@@ -201,15 +201,15 @@ func TestDefaultConfig(t *testing.T) {
 		t.Fatal("DefaultConfig() ports should not be nil")
 	}
 
-	// Verify input ports (includes agent.boid for Boid coordination and
-	// agent.context.profile for optional profile-context injection)
+	// Verify input ports (includes boid for Boid coordination and
+	// context_profile for optional profile-context injection)
 	if len(cfg.Ports.Inputs) != 6 {
 		t.Errorf("DefaultConfig() input ports count = %d, want 6", len(cfg.Ports.Inputs))
 	}
 
 	// Verify output ports
-	if len(cfg.Ports.Outputs) != 4 {
-		t.Errorf("DefaultConfig() output ports count = %d, want 4", len(cfg.Ports.Outputs))
+	if len(cfg.Ports.Outputs) != 6 {
+		t.Errorf("DefaultConfig() output ports count = %d, want 6", len(cfg.Ports.Outputs))
 	}
 
 	// Verify KV ports
@@ -219,9 +219,9 @@ func TestDefaultConfig(t *testing.T) {
 
 	// Verify specific input subjects
 	expectedInputs := map[string]string{
-		"agent.task":     "agent.task.*",
-		"agent.response": "agent.response.>",
-		"tool.result":    "tool.result.>",
+		"task":     "teams.task.*",
+		"response": "teams.response.>",
+		"result":   "teams.result.>",
 	}
 	for name, subject := range expectedInputs {
 		found := false
@@ -238,9 +238,9 @@ func TestDefaultConfig(t *testing.T) {
 
 	// Verify specific output subjects
 	expectedOutputs := map[string]string{
-		"agent.request":  "agent.request.*",
-		"tool.execute":   "tool.execute.*",
-		"agent.complete": "agent.complete.*",
+		"request":  "teams.request.*",
+		"execute":  "teams.execute.*",
+		"complete": "teams.complete.*",
 	}
 	for name, subject := range expectedOutputs {
 		found := false

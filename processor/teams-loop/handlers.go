@@ -17,11 +17,11 @@ import (
 
 // Subject patterns for NATS publishing (concrete subjects, no wildcards).
 const (
-	subjectAgentRequest  = "agent.request"
-	subjectAgentCreated  = "agent.created"
-	subjectAgentFailed   = "agent.failed"
-	subjectToolExecute   = "tool.execute"
-	subjectAgentComplete = "agent.complete"
+	subjectAgentRequest  = "teams.request"
+	subjectAgentCreated  = "teams.created"
+	subjectAgentFailed   = "teams.failed"
+	subjectToolExecute   = "teams.execute"
+	subjectAgentComplete = "teams.complete"
 )
 
 // TaskMessage is an alias for agentic.TaskMessage for backward compatibility.

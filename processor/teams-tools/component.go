@@ -133,7 +133,7 @@ func (c *Component) Start(ctx context.Context) error {
 	// Note: If your JetStream stream subjects include "tool.>" or similar patterns,
 	// you must configure a different subject (e.g., "discovery.tool.list") to avoid
 	// JetStream capturing the request/reply message before the handler responds.
-	toolListSubject := "tool.list"
+	toolListSubject := "teams.tool.list"
 	for _, port := range c.config.Ports.Inputs {
 		if port.Name == "tool_list_request" {
 			if port.Subject != "" {

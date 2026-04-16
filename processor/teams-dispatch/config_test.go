@@ -12,7 +12,7 @@ func TestDefaultConfig(t *testing.T) {
 
 	assert.Equal(t, "general", config.DefaultRole)
 	assert.True(t, config.AutoContinue)
-	assert.Equal(t, "USER", config.StreamName)
+	assert.Equal(t, "TEAMS", config.StreamName)
 
 	// Check permissions
 	assert.Contains(t, config.Permissions.View, "*")
@@ -22,8 +22,8 @@ func TestDefaultConfig(t *testing.T) {
 
 	// Check ports
 	require.NotNil(t, config.Ports)
-	assert.Len(t, config.Ports.Inputs, 2)
-	assert.Len(t, config.Ports.Outputs, 3)
+	assert.Len(t, config.Ports.Inputs, 4)  // user_messages, complete, created, failed
+	assert.Len(t, config.Ports.Outputs, 3) // tasks, signals, user_response
 }
 
 func TestConfig_Validate(t *testing.T) {
@@ -48,7 +48,7 @@ func TestConfig_Validate(t *testing.T) {
 		{
 			name: "missing default_role",
 			config: Config{
-				StreamName: "USER",
+				StreamName: "TEAMS",
 			},
 			wantErr: "default_role is required",
 		},
@@ -91,17 +91,19 @@ func TestPortDefinitions(t *testing.T) {
 	for _, p := range config.Ports.Inputs {
 		inputNames[p.Name] = true
 	}
-	assert.True(t, inputNames["user.message"])
-	assert.True(t, inputNames["agent.complete"])
+	assert.True(t, inputNames["user_messages"])
+	assert.True(t, inputNames["complete"])
+	assert.True(t, inputNames["created"])
+	assert.True(t, inputNames["failed"])
 
 	// Check output ports
 	outputNames := make(map[string]bool)
 	for _, p := range config.Ports.Outputs {
 		outputNames[p.Name] = true
 	}
-	assert.True(t, outputNames["agent.task"])
-	assert.True(t, outputNames["agent.signal"])
-	assert.True(t, outputNames["user.response"])
+	assert.True(t, outputNames["tasks"])
+	assert.True(t, outputNames["signals"])
+	assert.True(t, outputNames["user_response"])
 }
 
 func TestPortDefinitions_Subjects(t *testing.T) {
@@ -110,27 +112,33 @@ func TestPortDefinitions_Subjects(t *testing.T) {
 	// Verify input subjects
 	for _, p := range config.Ports.Inputs {
 		switch p.Name {
-		case "user.message":
-			assert.Equal(t, "user.message.>", p.Subject)
-			assert.Equal(t, "USER", p.StreamName)
-		case "agent.complete":
-			assert.Equal(t, "agent.complete.*", p.Subject)
-			assert.Equal(t, "AGENT", p.StreamName)
+		case "user_messages":
+			assert.Equal(t, "teams.user.message.>", p.Subject)
+			assert.Equal(t, "TEAMS", p.StreamName)
+		case "complete":
+			assert.Equal(t, "teams.complete.*", p.Subject)
+			assert.Equal(t, "TEAMS", p.StreamName)
+		case "created":
+			assert.Equal(t, "teams.created.*", p.Subject)
+			assert.Equal(t, "TEAMS", p.StreamName)
+		case "failed":
+			assert.Equal(t, "teams.failed.*", p.Subject)
+			assert.Equal(t, "TEAMS", p.StreamName)
 		}
 	}
 
 	// Verify output subjects
 	for _, p := range config.Ports.Outputs {
 		switch p.Name {
-		case "agent.task":
-			assert.Equal(t, "agent.task.*", p.Subject)
-			assert.Equal(t, "AGENT", p.StreamName)
-		case "agent.signal":
-			assert.Equal(t, "agent.signal.*", p.Subject)
-			assert.Equal(t, "AGENT", p.StreamName)
-		case "user.response":
-			assert.Equal(t, "user.response.>", p.Subject)
-			assert.Equal(t, "USER", p.StreamName)
+		case "tasks":
+			assert.Equal(t, "teams.task.*", p.Subject)
+			assert.Equal(t, "TEAMS", p.StreamName)
+		case "signals":
+			assert.Equal(t, "teams.signal.*", p.Subject)
+			assert.Equal(t, "TEAMS", p.StreamName)
+		case "user_response":
+			assert.Equal(t, "teams.user.response.>", p.Subject)
+			assert.Equal(t, "TEAMS", p.StreamName)
 		}
 	}
 }

@@ -187,13 +187,13 @@ func TestDefaultConfig(t *testing.T) {
 	}
 
 	// Verify input subject
-	if cfg.Ports.Inputs[0].Subject != "tool.execute.>" {
-		t.Errorf("DefaultConfig() input subject = %s, want tool.execute.>", cfg.Ports.Inputs[0].Subject)
+	if cfg.Ports.Inputs[0].Subject != "teams.execute.>" {
+		t.Errorf("DefaultConfig() input subject = %s, want teams.execute.>", cfg.Ports.Inputs[0].Subject)
 	}
 
 	// Verify output subject
-	if cfg.Ports.Outputs[0].Subject != "tool.result.*" {
-		t.Errorf("DefaultConfig() output subject = %s, want tool.result.*", cfg.Ports.Outputs[0].Subject)
+	if cfg.Ports.Outputs[0].Subject != "teams.result.*" {
+		t.Errorf("DefaultConfig() output subject = %s, want teams.result.*", cfg.Ports.Outputs[0].Subject)
 	}
 
 	// Verify allowed tools is initialized (can be nil or empty, both valid)

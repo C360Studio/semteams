@@ -15,9 +15,10 @@ import (
 )
 
 // profileContextSubject returns the NATS subject used to publish an assembled
-// operating_model.profile_context event to teams-loop.
-func profileContextSubject(loopID string) string {
-	return fmt.Sprintf("agent.context.profile.%s", loopID)
+// operating_model.profile_context event to teams-loop, resolved from the
+// component's port config. Kept as a method so tests can exercise it.
+func (c *Component) profileContextSubject(loopID string) string {
+	return c.outputSubject("profile_context", loopID)
 }
 
 // defaultProfileContextTokenBudget matches the plan's 800-token budget for
@@ -283,7 +284,7 @@ func (c *Component) publishProfileContext(ctx context.Context, payload *operatin
 	if err != nil {
 		return fmt.Errorf("marshal profile_context: %w", err)
 	}
-	subject := profileContextSubject(payload.LoopID)
+	subject := c.profileContextSubject(payload.LoopID)
 	if c.natsClient == nil {
 		c.logger.InfoContext(ctx, "profile_context publish skipped (no NATS client)",
 			"subject", subject)

@@ -10,6 +10,10 @@ description: |
     2. After receiving search results → agent synthesizes and completes
        with a structured report
 
+  web_search is always registered: real executor when BRAVE_SEARCH_API_KEY
+  is set, stub executor (canned results) otherwise. This keeps mock-llm
+  E2E self-contained without external API dependencies.
+
 responses:
   - tool_call:
       name: web_search

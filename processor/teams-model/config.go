@@ -127,10 +127,10 @@ func (r *RetryConfig) rateLimitDelayDuration(defaultDelay time.Duration) time.Du
 func DefaultConfig() Config {
 	inputDefs := []component.PortDefinition{
 		{
-			Name:        "agent.request",
+			Name:        "request",
 			Type:        "jetstream",
-			Subject:     "agent.request.>",
-			StreamName:  "AGENT",
+			Subject:     "teams.request.>",
+			StreamName:  "TEAMS",
 			Required:    true,
 			Description: "Agent request input (JetStream)",
 		},
@@ -138,12 +138,19 @@ func DefaultConfig() Config {
 
 	outputDefs := []component.PortDefinition{
 		{
-			Name:        "agent.response",
+			Name:        "response",
 			Type:        "jetstream",
-			Subject:     "agent.response.*",
-			StreamName:  "AGENT",
+			Subject:     "teams.response.*",
+			StreamName:  "TEAMS",
 			Required:    true,
 			Description: "Agent response output (JetStream)",
+		},
+		{
+			Name:        "stream",
+			Type:        "nats",
+			Subject:     "teams.stream.*",
+			Required:    false,
+			Description: "Streaming chunk output (core NATS, fire-and-forget)",
 		},
 	}
 
@@ -152,7 +159,7 @@ func DefaultConfig() Config {
 			Inputs:  inputDefs,
 			Outputs: outputDefs,
 		},
-		StreamName: "AGENT",
+		StreamName: "TEAMS",
 		Timeout:    "120s",
 		Retry: RetryConfig{
 			MaxAttempts:         3,

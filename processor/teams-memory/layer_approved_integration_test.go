@@ -24,14 +24,14 @@ import (
 
 // TestIntegration_LayerApproved_PublishesGraphMutation drives the end-to-end
 // write path: publish a BaseMessage-wrapped LayerApproved on
-// agent.operating_model.layer_approved.{user_id}, wait for teams-memory to
-// emit the corresponding graph.mutation.{loop_id} message, assert the
+// teams.operating_model.layer_approved.{user_id}, wait for teams-memory to
+// emit the corresponding teams.graph.{loop_id} message, assert the
 // triples produced match the payload.
 func TestIntegration_LayerApproved_PublishesGraphMutation(t *testing.T) {
 	natsClient := getSharedNATSClient(t)
 
 	config := teamsmemory.DefaultConfig()
-	config.StreamName = "AGENT"
+	config.StreamName = "TEAMS"
 	config.ConsumerNameSuffix = "layer-approved-int-test-" + uniqueSuffix()
 	config.Hydration.PostCompaction.Enabled = false
 	config.Hydration.PreTask.Enabled = false
@@ -57,8 +57,8 @@ func TestIntegration_LayerApproved_PublishesGraphMutation(t *testing.T) {
 	defer lc.Stop(5 * time.Second)
 	waitForConsumerReady(t, comp)
 
-	// Subscribe to graph.mutation.* to capture the emitted mutation.
-	mutationCh := subscribeCoreNATS(t, natsClient, "graph.mutation.>")
+	// Subscribe to teams.graph.* to capture the emitted mutation.
+	mutationCh := subscribeCoreNATS(t, natsClient, "teams.graph.>")
 
 	// Publish an approved layer.
 	loopID := "loop-int-layerapproved"
@@ -83,7 +83,7 @@ func TestIntegration_LayerApproved_PublishesGraphMutation(t *testing.T) {
 	data, err := baseMsg.MarshalJSON()
 	require.NoError(t, err)
 
-	subject := "agent.operating_model.layer_approved." + payload.UserID
+	subject := "teams.operating_model.layer_approved." + payload.UserID
 	require.NoError(t, natsClient.PublishToStream(ctx, subject, data))
 
 	// Wait for the mutation to arrive on graph.mutation.{loop_id}.
@@ -92,7 +92,7 @@ func TestIntegration_LayerApproved_PublishesGraphMutation(t *testing.T) {
 	case raw := <-mutationCh:
 		require.NoError(t, json.Unmarshal(raw, &mutation))
 	case <-time.After(5 * time.Second):
-		t.Fatalf("timed out waiting for graph.mutation.%s", loopID)
+		t.Fatalf("timed out waiting for teams.graph.%s", loopID)
 	}
 
 	assert.Equal(t, loopID, mutation.LoopID, "mutation loop_id should match payload")
@@ -115,7 +115,7 @@ func TestIntegration_LayerApproved_WithoutPlatform_SkipsSilently(t *testing.T) {
 	natsClient := getSharedNATSClient(t)
 
 	config := teamsmemory.DefaultConfig()
-	config.StreamName = "AGENT"
+	config.StreamName = "TEAMS"
 	config.ConsumerNameSuffix = "layer-approved-noplatform-" + uniqueSuffix()
 	config.Hydration.PostCompaction.Enabled = false
 	config.Hydration.PreTask.Enabled = false
@@ -139,7 +139,7 @@ func TestIntegration_LayerApproved_WithoutPlatform_SkipsSilently(t *testing.T) {
 	defer lc.Stop(5 * time.Second)
 	waitForConsumerReady(t, comp)
 
-	mutationCh := subscribeCoreNATS(t, natsClient, "graph.mutation.>")
+	mutationCh := subscribeCoreNATS(t, natsClient, "teams.graph.>")
 
 	loopID := "loop-int-noplatform"
 	payload := &operatingmodel.LayerApproved{
@@ -154,12 +154,12 @@ func TestIntegration_LayerApproved_WithoutPlatform_SkipsSilently(t *testing.T) {
 	require.NoError(t, err)
 
 	require.NoError(t, natsClient.PublishToStream(ctx,
-		"agent.operating_model.layer_approved."+payload.UserID, data))
+		"teams.operating_model.layer_approved."+payload.UserID, data))
 
 	// No mutation should arrive within a small grace window.
 	select {
 	case raw := <-mutationCh:
-		t.Fatalf("expected no graph.mutation without platform; got %s", string(raw))
+		t.Fatalf("expected no teams.graph mutation without platform; got %s", string(raw))
 	case <-time.After(1 * time.Second):
 		// Expected path.
 	}
@@ -187,7 +187,7 @@ func TestIntegration_RoundTrip_LayerApproved_KV_ProfileReader(t *testing.T) {
 	natsClient := getSharedNATSClient(t)
 
 	config := teamsmemory.DefaultConfig()
-	config.StreamName = "AGENT"
+	config.StreamName = "TEAMS"
 	config.ConsumerNameSuffix = "roundtrip-" + uniqueSuffix()
 	config.Hydration.PostCompaction.Enabled = false
 	config.Hydration.PreTask.Enabled = false
@@ -213,7 +213,7 @@ func TestIntegration_RoundTrip_LayerApproved_KV_ProfileReader(t *testing.T) {
 	defer lc.Stop(5 * time.Second)
 	waitForConsumerReady(t, comp)
 
-	mutationCh := subscribeCoreNATS(t, natsClient, "graph.mutation.>")
+	mutationCh := subscribeCoreNATS(t, natsClient, "teams.graph.>")
 
 	// --- Step 1: publish LayerApproved ---
 	payload := &operatingmodel.LayerApproved{
@@ -243,15 +243,15 @@ func TestIntegration_RoundTrip_LayerApproved_KV_ProfileReader(t *testing.T) {
 	data, err := baseMsg.MarshalJSON()
 	require.NoError(t, err)
 	require.NoError(t, natsClient.PublishToStream(ctx,
-		"agent.operating_model.layer_approved."+payload.UserID, data))
+		"teams.operating_model.layer_approved."+payload.UserID, data))
 
-	// --- Step 2: capture graph.mutation ---
+	// --- Step 2: capture teams.graph.* mutation ---
 	var mutation teamsmemory.GraphMutationMessage
 	select {
 	case raw := <-mutationCh:
 		require.NoError(t, json.Unmarshal(raw, &mutation))
 	case <-time.After(5 * time.Second):
-		t.Fatal("timed out waiting for graph.mutation")
+		t.Fatal("timed out waiting for teams.graph mutation")
 	}
 	require.NotEmpty(t, mutation.Triples)
 
@@ -291,7 +291,7 @@ func TestIntegration_RoundTrip_LayerApproved_KV_ProfileReader(t *testing.T) {
 
 // writeTriplesToKV groups triples by subject and writes each group as a
 // graph.EntityState JSON blob to the KV bucket, simulating what graph-ingest
-// does when it processes a graph.mutation.add_triples message.
+// does when it processes a teams.graph.add_triples message.
 func writeTriplesToKV(t *testing.T, ctx context.Context, kv *natsclient.KVStore, triples []message.Triple) {
 	t.Helper()
 	grouped := make(map[string][]message.Triple)

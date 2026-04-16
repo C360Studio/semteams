@@ -32,6 +32,16 @@
 		reverse_proxy backend:8080
 	}
 
+	# Message logger — observability endpoints for debugging the agentic pipeline
+	handle /message-logger/* {
+		reverse_proxy backend:8080
+	}
+
+	# Prometheus metrics
+	handle /metrics {
+		reverse_proxy backend:9090
+	}
+
 	# GraphQL gateway (graph-gateway on port 8082)
 	handle /graphql {
 		reverse_proxy backend:8082

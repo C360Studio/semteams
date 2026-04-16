@@ -36,12 +36,12 @@ func (r integrationProfileReader) ReadOperatingModel(ctx context.Context, org, p
 // TestIntegration_LoopCreated_PublishesProfileContext drives the end-to-end
 // read path: publish a LoopCreatedEvent carrying user_id in metadata, wait
 // for teams-memory to assemble + publish an operating_model.profile_context.v1
-// payload on agent.context.profile.{loop_id}, assert the payload shape.
+// payload on teams.context.profile.{loop_id}, assert the payload shape.
 func TestIntegration_LoopCreated_PublishesProfileContext(t *testing.T) {
 	natsClient := getSharedNATSClient(t)
 
 	config := teamsmemory.DefaultConfig()
-	config.StreamName = "AGENT"
+	config.StreamName = "TEAMS"
 	config.ConsumerNameSuffix = "profile-ctx-int-" + uniqueSuffix()
 	config.Hydration.PostCompaction.Enabled = false
 	config.Hydration.PreTask.Enabled = false
@@ -91,7 +91,7 @@ func TestIntegration_LoopCreated_PublishesProfileContext(t *testing.T) {
 	waitForConsumerReady(t, comp)
 
 	// Subscribe to the profile-context output channel.
-	profileCh := subscribeCoreNATS(t, natsClient, "agent.context.profile.>")
+	profileCh := subscribeCoreNATS(t, natsClient, "teams.context.profile.>")
 
 	// Publish a LoopCreatedEvent with user_id in metadata.
 	loopID := "loop-int-profilectx"
@@ -109,14 +109,14 @@ func TestIntegration_LoopCreated_PublishesProfileContext(t *testing.T) {
 	baseMsg := message.NewBaseMessage(event.Schema(), event, "integration-test")
 	data, err := baseMsg.MarshalJSON()
 	require.NoError(t, err)
-	require.NoError(t, natsClient.PublishToStream(ctx, "agent.created."+loopID, data))
+	require.NoError(t, natsClient.PublishToStream(ctx, "teams.created."+loopID, data))
 
 	// Wait for the profile-context publish.
 	var raw []byte
 	select {
 	case raw = <-profileCh:
 	case <-time.After(5 * time.Second):
-		t.Fatalf("timed out waiting for agent.context.profile.%s", loopID)
+		t.Fatalf("timed out waiting for teams.context.profile.%s", loopID)
 	}
 
 	// Decode the BaseMessage envelope and assert the typed payload.
@@ -139,7 +139,7 @@ func TestIntegration_LoopCreated_WithoutUserID_SkipsPublish(t *testing.T) {
 	natsClient := getSharedNATSClient(t)
 
 	config := teamsmemory.DefaultConfig()
-	config.StreamName = "AGENT"
+	config.StreamName = "TEAMS"
 	config.ConsumerNameSuffix = "profile-ctx-nouser-" + uniqueSuffix()
 	config.Hydration.PostCompaction.Enabled = false
 	config.Hydration.PreTask.Enabled = false
@@ -165,7 +165,7 @@ func TestIntegration_LoopCreated_WithoutUserID_SkipsPublish(t *testing.T) {
 	defer lc.Stop(5 * time.Second)
 	waitForConsumerReady(t, comp)
 
-	profileCh := subscribeCoreNATS(t, natsClient, "agent.context.profile.>")
+	profileCh := subscribeCoreNATS(t, natsClient, "teams.context.profile.>")
 
 	loopID := "loop-int-nouser"
 	event := &agentic.LoopCreatedEvent{
@@ -176,7 +176,7 @@ func TestIntegration_LoopCreated_WithoutUserID_SkipsPublish(t *testing.T) {
 	baseMsg := message.NewBaseMessage(event.Schema(), event, "integration-test")
 	data, err := baseMsg.MarshalJSON()
 	require.NoError(t, err)
-	require.NoError(t, natsClient.PublishToStream(ctx, "agent.created."+loopID, data))
+	require.NoError(t, natsClient.PublishToStream(ctx, "teams.created."+loopID, data))
 
 	// Expect no profile-context publish within a reasonable grace window.
 	select {

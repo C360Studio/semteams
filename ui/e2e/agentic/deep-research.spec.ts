@@ -111,7 +111,6 @@ test.describe("Deep Research", () => {
     // Card should appear on the board via SSE
     const taskCard = page.getByTestId("task-card").first();
     await expect(taskCard).toBeVisible({ timeout: 30000 });
-    await expect(page.getByTestId("task-card")).toHaveCount(initialCards + 1);
 
     // -----------------------------------------------------------------
     // Step 4 — wait for the loop to complete

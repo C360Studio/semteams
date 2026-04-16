@@ -36,7 +36,7 @@ var (
 // TestMain sets up shared NATS container for all model integration tests
 func TestMain(m *testing.M) {
 	streams := []natsclient.TestStreamConfig{
-		{Name: "AGENT", Subjects: []string{"agent.>", "tool.>"}},
+		{Name: "TEAMS", Subjects: []string{"teams.>"}},
 	}
 
 	testClient, err := natsclient.NewSharedTestClient(
@@ -111,8 +111,8 @@ func TestIntegration_ModelCompleteResponse(t *testing.T) {
 				{
 					Name:       "requests",
 					Type:       "jetstream",
-					Subject:    "agent.request.>",
-					StreamName: "AGENT",
+					Subject:    "teams.request.>",
+					StreamName: "TEAMS",
 					Required:   true,
 				},
 			},
@@ -120,12 +120,12 @@ func TestIntegration_ModelCompleteResponse(t *testing.T) {
 				{
 					Name:       "responses",
 					Type:       "jetstream",
-					Subject:    "agent.response.*",
-					StreamName: "AGENT",
+					Subject:    "teams.response.*",
+					StreamName: "TEAMS",
 				},
 			},
 		},
-		StreamName:           "AGENT",
+		StreamName:           "TEAMS",
 		ConsumerNameSuffix:   "test-" + t.Name(),
 		DeleteConsumerOnStop: true,
 		Timeout:              "5s",
@@ -171,7 +171,7 @@ func TestIntegration_ModelCompleteResponse(t *testing.T) {
 	receivedResponses := make([]agentic.AgentResponse, 0)
 	var receiveMu sync.Mutex
 
-	sub, err := natsClient.Subscribe(ctx, "agent.response.>", func(_ context.Context, msg *nats.Msg) {
+	sub, err := natsClient.Subscribe(ctx, "teams.response.>", func(_ context.Context, msg *nats.Msg) {
 		var baseMsg message.BaseMessage
 		if err := json.Unmarshal(msg.Data, &baseMsg); err == nil {
 			if resp, ok := baseMsg.Payload().(*agentic.AgentResponse); ok {
@@ -199,7 +199,7 @@ func TestIntegration_ModelCompleteResponse(t *testing.T) {
 			},
 		},
 	}
-	publishAgentRequestMessage(t, natsClient, "agent.request.test", request)
+	publishAgentRequestMessage(t, natsClient, "teams.request.test", request)
 	require.NoError(t, err)
 
 	// Wait for response
@@ -261,8 +261,8 @@ func TestIntegration_ModelToolCallResponse(t *testing.T) {
 				{
 					Name:       "requests",
 					Type:       "jetstream",
-					Subject:    "agent.request.>",
-					StreamName: "AGENT",
+					Subject:    "teams.request.>",
+					StreamName: "TEAMS",
 					Required:   true,
 				},
 			},
@@ -270,12 +270,12 @@ func TestIntegration_ModelToolCallResponse(t *testing.T) {
 				{
 					Name:       "responses",
 					Type:       "jetstream",
-					Subject:    "agent.response.*",
-					StreamName: "AGENT",
+					Subject:    "teams.response.*",
+					StreamName: "TEAMS",
 				},
 			},
 		},
-		StreamName:           "AGENT",
+		StreamName:           "TEAMS",
 		ConsumerNameSuffix:   "test-" + t.Name(),
 		DeleteConsumerOnStop: true,
 		Timeout:              "5s",
@@ -322,7 +322,7 @@ func TestIntegration_ModelToolCallResponse(t *testing.T) {
 	receivedResponses := make([]agentic.AgentResponse, 0)
 	var receiveMu sync.Mutex
 
-	sub, err := natsClient.Subscribe(ctx, "agent.response.>", func(_ context.Context, msg *nats.Msg) {
+	sub, err := natsClient.Subscribe(ctx, "teams.response.>", func(_ context.Context, msg *nats.Msg) {
 		var baseMsg message.BaseMessage
 		if err := json.Unmarshal(msg.Data, &baseMsg); err == nil {
 			if resp, ok := baseMsg.Payload().(*agentic.AgentResponse); ok {
@@ -362,7 +362,7 @@ func TestIntegration_ModelToolCallResponse(t *testing.T) {
 			},
 		},
 	}
-	publishAgentRequestMessage(t, natsClient, "agent.request.tool", request)
+	publishAgentRequestMessage(t, natsClient, "teams.request.tool", request)
 
 	// Wait for response
 	time.Sleep(1 * time.Second)
@@ -442,8 +442,8 @@ func TestIntegration_ModelEndpointResolution(t *testing.T) {
 				{
 					Name:       "requests",
 					Type:       "jetstream",
-					Subject:    "agent.request.>",
-					StreamName: "AGENT",
+					Subject:    "teams.request.>",
+					StreamName: "TEAMS",
 					Required:   true,
 				},
 			},
@@ -451,12 +451,12 @@ func TestIntegration_ModelEndpointResolution(t *testing.T) {
 				{
 					Name:       "responses",
 					Type:       "jetstream",
-					Subject:    "agent.response.*",
-					StreamName: "AGENT",
+					Subject:    "teams.response.*",
+					StreamName: "TEAMS",
 				},
 			},
 		},
-		StreamName:           "AGENT",
+		StreamName:           "TEAMS",
 		ConsumerNameSuffix:   "test-" + t.Name(),
 		DeleteConsumerOnStop: true,
 		Timeout:              "5s",
@@ -507,7 +507,7 @@ func TestIntegration_ModelEndpointResolution(t *testing.T) {
 	receivedResponses := make([]agentic.AgentResponse, 0)
 	var receiveMu sync.Mutex
 
-	sub, err := natsClient.Subscribe(ctx, "agent.response.>", func(_ context.Context, msg *nats.Msg) {
+	sub, err := natsClient.Subscribe(ctx, "teams.response.>", func(_ context.Context, msg *nats.Msg) {
 		var baseMsg message.BaseMessage
 		if err := json.Unmarshal(msg.Data, &baseMsg); err == nil {
 			if resp, ok := baseMsg.Payload().(*agentic.AgentResponse); ok {
@@ -532,7 +532,7 @@ func TestIntegration_ModelEndpointResolution(t *testing.T) {
 			{Role: "user", Content: "Test A"},
 		},
 	}
-	publishAgentRequestMessage(t, natsClient, "agent.request.a", request1)
+	publishAgentRequestMessage(t, natsClient, "teams.request.a", request1)
 
 	time.Sleep(500 * time.Millisecond)
 
@@ -546,7 +546,7 @@ func TestIntegration_ModelEndpointResolution(t *testing.T) {
 			{Role: "user", Content: "Test B"},
 		},
 	}
-	publishAgentRequestMessage(t, natsClient, "agent.request.b", request2)
+	publishAgentRequestMessage(t, natsClient, "teams.request.b", request2)
 
 	time.Sleep(500 * time.Millisecond)
 

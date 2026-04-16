@@ -65,19 +65,36 @@ const (
 
 // ViolationHandler processes detected violations
 type ViolationHandler struct {
-	config     ViolationConfig
-	natsClient *natsclient.Client
-	logger     *slog.Logger
-	metrics    *governanceMetrics
+	config              ViolationConfig
+	natsClient          *natsclient.Client
+	logger              *slog.Logger
+	metrics             *governanceMetrics
+	violationSubject    string // subject prefix for violations port (e.g. "teams.governance.violation.")
+	userResponseSubject string // subject prefix for user_errors port (e.g. "teams.user.")
 }
 
 // NewViolationHandler creates a new violation handler
 func NewViolationHandler(config ViolationConfig, nc *natsclient.Client, logger *slog.Logger, metrics *governanceMetrics) *ViolationHandler {
 	return &ViolationHandler{
-		config:     config,
-		natsClient: nc,
-		logger:     logger,
-		metrics:    metrics,
+		config:              config,
+		natsClient:          nc,
+		logger:              logger,
+		metrics:             metrics,
+		violationSubject:    "teams.governance.violation.",
+		userResponseSubject: "teams.user.",
+	}
+}
+
+// NewViolationHandlerWithSubjects creates a violation handler with explicit port subjects.
+// The subjects should be the port prefix with trailing dot (e.g. "teams.governance.violation.").
+func NewViolationHandlerWithSubjects(config ViolationConfig, nc *natsclient.Client, logger *slog.Logger, metrics *governanceMetrics, violationSubject, userResponseSubject string) *ViolationHandler {
+	return &ViolationHandler{
+		config:              config,
+		natsClient:          nc,
+		logger:              logger,
+		metrics:             metrics,
+		violationSubject:    violationSubject,
+		userResponseSubject: userResponseSubject,
 	}
 }
 
@@ -125,7 +142,7 @@ func (h *ViolationHandler) Handle(ctx context.Context, violation *Violation) err
 	}
 
 	// Publish violation event
-	subject := fmt.Sprintf("governance.violation.%s.%s", violation.FilterName, violation.UserID)
+	subject := fmt.Sprintf("%s%s.%s", h.violationSubject, violation.FilterName, violation.UserID)
 	violationJSON, err := json.Marshal(violation)
 	if err != nil {
 		return errs.Wrap(err, "ViolationHandler", "Handle", "marshal violation")
@@ -173,7 +190,7 @@ func (h *ViolationHandler) notifyUser(ctx context.Context, violation *Violation)
 		return errs.Wrap(err, "ViolationHandler", "notifyUser", "marshal notification")
 	}
 
-	subject := fmt.Sprintf("user.response.%s.%s", violation.ChannelID, violation.UserID)
+	subject := fmt.Sprintf("%s%s.%s", h.userResponseSubject, violation.ChannelID, violation.UserID)
 	return errs.WrapTransient(h.natsClient.Publish(ctx, subject, notificationJSON), "ViolationHandler", "notifyUser", "publish notification")
 }
 

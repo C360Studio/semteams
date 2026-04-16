@@ -29,7 +29,9 @@ func RegisterAll(logger *slog.Logger) {
 		logger.Info("Registered bash tool", slog.String("mode", mode))
 	}
 
-	// Web search — requires BRAVE_SEARCH_API_KEY
+	// Web search — real executor with BRAVE_SEARCH_API_KEY, stub otherwise.
+	// The stub keeps web_search in the tool list so researcher-role agents
+	// and E2E fixtures work without external API dependencies.
 	if apiKey := os.Getenv("BRAVE_SEARCH_API_KEY"); apiKey != "" {
 		ws := NewWebSearchExecutor(apiKey)
 		if err := teamtools.RegisterTool("web_search", ws); err != nil {
@@ -38,7 +40,12 @@ func RegisterAll(logger *slog.Logger) {
 			logger.Info("Registered web_search tool", slog.String("provider", "brave"))
 		}
 	} else {
-		logger.Debug("Skipping web_search tool registration (BRAVE_SEARCH_API_KEY not set)")
+		stub := NewStubWebSearchExecutor()
+		if err := teamtools.RegisterTool("web_search", stub); err != nil {
+			logger.Warn("Failed to register web_search stub", slog.Any("error", err))
+		} else {
+			logger.Info("Registered web_search tool", slog.String("provider", "stub"))
+		}
 	}
 
 	// HTTP request — always available

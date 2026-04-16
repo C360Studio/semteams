@@ -1,5 +1,11 @@
 // Agent store — SSE-driven reactive state for agentic loops
 // Connects to /teams-dispatch/activity for real-time loop updates
+//
+// Backend SSE protocol (from dispatch's KV watcher):
+//   event: connected    — connection established
+//   event: activity     — KV entry (loop data wrapped in ActivityEvent envelope)
+//   event: sync_complete — all existing KV entries delivered (signal only, no loop data)
+//   :heartbeat <ts>     — keep-alive comment (ignored by EventSource)
 
 import { SvelteMap } from "svelte/reactivity";
 import type { AgentLoop } from "$lib/types/agent";
@@ -9,6 +15,14 @@ const SSE_URL = "/teams-dispatch/activity";
 const MAX_RECONNECT_ATTEMPTS = 5;
 const BASE_RECONNECT_DELAY = 1000;
 
+// ActivityEvent is the envelope the backend wraps around KV entries.
+interface ActivityEvent {
+  type: string; // loop_created, loop_updated, loop_deleted
+  loop_id: string;
+  timestamp: string;
+  data?: AgentLoop;
+}
+
 function createAgentStore() {
   let connected = $state(false);
   let error = $state<string | null>(null);
@@ -17,10 +31,16 @@ function createAgentStore() {
   let reconnectAttempts = 0;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
-  function handleLoopUpdate(event: MessageEvent) {
+  function handleActivity(event: MessageEvent) {
     try {
-      const data = JSON.parse(event.data) as AgentLoop;
-      loops.set(data.loop_id, data);
+      const envelope = JSON.parse(event.data) as ActivityEvent;
+      if (envelope.type === "loop_deleted") {
+        loops.delete(envelope.loop_id);
+        return;
+      }
+      if (envelope.data) {
+        loops.set(envelope.data.loop_id, envelope.data);
+      }
     } catch {
       // Ignore malformed events
     }
@@ -32,17 +52,9 @@ function createAgentStore() {
     reconnectAttempts = 0;
   }
 
-  function handleSyncComplete(event: MessageEvent) {
-    try {
-      const data = JSON.parse(event.data);
-      if (Array.isArray(data)) {
-        for (const loop of data) {
-          loops.set(loop.loop_id, loop);
-        }
-      }
-    } catch {
-      // Ignore malformed events
-    }
+  function handleSyncComplete() {
+    // Signal-only: all existing KV entries already arrived as individual
+    // 'activity' events during the initial watcher sync. Nothing to parse.
   }
 
   function scheduleReconnect() {
@@ -66,7 +78,7 @@ function createAgentStore() {
 
     eventSource.addEventListener("connected", handleConnected);
     eventSource.addEventListener("sync_complete", handleSyncComplete);
-    eventSource.addEventListener("loop_update", handleLoopUpdate);
+    eventSource.addEventListener("activity", handleActivity);
     // heartbeat is just a keep-alive, no action needed
 
     eventSource.onerror = () => {

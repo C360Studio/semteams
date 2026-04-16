@@ -89,8 +89,31 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 		return nil, errs.Wrap(err, "Component", "NewComponent", "build filter chain")
 	}
 
+	// Resolve violation output subjects from port config so we are not hardcoded
+	// to "governance.violation." and "user.response.".
+	violationSubject := "governance.violation."
+	userResponseSubject := "user.response."
+	if config.Ports != nil {
+		for _, p := range config.Ports.Outputs {
+			switch p.Name {
+			case "violations":
+				s := p.Subject
+				if len(s) > 0 && s[len(s)-1] == '*' {
+					s = s[:len(s)-1]
+				}
+				violationSubject = s
+			case "user_errors":
+				s := p.Subject
+				if len(s) > 0 && s[len(s)-1] == '*' {
+					s = s[:len(s)-1]
+				}
+				userResponseSubject = s
+			}
+		}
+	}
+
 	// Create violation handler
-	violationHandler := NewViolationHandler(config.Violations, deps.NATSClient, logger, metrics)
+	violationHandler := NewViolationHandlerWithSubjects(config.Violations, deps.NATSClient, logger, metrics, violationSubject, userResponseSubject)
 
 	return &Component{
 		name:       "teams-governance",
@@ -148,6 +171,25 @@ func (c *Component) Start(ctx context.Context) error {
 	return nil
 }
 
+// outputSubjectPrefix returns the subject prefix for a named output port,
+// stripping the trailing wildcard (*). Used to build per-message subjects like
+// "teams.task.validated.{id}" from a port declared as "teams.task.validated.*".
+func (c *Component) outputSubjectPrefix(portName string) string {
+	if c.config.Ports != nil {
+		for _, p := range c.config.Ports.Outputs {
+			if p.Name == portName {
+				s := p.Subject
+				if len(s) > 0 && s[len(s)-1] == '*' {
+					s = s[:len(s)-1]
+				}
+				return s
+			}
+		}
+	}
+	// Fallback: should not happen in normal operation
+	return portName + "."
+}
+
 // setupInputConsumers sets up JetStream consumers for all input ports
 func (c *Component) setupInputConsumers(ctx context.Context) error {
 	for _, port := range c.config.Ports.Inputs {
@@ -156,25 +198,26 @@ func (c *Component) setupInputConsumers(ctx context.Context) error {
 		}
 
 		var msgType MessageType
-		var outputSubjectPrefix string
+		var outPortName string
 
 		// Route to appropriate handler based on port name
 		switch port.Name {
 		case "task_validation":
 			msgType = MessageTypeTask
-			outputSubjectPrefix = "agent.task.validated"
+			outPortName = "validated_tasks"
 		case "request_validation":
 			msgType = MessageTypeRequest
-			outputSubjectPrefix = "agent.request.validated"
+			outPortName = "validated_requests"
 		case "response_validation":
 			msgType = MessageTypeResponse
-			outputSubjectPrefix = "agent.response.validated"
+			outPortName = "validated_responses"
 		default:
 			c.logger.Debug("Skipping unknown input port", "port", port.Name)
 			continue
 		}
 
-		handler := c.createHandler(msgType, outputSubjectPrefix)
+		prefix := c.outputSubjectPrefix(outPortName)
+		handler := c.createHandler(msgType, prefix)
 		if err := c.setupConsumer(ctx, port, handler); err != nil {
 			return errs.Wrap(err, "Component", "setupInputConsumers", fmt.Sprintf("setup consumer for %s", port.Name))
 		}

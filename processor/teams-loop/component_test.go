@@ -44,12 +44,12 @@ func TestComponent_InputPorts(t *testing.T) {
 		required bool
 	}
 	expected := map[string]portExpectation{
-		"agent.task":            {"agent.task.*", true},
-		"agent.response":        {"agent.response.>", true},
-		"tool.result":           {"tool.result.>", true},
-		"agent.signal":          {"agent.signal.*", false},          // Optional - not all deployments need signal handling
-		"agent.boid":            {"agent.boid.>", false},            // Optional - Boid steering signals for coordination
-		"agent.context.profile": {"agent.context.profile.*", false}, // Optional - profile-context injection from teams-memory
+		"task":            {"teams.task.*", true},
+		"response":        {"teams.response.>", true},
+		"result":          {"teams.result.>", true},
+		"signal":          {"teams.signal.*", false},          // Optional - not all deployments need signal handling
+		"boid":            {"teams.boid.>", false},            // Optional - Boid steering signals for coordination
+		"context_profile": {"teams.context.profile.*", false}, // Optional - profile-context injection from teams-memory
 	}
 
 	for _, port := range ports {
@@ -84,16 +84,18 @@ func TestComponent_OutputPorts(t *testing.T) {
 
 	ports := comp.OutputPorts()
 
-	if len(ports) != 4 {
-		t.Fatalf("OutputPorts() count = %d, want 4", len(ports))
+	if len(ports) != 6 {
+		t.Fatalf("OutputPorts() count = %d, want 6", len(ports))
 	}
 
 	// Expected output ports
 	expected := map[string]string{
-		"agent.request":            "agent.request.*",
-		"tool.execute":             "tool.execute.*",
-		"agent.complete":           "agent.complete.*",
-		"agent.context.compaction": "agent.context.compaction.*",
+		"request":            "teams.request.*",
+		"execute":            "teams.execute.*",
+		"complete":           "teams.complete.*",
+		"context_compaction": "teams.context.compaction.*",
+		"created":            "teams.created.*",
+		"failed":             "teams.failed.*",
 	}
 
 	for _, port := range ports {

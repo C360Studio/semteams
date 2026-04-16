@@ -193,43 +193,60 @@ tasks:
 
   test:e2e:agentic:tool-approval-gate:
     desc: Run the tool-approval-gate journey with its paired fixture
-    env:
+    vars:
       FIXTURE: tool-approval-gate.yaml
       AGENTIC_CONFIG: e2e-agentic.json
     cmds:
       - defer: { task: test:e2e:agentic:cleanup }
       - task: test:e2e:agentic:stack:up
+        vars:
+          FIXTURE: "{{.FIXTURE}}"
+          AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
       - npx playwright test --config playwright.agentic.config.ts e2e/agentic/tool-approval-gate.spec.ts
 
   test:e2e:agentic:real-time-activity-stream:
     desc: Run the real-time-activity-stream journey with its paired fixture
-    env:
+    vars:
       FIXTURE: real-time-activity-stream.yaml
       AGENTIC_CONFIG: e2e-agentic.json
     cmds:
       - defer: { task: test:e2e:agentic:cleanup }
       - task: test:e2e:agentic:stack:up
+        vars:
+          FIXTURE: "{{.FIXTURE}}"
+          AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
       - npx playwright test --config playwright.agentic.config.ts e2e/agentic/real-time-activity-stream.spec.ts
 
   test:e2e:agentic:deep-research:
     desc: Run the deep-research journey with researcher config + paired fixture
-    env:
+    vars:
       FIXTURE: deep-research.yaml
       AGENTIC_CONFIG: e2e-deep-research.json
     cmds:
       - defer: { task: test:e2e:agentic:cleanup }
       - task: test:e2e:agentic:stack:up
+        vars:
+          FIXTURE: "{{.FIXTURE}}"
+          AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
       - npx playwright test --config playwright.agentic.config.ts e2e/agentic/deep-research.spec.ts
 
   test:e2e:agentic:stack:up:
     desc: Start the agentic E2E Docker stack and wait for health
     internal: true
-    env:
+    vars:
+      FIXTURE: '{{.FIXTURE | default ""}}'
+      AGENTIC_CONFIG: '{{.AGENTIC_CONFIG | default "e2e-agentic.json"}}'
       E2E_AGENTIC_UI_PORT: '{{.E2E_AGENTIC_UI_PORT | default "3100"}}'
+    env:
+      FIXTURE: "{{.FIXTURE}}"
+      AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
+      E2E_AGENTIC_UI_PORT: "{{.E2E_AGENTIC_UI_PORT}}"
     cmds:
-      - docker compose -f docker-compose.agentic-e2e.yml up --build -d
+      - echo "Stack config → AGENTIC_CONFIG={{.AGENTIC_CONFIG}} FIXTURE={{.FIXTURE}}"
+      - docker compose -f docker-compose.agentic-e2e.yml build --no-cache backend
+      - docker compose -f docker-compose.agentic-e2e.yml up -d
       - |
-        PORT="${E2E_AGENTIC_UI_PORT:-3100}"
+        PORT="{{.E2E_AGENTIC_UI_PORT}}"
         echo "Waiting for stack at http://localhost:${PORT} ..."
         for i in $(seq 1 60); do
           if curl -sf "http://localhost:${PORT}/health" > /dev/null 2>&1; then

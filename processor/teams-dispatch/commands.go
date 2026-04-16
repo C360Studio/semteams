@@ -163,8 +163,11 @@ func (c *Component) handleCancelCommand(ctx context.Context, msg agentic.UserMes
 		return agentic.UserResponse{}, errs.Wrap(err, "Component", "handleCancelCommand", "marshal signal")
 	}
 
-	subject := fmt.Sprintf("agent.signal.%s", targetLoopID)
-	if err := c.natsClient.Publish(ctx, subject, signalData); err != nil {
+	signalSubject := c.outputSubject("signals", targetLoopID)
+	if signalSubject == "" {
+		return agentic.UserResponse{}, errs.WrapInvalid(fmt.Errorf("signals output port not configured"), "Component", "handleCancelCommand", "resolve signal subject")
+	}
+	if err := c.natsClient.Publish(ctx, signalSubject, signalData); err != nil {
 		return agentic.UserResponse{}, errs.WrapTransient(err, "Component", "handleCancelCommand", "publish signal")
 	}
 
@@ -395,8 +398,11 @@ func (c *Component) makeSignalCommand(signalType string) CommandHandler {
 			return agentic.UserResponse{}, errs.Wrap(err, "Component", "signalCommand", "marshal signal")
 		}
 
-		subject := fmt.Sprintf("agent.signal.%s", targetLoopID)
-		if err := c.natsClient.Publish(ctx, subject, signalData); err != nil {
+		signalSubject := c.outputSubject("signals", targetLoopID)
+		if signalSubject == "" {
+			return agentic.UserResponse{}, errs.WrapInvalid(fmt.Errorf("signals output port not configured"), "Component", "signalCommand", "resolve signal subject")
+		}
+		if err := c.natsClient.Publish(ctx, signalSubject, signalData); err != nil {
 			return agentic.UserResponse{}, errs.WrapTransient(err, "Component", "signalCommand", "publish signal")
 		}
 

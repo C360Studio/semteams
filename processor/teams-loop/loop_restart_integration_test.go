@@ -28,35 +28,35 @@ func newLoopTestConfig(suffix string) teamsloop.Config {
 				{
 					Name:       "tasks",
 					Type:       "jetstream",
-					Subject:    "agent.task.*",
-					StreamName: "AGENT",
+					Subject:    "teams.task.*",
+					StreamName: "TEAMS",
 					Required:   true,
 				},
 				{
 					Name:       "responses",
 					Type:       "jetstream",
-					Subject:    "agent.response.>",
-					StreamName: "AGENT",
+					Subject:    "teams.response.>",
+					StreamName: "TEAMS",
 				},
 			},
 			Outputs: []component.PortDefinition{
 				{
 					Name:       "requests",
 					Type:       "jetstream",
-					Subject:    "agent.request.*",
-					StreamName: "AGENT",
+					Subject:    "teams.request.*",
+					StreamName: "TEAMS",
 				},
 				{
 					Name:       "complete",
 					Type:       "jetstream",
-					Subject:    "agent.complete.*",
-					StreamName: "AGENT",
+					Subject:    "teams.complete.*",
+					StreamName: "TEAMS",
 				},
 			},
 		},
 		MaxIterations:      10,
 		Timeout:            "60s",
-		StreamName:         "AGENT",
+		StreamName:         "TEAMS",
 		ConsumerNameSuffix: suffix,
 		LoopsBucket:        "AGENT_LOOPS",
 	}
@@ -143,7 +143,7 @@ func TestIntegration_LoopKVStateSurvivesRestart(t *testing.T) {
 	var requestMu sync.Mutex
 	receivedRequests := make([]agentic.AgentRequest, 0)
 
-	_, err := natsClient.Subscribe(ctx, "agent.request.>", func(_ context.Context, msg *nats.Msg) {
+	_, err := natsClient.Subscribe(ctx, "teams.request.>", func(_ context.Context, msg *nats.Msg) {
 		var baseMsg message.BaseMessage
 		if err := json.Unmarshal(msg.Data, &baseMsg); err == nil {
 			if req, ok := baseMsg.Payload().(*agentic.AgentRequest); ok {
@@ -165,7 +165,7 @@ func TestIntegration_LoopKVStateSurvivesRestart(t *testing.T) {
 		Model:  "test-model",
 		Prompt: "Test restart scenario",
 	}
-	publishTaskMessage(t, natsClient, "agent.task.restart", task)
+	publishTaskMessage(t, natsClient, "teams.task.restart", task)
 
 	// Wait for the model request to confirm loop is active
 	require.Eventually(t, func() bool {
@@ -225,7 +225,7 @@ func TestIntegration_TerminalStateSurvivesRestart(t *testing.T) {
 	var requestMu sync.Mutex
 	receivedRequests := make([]agentic.AgentRequest, 0)
 
-	_, err := natsClient.Subscribe(ctx, "agent.request.>", func(_ context.Context, msg *nats.Msg) {
+	_, err := natsClient.Subscribe(ctx, "teams.request.>", func(_ context.Context, msg *nats.Msg) {
 		var baseMsg message.BaseMessage
 		if err := json.Unmarshal(msg.Data, &baseMsg); err == nil {
 			if req, ok := baseMsg.Payload().(*agentic.AgentRequest); ok {
@@ -247,7 +247,7 @@ func TestIntegration_TerminalStateSurvivesRestart(t *testing.T) {
 		Model:  "test-model",
 		Prompt: "Test terminal state",
 	}
-	publishTaskMessage(t, natsClient, "agent.task.terminal", task)
+	publishTaskMessage(t, natsClient, "teams.task.terminal", task)
 
 	// Wait for model request
 	require.Eventually(t, func() bool {
@@ -273,7 +273,7 @@ func TestIntegration_TerminalStateSurvivesRestart(t *testing.T) {
 			CompletionTokens: 50,
 		},
 	}
-	publishResponseMessage(t, natsClient, "agent.response."+requestID, response)
+	publishResponseMessage(t, natsClient, "teams.response."+requestID, response)
 
 	// Wait for KV to reflect terminal state
 	require.Eventually(t, func() bool {

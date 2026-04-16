@@ -22,14 +22,14 @@ function createTaskStore() {
     // Separate top-level loops from children. Uses a plain object (not
     // Map) to avoid the svelte/prefer-svelte-reactivity lint rule — this
     // is a local grouping variable, not reactive state.
-    // Top-level loops have an empty parent_loop_id (Go zero-value "").
-    // Filter explicitly on empty string rather than falsy to match the
-    // backend contract (parent_loop_id is always a string, never null).
-    const topLevel = allLoops.filter((l) => l.parent_loop_id === "");
+    // Top-level loops have an empty or absent parent_loop_id. The Go
+    // struct uses `omitempty`, so the field is omitted from JSON when
+    // empty — treat both "" and undefined/missing as top-level.
+    const topLevel = allLoops.filter((l) => !l.parent_loop_id);
     const childrenByParent: Record<string, typeof allLoops> = {};
 
     for (const loop of allLoops) {
-      if (loop.parent_loop_id !== "") {
+      if (loop.parent_loop_id) {
         (childrenByParent[loop.parent_loop_id] ??= []).push(loop);
       }
     }

@@ -47,7 +47,7 @@ const (
 // operating_model.layer_approved events. The user_id is the routing key so
 // teams-memory can filter per-user later without changing the subject shape.
 func onboardingLayerApprovedSubject(userID string) string {
-	return fmt.Sprintf("agent.operating_model.layer_approved.%s", userID)
+	return fmt.Sprintf("teams.operating_model.layer_approved.%s", userID)
 }
 
 // isOnboardingInFlight reports whether the user's active loop on this channel

@@ -98,8 +98,8 @@ services:
       mock-llm:
         condition: service_healthy
     environment:
-      - STREAMKIT_NATS_URLS=nats://nats:4222
-      - STREAMKIT_LOG_LEVEL=debug
+      - SEMSTREAMS_NATS_URLS=nats://nats:4222
+      - SEMSTREAMS_LOG_LEVEL=debug
       - AGENTIC_LLM_URL=http://mock-llm:8080/v1
     volumes:
       - ${BACKEND_CONTEXT:-..}/configs/${AGENTIC_CONFIG:-e2e-agentic.json}:/etc/semstreams/config.json:ro

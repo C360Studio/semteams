@@ -6,22 +6,21 @@
 //
 // # Architecture
 //
-//	┌─────────────┐                           ┌─────────────────┐
-//	│  CLI/Slack/ │     user.message.*        │                 │
-//	│  Discord/   │ ─────────────────────────▶│ agentic-dispatch│
-//	│  Web Input  │                           │                 │
-//	│             │◀───────────────────────── │  • Commands     │
-//	└─────────────┘     user.response.*       │  • Perms        │
-//	                                          │  • Loops        │
-//	                                          └────────┬────────┘
-//	                                                   │
-//	                                                   │ agent.task.*
-//	                                                   │ agent.signal.*
-//	                                                   ▼
-//	                                          ┌─────────────┐
-//	                                          │ agentic-    │
-//	                                          │ loop        │
-//	                                          └─────────────┘
+//	┌─────────────┐                              ┌─────────────────┐
+//	│  CLI/Slack/ │  teams.user.message.*        │                 │
+//	│  Discord/   │ ────────────────────────────▶│ teams-dispatch  │
+//	│  Web Input  │                              │                 │
+//	│             │◀──────────────────────────── │  • Commands     │
+//	└─────────────┘  teams.user.response.*       │  • Perms        │
+//	                                             │  • Loops        │
+//	                                             └────────┬────────┘
+//	                                                      │
+//	                                                      │ teams.task.*
+//	                                                      │ teams.signal.*
+//	                                                      ▼
+//	                                             ┌─────────────┐
+//	                                             │ teams-loop  │
+//	                                             └─────────────┘
 //
 // # Command Registration
 //
@@ -81,24 +80,21 @@
 //
 // # NATS Subjects
 //
-// The agentic-dispatch component uses these subject patterns:
+// Default subject patterns (resolved from port config — overridable per deployment):
 //
-//   - user.message.{channel}.{id} - Incoming user messages
-//   - user.response.{channel}.{id} - Outgoing responses
-//   - agent.task.{task_id} - Task dispatch to agentic-loop
-//   - agent.signal.{loop_id} - Signals to agentic-loop
-//   - agent.complete.{loop_id} - Completion events from agentic-loop
+//   - teams.user.message.> - Incoming user messages
+//   - teams.user.response.{channel}.{id} - Outgoing responses
+//   - teams.task.{task_id} - Task dispatch to teams-loop
+//   - teams.signal.{loop_id} - Control signals to teams-loop
+//   - teams.complete.{loop_id} - Completion events from teams-loop
+//   - teams.created.{loop_id} - Loop creation events (workflow context sync)
+//   - teams.failed.{loop_id} - Loop failure events
 //
 // # JetStream Integration
 //
-// All messaging uses JetStream for durability:
+// All messaging uses JetStream for durability. Subject namespace and stream name
+// are driven by the port configuration, not hardcoded. This allows multiple
+// dispatch instances with different subject namespaces to coexist in one deployment.
 //
-//   - User messages consumed from USER stream
-//   - Agent tasks published to AGENT stream
-//   - Completion events consumed from AGENT stream
-//
-// Consumer naming follows the pattern: agentic-dispatch-{port-name}
-//
-// Default stream is USER (not AGENT) since this component bridges user
-// input to the agentic system.
+// Default stream is TEAMS. Consumer names follow the pattern: teams-dispatch-{port-name}.
 package teamsdispatch
