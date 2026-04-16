@@ -914,8 +914,8 @@ func (c *Component) handleAgentComplete(ctx context.Context, data []byte) {
 		return
 	}
 
-	// Update loop state
-	c.loopTracker.UpdateState(completion.LoopID, completion.Outcome)
+	// Update loop state (map outcome → display state)
+	c.loopTracker.UpdateState(completion.LoopID, outcomeToState(completion.Outcome))
 
 	// Record loop ended
 	c.metrics.recordLoopEnded()
