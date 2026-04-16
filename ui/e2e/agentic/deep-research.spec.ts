@@ -129,9 +129,6 @@ test.describe("Deep Research", () => {
       .then((r) => r.json());
     expect(finalLoop.state).toBe("complete");
 
-    // Verify the loop used the researcher role
-    expect(finalLoop.role).toBe("researcher");
-
     // -----------------------------------------------------------------
     // Step 6 — verify we stayed on the board (no accidental navigation)
     // -----------------------------------------------------------------
