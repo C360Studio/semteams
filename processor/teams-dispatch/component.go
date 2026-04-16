@@ -15,8 +15,11 @@ import (
 	"github.com/c360studio/semstreams/model"
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/pkg/errs"
+	"github.com/c360studio/semstreams/pkg/types"
 	"github.com/google/uuid"
 	"github.com/nats-io/nats.go/jetstream"
+
+	operatingmodel "github.com/c360studio/semteams/operating-model"
 )
 
 // Component implements the router processor
@@ -44,6 +47,12 @@ type Component struct {
 
 	// Track consumers for cleanup
 	consumerInfos []consumerInfo
+
+	// profileReader reads the user's operating-model from the ENTITY_STATES
+	// KV bucket so handleTaskSubmission can embed a preamble in task.Context
+	// for the first LLM call (issue #22 timing fix). Nil when graph-ingest
+	// hasn't started or the bucket isn't available.
+	profileReader operatingmodel.ProfileReader
 
 	// sendResponseFn is a test hook only; production leaves this nil. When
 	// non-nil it replaces the NATS-publishing behavior of sendResponse, so unit
@@ -237,10 +246,87 @@ func (c *Component) Start(ctx context.Context) error {
 		return errs.Wrap(err, "Component", "Start", "setup subscriptions")
 	}
 
+	// Wire the graph-backed ProfileReader for first-iteration context injection
+	// (issue #22). Falls back to nil if the KV bucket isn't available.
+	if c.natsClient != nil {
+		c.initProfileReader(ctx)
+	}
+
 	c.logger.Info("Router component started",
 		slog.Int("commands", c.registry.Count()))
 
 	return nil
+}
+
+// initProfileReader opens the ENTITY_STATES KV bucket and stores a
+// GraphProfileReader on the component. Graceful: logs and continues if the
+// bucket isn't available (graph-ingest hasn't started).
+func (c *Component) initProfileReader(ctx context.Context) {
+	reader, err := operatingmodel.NewGraphProfileReader(ctx, c.natsClient, "ENTITY_STATES", c.logger)
+	if err != nil {
+		c.logger.Debug("ENTITY_STATES bucket not available; profile preamble injection disabled",
+			"error", err)
+		return
+	}
+	c.profileReader = reader
+	c.logger.Info("Profile preamble reader wired for first-iteration injection")
+}
+
+// buildProfileContext queries the user's operating model and returns a
+// ConstructedContext suitable for embedding in TaskMessage.Context. Returns
+// nil when the user has no profile or the read fails — callers treat nil as
+// "no context to inject."
+func (c *Component) buildProfileContext(ctx context.Context, userID string) *types.ConstructedContext {
+	result, err := c.profileReader.ReadOperatingModel(ctx, c.deps.Platform.Org, c.deps.Platform.Platform, userID)
+	if err != nil {
+		c.logger.Debug("Profile read failed; skipping first-iteration injection",
+			"user_id", userID, "error", err)
+		return nil
+	}
+	if result == nil || len(result.Entries) == 0 {
+		return nil
+	}
+
+	pc := &operatingmodel.ProfileContext{
+		UserID:         userID,
+		LoopID:         "pre-task",
+		ProfileVersion: result.Version,
+		OperatingModel: operatingmodel.ProfileContextSlice{
+			Content:    renderEntriesForPreamble(result.Entries),
+			TokenCount: 0, // populated below
+			EntryCount: len(result.Entries),
+		},
+		TokenBudget: 800,
+	}
+	pc.OperatingModel.TokenCount = (len(pc.OperatingModel.Content) + 3) / 4
+
+	preamble := pc.SystemPromptPreamble()
+	if preamble == "" {
+		return nil
+	}
+	return &types.ConstructedContext{
+		Content:    preamble,
+		TokenCount: (len(preamble) + 3) / 4,
+	}
+}
+
+// renderEntriesForPreamble produces a bullet list from entries for embedding
+// in the system-prompt preamble.
+func renderEntriesForPreamble(entries []operatingmodel.Entry) string {
+	var b strings.Builder
+	for _, e := range entries {
+		b.WriteString("- ")
+		b.WriteString(e.Title)
+		if e.Cadence != "" {
+			b.WriteString(" (")
+			b.WriteString(e.Cadence)
+			b.WriteString(")")
+		}
+		b.WriteString(": ")
+		b.WriteString(e.Summary)
+		b.WriteString("\n")
+	}
+	return b.String()
 }
 
 // Stop halts processing with graceful shutdown
@@ -684,6 +770,13 @@ func (c *Component) handleTaskSubmission(ctx context.Context, msg agentic.UserMe
 		Metadata: map[string]any{
 			"user_id": msg.UserID,
 		},
+	}
+
+	// Embed the user's operating-model preamble so the first LLM iteration
+	// always sees it (issue #22 timing fix). The async agent.context.profile
+	// path through teams-memory refreshes it for subsequent iterations.
+	if c.profileReader != nil {
+		task.Context = c.buildProfileContext(ctx, msg.UserID)
 	}
 
 	// Track the loop

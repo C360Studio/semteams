@@ -145,21 +145,24 @@ func TestAssembleProfileContext_DeterministicAcrossCalls(t *testing.T) {
 
 // --- handleLoopCreated (handler wired through) ---
 
-// stubProfileReader returns a fixed entry set and profile version.
+// stubProfileReader returns a fixed result set.
 type stubProfileReader struct {
 	entries []operatingmodel.Entry
 	version int
 	err     error
 }
 
-func (s stubProfileReader) ReadOperatingModel(_ context.Context, _, _, _ string) ([]operatingmodel.Entry, int, error) {
-	if s.err != nil {
-		return nil, 0, s.err
+func (s stubProfileReader) ReadOperatingModel(ctx context.Context, _, _, _ string) (*operatingmodel.ProfileResult, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
-	return s.entries, s.version, nil
+	if s.err != nil {
+		return nil, s.err
+	}
+	return &operatingmodel.ProfileResult{Entries: s.entries, Version: s.version}, nil
 }
 
-func newProfileContextTestComponent(t *testing.T, reader ProfileReader) *Component {
+func newProfileContextTestComponent(t *testing.T, reader operatingmodel.ProfileReader) *Component {
 	t.Helper()
 	cfg := DefaultConfig()
 	rawCfg, _ := json.Marshal(cfg)
@@ -238,7 +241,7 @@ func TestHandleLoopCreated_SkipsWhenUserIDAbsent(t *testing.T) {
 }
 
 func TestHandleLoopCreated_InvalidJSON(t *testing.T) {
-	c := newProfileContextTestComponent(t, EmptyProfileReader{})
+	c := newProfileContextTestComponent(t, operatingmodel.EmptyProfileReader{})
 	c.handleLoopCreated(context.Background(), []byte("{nope"))
 	if got := atomic.LoadInt64(&c.errors); got != 1 {
 		t.Errorf("errors = %d, want 1", got)
@@ -246,7 +249,7 @@ func TestHandleLoopCreated_InvalidJSON(t *testing.T) {
 }
 
 func TestHandleLoopCreated_WrongPayloadType(t *testing.T) {
-	c := newProfileContextTestComponent(t, EmptyProfileReader{})
+	c := newProfileContextTestComponent(t, operatingmodel.EmptyProfileReader{})
 	// Wrap a ProfileContext (different type) in a BaseMessage.
 	foreign := &operatingmodel.ProfileContext{UserID: "u", LoopID: "l"}
 	baseMsg := message.NewBaseMessage(foreign.Schema(), foreign, "test")
@@ -275,7 +278,7 @@ func TestHandleLoopCreated_EmptyProfileStillSucceeds(t *testing.T) {
 	// A user who hasn't onboarded yet: reader returns (nil, 0, nil). The
 	// handler must still publish an (empty-slice) profile-context so
 	// downstream consumers get consistent signaling.
-	c := newProfileContextTestComponent(t, EmptyProfileReader{})
+	c := newProfileContextTestComponent(t, operatingmodel.EmptyProfileReader{})
 	data := wrapLoopCreated(t, validLoopCreated("new-user"))
 
 	c.handleLoopCreated(context.Background(), data)
@@ -288,7 +291,7 @@ func TestHandleLoopCreated_EmptyProfileStillSucceeds(t *testing.T) {
 }
 
 func TestHandlerForPort_RoutesLoopCreatedEvents(t *testing.T) {
-	c := newProfileContextTestComponent(t, EmptyProfileReader{})
+	c := newProfileContextTestComponent(t, operatingmodel.EmptyProfileReader{})
 	h, ok := c.handlerForPort("loop_created_events")
 	if !ok {
 		t.Fatal("loop_created_events port not routed")
@@ -301,8 +304,8 @@ func TestHandlerForPort_RoutesLoopCreatedEvents(t *testing.T) {
 func TestSetProfileReader_NilRestoresEmpty(t *testing.T) {
 	c := newProfileContextTestComponent(t, stubProfileReader{entries: sampleEntries(), version: 1})
 	c.SetProfileReader(nil)
-	if _, ok := c.getProfileReader().(EmptyProfileReader); !ok {
-		t.Errorf("expected EmptyProfileReader after SetProfileReader(nil), got %T", c.getProfileReader())
+	if _, ok := c.getProfileReader().(operatingmodel.EmptyProfileReader); !ok {
+		t.Errorf("expected operatingmodel.EmptyProfileReader, got %T", c.getProfileReader())
 	}
 }
 

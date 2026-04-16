@@ -26,10 +26,11 @@ type integrationProfileReader struct {
 	version int
 }
 
-func (r integrationProfileReader) ReadOperatingModel(
-	_ context.Context, _, _, _ string,
-) ([]operatingmodel.Entry, int, error) {
-	return r.entries, r.version, nil
+func (r integrationProfileReader) ReadOperatingModel(ctx context.Context, org, platform, userID string) (*operatingmodel.ProfileResult, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return &operatingmodel.ProfileResult{Entries: r.entries, Version: r.version}, nil
 }
 
 // TestIntegration_LoopCreated_PublishesProfileContext drives the end-to-end

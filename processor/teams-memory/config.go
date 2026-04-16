@@ -15,6 +15,7 @@ type Config struct {
 	Ports              *component.PortConfig `json:"ports,omitempty" schema:"type:ports,description:Port configuration,category:basic"`
 	StreamName         string                `json:"stream_name,omitempty" schema:"type:string,description:JetStream stream name,category:advanced,default:AGENT"`
 	ConsumerNameSuffix string                `json:"consumer_name_suffix,omitempty" schema:"type:string,description:Consumer name suffix for uniqueness,category:advanced"`
+	EntityStatesBucket string                `json:"entity_states_bucket,omitempty" schema:"type:string,description:KV bucket for entity state (read-only for ProfileReader),category:advanced,default:ENTITY_STATES"`
 }
 
 // ExtractionConfig holds fact extraction configuration

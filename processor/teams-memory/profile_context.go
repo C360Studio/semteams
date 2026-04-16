@@ -14,31 +14,6 @@ import (
 	operatingmodel "github.com/c360studio/semteams/operating-model"
 )
 
-// ProfileReader reads a user's current operating-model profile from the
-// knowledge graph. Implementations should return the latest approved version
-// of each canonical layer along with its entries.
-//
-// Returning (nil, 0, nil) signals "no profile yet" — that's not an error; the
-// assembler will produce an empty operating-model slice and downstream
-// consumers will skip injection.
-type ProfileReader interface {
-	// ReadOperatingModel returns the entries in canonical layer order plus
-	// the profile version they correspond to. org and platform identify the
-	// tenant so the reader can filter the 6-part entity-ID subtree.
-	ReadOperatingModel(ctx context.Context, org, platform, userID string) ([]operatingmodel.Entry, int, error)
-}
-
-// EmptyProfileReader always reports no profile. Used as the default when a
-// real graph client is not wired (test harness, initial boot, or
-// graph-query infrastructure still in development).
-type EmptyProfileReader struct{}
-
-// ReadOperatingModel implements ProfileReader by returning the "no profile
-// yet" signal.
-func (EmptyProfileReader) ReadOperatingModel(_ context.Context, _, _, _ string) ([]operatingmodel.Entry, int, error) {
-	return nil, 0, nil
-}
-
 // profileContextSubject returns the NATS subject used to publish an assembled
 // operating_model.profile_context event to teams-loop.
 func profileContextSubject(loopID string) string {
@@ -144,10 +119,15 @@ func (c *Component) assembleProfileContextFromGraph(
 	userID, loopID string,
 ) (*operatingmodel.ProfileContext, error) {
 	reader := c.getProfileReader()
-	entries, profileVersion, err := reader.ReadOperatingModel(
-		ctx, c.platform.Org, c.platform.Platform, userID)
+	result, err := reader.ReadOperatingModel(ctx, c.platform.Org, c.platform.Platform, userID)
 	if err != nil {
 		return nil, fmt.Errorf("read operating model: %w", err)
+	}
+	var entries []operatingmodel.Entry
+	var profileVersion int
+	if result != nil {
+		entries = result.Entries
+		profileVersion = result.Version
 	}
 	return AssembleProfileContext(ProfileContextInputs{
 		UserID:         userID,

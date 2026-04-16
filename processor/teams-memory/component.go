@@ -17,6 +17,8 @@ import (
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/pkg/errs"
 	"github.com/nats-io/nats.go/jetstream"
+
+	operatingmodel "github.com/c360studio/semteams/operating-model"
 )
 
 // agenticMemorySchema defines the configuration schema
@@ -34,7 +36,7 @@ type Component struct {
 	extractor *LLMExtractor
 	// profileReader is swapped atomically so handlers running concurrently
 	// with SetProfileReader observe a consistent reader without a mutex.
-	profileReader atomic.Pointer[ProfileReader]
+	profileReader atomic.Pointer[operatingmodel.ProfileReader]
 
 	// Lifecycle management
 	running   bool
@@ -89,7 +91,7 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 		hydrator:   hydrator,
 		extractor:  extractor,
 	}
-	var initial ProfileReader = EmptyProfileReader{}
+	var initial operatingmodel.ProfileReader = operatingmodel.EmptyProfileReader{}
 	comp.profileReader.Store(&initial)
 	return comp, nil
 }
@@ -98,20 +100,20 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 // profile context. Production deployments call this with a graph-backed
 // reader during component initialization; tests may supply a stub. Safe to
 // call concurrently with handlers via atomic swap.
-func (c *Component) SetProfileReader(reader ProfileReader) {
+func (c *Component) SetProfileReader(reader operatingmodel.ProfileReader) {
 	if reader == nil {
-		reader = EmptyProfileReader{}
+		reader = operatingmodel.EmptyProfileReader{}
 	}
 	c.profileReader.Store(&reader)
 }
 
 // getProfileReader returns the currently-installed ProfileReader. Always
 // non-nil: the component constructor initializes it to EmptyProfileReader.
-func (c *Component) getProfileReader() ProfileReader {
+func (c *Component) getProfileReader() operatingmodel.ProfileReader {
 	if r := c.profileReader.Load(); r != nil {
 		return *r
 	}
-	return EmptyProfileReader{}
+	return operatingmodel.EmptyProfileReader{}
 }
 
 // Initialize prepares the component
@@ -147,6 +149,7 @@ func (c *Component) Start(ctx context.Context) error {
 			c.mu.Unlock()
 			return errs.Wrap(err, "Component", "Start", "setup input consumers")
 		}
+		c.initProfileReader(ctx)
 	}
 
 	c.mu.Lock()
@@ -154,6 +157,25 @@ func (c *Component) Start(ctx context.Context) error {
 	c.mu.Unlock()
 
 	return nil
+}
+
+// initProfileReader attempts to open the entity-states KV bucket and swap
+// in a GraphProfileReader. Falls back silently to EmptyProfileReader.
+func (c *Component) initProfileReader(ctx context.Context) {
+	bucket := c.config.EntityStatesBucket
+	if bucket == "" {
+		bucket = "ENTITY_STATES"
+	}
+	reader, err := operatingmodel.NewGraphProfileReader(ctx, c.natsClient, bucket, c.logger)
+	if err != nil {
+		c.logger.Warn("Could not open entity-states bucket for ProfileReader; using empty reader",
+			"bucket", bucket,
+			"error", err,
+			"hint", "start graph-ingest to create the bucket, or set entity_states_bucket in config")
+		return
+	}
+	c.SetProfileReader(reader)
+	c.logger.Info("Graph-backed ProfileReader wired", "bucket", bucket)
 }
 
 // setupInputConsumers sets up JetStream consumers for all input ports
