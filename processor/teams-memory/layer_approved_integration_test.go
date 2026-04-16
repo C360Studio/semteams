@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/graph"
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/natsclient"
 	teamsmemory "github.com/c360studio/semteams/processor/teams-memory"
@@ -170,6 +171,144 @@ func TestIntegration_LayerApproved_WithoutPlatform_SkipsSilently(t *testing.T) {
 	require.Eventually(t, func() bool {
 		return comp.Health().ErrorCount > 0
 	}, 2*time.Second, 50*time.Millisecond, "errors should tick on missing platform")
+}
+
+// TestIntegration_RoundTrip_LayerApproved_KV_ProfileReader drives the full
+// write→read round-trip:
+//
+//  1. Publish a LayerApproved payload (simulates /onboard approval)
+//  2. Capture the graph.mutation emitted by teams-memory
+//  3. Simulate graph-ingest: group triples by subject into EntityState blobs
+//     and write them to the ENTITY_STATES KV bucket
+//  4. Create a GraphProfileReader against the same KV bucket
+//  5. Call ReadOperatingModel and assert the reconstructed entries match
+//     the original LayerApproved payload
+func TestIntegration_RoundTrip_LayerApproved_KV_ProfileReader(t *testing.T) {
+	natsClient := getSharedNATSClient(t)
+
+	config := teamsmemory.DefaultConfig()
+	config.StreamName = "AGENT"
+	config.ConsumerNameSuffix = "roundtrip-" + uniqueSuffix()
+	config.Hydration.PostCompaction.Enabled = false
+	config.Hydration.PreTask.Enabled = false
+	config.Extraction.LLMAssisted.Enabled = false
+
+	rawConfig, err := json.Marshal(config)
+	require.NoError(t, err)
+
+	deps := component.Dependencies{
+		NATSClient: natsClient,
+		Platform:   component.PlatformMeta{Org: "c360", Platform: "ops"},
+	}
+	comp, err := teamsmemory.NewComponent(rawConfig, deps)
+	require.NoError(t, err)
+
+	lc, ok := comp.(component.LifecycleComponent)
+	require.True(t, ok)
+	require.NoError(t, lc.Initialize())
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	require.NoError(t, lc.Start(ctx))
+	defer lc.Stop(5 * time.Second)
+	waitForConsumerReady(t, comp)
+
+	mutationCh := subscribeCoreNATS(t, natsClient, "graph.mutation.>")
+
+	// --- Step 1: publish LayerApproved ---
+	payload := &operatingmodel.LayerApproved{
+		UserID:            "roundtrip-user",
+		LoopID:            "loop-roundtrip",
+		Layer:             operatingmodel.LayerOperatingRhythms,
+		ProfileVersion:    1,
+		CheckpointSummary: "Weekly rhythms established",
+		Entries: []operatingmodel.Entry{
+			{
+				EntryID: "rt-e1",
+				Title:   "Weekly planning",
+				Summary: "Mondays 9-10am",
+				Cadence: "weekly",
+				Trigger: "Monday 9am",
+			},
+			{
+				EntryID: "rt-e2",
+				Title:   "Daily standup",
+				Summary: "15-min team sync",
+				Cadence: "daily",
+			},
+		},
+		ApprovedAt: time.Now().UTC(),
+	}
+	baseMsg := message.NewBaseMessage(payload.Schema(), payload, "integration-test")
+	data, err := baseMsg.MarshalJSON()
+	require.NoError(t, err)
+	require.NoError(t, natsClient.PublishToStream(ctx,
+		"agent.operating_model.layer_approved."+payload.UserID, data))
+
+	// --- Step 2: capture graph.mutation ---
+	var mutation teamsmemory.GraphMutationMessage
+	select {
+	case raw := <-mutationCh:
+		require.NoError(t, json.Unmarshal(raw, &mutation))
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for graph.mutation")
+	}
+	require.NotEmpty(t, mutation.Triples)
+
+	// --- Step 3: simulate graph-ingest — group triples by subject, write to KV ---
+	kvBucket, err := natsClient.GetKeyValueBucket(ctx, "ENTITY_STATES")
+	require.NoError(t, err)
+	kv := natsClient.NewKVStore(kvBucket)
+	writeTriplesToKV(t, ctx, kv, mutation.Triples)
+
+	// --- Step 4: create GraphProfileReader against same bucket ---
+	reader, err := operatingmodel.NewGraphProfileReader(ctx, natsClient, "ENTITY_STATES", nil)
+	require.NoError(t, err, "NewGraphProfileReader should succeed after KV write")
+
+	// --- Step 5: read back and assert ---
+	result, err := reader.ReadOperatingModel(ctx, "c360", "ops", "roundtrip-user")
+	require.NoError(t, err)
+	require.NotNil(t, result, "result should not be nil after writing entries")
+	assert.Equal(t, 1, result.Version, "profile version should match LayerApproved.ProfileVersion")
+	assert.Len(t, result.Entries, 2, "should reconstruct both entries")
+
+	// Verify entry content matches the original payload.
+	titles := make(map[string]bool)
+	for _, e := range result.Entries {
+		titles[e.Title] = true
+		if e.Title == "Weekly planning" {
+			assert.Equal(t, "Mondays 9-10am", e.Summary)
+			assert.Equal(t, "weekly", e.Cadence)
+		}
+		if e.Title == "Daily standup" {
+			assert.Equal(t, "15-min team sync", e.Summary)
+			assert.Equal(t, "daily", e.Cadence)
+		}
+	}
+	assert.True(t, titles["Weekly planning"], "missing entry: Weekly planning")
+	assert.True(t, titles["Daily standup"], "missing entry: Daily standup")
+}
+
+// writeTriplesToKV groups triples by subject and writes each group as a
+// graph.EntityState JSON blob to the KV bucket, simulating what graph-ingest
+// does when it processes a graph.mutation.add_triples message.
+func writeTriplesToKV(t *testing.T, ctx context.Context, kv *natsclient.KVStore, triples []message.Triple) {
+	t.Helper()
+	grouped := make(map[string][]message.Triple)
+	for _, tr := range triples {
+		grouped[tr.Subject] = append(grouped[tr.Subject], tr)
+	}
+	for entityID, entityTriples := range grouped {
+		state := graph.EntityState{
+			ID:      entityID,
+			Triples: entityTriples,
+		}
+		data, err := json.Marshal(state)
+		require.NoError(t, err, "marshal EntityState for %s", entityID)
+		_, err = kv.Put(ctx, entityID, data)
+		require.NoError(t, err, "KV put for %s", entityID)
+	}
+	t.Logf("Wrote %d entity states to KV", len(grouped))
 }
 
 // --- helpers ---
