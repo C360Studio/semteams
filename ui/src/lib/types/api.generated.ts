@@ -4,2132 +4,3933 @@
  */
 
 export interface paths {
-  "/config/{name}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Real-time activity events (SSE)
+         * @description Server-Sent Events stream of loop activity. Events include loop_created, loop_updated, loop_deleted. Connect with EventSource or curl -N.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description SSE event stream */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * Get component configuration
-     * @description Returns the current configuration for a specific component
-     */
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          /** @description Component name */
-          name: string;
+    "/commands": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description Component configuration */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "application/json": Record<string, never>;
-          };
+        /**
+         * List available commands
+         * @description Returns the list of all registered commands with their descriptions and usage
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description List of available commands */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": Record<string, never>;
+                    };
+                };
+            };
         };
-        /** @description Component not found */
-        404: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
-        };
-      };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/deployment/{id}/deploy": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/config/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get component configuration
+         * @description Returns the current configuration for a specific component
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Component name */
+                    name: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Component configuration */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": Record<string, never>;
+                    };
+                };
+                /** @description Component not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    get?: never;
-    put?: never;
-    /**
-     * Deploy flow
-     * @description Deploys a flow to the runtime
-     */
-    post: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description Flow deployed */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
+    "/debug/state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
-        /** @description Validation errors */
-        400: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
+        /**
+         * Internal component state for debugging
+         * @description Returns internal state including active loops, registered commands, configuration, and uptime. Useful for debugging and monitoring.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Debug state */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": Record<string, never>;
+                    };
+                };
+            };
         };
-      };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/deployment/{id}/start": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/deployment/{id}/deploy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Deploy flow
+         * @description Deploys a flow to the runtime
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Flow deployed */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Validation errors */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    get?: never;
-    put?: never;
-    /**
-     * Start flow
-     * @description Starts a deployed flow
-     */
-    post: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description Flow started */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
+    "/deployment/{id}/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
-      };
+        get?: never;
+        put?: never;
+        /**
+         * Start flow
+         * @description Starts a deployed flow
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Flow started */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/deployment/{id}/stop": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/deployment/{id}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stop flow
+         * @description Stops a running flow
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Flow stopped */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    get?: never;
-    put?: never;
-    /**
-     * Stop flow
-     * @description Stops a running flow
-     */
-    post: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description Flow stopped */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
+    "/entries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
-      };
+        /**
+         * Get recent message entries
+         * @description Returns the most recent logged messages from the circular buffer
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Maximum number of entries to return (default: 100, max: 10000) */
+                    limit?: number;
+                    /** @description Filter by NATS subject pattern */
+                    subject?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description List of message entries */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MessageLogEntry"][];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/entries": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/flowgraph": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get component FlowGraph
+         * @description Returns the complete FlowGraph with nodes and edges for all managed components
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description FlowGraph with nodes and edges */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": Record<string, never>;
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * Get recent message entries
-     * @description Returns the most recent logged messages from the circular buffer
-     */
-    get: {
-      parameters: {
-        query?: {
-          /** @description Maximum number of entries to return (default: 100, max: 10000) */
-          limit?: number;
-          /** @description Filter by NATS subject pattern */
-          subject?: string;
+    "/flows": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description List of message entries */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "application/json": components["schemas"]["MessageLogEntry"][];
-          };
+        /**
+         * List all flows
+         * @description Returns a list of all visual flows
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description List of flows */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": Record<string, never>;
+                    };
+                };
+            };
         };
-      };
+        put?: never;
+        /**
+         * Create a new flow
+         * @description Creates a new visual flow
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            /** @description Flow definition to create */
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["Flow"];
+                };
+            };
+            responses: {
+                /** @description Flow created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": Record<string, never>;
+                    };
+                };
+                /** @description Invalid request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/flowgraph": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/flows/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get flow by ID
+         * @description Returns a single flow by ID
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Flow ID */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Flow details */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": Record<string, never>;
+                    };
+                };
+                /** @description Flow not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        /**
+         * Update flow
+         * @description Updates an existing flow
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            /** @description Updated flow definition */
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["Flow"];
+                };
+            };
+            responses: {
+                /** @description Flow updated */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": Record<string, never>;
+                    };
+                };
+                /** @description Flow not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Version conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        post?: never;
+        /**
+         * Delete flow
+         * @description Deletes a flow
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Flow deleted */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Flow not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * Get component FlowGraph
-     * @description Returns the complete FlowGraph with nodes and edges for all managed components
-     */
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description FlowGraph with nodes and edges */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "application/json": Record<string, never>;
-          };
+    "/flows/{id}/runtime/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
-      };
+        /**
+         * Get runtime health
+         * @description Returns health status and timing for flow components (status, uptime, last activity)
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Flow ID */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Runtime health status */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["RuntimeHealthResponse"];
+                    };
+                };
+                /** @description Flow not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/flows": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/flows/{id}/runtime/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get runtime messages
+         * @description Returns filtered message logger entries for flow components (NATS message flow visibility)
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Maximum number of messages to return (default: 100, max: 1000) */
+                    limit?: number;
+                };
+                header?: never;
+                path: {
+                    /** @description Flow ID */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Runtime message entries */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["RuntimeMessagesResponse"];
+                    };
+                };
+                /** @description Flow not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * List all flows
-     * @description Returns a list of all visual flows
-     */
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description List of flows */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "application/json": Record<string, never>;
-          };
+    "/flows/{id}/runtime/metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
-      };
+        /**
+         * Get runtime metrics
+         * @description Returns runtime metrics for flow components (throughput, errors, queue depth) with graceful degradation
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Flow ID */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Runtime metrics */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["RuntimeMetricsResponse"];
+                    };
+                };
+                /** @description Flow not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    put?: never;
-    /**
-     * Create a new flow
-     * @description Creates a new visual flow
-     */
-    post: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description Flow created */
-        201: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "application/json": Record<string, never>;
-          };
+    "/gaps": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
-        /** @description Invalid request */
-        400: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
+        /**
+         * Get component flow gaps
+         * @description Returns disconnected nodes and orphaned ports in the component flow
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Component flow gaps and disconnected nodes */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": Record<string, never>;
+                    };
+                };
+            };
         };
-      };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/flows/{id}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/graphql": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Execute GraphQL query
+         * @description Execute GraphQL queries against the knowledge graph. The GraphQL schema is available via introspection query.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            /** @description GraphQL query with optional variables */
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["GraphQLRequest"];
+                };
+            };
+            responses: {
+                /** @description GraphQL response with data or errors */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": Record<string, never>;
+                    };
+                };
+                /** @description Invalid GraphQL query */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Method not allowed (only POST supported) */
+                405: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Query timeout */
+                504: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * Get flow by ID
-     * @description Returns a single flow by ID
-     */
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          /** @description Flow ID */
-          id: string;
+    "/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description Flow details */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "application/json": Record<string, never>;
-          };
+        /**
+         * Get component health status
+         * @description Returns aggregated health status for all managed components
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Component health information */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": Record<string, never>;
+                    };
+                };
+            };
         };
-        /** @description Flow not found */
-        404: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
-        };
-      };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * Update flow
-     * @description Updates an existing flow
-     */
-    put: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description Flow updated */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "application/json": Record<string, never>;
-          };
+    "/inference/anomalies/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
-        /** @description Flow not found */
-        404: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
+        /**
+         * Get anomaly by ID
+         * @description Returns details of a specific structural anomaly
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Anomaly ID */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Anomaly details */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StructuralAnomaly"];
+                    };
+                };
+                /** @description Anomaly not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Internal server error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
         };
-        /** @description Version conflict */
-        409: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
-        };
-      };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    post?: never;
-    /**
-     * Delete flow
-     * @description Deletes a flow
-     */
-    delete: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description Flow deleted */
-        204: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
+    "/inference/anomalies/{id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
-        /** @description Flow not found */
-        404: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
+        get?: never;
+        put?: never;
+        /**
+         * Submit review decision
+         * @description Submit a human review decision (approve or reject) for a structural anomaly
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Anomaly ID */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            /** @description Review decision with optional notes and overrides */
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ReviewRequest"];
+                };
+            };
+            responses: {
+                /** @description Updated anomaly after review */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StructuralAnomaly"];
+                    };
+                };
+                /** @description Invalid request (bad decision or missing target entity) */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Anomaly not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Anomaly not in reviewable state */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Internal server error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
         };
-      };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/flows/{id}/runtime/health": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/inference/anomalies/pending": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List pending anomalies
+         * @description Returns structural anomalies awaiting human review
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description List of pending anomalies */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StructuralAnomaly"][];
+                    };
+                };
+                /** @description Internal server error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * Get runtime health
-     * @description Returns health status and timing for flow components (status, uptime, last activity)
-     */
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          /** @description Flow ID */
-          id: string;
+    "/inference/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description Runtime health status */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "application/json": components["schemas"]["RuntimeHealthResponse"];
-          };
+        /**
+         * Get inference statistics
+         * @description Returns statistics about detected anomalies and their review status
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Inference statistics */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StatsResponse"];
+                    };
+                };
+                /** @description Internal server error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
         };
-        /** @description Flow not found */
-        404: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
-        };
-      };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/flows/{id}/runtime/messages": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/kv/{bucket}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Query KV bucket
+         * @description Query NATS KV bucket entries (development/test only)
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Key pattern to match (e.g., 'entity.*') */
+                    pattern?: string;
+                    /** @description Maximum number of entries to return (default: 100, max: 1000) */
+                    limit?: number;
+                };
+                header?: never;
+                path: {
+                    /** @description KV bucket name */
+                    bucket: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description KV bucket entries */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": Record<string, never>;
+                    };
+                };
+                /** @description KV query disabled in production */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Bucket not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * Get runtime messages
-     * @description Returns filtered message logger entries for flow components (NATS message flow visibility)
-     */
-    get: {
-      parameters: {
-        query?: {
-          /** @description Maximum number of messages to return (default: 100, max: 1000) */
-          limit?: number;
+    "/kv/{bucket}/watch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
-        header?: never;
-        path: {
-          /** @description Flow ID */
-          id: string;
+        /**
+         * Watch KV bucket changes
+         * @description Stream KV bucket changes via Server-Sent Events (SSE). Supports pattern filtering and SSE reconnection with event IDs.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Key pattern to watch (e.g., 'entity.*'). Default: '*' (all keys) */
+                    pattern?: string;
+                };
+                header?: never;
+                path: {
+                    /** @description KV bucket name (e.g., ENTITY_STATES, CONTEXT_INDEX) */
+                    bucket: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description SSE stream of KV changes. Events: 'connected' (initial), 'kv_change' (updates), 'error' (failures) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Invalid bucket name or pattern */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Bucket not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
         };
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description Runtime message entries */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "application/json": components["schemas"]["RuntimeMessagesResponse"];
-          };
-        };
-        /** @description Flow not found */
-        404: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
-        };
-      };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/flows/{id}/runtime/metrics": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/list": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List all components
+         * @description Returns a list of all managed components with basic information
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description List of components */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": Record<string, never>;
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * Get runtime metrics
-     * @description Returns runtime metrics for flow components (throughput, errors, queue depth) with graceful degradation
-     */
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          /** @description Flow ID */
-          id: string;
+    "/loops": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description Runtime metrics */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "application/json": components["schemas"]["RuntimeMetricsResponse"];
-          };
+        /**
+         * List all tracked loops
+         * @description Returns all active and recent loops. Supports optional filtering by user_id and state query parameters.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Filter by user ID */
+                    user_id?: unknown;
+                    /** @description Filter by loop state (pending, executing, paused, complete, failed, cancelled) */
+                    state?: unknown;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description List of loops */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": Record<string, never>;
+                    };
+                };
+            };
         };
-        /** @description Flow not found */
-        404: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
-        };
-      };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/gaps": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/loops/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get single loop by ID
+         * @description Returns detailed information about a specific loop including state, iterations, and metadata.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Loop ID */
+                    id: unknown;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Loop details */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": Record<string, never>;
+                    };
+                };
+                /** @description Loop not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * Get component flow gaps
-     * @description Returns disconnected nodes and orphaned ports in the component flow
-     */
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description Component flow gaps and disconnected nodes */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "application/json": Record<string, never>;
-          };
+    "/loops/{id}/signal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
-      };
+        get?: never;
+        put?: never;
+        /**
+         * Send control signal to loop
+         * @description Sends a control signal (pause, resume, cancel) to an active loop.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Loop ID */
+                    id: unknown;
+                };
+                cookie?: never;
+            };
+            /** @description Control signal to send */
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["SignalRequest"];
+                };
+            };
+            responses: {
+                /** @description Signal accepted */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": Record<string, never>;
+                    };
+                };
+                /** @description Invalid signal type */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Loop not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/graphql": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/mcp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * MCP endpoint
+         * @description Model Context Protocol endpoint for AI tool integration. Enables LLMs to interact with the knowledge graph.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description MCP response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": Record<string, never>;
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    get?: never;
-    put?: never;
-    /**
-     * Execute GraphQL query
-     * @description Execute GraphQL queries against the knowledge graph. The GraphQL schema is available via introspection query.
-     */
-    post: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description GraphQL response with data or errors */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "application/json": Record<string, never>;
-          };
+    "/message": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
-        /** @description Invalid GraphQL query */
-        400: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
+        get?: never;
+        put?: never;
+        /**
+         * Process a user message
+         * @description Processes a user message synchronously. Commands (starting with /) are executed immediately. Regular messages are submitted as tasks.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            /** @description User message to process */
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["HTTPMessageRequest"];
+                };
+            };
+            responses: {
+                /** @description Message processed successfully */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": Record<string, never>;
+                    };
+                };
+                /** @description Invalid request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
         };
-        /** @description Method not allowed (only POST supported) */
-        405: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
-        };
-        /** @description Query timeout */
-        504: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
-        };
-      };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/health": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/paths": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get component data paths
+         * @description Returns data paths from input components to all reachable components
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Data paths through component graph */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": Record<string, never>;
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * Get component health status
-     * @description Returns aggregated health status for all managed components
-     */
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description Component health information */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "application/json": Record<string, never>;
-          };
+    "/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
-      };
+        /**
+         * Get message statistics
+         * @description Returns statistics about processed messages
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Message statistics */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": Record<string, never>;
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/inference/anomalies/{id}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/status/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get component status
+         * @description Returns detailed status for a specific component
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Component name */
+                    name: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Component status */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": Record<string, never>;
+                    };
+                };
+                /** @description Component not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * Get anomaly by ID
-     * @description Returns details of a specific structural anomaly
-     */
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          /** @description Anomaly ID */
-          id: string;
+    "/status/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description Anomaly details */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "application/json": components["schemas"]["StructuralAnomaly"];
-          };
+        /**
+         * WebSocket status stream
+         * @description Real-time flow status updates via WebSocket.
+         *
+         *     ## Connection
+         *     Connect with: ws://host/flowbuilder/status/stream?flowId={flowId}
+         *
+         *     ## Message Types (Server → Client)
+         *     All messages are wrapped in StatusStreamEnvelope:
+         *     - **flow_status**: Flow state changes (deployed, running, stopped, failed)
+         *     - **component_health**: Component health updates (every 5s)
+         *     - **component_metrics**: Real-time metrics from MetricsForwarder
+         *     - **log_entry**: Log messages from LogForwarder
+         *
+         *     ## Filtering (Client → Server)
+         *     Send SubscribeCommand JSON to filter messages:
+         *     - message_types: Array of message types to receive
+         *     - log_level: Minimum log level (DEBUG < INFO < WARN < ERROR)
+         *     - sources: Array of component names to filter by
+         *
+         *     ## Example Subscribe Command
+         *     {"command":"subscribe","message_types":["flow_status","log_entry"],"log_level":"WARN"}
+         */
+        get: {
+            parameters: {
+                query: {
+                    /** @description Flow ID to subscribe to for status updates */
+                    flowId: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Switching to WebSocket protocol */
+                101: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Missing or invalid flowId parameter */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Flow not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
         };
-        /** @description Anomaly not found */
-        404: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
-        };
-        /** @description Internal server error */
-        500: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
-        };
-      };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/inference/anomalies/{id}/review": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/subjects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get monitored subjects
+         * @description Returns list of NATS subjects being monitored
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description List of monitored subjects */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": Record<string, never>;
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    get?: never;
-    put?: never;
-    /**
-     * Submit review decision
-     * @description Submit a human review decision (approve or reject) for a structural anomaly
-     */
-    post: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          /** @description Anomaly ID */
-          id: string;
+    "/trace/{traceID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description Updated anomaly after review */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "application/json": components["schemas"]["StructuralAnomaly"];
-          };
+        /**
+         * Get entries by trace ID
+         * @description Returns all message entries for a specific W3C trace ID, ordered chronologically
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description W3C trace ID (32 hex characters) */
+                    traceID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Trace entries found */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": Record<string, never>;
+                    };
+                };
+                /** @description Invalid trace ID format */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
         };
-        /** @description Invalid request (bad decision or missing target entity) */
-        400: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
-        };
-        /** @description Anomaly not found */
-        404: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
-        };
-        /** @description Anomaly not in reviewable state */
-        409: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
-        };
-        /** @description Internal server error */
-        500: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
-        };
-      };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/inference/anomalies/pending": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/trajectories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List trajectory summaries with optional filters
+         * @description Returns paginated trajectory summaries. Filters by outcome, role, workflow, time, and metadata.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Max items (default 20, max 100) */
+                    limit?: number;
+                    /** @description Pagination offset */
+                    offset?: number;
+                    /** @description Filter: success, failed, cancelled */
+                    outcome?: string;
+                    /** @description Filter by agent role */
+                    role?: string;
+                    /** @description Filter by workflow */
+                    workflow_slug?: string;
+                    /** @description Filter: RFC3339 timestamp */
+                    since?: string;
+                    /** @description Filter by metadata key */
+                    metadata_key?: string;
+                    /** @description Filter by metadata value (requires metadata_key) */
+                    metadata_value?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Paginated list of trajectory summaries */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TrajectoryListResponse"];
+                    };
+                };
+                /** @description Invalid filter parameters */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Loop storage not available */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * List pending anomalies
-     * @description Returns structural anomalies awaiting human review
-     */
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description List of pending anomalies */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "application/json": components["schemas"]["StructuralAnomaly"][];
-          };
+    "/trajectories/{loopId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
-        /** @description Internal server error */
-        500: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
+        /**
+         * Get full trajectory with steps
+         * @description Returns the complete trajectory including all steps for a specific loop.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Max steps to return */
+                    limit?: number;
+                };
+                header?: never;
+                path: {
+                    /** @description Loop ID */
+                    loopId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Full trajectory with steps */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Trajectory"];
+                    };
+                };
+                /** @description Missing loopId */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Trajectory not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
         };
-      };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/inference/stats": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/types": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List available component types
+         * @description Returns array of component metadata including schemas
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Array of component types */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": Record<string, never>;
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * Get inference statistics
-     * @description Returns statistics about detected anomalies and their review status
-     */
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description Inference statistics */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "application/json": components["schemas"]["StatsResponse"];
-          };
+    "/types/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
-        /** @description Internal server error */
-        500: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
+        /**
+         * Get component type by ID
+         * @description Returns metadata and schema for a specific component type
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Component type ID */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Component type metadata */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": Record<string, never>;
+                    };
+                };
+                /** @description Component type not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
         };
-      };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/kv/{bucket}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Validate component flow connectivity
+         * @description Performs FlowGraph connectivity analysis for operational validation (used by E2E tests)
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Flow connectivity analysis results */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": Record<string, never>;
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * Query KV bucket
-     * @description Query NATS KV bucket entries (development/test only)
-     */
-    get: {
-      parameters: {
-        query?: {
-          /** @description Key pattern to match (e.g., 'entity.*') */
-          pattern?: string;
-          /** @description Maximum number of entries to return (default: 100, max: 1000) */
-          limit?: number;
-        };
-        header?: never;
-        path: {
-          /** @description KV bucket name */
-          bucket: string;
-        };
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description KV bucket entries */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "application/json": Record<string, never>;
-          };
-        };
-        /** @description KV query disabled in production */
-        403: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
-        };
-        /** @description Bucket not found */
-        404: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
-        };
-      };
-    };
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/kv/{bucket}/watch": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * Watch KV bucket changes
-     * @description Stream KV bucket changes via Server-Sent Events (SSE). Supports pattern filtering and SSE reconnection with event IDs.
-     */
-    get: {
-      parameters: {
-        query?: {
-          /** @description Key pattern to watch (e.g., 'entity.*'). Default: '*' (all keys) */
-          pattern?: string;
-        };
-        header?: never;
-        path: {
-          /** @description KV bucket name (e.g., ENTITY_STATES, CONTEXT_INDEX) */
-          bucket: string;
-        };
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description SSE stream of KV changes. Events: 'connected' (initial), 'kv_change' (updates), 'error' (failures) */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
-        };
-        /** @description Invalid bucket name or pattern */
-        400: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
-        };
-        /** @description Bucket not found */
-        404: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
-        };
-      };
-    };
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/list": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * List all components
-     * @description Returns a list of all managed components with basic information
-     */
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description List of components */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "application/json": Record<string, never>;
-          };
-        };
-      };
-    };
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/mcp": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /**
-     * MCP endpoint
-     * @description Model Context Protocol endpoint for AI tool integration. Enables LLMs to interact with the knowledge graph.
-     */
-    post: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description MCP response */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "application/json": Record<string, never>;
-          };
-        };
-      };
-    };
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/paths": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * Get component data paths
-     * @description Returns data paths from input components to all reachable components
-     */
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description Data paths through component graph */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "application/json": Record<string, never>;
-          };
-        };
-      };
-    };
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/stats": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * Get message statistics
-     * @description Returns statistics about processed messages
-     */
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description Message statistics */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "application/json": Record<string, never>;
-          };
-        };
-      };
-    };
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/status/{name}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * Get component status
-     * @description Returns detailed status for a specific component
-     */
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          /** @description Component name */
-          name: string;
-        };
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description Component status */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "application/json": Record<string, never>;
-          };
-        };
-        /** @description Component not found */
-        404: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
-        };
-      };
-    };
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/status/stream": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * WebSocket status stream
-     * @description Real-time flow status updates via WebSocket.
-     *
-     *     ## Connection
-     *     Connect with: ws://host/flowbuilder/status/stream?flowId={flowId}
-     *
-     *     ## Message Types (Server → Client)
-     *     All messages are wrapped in StatusStreamEnvelope:
-     *     - **flow_status**: Flow state changes (deployed, running, stopped, failed)
-     *     - **component_health**: Component health updates (every 5s)
-     *     - **component_metrics**: Real-time metrics from MetricsForwarder
-     *     - **log_entry**: Log messages from LogForwarder
-     *
-     *     ## Filtering (Client → Server)
-     *     Send SubscribeCommand JSON to filter messages:
-     *     - message_types: Array of message types to receive
-     *     - log_level: Minimum log level (DEBUG < INFO < WARN < ERROR)
-     *     - sources: Array of component names to filter by
-     *
-     *     ## Example Subscribe Command
-     *     {"command":"subscribe","message_types":["flow_status","log_entry"],"log_level":"WARN"}
-     */
-    get: {
-      parameters: {
-        query: {
-          /** @description Flow ID to subscribe to for status updates */
-          flowId: string;
-        };
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description Switching to WebSocket protocol */
-        101: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
-        };
-        /** @description Missing or invalid flowId parameter */
-        400: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
-        };
-        /** @description Flow not found */
-        404: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
-        };
-      };
-    };
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/subjects": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * Get monitored subjects
-     * @description Returns list of NATS subjects being monitored
-     */
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description List of monitored subjects */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "application/json": Record<string, never>;
-          };
-        };
-      };
-    };
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/types": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * List available component types
-     * @description Returns array of component metadata including schemas
-     */
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description Array of component types */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "application/json": Record<string, never>;
-          };
-        };
-      };
-    };
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/types/{id}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * Get component type by ID
-     * @description Returns metadata and schema for a specific component type
-     */
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          /** @description Component type ID */
-          id: string;
-        };
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description Component type metadata */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "application/json": Record<string, never>;
-          };
-        };
-        /** @description Component type not found */
-        404: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
-        };
-      };
-    };
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/validate": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * Validate component flow connectivity
-     * @description Performs FlowGraph connectivity analysis for operational validation (used by E2E tests)
-     */
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description Flow connectivity analysis results */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "application/json": Record<string, never>;
-          };
-        };
-      };
-    };
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
-  schemas: {
-    ComponentType: {
-      /** @description Component category */
-      category?: string;
-      /** @description Component description */
-      description?: string;
-      /** @description Business domain (robotics, semantic, etc.) */
-      domain?: string;
-      /** @description Component ID */
-      id: string;
-      /** @description Human-readable name */
-      name: string;
-      /** @description Technical protocol (udp, tcp, etc.) */
-      protocol?: string;
-      /** @description Component configuration schema */
-      schema?:
-        | components["schemas"]["document_processor.v1"]
-        | components["schemas"]["file.v1"]
-        | components["schemas"]["file_input.v1"]
-        | components["schemas"]["graph-clustering.v1"]
-        | components["schemas"]["graph-embedding.v1"]
-        | components["schemas"]["graph-gateway.v1"]
-        | components["schemas"]["graph-index-spatial.v1"]
-        | components["schemas"]["graph-index-temporal.v1"]
-        | components["schemas"]["graph-index.v1"]
-        | components["schemas"]["graph-ingest.v1"]
-        | components["schemas"]["graph-query.v1"]
-        | components["schemas"]["http.v1"]
-        | components["schemas"]["httppost.v1"]
-        | components["schemas"]["iot_sensor.v1"]
-        | components["schemas"]["json_filter.v1"]
-        | components["schemas"]["json_generic.v1"]
-        | components["schemas"]["json_map.v1"]
-        | components["schemas"]["objectstore.v1"]
-        | components["schemas"]["rule-processor.v1"]
-        | components["schemas"]["udp.v1"]
-        | components["schemas"]["websocket.v1"]
-        | components["schemas"]["websocket_input.v1"];
-      /** @description Component type (input/processor/output/storage) */
-      type: string;
-      /** @description Component version */
-      version?: string;
-    };
-    Flow: {
-      connections: {
-        id: string;
-        source_node_id: string;
-        source_port: string;
-        target_node_id: string;
-        target_port: string;
-      }[];
-      /** Format: date-time */
-      created_at: string;
-      created_by?: string;
-      /** Format: date-time */
-      deployed_at?: string | null;
-      description?: string;
-      id: string;
-      /** Format: date-time */
-      last_modified: string;
-      name: string;
-      nodes: {
-        component: string;
-        config: {
-          [key: string]: unknown;
+    schemas: {
+        ActivityEvent: {
+            /** Format: byte */
+            data?: string;
+            loop_id: string;
+            /** Format: date-time */
+            timestamp: string;
+            type: string;
         };
-        id: string;
-        name: string;
-        position: {
-          x: number;
-          y: number;
+        ComponentType: {
+            /** @description Component category */
+            category?: string;
+            /** @description Component description */
+            description?: string;
+            /** @description Business domain (robotics, semantic, etc.) */
+            domain?: string;
+            /** @description Component ID */
+            id: string;
+            /** @description Human-readable name */
+            name: string;
+            /** @description Technical protocol (udp, tcp, etc.) */
+            protocol?: string;
+            /** @description Component configuration schema */
+            schema?: components["schemas"]["a2a-adapter.v1"] | components["schemas"]["agentic-dispatch.v1"] | components["schemas"]["agentic-governance.v1"] | components["schemas"]["agentic-loop.v1"] | components["schemas"]["agentic-model.v1"] | components["schemas"]["agentic-tools.v1"] | components["schemas"]["directory-bridge.v1"] | components["schemas"]["file.v1"] | components["schemas"]["file_input.v1"] | components["schemas"]["github_webhook.v1"] | components["schemas"]["graph-clustering.v1"] | components["schemas"]["graph-embedding.v1"] | components["schemas"]["graph-gateway.v1"] | components["schemas"]["graph-index-spatial.v1"] | components["schemas"]["graph-index-temporal.v1"] | components["schemas"]["graph-index.v1"] | components["schemas"]["graph-ingest.v1"] | components["schemas"]["graph-query.v1"] | components["schemas"]["http.v1"] | components["schemas"]["httppost.v1"] | components["schemas"]["json_filter.v1"] | components["schemas"]["json_generic.v1"] | components["schemas"]["json_map.v1"] | components["schemas"]["oasf-generator.v1"] | components["schemas"]["objectstore.v1"] | components["schemas"]["otel-exporter.v1"] | components["schemas"]["rule-processor.v1"] | components["schemas"]["slim-bridge.v1"] | components["schemas"]["udp.v1"] | components["schemas"]["websocket.v1"] | components["schemas"]["websocket_input.v1"];
+            /** @description Component type (input/processor/output/storage) */
+            type: string;
+            /** @description Component version */
+            version?: string;
         };
-        type: string;
-      }[];
-      runtime_state: string;
-      /** Format: date-time */
-      started_at?: string | null;
-      /** Format: date-time */
-      stopped_at?: string | null;
-      /** Format: date-time */
-      updated_at: string;
-      version: number;
-    };
-    FlowStatusPayload: {
-      error?: string;
-      prev_state: string;
-      state: string;
-      timestamp: number;
-    };
-    LogEntryPayload: {
-      fields: {
-        [key: string]: unknown;
-      };
-      level: string;
-      message: string;
-      source: string;
-    };
-    MessageLogEntry: {
-      message_id?: string;
-      message_type?: string;
-      metadata?: {
-        [key: string]: unknown;
-      };
-      /** Format: byte */
-      raw_data?: string;
-      subject: string;
-      summary: string;
-      /** Format: date-time */
-      timestamp: string;
-    };
-    MetricEntry: {
-      labels: {
-        [key: string]: string;
-      };
-      name: string;
-      type: string;
-      value: number;
-    };
-    MetricsPayload: {
-      component: string;
-      metrics: {
-        labels: {
-          [key: string]: string;
+        Flow: {
+            connections: {
+                id: string;
+                source_node_id: string;
+                source_port: string;
+                target_node_id: string;
+                target_port: string;
+            }[];
+            /** Format: date-time */
+            created_at: string;
+            created_by?: string;
+            deployed_at?: string | null;
+            description?: string;
+            id: string;
+            /** Format: date-time */
+            last_modified: string;
+            name: string;
+            nodes: {
+                component: string;
+                config: {
+                    [key: string]: unknown;
+                };
+                id: string;
+                name: string;
+                position: {
+                    x: number;
+                    y: number;
+                };
+                type: string;
+            }[];
+            runtime_state: string;
+            started_at?: string | null;
+            stopped_at?: string | null;
+            /** Format: date-time */
+            updated_at: string;
+            version: number;
         };
-        name: string;
-        type: string;
-        value: number;
-      }[];
-    };
-    RuntimeHealthResponse: {
-      components: {
-        component: string;
-        details: unknown;
-        healthy: boolean;
-        /** Format: date-time */
-        last_activity?: string | null;
-        message: string;
-        name: string;
-        /** Format: date-time */
-        start_time?: string | null;
-        status: string;
-        type: string;
-        uptime_seconds?: number | null;
-      }[];
-      overall: {
-        degraded_count: number;
-        error_count: number;
-        running_count: number;
-        status: string;
-      };
-      /** Format: date-time */
-      timestamp: string;
-    };
-    RuntimeMessagesResponse: {
-      limit: number;
-      messages: {
-        component: string;
-        direction: string;
-        message_id: string;
-        message_type?: string;
-        metadata?: {
-          [key: string]: unknown;
+        FlowStatusPayload: {
+            error?: string;
+            prev_state: string;
+            state: string;
+            timestamp: number;
         };
-        subject: string;
-        summary: string;
-        timestamp: string;
-      }[];
-      note?: string;
-      timestamp: string;
-      total: number;
+        GraphQLRequest: {
+            query: string;
+            variables?: {
+                [key: string]: unknown;
+            };
+        };
+        HTTPMessageRequest: {
+            channel_id?: string;
+            channel_type?: string;
+            content: string;
+            metadata?: {
+                [key: string]: string;
+            };
+            reply_to?: string;
+            user_id?: string;
+        };
+        HTTPMessageResponse: {
+            content: string;
+            error?: string;
+            in_reply_to?: string;
+            response_id: string;
+            timestamp: string;
+            type: string;
+        };
+        LogEntryPayload: {
+            fields: {
+                [key: string]: unknown;
+            };
+            level: string;
+            message: string;
+            source: string;
+        };
+        LoopInfo: {
+            channel_id: string;
+            channel_type: string;
+            /** Format: date-time */
+            completed_at?: string;
+            context_request_id?: string;
+            /** Format: date-time */
+            created_at: string;
+            error?: string;
+            iterations: number;
+            loop_id: string;
+            max_iterations: number;
+            metadata?: {
+                [key: string]: unknown;
+            };
+            outcome?: string;
+            result?: string;
+            state: string;
+            task_id: string;
+            user_id: string;
+            workflow_slug?: string;
+            workflow_step?: string;
+        };
+        MessageLogEntry: {
+            message_id?: string;
+            message_type?: string;
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** Format: byte */
+            raw_data?: string;
+            sequence: number;
+            span_id?: string;
+            subject: string;
+            summary: string;
+            /** Format: date-time */
+            timestamp: string;
+            trace_id?: string;
+        };
+        MetricEntry: {
+            labels: {
+                [key: string]: string;
+            };
+            name: string;
+            type: string;
+            value: number;
+        };
+        MetricsPayload: {
+            component: string;
+            metrics: {
+                labels: {
+                    [key: string]: string;
+                };
+                name: string;
+                type: string;
+                value: number;
+            }[];
+        };
+        ReviewRequest: {
+            decision: string;
+            notes?: string;
+            override_predicate?: string;
+            reviewed_by?: string;
+            target_entity?: string;
+        };
+        RuntimeHealthResponse: {
+            components: {
+                component: string;
+                details: unknown;
+                healthy: boolean;
+                last_activity?: string | null;
+                message: string;
+                name: string;
+                start_time?: string | null;
+                status: string;
+                type: string;
+                uptime_seconds?: number | null;
+            }[];
+            overall: {
+                degraded_count: number;
+                error_count: number;
+                running_count: number;
+                status: string;
+            };
+            /** Format: date-time */
+            timestamp: string;
+        };
+        RuntimeMessagesResponse: {
+            limit: number;
+            messages: {
+                component: string;
+                direction: string;
+                message_id: string;
+                message_type?: string;
+                metadata?: {
+                    [key: string]: unknown;
+                };
+                subject: string;
+                summary: string;
+                timestamp: string;
+            }[];
+            note?: string;
+            timestamp: string;
+            total: number;
+        };
+        RuntimeMetricsResponse: {
+            components: {
+                component: string;
+                error_rate?: number | null;
+                name: string;
+                queue_depth?: number | null;
+                raw_counters?: {
+                    [key: string]: number;
+                } | null;
+                status: string;
+                throughput?: number | null;
+                type: string;
+            }[];
+            prometheus_available: boolean;
+            /** Format: date-time */
+            timestamp: string;
+        };
+        SignalRequest: {
+            reason: string;
+            type: string;
+        };
+        SignalResponse: {
+            accepted: boolean;
+            loop_id: string;
+            message?: string;
+            signal: string;
+            timestamp: string;
+        };
+        StatsResponse: {
+            applied: number;
+            human_approved: number;
+            human_rejected: number;
+            human_review: number;
+            llm_approved: number;
+            llm_rejected: number;
+            pending_review: number;
+            total_detected: number;
+        };
+        StatusStreamEnvelope: {
+            flow_id: string;
+            id: string;
+            /** Format: byte */
+            payload?: string;
+            timestamp: number;
+            type: string;
+        };
+        StructuralAnomaly: {
+            confidence: number;
+            /** Format: date-time */
+            detected_at: string;
+            entity_a: string;
+            entity_a_context?: string;
+            entity_b?: string;
+            entity_b_context?: string;
+            evidence: {
+                actual_distance?: number;
+                chain_path?: string[];
+                community_id?: string;
+                core_level?: number;
+                current_core_level?: number;
+                distance_lower_bound?: number;
+                distance_upper_bound?: number;
+                expected_max_hops?: number;
+                expected_peer_count?: number;
+                lost_connections?: number;
+                peer_connectivity?: number;
+                peer_count?: number;
+                predicate?: string;
+                previous_core_level?: number;
+                similarity?: number;
+                structural_distance?: number;
+            };
+            id: string;
+            llm_reasoning?: string;
+            review_notes?: string;
+            reviewed_at?: string | null;
+            reviewed_by?: string;
+            status: string;
+            suggestion?: {
+                confidence: number;
+                from_entity: string;
+                predicate: string;
+                reasoning: string;
+                to_entity: string;
+            } | null;
+            type: string;
+        };
+        SubscribeCommand: {
+            command: string;
+            log_level?: string;
+            message_types?: string[];
+            sources?: string[];
+        };
+        Trajectory: {
+            duration: number;
+            end_time?: string | null;
+            loop_id: string;
+            outcome?: string;
+            /** Format: date-time */
+            start_time: string;
+            steps: {
+                capability?: string;
+                duration: number;
+                error_category?: string;
+                error_message?: string;
+                messages?: {
+                    content?: string;
+                    is_error?: boolean;
+                    name?: string;
+                    reasoning_content?: string;
+                    role: string;
+                    tool_call_id?: string;
+                    tool_calls?: {
+                        arguments?: {
+                            [key: string]: unknown;
+                        };
+                        id: string;
+                        loop_id?: string;
+                        metadata?: {
+                            [key: string]: unknown;
+                        };
+                        name: string;
+                        trace_id?: string;
+                    }[];
+                }[];
+                model?: string;
+                prompt?: string;
+                provider?: string;
+                request_id?: string;
+                response?: string;
+                retry_count?: number;
+                step_type: string;
+                /** Format: date-time */
+                timestamp: string;
+                tokens_in?: number;
+                tokens_out?: number;
+                tool_arguments?: {
+                    [key: string]: unknown;
+                };
+                tool_calls?: {
+                    arguments?: {
+                        [key: string]: unknown;
+                    };
+                    id: string;
+                    loop_id?: string;
+                    metadata?: {
+                        [key: string]: unknown;
+                    };
+                    name: string;
+                    trace_id?: string;
+                }[];
+                tool_name?: string;
+                tool_result?: string;
+                tool_status?: string;
+                utilization?: number;
+            }[];
+            total_tokens_in: number;
+            total_tokens_out: number;
+        };
+        TrajectoryListItem: {
+            duration: number;
+            end_time?: string | null;
+            iterations: number;
+            loop_id: string;
+            metadata?: {
+                [key: string]: unknown;
+            };
+            model: string;
+            outcome?: string;
+            role: string;
+            /** Format: date-time */
+            start_time: string;
+            task_id: string;
+            total_tokens_in: number;
+            total_tokens_out: number;
+            workflow_slug?: string;
+            workflow_step?: string;
+        };
+        TrajectoryListResponse: {
+            total: number;
+            trajectories: {
+                duration: number;
+                end_time?: string | null;
+                iterations: number;
+                loop_id: string;
+                metadata?: {
+                    [key: string]: unknown;
+                };
+                model: string;
+                outcome?: string;
+                role: string;
+                /** Format: date-time */
+                start_time: string;
+                task_id: string;
+                total_tokens_in: number;
+                total_tokens_out: number;
+                workflow_slug?: string;
+                workflow_step?: string;
+            }[];
+        };
+        TrajectoryStep: {
+            capability?: string;
+            duration: number;
+            error_category?: string;
+            error_message?: string;
+            messages?: {
+                content?: string;
+                is_error?: boolean;
+                name?: string;
+                reasoning_content?: string;
+                role: string;
+                tool_call_id?: string;
+                tool_calls?: {
+                    arguments?: {
+                        [key: string]: unknown;
+                    };
+                    id: string;
+                    loop_id?: string;
+                    metadata?: {
+                        [key: string]: unknown;
+                    };
+                    name: string;
+                    trace_id?: string;
+                }[];
+            }[];
+            model?: string;
+            prompt?: string;
+            provider?: string;
+            request_id?: string;
+            response?: string;
+            retry_count?: number;
+            step_type: string;
+            /** Format: date-time */
+            timestamp: string;
+            tokens_in?: number;
+            tokens_out?: number;
+            tool_arguments?: {
+                [key: string]: unknown;
+            };
+            tool_calls?: {
+                arguments?: {
+                    [key: string]: unknown;
+                };
+                id: string;
+                loop_id?: string;
+                metadata?: {
+                    [key: string]: unknown;
+                };
+                name: string;
+                trace_id?: string;
+            }[];
+            tool_name?: string;
+            tool_result?: string;
+            tool_status?: string;
+            utilization?: number;
+        };
+        /**
+         * a2a-adapter Configuration
+         * @description Receives A2A task requests from external agents
+         */
+        "a2a-adapter.v1": {
+            /**
+             * @description Path for agent card endpoint
+             * @default /.well-known/agent.json
+             */
+            agent_card_path: string;
+            /** @description Suffix for consumer names */
+            consumer_name_suffix?: string;
+            /**
+             * @description Delete consumers on Stop
+             * @default false
+             */
+            delete_consumer_on_stop: boolean;
+            /**
+             * @description HTTP listen address
+             * @default :8080
+             */
+            listen_address: string;
+            /**
+             * @description Maximum concurrent tasks
+             * @default 10
+             */
+            max_concurrent_tasks: number;
+            /**
+             * @description OASF records KV bucket
+             * @default OASF_RECORDS
+             */
+            oasf_bucket: string;
+            /** @description Port configuration */
+            ports?: string;
+            /**
+             * @description Request processing timeout
+             * @default 30s
+             */
+            request_timeout: string;
+            /** @description SLIM group for A2A */
+            slim_group_id?: string;
+            /**
+             * @description A2A transport type
+             * @default http
+             */
+            transport: string;
+        };
+        /**
+         * agentic-dispatch Configuration
+         * @description Routes user messages to agentic loops with command parsing and permissions
+         */
+        "agentic-dispatch.v1": {
+            /**
+             * @description Automatically continue last active loop
+             * @default true
+             */
+            auto_continue: boolean;
+            /** @description Suffix appended to consumer names for uniqueness */
+            consumer_name_suffix?: string;
+            /**
+             * @description Default role for new tasks
+             * @default general
+             */
+            default_role: string;
+            /**
+             * @description Delete durable consumers on Stop (use for tests only)
+             * @default false
+             */
+            delete_consumer_on_stop: boolean;
+            /** @description Permission configuration */
+            permissions?: {
+                /** @description approve */
+                approve?: string[];
+                /** @description cancel_any */
+                cancel_any?: string[];
+                /** @description cancel_own */
+                cancel_own?: boolean;
+                /** @description submit_task */
+                submit_task?: string[];
+                /** @description view */
+                view?: string[];
+            };
+            /** @description Port configuration for inputs and outputs */
+            ports?: string;
+            /**
+             * @description NATS stream name for user messages
+             * @default USER
+             */
+            stream_name: string;
+        };
+        /**
+         * agentic-governance Configuration
+         * @description Content governance layer for agentic systems with PII redaction, injection detection, and rate limiting
+         */
+        "agentic-governance.v1": {
+            /** @description Consumer name suffix for uniqueness */
+            consumer_name_suffix?: string;
+            /** @description Filter chain configuration */
+            filter_chain?: {
+                /** @description Ordered list of filters to apply */
+                filters?: {
+                    /** @description Content filter configuration */
+                    content_config?: {
+                        /**
+                         * @description Block threshold (0.0-1.0)
+                         * @default 0.9
+                         */
+                        block_threshold: number;
+                        /** @description Default policies to enable */
+                        enabled_default?: string[];
+                        /** @description Content policies */
+                        policies?: {
+                            /**
+                             * @description Action on violation
+                             * @default block
+                             */
+                            action: string;
+                            /** @description Policy categories */
+                            categories?: string[];
+                            /** @description Keywords to match */
+                            keywords?: string[];
+                            /** @description Policy identifier */
+                            name?: string;
+                            /** @description Regex patterns */
+                            patterns?: string[];
+                            /**
+                             * @description Violation severity
+                             * @default high
+                             */
+                            severity: string;
+                        }[];
+                        /**
+                         * @description Warning threshold (0.0-1.0)
+                         * @default 0.7
+                         */
+                        warn_threshold: number;
+                    };
+                    /**
+                     * @description Whether this filter is enabled
+                     * @default true
+                     */
+                    enabled: boolean;
+                    /** @description Injection filter configuration */
+                    injection_config?: {
+                        /**
+                         * @description Confidence threshold for blocking (0.0-1.0)
+                         * @default 0.8
+                         */
+                        confidence_threshold: number;
+                        /** @description Built-in pattern names to enable */
+                        enabled_patterns?: string[];
+                        /** @description Injection patterns to detect */
+                        patterns?: {
+                            /**
+                             * @description Detection confidence
+                             * @default 0.9
+                             */
+                            confidence: number;
+                            /** @description Pattern description */
+                            description?: string;
+                            /** @description Pattern identifier */
+                            name?: string;
+                            /** @description Regex pattern */
+                            pattern?: string;
+                            /**
+                             * @description Violation severity
+                             * @default high
+                             */
+                            severity: string;
+                        }[];
+                    };
+                    /** @description Filter name (pii_redaction injection_detection content_moderation rate_limiting) */
+                    name?: string;
+                    /** @description PII filter configuration */
+                    pii_config?: {
+                        /** @description PII types allowed through without redaction */
+                        allowed_types?: string[];
+                        /**
+                         * @description Confidence threshold (0.0-1.0)
+                         * @default 0.85
+                         */
+                        confidence_threshold: number;
+                        /** @description Custom PII patterns */
+                        custom_patterns?: {
+                            /**
+                             * @description Detection confidence
+                             * @default 0.9
+                             */
+                            confidence: number;
+                            /** @description Regex pattern */
+                            pattern?: string;
+                            /** @description Replacement text */
+                            replacement?: string;
+                            /** @description PII type identifier */
+                            type?: string;
+                        }[];
+                        /**
+                         * @description Masking character for mask strategy
+                         * @default *
+                         */
+                        mask_char: string;
+                        /**
+                         * @description Redaction strategy (mask hash remove label)
+                         * @default label
+                         */
+                        strategy: string;
+                        /** @description PII types to detect */
+                        types?: string[];
+                    };
+                    /** @description Rate limit filter configuration */
+                    rate_limit_config?: {
+                        /**
+                         * @description Rate limiting algorithm
+                         * @default token_bucket
+                         */
+                        algorithm: string;
+                        /** @description Global rate limits */
+                        global?: {
+                            /**
+                             * @description Maximum requests per minute
+                             * @default 60
+                             */
+                            requests_per_minute: number;
+                            /**
+                             * @description Maximum tokens per hour
+                             * @default 100000
+                             */
+                            tokens_per_hour: number;
+                        };
+                        /** @description Per-session rate limits */
+                        per_session?: {
+                            /**
+                             * @description Maximum requests per minute
+                             * @default 60
+                             */
+                            requests_per_minute: number;
+                            /**
+                             * @description Maximum tokens per hour
+                             * @default 100000
+                             */
+                            tokens_per_hour: number;
+                        };
+                        /** @description Per-user rate limits */
+                        per_user?: {
+                            /**
+                             * @description Maximum requests per minute
+                             * @default 60
+                             */
+                            requests_per_minute: number;
+                            /**
+                             * @description Maximum tokens per hour
+                             * @default 100000
+                             */
+                            tokens_per_hour: number;
+                        };
+                        /** @description Storage configuration */
+                        storage?: {
+                            /** @description KV bucket name */
+                            bucket?: string;
+                            /**
+                             * @description Storage type (memory kv)
+                             * @default memory
+                             */
+                            type: string;
+                        };
+                    };
+                }[];
+                /**
+                 * @description Violation handling policy (fail_fast continue log_only)
+                 * @default fail_fast
+                 */
+                policy: string;
+            };
+            /** @description Port configuration */
+            ports?: string;
+            /**
+             * @description JetStream stream name
+             * @default AGENT
+             */
+            stream_name: string;
+            /** @description Violation handling configuration */
+            violations?: {
+                /**
+                 * @description NATS subject for admin alerts
+                 * @default admin.governance.alert
+                 */
+                admin_subject: string;
+                /** @description Severity levels that trigger admin alerts */
+                notify_admin_severity?: string[];
+                /**
+                 * @description Send error messages to users
+                 * @default true
+                 */
+                notify_user: boolean;
+                /**
+                 * @description Violation retention in days
+                 * @default 90
+                 */
+                retention_days: number;
+                /**
+                 * @description KV bucket for violations
+                 * @default GOVERNANCE_VIOLATIONS
+                 */
+                store: string;
+            };
+        };
+        /**
+         * agentic-loop Configuration
+         * @description Orchestrates agentic loops with tool calls, state management, and trajectory tracking
+         */
+        "agentic-loop.v1": {
+            /**
+             * @description Enable Boid-style agent coordination (position tracking and steering signals)
+             * @default false
+             */
+            boid_enabled: boolean;
+            /**
+             * @description TTL for Boid steering signals before expiration (e.g. 30s or 1m)
+             * @default 30s
+             */
+            boid_signal_ttl: string;
+            /** @description JetStream consumer tuning for long-running ports (agent.task/agent.response/tool.result) */
+            consumer?: {
+                /**
+                 * @description AckWait duration for long-running consumers (e.g. 90s or 5m)
+                 * @default 90s
+                 */
+                ack_wait: string;
+                /**
+                 * @description InProgress heartbeat interval (e.g. 60s or 2m). Must be less than ack_wait
+                 * @default 60s
+                 */
+                heartbeat_interval: string;
+                /**
+                 * @description Maximum redelivery attempts for long-running consumers
+                 * @default 2
+                 */
+                max_deliver: number;
+            };
+            /** @description Suffix for consumer names */
+            consumer_name_suffix?: string;
+            /**
+             * @description NATS ObjectStore bucket for trajectory step content (tool results and model responses)
+             * @default AGENT_CONTENT
+             */
+            content_bucket: string;
+            /** @description Context window management. Model limits are resolved from the model registry */
+            context?: {
+                /** @description Utilization threshold (0.01-1.0) that triggers context compaction */
+                compact_threshold?: number;
+                /** @description Deprecated: context management is always enabled (required for Gemini compatibility) */
+                enabled?: boolean;
+                /** @description Priority for entity context vs conversation (1-10, higher = more entity context) */
+                entity_priority?: number;
+                /** @description Fraction of model context to reserve for responses (0.0-0.5). Takes precedence over headroom_tokens when the computed value is larger */
+                headroom_ratio?: number;
+                /** @description Minimum token headroom floor — ratio-based headroom never goes below this value */
+                headroom_tokens?: number;
+                /** @description Hard token limit for context budget (overrides model limits when set) */
+                max_budget_tokens?: number;
+                /** @description Entity IDs to always keep in context during slicing */
+                preserve_entities?: string[];
+                /** @description Enable context slicing when budget is exceeded */
+                slice_on_budget?: boolean;
+            };
+            /**
+             * @description Delete durable consumers on Stop (use for tests only)
+             * @default false
+             */
+            delete_consumer_on_stop: boolean;
+            /**
+             * @description NATS KV bucket name for storing loop state
+             * @default AGENT_LOOPS
+             */
+            loops_bucket: string;
+            /**
+             * @description Maximum number of iterations before loop terminates
+             * @default 20
+             */
+            max_iterations: number;
+            /** @description Port configuration for inputs and outputs */
+            ports?: string;
+            /**
+             * @description NATS KV bucket name for boid agent positions
+             * @default AGENT_POSITIONS
+             */
+            positions_bucket: string;
+            /**
+             * @description JetStream stream name
+             * @default AGENT
+             */
+            stream_name: string;
+            /**
+             * @description Timeout duration for loop execution (e.g. 120s or 5m)
+             * @default 120s
+             */
+            timeout: string;
+            /**
+             * @description TTL for trajectory cache (e.g. 4h or 30m). Trajectories older than this are only available via graph queries
+             * @default 4h
+             */
+            trajectory_cache_ttl: string;
+            /**
+             * @description Trajectory detail level: summary (default) or full
+             * @default summary
+             */
+            trajectory_detail: string;
+        };
+        /**
+         * agentic-model Configuration
+         * @description OpenAI-compatible agentic model processor with tool calling support
+         */
+        "agentic-model.v1": {
+            /** @description Suffix appended to consumer names for uniqueness */
+            consumer_name_suffix?: string;
+            /**
+             * @description Delete durable consumers on Stop (use for tests only)
+             * @default false
+             */
+            delete_consumer_on_stop: boolean;
+            /** @description Port configuration */
+            ports?: string;
+            /** @description Retry configuration */
+            retry?: {
+                /**
+                 * @description Backoff strategy
+                 * @default exponential
+                 * @enum {string}
+                 */
+                backoff: "exponential" | "linear";
+                /**
+                 * @description Initial retry delay for transient errors
+                 * @default 1s
+                 */
+                initial_delay: string;
+                /**
+                 * @description Maximum retry attempts for transient errors (5xx/network)
+                 * @default 3
+                 */
+                max_attempts: number;
+                /**
+                 * @description Maximum retry delay (caps both generic and rate-limit backoff)
+                 * @default 60s
+                 */
+                max_delay: string;
+                /**
+                 * @description Maximum retry attempts for 429 rate-limit responses (separate from generic retries)
+                 * @default 5
+                 */
+                max_rate_limit_retries: number;
+                /**
+                 * @description Initial delay when rate limited (429) — doubles each attempt
+                 * @default 15s
+                 */
+                rate_limit_delay: string;
+            };
+            /**
+             * @description JetStream stream name for agentic messages
+             * @default AGENT
+             */
+            stream_name: string;
+            /**
+             * @description Request timeout
+             * @default 120s
+             */
+            timeout: string;
+        };
+        /**
+         * agentic-tools Configuration
+         * @description Tool executor processor with filtering and timeout support
+         */
+        "agentic-tools.v1": {
+            /** @description List of allowed tools (nil/empty allows all) */
+            allowed_tools?: string[];
+            /** @description Suffix appended to consumer names for uniqueness */
+            consumer_name_suffix?: string;
+            /**
+             * @description Delete durable consumers on Stop (use for tests only)
+             * @default false
+             */
+            delete_consumer_on_stop: boolean;
+            /** @description Port configuration */
+            ports?: string;
+            /**
+             * @description JetStream stream name for agentic messages
+             * @default AGENT
+             */
+            stream_name: string;
+            /**
+             * @description Tool execution timeout
+             * @default 60s
+             */
+            timeout: string;
+        };
+        /**
+         * directory-bridge Configuration
+         * @description Registers agents with AGNTCY directories using OASF records
+         */
+        "directory-bridge.v1": {
+            /** @description Suffix for consumer names */
+            consumer_name_suffix?: string;
+            /**
+             * @description Delete consumers on Stop
+             * @default false
+             */
+            delete_consumer_on_stop: boolean;
+            /** @description AGNTCY directory service URL */
+            directory_url?: string;
+            /**
+             * @description Heartbeat interval
+             * @default 30s
+             */
+            heartbeat_interval: string;
+            /**
+             * @description Identity provider type
+             * @default local
+             */
+            identity_provider: string;
+            /**
+             * @description KV bucket for OASF records
+             * @default OASF_RECORDS
+             */
+            oasf_kv_bucket: string;
+            /** @description Port configuration */
+            ports?: string;
+            /**
+             * @description Registration time-to-live
+             * @default 5m
+             */
+            registration_ttl: string;
+            /**
+             * @description Number of registration retries
+             * @default 3
+             */
+            retry_count: number;
+            /**
+             * @description Initial retry delay
+             * @default 1s
+             */
+            retry_delay: string;
+        };
+        /**
+         * file Configuration
+         * @description File output for writing messages to disk in JSON, JSONL, or raw format
+         */
+        "file.v1": {
+            /** @description Append mode */
+            append?: boolean;
+            /** @description Buffer size */
+            buffer_size?: number;
+            /** @description Output directory */
+            directory?: string;
+            /** @description Prefix */
+            file_prefix?: string;
+            /**
+             * @description format
+             * @enum {string}
+             */
+            format?: "json" | "jsonl" | "raw";
+            /** @description Port configuration */
+            ports?: string;
+        };
+        /**
+         * file_input Configuration
+         * @description File input component for reading JSONL/JSON files and publishing to NATS
+         */
+        "file_input.v1": {
+            /**
+             * @description File format (jsonl or json)
+             * @default jsonl
+             */
+            format: string;
+            /**
+             * @description Delay between lines
+             * @default 10ms
+             */
+            interval: string;
+            /** @description Port configuration */
+            ports?: string;
+        };
+        /**
+         * github_webhook Configuration
+         * @description GitHub webhook receiver for issue and PR events
+         */
+        "github_webhook.v1": {
+            /** @description GitHub event types to accept (issues;pull_request;pull_request_review;issue_comment) */
+            event_filter?: string[];
+            /**
+             * @description HTTP port for webhook receiver
+             * @default 8090
+             */
+            http_port: number;
+            /**
+             * @description Webhook endpoint path
+             * @default /github/webhook
+             */
+            path: string;
+            /** @description Port configuration */
+            ports?: string;
+            /** @description Repositories to process (owner/repo format) */
+            repo_allowlist?: string[];
+        };
+        /**
+         * graph-clustering Configuration
+         * @description Graph community detection and clustering processor
+         */
+        "graph-clustering.v1": {
+            /** @description Configuration for anomaly detection */
+            anomaly_config?: {
+                /** @description core_anomaly */
+                core_anomaly?: {
+                    /** @description enabled */
+                    enabled?: boolean;
+                    /** @description hub_isolation_threshold */
+                    hub_isolation_threshold?: number;
+                    /** @description min_core_for_hub_analysis */
+                    min_core_for_hub_analysis?: number;
+                    /** @description min_demotion_delta */
+                    min_demotion_delta?: number;
+                    /** @description track_core_demotions */
+                    track_core_demotions?: boolean;
+                };
+                /** @description detection_timeout */
+                detection_timeout?: number;
+                /** @description enabled */
+                enabled?: boolean;
+                /** @description max_anomalies_per_run */
+                max_anomalies_per_run?: number;
+                /** @description review */
+                review?: {
+                    /** @description auto_approve_threshold */
+                    auto_approve_threshold?: number;
+                    /** @description auto_reject_threshold */
+                    auto_reject_threshold?: number;
+                    /** @description batch_size */
+                    batch_size?: number;
+                    /** @description enabled */
+                    enabled?: boolean;
+                    /** @description fallback_to_human */
+                    fallback_to_human?: boolean;
+                    /** @description llm */
+                    llm?: {
+                        /** @description api_key */
+                        api_key?: string;
+                        /** @description base_url */
+                        base_url?: string;
+                        /** @description domain */
+                        domain?: string;
+                        /** @description max_retries */
+                        max_retries?: number;
+                        /** @description model */
+                        model?: string;
+                        /** @description prompts_file */
+                        prompts_file?: string;
+                        /** @description provider */
+                        provider?: string;
+                        /** @description timeout_seconds */
+                        timeout_seconds?: number;
+                    };
+                    /** @description review_timeout */
+                    review_timeout?: number;
+                    /** @description workers */
+                    workers?: number;
+                };
+                /** @description run_with_community_detection */
+                run_with_community_detection?: boolean;
+                /** @description semantic_gap */
+                semantic_gap?: {
+                    /** @description enabled */
+                    enabled?: boolean;
+                    /** @description max_candidates_per_entity */
+                    max_candidates_per_entity?: number;
+                    /** @description max_gaps_per_entity */
+                    max_gaps_per_entity?: number;
+                    /** @description min_semantic_similarity */
+                    min_semantic_similarity?: number;
+                    /** @description min_structural_distance */
+                    min_structural_distance?: number;
+                };
+                /** @description storage */
+                storage?: {
+                    /** @description bucket_name */
+                    bucket_name?: string;
+                    /** @description cleanup_interval */
+                    cleanup_interval?: number;
+                    /** @description retention_days */
+                    retention_days?: number;
+                };
+                /** @description transitivity */
+                transitivity?: {
+                    /** @description enabled */
+                    enabled?: boolean;
+                    /** @description max_intermediate_hops */
+                    max_intermediate_hops?: number;
+                    /** @description min_expected_transitivity */
+                    min_expected_transitivity?: number;
+                    /** @description transitive_predicates */
+                    transitive_predicates?: string[];
+                };
+                /** @description virtual_edges */
+                virtual_edges?: {
+                    /** @description auto_apply */
+                    auto_apply?: {
+                        /** @description enabled */
+                        enabled?: boolean;
+                        /** @description min_confidence */
+                        min_confidence?: number;
+                        /** @description predicate_template */
+                        predicate_template?: string;
+                    };
+                    /** @description review_queue */
+                    review_queue?: {
+                        /** @description enabled */
+                        enabled?: boolean;
+                        /** @description max_confidence */
+                        max_confidence?: number;
+                        /** @description min_confidence */
+                        min_confidence?: number;
+                        /** @description require_llm_classification */
+                        require_llm_classification?: boolean;
+                    };
+                };
+            };
+            /** @description Event count threshold for triggering detection */
+            batch_size?: number;
+            /** @description Interval between community detection runs (e.g. 30s or 5m) */
+            detection_interval?: string;
+            /** @description Enable anomaly detection after structural computation */
+            enable_anomaly_detection?: boolean;
+            /** @description Enable LLM-based community summarization (requires model registry with community_summary capability) */
+            enable_llm?: boolean;
+            /** @description Enable structural index computation (k-core and pivot distance) */
+            enable_structural?: boolean;
+            /** @description Number of parallel workers for LLM enhancement (default 5) */
+            enhancement_workers?: number;
+            /** @description Maximum BFS traversal depth (default 10) */
+            max_hop_distance?: number;
+            /** @description Maximum iterations for LPA algorithm */
+            max_iterations?: number;
+            /** @description Minimum number of entities to form a community */
+            min_community_size?: number;
+            /** @description Number of pivot nodes for distance indexing (default 16) */
+            pivot_count?: number;
+            /** @description Port configuration */
+            ports?: string;
+            /** @description Max attempts to wait for dependencies at startup */
+            startup_attempts?: number;
+            /** @description Interval between startup attempts in milliseconds */
+            startup_interval_ms?: number;
+        };
+        /**
+         * graph-embedding Configuration
+         * @description Graph entity embedding generation processor
+         */
+        "graph-embedding.v1": {
+            /** @description Batch size for embedding generation */
+            batch_size?: number;
+            /** @description Cache TTL for embeddings (e.g. 15m or 1h) */
+            cache_ttl?: string;
+            /** @description Debounce window for entity updates in ms. 0=immediate processing */
+            coalesce_ms?: number;
+            /** @description Embedder type (bm25 or http). HTTP requires model registry with embedding capability */
+            embedder_type?: string;
+            /** @description Port configuration */
+            ports?: string;
+            /** @description Max attempts to wait for dependencies at startup */
+            startup_attempts?: number;
+            /** @description Interval between startup attempts in milliseconds */
+            startup_interval_ms?: number;
+            /** @description Predicate suffixes to extract for embedding (e.g. .source_code .signature). Defaults to common text predicates */
+            text_suffixes?: string[];
+        };
+        /**
+         * graph-gateway Configuration
+         * @description Graph operations HTTP gateway
+         */
+        "graph-gateway.v1": {
+            /** @description HTTP server bind address (only used when standalone_server is true) */
+            bind_address?: string;
+            /** @description Enable inference API for anomaly review */
+            enable_inference_api?: boolean;
+            /** @description Enable GraphQL playground */
+            enable_playground?: boolean;
+            /** @description GraphQL endpoint path */
+            graphql_path?: string;
+            /** @description MCP endpoint path */
+            mcp_path?: string;
+            /** @description Port configuration */
+            ports?: string;
+            /** @description Create a standalone HTTP server (for tests/development). When false ServiceManager provides HTTP serving */
+            standalone_server?: boolean;
+        };
+        /**
+         * graph-index-spatial Configuration
+         * @description Graph spatial indexing processor for geospatial queries
+         */
+        "graph-index-spatial.v1": {
+            /** @description Event batch size */
+            batch_size?: number;
+            /** @description Geohash precision (1-12) */
+            geohash_precision?: number;
+            /** @description Port configuration */
+            ports?: string;
+            /** @description Max attempts to wait for dependencies at startup */
+            startup_attempts?: number;
+            /** @description Interval between startup attempts in milliseconds */
+            startup_interval_ms?: number;
+            /** @description Number of worker goroutines */
+            workers?: number;
+        };
+        /**
+         * graph-index-temporal Configuration
+         * @description Graph temporal indexing processor
+         */
+        "graph-index-temporal.v1": {
+            /** @description Batch size for processing */
+            batch_size?: number;
+            /** @description Port configuration */
+            ports?: string;
+            /** @description Max attempts to wait for dependencies at startup */
+            startup_attempts?: number;
+            /** @description Interval between startup attempts in milliseconds */
+            startup_interval_ms?: number;
+            /** @description Time resolution (minute hour day) */
+            time_resolution?: string;
+            /** @description Number of worker goroutines */
+            workers?: number;
+        };
+        /**
+         * graph-index Configuration
+         * @description Graph relationship index maintenance processor
+         */
+        "graph-index.v1": {
+            /** @description Batch size for index updates */
+            batch_size?: number;
+            /** @description Debounce window for entity updates in ms. 0=immediate processing */
+            coalesce_ms?: number;
+            /** @description Port configuration */
+            ports?: string;
+            /** @description Max attempts to wait for dependencies at startup */
+            startup_attempts?: number;
+            /** @description Interval between startup attempts in milliseconds */
+            startup_interval_ms?: number;
+            /** @description Number of worker goroutines */
+            workers?: number;
+        };
+        /**
+         * graph-ingest Configuration
+         * @description Entity and triple ingestion processor
+         */
+        "graph-ingest.v1": {
+            /**
+             * @description Enable hierarchy inference
+             * @default false
+             */
+            enable_hierarchy: boolean;
+            /** @description Enable sibling edges between same-type entities (default true when hierarchy enabled) */
+            enable_type_siblings?: boolean;
+            /** @description Port configuration */
+            ports?: string;
+        };
+        /**
+         * graph-query Configuration
+         * @description Query coordinator for graph subsystem
+         */
+        "graph-query.v1": {
+            /** @description Maximum traversal depth for path search queries */
+            max_depth?: string;
+            /** @description Port configuration for input and output connections */
+            ports: Record<string, never>;
+            /** @description Timeout for query operations (e.g., '5s', '10s') */
+            query_timeout?: string;
+        };
+        /**
+         * http Configuration
+         * @description HTTP gateway for bidirectional NATS request/reply
+         */
+        "http.v1": {
+            /** @description Allowed origins (required for CORS) */
+            cors_origins?: string[];
+            /** @description Enable CORS */
+            enable_cors?: boolean;
+            /** @description Max request size (bytes) */
+            max_request_size?: number;
+            /** @description Route mappings */
+            routes?: {
+                /** @description Route description */
+                description?: string;
+                /** @description HTTP method */
+                method?: string;
+                /** @description NATS request subject */
+                nats_subject?: string;
+                /** @description HTTP route path */
+                path?: string;
+                /**
+                 * @description Request timeout
+                 * @default 5s
+                 */
+                timeout: string;
+            }[];
+        };
+        /**
+         * httppost Configuration
+         * @description HTTP POST output for sending messages to HTTP endpoints with retries
+         */
+        "httppost.v1": {
+            /** @description Content-Type */
+            content_type?: string;
+            /** @description HTTP headers */
+            headers?: Record<string, never>;
+            /** @description Port configuration */
+            ports?: string;
+            /** @description Retry count */
+            retry_count?: number;
+            /** @description Timeout (sec) */
+            timeout?: number;
+            /** @description HTTP endpoint URL */
+            url?: string;
+        };
+        /**
+         * json_filter Configuration
+         * @description GenericJSON (core .json.v1) filter for field-based filtering
+         */
+        "json_filter.v1": {
+            /** @description Port configuration */
+            ports?: string;
+            /** @description Filter rules */
+            rules?: Record<string, never>[];
+        };
+        /**
+         * json_generic Configuration
+         * @description Wraps plain JSON into GenericJSON (core .json.v1) format
+         */
+        "json_generic.v1": {
+            /** @description Port configuration */
+            ports?: string;
+        };
+        /**
+         * json_map Configuration
+         * @description GenericJSON (core .json.v1) field transformer for renaming, adding, and removing fields
+         */
+        "json_map.v1": {
+            /** @description Static fields */
+            add_fields?: Record<string, never>;
+            /** @description Field mappings */
+            mappings?: {
+                /**
+                 * @description Type
+                 * @enum {string}
+                 */
+                transform?: "copy" | "uppercase" | "lowercase" | "trim";
+            }[];
+            /** @description Port configuration */
+            ports?: string;
+            /** @description Field removal */
+            remove_fields?: string[];
+        };
+        /**
+         * oasf-generator Configuration
+         * @description Generates OASF records from agent entity capabilities for AGNTCY directory registration
+         */
+        "oasf-generator.v1": {
+            /** @description Suffix for consumer names */
+            consumer_name_suffix?: string;
+            /**
+             * @description Default agent version for OASF records
+             * @default 1.0.0
+             */
+            default_agent_version: string;
+            /** @description Default authors for OASF records */
+            default_authors?: string[];
+            /**
+             * @description Delete consumers on Stop
+             * @default false
+             */
+            delete_consumer_on_stop: boolean;
+            /**
+             * @description KV bucket for entity states
+             * @default ENTITY_STATES
+             */
+            entity_kv_bucket: string;
+            /**
+             * @description Debounce duration for generation
+             * @default 1s
+             */
+            generation_debounce: string;
+            /**
+             * @description Include SemStreams extensions
+             * @default true
+             */
+            include_extensions: boolean;
+            /**
+             * @description KV bucket for OASF records
+             * @default OASF_RECORDS
+             */
+            oasf_kv_bucket: string;
+            /** @description Port configuration */
+            ports?: string;
+            /**
+             * @description JetStream stream name for entity events
+             * @default ENTITY
+             */
+            stream_name: string;
+            /**
+             * @description Key pattern to watch for entity changes
+             * @default >
+             */
+            watch_pattern: string;
+        };
+        /**
+         * objectstore Configuration
+         * @description NATS ObjectStore component for immutable message storage
+         */
+        "objectstore.v1": {
+            /**
+             * @description NATS ObjectStore bucket name
+             * @default MESSAGES
+             */
+            bucket_name: string;
+            /** @description Port configuration for inputs and outputs */
+            ports?: string;
+        };
+        /**
+         * otel-exporter Configuration
+         * @description Exports agent telemetry to OpenTelemetry collectors
+         */
+        "otel-exporter.v1": {
+            /**
+             * @description Batch export timeout
+             * @default 5s
+             */
+            batch_timeout: string;
+            /** @description Suffix for consumer names */
+            consumer_name_suffix?: string;
+            /**
+             * @description Delete consumers on Stop
+             * @default false
+             */
+            delete_consumer_on_stop: boolean;
+            /**
+             * @description OTEL collector endpoint
+             * @default localhost:4317
+             */
+            endpoint: string;
+            /**
+             * @description Enable log export
+             * @default false
+             */
+            export_logs: boolean;
+            /**
+             * @description Enable metric export
+             * @default true
+             */
+            export_metrics: boolean;
+            /**
+             * @description Export operation timeout
+             * @default 30s
+             */
+            export_timeout: string;
+            /**
+             * @description Enable trace export
+             * @default true
+             */
+            export_traces: boolean;
+            /** @description Additional export headers */
+            headers?: Record<string, never>;
+            /**
+             * @description Maximum batch size
+             * @default 512
+             */
+            max_batch_size: number;
+            /**
+             * @description Max export batch size
+             * @default 512
+             */
+            max_export_batch_size: number;
+            /** @description Port configuration */
+            ports?: string;
+            /**
+             * @description Export protocol
+             * @default grpc
+             */
+            protocol: string;
+            /** @description Resource attributes */
+            resource_attributes?: Record<string, never>;
+            /**
+             * @description Trace sampling rate
+             * @default 1
+             */
+            sampling_rate: number;
+            /**
+             * @description Service name for traces
+             * @default semstreams
+             */
+            service_name: string;
+            /**
+             * @description Service version
+             * @default 1.0.0
+             */
+            service_version: string;
+        };
+        /**
+         * rule-processor Configuration
+         * @description Rule execution processor
+         */
+        "rule-processor.v1": {
+            /**
+             * @description Minimum time between repeated alerts (e.g. '2m')
+             * @default 2m
+             */
+            alert_cooldown_period: string;
+            /**
+             * @description Time window for message buffering (e.g. '10m')
+             * @default 10m
+             */
+            buffer_window_size: string;
+            /**
+             * @description Debounce delay in milliseconds for rule evaluation (0=disabled)
+             * @default 0
+             */
+            debounce_delay_ms: number;
+            /**
+             * @description Enable graph entity creation from rules
+             * @default true
+             */
+            enable_graph_integration: boolean;
+            /** @description Map of bucket names to watch patterns for multi-bucket observability */
+            entity_watch_buckets?: Record<string, never>;
+            /** @description NATS KV patterns to watch for entity changes (e.g. 'telemetry.robotics.>') */
+            entity_watch_patterns?: string[];
+            /** @description Inline rule definitions (alternative to files) */
+            inline_rules?: {
+                /** @description conditions */
+                conditions?: {
+                    /** @description field */
+                    field?: string;
+                    /** @description from */
+                    from?: string;
+                    /** @description operator */
+                    operator?: string;
+                    /** @description required */
+                    required?: boolean;
+                    /** @description value */
+                    value?: string;
+                }[];
+                /** @description cooldown */
+                cooldown?: string;
+                /** @description description */
+                description?: string;
+                /** @description enabled */
+                enabled?: boolean;
+                /** @description entity */
+                entity?: {
+                    /** @description pattern */
+                    pattern?: string;
+                    /** @description watch_buckets */
+                    watch_buckets?: string[];
+                };
+                /** @description id */
+                id?: string;
+                /** @description logic */
+                logic?: string;
+                /** @description max_iterations */
+                max_iterations?: number;
+                /** @description metadata */
+                metadata?: Record<string, never>;
+                /** @description name */
+                name?: string;
+                /** @description on_enter */
+                on_enter?: {
+                    /** @description boid_signal_type */
+                    boid_signal_type?: string;
+                    /** @description boid_strength */
+                    boid_strength?: number;
+                    /** @description bucket */
+                    bucket?: string;
+                    /** @description context_data */
+                    context_data?: Record<string, never>;
+                    /** @description key */
+                    key?: string;
+                    /** @description merge */
+                    merge?: boolean;
+                    /** @description model */
+                    model?: string;
+                    /** @description object */
+                    object?: string;
+                    /** @description payload */
+                    payload?: Record<string, never>;
+                    /** @description predicate */
+                    predicate?: string;
+                    /** @description prompt */
+                    prompt?: string;
+                    /** @description properties */
+                    properties?: Record<string, never>;
+                    /** @description role */
+                    role?: string;
+                    /** @description subject */
+                    subject?: string;
+                    /** @description ttl */
+                    ttl?: string;
+                    /** @description type */
+                    type?: string;
+                    /** @description when */
+                    when?: {
+                        /** @description field */
+                        field?: string;
+                        /** @description from */
+                        from?: string;
+                        /** @description operator */
+                        operator?: string;
+                        /** @description required */
+                        required?: boolean;
+                        /** @description value */
+                        value?: string;
+                    }[];
+                    /** @description workflow_id */
+                    workflow_id?: string;
+                    /** @description workflow_slug */
+                    workflow_slug?: string;
+                    /** @description workflow_step */
+                    workflow_step?: string;
+                }[];
+                /** @description on_exit */
+                on_exit?: {
+                    /** @description boid_signal_type */
+                    boid_signal_type?: string;
+                    /** @description boid_strength */
+                    boid_strength?: number;
+                    /** @description bucket */
+                    bucket?: string;
+                    /** @description context_data */
+                    context_data?: Record<string, never>;
+                    /** @description key */
+                    key?: string;
+                    /** @description merge */
+                    merge?: boolean;
+                    /** @description model */
+                    model?: string;
+                    /** @description object */
+                    object?: string;
+                    /** @description payload */
+                    payload?: Record<string, never>;
+                    /** @description predicate */
+                    predicate?: string;
+                    /** @description prompt */
+                    prompt?: string;
+                    /** @description properties */
+                    properties?: Record<string, never>;
+                    /** @description role */
+                    role?: string;
+                    /** @description subject */
+                    subject?: string;
+                    /** @description ttl */
+                    ttl?: string;
+                    /** @description type */
+                    type?: string;
+                    /** @description when */
+                    when?: {
+                        /** @description field */
+                        field?: string;
+                        /** @description from */
+                        from?: string;
+                        /** @description operator */
+                        operator?: string;
+                        /** @description required */
+                        required?: boolean;
+                        /** @description value */
+                        value?: string;
+                    }[];
+                    /** @description workflow_id */
+                    workflow_id?: string;
+                    /** @description workflow_slug */
+                    workflow_slug?: string;
+                    /** @description workflow_step */
+                    workflow_step?: string;
+                }[];
+                /** @description related_patterns */
+                related_patterns?: string[];
+                /** @description type */
+                type?: string;
+                /** @description while_true */
+                while_true?: {
+                    /** @description boid_signal_type */
+                    boid_signal_type?: string;
+                    /** @description boid_strength */
+                    boid_strength?: number;
+                    /** @description bucket */
+                    bucket?: string;
+                    /** @description context_data */
+                    context_data?: Record<string, never>;
+                    /** @description key */
+                    key?: string;
+                    /** @description merge */
+                    merge?: boolean;
+                    /** @description model */
+                    model?: string;
+                    /** @description object */
+                    object?: string;
+                    /** @description payload */
+                    payload?: Record<string, never>;
+                    /** @description predicate */
+                    predicate?: string;
+                    /** @description prompt */
+                    prompt?: string;
+                    /** @description properties */
+                    properties?: Record<string, never>;
+                    /** @description role */
+                    role?: string;
+                    /** @description subject */
+                    subject?: string;
+                    /** @description ttl */
+                    ttl?: string;
+                    /** @description type */
+                    type?: string;
+                    /** @description when */
+                    when?: {
+                        /** @description field */
+                        field?: string;
+                        /** @description from */
+                        from?: string;
+                        /** @description operator */
+                        operator?: string;
+                        /** @description required */
+                        required?: boolean;
+                        /** @description value */
+                        value?: string;
+                    }[];
+                    /** @description workflow_id */
+                    workflow_id?: string;
+                    /** @description workflow_slug */
+                    workflow_slug?: string;
+                    /** @description workflow_step */
+                    workflow_step?: string;
+                }[];
+            }[];
+            /** @description Port configuration for inputs (KV watch: ENTITY_STATES PREDICATE_INDEX) and outputs (NATS: control commands) */
+            ports?: string;
+            /**
+             * @description Dynamic rule definitions (rules.{rule_id} pattern)
+             * @default {}
+             */
+            rules: Record<string, never>;
+            /**
+             * @description Paths to JSON rule definition files
+             * @default [
+             *       "[]"
+             *     ]
+             */
+            rules_files: string[];
+        };
+        /**
+         * slim-bridge Configuration
+         * @description Receives messages from SLIM groups using MLS encryption
+         */
+        "slim-bridge.v1": {
+            /** @description Suffix for consumer names */
+            consumer_name_suffix?: string;
+            /**
+             * @description Delete consumers on Stop
+             * @default false
+             */
+            delete_consumer_on_stop: boolean;
+            /** @description SLIM group IDs to join */
+            group_ids?: string[];
+            /**
+             * @description Identity provider type
+             * @default local
+             */
+            identity_provider: string;
+            /**
+             * @description MLS key ratchet interval
+             * @default 1h
+             */
+            key_ratchet_interval: string;
+            /**
+             * @description Maximum reconnection attempts
+             * @default 10
+             */
+            max_reconnect_attempts: number;
+            /**
+             * @description Message buffer size
+             * @default 1000
+             */
+            message_buffer_size: number;
+            /** @description Port configuration */
+            ports?: string;
+            /**
+             * @description Reconnection interval
+             * @default 5s
+             */
+            reconnect_interval: string;
+            /** @description SLIM service endpoint URL */
+            slim_endpoint?: string;
+        };
+        /**
+         * udp Configuration
+         * @description UDP input component for receiving MAVLink and other UDP data
+         */
+        "udp.v1": {
+            /** @description Port configuration */
+            ports?: string;
+        };
+        /**
+         * websocket Configuration
+         * @description WebSocket output component for real-time visualization and data streaming
+         */
+        "websocket.v1": {
+            /** @description Acknowledgment timeout (e.g. 5s) */
+            ack_timeout?: string;
+            /** @description Delivery reliability mode */
+            delivery_mode?: string;
+            /** @description Port configuration */
+            ports?: string;
+        };
+        /**
+         * websocket_input Configuration
+         * @description WebSocket input for receiving federated data from remote StreamKit instances
+         */
+        "websocket_input.v1": {
+            /** @description Backpressure handling configuration */
+            backpressure?: {
+                /** @description Enable backpressure handling */
+                enabled?: boolean;
+            };
+            /** @description Bidirectional request/reply configuration */
+            bidirectional?: {
+                /** @description Enable request/reply patterns */
+                enabled?: boolean;
+            };
+            /** @description Operation mode (server or client) */
+            mode?: string;
+            /** @description Port configuration */
+            ports?: string;
+        };
     };
-    RuntimeMetricsResponse: {
-      components: {
-        component: string;
-        error_rate?: number | null;
-        name: string;
-        queue_depth?: number | null;
-        raw_counters?: {
-          [key: string]: number;
-        } | null;
-        status: string;
-        throughput?: number | null;
-        type: string;
-      }[];
-      prometheus_available: boolean;
-      /** Format: date-time */
-      timestamp: string;
-    };
-    StatsResponse: {
-      applied: number;
-      human_approved: number;
-      human_rejected: number;
-      human_review: number;
-      llm_approved: number;
-      llm_rejected: number;
-      pending_review: number;
-      total_detected: number;
-    };
-    StatusStreamEnvelope: {
-      flow_id: string;
-      id: string;
-      /** Format: byte */
-      payload?: string;
-      timestamp: number;
-      type: string;
-    };
-    StructuralAnomaly: {
-      confidence: number;
-      /** Format: date-time */
-      detected_at: string;
-      entity_a: string;
-      entity_a_context?: string;
-      entity_b?: string;
-      entity_b_context?: string;
-      evidence: {
-        actual_distance?: number;
-        chain_path?: string[];
-        community_id?: string;
-        core_level?: number;
-        current_core_level?: number;
-        distance_lower_bound?: number;
-        distance_upper_bound?: number;
-        expected_max_hops?: number;
-        expected_peer_count?: number;
-        lost_connections?: number;
-        peer_connectivity?: number;
-        peer_count?: number;
-        predicate?: string;
-        previous_core_level?: number;
-        similarity?: number;
-        structural_distance?: number;
-      };
-      id: string;
-      llm_reasoning?: string;
-      review_notes?: string;
-      /** Format: date-time */
-      reviewed_at?: string | null;
-      reviewed_by?: string;
-      status: string;
-      suggestion?: {
-        confidence: number;
-        from_entity: string;
-        predicate: string;
-        reasoning: string;
-        to_entity: string;
-      } | null;
-      type: string;
-    };
-    SubscribeCommand: {
-      command: string;
-      log_level?: string;
-      message_types?: string[];
-      sources?: string[];
-    };
-    /**
-     * document_processor Configuration
-     * @description Transforms incoming JSON documents into Graphable payloads for semantic search
-     */
-    "document_processor.v1": {
-      /** @description Port configuration */
-      ports?: string;
-    };
-    /**
-     * file Configuration
-     * @description File output for writing messages to disk in JSON, JSONL, or raw format
-     */
-    "file.v1": {
-      /** @description Append mode */
-      append?: boolean;
-      /** @description Buffer size */
-      buffer_size?: number;
-      /** @description Output directory */
-      directory?: string;
-      /** @description Prefix */
-      file_prefix?: string;
-      /**
-       * @description format
-       * @enum {string}
-       */
-      format?: "json" | "jsonl" | "raw";
-      /** @description Port configuration */
-      ports?: string;
-    };
-    /**
-     * file_input Configuration
-     * @description File input component for reading JSONL/JSON files and publishing to NATS
-     */
-    "file_input.v1": {
-      /**
-       * @description File format (jsonl or json)
-       * @default jsonl
-       */
-      format: string;
-      /**
-       * @description Delay between lines
-       * @default 10ms
-       */
-      interval: string;
-      /** @description Port configuration */
-      ports?: string;
-    };
-    /**
-     * graph-clustering Configuration
-     * @description Graph community detection and clustering processor
-     */
-    "graph-clustering.v1": {
-      /** @description Configuration for anomaly detection */
-      anomaly_config?: Record<string, never>;
-      /** @description Event count threshold for triggering detection */
-      batch_size?: number;
-      /** @description Interval between community detection runs (e.g. 30s or 5m) */
-      detection_interval?: string;
-      /** @description Enable anomaly detection after structural computation */
-      enable_anomaly_detection?: boolean;
-      /** @description Enable LLM-based community summarization */
-      enable_llm?: boolean;
-      /** @description Enable structural index computation (k-core and pivot distance) */
-      enable_structural?: boolean;
-      /** @description Number of parallel workers for LLM enhancement (default 5) */
-      enhancement_workers?: number;
-      /** @description URL for LLM endpoint (required if enable_llm is true) */
-      llm_endpoint?: string;
-      /** @description Model name for LLM service (e.g. mistral-7b-instruct) */
-      llm_model?: string;
-      /** @description Maximum BFS traversal depth (default 10) */
-      max_hop_distance?: number;
-      /** @description Maximum iterations for LPA algorithm */
-      max_iterations?: number;
-      /** @description Minimum number of entities to form a community */
-      min_community_size?: number;
-      /** @description Number of pivot nodes for distance indexing (default 16) */
-      pivot_count?: number;
-      /** @description Port configuration */
-      ports?: string;
-      /** @description Max attempts to wait for dependencies at startup */
-      startup_attempts?: number;
-      /** @description Interval between startup attempts in milliseconds */
-      startup_interval_ms?: number;
-    };
-    /**
-     * graph-embedding Configuration
-     * @description Graph entity embedding generation processor
-     */
-    "graph-embedding.v1": {
-      /** @description Batch size for embedding generation */
-      batch_size?: number;
-      /** @description Cache TTL for embeddings (e.g. 15m or 1h) */
-      cache_ttl?: string;
-      /** @description Embedder type (bm25 or http) */
-      embedder_type?: string;
-      /** @description URL for HTTP embedder (required if embedder_type is http) */
-      embedder_url?: string;
-      /** @description Port configuration */
-      ports?: string;
-      /** @description Max attempts to wait for dependencies at startup */
-      startup_attempts?: number;
-      /** @description Interval between startup attempts in milliseconds */
-      startup_interval_ms?: number;
-    };
-    /**
-     * graph-gateway Configuration
-     * @description Graph operations HTTP gateway
-     */
-    "graph-gateway.v1": {
-      /** @description HTTP server bind address */
-      bind_address?: string;
-      /** @description Enable inference API for anomaly review */
-      enable_inference_api?: boolean;
-      /** @description Enable GraphQL playground */
-      enable_playground?: boolean;
-      /** @description GraphQL endpoint path */
-      graphql_path?: string;
-      /** @description MCP endpoint path */
-      mcp_path?: string;
-      /** @description Port configuration */
-      ports?: string;
-    };
-    /**
-     * graph-index-spatial Configuration
-     * @description Graph spatial indexing processor for geospatial queries
-     */
-    "graph-index-spatial.v1": {
-      /** @description Event batch size */
-      batch_size?: number;
-      /** @description Geohash precision (1-12) */
-      geohash_precision?: number;
-      /** @description Port configuration */
-      ports?: string;
-      /** @description Max attempts to wait for dependencies at startup */
-      startup_attempts?: number;
-      /** @description Interval between startup attempts in milliseconds */
-      startup_interval_ms?: number;
-      /** @description Number of worker goroutines */
-      workers?: number;
-    };
-    /**
-     * graph-index-temporal Configuration
-     * @description Graph temporal indexing processor
-     */
-    "graph-index-temporal.v1": {
-      /** @description Batch size for processing */
-      batch_size?: number;
-      /** @description Port configuration */
-      ports?: string;
-      /** @description Max attempts to wait for dependencies at startup */
-      startup_attempts?: number;
-      /** @description Interval between startup attempts in milliseconds */
-      startup_interval_ms?: number;
-      /** @description Time resolution (minute hour day) */
-      time_resolution?: string;
-      /** @description Number of worker goroutines */
-      workers?: number;
-    };
-    /**
-     * graph-index Configuration
-     * @description Graph relationship index maintenance processor
-     */
-    "graph-index.v1": {
-      /** @description Batch size for index updates */
-      batch_size?: number;
-      /** @description Port configuration */
-      ports?: string;
-      /** @description Max attempts to wait for dependencies at startup */
-      startup_attempts?: number;
-      /** @description Interval between startup attempts in milliseconds */
-      startup_interval_ms?: number;
-      /** @description Number of worker goroutines */
-      workers?: number;
-    };
-    /**
-     * graph-ingest Configuration
-     * @description Entity and triple ingestion processor
-     */
-    "graph-ingest.v1": {
-      /** @description Enable hierarchy inference */
-      enable_hierarchy?: boolean;
-      /** @description Enable sibling edges between same-type entities (default true when hierarchy enabled) */
-      enable_type_siblings?: boolean;
-      /** @description Port configuration */
-      ports?: string;
-    };
-    /**
-     * graph-query Configuration
-     * @description Query coordinator for graph subsystem
-     */
-    "graph-query.v1": {
-      /** @description Maximum traversal depth for path search queries */
-      max_depth?: string;
-      /** @description Port configuration for input and output connections */
-      ports: Record<string, never>;
-      /** @description Timeout for query operations (e.g., '5s', '10s') */
-      query_timeout?: string;
-    };
-    /**
-     * http Configuration
-     * @description HTTP gateway for bidirectional NATS request/reply
-     */
-    "http.v1": {
-      /** @description Allowed origins (required for CORS) */
-      cors_origins?: string[];
-      /** @description Enable CORS */
-      enable_cors?: boolean;
-      /** @description Max request size (bytes) */
-      max_request_size?: number;
-      /** @description Route mappings */
-      routes?: string[];
-    };
-    /**
-     * httppost Configuration
-     * @description HTTP POST output for sending messages to HTTP endpoints with retries
-     */
-    "httppost.v1": {
-      /** @description Content-Type */
-      content_type?: string;
-      /** @description HTTP headers */
-      headers?: Record<string, never>;
-      /** @description Port configuration */
-      ports?: string;
-      /** @description Retry count */
-      retry_count?: number;
-      /** @description Timeout (sec) */
-      timeout?: number;
-      /** @description HTTP endpoint URL */
-      url?: string;
-    };
-    /**
-     * iot_sensor Configuration
-     * @description Transforms incoming JSON sensor data into Graphable SensorReading payloads
-     */
-    "iot_sensor.v1": {
-      /** @description Port configuration */
-      ports?: string;
-    };
-    /**
-     * json_filter Configuration
-     * @description GenericJSON (core .json.v1) filter for field-based filtering
-     */
-    "json_filter.v1": {
-      /** @description Port configuration */
-      ports?: string;
-      /** @description Filter rules */
-      rules?: string[];
-    };
-    /**
-     * json_generic Configuration
-     * @description Wraps plain JSON into GenericJSON (core .json.v1) format
-     */
-    "json_generic.v1": {
-      /** @description Port configuration */
-      ports?: string;
-    };
-    /**
-     * json_map Configuration
-     * @description GenericJSON (core .json.v1) field transformer for renaming, adding, and removing fields
-     */
-    "json_map.v1": {
-      /** @description Static fields */
-      add_fields?: Record<string, never>;
-      /** @description Field mappings */
-      mappings?: string[];
-      /** @description Port configuration */
-      ports?: string;
-      /** @description Field removal */
-      remove_fields?: string[];
-    };
-    /**
-     * objectstore Configuration
-     * @description NATS ObjectStore component for immutable message storage
-     */
-    "objectstore.v1": {
-      /**
-       * @description NATS ObjectStore bucket name
-       * @default MESSAGES
-       */
-      bucket_name: string;
-      /** @description Port configuration for inputs and outputs */
-      ports?: string;
-    };
-    /**
-     * rule-processor Configuration
-     * @description Rule execution processor
-     */
-    "rule-processor.v1": {
-      /**
-       * @description Minimum time between repeated alerts (e.g. '2m')
-       * @default 2m
-       */
-      alert_cooldown_period: string;
-      /**
-       * @description Time window for message buffering (e.g. '10m')
-       * @default 10m
-       */
-      buffer_window_size: string;
-      /**
-       * @description Debounce delay in milliseconds for rule evaluation (0=disabled)
-       * @default 0
-       */
-      debounce_delay_ms: number;
-      /**
-       * @description Enable graph entity creation from rules
-       * @default true
-       */
-      enable_graph_integration: boolean;
-      /** @description NATS KV patterns to watch for entity changes (e.g. 'telemetry.robotics.>') */
-      entity_watch_patterns?: string[];
-      /** @description Inline rule definitions (alternative to files) */
-      inline_rules?: string[];
-      /** @description Port configuration for inputs (KV watch: ENTITY_STATES PREDICATE_INDEX) and outputs (NATS: control commands) */
-      ports?: string;
-      /**
-       * @description Dynamic rule definitions (rules.{rule_id} pattern)
-       * @default {}
-       */
-      rules: Record<string, never>;
-      /**
-       * @description Paths to JSON rule definition files
-       * @default [
-       *       "[]"
-       *     ]
-       */
-      rules_files: string[];
-    };
-    /**
-     * udp Configuration
-     * @description UDP input component for receiving MAVLink and other UDP data
-     */
-    "udp.v1": {
-      /** @description Port configuration */
-      ports?: string;
-    };
-    /**
-     * websocket Configuration
-     * @description WebSocket output component for real-time visualization and data streaming
-     */
-    "websocket.v1": {
-      /** @description Acknowledgment timeout (e.g. 5s) */
-      ack_timeout?: string;
-      /** @description Delivery reliability mode */
-      delivery_mode?: string;
-      /** @description Port configuration */
-      ports?: string;
-    };
-    /**
-     * websocket_input Configuration
-     * @description WebSocket input for receiving federated data from remote StreamKit instances
-     */
-    "websocket_input.v1": {
-      /** @description Backpressure handling configuration */
-      backpressure?: Record<string, never>;
-      /** @description Bidirectional request/reply configuration */
-      bidirectional?: Record<string, never>;
-      /** @description Operation mode (server or client) */
-      mode?: string;
-      /** @description Port configuration */
-      ports?: string;
-    };
-  };
-  responses: never;
-  parameters: never;
-  requestBodies: never;
-  headers: never;
-  pathItems: never;
+    responses: never;
+    parameters: never;
+    requestBodies: never;
+    headers: never;
+    pathItems: never;
 }
 export type $defs = Record<string, never>;
 export type operations = Record<string, never>;

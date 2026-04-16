@@ -844,7 +844,11 @@ func (h *MessageHandler) HandleToolResult(ctx context.Context, loopID string, to
 		ContextEvents:     []agentic.ContextEvent{},
 	}
 
-	// Record trajectory step
+	// Record trajectory step with tool status for graph queryability.
+	toolStatus := "success"
+	if toolResult.Error != "" {
+		toolStatus = "failed"
+	}
 	step := agentic.TrajectoryStep{
 		Timestamp:     time.Now(),
 		StepType:      "tool_call",
@@ -854,6 +858,9 @@ func (h *MessageHandler) HandleToolResult(ctx context.Context, loopID string, to
 		Duration:      h.computeToolDuration(toolResult.CallID),
 		Provider:      h.resolveProvider(entity.Model),
 		Capability:    entity.Role,
+		ToolStatus:    toolStatus,
+		ErrorMessage:  toolResult.Error,
+		ErrorCategory: string(toolResult.ErrorKind),
 	}
 	result.TrajectorySteps = append(result.TrajectorySteps, step)
 
