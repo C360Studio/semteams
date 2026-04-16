@@ -429,14 +429,15 @@ func TestDefaultConfig(t *testing.T) {
 		t.Fatal("DefaultConfig() ports should not be nil")
 	}
 
-	// Check input ports
-	if len(cfg.Ports.Inputs) != 3 {
-		t.Errorf("DefaultConfig() input ports count = %d, want 3", len(cfg.Ports.Inputs))
+	// Check input ports (compaction_events, hydrate_requests, entity_states,
+	// layer_approved_events, loop_created_events)
+	if len(cfg.Ports.Inputs) != 5 {
+		t.Errorf("DefaultConfig() input ports count = %d, want 5", len(cfg.Ports.Inputs))
 	}
 
-	// Check output ports
-	if len(cfg.Ports.Outputs) != 3 {
-		t.Errorf("DefaultConfig() output ports count = %d, want 3", len(cfg.Ports.Outputs))
+	// Check output ports (injected_context, graph_mutations, checkpoint_events, profile_context)
+	if len(cfg.Ports.Outputs) != 4 {
+		t.Errorf("DefaultConfig() output ports count = %d, want 4", len(cfg.Ports.Outputs))
 	}
 
 	// Verify default config passes validation

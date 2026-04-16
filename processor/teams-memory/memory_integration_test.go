@@ -32,9 +32,12 @@ func TestMain(m *testing.M) {
 			Subjects: []string{
 				"agent.context.compaction.>",
 				"agent.context.injected.>",
+				"agent.context.profile.>",
 				"memory.hydrate.request.>",
 				"graph.mutation.>",
 				"memory.checkpoint.created.>",
+				"agent.operating_model.layer_approved.>",
+				"agent.created.>",
 			},
 		},
 	}

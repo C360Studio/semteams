@@ -211,6 +211,22 @@ func DefaultConfig() Config {
 			Required:    false,
 			Description: "Entity state changes (KV Watch)",
 		},
+		{
+			Name:        "layer_approved_events",
+			Type:        "jetstream",
+			Subject:     "agent.operating_model.layer_approved.*",
+			StreamName:  "AGENT",
+			Required:    false,
+			Description: "Operating-model layer-approved events from /onboard (JetStream)",
+		},
+		{
+			Name:        "loop_created_events",
+			Type:        "jetstream",
+			Subject:     "agent.created.*",
+			StreamName:  "AGENT",
+			Required:    false,
+			Description: "Loop-created events; triggers profile-context assembly (JetStream)",
+		},
 	}
 
 	outputDefs := []component.PortDefinition{
@@ -235,6 +251,14 @@ func DefaultConfig() Config {
 			Subject:     "memory.checkpoint.created.*",
 			Required:    true,
 			Description: "Checkpoint event notifications (NATS)",
+		},
+		{
+			Name:        "profile_context",
+			Type:        "jetstream",
+			Subject:     "agent.context.profile.*",
+			StreamName:  "AGENT",
+			Required:    false,
+			Description: "Operating-model profile context for loop injection (JetStream)",
 		},
 	}
 

@@ -44,6 +44,11 @@ type Component struct {
 
 	// Track consumers for cleanup
 	consumerInfos []consumerInfo
+
+	// sendResponseFn is a test hook only; production leaves this nil. When
+	// non-nil it replaces the NATS-publishing behavior of sendResponse, so unit
+	// tests can capture outgoing responses without a live NATS connection.
+	sendResponseFn func(agentic.UserResponse)
 }
 
 // consumerInfo tracks JetStream consumer details for cleanup
@@ -436,15 +441,21 @@ func (c *Component) handleUserMessage(ctx context.Context, data []byte) {
 		slog.String("user_id", msg.UserID),
 		slog.String("channel", msg.ChannelType))
 
-	// Three-way routing:
+	// Four-way routing:
 	// 1. Explicit commands (starts with "/") — always command
-	// 2. Intent classification (when enabled) — LLM classifies ambiguous messages
-	// 3. Fallback — treat as task submission
-	if strings.HasPrefix(msg.Content, "/") {
+	// 2. Onboarding interview turn — when the user has an active onboarding loop
+	//    on this channel, free-text goes to the interview handler, not to the
+	//    generic task-submission path
+	// 3. Intent classification (when enabled) — LLM classifies ambiguous messages
+	// 4. Fallback — treat as task submission
+	switch {
+	case strings.HasPrefix(msg.Content, "/"):
 		c.handleCommand(ctx, msg)
-	} else if c.intentClassifier != nil {
+	case c.isOnboardingInFlight(msg.UserID, msg.ChannelID):
+		c.handleOnboardingTurn(ctx, msg)
+	case c.intentClassifier != nil:
 		c.handleClassifiedMessage(ctx, msg)
-	} else {
+	default:
 		c.handleTaskSubmission(ctx, msg)
 	}
 
@@ -660,7 +671,9 @@ func (c *Component) handleTaskSubmission(ctx context.Context, msg agentic.UserMe
 
 	taskID := uuid.New().String()
 
-	// Create task message
+	// Create task message. Metadata carries the originating user_id so
+	// downstream teams-memory can hydrate a per-user profile context when the
+	// loop is created (see processor/teams-memory/profile_context.go).
 	task := agentic.TaskMessage{
 		LoopID:           loopID,
 		TaskID:           taskID,
@@ -668,6 +681,9 @@ func (c *Component) handleTaskSubmission(ctx context.Context, msg agentic.UserMe
 		Model:            c.resolveModel(),
 		Prompt:           msg.Content,
 		ContextRequestID: msg.ContextRequestID,
+		Metadata: map[string]any{
+			"user_id": msg.UserID,
+		},
 	}
 
 	// Track the loop
@@ -884,6 +900,10 @@ func (c *Component) handleAgentFailed(ctx context.Context, data []byte) {
 
 // sendResponse publishes a response to the user's channel
 func (c *Component) sendResponse(ctx context.Context, resp agentic.UserResponse) {
+	if c.sendResponseFn != nil {
+		c.sendResponseFn(resp)
+		return
+	}
 	respMsg := message.NewBaseMessage(resp.Schema(), &resp, "teams-dispatch")
 	data, err := json.Marshal(respMsg)
 	if err != nil {

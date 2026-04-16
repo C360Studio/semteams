@@ -78,6 +78,14 @@ func (c *Component) registerBuiltinCommands() {
 		RequireLoop: false,
 		Help:        "/resume [loop_id] - Resume paused loop",
 	}, c.makeSignalCommand(agentic.SignalResume))
+
+	// /onboard - Start operating-model onboarding interview
+	c.registry.Register("onboard", CommandConfig{
+		Pattern:     `^/onboard$`,
+		Permission:  "submit_task",
+		RequireLoop: false,
+		Help:        "/onboard - Start the operating-model onboarding interview",
+	}, c.handleOnboardCommand)
 }
 
 // handleCancelCommand handles the /cancel command

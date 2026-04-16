@@ -522,6 +522,14 @@ func (c *Component) setupSubscriptions(ctx context.Context) error {
 				continue
 			}
 			handler = c.handleBoidSignalMessage
+		case "agent.context.profile":
+			// Only subscribe when profile-context injection is enabled.
+			// Disabled deployments skip the subscription entirely so we don't
+			// burn JetStream consumers for payloads we'd ignore.
+			if !c.config.Context.InjectProfileContext {
+				continue
+			}
+			handler = c.handleProfileContextMessage
 		default:
 			c.logger.Warn("Unknown input port", "port", port.Name)
 			continue

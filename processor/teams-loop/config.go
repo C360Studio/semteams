@@ -43,6 +43,13 @@ type ContextConfig struct {
 	SliceOnBudget    bool     `json:"slice_on_budget,omitempty" description:"Enable context slicing when budget is exceeded"`
 	PreserveEntities []string `json:"preserve_entities,omitempty" description:"Entity IDs to always keep in context during slicing"`
 	EntityPriority   int      `json:"entity_priority,omitempty" description:"Priority for entity context vs conversation (1-10, higher = more entity context)"`
+	// InjectProfileContext toggles consumption of operating_model.profile_context.v1
+	// events published by teams-memory on agent.context.profile.*. When true,
+	// the rendered preamble is injected into RegionHydratedContext and shown
+	// to the model alongside the system prompt. Defaults off for backward
+	// compatibility with deployments that don't run teams-memory's
+	// profile-context publisher.
+	InjectProfileContext bool `json:"inject_profile_context,omitempty" description:"Enable profile-context injection from teams-memory (agent.context.profile.*)"`
 }
 
 // Validate validates the configuration
@@ -181,6 +188,14 @@ func DefaultConfig() Config {
 					StreamName:  "AGENT",
 					Required:    false,
 					Description: "Boid steering signals for agent coordination",
+				},
+				{
+					Name:        "agent.context.profile",
+					Type:        "jetstream",
+					Subject:     "agent.context.profile.*",
+					StreamName:  "AGENT",
+					Required:    false,
+					Description: "Operating-model profile context from teams-memory (JetStream)",
 				},
 			},
 			Outputs: []component.PortDefinition{

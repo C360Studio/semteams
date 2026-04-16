@@ -28,9 +28,13 @@ type Component struct {
 	config     Config
 	natsClient *natsclient.Client
 	logger     *slog.Logger
+	platform   component.PlatformMeta
 
 	hydrator  *Hydrator
 	extractor *LLMExtractor
+	// profileReader is swapped atomically so handlers running concurrently
+	// with SetProfileReader observe a consistent reader without a mutex.
+	profileReader atomic.Pointer[ProfileReader]
 
 	// Lifecycle management
 	running   bool
@@ -76,14 +80,38 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 		return nil, errs.Wrap(err, "Component", "NewComponent", "create extractor")
 	}
 
-	return &Component{
+	comp := &Component{
 		name:       "teams-memory",
 		config:     config,
 		natsClient: deps.NATSClient,
 		logger:     deps.GetLogger(),
+		platform:   deps.Platform,
 		hydrator:   hydrator,
 		extractor:  extractor,
-	}, nil
+	}
+	var initial ProfileReader = EmptyProfileReader{}
+	comp.profileReader.Store(&initial)
+	return comp, nil
+}
+
+// SetProfileReader wires a ProfileReader for assembling operating-model
+// profile context. Production deployments call this with a graph-backed
+// reader during component initialization; tests may supply a stub. Safe to
+// call concurrently with handlers via atomic swap.
+func (c *Component) SetProfileReader(reader ProfileReader) {
+	if reader == nil {
+		reader = EmptyProfileReader{}
+	}
+	c.profileReader.Store(&reader)
+}
+
+// getProfileReader returns the currently-installed ProfileReader. Always
+// non-nil: the component constructor initializes it to EmptyProfileReader.
+func (c *Component) getProfileReader() ProfileReader {
+	if r := c.profileReader.Load(); r != nil {
+		return *r
+	}
+	return EmptyProfileReader{}
 }
 
 // Initialize prepares the component
@@ -136,15 +164,8 @@ func (c *Component) setupInputConsumers(ctx context.Context) error {
 			continue
 		}
 
-		var handler func(context.Context, []byte)
-
-		// Route to appropriate handler based on port name
-		switch port.Name {
-		case "compaction_events":
-			handler = c.handleCompactionEvent
-		case "hydrate_requests":
-			handler = c.handleHydrateRequest
-		default:
+		handler, ok := c.handlerForPort(port.Name)
+		if !ok {
 			c.logger.Debug("Skipping unknown input port", "port", port.Name)
 			continue
 		}
@@ -155,6 +176,24 @@ func (c *Component) setupInputConsumers(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// handlerForPort returns the registered handler for the named input port and
+// whether the port is recognized. Extracted from setupInputConsumers so the
+// routing table is independently testable.
+func (c *Component) handlerForPort(name string) (func(context.Context, []byte), bool) {
+	switch name {
+	case "compaction_events":
+		return c.handleCompactionEvent, true
+	case "hydrate_requests":
+		return c.handleHydrateRequest, true
+	case "layer_approved_events":
+		return c.handleLayerApproved, true
+	case "loop_created_events":
+		return c.handleLoopCreated, true
+	default:
+		return nil, false
+	}
 }
 
 // setupConsumer sets up a JetStream consumer for an input port
