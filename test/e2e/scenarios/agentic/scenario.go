@@ -202,7 +202,7 @@ func (s *Scenario) verifyComponents(ctx context.Context, result *scenarios.Resul
 	}
 
 	// Check for required agentic components
-	required := []string{"agentic-loop", "agentic-model"}
+	required := []string{"teams-loop", "teams-model"}
 	found := make(map[string]bool)
 
 	for _, comp := range components {

@@ -25,7 +25,7 @@ func TestRegister_SuccessfulRegistration(t *testing.T) {
 	// Look for our component
 	found := false
 	for _, typeName := range types {
-		if typeName == "agentic-loop" {
+		if typeName == "teams-loop" {
 			found = true
 			break
 		}
@@ -46,13 +46,13 @@ func TestRegister_FactoryMetadata(t *testing.T) {
 
 	// Get factory metadata
 	factories := registry.ListFactories()
-	factoryReg, ok := factories["agentic-loop"]
+	factoryReg, ok := factories["teams-loop"]
 	if !ok {
 		t.Fatal("Factory 'agentic-loop' not found in ListFactories()")
 	}
 
 	// Verify metadata
-	if factoryReg.Name != "agentic-loop" {
+	if factoryReg.Name != "teams-loop" {
 		t.Errorf("Factory.Name = %s, want agentic-loop", factoryReg.Name)
 	}
 	if factoryReg.Type != "processor" {
@@ -86,7 +86,7 @@ func TestRegister_ConfigSchema(t *testing.T) {
 	}
 
 	factories := registry.ListFactories()
-	factoryReg, ok := factories["agentic-loop"]
+	factoryReg, ok := factories["teams-loop"]
 	if !ok {
 		t.Fatal("Factory 'agentic-loop' not found")
 	}
@@ -192,7 +192,7 @@ func TestRegister_FactoryFunctionality(t *testing.T) {
 
 	// Verify factory can create components
 	factories := registry.ListFactories()
-	factoryReg, ok := factories["agentic-loop"]
+	factoryReg, ok := factories["teams-loop"]
 	if !ok {
 		t.Fatal("Factory 'agentic-loop' not found")
 	}
@@ -216,7 +216,7 @@ func TestRegister_SchemaValidation(t *testing.T) {
 	}
 
 	factories := registry.ListFactories()
-	factoryReg, ok := factories["agentic-loop"]
+	factoryReg, ok := factories["teams-loop"]
 	if !ok {
 		t.Fatal("Factory 'agentic-loop' not found")
 	}
@@ -255,7 +255,7 @@ func TestRegister_DefaultValues(t *testing.T) {
 	}
 
 	factories := registry.ListFactories()
-	factoryReg, ok := factories["agentic-loop"]
+	factoryReg, ok := factories["teams-loop"]
 	if !ok {
 		t.Fatal("Factory 'agentic-loop' not found")
 	}
@@ -291,7 +291,7 @@ func TestRegister_ComponentDomain(t *testing.T) {
 	}
 
 	factories := registry.ListFactories()
-	factoryReg, ok := factories["agentic-loop"]
+	factoryReg, ok := factories["teams-loop"]
 	if !ok {
 		t.Fatal("Factory 'agentic-loop' not found")
 	}
@@ -316,7 +316,7 @@ func TestRegister_ComponentProtocol(t *testing.T) {
 	}
 
 	factories := registry.ListFactories()
-	factoryReg, ok := factories["agentic-loop"]
+	factoryReg, ok := factories["teams-loop"]
 	if !ok {
 		t.Fatal("Factory 'agentic-loop' not found")
 	}
@@ -341,7 +341,7 @@ func TestRegister_VersionFormat(t *testing.T) {
 	}
 
 	factories := registry.ListFactories()
-	factoryReg, ok := factories["agentic-loop"]
+	factoryReg, ok := factories["teams-loop"]
 	if !ok {
 		t.Fatal("Factory 'agentic-loop' not found")
 	}

@@ -76,7 +76,7 @@ func TestHandleTask_CreatesLoop(t *testing.T) {
 
 	found := false
 	for _, msg := range result.PublishedMessages {
-		if msg.Subject == "agent.request."+result.LoopID {
+		if msg.Subject == "teams.request."+result.LoopID {
 			found = true
 
 			// Extract request from BaseMessage envelope
@@ -223,7 +223,7 @@ func TestHandleModelResponse_ToolCall(t *testing.T) {
 	// Serial dispatch: only the first tool call should be published
 	toolExecuteCount := 0
 	for _, msg := range result.PublishedMessages {
-		if containsIgnoreCase(msg.Subject, "tool.execute") {
+		if containsIgnoreCase(msg.Subject, "teams.execute") {
 			toolExecuteCount++
 		}
 	}
@@ -287,7 +287,7 @@ func TestHandleModelResponse_Complete_General(t *testing.T) {
 	// Should publish agent.complete
 	found := false
 	for _, msg := range result.PublishedMessages {
-		if containsIgnoreCase(msg.Subject, "agent.complete") {
+		if containsIgnoreCase(msg.Subject, "teams.complete") {
 			found = true
 			break
 		}
@@ -376,7 +376,7 @@ func TestHandleModelResponse_Complete_Architect(t *testing.T) {
 	// Should publish agent.complete (rules engine watches this)
 	foundComplete := false
 	for _, msg := range result.PublishedMessages {
-		if containsIgnoreCase(msg.Subject, "agent.complete") {
+		if containsIgnoreCase(msg.Subject, "teams.complete") {
 			foundComplete = true
 			break
 		}
@@ -485,7 +485,7 @@ func TestHandleToolResult_SingleTool(t *testing.T) {
 	// Should publish next agent.request
 	found := false
 	for _, msg := range result.PublishedMessages {
-		if containsIgnoreCase(msg.Subject, "agent.request") {
+		if containsIgnoreCase(msg.Subject, "teams.request") {
 			found = true
 
 			// Verify request includes tool result (wrapped in BaseMessage envelope)
@@ -568,7 +568,7 @@ func TestHandleToolResult_MultipleTool_SerialDispatch(t *testing.T) {
 	// Only 1 tool.execute should be published (serial dispatch)
 	toolExecCount := 0
 	for _, msg := range modelResult.PublishedMessages {
-		if containsIgnoreCase(msg.Subject, "tool.execute") {
+		if containsIgnoreCase(msg.Subject, "teams.execute") {
 			toolExecCount++
 		}
 	}
@@ -591,10 +591,10 @@ func TestHandleToolResult_MultipleTool_SerialDispatch(t *testing.T) {
 	}
 	foundToolExec := false
 	for _, msg := range result1.PublishedMessages {
-		if containsIgnoreCase(msg.Subject, "tool.execute.tool2") {
+		if containsIgnoreCase(msg.Subject, "teams.execute.tool2") {
 			foundToolExec = true
 		}
-		if containsIgnoreCase(msg.Subject, "agent.request") {
+		if containsIgnoreCase(msg.Subject, "teams.request") {
 			t.Error("Should not publish agent.request until all tools complete")
 		}
 	}
@@ -616,10 +616,10 @@ func TestHandleToolResult_MultipleTool_SerialDispatch(t *testing.T) {
 	}
 	foundToolExec = false
 	for _, msg := range result2.PublishedMessages {
-		if containsIgnoreCase(msg.Subject, "tool.execute.tool3") {
+		if containsIgnoreCase(msg.Subject, "teams.execute.tool3") {
 			foundToolExec = true
 		}
-		if containsIgnoreCase(msg.Subject, "agent.request") {
+		if containsIgnoreCase(msg.Subject, "teams.request") {
 			t.Error("Should not publish agent.request until all tools complete")
 		}
 	}
@@ -642,7 +642,7 @@ func TestHandleToolResult_MultipleTool_SerialDispatch(t *testing.T) {
 
 	foundRequest := false
 	for _, msg := range result3.PublishedMessages {
-		if containsIgnoreCase(msg.Subject, "agent.request") {
+		if containsIgnoreCase(msg.Subject, "teams.request") {
 			foundRequest = true
 			break
 		}
@@ -704,7 +704,7 @@ func TestHandleToolResult_WithError(t *testing.T) {
 	// Should publish next agent.request with error included
 	found := false
 	for _, msg := range result.PublishedMessages {
-		if containsIgnoreCase(msg.Subject, "agent.request") {
+		if containsIgnoreCase(msg.Subject, "teams.request") {
 			found = true
 			break
 		}
@@ -768,7 +768,7 @@ func TestHandleToolResult_StopLoop(t *testing.T) {
 	foundComplete := false
 	foundRequest := false
 	for _, msg := range result.PublishedMessages {
-		if containsIgnoreCase(msg.Subject, "agent.complete") {
+		if containsIgnoreCase(msg.Subject, "teams.complete") {
 			foundComplete = true
 
 			// Verify the completion result contains the tool's content
@@ -784,7 +784,7 @@ func TestHandleToolResult_StopLoop(t *testing.T) {
 				t.Errorf("Completion result = %q, want %q", got, toolResult.Content)
 			}
 		}
-		if containsIgnoreCase(msg.Subject, "agent.request") {
+		if containsIgnoreCase(msg.Subject, "teams.request") {
 			foundRequest = true
 		}
 	}
@@ -863,7 +863,7 @@ func TestHandleToolResult_StopLoopClearsQueue(t *testing.T) {
 	// Only submit_work should be dispatched (bash is queued)
 	toolExecCount := 0
 	for _, msg := range modelResult.PublishedMessages {
-		if containsIgnoreCase(msg.Subject, "tool.execute") {
+		if containsIgnoreCase(msg.Subject, "teams.execute") {
 			toolExecCount++
 			if !containsIgnoreCase(msg.Subject, "submit_work") {
 				t.Errorf("Expected tool.execute.submit_work, got %s", msg.Subject)
@@ -891,13 +891,13 @@ func TestHandleToolResult_StopLoopClearsQueue(t *testing.T) {
 	// Verify agent.complete published, no tool.execute for bash
 	foundComplete := false
 	for _, msg := range submitResult.PublishedMessages {
-		if containsIgnoreCase(msg.Subject, "agent.complete") {
+		if containsIgnoreCase(msg.Subject, "teams.complete") {
 			foundComplete = true
 		}
-		if containsIgnoreCase(msg.Subject, "tool.execute") {
+		if containsIgnoreCase(msg.Subject, "teams.execute") {
 			t.Fatal("StopLoop must not dispatch queued tools")
 		}
-		if containsIgnoreCase(msg.Subject, "agent.request") {
+		if containsIgnoreCase(msg.Subject, "teams.request") {
 			t.Fatal("StopLoop must not publish agent.request")
 		}
 	}
@@ -1012,7 +1012,7 @@ func TestHandleTask_IncludesBudgetMessage(t *testing.T) {
 
 	// Find the agent.request and check for budget message
 	for _, msg := range result.PublishedMessages {
-		if !containsIgnoreCase(msg.Subject, "agent.request") {
+		if !containsIgnoreCase(msg.Subject, "teams.request") {
 			continue
 		}
 
@@ -1192,7 +1192,7 @@ func TestHandleTask_PopulatesToolsInRequest(t *testing.T) {
 	// Find the agent.request message
 	var foundRequest bool
 	for _, msg := range result.PublishedMessages {
-		if !containsIgnoreCase(msg.Subject, "agent.request") {
+		if !containsIgnoreCase(msg.Subject, "teams.request") {
 			continue
 		}
 		foundRequest = true
@@ -1280,7 +1280,7 @@ func TestHandleToolResult_NextRequestHasTools(t *testing.T) {
 	// Find the follow-up agent.request message
 	var foundRequest bool
 	for _, msg := range result.PublishedMessages {
-		if !containsIgnoreCase(msg.Subject, "agent.request") {
+		if !containsIgnoreCase(msg.Subject, "teams.request") {
 			continue
 		}
 		foundRequest = true
@@ -1404,7 +1404,7 @@ func TestHandleTask_PerTaskTools(t *testing.T) {
 
 	// Find agent.request and verify it contains per-task tools, not global ones
 	for _, msg := range result.PublishedMessages {
-		if !containsIgnoreCase(msg.Subject, "agent.request") {
+		if !containsIgnoreCase(msg.Subject, "teams.request") {
 			continue
 		}
 		var envelope map[string]any
@@ -1474,7 +1474,7 @@ func TestHandleTask_MetadataCachedAndPropagated(t *testing.T) {
 
 	// Find tool.execute message and check metadata propagation
 	for _, msg := range result.PublishedMessages {
-		if !containsIgnoreCase(msg.Subject, "tool.execute") {
+		if !containsIgnoreCase(msg.Subject, "teams.execute") {
 			continue
 		}
 		var envelope map[string]any
@@ -1571,7 +1571,7 @@ func TestToolCallFilter_AllApproved(t *testing.T) {
 	// Serial dispatch: first call dispatched, second queued
 	toolCount := 0
 	for _, msg := range result.PublishedMessages {
-		if containsIgnoreCase(msg.Subject, "tool.execute") {
+		if containsIgnoreCase(msg.Subject, "teams.execute") {
 			toolCount++
 		}
 	}
@@ -1623,7 +1623,7 @@ func TestToolCallFilter_PartialRejection(t *testing.T) {
 	// Only safe_tool should be published
 	toolCount := 0
 	for _, msg := range result.PublishedMessages {
-		if containsIgnoreCase(msg.Subject, "tool.execute") {
+		if containsIgnoreCase(msg.Subject, "teams.execute") {
 			toolCount++
 		}
 	}
@@ -1672,7 +1672,7 @@ func TestToolCallFilter_AllRejected(t *testing.T) {
 	// No tool.execute messages should be published
 	toolCount := 0
 	for _, msg := range result.PublishedMessages {
-		if containsIgnoreCase(msg.Subject, "tool.execute") {
+		if containsIgnoreCase(msg.Subject, "teams.execute") {
 			toolCount++
 		}
 	}
@@ -1683,7 +1683,7 @@ func TestToolCallFilter_AllRejected(t *testing.T) {
 	// All tools rejected → handleToolsComplete should fire → agent.request published
 	requestCount := 0
 	for _, msg := range result.PublishedMessages {
-		if containsIgnoreCase(msg.Subject, "agent.request") {
+		if containsIgnoreCase(msg.Subject, "teams.request") {
 			requestCount++
 		}
 	}
@@ -1727,7 +1727,7 @@ func TestToolCallFilter_Nil_NoFiltering(t *testing.T) {
 	// Without filter, all calls proceed normally
 	toolCount := 0
 	for _, msg := range result.PublishedMessages {
-		if containsIgnoreCase(msg.Subject, "tool.execute") {
+		if containsIgnoreCase(msg.Subject, "teams.execute") {
 			toolCount++
 		}
 	}
@@ -1776,7 +1776,7 @@ func TestEmptyNameToolCalls_Rejected(t *testing.T) {
 	// Only real_tool should be dispatched
 	toolCount := 0
 	for _, msg := range result.PublishedMessages {
-		if containsIgnoreCase(msg.Subject, "tool.execute") {
+		if containsIgnoreCase(msg.Subject, "teams.execute") {
 			toolCount++
 		}
 	}
@@ -1828,7 +1828,7 @@ func TestEmptyNameToolCalls_AllEmpty(t *testing.T) {
 	// No tool.execute messages should be published
 	toolCount := 0
 	for _, msg := range result.PublishedMessages {
-		if containsIgnoreCase(msg.Subject, "tool.execute") {
+		if containsIgnoreCase(msg.Subject, "teams.execute") {
 			toolCount++
 		}
 	}
@@ -1839,7 +1839,7 @@ func TestEmptyNameToolCalls_AllEmpty(t *testing.T) {
 	// All empty → handleToolsComplete should fire → agent.request published
 	requestCount := 0
 	for _, msg := range result.PublishedMessages {
-		if containsIgnoreCase(msg.Subject, "agent.request") {
+		if containsIgnoreCase(msg.Subject, "teams.request") {
 			requestCount++
 		}
 	}
@@ -1887,7 +1887,7 @@ func TestToolCallFilter_RejectedCallsPreserveToolName(t *testing.T) {
 	// All rejected → handleToolsComplete fires → agent.request published.
 	// Parse the request to verify tool result messages have names.
 	for _, msg := range result.PublishedMessages {
-		if !containsIgnoreCase(msg.Subject, "agent.request") {
+		if !containsIgnoreCase(msg.Subject, "teams.request") {
 			continue
 		}
 
@@ -1973,7 +1973,7 @@ func TestHandleToolsComplete_FullConversationHistory(t *testing.T) {
 
 	// Find the follow-up agent.request and validate conversation structure
 	for _, msg := range result.PublishedMessages {
-		if !containsIgnoreCase(msg.Subject, "agent.request") {
+		if !containsIgnoreCase(msg.Subject, "teams.request") {
 			continue
 		}
 

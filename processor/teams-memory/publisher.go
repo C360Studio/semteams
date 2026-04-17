@@ -15,6 +15,25 @@ type Publisher interface {
 	Publish(ctx context.Context, subject string, data []byte) error
 }
 
+// outputSubject returns the resolved NATS subject for a named output port,
+// replacing the trailing wildcard (*) with suffix. Falls back to the
+// legacy pattern when the port is not found in config.
+func (c *Component) outputSubject(portName, suffix string) string {
+	if c.config.Ports != nil {
+		for _, p := range c.config.Ports.Outputs {
+			if p.Name == portName {
+				subject := p.Subject
+				if len(subject) > 0 && subject[len(subject)-1] == '*' {
+					subject = subject[:len(subject)-1] + suffix
+				}
+				return subject
+			}
+		}
+	}
+	// Fallback: should not happen in normal operation
+	return portName + "." + suffix
+}
+
 // InjectedContextMessage represents context injected back to the agent loop
 type InjectedContextMessage struct {
 	LoopID     string `json:"loop_id"`
@@ -80,8 +99,8 @@ func (c *Component) publishInjectedContext(ctx context.Context, loopID, source s
 		return errs.Wrap(err, "Component", "publishInjectedContext", "marshal injected context message")
 	}
 
-	// Build subject: agent.context.injected.{loopID}
-	subject := fmt.Sprintf("agent.context.injected.%s", loopID)
+	// Build subject from port config
+	subject := c.outputSubject("injected_context", loopID)
 
 	// Publish if NATS client available
 	if c.natsClient != nil {
@@ -128,8 +147,8 @@ func (c *Component) publishGraphMutations(ctx context.Context, loopID, operation
 		return errs.Wrap(err, "Component", "publishGraphMutations", "marshal graph mutation message")
 	}
 
-	// Build subject: graph.mutation.{loopID}
-	subject := fmt.Sprintf("graph.mutation.%s", loopID)
+	// Build subject from port config
+	subject := c.outputSubject("graph_mutations", loopID)
 
 	// Publish if NATS client available
 	if c.natsClient != nil {
@@ -185,8 +204,8 @@ func (c *Component) publishCheckpointEvent(ctx context.Context, loopID, checkpoi
 		return errs.Wrap(err, "Component", "publishCheckpointEvent", "marshal checkpoint event message")
 	}
 
-	// Build subject: memory.checkpoint.created.{loopID}
-	subject := fmt.Sprintf("memory.checkpoint.created.%s", loopID)
+	// Build subject from port config
+	subject := c.outputSubject("checkpoint_events", loopID)
 
 	// Publish if NATS client available
 	if c.natsClient != nil {

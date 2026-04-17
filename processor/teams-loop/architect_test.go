@@ -114,7 +114,7 @@ func TestArchitectCompletion_PublishesAgentComplete(t *testing.T) {
 	// Should publish agent.complete with enriched data
 	foundComplete := false
 	for _, msg := range result.PublishedMessages {
-		if containsIgnoreCase(msg.Subject, "agent.complete") {
+		if containsIgnoreCase(msg.Subject, "teams.complete") {
 			foundComplete = true
 
 			// Parse the BaseMessage envelope
@@ -195,7 +195,7 @@ func TestEditorCompletion_DoesNotChain(t *testing.T) {
 	// Should publish agent.complete
 	foundComplete := false
 	for _, msg := range result.PublishedMessages {
-		if containsIgnoreCase(msg.Subject, "agent.complete") {
+		if containsIgnoreCase(msg.Subject, "teams.complete") {
 			foundComplete = true
 			break
 		}

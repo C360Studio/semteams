@@ -26,6 +26,17 @@ import (
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/service"
 	"github.com/c360studio/semstreams/types"
+
+	// semteams product components — registered alongside semstreams'
+	// framework components. No conflict because factory names are
+	// "teams-*" (not "agentic-*").
+	teamsdispatch "github.com/c360studio/semteams/processor/teams-dispatch"
+	teamsgovernance "github.com/c360studio/semteams/processor/teams-governance"
+	teamsloop "github.com/c360studio/semteams/processor/teams-loop"
+	teamsmemory "github.com/c360studio/semteams/processor/teams-memory"
+	teamsmodel "github.com/c360studio/semteams/processor/teams-model"
+	teamstools "github.com/c360studio/semteams/processor/teams-tools"
+	"github.com/c360studio/semteams/processor/teams-tools/executors"
 )
 
 // Build information constants
@@ -254,22 +265,54 @@ func extractPlatformMeta(cfg *config.Config) types.PlatformMeta {
 	}
 }
 
-// setupRegistriesAndManager creates registries and service manager
+// setupRegistriesAndManager creates registries and service manager.
+//
+// Registration order:
+//  1. semstreams framework components (agentic-*, graph-*, json-*, rule, I/O, gateways)
+//  2. semteams product processors (teams-dispatch, teams-loop, etc.)
+//  3. Tool executors (bash, web_search, http_request)
+//
+// No factory name collision: semstreams uses "agentic-*", semteams uses "teams-*".
+// Configs control which factories actually run.
 func setupRegistriesAndManager(cfg *config.Config) (*component.Registry, *service.Manager, error) {
 	componentRegistry := component.NewRegistry()
-	slog.Debug("Registering core component factories (UDP, WebSocket, parsers)")
+
+	// Framework components (all of semstreams — includes agentic-* base versions)
 	if err := componentregistry.Register(componentRegistry); err != nil {
-		return nil, nil, fmt.Errorf("register components: %w", err)
+		return nil, nil, fmt.Errorf("register framework components: %w", err)
 	}
 
-	// Register bundled example/domain components (not in core registry to avoid
-	// pulling example deps into downstream consumers like semdragons/semspec)
+	// Product components (semteams extensions — "teams-*" factory names,
+	// no conflict with semstreams' "agentic-*" names)
+	if err := teamsdispatch.Register(componentRegistry); err != nil {
+		return nil, nil, fmt.Errorf("register teams-dispatch: %w", err)
+	}
+	if err := teamsloop.Register(componentRegistry); err != nil {
+		return nil, nil, fmt.Errorf("register teams-loop: %w", err)
+	}
+	if err := teamsmodel.Register(componentRegistry); err != nil {
+		return nil, nil, fmt.Errorf("register teams-model: %w", err)
+	}
+	if err := teamstools.Register(componentRegistry); err != nil {
+		return nil, nil, fmt.Errorf("register teams-tools: %w", err)
+	}
+	if err := teamsgovernance.Register(componentRegistry); err != nil {
+		return nil, nil, fmt.Errorf("register teams-governance: %w", err)
+	}
+	if err := teamsmemory.Register(componentRegistry); err != nil {
+		return nil, nil, fmt.Errorf("register teams-memory: %w", err)
+	}
+
+	// Tool executors (bash, web_search, http_request, github, rules)
+	executors.RegisterAll(slog.Default())
+
+	// Example components
 	if err := registerExampleComponents(componentRegistry); err != nil {
 		return nil, nil, fmt.Errorf("register example components: %w", err)
 	}
 
 	factories := componentRegistry.ListFactories()
-	slog.Info("Core component factories registered", "count", len(factories), "factories", factories)
+	slog.Info("Component factories registered", "count", len(factories))
 
 	serviceRegistry := service.NewServiceRegistry()
 	if err := service.RegisterAll(serviceRegistry); err != nil {
@@ -463,6 +506,9 @@ func loadConfig(path string) (*config.Config, error) {
 	return cfg, nil
 }
 
+// registerFrameworkComponents registers semstreams' framework components
+// individually, SKIPPING the agentic-* components (those are registered
+// from semteams' product packages instead).
 // registerExampleComponents registers bundled example/domain processors.
 // These are kept out of componentregistry.Register() so that downstream
 // consumers (semdragons, semspec) don't inherit example dependencies.

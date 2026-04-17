@@ -476,7 +476,7 @@ func TestLoopTracker_SendSignal_NoClient(t *testing.T) {
 	ctx := context.Background()
 
 	// With nil NATS client, SendSignal should return ErrNATSClientNil
-	err := tracker.SendSignal(ctx, nil, "loop-1", "cancel", "test reason")
+	err := tracker.SendSignal(ctx, nil, "teams.signal.", "loop-1", "cancel", "test reason")
 	assert.Error(t, err)
 	assert.Equal(t, ErrNATSClientNil, err)
 }

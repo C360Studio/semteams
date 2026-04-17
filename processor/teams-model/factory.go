@@ -12,7 +12,7 @@ type RegistryInterface interface {
 // Register registers the agentic-model processor component with the given registry
 func Register(registry RegistryInterface) error {
 	return registry.RegisterWithConfig(component.RegistrationConfig{
-		Name:        "agentic-model",
+		Name:        "teams-model",
 		Factory:     NewComponent,
 		Schema:      agenticModelSchema,
 		Type:        "processor",

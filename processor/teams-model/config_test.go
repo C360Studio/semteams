@@ -163,14 +163,15 @@ func TestDefaultConfig(t *testing.T) {
 		if len(cfg.Ports.Inputs) != 1 {
 			t.Errorf("DefaultConfig() input ports count = %d, want 1", len(cfg.Ports.Inputs))
 		}
-		if len(cfg.Ports.Outputs) != 1 {
-			t.Errorf("DefaultConfig() output ports count = %d, want 1", len(cfg.Ports.Outputs))
+		// 2 outputs: "response" (JetStream) + "stream" (NATS fire-and-forget)
+		if len(cfg.Ports.Outputs) != 2 {
+			t.Errorf("DefaultConfig() output ports count = %d, want 2", len(cfg.Ports.Outputs))
 		}
-		if cfg.Ports.Inputs[0].Subject != "agent.request.>" {
-			t.Errorf("DefaultConfig() input subject = %s, want agent.request.>", cfg.Ports.Inputs[0].Subject)
+		if cfg.Ports.Inputs[0].Subject != "teams.request.>" {
+			t.Errorf("DefaultConfig() input subject = %s, want teams.request.>", cfg.Ports.Inputs[0].Subject)
 		}
-		if cfg.Ports.Outputs[0].Subject != "agent.response.*" {
-			t.Errorf("DefaultConfig() output subject = %s, want agent.response.*", cfg.Ports.Outputs[0].Subject)
+		if cfg.Ports.Outputs[0].Subject != "teams.response.*" {
+			t.Errorf("DefaultConfig() output subject = %s, want teams.response.*", cfg.Ports.Outputs[0].Subject)
 		}
 	}
 }

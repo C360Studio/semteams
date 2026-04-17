@@ -25,7 +25,7 @@ func TestComponent_Meta(t *testing.T) {
 
 	meta := comp.Meta()
 
-	if meta.Name != "agentic-model" {
+	if meta.Name != "teams-model" {
 		t.Errorf("Meta().Name = %s, want agentic-model", meta.Name)
 	}
 	if meta.Type != "processor" {
@@ -49,8 +49,8 @@ func TestComponent_InputPorts(t *testing.T) {
 	}
 
 	port := ports[0]
-	if port.Name != "agent.request" {
-		t.Errorf("InputPort name = %s, want agent.request", port.Name)
+	if port.Name != "request" {
+		t.Errorf("InputPort name = %s, want request", port.Name)
 	}
 	if port.Direction != component.DirectionInput {
 		t.Errorf("InputPort direction = %v, want DirectionInput", port.Direction)
@@ -64,11 +64,11 @@ func TestComponent_InputPorts(t *testing.T) {
 	if !ok {
 		t.Fatalf("InputPort config should be JetStreamPort, got %T", port.Config)
 	}
-	if len(jsConfig.Subjects) != 1 || jsConfig.Subjects[0] != "agent.request.>" {
-		t.Errorf("InputPort subjects = %v, want [agent.request.>]", jsConfig.Subjects)
+	if len(jsConfig.Subjects) != 1 || jsConfig.Subjects[0] != "teams.request.>" {
+		t.Errorf("InputPort subjects = %v, want [teams.request.>]", jsConfig.Subjects)
 	}
-	if jsConfig.StreamName != "AGENT" {
-		t.Errorf("InputPort stream = %s, want AGENT", jsConfig.StreamName)
+	if jsConfig.StreamName != "TEAMS" {
+		t.Errorf("InputPort stream = %s, want TEAMS", jsConfig.StreamName)
 	}
 }
 
@@ -77,28 +77,34 @@ func TestComponent_OutputPorts(t *testing.T) {
 
 	ports := comp.OutputPorts()
 
-	if len(ports) != 1 {
-		t.Fatalf("OutputPorts() count = %d, want 1", len(ports))
+	// Two output ports: "response" (JetStream) and "stream" (NATS fire-and-forget)
+	if len(ports) != 2 {
+		t.Fatalf("OutputPorts() count = %d, want 2", len(ports))
 	}
 
-	port := ports[0]
-	if port.Name != "agent.response" {
-		t.Errorf("OutputPort name = %s, want agent.response", port.Name)
+	// First port: durable response output
+	resp := ports[0]
+	if resp.Name != "response" {
+		t.Errorf("OutputPort[0] name = %s, want response", resp.Name)
 	}
-	if port.Direction != component.DirectionOutput {
-		t.Errorf("OutputPort direction = %v, want DirectionOutput", port.Direction)
+	if resp.Direction != component.DirectionOutput {
+		t.Errorf("OutputPort[0] direction = %v, want DirectionOutput", resp.Direction)
 	}
-
-	// Verify JetStream config (component uses JetStream for durable messaging)
-	jsConfig, ok := port.Config.(component.JetStreamPort)
+	jsConfig, ok := resp.Config.(component.JetStreamPort)
 	if !ok {
-		t.Fatalf("OutputPort config should be JetStreamPort, got %T", port.Config)
+		t.Fatalf("OutputPort[0] config should be JetStreamPort, got %T", resp.Config)
 	}
-	if len(jsConfig.Subjects) != 1 || jsConfig.Subjects[0] != "agent.response.*" {
-		t.Errorf("OutputPort subjects = %v, want [agent.response.*]", jsConfig.Subjects)
+	if len(jsConfig.Subjects) != 1 || jsConfig.Subjects[0] != "teams.response.*" {
+		t.Errorf("OutputPort[0] subjects = %v, want [teams.response.*]", jsConfig.Subjects)
 	}
-	if jsConfig.StreamName != "AGENT" {
-		t.Errorf("OutputPort stream = %s, want AGENT", jsConfig.StreamName)
+	if jsConfig.StreamName != "TEAMS" {
+		t.Errorf("OutputPort[0] stream = %s, want TEAMS", jsConfig.StreamName)
+	}
+
+	// Second port: streaming chunk output (core NATS, fire-and-forget)
+	stream := ports[1]
+	if stream.Name != "stream" {
+		t.Errorf("OutputPort[1] name = %s, want stream", stream.Name)
 	}
 }
 
@@ -127,10 +133,10 @@ func TestNewComponent_ValidConfig(t *testing.T) {
 	config := teamsmodel.Config{
 		Ports: &component.PortConfig{
 			Inputs: []component.PortDefinition{
-				{Name: "input", Type: "nats", Subject: "agent.request.>", Required: true},
+				{Name: "input", Type: "nats", Subject: "teams.request.>", Required: true},
 			},
 			Outputs: []component.PortDefinition{
-				{Name: "output", Type: "nats", Subject: "agent.response.*", Required: true},
+				{Name: "output", Type: "nats", Subject: "teams.response.*", Required: true},
 			},
 		},
 		Timeout: "120s",

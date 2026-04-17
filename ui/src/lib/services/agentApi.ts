@@ -1,5 +1,5 @@
 // Agent API client
-// Handles communication with agentic-dispatch and agentic-loop backend services
+// Handles communication with teams-dispatch and teams-loop backend services
 
 import type {
   AgentLoop,
@@ -8,8 +8,8 @@ import type {
   TrajectoryEntry,
 } from "$lib/types/agent";
 
-const DISPATCH_BASE = "/agentic-dispatch";
-const LOOP_BASE = "/agentic-loop";
+const DISPATCH_BASE = "/teams-dispatch";
+const LOOP_BASE = "/teams-loop";
 
 export class AgentApiError extends Error {
   constructor(

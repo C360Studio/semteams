@@ -17,6 +17,8 @@ import (
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/pkg/errs"
 	"github.com/nats-io/nats.go/jetstream"
+
+	operatingmodel "github.com/c360studio/semteams/operating-model"
 )
 
 // agenticMemorySchema defines the configuration schema
@@ -28,14 +30,20 @@ type Component struct {
 	config     Config
 	natsClient *natsclient.Client
 	logger     *slog.Logger
+	platform   component.PlatformMeta
 
 	hydrator  *Hydrator
 	extractor *LLMExtractor
+	// profileReader is swapped atomically so handlers running concurrently
+	// with SetProfileReader observe a consistent reader without a mutex.
+	profileReader atomic.Pointer[operatingmodel.ProfileReader]
 
 	// Lifecycle management
-	running   bool
-	startTime time.Time
-	mu        sync.RWMutex
+	running       bool
+	startTime     time.Time
+	cancelFunc    context.CancelFunc // cancels consumer goroutines on Stop
+	consumerNames []string           // stream:consumer keys registered during Start
+	mu            sync.RWMutex
 
 	// Metrics
 	eventsProcessed int64
@@ -76,14 +84,38 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 		return nil, errs.Wrap(err, "Component", "NewComponent", "create extractor")
 	}
 
-	return &Component{
-		name:       "agentic-memory",
+	comp := &Component{
+		name:       "teams-memory",
 		config:     config,
 		natsClient: deps.NATSClient,
 		logger:     deps.GetLogger(),
+		platform:   deps.Platform,
 		hydrator:   hydrator,
 		extractor:  extractor,
-	}, nil
+	}
+	var initial operatingmodel.ProfileReader = operatingmodel.EmptyProfileReader{}
+	comp.profileReader.Store(&initial)
+	return comp, nil
+}
+
+// SetProfileReader wires a ProfileReader for assembling operating-model
+// profile context. Production deployments call this with a graph-backed
+// reader during component initialization; tests may supply a stub. Safe to
+// call concurrently with handlers via atomic swap.
+func (c *Component) SetProfileReader(reader operatingmodel.ProfileReader) {
+	if reader == nil {
+		reader = operatingmodel.EmptyProfileReader{}
+	}
+	c.profileReader.Store(&reader)
+}
+
+// getProfileReader returns the currently-installed ProfileReader. Always
+// non-nil: the component constructor initializes it to EmptyProfileReader.
+func (c *Component) getProfileReader() operatingmodel.ProfileReader {
+	if r := c.profileReader.Load(); r != nil {
+		return *r
+	}
+	return operatingmodel.EmptyProfileReader{}
 }
 
 // Initialize prepares the component
@@ -110,22 +142,47 @@ func (c *Component) Start(ctx context.Context) error {
 	c.running = true
 	c.mu.Unlock()
 
+	// Create a cancellable child context so Stop() can tear down consumer goroutines.
+	consumerCtx, cancel := context.WithCancel(ctx)
+
 	// NATS client is optional for unit tests
 	if c.natsClient != nil {
-		if err := c.setupInputConsumers(ctx); err != nil {
+		if err := c.setupInputConsumers(consumerCtx); err != nil {
+			cancel()
 			// Reset running state on failure
 			c.mu.Lock()
 			c.running = false
 			c.mu.Unlock()
 			return errs.Wrap(err, "Component", "Start", "setup input consumers")
 		}
+		c.initProfileReader(consumerCtx)
 	}
 
 	c.mu.Lock()
+	c.cancelFunc = cancel
 	c.startTime = time.Now()
 	c.mu.Unlock()
 
 	return nil
+}
+
+// initProfileReader attempts to open the entity-states KV bucket and swap
+// in a GraphProfileReader. Falls back silently to EmptyProfileReader.
+func (c *Component) initProfileReader(ctx context.Context) {
+	bucket := c.config.EntityStatesBucket
+	if bucket == "" {
+		bucket = "ENTITY_STATES"
+	}
+	reader, err := operatingmodel.NewGraphProfileReader(ctx, c.natsClient, bucket, c.logger)
+	if err != nil {
+		c.logger.Warn("Could not open entity-states bucket for ProfileReader; using empty reader",
+			"bucket", bucket,
+			"error", err,
+			"hint", "start graph-ingest to create the bucket, or set entity_states_bucket in config")
+		return
+	}
+	c.SetProfileReader(reader)
+	c.logger.Info("Graph-backed ProfileReader wired", "bucket", bucket)
 }
 
 // setupInputConsumers sets up JetStream consumers for all input ports
@@ -136,15 +193,8 @@ func (c *Component) setupInputConsumers(ctx context.Context) error {
 			continue
 		}
 
-		var handler func(context.Context, []byte)
-
-		// Route to appropriate handler based on port name
-		switch port.Name {
-		case "compaction_events":
-			handler = c.handleCompactionEvent
-		case "hydrate_requests":
-			handler = c.handleHydrateRequest
-		default:
+		handler, ok := c.handlerForPort(port.Name)
+		if !ok {
 			c.logger.Debug("Skipping unknown input port", "port", port.Name)
 			continue
 		}
@@ -155,6 +205,24 @@ func (c *Component) setupInputConsumers(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// handlerForPort returns the registered handler for the named input port and
+// whether the port is recognized. Extracted from setupInputConsumers so the
+// routing table is independently testable.
+func (c *Component) handlerForPort(name string) (func(context.Context, []byte), bool) {
+	switch name {
+	case "compaction_events":
+		return c.handleCompactionEvent, true
+	case "hydrate_requests":
+		return c.handleHydrateRequest, true
+	case "layer_approved_events":
+		return c.handleLayerApproved, true
+	case "loop_created_events":
+		return c.handleLoopCreated, true
+	default:
+		return nil, false
+	}
 }
 
 // setupConsumer sets up a JetStream consumer for an input port
@@ -205,6 +273,11 @@ func (c *Component) setupConsumer(ctx context.Context, port component.PortDefini
 	if err != nil {
 		return errs.WrapTransient(err, "Component", "setupConsumer", fmt.Sprintf("consumer setup for stream %s", streamName))
 	}
+
+	// Record consumer identity so Stop() can cleanly drain it.
+	c.mu.Lock()
+	c.consumerNames = append(c.consumerNames, streamName+":"+consumerName)
+	c.mu.Unlock()
 
 	c.logger.Info("Subscribed (JetStream)",
 		"subject", port.Subject,
@@ -265,8 +338,24 @@ func (c *Component) Stop(_ time.Duration) error {
 		return nil
 	}
 
-	// Cleanup operations would happen here in integration mode
-	// For now, just mark as stopped
+	// Stop each JetStream ConsumeContext registered during Start so the NATS
+	// library releases its internal goroutines promptly.
+	if c.natsClient != nil {
+		for _, key := range c.consumerNames {
+			parts := strings.SplitN(key, ":", 2)
+			if len(parts) == 2 {
+				c.natsClient.StopConsumer(parts[0], parts[1])
+			}
+		}
+	}
+	c.consumerNames = nil
+
+	// Cancel the consumer context.
+	if c.cancelFunc != nil {
+		c.cancelFunc()
+		c.cancelFunc = nil
+	}
+
 	c.running = false
 	return nil
 }
@@ -276,7 +365,7 @@ func (c *Component) Stop(_ time.Duration) error {
 // Meta returns component metadata
 func (c *Component) Meta() component.Metadata {
 	return component.Metadata{
-		Name:        "agentic-memory",
+		Name:        "teams-memory",
 		Type:        "processor",
 		Description: "Graph-backed agent memory with context hydration and fact extraction",
 		Version:     "0.1.0",

@@ -17,7 +17,7 @@ type Config struct {
 	MaxIterations        int                   `json:"max_iterations" schema:"type:int,description:Maximum number of iterations before loop terminates,default:20,min:1,max:1000,category:basic,required"`
 	Timeout              string                `json:"timeout" schema:"type:string,description:Timeout duration for loop execution (e.g. 120s or 5m),default:120s,category:basic,required"`
 	ApprovalRequired     []string              `json:"approval_required,omitempty" schema:"type:array,description:Tool names that require human approval before execution. When called the loop transitions to awaiting_approval.,category:advanced"`
-	StreamName           string                `json:"stream_name" schema:"type:string,description:JetStream stream name,default:AGENT,category:advanced"`
+	StreamName           string                `json:"stream_name" schema:"type:string,description:JetStream stream name,default:TEAMS,category:advanced"`
 	ConsumerNameSuffix   string                `json:"consumer_name_suffix" schema:"type:string,description:Suffix for consumer names,category:advanced"`
 	DeleteConsumerOnStop bool                  `json:"delete_consumer_on_stop,omitempty" schema:"type:bool,description:Delete durable consumers on Stop (use for tests only),category:advanced,default:false"`
 	LoopsBucket          string                `json:"loops_bucket" schema:"type:string,description:NATS KV bucket name for storing loop state,default:AGENT_LOOPS,category:advanced,required"`
@@ -43,6 +43,13 @@ type ContextConfig struct {
 	SliceOnBudget    bool     `json:"slice_on_budget,omitempty" description:"Enable context slicing when budget is exceeded"`
 	PreserveEntities []string `json:"preserve_entities,omitempty" description:"Entity IDs to always keep in context during slicing"`
 	EntityPriority   int      `json:"entity_priority,omitempty" description:"Priority for entity context vs conversation (1-10, higher = more entity context)"`
+	// InjectProfileContext toggles consumption of operating_model.profile_context.v1
+	// events published by teams-memory on agent.context.profile.*. When true,
+	// the rendered preamble is injected into RegionHydratedContext and shown
+	// to the model alongside the system prompt. Defaults off for backward
+	// compatibility with deployments that don't run teams-memory's
+	// profile-context publisher.
+	InjectProfileContext bool `json:"inject_profile_context,omitempty" description:"Enable profile-context injection from teams-memory (agent.context.profile.*)"`
 }
 
 // Validate validates the configuration
@@ -132,7 +139,7 @@ func DefaultConfig() Config {
 	return Config{
 		MaxIterations:    20,
 		Timeout:          "120s",
-		StreamName:       "AGENT",
+		StreamName:       "TEAMS",
 		LoopsBucket:      "AGENT_LOOPS",
 		PositionsBucket:  "AGENT_POSITIONS",
 		BoidEnabled:      false,
@@ -143,74 +150,96 @@ func DefaultConfig() Config {
 		Ports: &component.PortConfig{
 			Inputs: []component.PortDefinition{
 				{
-					Name:        "agent.task",
+					Name:        "task",
 					Type:        "jetstream",
-					Subject:     "agent.task.*",
-					StreamName:  "AGENT",
+					Subject:     "teams.task.*",
+					StreamName:  "TEAMS",
 					Required:    true,
 					Description: "Agent task requests (JetStream)",
 				},
 				{
-					Name:        "agent.response",
+					Name:        "response",
 					Type:        "jetstream",
-					Subject:     "agent.response.>",
-					StreamName:  "AGENT",
+					Subject:     "teams.response.>",
+					StreamName:  "TEAMS",
 					Required:    true,
 					Description: "Agent model responses (JetStream)",
 				},
 				{
-					Name:        "tool.result",
+					Name:        "result",
 					Type:        "jetstream",
-					Subject:     "tool.result.>",
-					StreamName:  "AGENT",
+					Subject:     "teams.result.>",
+					StreamName:  "TEAMS",
 					Required:    true,
 					Description: "Tool execution results (JetStream)",
 				},
 				{
-					Name:        "agent.signal",
+					Name:        "signal",
 					Type:        "jetstream",
-					Subject:     "agent.signal.*",
-					StreamName:  "AGENT",
+					Subject:     "teams.signal.*",
+					StreamName:  "TEAMS",
 					Required:    false,
 					Description: "Control signals for loops (cancel, pause, etc.)",
 				},
 				{
-					Name:        "agent.boid",
+					Name:        "boid",
 					Type:        "jetstream",
-					Subject:     "agent.boid.>",
-					StreamName:  "AGENT",
+					Subject:     "teams.boid.>",
+					StreamName:  "TEAMS",
 					Required:    false,
 					Description: "Boid steering signals for agent coordination",
+				},
+				{
+					Name:        "context_profile",
+					Type:        "jetstream",
+					Subject:     "teams.context.profile.*",
+					StreamName:  "TEAMS",
+					Required:    false,
+					Description: "Operating-model profile context from teams-memory (JetStream)",
 				},
 			},
 			Outputs: []component.PortDefinition{
 				{
-					Name:        "agent.request",
+					Name:        "request",
 					Type:        "jetstream",
-					Subject:     "agent.request.*",
-					StreamName:  "AGENT",
+					Subject:     "teams.request.*",
+					StreamName:  "TEAMS",
 					Description: "Agent model requests (JetStream)",
 				},
 				{
-					Name:        "tool.execute",
+					Name:        "execute",
 					Type:        "jetstream",
-					Subject:     "tool.execute.*",
-					StreamName:  "AGENT",
+					Subject:     "teams.execute.*",
+					StreamName:  "TEAMS",
 					Description: "Tool execution requests (JetStream)",
 				},
 				{
-					Name:        "agent.complete",
+					Name:        "complete",
 					Type:        "jetstream",
-					Subject:     "agent.complete.*",
-					StreamName:  "AGENT",
+					Subject:     "teams.complete.*",
+					StreamName:  "TEAMS",
 					Description: "Agent task completions (JetStream)",
 				},
 				{
-					Name:        "agent.context.compaction",
+					Name:        "context_compaction",
 					Type:        "jetstream",
-					Subject:     "agent.context.compaction.*",
-					StreamName:  "AGENT",
+					Subject:     "teams.context.compaction.*",
+					StreamName:  "TEAMS",
 					Description: "Context compaction events (JetStream)",
+				},
+				{
+					Name:        "created",
+					Type:        "jetstream",
+					Subject:     "teams.created.*",
+					StreamName:  "TEAMS",
+					Description: "Loop created events (JetStream)",
+				},
+				{
+					Name:        "failed",
+					Type:        "jetstream",
+					Subject:     "teams.failed.*",
+					StreamName:  "TEAMS",
+					Description: "Loop failed events (JetStream)",
 				},
 			},
 			KVWrite: []component.PortDefinition{

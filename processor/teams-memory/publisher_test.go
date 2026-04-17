@@ -86,8 +86,8 @@ func TestPublishInjectedContext_ValidMessage(t *testing.T) {
 				t.Fatalf("Failed to marshal message: %v", err)
 			}
 
-			// Verify subject pattern: agent.context.injected.*
-			expectedSubjectPrefix := "agent.context.injected."
+			// Verify subject pattern: teams.context.injected.*
+			expectedSubjectPrefix := "teams.context.injected."
 			subject := expectedSubjectPrefix + tt.message.LoopID
 
 			if !strings.HasPrefix(subject, expectedSubjectPrefix) {
@@ -120,24 +120,24 @@ func TestPublishInjectedContext_SubjectPattern(t *testing.T) {
 		{
 			name:        "standard loop ID",
 			loopID:      "loop-001",
-			wantSubject: "agent.context.injected.loop-001",
+			wantSubject: "teams.context.injected.loop-001",
 		},
 		{
 			name:        "UUID loop ID",
 			loopID:      "550e8400-e29b-41d4-a716-446655440000",
-			wantSubject: "agent.context.injected.550e8400-e29b-41d4-a716-446655440000",
+			wantSubject: "teams.context.injected.550e8400-e29b-41d4-a716-446655440000",
 		},
 		{
 			name:        "hierarchical loop ID",
 			loopID:      "architect.task-123.loop-001",
-			wantSubject: "agent.context.injected.architect.task-123.loop-001",
+			wantSubject: "teams.context.injected.architect.task-123.loop-001",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Verify subject pattern construction
-			subject := "agent.context.injected." + tt.loopID
+			subject := "teams.context.injected." + tt.loopID
 
 			if subject != tt.wantSubject {
 				t.Errorf("Subject = %s, want %s", subject, tt.wantSubject)
@@ -209,8 +209,8 @@ func TestPublishGraphMutations_AddTriples(t *testing.T) {
 				t.Fatalf("Failed to marshal message: %v", err)
 			}
 
-			// Verify subject pattern: graph.mutation.*
-			expectedSubjectPrefix := "graph.mutation."
+			// Verify subject pattern: teams.graph.*
+			expectedSubjectPrefix := "teams.graph."
 			subject := expectedSubjectPrefix + tt.message.LoopID
 
 			if !strings.HasPrefix(subject, expectedSubjectPrefix) {
@@ -255,8 +255,8 @@ func TestPublishGraphMutations_DeleteTriples(t *testing.T) {
 	}
 
 	// Verify subject pattern
-	subject := "graph.mutation." + message.LoopID
-	expectedPrefix := "graph.mutation."
+	subject := "teams.graph." + message.LoopID
+	expectedPrefix := "teams.graph."
 
 	if !strings.HasPrefix(subject, expectedPrefix) {
 		t.Errorf("Subject %s does not start with %s", subject, expectedPrefix)
@@ -310,8 +310,8 @@ func TestPublishCheckpointEvent_ValidMessage(t *testing.T) {
 				t.Fatalf("Failed to marshal message: %v", err)
 			}
 
-			// Verify subject pattern: memory.checkpoint.created.*
-			expectedSubjectPrefix := "memory.checkpoint.created."
+			// Verify subject pattern: teams.checkpoint.*
+			expectedSubjectPrefix := "teams.checkpoint."
 			subject := expectedSubjectPrefix + tt.message.LoopID
 
 			if !strings.HasPrefix(subject, expectedSubjectPrefix) {
@@ -344,19 +344,19 @@ func TestPublishCheckpointEvent_SubjectPattern(t *testing.T) {
 		{
 			name:        "standard loop ID",
 			loopID:      "loop-001",
-			wantSubject: "memory.checkpoint.created.loop-001",
+			wantSubject: "teams.checkpoint.loop-001",
 		},
 		{
 			name:        "hierarchical loop ID",
 			loopID:      "architect.task-123.loop-001",
-			wantSubject: "memory.checkpoint.created.architect.task-123.loop-001",
+			wantSubject: "teams.checkpoint.architect.task-123.loop-001",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Verify subject pattern construction
-			subject := "memory.checkpoint.created." + tt.loopID
+			subject := "teams.checkpoint." + tt.loopID
 
 			if subject != tt.wantSubject {
 				t.Errorf("Subject = %s, want %s", subject, tt.wantSubject)

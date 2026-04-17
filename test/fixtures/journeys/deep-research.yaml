@@ -1,0 +1,48 @@
+name: deep-research
+description: |
+  Journey: user asks a research question, agent calls web_search to
+  gather information, then completes with a structured report.
+
+  Paired spec: ui/e2e/agentic/deep-research.spec.ts
+
+  Response sequence:
+    1. Initial prompt → agent calls web_search tool to research the topic
+    2. After receiving search results → agent synthesizes and completes
+       with a structured report
+
+  web_search is always registered: real executor when BRAVE_SEARCH_API_KEY
+  is set, stub executor (canned results) otherwise. This keeps mock-llm
+  E2E self-contained without external API dependencies.
+
+responses:
+  - tool_call:
+      name: web_search
+      arguments_json: |
+        {
+          "query": "MQTT vs NATS IoT edge deployment comparison"
+        }
+  - completion:
+      content: |
+        ## Summary
+
+        MQTT and NATS serve different niches in IoT edge deployments.
+        MQTT excels in constrained environments with its lightweight
+        pub/sub model, while NATS provides higher throughput and built-in
+        request/reply patterns.
+
+        ## Key Findings
+
+        1. MQTT uses TCP with QoS levels (0, 1, 2) for reliability
+        2. NATS JetStream adds persistence and exactly-once delivery
+        3. MQTT brokers (Mosquitto) run on minimal hardware
+        4. NATS has lower latency for request/reply patterns
+
+        ## Sources
+
+        - https://mqtt.org/specification
+        - https://docs.nats.io/compare
+
+        ## Gaps / Open Questions
+
+        - Real-world benchmarks on constrained ARM devices
+        - Power consumption comparison for battery-operated sensors

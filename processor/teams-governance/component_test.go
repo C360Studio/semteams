@@ -26,7 +26,7 @@ func TestComponent_NewComponent(t *testing.T) {
 	require.True(t, ok)
 
 	meta := discoverable.Meta()
-	assert.Equal(t, "agentic-governance", meta.Name)
+	assert.Equal(t, "teams-governance", meta.Name)
 	assert.Equal(t, "processor", meta.Type)
 }
 
@@ -48,7 +48,7 @@ func TestComponent_Meta(t *testing.T) {
 	c := comp.(*Component)
 	meta := c.Meta()
 
-	assert.Equal(t, "agentic-governance", meta.Name)
+	assert.Equal(t, "teams-governance", meta.Name)
 	assert.Equal(t, "processor", meta.Type)
 	assert.NotEmpty(t, meta.Description)
 	assert.Equal(t, "0.1.0", meta.Version)

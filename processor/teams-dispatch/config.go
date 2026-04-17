@@ -13,7 +13,7 @@ type Config struct {
 	DefaultRole          string                `json:"default_role" schema:"type:string,description:Default role for new tasks,default:general,category:basic,required"`
 	AutoContinue         bool                  `json:"auto_continue" schema:"type:bool,description:Automatically continue last active loop,default:true,category:basic"` // Continue last loop if exists
 	Permissions          PermissionConfig      `json:"permissions" schema:"type:object,description:Permission configuration,category:advanced"`
-	StreamName           string                `json:"stream_name" schema:"type:string,description:NATS stream name for user messages,default:USER,category:advanced"`
+	StreamName           string                `json:"stream_name" schema:"type:string,description:NATS stream name for incoming messages,default:TEAMS,category:advanced"`
 	ConsumerNameSuffix   string                `json:"consumer_name_suffix,omitempty" schema:"type:string,description:Suffix appended to consumer names for uniqueness,category:advanced"`
 	DeleteConsumerOnStop bool                  `json:"delete_consumer_on_stop,omitempty" schema:"type:bool,description:Delete durable consumers on Stop (use for tests only),category:advanced,default:false"`
 	Ports                *component.PortConfig `json:"ports,omitempty" schema:"type:ports,description:Port configuration for inputs and outputs,category:basic"`
@@ -45,7 +45,7 @@ func DefaultConfig() Config {
 	return Config{
 		DefaultRole:  "general",
 		AutoContinue: true,
-		StreamName:   "USER",
+		StreamName:   "TEAMS",
 		Permissions: PermissionConfig{
 			View:       []string{"*"}, // Everyone can view
 			SubmitTask: []string{"*"}, // Everyone can submit
@@ -56,42 +56,58 @@ func DefaultConfig() Config {
 		Ports: &component.PortConfig{
 			Inputs: []component.PortDefinition{
 				{
-					Name:        "user.message",
+					Name:        "user_messages",
 					Type:        "jetstream",
-					Subject:     "user.message.>",
-					StreamName:  "USER",
+					Subject:     "teams.user.message.>",
+					StreamName:  "TEAMS",
 					Required:    true,
 					Description: "User messages from all channels",
 				},
 				{
-					Name:        "agent.complete",
+					Name:        "complete",
 					Type:        "jetstream",
-					Subject:     "agent.complete.*",
-					StreamName:  "AGENT",
+					Subject:     "teams.complete.*",
+					StreamName:  "TEAMS",
 					Required:    true,
 					Description: "Agent task completions",
+				},
+				{
+					Name:        "created",
+					Type:        "jetstream",
+					Subject:     "teams.created.*",
+					StreamName:  "TEAMS",
+					Required:    false,
+					Description: "Loop creation events for workflow context sync",
+				},
+				{
+					Name:        "failed",
+					Type:        "jetstream",
+					Subject:     "teams.failed.*",
+					StreamName:  "TEAMS",
+					Required:    false,
+					Description: "Loop failure events",
 				},
 			},
 			Outputs: []component.PortDefinition{
 				{
-					Name:        "agent.task",
+					Name:        "tasks",
 					Type:        "jetstream",
-					Subject:     "agent.task.*",
-					StreamName:  "AGENT",
+					Subject:     "teams.task.*",
+					StreamName:  "TEAMS",
 					Description: "Agent task requests",
 				},
 				{
-					Name:        "agent.signal",
+					Name:        "signals",
 					Type:        "jetstream",
-					Subject:     "agent.signal.*",
-					StreamName:  "AGENT",
+					Subject:     "teams.signal.*",
+					StreamName:  "TEAMS",
 					Description: "Agent control signals",
 				},
 				{
-					Name:        "user.response",
+					Name:        "user_response",
 					Type:        "jetstream",
-					Subject:     "user.response.>",
-					StreamName:  "USER",
+					Subject:     "teams.user.response.>",
+					StreamName:  "TEAMS",
 					Description: "Responses back to users",
 				},
 			},

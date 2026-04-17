@@ -29,7 +29,7 @@ var (
 // TestMain sets up shared NATS container for all tools integration tests
 func TestMain(m *testing.M) {
 	streams := []natsclient.TestStreamConfig{
-		{Name: "AGENT", Subjects: []string{"agent.>", "tool.execute.>", "tool.result.>"}},
+		{Name: "TEAMS", Subjects: []string{"teams.>"}},
 	}
 
 	testClient, err := natsclient.NewSharedTestClient(
@@ -121,8 +121,8 @@ func TestIntegration_ToolExecution(t *testing.T) {
 				{
 					Name:       "tool_calls",
 					Type:       "jetstream",
-					Subject:    "tool.execute.>",
-					StreamName: "AGENT",
+					Subject:    "teams.execute.>",
+					StreamName: "TEAMS",
 					Required:   true,
 				},
 			},
@@ -130,12 +130,12 @@ func TestIntegration_ToolExecution(t *testing.T) {
 				{
 					Name:       "tool_results",
 					Type:       "jetstream",
-					Subject:    "tool.result.*",
-					StreamName: "AGENT",
+					Subject:    "teams.result.*",
+					StreamName: "TEAMS",
 				},
 			},
 		},
-		StreamName:         "AGENT",
+		StreamName:         "TEAMS",
 		ConsumerNameSuffix: "exec-test",
 		Timeout:            "5s",
 	}
@@ -181,7 +181,7 @@ func TestIntegration_ToolExecution(t *testing.T) {
 	receivedResults := make([]agentic.ToolResult, 0)
 	var receiveMu sync.Mutex
 
-	_, err = natsClient.Subscribe(ctx, "tool.result.>", func(_ context.Context, msg *nats.Msg) {
+	_, err = natsClient.Subscribe(ctx, "teams.result.>", func(_ context.Context, msg *nats.Msg) {
 		var baseMsg message.BaseMessage
 		if err := json.Unmarshal(msg.Data, &baseMsg); err == nil {
 			if result, ok := baseMsg.Payload().(*agentic.ToolResult); ok {
@@ -203,7 +203,7 @@ func TestIntegration_ToolExecution(t *testing.T) {
 			"input": "test",
 		},
 	}
-	publishToolCallMessage(t, natsClient, "tool.execute.echo", toolCall)
+	publishToolCallMessage(t, natsClient, "teams.execute.echo", toolCall)
 
 	// Wait for result
 	time.Sleep(500 * time.Millisecond)
@@ -229,8 +229,8 @@ func TestIntegration_ToolAllowedList(t *testing.T) {
 				{
 					Name:       "tool_calls",
 					Type:       "jetstream",
-					Subject:    "tool.execute.>",
-					StreamName: "AGENT",
+					Subject:    "teams.execute.>",
+					StreamName: "TEAMS",
 					Required:   true,
 				},
 			},
@@ -238,12 +238,12 @@ func TestIntegration_ToolAllowedList(t *testing.T) {
 				{
 					Name:       "tool_results",
 					Type:       "jetstream",
-					Subject:    "tool.result.*",
-					StreamName: "AGENT",
+					Subject:    "teams.result.*",
+					StreamName: "TEAMS",
 				},
 			},
 		},
-		StreamName:         "AGENT",
+		StreamName:         "TEAMS",
 		ConsumerNameSuffix: "allowed-test",
 		AllowedTools:       []string{"allowed_tool"}, // Only this tool is allowed
 		Timeout:            "5s",
@@ -296,7 +296,7 @@ func TestIntegration_ToolAllowedList(t *testing.T) {
 	receivedResults := make([]agentic.ToolResult, 0)
 	var receiveMu sync.Mutex
 
-	_, err = natsClient.Subscribe(ctx, "tool.result.>", func(_ context.Context, msg *nats.Msg) {
+	_, err = natsClient.Subscribe(ctx, "teams.result.>", func(_ context.Context, msg *nats.Msg) {
 		var baseMsg message.BaseMessage
 		if err := json.Unmarshal(msg.Data, &baseMsg); err == nil {
 			if result, ok := baseMsg.Payload().(*agentic.ToolResult); ok {
@@ -318,7 +318,7 @@ func TestIntegration_ToolAllowedList(t *testing.T) {
 			"input": "test",
 		},
 	}
-	publishToolCallMessage(t, natsClient, "tool.execute.blocked", blockedCall)
+	publishToolCallMessage(t, natsClient, "teams.execute.blocked", blockedCall)
 
 	time.Sleep(500 * time.Millisecond)
 
@@ -343,8 +343,8 @@ func TestIntegration_ToolTimeout(t *testing.T) {
 				{
 					Name:       "tool_calls",
 					Type:       "jetstream",
-					Subject:    "tool.execute.>",
-					StreamName: "AGENT",
+					Subject:    "teams.execute.>",
+					StreamName: "TEAMS",
 					Required:   true,
 				},
 			},
@@ -352,12 +352,12 @@ func TestIntegration_ToolTimeout(t *testing.T) {
 				{
 					Name:       "tool_results",
 					Type:       "jetstream",
-					Subject:    "tool.result.*",
-					StreamName: "AGENT",
+					Subject:    "teams.result.*",
+					StreamName: "TEAMS",
 				},
 			},
 		},
-		StreamName:         "AGENT",
+		StreamName:         "TEAMS",
 		ConsumerNameSuffix: "timeout-test",
 		Timeout:            "500ms", // Short timeout
 	}
@@ -404,7 +404,7 @@ func TestIntegration_ToolTimeout(t *testing.T) {
 	receivedResults := make([]agentic.ToolResult, 0)
 	var receiveMu sync.Mutex
 
-	_, err = natsClient.Subscribe(ctx, "tool.result.>", func(_ context.Context, msg *nats.Msg) {
+	_, err = natsClient.Subscribe(ctx, "teams.result.>", func(_ context.Context, msg *nats.Msg) {
 		var baseMsg message.BaseMessage
 		if err := json.Unmarshal(msg.Data, &baseMsg); err == nil {
 			if result, ok := baseMsg.Payload().(*agentic.ToolResult); ok {
@@ -426,7 +426,7 @@ func TestIntegration_ToolTimeout(t *testing.T) {
 			"input": "test",
 		},
 	}
-	publishToolCallMessage(t, natsClient, "tool.execute.slow", slowCall)
+	publishToolCallMessage(t, natsClient, "teams.execute.slow", slowCall)
 
 	// Wait for timeout to occur
 	time.Sleep(1 * time.Second)
@@ -452,8 +452,8 @@ func TestIntegration_ToolConcurrentExecution(t *testing.T) {
 				{
 					Name:       "tool_calls",
 					Type:       "jetstream",
-					Subject:    "tool.execute.>",
-					StreamName: "AGENT",
+					Subject:    "teams.execute.>",
+					StreamName: "TEAMS",
 					Required:   true,
 				},
 			},
@@ -461,12 +461,12 @@ func TestIntegration_ToolConcurrentExecution(t *testing.T) {
 				{
 					Name:       "tool_results",
 					Type:       "jetstream",
-					Subject:    "tool.result.*",
-					StreamName: "AGENT",
+					Subject:    "teams.result.*",
+					StreamName: "TEAMS",
 				},
 			},
 		},
-		StreamName:         "AGENT",
+		StreamName:         "TEAMS",
 		ConsumerNameSuffix: "concurrent-test",
 		Timeout:            "5s",
 	}
@@ -527,7 +527,7 @@ func TestIntegration_ToolConcurrentExecution(t *testing.T) {
 	receivedResults := make([]agentic.ToolResult, 0)
 	var receiveMu sync.Mutex
 
-	_, err = natsClient.Subscribe(ctx, "tool.result.>", func(_ context.Context, msg *nats.Msg) {
+	_, err = natsClient.Subscribe(ctx, "teams.result.>", func(_ context.Context, msg *nats.Msg) {
 		var baseMsg message.BaseMessage
 		if err := json.Unmarshal(msg.Data, &baseMsg); err == nil {
 			if result, ok := baseMsg.Payload().(*agentic.ToolResult); ok {
@@ -551,7 +551,7 @@ func TestIntegration_ToolConcurrentExecution(t *testing.T) {
 	}
 
 	for _, call := range calls {
-		publishToolCallMessage(t, natsClient, "tool.execute."+call.Name, call)
+		publishToolCallMessage(t, natsClient, "teams.execute."+call.Name, call)
 	}
 
 	// Wait for all results - should complete faster than sequential time
@@ -591,8 +591,8 @@ func TestIntegration_ToolListRequestReply(t *testing.T) {
 				{
 					Name:       "tool_calls",
 					Type:       "jetstream",
-					Subject:    "tool.execute.>",
-					StreamName: "AGENT",
+					Subject:    "teams.execute.>",
+					StreamName: "TEAMS",
 					Required:   true,
 				},
 				{
@@ -606,12 +606,12 @@ func TestIntegration_ToolListRequestReply(t *testing.T) {
 				{
 					Name:       "tool_results",
 					Type:       "jetstream",
-					Subject:    "tool.result.*",
-					StreamName: "AGENT",
+					Subject:    "teams.result.*",
+					StreamName: "TEAMS",
 				},
 			},
 		},
-		StreamName:         "AGENT",
+		StreamName:         "TEAMS",
 		ConsumerNameSuffix: "list-req-test",
 		Timeout:            "5s",
 	}
@@ -703,8 +703,8 @@ func TestIntegration_GlobalRegistryTools(t *testing.T) {
 				{
 					Name:       "tool_calls",
 					Type:       "jetstream",
-					Subject:    "tool.execute.>",
-					StreamName: "AGENT",
+					Subject:    "teams.execute.>",
+					StreamName: "TEAMS",
 					Required:   true,
 				},
 			},
@@ -712,12 +712,12 @@ func TestIntegration_GlobalRegistryTools(t *testing.T) {
 				{
 					Name:       "tool_results",
 					Type:       "jetstream",
-					Subject:    "tool.result.*",
-					StreamName: "AGENT",
+					Subject:    "teams.result.*",
+					StreamName: "TEAMS",
 				},
 			},
 		},
-		StreamName:         "AGENT",
+		StreamName:         "TEAMS",
 		ConsumerNameSuffix: "global-reg-test",
 		Timeout:            "5s",
 	}
@@ -782,8 +782,8 @@ func TestIntegration_GlobalRegistryExecution(t *testing.T) {
 				{
 					Name:       "tool_calls",
 					Type:       "jetstream",
-					Subject:    "tool.execute.>",
-					StreamName: "AGENT",
+					Subject:    "teams.execute.>",
+					StreamName: "TEAMS",
 					Required:   true,
 				},
 			},
@@ -791,12 +791,12 @@ func TestIntegration_GlobalRegistryExecution(t *testing.T) {
 				{
 					Name:       "tool_results",
 					Type:       "jetstream",
-					Subject:    "tool.result.*",
-					StreamName: "AGENT",
+					Subject:    "teams.result.*",
+					StreamName: "TEAMS",
 				},
 			},
 		},
-		StreamName:         "AGENT",
+		StreamName:         "TEAMS",
 		ConsumerNameSuffix: "global-exec-test",
 		Timeout:            "5s",
 	}
@@ -830,7 +830,7 @@ func TestIntegration_GlobalRegistryExecution(t *testing.T) {
 	receivedResults := make([]agentic.ToolResult, 0)
 	var receiveMu sync.Mutex
 
-	_, err = natsClient.Subscribe(ctx, "tool.result.>", func(_ context.Context, msg *nats.Msg) {
+	_, err = natsClient.Subscribe(ctx, "teams.result.>", func(_ context.Context, msg *nats.Msg) {
 		var baseMsg message.BaseMessage
 		if err := json.Unmarshal(msg.Data, &baseMsg); err == nil {
 			if result, ok := baseMsg.Payload().(*agentic.ToolResult); ok {
@@ -852,7 +852,7 @@ func TestIntegration_GlobalRegistryExecution(t *testing.T) {
 			"input": "test",
 		},
 	}
-	publishToolCallMessage(t, natsClient, "tool.execute.global_exec_tool", toolCall)
+	publishToolCallMessage(t, natsClient, "teams.execute.global_exec_tool", toolCall)
 
 	// Wait for result
 	time.Sleep(500 * time.Millisecond)

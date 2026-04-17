@@ -113,7 +113,7 @@ describe("agentStore", () => {
 
       expect(MockEventSource.instances).toHaveLength(1);
       expect(MockEventSource.instances[0].url).toBe(
-        "/agentic-dispatch/activity",
+        "/teams-dispatch/activity",
       );
     });
 
@@ -166,55 +166,101 @@ describe("agentStore", () => {
       expect(agentStore.error).toBeNull();
     });
 
-    it("should populate loops on 'sync_complete' event", () => {
+    it("should populate loops from 'activity' events during initial sync", () => {
       agentStore.connect();
       const es = MockEventSource.instances[0];
-      const loops = [
-        createMockLoop({ loop_id: "loop-1" }),
-        createMockLoop({ loop_id: "loop-2", role: "builder" }),
-      ];
 
-      es.simulateEvent("sync_complete", loops);
+      // Backend sends each existing KV entry as an individual 'activity' event
+      es.simulateEvent("activity", {
+        type: "loop_created",
+        loop_id: "loop-1",
+        timestamp: "2026-04-16T00:00:00Z",
+        data: createMockLoop({ loop_id: "loop-1" }),
+      });
+      es.simulateEvent("activity", {
+        type: "loop_created",
+        loop_id: "loop-2",
+        timestamp: "2026-04-16T00:00:00Z",
+        data: createMockLoop({ loop_id: "loop-2", role: "builder" }),
+      });
+
+      // Then sync_complete signals all existing entries were delivered
+      es.simulateEvent("sync_complete", { message: "Initial sync complete" });
 
       expect(agentStore.loops.size).toBe(2);
       expect(agentStore.getLoop("loop-1")?.role).toBe("architect");
       expect(agentStore.getLoop("loop-2")?.role).toBe("builder");
     });
 
-    it("should update a loop on 'loop_update' event", () => {
+    it("should add a loop on 'activity' event with loop_created type", () => {
       agentStore.connect();
       const es = MockEventSource.instances[0];
       const loop = createMockLoop();
 
-      es.simulateEvent("loop_update", loop);
+      es.simulateEvent("activity", {
+        type: "loop_created",
+        loop_id: "loop-1",
+        timestamp: "2026-04-16T00:00:00Z",
+        data: loop,
+      });
 
       expect(agentStore.loops.size).toBe(1);
       expect(agentStore.getLoop("loop-1")).toEqual(loop);
     });
 
-    it("should update existing loop on repeated 'loop_update' events", () => {
+    it("should update existing loop on 'activity' event with loop_updated type", () => {
       agentStore.connect();
       const es = MockEventSource.instances[0];
 
-      es.simulateEvent("loop_update", createMockLoop({ iterations: 1 }));
+      es.simulateEvent("activity", {
+        type: "loop_created",
+        loop_id: "loop-1",
+        timestamp: "2026-04-16T00:00:00Z",
+        data: createMockLoop({ iterations: 1 }),
+      });
       expect(agentStore.getLoop("loop-1")?.iterations).toBe(1);
 
-      es.simulateEvent("loop_update", createMockLoop({ iterations: 3 }));
+      es.simulateEvent("activity", {
+        type: "loop_updated",
+        loop_id: "loop-1",
+        timestamp: "2026-04-16T00:00:01Z",
+        data: createMockLoop({ iterations: 3 }),
+      });
       expect(agentStore.getLoop("loop-1")?.iterations).toBe(3);
     });
 
-    it("should ignore malformed loop_update data", () => {
+    it("should delete a loop on 'activity' event with loop_deleted type", () => {
+      agentStore.connect();
+      const es = MockEventSource.instances[0];
+
+      es.simulateEvent("activity", {
+        type: "loop_created",
+        loop_id: "loop-1",
+        timestamp: "2026-04-16T00:00:00Z",
+        data: createMockLoop(),
+      });
+      expect(agentStore.loops.size).toBe(1);
+
+      es.simulateEvent("activity", {
+        type: "loop_deleted",
+        loop_id: "loop-1",
+        timestamp: "2026-04-16T00:00:01Z",
+      });
+      expect(agentStore.loops.size).toBe(0);
+    });
+
+    it("should ignore malformed activity data", () => {
       agentStore.connect();
       const es = MockEventSource.instances[0];
 
       // Send invalid JSON string
-      const event = new MessageEvent("loop_update", {
+      const event = new MessageEvent("activity", {
         data: "not valid json!!!",
       });
       const listeners = (
         es as unknown as { listeners: Map<string, EventSourceListener[]> }
       ).listeners;
-      const list = listeners?.get("loop_update") || [];
+      const list = listeners?.get("activity") || [];
       for (const l of list) {
         l(event);
       }
@@ -222,12 +268,12 @@ describe("agentStore", () => {
       expect(agentStore.loops.size).toBe(0);
     });
 
-    it("should ignore malformed sync_complete data", () => {
+    it("should handle sync_complete as signal-only (no loop data)", () => {
       agentStore.connect();
       const es = MockEventSource.instances[0];
 
-      // Send non-array JSON
-      es.simulateEvent("sync_complete", { not: "an array" });
+      // sync_complete carries no loop data — just a signal
+      es.simulateEvent("sync_complete", { message: "Initial sync complete" });
 
       expect(agentStore.loops.size).toBe(0);
     });
@@ -265,7 +311,7 @@ describe("agentStore", () => {
       // Now a second EventSource should have been created
       expect(MockEventSource.instances).toHaveLength(2);
       expect(MockEventSource.instances[1].url).toBe(
-        "/agentic-dispatch/activity",
+        "/teams-dispatch/activity",
       );
     });
 

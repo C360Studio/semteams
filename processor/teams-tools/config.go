@@ -46,10 +46,10 @@ func (c *Config) Validate() error {
 func DefaultConfig() Config {
 	inputDefs := []component.PortDefinition{
 		{
-			Name:        "tool.execute",
+			Name:        "execute",
 			Type:        "jetstream",
-			Subject:     "tool.execute.>",
-			StreamName:  "AGENT",
+			Subject:     "teams.execute.>",
+			StreamName:  "TEAMS",
 			Required:    true,
 			Description: "Tool execution requests (JetStream)",
 		},
@@ -57,10 +57,10 @@ func DefaultConfig() Config {
 
 	outputDefs := []component.PortDefinition{
 		{
-			Name:        "tool.result",
+			Name:        "result",
 			Type:        "jetstream",
-			Subject:     "tool.result.*",
-			StreamName:  "AGENT",
+			Subject:     "teams.result.*",
+			StreamName:  "TEAMS",
 			Required:    true,
 			Description: "Tool execution results (JetStream)",
 		},
@@ -71,7 +71,7 @@ func DefaultConfig() Config {
 			Inputs:  inputDefs,
 			Outputs: outputDefs,
 		},
-		StreamName:   "AGENT",
+		StreamName:   "TEAMS",
 		Timeout:      "60s",
 		AllowedTools: nil, // nil means allow all tools
 	}

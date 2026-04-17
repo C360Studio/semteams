@@ -2,11 +2,11 @@
   "version": "1.1.0",
   "platform": {
     "org": "c360",
-    "id": "semstreams-agentic",
-    "type": "agentic-e2e",
+    "id": "semteams-agentic",
+    "type": "agentic",
     "region": "local",
     "instance_id": "agentic-001",
-    "environment": "test"
+    "environment": "development"
   },
   "tier": "agentic",
   "nats": {
@@ -14,18 +14,44 @@
   },
   "model_registry": {
     "endpoints": {
-      "mock": {
+      "claude-haiku": {
+        "provider": "anthropic",
+        "url": "https://api.anthropic.com/v1",
+        "model": "claude-haiku-4-5-20251001",
+        "api_key_env": "ANTHROPIC_API_KEY",
+        "max_tokens": 200000,
+        "supports_tools": true,
+        "stream": true,
+        "max_concurrent": 10,
+        "requests_per_minute": 200
+      },
+      "claude-sonnet": {
+        "provider": "anthropic",
+        "url": "https://api.anthropic.com/v1",
+        "model": "claude-sonnet-4-6",
+        "api_key_env": "ANTHROPIC_API_KEY",
+        "max_tokens": 200000,
+        "supports_tools": true,
+        "stream": true,
+        "reasoning_effort": "low",
+        "max_concurrent": 10,
+        "requests_per_minute": 100
+      },
+      "gemini-flash": {
         "provider": "openai",
-        "url": "http://mock-llm:8080/v1",
-        "model": "mock-model",
-        "max_tokens": 4096,
+        "url": "https://generativelanguage.googleapis.com/v1beta/openai",
+        "model": "gemini-2.5-flash",
+        "api_key_env": "GEMINI_API_KEY",
+        "max_tokens": 1048576,
         "supports_tools": true,
         "tool_format": "openai",
-        "stream": true
+        "stream": true,
+        "max_concurrent": 10,
+        "requests_per_minute": 200
       }
     },
     "defaults": {
-      "model": "mock"
+      "model": "claude-haiku"
     }
   },
   "services": {
@@ -36,8 +62,8 @@
         "http_port": 8080,
         "swagger_ui": true,
         "server_info": {
-          "title": "SemStreams Agentic Tier - Agent Loop Testing",
-          "description": "Agentic components with mock LLM for E2E testing",
+          "title": "SemTeams Agentic Tier",
+          "description": "Agentic components with real LLM providers",
           "version": "0.7.0"
         }
       }
@@ -61,7 +87,7 @@
       "enabled": true,
       "config": {
         "buffer_size": 10000,
-        "monitor_subjects": ["agent.*", "tool.*"],
+        "monitor_subjects": ["teams.>"],
         "enable_kv_query": true,
         "log_level": "INFO"
       }
@@ -182,9 +208,9 @@
             },
             {
               "name": "agent_task",
-              "subject": "agent.task.*",
+              "subject": "teams.task.*",
               "type": "jetstream",
-              "stream_name": "AGENT",
+              "stream_name": "TEAMS",
               "description": "Agent task triggers from rules"
             }
           ]
@@ -217,9 +243,9 @@
             "on_enter": [
               {
                 "type": "publish_agent",
-                "subject": "agent.task.temp_anomaly",
+                "subject": "teams.task.temp_anomaly",
                 "role": "general",
-                "model": "mock",
+                "model": "claude-haiku",
                 "prompt": "Temperature anomaly detected. Sensor: {{.EntityID}}, Reading: {{.Properties.sensor.measurement.fahrenheit}}F. Use query_entity tool to get full sensor details, then provide assessment and recommendations."
               },
               {
@@ -286,8 +312,8 @@
             {
               "name": "agent.task",
               "type": "jetstream",
-              "subject": "agent.task.*",
-              "stream_name": "AGENT",
+              "subject": "teams.task.*",
+              "stream_name": "TEAMS",
               "description": "Agent task spawning"
             }
           ],
@@ -308,39 +334,39 @@
         }
       }
     },
-    "agentic-loop": {
+    "teams-loop": {
       "type": "processor",
-      "name": "agentic-loop",
+      "name": "teams-loop",
       "enabled": true,
       "config": {
         "max_iterations": 5,
         "timeout": "30s",
         "approval_required": ["create_rule", "update_rule", "delete_rule"],
-        "stream_name": "AGENT",
+        "stream_name": "TEAMS",
         "loops_bucket": "AGENT_LOOPS",
         "ports": {
           "inputs": [
             {
               "name": "agent.task",
               "type": "jetstream",
-              "subject": "agent.task.*",
-              "stream_name": "AGENT",
+              "subject": "teams.task.*",
+              "stream_name": "TEAMS",
               "required": true,
               "description": "Agent task requests"
             },
             {
               "name": "agent.response",
               "type": "jetstream",
-              "subject": "agent.response.>",
-              "stream_name": "AGENT",
+              "subject": "teams.response.>",
+              "stream_name": "TEAMS",
               "required": true,
               "description": "Model responses"
             },
             {
               "name": "tool.result",
               "type": "jetstream",
-              "subject": "tool.result.>",
-              "stream_name": "AGENT",
+              "subject": "teams.result.>",
+              "stream_name": "TEAMS",
               "required": true,
               "description": "Tool execution results"
             }
@@ -349,22 +375,22 @@
             {
               "name": "agent.request",
               "type": "jetstream",
-              "subject": "agent.request.*",
-              "stream_name": "AGENT",
+              "subject": "teams.request.*",
+              "stream_name": "TEAMS",
               "description": "Model requests"
             },
             {
               "name": "tool.execute",
               "type": "jetstream",
-              "subject": "tool.execute.*",
-              "stream_name": "AGENT",
+              "subject": "teams.execute.*",
+              "stream_name": "TEAMS",
               "description": "Tool execution requests"
             },
             {
               "name": "agent.complete",
               "type": "jetstream",
-              "subject": "agent.complete.*",
-              "stream_name": "AGENT",
+              "subject": "teams.complete.*",
+              "stream_name": "TEAMS",
               "description": "Task completions"
             }
           ],
@@ -385,19 +411,13 @@
         }
       }
     },
-    "agentic-model": {
+    "teams-model": {
       "type": "processor",
-      "name": "agentic-model",
+      "name": "teams-model",
       "enabled": true,
       "config": {
-        "stream_name": "AGENT",
+        "stream_name": "TEAMS",
         "timeout": "30s",
-        "endpoints": {
-          "mock": {
-            "url": "http://mock-llm:8080/v1",
-            "model": "mock-model"
-          }
-        },
         "retry": {
           "max_attempts": 3,
           "backoff": "exponential"
@@ -407,8 +427,8 @@
             {
               "name": "agent.request",
               "type": "jetstream",
-              "subject": "agent.request.>",
-              "stream_name": "AGENT",
+              "subject": "teams.request.>",
+              "stream_name": "TEAMS",
               "required": true,
               "description": "Agent request input"
             }
@@ -417,8 +437,8 @@
             {
               "name": "agent.response",
               "type": "jetstream",
-              "subject": "agent.response.*",
-              "stream_name": "AGENT",
+              "subject": "teams.response.*",
+              "stream_name": "TEAMS",
               "required": true,
               "description": "Agent response output"
             }
@@ -426,12 +446,12 @@
         }
       }
     },
-    "agentic-tools": {
+    "teams-tools": {
       "type": "processor",
-      "name": "agentic-tools",
+      "name": "teams-tools",
       "enabled": true,
       "config": {
-        "stream_name": "AGENT",
+        "stream_name": "TEAMS",
         "timeout": "10s",
         "allowed_tools": ["query_entity"],
         "ports": {
@@ -439,8 +459,8 @@
             {
               "name": "tool.execute",
               "type": "jetstream",
-              "subject": "tool.execute.>",
-              "stream_name": "AGENT",
+              "subject": "teams.execute.>",
+              "stream_name": "TEAMS",
               "required": true,
               "description": "Tool execution requests"
             }
@@ -449,8 +469,8 @@
             {
               "name": "tool.result",
               "type": "jetstream",
-              "subject": "tool.result.*",
-              "stream_name": "AGENT",
+              "subject": "teams.result.*",
+              "stream_name": "TEAMS",
               "required": true,
               "description": "Tool execution results"
             }
@@ -512,9 +532,9 @@
     "directory-bridge": {
       "type": "output",
       "name": "directory-bridge",
-      "enabled": true,
+      "enabled": false,
       "config": {
-        "directory_url": "http://mock-llm:8081",
+        "directory_url": "http://localhost:8081",
         "heartbeat_interval": "30s",
         "registration_ttl": "5m",
         "identity_provider": "local",
@@ -561,9 +581,9 @@
           "outputs": [
             {
               "name": "task_messages",
-              "subject": "agent.task.a2a.*",
+              "subject": "teams.task.a2a.*",
               "type": "jetstream",
-              "stream_name": "AGENT",
+              "stream_name": "TEAMS",
               "required": true,
               "description": "Task messages to agent dispatch"
             }
@@ -574,9 +594,9 @@
     "otel-exporter": {
       "type": "output",
       "name": "otel-exporter",
-      "enabled": true,
+      "enabled": false,
       "config": {
-        "endpoint": "http://mock-llm:8081",
+        "endpoint": "http://localhost:4318",
         "protocol": "http",
         "service_name": "semstreams-agentic",
         "service_version": "1.0.0",
@@ -591,9 +611,9 @@
           "inputs": [
             {
               "name": "agent_events",
-              "subject": "agent.>",
+              "subject": "teams.>",
               "type": "jetstream",
-              "stream_name": "AGENT",
+              "stream_name": "TEAMS",
               "required": true,
               "description": "Agent lifecycle events for span collection"
             }

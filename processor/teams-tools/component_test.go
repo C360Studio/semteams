@@ -20,7 +20,7 @@ func TestComponent_Meta(t *testing.T) {
 
 	meta := comp.Meta()
 
-	if meta.Name != "agentic-tools" {
+	if meta.Name != "teams-tools" {
 		t.Errorf("Meta().Name = %s, want agentic-tools", meta.Name)
 	}
 	if meta.Type != "processor" {
@@ -44,8 +44,8 @@ func TestComponent_InputPorts(t *testing.T) {
 	}
 
 	port := ports[0]
-	if port.Name != "tool.execute" {
-		t.Errorf("InputPort name = %s, want tool.execute", port.Name)
+	if port.Name != "execute" {
+		t.Errorf("InputPort name = %s, want execute", port.Name)
 	}
 	if port.Direction != component.DirectionInput {
 		t.Errorf("InputPort direction = %v, want DirectionInput", port.Direction)
@@ -59,11 +59,11 @@ func TestComponent_InputPorts(t *testing.T) {
 	if !ok {
 		t.Fatalf("InputPort config should be JetStreamPort, got %T", port.Config)
 	}
-	if len(jsConfig.Subjects) != 1 || jsConfig.Subjects[0] != "tool.execute.>" {
-		t.Errorf("InputPort subjects = %v, want [tool.execute.>]", jsConfig.Subjects)
+	if len(jsConfig.Subjects) != 1 || jsConfig.Subjects[0] != "teams.execute.>" {
+		t.Errorf("InputPort subjects = %v, want [teams.execute.>]", jsConfig.Subjects)
 	}
-	if jsConfig.StreamName != "AGENT" {
-		t.Errorf("InputPort stream = %s, want AGENT", jsConfig.StreamName)
+	if jsConfig.StreamName != "TEAMS" {
+		t.Errorf("InputPort stream = %s, want TEAMS", jsConfig.StreamName)
 	}
 }
 
@@ -77,8 +77,8 @@ func TestComponent_OutputPorts(t *testing.T) {
 	}
 
 	port := ports[0]
-	if port.Name != "tool.result" {
-		t.Errorf("OutputPort name = %s, want tool.result", port.Name)
+	if port.Name != "result" {
+		t.Errorf("OutputPort name = %s, want result", port.Name)
 	}
 	if port.Direction != component.DirectionOutput {
 		t.Errorf("OutputPort direction = %v, want DirectionOutput", port.Direction)
@@ -89,11 +89,11 @@ func TestComponent_OutputPorts(t *testing.T) {
 	if !ok {
 		t.Fatalf("OutputPort config should be JetStreamPort, got %T", port.Config)
 	}
-	if len(jsConfig.Subjects) != 1 || jsConfig.Subjects[0] != "tool.result.*" {
-		t.Errorf("OutputPort subjects = %v, want [tool.result.*]", jsConfig.Subjects)
+	if len(jsConfig.Subjects) != 1 || jsConfig.Subjects[0] != "teams.result.*" {
+		t.Errorf("OutputPort subjects = %v, want [teams.result.*]", jsConfig.Subjects)
 	}
-	if jsConfig.StreamName != "AGENT" {
-		t.Errorf("OutputPort stream = %s, want AGENT", jsConfig.StreamName)
+	if jsConfig.StreamName != "TEAMS" {
+		t.Errorf("OutputPort stream = %s, want TEAMS", jsConfig.StreamName)
 	}
 }
 

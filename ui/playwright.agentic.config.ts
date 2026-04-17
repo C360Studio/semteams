@@ -3,8 +3,8 @@ import { defineConfig, devices } from "@playwright/test";
 /**
  * Playwright config for agentic journey tests.
  *
- * These tests exercise the full semteams agentic surface (agentic-dispatch,
- * agentic-loop, agentic-tools, agentic-governance) against a mock-llm server
+ * These tests exercise the full semteams agentic surface (teams-dispatch,
+ * teams-loop, teams-tools, teams-governance) against a mock-llm server
  * configured via a YAML fixture. The stack is different from the default
  * Playwright stack (docker-compose.e2e.yml) — see docker-compose.agentic-e2e.yml
  * for the service list.
@@ -41,17 +41,13 @@ export default defineConfig({
   // Reporter to use
   reporter: process.env.CI ? "github" : "list",
 
-  // Start Docker Compose stack automatically. Note: the stack uses a
-  // different host port (3100 by default) than the non-agentic stack (3000)
-  // so the two can coexist.
-  webServer: {
-    command: `E2E_AGENTIC_UI_PORT=${E2E_AGENTIC_UI_PORT} docker compose -f docker-compose.agentic-e2e.yml up --build`,
-    url: `http://localhost:${E2E_AGENTIC_UI_PORT}/health`,
-    timeout: 180000, // Longer than the default stack — mock-llm needs to build
-    reuseExistingServer: !process.env.CI,
-    stdout: "pipe",
-    stderr: "pipe",
-  },
+  // Stack lifecycle is managed by the Taskfile (task test:e2e:agentic:stack:up),
+  // not Playwright. This ensures env vars (FIXTURE, AGENTIC_CONFIG) propagate
+  // correctly to docker-compose. Playwright just expects the stack to be up.
+  //
+  // For manual runs, start the stack first:
+  //   FIXTURE=deep-research.yaml AGENTIC_CONFIG=e2e-deep-research.json \
+  //     docker compose -f docker-compose.agentic-e2e.yml up --build
 
   use: {
     baseURL: `http://localhost:${E2E_AGENTIC_UI_PORT}`,

@@ -28,7 +28,7 @@ var (
 // TestMain sets up shared NATS container for all loop integration tests
 func TestMain(m *testing.M) {
 	streams := []natsclient.TestStreamConfig{
-		{Name: "AGENT", Subjects: []string{"agent.>", "tool.>"}},
+		{Name: "TEAMS", Subjects: []string{"teams.>"}},
 	}
 
 	testClient, err := natsclient.NewSharedTestClient(
@@ -102,35 +102,35 @@ func TestIntegration_LoopFullCycle(t *testing.T) {
 				{
 					Name:       "tasks",
 					Type:       "jetstream",
-					Subject:    "agent.task.*",
-					StreamName: "AGENT",
+					Subject:    "teams.task.*",
+					StreamName: "TEAMS",
 					Required:   true,
 				},
 				{
 					Name:       "responses",
 					Type:       "jetstream",
-					Subject:    "agent.response.>",
-					StreamName: "AGENT",
+					Subject:    "teams.response.>",
+					StreamName: "TEAMS",
 				},
 			},
 			Outputs: []component.PortDefinition{
 				{
 					Name:       "requests",
 					Type:       "jetstream",
-					Subject:    "agent.request.*",
-					StreamName: "AGENT",
+					Subject:    "teams.request.*",
+					StreamName: "TEAMS",
 				},
 				{
 					Name:       "complete",
 					Type:       "jetstream",
-					Subject:    "agent.complete.*",
-					StreamName: "AGENT",
+					Subject:    "teams.complete.*",
+					StreamName: "TEAMS",
 				},
 			},
 		},
 		MaxIterations:      10,
 		Timeout:            "60s",
-		StreamName:         "AGENT",
+		StreamName:         "TEAMS",
 		ConsumerNameSuffix: "fullcycle-test",
 		LoopsBucket:        "AGENT_LOOPS",
 	}
@@ -164,7 +164,7 @@ func TestIntegration_LoopFullCycle(t *testing.T) {
 	receivedRequests := make([]agentic.AgentRequest, 0)
 	var requestMu sync.Mutex
 
-	_, err = natsClient.Subscribe(ctx, "agent.request.>", func(_ context.Context, msg *nats.Msg) {
+	_, err = natsClient.Subscribe(ctx, "teams.request.>", func(_ context.Context, msg *nats.Msg) {
 		var baseMsg message.BaseMessage
 		if err := json.Unmarshal(msg.Data, &baseMsg); err == nil {
 			if req, ok := baseMsg.Payload().(*agentic.AgentRequest); ok {
@@ -180,7 +180,7 @@ func TestIntegration_LoopFullCycle(t *testing.T) {
 	receivedComplete := make([]map[string]any, 0)
 	var completeMu sync.Mutex
 
-	_, err = natsClient.Subscribe(ctx, "agent.complete.>", func(_ context.Context, msg *nats.Msg) {
+	_, err = natsClient.Subscribe(ctx, "teams.complete.>", func(_ context.Context, msg *nats.Msg) {
 		var event map[string]any
 		if err := json.Unmarshal(msg.Data, &event); err == nil {
 			completeMu.Lock()
@@ -200,7 +200,7 @@ func TestIntegration_LoopFullCycle(t *testing.T) {
 		Model:  "test-model",
 		Prompt: "Complete this task",
 	}
-	publishTaskMessage(t, natsClient, "agent.task.test", task)
+	publishTaskMessage(t, natsClient, "teams.task.test", task)
 
 	time.Sleep(500 * time.Millisecond)
 
@@ -227,7 +227,7 @@ func TestIntegration_LoopFullCycle(t *testing.T) {
 			CompletionTokens: 50,
 		},
 	}
-	publishResponseMessage(t, natsClient, "agent.response."+response.RequestID, response)
+	publishResponseMessage(t, natsClient, "teams.response."+response.RequestID, response)
 
 	time.Sleep(500 * time.Millisecond)
 
@@ -248,47 +248,47 @@ func TestIntegration_LoopWithToolCalls(t *testing.T) {
 				{
 					Name:       "tasks",
 					Type:       "jetstream",
-					Subject:    "agent.task.*",
-					StreamName: "AGENT",
+					Subject:    "teams.task.*",
+					StreamName: "TEAMS",
 					Required:   true,
 				},
 				{
 					Name:       "responses",
 					Type:       "jetstream",
-					Subject:    "agent.response.>",
-					StreamName: "AGENT",
+					Subject:    "teams.response.>",
+					StreamName: "TEAMS",
 				},
 				{
 					Name:       "tool_results",
 					Type:       "jetstream",
-					Subject:    "tool.result.>",
-					StreamName: "AGENT",
+					Subject:    "teams.result.>",
+					StreamName: "TEAMS",
 				},
 			},
 			Outputs: []component.PortDefinition{
 				{
 					Name:       "requests",
 					Type:       "jetstream",
-					Subject:    "agent.request.*",
-					StreamName: "AGENT",
+					Subject:    "teams.request.*",
+					StreamName: "TEAMS",
 				},
 				{
 					Name:       "tool_calls",
 					Type:       "jetstream",
-					Subject:    "tool.execute.*",
-					StreamName: "AGENT",
+					Subject:    "teams.execute.*",
+					StreamName: "TEAMS",
 				},
 				{
 					Name:       "complete",
 					Type:       "jetstream",
-					Subject:    "agent.complete.*",
-					StreamName: "AGENT",
+					Subject:    "teams.complete.*",
+					StreamName: "TEAMS",
 				},
 			},
 		},
 		MaxIterations:      10,
 		Timeout:            "60s",
-		StreamName:         "AGENT",
+		StreamName:         "TEAMS",
 		ConsumerNameSuffix: "toolcalls-test",
 		LoopsBucket:        "AGENT_LOOPS",
 	}
@@ -322,7 +322,7 @@ func TestIntegration_LoopWithToolCalls(t *testing.T) {
 	var currentRequestID string
 	var requestMu sync.Mutex
 
-	_, err = natsClient.Subscribe(ctx, "agent.request.>", func(_ context.Context, msg *nats.Msg) {
+	_, err = natsClient.Subscribe(ctx, "teams.request.>", func(_ context.Context, msg *nats.Msg) {
 		var baseMsg message.BaseMessage
 		if err := json.Unmarshal(msg.Data, &baseMsg); err == nil {
 			if req, ok := baseMsg.Payload().(*agentic.AgentRequest); ok {
@@ -338,7 +338,7 @@ func TestIntegration_LoopWithToolCalls(t *testing.T) {
 	receivedToolCalls := make([]agentic.ToolCall, 0)
 	var toolMu sync.Mutex
 
-	_, err = natsClient.Subscribe(ctx, "tool.execute.>", func(_ context.Context, msg *nats.Msg) {
+	_, err = natsClient.Subscribe(ctx, "teams.execute.>", func(_ context.Context, msg *nats.Msg) {
 		var baseMsg message.BaseMessage
 		if err := json.Unmarshal(msg.Data, &baseMsg); err == nil {
 			if call, ok := baseMsg.Payload().(*agentic.ToolCall); ok {
@@ -360,7 +360,7 @@ func TestIntegration_LoopWithToolCalls(t *testing.T) {
 		Model:  "test-model",
 		Prompt: "Use tools to complete",
 	}
-	publishTaskMessage(t, natsClient, "agent.task.tool", task)
+	publishTaskMessage(t, natsClient, "teams.task.tool", task)
 
 	time.Sleep(500 * time.Millisecond)
 
@@ -387,7 +387,7 @@ func TestIntegration_LoopWithToolCalls(t *testing.T) {
 			},
 		},
 	}
-	publishResponseMessage(t, natsClient, "agent.response."+reqID, response)
+	publishResponseMessage(t, natsClient, "teams.response."+reqID, response)
 
 	time.Sleep(500 * time.Millisecond)
 
@@ -407,7 +407,7 @@ func TestIntegration_LoopWithToolCalls(t *testing.T) {
 		CallID:  callID,
 		Content: "file contents",
 	}
-	publishToolResultMessage(t, natsClient, "tool.result."+callID, toolResult)
+	publishToolResultMessage(t, natsClient, "teams.result."+callID, toolResult)
 
 	time.Sleep(500 * time.Millisecond)
 
@@ -429,35 +429,35 @@ func TestIntegration_LoopMaxIterations(t *testing.T) {
 				{
 					Name:       "tasks",
 					Type:       "jetstream",
-					Subject:    "agent.task.*",
-					StreamName: "AGENT",
+					Subject:    "teams.task.*",
+					StreamName: "TEAMS",
 					Required:   true,
 				},
 				{
 					Name:       "responses",
 					Type:       "jetstream",
-					Subject:    "agent.response.>",
-					StreamName: "AGENT",
+					Subject:    "teams.response.>",
+					StreamName: "TEAMS",
 				},
 			},
 			Outputs: []component.PortDefinition{
 				{
 					Name:       "requests",
 					Type:       "jetstream",
-					Subject:    "agent.request.*",
-					StreamName: "AGENT",
+					Subject:    "teams.request.*",
+					StreamName: "TEAMS",
 				},
 				{
 					Name:       "complete",
 					Type:       "jetstream",
-					Subject:    "agent.complete.*",
-					StreamName: "AGENT",
+					Subject:    "teams.complete.*",
+					StreamName: "TEAMS",
 				},
 			},
 		},
 		MaxIterations:      3, // Low limit for testing
 		Timeout:            "60s",
-		StreamName:         "AGENT",
+		StreamName:         "TEAMS",
 		ConsumerNameSuffix: "maxiter-test",
 		LoopsBucket:        "AGENT_LOOPS",
 	}
@@ -492,7 +492,7 @@ func TestIntegration_LoopMaxIterations(t *testing.T) {
 	var requestMu sync.Mutex
 	var lastRequestID string
 
-	_, err = natsClient.Subscribe(ctx, "agent.request.>", func(_ context.Context, msg *nats.Msg) {
+	_, err = natsClient.Subscribe(ctx, "teams.request.>", func(_ context.Context, msg *nats.Msg) {
 		var baseMsg message.BaseMessage
 		if err := json.Unmarshal(msg.Data, &baseMsg); err == nil {
 			if req, ok := baseMsg.Payload().(*agentic.AgentRequest); ok {
@@ -509,7 +509,7 @@ func TestIntegration_LoopMaxIterations(t *testing.T) {
 	receivedComplete := make([]map[string]any, 0)
 	var completeMu sync.Mutex
 
-	_, err = natsClient.Subscribe(ctx, "agent.complete.>", func(_ context.Context, msg *nats.Msg) {
+	_, err = natsClient.Subscribe(ctx, "teams.complete.>", func(_ context.Context, msg *nats.Msg) {
 		var event map[string]any
 		if err := json.Unmarshal(msg.Data, &event); err == nil {
 			completeMu.Lock()
@@ -529,7 +529,7 @@ func TestIntegration_LoopMaxIterations(t *testing.T) {
 		Model:  "test-model",
 		Prompt: "Never-ending task",
 	}
-	publishTaskMessage(t, natsClient, "agent.task.maxiter", task)
+	publishTaskMessage(t, natsClient, "teams.task.maxiter", task)
 
 	// Simulate continuous tool calls to trigger max iterations
 	for i := 0; i < 5; i++ {
@@ -558,7 +558,7 @@ func TestIntegration_LoopMaxIterations(t *testing.T) {
 				},
 			},
 		}
-		publishResponseMessage(t, natsClient, "agent.response."+reqID, response)
+		publishResponseMessage(t, natsClient, "teams.response."+reqID, response)
 	}
 
 	time.Sleep(1 * time.Second)
@@ -581,29 +581,29 @@ func TestIntegration_LoopStatePersistence(t *testing.T) {
 				{
 					Name:       "tasks",
 					Type:       "jetstream",
-					Subject:    "agent.task.*",
-					StreamName: "AGENT",
+					Subject:    "teams.task.*",
+					StreamName: "TEAMS",
 					Required:   true,
 				},
 				{
 					Name:       "responses",
 					Type:       "jetstream",
-					Subject:    "agent.response.>",
-					StreamName: "AGENT",
+					Subject:    "teams.response.>",
+					StreamName: "TEAMS",
 				},
 			},
 			Outputs: []component.PortDefinition{
 				{
 					Name:       "requests",
 					Type:       "jetstream",
-					Subject:    "agent.request.*",
-					StreamName: "AGENT",
+					Subject:    "teams.request.*",
+					StreamName: "TEAMS",
 				},
 			},
 		},
 		MaxIterations:      10,
 		Timeout:            "60s",
-		StreamName:         "AGENT",
+		StreamName:         "TEAMS",
 		ConsumerNameSuffix: "persist-test",
 		LoopsBucket:        "AGENT_LOOPS",
 	}
@@ -642,7 +642,7 @@ func TestIntegration_LoopStatePersistence(t *testing.T) {
 		Model:  "test-model",
 		Prompt: "Test persistence",
 	}
-	publishTaskMessage(t, natsClient, "agent.task.persist", task)
+	publishTaskMessage(t, natsClient, "teams.task.persist", task)
 
 	time.Sleep(500 * time.Millisecond)
 
@@ -670,48 +670,15 @@ func TestIntegration_LoopStatePersistence(t *testing.T) {
 // Uses its own NATS client to avoid query handler conflicts with other test components.
 func TestIntegration_LoopTrajectoryCapture(t *testing.T) {
 	tc := natsclient.NewTestClient(t, natsclient.WithFastStartup(), natsclient.WithJetStream(),
-		natsclient.WithStreams(natsclient.TestStreamConfig{Name: "AGENT", Subjects: []string{"agent.>", "tool.>"}}),
-		natsclient.WithKV(), natsclient.WithKVBuckets("AGENT_LOOPS"))
+		natsclient.WithStreams(natsclient.TestStreamConfig{Name: "TEAMS", Subjects: []string{"teams.>"}}),
+		natsclient.WithKV(), natsclient.WithKVBuckets("AGENT_LOOPS", "AGENT_CONTENT"))
 	natsClient := tc.Client
 
-	config := teamsloop.Config{
-		Ports: &component.PortConfig{
-			Inputs: []component.PortDefinition{
-				{
-					Name:       "tasks",
-					Type:       "jetstream",
-					Subject:    "agent.task.*",
-					StreamName: "AGENT",
-					Required:   true,
-				},
-				{
-					Name:       "responses",
-					Type:       "jetstream",
-					Subject:    "agent.response.>",
-					StreamName: "AGENT",
-				},
-			},
-			Outputs: []component.PortDefinition{
-				{
-					Name:       "requests",
-					Type:       "jetstream",
-					Subject:    "agent.request.*",
-					StreamName: "AGENT",
-				},
-				{
-					Name:       "complete",
-					Type:       "jetstream",
-					Subject:    "agent.complete.*",
-					StreamName: "AGENT",
-				},
-			},
-		},
-		MaxIterations:      10,
-		Timeout:            "60s",
-		StreamName:         "AGENT",
-		ConsumerNameSuffix: "trajectory-test",
-		LoopsBucket:        "AGENT_LOOPS",
-	}
+	config := teamsloop.DefaultConfig()
+	config.MaxIterations = 10
+	config.Timeout = "60s"
+	config.ConsumerNameSuffix = "trajectory-test"
+	config.LoopsBucket = "AGENT_LOOPS"
 
 	rawConfig, err := json.Marshal(config)
 	require.NoError(t, err)
@@ -742,7 +709,7 @@ func TestIntegration_LoopTrajectoryCapture(t *testing.T) {
 	var requestID string
 	var requestMu sync.Mutex
 
-	_, err = natsClient.Subscribe(ctx, "agent.request.>", func(_ context.Context, msg *nats.Msg) {
+	_, err = natsClient.Subscribe(ctx, "teams.request.>", func(_ context.Context, msg *nats.Msg) {
 		var baseMsg message.BaseMessage
 		if err := json.Unmarshal(msg.Data, &baseMsg); err == nil {
 			if req, ok := baseMsg.Payload().(*agentic.AgentRequest); ok {
@@ -765,7 +732,7 @@ func TestIntegration_LoopTrajectoryCapture(t *testing.T) {
 		Model:  "test-model",
 		Prompt: "Test trajectory",
 	}
-	publishTaskMessage(t, natsClient, "agent.task.traj", task)
+	publishTaskMessage(t, natsClient, "teams.task.traj", task)
 
 	time.Sleep(500 * time.Millisecond)
 
@@ -787,7 +754,7 @@ func TestIntegration_LoopTrajectoryCapture(t *testing.T) {
 			CompletionTokens: 100,
 		},
 	}
-	publishResponseMessage(t, natsClient, "agent.response."+reqID, response)
+	publishResponseMessage(t, natsClient, "teams.response."+reqID, response)
 
 	time.Sleep(1 * time.Second)
 

@@ -104,6 +104,33 @@ task e2e:all            # Run all tiers sequentially
 - E2E tests are for final validation, not iterative development
 - If e2e fails, check `task e2e:check-ports` for port conflicts
 
+### E2E Active Monitoring Protocol (MANDATORY)
+
+**E2E tests are long-running. MUST monitor actively — never block in foreground.**
+
+1. Launch via `run_in_background: true`
+2. Monitor three sources every 20-30s:
+   - **Test output**: `TaskOutput` (non-blocking read of background task)
+   - **Backend logs**: `docker compose -f docker-compose.agentic-e2e.yml logs --since=30s backend 2>&1 | grep -iE '(dispatch|loop|error|fail|complet|model)' | tail -20`
+   - **Message logger**: `curl -s http://localhost:3100/message-logger/entries?limit=10 | jq '.[].subject'`
+3. Dump evidence to `/tmp/` for post-mortem (logs, messages, loops)
+4. **Abort early** if stuck in loops or burning tokens on retries
+5. **Report with evidence** — quote log lines, never guess at root cause
+
+### Config Layering
+
+Production configs use real providers (anthropic, gemini). E2E configs use mock-llm.
+
+| Config | Purpose | Model |
+|--------|---------|-------|
+| `agentic.json` | Production general-purpose | claude-haiku |
+| `deep-research.json` | Production researcher workflow | claude-haiku |
+| `e2e-agentic.json` | E2E testing | mock-llm |
+| `e2e-deep-research.json` | E2E deep-research testing | mock-llm |
+
+E2E journey tasks (in `ui/Taskfile.yml`) manage Docker stack lifecycle — Playwright
+does NOT auto-start the stack. Each task: start → health-check → test → cleanup.
+
 ## Testing Patterns
 
 - Unit tests: Standard `*_test.go` files

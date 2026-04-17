@@ -90,13 +90,13 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 	// to trigger on every iteration regardless of context utilization.
 	config := DefaultConfig()
 	if err := json.Unmarshal(rawConfig, &config); err != nil {
-		return nil, errs.WrapInvalid(err, "agentic-loop", "NewComponent", "parse config")
+		return nil, errs.WrapInvalid(err, "teams-loop", "NewComponent", "parse config")
 	}
 	config.Context.EnsureDefaults()
 
 	// Validate configuration
 	if err := config.Validate(); err != nil {
-		return nil, errs.WrapInvalid(err, "agentic-loop", "NewComponent", "validate config")
+		return nil, errs.WrapInvalid(err, "teams-loop", "NewComponent", "validate config")
 	}
 
 	// Merge ports with defaults
@@ -126,7 +126,7 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 	// Parse timeout for message processing
 	messageTimeout, err := time.ParseDuration(config.Timeout)
 	if err != nil {
-		return nil, errs.WrapInvalid(err, "agentic-loop", "NewComponent", "parse timeout format")
+		return nil, errs.WrapInvalid(err, "teams-loop", "NewComponent", "parse timeout format")
 	}
 
 	// Create handler with model registry if available
@@ -211,7 +211,7 @@ func createSummarizer(deps component.Dependencies, logger *slog.Logger) (Summari
 // Meta returns component metadata
 func (c *Component) Meta() component.Metadata {
 	return component.Metadata{
-		Name:        "agentic-loop",
+		Name:        "teams-loop",
 		Type:        "processor",
 		Description: "Orchestrates agentic loops with tool calls and trajectory tracking",
 		Version:     "1.0.0",
@@ -277,10 +277,10 @@ func (c *Component) Initialize() error {
 func (c *Component) Start(ctx context.Context) error {
 	// Validate context
 	if ctx == nil {
-		return errs.WrapInvalid(errs.ErrInvalidConfig, "agentic-loop", "Start", "context cannot be nil")
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "teams-loop", "Start", "context cannot be nil")
 	}
 	if err := ctx.Err(); err != nil {
-		return errs.WrapInvalid(err, "agentic-loop", "Start", "context already cancelled")
+		return errs.WrapInvalid(err, "teams-loop", "Start", "context already cancelled")
 	}
 
 	c.mu.Lock()
@@ -293,18 +293,18 @@ func (c *Component) Start(ctx context.Context) error {
 	// Initialize KV buckets if NATS client available
 	if c.natsClient != nil {
 		if err := c.initializeKVBuckets(ctx); err != nil {
-			return errs.Wrap(err, "agentic-loop", "Start", "initialize KV buckets")
+			return errs.Wrap(err, "teams-loop", "Start", "initialize KV buckets")
 		}
 
 		// Set up NATS subscriptions for input ports
 		if err := c.setupSubscriptions(ctx); err != nil {
-			return errs.Wrap(err, "agentic-loop", "Start", "setup subscriptions")
+			return errs.Wrap(err, "teams-loop", "Start", "setup subscriptions")
 		}
 
 		// Set up trajectory query handler
 		sub, err := c.natsClient.SubscribeForRequests(ctx, "teams.query.trajectory", c.handleTrajectoryQuery)
 		if err != nil {
-			return errs.Wrap(err, "agentic-loop", "Start", "subscribe to trajectory query")
+			return errs.Wrap(err, "teams-loop", "Start", "subscribe to trajectory query")
 		}
 		c.trajectorySub = sub
 	}
@@ -400,7 +400,7 @@ func buildDefaultOutputPorts() []component.Port {
 func (c *Component) initializeKVBuckets(ctx context.Context) error {
 	js, err := c.natsClient.JetStream()
 	if err != nil {
-		return errs.WrapTransient(err, "agentic-loop", "initializeKVBuckets", "get JetStream")
+		return errs.WrapTransient(err, "teams-loop", "initializeKVBuckets", "get JetStream")
 	}
 
 	// Initialize loops bucket
@@ -413,7 +413,7 @@ func (c *Component) initializeKVBuckets(ctx context.Context) error {
 			TTL:     24 * time.Hour,
 		})
 		if err != nil {
-			return errs.Wrap(err, "agentic-loop", "initializeKVBuckets", "create loops bucket")
+			return errs.Wrap(err, "teams-loop", "initializeKVBuckets", "create loops bucket")
 		}
 	}
 	c.loopsBucket = loopsBucket
@@ -431,7 +431,7 @@ func (c *Component) initializeKVBuckets(ctx context.Context) error {
 	}
 	trajectoryCache, err := cache.NewTTL[*agentic.Trajectory](ctx, trajCacheTTL, cleanupInterval)
 	if err != nil {
-		return errs.Wrap(err, "agentic-loop", "initializeKVBuckets", "create trajectory cache")
+		return errs.Wrap(err, "teams-loop", "initializeKVBuckets", "create trajectory cache")
 	}
 	c.trajectoryCache = trajectoryCache
 
@@ -464,7 +464,7 @@ func (c *Component) initializeKVBuckets(ctx context.Context) error {
 				Bucket: bucketName,
 			})
 			if err != nil {
-				return errs.Wrap(err, "agentic-loop", "initializeKVBuckets", "create positions bucket")
+				return errs.Wrap(err, "teams-loop", "initializeKVBuckets", "create positions bucket")
 			}
 		}
 		c.positionsBucket = positionsBucket
@@ -508,27 +508,35 @@ func (c *Component) setupSubscriptions(ctx context.Context) error {
 
 		// Route to appropriate handler based on port name
 		switch port.Name {
-		case "agent.task":
+		case "task":
 			handler = c.handleTaskMessage
-		case "agent.response":
+		case "response":
 			handler = c.handleResponseMessage
-		case "tool.result":
+		case "result":
 			handler = c.handleToolResultMessage
-		case "agent.signal":
+		case "signal":
 			handler = c.handleSignalMessage
-		case "agent.boid":
+		case "boid":
 			// Only subscribe to Boid signals if Boid coordination is enabled
 			if !c.config.BoidEnabled {
 				continue
 			}
 			handler = c.handleBoidSignalMessage
+		case "context_profile":
+			// Only subscribe when profile-context injection is enabled.
+			// Disabled deployments skip the subscription entirely so we don't
+			// burn JetStream consumers for payloads we'd ignore.
+			if !c.config.Context.InjectProfileContext {
+				continue
+			}
+			handler = c.handleProfileContextMessage
 		default:
 			c.logger.Warn("Unknown input port", "port", port.Name)
 			continue
 		}
 
 		if err := c.setupConsumer(ctx, port, subject, handler); err != nil {
-			return errs.Wrap(err, "agentic-loop", "setupSubscriptions", fmt.Sprintf("setup consumer for %s", subject))
+			return errs.Wrap(err, "teams-loop", "setupSubscriptions", fmt.Sprintf("setup consumer for %s", subject))
 		}
 	}
 
@@ -545,7 +553,7 @@ func (c *Component) setupConsumer(ctx context.Context, port component.Port, subj
 
 	// Wait for stream to be available
 	if err := c.waitForStream(ctx, streamName); err != nil {
-		return errs.WrapTransient(err, "agentic-loop", "setupConsumer", fmt.Sprintf("wait for stream %s", streamName))
+		return errs.WrapTransient(err, "teams-loop", "setupConsumer", fmt.Sprintf("wait for stream %s", streamName))
 	}
 
 	// Create durable consumer name
@@ -579,7 +587,7 @@ func (c *Component) setupConsumer(ctx context.Context, port component.Port, subj
 	)
 
 	switch port.Name {
-	case "agent.task", "agent.response", "tool.result":
+	case "task", "response", "result":
 		ackWait = 90 * time.Second
 		maxAckPending = 1
 		maxDeliver = 2
@@ -587,7 +595,7 @@ func (c *Component) setupConsumer(ctx context.Context, port component.Port, subj
 		backOff = []time.Duration{30 * time.Second, 2 * time.Minute}
 		useHeartbeat = true
 		heartbeatInterval = 60 * time.Second
-	default: // agent.signal, agent.boid — fast, advisory
+	default: // signal, boid — fast, advisory
 		ackWait = 30 * time.Second
 		maxAckPending = 10
 		maxDeliver = consumerCfg.MaxDeliver
@@ -633,7 +641,7 @@ func (c *Component) setupConsumer(ctx context.Context, port component.Port, subj
 
 	err := c.natsClient.ConsumeStreamWithConfig(ctx, cfg, handlerFn)
 	if err != nil {
-		return errs.Wrap(err, "agentic-loop", "setupConsumer", fmt.Sprintf("setup consumer for stream %s", streamName))
+		return errs.Wrap(err, "teams-loop", "setupConsumer", fmt.Sprintf("setup consumer for stream %s", streamName))
 	}
 
 	// Track consumer for cleanup in Stop()
@@ -654,7 +662,7 @@ func (c *Component) setupConsumer(ctx context.Context, port component.Port, subj
 func (c *Component) waitForStream(ctx context.Context, streamName string) error {
 	js, err := c.natsClient.JetStream()
 	if err != nil {
-		return errs.WrapTransient(err, "agentic-loop", "waitForStream", "get JetStream context")
+		return errs.WrapTransient(err, "teams-loop", "waitForStream", "get JetStream context")
 	}
 
 	maxRetries := 30
@@ -678,7 +686,7 @@ func (c *Component) waitForStream(ctx context.Context, streamName string) error 
 
 	return errs.WrapTransient(
 		fmt.Errorf("stream %s not found after %d retries", streamName, maxRetries),
-		"agentic-loop",
+		"teams-loop",
 		"waitForStream",
 		"find stream",
 	)
@@ -954,6 +962,27 @@ func (c *Component) handleToolResultMessage(ctx context.Context, data []byte) {
 
 }
 
+// outputSubject resolves a concrete publish subject from a named output port.
+// It finds the port by name, strips wildcard suffixes (* or >) from the first
+// configured subject, then appends the given suffix.  Returns an empty string
+// when the port is not found or has no subjects configured.
+func (c *Component) outputSubject(portName, suffix string) string {
+	for _, port := range c.outputPorts {
+		if port.Name != portName {
+			continue
+		}
+		jsPort, ok := port.Config.(component.JetStreamPort)
+		if !ok || len(jsPort.Subjects) == 0 {
+			return ""
+		}
+		base := jsPort.Subjects[0]
+		base = strings.TrimSuffix(base, "*")
+		base = strings.TrimSuffix(base, ">")
+		return base + suffix
+	}
+	return ""
+}
+
 // publishResults publishes all output messages from a handler result using JetStream
 func (c *Component) publishResults(ctx context.Context, result HandlerResult) {
 	for _, msg := range result.PublishedMessages {
@@ -974,14 +1003,18 @@ func (c *Component) publishResults(ctx context.Context, result HandlerResult) {
 
 // publishContextEvent publishes a context management event
 func (c *Component) publishContextEvent(ctx context.Context, event agentic.ContextEvent) {
-	eventMsg := message.NewBaseMessage(event.Schema(), &event, "agentic-loop")
+	eventMsg := message.NewBaseMessage(event.Schema(), &event, "teams-loop")
 	data, err := json.Marshal(eventMsg)
 	if err != nil {
 		c.logger.Error("Failed to marshal context event", "error", err, "type", event.Type)
 		return
 	}
 
-	subject := fmt.Sprintf("agent.context.compaction.%s", event.LoopID)
+	subject := c.outputSubject("context_compaction", event.LoopID)
+	if subject == "" {
+		c.logger.Warn("context_compaction output port not configured, using fallback subject")
+		subject = fmt.Sprintf("teams.context.compaction.%s", event.LoopID)
+	}
 	if err := c.natsClient.PublishToStream(ctx, subject, data); err != nil {
 		c.logger.Error("Failed to publish context event", "error", err, "subject", subject)
 	}
@@ -1270,7 +1303,7 @@ func (c *Component) handleCancelSignal(ctx context.Context, signal agentic.UserS
 		Metadata:     entity.Metadata,
 	}
 
-	completionMsg := message.NewBaseMessage(completion.Schema(), &completion, "agentic-loop")
+	completionMsg := message.NewBaseMessage(completion.Schema(), &completion, "teams-loop")
 	completionData, err := json.Marshal(completionMsg)
 	if err != nil {
 		c.logger.Error("Failed to marshal completion",
@@ -1279,7 +1312,11 @@ func (c *Component) handleCancelSignal(ctx context.Context, signal agentic.UserS
 		return
 	}
 
-	subject := fmt.Sprintf("agent.complete.%s", loopID)
+	subject := c.outputSubject("complete", loopID)
+	if subject == "" {
+		c.logger.Warn("complete output port not configured, using fallback subject")
+		subject = fmt.Sprintf("teams.complete.%s", loopID)
+	}
 	if err := c.natsClient.PublishToStream(ctx, subject, completionData); err != nil {
 		c.logger.Error("Failed to publish completion",
 			slog.String("error", err.Error()),

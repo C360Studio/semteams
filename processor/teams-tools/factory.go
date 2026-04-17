@@ -18,7 +18,7 @@ func Register(registry RegistryInterface) error {
 		return errs.WrapInvalid(fmt.Errorf("registry cannot be nil"), "Factory", "Register", "validate registry")
 	}
 	return registry.RegisterWithConfig(component.RegistrationConfig{
-		Name:        "agentic-tools",
+		Name:        "teams-tools",
 		Factory:     NewComponent,
 		Schema:      agenticToolsSchema,
 		Type:        "processor",

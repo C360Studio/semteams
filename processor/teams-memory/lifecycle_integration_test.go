@@ -4,7 +4,9 @@ package teamsmemory_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"testing"
+	"time"
 
 	"github.com/c360studio/semstreams/component"
 	teamsmemory "github.com/c360studio/semteams/processor/teams-memory"
@@ -18,6 +20,8 @@ func createTestComponentForLifecycle() component.LifecycleComponent {
 	}
 
 	config := teamsmemory.DefaultConfig()
+	config.StreamName = "TEAMS"
+	config.ConsumerNameSuffix = "lifecycle-" + fmt.Sprintf("%d", time.Now().UnixNano())
 	deps := component.Dependencies{
 		NATSClient: sharedNATSClient,
 	}

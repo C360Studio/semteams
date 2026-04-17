@@ -20,7 +20,7 @@ import (
 const (
 	graphMutationSubject = "graph.mutation.triple.add"
 	graphWriterTimeout   = 5 * time.Second
-	graphWriterSource    = "agentic-loop"
+	graphWriterSource    = "teams-loop"
 )
 
 // graphWriter emits graph triples for model endpoints and loop execution events

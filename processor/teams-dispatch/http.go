@@ -18,7 +18,7 @@ import (
 )
 
 func init() {
-	service.RegisterOpenAPISpec("agentic-dispatch", agenticDispatchOpenAPISpec())
+	service.RegisterOpenAPISpec("teams-dispatch", agenticDispatchOpenAPISpec())
 }
 
 // Compile-time check that Component implements the HTTP handler interface
@@ -335,8 +335,20 @@ func (c *Component) processTaskSubmissionSync(ctx context.Context, msg agentic.U
 		}
 	}
 
-	subject := fmt.Sprintf("agent.task.%s", taskID)
-	if err := c.natsClient.PublishToStream(ctx, subject, taskData); err != nil {
+	taskSubject := c.outputSubject("tasks", taskID)
+	if taskSubject == "" {
+		c.logger.Error("tasks output port not configured; cannot publish task")
+		return agentic.UserResponse{
+			ResponseID:  uuid.New().String(),
+			ChannelType: msg.ChannelType,
+			ChannelID:   msg.ChannelID,
+			UserID:      msg.UserID,
+			Type:        agentic.ResponseTypeError,
+			Content:     "Failed to submit task. Please try again.",
+			Timestamp:   time.Now(),
+		}
+	}
+	if err := c.natsClient.PublishToStream(ctx, taskSubject, taskData); err != nil {
 		c.logger.Error("Failed to publish task", slog.String("error", err.Error()))
 		return agentic.UserResponse{
 			ResponseID:  uuid.New().String(),
@@ -598,8 +610,17 @@ func (c *Component) handleLoopSignal(w http.ResponseWriter, r *http.Request) {
 		slog.String("reason", req.Reason),
 		slog.String("user_id", loop.UserID))
 
-	// Send signal via NATS
-	if err := c.loopTracker.SendSignal(ctx, c.natsClient, loopID, req.Type, req.Reason); err != nil {
+	// Send signal via NATS — resolve subject prefix from port config
+	signalPrefix := c.outputSubject("signals", "")
+	if signalPrefix == "" {
+		c.logger.ErrorContext(ctx, "signals output port not configured; cannot send signal",
+			slog.String("loop_id", loopID))
+		c.metrics.recordHTTPRequest("/loops/{id}/signal", "POST", "500")
+		c.metrics.recordLoopSignal(req.Type, false)
+		c.writeJSONError(w, http.StatusInternalServerError, "signals port not configured")
+		return
+	}
+	if err := c.loopTracker.SendSignal(ctx, c.natsClient, signalPrefix, loopID, req.Type, req.Reason); err != nil {
 		c.logger.ErrorContext(ctx, "failed to send signal",
 			slog.String("request_id", requestID),
 			slog.String("loop_id", loopID),

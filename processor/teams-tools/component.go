@@ -78,7 +78,7 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 	}
 
 	return &Component{
-		name:       "agentic-tools",
+		name:       "teams-tools",
 		config:     config,
 		registry:   NewExecutorRegistry(),
 		natsClient: deps.NATSClient,
@@ -133,7 +133,7 @@ func (c *Component) Start(ctx context.Context) error {
 	// Note: If your JetStream stream subjects include "tool.>" or similar patterns,
 	// you must configure a different subject (e.g., "discovery.tool.list") to avoid
 	// JetStream capturing the request/reply message before the handler responds.
-	toolListSubject := "tool.list"
+	toolListSubject := "teams.tool.list"
 	for _, port := range c.config.Ports.Inputs {
 		if port.Name == "tool_list_request" {
 			if port.Subject != "" {
@@ -443,7 +443,7 @@ func (c *Component) executeWithTimeout(ctx context.Context, call agentic.ToolCal
 
 // publishResult publishes a tool result to JetStream
 func (c *Component) publishResult(ctx context.Context, result agentic.ToolResult) error {
-	resultMsg := message.NewBaseMessage(result.Schema(), &result, "agentic-tools")
+	resultMsg := message.NewBaseMessage(result.Schema(), &result, "teams-tools")
 	data, err := json.Marshal(resultMsg)
 	if err != nil {
 		return errs.Wrap(err, "Component", "publishResult", "marshal result")
@@ -583,7 +583,7 @@ func (c *Component) handleToolListRequest(_ context.Context, _ []byte) ([]byte, 
 // Meta returns component metadata
 func (c *Component) Meta() component.Metadata {
 	return component.Metadata{
-		Name:        "agentic-tools",
+		Name:        "teams-tools",
 		Type:        "processor",
 		Description: "Tool executor processor with filtering and timeout support",
 		Version:     "0.1.0",

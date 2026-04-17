@@ -119,16 +119,16 @@ func getMetrics(registry *metric.MetricsRegistry) *modelMetrics {
 
 		// Register metrics with the metrics registry if available
 		if registry != nil {
-			_ = registry.RegisterCounterVec("agentic-model", "requests_total", metrics.requestsTotal)
-			_ = registry.RegisterHistogramVec("agentic-model", "request_duration_seconds", metrics.requestDuration)
-			_ = registry.RegisterGaugeVec("agentic-model", "requests_in_flight", metrics.requestsInFlight)
-			_ = registry.RegisterCounterVec("agentic-model", "errors_total", metrics.errorsTotal)
-			_ = registry.RegisterHistogramVec("agentic-model", "tool_calls_returned", metrics.toolCallsReturned)
-			_ = registry.RegisterCounterVec("agentic-model", "tokens_total", metrics.tokensTotal)
-			_ = registry.RegisterCounterVec("agentic-model", "stream_chunks_total", metrics.streamChunksTotal)
-			_ = registry.RegisterHistogramVec("agentic-model", "stream_ttft_seconds", metrics.streamTTFT)
-			_ = registry.RegisterCounterVec("agentic-model", "rate_limit_hits_total", metrics.rateLimitHits)
-			_ = registry.RegisterCounterVec("agentic-model", "rate_limit_retries_total", metrics.rateLimitRetries)
+			_ = registry.RegisterCounterVec("teams-model", "requests_total", metrics.requestsTotal)
+			_ = registry.RegisterHistogramVec("teams-model", "request_duration_seconds", metrics.requestDuration)
+			_ = registry.RegisterGaugeVec("teams-model", "requests_in_flight", metrics.requestsInFlight)
+			_ = registry.RegisterCounterVec("teams-model", "errors_total", metrics.errorsTotal)
+			_ = registry.RegisterHistogramVec("teams-model", "tool_calls_returned", metrics.toolCallsReturned)
+			_ = registry.RegisterCounterVec("teams-model", "tokens_total", metrics.tokensTotal)
+			_ = registry.RegisterCounterVec("teams-model", "stream_chunks_total", metrics.streamChunksTotal)
+			_ = registry.RegisterHistogramVec("teams-model", "stream_ttft_seconds", metrics.streamTTFT)
+			_ = registry.RegisterCounterVec("teams-model", "rate_limit_hits_total", metrics.rateLimitHits)
+			_ = registry.RegisterCounterVec("teams-model", "rate_limit_retries_total", metrics.rateLimitRetries)
 		} else {
 			// Fallback to default prometheus registry for testing
 			_ = prometheus.DefaultRegisterer.Register(metrics.requestsTotal)

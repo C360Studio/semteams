@@ -392,7 +392,10 @@ func (s *SignalMessage) UnmarshalJSON(data []byte) error {
 }
 
 // SendSignal publishes a control signal to a loop via NATS.
-func (t *LoopTracker) SendSignal(ctx context.Context, nc *natsclient.Client, loopID, signalType, reason string) error {
+// subjectPrefix is the base subject for the signals output port (e.g.
+// "teams.signal.") — the loopID is appended to form the final subject.
+// Callers should resolve the prefix via Component.outputSubject("signals", "").
+func (t *LoopTracker) SendSignal(ctx context.Context, nc *natsclient.Client, subjectPrefix, loopID, signalType, reason string) error {
 	if nc == nil {
 		return ErrNATSClientNil
 	}
@@ -404,13 +407,13 @@ func (t *LoopTracker) SendSignal(ctx context.Context, nc *natsclient.Client, loo
 		Timestamp: time.Now(),
 	}
 
-	signalMsg := message.NewBaseMessage(signal.Schema(), &signal, "agentic-dispatch")
+	signalMsg := message.NewBaseMessage(signal.Schema(), &signal, "teams-dispatch")
 	data, err := json.Marshal(signalMsg)
 	if err != nil {
 		return errs.Wrap(err, "LoopTracker", "SendSignal", fmt.Sprintf("marshal signal for loop %s", loopID))
 	}
 
-	subject := "agent.signal." + loopID
+	subject := subjectPrefix + loopID
 	if err := nc.PublishToStream(ctx, subject, data); err != nil {
 		return errs.WrapTransient(err, "LoopTracker", "SendSignal", fmt.Sprintf("publish signal %s to loop %s on subject %s", signalType, loopID, subject))
 	}

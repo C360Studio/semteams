@@ -17,11 +17,11 @@ import (
 
 // Subject patterns for NATS publishing (concrete subjects, no wildcards).
 const (
-	subjectAgentRequest  = "agent.request"
-	subjectAgentCreated  = "agent.created"
-	subjectAgentFailed   = "agent.failed"
-	subjectToolExecute   = "tool.execute"
-	subjectAgentComplete = "agent.complete"
+	subjectAgentRequest  = "teams.request"
+	subjectAgentCreated  = "teams.created"
+	subjectAgentFailed   = "teams.failed"
+	subjectToolExecute   = "teams.execute"
+	subjectAgentComplete = "teams.complete"
 )
 
 // TaskMessage is an alias for agentic.TaskMessage for backward compatibility.
@@ -280,7 +280,7 @@ func (h *MessageHandler) buildLoopCreatedData(loopID string, task TaskMessage, e
 		CreatedAt:        time.Now(),
 		Metadata:         task.Metadata,
 	}
-	createdMsg := message.NewBaseMessage(created.Schema(), &created, "agentic-loop")
+	createdMsg := message.NewBaseMessage(created.Schema(), &created, "teams-loop")
 	return json.Marshal(createdMsg)
 }
 
@@ -333,7 +333,7 @@ func (h *MessageHandler) HandleTask(ctx context.Context, task TaskMessage) (Hand
 	if task.MaxDepth > 0 && task.Depth >= task.MaxDepth {
 		return HandlerResult{}, errs.WrapInvalid(
 			fmt.Errorf("max agent depth (%d) reached, cannot spawn child agent", task.MaxDepth),
-			"agentic-loop",
+			"teams-loop",
 			"HandleTask",
 			"check depth limit",
 		)
@@ -434,7 +434,7 @@ func (h *MessageHandler) buildTaskRequest(loopID string, task TaskMessage, entit
 	h.loopManager.TrackRequest(request.RequestID, loopID)
 	h.loopManager.TrackRequestStart(request.RequestID)
 
-	requestMsg := message.NewBaseMessage(request.Schema(), &request, "agentic-loop")
+	requestMsg := message.NewBaseMessage(request.Schema(), &request, "teams-loop")
 	requestData, err := json.Marshal(requestMsg)
 	if err != nil {
 		return HandlerResult{}, err
@@ -488,7 +488,7 @@ func (h *MessageHandler) HandleModelResponse(ctx context.Context, loopID string,
 			result.PublishedMessages = failMsgs
 			result.FailureState = failure
 		}
-		return result, errs.WrapFatal(fmt.Errorf("loop timeout exceeded"), "agentic-loop", "HandleModelResponse", "check timeout")
+		return result, errs.WrapFatal(fmt.Errorf("loop timeout exceeded"), "teams-loop", "HandleModelResponse", "check timeout")
 	}
 
 	entity, err := h.loopManager.GetLoop(loopID)
@@ -510,7 +510,7 @@ func (h *MessageHandler) HandleModelResponse(ctx context.Context, loopID string,
 	if entity.Iterations >= entity.MaxIterations {
 		return HandlerResult{}, errs.WrapFatal(
 			fmt.Errorf("max iterations (%d) reached", entity.MaxIterations),
-			"agentic-loop",
+			"teams-loop",
 			"HandleModelResponse",
 			"check max iterations",
 		)
@@ -717,7 +717,7 @@ func (h *MessageHandler) dispatchToolCall(result *HandlerResult, loopID string, 
 	h.loopManager.TrackToolArguments(tc.ID, tc.Arguments)
 	h.loopManager.TrackToolStart(tc.ID)
 
-	toolMsg := message.NewBaseMessage(tc.Schema(), &tc, "agentic-loop")
+	toolMsg := message.NewBaseMessage(tc.Schema(), &tc, "teams-loop")
 	toolData, err := json.Marshal(toolMsg)
 	if err != nil {
 		return err
@@ -774,7 +774,7 @@ func (h *MessageHandler) handleCompleteResponse(result *HandlerResult, loopID st
 			slog.String("error", trajErr.Error()))
 	}
 
-	completionMsg := message.NewBaseMessage(completion.Schema(), &completion, "agentic-loop")
+	completionMsg := message.NewBaseMessage(completion.Schema(), &completion, "teams-loop")
 	completionData, err := json.Marshal(completionMsg)
 	if err != nil {
 		return err
@@ -815,7 +815,7 @@ func (h *MessageHandler) HandleToolResult(ctx context.Context, loopID string, to
 			result.PublishedMessages = failMsgs
 			result.FailureState = failure
 		}
-		return result, errs.WrapFatal(fmt.Errorf("loop timeout exceeded"), "agentic-loop", "HandleToolResult", "check timeout")
+		return result, errs.WrapFatal(fmt.Errorf("loop timeout exceeded"), "teams-loop", "HandleToolResult", "check timeout")
 	}
 
 	entity, err := h.loopManager.GetLoop(loopID)
@@ -844,7 +844,11 @@ func (h *MessageHandler) HandleToolResult(ctx context.Context, loopID string, to
 		ContextEvents:     []agentic.ContextEvent{},
 	}
 
-	// Record trajectory step
+	// Record trajectory step with tool status for graph queryability.
+	toolStatus := "success"
+	if toolResult.Error != "" {
+		toolStatus = "failed"
+	}
 	step := agentic.TrajectoryStep{
 		Timestamp:     time.Now(),
 		StepType:      "tool_call",
@@ -854,6 +858,9 @@ func (h *MessageHandler) HandleToolResult(ctx context.Context, loopID string, to
 		Duration:      h.computeToolDuration(toolResult.CallID),
 		Provider:      h.resolveProvider(entity.Model),
 		Capability:    entity.Role,
+		ToolStatus:    toolStatus,
+		ErrorMessage:  toolResult.Error,
+		ErrorCategory: string(toolResult.ErrorKind),
 	}
 	result.TrajectorySteps = append(result.TrajectorySteps, step)
 
@@ -921,7 +928,7 @@ func (h *MessageHandler) handleToolsComplete(
 	if err != nil {
 		// Max iterations reached - mark as failed
 		if transitionErr := h.loopManager.TransitionLoop(loopID, agentic.LoopStateFailed); transitionErr != nil {
-			return *result, errs.Wrap(transitionErr, "agentic-loop", "handleToolsComplete", fmt.Sprintf("transition loop to failed state (original error: %v)", err))
+			return *result, errs.Wrap(transitionErr, "teams-loop", "handleToolsComplete", fmt.Sprintf("transition loop to failed state (original error: %v)", err))
 		}
 		result.State = agentic.LoopStateFailed
 		result.MaxIterationsReached = true
@@ -991,7 +998,7 @@ func (h *MessageHandler) handleToolsComplete(
 	h.loopManager.TrackRequest(request.RequestID, loopID)
 	h.loopManager.TrackRequestStart(request.RequestID)
 
-	requestMsg := message.NewBaseMessage(request.Schema(), &request, "agentic-loop")
+	requestMsg := message.NewBaseMessage(request.Schema(), &request, "teams-loop")
 	requestData, err := json.Marshal(requestMsg)
 	if err != nil {
 		return *result, err
@@ -1121,7 +1128,7 @@ func (h *MessageHandler) BuildFailureMessages(loopID, reason, errorMsg string) (
 		return nil, nil, err
 	}
 
-	failureMsg := message.NewBaseMessage(failure.Schema(), failure, "agentic-loop")
+	failureMsg := message.NewBaseMessage(failure.Schema(), failure, "teams-loop")
 	data, err := json.Marshal(failureMsg)
 	if err != nil {
 		return nil, nil, err

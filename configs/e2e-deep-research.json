@@ -1,0 +1,279 @@
+{
+  "version": "1.1.0",
+  "platform": {
+    "org": "c360",
+    "id": "semteams-e2e-deep-research",
+    "type": "deep-research",
+    "region": "local",
+    "instance_id": "agentic-001",
+    "environment": "test"
+  },
+  "tier": "agentic",
+  "nats": {
+    "urls": [
+      "nats://nats:4222"
+    ]
+  },
+  "model_registry": {
+    "endpoints": {
+      "mock": {
+        "provider": "openai",
+        "url": "http://mock-llm:8080/v1",
+        "model": "mock-model",
+        "max_tokens": 4096,
+        "supports_tools": true,
+        "tool_format": "openai",
+        "stream": true
+      }
+    },
+    "defaults": {
+      "model": "mock"
+    }
+  },
+  "services": {
+    "service-manager": {
+      "name": "service-manager",
+      "enabled": true,
+      "config": {
+        "http_port": 8080,
+        "swagger_ui": true,
+        "server_info": {
+          "title": "SemStreams Agentic Tier - Agent Loop Testing",
+          "description": "Deep Research workflow with mock LLM for E2E testing",
+          "version": "0.7.0"
+        }
+      }
+    },
+    "component-manager": {
+      "name": "component-manager",
+      "enabled": true,
+      "config": {}
+    },
+    "metrics": {
+      "name": "metrics",
+      "enabled": true,
+      "config": {
+        "port": 9090,
+        "path": "/metrics",
+        "include_go_metrics": true
+      }
+    },
+    "message-logger": {
+      "name": "message-logger",
+      "enabled": true,
+      "config": {
+        "buffer_size": 10000,
+        "monitor_subjects": [
+          "teams.>"
+        ],
+        "enable_kv_query": true,
+        "log_level": "INFO"
+      }
+    },
+    "log-forwarder": {
+      "name": "log-forwarder",
+      "enabled": true,
+      "config": {
+        "min_level": "DEBUG",
+        "exclude_sources": []
+      }
+    },
+    "metrics-forwarder": {
+      "name": "metrics-forwarder",
+      "enabled": true,
+      "config": {
+        "push_interval": "5s",
+        "include_go_metrics": false,
+        "include_proc_metrics": false
+      }
+    }
+  },
+  "components": {
+    "teams-loop": {
+      "type": "processor",
+      "name": "teams-loop",
+      "enabled": true,
+      "config": {
+        "max_iterations": 25,
+        "timeout": "300s",
+        "approval_required": [],
+        "stream_name": "TEAMS",
+        "loops_bucket": "AGENT_LOOPS",
+        "ports": {
+          "inputs": [
+            {
+              "name": "task",
+              "type": "jetstream",
+              "subject": "teams.task.*",
+              "stream_name": "TEAMS",
+              "required": true,
+              "description": "Agent task requests"
+            },
+            {
+              "name": "response",
+              "type": "jetstream",
+              "subject": "teams.response.>",
+              "stream_name": "TEAMS",
+              "required": true,
+              "description": "Model responses"
+            },
+            {
+              "name": "result",
+              "type": "jetstream",
+              "subject": "teams.result.>",
+              "stream_name": "TEAMS",
+              "required": true,
+              "description": "Tool execution results"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "request",
+              "type": "jetstream",
+              "subject": "teams.request.*",
+              "stream_name": "TEAMS",
+              "description": "Model requests"
+            },
+            {
+              "name": "execute",
+              "type": "jetstream",
+              "subject": "teams.execute.*",
+              "stream_name": "TEAMS",
+              "description": "Tool execution requests"
+            },
+            {
+              "name": "complete",
+              "type": "jetstream",
+              "subject": "teams.complete.*",
+              "stream_name": "TEAMS",
+              "description": "Task completions"
+            }
+          ],
+          "kv_write": [
+            {
+              "name": "loops",
+              "type": "kv-write",
+              "bucket": "AGENT_LOOPS",
+              "description": "Loop state storage"
+            },
+            {
+              "name": "trajectories",
+              "type": "kv-write",
+              "bucket": "AGENT_TRAJECTORIES",
+              "description": "Trajectory storage"
+            }
+          ]
+        }
+      }
+    },
+    "teams-model": {
+      "type": "processor",
+      "name": "teams-model",
+      "enabled": true,
+      "config": {
+        "stream_name": "TEAMS",
+        "timeout": "30s",
+        "endpoints": {
+          "mock": {
+            "provider": "openai",
+            "url": "http://mock-llm:8080/v1",
+            "model": "mock-model",
+            "max_tokens": 4096,
+            "supports_tools": true,
+            "tool_format": "openai",
+            "stream": true
+          }
+        },
+        "retry": {
+          "max_attempts": 3,
+          "backoff": "exponential"
+        },
+        "ports": {
+          "inputs": [
+            {
+              "name": "agent.request",
+              "type": "jetstream",
+              "subject": "teams.request.>",
+              "stream_name": "TEAMS",
+              "required": true,
+              "description": "Agent request input"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "agent.response",
+              "type": "jetstream",
+              "subject": "teams.response.*",
+              "stream_name": "TEAMS",
+              "required": true,
+              "description": "Agent response output"
+            }
+          ]
+        }
+      }
+    },
+    "teams-tools": {
+      "type": "processor",
+      "name": "teams-tools",
+      "enabled": true,
+      "config": {
+        "stream_name": "TEAMS",
+        "timeout": "10s",
+        "allowed_tools": null,
+        "ports": {
+          "inputs": [
+            {
+              "name": "tool.execute",
+              "type": "jetstream",
+              "subject": "teams.execute.>",
+              "stream_name": "TEAMS",
+              "required": true,
+              "description": "Tool execution requests"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "tool.result",
+              "type": "jetstream",
+              "subject": "teams.result.*",
+              "stream_name": "TEAMS",
+              "required": true,
+              "description": "Tool execution results"
+            }
+          ],
+          "kv_read": [
+            {
+              "name": "entity_states",
+              "type": "kv-read",
+              "bucket": "ENTITY_STATES",
+              "description": "Entity state KV for graph queries"
+            }
+          ]
+        }
+      }
+    },
+    "teams-dispatch": {
+      "type": "processor",
+      "name": "teams-dispatch",
+      "enabled": true,
+      "config": {
+        "default_role": "researcher",
+        "auto_continue": true,
+        "stream_name": "TEAMS",
+        "permissions": {
+          "view": [
+            "*"
+          ],
+          "submit_task": [
+            "*"
+          ],
+          "cancel_own": true,
+          "cancel_any": [],
+          "approve": [
+            "*"
+          ]
+        }
+      }
+    }
+  }
+}

@@ -11,7 +11,7 @@ func Register(registry *component.Registry) error {
 	}
 
 	registration := &component.Registration{
-		Name:        "agentic-loop",
+		Name:        "teams-loop",
 		Type:        "processor",
 		Protocol:    "nats",
 		Domain:      "agentic",
@@ -21,5 +21,5 @@ func Register(registry *component.Registry) error {
 		Factory:     NewComponent,
 	}
 
-	return registry.RegisterFactory("agentic-loop", registration)
+	return registry.RegisterFactory("teams-loop", registration)
 }

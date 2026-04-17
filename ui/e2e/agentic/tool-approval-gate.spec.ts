@@ -51,7 +51,7 @@ test.describe("Tool Approval Gate", () => {
 
     // -----------------------------------------------------------------
     // Step 2 — type a task in the chat bar. This calls
-    // agentApi.sendMessage() → POST /agentic-dispatch/message.
+    // agentApi.sendMessage() → POST /teams-dispatch/message.
     // The mock-llm fixture responds with a create_rule tool call,
     // which triggers the approval gate.
     // -----------------------------------------------------------------
@@ -66,7 +66,7 @@ test.describe("Tool Approval Gate", () => {
     // correlate with the card that appears on the kanban board.
     // -----------------------------------------------------------------
     const loopId = await pollUntil(async () => {
-      const resp = await request.get("/agentic-dispatch/loops");
+      const resp = await request.get("/teams-dispatch/loops");
       if (!resp.ok()) return null;
       const loops = (await resp.json()) as Array<{
         loop_id: string;
@@ -119,7 +119,7 @@ test.describe("Tool Approval Gate", () => {
     // should agree with what the UI shows.
     // -----------------------------------------------------------------
     const finalLoop = await request
-      .get(`/agentic-dispatch/loops/${loopId}`)
+      .get(`/teams-dispatch/loops/${loopId}`)
       .then((r) => r.json());
     expect(finalLoop.state).toBe("complete");
   });

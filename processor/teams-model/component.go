@@ -97,7 +97,7 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 	}
 
 	return &Component{
-		name:           "agentic-model",
+		name:           "teams-model",
 		config:         config,
 		modelRegistry:  deps.ModelRegistry,
 		clientCache:    make(map[string]*Client),
@@ -530,6 +530,25 @@ func (c *Component) getClientForRequest(req agentic.AgentRequest) (*Client, erro
 	return client, nil
 }
 
+// outputSubject returns the resolved NATS subject for a named output port,
+// replacing the trailing wildcard (*) with suffix. Falls back to the
+// legacy hardcoded pattern when the port is not found in config.
+func (c *Component) outputSubject(portName, suffix string) string {
+	if c.config.Ports != nil {
+		for _, p := range c.config.Ports.Outputs {
+			if p.Name == portName {
+				subject := p.Subject
+				if len(subject) > 0 && subject[len(subject)-1] == '*' {
+					subject = subject[:len(subject)-1] + suffix
+				}
+				return subject
+			}
+		}
+	}
+	// Fallback: should not happen in normal operation
+	return portName + "." + suffix
+}
+
 // makeChunkHandler returns a ChunkHandler that publishes chunks to core NATS.
 // Chunks are fire-and-forget (core NATS Publish, not JetStream) since they are
 // ephemeral — dropped if no subscriber is listening.
@@ -541,7 +560,7 @@ func (c *Component) makeChunkHandler() ChunkHandler {
 			return
 		}
 
-		subject := "agent.stream." + chunk.RequestID
+		subject := c.outputSubject("stream", chunk.RequestID)
 		if err := c.natsClient.Publish(context.Background(), subject, data); err != nil {
 			c.logger.Debug("Failed to publish stream chunk", "subject", subject, "error", err)
 		}
@@ -572,15 +591,15 @@ func (c *Component) incrementErrors() {
 
 // publishResponse publishes an agent response to JetStream
 func (c *Component) publishResponse(ctx context.Context, resp agentic.AgentResponse) error {
-	respMsg := message.NewBaseMessage(resp.Schema(), &resp, "agentic-model")
+	respMsg := message.NewBaseMessage(resp.Schema(), &resp, "teams-model")
 	data, err := json.Marshal(respMsg)
 	if err != nil {
 		return errs.WrapInvalid(err, "Component", "publishResponse", "marshal response")
 	}
 
-	// Publish to output subjects
+	// Publish to JetStream output ports only (nats ports like "stream" are handled separately)
 	for _, port := range c.config.Ports.Outputs {
-		if port.Subject == "" {
+		if port.Subject == "" || port.Type == "nats" {
 			continue
 		}
 
@@ -624,7 +643,7 @@ func (c *Component) publishErrorResponseWithTokens(ctx context.Context, requestI
 // Meta returns component metadata
 func (c *Component) Meta() component.Metadata {
 	return component.Metadata{
-		Name:        "agentic-model",
+		Name:        "teams-model",
 		Type:        "processor",
 		Description: "OpenAI-compatible agentic model processor with tool calling support",
 		Version:     "0.1.0",
@@ -661,16 +680,21 @@ func (c *Component) OutputPorts() []component.Port {
 
 	ports := make([]component.Port, len(c.config.Ports.Outputs))
 	for i, portDef := range c.config.Ports.Outputs {
-		ports[i] = component.Port{
+		p := component.Port{
 			Name:        portDef.Name,
 			Direction:   component.DirectionOutput,
 			Required:    portDef.Required,
 			Description: portDef.Description,
-			Config: component.JetStreamPort{
+		}
+		if portDef.Type == "nats" {
+			p.Config = component.NATSPort{Subject: portDef.Subject}
+		} else {
+			p.Config = component.JetStreamPort{
 				StreamName: portDef.StreamName,
 				Subjects:   []string{portDef.Subject},
-			},
+			}
 		}
+		ports[i] = p
 	}
 	return ports
 }

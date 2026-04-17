@@ -17,8 +17,13 @@ import (
 	"github.com/c360studio/semstreams/agentic"
 )
 
+// ToolDefinition is an alias for the framework's tool definition type.
 type ToolDefinition = agentic.ToolDefinition
+
+// ToolCall is an alias for the framework's tool call type.
 type ToolCall = agentic.ToolCall
+
+// ToolResult is an alias for the framework's tool result type.
 type ToolResult = agentic.ToolResult
 
 // ValidateToolsAllowed validates that all tool calls are in the allowed list.

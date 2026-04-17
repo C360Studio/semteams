@@ -81,12 +81,12 @@ func getMetrics(registry *metric.MetricsRegistry) *toolsMetrics {
 
 		// Register metrics with the metrics registry if available
 		if registry != nil {
-			_ = registry.RegisterCounterVec("agentic-tools", "executions_total", metrics.executionsTotal)
-			_ = registry.RegisterHistogramVec("agentic-tools", "execution_duration_seconds", metrics.executionDuration)
-			_ = registry.RegisterCounterVec("agentic-tools", "errors_total", metrics.errorsTotal)
-			_ = registry.RegisterCounterVec("agentic-tools", "timeout_total", metrics.timeoutTotal)
-			_ = registry.RegisterCounterVec("agentic-tools", "filtered_total", metrics.filteredTotal)
-			_ = registry.RegisterGauge("agentic-tools", "registered", metrics.toolsRegistered)
+			_ = registry.RegisterCounterVec("teams-tools", "executions_total", metrics.executionsTotal)
+			_ = registry.RegisterHistogramVec("teams-tools", "execution_duration_seconds", metrics.executionDuration)
+			_ = registry.RegisterCounterVec("teams-tools", "errors_total", metrics.errorsTotal)
+			_ = registry.RegisterCounterVec("teams-tools", "timeout_total", metrics.timeoutTotal)
+			_ = registry.RegisterCounterVec("teams-tools", "filtered_total", metrics.filteredTotal)
+			_ = registry.RegisterGauge("teams-tools", "registered", metrics.toolsRegistered)
 		} else {
 			// Fallback to default prometheus registry for testing
 			_ = prometheus.DefaultRegisterer.Register(metrics.executionsTotal)

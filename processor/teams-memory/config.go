@@ -15,6 +15,7 @@ type Config struct {
 	Ports              *component.PortConfig `json:"ports,omitempty" schema:"type:ports,description:Port configuration,category:basic"`
 	StreamName         string                `json:"stream_name,omitempty" schema:"type:string,description:JetStream stream name,category:advanced,default:AGENT"`
 	ConsumerNameSuffix string                `json:"consumer_name_suffix,omitempty" schema:"type:string,description:Consumer name suffix for uniqueness,category:advanced"`
+	EntityStatesBucket string                `json:"entity_states_bucket,omitempty" schema:"type:string,description:KV bucket for entity state (read-only for ProfileReader),category:advanced,default:ENTITY_STATES"`
 }
 
 // ExtractionConfig holds fact extraction configuration
@@ -191,16 +192,16 @@ func DefaultConfig() Config {
 		{
 			Name:        "compaction_events",
 			Type:        "jetstream",
-			Subject:     "agent.context.compaction.>",
-			StreamName:  "AGENT",
+			Subject:     "teams.context.compaction.>",
+			StreamName:  "TEAMS",
 			Required:    true,
 			Description: "Compaction events input (JetStream)",
 		},
 		{
 			Name:        "hydrate_requests",
 			Type:        "jetstream",
-			Subject:     "memory.hydrate.request.*",
-			StreamName:  "AGENT",
+			Subject:     "teams.hydrate.request.*",
+			StreamName:  "TEAMS",
 			Required:    false,
 			Description: "Hydration request input (JetStream)",
 		},
@@ -211,30 +212,54 @@ func DefaultConfig() Config {
 			Required:    false,
 			Description: "Entity state changes (KV Watch)",
 		},
+		{
+			Name:        "layer_approved_events",
+			Type:        "jetstream",
+			Subject:     "teams.operating_model.layer_approved.*",
+			StreamName:  "TEAMS",
+			Required:    false,
+			Description: "Operating-model layer-approved events from /onboard (JetStream)",
+		},
+		{
+			Name:        "loop_created_events",
+			Type:        "jetstream",
+			Subject:     "teams.created.*",
+			StreamName:  "TEAMS",
+			Required:    false,
+			Description: "Loop-created events; triggers profile-context assembly (JetStream)",
+		},
 	}
 
 	outputDefs := []component.PortDefinition{
 		{
 			Name:        "injected_context",
 			Type:        "jetstream",
-			Subject:     "agent.context.injected.*",
-			StreamName:  "AGENT",
+			Subject:     "teams.context.injected.*",
+			StreamName:  "TEAMS",
 			Required:    true,
 			Description: "Injected context output (JetStream)",
 		},
 		{
 			Name:        "graph_mutations",
 			Type:        "nats",
-			Subject:     "graph.mutation.*",
+			Subject:     "teams.graph.*",
 			Required:    true,
 			Description: "Graph mutation commands (NATS)",
 		},
 		{
 			Name:        "checkpoint_events",
 			Type:        "nats",
-			Subject:     "memory.checkpoint.created.*",
+			Subject:     "teams.checkpoint.*",
 			Required:    true,
 			Description: "Checkpoint event notifications (NATS)",
+		},
+		{
+			Name:        "profile_context",
+			Type:        "jetstream",
+			Subject:     "teams.context.profile.*",
+			StreamName:  "TEAMS",
+			Required:    false,
+			Description: "Operating-model profile context for loop injection (JetStream)",
 		},
 	}
 

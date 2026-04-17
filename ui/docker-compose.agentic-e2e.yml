@@ -6,7 +6,7 @@
 #
 # This is distinct from docker-compose.e2e.yml, which uses protocol-flow.json
 # and has no mock-llm service. Journey tests need agentic.json's components
-# (agentic-dispatch, agentic-loop, agentic-tools, agentic-governance) and
+# (teams-dispatch, teams-loop, teams-tools, teams-governance) and
 # the mock-llm for deterministic LLM responses.
 #
 # Container names and networks are prefixed `semteams-ui-agentic-*` so this
@@ -98,11 +98,11 @@ services:
       mock-llm:
         condition: service_healthy
     environment:
-      - STREAMKIT_NATS_URLS=nats://nats:4222
-      - STREAMKIT_LOG_LEVEL=debug
+      - SEMSTREAMS_NATS_URLS=nats://nats:4222
+      - SEMSTREAMS_LOG_LEVEL=debug
       - AGENTIC_LLM_URL=http://mock-llm:8080/v1
     volumes:
-      - ${BACKEND_CONTEXT:-..}/configs/${BACKEND_CONFIG:-agentic.json}:/etc/semstreams/config.json:ro
+      - ${BACKEND_CONTEXT:-..}/configs/${AGENTIC_CONFIG:-e2e-agentic.json}:/etc/semstreams/config.json:ro
       - ${BACKEND_CONTEXT:-..}/testdata:/data/testdata:ro
     networks:
       - agentic-net
@@ -129,7 +129,7 @@ services:
       - agentic-net
 
   # Caddy Reverse Proxy — reuses Caddyfile.e2e (already has
-  # /agentic-dispatch/* and /agentic-loop/* routes with SSE flushing).
+  # /teams-dispatch/* and /teams-loop/* routes with SSE flushing).
   caddy:
     image: caddy:2-alpine
     container_name: semteams-ui-agentic-caddy

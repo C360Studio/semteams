@@ -5,7 +5,7 @@
 #
 # Prerequisites:
 #   - semteams backend running and exposing /components/types,
-#     /flowbuilder/*, /agentic-dispatch/*, /agentic-loop/*, /health, /graphql
+#     /flowbuilder/*, /teams-dispatch/*, /teams-loop/*, /health, /graphql
 #
 # Usage:
 #   # Option 1: Backend running natively (go run, binary, etc.)

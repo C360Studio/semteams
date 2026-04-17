@@ -1,0 +1,168 @@
+{
+  "version": "1.1.0",
+  "platform": {
+    "org": "c360",
+    "id": "semteams-onboarding",
+    "type": "onboarding",
+    "region": "local",
+    "instance_id": "onboarding-001",
+    "environment": "development"
+  },
+  "tier": "agentic",
+  "nats": {
+    "urls": ["nats://localhost:4222"]
+  },
+  "model_registry": {
+    "endpoints": {
+      "claude-haiku": {
+        "provider": "anthropic",
+        "url": "https://api.anthropic.com/v1",
+        "model": "claude-haiku-4-5-20251001",
+        "api_key_env": "ANTHROPIC_API_KEY",
+        "max_tokens": 200000,
+        "supports_tools": true,
+        "stream": true,
+        "max_concurrent": 10,
+        "requests_per_minute": 200
+      },
+      "mock": {
+        "provider": "openai",
+        "url": "http://mock-llm:8080/v1",
+        "model": "mock-model",
+        "max_tokens": 4096,
+        "supports_tools": true,
+        "tool_format": "openai",
+        "stream": true
+      }
+    },
+    "defaults": {
+      "model": "claude-haiku"
+    }
+  },
+  "services": {
+    "service-manager": {
+      "name": "service-manager",
+      "enabled": true,
+      "config": {
+        "http_port": 8080,
+        "swagger_ui": true,
+        "server_info": {
+          "title": "SemTeams Onboarding Demo",
+          "description": "End-to-end demo of the operating-model onboarding interview: /onboard command, layer-approved graph writes, and profile-context injection into follow-up loops.",
+          "version": "0.1.0"
+        }
+      }
+    },
+    "component-manager": {
+      "name": "component-manager",
+      "enabled": true,
+      "config": {}
+    },
+    "metrics": {
+      "name": "metrics",
+      "enabled": true,
+      "config": {
+        "port": 9090,
+        "path": "/metrics",
+        "include_go_metrics": true
+      }
+    },
+    "message-logger": {
+      "name": "message-logger",
+      "enabled": true,
+      "config": {
+        "buffer_size": 10000,
+        "monitor_subjects": [
+          "teams.>",
+          "graph.mutation.*"
+        ],
+        "enable_kv_query": true,
+        "log_level": "INFO"
+      }
+    }
+  },
+  "components": {
+    "teams-dispatch": {
+      "type": "processor",
+      "name": "teams-dispatch",
+      "enabled": true,
+      "config": {
+        "default_role": "general",
+        "auto_continue": true,
+        "stream_name": "TEAMS",
+        "permissions": {
+          "view": ["*"],
+          "submit_task": ["*"],
+          "cancel_own": true,
+          "cancel_any": [],
+          "approve": ["*"]
+        }
+      }
+    },
+    "teams-loop": {
+      "type": "processor",
+      "name": "teams-loop",
+      "enabled": true,
+      "config": {
+        "max_iterations": 20,
+        "timeout": "120s",
+        "stream_name": "TEAMS",
+        "loops_bucket": "AGENT_LOOPS",
+        "context": {
+          "compact_threshold": 0.8,
+          "headroom_ratio": 0.1,
+          "headroom_tokens": 4096,
+          "inject_profile_context": true
+        }
+      }
+    },
+    "teams-memory": {
+      "type": "processor",
+      "name": "teams-memory",
+      "enabled": true,
+      "config": {
+        "extraction": {
+          "llm_assisted": {
+            "enabled": false,
+            "model": "claude-haiku",
+            "trigger_iteration_interval": 5,
+            "trigger_context_threshold": 0.8,
+            "max_tokens": 1000
+          }
+        },
+        "hydration": {
+          "pre_task": {
+            "enabled": false,
+            "max_context_tokens": 2000,
+            "include_decisions": true,
+            "include_files": true
+          },
+          "post_compaction": {
+            "enabled": false,
+            "reconstruct_from_checkpoint": true,
+            "max_recovery_tokens": 1500
+          }
+        },
+        "checkpoint": {
+          "enabled": true,
+          "storage_bucket": "AGENT_MEMORY_CHECKPOINTS",
+          "retention_days": 7
+        },
+        "stream_name": "TEAMS"
+      }
+    },
+    "teams-model": {
+      "type": "processor",
+      "name": "teams-model",
+      "enabled": true,
+      "config": {
+        "stream_name": "TEAMS",
+        "timeout": "30s",
+        "retry": {
+          "max_attempts": 3,
+          "backoff": "exponential"
+        }
+      }
+    }
+  }
+}

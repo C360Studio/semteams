@@ -28,13 +28,16 @@ var (
 func TestMain(m *testing.M) {
 	streams := []natsclient.TestStreamConfig{
 		{
-			Name: "AGENT",
+			Name: "TEAMS",
 			Subjects: []string{
-				"agent.context.compaction.>",
-				"agent.context.injected.>",
-				"memory.hydrate.request.>",
-				"graph.mutation.>",
-				"memory.checkpoint.created.>",
+				"teams.context.compaction.>",
+				"teams.context.injected.>",
+				"teams.context.profile.>",
+				"teams.hydrate.request.>",
+				"teams.graph.>",
+				"teams.checkpoint.>",
+				"teams.operating_model.layer_approved.>",
+				"teams.created.>",
 			},
 		},
 	}
@@ -81,7 +84,7 @@ func TestIntegration_ComponentLifecycle_StartStop(t *testing.T) {
 	natsClient := getSharedNATSClient(t)
 
 	config := teamsmemory.DefaultConfig()
-	config.StreamName = "AGENT"
+	config.StreamName = "TEAMS"
 	config.ConsumerNameSuffix = "lifecycle-test"
 	// Disable hydration to avoid graph client requirements
 	config.Hydration.PostCompaction.Enabled = false
@@ -131,7 +134,7 @@ func TestIntegration_ComponentHealth_ReflectsState(t *testing.T) {
 	natsClient := getSharedNATSClient(t)
 
 	config := teamsmemory.DefaultConfig()
-	config.StreamName = "AGENT"
+	config.StreamName = "TEAMS"
 	config.ConsumerNameSuffix = "health-test"
 	config.Hydration.PostCompaction.Enabled = false
 	config.Hydration.PreTask.Enabled = false
@@ -176,7 +179,7 @@ func TestIntegration_CompactionComplete_ReceivesEvent(t *testing.T) {
 	natsClient := getSharedNATSClient(t)
 
 	config := teamsmemory.DefaultConfig()
-	config.StreamName = "AGENT"
+	config.StreamName = "TEAMS"
 	config.ConsumerNameSuffix = "compact-complete-test"
 	// Disable features that need external clients
 	config.Hydration.PostCompaction.Enabled = false
@@ -220,7 +223,7 @@ func TestIntegration_CompactionComplete_ReceivesEvent(t *testing.T) {
 	eventData, err := json.Marshal(event)
 	require.NoError(t, err)
 
-	err = natsClient.PublishToStream(ctx, "agent.context.compaction.loop-001", eventData)
+	err = natsClient.PublishToStream(ctx, "teams.context.compaction.loop-001", eventData)
 	require.NoError(t, err)
 
 	// Verify the event was processed (component stays healthy)
@@ -235,7 +238,7 @@ func TestIntegration_CompactionStarting_ReceivesEvent(t *testing.T) {
 	natsClient := getSharedNATSClient(t)
 
 	config := teamsmemory.DefaultConfig()
-	config.StreamName = "AGENT"
+	config.StreamName = "TEAMS"
 	config.ConsumerNameSuffix = "compact-starting-test"
 	config.Hydration.PostCompaction.Enabled = false
 	config.Hydration.PreTask.Enabled = false
@@ -277,7 +280,7 @@ func TestIntegration_CompactionStarting_ReceivesEvent(t *testing.T) {
 	eventData, err := json.Marshal(event)
 	require.NoError(t, err)
 
-	err = natsClient.PublishToStream(ctx, "agent.context.compaction.loop-002", eventData)
+	err = natsClient.PublishToStream(ctx, "teams.context.compaction.loop-002", eventData)
 	require.NoError(t, err)
 
 	require.Eventually(t, func() bool {
@@ -291,7 +294,7 @@ func TestIntegration_HydrateRequest_PreTask(t *testing.T) {
 	natsClient := getSharedNATSClient(t)
 
 	config := teamsmemory.DefaultConfig()
-	config.StreamName = "AGENT"
+	config.StreamName = "TEAMS"
 	config.ConsumerNameSuffix = "hydrate-pretask-test"
 	// Keep pre-task enabled but no graph client means no actual hydration output
 	config.Hydration.PreTask.Enabled = true
@@ -325,7 +328,7 @@ func TestIntegration_HydrateRequest_PreTask(t *testing.T) {
 	receivedContext := make([]teamsmemory.InjectedContextMessage, 0)
 	var mu sync.Mutex
 
-	_, err = natsClient.Subscribe(ctx, "agent.context.injected.>", func(_ context.Context, msg *nats.Msg) {
+	_, err = natsClient.Subscribe(ctx, "teams.context.injected.>", func(_ context.Context, msg *nats.Msg) {
 		var ctxMsg teamsmemory.InjectedContextMessage
 		if err := json.Unmarshal(msg.Data, &ctxMsg); err == nil {
 			mu.Lock()
@@ -347,7 +350,7 @@ func TestIntegration_HydrateRequest_PreTask(t *testing.T) {
 	reqData, err := json.Marshal(request)
 	require.NoError(t, err)
 
-	err = natsClient.PublishToStream(ctx, "memory.hydrate.request.loop-pretask-001", reqData)
+	err = natsClient.PublishToStream(ctx, "teams.hydrate.request.loop-pretask-001", reqData)
 	require.NoError(t, err)
 
 	// Verify injected context was published (even if empty due to no graph client)
@@ -370,7 +373,7 @@ func TestIntegration_HydrateRequest_PreTask_MissingDescription(t *testing.T) {
 	natsClient := getSharedNATSClient(t)
 
 	config := teamsmemory.DefaultConfig()
-	config.StreamName = "AGENT"
+	config.StreamName = "TEAMS"
 	config.ConsumerNameSuffix = "hydrate-pretask-nodesc-test"
 	config.Hydration.PreTask.Enabled = true
 	config.Hydration.PostCompaction.Enabled = false
@@ -414,7 +417,7 @@ func TestIntegration_HydrateRequest_PreTask_MissingDescription(t *testing.T) {
 	reqData, err := json.Marshal(request)
 	require.NoError(t, err)
 
-	err = natsClient.PublishToStream(ctx, "memory.hydrate.request.loop-pretask-nodesc", reqData)
+	err = natsClient.PublishToStream(ctx, "teams.hydrate.request.loop-pretask-nodesc", reqData)
 	require.NoError(t, err)
 
 	// Verify error count increased
@@ -429,7 +432,7 @@ func TestIntegration_HydrateRequest_PostCompaction(t *testing.T) {
 	natsClient := getSharedNATSClient(t)
 
 	config := teamsmemory.DefaultConfig()
-	config.StreamName = "AGENT"
+	config.StreamName = "TEAMS"
 	config.ConsumerNameSuffix = "hydrate-postcompact-test"
 	config.Hydration.PreTask.Enabled = false
 	config.Hydration.PostCompaction.Enabled = true
@@ -462,7 +465,7 @@ func TestIntegration_HydrateRequest_PostCompaction(t *testing.T) {
 	receivedContext := make([]teamsmemory.InjectedContextMessage, 0)
 	var mu sync.Mutex
 
-	_, err = natsClient.Subscribe(ctx, "agent.context.injected.>", func(_ context.Context, msg *nats.Msg) {
+	_, err = natsClient.Subscribe(ctx, "teams.context.injected.>", func(_ context.Context, msg *nats.Msg) {
 		var ctxMsg teamsmemory.InjectedContextMessage
 		if err := json.Unmarshal(msg.Data, &ctxMsg); err == nil {
 			mu.Lock()
@@ -483,7 +486,7 @@ func TestIntegration_HydrateRequest_PostCompaction(t *testing.T) {
 	reqData, err := json.Marshal(request)
 	require.NoError(t, err)
 
-	err = natsClient.PublishToStream(ctx, "memory.hydrate.request.loop-postcompact-001", reqData)
+	err = natsClient.PublishToStream(ctx, "teams.hydrate.request.loop-postcompact-001", reqData)
 	require.NoError(t, err)
 
 	// Verify injected context was published
@@ -506,7 +509,7 @@ func TestIntegration_InvalidCompactionEvent_IncrementErrors(t *testing.T) {
 	natsClient := getSharedNATSClient(t)
 
 	config := teamsmemory.DefaultConfig()
-	config.StreamName = "AGENT"
+	config.StreamName = "TEAMS"
 	config.ConsumerNameSuffix = "invalid-event-test"
 	config.Hydration.PostCompaction.Enabled = false
 	config.Hydration.PreTask.Enabled = false
@@ -542,7 +545,7 @@ func TestIntegration_InvalidCompactionEvent_IncrementErrors(t *testing.T) {
 	initialErrors := initialHealth.ErrorCount
 
 	// Publish invalid JSON
-	err = natsClient.PublishToStream(ctx, "agent.context.compaction.invalid", []byte("{invalid json"))
+	err = natsClient.PublishToStream(ctx, "teams.context.compaction.invalid", []byte("{invalid json"))
 	require.NoError(t, err)
 
 	// Verify error count increased
@@ -557,7 +560,7 @@ func TestIntegration_EmptyLoopID_Rejected(t *testing.T) {
 	natsClient := getSharedNATSClient(t)
 
 	config := teamsmemory.DefaultConfig()
-	config.StreamName = "AGENT"
+	config.StreamName = "TEAMS"
 	config.ConsumerNameSuffix = "empty-loopid-test"
 	config.Hydration.PostCompaction.Enabled = false
 	config.Hydration.PreTask.Enabled = false
@@ -601,7 +604,7 @@ func TestIntegration_EmptyLoopID_Rejected(t *testing.T) {
 	eventData, err := json.Marshal(event)
 	require.NoError(t, err)
 
-	err = natsClient.PublishToStream(ctx, "agent.context.compaction.empty", eventData)
+	err = natsClient.PublishToStream(ctx, "teams.context.compaction.empty", eventData)
 	require.NoError(t, err)
 
 	// Verify error count increased
@@ -616,7 +619,7 @@ func TestIntegration_PublishInjectedContext_ToJetStream(t *testing.T) {
 	natsClient := getSharedNATSClient(t)
 
 	config := teamsmemory.DefaultConfig()
-	config.StreamName = "AGENT"
+	config.StreamName = "TEAMS"
 	config.ConsumerNameSuffix = "publish-context-test"
 	config.Hydration.PostCompaction.Enabled = true
 	config.Hydration.PreTask.Enabled = false
@@ -649,7 +652,7 @@ func TestIntegration_PublishInjectedContext_ToJetStream(t *testing.T) {
 	receivedContext := make([]teamsmemory.InjectedContextMessage, 0)
 	var mu sync.Mutex
 
-	_, err = natsClient.Subscribe(ctx, "agent.context.injected.>", func(_ context.Context, msg *nats.Msg) {
+	_, err = natsClient.Subscribe(ctx, "teams.context.injected.>", func(_ context.Context, msg *nats.Msg) {
 		var ctxMsg teamsmemory.InjectedContextMessage
 		if err := json.Unmarshal(msg.Data, &ctxMsg); err == nil {
 			mu.Lock()
@@ -673,7 +676,7 @@ func TestIntegration_PublishInjectedContext_ToJetStream(t *testing.T) {
 	eventData, err := json.Marshal(event)
 	require.NoError(t, err)
 
-	err = natsClient.PublishToStream(ctx, "agent.context.compaction.loop-publish-001", eventData)
+	err = natsClient.PublishToStream(ctx, "teams.context.compaction.loop-publish-001", eventData)
 	require.NoError(t, err)
 
 	// Wait for processing and publishing
@@ -697,7 +700,7 @@ func TestIntegration_MultipleEvents_ProcessedSequentially(t *testing.T) {
 	natsClient := getSharedNATSClient(t)
 
 	config := teamsmemory.DefaultConfig()
-	config.StreamName = "AGENT"
+	config.StreamName = "TEAMS"
 	config.ConsumerNameSuffix = "multi-event-test"
 	config.Hydration.PostCompaction.Enabled = false
 	config.Hydration.PreTask.Enabled = false
@@ -739,7 +742,7 @@ func TestIntegration_MultipleEvents_ProcessedSequentially(t *testing.T) {
 		eventData, err := json.Marshal(event)
 		require.NoError(t, err)
 
-		err = natsClient.PublishToStream(ctx, "agent.context.compaction."+loopID, eventData)
+		err = natsClient.PublishToStream(ctx, "teams.context.compaction."+loopID, eventData)
 		require.NoError(t, err)
 	}
 
@@ -755,7 +758,7 @@ func TestIntegration_UnknownEventType_NoError(t *testing.T) {
 	natsClient := getSharedNATSClient(t)
 
 	config := teamsmemory.DefaultConfig()
-	config.StreamName = "AGENT"
+	config.StreamName = "TEAMS"
 	config.ConsumerNameSuffix = "unknown-type-test"
 	config.Hydration.PostCompaction.Enabled = false
 	config.Hydration.PreTask.Enabled = false
@@ -799,7 +802,7 @@ func TestIntegration_UnknownEventType_NoError(t *testing.T) {
 	eventData, err := json.Marshal(event)
 	require.NoError(t, err)
 
-	err = natsClient.PublishToStream(ctx, "agent.context.compaction.unknown", eventData)
+	err = natsClient.PublishToStream(ctx, "teams.context.compaction.unknown", eventData)
 	require.NoError(t, err)
 
 	// Wait a bit then verify error count did NOT increase
