@@ -671,47 +671,14 @@ func TestIntegration_LoopStatePersistence(t *testing.T) {
 func TestIntegration_LoopTrajectoryCapture(t *testing.T) {
 	tc := natsclient.NewTestClient(t, natsclient.WithFastStartup(), natsclient.WithJetStream(),
 		natsclient.WithStreams(natsclient.TestStreamConfig{Name: "TEAMS", Subjects: []string{"teams.>"}}),
-		natsclient.WithKV(), natsclient.WithKVBuckets("AGENT_LOOPS"))
+		natsclient.WithKV(), natsclient.WithKVBuckets("AGENT_LOOPS", "AGENT_CONTENT"))
 	natsClient := tc.Client
 
-	config := teamsloop.Config{
-		Ports: &component.PortConfig{
-			Inputs: []component.PortDefinition{
-				{
-					Name:       "tasks",
-					Type:       "jetstream",
-					Subject:    "teams.task.*",
-					StreamName: "TEAMS",
-					Required:   true,
-				},
-				{
-					Name:       "responses",
-					Type:       "jetstream",
-					Subject:    "teams.response.>",
-					StreamName: "TEAMS",
-				},
-			},
-			Outputs: []component.PortDefinition{
-				{
-					Name:       "requests",
-					Type:       "jetstream",
-					Subject:    "teams.request.*",
-					StreamName: "TEAMS",
-				},
-				{
-					Name:       "complete",
-					Type:       "jetstream",
-					Subject:    "teams.complete.*",
-					StreamName: "TEAMS",
-				},
-			},
-		},
-		MaxIterations:      10,
-		Timeout:            "60s",
-		StreamName:         "TEAMS",
-		ConsumerNameSuffix: "trajectory-test",
-		LoopsBucket:        "AGENT_LOOPS",
-	}
+	config := teamsloop.DefaultConfig()
+	config.MaxIterations = 10
+	config.Timeout = "60s"
+	config.ConsumerNameSuffix = "trajectory-test"
+	config.LoopsBucket = "AGENT_LOOPS"
 
 	rawConfig, err := json.Marshal(config)
 	require.NoError(t, err)

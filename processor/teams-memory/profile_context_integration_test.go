@@ -57,8 +57,17 @@ func TestIntegration_LoopCreated_PublishesProfileContext(t *testing.T) {
 	comp, err := teamsmemory.NewComponent(rawConfig, deps)
 	require.NoError(t, err)
 
-	// Swap in a reader with real entries before Start so we exercise the
-	// assembler end-to-end.
+	lc, ok := comp.(component.LifecycleComponent)
+	require.True(t, ok)
+	require.NoError(t, lc.Initialize())
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	require.NoError(t, lc.Start(ctx))
+	defer lc.Stop(5 * time.Second)
+
+	// Swap in a reader with real entries AFTER Start so it overrides the
+	// graph-backed reader wired by initProfileReader during Start().
 	tmComp, ok := comp.(*teamsmemory.Component)
 	require.True(t, ok)
 	tmComp.SetProfileReader(integrationProfileReader{
@@ -80,14 +89,6 @@ func TestIntegration_LoopCreated_PublishesProfileContext(t *testing.T) {
 		version: 1,
 	})
 
-	lc, ok := comp.(component.LifecycleComponent)
-	require.True(t, ok)
-	require.NoError(t, lc.Initialize())
-
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-	defer cancel()
-	require.NoError(t, lc.Start(ctx))
-	defer lc.Stop(5 * time.Second)
 	waitForConsumerReady(t, comp)
 
 	// Subscribe to the profile-context output channel.

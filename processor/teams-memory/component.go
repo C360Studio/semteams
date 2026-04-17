@@ -39,9 +39,11 @@ type Component struct {
 	profileReader atomic.Pointer[operatingmodel.ProfileReader]
 
 	// Lifecycle management
-	running   bool
-	startTime time.Time
-	mu        sync.RWMutex
+	running       bool
+	startTime     time.Time
+	cancelFunc    context.CancelFunc // cancels consumer goroutines on Stop
+	consumerNames []string           // stream:consumer keys registered during Start
+	mu            sync.RWMutex
 
 	// Metrics
 	eventsProcessed int64
@@ -140,19 +142,24 @@ func (c *Component) Start(ctx context.Context) error {
 	c.running = true
 	c.mu.Unlock()
 
+	// Create a cancellable child context so Stop() can tear down consumer goroutines.
+	consumerCtx, cancel := context.WithCancel(ctx)
+
 	// NATS client is optional for unit tests
 	if c.natsClient != nil {
-		if err := c.setupInputConsumers(ctx); err != nil {
+		if err := c.setupInputConsumers(consumerCtx); err != nil {
+			cancel()
 			// Reset running state on failure
 			c.mu.Lock()
 			c.running = false
 			c.mu.Unlock()
 			return errs.Wrap(err, "Component", "Start", "setup input consumers")
 		}
-		c.initProfileReader(ctx)
+		c.initProfileReader(consumerCtx)
 	}
 
 	c.mu.Lock()
+	c.cancelFunc = cancel
 	c.startTime = time.Now()
 	c.mu.Unlock()
 
@@ -267,6 +274,11 @@ func (c *Component) setupConsumer(ctx context.Context, port component.PortDefini
 		return errs.WrapTransient(err, "Component", "setupConsumer", fmt.Sprintf("consumer setup for stream %s", streamName))
 	}
 
+	// Record consumer identity so Stop() can cleanly drain it.
+	c.mu.Lock()
+	c.consumerNames = append(c.consumerNames, streamName+":"+consumerName)
+	c.mu.Unlock()
+
 	c.logger.Info("Subscribed (JetStream)",
 		"subject", port.Subject,
 		"stream", streamName,
@@ -326,8 +338,24 @@ func (c *Component) Stop(_ time.Duration) error {
 		return nil
 	}
 
-	// Cleanup operations would happen here in integration mode
-	// For now, just mark as stopped
+	// Stop each JetStream ConsumeContext registered during Start so the NATS
+	// library releases its internal goroutines promptly.
+	if c.natsClient != nil {
+		for _, key := range c.consumerNames {
+			parts := strings.SplitN(key, ":", 2)
+			if len(parts) == 2 {
+				c.natsClient.StopConsumer(parts[0], parts[1])
+			}
+		}
+	}
+	c.consumerNames = nil
+
+	// Cancel the consumer context.
+	if c.cancelFunc != nil {
+		c.cancelFunc()
+		c.cancelFunc = nil
+	}
+
 	c.running = false
 	return nil
 }

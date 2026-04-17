@@ -66,3 +66,6 @@ cmd/e2e/test/e2e/results/*.txt
 
 # UI test artifacts
 ui/test-results/
+
+# Claude Code project-local memory/state
+.claude/projects/
