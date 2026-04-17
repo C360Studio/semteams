@@ -21,7 +21,6 @@ dist/
 *.out
 coverage.html
 coverage.txt
-test/e2e/results/
 
 # Documentation
 docs/

@@ -614,4 +614,5 @@ Reactive workflows keep data typed throughout execution, with state "at rest" in
 - [Reactive Workflows Guide](../advanced/10-reactive-workflows.md) — Comprehensive reference documentation
 - [Orchestration Layers](../concepts/14-orchestration-layers.md) — When to use rules vs. workflows
 - [Agentic Quickstart](07-agentic-quickstart.md) — LLM-powered agents
-- [cmd/e2e-semstreams/workflows.go](../../cmd/e2e-semstreams/workflows.go) — Working workflow examples
+- Working workflow examples live upstream in
+  [semstreams/cmd/e2e-semstreams/workflows.go](https://github.com/c360studio/semstreams/blob/main/cmd/e2e-semstreams/workflows.go)

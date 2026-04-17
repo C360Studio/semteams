@@ -67,7 +67,7 @@ test.describe("Deep Research", () => {
     );
 
     await expect(page.getByTestId("kanban-board")).toBeVisible();
-    const initialCards = await page.getByTestId("task-card").count();
+    await page.getByTestId("task-card").count();
 
     // -----------------------------------------------------------------
     // Step 2 — type a research question in the chat bar

@@ -47,22 +47,10 @@ coverage/
 
 # Go binaries
 *.test
-cmd/e2e/e2e
-cmd/semstreams/semstreams
 /semstreams
 /semteams
 bin/
 openapi-generator
-
-# Test profile output
-test/e2e/results/profiles/
-cmd/e2e/test/e2e/results/profiles/
-
-# E2E test results
-cmd/e2e/test/e2e/results/*.json
-cmd/e2e/test/e2e/results/*.txt
-/e2e
-/e2e-semstreams
 
 # UI test artifacts
 ui/test-results/

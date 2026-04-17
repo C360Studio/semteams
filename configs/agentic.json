@@ -87,7 +87,7 @@
       "enabled": true,
       "config": {
         "buffer_size": 10000,
-        "monitor_subjects": ["teams.>"],
+        "monitor_subjects": ["agent.>"],
         "enable_kv_query": true,
         "log_level": "INFO"
       }
@@ -208,9 +208,9 @@
             },
             {
               "name": "agent_task",
-              "subject": "teams.task.*",
+              "subject": "agent.task.*",
               "type": "jetstream",
-              "stream_name": "TEAMS",
+              "stream_name": "AGENT",
               "description": "Agent task triggers from rules"
             }
           ]
@@ -243,7 +243,7 @@
             "on_enter": [
               {
                 "type": "publish_agent",
-                "subject": "teams.task.temp_anomaly",
+                "subject": "agent.task.temp_anomaly",
                 "role": "general",
                 "model": "claude-haiku",
                 "prompt": "Temperature anomaly detected. Sensor: {{.EntityID}}, Reading: {{.Properties.sensor.measurement.fahrenheit}}F. Use query_entity tool to get full sensor details, then provide assessment and recommendations."
@@ -312,8 +312,8 @@
             {
               "name": "agent.task",
               "type": "jetstream",
-              "subject": "teams.task.*",
-              "stream_name": "TEAMS",
+              "subject": "agent.task.*",
+              "stream_name": "AGENT",
               "description": "Agent task spawning"
             }
           ],
@@ -336,37 +336,36 @@
     },
     "teams-loop": {
       "type": "processor",
-      "name": "teams-loop",
+      "name": "agentic-loop",
       "enabled": true,
       "config": {
         "max_iterations": 5,
         "timeout": "30s",
-        "approval_required": ["create_rule", "update_rule", "delete_rule"],
-        "stream_name": "TEAMS",
+        "stream_name": "AGENT",
         "loops_bucket": "AGENT_LOOPS",
         "ports": {
           "inputs": [
             {
               "name": "agent.task",
               "type": "jetstream",
-              "subject": "teams.task.*",
-              "stream_name": "TEAMS",
+              "subject": "agent.task.*",
+              "stream_name": "AGENT",
               "required": true,
               "description": "Agent task requests"
             },
             {
               "name": "agent.response",
               "type": "jetstream",
-              "subject": "teams.response.>",
-              "stream_name": "TEAMS",
+              "subject": "agent.response.>",
+              "stream_name": "AGENT",
               "required": true,
               "description": "Model responses"
             },
             {
               "name": "tool.result",
               "type": "jetstream",
-              "subject": "teams.result.>",
-              "stream_name": "TEAMS",
+              "subject": "tool.result.>",
+              "stream_name": "AGENT",
               "required": true,
               "description": "Tool execution results"
             }
@@ -375,22 +374,22 @@
             {
               "name": "agent.request",
               "type": "jetstream",
-              "subject": "teams.request.*",
-              "stream_name": "TEAMS",
+              "subject": "agent.request.*",
+              "stream_name": "AGENT",
               "description": "Model requests"
             },
             {
               "name": "tool.execute",
               "type": "jetstream",
-              "subject": "teams.execute.*",
-              "stream_name": "TEAMS",
+              "subject": "tool.execute.*",
+              "stream_name": "AGENT",
               "description": "Tool execution requests"
             },
             {
               "name": "agent.complete",
               "type": "jetstream",
-              "subject": "teams.complete.*",
-              "stream_name": "TEAMS",
+              "subject": "agent.complete.*",
+              "stream_name": "AGENT",
               "description": "Task completions"
             }
           ],
@@ -411,12 +410,12 @@
         }
       }
     },
-    "teams-model": {
+    "agentic-model": {
       "type": "processor",
-      "name": "teams-model",
+      "name": "agentic-model",
       "enabled": true,
       "config": {
-        "stream_name": "TEAMS",
+        "stream_name": "AGENT",
         "timeout": "30s",
         "retry": {
           "max_attempts": 3,
@@ -427,8 +426,8 @@
             {
               "name": "agent.request",
               "type": "jetstream",
-              "subject": "teams.request.>",
-              "stream_name": "TEAMS",
+              "subject": "agent.request.>",
+              "stream_name": "AGENT",
               "required": true,
               "description": "Agent request input"
             }
@@ -437,8 +436,8 @@
             {
               "name": "agent.response",
               "type": "jetstream",
-              "subject": "teams.response.*",
-              "stream_name": "TEAMS",
+              "subject": "agent.response.*",
+              "stream_name": "AGENT",
               "required": true,
               "description": "Agent response output"
             }
@@ -446,21 +445,22 @@
         }
       }
     },
-    "teams-tools": {
+    "agentic-tools": {
       "type": "processor",
-      "name": "teams-tools",
+      "name": "agentic-tools",
       "enabled": true,
       "config": {
-        "stream_name": "TEAMS",
+        "stream_name": "AGENT",
         "timeout": "10s",
         "allowed_tools": ["query_entity"],
+        "approval_required": ["create_rule", "update_rule", "delete_rule"],
         "ports": {
           "inputs": [
             {
               "name": "tool.execute",
               "type": "jetstream",
-              "subject": "teams.execute.>",
-              "stream_name": "TEAMS",
+              "subject": "tool.execute.>",
+              "stream_name": "AGENT",
               "required": true,
               "description": "Tool execution requests"
             }
@@ -469,8 +469,8 @@
             {
               "name": "tool.result",
               "type": "jetstream",
-              "subject": "teams.result.*",
-              "stream_name": "TEAMS",
+              "subject": "tool.result.*",
+              "stream_name": "AGENT",
               "required": true,
               "description": "Tool execution results"
             }
@@ -581,9 +581,9 @@
           "outputs": [
             {
               "name": "task_messages",
-              "subject": "teams.task.a2a.*",
+              "subject": "agent.task.a2a.*",
               "type": "jetstream",
-              "stream_name": "TEAMS",
+              "stream_name": "AGENT",
               "required": true,
               "description": "Task messages to agent dispatch"
             }
@@ -611,9 +611,9 @@
           "inputs": [
             {
               "name": "agent_events",
-              "subject": "teams.>",
+              "subject": "agent.>",
               "type": "jetstream",
-              "stream_name": "TEAMS",
+              "stream_name": "AGENT",
               "required": true,
               "description": "Agent lifecycle events for span collection"
             }

@@ -6,14 +6,13 @@ tasks:
     cmds:
       - echo "[CLEAN] Removing local binaries..."
       - rm -f bin/semteams
-      - rm -f cmd/e2e/e2e
       - echo "[OK] Local binaries removed"
 
   docker:
     desc: Clean Docker build cache and SemStreams images
     cmds:
       - echo "[CLEAN] Cleaning Docker build cache and images..."
-      - docker compose -f docker/compose/e2e.yml down -v --timeout 15 2>/dev/null || true
+      - docker compose -f docker/compose/services.yml down -v --timeout 15 2>/dev/null || true
       - docker volume ls -q --filter name=semstreams | xargs -r docker volume rm 2>/dev/null || true
       - docker images --filter reference=semstreams-semstreams --format "{{.ID}}" | xargs -r docker rmi -f 2>/dev/null || true
       - docker builder prune -f

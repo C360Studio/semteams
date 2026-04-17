@@ -325,14 +325,15 @@ Engine
 
 ## Working Examples
 
-See `/cmd/e2e-semstreams/workflows.go` for production-ready workflow examples including:
+Reactive workflow examples live upstream in the semstreams repo at
+`cmd/e2e-semstreams/workflows.go`. They cover:
 
 - **Cold Storage Alert**: Multi-condition monitoring (temperature + zone checks)
 - **High Humidity Alert**: Threshold-based alerting with sensor type filtering
 - **Low Pressure Alert**: Critical system monitoring with cooldown periods
 - **Notify Technician**: Rule-triggered workflow demonstrating rule→workflow integration
 
-These examples show real-world patterns for:
+Patterns demonstrated:
 
 - KV watch triggers on entity states
 - JetStream subject consumers for workflow triggers
@@ -343,5 +344,6 @@ These examples show real-world patterns for:
 
 ## Detailed Reference
 
-- [processor/reactive/](../../processor/reactive/) - Package source code
-- [cmd/e2e-semstreams/workflows.go](../../cmd/e2e-semstreams/workflows.go) - Working examples
+- Reactive workflow source + examples are all in the
+  [semstreams](https://github.com/c360studio/semstreams) repo — semteams
+  imports semstreams and does not own this code.

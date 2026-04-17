@@ -9,8 +9,7 @@ IS the spec. No custom schema, no parallel markdown prose, no drift risk.
 | Artifact | Location | Purpose |
 |---|---|---|
 | Journey specs (executable) | `ui/e2e/agentic/<slug>.spec.ts` | Playwright `describe`/`test` — readable AND runnable |
-| Shared mock-llm fixtures | `test/fixtures/journeys/<slug>.yaml` | Deterministic LLM responses, loaded by both Playwright and Go observer tests |
-| Go observer tests (optional) | `test/e2e/scenarios/journeys/<slug>/` | Backend-only assertions for journeys that benefit from a non-browser observer |
+| Shared mock-llm fixtures | `test/fixtures/journeys/<slug>.yaml` | Deterministic LLM responses, loaded by mock-llm |
 
 ## Why Playwright is the spec
 
@@ -49,14 +48,11 @@ as each capability stabilizes.
    `test/fixtures/journeys/<slug>.yaml` and point the mock-llm container
    at it via the Playwright fixture helper.
 3. Backend-state assertions go inline in the test via
-   `await request.get('http://localhost:8080/agentic-dispatch/loops/{id}')`
-   — no separate test file needed.
+   `await request.get('/teams-dispatch/loops/{id}')` — no separate test
+   file needed. (Component instance names are `teams-dispatch` /
+   `teams-loop` so HTTP prefixes match; factories are upstream
+   `agentic-dispatch` / `agentic-loop`.)
 4. Run it locally: `task ui:test:e2e` (or `cd ui && npm run test:e2e`).
-5. If the journey also benefits from a non-browser Go observer (e.g. heavy
-   backend-only state assertions, or a backend CI tier that doesn't run
-   Playwright), add a sibling scenario under
-   `test/e2e/scenarios/journeys/<slug>/`. Optional — many journeys will
-   only need the Playwright side.
 
 ## How to read a journey spec
 

@@ -22,25 +22,7 @@ includes:
     taskfile: ./taskfiles/dev.yml
     aliases: [d]
 
-  # E2E test taskfiles
-  e2e:
-    taskfile: ./taskfiles/e2e/common.yml
-  e2e:core:
-    taskfile: ./taskfiles/e2e/core.yml
-  e2e:structural:
-    taskfile: ./taskfiles/e2e/structural.yml
-  e2e:statistical:
-    taskfile: ./taskfiles/e2e/statistical.yml
-  e2e:semantic:
-    taskfile: ./taskfiles/e2e/semantic.yml
-  e2e:agentic:
-    taskfile: ./taskfiles/e2e/agentic.yml
-  e2e:throughput:
-    taskfile: ./taskfiles/e2e/throughput.yml
-
   # Frontend (Svelte 5 + SvelteKit) — see ui/Taskfile.yml for full surface.
-  # Intentionally NOT wired into root `check`/`lint` in Phase A. That wiring
-  # lands in Phase A.5 after the imported tree is verified clean.
   ui:
     taskfile: ./ui/Taskfile.yml
     dir: ./ui
@@ -84,44 +66,3 @@ tasks:
       - task: ui:check
       - task: ui:test
       - task: ui:build
-
-  # E2E composite tasks
-  e2e:tiers:
-    desc: Run all tier E2E tests (structural -> statistical -> semantic)
-    silent: false
-    deps: [e2e:clean, e2e:check-ports, build:e2e]
-    cmds:
-      - 'echo "[TIERS] Running all inference tier E2E tests..."'
-      - 'echo ""'
-      - 'echo "=== STRUCTURAL (Rules-Only) ==="'
-      - docker compose -f docker/compose/tiered.yml --profile structural up -d --wait
-      - cmd: cd cmd/e2e && ./e2e --scenario tiered --variant structural --output-dir ./test/e2e/results
-        ignore_error: true
-      - docker compose -f docker/compose/tiered.yml --profile structural down -v --timeout 15
-      - sleep 3
-      - 'echo ""'
-      - 'echo "=== STATISTICAL (BM25 + LPA) ==="'
-      - docker compose -f docker/compose/tiered.yml --profile statistical up -d --wait
-      - cmd: cd cmd/e2e && ./e2e --scenario tiered --variant statistical --output-dir ./test/e2e/results
-        ignore_error: true
-      - docker compose -f docker/compose/tiered.yml --profile statistical down -v --timeout 15
-      - sleep 3
-      - 'echo ""'
-      - 'echo "=== SEMANTIC (Neural + LLM) ==="'
-      - docker compose -f docker/compose/tiered.yml --profile semantic up -d --wait
-      - cmd: cd cmd/e2e && ./e2e --scenario tiered --variant semantic --base-url http://localhost:8180 --udp-endpoint localhost:14650 --metrics-url http://localhost:9190 --output-dir ./test/e2e/results
-        ignore_error: true
-      - docker compose -f docker/compose/tiered.yml --profile semantic down -v --timeout 15
-      - 'echo ""'
-      - 'echo "[TIERS] Generating comparison report..."'
-      - cmd: cd cmd/e2e && ./e2e --compare-tiers --output-dir ./test/e2e/results
-        ignore_error: true
-      - 'echo "[OK] All tier tests complete. Results in ./test/e2e/results/"'
-
-  e2e:all:
-    desc: Run all E2E tests (core -> structural -> statistical -> semantic)
-    cmds:
-      - task: e2e:core
-      - task: e2e:structural
-      - task: e2e:statistical
-      - task: e2e:semantic

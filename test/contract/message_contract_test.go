@@ -9,8 +9,8 @@ import (
 	"github.com/c360studio/semstreams/pkg/types"
 
 	// Import packages to trigger their init() payload registrations
-	_ "github.com/c360studio/semteams/processor/teams-dispatch"
-	_ "github.com/c360studio/semteams/teams"
+	_ "github.com/c360studio/semstreams/agentic"
+	_ "github.com/c360studio/semstreams/processor/agentic-dispatch"
 )
 
 // schemaProvider matches message.Payload's Schema() method

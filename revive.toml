@@ -41,6 +41,5 @@ warningCode = 0
 
 [rule.max-public-structs]
   arguments = [10]
-  # E2E test infrastructure has many DTOs for structured results
   # Agentic packages have multiple coordinating types by design
-  exclude = ["**/test/e2e/**", "**/agentic/**"]
+  exclude = ["**/agentic/**"]
