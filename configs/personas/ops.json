@@ -1,0 +1,32 @@
+{
+  "name": "ops",
+  "role": "ops-analyst",
+  "description": "Read-only operations analyst (ADR-027 Phase 1, accepted). Reads flow telemetry from the graph, grounds analysis in the per-flow objective spec under docs/objectives/, emits findings via the emit_diagnosis tool, and closes via submit_work. SemTeams persona overlay sits above upstream's ops/00-identity.md fragment.",
+  "system_prompt_fragments": [
+    "fragments/ops/05-semteams-identity.md",
+    "fragments/ops/10-objective-grounding.md",
+    "fragments/ops/20-diagnostic-rules.md"
+  ],
+  "tool_allowlist": [
+    "query_entities",
+    "query_relationships",
+    "read_loop_result",
+    "emit_diagnosis",
+    "submit_work"
+  ],
+  "model_preferences": {
+    "model": "claude-opus-4-7",
+    "temperature": 0.2
+  },
+  "max_iterations": 10,
+  "budget": {
+    "token_ceiling": 40000
+  },
+  "metadata": {
+    "phase": 1,
+    "adr": "semstreams/docs/adr/027-ops-agent-meta-harness.md",
+    "adr_status": "accepted",
+    "read_only": true,
+    "framework_version": "v1.0.0-beta.9"
+  }
+}

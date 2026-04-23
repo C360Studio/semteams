@@ -22,9 +22,29 @@
       "default": "general",
       "category": "basic"
     },
+    "default_tools": {
+      "type": "array",
+      "description": "Tool names granted to initial user-message tasks (resolved at dispatch; nil/empty falls back to global discovery)",
+      "items": {
+        "type": "string"
+      },
+      "category": "advanced"
+    },
     "delete_consumer_on_stop": {
       "type": "boolean",
       "description": "Delete durable consumers on Stop (use for tests only)",
+      "default": false,
+      "category": "advanced"
+    },
+    "enable_intent_classification": {
+      "type": "boolean",
+      "description": "Enable LLM-assisted intent classification for ambiguous messages",
+      "default": false,
+      "category": "advanced"
+    },
+    "enable_onboarding": {
+      "type": "boolean",
+      "description": "Enable /onboard command for operating model interview",
       "default": false,
       "category": "advanced"
     },

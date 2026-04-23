@@ -1,0 +1,349 @@
+{
+  "version": "1.1.0",
+  "platform": {
+    "org": "c360",
+    "id": "semteams-ops-observer",
+    "type": "ops-observer-e2e",
+    "region": "local",
+    "instance_id": "e2e-001",
+    "environment": "development"
+  },
+  "tier": "agentic",
+  "nats": {
+    "urls": ["nats://localhost:4222"]
+  },
+  "model_registry": {
+    "endpoints": {
+      "mock": {
+        "provider": "openai",
+        "url": "http://mock-llm:8080/v1",
+        "model": "mock-model",
+        "max_tokens": 200000,
+        "supports_tools": true,
+        "tool_format": "openai",
+        "stream": true
+      }
+    },
+    "defaults": {
+      "model": "mock"
+    }
+  },
+  "services": {
+    "service-manager": {
+      "name": "service-manager",
+      "enabled": true,
+      "config": {
+        "http_port": 8080,
+        "swagger_ui": true,
+        "server_info": {
+          "title": "SemTeams Ops Observer E2E",
+          "description": "Deep-research flow + ADR-027 Phase 1 ops-analyst observer rule. Shares one agentic-loop across both roles — ops agent runs as role=ops-analyst on the same loop the researcher uses. Validates rule firing + ops loop completion. Full persona-fragment grounding (configs/personas/fragments/ops/) gates on ADR-029 persona.Manager landing upstream.",
+          "version": "0.1.0"
+        }
+      }
+    },
+    "component-manager": {
+      "name": "component-manager",
+      "enabled": true,
+      "config": {}
+    },
+    "metrics": {
+      "name": "metrics",
+      "enabled": true,
+      "config": {
+        "port": 9090,
+        "path": "/metrics",
+        "include_go_metrics": true
+      }
+    },
+    "message-logger": {
+      "name": "message-logger",
+      "enabled": true,
+      "config": {
+        "buffer_size": 10000,
+        "monitor_subjects": ["agent.>"],
+        "enable_kv_query": true,
+        "log_level": "INFO"
+      }
+    },
+    "log-forwarder": {
+      "name": "log-forwarder",
+      "enabled": true,
+      "config": {
+        "min_level": "DEBUG",
+        "exclude_sources": []
+      }
+    },
+    "metrics-forwarder": {
+      "name": "metrics-forwarder",
+      "enabled": true,
+      "config": {
+        "push_interval": "5s",
+        "include_go_metrics": false,
+        "include_proc_metrics": false
+      }
+    }
+  },
+  "components": {
+    "rule": {
+      "type": "processor",
+      "name": "rule-processor",
+      "enabled": true,
+      "config": {
+        "entity_watch_patterns": ["agent.complete.>", "c360.>"],
+        "ports": {
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "agent_task",
+              "subject": "agent.task.*",
+              "type": "jetstream",
+              "stream_name": "AGENT",
+              "description": "Agent task triggers from ops observer rule"
+            }
+          ]
+        },
+        "enable_graph_integration": true,
+        "inline_rules": [
+          {
+            "id": "ops_observe_complete_loops",
+            "type": "expression",
+            "name": "Ops Observer - Trigger on Completed Researcher Loops",
+            "description": "Fires once per fire_every_n_events=20 completed researcher loops (semstreams beta.9). Mirrors configs/rules/ops/observe-complete-loops.json — kept inline here so the e2e config is self-contained.",
+            "enabled": true,
+            "entity": {
+              "pattern": "agent.complete.>"
+            },
+            "conditions": [
+              {
+                "field": "role",
+                "operator": "eq",
+                "value": "researcher",
+                "required": true
+              },
+              {
+                "field": "outcome",
+                "operator": "in",
+                "value": ["success", "failure", "timeout"],
+                "required": true
+              }
+            ],
+            "logic": "and",
+            "fire_every_n_events": 20,
+            "on_enter": [
+              {
+                "type": "publish_agent",
+                "subject": "agent.task.ops.analyze",
+                "role": "ops-analyst",
+                "model": "mock",
+                "properties": {
+                  "flow_name": "deep-research",
+                  "observation_window": 20,
+                  "objective_spec_path": "docs/objectives/deep-research.md"
+                },
+                "prompt": "Analyze the last 20 completed deep-research loops. Objective spec: docs/objectives/deep-research.md. Use emit_diagnosis to surface findings (one call per finding). When done, call submit_work with a one-paragraph summary listing the finding ids. Persona fragments carry the grounding contract and immutable guardrails."
+              }
+            ],
+            "on_exit": [],
+            "metadata": {
+              "phase": "ops-agent-phase-1",
+              "adr": "semstreams/docs/adr/027-ops-agent-meta-harness.md",
+              "adr_status": "accepted",
+              "objective_spec": "docs/objectives/deep-research.md",
+              "evaluation_window": 20,
+              "tier": 1
+            }
+          }
+        ]
+      }
+    },
+    "teams-loop": {
+      "type": "processor",
+      "name": "agentic-loop",
+      "enabled": true,
+      "config": {
+        "max_iterations": 10,
+        "timeout": "120s",
+        "stream_name": "AGENT",
+        "loops_bucket": "AGENT_LOOPS",
+        "ports": {
+          "inputs": [
+            {
+              "name": "agent.task",
+              "type": "jetstream",
+              "subject": "agent.task.*",
+              "stream_name": "AGENT",
+              "required": true,
+              "description": "Agent task requests (both researcher and ops-analyst roles)"
+            },
+            {
+              "name": "agent.response",
+              "type": "jetstream",
+              "subject": "agent.response.>",
+              "stream_name": "AGENT",
+              "required": true,
+              "description": "Model responses"
+            },
+            {
+              "name": "tool.result",
+              "type": "jetstream",
+              "subject": "tool.result.>",
+              "stream_name": "AGENT",
+              "required": true,
+              "description": "Tool execution results"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "agent.request",
+              "type": "jetstream",
+              "subject": "agent.request.*",
+              "stream_name": "AGENT",
+              "description": "Model requests"
+            },
+            {
+              "name": "tool.execute",
+              "type": "jetstream",
+              "subject": "tool.execute.*",
+              "stream_name": "AGENT",
+              "description": "Tool execution requests"
+            },
+            {
+              "name": "agent.complete",
+              "type": "jetstream",
+              "subject": "agent.complete.*",
+              "stream_name": "AGENT",
+              "description": "Task completions"
+            }
+          ],
+          "kv_write": [
+            {
+              "name": "loops",
+              "type": "kv-write",
+              "bucket": "AGENT_LOOPS",
+              "description": "Loop state storage"
+            },
+            {
+              "name": "trajectories",
+              "type": "kv-write",
+              "bucket": "AGENT_TRAJECTORIES",
+              "description": "Trajectory storage"
+            }
+          ]
+        }
+      }
+    },
+    "agentic-model": {
+      "type": "processor",
+      "name": "agentic-model",
+      "enabled": true,
+      "config": {
+        "stream_name": "AGENT",
+        "timeout": "30s",
+        "retry": {
+          "max_attempts": 3,
+          "backoff": "exponential"
+        },
+        "ports": {
+          "inputs": [
+            {
+              "name": "agent.request",
+              "type": "jetstream",
+              "subject": "agent.request.>",
+              "stream_name": "AGENT",
+              "required": true,
+              "description": "Agent request input"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "agent.response",
+              "type": "jetstream",
+              "subject": "agent.response.*",
+              "stream_name": "AGENT",
+              "required": true,
+              "description": "Agent response output"
+            }
+          ]
+        }
+      }
+    },
+    "agentic-tools": {
+      "type": "processor",
+      "name": "agentic-tools",
+      "enabled": true,
+      "config": {
+        "stream_name": "AGENT",
+        "timeout": "10s",
+        "allowed_tools": null,
+        "ports": {
+          "inputs": [
+            {
+              "name": "tool.execute",
+              "type": "jetstream",
+              "subject": "tool.execute.>",
+              "stream_name": "AGENT",
+              "required": true,
+              "description": "Tool execution requests"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "tool.result",
+              "type": "jetstream",
+              "subject": "tool.result.*",
+              "stream_name": "AGENT",
+              "required": true,
+              "description": "Tool execution results"
+            }
+          ],
+          "kv_read": [
+            {
+              "name": "entity_states",
+              "type": "kv-read",
+              "bucket": "ENTITY_STATES",
+              "description": "Entity state KV for graph queries"
+            }
+          ]
+        }
+      }
+    },
+    "teams-dispatch": {
+      "type": "processor",
+      "name": "agentic-dispatch",
+      "enabled": true,
+      "config": {
+        "default_role": "researcher",
+        "auto_continue": false,
+        "stream_name": "AGENT",
+        "ports": {
+          "inputs": [
+            {
+              "name": "user_messages",
+              "type": "jetstream",
+              "subject": "agent.task.*",
+              "stream_name": "AGENT",
+              "description": "User messages to dispatch"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "tasks",
+              "type": "jetstream",
+              "subject": "agent.task.*",
+              "stream_name": "AGENT",
+              "description": "Task messages to agent loops"
+            }
+          ]
+        },
+        "permissions": {
+          "view": ["*"],
+          "submit_task": ["*"],
+          "cancel_own": true,
+          "cancel_any": [],
+          "approve": ["*"]
+        }
+      }
+    }
+  }
+}

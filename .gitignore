@@ -57,3 +57,4 @@ ui/test-results/
 
 # Claude Code project-local memory/state
 .claude/projects/
+.claude/scheduled_tasks.lock

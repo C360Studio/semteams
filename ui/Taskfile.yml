@@ -1,5 +1,13 @@
 version: "3"
 
+env:
+  # Pin the docker-compose project name so we don't collide with sibling
+  # products (semspec, semdragons) whose compose files live in directories
+  # also named `ui` and would otherwise share the default project name.
+  # Without this, our `nats` service can be shadowed by another project's
+  # nats container running concurrently.
+  COMPOSE_PROJECT_NAME: '{{.COMPOSE_PROJECT_NAME | default "semteams-agentic"}}'
+
 vars:
   # Backend configuration — the semteams backend
   BACKEND_URL: '{{.BACKEND_URL | default "http://localhost:8080"}}'
@@ -230,6 +238,122 @@ tasks:
           AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
       - npx playwright test --config playwright.agentic.config.ts e2e/agentic/deep-research.spec.ts
 
+  test:e2e:agentic:ops-agent:
+    desc: Run the ops-agent baseline journey (ADR-027 Phase 1 — 20 researcher loops + ops diagnostic)
+    summary: |
+      Drives 20 serial researcher loops against the mock LLM, then
+      validates that the ops_observe_complete_loops rule spawns an
+      ops-analyst loop whose completion cites docs/objectives/deep-research.md.
+
+      Long-running: 20 mock researcher loops take ~100s. Set a generous
+      timeout when running under CI.
+    vars:
+      FIXTURE: ops-agent-baseline.yaml
+      AGENTIC_CONFIG: e2e-ops-observer.json
+    cmds:
+      - defer: { task: test:e2e:agentic:cleanup }
+      - task: test:e2e:agentic:stack:up
+        vars:
+          FIXTURE: "{{.FIXTURE}}"
+          AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
+      - npx playwright test --config playwright.agentic.config.ts e2e/agentic/ops-agent-baseline.spec.ts
+
+  test:e2e:agentic:dev:
+    desc: |
+      Boot the agentic E2E stack and leave it running for interactive
+      debugging. Skips the deferred cleanup that the test:e2e:agentic:*
+      tasks use, so containers stay up until you tear them down with
+      `task test:e2e:agentic:cleanup`.
+
+      Defaults to the ops-observer config + ops fixture; override via
+      FIXTURE= and AGENTIC_CONFIG= env or args. DEBUG=1 forces debug
+      log level on the backend (already the default for e2e configs;
+      kept here for parity with future configs).
+
+      Use the probe targets while the stack is up:
+        task test:e2e:agentic:probe:loops
+        task test:e2e:agentic:probe:send -- "your message"
+        task test:e2e:agentic:probe:triples -- ops.diagnosis.finding
+        task test:e2e:agentic:logs
+
+      Then re-run a spec without rebooting:
+        task test:e2e:agentic:run-spec -- e2e/agentic/ops-agent-baseline.spec.ts
+    vars:
+      FIXTURE: '{{.FIXTURE | default "ops-agent-baseline.yaml"}}'
+      AGENTIC_CONFIG: '{{.AGENTIC_CONFIG | default "e2e-ops-observer.json"}}'
+      DEBUG: '{{.DEBUG | default "0"}}'
+    cmds:
+      - echo "▶︎  Booting stack (FIXTURE={{.FIXTURE}} AGENTIC_CONFIG={{.AGENTIC_CONFIG}} DEBUG={{.DEBUG}}) — no auto-cleanup"
+      - task: test:e2e:agentic:stack:up
+        vars:
+          FIXTURE: "{{.FIXTURE}}"
+          AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
+      - |
+        cat <<'EOF'
+
+        Stack up at http://localhost:3100. Probe with:
+          task test:e2e:agentic:probe:loops
+          task test:e2e:agentic:probe:send -- 'your message'
+          task test:e2e:agentic:probe:triples -- ops.diagnosis.finding
+          task test:e2e:agentic:logs
+          task test:e2e:agentic:run-spec -- e2e/agentic/ops-agent-baseline.spec.ts
+
+        Tear down with: task test:e2e:agentic:cleanup
+        EOF
+
+  test:e2e:agentic:run-spec:
+    desc: |
+      Run a playwright spec against the already-running stack (booted
+      via test:e2e:agentic:dev). Pass the spec path as the first CLI arg.
+      Example:
+        task test:e2e:agentic:run-spec -- e2e/agentic/ops-agent-baseline.spec.ts
+    cmds:
+      - npx playwright test --config playwright.agentic.config.ts {{.CLI_ARGS}}
+
+  test:e2e:agentic:logs:
+    desc: |
+      Tail backend container logs (debug level by default). Pass --since
+      via CLI_ARGS, e.g.:
+        task test:e2e:agentic:logs -- --since=30s
+    cmds:
+      - docker compose -f docker-compose.agentic-e2e.yml logs backend {{.CLI_ARGS | default "--tail=100"}}
+
+  test:e2e:agentic:probe:loops:
+    desc: List active loops on the running stack (one-line summary per loop)
+    cmds:
+      - |
+        (
+          echo -e "loop_id\tstate\titers\toutcome"
+          curl -sf http://localhost:3100/teams-dispatch/loops \
+            | jq -r '.[] | "\(.loop_id)\t\(.state)\t\(.iterations)/\(.max_iterations)\t\(.outcome // "-")"'
+        ) | column -t -s $'\t'
+
+  test:e2e:agentic:probe:send:
+    desc: |
+      Send a chat message to the running stack. Pass content as CLI arg:
+        task test:e2e:agentic:probe:send -- "Research MQTT vs NATS"
+    cmds:
+      - |
+        CONTENT="{{.CLI_ARGS | default "ping"}}"
+        curl -sf -X POST http://localhost:3100/teams-dispatch/message \
+          -H 'Content-Type: application/json' \
+          -d "$(jq -nc --arg c "$CONTENT" '{content:$c}')" \
+          | jq
+
+  test:e2e:agentic:probe:triples:
+    desc: |
+      Query the graph for triples by predicate (semstreams beta.9 endpoint).
+      Pass predicate as CLI arg:
+        task test:e2e:agentic:probe:triples -- ops.diagnosis.finding
+    cmds:
+      - |
+        PREDICATE="{{.CLI_ARGS}}"
+        if [ -z "$PREDICATE" ]; then
+          echo "Usage: task test:e2e:agentic:probe:triples -- <predicate>" >&2
+          exit 1
+        fi
+        curl -sf "http://localhost:3100/graph/triples?predicate=$PREDICATE&limit=20" | jq
+
   test:e2e:agentic:stack:up:
     desc: Start the agentic E2E Docker stack and wait for health
     internal: true
@@ -285,6 +409,7 @@ tasks:
       - task: test:e2e:agentic:tool-approval-gate
       - task: test:e2e:agentic:real-time-activity-stream
       - task: test:e2e:agentic:deep-research
+      - task: test:e2e:agentic:ops-agent
 
   test:e2e:agentic:cleanup:
     desc: Tear down the agentic E2E Docker stack

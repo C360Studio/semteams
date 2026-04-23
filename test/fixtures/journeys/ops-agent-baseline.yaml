@@ -1,0 +1,176 @@
+name: ops-agent-baseline
+description: |
+  Journey: validate ADR-027 Phase 1 (ops-agent read-only diagnostic)
+  end-to-end. Drive 20 deep-research loops serially, then let the
+  ops_observe_complete_loops rule fire the ops-analyst on the 20th
+  completion. Assert the ops loop runs and produces a completion that
+  cites docs/objectives/deep-research.md.
+
+  Paired spec: ui/e2e/agentic/ops-agent-baseline.spec.ts
+  Paired config: configs/e2e-ops-observer.json
+
+  Response sequence design:
+    - Deep-research loops are driven SERIALLY by the Playwright spec so
+      that mock-llm responses are consumed in lockstep (the mock has no
+      content-matching — just a sequential queue with last-response
+      repeat).
+    - Each deep-research iteration consumes 2 responses: one web_search
+      tool_call, then one synthesis completion.
+    - 20 iterations × 2 = 40 deep-research responses.
+    - The 20th completion fires the ops rule, which publishes to
+      agent.task.ops.analyze. The ops-analyst loop picks up that task
+      and begins its own iteration — starting at response #41.
+    - The ops loop consumes: one graph_query tool_call (reading
+      completed researcher loops), then one completion emitting
+      ops.diagnosis.* findings that cite the objective spec by path.
+    - Once the ops loop completes, the mock's "last response repeats"
+      semantics absorbs any rule re-fire (5s duration cooldown means
+      the rule may fire again on later researcher completions, but we
+      only validate the first ops cycle in this fixture).
+
+  web_search uses a stub executor when BRAVE_SEARCH_API_KEY is unset —
+  same pattern as deep-research.yaml. graph_query is a built-in tool.
+
+  Deep-research responses use a shared YAML anchor (&dr_search,
+  &dr_synth) to keep the fixture readable.
+
+responses:
+  # -----------------------------------------------------------------
+  # Deep-research iterations 1-20 — each pair (search + synthesis)
+  # consumed by one researcher loop. See anchor definitions below.
+  # -----------------------------------------------------------------
+
+  - &dr_search
+    tool_call:
+      name: web_search
+      arguments_json: |
+        {
+          "query": "MQTT vs NATS IoT edge deployment comparison"
+        }
+
+  - &dr_synth
+    completion:
+      content: |
+        ## Summary
+
+        MQTT and NATS serve different niches in IoT edge deployments.
+
+        ## Key Findings
+
+        1. MQTT uses TCP with QoS levels (0, 1, 2) for reliability.
+        2. NATS JetStream adds persistence and exactly-once delivery.
+        3. MQTT brokers run on minimal hardware.
+        4. NATS has lower latency for request/reply patterns.
+
+        ## Sources
+
+        - https://mqtt.org/specification
+        - https://docs.nats.io/compare
+
+  - *dr_search
+  - *dr_synth
+  - *dr_search
+  - *dr_synth
+  - *dr_search
+  - *dr_synth
+  - *dr_search
+  - *dr_synth
+  - *dr_search
+  - *dr_synth
+  - *dr_search
+  - *dr_synth
+  - *dr_search
+  - *dr_synth
+  - *dr_search
+  - *dr_synth
+  - *dr_search
+  - *dr_synth
+  - *dr_search
+  - *dr_synth
+  - *dr_search
+  - *dr_synth
+  - *dr_search
+  - *dr_synth
+  - *dr_search
+  - *dr_synth
+  - *dr_search
+  - *dr_synth
+  - *dr_search
+  - *dr_synth
+  - *dr_search
+  - *dr_synth
+  - *dr_search
+  - *dr_synth
+  - *dr_search
+  - *dr_synth
+  - *dr_search
+  - *dr_synth
+
+  # -----------------------------------------------------------------
+  # Ops-analyst cycle — triggered by the observe rule's
+  # fire_every_n_events: 20 gate after the 20th researcher
+  # completion. The ops agent issues two graph reads, emits two
+  # findings via emit_diagnosis, then closes via submit_work.
+  #
+  # Tool calls land as opaque arguments_json strings — the framework
+  # tool executors validate the schema. Evidence entity IDs use the
+  # platform pattern c360.semteams-research.* established by the
+  # deep-research e2e config; the mock backend's tool handlers
+  # accept these without strict existence checks.
+  # -----------------------------------------------------------------
+
+  - tool_call:
+      name: query_entities
+      arguments_json: |
+        {
+          "predicate": "agent.loop.outcome",
+          "object": "success",
+          "limit": 20
+        }
+
+  - tool_call:
+      name: query_relationships
+      arguments_json: |
+        {
+          "subject_prefix": "c360.semteams-research.agent.loop.completed",
+          "predicate": "research.has_evidence"
+        }
+
+  - tool_call:
+      name: emit_diagnosis
+      arguments_json: |
+        {
+          "finding": "baseline primary metric established for deep-research over 20-loop window",
+          "recommendation": "no action — observation only. Per docs/objectives/deep-research.md, baseline value will inform future Pareto comparisons.",
+          "confidence": 0.85,
+          "evidence": [
+            "c360.semteams-research.agent.loop.completed.window-1",
+            "c360.semteams-research.agent.loop.completed.window-2",
+            "c360.semteams-research.agent.loop.completed.window-3"
+          ],
+          "observed_role": "researcher",
+          "severity": "info"
+        }
+
+  - tool_call:
+      name: emit_diagnosis
+      arguments_json: |
+        {
+          "finding": "token cost p95 within Pareto secondary regression budget",
+          "recommendation": "no action — observation only. Per docs/objectives/deep-research.md secondary metric deep_research_tokens_p95, no failure-mode pattern matched.",
+          "confidence": 0.75,
+          "evidence": [
+            "c360.semteams-research.agent.loop.completed.window-1",
+            "c360.semteams-research.agent.loop.completed.window-10",
+            "c360.semteams-research.agent.loop.completed.window-20"
+          ],
+          "observed_role": "researcher",
+          "severity": "info"
+        }
+
+  - tool_call:
+      name: submit_work
+      arguments_json: |
+        {
+          "summary": "Two findings emitted for deep-research baseline window: primary metric baseline established (high confidence), token cost within Pareto budget (medium confidence). Both observation-only; no recommended actions per docs/objectives/deep-research.md."
+        }

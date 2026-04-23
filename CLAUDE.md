@@ -67,10 +67,56 @@ task ui:build           # Production build
 | `onboarding.json` | Onboarding interview demo (intent classification, profile context, /onboard command) | claude-haiku |
 | `e2e-agentic.json` | E2E testing | mock-llm |
 | `e2e-deep-research.json` | E2E deep-research testing | mock-llm |
+| `e2e-ops-observer.json` | E2E ops observer (ADR-027 Phase 1) — deep-research + observe rule | mock-llm |
 
 UI Playwright journey tasks (in `ui/Taskfile.yml`) manage the Docker stack
 lifecycle — Playwright does NOT auto-start the stack. Each task: start →
 health-check → test → cleanup.
+
+### Ops Agent Phase 1 (ADR-027, accepted)
+
+Read-only diagnostic agent grounded in per-flow objective specs.
+Status accepted upstream 2026-04-18 (ADR-027 Proposed → Accepted).
+Framework support landed in semstreams `v1.0.0-beta.9`:
+`fire_every_n_events` rule field, persona file-loader,
+`emit_diagnosis` tool, `GET /graph/triples` endpoint. ADR lives at
+`../semstreams/docs/adr/027-ops-agent-meta-harness.md`.
+
+Single-process deployment: the ops agent runs in the same backend as
+the flow it observes. The observe rule fires `publish_agent` with
+`role: ops-analyst`, and the existing `agentic-loop` consumes it
+without a second dispatch. (Upstream ships
+`../semstreams/configs/flows/ops-agent.json` as a reference for
+operators who prefer a standalone ops binary; SemTeams does not
+deploy it.)
+
+- `configs/personas/ops.json` — persona definition. Read-only tool
+  allowlist: `query_entities`, `query_relationships`,
+  `read_loop_result`, `emit_diagnosis`, `submit_work`.
+- `configs/personas/fragments/ops/05-semteams-identity.md`,
+  `10-objective-grounding.md`, `20-diagnostic-rules.md` — persona
+  fragments layered above upstream's `ops/00-identity.md` via the
+  beta.9 file-loader (digit-prefix ordering).
+- `configs/rules/ops/observe-complete-loops.json` — fires once per
+  `fire_every_n_events: 20` completed researcher loops.
+- `configs/e2e-ops-observer.json` — single-process e2e config
+  (deep-research components + observe rule) for the Playwright
+  journey.
+- `docs/objectives/README.md` — objective-spec schema.
+- `docs/objectives/deep-research.md` — first concrete spec.
+
+The ops agent emits findings via the `emit_diagnosis` tool (not raw
+triples). Each call requires `finding`, `recommendation`, `confidence`
+(0.0–1.0), and `evidence` (≥1 graph entity ID). The framework's
+executor mints `{org}.{platform}.ops.diagnosis.finding.{uuid}`
+entities with `ops.diagnosis.{finding,recommendation,confidence,
+evidence,observed_role,severity}` predicates.
+
+Phase 2 (ops proposes changes) is **config-only** per upstream's
+`_phase2_note`: add `create_rule`/`manage_flow`/etc. to
+`allowed_tools` and mirror into `approval_required`. The existing
+`ApprovalFilter` transitions the loop to `LoopStateAwaitingApproval`
+for human review. No framework blocker remaining.
 
 ### Component Instance vs Factory
 

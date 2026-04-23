@@ -21,7 +21,7 @@
     "test:e2e:report": "playwright show-report",
     "test:e2e:cleanup": "docker compose -f docker-compose.e2e.yml down",
     "test:e2e:agentic": "playwright test --config playwright.agentic.config.ts",
-    "test:e2e:agentic:cleanup": "docker compose -f docker-compose.agentic-e2e.yml down -v",
+    "test:e2e:agentic:cleanup": "docker compose --project-name semteams-agentic -f docker-compose.agentic-e2e.yml down -v",
     "test:e2e:helpers": "vitest --config vitest.e2e.config.ts",
     "test:integration": "npm run test:e2e:helpers && npm run test:e2e",
     "lint": "eslint .",

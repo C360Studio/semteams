@@ -37,6 +37,13 @@
 		reverse_proxy backend:8080
 	}
 
+	# Graph triple read endpoint — service-manager mux (semstreams beta.9).
+	# Used by ops Phase 1 Playwright assertions to verify ops.diagnosis.*
+	# triples landed.
+	handle /graph/triples {
+		reverse_proxy backend:8080
+	}
+
 	# Prometheus metrics
 	handle /metrics {
 		reverse_proxy backend:9090
