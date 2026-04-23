@@ -3,7 +3,7 @@ module github.com/c360studio/semteams
 go 1.25.3
 
 require (
-	github.com/c360studio/semstreams v1.0.0-beta.9
+	github.com/c360studio/semstreams v1.0.0-beta.13
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
 	github.com/stretchr/testify v1.11.1

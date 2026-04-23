@@ -20,9 +20,13 @@ import (
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/componentregistry"
 	"github.com/c360studio/semstreams/config"
+	"github.com/c360studio/semstreams/flowstore"
+	"github.com/c360studio/semstreams/flowtemplate"
 	"github.com/c360studio/semstreams/metric"
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/persona"
+	"github.com/c360studio/semstreams/processor/agentic-tools/executors"
+	rulepkg "github.com/c360studio/semstreams/processor/rule"
 	"github.com/c360studio/semstreams/service"
 	"github.com/c360studio/semstreams/types"
 )
@@ -128,34 +132,122 @@ func run() error {
 	// fragments are available to agentic-loop's prompt.Registry. The
 	// agentic-loop component creates its own persona.Manager against the
 	// same KV bucket — this step just seeds the bucket at startup.
-	// Mirrors upstream cmd/semstreams/main.go:143. See semstreams
-	// docs/advanced/12-coordinator-pattern.md.
-	if err := loadPersonaFragments(ctx, natsClient, cliCfg.PersonaFragmentsPath); err != nil {
-		slog.Warn("persona fragment loader reported errors",
-			"path", cliCfg.PersonaFragmentsPath,
-			"error", err)
-	}
+	// Mirrors upstream cmd/semstreams/main.go:143. See semteams ADR-029
+	// (docs/adr/029-product-shell-wiring.md) for the wiring contract.
+	personaMgr := loadPersonaFragments(ctx, natsClient, cliCfg.PersonaFragmentsPath)
 
-	// 12. Run application with signal handling
+	// 12. Wire agentic-tools executors. Stateful tools (read_loop_result,
+	// decide, emit_diagnosis, graph_query) need NATS + platform identity.
+	// Pattern-B tools (create_rule, update_persona, list_flows, etc.) each
+	// need their matching manager; nil manager → registerX skips. We wire
+	// all four Pattern-B managers today so any future product journey
+	// that needs CRUD tooling has it — ADR-029 "product shell owns its
+	// wiring" applies per-manager: wire once, don't drift silently later.
+	// Mirrors upstream cmd/semstreams/main.go:149.
+	executors.RegisterAll(ctx, executors.ToolDependencies{
+		NATSClient:          natsClient,
+		Platform:            platform,
+		Logger:              slog.Default(),
+		RuleManager:         buildRuleManager(ctx, natsClient, configManager, slog.Default()),
+		FlowManager:         buildFlowManager(natsClient, slog.Default()),
+		PersonaManager:      personaMgr,
+		FlowTemplateManager: buildFlowTemplateManager(natsClient, slog.Default()),
+		ComponentRegistry:   componentRegistry,
+		LoopsBucket:         extractLoopsBucket(cfg),
+	})
+
+	// 13. Run application with signal handling
 	return runWithSignalHandling(ctx, manager, cliCfg.ShutdownTimeout)
 }
 
 // loadPersonaFragments seeds the PERSONAS KV bucket from a directory
-// tree shaped <root>/<role>/*.md. Non-fatal on init failure — personas
-// are optional infrastructure for flows that don't use them.
-func loadPersonaFragments(ctx context.Context, natsClient *natsclient.Client, root string) error {
+// tree shaped <root>/<role>/*.md and returns the manager so it can be
+// threaded into executors.RegisterAll. Non-fatal on init failure —
+// callers must nil-check the return before relying on it.
+func loadPersonaFragments(ctx context.Context, natsClient *natsclient.Client, root string) *persona.Manager {
 	if root == "" {
 		slog.Debug("persona fragments path empty, skipping load")
 		return nil
 	}
 	mgr, err := persona.NewManager(natsClient)
 	if err != nil {
-		slog.Warn("persona manager init failed; persona fragments not loaded",
+		slog.Warn("persona manager init failed; persona CRUD tools and fragment loading disabled",
 			"error", err)
 		return nil
 	}
 	slog.Info("loading persona fragments", "root", root)
-	return persona.LoadFromDirectory(ctx, root, mgr, slog.Default())
+	if err := persona.LoadFromDirectory(ctx, root, mgr, slog.Default()); err != nil {
+		slog.Warn("persona fragment loader reported errors",
+			"path", root,
+			"error", err)
+		// Return the manager anyway — partial load is better than no persona
+		// CRUD tooling and the caller already logged the specifics.
+	}
+	return mgr
+}
+
+// extractLoopsBucket pulls the agentic-tools loops_bucket config value so
+// executors.RegisterAll can thread it into the stateful-tool registrations
+// (read_loop_result, flow_monitor). Empty return lets RegisterAll fall
+// back to the AGENT_LOOPS default. Independent reimplementation of
+// upstream cmd/semstreams/main.go per ADR-029 — not an import.
+func extractLoopsBucket(cfg *config.Config) string {
+	for _, cc := range cfg.Components {
+		if cc.Name != "agentic-tools" || !cc.Enabled {
+			continue
+		}
+		var tcfg struct {
+			LoopsBucket string `json:"loops_bucket"`
+		}
+		if err := json.Unmarshal(cc.Config, &tcfg); err == nil && tcfg.LoopsBucket != "" {
+			return tcfg.LoopsBucket
+		}
+	}
+	return ""
+}
+
+// buildRuleManager constructs a rule.ConfigManager (KV-backed rule CRUD)
+// for use by the Pattern-B rule executors. Nil on init failure →
+// registerRules skips. Note: upstream's runtime hot-reload ConfigManager
+// lives on the rule processor itself and reads the same KV bucket — two
+// instances coexist safely (NATS KV serialises per-key writes). Ours is
+// write-only CRUD for agentic-tools; the processor-internal one is
+// read+apply. Independent reimplementation per ADR-029.
+func buildRuleManager(ctx context.Context, natsClient *natsclient.Client, configMgr *config.Manager, logger *slog.Logger) executors.RuleManager {
+	rcm := rulepkg.NewConfigManager(nil, configMgr, logger)
+	if err := rcm.InitializeKVStore(natsClient); err != nil {
+		logger.Warn("rule CRUD tools disabled: could not initialise rules KV store",
+			"error", err)
+		return nil
+	}
+	_ = ctx // reserved for future use if KV init needs a context
+	return rcm
+}
+
+// buildFlowManager constructs a flowstore.Manager (KV-backed flow CRUD).
+// Nil on init failure → registerFlows skips. Independent reimplementation
+// per ADR-029.
+func buildFlowManager(natsClient *natsclient.Client, logger *slog.Logger) executors.FlowManager {
+	mgr, err := flowstore.NewManager(natsClient)
+	if err != nil {
+		logger.Warn("flow CRUD tools disabled: could not initialise flow store",
+			"error", err)
+		return nil
+	}
+	return mgr
+}
+
+// buildFlowTemplateManager constructs a flowtemplate.Manager (KV-backed
+// template CRUD + render). Nil on init failure → registerFlowTemplates
+// skips. Independent reimplementation per ADR-029.
+func buildFlowTemplateManager(natsClient *natsclient.Client, logger *slog.Logger) executors.FlowTemplateManager {
+	mgr, err := flowtemplate.NewManager(natsClient)
+	if err != nil {
+		logger.Warn("flow-template tools disabled: could not initialise flow-template store",
+			"error", err)
+		return nil
+	}
+	return mgr
 }
 
 // parseCLI parses and validates CLI flags.

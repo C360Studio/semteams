@@ -73,18 +73,20 @@ and it is load-bearing documentation.
 |---|---|---|---|
 | `componentregistry.Register` | C | `setupRegistriesAndManager` | ✅ live |
 | `persona.NewManager` + `persona.LoadFromDirectory` | B | `loadPersonaFragments` after services configured | ✅ live (c226c50) |
-| `executors.RegisterAll` | A + B tool executors | after persona load, before `StartAll` | ⚠️ next commit |
+| `rule.NewConfigManager` (+ `InitializeKVStore`) | B | `buildRuleManager`, passed to `executors.RegisterAll` | ✅ live |
+| `flowstore.NewManager` | B | `buildFlowManager`, passed to `executors.RegisterAll` | ✅ live |
+| `flowtemplate.NewManager` | B | `buildFlowTemplateManager`, passed to `executors.RegisterAll` | ✅ live |
+| `executors.RegisterAll` | A + B tool executors | after persona load, before `StartAll` | ✅ live |
+
+All four Pattern-B managers are wired at boot. Wire-once discipline: the
+alternative (deferring rule/flow/flow-template managers until a journey
+asks for them) is exactly the silent-drift failure mode this ADR exists
+to prevent. Builder functions return nil on KV init failure, and each
+`register*` inside `executors.RegisterAll` skips when its manager is nil,
+so boot remains resilient to partial NATS unavailability.
 
 ### Wirings deferred
 
-Add when a product feature needs them, not speculatively:
-
-- `rule.ConfigManager` (upstream pattern B) — wire when semteams ships
-  a feature that persists rules (not today; inline rules cover our e2e
-  scenarios).
-- `flowstore.Manager` / `flowtemplate.Manager` — wire when coordinator
-  dynamic flow composition (ADR-026 upstream) lands in a semteams
-  product journey.
 - `registerExampleComponents` (upstream's `iot_sensor`, `document`) —
   semteams does **not** register these. They are framework example
   processors; keeping them out of our binary is part of the product
