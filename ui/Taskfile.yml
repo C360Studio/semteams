@@ -258,48 +258,104 @@ tasks:
           AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
       - npx playwright test --config playwright.agentic.config.ts e2e/agentic/ops-agent-baseline.spec.ts
 
-  test:e2e:agentic:dev:
-    desc: |
-      Boot the agentic E2E stack and leave it running for interactive
-      debugging. Skips the deferred cleanup that the test:e2e:agentic:*
-      tasks use, so containers stay up until you tear them down with
-      `task test:e2e:agentic:cleanup`.
+  # === Interactive dev-mode scenario tasks ===
+  #
+  # Each scenario binds a FIXTURE + AGENTIC_CONFIG pair so the caller does
+  # not juggle two env vars. Matches the test:e2e:agentic:<scenario>
+  # pattern (which also runs playwright) — these variants just boot and
+  # leave the stack up for curl / probe experimentation.
+  #
+  # Tear down any scenario with: task test:e2e:agentic:cleanup
 
-      Defaults to the ops-observer config + ops fixture; override via
-      FIXTURE= and AGENTIC_CONFIG= env or args. DEBUG=1 forces debug
-      log level on the backend (already the default for e2e configs;
-      kept here for parity with future configs).
-
-      Use the probe targets while the stack is up:
-        task test:e2e:agentic:probe:loops
-        task test:e2e:agentic:probe:send -- "your message"
-        task test:e2e:agentic:probe:triples -- ops.diagnosis.finding
-        task test:e2e:agentic:logs
-
-      Then re-run a spec without rebooting:
-        task test:e2e:agentic:run-spec -- e2e/agentic/ops-agent-baseline.spec.ts
-    vars:
-      FIXTURE: '{{.FIXTURE | default "ops-agent-baseline.yaml"}}'
-      AGENTIC_CONFIG: '{{.AGENTIC_CONFIG | default "e2e-ops-observer.json"}}'
-      DEBUG: '{{.DEBUG | default "0"}}'
+  test:e2e:agentic:dev:deep-research:
+    desc: Boot stack for the deep-research scenario (thin researcher loop + mock-LLM). No playwright.
     cmds:
-      - echo "▶︎  Booting stack (FIXTURE={{.FIXTURE}} AGENTIC_CONFIG={{.AGENTIC_CONFIG}} DEBUG={{.DEBUG}}) — no auto-cleanup"
+      - task: test:e2e:agentic:dev:_boot
+        vars:
+          FIXTURE: deep-research.yaml
+          AGENTIC_CONFIG: e2e-deep-research.json
+          SCENARIO: deep-research
+
+  test:e2e:agentic:dev:ops-agent:
+    desc: Boot stack for the ops-agent scenario (researcher + ops observer). No playwright.
+    cmds:
+      - task: test:e2e:agentic:dev:_boot
+        vars:
+          FIXTURE: ops-agent-baseline.yaml
+          AGENTIC_CONFIG: e2e-ops-observer.json
+          SCENARIO: ops-agent
+
+  test:e2e:agentic:dev:tool-approval:
+    desc: Boot stack for the tool-approval-gate scenario. No playwright.
+    cmds:
+      - task: test:e2e:agentic:dev:_boot
+        vars:
+          FIXTURE: tool-approval-gate.yaml
+          AGENTIC_CONFIG: e2e-agentic.json
+          SCENARIO: tool-approval
+
+  test:e2e:agentic:dev:real-time-activity:
+    desc: Boot stack for the real-time-activity-stream scenario. No playwright.
+    cmds:
+      - task: test:e2e:agentic:dev:_boot
+        vars:
+          FIXTURE: real-time-activity-stream.yaml
+          AGENTIC_CONFIG: e2e-agentic.json
+          SCENARIO: real-time-activity
+
+  test:e2e:agentic:dev:_boot:
+    desc: Internal — boot helper for the per-scenario dev tasks
+    internal: true
+    vars:
+      FIXTURE: '{{.FIXTURE}}'
+      AGENTIC_CONFIG: '{{.AGENTIC_CONFIG}}'
+      SCENARIO: '{{.SCENARIO | default "custom"}}'
+    cmds:
+      - echo "▶︎  Booting scenario '{{.SCENARIO}}' (FIXTURE={{.FIXTURE}} AGENTIC_CONFIG={{.AGENTIC_CONFIG}}) — no auto-cleanup"
       - task: test:e2e:agentic:stack:up
         vars:
           FIXTURE: "{{.FIXTURE}}"
           AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
       - |
-        cat <<'EOF'
+        cat <<EOF
 
-        Stack up at http://localhost:3100. Probe with:
+        Stack up at http://localhost:3100 (scenario: {{.SCENARIO}}). Probe with:
           task test:e2e:agentic:probe:loops
           task test:e2e:agentic:probe:send -- 'your message'
-          task test:e2e:agentic:probe:triples -- ops.diagnosis.finding
+          task test:e2e:agentic:probe:triples -- <predicate>
           task test:e2e:agentic:logs
-          task test:e2e:agentic:run-spec -- e2e/agentic/ops-agent-baseline.spec.ts
+
+        Re-run the matching spec without rebooting:
+          task test:e2e:agentic:run-spec -- e2e/agentic/<scenario>.spec.ts
 
         Tear down with: task test:e2e:agentic:cleanup
         EOF
+
+  test:e2e:agentic:dev:
+    desc: |
+      Boot the agentic E2E stack with custom FIXTURE / AGENTIC_CONFIG env
+      vars. For named scenarios prefer the dedicated tasks:
+        task test:e2e:agentic:dev:deep-research
+        task test:e2e:agentic:dev:ops-agent
+        task test:e2e:agentic:dev:tool-approval
+        task test:e2e:agentic:dev:real-time-activity
+
+      Use this task when experimenting with a config that does not yet
+      have a named scenario entry.
+
+      Tear down with: task test:e2e:agentic:cleanup
+    vars:
+      FIXTURE: '{{.FIXTURE}}'
+      AGENTIC_CONFIG: '{{.AGENTIC_CONFIG}}'
+    preconditions:
+      - sh: '[ -n "{{.FIXTURE}}" ] && [ -n "{{.AGENTIC_CONFIG}}" ]'
+        msg: "FIXTURE and AGENTIC_CONFIG env vars required. Prefer a test:e2e:agentic:dev:<scenario> task."
+    cmds:
+      - task: test:e2e:agentic:dev:_boot
+        vars:
+          FIXTURE: "{{.FIXTURE}}"
+          AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
+          SCENARIO: custom
 
   test:e2e:agentic:run-spec:
     desc: |
