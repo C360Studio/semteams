@@ -37,7 +37,7 @@
         "swagger_ui": true,
         "server_info": {
           "title": "SemTeams Ops Observer E2E",
-          "description": "Deep-research flow + ADR-027 Phase 1 ops-analyst observer rule. Shares one agentic-loop across both roles — ops agent runs as role=ops-analyst on the same loop the researcher uses. Validates rule firing + ops loop completion. Full persona-fragment grounding (configs/personas/fragments/ops/) gates on ADR-029 persona.Manager landing upstream.",
+          "description": "Deep-research flow + ADR-027 Phase 1 ops-analyst observer rule. Shares one agentic-loop across both roles — ops agent runs as role=ops-analyst on the same loop the researcher uses. Validates rule firing + ops loop completion. Persona-fragment grounding from configs/personas/fragments/ops/ is loaded at boot by cmd/semteams/main.go (persona.LoadFromDirectory).",
           "version": "0.1.0"
         }
       }
