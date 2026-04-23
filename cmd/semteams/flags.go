@@ -10,16 +10,17 @@ import (
 
 // CLIConfig holds command-line configuration
 type CLIConfig struct {
-	ConfigPath      string
-	LogLevel        string
-	LogFormat       string
-	Debug           bool
-	DebugPort       int
-	ShutdownTimeout time.Duration
-	HealthPort      int
-	ShowVersion     bool
-	ShowHelp        bool
-	Validate        bool
+	ConfigPath           string
+	PersonaFragmentsPath string
+	LogLevel             string
+	LogFormat            string
+	Debug                bool
+	DebugPort            int
+	ShutdownTimeout      time.Duration
+	HealthPort           int
+	ShowVersion          bool
+	ShowHelp             bool
+	Validate             bool
 }
 
 func parseFlags() *CLIConfig {
@@ -33,6 +34,10 @@ func parseFlags() *CLIConfig {
 	flag.StringVar(&cfg.ConfigPath, "c",
 		getEnv("SEMSTREAMS_CONFIG", "configs/example.json"),
 		"Path to configuration file (env: SEMSTREAMS_CONFIG)")
+
+	flag.StringVar(&cfg.PersonaFragmentsPath, "persona-fragments",
+		getEnv("SEMSTREAMS_PERSONA_FRAGMENTS_PATH", "configs/personas/fragments"),
+		"Directory tree of per-role persona fragment files (env: SEMSTREAMS_PERSONA_FRAGMENTS_PATH). Missing dir is a warning, not fatal.")
 
 	flag.StringVar(&cfg.LogLevel, "log-level",
 		getEnv("SEMSTREAMS_LOG_LEVEL", "info"),

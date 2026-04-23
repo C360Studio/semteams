@@ -22,6 +22,7 @@ import (
 	"github.com/c360studio/semstreams/config"
 	"github.com/c360studio/semstreams/metric"
 	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semstreams/persona"
 	"github.com/c360studio/semstreams/service"
 	"github.com/c360studio/semstreams/types"
 )
@@ -123,8 +124,38 @@ func run() error {
 		return err
 	}
 
-	// 11. Run application with signal handling
+	// 11. Populate the PERSONAS KV bucket from disk so per-role prompt
+	// fragments are available to agentic-loop's prompt.Registry. The
+	// agentic-loop component creates its own persona.Manager against the
+	// same KV bucket — this step just seeds the bucket at startup.
+	// Mirrors upstream cmd/semstreams/main.go:143. See semstreams
+	// docs/advanced/12-coordinator-pattern.md.
+	if err := loadPersonaFragments(ctx, natsClient, cliCfg.PersonaFragmentsPath); err != nil {
+		slog.Warn("persona fragment loader reported errors",
+			"path", cliCfg.PersonaFragmentsPath,
+			"error", err)
+	}
+
+	// 12. Run application with signal handling
 	return runWithSignalHandling(ctx, manager, cliCfg.ShutdownTimeout)
+}
+
+// loadPersonaFragments seeds the PERSONAS KV bucket from a directory
+// tree shaped <root>/<role>/*.md. Non-fatal on init failure — personas
+// are optional infrastructure for flows that don't use them.
+func loadPersonaFragments(ctx context.Context, natsClient *natsclient.Client, root string) error {
+	if root == "" {
+		slog.Debug("persona fragments path empty, skipping load")
+		return nil
+	}
+	mgr, err := persona.NewManager(natsClient)
+	if err != nil {
+		slog.Warn("persona manager init failed; persona fragments not loaded",
+			"error", err)
+		return nil
+	}
+	slog.Info("loading persona fragments", "root", root)
+	return persona.LoadFromDirectory(ctx, root, mgr, slog.Default())
 }
 
 // parseCLI parses and validates CLI flags.
