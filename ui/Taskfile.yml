@@ -303,6 +303,15 @@ tasks:
           AGENTIC_CONFIG: e2e-agentic.json
           SCENARIO: real-time-activity
 
+  test:e2e:agentic:dev:coordinator:
+    desc: Boot stack for the coordinator front-door scenario (coordinator classifies → rule spawns researcher). No playwright.
+    cmds:
+      - task: test:e2e:agentic:dev:_boot
+        vars:
+          FIXTURE: coordinator-researcher.yaml
+          AGENTIC_CONFIG: e2e-coordinator.json
+          SCENARIO: coordinator
+
   test:e2e:agentic:dev:_boot:
     desc: Internal — boot helper for the per-scenario dev tasks
     internal: true

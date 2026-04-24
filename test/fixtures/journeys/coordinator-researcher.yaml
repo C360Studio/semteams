@@ -1,0 +1,61 @@
+name: coordinator-researcher
+description: |
+  Journey: user sends a research-worthy question; coordinator classifies
+  intent via the decide tool; rule fires publish_agent role=researcher;
+  researcher runs one web_search turn and synthesizes.
+
+  Paired spec: none yet — driven via curl + /teams-dispatch/loops polling
+  for the first iteration of Step 2 (see plan
+  /Users/coby/.claude/plans/last-session-turned-into-cheerful-oasis.md).
+
+  Mock is sequence-based and role-blind. The order below matches the
+  order the mock-llm receives requests:
+    1. Coordinator iteration 1 — call decide(action=delegate_research,
+       reason=...). The decide tool emits a coordinator.next_action
+       triple and sets StopLoop=true, so this is the coordinator's only
+       LLM call.
+    2. Researcher iteration 1 — call web_search for the user's query.
+       Researcher was spawned by the rule; its first LLM call follows
+       immediately after the coordinator's decide completes.
+    3. Researcher iteration 2 — synthesize the search result and
+       complete with a structured report.
+
+responses:
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "delegate_research",
+          "reason": "user asked a comparison-of-named-products question which requires evidence from outside training"
+        }
+  - tool_call:
+      name: web_search
+      arguments_json: |
+        {
+          "query": "MQTT vs NATS IoT edge deployment comparison"
+        }
+  - completion:
+      content: |
+        ## Summary
+
+        MQTT and NATS serve different niches in IoT edge deployments.
+        MQTT excels in constrained environments with its lightweight
+        pub/sub model, while NATS provides higher throughput and built-in
+        request/reply patterns.
+
+        ## Key Findings
+
+        1. MQTT uses TCP with QoS levels (0, 1, 2) for reliability
+        2. NATS JetStream adds persistence and exactly-once delivery
+        3. MQTT brokers (Mosquitto) run on minimal hardware
+        4. NATS has lower latency for request/reply patterns
+
+        ## Sources
+
+        - https://mqtt.org/specification
+        - https://docs.nats.io/compare
+
+        ## Gaps / Open Questions
+
+        - Real-world benchmarks on constrained ARM devices
+        - Power consumption comparison for battery-operated sensors

@@ -5,8 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -300,9 +302,43 @@ func (s *OpenAIServer) handleChatCompletion(w http.ResponseWriter, r *http.Reque
 	// Track request
 	s.mu.Lock()
 	s.requestCount++
+	reqNum := s.requestCount
+	fixIdx := s.fixtureIndex
 	s.lastRequest = &req
 	delay := s.requestDelay
 	s.mu.Unlock()
+
+	// Diagnostic trace — one line per LLM call so fixture consumption is
+	// visible to journey-runners. Includes tool count + whether the
+	// request carries prior tool_result messages (useful for distinguishing
+	// first-call vs post-tool iterations). Also records per-message role
+	// and size breakdown (+ a preview of every system message) so journey
+	// tests can verify the caller actually fed expected persona fragments
+	// into the prompt — the anti-gaming check that proves persona wiring
+	// works, not just that loading succeeded.
+	toolCount := len(req.Tools)
+	hasToolResults := false
+	var msgBreakdown []string
+	var sysPreviews []string
+	for i, m := range req.Messages {
+		if m.Role == "tool" {
+			hasToolResults = true
+		}
+		msgBreakdown = append(msgBreakdown, fmt.Sprintf("%s(%d)", m.Role, len(m.Content)))
+		if m.Role == "system" {
+			preview := m.Content
+			if len(preview) > 500 {
+				preview = preview[:500] + "…"
+			}
+			preview = strings.ReplaceAll(preview, "\n", " ⏎ ")
+			sysPreviews = append(sysPreviews, fmt.Sprintf("sys[%d]=%q", i, preview))
+		}
+	}
+	log.Printf("[mock-llm] req#%d (fixture idx=%d) model=%s tools=%d has_tool_results=%v stream=%v msgs=[%s]",
+		reqNum, fixIdx, req.Model, toolCount, hasToolResults, req.Stream, strings.Join(msgBreakdown, " "))
+	for _, p := range sysPreviews {
+		log.Printf("[mock-llm]   req#%d %s", reqNum, p)
+	}
 
 	// Apply artificial delay if configured
 	if delay > 0 {

@@ -2,10 +2,10 @@
   "version": "1.1.0",
   "platform": {
     "org": "c360",
-    "id": "semteams-research",
+    "id": "semteams-coordinator",
     "type": "agentic-e2e",
     "region": "local",
-    "instance_id": "deep-research-001",
+    "instance_id": "coordinator-001",
     "environment": "test"
   },
   "tier": "agentic",
@@ -57,8 +57,8 @@
         "http_port": 8080,
         "swagger_ui": true,
         "server_info": {
-          "title": "SemTeams Deep Research E2E",
-          "description": "Thin agentic loop for deterministic researcher journey testing",
+          "title": "SemTeams Coordinator E2E",
+          "description": "Coordinator front-door journey: user chat → coordinator classifies → decide tool writes triple → rule spawns researcher → researcher completes. Exercises the ADR-029 Pattern-B wiring end to end.",
           "version": "1.0.0"
         }
       }
@@ -85,7 +85,8 @@
         "monitor_subjects": [
           "agent.>",
           "tool.>",
-          "user.>"
+          "user.>",
+          "graph.mutation.>"
         ],
         "enable_kv_query": true,
         "log_level": "INFO"
@@ -98,8 +99,8 @@
       "name": "agentic-dispatch",
       "enabled": true,
       "config": {
-        "default_role": "general",
-        "default_tools": [],
+        "default_role": "coordinator",
+        "default_tools": ["decide", "read_loop_result", "submit_work"],
         "auto_continue": false,
         "stream_name": "USER",
         "ports": {
@@ -179,7 +180,7 @@
       "config": {
         "stream_name": "TOOL",
         "timeout": "10s",
-        "allowed_tools": ["web_search", "query_entity", "query_entities", "graph_query", "read_loop_result", "decide", "submit_work"],
+        "allowed_tools": ["web_search", "decide", "read_loop_result", "submit_work"],
         "ports": {
           "inputs": [
             {"name": "tool.execute", "type": "jetstream", "subject": "tool.execute.>", "stream_name": "TOOL", "required": true}
@@ -189,6 +190,45 @@
           ],
           "kv_read": [
             {"name": "entity_states", "type": "kv-read", "bucket": "ENTITY_STATES"}
+          ]
+        }
+      }
+    },
+    "rule-processor": {
+      "type": "processor",
+      "name": "rule-processor",
+      "enabled": true,
+      "config": {
+        "rules_files": [
+          "/app/configs/rules/coordinator/01-delegate-research.json"
+        ],
+        "enable_graph_integration": true,
+        "entity_watch_buckets": {
+          "ENTITY_STATES": [">"]
+        },
+        "ports": {
+          "inputs": [
+            {"name": "entity_states", "subject": "ENTITY_STATES.>", "type": "kv-watch", "bucket": "ENTITY_STATES"}
+          ],
+          "outputs": [
+            {"name": "agent.task", "subject": "agent.task.*", "type": "jetstream", "stream_name": "AGENT", "description": "Spawn agents from rules"},
+            {"name": "graph.mutation", "subject": "graph.mutation.*", "type": "nats", "description": "Graph triple mutations"}
+          ]
+        }
+      }
+    },
+    "graph-ingest": {
+      "type": "processor",
+      "name": "graph-ingest",
+      "enabled": true,
+      "config": {
+        "enable_hierarchy": true,
+        "ports": {
+          "inputs": [
+            {"name": "graph_mutations", "subject": "graph.mutation.>", "type": "nats"}
+          ],
+          "outputs": [
+            {"name": "entity_states", "subject": "ENTITY_STATES", "type": "kv-write"}
           ]
         }
       }

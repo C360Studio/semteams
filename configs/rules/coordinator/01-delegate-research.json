@@ -1,0 +1,41 @@
+{
+  "id": "coordinator_delegate_research",
+  "type": "expression",
+  "name": "Coordinator Delegates to Researcher",
+  "description": "Fires when a coordinator loop calls decide(action=delegate_research). The decide tool (processor/agentic-tools/decide.go) writes a `coordinator.next_action` triple on the coordinator loop's entity; this rule matches on that triple and spawns a researcher loop. See upstream semstreams docs/advanced/12-coordinator-pattern.md for the pattern, and configs/rules/deep-research/03-fan-out-subtopics.json for a sibling rule that invert-matches the same triple mechanism.",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "agent.loop.role",
+      "operator": "eq",
+      "value": "coordinator",
+      "required": true
+    },
+    {
+      "field": "coordinator.next_action",
+      "operator": "eq",
+      "value": "delegate_research",
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "publish_agent",
+      "subject": "agent.task.research",
+      "role": "researcher",
+      "model": "general",
+      "tools": ["web_search", "read_loop_result", "submit_work"],
+      "properties": {
+        "parent_loop_id": "$entity.id"
+      },
+      "prompt": "A coordinator delegated a research task to you (parent loop $entity.id). Call read_loop_result with loop_id=$entity.id to fetch the user's original question, then use web_search to investigate and produce a concise synthesis. Call submit_work with your final answer."
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "pattern": "coordinator-front-door",
+    "upstream_doc": "semstreams/docs/advanced/12-coordinator-pattern.md",
+    "semteams_adr": "docs/adr/029-product-shell-wiring.md"
+  }
+}
