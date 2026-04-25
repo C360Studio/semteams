@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { onMount, onDestroy } from 'svelte';
 	import favicon from '$lib/assets/favicon.svg';
 	import '../styles/global.css';
 	import { agentStore } from '$lib/stores/agentStore.svelte';
@@ -8,12 +7,13 @@
 
 	let { children } = $props();
 
-	onMount(() => {
+	// Tie the SSE connection lifecycle to the layout via $effect — Svelte
+	// runs the cleanup (disconnect) on layout teardown, and if we ever
+	// gate the connection on a reactive dep (config rune, auth token)
+	// $effect re-runs naturally where onMount/onDestroy would not.
+	$effect(() => {
 		agentStore.connect();
-	});
-
-	onDestroy(() => {
-		agentStore.disconnect();
+		return () => agentStore.disconnect();
 	});
 </script>
 

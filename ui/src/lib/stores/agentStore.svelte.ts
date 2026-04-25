@@ -8,20 +8,12 @@
 //   :heartbeat <ts>     — keep-alive comment (ignored by EventSource)
 
 import { SvelteMap } from "svelte/reactivity";
-import type { AgentLoop } from "$lib/types/agent";
-import { isActiveState } from "$lib/types/agent";
+import type { AgentLoop, WireActivityEnvelope } from "$lib/types/agent";
+import { isActiveState, normalizeWireLoop } from "$lib/types/agent";
 
 const SSE_URL = "/teams-dispatch/activity";
 const MAX_RECONNECT_ATTEMPTS = 5;
 const BASE_RECONNECT_DELAY = 1000;
-
-// ActivityEvent is the envelope the backend wraps around KV entries.
-interface ActivityEvent {
-  type: string; // loop_created, loop_updated, loop_deleted
-  loop_id: string;
-  timestamp: string;
-  data?: AgentLoop;
-}
 
 function createAgentStore() {
   let connected = $state(false);
@@ -33,26 +25,14 @@ function createAgentStore() {
 
   function handleActivity(event: MessageEvent) {
     try {
-      const envelope = JSON.parse(event.data) as ActivityEvent;
+      const envelope = JSON.parse(event.data) as WireActivityEnvelope;
       if (envelope.type === "loop_deleted") {
         loops.delete(envelope.loop_id);
         return;
       }
-      if (!envelope.data) return;
-
-      // Skip dispatch's "COMPLETE_<id>" ghost records — they carry
-      // outcome/result for an already-tracked loop, no state field, and
-      // they're not loops in their own right. They should ideally merge
-      // onto the real loop entry; until the wire format settles, drop.
-      if (envelope.loop_id?.startsWith("COMPLETE_")) return;
-
-      // Normalize wire-format drift: the real loop record from the
-      // KV watcher uses `id`, the dispatch LoopTracker shape uses
-      // `loop_id`. Accept either, write under loop_id.
-      const raw = envelope.data as AgentLoop & { id?: string };
-      const id = raw.loop_id || raw.id;
-      if (!id) return;
-      loops.set(id, { ...raw, loop_id: id });
+      const loop = normalizeWireLoop(envelope);
+      if (!loop) return;
+      loops.set(loop.loop_id, loop);
     } catch {
       // Ignore malformed events
     }

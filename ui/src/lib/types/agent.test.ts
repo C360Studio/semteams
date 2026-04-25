@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   isActiveState,
+  normalizeWireLoop,
   type AgentLoopState,
   type ActiveLoopState,
   type AgentLoop,
@@ -11,6 +12,7 @@ import {
   type SignalResponse,
   type TrajectoryEntry,
   type TrajectoryToolCall,
+  type WireActivityEnvelope,
 } from "$lib/types/agent";
 
 // ---------------------------------------------------------------------------
@@ -34,8 +36,11 @@ describe("isActiveState", () => {
     "paused",
     "awaiting_approval",
     "complete",
+    "success",
     "failed",
+    "error",
     "cancelled",
+    "truncated",
   ];
 
   it.each(inactiveStates)("returns false for inactive state '%s'", (state) => {
@@ -232,6 +237,114 @@ describe("TrajectoryEntry", () => {
     expect(entry.tool_calls).toHaveLength(1);
     expect(entry.tool_calls![0].name).toBe("graph_search");
     expect(entry.tool_calls![0].result).toBe("found 5 entities");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// normalizeWireLoop — SSE wire-format adapter
+// ---------------------------------------------------------------------------
+
+describe("normalizeWireLoop", () => {
+  it("accepts the KV-watcher shape that uses `id` instead of `loop_id`", () => {
+    // Real loop records from the agentic-loop KV watcher use `id`. The UI
+    // canonicalises to `loop_id`.
+    const env: WireActivityEnvelope = {
+      type: "loop_updated",
+      loop_id: "loop-1",
+      data: {
+        id: "loop-1",
+        task_id: "task-1",
+        state: "complete",
+        role: "researcher",
+        iterations: 3,
+        max_iterations: 6,
+      },
+    };
+    const loop = normalizeWireLoop(env);
+    expect(loop?.loop_id).toBe("loop-1");
+    expect(loop?.state).toBe("complete");
+    expect(loop?.role).toBe("researcher");
+    expect(loop?.iterations).toBe(3);
+  });
+
+  it("accepts the LoopTracker shape that uses `loop_id`", () => {
+    const env: WireActivityEnvelope = {
+      type: "loop_updated",
+      loop_id: "loop-2",
+      data: {
+        loop_id: "loop-2",
+        task_id: "task-2",
+        state: "exploring",
+        role: "coordinator",
+      },
+    };
+    const loop = normalizeWireLoop(env);
+    expect(loop?.loop_id).toBe("loop-2");
+  });
+
+  it("drops COMPLETE_<id> ghost envelopes", () => {
+    // dispatch publishes these alongside the real loop entry; they carry
+    // outcome/result for an already-tracked loop, no `state`, and they're
+    // not loops in their own right.
+    const env: WireActivityEnvelope = {
+      type: "loop_updated",
+      loop_id: "COMPLETE_loop-3",
+      data: {
+        loop_id: "COMPLETE_loop-3",
+        task_id: "task-3",
+        outcome: "success",
+        result: "done",
+      },
+    };
+    expect(normalizeWireLoop(env)).toBeNull();
+  });
+
+  it("drops envelopes with no data", () => {
+    const env: WireActivityEnvelope = { type: "loop_updated", loop_id: "loop-4" };
+    expect(normalizeWireLoop(env)).toBeNull();
+  });
+
+  it("drops envelopes that have neither `id` nor `loop_id`", () => {
+    const env: WireActivityEnvelope = {
+      type: "loop_updated",
+      loop_id: "loop-5",
+      data: { task_id: "task-5", state: "exploring" },
+    };
+    expect(normalizeWireLoop(env)).toBeNull();
+  });
+
+  it("coerces missing optional fields to empty defaults", () => {
+    const env: WireActivityEnvelope = {
+      type: "loop_updated",
+      loop_id: "loop-6",
+      data: { id: "loop-6" },
+    };
+    const loop = normalizeWireLoop(env);
+    expect(loop).toEqual<AgentLoop>({
+      loop_id: "loop-6",
+      task_id: "",
+      state: "exploring",
+      role: "",
+      iterations: 0,
+      max_iterations: 0,
+      user_id: "",
+      channel_type: "",
+      parent_loop_id: "",
+      outcome: "",
+      error: "",
+    });
+  });
+
+  it("preserves outcome aliases that upstream leaks into `state`", () => {
+    // Backend dispatch writes Outcome ("success"/"failed"/...) into the
+    // state field; UI must accept the alias vocabulary verbatim and let
+    // loopStateToColumn map it.
+    const env: WireActivityEnvelope = {
+      type: "loop_updated",
+      loop_id: "loop-7",
+      data: { id: "loop-7", state: "success" },
+    };
+    expect(normalizeWireLoop(env)?.state).toBe("success");
   });
 });
 
