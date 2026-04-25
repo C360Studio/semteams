@@ -51,8 +51,13 @@
 		Referrer-Policy "strict-origin-when-cross-origin"
 	}
 
-	# Enable gzip compression
-	encode gzip
+	# Enable gzip compression — but NOT on SSE streams. Gzip buffers
+	# response data to compress in chunks, which breaks SSE's incremental
+	# delivery and surfaces in browsers as ERR_INCOMPLETE_CHUNKED_ENCODING.
+	# /teams-dispatch/activity is the agent-loop activity stream; add
+	# more matchers here if other SSE endpoints land later.
+	@notSSE not path /teams-dispatch/activity
+	encode @notSSE gzip
 
 	# Logging - stdout is Docker best practice (12-factor app)
 	# Docker captures stdout/stderr and routes to logging systems
