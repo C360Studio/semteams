@@ -39,7 +39,7 @@
 </script>
 
 <svelte:head>
-	<title>Flows - SemStreams</title>
+	<title>Flows - SemTeams</title>
 </svelte:head>
 
 <main>

@@ -763,7 +763,7 @@
 </script>
 
 <svelte:head>
-	<title>{backendFlow?.name || 'Flow Editor'} - SemStreams</title>
+	<title>{backendFlow?.name || 'Flow Editor'} - SemTeams</title>
 </svelte:head>
 
 <!-- Window event handlers for responsive layout and keyboard shortcuts -->

@@ -53,6 +53,11 @@ export interface AgentLoop {
 // watcher emits `id`; the dispatch LoopTracker emits `loop_id`. Several
 // fields are absent (`omitempty`) when empty. Treat WireLoop as an
 // untrusted input and use `normalizeWireLoop` to produce an AgentLoop.
+//
+// The index signature catches producer-specific fields we don't model
+// (e.g. `result`, `tokens_in`, `model`, `prompt` on COMPLETE_<id>
+// records). Listed fields are read by normalizeWireLoop; everything else
+// rides along untyped.
 export interface WireLoop {
   id?: string;
   loop_id?: string;
@@ -66,6 +71,7 @@ export interface WireLoop {
   parent_loop_id?: string;
   outcome?: string;
   error?: string;
+  [k: string]: unknown;
 }
 
 export interface WireActivityEnvelope {
