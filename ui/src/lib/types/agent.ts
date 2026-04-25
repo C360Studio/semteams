@@ -7,8 +7,15 @@ export type AgentLoopState =
   | "paused"
   | "awaiting_approval"
   | "complete"
+  | "success"
   | "failed"
-  | "cancelled";
+  | "error"
+  | "cancelled"
+  | "truncated";
+// Terminal-state aliases ("success"/"error"/"truncated") come from upstream
+// dispatch writing the loop's `outcome` value into the `state` field at
+// completion (loop_tracker.UpdateState in agentic-dispatch). Until upstream
+// normalises that, the UI accepts both vocabularies.
 
 export type ActiveLoopState =
   | "exploring"

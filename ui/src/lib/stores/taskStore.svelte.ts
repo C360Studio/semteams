@@ -49,7 +49,12 @@ function createTaskStore() {
       failed: [],
     };
     for (const task of tasks) {
-      grouped[task.column].push(task);
+      // Defensive: a future unmapped column would otherwise throw and
+      // poison the entire reactive batch (breaks bind:value updates on
+      // ChatBar etc.). Keep the column-aware Map happy by silently
+      // bucketing strangers into "thinking".
+      const bucket = grouped[task.column] ?? grouped.thinking;
+      bucket.push(task);
     }
     return grouped;
   });

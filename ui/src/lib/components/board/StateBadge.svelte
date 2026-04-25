@@ -8,8 +8,8 @@
   let { state }: Props = $props();
 </script>
 
-<span class="state-badge {state}" data-state={state}>
-  {state.replace(/_/g, " ")}
+<span class="state-badge {state ?? 'unknown'}" data-state={state ?? 'unknown'}>
+  {(state ?? "unknown").replace(/_/g, " ")}
 </span>
 
 <style>

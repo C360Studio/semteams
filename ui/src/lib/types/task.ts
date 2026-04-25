@@ -47,15 +47,20 @@ export function loopStateToColumn(state: AgentLoopState): TaskColumn {
     case "paused":
       return "needs_you";
     case "complete":
+    case "success":
+    case "truncated":
       return "done";
     case "failed":
+    case "error":
     case "cancelled":
       return "failed";
     default: {
-      // Exhaustiveness guard — if a new AgentLoopState is added and
-      // not mapped here, TypeScript will error on `_exhaustive`.
-      const _exhaustive: never = state;
-      return _exhaustive;
+      // Cross-repo type drift is a runtime fact (backend ships separately).
+      // Log the unknown state so we notice, but don't crash the reactive
+      // graph — that poisons Svelte's batched flush and breaks unrelated
+      // bindings (chat input was the load-bearing victim).
+      console.warn("[loopStateToColumn] unknown state, defaulting to thinking", state);
+      return "thinking";
     }
   }
 }

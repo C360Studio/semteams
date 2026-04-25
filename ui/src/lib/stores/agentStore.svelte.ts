@@ -38,9 +38,21 @@ function createAgentStore() {
         loops.delete(envelope.loop_id);
         return;
       }
-      if (envelope.data) {
-        loops.set(envelope.data.loop_id, envelope.data);
-      }
+      if (!envelope.data) return;
+
+      // Skip dispatch's "COMPLETE_<id>" ghost records — they carry
+      // outcome/result for an already-tracked loop, no state field, and
+      // they're not loops in their own right. They should ideally merge
+      // onto the real loop entry; until the wire format settles, drop.
+      if (envelope.loop_id?.startsWith("COMPLETE_")) return;
+
+      // Normalize wire-format drift: the real loop record from the
+      // KV watcher uses `id`, the dispatch LoopTracker shape uses
+      // `loop_id`. Accept either, write under loop_id.
+      const raw = envelope.data as AgentLoop & { id?: string };
+      const id = raw.loop_id || raw.id;
+      if (!id) return;
+      loops.set(id, { ...raw, loop_id: id });
     } catch {
       // Ignore malformed events
     }
