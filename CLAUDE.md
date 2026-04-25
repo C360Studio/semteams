@@ -1,16 +1,28 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
 # SemTeams Project Context
 
 SemTeams is the reference/demo product for agentic teams built on the
 [semstreams](https://github.com/c360studio/semstreams) framework. It has
 **no custom Go components** — every processor comes from semstreams via the
 `github.com/c360studio/semstreams` Go module dependency. The product is the
-Svelte UI, the flow-template config library, and the docs.
+Svelte UI, the flow-template config library, the docs, and the
+product-shell wiring in `cmd/semteams/`.
+
+> **Note**: The repo's `README.md` is the upstream **SemStreams** README
+> (framework getting-started). It is NOT SemTeams-specific. Use this
+> CLAUDE.md and `docs/adr/029-product-shell-wiring.md` as the
+> authoritative entry points for SemTeams-specific context.
 
 ## Tech Stack
 
-- Go 1.25 — thin `cmd/semteams` binary that wraps semstreams'
-  `componentregistry.Register`
-- Go module: `github.com/c360studio/semstreams` (currently `v1.0.0-beta.8`)
+- Go 1.25 — `cmd/semteams/` binary (~600 LoC across `main.go`, `flags.go`,
+  `banner.go`, `logging.go`). Independently implements every
+  framework-wiring pattern per ADR-029 — no imports from upstream
+  `cmd/semstreams/`. See [ADR-029](docs/adr/029-product-shell-wiring.md).
+- Go module: `github.com/c360studio/semstreams` (currently `v1.0.0-beta.13`)
 - NATS JetStream (KV, ObjectStore), Prometheus, slog — via semstreams
 - Task (task runner) — run `task --list` for all commands
 - `ui/` — Svelte 5 + SvelteKit 2 + TypeScript frontend (subtree-imported
@@ -21,7 +33,7 @@ Svelte UI, the flow-template config library, and the docs.
 
 | Path | Purpose |
 |------|---------|
-| `cmd/semteams/` | Branded binary. Wraps semstreams' componentregistry.Register — no custom components |
+| `cmd/semteams/` | Product-shell binary. Wires Pattern-A/B/C framework primitives per ADR-029 — no custom components, but non-trivial wiring (persona loader, Pattern-B managers, `executors.RegisterAll`) |
 | `cmd/openapi-generator/` | Dev tool: generate OpenAPI spec from component registry |
 | `configs/` | Flow-template library. Loadable at runtime via UI |
 | `docs/` | Product and integration documentation |
@@ -45,8 +57,14 @@ Svelte UI, the flow-template config library, and the docs.
 ```bash
 task build              # Build bin/semteams
 task test               # Run Go tests (fast)
+task test:race          # Go tests with -race
+task test:integration   # Integration tests (testcontainers; sequential w/ -p 1 on macOS)
 task check              # Go lint + test
 task check:all          # Go + UI lint + type-check + test + build
+task schema:generate    # Regenerate schemas/ + specs/openapi.v3.yaml
+
+# Single Go test (use raw go test — no task wrapper)
+go test ./test/contract/... -run TestConfigDispatch -v
 
 # UI
 task ui:dev             # Start Vite dev server
@@ -66,6 +84,7 @@ task ui:build           # Production build
 | `deep-research.json` | Production researcher workflow | claude-haiku |
 | `onboarding.json` | Onboarding interview demo (intent classification, profile context, /onboard command) | claude-haiku |
 | `e2e-agentic.json` | E2E testing | mock-llm |
+| `e2e-coordinator.json` | E2E coordinator → researcher journey | mock-llm |
 | `e2e-deep-research.json` | E2E deep-research testing | mock-llm |
 | `e2e-ops-observer.json` | E2E ops observer (ADR-027 Phase 1) — deep-research + observe rule | mock-llm |
 
@@ -117,6 +136,26 @@ Phase 2 (ops proposes changes) is **config-only** per upstream's
 `allowed_tools` and mirror into `approval_required`. The existing
 `ApprovalFilter` transitions the loop to `LoopStateAwaitingApproval`
 for human review. No framework blocker remaining.
+
+### Product-Shell Wiring (ADR-029)
+
+`cmd/semteams/main.go` independently implements every framework-wiring
+pattern the product relies on — it does **not** import from
+`cmd/semstreams/`. Upstream's `main.go` is reference, not library.
+Mirroring (~50 lines of boot code) is the cost of admission. Live
+wirings:
+
+| Surface | Pattern | Call site |
+|---|---|---|
+| `componentregistry.Register` | C | `setupRegistriesAndManager` |
+| `persona.NewManager` + `LoadFromDirectory` | B | `loadPersonaFragments` |
+| `rule.NewConfigManager` | B | `buildRuleManager` → `executors.RegisterAll` |
+| `flowstore.NewManager` | B | `buildFlowManager` → `executors.RegisterAll` |
+| `flowtemplate.NewManager` | B | `buildFlowTemplateManager` → `executors.RegisterAll` |
+| `executors.RegisterAll` | A + B tool executors | after persona load, before `StartAll` |
+
+When a journey breaks because a tool executor isn't firing or persona
+fragments aren't grounding, suspect drift here first.
 
 ### Component Instance vs Factory
 
