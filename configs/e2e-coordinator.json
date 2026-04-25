@@ -91,6 +91,11 @@
         "enable_kv_query": true,
         "log_level": "INFO"
       }
+    },
+    "flow-builder": {
+      "name": "flow-builder",
+      "enabled": true,
+      "config": {}
     }
   },
   "components": {
@@ -103,6 +108,11 @@
         "default_tools": ["decide", "read_loop_result", "submit_work"],
         "auto_continue": false,
         "stream_name": "USER",
+        "permissions": {
+          "submit_task": ["*"],
+          "view": ["*"],
+          "approve": ["*"]
+        },
         "ports": {
           "inputs": [
             {"name": "user.message", "type": "jetstream", "subject": "user.message.>", "stream_name": "USER", "required": true, "description": "User messages from any channel"},

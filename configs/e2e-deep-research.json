@@ -102,6 +102,11 @@
         "default_tools": [],
         "auto_continue": false,
         "stream_name": "USER",
+        "permissions": {
+          "submit_task": ["*"],
+          "view": ["*"],
+          "approve": ["*"]
+        },
         "ports": {
           "inputs": [
             {"name": "user.message", "type": "jetstream", "subject": "user.message.>", "stream_name": "USER", "required": true, "description": "User messages from any channel"},
