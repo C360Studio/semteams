@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state';
+	import { resolve } from '$app/paths';
 </script>
 
 <svelte:head>
@@ -10,7 +11,7 @@
 	<div class="error-content">
 		<h1 class="error-status">{page.status}</h1>
 		<p class="error-message">{page.error?.message || 'Something went wrong'}</p>
-		<a href="/" class="error-home-link">← Back to Board</a>
+		<a href={resolve('/')} class="error-home-link">← Back to Board</a>
 	</div>
 </div>
 

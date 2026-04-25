@@ -42,7 +42,10 @@ describe("loopStateToColumn", () => {
     ["awaiting_approval", "needs_you"],
     ["paused", "needs_you"],
     ["complete", "done"],
+    ["success", "done"],
+    ["truncated", "done"],
     ["failed", "failed"],
+    ["error", "failed"],
     ["cancelled", "failed"],
   ];
 
