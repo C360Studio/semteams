@@ -21,13 +21,18 @@ import {
 const SELECTION_PARAM = "task";
 
 function createTaskStore() {
-  // Read selection from the URL — reactive via $app/state's `page` rune.
-  const selectedId = $derived<string | null>(
-    page.url?.searchParams.get(SELECTION_PARAM) ?? null,
-  );
+  // Selection lives in the URL. Read via a getter (NOT $derived) because
+  // SvelteKit guards page.url against module-scope reads on the server —
+  // the `$derived` body would evaluate during the createTaskStore() call
+  // at module import, which happens during SSR outside any render context
+  // and trips the "Can only read 'page.url' on the server during
+  // rendering" guard. Getters defer the read until a consumer calls them
+  // from inside a component render or $effect, which IS a render context.
+  function readSelection(): string | null {
+    return page.url?.searchParams.get(SELECTION_PARAM) ?? null;
+  }
 
   function setSelection(id: string | null) {
-    // page.url is a getter on $app/state; clone before mutating.
     if (!page.url) return;
     const url = new URL(page.url);
     if (id === null) url.searchParams.delete(SELECTION_PARAM);
@@ -122,13 +127,14 @@ function createTaskStore() {
 
     /** The currently selected task (for the context panel). */
     get selectedTask(): TaskInfo | undefined {
-      if (!selectedId) return undefined;
-      return tasks.find((t) => t.id === selectedId);
+      const id = readSelection();
+      if (!id) return undefined;
+      return tasks.find((t) => t.id === id);
     },
 
     /** The selected task ID (or null). */
     get selectedId() {
-      return selectedId;
+      return readSelection();
     },
 
     /** Select a task (opens the context panel). */
@@ -143,7 +149,7 @@ function createTaskStore() {
 
     /** Toggle selection — click same card again to deselect. */
     toggleTask(id: string) {
-      setSelection(selectedId === id ? null : id);
+      setSelection(readSelection() === id ? null : id);
     },
 
     /** Get tasks for a specific column. */
