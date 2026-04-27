@@ -78,10 +78,22 @@ describe("TaskDetailPanel", () => {
     expect(screen.getByText("5/20 iterations")).toBeInTheDocument();
   });
 
-  it("renders truncated ID", () => {
+  it("renders truncated ID with ellipsis", () => {
     render(TaskDetailPanel, { props: { task: makeTask({ id: "loop_abcdef123456" }) } });
 
-    expect(screen.getByText("ID: loop_abcdef1")).toBeInTheDocument();
+    // ID is now displayed without the "ID: " label (the monospace
+    // styling + ellipsis says it's an identifier).
+    expect(screen.getByText("loop_abcdef1…")).toBeInTheDocument();
+  });
+
+  it("renders #N short ref in header when present", () => {
+    render(TaskDetailPanel, { props: { task: makeTask({ shortRef: 42 }) } });
+    expect(screen.getByTestId("header-ref")).toHaveTextContent("#42");
+  });
+
+  it("does NOT render short ref when shortRef is null", () => {
+    render(TaskDetailPanel, { props: { task: makeTask({ shortRef: null }) } });
+    expect(screen.queryByTestId("header-ref")).not.toBeInTheDocument();
   });
 
   it("fires onClose when close button is clicked", async () => {
@@ -160,7 +172,9 @@ describe("TaskDetailPanel", () => {
         props: { task: makeTask({ childLoops: children }) },
       });
 
-      expect(screen.getByText("Child Loops (2)")).toBeInTheDocument();
+      // "Sub-loops" reads better than "Child Loops" in the user-facing
+      // copy — implementation detail in the rename.
+      expect(screen.getByText("Sub-loops (2)")).toBeInTheDocument();
       expect(screen.getByText("researcher")).toBeInTheDocument();
       expect(screen.getByText("editor")).toBeInTheDocument();
     });
@@ -168,7 +182,52 @@ describe("TaskDetailPanel", () => {
     it("hides child loop section when no children", () => {
       render(TaskDetailPanel, { props: { task: makeTask() } });
 
-      expect(screen.queryByText(/Child Loops/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Sub-loops/)).not.toBeInTheDocument();
+    });
+  });
+
+  describe("tabs", () => {
+    it("renders all four tabs", () => {
+      render(TaskDetailPanel, { props: { task: makeTask() } });
+      expect(screen.getByTestId("tab-activity")).toBeInTheDocument();
+      expect(screen.getByTestId("tab-trace")).toBeInTheDocument();
+      expect(screen.getByTestId("tab-entities")).toBeInTheDocument();
+      expect(screen.getByTestId("tab-logs")).toBeInTheDocument();
+    });
+
+    it("Activity is the default active tab", () => {
+      render(TaskDetailPanel, { props: { task: makeTask() } });
+      expect(screen.getByTestId("tab-activity")).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
+      expect(screen.getByTestId("panel-activity")).toBeInTheDocument();
+      expect(screen.queryByTestId("panel-trace")).not.toBeInTheDocument();
+    });
+
+    it("clicking a tab switches the visible panel", async () => {
+      const user = userEvent.setup();
+      render(TaskDetailPanel, { props: { task: makeTask() } });
+
+      await user.click(screen.getByTestId("tab-trace"));
+
+      expect(screen.getByTestId("tab-trace")).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
+      expect(screen.getByTestId("panel-trace")).toBeInTheDocument();
+      expect(screen.queryByTestId("panel-activity")).not.toBeInTheDocument();
+    });
+
+    it("placeholder tabs surface what's coming, don't pretend to deliver", async () => {
+      const user = userEvent.setup();
+      render(TaskDetailPanel, { props: { task: makeTask() } });
+
+      await user.click(screen.getByTestId("tab-entities"));
+      expect(screen.getByText("Scoped knowledge graph")).toBeInTheDocument();
+
+      await user.click(screen.getByTestId("tab-logs"));
+      expect(screen.getByText("Filtered logs")).toBeInTheDocument();
     });
   });
 });
