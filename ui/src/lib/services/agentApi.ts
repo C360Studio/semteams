@@ -4,6 +4,7 @@
 import type {
   AgentLoop,
   ControlSignal,
+  LoopTrajectory,
   SignalResponse,
   TrajectoryEntry,
 } from "$lib/types/agent";
@@ -99,6 +100,23 @@ export const agentApi = {
     if (!response.ok) {
       throw new AgentApiError(
         `Failed to get trajectory: ${response.statusText}`,
+        response.status,
+      );
+    }
+    return response.json();
+  },
+
+  /**
+   * Fetch the loop's full trajectory — the structured step sequence
+   * (model_call / tool_call) that powers the story view.
+   * Same endpoint as getTrajectory, but typed against the actual wire
+   * shape rather than the legacy summary type.
+   */
+  async getLoopTrajectory(loopId: string): Promise<LoopTrajectory> {
+    const response = await fetch(`${LOOP_BASE}/trajectories/${loopId}`);
+    if (!response.ok) {
+      throw new AgentApiError(
+        `Failed to get loop trajectory: ${response.statusText}`,
         response.status,
       );
     }

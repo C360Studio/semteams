@@ -204,3 +204,53 @@ export interface TrajectoryToolCall {
   error?: string;
   duration_ms?: number;
 }
+
+// ---------------------------------------------------------------------------
+// Loop trajectory — what /teams-loop/trajectories/<loop_id> actually returns.
+// The "narrative" data source for the story view in TaskDetailPanel.
+// Shape verified against the running e2e-coordinator stack 2026-04-27.
+// ---------------------------------------------------------------------------
+
+export type TrajectoryStepType = "model_call" | "tool_call";
+
+export interface ModelCallStep {
+  step_type: "model_call";
+  timestamp: string;
+  request_id: string;
+  /** Populated only after the response arrives. */
+  response?: string;
+  tokens_in?: number;
+  tokens_out?: number;
+  /** Duration in milliseconds. */
+  duration?: number;
+  model?: string;
+  provider?: string;
+  /** Capability the model was called with — "coordinator", "researcher", … */
+  capability?: string;
+}
+
+export interface ToolCallStep {
+  step_type: "tool_call";
+  timestamp: string;
+  tool_name: string;
+  tool_arguments?: Record<string, unknown>;
+  tool_result?: string;
+  tool_status?: string;
+  duration?: number;
+  provider?: string;
+  capability?: string;
+}
+
+export type TrajectoryStep = ModelCallStep | ToolCallStep;
+
+export interface LoopTrajectory {
+  loop_id: string;
+  start_time: string;
+  end_time?: string;
+  steps: TrajectoryStep[];
+  outcome?: string;
+  total_tokens_in?: number;
+  total_tokens_out?: number;
+  /** Total duration in milliseconds. Populated once the loop completes. */
+  duration?: number;
+}

@@ -4,9 +4,8 @@
   import { isActiveState } from "$lib/types/agent";
   import { agentApi } from "$lib/services/agentApi";
   import { taskLabels } from "$lib/stores/taskLabels.svelte";
-  import TrajectoryViewer from "$lib/components/agents/TrajectoryViewer.svelte";
   import StateBadge from "./StateBadge.svelte";
-  import TaskTrace from "./TaskTrace.svelte";
+  import TaskStory from "./TaskStory.svelte";
 
   interface Props {
     task: TaskInfo;
@@ -15,13 +14,14 @@
 
   let { task, onClose }: Props = $props();
 
-  // Tab definitions. Activity is the only one with real content today;
-  // the others are placeholders that signal what's coming next without
-  // pretending to deliver it. Per docs/proposals/ui-redesign.md step 5.
-  type TabId = "activity" | "trace" | "entities" | "logs";
+  // Tab definitions. Activity tells the story (model_call / tool_call
+  // narrative + raw-activity escape hatch). Entities + Logs are next
+  // up; placeholders for now. The previous "Trace" tab was a parallel
+  // view of the same wire data and ended up confusing — folded under
+  // "Show raw activity" inside Activity.
+  type TabId = "activity" | "entities" | "logs";
   const TABS: { id: TabId; label: string }[] = [
     { id: "activity", label: "Activity" },
-    { id: "trace", label: "Trace" },
     { id: "entities", label: "Entities" },
     { id: "logs", label: "Logs" },
   ];
@@ -211,7 +211,7 @@
     {/if}
 
     {#if signalError}
-      <div class="signal-error" role="alert">{signalError}</div>
+      <div class="signal-error" role="alert" data-testid="signal-error">{signalError}</div>
     {/if}
 
     <div class="action-buttons">
@@ -262,7 +262,7 @@
       <div id="panel-activity" role="tabpanel" data-testid="panel-activity">
         {#if task.childLoops.length > 0}
           <section class="panel-section">
-            <h3 class="section-title">Sub-loops ({task.childLoops.length})</h3>
+            <h3 class="section-title">Sub-tasks ({task.childLoops.length})</h3>
             <ul class="child-list">
               {#each task.childLoops as child (child.loop_id)}
                 <li class="child-item">
@@ -279,14 +279,9 @@
           </section>
         {/if}
 
-        <section class="panel-section trajectory-section">
-          <h3 class="section-title">Trajectory</h3>
-          <TrajectoryViewer loopId={task.id} />
+        <section class="panel-section">
+          <TaskStory loopId={task.id} prompt={task.primaryLoop.prompt} />
         </section>
-      </div>
-    {:else if activeTab === "trace"}
-      <div id="panel-trace" role="tabpanel" data-testid="panel-trace">
-        <TaskTrace loopId={task.id} />
       </div>
     {:else if activeTab === "entities"}
       <div id="panel-entities" role="tabpanel" data-testid="panel-entities" class="placeholder-tab">

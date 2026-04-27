@@ -77,10 +77,9 @@ export function entryMentionsLoop(
 }
 
 /**
- * Coarse classification for UI treatment. The Trace tab uses this to
- * pick an icon / color and to decide which entries to surface
- * prominently (LLM requests/responses + tool calls) vs. group as
- * background noise (graph mutations, lifecycle).
+ * Coarse classification for UI treatment. The Activity tab uses this
+ * to drive structural grouping (lifecycle / LLM / tools / background)
+ * rather than user-facing filter chips.
  */
 export type EntryKind =
   | "llm-request"
@@ -102,4 +101,104 @@ export function classifyEntry(entry: MessageLogEntry): EntryKind {
   }
   if (s.startsWith("graph.mutation.")) return "graph";
   return "other";
+}
+
+/**
+ * Pull a request_id out of a message's payload. agent.request.* and
+ * agent.response.* both carry it; pairing requests with responses by
+ * this key produces a "round" — the user-facing unit "the LLM was
+ * asked X and said Y."
+ */
+export function requestIdOf(entry: MessageLogEntry): string | null {
+  const raw = entry.raw_data;
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const payload = (r.payload as Record<string, unknown>) ?? r;
+  const id = payload?.request_id;
+  return typeof id === "string" ? id : null;
+}
+
+/**
+ * Pull a tool call id from a tool.execute.* / tool.result.* payload.
+ * Used to pair execute with result the same way request_id pairs LLM
+ * sides. Returns null when not present.
+ */
+export function toolCallIdOf(entry: MessageLogEntry): string | null {
+  const raw = entry.raw_data;
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const payload = (r.payload as Record<string, unknown>) ?? r;
+  const id = payload?.call_id ?? payload?.tool_call_id;
+  return typeof id === "string" ? id : null;
+}
+
+export interface LLMRound {
+  requestId: string;
+  request: MessageLogEntry | null;
+  response: MessageLogEntry | null;
+}
+
+export interface ToolRound {
+  callId: string;
+  execute: MessageLogEntry | null;
+  result: MessageLogEntry | null;
+}
+
+/**
+ * Pair LLM request and response messages into rounds keyed by
+ * request_id. A round may have just a request (in-flight) or just a
+ * response (request fell off the log window). Sorted by the earliest
+ * timestamp seen for the round.
+ */
+export function pairLLMRounds(entries: MessageLogEntry[]): LLMRound[] {
+  const byId = new Map<string, LLMRound>();
+  for (const e of entries) {
+    const kind = classifyEntry(e);
+    if (kind !== "llm-request" && kind !== "llm-response") continue;
+    const id = requestIdOf(e);
+    if (!id) continue;
+    let round = byId.get(id);
+    if (!round) {
+      round = { requestId: id, request: null, response: null };
+      byId.set(id, round);
+    }
+    if (kind === "llm-request") round.request = e;
+    else round.response = e;
+  }
+  const rounds = [...byId.values()];
+  rounds.sort((a, b) => {
+    const at = (a.request ?? a.response)?.timestamp ?? "";
+    const bt = (b.request ?? b.response)?.timestamp ?? "";
+    return at.localeCompare(bt);
+  });
+  return rounds;
+}
+
+/**
+ * Pair tool execute / result messages into rounds keyed by call id.
+ * Mirror of pairLLMRounds. Tool messages without an identifiable
+ * call_id fall through to the background section.
+ */
+export function pairToolRounds(entries: MessageLogEntry[]): ToolRound[] {
+  const byId = new Map<string, ToolRound>();
+  for (const e of entries) {
+    const kind = classifyEntry(e);
+    if (kind !== "tool-execute" && kind !== "tool-result") continue;
+    const id = toolCallIdOf(e);
+    if (!id) continue;
+    let round = byId.get(id);
+    if (!round) {
+      round = { callId: id, execute: null, result: null };
+      byId.set(id, round);
+    }
+    if (kind === "tool-execute") round.execute = e;
+    else round.result = e;
+  }
+  const rounds = [...byId.values()];
+  rounds.sort((a, b) => {
+    const at = (a.execute ?? a.result)?.timestamp ?? "";
+    const bt = (b.execute ?? b.result)?.timestamp ?? "";
+    return at.localeCompare(bt);
+  });
+  return rounds;
 }

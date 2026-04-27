@@ -159,8 +159,12 @@ describe("TaskDetailPanel", () => {
 
       await user.click(screen.getByText("Approve"));
 
-      expect(screen.getByRole("alert")).toBeInTheDocument();
-      expect(screen.getByText("Signal failed")).toBeInTheDocument();
+      // Scope to the signal-error element — the panel also embeds
+      // TaskStory which raises its own alert if the trajectory fetch
+      // fails, so a generic getByRole("alert") would match multiple.
+      const err = await screen.findByTestId("signal-error");
+      expect(err).toBeInTheDocument();
+      expect(err).toHaveTextContent("Signal failed");
     });
   });
 
@@ -174,9 +178,9 @@ describe("TaskDetailPanel", () => {
         props: { task: makeTask({ childLoops: children }) },
       });
 
-      // "Sub-loops" reads better than "Child Loops" in the user-facing
-      // copy — implementation detail in the rename.
-      expect(screen.getByText("Sub-loops (2)")).toBeInTheDocument();
+      // "Sub-tasks" reads less internal than "Sub-loops" / "Child
+      // Loops" — the user thinks of them as tasks, not loops.
+      expect(screen.getByText("Sub-tasks (2)")).toBeInTheDocument();
       expect(screen.getByText("researcher")).toBeInTheDocument();
       expect(screen.getByText("editor")).toBeInTheDocument();
     });
@@ -184,17 +188,20 @@ describe("TaskDetailPanel", () => {
     it("hides child loop section when no children", () => {
       render(TaskDetailPanel, { props: { task: makeTask() } });
 
-      expect(screen.queryByText(/Sub-loops/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Sub-tasks/)).not.toBeInTheDocument();
     });
   });
 
   describe("tabs", () => {
-    it("renders all four tabs", () => {
+    it("renders three tabs (Activity is the only one with content today)", () => {
+      // Trace tab was folded into Activity (under "Show raw activity"
+      // toggle) — having two tabs for the same data confused users
+      // who didn't know our internal taxonomy.
       render(TaskDetailPanel, { props: { task: makeTask() } });
       expect(screen.getByTestId("tab-activity")).toBeInTheDocument();
-      expect(screen.getByTestId("tab-trace")).toBeInTheDocument();
       expect(screen.getByTestId("tab-entities")).toBeInTheDocument();
       expect(screen.getByTestId("tab-logs")).toBeInTheDocument();
+      expect(screen.queryByTestId("tab-trace")).not.toBeInTheDocument();
     });
 
     it("Activity is the default active tab", () => {
@@ -204,20 +211,20 @@ describe("TaskDetailPanel", () => {
         "true",
       );
       expect(screen.getByTestId("panel-activity")).toBeInTheDocument();
-      expect(screen.queryByTestId("panel-trace")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("panel-entities")).not.toBeInTheDocument();
     });
 
     it("clicking a tab switches the visible panel", async () => {
       const user = userEvent.setup();
       render(TaskDetailPanel, { props: { task: makeTask() } });
 
-      await user.click(screen.getByTestId("tab-trace"));
+      await user.click(screen.getByTestId("tab-entities"));
 
-      expect(screen.getByTestId("tab-trace")).toHaveAttribute(
+      expect(screen.getByTestId("tab-entities")).toHaveAttribute(
         "aria-selected",
         "true",
       );
-      expect(screen.getByTestId("panel-trace")).toBeInTheDocument();
+      expect(screen.getByTestId("panel-entities")).toBeInTheDocument();
       expect(screen.queryByTestId("panel-activity")).not.toBeInTheDocument();
     });
 
