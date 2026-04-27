@@ -194,6 +194,11 @@ tasks:
       - task: test:e2e:agentic:real-time-activity-stream
       - task: test:e2e:agentic:deep-research
       - task: test:e2e:agentic:ops-agent
+      - task: test:e2e:agentic:coordinator-researcher
+      - task: test:e2e:agentic:task-story-trace
+      - task: test:e2e:agentic:action-chips
+      - task: test:e2e:agentic:task-title-aliases
+      - task: test:e2e:agentic:admin-flows-inventory
 
   test:e2e:agentic:tool-approval-gate:
     desc: Run the tool-approval-gate journey with its paired fixture
@@ -253,6 +258,79 @@ tasks:
           FIXTURE: "{{.FIXTURE}}"
           AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
       - npx playwright test e2e/agentic/ops-agent-baseline.spec.ts
+
+  test:e2e:agentic:coordinator-researcher:
+    desc: Run the coordinator → researcher delegation journey
+    summary: |
+      One user prompt produces two loops: coordinator (decide tool) and
+      researcher (web_search + synth). Validates the rule-engine spawn
+      path (publish_agent on coordinator.next_action triple).
+    vars:
+      FIXTURE: coordinator-researcher.yaml
+      AGENTIC_CONFIG: e2e-coordinator.json
+    cmds:
+      - defer: { task: test:e2e:agentic:cleanup }
+      - task: test:e2e:agentic:stack:up
+        vars:
+          FIXTURE: "{{.FIXTURE}}"
+          AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
+      - npx playwright test e2e/agentic/coordinator-researcher.spec.ts
+
+  test:e2e:agentic:task-story-trace:
+    desc: Run the task-story / raw-activity right-rail journey
+    summary: |
+      Reuses the deep-research fixture to land a completed task, then
+      drives the right-rail detail panel: Activity tab shows the story
+      list; "Show raw activity" disclosure exposes the trace rows.
+    vars:
+      FIXTURE: deep-research.yaml
+      AGENTIC_CONFIG: e2e-deep-research.json
+    cmds:
+      - defer: { task: test:e2e:agentic:cleanup }
+      - task: test:e2e:agentic:stack:up
+        vars:
+          FIXTURE: "{{.FIXTURE}}"
+          AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
+      - npx playwright test e2e/agentic/task-story-trace.spec.ts
+
+  test:e2e:agentic:action-chips:
+    desc: Run the persona action-chips journey (Research / Plan / Implement)
+    vars:
+      FIXTURE: deep-research.yaml
+      AGENTIC_CONFIG: e2e-deep-research.json
+    cmds:
+      - defer: { task: test:e2e:agentic:cleanup }
+      - task: test:e2e:agentic:stack:up
+        vars:
+          FIXTURE: "{{.FIXTURE}}"
+          AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
+      - npx playwright test e2e/agentic/action-chips-personas.spec.ts
+
+  test:e2e:agentic:task-title-aliases:
+    desc: Run the editable-title + alias-chip journey
+    vars:
+      FIXTURE: deep-research.yaml
+      AGENTIC_CONFIG: e2e-deep-research.json
+    cmds:
+      - defer: { task: test:e2e:agentic:cleanup }
+      - task: test:e2e:agentic:stack:up
+        vars:
+          FIXTURE: "{{.FIXTURE}}"
+          AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
+      - npx playwright test e2e/agentic/task-title-aliases.spec.ts
+
+  test:e2e:agentic:admin-flows-inventory:
+    desc: Run the read-only /admin/flows inventory journey
+    vars:
+      FIXTURE: deep-research.yaml
+      AGENTIC_CONFIG: e2e-deep-research.json
+    cmds:
+      - defer: { task: test:e2e:agentic:cleanup }
+      - task: test:e2e:agentic:stack:up
+        vars:
+          FIXTURE: "{{.FIXTURE}}"
+          AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
+      - npx playwright test e2e/agentic/admin-flows-inventory.spec.ts
 
   # === Interactive dev-mode scenario tasks ===
   #
