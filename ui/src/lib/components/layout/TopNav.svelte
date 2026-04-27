@@ -1,9 +1,11 @@
 <script lang="ts">
   import { resolve } from "$app/paths";
+  import GlobalStatus from "./GlobalStatus.svelte";
 </script>
 
 <header class="top-nav" data-testid="top-nav">
   <a class="app-name" href={resolve("/")} data-testid="brand-home">semteams</a>
+  <GlobalStatus />
 </header>
 
 <style>
