@@ -12,6 +12,7 @@ import { page } from "$app/state";
 import { replaceState } from "$app/navigation";
 import { agentStore } from "./agentStore.svelte";
 import { taskRefs } from "./taskRefs.svelte";
+import { taskLabels } from "./taskLabels.svelte";
 import {
   type TaskInfo,
   type TaskColumn,
@@ -71,6 +72,10 @@ function createTaskStore() {
         loop,
         childrenByParent[loop.loop_id] ?? [],
         taskRefs.get(loop.loop_id),
+        {
+          titleOverride: taskLabels.getTitle(loop.loop_id),
+          aliases: taskLabels.getAliases(loop.loop_id),
+        },
       ),
     );
   });
@@ -169,13 +174,15 @@ function createTaskStore() {
     },
 
     /**
-     * Resolve "@42" / "#42" / "compare mqtt" to a TaskInfo. Numeric
-     * tokens look up by ref; otherwise fuzzy title match. Returns
-     * null if nothing resolves.
+     * Resolve "@42" / "#42" / "@my-alias" / "compare mqtt" to a
+     * TaskInfo. Tries ref → alias → fuzzy title in that order.
      */
     resolveMention(input: string): TaskInfo | undefined {
-      const found = resolveTaskMention(input, tasks, (ref) =>
-        taskRefs.findLoopByRef(ref),
+      const found = resolveTaskMention(
+        input,
+        tasks,
+        (ref) => taskRefs.findLoopByRef(ref),
+        (alias) => taskLabels.findLoopByAlias(alias),
       );
       return found ?? undefined;
     },

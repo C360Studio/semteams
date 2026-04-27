@@ -3,6 +3,7 @@
   import type { ControlSignal } from "$lib/types/agent";
   import { isActiveState } from "$lib/types/agent";
   import { agentApi } from "$lib/services/agentApi";
+  import { taskLabels } from "$lib/stores/taskLabels.svelte";
   import TrajectoryViewer from "$lib/components/agents/TrajectoryViewer.svelte";
   import StateBadge from "./StateBadge.svelte";
 
@@ -28,11 +29,31 @@
   let signalError = $state<string | null>(null);
   let closeBtnRef = $state<HTMLButtonElement | null>(null);
 
+  // Inline title editor. `editingTitle` flips the heading into an input;
+  // `titleDraft` is the buffer the user types into. Save on Enter / blur,
+  // cancel on Escape. Empty save clears the override (back to derived).
+  let editingTitle = $state(false);
+  let titleDraft = $state("");
+  let titleInputEl = $state<HTMLInputElement>();
+
+  // Alias editor.
+  let aliasDraft = $state("");
+  let aliasError = $state<string | null>(null);
+
   // Focus the close button when the panel mounts so keyboard users know
   // the panel appeared. Without this, focus stays on the clicked card
   // and the panel is invisible to screen readers.
   $effect(() => {
     closeBtnRef?.focus();
+  });
+
+  // When entering edit mode, focus + select the input so the user can
+  // overwrite or extend without an extra click.
+  $effect(() => {
+    if (editingTitle && titleInputEl) {
+      titleInputEl.focus();
+      titleInputEl.select();
+    }
   });
 
   async function handleSignal(signal: ControlSignal) {
@@ -42,6 +63,60 @@
     } catch (err) {
       signalError = err instanceof Error ? err.message : "Signal failed";
     }
+  }
+
+  function startTitleEdit() {
+    titleDraft = task.title;
+    editingTitle = true;
+  }
+
+  function commitTitle() {
+    if (!editingTitle) return;
+    // Empty input → clear override → revert to auto-derived.
+    taskLabels.setTitle(task.id, titleDraft);
+    editingTitle = false;
+  }
+
+  function cancelTitle() {
+    editingTitle = false;
+    titleDraft = "";
+  }
+
+  function handleTitleKey(e: KeyboardEvent) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      commitTitle();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      cancelTitle();
+    }
+  }
+
+  function resetTitleToAuto() {
+    taskLabels.clearTitle(task.id);
+  }
+
+  function commitAlias() {
+    aliasError = null;
+    const value = aliasDraft.trim();
+    if (!value) return;
+    const ok = taskLabels.addAlias(task.id, value);
+    if (ok) {
+      aliasDraft = "";
+    } else {
+      aliasError = `"${value}" is already used by another task`;
+    }
+  }
+
+  function handleAliasKey(e: KeyboardEvent) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      commitAlias();
+    }
+  }
+
+  function removeAlias(alias: string) {
+    taskLabels.removeAlias(task.id, alias);
   }
 </script>
 
@@ -63,13 +138,76 @@
         <span aria-hidden="true">×</span>
       </button>
     </div>
-    <h2 class="task-title">{task.title}</h2>
+    {#if editingTitle}
+      <div class="title-edit-row">
+        <input
+          class="title-input"
+          type="text"
+          bind:value={titleDraft}
+          bind:this={titleInputEl}
+          onkeydown={handleTitleKey}
+          onblur={commitTitle}
+          data-testid="title-input"
+          aria-label="Edit task title"
+          placeholder="Empty resets to auto-title"
+        />
+      </div>
+    {:else}
+      <button
+        type="button"
+        class="task-title-button"
+        data-testid="task-title"
+        onclick={startTitleEdit}
+        title="Click to rename"
+        aria-label="Edit title: {task.title}"
+      >
+        <h2 class="task-title">{task.title}</h2>
+        <span class="title-edit-hint" aria-hidden="true">✎</span>
+      </button>
+    {/if}
+
     <div class="task-meta">
       <span class="meta-item">
         {task.iterations}/{task.maxIterations} iterations
       </span>
       <span class="meta-item meta-id" title={task.id}>{task.id.slice(0, 12)}…</span>
+      {#if task.titleEdited && !editingTitle}
+        <button
+          type="button"
+          class="meta-reset"
+          data-testid="title-reset"
+          onclick={resetTitleToAuto}
+          title="Reset to auto-derived title"
+        >reset</button>
+      {/if}
     </div>
+
+    <div class="alias-row" data-testid="alias-row">
+      {#each task.aliases as alias (alias)}
+        <span class="alias-chip" data-testid="alias-chip">
+          @{alias}
+          <button
+            type="button"
+            class="alias-remove"
+            onclick={() => removeAlias(alias)}
+            aria-label="Remove alias {alias}"
+          >×</button>
+        </span>
+      {/each}
+      <input
+        class="alias-input"
+        type="text"
+        bind:value={aliasDraft}
+        onkeydown={handleAliasKey}
+        onblur={() => aliasDraft.trim() && commitAlias()}
+        placeholder={task.aliases.length === 0 ? "Add alias…" : "+"}
+        data-testid="alias-input"
+        aria-label="Add alias"
+      />
+    </div>
+    {#if aliasError}
+      <p class="alias-error" role="alert">{aliasError}</p>
+    {/if}
 
     {#if signalError}
       <div class="signal-error" role="alert">{signalError}</div>
@@ -242,12 +380,145 @@
     outline-offset: 2px;
   }
 
+  .task-title-button {
+    all: unset;
+    cursor: pointer;
+    display: flex;
+    align-items: baseline;
+    gap: 0.375rem;
+    padding: 0.125rem 0.25rem;
+    margin: 0 -0.25rem;
+    border-radius: 4px;
+    width: calc(100% + 0.5rem);
+  }
+
+  .task-title-button:hover {
+    background: var(--ui-surface-tertiary, #e5e7eb);
+  }
+
+  .task-title-button:focus-visible {
+    outline: 2px solid var(--ui-interactive-primary, #3b82f6);
+    outline-offset: 2px;
+  }
+
   .task-title {
     margin: 0;
     font-size: 0.9375rem;
     font-weight: 600;
     color: var(--ui-text-primary, #111827);
     line-height: 1.3;
+    flex: 1;
+    text-align: left;
+  }
+
+  .title-edit-hint {
+    font-size: 0.75rem;
+    color: var(--ui-text-tertiary, #9ca3af);
+    flex-shrink: 0;
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+
+  .task-title-button:hover .title-edit-hint,
+  .task-title-button:focus-visible .title-edit-hint {
+    opacity: 1;
+  }
+
+  .title-edit-row {
+    margin: 0 -0.25rem;
+  }
+
+  .title-input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 0.25rem 0.375rem;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: var(--ui-text-primary, #111827);
+    background: var(--ui-surface-primary, #fff);
+    border: 1px solid var(--ui-interactive-primary, #3b82f6);
+    border-radius: 4px;
+    outline: none;
+    font-family: inherit;
+  }
+
+  .meta-reset {
+    all: unset;
+    cursor: pointer;
+    color: var(--ui-text-tertiary, #9ca3af);
+    text-decoration: underline;
+    text-decoration-style: dotted;
+    text-underline-offset: 2px;
+    font-size: 0.6875rem;
+  }
+
+  .meta-reset:hover {
+    color: var(--ui-text-primary, #374151);
+  }
+
+  .alias-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.25rem;
+    margin-top: 0.4375rem;
+  }
+
+  .alias-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.0625rem 0.25rem 0.0625rem 0.4375rem;
+    background: var(--ui-surface-tertiary, #e5e7eb);
+    border-radius: 9999px;
+    font-size: 0.6875rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--ui-text-primary, #111827);
+  }
+
+  .alias-remove {
+    all: unset;
+    cursor: pointer;
+    width: 1rem;
+    height: 1rem;
+    line-height: 1;
+    text-align: center;
+    border-radius: 9999px;
+    color: var(--ui-text-secondary, #6b7280);
+    font-size: 0.75rem;
+  }
+
+  .alias-remove:hover {
+    color: var(--ui-text-primary, #111827);
+    background: var(--ui-surface-primary, #d1d5db);
+  }
+
+  .alias-input {
+    flex: 1;
+    min-width: 6rem;
+    padding: 0.125rem 0.375rem;
+    border: 1px dashed var(--ui-border-subtle, #d1d5db);
+    background: transparent;
+    border-radius: 4px;
+    font-size: 0.6875rem;
+    color: var(--ui-text-primary, #111827);
+    outline: none;
+    font-family: inherit;
+  }
+
+  .alias-input:focus {
+    border-style: solid;
+    border-color: var(--ui-interactive-primary, #3b82f6);
+  }
+
+  .alias-error {
+    margin: 0.25rem 0 0;
+    padding: 0.25rem 0.375rem;
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    border-radius: 4px;
+    font-size: 0.6875rem;
+    color: #991b1b;
   }
 
   .task-meta {

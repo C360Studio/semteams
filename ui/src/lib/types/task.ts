@@ -83,6 +83,19 @@ export interface TaskInfo {
   shortRef: number | null;
 
   /**
+   * User-defined synonyms. Resolved by `@`-mentions in the chat bar.
+   * Empty array if the user hasn't added any.
+   */
+  aliases: string[];
+
+  /**
+   * True when the user has overridden the auto-derived title with
+   * their own. Display unchanged (still in `title`); this flag lets
+   * the detail panel show a "reset to auto-title" affordance.
+   */
+  titleEdited: boolean;
+
+  /**
    * Human-readable title for the card. Phase 1: falls back to
    * `task_id` since the loop entity doesn't carry the user's prompt.
    * Phase 2: will be the first line of the user's message.
@@ -150,18 +163,25 @@ function titleFromPrompt(prompt: string): string {
 }
 
 /**
+ * Optional label data sourced from taskLabels — passed in to keep this
+ * function pure (no store imports). Caller (taskStore) reads
+ * taskLabels.getTitle / .getAliases and threads them through.
+ */
+export interface TaskLabelData {
+  titleOverride: string | null;
+  aliases: string[];
+}
+
+/**
  * Derive a TaskInfo from a top-level loop and its children.
  * The task's column is the most-urgent state across itself and all
  * children (needs_you > failed > executing > thinking > done).
- *
- * `shortRef` is passed in rather than read from a store so this stays
- * a pure function — the caller (taskStore) reads taskRefs.get() and
- * passes the ref through.
  */
 export function deriveTaskInfo(
   primaryLoop: AgentLoop,
   childLoops: AgentLoop[],
   shortRef: number | null = null,
+  labels: TaskLabelData = { titleOverride: null, aliases: [] },
 ): TaskInfo {
   const primaryColumn = loopStateToColumn(primaryLoop.state);
 
@@ -178,12 +198,15 @@ export function deriveTaskInfo(
     (c) => loopStateToColumn(c.state) === "needs_you",
   );
 
-  // Title preference: the user's prompt (most informative) → task_id
-  // (UUID, ugly but stable) → short loop_id (always present). prompt
-  // arrives via the dispatch's COMPLETE_<id> envelope merge in
-  // agentStore, so freshly-created tasks may briefly show task_id
-  // before the prompt lands.
+  // Title preference: user override (highest, freely editable) → the
+  // user's prompt (most informative auto-source) → task_id (UUID,
+  // ugly but stable) → short loop_id (always present). prompt arrives
+  // via the dispatch's COMPLETE_<id> envelope merge in agentStore, so
+  // freshly-created tasks may briefly show task_id before the prompt
+  // lands.
+  const titleEdited = labels.titleOverride !== null;
   const title =
+    labels.titleOverride ||
     (primaryLoop.prompt && titleFromPrompt(primaryLoop.prompt)) ||
     primaryLoop.task_id ||
     primaryLoop.loop_id.slice(0, 12);
@@ -191,6 +214,8 @@ export function deriveTaskInfo(
   return {
     id: primaryLoop.loop_id,
     shortRef,
+    aliases: labels.aliases,
+    titleEdited,
     title,
     column: effectiveColumn,
     state: primaryLoop.state,
@@ -205,20 +230,25 @@ export function deriveTaskInfo(
 }
 
 /**
- * Resolve an "@42" / "#42" / partial-title input to a TaskInfo.
- * Numeric tokens look up by ref via taskRefs (caller passes the
- * lookup function so this stays pure). Otherwise case-insensitive
- * substring match across titles. Aliases land in step 7 of the redesign.
+ * Resolve an "@42" / "#42" / "@my-alias" / partial-title input to a
+ * TaskInfo. Resolution order:
+ *
+ *   1. Numeric token → exact ref match (#42 / @42 / 42).
+ *   2. Exact alias match (case-insensitive).
+ *   3. Title fuzzy (case-insensitive substring). First match wins.
+ *
+ * Lookup helpers passed in so this stays pure (no store imports).
  */
 export function resolveTaskMention(
   input: string,
   tasks: TaskInfo[],
   loopByRef: (ref: number) => string | null,
+  loopByAlias: (alias: string) => string | null = () => null,
 ): TaskInfo | null {
   const trimmed = input.replace(/^[@#]/, "").trim();
   if (!trimmed) return null;
 
-  // Numeric → exact ref match
+  // 1. Numeric → exact ref match
   if (/^\d+$/.test(trimmed)) {
     const ref = Number(trimmed);
     const loopId = loopByRef(ref);
@@ -228,7 +258,14 @@ export function resolveTaskMention(
     }
   }
 
-  // Title fuzzy (case-insensitive substring). First match wins.
+  // 2. Exact alias match
+  const aliasLoopId = loopByAlias(trimmed);
+  if (aliasLoopId) {
+    const match = tasks.find((t) => t.id === aliasLoopId);
+    if (match) return match;
+  }
+
+  // 3. Title fuzzy (case-insensitive substring). First match wins.
   const lower = trimmed.toLowerCase();
   return tasks.find((t) => t.title.toLowerCase().includes(lower)) ?? null;
 }

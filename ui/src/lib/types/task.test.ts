@@ -319,6 +319,36 @@ describe("deriveTaskInfo", () => {
     const t = deriveTaskInfo(makeLoop({ loop_id: "loop_x" }), []);
     expect(t.shortRef).toBeNull();
   });
+
+  it("title override wins over prompt-derived auto-title", () => {
+    const t = deriveTaskInfo(
+      makeLoop({ prompt: "auto-title from prompt" }),
+      [],
+      null,
+      { titleOverride: "User-set title", aliases: [] },
+    );
+    expect(t.title).toBe("User-set title");
+    expect(t.titleEdited).toBe(true);
+  });
+
+  it("titleEdited is false when no override is set", () => {
+    const t = deriveTaskInfo(makeLoop({ prompt: "auto" }), [], null);
+    expect(t.title).toBe("auto");
+    expect(t.titleEdited).toBe(false);
+  });
+
+  it("aliases default to empty when no labels passed", () => {
+    const t = deriveTaskInfo(makeLoop(), []);
+    expect(t.aliases).toEqual([]);
+  });
+
+  it("aliases pass through from labels", () => {
+    const t = deriveTaskInfo(makeLoop(), [], null, {
+      titleOverride: null,
+      aliases: ["mqtt", "iot"],
+    });
+    expect(t.aliases).toEqual(["mqtt", "iot"]);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -330,6 +360,8 @@ describe("resolveTaskMention", () => {
     return {
       id: "loop_default",
       shortRef: null,
+      aliases: [],
+      titleEdited: false,
       title: "untitled",
       column: "thinking",
       state: "exploring",
@@ -386,5 +418,25 @@ describe("resolveTaskMention", () => {
   it("strips leading @ and # before parsing", () => {
     // The user typed "@mqtt" — should still hit the fuzzy fallback.
     expect(resolveTaskMention("@mqtt", tasks, loopByRef)?.id).toBe("loop_a");
+  });
+
+  it("exact alias match resolves before fuzzy title", () => {
+    // alias "edge" → loop_b, even though "edge" is a substring of
+    // "compare mqtt vs nats for iot edge" (loop_a's title).
+    const tasksWithAlias = [
+      task({ id: "loop_a", shortRef: 1, title: "compare mqtt vs nats for iot edge" }),
+      task({ id: "loop_b", shortRef: 2, title: "research rust" }),
+    ];
+    const loopByAlias = (a: string) => (a.toLowerCase() === "edge" ? "loop_b" : null);
+    expect(
+      resolveTaskMention("@edge", tasksWithAlias, () => null, loopByAlias)?.id,
+    ).toBe("loop_b");
+  });
+
+  it("alias lookup falls through to fuzzy when no alias matches", () => {
+    const loopByAlias = () => null;
+    expect(
+      resolveTaskMention("@mqtt", tasks, loopByRef, loopByAlias)?.id,
+    ).toBe("loop_a");
   });
 });
