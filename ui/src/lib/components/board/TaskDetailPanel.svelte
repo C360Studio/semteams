@@ -6,6 +6,7 @@
   import { taskLabels } from "$lib/stores/taskLabels.svelte";
   import TrajectoryViewer from "$lib/components/agents/TrajectoryViewer.svelte";
   import StateBadge from "./StateBadge.svelte";
+  import TaskTrace from "./TaskTrace.svelte";
 
   interface Props {
     task: TaskInfo;
@@ -284,13 +285,8 @@
         </section>
       </div>
     {:else if activeTab === "trace"}
-      <div id="panel-trace" role="tabpanel" data-testid="panel-trace" class="placeholder-tab">
-        <p class="placeholder-title">Runtime message trace</p>
-        <p class="placeholder-body">
-          NATS subjects this task fired and reacted to, in order across
-          components. Coming next — wires up the message-logger to filter
-          by the task's loop chain.
-        </p>
+      <div id="panel-trace" role="tabpanel" data-testid="panel-trace">
+        <TaskTrace loopId={task.id} />
       </div>
     {:else if activeTab === "entities"}
       <div id="panel-entities" role="tabpanel" data-testid="panel-entities" class="placeholder-tab">
