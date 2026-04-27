@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   isActiveState,
   normalizeWireLoop,
+  extractCompletionPatch,
   type AgentLoopState,
   type ActiveLoopState,
   type AgentLoop,
@@ -345,6 +346,90 @@ describe("normalizeWireLoop", () => {
       data: { id: "loop-7", state: "success" },
     };
     expect(normalizeWireLoop(env)?.state).toBe("success");
+  });
+
+  it("propagates prompt/result/tokens when present", () => {
+    // The KV-watcher shape sometimes includes completion fields directly
+    // on the main loop entry (post beta.14). When it does, we expose
+    // them on AgentLoop so deriveTaskInfo can use prompt for the title.
+    const env: WireActivityEnvelope = {
+      type: "loop_updated",
+      loop_id: "loop-8",
+      data: {
+        id: "loop-8",
+        state: "complete",
+        prompt: "compare mqtt vs nats for iot edge",
+        result: "## Summary\n\n...",
+        tokens_in: 100,
+        tokens_out: 50,
+      },
+    };
+    const loop = normalizeWireLoop(env);
+    expect(loop?.prompt).toBe("compare mqtt vs nats for iot edge");
+    expect(loop?.result).toContain("Summary");
+    expect(loop?.tokens_in).toBe(100);
+    expect(loop?.tokens_out).toBe(50);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// extractCompletionPatch — COMPLETE_<id> envelope handling
+// ---------------------------------------------------------------------------
+
+describe("extractCompletionPatch", () => {
+  it("returns null for non-COMPLETE envelopes", () => {
+    const env: WireActivityEnvelope = {
+      type: "loop_updated",
+      loop_id: "loop-1",
+      data: { id: "loop-1", state: "complete" },
+    };
+    expect(extractCompletionPatch(env)).toBeNull();
+  });
+
+  it("returns null for COMPLETE envelopes with no data", () => {
+    const env: WireActivityEnvelope = {
+      type: "loop_updated",
+      loop_id: "COMPLETE_loop-1",
+    };
+    expect(extractCompletionPatch(env)).toBeNull();
+  });
+
+  it("strips the COMPLETE_ prefix and returns id + completion patch", () => {
+    const env: WireActivityEnvelope = {
+      type: "loop_updated",
+      loop_id: "COMPLETE_loop-1",
+      data: {
+        loop_id: "COMPLETE_loop-1",
+        outcome: "success",
+        prompt: "compare mqtt vs nats",
+        result: "## Summary\n\n...",
+        tokens_in: 100,
+        tokens_out: 50,
+      },
+    };
+    const out = extractCompletionPatch(env);
+    expect(out?.id).toBe("loop-1");
+    expect(out?.patch).toEqual({
+      outcome: "success",
+      prompt: "compare mqtt vs nats",
+      result: "## Summary\n\n...",
+      tokens_in: 100,
+      tokens_out: 50,
+    });
+  });
+
+  it("only surfaces fields that are present (no undefined zero-fill)", () => {
+    const env: WireActivityEnvelope = {
+      type: "loop_updated",
+      loop_id: "COMPLETE_loop-1",
+      data: { loop_id: "COMPLETE_loop-1", prompt: "hi" },
+    };
+    const out = extractCompletionPatch(env);
+    // Only `prompt` was set — patch should not include keys for the
+    // missing fields, so a merge doesn't accidentally overwrite values
+    // that the main loop entry already has.
+    expect(out?.patch).toEqual({ prompt: "hi" });
+    expect(Object.keys(out?.patch ?? {})).toEqual(["prompt"]);
   });
 });
 

@@ -23,10 +23,10 @@
 
 <div class="app-shell">
 	<TopNav />
+	<ChatBar />
 	<main class="app-main">
 		{@render children?.()}
 	</main>
-	<ChatBar />
 </div>
 
 <style>

@@ -132,9 +132,11 @@
 
 <style>
   .chat-bar {
-    border-top: 1px solid var(--ui-border-subtle, #e5e7eb);
+    /* Anchored at the top of the work area (below TopNav). The "ask"
+       is the primary verb of this product — pride of place. */
+    border-bottom: 1px solid var(--ui-border-subtle, #e5e7eb);
     background: var(--ui-surface-primary, #fff);
-    padding: 0.5rem 1rem;
+    padding: 0.625rem 1rem 0.75rem;
     flex-shrink: 0;
   }
 

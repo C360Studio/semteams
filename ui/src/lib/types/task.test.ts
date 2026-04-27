@@ -135,18 +135,67 @@ describe("deriveTaskInfo", () => {
     expect(task.childAttentionCount).toBe(0);
   });
 
-  it("uses task_id as title, falls back to truncated loop_id", () => {
+  it("title preference: prompt → task_id → truncated loop_id", () => {
+    // Best case: the user's prompt arrived (via dispatch's COMPLETE_<id>
+    // merge in agentStore) and becomes the human-readable title.
+    const withPrompt = deriveTaskInfo(
+      makeLoop({
+        task_id: "uuid-not-pretty",
+        loop_id: "loop_xyz",
+        prompt: "compare mqtt vs nats",
+      }),
+      [],
+    );
+    expect(withPrompt.title).toBe("compare mqtt vs nats");
+
+    // Pre-completion / no prompt yet → fall back to task_id (still
+    // ugly, but stable).
     const withTaskId = deriveTaskInfo(
       makeLoop({ task_id: "my-task", loop_id: "loop_long_id_1234" }),
       [],
     );
     expect(withTaskId.title).toBe("my-task");
 
+    // No task_id either → short slice of loop_id.
     const withoutTaskId = deriveTaskInfo(
       makeLoop({ task_id: "", loop_id: "loop_long_id_1234" }),
       [],
     );
     expect(withoutTaskId.title).toBe("loop_long_id");
+  });
+
+  it("title strips a leading slash command", () => {
+    // The slash command itself is captured in role/state already.
+    // "/research foo bar" → "foo bar"; lookup is friendlier without it.
+    const t = deriveTaskInfo(
+      makeLoop({ prompt: "/research compare mqtt vs nats" }),
+      [],
+    );
+    expect(t.title).toBe("compare mqtt vs nats");
+  });
+
+  it("title collapses whitespace and truncates with ellipsis at 80 chars", () => {
+    const longPrompt =
+      "this is a really long prompt that goes on and on and on without any meaningful content but exceeds the maximum title length we allow";
+    const t = deriveTaskInfo(makeLoop({ prompt: longPrompt }), []);
+    expect(t.title.length).toBeLessThanOrEqual(80);
+    expect(t.title.endsWith("…")).toBe(true);
+
+    const messy = deriveTaskInfo(
+      makeLoop({ prompt: "  hello\n\nworld\t  test  " }),
+      [],
+    );
+    expect(messy.title).toBe("hello world test");
+  });
+
+  it("title falls through prompt:'' → task_id when prompt is empty", () => {
+    // Belt-and-suspenders: if the wire format ever sends prompt:"",
+    // we should NOT show an empty card title.
+    const t = deriveTaskInfo(
+      makeLoop({ prompt: "", task_id: "real-task-id" }),
+      [],
+    );
+    expect(t.title).toBe("real-task-id");
   });
 
   it("column follows primary loop state when no children", () => {

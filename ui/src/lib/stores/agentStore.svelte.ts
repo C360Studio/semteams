@@ -9,7 +9,11 @@
 
 import { SvelteMap } from "svelte/reactivity";
 import type { AgentLoop, WireActivityEnvelope } from "$lib/types/agent";
-import { isActiveState, normalizeWireLoop } from "$lib/types/agent";
+import {
+  isActiveState,
+  normalizeWireLoop,
+  extractCompletionPatch,
+} from "$lib/types/agent";
 
 const SSE_URL = "/teams-dispatch/activity";
 const MAX_RECONNECT_ATTEMPTS = 5;
@@ -30,9 +34,27 @@ function createAgentStore() {
         loops.delete(envelope.loop_id);
         return;
       }
+
+      // COMPLETE_<id> envelopes carry completion fields (prompt, result,
+      // outcome, tokens) that the dispatch publishes separately from the
+      // main loop entry. Merge them onto the existing loop instead of
+      // dropping — the prompt is the source of human-readable titles,
+      // the result is what we surface in detail panels, etc.
+      const patch = extractCompletionPatch(envelope);
+      if (patch) {
+        const existing = loops.get(patch.id);
+        if (existing) loops.set(patch.id, { ...existing, ...patch.patch });
+        // If the parent loop hasn't arrived yet, drop the patch — it'll
+        // come around again or is for a loop we never saw.
+        return;
+      }
+
       const loop = normalizeWireLoop(envelope);
       if (!loop) return;
-      loops.set(loop.loop_id, loop);
+      // Preserve already-merged completion fields if a re-publish of the
+      // main loop entry arrives after the COMPLETE patch.
+      const existing = loops.get(loop.loop_id);
+      loops.set(loop.loop_id, existing ? { ...existing, ...loop } : loop);
     } catch {
       // Ignore malformed events
     }

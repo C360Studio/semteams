@@ -46,6 +46,14 @@ export interface AgentLoop {
   parent_loop_id: string;
   outcome: string;
   error: string;
+
+  // Completion data — present once the loop terminates. Sourced from
+  // the dispatch's COMPLETE_<id> envelope, merged onto the loop entry.
+  // `prompt` is the field we mine for human-readable task titles.
+  prompt?: string;
+  result?: string;
+  tokens_in?: number;
+  tokens_out?: number;
 }
 
 // WireLoop is the actual JSON shape SSE delivers — looser than AgentLoop
@@ -71,6 +79,10 @@ export interface WireLoop {
   parent_loop_id?: string;
   outcome?: string;
   error?: string;
+  prompt?: string;
+  result?: string;
+  tokens_in?: number;
+  tokens_out?: number;
   [k: string]: unknown;
 }
 
@@ -104,7 +116,32 @@ export function normalizeWireLoop(env: WireActivityEnvelope): AgentLoop | null {
     parent_loop_id: w.parent_loop_id ?? "",
     outcome: w.outcome ?? "",
     error: w.error ?? "",
+    ...(w.prompt !== undefined && { prompt: w.prompt }),
+    ...(w.result !== undefined && { result: w.result }),
+    ...(w.tokens_in !== undefined && { tokens_in: w.tokens_in }),
+    ...(w.tokens_out !== undefined && { tokens_out: w.tokens_out }),
   };
+}
+
+// extractCompletionPatch reads a "COMPLETE_<id>" envelope and produces
+// a partial AgentLoop containing the completion fields (prompt, result,
+// tokens_in, tokens_out, outcome) that the dispatch publishes
+// separately from the main loop entry. Returns null if the envelope is
+// not a completion record or has no usable id.
+export function extractCompletionPatch(
+  env: WireActivityEnvelope,
+): { id: string; patch: Partial<AgentLoop> } | null {
+  if (!env.loop_id?.startsWith("COMPLETE_")) return null;
+  const id = env.loop_id.slice("COMPLETE_".length);
+  const w = env.data;
+  if (!id || !w) return null;
+  const patch: Partial<AgentLoop> = {};
+  if (w.prompt !== undefined) patch.prompt = w.prompt;
+  if (w.result !== undefined) patch.result = w.result;
+  if (w.tokens_in !== undefined) patch.tokens_in = w.tokens_in;
+  if (w.tokens_out !== undefined) patch.tokens_out = w.tokens_out;
+  if (w.outcome !== undefined) patch.outcome = w.outcome;
+  return { id, patch };
 }
 
 export type ControlSignal =

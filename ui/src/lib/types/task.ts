@@ -118,6 +118,31 @@ const COLUMN_URGENCY: Record<TaskColumn, number> = {
 };
 
 /**
+ * Maximum length of an auto-generated task title in characters. The
+ * card UI truncates with ellipsis; this just bounds the value we store.
+ * Matches the rough length of a Claude Desktop chat title.
+ */
+const TITLE_MAX_LEN = 80;
+
+/**
+ * Derive a human-readable title from a loop's prompt. Strips leading
+ * slash commands (e.g., "/research foo bar" → "foo bar") since the
+ * command is captured in role/state. Collapses whitespace, hard-cuts
+ * at TITLE_MAX_LEN with an ellipsis when the original is longer.
+ */
+function titleFromPrompt(prompt: string): string {
+  let s = prompt.trim();
+  // Drop a leading slash command token if present.
+  if (s.startsWith("/")) {
+    const rest = s.split(/\s+/).slice(1).join(" ");
+    if (rest.length > 0) s = rest;
+  }
+  s = s.replace(/\s+/g, " ");
+  if (s.length <= TITLE_MAX_LEN) return s;
+  return s.slice(0, TITLE_MAX_LEN - 1).trimEnd() + "…";
+}
+
+/**
  * Derive a TaskInfo from a top-level loop and its children.
  * The task's column is the most-urgent state across itself and all
  * children (needs_you > failed > executing > thinking > done).
@@ -141,9 +166,19 @@ export function deriveTaskInfo(
     (c) => loopStateToColumn(c.state) === "needs_you",
   );
 
+  // Title preference: the user's prompt (most informative) → task_id
+  // (UUID, ugly but stable) → short loop_id (always present). prompt
+  // arrives via the dispatch's COMPLETE_<id> envelope merge in
+  // agentStore, so freshly-created tasks may briefly show task_id
+  // before the prompt lands.
+  const title =
+    (primaryLoop.prompt && titleFromPrompt(primaryLoop.prompt)) ||
+    primaryLoop.task_id ||
+    primaryLoop.loop_id.slice(0, 12);
+
   return {
     id: primaryLoop.loop_id,
-    title: primaryLoop.task_id || primaryLoop.loop_id.slice(0, 12),
+    title,
     column: effectiveColumn,
     state: primaryLoop.state,
     role: primaryLoop.role,
