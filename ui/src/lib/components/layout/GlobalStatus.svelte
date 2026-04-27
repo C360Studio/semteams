@@ -1,7 +1,9 @@
 <script lang="ts">
   // Top-right of TopNav. Houses the system-status indicator (dot +
-  // label, click for details popover) and the "needs you" attention
-  // pill. User menu / notifications bell will land here next.
+  // label, click for details popover), the "needs you" attention
+  // pill, and the admin entrypoint. User menu / notifications bell
+  // will land here next.
+  import { resolve } from "$app/paths";
   import { systemStatus } from "$lib/stores/systemStatus.svelte";
   import { taskStore } from "$lib/stores/taskStore.svelte";
   import StatusPopover from "./StatusPopover.svelte";
@@ -19,6 +21,16 @@
       {taskStore.needsAttentionCount} needs you
     </span>
   {/if}
+
+  <a
+    class="admin-link"
+    href={resolve("/admin")}
+    data-testid="admin-link"
+    title="Admin"
+    aria-label="Admin"
+  >
+    <span aria-hidden="true">⚙</span>
+  </a>
 
   <div class="status-anchor">
     <button
@@ -64,6 +76,29 @@
     font-size: 0.6875rem;
     font-weight: 600;
     letter-spacing: 0.01em;
+  }
+
+  .admin-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.5rem;
+    height: 1.5rem;
+    border-radius: 4px;
+    color: var(--ui-text-secondary, #6b7280);
+    text-decoration: none;
+    font-size: 0.875rem;
+    transition: background 0.15s, color 0.15s;
+  }
+
+  .admin-link:hover {
+    background: var(--ui-surface-tertiary, #e5e7eb);
+    color: var(--ui-text-primary, #111827);
+  }
+
+  .admin-link:focus-visible {
+    outline: 2px solid var(--ui-interactive-primary, #3b82f6);
+    outline-offset: 2px;
   }
 
   /* Anchor lets the absolutely-positioned popover lock to this slot. */

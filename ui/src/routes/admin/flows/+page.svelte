@@ -24,7 +24,7 @@
 				description: 'New flow created from UI'
 			});
 			// eslint-disable-next-line svelte/no-navigation-without-resolve
-			await goto(`/flows/${newFlow.id}`);
+			await goto(`/admin/flows/${newFlow.id}`);
 		} catch (error) {
 			console.error('Failed to create flow:', error);
 			const message = getUserFriendlyErrorMessage(error);
@@ -34,7 +34,7 @@
 
 	function handleFlowClick(flowId: string) {
 		// eslint-disable-next-line svelte/no-navigation-without-resolve
-		goto(`/flows/${flowId}`);
+		goto(`/admin/flows/${flowId}`);
 	}
 </script>
 
