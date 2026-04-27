@@ -140,10 +140,13 @@
 <style>
   .chat-bar {
     /* Anchored at the top of the work area (below TopNav). The "ask"
-       is the primary verb of this product — pride of place. */
+       is the primary verb of this product — pride of place.
+       Surface-secondary lifts the bar off the page so it reads as a
+       distinct ask zone rather than blending into the workboard. The
+       input within stays on surface-primary so it feels recessed. */
     border-bottom: 1px solid var(--ui-border-subtle, #e5e7eb);
-    background: var(--ui-surface-primary, #fff);
-    padding: 0.625rem 1rem 0.75rem;
+    background: var(--ui-surface-secondary, #f7f7f7);
+    padding: 0.75rem 1rem 0.875rem;
     flex-shrink: 0;
   }
 
