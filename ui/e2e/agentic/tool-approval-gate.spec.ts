@@ -42,8 +42,8 @@ test.describe("Tool Approval Gate", () => {
     await page.goto("/");
 
     await expect(page.getByTestId("connection-status")).toHaveAttribute(
-      "data-connected",
-      "true",
+      "data-summary",
+      "healthy",
       { timeout: 10000 },
     );
 
@@ -107,21 +107,23 @@ test.describe("Tool Approval Gate", () => {
     await page.getByRole("button", { name: "Approve" }).click();
 
     // -----------------------------------------------------------------
-    // Step 7 — verify the loop transitions to complete. The card's
-    // state badge should update via SSE.
+    // Step 7 — verify the loop transitions to a terminal-success state.
+    // Upstream dispatch emits both `complete` and `success` aliases on
+    // completion; assert via the canonical kanban column instead of
+    // the raw badge value.
     // -----------------------------------------------------------------
     await expect(
-      page.locator("[data-testid='task-card'] [data-state='complete']"),
+      page.locator("[data-testid='task-card'][data-column='done']"),
     ).toBeVisible({ timeout: 30000 });
 
     // -----------------------------------------------------------------
     // Step 8 — backend-state assertion. The canonical source of truth
-    // should agree with what the UI shows.
+    // should agree with what the UI shows. Accept either terminal alias.
     // -----------------------------------------------------------------
     const finalLoop = await request
       .get(`/teams-dispatch/loops/${loopId}`)
       .then((r) => r.json());
-    expect(finalLoop.state).toBe("complete");
+    expect(["complete", "success"]).toContain(finalLoop.state);
   });
 });
 

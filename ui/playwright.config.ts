@@ -1,51 +1,45 @@
 import { defineConfig, devices } from "@playwright/test";
 
-const E2E_UI_PORT = process.env.E2E_UI_PORT || "3000";
+/**
+ * E2E journey tests against the agentic stack (mock-llm + dispatch +
+ * loop + tools + governance). Each spec under `e2e/agentic/` pairs a
+ * mock-llm fixture (test/fixtures/journeys/*.yaml) with a backend
+ * config (configs/*.json), wired in via FIXTURE / AGENTIC_CONFIG env
+ * vars by the per-scenario Taskfile entries.
+ *
+ * Stack lifecycle is owned by the Taskfile (task test:e2e:agentic:stack:up
+ * → docker compose -f docker-compose.agentic-e2e.yml up). Playwright
+ * does NOT auto-start the stack — env-var propagation through Vite's
+ * Docker layer is unreliable when Playwright owns the lifecycle.
+ *
+ * Quick-start:
+ *   task test:e2e:deep-research
+ *   task test:e2e:tool-approval-gate
+ *   task test:e2e:real-time-activity-stream
+ *   task test:e2e:ops-agent
+ */
+
+const E2E_AGENTIC_UI_PORT = process.env.E2E_AGENTIC_UI_PORT || "3100";
 
 export default defineConfig({
-  testDir: "e2e",
+  testDir: "e2e/agentic",
 
-  // Run tests in files in parallel
   fullyParallel: true,
 
-  // Fail the build on CI if you accidentally left test.only in the source code
   forbidOnly: !!process.env.CI,
 
-  // Retry on CI only
   retries: process.env.CI ? 2 : 0,
 
-  // Opt out of parallel tests on CI
-  workers: process.env.CI ? 1 : undefined,
+  // Single worker because the stack is single-tenant — sharing one
+  // mock-llm across parallel tests would interleave fixture responses.
+  workers: 1,
 
-  // Reporter to use
   reporter: process.env.CI ? "github" : "list",
 
-  // Global setup to check port availability and detect conflicts
-  globalSetup: "./e2e/global-setup.ts",
-
-  // Global teardown to cleanup Docker after tests
-  globalTeardown: "./playwright.teardown.ts",
-
-  // Start Docker Compose stack automatically
-  webServer: {
-    command: `E2E_UI_PORT=${E2E_UI_PORT} docker compose -f docker-compose.e2e.yml up --build`,
-    url: `http://localhost:${E2E_UI_PORT}/health`,
-    timeout: 120000,
-    reuseExistingServer: !process.env.CI,
-    stdout: "pipe",
-    stderr: "pipe",
-  },
-
   use: {
-    baseURL: `http://localhost:${E2E_UI_PORT}`,
-
-    // Collect trace on failure for debugging
+    baseURL: `http://localhost:${E2E_AGENTIC_UI_PORT}`,
     trace: "on-first-retry",
-
-    // Take screenshot on failure
     screenshot: "only-on-failure",
-
-    // Capture video on failure
     video: "retain-on-failure",
   },
 

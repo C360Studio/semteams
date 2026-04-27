@@ -61,8 +61,8 @@ test.describe("Deep Research", () => {
     await page.goto("/");
 
     await expect(page.getByTestId("connection-status")).toHaveAttribute(
-      "data-connected",
-      "true",
+      "data-summary",
+      "healthy",
       { timeout: 15000 },
     );
 
@@ -115,19 +115,24 @@ test.describe("Deep Research", () => {
     // -----------------------------------------------------------------
     // Step 4 — wait for the loop to complete
     // The mock-llm fixture has 2 turns: web_search → completion
-    // With the deep-research config, there are no approval gates
+    // With the deep-research config, there are no approval gates.
+    //
+    // Assert by kanban column rather than the raw `data-state` attr —
+    // upstream emits both `complete` and `success` as terminal states
+    // (see agent.ts AgentLoopState union). Column mapping is the
+    // canonical UI signal.
     // -----------------------------------------------------------------
     await expect(
-      page.locator("[data-testid='task-card'] [data-state='complete']"),
+      page.locator("[data-testid='task-card'][data-column='done']"),
     ).toBeVisible({ timeout: 60000 });
 
     // -----------------------------------------------------------------
-    // Step 5 — verify backend state
+    // Step 5 — verify backend state. Accept either terminal alias.
     // -----------------------------------------------------------------
     const finalLoop = await request
       .get(`/teams-dispatch/loops/${loopId}`)
       .then((r) => r.json());
-    expect(finalLoop.state).toBe("complete");
+    expect(["complete", "success"]).toContain(finalLoop.state);
 
     // -----------------------------------------------------------------
     // Step 6 — verify we stayed on the board (no accidental navigation)
