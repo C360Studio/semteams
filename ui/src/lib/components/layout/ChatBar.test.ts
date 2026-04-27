@@ -14,13 +14,38 @@ vi.mock("$lib/services/agentApi", () => ({
   },
 }));
 
-// Mock taskStore with controllable selectedTask
-const mockSelectedTask = vi.fn().mockReturnValue(undefined);
+// Mock taskStore with controllable selectedTask + attention queue.
+// vi.mock hoists the entire call (including factory body) to the top
+// of the file, before const declarations — so direct references to
+// outer vars inside the factory hit the temporal dead zone. Use
+// vi.hoisted for all the controllable spies; getters in the factory
+// body are still safe (they run lazily on access).
+const { mockSelectedTask, mockNeedsYou, mockNeedsAttentionCount, mockSelectTask } =
+  vi.hoisted(() => ({
+    mockSelectedTask: vi.fn().mockReturnValue(undefined),
+    mockNeedsYou: vi.fn().mockReturnValue([]),
+    mockNeedsAttentionCount: vi.fn().mockReturnValue(0),
+    mockSelectTask: vi.fn(),
+  }));
+
 vi.mock("$lib/stores/taskStore.svelte", () => ({
   taskStore: {
     get selectedTask() {
       return mockSelectedTask();
     },
+    get byColumn() {
+      return {
+        needs_you: mockNeedsYou(),
+        thinking: [],
+        executing: [],
+        done: [],
+        failed: [],
+      };
+    },
+    get needsAttentionCount() {
+      return mockNeedsAttentionCount();
+    },
+    selectTask: (id: string) => mockSelectTask(id),
     deselectTask: vi.fn(),
   },
 }));
@@ -51,6 +76,8 @@ function selectedTask(overrides: Record<string, unknown> = {}) {
 beforeEach(() => {
   vi.clearAllMocks();
   mockSelectedTask.mockReturnValue(undefined);
+  mockNeedsYou.mockReturnValue([]);
+  mockNeedsAttentionCount.mockReturnValue(0);
 });
 
 // ---------------------------------------------------------------------------
@@ -322,5 +349,91 @@ describe("ChatBar — slash commands", () => {
       "/unknowncmd something",
     );
     expect(agentApi.sendSignal).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Action chips (persona shortcuts + Approve next)
+// ---------------------------------------------------------------------------
+
+describe("ChatBar — action chips", () => {
+  it("shows persona chips on the empty state", () => {
+    render(ChatBar);
+    expect(screen.getByTestId("action-chip-research")).toBeInTheDocument();
+    expect(screen.getByTestId("action-chip-plan")).toBeInTheDocument();
+    expect(screen.getByTestId("action-chip-implement")).toBeInTheDocument();
+  });
+
+  it("hides action chips when a task is selected", () => {
+    mockSelectedTask.mockReturnValue(selectedTask());
+    render(ChatBar);
+    expect(screen.queryByTestId("action-chips")).not.toBeInTheDocument();
+  });
+
+  it("hides action chips when typing a slash command", async () => {
+    const user = userEvent.setup();
+    render(ChatBar);
+
+    expect(screen.getByTestId("action-chips")).toBeInTheDocument();
+    await user.type(screen.getByTestId("chat-input"), "/");
+    expect(screen.queryByTestId("action-chips")).not.toBeInTheDocument();
+  });
+
+  it("clicking a persona chip prefixes the input and focuses it", async () => {
+    const user = userEvent.setup();
+    render(ChatBar);
+
+    await user.click(screen.getByTestId("action-chip-research"));
+
+    const input = screen.getByTestId("chat-input") as HTMLInputElement;
+    expect(input.value).toBe("@research ");
+    expect(document.activeElement).toBe(input);
+  });
+
+  it("clicking a different persona chip replaces the existing prefix", async () => {
+    const user = userEvent.setup();
+    render(ChatBar);
+
+    await user.click(screen.getByTestId("action-chip-research"));
+    await user.type(screen.getByTestId("chat-input"), "compare mqtt");
+
+    let input = screen.getByTestId("chat-input") as HTMLInputElement;
+    expect(input.value).toBe("@research compare mqtt");
+
+    await user.click(screen.getByTestId("action-chip-plan"));
+
+    // Replaced @research with @plan, kept the user's typed body.
+    input = screen.getByTestId("chat-input") as HTMLInputElement;
+    expect(input.value).toBe("@plan compare mqtt");
+  });
+
+  it("does not show 'Approve next' when no tasks need attention", () => {
+    mockNeedsAttentionCount.mockReturnValue(0);
+    render(ChatBar);
+    expect(
+      screen.queryByTestId("action-chip-approve-next"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows 'Approve next' with a count when tasks need attention", () => {
+    mockNeedsAttentionCount.mockReturnValue(2);
+    render(ChatBar);
+    const chip = screen.getByTestId("action-chip-approve-next");
+    expect(chip).toBeInTheDocument();
+    expect(chip).toHaveTextContent("Approve next");
+    expect(chip).toHaveTextContent("2");
+  });
+
+  it("clicking 'Approve next' selects the first awaiting task", async () => {
+    mockNeedsAttentionCount.mockReturnValue(1);
+    mockNeedsYou.mockReturnValue([
+      selectedTask({ id: "loop_waiting", state: "awaiting_approval" }),
+    ]);
+    const user = userEvent.setup();
+    render(ChatBar);
+
+    await user.click(screen.getByTestId("action-chip-approve-next"));
+
+    expect(mockSelectTask).toHaveBeenCalledWith("loop_waiting");
   });
 });

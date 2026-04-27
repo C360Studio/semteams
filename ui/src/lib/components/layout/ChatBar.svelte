@@ -6,6 +6,7 @@
   let input = $state("");
   let sending = $state(false);
   let error = $state<string | null>(null);
+  let inputEl = $state<HTMLInputElement>();
 
   /** Slash commands that operate on the selected task. */
   const TASK_COMMANDS: Record<string, ControlSignal> = {
@@ -15,6 +16,19 @@
     "/resume": "resume",
     "/cancel": "cancel",
   };
+
+  /**
+   * Persona-shaped action chips. Clicking inserts the prefix into the
+   * input (so the user sees what's about to be sent) and focuses the
+   * input. Today the coordinator interprets the prefix via its decide
+   * tool; when role-routing on the wire arrives, these become real
+   * per-message overrides without UI churn.
+   */
+  const PERSONA_CHIPS = [
+    { id: "research", label: "Research", prefix: "@research " },
+    { id: "plan", label: "Plan", prefix: "@plan " },
+    { id: "implement", label: "Implement", prefix: "@implement " },
+  ] as const;
 
   // Placeholder copy is human-shaped, not slash-command-shaped. Slash
   // commands still work — we just don't shout them in the placeholder.
@@ -27,6 +41,30 @@
   // Surface the slash-command hints only when the user is actively
   // typing a slash command. Default state stays clean.
   let showingSlash = $derived(input.trimStart().startsWith("/"));
+
+  function applyPersona(prefix: string) {
+    // If the user already started typing a different persona prefix,
+    // replace it; otherwise prepend to whatever's there.
+    const stripped = input.replace(/^@\w+\s*/, "");
+    input = prefix + stripped;
+    inputEl?.focus();
+    // Move the caret to the end so the user starts typing after the
+    // persona prefix, not in the middle of it.
+    queueMicrotask(() => {
+      if (inputEl) inputEl.setSelectionRange(input.length, input.length);
+    });
+  }
+
+  function approveNext() {
+    // Find the most-urgent waiting task (first in the needs_you column)
+    // and select it. The right-rail drilldown opens with Approve/Reject
+    // buttons already in scope — user clicks once more to actually
+    // approve. We don't fire the signal directly so the user sees what
+    // they're approving before it goes.
+    const waiting = taskStore.byColumn.needs_you;
+    const next = waiting[0];
+    if (next) taskStore.selectTask(next.id);
+  }
 
   async function handleSubmit() {
     const text = input.trim();
@@ -112,6 +150,7 @@
       class="chat-input"
       type="text"
       bind:value={input}
+      bind:this={inputEl}
       {placeholder}
       onkeydown={handleKeydown}
       disabled={sending}
@@ -129,6 +168,37 @@
       {sending ? "..." : "Send"}
     </button>
   </div>
+
+  {#if !taskStore.selectedTask && !showingSlash}
+    <!-- Persona action chips. Only on empty state — when a task is
+         selected, those affordances live in the right-rail drilldown.
+         The "Approve next" chip is colored and surfaces only when
+         tasks are actually waiting on the user. -->
+    <div class="action-chips" data-testid="action-chips">
+      {#each PERSONA_CHIPS as chip (chip.id)}
+        <button
+          type="button"
+          class="action-chip"
+          data-testid="action-chip-{chip.id}"
+          onclick={() => applyPersona(chip.prefix)}
+        >
+          {chip.label}
+        </button>
+      {/each}
+      {#if taskStore.needsAttentionCount > 0}
+        <button
+          type="button"
+          class="action-chip approve-next"
+          data-testid="action-chip-approve-next"
+          onclick={approveNext}
+          title="Open the first task waiting on you"
+        >
+          Approve next
+          <span class="chip-count">{taskStore.needsAttentionCount}</span>
+        </button>
+      {/if}
+    </div>
+  {/if}
 
   {#if showingSlash && taskStore.selectedTask}
     <!-- Only show command hints when the user has actually typed "/"
@@ -297,5 +367,68 @@
     padding: 0.0625rem 0.375rem;
     background: var(--ui-surface-secondary, #f9fafb);
     border-radius: 3px;
+  }
+
+  .action-chips {
+    display: flex;
+    gap: 0.4375rem;
+    padding-top: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .action-chip {
+    all: unset;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.25rem 0.625rem;
+    border: 1px solid var(--ui-border-subtle, #d1d5db);
+    background: var(--ui-surface-primary, #fff);
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--ui-text-secondary, #6b7280);
+    transition: border-color 0.15s, color 0.15s, background 0.15s;
+  }
+
+  .action-chip:hover {
+    border-color: var(--ui-interactive-primary, #3b82f6);
+    color: var(--ui-text-primary, #111827);
+  }
+
+  .action-chip:focus-visible {
+    outline: 2px solid var(--ui-interactive-primary, #3b82f6);
+    outline-offset: 2px;
+  }
+
+  /* Approve-next pops in the same orange family as the needs-you
+     pill in TopNav so the eye recognizes them as the same concept. */
+  .action-chip.approve-next {
+    border-color: var(--col-needs-you, #f97316);
+    color: var(--col-needs-you, #f97316);
+    font-weight: 600;
+  }
+
+  .action-chip.approve-next:hover {
+    background: var(--col-needs-you, #f97316);
+    color: white;
+  }
+
+  .chip-count {
+    font-variant-numeric: tabular-nums;
+    background: var(--col-needs-you, #f97316);
+    color: white;
+    padding: 0 0.4rem;
+    border-radius: 9999px;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    min-width: 1rem;
+    text-align: center;
+  }
+
+  .action-chip.approve-next:hover .chip-count {
+    background: white;
+    color: var(--col-needs-you, #f97316);
   }
 </style>
