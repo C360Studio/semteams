@@ -179,25 +179,21 @@ tasks:
       - npm run test
 
   test:e2e:
-    desc: Run E2E tests (auto-manages Docker stack)
-    cmds:
-      - npm run test:e2e
-
-  test:e2e:agentic:
-    desc: Run agentic journey E2E tests (separate stack with mock-llm + agentic.json backend)
+    desc: Run all E2E journey specs (each with its own fixture and fresh stack)
     summary: |
-      Runs Playwright tests under e2e/agentic/ against the agentic stack
-      defined in docker-compose.agentic-e2e.yml. Each spec specifies the
-      mock-llm fixture it expects via the FIXTURE env var.
+      Runs every Playwright journey under e2e/agentic/ with its paired
+      mock-llm fixture, tearing down the docker stack between runs so
+      mock-llm reloads the right fixture for each journey.
 
-      The agentic stack uses host port 3100 (configurable via
-      E2E_AGENTIC_UI_PORT) so it can run alongside the default e2e stack
-      on 3000.
-
-      Pass FIXTURE to load a specific mock-llm script:
-        FIXTURE=tool-approval-gate.yaml task test:e2e:agentic
+      Slow (each journey re-builds and re-boots the stack — roughly
+      2-3 minutes per journey on first run) but deterministic. Prefer
+      the per-scenario tasks (test:e2e:agentic:<slug>) for iterative
+      development.
     cmds:
-      - npm run test:e2e:agentic
+      - task: test:e2e:agentic:tool-approval-gate
+      - task: test:e2e:agentic:real-time-activity-stream
+      - task: test:e2e:agentic:deep-research
+      - task: test:e2e:agentic:ops-agent
 
   test:e2e:agentic:tool-approval-gate:
     desc: Run the tool-approval-gate journey with its paired fixture
@@ -210,7 +206,7 @@ tasks:
         vars:
           FIXTURE: "{{.FIXTURE}}"
           AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
-      - npx playwright test --config playwright.agentic.config.ts e2e/agentic/tool-approval-gate.spec.ts
+      - npx playwright test e2e/agentic/tool-approval-gate.spec.ts
 
   test:e2e:agentic:real-time-activity-stream:
     desc: Run the real-time-activity-stream journey with its paired fixture
@@ -223,7 +219,7 @@ tasks:
         vars:
           FIXTURE: "{{.FIXTURE}}"
           AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
-      - npx playwright test --config playwright.agentic.config.ts e2e/agentic/real-time-activity-stream.spec.ts
+      - npx playwright test e2e/agentic/real-time-activity-stream.spec.ts
 
   test:e2e:agentic:deep-research:
     desc: Run the deep-research journey with researcher config + paired fixture
@@ -236,7 +232,7 @@ tasks:
         vars:
           FIXTURE: "{{.FIXTURE}}"
           AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
-      - npx playwright test --config playwright.agentic.config.ts e2e/agentic/deep-research.spec.ts
+      - npx playwright test e2e/agentic/deep-research.spec.ts
 
   test:e2e:agentic:ops-agent:
     desc: Run the ops-agent baseline journey (ADR-027 Phase 1 — 20 researcher loops + ops diagnostic)
@@ -256,7 +252,7 @@ tasks:
         vars:
           FIXTURE: "{{.FIXTURE}}"
           AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
-      - npx playwright test --config playwright.agentic.config.ts e2e/agentic/ops-agent-baseline.spec.ts
+      - npx playwright test e2e/agentic/ops-agent-baseline.spec.ts
 
   # === Interactive dev-mode scenario tasks ===
   #
@@ -373,7 +369,7 @@ tasks:
       Example:
         task test:e2e:agentic:run-spec -- e2e/agentic/ops-agent-baseline.spec.ts
     cmds:
-      - npx playwright test --config playwright.agentic.config.ts {{.CLI_ARGS}}
+      - npx playwright test {{.CLI_ARGS}}
 
   test:e2e:agentic:logs:
     desc: |
@@ -456,35 +452,10 @@ tasks:
         docker compose -f docker-compose.agentic-e2e.yml logs backend --tail 20
         exit 1
 
-  test:e2e:superpowers:
-    desc: Run all agentic journey specs (each with its own fixture and fresh stack)
-    summary: |
-      Runs every agentic journey spec under e2e/agentic/ with its paired
-      mock-llm fixture, tearing down the docker stack between runs so
-      mock-llm reloads the right fixture for each journey.
-
-      Slow (each journey re-builds and re-boots the stack — roughly
-      2-3 minutes per journey on first run) but deterministic. Prefer
-      the individual convenience targets (task test:e2e:agentic:<slug>)
-      for iterative development.
-
-      The trailing `defer` ensures the docker stack is torn down even
-      if a journey fails mid-run.
-    cmds:
-      - task: test:e2e:agentic:tool-approval-gate
-      - task: test:e2e:agentic:real-time-activity-stream
-      - task: test:e2e:agentic:deep-research
-      - task: test:e2e:agentic:ops-agent
-
   test:e2e:agentic:cleanup:
     desc: Tear down the agentic E2E Docker stack
     cmds:
-      - npm run test:e2e:agentic:cleanup
-
-  test:all:
-    desc: Run all tests
-    cmds:
-      - npm run test:all
+      - npm run test:e2e:cleanup
 
   # === Linting and Formatting ===
 

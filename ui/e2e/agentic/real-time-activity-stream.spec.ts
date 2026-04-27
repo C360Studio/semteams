@@ -43,8 +43,8 @@ test.describe("Real-Time Activity Stream", () => {
     await page.goto("/");
 
     await expect(page.getByTestId("connection-status")).toHaveAttribute(
-      "data-connected",
-      "true",
+      "data-summary",
+      "healthy",
       { timeout: 10000 },
     );
 
@@ -87,13 +87,14 @@ test.describe("Real-Time Activity Stream", () => {
     await expect(page.getByTestId("task-card")).toHaveCount(initialCards + 1);
 
     // -----------------------------------------------------------------
-    // Step 5 — observe the card transition to complete. The fixture is
-    // only two turns (tool_call → completion) and query_entity is not
-    // approval-gated, so the loop runs to completion without human
-    // intervention.
+    // Step 5 — observe the card transition to the Done column. The
+    // fixture is only two turns (tool_call → completion) and
+    // query_entity is not approval-gated, so the loop runs to
+    // completion without human intervention. Asserting by column
+    // tolerates the `complete`/`success` terminal-name drift.
     // -----------------------------------------------------------------
     await expect(
-      page.locator("[data-testid='task-card'] [data-state='complete']"),
+      page.locator("[data-testid='task-card'][data-column='done']"),
     ).toBeVisible({ timeout: 30000 });
 
     // -----------------------------------------------------------------
@@ -103,12 +104,12 @@ test.describe("Real-Time Activity Stream", () => {
     expect(new URL(page.url()).pathname).toBe("/");
 
     // -----------------------------------------------------------------
-    // Step 7 — backend-state assertion.
+    // Step 7 — backend-state assertion. Accept either terminal alias.
     // -----------------------------------------------------------------
     const finalLoop = await request
       .get(`/teams-dispatch/loops/${loopId}`)
       .then((r) => r.json());
-    expect(finalLoop.state).toBe("complete");
+    expect(["complete", "success"]).toContain(finalLoop.state);
   });
 });
 
