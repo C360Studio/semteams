@@ -131,24 +131,27 @@ subgraph. A standalone full-graph view, if ever needed, lives at
 ### Top-level "Flows" tab
 
 Removed from primary nav. SemTeams stops trying to be a flow editor.
-Two reasons:
+Three reasons:
 1. The 3-panel canvas-with-properties layout was stapled on from
    semstreams-ui and never integrated visually.
 2. Flow viz is genuinely hard for semstreams' actual shape: it's not
    a pipeline DAG, it's overlapping flows on a shared NATS subject
    bus. A single static topology diagram lies about runtime.
+3. **The coordinator authors flows.** Humans approve / reject /
+   review proposed changes. There's no "I want to drag boxes around"
+   path that's a real product use case — that's the agent's job.
 
 What replaces it:
+- **Read-only inventory at /admin/flows** — name, description,
+  component count per deployed flow. Authoritative source is
+  `configs/*.json` in the repo (version control, code review).
 - **Task-level Trace tab** for "what messages flowed for this task" —
-  the runtime story is the truer answer.
-- **Agent-proposed flow changes** (ADR-027 Phase 2) surface as a JSON
-  diff + an "Open in flow editor" deep-link. If a semstreams-ui
-  deployment is pointed at the same backend, the link opens there.
-  Otherwise, just the diff (still useful for review/approval).
-- **Power users** who want a flow editor can deploy semstreams-ui
-  alongside semteams, both targeting the same backend. SemTeams owns
-  the workboard; semstreams-ui owns the flow editor. Different
-  products, different jobs.
+  the runtime story is the truer answer than a static topology.
+- **Agent-proposed flow changes** (ADR-027 Phase 2) surface in the
+  approval queue as a JSON diff. Human approves → coordinator's
+  managed-flow tool fires the change. No editor required.
+- **Trajectory** stays first-class in the task drilldown's Activity
+  tab — table-stakes for human-in-the-loop review. No admin gating.
 
 ### `flow-builder` HTTP endpoints
 

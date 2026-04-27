@@ -18,7 +18,7 @@
       href: "/admin/flows",
       title: "Flows",
       description:
-        "Visual flow builder. Power-user surface — most flows are static configs in /configs.",
+        "Read-only inventory of deployed flows. Coordinator authors changes; edit configs/*.json directly for static authoring.",
       available: true,
     },
     {
