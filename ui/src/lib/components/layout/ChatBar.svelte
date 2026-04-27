@@ -16,11 +16,17 @@
     "/cancel": "cancel",
   };
 
+  // Placeholder copy is human-shaped, not slash-command-shaped. Slash
+  // commands still work — we just don't shout them in the placeholder.
   let placeholder = $derived(
     taskStore.selectedTask
-      ? `Message task ${taskStore.selectedTask.title}... or /approve, /reject`
-      : "What should I work on?",
+      ? "Reply to this task…"
+      : "What should the team work on?",
   );
+
+  // Surface the slash-command hints only when the user is actively
+  // typing a slash command. Default state stays clean.
+  let showingSlash = $derived(input.trimStart().startsWith("/"));
 
   async function handleSubmit() {
     const text = input.trim();
@@ -81,18 +87,19 @@
   {/if}
 
   {#if taskStore.selectedTask}
+    <!-- Just the task as a chip. No "Task:" label (the chip-shape says
+         it), no state badge (the user just clicked the card and saw
+         the badge there), no slash-hint chrome. -->
     <div class="chat-context" data-testid="chat-context">
-      <span class="context-label">Task:</span>
-      <span class="context-title">{taskStore.selectedTask.title}</span>
-      <span class="context-state {taskStore.selectedTask.state}">
-        {taskStore.selectedTask.state.replace(/_/g, " ")}
+      <span class="context-chip" title={taskStore.selectedTask.title}>
+        <span class="context-chip-title">{taskStore.selectedTask.title}</span>
+        <button
+          class="context-clear"
+          type="button"
+          onclick={() => taskStore.deselectTask()}
+          aria-label="Clear task selection"
+        >×</button>
       </span>
-      <button
-        class="context-clear"
-        type="button"
-        onclick={() => taskStore.deselectTask()}
-        aria-label="Clear task selection"
-      >×</button>
     </div>
   {/if}
 
@@ -119,15 +126,15 @@
     </button>
   </div>
 
-  <div class="slash-hints" aria-hidden="true">
-    {#if taskStore.selectedTask}
+  {#if showingSlash && taskStore.selectedTask}
+    <!-- Only show command hints when the user has actually typed "/"
+         and there's a selected task to act on. Out of the way otherwise. -->
+    <div class="slash-hints" aria-hidden="true">
       {#each Object.keys(TASK_COMMANDS) as cmd (cmd)}
         <span class="hint-chip">{cmd}</span>
       {/each}
-    {:else}
-      <span class="hint-chip">Type a task to get started</span>
-    {/if}
-  </div>
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -171,64 +178,43 @@
     display: flex;
     align-items: center;
     gap: 0.375rem;
-    padding: 0.25rem 0;
-    margin-bottom: 0.25rem;
+    margin-bottom: 0.4rem;
+  }
+
+  .context-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    max-width: 100%;
+    padding: 0.25rem 0.25rem 0.25rem 0.625rem;
+    border: 1px solid var(--ui-border-subtle, #d1d5db);
+    background: var(--ui-surface-secondary, #f3f4f6);
+    border-radius: 9999px;
     font-size: 0.75rem;
-  }
-
-  .context-label {
-    color: var(--ui-text-secondary, #6b7280);
-    font-weight: 500;
-  }
-
-  .context-title {
     color: var(--ui-text-primary, #111827);
-    font-weight: 600;
+  }
+
+  .context-chip-title {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    max-width: 200px;
-  }
-
-  .context-state {
-    padding: 0 0.25rem;
-    border-radius: 3px;
-    font-size: 0.6875rem;
-    font-weight: 600;
-    text-transform: capitalize;
-  }
-
-  .context-state.awaiting_approval {
-    background: #ffedd5;
-    color: #9a3412;
-  }
-
-  .context-state.executing,
-  .context-state.reviewing {
-    background: #ccfbf1;
-    color: #0f766e;
-  }
-
-  .context-state.complete {
-    background: #d1fae5;
-    color: #065f46;
-  }
-
-  .context-state.failed {
-    background: #fee2e2;
-    color: #991b1b;
+    max-width: 320px;
   }
 
   .context-clear {
     all: unset;
     cursor: pointer;
-    color: var(--ui-text-secondary, #9ca3af);
-    font-size: 0.875rem;
+    width: 1.125rem;
+    height: 1.125rem;
     line-height: 1;
-    margin-left: auto;
+    text-align: center;
+    border-radius: 9999px;
+    color: var(--ui-text-secondary, #9ca3af);
+    font-size: 0.8125rem;
   }
 
   .context-clear:hover {
+    background: var(--ui-surface-primary, #e5e7eb);
     color: var(--ui-text-primary, #374151);
   }
 

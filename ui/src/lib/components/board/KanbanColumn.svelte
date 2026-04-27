@@ -45,17 +45,25 @@
   .kanban-column {
     display: flex;
     flex-direction: column;
-    min-width: 220px;
-    max-width: 320px;
-    flex: 1;
+    min-width: 260px;
+    max-width: 340px;
+    flex: 1 1 280px;
+    /* Container surface so columns read as columns. Subtle elevation
+       above the page background; cards sit on top with their own
+       slightly-brighter surface. */
+    background: var(--ui-surface-secondary, #f3f4f6);
+    border: 1px solid var(--ui-border-subtle, #e5e7eb);
+    border-radius: 10px;
     overflow: hidden;
   }
 
   .column-header {
     display: flex;
     align-items: center;
-    gap: 0.375rem;
-    padding: 0 0.5rem 0.5rem;
+    gap: 0.5rem;
+    padding: 0.625rem 0.875rem;
+    border-bottom: 1px solid var(--ui-border-subtle, #e5e7eb);
+    background: var(--ui-surface-tertiary, transparent);
     flex-shrink: 0;
   }
 
@@ -69,21 +77,23 @@
   .column-label {
     margin: 0;
     font-size: 0.75rem;
-    font-weight: 600;
+    font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--ui-text-secondary, #6b7280);
+    letter-spacing: 0.06em;
+    color: var(--ui-text-primary, #111827);
+    flex: 1;
   }
 
   .column-count {
     font-size: 0.6875rem;
-    font-weight: 600;
+    font-weight: 700;
     font-variant-numeric: tabular-nums;
     color: var(--ui-text-secondary, #6b7280);
-    background: var(--ui-surface-secondary, #f3f4f6);
-    padding: 0 0.375rem;
+    background: var(--ui-surface-primary, #fff);
+    border: 1px solid var(--ui-border-subtle, #e5e7eb);
+    padding: 0.0625rem 0.5rem;
     border-radius: 9999px;
-    min-width: 1.25rem;
+    min-width: 1.5rem;
     text-align: center;
   }
 
@@ -91,16 +101,17 @@
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
-    padding: 0 0.25rem;
+    padding: 0.625rem;
     overflow-y: auto;
     flex: 1;
   }
 
   .column-empty {
     text-align: center;
-    padding: 1.5rem 0.5rem;
+    padding: 2rem 0.5rem;
     font-size: 0.75rem;
     color: var(--ui-text-secondary, #9ca3af);
     margin: 0;
+    font-style: italic;
   }
 </style>

@@ -65,16 +65,26 @@ describe("ChatBar — initial render", () => {
     expect(screen.getByTestId("send-button")).toBeInTheDocument();
   });
 
-  it("shows 'What should I work on?' placeholder when no task selected", () => {
+  it("shows 'What should the team work on?' placeholder when no task selected", () => {
     render(ChatBar);
 
     expect(screen.getByTestId("chat-input")).toHaveAttribute(
       "placeholder",
-      "What should I work on?",
+      "What should the team work on?",
     );
   });
 
-  it("shows task context when a task is selected", () => {
+  it("shows 'Reply to this task…' placeholder when a task is selected", () => {
+    mockSelectedTask.mockReturnValue(selectedTask());
+    render(ChatBar);
+
+    expect(screen.getByTestId("chat-input")).toHaveAttribute(
+      "placeholder",
+      "Reply to this task…",
+    );
+  });
+
+  it("shows the task chip when a task is selected", () => {
     mockSelectedTask.mockReturnValue(selectedTask());
     render(ChatBar);
 
@@ -82,18 +92,48 @@ describe("ChatBar — initial render", () => {
     expect(screen.getByText("Test Task")).toBeInTheDocument();
   });
 
-  it("shows slash hint chips for selected task", () => {
+  it("does NOT show technical chrome (no Task: label, no state badge)", () => {
+    // Per ui-redesign: the chip-shape says "this is a task ref" — a
+    // "Task:" label is redundant. The state badge was duplicated from
+    // the card the user just clicked. Both removed.
+    mockSelectedTask.mockReturnValue(selectedTask({ state: "executing" }));
+    render(ChatBar);
+
+    expect(screen.queryByText("Task:")).not.toBeInTheDocument();
+    // No state badge text either
+    expect(screen.queryByText("executing")).not.toBeInTheDocument();
+  });
+
+  it("does NOT show slash hint chips by default", () => {
+    // Slash hints are technical chrome that intimidates new users.
+    // They surface only when the user is actively typing "/...".
     mockSelectedTask.mockReturnValue(selectedTask());
     render(ChatBar);
 
-    expect(screen.getByText("/approve")).toBeInTheDocument();
-    expect(screen.getByText("/reject")).toBeInTheDocument();
+    expect(screen.queryByText("/approve")).not.toBeInTheDocument();
+    expect(screen.queryByText("/reject")).not.toBeInTheDocument();
   });
 
-  it("shows 'Type a task' hint when no task selected", () => {
+  it("does NOT show 'Type a task' hint", () => {
+    // Removed — the placeholder text already says it.
     render(ChatBar);
 
-    expect(screen.getByText("Type a task to get started")).toBeInTheDocument();
+    expect(
+      screen.queryByText("Type a task to get started"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows slash hints only after the user types '/'", async () => {
+    mockSelectedTask.mockReturnValue(selectedTask());
+    const user = userEvent.setup();
+    render(ChatBar);
+
+    expect(screen.queryByText("/approve")).not.toBeInTheDocument();
+
+    await user.type(screen.getByTestId("chat-input"), "/");
+
+    expect(screen.getByText("/approve")).toBeInTheDocument();
+    expect(screen.getByText("/reject")).toBeInTheDocument();
   });
 });
 

@@ -133,10 +133,11 @@
 
   .columns-container {
     display: flex;
-    gap: 0.75rem;
-    padding: 0 0.5rem;
+    gap: 1rem;
+    padding: 0.25rem 1rem 1rem;
     flex: 1;
     overflow-x: auto;
     overflow-y: hidden;
+    align-items: stretch;
   }
 </style>
