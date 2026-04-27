@@ -1,9 +1,12 @@
 <script lang="ts">
-  // Global status surface for the top-right of TopNav. Houses the
-  // connection indicator and the "needs you" attention badge today;
-  // user menu / notifications / breaker-state will land here later.
-  import { agentStore } from "$lib/stores/agentStore.svelte";
+  // Top-right of TopNav. Houses the system-status indicator (dot +
+  // label, click for details popover) and the "needs you" attention
+  // pill. User menu / notifications bell will land here next.
+  import { systemStatus } from "$lib/stores/systemStatus.svelte";
   import { taskStore } from "$lib/stores/taskStore.svelte";
+  import StatusPopover from "./StatusPopover.svelte";
+
+  let popoverOpen = $state(false);
 </script>
 
 <div class="global-status" data-testid="global-status">
@@ -17,13 +20,30 @@
     </span>
   {/if}
 
-  <span
-    class="connection-dot"
-    data-testid="connection-status"
-    data-connected={agentStore.connected}
-    title={agentStore.connected ? "Connected" : "Connecting…"}
-    aria-label={agentStore.connected ? "Connected" : "Connecting"}
-  ></span>
+  <div class="status-anchor">
+    <button
+      class="status-trigger"
+      type="button"
+      data-testid="status-trigger"
+      data-summary={systemStatus.summary}
+      onclick={() => (popoverOpen = !popoverOpen)}
+      aria-haspopup="dialog"
+      aria-expanded={popoverOpen}
+      aria-label="System status: {systemStatus.label}"
+      title="System status — click for details"
+    >
+      <span
+        class="connection-dot"
+        data-testid="connection-status"
+        data-summary={systemStatus.summary}
+      ></span>
+      <span class="status-label">{systemStatus.label}</span>
+    </button>
+
+    {#if popoverOpen}
+      <StatusPopover onClose={() => (popoverOpen = false)} />
+    {/if}
+  </div>
 </div>
 
 <style>
@@ -46,18 +66,63 @@
     letter-spacing: 0.01em;
   }
 
+  /* Anchor lets the absolutely-positioned popover lock to this slot. */
+  .status-anchor {
+    position: relative;
+  }
+
+  .status-trigger {
+    all: unset;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4375rem;
+    padding: 0.1875rem 0.5rem 0.1875rem 0.4375rem;
+    border-radius: 9999px;
+    color: var(--ui-text-secondary, #6b7280);
+    font-size: 0.6875rem;
+    font-weight: 500;
+    transition: background 0.15s, color 0.15s;
+  }
+
+  .status-trigger:hover,
+  .status-trigger[aria-expanded="true"] {
+    background: var(--ui-surface-tertiary, #e5e7eb);
+    color: var(--ui-text-primary, #111827);
+  }
+
+  .status-trigger:focus-visible {
+    outline: 2px solid var(--ui-interactive-primary, #3b82f6);
+    outline-offset: 2px;
+  }
+
   .connection-dot {
     display: inline-block;
     width: 8px;
     height: 8px;
     border-radius: 50%;
-    background: var(--status-error, #ef4444);
+    background: var(--ui-text-tertiary, #9ca3af);
     flex-shrink: 0;
     transition: background 0.2s;
-    cursor: help;
   }
 
-  .connection-dot[data-connected="true"] {
+  .connection-dot[data-summary="healthy"] {
     background: var(--status-success, #22c55e);
+  }
+
+  .connection-dot[data-summary="degraded"] {
+    background: var(--status-warning, #eab308);
+  }
+
+  .connection-dot[data-summary="unhealthy"] {
+    background: var(--status-error, #ef4444);
+  }
+
+  .connection-dot[data-summary="unknown"] {
+    background: var(--ui-text-tertiary, #9ca3af);
+  }
+
+  .status-label {
+    font-variant-numeric: tabular-nums;
   }
 </style>
