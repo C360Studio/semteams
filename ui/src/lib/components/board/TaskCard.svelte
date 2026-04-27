@@ -33,6 +33,9 @@
   <div class="card-header">
     <StateBadge state={task.state} />
     <span class="role-badge">{task.role}</span>
+    {#if task.shortRef !== null}
+      <span class="card-ref" data-testid="card-ref">#{task.shortRef}</span>
+    {/if}
   </div>
 
   <p class="card-title">{task.title}</p>
@@ -98,6 +101,15 @@
     font-size: 0.6875rem;
     color: var(--ui-text-secondary, #6b7280);
     font-weight: 500;
+  }
+
+  .card-ref {
+    margin-left: auto;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--ui-text-tertiary, #9ca3af);
+    letter-spacing: 0.01em;
   }
 
   .card-title {

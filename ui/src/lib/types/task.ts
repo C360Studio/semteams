@@ -76,6 +76,13 @@ export interface TaskInfo {
   id: string;
 
   /**
+   * GitHub-style short ref ("#42"). Per-deployment monotonic counter
+   * minted by taskRefs and persisted in localStorage. Null only if a
+   * ref hasn't been assigned yet (e.g. layout effect hasn't fired).
+   */
+  shortRef: number | null;
+
+  /**
    * Human-readable title for the card. Phase 1: falls back to
    * `task_id` since the loop entity doesn't carry the user's prompt.
    * Phase 2: will be the first line of the user's message.
@@ -146,10 +153,15 @@ function titleFromPrompt(prompt: string): string {
  * Derive a TaskInfo from a top-level loop and its children.
  * The task's column is the most-urgent state across itself and all
  * children (needs_you > failed > executing > thinking > done).
+ *
+ * `shortRef` is passed in rather than read from a store so this stays
+ * a pure function — the caller (taskStore) reads taskRefs.get() and
+ * passes the ref through.
  */
 export function deriveTaskInfo(
   primaryLoop: AgentLoop,
   childLoops: AgentLoop[],
+  shortRef: number | null = null,
 ): TaskInfo {
   const primaryColumn = loopStateToColumn(primaryLoop.state);
 
@@ -178,6 +190,7 @@ export function deriveTaskInfo(
 
   return {
     id: primaryLoop.loop_id,
+    shortRef,
     title,
     column: effectiveColumn,
     state: primaryLoop.state,
@@ -189,4 +202,33 @@ export function deriveTaskInfo(
     childNeedsAttention: attentionChildren.length > 0,
     childAttentionCount: attentionChildren.length,
   };
+}
+
+/**
+ * Resolve an "@42" / "#42" / partial-title input to a TaskInfo.
+ * Numeric tokens look up by ref via taskRefs (caller passes the
+ * lookup function so this stays pure). Otherwise case-insensitive
+ * substring match across titles. Aliases land in step 7 of the redesign.
+ */
+export function resolveTaskMention(
+  input: string,
+  tasks: TaskInfo[],
+  loopByRef: (ref: number) => string | null,
+): TaskInfo | null {
+  const trimmed = input.replace(/^[@#]/, "").trim();
+  if (!trimmed) return null;
+
+  // Numeric → exact ref match
+  if (/^\d+$/.test(trimmed)) {
+    const ref = Number(trimmed);
+    const loopId = loopByRef(ref);
+    if (loopId) {
+      const match = tasks.find((t) => t.id === loopId);
+      if (match) return match;
+    }
+  }
+
+  // Title fuzzy (case-insensitive substring). First match wins.
+  const lower = trimmed.toLowerCase();
+  return tasks.find((t) => t.title.toLowerCase().includes(lower)) ?? null;
 }

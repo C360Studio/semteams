@@ -3,6 +3,7 @@
 	import '../styles/global.css';
 	import { agentStore } from '$lib/stores/agentStore.svelte';
 	import { systemStatus } from '$lib/stores/systemStatus.svelte';
+	import { taskRefs } from '$lib/stores/taskRefs.svelte';
 	import TopNav from '$lib/components/layout/TopNav.svelte';
 	import ChatBar from '$lib/components/layout/ChatBar.svelte';
 
@@ -18,6 +19,18 @@
 			agentStore.disconnect();
 			systemStatus.stop();
 		};
+	});
+
+	// Auto-assign #N short refs to top-level loops as they arrive.
+	// $effect re-runs whenever agentStore.loops changes; ensure() is
+	// idempotent so already-assigned loops are no-ops. Keeping this in
+	// the layout (not the store) because $effect can't run at
+	// module scope and we want refs minted as soon as loops appear,
+	// before any consumer renders the card.
+	$effect(() => {
+		for (const loop of agentStore.loopsList) {
+			if (!loop.parent_loop_id) taskRefs.ensure(loop.loop_id);
+		}
 	});
 </script>
 

@@ -43,6 +43,7 @@ function makeLoop(overrides: Partial<AgentLoop> = {}): AgentLoop {
 function makeTask(overrides: Partial<TaskInfo> = {}): TaskInfo {
   return {
     id: "loop_001",
+    shortRef: null,
     title: "Test Task",
     column: "executing",
     state: "executing",

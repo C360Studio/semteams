@@ -21,6 +21,7 @@ function makeTask(overrides: Partial<TaskInfo> = {}): TaskInfo {
   };
   return {
     id: "loop_001",
+    shortRef: null,
     title: "Test task title",
     column: "executing",
     state: "executing",

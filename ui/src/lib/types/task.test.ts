@@ -3,8 +3,10 @@ import type { AgentLoop, AgentLoopState } from "./agent";
 import {
   loopStateToColumn,
   deriveTaskInfo,
+  resolveTaskMention,
   COLUMNS,
   type TaskColumn,
+  type TaskInfo,
 } from "./task";
 
 // ---------------------------------------------------------------------------
@@ -306,5 +308,83 @@ describe("deriveTaskInfo", () => {
     expect(task.childLoops).toHaveLength(2);
     expect(task.childLoops[0].loop_id).toBe("c1");
     expect(task.childLoops[1].loop_id).toBe("c2");
+  });
+
+  it("populates shortRef when caller provides one", () => {
+    const t = deriveTaskInfo(makeLoop({ loop_id: "loop_x" }), [], 42);
+    expect(t.shortRef).toBe(42);
+  });
+
+  it("shortRef is null by default (caller hasn't assigned yet)", () => {
+    const t = deriveTaskInfo(makeLoop({ loop_id: "loop_x" }), []);
+    expect(t.shortRef).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// resolveTaskMention — @-mention / #-ref resolver
+// ---------------------------------------------------------------------------
+
+describe("resolveTaskMention", () => {
+  function task(overrides: Partial<TaskInfo>): TaskInfo {
+    return {
+      id: "loop_default",
+      shortRef: null,
+      title: "untitled",
+      column: "thinking",
+      state: "exploring",
+      role: "general",
+      iterations: 0,
+      maxIterations: 10,
+      primaryLoop: makeLoop(),
+      childLoops: [],
+      childNeedsAttention: false,
+      childAttentionCount: 0,
+      ...overrides,
+    };
+  }
+
+  const tasks: TaskInfo[] = [
+    task({ id: "loop_a", shortRef: 1, title: "compare mqtt vs nats" }),
+    task({ id: "loop_b", shortRef: 2, title: "research rust tail calls" }),
+    task({ id: "loop_c", shortRef: 3, title: "validate beta.15 path" }),
+  ];
+
+  // Stable lookup map for the tests.
+  const refToLoop: Record<number, string> = {
+    1: "loop_a",
+    2: "loop_b",
+    3: "loop_c",
+  };
+  const loopByRef = (ref: number) => refToLoop[ref] ?? null;
+
+  it("resolves '#42' to the task with that shortRef", () => {
+    expect(resolveTaskMention("#2", tasks, loopByRef)?.id).toBe("loop_b");
+  });
+
+  it("resolves '@42' the same way (chip-style)", () => {
+    expect(resolveTaskMention("@3", tasks, loopByRef)?.id).toBe("loop_c");
+  });
+
+  it("resolves bare numeric tokens", () => {
+    expect(resolveTaskMention("1", tasks, loopByRef)?.id).toBe("loop_a");
+  });
+
+  it("falls back to fuzzy title match when input is non-numeric", () => {
+    expect(resolveTaskMention("mqtt", tasks, loopByRef)?.id).toBe("loop_a");
+    expect(resolveTaskMention("rust", tasks, loopByRef)?.id).toBe("loop_b");
+    expect(resolveTaskMention("BETA", tasks, loopByRef)?.id).toBe("loop_c");
+  });
+
+  it("returns null when nothing resolves", () => {
+    expect(resolveTaskMention("nope", tasks, loopByRef)).toBeNull();
+    expect(resolveTaskMention("#999", tasks, loopByRef)).toBeNull();
+    expect(resolveTaskMention("", tasks, loopByRef)).toBeNull();
+    expect(resolveTaskMention("  @  ", tasks, loopByRef)).toBeNull();
+  });
+
+  it("strips leading @ and # before parsing", () => {
+    // The user typed "@mqtt" — should still hit the fuzzy fallback.
+    expect(resolveTaskMention("@mqtt", tasks, loopByRef)?.id).toBe("loop_a");
   });
 });

@@ -89,9 +89,13 @@
   {#if taskStore.selectedTask}
     <!-- Just the task as a chip. No "Task:" label (the chip-shape says
          it), no state badge (the user just clicked the card and saw
-         the badge there), no slash-hint chrome. -->
+         the badge there), no slash-hint chrome. The #N ref makes the
+         chip a stable handle even if the title gets edited later. -->
     <div class="chat-context" data-testid="chat-context">
       <span class="context-chip" title={taskStore.selectedTask.title}>
+        {#if taskStore.selectedTask.shortRef !== null}
+          <span class="context-chip-ref">#{taskStore.selectedTask.shortRef}</span>
+        {/if}
         <span class="context-chip-title">{taskStore.selectedTask.title}</span>
         <button
           class="context-clear"
@@ -195,6 +199,13 @@
     border-radius: 9999px;
     font-size: 0.75rem;
     color: var(--ui-text-primary, #111827);
+  }
+
+  .context-chip-ref {
+    font-weight: 600;
+    color: var(--ui-text-tertiary, #6b7280);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.01em;
   }
 
   .context-chip-title {

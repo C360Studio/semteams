@@ -11,11 +11,13 @@
 import { page } from "$app/state";
 import { replaceState } from "$app/navigation";
 import { agentStore } from "./agentStore.svelte";
+import { taskRefs } from "./taskRefs.svelte";
 import {
   type TaskInfo,
   type TaskColumn,
   COLUMNS,
   deriveTaskInfo,
+  resolveTaskMention,
 } from "$lib/types/task";
 
 const SELECTION_PARAM = "task";
@@ -65,7 +67,11 @@ function createTaskStore() {
     }
 
     return topLevel.map((loop) =>
-      deriveTaskInfo(loop, childrenByParent[loop.loop_id] ?? []),
+      deriveTaskInfo(
+        loop,
+        childrenByParent[loop.loop_id] ?? [],
+        taskRefs.get(loop.loop_id),
+      ),
     );
   });
 
@@ -160,6 +166,18 @@ function createTaskStore() {
     /** Total count of tasks needing user attention. */
     get needsAttentionCount(): number {
       return columnCounts.needs_you;
+    },
+
+    /**
+     * Resolve "@42" / "#42" / "compare mqtt" to a TaskInfo. Numeric
+     * tokens look up by ref; otherwise fuzzy title match. Returns
+     * null if nothing resolves.
+     */
+    resolveMention(input: string): TaskInfo | undefined {
+      const found = resolveTaskMention(input, tasks, (ref) =>
+        taskRefs.findLoopByRef(ref),
+      );
+      return found ?? undefined;
     },
   };
 }
