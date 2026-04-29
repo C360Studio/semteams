@@ -54,6 +54,30 @@ export interface AgentLoop {
   result?: string;
   tokens_in?: number;
   tokens_out?: number;
+
+  // Pending-approval snapshot — populated when state === "awaiting_approval".
+  // Mirrors upstream agentic.PendingApprovalState (semstreams beta.19+).
+  // Cleared when the loop resumes after an ApprovalResponse.
+  pending_approval?: PendingApproval;
+}
+
+// PendingApproval mirrors agentic.PendingApprovalState from semstreams.
+// Wire shape is set by the upstream JSON tags on the Go struct.
+export interface PendingApproval {
+  call_id: string;
+  tool_name: string;
+  arguments?: Record<string, unknown>;
+  reason?: string;
+  /** RFC3339 timestamp when the gating rejection arrived. */
+  requested_at: string;
+  /**
+   * Auto-reject deadline as a nanosecond integer. Go's time.Duration
+   * has no custom JSON marshaller, so it serialises as int64
+   * (nanoseconds). Zero / absent means wait indefinitely. Convert to
+   * seconds at the render site: `Math.round(timeout / 1e9)`.
+   */
+  timeout?: number;
+  trace_id?: string;
 }
 
 // WireLoop is the actual JSON shape SSE delivers — looser than AgentLoop
@@ -83,6 +107,7 @@ export interface WireLoop {
   result?: string;
   tokens_in?: number;
   tokens_out?: number;
+  pending_approval?: PendingApproval;
   [k: string]: unknown;
 }
 
@@ -120,6 +145,9 @@ export function normalizeWireLoop(env: WireActivityEnvelope): AgentLoop | null {
     ...(w.result !== undefined && { result: w.result }),
     ...(w.tokens_in !== undefined && { tokens_in: w.tokens_in }),
     ...(w.tokens_out !== undefined && { tokens_out: w.tokens_out }),
+    ...(w.pending_approval !== undefined && {
+      pending_approval: w.pending_approval,
+    }),
   };
 }
 
@@ -182,6 +210,35 @@ export interface SignalResponse {
   loop_id: string;
   signal: string;
   status: string;
+}
+
+// ApprovalDecision values match the upstream agentic.ApprovalDecision*
+// constants ("approve" / "reject" / "modify"). Wire format on
+// POST /teams-dispatch/loops/{id}/approval.
+export type ApprovalDecision = "approve" | "reject" | "modify";
+
+export interface ApprovalRequest {
+  decision: ApprovalDecision;
+  /** Required when decision === "modify"; ignored otherwise. */
+  modified_arguments?: Record<string, unknown>;
+  /** Free-form reason; surfaced in the audit trail. */
+  reason?: string;
+  /**
+   * Body fallback for the approver identity. The product middleware
+   * lifts X-User-Id into ctx, which dominates this field. Sending
+   * both keeps the request resolvable even if the middleware is not
+   * deployed (e.g., during a partial rollout).
+   */
+  user_id?: string;
+}
+
+export interface ApprovalAcceptResponse {
+  loop_id: string;
+  decision: ApprovalDecision;
+  accepted: boolean;
+  message?: string;
+  /** RFC3339 server-side acceptance timestamp. */
+  timestamp: string;
 }
 
 export interface TrajectoryEntry {

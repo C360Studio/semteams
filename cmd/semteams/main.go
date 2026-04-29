@@ -180,7 +180,20 @@ func run() error {
 		return err
 	}
 
-	// 12. Run application with signal handling
+	// 12. Register product HTTP middleware. Per beta.23: must run before
+	// StartAll, since the framework reads the chain at server boot. The
+	// chain lifts X-User-Id headers into agentic-dispatch's identity ctx
+	// so beta.22's POST /teams-dispatch/loops/{id}/approval handler (and
+	// any other identity-aware handler) sees the caller without a body
+	// claim. See cmd/semteams/middleware.go for the chain definition.
+	//
+	// Placement: any step after configureAndCreateServices and before
+	// runWithSignalHandling works. Moving it after StartAll silently
+	// drops the chain — the framework logs a warning, but the binary
+	// boots green and X-User-Id is ignored.
+	manager.UseHTTPMiddleware(productMiddleware()...)
+
+	// 13. Run application with signal handling
 	return runWithSignalHandling(ctx, manager, cliCfg.ShutdownTimeout)
 }
 

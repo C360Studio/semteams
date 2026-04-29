@@ -468,6 +468,35 @@ describe("agentStore", () => {
     it("getLoop returns undefined for unknown loop", () => {
       expect(agentStore.getLoop("unknown")).toBeUndefined();
     });
+
+    it("pendingApproval returns the snapshot for awaiting_approval loops", () => {
+      agentStore.updateLoop(
+        createMockLoop({
+          loop_id: "gated",
+          state: "awaiting_approval",
+          pending_approval: {
+            call_id: "call-1",
+            tool_name: "create_rule",
+            arguments: { name: "high-temp-alert" },
+            reason: "approval_required: rule write",
+            requested_at: "2026-04-29T10:00:00Z",
+          },
+        }),
+      );
+
+      const snap = agentStore.pendingApproval("gated");
+      expect(snap?.tool_name).toBe("create_rule");
+      expect(snap?.call_id).toBe("call-1");
+      expect(snap?.arguments).toEqual({ name: "high-temp-alert" });
+    });
+
+    it("pendingApproval returns undefined for unknown or unpaused loops", () => {
+      agentStore.updateLoop(
+        createMockLoop({ loop_id: "active", state: "exploring" }),
+      );
+      expect(agentStore.pendingApproval("unknown")).toBeUndefined();
+      expect(agentStore.pendingApproval("active")).toBeUndefined();
+    });
   });
 
   // =========================================================================

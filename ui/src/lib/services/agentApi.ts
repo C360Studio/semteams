@@ -1,8 +1,11 @@
 // Agent API client
 // Handles communication with teams-dispatch and teams-loop backend services
 
+import { userIdentity } from "$lib/stores/userIdentity.svelte";
 import type {
   AgentLoop,
+  ApprovalAcceptResponse,
+  ApprovalRequest,
   ControlSignal,
   LoopTrajectory,
   SignalResponse,
@@ -77,6 +80,63 @@ export const agentApi = {
       const error = await response.json().catch(() => ({}));
       throw new AgentApiError(
         `Failed to send signal: ${response.statusText}`,
+        response.status,
+        error,
+      );
+    }
+    return response.json();
+  },
+
+  /**
+   * Submit a human approval response for a gated tool call. Drives
+   * the semstreams beta.19 approval flow: the agent loop is paused
+   * waiting for this call. The backend publishes an ApprovalResponse
+   * on `agent.approval_response.<loop_id>` and the loop resumes.
+   *
+   * Sets the X-User-Id header from the userIdentity store so the
+   * product middleware (cmd/semteams/middleware.go) lifts the value
+   * into agentic-dispatch's identity ctx before resolution. The
+   * backend's resolution order — ctx > body.user_id > "http-user" —
+   * means a deployment without the middleware still resolves the
+   * caller via the body fallback.
+   *
+   * Throws AgentApiError on non-2xx responses. Notable status codes:
+   *   - 400: malformed body or unknown decision value
+   *   - 404: loop unknown to dispatch (process restart, etc.)
+   *   - 409: loop tracked but not awaiting approval (already resolved
+   *          or never gated). Caller should refresh state.
+   *   - 500: NATS publish failure; safe to retry.
+   */
+  async submitApproval(
+    id: string,
+    request: ApprovalRequest,
+  ): Promise<ApprovalAcceptResponse> {
+    const identity = userIdentity.value;
+    // Treat an explicitly-empty user_id the same as absent: fall back
+    // to the store value. Upstream IdentityFromRequest treats empty
+    // body fields as "no claim" too, so an empty body would resolve
+    // via ctx-or-default — but sending the empty string makes the
+    // body and header disagree, which is noise.
+    const callerUserID = request.user_id?.trim();
+    const body: ApprovalRequest = {
+      ...request,
+      // Body fallback so the request resolves even if the middleware
+      // is not deployed. Middleware-injected ctx still wins per
+      // upstream IdentityFromRequest precedence.
+      user_id: callerUserID && callerUserID !== "" ? callerUserID : identity,
+    };
+    const response = await fetch(`${DISPATCH_BASE}/loops/${id}/approval`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-User-Id": identity,
+      },
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new AgentApiError(
+        `Failed to submit approval: ${response.statusText}`,
         response.status,
         error,
       );

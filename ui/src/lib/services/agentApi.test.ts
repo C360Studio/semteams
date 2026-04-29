@@ -287,6 +287,188 @@ describe("agentApi", () => {
   });
 
   // =========================================================================
+  // submitApproval
+  // =========================================================================
+
+  describe("submitApproval", () => {
+    it("POSTs to /teams-dispatch/loops/{id}/approval with X-User-Id and JSON body", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        statusText: "OK",
+        json: async () => ({
+          loop_id: "loop-1",
+          decision: "approve",
+          accepted: true,
+          message: "Approval 'approve' submitted for loop loop-1",
+          timestamp: "2026-04-29T10:30:00Z",
+        }),
+      });
+
+      const result = await agentApi.submitApproval("loop-1", {
+        decision: "approve",
+      });
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      const [url, init] = mockFetch.mock.calls[0];
+      expect(url).toBe("/teams-dispatch/loops/loop-1/approval");
+      expect(init.method).toBe("POST");
+      expect(init.headers["Content-Type"]).toBe("application/json");
+      // The default identity is "ui-anonymous" — both header and body
+      // carry it so the request resolves with or without the product
+      // middleware deployed.
+      expect(init.headers["X-User-Id"]).toBe("ui-anonymous");
+      expect(JSON.parse(init.body)).toEqual({
+        decision: "approve",
+        user_id: "ui-anonymous",
+      });
+      expect(result.accepted).toBe(true);
+      expect(result.decision).toBe("approve");
+    });
+
+    it("forwards modified_arguments and reason for the modify path", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        statusText: "OK",
+        json: async () => ({
+          loop_id: "loop-2",
+          decision: "modify",
+          accepted: true,
+          timestamp: "2026-04-29T10:31:00Z",
+        }),
+      });
+
+      await agentApi.submitApproval("loop-2", {
+        decision: "modify",
+        modified_arguments: { path: "/tmp/safe" },
+        reason: "narrow scope",
+      });
+
+      const [, init] = mockFetch.mock.calls[0];
+      expect(JSON.parse(init.body)).toEqual({
+        decision: "modify",
+        modified_arguments: { path: "/tmp/safe" },
+        reason: "narrow scope",
+        user_id: "ui-anonymous",
+      });
+    });
+
+    it("body honours explicit user_id; header always reflects the store (middleware seam wins downstream)", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        statusText: "OK",
+        json: async () => ({
+          loop_id: "loop-3",
+          decision: "reject",
+          accepted: true,
+          timestamp: "2026-04-29T10:32:00Z",
+        }),
+      });
+
+      await agentApi.submitApproval("loop-3", {
+        decision: "reject",
+        user_id: "alice@example.com",
+      });
+
+      const [, init] = mockFetch.mock.calls[0];
+      // Header always reflects the store — the middleware lifts it
+      // into ctx, which dominates the body per upstream
+      // IdentityFromRequest precedence. Body fallback carries the
+      // caller's explicit value for deployments that skip the
+      // middleware (then the body becomes the resolution source).
+      expect(init.headers["X-User-Id"]).toBe("ui-anonymous");
+      expect(JSON.parse(init.body).user_id).toBe("alice@example.com");
+    });
+
+    it("treats an empty user_id as absent and falls back to the store value", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        statusText: "OK",
+        json: async () => ({
+          loop_id: "loop-empty",
+          decision: "approve",
+          accepted: true,
+          timestamp: "2026-04-29T10:33:00Z",
+        }),
+      });
+
+      await agentApi.submitApproval("loop-empty", {
+        decision: "approve",
+        user_id: "   ",
+      });
+
+      const [, init] = mockFetch.mock.calls[0];
+      // Empty / whitespace-only caller user_id collapses to the
+      // store value so body and header agree.
+      expect(JSON.parse(init.body).user_id).toBe("ui-anonymous");
+    });
+
+    it("throws AgentApiError on 404 unknown loop", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        statusText: "Not Found",
+        json: async () => ({ error: "loop not tracked" }),
+      });
+
+      await expect(
+        agentApi.submitApproval("loop-unknown", { decision: "approve" }),
+      ).rejects.toMatchObject({
+        name: "AgentApiError",
+        statusCode: 404,
+        message: expect.stringContaining("Failed to submit approval"),
+      });
+    });
+
+    it("throws AgentApiError on 409 stale state", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 409,
+        statusText: "Conflict",
+        json: async () => ({ error: "loop is not awaiting approval" }),
+      });
+
+      await expect(
+        agentApi.submitApproval("loop-stale", { decision: "approve" }),
+      ).rejects.toMatchObject({
+        name: "AgentApiError",
+        statusCode: 409,
+      });
+    });
+
+    it("throws AgentApiError on 400 bad body", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 400,
+        statusText: "Bad Request",
+        json: async () => ({ error: "unknown decision value" }),
+      });
+
+      await expect(
+        agentApi.submitApproval("loop-1", {
+          decision: "approve",
+        }),
+      ).rejects.toBeInstanceOf(AgentApiError);
+    });
+
+    it("tolerates a non-JSON error body without throwing in the catch", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        statusText: "Internal Server Error",
+        json: async () => {
+          throw new Error("not json");
+        },
+      });
+
+      await expect(
+        agentApi.submitApproval("loop-1", { decision: "approve" }),
+      ).rejects.toMatchObject({
+        statusCode: 500,
+      });
+    });
+  });
+
+  // =========================================================================
   // getTrajectories
   // =========================================================================
 
