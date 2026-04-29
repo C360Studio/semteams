@@ -155,8 +155,23 @@ confirmed the contract shape inline below.
   team is finalising. R2 ships with whatever codes are stable at
   build time; later codes plug into the same `last_error` field.
 
-**Decided: ☐ A   ☑ B   ☐ C**  *(2026-04-29; sub-codes pending
-SemSource finalisation)*
+**SemSource readiness confirmed 2026-04-29 (later same day):**
+
+> "Ready for SemTeams to integrate against — they can publish
+> AddRequest to graph.ingest.add.{namespace} and parse AddReply.
+> Open questions from the ADR (queue-group semantics under
+> federation, on-transition status latency) are unaffected by the
+> implementation; we can revisit if they hit them."
+
+R2 is fully unblocked. The two ADR-level open questions
+(federation queue-group semantics, on-transition status latency)
+are implementation-agnostic — we can build R2 against the
+contract as specified and revisit only if our journey hits the
+edge cases.
+
+**Decided: ☐ A   ☑ B   ☐ C**  *(2026-04-29; SemSource team ready
+for integration; sub-codes for size/timeout still finalising
+async, do not block R2)*
 
 ---
 
@@ -238,7 +253,7 @@ reflect this; demo discipline message changes accordingly.
 | 1 | Reviewer scope | A — output-side only | ☑ 2026-04-29 |
 | 2 | Stop condition | D — MaxIter + reviewer + optional human gate; MaxIter = 5 | ☑ 2026-04-29 |
 | 3 | Coordinator action space | C — hybrid rules + tool-using persona + approval gates | ☑ 2026-04-29 |
-| 4 | SemSource action shape | B — NATS-event on `graph.ingest.add.{namespace}`; NATS-creds authz with provenance in body | ☑ 2026-04-29 (size/timeout codes still being finalised by SemSource team — does not block R2) |
+| 4 | SemSource action shape | B — NATS-event on `graph.ingest.add.{namespace}`; NATS-creds authz with provenance in body | ☑ 2026-04-29 — SemSource team ready for integration (size/timeout sub-codes still finalising async, does not block R2) |
 | 5 | Cross-product handoff vs internal dev-via-spec | B — light port of best-of-SemSpec patterns into an internal SemTeams flow (REFRAMED from original handoff framing) | ☑ 2026-04-29 |
 
 ---
