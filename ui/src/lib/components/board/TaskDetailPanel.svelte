@@ -4,6 +4,7 @@
   import { isActiveState } from "$lib/types/agent";
   import { agentApi } from "$lib/services/agentApi";
   import { taskLabels } from "$lib/stores/taskLabels.svelte";
+  import PendingApprovalSection from "./PendingApprovalSection.svelte";
   import StateBadge from "./StateBadge.svelte";
   import TaskStory from "./TaskStory.svelte";
 
@@ -214,6 +215,13 @@
       <div class="signal-error" role="alert" data-testid="signal-error">{signalError}</div>
     {/if}
 
+    {#if task.state === "awaiting_approval" && task.primaryLoop.pending_approval}
+      <PendingApprovalSection
+        loopId={task.id}
+        pendingApproval={task.primaryLoop.pending_approval}
+      />
+    {/if}
+
     <div class="action-buttons">
       {#if isActiveState(task.state)}
         <button type="button" class="action-btn" onclick={() => handleSignal("pause")}>
@@ -230,11 +238,12 @@
           Cancel
         </button>
       {:else if task.state === "awaiting_approval"}
-        <button type="button" class="action-btn approve" onclick={() => handleSignal("approve")}>
-          Approve
-        </button>
-        <button type="button" class="action-btn danger" onclick={() => handleSignal("reject")}>
-          Reject
+        <!-- Cancel remains available alongside the Approve/Reject/Modify
+             controls inside <PendingApprovalSection> — the agentic-loop
+             cancel signal terminates the loop and discards the pending
+             approval, while approve/reject/modify resolve it. -->
+        <button type="button" class="action-btn danger" onclick={() => handleSignal("cancel")}>
+          Cancel
         </button>
       {/if}
     </div>

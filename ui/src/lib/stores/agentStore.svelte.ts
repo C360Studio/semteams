@@ -128,6 +128,23 @@ function createAgentStore() {
       return loops.get(id);
     },
 
+    /**
+     * Pending-approval snapshot for a loop, or undefined if the loop is
+     * unknown or not currently gated. Convenience accessor —
+     * equivalent to `getLoop(id)?.pending_approval`.
+     *
+     * NOTE: this method is NOT reactive when called directly in a
+     * Svelte component template — Svelte 5 tracks reactivity on
+     * property reads, and a method call returns a non-reactive
+     * snapshot. To re-render when the loop's `pending_approval`
+     * changes, either wrap the call in `$derived` or read
+     * `agentStore.getLoop(id)?.pending_approval` inline (the
+     * `getLoop` path goes through the SvelteMap, which IS tracked).
+     */
+    pendingApproval(id: string) {
+      return loops.get(id)?.pending_approval;
+    },
+
     connect() {
       if (eventSource) return; // Already connected
       connectInternal();

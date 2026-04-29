@@ -5,11 +5,18 @@ import TaskDetailPanel from "./TaskDetailPanel.svelte";
 import type { TaskInfo } from "$lib/types/task";
 import type { AgentLoop } from "$lib/types/agent";
 
-// Mock agentApi — covers both TaskDetailPanel's sendSignal calls and
-// TrajectoryViewer's getTrajectory/getTrajectories calls.
+// Mock agentApi — covers TaskDetailPanel's sendSignal calls,
+// PendingApprovalSection's submitApproval calls, and TrajectoryViewer's
+// getTrajectory/getTrajectories calls.
 vi.mock("$lib/services/agentApi", () => ({
   agentApi: {
     sendSignal: vi.fn().mockResolvedValue({ status: "sent" }),
+    submitApproval: vi.fn().mockResolvedValue({
+      loop_id: "loop_001",
+      decision: "approve",
+      accepted: true,
+      timestamp: "2026-04-29T11:00:00Z",
+    }),
     getTrajectory: vi.fn().mockResolvedValue({
       loop_id: "",
       role: "",
@@ -18,6 +25,14 @@ vi.mock("$lib/services/agentApi", () => ({
       duration_ms: 0,
     }),
     getTrajectories: vi.fn().mockResolvedValue([]),
+  },
+  AgentApiError: class AgentApiError extends Error {
+    statusCode: number;
+    constructor(message: string, statusCode: number) {
+      super(message);
+      this.name = "AgentApiError";
+      this.statusCode = statusCode;
+    }
   },
 }));
 
@@ -123,48 +138,110 @@ describe("TaskDetailPanel", () => {
       expect(screen.getByText("Cancel")).toBeInTheDocument();
     });
 
-    it("shows Approve + Reject for awaiting_approval state", () => {
-      render(TaskDetailPanel, { props: { task: makeTask({ state: "awaiting_approval" }) } });
+    it("renders PendingApprovalSection and Cancel for awaiting_approval state", () => {
+      render(TaskDetailPanel, {
+        props: {
+          task: makeTask({
+            state: "awaiting_approval",
+            primaryLoop: makeLoop({
+              state: "awaiting_approval",
+              pending_approval: {
+                call_id: "call-1",
+                tool_name: "create_rule",
+                arguments: { name: "alert" },
+                requested_at: "2026-04-29T11:00:00Z",
+              },
+            }),
+          }),
+        },
+      });
 
-      expect(screen.getByText("Approve")).toBeInTheDocument();
-      expect(screen.getByText("Reject")).toBeInTheDocument();
+      // Approve / Reject now live inside PendingApprovalSection — the
+      // panel header surface only carries Cancel for this state.
+      expect(screen.getByTestId("pending-approval-section")).toBeInTheDocument();
+      expect(screen.getByTestId("approval-approve")).toBeInTheDocument();
+      expect(screen.getByTestId("approval-reject")).toBeInTheDocument();
+      expect(screen.getByText("Cancel")).toBeInTheDocument();
+    });
+
+    it("hides PendingApprovalSection when pending_approval is absent", () => {
+      // Defensive: state is awaiting_approval but the dispatch hasn't
+      // populated the snapshot yet (transient race). Render the row
+      // without the section instead of crashing.
+      render(TaskDetailPanel, {
+        props: { task: makeTask({ state: "awaiting_approval" }) },
+      });
+
+      expect(
+        screen.queryByTestId("pending-approval-section"),
+      ).not.toBeInTheDocument();
+      expect(screen.queryByTestId("approval-approve")).not.toBeInTheDocument();
     });
 
     it("shows no action buttons for complete state", () => {
       render(TaskDetailPanel, { props: { task: makeTask({ state: "complete" }) } });
 
       expect(screen.queryByText("Pause")).not.toBeInTheDocument();
-      expect(screen.queryByText("Approve")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("approval-approve")).not.toBeInTheDocument();
     });
   });
 
   describe("signal dispatch", () => {
-    it("calls sendSignal on Approve click", async () => {
+    it("approve click flows through submitApproval (not sendSignal)", async () => {
       const user = userEvent.setup();
       render(TaskDetailPanel, {
-        props: { task: makeTask({ id: "loop_xyz", state: "awaiting_approval" }) },
+        props: {
+          task: makeTask({
+            id: "loop_xyz",
+            state: "awaiting_approval",
+            primaryLoop: makeLoop({
+              loop_id: "loop_xyz",
+              state: "awaiting_approval",
+              pending_approval: {
+                call_id: "call-xyz",
+                tool_name: "create_rule",
+                arguments: { name: "alert" },
+                requested_at: "2026-04-29T11:00:00Z",
+              },
+            }),
+          }),
+        },
       });
 
-      await user.click(screen.getByText("Approve"));
+      await user.click(screen.getByTestId("approval-approve"));
 
-      expect(agentApi.sendSignal).toHaveBeenCalledWith("loop_xyz", "approve");
+      expect(agentApi.submitApproval).toHaveBeenCalledWith(
+        "loop_xyz",
+        expect.objectContaining({ decision: "approve" }),
+      );
+      // Old broken signal path is gone.
+      expect(agentApi.sendSignal).not.toHaveBeenCalled();
     });
 
-    it("shows error when signal fails", async () => {
-      vi.mocked(agentApi.sendSignal).mockRejectedValueOnce(new Error("Signal failed"));
+    it("Cancel click still uses sendSignal during awaiting_approval", async () => {
       const user = userEvent.setup();
       render(TaskDetailPanel, {
-        props: { task: makeTask({ state: "awaiting_approval" }) },
+        props: {
+          task: makeTask({
+            id: "loop_cancel",
+            state: "awaiting_approval",
+            primaryLoop: makeLoop({
+              loop_id: "loop_cancel",
+              state: "awaiting_approval",
+              pending_approval: {
+                call_id: "call-c",
+                tool_name: "delete_rule",
+                arguments: {},
+                requested_at: "2026-04-29T11:00:00Z",
+              },
+            }),
+          }),
+        },
       });
 
-      await user.click(screen.getByText("Approve"));
+      await user.click(screen.getByText("Cancel"));
 
-      // Scope to the signal-error element — the panel also embeds
-      // TaskStory which raises its own alert if the trajectory fetch
-      // fails, so a generic getByRole("alert") would match multiple.
-      const err = await screen.findByTestId("signal-error");
-      expect(err).toBeInTheDocument();
-      expect(err).toHaveTextContent("Signal failed");
+      expect(agentApi.sendSignal).toHaveBeenCalledWith("loop_cancel", "cancel");
     });
   });
 

@@ -4,15 +4,17 @@ import { test, expect } from "@playwright/test";
  * Journey: Tool Approval Gate
  *
  * Goal: An agent proposes a high-risk tool (`create_rule`), the loop pauses
- * for human approval, the user approves via the Board's detail panel,
- * the tool executes, and the loop completes.
+ * for human approval, the user approves via PendingApprovalSection inside
+ * TaskDetailPanel, the tool executes, and the loop completes.
  *
  * Validates:
  *   - ChatBar → agentApi.sendMessage() wiring (new task creation)
  *   - Kanban board renders the task card via SSE activity stream
  *   - Task card transitions through state columns (Thinking → Needs You)
- *   - TaskDetailPanel shows Approve/Reject buttons for awaiting_approval
- *   - Approve signal → loop resumes → card moves to Done column
+ *   - PendingApprovalSection renders for awaiting_approval state with the
+ *     gated tool's name + arguments + approve/reject controls
+ *   - approval-approve click → POST /teams-dispatch/loops/{id}/approval →
+ *     ApprovalResponse → loop resumes → card moves to Done column
  *   - Backend state matches UI state
  *
  * Required fixture: test/fixtures/journeys/tool-approval-gate.yaml
@@ -23,6 +25,10 @@ import { test, expect } from "@playwright/test";
  *   FIXTURE=tool-approval-gate.yaml \
  *     npx playwright test --config playwright.agentic.config.ts \
  *     e2e/agentic/tool-approval-gate.spec.ts
+ *
+ * Backend wiring is feature-flag-free as of semstreams beta.22 + the
+ * cmd/semteams/middleware.go X-User-Id lift. UI wiring landed in this
+ * branch (feat/approval-flow-ui).
  */
 
 test.describe("Tool Approval Gate", () => {
@@ -31,21 +37,7 @@ test.describe("Tool Approval Gate", () => {
     expect(health.ok()).toBe(true);
   });
 
-  // Upstream loop-side wiring landed in semstreams beta.19: the
-  // agentic-loop now pauses on `approval_required: ...` rejections,
-  // emits an ApprovalPendingEvent on `agent.approval_pending.<loop_id>`,
-  // and resumes only on a matching ApprovalResponse on
-  // `agent.approval_response.<loop_id>`. See
-  // ../semstreams/docs/operations/migration-beta19.md.
-  //
-  // Still blocked at the UI layer: TaskDetailPanel does not yet render
-  // Approve/Reject buttons for awaiting_approval, and there is no
-  // client publisher that sends an ApprovalResponse on the
-  // agent.approval_response.* subject. agentStore exposes
-  // `awaitingApproval` but no resolution path. Re-enable once the
-  // UI wires the approval-pending subscription + the resolution
-  // controls.
-  test.skip("user creates task via chat bar, approves tool, loop completes", async ({
+  test("user creates task via chat bar, approves tool, loop completes", async ({
     page,
     request,
   }) => {
@@ -77,7 +69,8 @@ test.describe("Tool Approval Gate", () => {
 
     // -----------------------------------------------------------------
     // Step 3 — poll the backend to find the loop_id. We need this to
-    // correlate with the card that appears on the kanban board.
+    // correlate with the card that appears on the kanban board AND to
+    // drive selection via ?task=<id>.
     // -----------------------------------------------------------------
     const loopId = await pollUntil(async () => {
       const resp = await request.get("/teams-dispatch/loops");
@@ -92,46 +85,54 @@ test.describe("Tool Approval Gate", () => {
     expect(loopId, "no agent loop appeared after dispatch").toBeTruthy();
 
     // -----------------------------------------------------------------
-    // Step 4 — the task card should appear on the kanban board via SSE.
-    // Wait for a card with the matching task_id (rendered as the card
-    // title) or loop_id to become visible.
-    // -----------------------------------------------------------------
-    const taskCard = page
-      .getByTestId("task-card")
-      .first();
-    await expect(taskCard).toBeVisible({ timeout: 30000 });
-
-    // -----------------------------------------------------------------
-    // Step 5 — wait for the card to reach awaiting_approval state.
-    // The state badge text updates via SSE as the loop transitions.
+    // Step 4 — wait for the card to reach awaiting_approval state.
+    // SSE delivers the loop's state transition + pending_approval
+    // snapshot via the activity stream.
     // -----------------------------------------------------------------
     await expect(
       page.locator("[data-testid='task-card'] [data-state='awaiting_approval']"),
     ).toBeVisible({ timeout: 30000 });
 
     // -----------------------------------------------------------------
-    // Step 6 — click the card to open the detail panel, then click
-    // Approve. The TaskDetailPanel shows Approve/Reject buttons when
-    // the task is in awaiting_approval state.
+    // Step 5 — open the detail panel via URL state. Direct
+    // page.goto?task=<id> is the canonical selection path —
+    // taskCard.click() races replaceState and is flaky. See the
+    // feedback_url_state_in_tests memory.
     // -----------------------------------------------------------------
-    await taskCard.click();
-
+    await page.goto(`/?task=${loopId}`);
     await expect(page.getByTestId("task-detail-panel")).toBeVisible();
 
-    await page.getByRole("button", { name: "Approve" }).click();
+    // -----------------------------------------------------------------
+    // Step 6 — PendingApprovalSection renders the gated tool with
+    // approve/reject controls. Verify the tool name surfaces
+    // (the fixture configures `create_rule`).
+    // -----------------------------------------------------------------
+    await expect(page.getByTestId("pending-approval-section")).toBeVisible();
+    await expect(page.getByTestId("approval-tool-name")).toHaveText(
+      "create_rule",
+    );
 
     // -----------------------------------------------------------------
-    // Step 7 — verify the loop transitions to a terminal-success state.
+    // Step 7 — click Approve. The component POSTs to
+    // /teams-dispatch/loops/{id}/approval with X-User-Id from the
+    // userIdentity store (default "ui-anonymous"). The dispatch
+    // publishes ApprovalResponse on agent.approval_response.<loop_id>;
+    // the agentic-loop resumes, runs the tool, takes the next mock-llm
+    // turn, and terminates.
+    // -----------------------------------------------------------------
+    await page.getByTestId("approval-approve").click();
+
+    // -----------------------------------------------------------------
+    // Step 8 — verify the loop transitions to a terminal-success state.
     // Upstream dispatch emits both `complete` and `success` aliases on
-    // completion; assert via the canonical kanban column instead of
-    // the raw badge value.
+    // completion; assert via the canonical kanban column.
     // -----------------------------------------------------------------
     await expect(
       page.locator("[data-testid='task-card'][data-column='done']"),
     ).toBeVisible({ timeout: 30000 });
 
     // -----------------------------------------------------------------
-    // Step 8 — backend-state assertion. The canonical source of truth
+    // Step 9 — backend-state assertion. The canonical source of truth
     // should agree with what the UI shows. Accept either terminal alias.
     // -----------------------------------------------------------------
     const finalLoop = await request
