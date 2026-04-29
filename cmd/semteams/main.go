@@ -24,7 +24,10 @@ import (
 	"github.com/c360studio/semstreams/flowtemplate"
 	"github.com/c360studio/semstreams/metric"
 	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semstreams/payloadbuiltins"
+	"github.com/c360studio/semstreams/payloadregistry"
 	"github.com/c360studio/semstreams/persona"
+	agentictools "github.com/c360studio/semstreams/processor/agentic-tools"
 	"github.com/c360studio/semstreams/processor/agentic-tools/executors"
 	rulepkg "github.com/c360studio/semstreams/processor/rule"
 	"github.com/c360studio/semstreams/service"
@@ -120,31 +123,38 @@ func run() error {
 		return err
 	}
 
-	// 9. Create service dependencies
-	svcDeps := createServiceDependencies(natsClient, metricsRegistry, logger, platform, configManager, componentRegistry)
-
-	// 10. Configure and create services
-	if err := configureAndCreateServices(cfg, manager, svcDeps); err != nil {
-		return err
+	// 9a. Build the shared payload registry and register first-party
+	// builtins (agentic, message, dispatch, rule, boid, operating-model,
+	// github-webhook, objectstore). Per beta.18: payload registry is
+	// constructor-injected via component.Dependencies.PayloadRegistry,
+	// so it must exist before services are constructed. Mirrors upstream
+	// cmd/semstreams/main.go.
+	payloadReg := payloadregistry.New()
+	if err := payloadbuiltins.Register(payloadReg); err != nil {
+		return fmt.Errorf("register builtin payloads: %w", err)
 	}
 
-	// 11. Populate the PERSONAS KV bucket from disk so per-role prompt
+	// 9b. Populate the PERSONAS KV bucket from disk so per-role prompt
 	// fragments are available to agentic-loop's prompt.Registry. The
 	// agentic-loop component creates its own persona.Manager against the
-	// same KV bucket — this step just seeds the bucket at startup.
-	// Mirrors upstream cmd/semstreams/main.go:143. See semteams ADR-029
-	// (docs/adr/029-product-shell-wiring.md) for the wiring contract.
+	// same KV bucket — this step just seeds the bucket at startup. The
+	// returned manager is also threaded into the tool registry below so
+	// Pattern-B persona CRUD tools (read/update/list) can work against
+	// the same bucket.
 	personaMgr := loadPersonaFragments(ctx, natsClient, cliCfg.PersonaFragmentsPath)
 
-	// 12. Wire agentic-tools executors. Stateful tools (read_loop_result,
-	// decide, emit_diagnosis, graph_query) need NATS + platform identity.
-	// Pattern-B tools (create_rule, update_persona, list_flows, etc.) each
-	// need their matching manager; nil manager → registerX skips. We wire
-	// all four Pattern-B managers today so any future product journey
-	// that needs CRUD tooling has it — ADR-029 "product shell owns its
-	// wiring" applies per-manager: wire once, don't drift silently later.
-	// Mirrors upstream cmd/semstreams/main.go:149.
-	executors.RegisterAll(ctx, executors.ToolDependencies{
+	// 9c. Build the shared tool registry and register first-party tool
+	// executors. Per beta.16: agentic-tools registry is constructor-
+	// injected via component.Dependencies.ToolRegistry. Stateful tools
+	// (read_loop_result, decide, emit_diagnosis, graph_query) need NATS
+	// + platform identity. Pattern-B tools (create_rule, update_persona,
+	// list_flows, etc.) each need their matching manager; nil manager →
+	// registerX skips. We wire all four Pattern-B managers so any future
+	// product journey that needs CRUD tooling has it — ADR-029 "product
+	// shell owns its wiring" applies per-manager: wire once, don't drift
+	// silently later.
+	toolRegistry := agentictools.NewExecutorRegistry()
+	if err := executors.RegisterBuiltins(ctx, toolRegistry, executors.ToolDependencies{
 		NATSClient:          natsClient,
 		Platform:            platform,
 		Logger:              slog.Default(),
@@ -154,15 +164,29 @@ func run() error {
 		FlowTemplateManager: buildFlowTemplateManager(natsClient, slog.Default()),
 		ComponentRegistry:   componentRegistry,
 		LoopsBucket:         extractLoopsBucket(cfg),
-	})
+	}); err != nil {
+		return fmt.Errorf("register builtin tools: %w", err)
+	}
 
-	// 13. Run application with signal handling
+	// 10. Create service dependencies, plumbing the shared registries so
+	// every component constructed by the service manager sees the same
+	// tool + payload registry instances.
+	svcDeps := createServiceDependencies(natsClient, metricsRegistry, logger, platform, configManager, componentRegistry)
+	svcDeps.ToolRegistry = toolRegistry
+	svcDeps.PayloadRegistry = payloadReg
+
+	// 11. Configure and create services
+	if err := configureAndCreateServices(cfg, manager, svcDeps); err != nil {
+		return err
+	}
+
+	// 12. Run application with signal handling
 	return runWithSignalHandling(ctx, manager, cliCfg.ShutdownTimeout)
 }
 
 // loadPersonaFragments seeds the PERSONAS KV bucket from a directory
 // tree shaped <root>/<role>/*.md and returns the manager so it can be
-// threaded into executors.RegisterAll. Non-fatal on init failure —
+// threaded into executors.RegisterBuiltins. Non-fatal on init failure —
 // callers must nil-check the return before relying on it.
 func loadPersonaFragments(ctx context.Context, natsClient *natsclient.Client, root string) *persona.Manager {
 	if root == "" {
@@ -187,8 +211,8 @@ func loadPersonaFragments(ctx context.Context, natsClient *natsclient.Client, ro
 }
 
 // extractLoopsBucket pulls the agentic-tools loops_bucket config value so
-// executors.RegisterAll can thread it into the stateful-tool registrations
-// (read_loop_result, flow_monitor). Empty return lets RegisterAll fall
+// executors.RegisterBuiltins can thread it into the stateful-tool registrations
+// (read_loop_result, flow_monitor). Empty return lets RegisterBuiltins fall
 // back to the AGENT_LOOPS default. Independent reimplementation of
 // upstream cmd/semstreams/main.go per ADR-029 — not an import.
 func extractLoopsBucket(cfg *config.Config) string {
