@@ -31,18 +31,20 @@ test.describe("Tool Approval Gate", () => {
     expect(health.ok()).toBe(true);
   });
 
-  // Blocked on an upstream framework gap. The agentic-tools
-  // ApprovalFilter rejects the create_rule call with the documented
-  // `approval_required: ...` prefix, but agentic-loop never imports
-  // IsApprovalRequired and never transitions the loop to
-  // LoopStateAwaitingApproval. Confirmed on semstreams beta.15 AND
-  // beta.16 — the prefix-detection wiring at the loop side is the
-  // missing piece (the comment in approval_filter.go:11-12 is
-  // aspirational). Until that lands, the loop treats the rejection
-  // as a regular tool failure, feeds the error back to the LLM,
-  // consumes the fixture's turn-2 completion, and terminates `success`
-  // without ever pausing for human approval. Re-enable when the
-  // upstream loop-side wiring exists.
+  // Upstream loop-side wiring landed in semstreams beta.19: the
+  // agentic-loop now pauses on `approval_required: ...` rejections,
+  // emits an ApprovalPendingEvent on `agent.approval_pending.<loop_id>`,
+  // and resumes only on a matching ApprovalResponse on
+  // `agent.approval_response.<loop_id>`. See
+  // ../semstreams/docs/operations/migration-beta19.md.
+  //
+  // Still blocked at the UI layer: TaskDetailPanel does not yet render
+  // Approve/Reject buttons for awaiting_approval, and there is no
+  // client publisher that sends an ApprovalResponse on the
+  // agent.approval_response.* subject. agentStore exposes
+  // `awaitingApproval` but no resolution path. Re-enable once the
+  // UI wires the approval-pending subscription + the resolution
+  // controls.
   test.skip("user creates task via chat bar, approves tool, loop completes", async ({
     page,
     request,

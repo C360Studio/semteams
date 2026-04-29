@@ -22,7 +22,7 @@ product-shell wiring in `cmd/semteams/`.
   `banner.go`, `logging.go`). Independently implements every
   framework-wiring pattern per ADR-029 — no imports from upstream
   `cmd/semstreams/`. See [ADR-029](docs/adr/029-product-shell-wiring.md).
-- Go module: `github.com/c360studio/semstreams` (currently `v1.0.0-beta.13`)
+- Go module: `github.com/c360studio/semstreams` (currently `v1.0.0-beta.24`)
 - NATS JetStream (KV, ObjectStore), Prometheus, slog — via semstreams
 - Task (task runner) — run `task --list` for all commands
 - `ui/` — Svelte 5 + SvelteKit 2 + TypeScript frontend (subtree-imported
@@ -33,7 +33,7 @@ product-shell wiring in `cmd/semteams/`.
 
 | Path | Purpose |
 |------|---------|
-| `cmd/semteams/` | Product-shell binary. Wires Pattern-A/B/C framework primitives per ADR-029 — no custom components, but non-trivial wiring (persona loader, Pattern-B managers, `executors.RegisterAll`) |
+| `cmd/semteams/` | Product-shell binary. Wires Pattern-A/B/C framework primitives per ADR-029 — no custom components, but non-trivial wiring (payload registry, persona loader, Pattern-B managers, `executors.RegisterBuiltins`) |
 | `cmd/openapi-generator/` | Dev tool: generate OpenAPI spec from component registry |
 | `configs/` | Flow-template library. Loadable at runtime via UI |
 | `docs/` | Product and integration documentation |
@@ -149,10 +149,11 @@ wirings:
 |---|---|---|
 | `componentregistry.Register` | C | `setupRegistriesAndManager` |
 | `persona.NewManager` + `LoadFromDirectory` | B | `loadPersonaFragments` |
-| `rule.NewConfigManager` | B | `buildRuleManager` → `executors.RegisterAll` |
-| `flowstore.NewManager` | B | `buildFlowManager` → `executors.RegisterAll` |
-| `flowtemplate.NewManager` | B | `buildFlowTemplateManager` → `executors.RegisterAll` |
-| `executors.RegisterAll` | A + B tool executors | after persona load, before `StartAll` |
+| `rule.NewConfigManager` | B | `buildRuleManager` → `executors.RegisterBuiltins` |
+| `flowstore.NewManager` | B | `buildFlowManager` → `executors.RegisterBuiltins` |
+| `flowtemplate.NewManager` | B | `buildFlowTemplateManager` → `executors.RegisterBuiltins` |
+| `payloadregistry.New` + `payloadbuiltins.Register` | A | before tool registry; plumbed via `Dependencies.PayloadRegistry` (beta.18) |
+| `agentictools.NewExecutorRegistry` + `executors.RegisterBuiltins` | A + B tool executors | after persona load; plumbed via `Dependencies.ToolRegistry` (beta.16) |
 
 When a journey breaks because a tool executor isn't firing or persona
 fragments aren't grounding, suspect drift here first.
