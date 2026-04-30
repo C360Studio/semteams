@@ -199,6 +199,7 @@ tasks:
       - task: test:e2e:agentic:action-chips
       - task: test:e2e:agentic:task-title-aliases
       - task: test:e2e:agentic:admin-flows-inventory
+      - task: test:e2e:agentic:research-iterative
       - task: test:e2e:agentic:research-with-source
 
   test:e2e:agentic:research-with-source:
@@ -237,6 +238,19 @@ tasks:
           FIXTURE: "{{.FIXTURE}}"
           AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
       - npx playwright test e2e/agentic/tool-approval-gate.spec.ts
+
+  test:e2e:agentic:research-iterative:
+    desc: Run the research-iterative journey with its paired fixture (R1 of ADR-031)
+    vars:
+      FIXTURE: research-iterative.yaml
+      AGENTIC_CONFIG: e2e-research-iterative.json
+    cmds:
+      - defer: { task: test:e2e:agentic:cleanup }
+      - task: test:e2e:agentic:stack:up
+        vars:
+          FIXTURE: "{{.FIXTURE}}"
+          AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
+      - npx playwright test e2e/agentic/research-iterative.spec.ts
 
   test:e2e:agentic:real-time-activity-stream:
     desc: Run the real-time-activity-stream journey with its paired fixture
