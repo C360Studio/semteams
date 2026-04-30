@@ -36,9 +36,19 @@ const (
 // registerProductTools wires product-shell-local tool executors onto
 // the shared registry, after the framework's RegisterBuiltins has
 // populated it with first-party tools. R2 of ADR-031 adds
-// add_source_repo. R3.2.1 adds emit_research_artifact. Future product
-// slices register here. Re-introduce a *config.Config parameter (or
-// switch to a deps struct) once a tool needs deployment-config visibility.
+// add_source_repo. R3.2.1 adds emit_research_artifact. Re-introduce
+// a *config.Config parameter (or switch to a deps struct) once a tool
+// needs deployment-config visibility.
+//
+// Discipline gate (commission-not-omission): adding a new tool
+// registration here requires a framework-alignment review per
+// cmd/semteams/tools/README.md. The pattern we are explicitly
+// avoiding: each tool is individually defensible; the cumulative
+// drift away from framework idiom turns the product shell into a
+// bespoke monster. Survey upstream first; if the pattern exists,
+// port don't fork; if it's planned but not shipped (e.g. upstream's
+// write_artifact suite per ADR-028 §What's not built here), document
+// the migration target in tools/README.md and an ADR addendum.
 func registerProductTools(reg *agentictools.ExecutorRegistry, natsClient *natsclient.Client, platform types.PlatformMeta, logger *slog.Logger) error {
 	if err := registerAddSource(reg, natsClient, logger); err != nil {
 		return err

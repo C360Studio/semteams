@@ -8,6 +8,31 @@
 // 2026-04-30 addendum to docs/adr/031-research-flow-and-semspec-handoff.md
 // for the stabilisation-as-converged-change-log model that motivates the
 // triple set.
+//
+// Discipline note (commission-not-omission): this tool is the
+// research-domain instance of upstream's planned generic write_artifact
+// suite (ADR-028 §What's not built here, verified absent in semstreams
+// beta.27). It mirrors the canonical agent-terminal-tool emission shape
+// of upstream `decide` and `emit_diagnosis` deliberately — see
+// ADR-031 §addendum 2026-04-30 "Framework-alignment review for R3.2
+// emission shape" for the four alternatives we considered and ruled out
+// with upstream evidence for each rejection.
+//
+// If you are reading this because you want to:
+//
+//   - Add a similar emit-* tool for another domain → read
+//     cmd/semteams/tools/README.md "Discipline" section first. Survey
+//     upstream; if a near-equivalent ships in semstreams, port don't
+//     fork.
+//   - Generalise this tool into a shape-agnostic emit_artifact in
+//     product code → STOP. The migration target is upstream's planned
+//     write_artifact, not a SemTeams-local generalisation. Open an
+//     ADR addendum evaluating migration when upstream ships it.
+//   - Stuff additional artifact content into the marker triples (e.g.
+//     full actor names, integration-point text) → STOP. Marker triples
+//     carry references and counts only. Content lives in the typed
+//     payload; consumers query it via read_loop_result or subscribe
+//     to the payload subject. See ADR-028 §Layer 2.
 package emitartifact
 
 import (
@@ -316,6 +341,15 @@ func parseArgsIntoArtifact(raw map[string]any, loopID string) (*research.Artifac
 // Timestamp object is RFC3339Nano for byte-exact correlation with the
 // published payload (research.Artifact serialises ProducedAt at nano
 // precision via the standard time.MarshalJSON).
+//
+// Discipline note: triples carry references and counts only — never
+// free-text content. Adding actor names, integration-point text, or
+// open-gap strings as triple objects violates upstream ADR-028 §Layer 2
+// ("rules carry references, not content") and explodes downstream
+// small-model context windows when a rule substitutes the predicate
+// into a prompt. The full structured content lives in the typed
+// payload published on research.artifact.{loop_id}; consumers read it
+// via read_loop_result or by subscribing to the subject.
 func buildTriples(loopEntityID string, a *research.Artifact, now time.Time) []message.Triple {
 	base := func(pred string, obj any) message.Triple {
 		return message.Triple{
