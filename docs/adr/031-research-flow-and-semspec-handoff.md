@@ -309,3 +309,90 @@ a bounded prompt against an already-indexed corpus.
   emission, adversarial Challenger. Read SemSpec's code for the
   shape; port what earns its keep, leave the prescribed
   pipeline.
+
+## Addendum 2026-04-30 — Stabilisation as converged change-log
+
+**Status:** Accepted (R2.5 retrospective).
+
+R2.5 shipped the chained research+source-acquisition journey (PR #38)
+and surfaced an open question the original ADR did not resolve: when
+the substrate (the indexed corpus) actively mutates during a research
+run, what does "stabilised" mean?
+
+The original ADR carried an implicit *stabilised = frozen* model
+inherited from the cross-product framing it later dropped — the
+internal `ResearchArtifact` would be a post-research snapshot of a
+substrate that had stopped changing. R2.5 falsified that. Adding a
+source mid-run is the *intended* behaviour, not a corner case (it is
+the structural test of this ADR's invariant: research can modify the
+substrate it is reasoning over).
+
+### Decision
+
+**Stabilisation is convergence of the change-log, not freeze of the
+substrate.** Concretely:
+
+- The artifact records substrate mutations in-flight as they happen.
+  Every successful `add_source_repo` (and any future substrate-mod
+  tool) appends a `Mutation` entry with `loop_id`, `revision`,
+  `approved_by`, `status`, `timestamp`, original args.
+- The artifact has a `revision` integer; each researcher pass
+  produces a new revision (1, 2, 3, …). The mutation log is
+  monotonic and append-only across revisions.
+- *Stabilised* is the derived predicate
+  `reviewer_approved == true && this revision's mutation delta == ∅`.
+  The reviewer's approval criteria do not change because the
+  substrate did — the reviewer evaluates whatever the latest revision
+  is, on its own terms.
+
+This model:
+
+- Honours the ADR-031 invariant rather than apologising for it.
+- Gives the dev-via-spec mode (R3.2+) a complete audit trail of
+  *what was added* during research, not just the post-hoc actor
+  list.
+- Makes the gating logic a rule predicate against artifact-derived
+  triples, not Go code — consistent with how every other coordinator
+  decision point works.
+
+### Pattern source vs implementation source
+
+SemSpec models plan revisions in its `plan-manager`. We borrow the
+*concepts* (numbered revisions, append-only mutation history,
+reviewer-evaluates-latest) but **explicitly do not borrow** its
+implementation. SemSpec's per-Plan bespoke KV-bucket ownership is
+exactly the friction SemTeams was architected to avoid. SemTeams
+uses its existing primitives:
+
+- `payloadregistry` for the typed `ResearchArtifact` payload (one
+  registration; no new bucket).
+- `graph.ingest` for marker triples on the loop entity (revision,
+  reviewer-approved, last-revision-mutation-count). Rules already
+  match on these.
+- `rule` (Pattern B) for the stabilisation predicate. No bespoke Go
+  state machine.
+
+If we later need to query historical artifacts, the typed payload is
+on a stable JetStream subject; replay or projection lives in the
+existing message-logger / objectstore primitives, not a new
+plan-manager-style component.
+
+### Ownership
+
+`ResearchArtifact` is **SemTeams-local**. Registered in
+`cmd/semteams/main.go` after `payloadbuiltins.Register(...)` via
+`research.RegisterPayloads(payloadReg)`. Not upstreamed to
+semstreams. Per the ADR-031 reframe rationale: no cross-product API,
+no version coupling, single-product cadence.
+
+### What ships, in order
+
+| Slice | Ships |
+|---|---|
+| **R3.1** | `cmd/semteams/research.Artifact` payload type + `RegisterPayloads(reg)` wired in `main.go`. Type-only; no producer/consumer yet. Unit tests for round-trip + Validate. |
+| **R3.2** | Mode-transition machinery: a tool/executor that emits the artifact onto a stable subject and writes the marker triples; a stabilisation rule that fires when the predicate is true; a coordinator transition rule that swaps personas. |
+| **R3.3** | Dev-via-spec persona fragments (planner / reviewer / challenger / architect-light), flow config, dev-via-spec rules. Configs only. |
+| **R3.4** | End-to-end OSH journey. Unbounded prompt → R1+R2.5 chain → stabilisation → mode transition → dev-via-spec → epic-shaped output. The demo. |
+
+Each slice ships a Playwright spec proving the marginal capability;
+prior slices stay green.
