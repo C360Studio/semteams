@@ -396,3 +396,130 @@ no version coupling, single-product cadence.
 
 Each slice ships a Playwright spec proving the marginal capability;
 prior slices stay green.
+
+## Addendum 2026-04-30 — Framework-alignment review for R3.2 emission shape
+
+**Status:** Accepted (R3.2.1 design review).
+
+Before committing R3.2.1's tool-emits-artifact design, we surveyed
+upstream semstreams (bumped to beta.27 in the same PR) for guidance
+on generating artifacts from rules vs from agent terminal tools. The
+semspec-trauma motivation: avoid silently inventing a bespoke
+artifact-emission pattern when the framework has a canonical one.
+
+### What upstream documents
+
+Two patterns ship with explicit guidance:
+
+| Pattern | Documented home | Consumer shape |
+|---|---|---|
+| Rule → `publish` action → output component | `docs/concepts/18-rule-driven-artifacts.md` (new in beta.26) | **External.** Markdown / JSON / CSV / HTTP webhook leaving the system. Doc explicitly: "If the consumer is *inside* SemStreams, prefer querying the graph directly." |
+| Agent terminal tool emits triples (+ payload) | `processor/agentic-tools/decide.go`, `emit_diagnosis.go`; ADR-028 §Layer 3 | **Internal.** Coordinator/specialist agent emits a structured terminal artifact a downstream rule matches on deterministically. |
+
+Two further upstream constraints pin the choice:
+
+- **ADR-028 §Layer 2:** "Rules do **not** parse agent output, make
+  quality judgments, or branch on the semantic content of a result.
+  If a rule condition needs to branch on the content of a result,
+  the rule should trigger a coordinator; the coordinator's terminal
+  tool result emits a triple that a subsequent rule can match on
+  deterministically."
+- **ADR-028 §What's not built here:** "**Artifact store** for dev
+  flows — named workspace + `write_artifact` / `read_artifact` /
+  `list_artifacts` tools. Follow-up plan." Verified absent in
+  beta.27. The framework anticipates artifact-emitting tools as the
+  canonical pattern; the generic primitive is on the roadmap but not
+  yet shipped.
+
+### What we considered and ruled out
+
+1. **Rule emits the typed payload from triples.** Rejected. Rule
+   actions substitute triple objects as `fmt.Sprintf("%v", obj)`
+   strings (`processor/rule/execution_context.go:75-101`); they
+   cannot compose nested structured data (actors[],
+   integration_points[], substrate_mutations[]) from per-predicate
+   triples. The framework deliberately does not ship a
+   `render_template` rule action — concept-doc 18 calls this out as
+   product-side concern.
+
+2. **Spawn a separate renderer agent on completion.** Rejected.
+   This is concept-doc 18's pattern for shape-changing artifacts —
+   a clean fit when the renderer reads from a stable substrate. For
+   our case the substrate is the researcher's own in-flight tool
+   calls (R2.5's `add_source_repo` calls). A separate renderer agent
+   would have to re-extract that mutation log from unstructured
+   `submit_work` content — exactly the
+   "rules-cannot-quality-judge-unstructured-content" problem from
+   ADR-028, shifted to a different agent. Inline emission keeps
+   mutation-knowledge local to where it is known.
+
+3. **Per-loop KV bucket for artifact state.** Rejected at R3.1
+   (see addendum 2026-04-30 above). SemSpec's plan-manager friction
+   is exactly what ADR-031's reframe was avoiding.
+
+4. **A new payload-emission rule action type.** Rejected. The
+   framework's `publish` action publishes a generic JSON envelope
+   (`entity_id` + `subject` + `timestamp` + `source` + static
+   `properties`); it is not typed-payload-aware and cannot draw
+   nested structured data from arbitrary completion content.
+   Inventing a typed-payload rule action would fork the rule engine
+   for our case — the bespoke-monster path.
+
+### What we're building
+
+R3.2.1 implements the agent-terminal-tool pattern, scoped to the
+research domain: `emit_research_artifact`, modelled on upstream's
+`decide` and `emit_diagnosis`. The researcher persona instructs the
+LLM to call it once per pass with the full artifact JSON before
+`submit_work`. The tool:
+
+- Validates the artifact via `research.Artifact.Validate`.
+- Writes a deterministic set of marker triples on the calling loop
+  entity using the framework's `agentictools.TriplePublisher`
+  (revision, four count predicates, `last_revision_mutation_count`,
+  `produced_at`). Rules in R3.2.2 match on these.
+- Publishes the typed `research.artifact.v1` payload on the stable
+  subject `research.artifact.{loop_id}` via core NATS for audit and
+  forward-compat. The subject is **not** a rule trigger — the
+  marker triples are. The payload is the audit trail and the
+  forward-compat surface for any future external consumer.
+
+### Migration posture
+
+- **When upstream ships the planned generic `write_artifact` tool**
+  (ADR-028 follow-up): evaluate migrating
+  `emit_research_artifact` onto it. The migration is replacing a
+  concrete executor with a configured one; the tool name +
+  triple/payload contract stay in product code.
+- **If a future external consumer surfaces** (UI dashboard, audit
+  observer, external pipeline): wire an `output/file` or
+  `output/httppost` component subscribed to
+  `research.artifact.>`. Additive — no changes to the tool, the
+  rule, or the persona.
+- **If R3.4's OSH journey reveals a gap** that the agent-terminal-
+  tool shape cannot cover (e.g. the artifact actually does need to
+  be assembled from an in-system multi-agent reduction rather than
+  a single researcher's pass): revisit and document why the
+  renderer-agent pattern is needed; do not silently grow the tool's
+  responsibility.
+
+### Demo discipline (load-bearing)
+
+For the question "why doesn't this just live in a rule":
+
+> Rules do mechanical routing on metadata triples. Rules do not
+> parse agent output or compose structured artifacts from
+> unstructured content — that's the framework's documented
+> contract (ADR-028 §Layer 2; concept-doc 18). Our research
+> artifact is the structured terminal output of an LLM
+> pass; the canonical place to mint it is the agent's terminal
+> tool — same shape as `decide` and `emit_diagnosis`. We're using
+> the framework idiom, not inventing one.
+
+For "why isn't this upstream then":
+
+> Upstream's roadmap anticipates a generic `write_artifact` tool
+> (ADR-028 §What's not built here). When it ships, we evaluate
+> migrating. Until then, our domain-specific
+> `emit_research_artifact` is a thin product-shell tool —
+> ~200 LoC + tests, no new framework primitives.

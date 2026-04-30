@@ -227,6 +227,48 @@ This caught a wire-format bug (`time.Duration` typed as `string`
 instead of `number`) and a WCAG 2.5.3 violation in PR #32 that
 would have shipped otherwise.
 
+## Product-Shell-Tool Discipline (MANDATORY)
+
+SemTeams is a reference/demo product on top of semstreams (ADR-029).
+The product shell intentionally stays thin. The trap pattern is
+**accretion** — each individual product-shell tool, rule, or payload
+is defensible; the cumulative drift turns the product shell into a
+bespoke monster (the semspec lesson).
+
+Before adding any of these, do a **framework-alignment review**:
+
+- A new tool in `cmd/semteams/tools/`
+- A new rule action type or rule action shape
+- A new SemTeams-local payload type
+- A new KV bucket
+- A new long-lived stream
+
+The review:
+
+1. Survey upstream `~/go/pkg/mod/github.com/c360studio/semstreams@<current>`
+   for an existing or planned-and-roadmapped equivalent.
+2. If exists → use it. If "near" → port to it; do not fork.
+3. If planned but not shipped → land a domain-specific instance,
+   document the migration target in the relevant ADR addendum.
+4. If not in scope upstream by intent → document why the SemTeams
+   case justifies a product-local primitive, in an ADR.
+
+The evidence trail (the ADR addendum recording the survey + the
+alternatives ruled out + the migration posture) is what protects
+future agents from re-litigating the decision in a vacuum or
+silently extending a pattern they don't understand the *why* of.
+
+Reference: `cmd/semteams/tools/README.md` lists the existing
+product-shell tools with their migration posture and links the
+working-template addendum (ADR-031 §addendum 2026-04-30
+"Framework-alignment review for R3.2 emission shape").
+
+If you cannot point at an upstream pattern your design implements
+or a planned one in the upstream roadmap — **that is a stop signal**.
+Either the design is wrong, or the framework is missing a primitive
+that should be raised upstream rather than worked around in product
+code.
+
 ## E2E Active Monitoring Protocol (MANDATORY)
 
 UI Playwright journeys are long-running. MUST monitor actively — never
