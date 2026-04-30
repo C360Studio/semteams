@@ -192,6 +192,41 @@ These upstream config fields default `false`; enable per config as needed:
 - `agentic-governance.enable_tool_governance` — pre-execution governance
   filtering
 
+## Reviewer-Pass Protocol (MANDATORY)
+
+Every multi-phase implementation runs a reviewer-pass at every
+critical step. Critical step = phase boundary or commit boundary;
+the agent picks the granularity based on the work's shape.
+
+- `go-reviewer` for backend Go work (`cmd/semteams/`, `test/`,
+  upstream coordination).
+- `svelte-reviewer` for Svelte / TypeScript frontend (`ui/`).
+- Both for cross-stack PRs.
+
+Workflow per critical step:
+
+1. Land the work (commit or phase complete).
+2. Verify locally — build, lint, tests must be green.
+3. Invoke the appropriate reviewer with explicit scope: which
+   files, which contracts, which migration guides if upstream
+   beta is involved.
+4. Apply the reviewer's findings:
+   - **Critical / blocker**: fix before proceeding to next phase.
+   - **Nit / recommendation**: fix in the same cycle if
+     scope-appropriate; defer with a tracking comment if not.
+   - **Disagreement**: explicit, not silent. Document "reviewer
+     flagged X; declining because Y" if the recommendation is
+     not applied.
+5. Verify again post-fix.
+
+Trivial dep bumps / docs-only / single-line edits can skip the
+reviewer pass. Anything touching business logic, security
+surfaces, API contracts, or accessibility runs the reviewer.
+
+This caught a wire-format bug (`time.Duration` typed as `string`
+instead of `number`) and a WCAG 2.5.3 violation in PR #32 that
+would have shipped otherwise.
+
 ## E2E Active Monitoring Protocol (MANDATORY)
 
 UI Playwright journeys are long-running. MUST monitor actively — never
