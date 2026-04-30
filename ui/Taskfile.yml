@@ -203,6 +203,7 @@ tasks:
       - task: test:e2e:agentic:research-with-source
       - task: test:e2e:agentic:research-with-source-acquisition
       - task: test:e2e:agentic:research-mode-transition
+      - task: test:e2e:agentic:dev-via-spec
 
   test:e2e:agentic:research-with-source:
     desc: Run the R2 source-acquisition journey (add_source_repo + approval gate + SemSource)
@@ -289,6 +290,38 @@ tasks:
           AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
           COMPOSE_PROFILES: "{{.COMPOSE_PROFILES}}"
       - npx playwright test e2e/agentic/research-mode-transition.spec.ts
+
+  test:e2e:agentic:dev-via-spec:
+    desc: Run the R3.3 dev-via-spec full-chain journey (planner / reviewer / challenger / architect-light)
+    summary: |
+      End-to-end exercise of ADR-031 R3.3: dev-via-spec port from
+      SemSpec patterns. Builds on R3.2.2's research-mode-transition:
+      the same six-loop research arc completes, then the stabilisation
+      rule spawns the dev-via-spec-planner. From there the dev-via-spec
+      internal rule chain (configs/rules/dev-via-spec/ rules 01/03/05)
+      drives the four-role handoff to architect-light terminal.
+
+      Ten loops, twenty-eight LLM round-trips. Covers the golden path
+      — every gate (reviewer + challenger) approves on first pass.
+      Retry rules (02 reviewer-rejected and 04 challenger-concerns)
+      are exercised structurally by max_iterations metadata; covering
+      them under e2e is a follow-up if the OSH journey reveals
+      real-LLM retry behaviour worth pinning.
+
+      Requires the SemSource image at ghcr.io/c360studio/semsource:latest;
+      override with SEMSOURCE_IMAGE if testing an unreleased build.
+    vars:
+      FIXTURE: dev-via-spec.yaml
+      AGENTIC_CONFIG: e2e-dev-via-spec.json
+      COMPOSE_PROFILES: semsource
+    cmds:
+      - defer: { task: test:e2e:agentic:cleanup }
+      - task: test:e2e:agentic:stack:up
+        vars:
+          FIXTURE: "{{.FIXTURE}}"
+          AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
+          COMPOSE_PROFILES: "{{.COMPOSE_PROFILES}}"
+      - npx playwright test e2e/agentic/dev-via-spec.spec.ts
 
   test:e2e:agentic:research-with-source-acquisition:
     desc: Run the chained research + source-acquisition journey (R2.5 of ADR-031)
@@ -520,6 +553,16 @@ tasks:
           AGENTIC_CONFIG: e2e-research-mode-transition.json
           COMPOSE_PROFILES: semsource
           SCENARIO: research-mode-transition
+
+  test:e2e:agentic:dev:dev-via-spec:
+    desc: Boot stack for the R3.3 dev-via-spec full-chain scenario (planner / reviewer / challenger / architect-light over the R3.2.2 research substrate). No playwright.
+    cmds:
+      - task: test:e2e:agentic:dev:_boot
+        vars:
+          FIXTURE: dev-via-spec.yaml
+          AGENTIC_CONFIG: e2e-dev-via-spec.json
+          COMPOSE_PROFILES: semsource
+          SCENARIO: dev-via-spec
 
   test:e2e:agentic:dev:_boot:
     desc: Internal — boot helper for the per-scenario dev tasks

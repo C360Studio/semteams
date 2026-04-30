@@ -1,0 +1,43 @@
+{
+  "id": "dev_via_spec_planner_to_reviewer",
+  "type": "expression",
+  "name": "Dev-via-spec Planner → Reviewer Handoff",
+  "description": "When the dev-via-spec-planner emits decide(action=planned), the planner has produced a plan ready for completeness review. This rule fires on that signal and spawns the dev-via-spec-reviewer specialist. R3.3 of the ADR-031 phasing — first internal handoff in the dev-via-spec chain.",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "agent.loop.role",
+      "operator": "eq",
+      "value": "dev-via-spec-planner",
+      "required": true
+    },
+    {
+      "field": "coordinator.next_action",
+      "operator": "eq",
+      "value": "planned",
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "publish_agent",
+      "subject": "agent.task.dev-via-spec-review",
+      "role": "dev-via-spec-reviewer",
+      "model": "general",
+      "tools": ["read_loop_result", "decide"],
+      "properties": {
+        "prior_loop_id": "$entity.id"
+      },
+      "prompt": "The dev-via-spec planner emitted a plan via decide(action=planned). Planner loop id: $entity.id (passed as prior_loop_id in your task properties). Call read_loop_result with that loop id to read the plan content (the decide reason field). Apply your completeness checklist per `20-completeness-checklist.md`. If every item is present and well-formed, call decide(action=approved). Otherwise call decide(action=insufficient, reason=\"<bullet list of gaps>\")."
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "phase": "R3.3",
+    "adr": "docs/adr/031-research-flow-and-semspec-handoff.md",
+    "adr_addendum": "docs/adr/031-research-flow-and-semspec-handoff.md#addendum-2026-04-30--r33-dev-via-spec-port-pattern-source-survey",
+    "pattern": "reviewer-as-enumerator (ported from SemSpec ADR-029)",
+    "cross_grounding_caveat": "The reviewer-as-enumerator pattern in SemSpec lets the reviewer cross-ground the plan against the upstream research artifact. The dev-via-spec-reviewer's checklist would benefit from the same cross-grounding (e.g., 'every artifact seed_requirement is represented by an epic'). Forward-propagating the upstream research_reviewer_loop_id through the dev-via-spec chain requires rule-engine support for property-passthrough that semstreams beta.27 doesn't ship. R3.3 ships with reviewer-evaluates-plan-only as the first-version contract; the reviewer's persona is defensive (checklist works on plan content alone). R3.4 or an upstream rule-engine improvement should add cross-entity property propagation, after which the persona can re-add cross-grounding to the artifact."
+  }
+}

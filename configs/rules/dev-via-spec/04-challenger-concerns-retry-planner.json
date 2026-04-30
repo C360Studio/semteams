@@ -1,0 +1,44 @@
+{
+  "id": "dev_via_spec_challenger_concerns_retry_planner",
+  "type": "expression",
+  "name": "Dev-via-spec Challenger Raised Concerns — Retry Planner",
+  "description": "When the dev-via-spec-challenger emits decide(action=concerns_raised), the adversarial probe surfaced falsifiable concerns the planner must address. This rule fires on that signal and respawns the dev-via-spec-planner with the concerns. The planner reads the concerns via read_loop_result on the challenger loop and revises. Bounded by max_iterations=5 with the same per-entity caveat as rule 02. R3.3 of the ADR-031 phasing.",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "agent.loop.role",
+      "operator": "eq",
+      "value": "dev-via-spec-challenger",
+      "required": true
+    },
+    {
+      "field": "coordinator.next_action",
+      "operator": "eq",
+      "value": "concerns_raised",
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "max_iterations": 5,
+  "on_enter": [
+    {
+      "type": "publish_agent",
+      "subject": "agent.task.dev-via-spec-plan-retry",
+      "role": "dev-via-spec-planner",
+      "model": "general",
+      "tools": ["read_loop_result", "decide"],
+      "properties": {
+        "prior_loop_id": "$entity.id",
+        "retry": true
+      },
+      "prompt": "The dev-via-spec challenger raised concerns about the prior plan. Challenger loop id: $entity.id. Call read_loop_result with that loop id to read the concerns list (the challenger's decide reason field), then revise the plan per your `20-revision-rules.md`. Treat each concern as a falsifiable claim — split coarse epics, prune creep items, add coverage for missing failure modes. Re-emit decide(action=planned, reason=\"<revised plan>\")."
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "phase": "R3.3",
+    "adr": "docs/adr/031-research-flow-and-semspec-handoff.md",
+    "stop_condition": "Q2 — MaxIter (=5) + challenger + opt-in human gate",
+    "max_iterations_note": "Per-entity caveat applies as in rule 02. The combined retry budget for reviewer + challenger gates is up to 10 round-trips; in practice the OSH journey settles in 1-2 retries per gate."
+  }
+}

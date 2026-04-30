@@ -523,3 +523,197 @@ For "why isn't this upstream then":
 > migrating. Until then, our domain-specific
 > `emit_research_artifact` is a thin product-shell tool —
 > ~200 LoC + tests, no new framework primitives.
+
+## Addendum 2026-04-30 — R3.3 dev-via-spec port: pattern-source survey
+
+**Status:** Accepted (R3.3 framework-alignment review).
+
+Before committing R3.3's persona-fragment port from SemSpec, we
+surveyed upstream semstreams (still beta.27) and SemSpec source for
+guidance on what to port and what to skip. The semspec-trauma
+motivation: avoid silently growing the product shell into a bespoke
+monster by importing SemSpec's prescribed pipeline along with its
+prompts.
+
+### What upstream provides (and does not)
+
+| Surface | Status at beta.27 | Implication for R3.3 |
+|---|---|---|
+| `persona/` package + file-loader | Stable since beta.9; no new primitives in beta.27. | Use the existing digit-prefix fragment-file pattern. |
+| Built-in tool executors (`processor/agentic-tools/executors/`) | `read_loop_result`, `decide`, `emit_diagnosis`, `personas`, `rules`, `flows`, `flow_templates`, `flow_monitor`, `bash`, `github_*`, `graph_query`, `httprequest`, `web_search`, `component_catalog`. | All four R3.3 roles run on `read_loop_result` + `decide` only — no new SemTeams-local tool needed. |
+| `write_artifact` / `read_artifact` / `list_artifacts` | Still listed in ADR-028 §"What's not built here." | The dev-via-spec terminal output stays on the same pattern as R3.2.1: loop completion message + `decide` for downstream rule routing. When the artifact-suite ships, we evaluate migrating the architect-light's terminal output. |
+| Cron-rule primitive (beta.27) | New, additive. | Not relevant to R3.3 — the dev-via-spec chain is event-driven on `decide` outcomes, not time-triggered. |
+
+### What we port from SemSpec
+
+Light port — concepts and prompt content, not pipeline. Source
+files at `~/Code/c360/semspec/prompt/`:
+
+| SemSpec source | Maps to (in this PR) | What ports across | What changes |
+|---|---|---|---|
+| `domain/software.go:336` (planner) | `configs/personas/fragments/dev-via-spec-planner/` | "Decompose intent into a development plan with goal/context/scope; revision path on reviewer rejection." | Input is a stable `research.Artifact` (with `actors[]`, `integration_points[]`, `seed_requirements[]`), not a freshly-shaped intent. |
+| `domain/software.go:426` (plan-reviewer) | `configs/personas/fragments/dev-via-spec-reviewer/` | "Reviewer-as-enumerator: walk an explicit checklist, decide approved/insufficient with bullet-list gaps." | One-round review (not SemSpec's R1+R2 split); checklist is dev-via-spec-shaped (epic decomposition, scope coherence) not SOP-driven. |
+| `domain/software.go:575` + `:1445` (adversarial QA) | `configs/personas/fragments/dev-via-spec-challenger/` | "Adversarial: find what could go wrong, not approve." Standalone role per ADR-031's four-role plan. | Operates on a planner output (not implementation/test artifacts). Probes for decomposition coarseness, scope creep, missing integration concerns. |
+| `domain/software.go:832` (architect) | `configs/personas/fragments/dev-via-spec-architect-light/` | "Map plan to actors / integration points / decisions with rationale." | Lighter — the research artifact already enumerates actors and integration points; the architect's job is to ratify those into final epic-shaped seed requirements. No greenfield architecture decisions. |
+
+### What we explicitly do NOT port
+
+| SemSpec mechanism | Why we skip |
+|---|---|
+| Fixed sequential processor chain (planner→plan-reviewer→req-generator→scenario-generator→scenario-reviewer) | We use the coordinator pattern with one `agentic-loop` and rule-driven role swaps. ADR-031 §Decision. |
+| Per-Plan KV bucket + plan-manager state machine | Rejected at R3.1 (see addendum 2026-04-30 above). Use `payloadregistry` + `graph.ingest` + rules. |
+| `StatusRejected` / `ReviewIteration` / `MaxReviewIterations` Plan struct fields | Equivalent is the rule's `max_iterations` field + reviewer's `decide(approved\|insufficient)` terminal output. |
+| `plan.mutation.revision` event surface | Equivalent is `agent.complete.>` + the rule-driven retry pattern. |
+| Two-round R1/R2 review structure | One reviewer pass per role transition. R3.4's OSH journey will tell us if a second round is needed. |
+
+### The SemTeams dev-via-spec chain
+
+Five rules under `configs/rules/dev-via-spec/`, all event-driven on
+prior agent's structured terminal output (`decide` action):
+
+```
+research-reviewer.decide(approved)              → rule_03 (R3.2.2) → planner
+                                                  ↓
+planner.decide(planned)                         → rule_01 → reviewer
+                                                  ↓
+reviewer.decide(approved)                       → rule_03 → challenger
+reviewer.decide(insufficient)                   → rule_02 → planner (retry, max_iter=5)
+                                                  ↓
+challenger.decide(accept)                       → rule_05 → architect-light
+challenger.decide(concerns_raised)              → rule_04 → planner (retry, max_iter=5)
+                                                  ↓
+architect-light.decide(seed_requirements_emitted) → terminal (no rule fires)
+```
+
+The `dev-via-spec` rules dir is loaded only by the new
+`e2e-dev-via-spec.json` config. The R3.2.2 e2e config remains
+unchanged (it does not load these rules), so R3.2.2's seven-loop
+smoke test stays stable — the persona-content swap to the real
+planner does not break the R3.2.2 spec because mock-llm replays
+the fixture sequence regardless of persona content, and no
+dev-via-spec rule loads to spawn an eighth loop.
+
+### What we ship
+
+- Four persona fragment dirs under `configs/personas/fragments/dev-via-spec-*/`. The `dev-via-spec-planner` stub introduced in R3.2.2 is replaced with the real planner contract; three dirs are new (reviewer, challenger, architect-light).
+- Five rule files under `configs/rules/dev-via-spec/`.
+- `configs/e2e-dev-via-spec.json` flow config — extends R3.2.2's research-mode-transition config with the new rule chain.
+- `test/fixtures/journeys/dev-via-spec.yaml` mock-llm fixture covering the chain through architect-light terminal.
+- `ui/e2e/agentic/dev-via-spec.spec.ts` Playwright journey assertion.
+
+Configs only per ADR-031 — zero Go changes.
+
+### Per-role rigour: each role addresses only its prior loop
+
+semstreams beta.27's rule engine substitutes `$entity.id` /
+`$entity.<predicate>` against the *triggering* entity only — there
+is no mechanism for a rule's `properties` block to forward an
+arbitrary upstream entity id from a prior rule's spawn
+(`processor/rule/execution_context.go:75-101`). R3.3 was initially
+read as constrained by this: "downstream roles can't cross-ground
+against the original research artifact, so the chain compresses
+content across hops." The reviewer-pass reframe corrected that
+read.
+
+**This is the right design, not a defect.** The reviewer-as-
+enumerator pattern works *because* each role has one concrete
+input to walk a checklist against. Forcing the reviewer to also
+cross-ground against the upstream artifact splits attention,
+dilutes the primary check, and (with small LLMs) likely degrades
+reasoning quality. SemSpec's chain works the same way — its
+plan-reviewer reads the plan, not the original intent. Chain
+quality emerges from per-role rigour, not per-role exhaustive
+backward reach.
+
+R3.3 ships with each role reading **only its prior loop**, and
+that is the intended shape:
+
+```
+research-reviewer.loop  ←  planner reads        (R3.2.2 rule 03 forwards prior_loop_id)
+planner.loop            ←  reviewer reads       (dev-via-spec rule 01 forwards prior_loop_id)
+reviewer.loop           ←  challenger reads     (dev-via-spec rule 03 forwards prior_loop_id)
+challenger.loop         ←  architect-light reads(dev-via-spec rule 05 forwards prior_loop_id)
+```
+
+Each downstream role grounds against what its prior role
+summarised in the `decide` reason field. That summary is the
+contract; rigour at the prior role is what the next role builds
+on.
+
+**Why echo-forward (embedding upstream IDs in persona prompts) is
+a Goodhart loader, not a fix.** The tempting alternative —
+instruct each persona to echo upstream IDs through `decide`
+reasons so the next role can `read_loop_result` deeper into the
+chain — fails on four counts: it splits the LLM's attention
+between primary task and bookkeeping; it creates a structural
+proxy ("did the LLM include the IDs?" replaces "did the LLM
+actually reason about upstream constraints?"); it encourages
+performative `read_loop_result` calls that satisfy the contract
+without informing reasoning; and more upstream content in context
+does not equal better grounding when effective attention is
+bounded. We resist the upstream rule-engine "forward-prop"
+feature ask on the same logic — the persona layer does not need
+it, and adding it would invite exactly the multi-hop
+cross-grounding that this section argues against.
+
+**If R3.4's OSH journey reveals drift, the right mitigation is a
+structural terminal validator, not forward-prop.** A rule (or
+thin Go checker) fires after architect-light emits and asserts:
+
+- Every final seed_requirement cites an actor that exists in the
+  original research artifact's `actors[]`.
+- Every cited integration boundary appears in
+  `integration_points[]`.
+- No invented entities pass through the chain undetected.
+
+This is structural (no LLM judgment), deterministic (rule engine
+can do it; `emit_research_artifact` already mints the marker
+triples the validator reads), Goodhart-resistant (the validator
+reads triples, not summaries — nothing for the chain to optimise
+against), and deferrable (ship R3.3 without it, add in R3.4 only
+if drift is observed). The discipline generalises: prefer
+structural checks over LLM-enforced cross-grounding whenever the
+constraint admits a deterministic predicate (see also ADR-028
+§Layer 2 on rules-as-mechanical-routing).
+
+### Compatibility note for R3.2.2
+
+The `dev-via-spec-planner` persona content is replaced wholesale
+in this PR (R3.2.2's stub becomes R3.3's real planner). R3.2.2's
+spec (`ui/e2e/agentic/research-mode-transition.spec.ts`) stays
+green **only because mock-llm is sequence-based** — it replays
+the R3.2.2 fixture's stub completion regardless of persona
+content, and R3.2.2's e2e config does not load the dev-via-spec
+rules so no eighth loop spawns. If R3.2.2's spec is ever run
+against a real LLM, the new planner persona will use `decide`
+rather than emit a completion message; the R3.2.2 rule's tools
+list now includes `decide` (added in this PR) so dispatch
+succeeds, but the completion-content assertion would no longer
+match. This is an acceptable trade-off — R3.2.2 is a mock-llm
+e2e by design, and a future real-LLM smoke check should target
+R3.3 rather than R3.2.2.
+
+### Migration posture
+
+- **When upstream ships `write_artifact`** (ADR-028 follow-up): evaluate migrating the architect-light's terminal output onto the typed artifact-store path. The migration is replacing a `decide(action="seed_requirements_emitted")` terminator with a structured `write_artifact` call; persona content adapts; rules unchanged.
+- **If R3.4's OSH journey reveals coverage gaps** (planner consistently mis-decomposing, reviewer missing the same class of failure): port more from SemSpec — the failure-class taxonomy (`error_categories.json`) maps to negative-memory-injection in reviewer prompts; the second-round review (R2) maps to a dual reviewer fragment. Document in a follow-up R3.4 addendum.
+- **If a future external consumer wants the dev-via-spec output** (UI dashboard rendering plans, audit observer): add an `output/file` or `output/httppost` component subscribed to whatever the architect-light terminal emits; additive.
+
+### Demo discipline (load-bearing)
+
+For the question "why don't you just call SemSpec":
+
+> SemSpec's MVP scope is intent that arrives already shaped enough
+> for an `ArchitectureDocument`. The whole reason SemTeams owns
+> this arc is that domain research, source acquisition, and scope
+> shaping are upstream of SemSpec's bound. The dev-via-spec mode
+> ports SemSpec's *patterns* into a coordinator that sees the
+> upstream context too. SemSpec is a pattern source, not a runtime
+> dependency.
+
+For "isn't this just rebuilding SemSpec":
+
+> We port four prompts and one taxonomy. SemSpec is sixteen
+> components, a per-Plan KV bucket, a state machine, and a fixed
+> processor chain — all of which we explicitly do not port (see
+> table above). The dev-via-spec mode is configs only.
