@@ -84,7 +84,7 @@ beforeEach(async () => {
     stop: vi.fn(),
     kill: vi.fn(),
     isRunning: vi.fn().mockReturnValue(false),
-  })) as any);
+  })) as never);
 
   // Re-apply Sigma mock implementation after reset
   const sigmaModule = await import("sigma");
@@ -100,5 +100,5 @@ beforeEach(async () => {
     kill: vi.fn(),
     getCamera: vi.fn().mockReturnValue(mockCamera),
     getGraph: vi.fn(),
-  })) as any);
+  })) as never);
 });

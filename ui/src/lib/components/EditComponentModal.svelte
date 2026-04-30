@@ -194,8 +194,7 @@
 		onclick={handleBackgroundClick}
 		onkeydown={(e) => e.key === 'Escape' && handleClose()}
 	>
-		<!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
-		<div class="dialog-content" onclick={(e) => e.stopPropagation()}>
+		<div class="dialog-content">
 			<header class="dialog-header">
 				<h2 id="dialog-title">Edit: {node.name}</h2>
 				<button class="close-button" onclick={handleClose} aria-label="Close dialog">×</button>
@@ -339,8 +338,7 @@
 			tabindex="-1"
 			onkeydown={(e) => e.key === 'Escape' && handleDeleteCancel()}
 		>
-			<!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
-			<div class="confirm-content" onclick={(e) => e.stopPropagation()}>
+			<div class="confirm-content">
 				<h3>Confirm Deletion</h3>
 				<p>Are you sure you want to delete "{node.name}"?</p>
 				<p class="confirm-warning">This action cannot be undone.</p>

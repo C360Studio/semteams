@@ -83,31 +83,12 @@
 		outline-offset: 2px;
 	}
 
-	/* Port type specific classes */
-	:global(.port-nats_stream) {
-		/* Blue-700 from theme */
-	}
-
-	:global(.port-nats_request) {
-		/* Purple-700 from theme */
-	}
-
-	:global(.port-kv_watch) {
-		/* Emerald-700 from theme */
-	}
-
-	:global(.port-network) {
-		/* Orange-700 from theme */
-	}
-
-	:global(.port-file) {
-		/* Gray-700 from theme */
-	}
-
-	/* Border pattern classes */
-	:global(.port-solid) {
-		/* Solid border for required ports */
-	}
+	/* Port type colours and border patterns are applied inline via
+	   style:border-color and style:border-style from
+	   computePortVisualStyle(port), so no per-type / per-pattern CSS
+	   class rules are needed. The .port-nats_stream / .port-solid /
+	   etc. classes are kept on the element for ARIA labelling and
+	   data hooks; styling is data-driven. */
 
 	:global(.port-dashed) {
 		border-style: dashed !important;

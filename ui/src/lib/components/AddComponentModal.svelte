@@ -181,8 +181,7 @@
 		onclick={handleBackgroundClick}
 		onkeydown={(e) => e.key === 'Escape' && handleClose()}
 	>
-		<!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
-		<div class="dialog-content" onclick={(e) => e.stopPropagation()}>
+		<div class="dialog-content">
 			<header class="dialog-header">
 				<h2 id="dialog-title">Add Component</h2>
 				<button class="close-button" onclick={handleClose} aria-label="Close dialog">×</button>

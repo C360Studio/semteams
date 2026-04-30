@@ -113,6 +113,18 @@
 	}
 </script>
 
+<!--
+	The element is intentionally a div with role="separator" — the
+	WAI-ARIA pattern for a window splitter / resize handle. svelte's
+	a11y lint rule treats role="separator" as non-interactive (separators
+	are static dividers in some contexts), but per ARIA 1.2 §5.3.6 a
+	separator with focus/keyboard handling IS the correct pattern for
+	a resize handle. Keyboard handler IS provided (onkeydown=handleKeyDown,
+	Arrow keys per the spec). The two svelte-ignore directives are the
+	precise scope of the false positives this widget triggers.
+-->
+<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div
 	class="resize-handle"
 	class:dragging={isDragging}
