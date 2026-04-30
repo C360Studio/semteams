@@ -181,11 +181,14 @@ func run() error {
 
 	// 9d. Register product-shell-local tool executors. R2 of ADR-031
 	// adds add_source_repo, which bridges the agent loop to SemSource's
-	// graph.ingest.add.{namespace} contract. The executor lives in
-	// semteams (not upstream) because the namespace allowlist is
-	// product policy. Tool stays inert if the deployment has no
+	// graph.ingest.add.{namespace} contract. R3.2.1 adds
+	// emit_research_artifact, which writes marker triples and publishes
+	// the typed research.artifact.v1 payload onto a stable subject.
+	// These tools live in semteams (not upstream) because their config
+	// (namespace allowlist; product-local payload type) is product
+	// policy. add_source_repo stays inert if the deployment has no
 	// namespaces configured — see addsource.Config.AllowedNamespaces.
-	if err := registerProductTools(toolRegistry, natsClient, cfg, slog.Default()); err != nil {
+	if err := registerProductTools(toolRegistry, natsClient, platform, slog.Default()); err != nil {
 		return fmt.Errorf("register product tools: %w", err)
 	}
 

@@ -6,11 +6,12 @@ import (
 	"os"
 	"strings"
 
-	"github.com/c360studio/semstreams/config"
 	"github.com/c360studio/semstreams/natsclient"
 	agentictools "github.com/c360studio/semstreams/processor/agentic-tools"
+	"github.com/c360studio/semstreams/types"
 
 	"github.com/c360studio/semteams/cmd/semteams/tools/addsource"
+	"github.com/c360studio/semteams/cmd/semteams/tools/emitartifact"
 )
 
 // Environment variables that configure product-shell-local tools.
@@ -35,14 +36,20 @@ const (
 // registerProductTools wires product-shell-local tool executors onto
 // the shared registry, after the framework's RegisterBuiltins has
 // populated it with first-party tools. R2 of ADR-031 adds
-// add_source_repo. Future product slices register here.
-//
-// The cfg parameter is reserved for future tools that read deployment
-// state from the framework config; current tool reads only env vars
-// (TODO: thread namespace allowlist through cfg.Components or a new
-// product config block once we have a second product tool that
-// benefits from JSON-config visibility).
-func registerProductTools(reg *agentictools.ExecutorRegistry, natsClient *natsclient.Client, _ *config.Config, logger *slog.Logger) error {
+// add_source_repo. R3.2.1 adds emit_research_artifact. Future product
+// slices register here. Re-introduce a *config.Config parameter (or
+// switch to a deps struct) once a tool needs deployment-config visibility.
+func registerProductTools(reg *agentictools.ExecutorRegistry, natsClient *natsclient.Client, platform types.PlatformMeta, logger *slog.Logger) error {
+	if err := registerAddSource(reg, natsClient, logger); err != nil {
+		return err
+	}
+	return registerEmitArtifact(reg, natsClient, platform, logger)
+}
+
+// registerAddSource wires the R2 add_source_repo executor. Stays inert
+// (skipped at boot) when no SemSource namespace allowlist is configured,
+// to keep the LLM from seeing a tool every call would fail.
+func registerAddSource(reg *agentictools.ExecutorRegistry, natsClient *natsclient.Client, logger *slog.Logger) error {
 	addSourceCfg := readAddSourceConfig()
 
 	// Skip registration entirely when the deployment has no namespace
@@ -67,6 +74,30 @@ func registerProductTools(reg *agentictools.ExecutorRegistry, natsClient *natscl
 		slog.String("name", addsource.RepoToolName),
 		slog.Int("allowed_namespaces", len(addSourceCfg.AllowedNamespaces)),
 		slog.String("default_namespace", addSourceCfg.DefaultNamespace))
+	return nil
+}
+
+// registerEmitArtifact wires the R3.2.1 emit_research_artifact executor.
+// Always registered when natsClient is non-nil — there's no per-deployment
+// gating: the tool is product policy, and any deployment running the
+// research flow needs it to drive the mode-transition machinery.
+// Reuses the framework's NATSTriplePublisher so the marker triples flow
+// through the same graph.mutation.triple.add path the decide and
+// emit_diagnosis tools use.
+func registerEmitArtifact(reg *agentictools.ExecutorRegistry, natsClient *natsclient.Client, platform types.PlatformMeta, logger *slog.Logger) error {
+	if natsClient == nil {
+		logger.Warn("nats client unavailable; emit_research_artifact registration skipped")
+		return nil
+	}
+	triplePublisher := agentictools.NewNATSTriplePublisher(natsClient)
+	executor := emitartifact.NewExecutor(triplePublisher, natsClient, platform, logger)
+	if err := reg.RegisterTool(emitartifact.ToolName, executor); err != nil {
+		return fmt.Errorf("register %s: %w", emitartifact.ToolName, err)
+	}
+	logger.Info("Registered product tool",
+		slog.String("name", emitartifact.ToolName),
+		slog.String("org", platform.Org),
+		slog.String("platform", platform.Platform))
 	return nil
 }
 
