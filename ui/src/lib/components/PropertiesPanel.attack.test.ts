@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, fireEvent } from "@testing-library/svelte";
 import { tick } from "svelte";
-import type { ComponentType } from "$lib/types/component";
+import type { ComponentType, PropertySchema } from "$lib/types/component";
 import type { FlowNode } from "$lib/types/flow";
 import PropertiesPanel from "./PropertiesPanel.svelte";
 
@@ -191,7 +191,7 @@ describe("PropertiesPanel Attack Tests", () => {
 
   describe("Boundary Condition Attacks", () => {
     it("handles component with 100+ fields without crashing", () => {
-      const properties: Record<string, any> = {};
+      const properties: Record<string, PropertySchema> = {};
       for (let i = 0; i < 100; i++) {
         properties[`field_${i}`] = {
           type: "string",
@@ -272,8 +272,8 @@ describe("PropertiesPanel Attack Tests", () => {
         render(PropertiesPanel, {
           props: {
             mode: "edit",
-            node: undefined as any,
-            nodeComponentType: undefined as any,
+            node: undefined as unknown as never,
+            nodeComponentType: undefined as unknown as never,
           },
         }),
       ).not.toThrow();

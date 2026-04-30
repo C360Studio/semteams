@@ -202,6 +202,7 @@ tasks:
       - task: test:e2e:agentic:research-iterative
       - task: test:e2e:agentic:research-with-source
       - task: test:e2e:agentic:research-with-source-acquisition
+      - task: test:e2e:agentic:research-mode-transition
 
   test:e2e:agentic:research-with-source:
     desc: Run the R2 source-acquisition journey (add_source_repo + approval gate + SemSource)
@@ -252,6 +253,42 @@ tasks:
           FIXTURE: "{{.FIXTURE}}"
           AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
       - npx playwright test e2e/agentic/research-iterative.spec.ts
+
+  test:e2e:agentic:research-mode-transition:
+    desc: Run the R3.2.2 research → dev-via-spec mode-transition journey
+    summary: |
+      End-to-end exercise of ADR-031 R3.2.2: stabilisation gate +
+      persona-swap mode transition. Builds on R2.5's chained research
+      + source-acquisition arc; adds the emit_research_artifact tool
+      call inside each researcher pass and the persona-swap rule
+      (03-stabilise-and-transition.json) that fires when the reviewer
+      approves a stabilised arc and spawns the dev-via-spec-planner
+      stub. The reviewer's stabilisation predicate (zero new substrate
+      mutations on the latest revision, per the ADR-031 §addendum
+      2026-04-30 "converged change-log" model) lives in the reviewer
+      persona; the rule trusts the structured terminal output per
+      ADR-028 §Layer 2.
+
+      Seven loops, twenty LLM round-trips. The chain is longer than
+      R2.5's because the stabilisation gate makes "approve on the
+      pass that mutated" structurally impossible — a settling pass
+      with zero new mutations is required before the reviewer can
+      approve.
+
+      Requires the SemSource image at ghcr.io/c360studio/semsource:latest;
+      override with SEMSOURCE_IMAGE if testing an unreleased build.
+    vars:
+      FIXTURE: research-mode-transition.yaml
+      AGENTIC_CONFIG: e2e-research-mode-transition.json
+      COMPOSE_PROFILES: semsource
+    cmds:
+      - defer: { task: test:e2e:agentic:cleanup }
+      - task: test:e2e:agentic:stack:up
+        vars:
+          FIXTURE: "{{.FIXTURE}}"
+          AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
+          COMPOSE_PROFILES: "{{.COMPOSE_PROFILES}}"
+      - npx playwright test e2e/agentic/research-mode-transition.spec.ts
 
   test:e2e:agentic:research-with-source-acquisition:
     desc: Run the chained research + source-acquisition journey (R2.5 of ADR-031)
@@ -473,6 +510,16 @@ tasks:
           AGENTIC_CONFIG: e2e-research-with-source-acquisition.json
           COMPOSE_PROFILES: semsource
           SCENARIO: research-with-source-acquisition
+
+  test:e2e:agentic:dev:research-mode-transition:
+    desc: Boot stack for the R3.2.2 research → dev-via-spec mode-transition scenario (semsource + emit_research_artifact + stabilisation + persona-swap). No playwright.
+    cmds:
+      - task: test:e2e:agentic:dev:_boot
+        vars:
+          FIXTURE: research-mode-transition.yaml
+          AGENTIC_CONFIG: e2e-research-mode-transition.json
+          COMPOSE_PROFILES: semsource
+          SCENARIO: research-mode-transition
 
   test:e2e:agentic:dev:_boot:
     desc: Internal — boot helper for the per-scenario dev tasks

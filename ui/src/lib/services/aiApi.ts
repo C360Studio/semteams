@@ -25,7 +25,7 @@ export class AiApiError extends Error {
   constructor(
     message: string,
     public statusCode?: number,
-    public details?: any,
+    public details?: unknown,
   ) {
     super(message);
     Object.setPrototypeOf(this, AiApiError.prototype);
@@ -93,7 +93,7 @@ async function generateFlow(
     });
 
     if (!response.ok) {
-      let errorDetails: any = {};
+      let errorDetails: unknown = {};
       try {
         errorDetails = await response.json();
       } catch {
@@ -159,7 +159,7 @@ async function streamGenerateFlow(
     });
 
     if (!response.ok) {
-      let errorDetails: any = {};
+      let errorDetails: unknown = {};
       try {
         errorDetails = await response.json();
       } catch {

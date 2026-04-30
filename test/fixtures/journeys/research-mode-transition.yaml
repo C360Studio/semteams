@@ -1,0 +1,391 @@
+name: research-mode-transition
+description: |
+  Journey: R3.2.2 of ADR-031. Builds on R2.5's chained research+source-
+  acquisition arc; adds (a) the emit_research_artifact tool call inside
+  each researcher pass and (b) the stabilisation gate enforced by the
+  reviewer (ADR-031 §addendum 2026-04-30 "Stabilisation as converged
+  change-log"). When the substrate mutates during a pass, the reviewer
+  rejects with "awaiting stabilisation" even if the artifact is
+  otherwise complete — the arc only stabilises on the *subsequent*
+  pass that queries without modifying. On the stabilised approval
+  rule 03 fires and spawns the dev-via-spec-planner stub, proving
+  the persona-swap mode-transition wires end-to-end.
+
+  Paired spec: ui/e2e/agentic/research-mode-transition.spec.ts.
+  Required compose profile: semsource (the SemSource container is
+  required for the substrate-modifying retry pass, same as R2.5).
+
+  Sequence (matches the fixture, seven loops, twenty LLM round-trips):
+
+    Loop A — researcher (initial pass, revision=1, default_role)
+      1. tool_call: query_entity (corpus probe, returns nothing useful)
+      2. tool_call: emit_research_artifact (revision=1, empty actors/
+         integration_points, open_gaps names the corpus gap)
+      3. completion: same artifact JSON for the reviewer to read.
+         → outcome=success → rule_01a fires.
+
+    Loop B — research-reviewer (pass 1, decides corpus gap)
+      4. tool_call: read_loop_result (placeholder; tool errors,
+         consumed by next canned turn)
+      5. tool_call: decide(insufficient, reason includes "recommend
+         add_source_repo for osh-core")
+         → coordinator.next_action=insufficient → rule_02 fires.
+
+    Loop C — researcher-with-source-acquisition (revision=2, substrate-
+              modifying pass)
+      6. tool_call: read_loop_result (placeholder; tool errors)
+      7. tool_call: add_source_repo(url=osh-core, namespace=research)
+         → agentic-tools approval filter: approval_required.
+         Test approves via /teams-dispatch/loops/{id}/approval. Loop
+         re-dispatches with ApprovedBy; SemSource handles AddRequest,
+         replies success.
+      8. tool_call: query_entity (now against augmented corpus; finds
+         OSH driver framework + Meshtastic radio actors)
+      9. tool_call: emit_research_artifact (revision=2, full actors/
+         integration_points/seed_requirements, substrate_mutations
+         carries one entry with revision=2 for the add_source_repo call)
+     10. completion: artifact JSON.
+         → outcome=success → rule_01b fires.
+
+    Loop D — research-reviewer (pass 2, stabilisation gate fires)
+     11. tool_call: read_loop_result (placeholder; tool errors)
+     12. tool_call: decide(insufficient, reason="awaiting stabilisation;
+         substrate mutated this revision (added 1 source), re-iterate
+         against augmented corpus before approval")
+         → coordinator.next_action=insufficient → rule_02 fires.
+
+    Loop E — researcher-with-source-acquisition (revision=3,
+              settling pass — no new substrate mutations)
+     13. tool_call: read_loop_result (placeholder; tool errors)
+     14. tool_call: query_entity (re-confirms findings against the
+         already-augmented corpus; no add_source_repo)
+     15. tool_call: emit_research_artifact (revision=3, same actors/
+         integration_points as revision=2, substrate_mutations
+         CARRIED FORWARD verbatim from revision=2 — no new entries
+         with revision=3, so last_revision_mutation_count=0)
+     16. completion: artifact JSON.
+         → outcome=success → rule_01b fires.
+
+    Loop F — research-reviewer (pass 3, approves on stabilised arc)
+     17. tool_call: read_loop_result (placeholder; tool errors)
+     18. tool_call: decide(approved)
+         → coordinator.next_action=approved → rule_03 fires.
+
+    Loop G — dev-via-spec-planner (R3.2.2 stub)
+     19. tool_call: read_loop_result (placeholder; tool errors)
+     20. completion: ack message confirming the artifact handoff.
+         → terminal. No rule fires.
+
+  Mock-llm is sequence-based and role-blind. The fixture aligns to
+  the exact order of LLM round-trips across all seven loops. Same
+  read_loop_result placeholder caveat as R1: arguments_json passes
+  verbatim, the placeholder loop_id will not resolve, the tool
+  returns an error, the next canned turn handles it. The structural
+  assertion (rule chain + approval round-trip + stabilisation gate
+  + persona-swap) is unaffected.
+
+  Why seven loops and not four (R2.5's count): the stabilisation
+  gate (ADR-031 §addendum 2026-04-30) makes "approved on the same
+  pass that mutated" structurally impossible. Honouring the
+  invariant — research can modify the substrate it is reasoning
+  over — requires a settling pass after each mutation. R3.2.2's
+  e2e proves the gate enforces this.
+
+responses:
+  # ---------- Loop A: researcher (initial pass, revision=1) ----------
+
+  - tool_call:
+      name: query_entity
+      arguments_json: |
+        {
+          "id": "osh.driver.framework"
+        }
+
+  - tool_call:
+      name: emit_research_artifact
+      arguments_json: |
+        {
+          "revision": 1,
+          "actors": [],
+          "integration_points": [],
+          "seed_requirements": [],
+          "addressed_gaps": [],
+          "open_gaps": [
+            "OSH driver framework documentation not indexed — query_entity for osh.driver.framework returned nothing. Recommend add_source_repo for the osh-core repository."
+          ],
+          "substrate_mutations": []
+        }
+
+  - completion:
+      content: |
+        Initial research pass on OSH driver framework actors. The
+        corpus does not appear to contain OSH driver framework
+        documentation — `query_entity` found no match for
+        `osh.driver.framework`. Submitting an empty artifact with
+        the corpus gap explicitly named so the reviewer can decide
+        whether to extend the corpus.
+
+        ```json
+        {
+          "revision": 1,
+          "actors": [],
+          "integration_points": [],
+          "seed_requirements": [],
+          "addressed_gaps": [],
+          "open_gaps": [
+            "OSH driver framework documentation not indexed — query_entity for osh.driver.framework returned nothing. Recommend add_source_repo for the osh-core repository."
+          ],
+          "substrate_mutations": []
+        }
+        ```
+
+  # ---------- Loop B: research-reviewer (pass 1) ----------
+
+  - tool_call:
+      name: read_loop_result
+      arguments_json: |
+        {
+          "loop_id": "researcher-loop-A"
+        }
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "insufficient",
+          "reason": "Corpus gap: OSH driver framework documentation is not indexed. Recommend add_source_repo for https://github.com/sensorhub-tools/osh-core in namespace research. The retry researcher should register this source before re-querying."
+        }
+
+  # ---------- Loop C: researcher-with-source-acquisition (revision=2) ----------
+
+  - tool_call:
+      name: read_loop_result
+      arguments_json: |
+        {
+          "loop_id": "reviewer-loop-B"
+        }
+
+  - tool_call:
+      name: add_source_repo
+      arguments_json: |
+        {
+          "url": "https://github.com/sensorhub-tools/osh-core",
+          "namespace": "research",
+          "branch": "main"
+        }
+
+  - tool_call:
+      name: query_entity
+      arguments_json: |
+        {
+          "id": "osh.driver.framework"
+        }
+
+  - tool_call:
+      name: emit_research_artifact
+      arguments_json: |
+        {
+          "revision": 2,
+          "actors": [
+            {"name": "OSH driver framework", "role": "Hosts the IDriver interface drivers must implement to expose sensor observations"},
+            {"name": "OGC CS endpoints", "role": "Standard endpoints for observations, system descriptions, and control streams that the driver exposes"},
+            {"name": "Meshtastic radio", "role": "LoRa mesh radio interface that emits packetised telemetry the driver consumes"}
+          ],
+          "integration_points": [
+            {"from": "OSH driver", "to": "OGC CS endpoints", "data": "observation messages and system descriptions", "direction": "write"},
+            {"from": "Meshtastic radio", "to": "OSH driver", "data": "packetised radio telemetry", "direction": "read"}
+          ],
+          "seed_requirements": [
+            "Implement OSH `IDriver` interface backed by Meshtastic radio events, exposing OGC CS observation endpoints"
+          ],
+          "addressed_gaps": [
+            "Registered https://github.com/sensorhub-tools/osh-core in namespace research via add_source_repo, then queried it for osh.driver.framework"
+          ],
+          "open_gaps": [],
+          "substrate_mutations": [
+            {
+              "tool": "add_source_repo",
+              "args": {
+                "url": "https://github.com/sensorhub-tools/osh-core",
+                "namespace": "research",
+                "branch": "main"
+              },
+              "loop_id": "researcher-with-source-loop-C",
+              "revision": 2,
+              "approved_by": "e2e-test-user",
+              "status": "executed",
+              "result": "registered git source; SemSource indexing succeeded",
+              "timestamp": "2026-04-30T12:00:00Z"
+            }
+          ]
+        }
+
+  - completion:
+      content: |
+        Source registration succeeded; re-queried the augmented
+        corpus and found the OSH driver framework, OGC CS endpoints,
+        and Meshtastic radio as the three actors. Two integration
+        points enumerated. One decomposable seed requirement.
+        Substrate mutation logged at revision 2.
+
+        ```json
+        {
+          "revision": 2,
+          "actors": [
+            {"name": "OSH driver framework", "role": "Hosts the IDriver interface drivers must implement to expose sensor observations"},
+            {"name": "OGC CS endpoints", "role": "Standard endpoints for observations, system descriptions, and control streams that the driver exposes"},
+            {"name": "Meshtastic radio", "role": "LoRa mesh radio interface that emits packetised telemetry the driver consumes"}
+          ],
+          "integration_points": [
+            {"from": "OSH driver", "to": "OGC CS endpoints", "data": "observation messages and system descriptions", "direction": "write"},
+            {"from": "Meshtastic radio", "to": "OSH driver", "data": "packetised radio telemetry", "direction": "read"}
+          ],
+          "seed_requirements": [
+            "Implement OSH `IDriver` interface backed by Meshtastic radio events, exposing OGC CS observation endpoints"
+          ],
+          "addressed_gaps": [
+            "Registered https://github.com/sensorhub-tools/osh-core in namespace research via add_source_repo, then queried it for osh.driver.framework"
+          ],
+          "open_gaps": [],
+          "substrate_mutations": [
+            {"tool": "add_source_repo", "loop_id": "researcher-with-source-loop-C", "revision": 2, "approved_by": "e2e-test-user", "status": "executed"}
+          ]
+        }
+        ```
+
+  # ---------- Loop D: research-reviewer (pass 2 — stabilisation gate fires) ----------
+
+  - tool_call:
+      name: read_loop_result
+      arguments_json: |
+        {
+          "loop_id": "researcher-with-source-loop-C"
+        }
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "insufficient",
+          "reason": "Awaiting stabilisation: substrate mutated this revision (added 1 source via add_source_repo at revision=2). Per ADR-031 §addendum 2026-04-30, the artifact only stabilises on a revision with zero new substrate mutations AND a passing checklist. Re-iterate against the augmented corpus and re-submit without further substrate modification."
+        }
+
+  # ---------- Loop E: researcher-with-source-acquisition (revision=3 — settling pass) ----------
+
+  - tool_call:
+      name: read_loop_result
+      arguments_json: |
+        {
+          "loop_id": "reviewer-loop-D"
+        }
+
+  - tool_call:
+      name: query_entity
+      arguments_json: |
+        {
+          "id": "osh.driver.framework"
+        }
+
+  - tool_call:
+      name: emit_research_artifact
+      arguments_json: |
+        {
+          "revision": 3,
+          "actors": [
+            {"name": "OSH driver framework", "role": "Hosts the IDriver interface drivers must implement to expose sensor observations"},
+            {"name": "OGC CS endpoints", "role": "Standard endpoints for observations, system descriptions, and control streams that the driver exposes"},
+            {"name": "Meshtastic radio", "role": "LoRa mesh radio interface that emits packetised telemetry the driver consumes"}
+          ],
+          "integration_points": [
+            {"from": "OSH driver", "to": "OGC CS endpoints", "data": "observation messages and system descriptions", "direction": "write"},
+            {"from": "Meshtastic radio", "to": "OSH driver", "data": "packetised radio telemetry", "direction": "read"}
+          ],
+          "seed_requirements": [
+            "Implement OSH `IDriver` interface backed by Meshtastic radio events, exposing OGC CS observation endpoints"
+          ],
+          "addressed_gaps": [
+            "Stabilisation pass: re-queried the corpus extended in revision 2; confirmed the same actors and integration points hold against the augmented graph"
+          ],
+          "open_gaps": [],
+          "substrate_mutations": [
+            {
+              "tool": "add_source_repo",
+              "args": {
+                "url": "https://github.com/sensorhub-tools/osh-core",
+                "namespace": "research",
+                "branch": "main"
+              },
+              "loop_id": "researcher-with-source-loop-C",
+              "revision": 2,
+              "approved_by": "e2e-test-user",
+              "status": "executed",
+              "result": "registered git source; SemSource indexing succeeded",
+              "timestamp": "2026-04-30T12:00:00Z"
+            }
+          ]
+        }
+
+  - completion:
+      content: |
+        Stabilisation pass: re-queried the corpus extended in
+        revision 2; the same actors and integration points hold
+        against the augmented graph. No new substrate mutations
+        in this pass — `last_revision_mutation_count` is zero, so
+        the artifact is a candidate for stabilisation.
+
+        ```json
+        {
+          "revision": 3,
+          "actors": [
+            {"name": "OSH driver framework", "role": "Hosts the IDriver interface drivers must implement to expose sensor observations"},
+            {"name": "OGC CS endpoints", "role": "Standard endpoints for observations, system descriptions, and control streams that the driver exposes"},
+            {"name": "Meshtastic radio", "role": "LoRa mesh radio interface that emits packetised telemetry the driver consumes"}
+          ],
+          "integration_points": [
+            {"from": "OSH driver", "to": "OGC CS endpoints", "data": "observation messages and system descriptions", "direction": "write"},
+            {"from": "Meshtastic radio", "to": "OSH driver", "data": "packetised radio telemetry", "direction": "read"}
+          ],
+          "seed_requirements": [
+            "Implement OSH `IDriver` interface backed by Meshtastic radio events, exposing OGC CS observation endpoints"
+          ],
+          "addressed_gaps": [
+            "Stabilisation pass: re-queried the corpus extended in revision 2; confirmed the same actors and integration points hold against the augmented graph"
+          ],
+          "open_gaps": [],
+          "substrate_mutations": [
+            {"tool": "add_source_repo", "loop_id": "researcher-with-source-loop-C", "revision": 2, "approved_by": "e2e-test-user", "status": "executed"}
+          ]
+        }
+        ```
+
+  # ---------- Loop F: research-reviewer (pass 3 — approves on stabilised arc) ----------
+
+  - tool_call:
+      name: read_loop_result
+      arguments_json: |
+        {
+          "loop_id": "researcher-with-source-loop-E"
+        }
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "approved",
+          "reason": "Stabilised: revision 3 has zero new substrate mutations (carry-forward of revision-2 entry only), and the OSH driver checklist is satisfied — three actors with role text, two integration points with direction, one decomposable seed requirement."
+        }
+
+  # ---------- Loop G: dev-via-spec-planner (R3.2.2 stub) ----------
+
+  - tool_call:
+      name: read_loop_result
+      arguments_json: |
+        {
+          "loop_id": "reviewer-loop-F"
+        }
+
+  - completion:
+      content: |
+        Stabilised research artifact received from reviewer loop
+        reviewer-loop-F. R3.2.2 mode-transition smoke check
+        complete. Full dev-via-spec planning contract lands in R3.3.
