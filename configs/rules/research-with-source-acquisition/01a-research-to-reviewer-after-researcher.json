@@ -1,0 +1,41 @@
+{
+  "id": "research_to_reviewer_after_researcher",
+  "type": "expression",
+  "name": "Researcher → Reviewer Handoff (initial pass)",
+  "description": "When the initial researcher loop completes successfully (the user-initiated default-role spawn), spawn a research-reviewer to evaluate the artifact via reviewer-as-enumerator. Mirrors R1's rule 01; lives in the R2.5 rules dir so the R2.5 e2e config does not have to reach across into R1's dir. R2.5 of the ADR-031 phasing.",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "agent.loop.role",
+      "operator": "eq",
+      "value": "researcher",
+      "required": true
+    },
+    {
+      "field": "agent.loop.outcome",
+      "operator": "eq",
+      "value": "success",
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "publish_agent",
+      "subject": "agent.task.research-review",
+      "role": "research-reviewer",
+      "model": "general",
+      "tools": ["read_loop_result", "decide"],
+      "properties": {
+        "researcher_loop_id": "$entity.id"
+      },
+      "prompt": "Evaluate the prior researcher loop's submission. Researcher loop id: $entity.id. Call read_loop_result with that loop id to fetch the artifact, apply the active checklist, then call decide(action=\"approved\") if all required items are present, or decide(action=\"insufficient\", reason=\"<bullet list of gaps>\") otherwise. If the artifact's open_gaps names a corpus that is not indexed, list 'recommend add_source_repo for <repo>' in your insufficient reason."
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "phase": "R2.5",
+    "adr": "docs/adr/031-research-flow-and-semspec-handoff.md",
+    "pattern": "reviewer-as-enumerator"
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "id": "reviewer_rejected_retry_with_source_acquisition",
+  "type": "expression",
+  "name": "Research Reviewer Rejected — Retry with source-acquisition",
+  "description": "When the research-reviewer emits decide(action=insufficient), respawn the researcher-with-source-acquisition role to address the reviewer's gaps. The researcher-with-source-acquisition persona reads the reason via read_loop_result and decides whether the gap is a corpus gap (call add_source_repo) or a search gap (re-query). This is the structural test of the ADR-031 invariant: research can modify the substrate it's reasoning over. Bounded by max_iterations=5; same caveat as R1's analogue rule about per-entity rule-state keying. R2.5 of the ADR-031 phasing.",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "agent.loop.role",
+      "operator": "eq",
+      "value": "research-reviewer",
+      "required": true
+    },
+    {
+      "field": "coordinator.next_action",
+      "operator": "eq",
+      "value": "insufficient",
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "max_iterations": 5,
+  "on_enter": [
+    {
+      "type": "publish_agent",
+      "subject": "agent.task.research-with-source-retry",
+      "role": "researcher-with-source-acquisition",
+      "model": "general",
+      "tools": ["read_loop_result", "query_entity", "query_entities", "add_source_repo"],
+      "properties": {
+        "reviewer_loop_id": "$entity.id",
+        "retry": true
+      },
+      "prompt": "Prior reviewer reported gaps. Reviewer loop id: $entity.id. Call read_loop_result with that loop id to read the gaps list (the reviewer's decide reason field), then decide whether the gap is a corpus gap (call add_source_repo first, then iterate) or a search gap (re-query the existing corpus). Emit a completion containing the updated artifact JSON, populating addressed_gaps with the gaps you covered (including any source registration) and open_gaps with anything you could not resolve."
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "phase": "R2.5",
+    "adr": "docs/adr/031-research-flow-and-semspec-handoff.md",
+    "stop_condition": "Q2 — MaxIter (=5) + reviewer + opt-in human gate",
+    "max_iterations_note": "Same per-entity rule-state caveat as R1's rule 02. Each reviewer loop is a new entity, so the budget is informational; mock-llm fixture sequence determines termination in this e2e."
+  }
+}

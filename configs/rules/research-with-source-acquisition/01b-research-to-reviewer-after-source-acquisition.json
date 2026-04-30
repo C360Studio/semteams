@@ -1,0 +1,41 @@
+{
+  "id": "research_to_reviewer_after_source_acquisition",
+  "type": "expression",
+  "name": "Researcher-with-source-acquisition → Reviewer Handoff",
+  "description": "When the source-acquisition retry researcher loop completes successfully, spawn a research-reviewer to evaluate the (potentially substrate-extended) artifact. Sibling to rule 01a — separate file because the rule engine matches role with eq, not in, so the two roles each need their own rule. R2.5 of the ADR-031 phasing.",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "agent.loop.role",
+      "operator": "eq",
+      "value": "researcher-with-source-acquisition",
+      "required": true
+    },
+    {
+      "field": "agent.loop.outcome",
+      "operator": "eq",
+      "value": "success",
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "publish_agent",
+      "subject": "agent.task.research-review",
+      "role": "research-reviewer",
+      "model": "general",
+      "tools": ["read_loop_result", "decide"],
+      "properties": {
+        "researcher_loop_id": "$entity.id"
+      },
+      "prompt": "Evaluate the prior researcher-with-source-acquisition loop's submission. Researcher loop id: $entity.id. Call read_loop_result with that loop id to fetch the artifact, apply the active checklist, then call decide(action=\"approved\") if all required items are present, or decide(action=\"insufficient\", reason=\"<bullet list of gaps>\") otherwise."
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "phase": "R2.5",
+    "adr": "docs/adr/031-research-flow-and-semspec-handoff.md",
+    "pattern": "reviewer-as-enumerator"
+  }
+}
