@@ -1,0 +1,52 @@
+name: research-with-source
+description: |
+  Journey: R2 slice 2 of ADR-031. User asks the source-curator agent to
+  register the OSH core repo as a SemSource source. The agent calls
+  add_source_repo, which is approval-gated; the loop pauses awaiting
+  approval. The user approves via PendingApprovalSection (the same
+  UI component shipped in ADR-030's approval-flow PR). The tool
+  re-dispatches with ApprovedBy stamped, publishes AddRequest on
+  graph.ingest.add.research, SemSource handles and replies success,
+  the agent emits a completion message, loop terminates.
+
+  Paired spec: ui/e2e/agentic/research-with-source.spec.ts.
+  Required compose profile: semsource (the SemSource container is
+  only spawned for journeys that exercise add_source_repo).
+
+  Sequence (matches the fixture, single loop, three LLM round-trips):
+
+    1. tool_call: add_source_repo(url=..., namespace=research) —
+       agentic-tools' approval filter returns approval_required:
+       rejection. agentic-loop pauses on awaiting_approval, emits
+       ApprovalPendingEvent on agent.approval_pending.<loop_id>.
+
+    2. (Test approves via /teams-dispatch/loops/{id}/approval. Loop
+       re-dispatches the tool with ApprovedBy stamped. Tool now
+       passes the approval filter, executes — publishes AddRequest
+       on graph.ingest.add.research, SemSource replies success.
+       Tool returns its content as a tool_result the LLM consumes
+       on the next turn.)
+
+    3. completion: confirms the registration. Loop terminates with
+       outcome=success.
+
+  Mock-llm fixture is sequence-based; the order below is the order
+  mock-llm receives requests across both pre- and post-approval turns.
+
+responses:
+  - tool_call:
+      name: add_source_repo
+      arguments_json: |
+        {
+          "url": "https://github.com/sensorhub-tools/osh-core",
+          "branch": "main",
+          "namespace": "research"
+        }
+
+  - completion:
+      content: |
+        Registered https://github.com/sensorhub-tools/osh-core (branch:
+        main) as a SemSource source in the `research` namespace. The
+        source is now graph-queryable; downstream researcher agents
+        can query its entities via graph.query.* once SemSource
+        finishes the initial seed.

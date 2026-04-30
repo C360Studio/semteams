@@ -1,0 +1,12 @@
+{
+  "namespace": "research",
+  "mode": "headless",
+  "sources": [
+    {
+      "type": "docs",
+      "paths": ["/etc/semsource/seed.md"],
+      "watch": false
+    }
+  ],
+  "http_port": 8090
+}

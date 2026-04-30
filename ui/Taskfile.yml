@@ -199,6 +199,31 @@ tasks:
       - task: test:e2e:agentic:action-chips
       - task: test:e2e:agentic:task-title-aliases
       - task: test:e2e:agentic:admin-flows-inventory
+      - task: test:e2e:agentic:research-with-source
+
+  test:e2e:agentic:research-with-source:
+    desc: Run the R2 source-acquisition journey (add_source_repo + approval gate + SemSource)
+    summary: |
+      Spawns the SemSource container alongside the regular agentic stack
+      (compose profile `semsource`). The journey exercises add_source_repo
+      end-to-end: source-curator agent proposes the add → approval gate
+      fires → human approves → tool publishes AddRequest on
+      graph.ingest.add.research → SemSource replies → loop completes.
+
+      Requires the SemSource image at ghcr.io/c360studio/semsource:latest;
+      override with SEMSOURCE_IMAGE if testing an unreleased build.
+    vars:
+      FIXTURE: research-with-source.yaml
+      AGENTIC_CONFIG: e2e-research-with-source.json
+      COMPOSE_PROFILES: semsource
+    cmds:
+      - defer: { task: test:e2e:agentic:cleanup }
+      - task: test:e2e:agentic:stack:up
+        vars:
+          FIXTURE: "{{.FIXTURE}}"
+          AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
+          COMPOSE_PROFILES: "{{.COMPOSE_PROFILES}}"
+      - npx playwright test e2e/agentic/research-with-source.spec.ts
 
   test:e2e:agentic:tool-approval-gate:
     desc: Run the tool-approval-gate journey with its paired fixture
@@ -386,6 +411,16 @@ tasks:
           AGENTIC_CONFIG: e2e-coordinator.json
           SCENARIO: coordinator
 
+  test:e2e:agentic:dev:research-with-source:
+    desc: Boot stack for the R2 source-acquisition scenario (semsource container + add_source_repo). No playwright.
+    cmds:
+      - task: test:e2e:agentic:dev:_boot
+        vars:
+          FIXTURE: research-with-source.yaml
+          AGENTIC_CONFIG: e2e-research-with-source.json
+          COMPOSE_PROFILES: semsource
+          SCENARIO: research-with-source
+
   test:e2e:agentic:dev:_boot:
     desc: Internal — boot helper for the per-scenario dev tasks
     internal: true
@@ -393,12 +428,14 @@ tasks:
       FIXTURE: '{{.FIXTURE}}'
       AGENTIC_CONFIG: '{{.AGENTIC_CONFIG}}'
       SCENARIO: '{{.SCENARIO | default "custom"}}'
+      COMPOSE_PROFILES: '{{.COMPOSE_PROFILES | default ""}}'
     cmds:
-      - echo "▶︎  Booting scenario '{{.SCENARIO}}' (FIXTURE={{.FIXTURE}} AGENTIC_CONFIG={{.AGENTIC_CONFIG}}) — no auto-cleanup"
+      - echo "▶︎  Booting scenario '{{.SCENARIO}}' (FIXTURE={{.FIXTURE}} AGENTIC_CONFIG={{.AGENTIC_CONFIG}} PROFILES={{.COMPOSE_PROFILES}}) — no auto-cleanup"
       - task: test:e2e:agentic:stack:up
         vars:
           FIXTURE: "{{.FIXTURE}}"
           AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
+          COMPOSE_PROFILES: "{{.COMPOSE_PROFILES}}"
       - |
         cat <<EOF
 
@@ -457,6 +494,27 @@ tasks:
     cmds:
       - docker compose -f docker-compose.agentic-e2e.yml logs backend {{.CLI_ARGS | default "--tail=100"}}
 
+  test:e2e:agentic:logs:semsource:
+    desc: |
+      Tail semsource container logs (only present when the semsource compose
+      profile is active — used by R2 source-acquisition scenarios).
+        task test:e2e:agentic:logs:semsource -- --since=30s
+    cmds:
+      - docker logs semteams-ui-agentic-semsource {{.CLI_ARGS | default "--tail=100"}}
+
+  test:e2e:agentic:cleanup:orphans:
+    desc: |
+      Force-remove orphan agentic containers + networks left behind by an
+      interrupted run. Use when `task test:e2e:agentic:cleanup` complains
+      about resources still in use.
+    cmds:
+      - |
+        docker ps -a --format '{{`{{.Names}}`}}' \
+          | grep -E '^semteams-(ui-)?agentic-' \
+          | xargs -I{} docker rm -f {} 2>/dev/null || true
+      - docker network rm semteams-agentic_agentic-net ui_agentic-net 2>/dev/null || true
+      - echo "✓ orphans cleaned"
+
   test:e2e:agentic:probe:loops:
     desc: List active loops on the running stack (one-line summary per loop)
     cmds:
@@ -477,6 +535,63 @@ tasks:
         curl -sf -X POST http://localhost:3100/teams-dispatch/message \
           -H 'Content-Type: application/json' \
           -d "$(jq -nc --arg c "$CONTENT" '{content:$c}')" \
+          | jq
+
+  test:e2e:agentic:probe:loop:
+    desc: |
+      Show a single loop's full state (state, outcome, pending_approval).
+      Pass the loop_id as CLI arg:
+        task test:e2e:agentic:probe:loop -- loop_70876992
+    cmds:
+      - |
+        LOOP_ID="{{.CLI_ARGS}}"
+        if [ -z "$LOOP_ID" ]; then
+          echo "Usage: task test:e2e:agentic:probe:loop -- <loop_id>" >&2
+          exit 1
+        fi
+        curl -sf "http://localhost:3100/teams-dispatch/loops/$LOOP_ID" \
+          | jq '{loop_id, role, state, outcome, error, pending_approval}'
+
+  test:e2e:agentic:probe:approve:
+    desc: |
+      Approve a loop's pending tool call (R2 source-acquisition + any
+      approval-gated journey). Pass the loop_id as CLI arg; optional
+      X-User-Id via USER_ID env var (default "ui-anonymous").
+        task test:e2e:agentic:probe:approve -- loop_70876992
+        USER_ID=alice task test:e2e:agentic:probe:approve -- loop_70876992
+    cmds:
+      - |
+        LOOP_ID="{{.CLI_ARGS}}"
+        if [ -z "$LOOP_ID" ]; then
+          echo "Usage: task test:e2e:agentic:probe:approve -- <loop_id>" >&2
+          exit 1
+        fi
+        USER_ID="${USER_ID:-ui-anonymous}"
+        curl -sf -X POST "http://localhost:3100/teams-dispatch/loops/$LOOP_ID/approval" \
+          -H 'Content-Type: application/json' \
+          -H "X-User-Id: $USER_ID" \
+          -d "$(jq -nc --arg uid "$USER_ID" '{decision:"approve",user_id:$uid}')" \
+          | jq
+
+  test:e2e:agentic:probe:reject:
+    desc: |
+      Reject a loop's pending tool call. Pass the loop_id; optional reason
+      via REASON env var.
+        task test:e2e:agentic:probe:reject -- loop_70876992
+        REASON='out of scope' task test:e2e:agentic:probe:reject -- loop_70876992
+    cmds:
+      - |
+        LOOP_ID="{{.CLI_ARGS}}"
+        if [ -z "$LOOP_ID" ]; then
+          echo "Usage: task test:e2e:agentic:probe:reject -- <loop_id>" >&2
+          exit 1
+        fi
+        USER_ID="${USER_ID:-ui-anonymous}"
+        REASON="${REASON:-rejected via probe task}"
+        curl -sf -X POST "http://localhost:3100/teams-dispatch/loops/$LOOP_ID/approval" \
+          -H 'Content-Type: application/json' \
+          -H "X-User-Id: $USER_ID" \
+          -d "$(jq -nc --arg uid "$USER_ID" --arg r "$REASON" '{decision:"reject",user_id:$uid,reason:$r}')" \
           | jq
 
   test:e2e:agentic:probe:triples:
@@ -500,12 +615,17 @@ tasks:
       FIXTURE: '{{.FIXTURE | default ""}}'
       AGENTIC_CONFIG: '{{.AGENTIC_CONFIG | default "e2e-agentic.json"}}'
       E2E_AGENTIC_UI_PORT: '{{.E2E_AGENTIC_UI_PORT | default "3100"}}'
+      # COMPOSE_PROFILES toggles optional services (e.g. "semsource").
+      # Empty default keeps existing journeys boot-fast; the
+      # research-with-source journey sets COMPOSE_PROFILES=semsource.
+      COMPOSE_PROFILES: '{{.COMPOSE_PROFILES | default ""}}'
     env:
       FIXTURE: "{{.FIXTURE}}"
       AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
       E2E_AGENTIC_UI_PORT: "{{.E2E_AGENTIC_UI_PORT}}"
+      COMPOSE_PROFILES: "{{.COMPOSE_PROFILES}}"
     cmds:
-      - echo "Stack config → AGENTIC_CONFIG={{.AGENTIC_CONFIG}} FIXTURE={{.FIXTURE}}"
+      - echo "Stack config → AGENTIC_CONFIG={{.AGENTIC_CONFIG}} FIXTURE={{.FIXTURE}} PROFILES={{.COMPOSE_PROFILES}}"
       - docker compose -f docker-compose.agentic-e2e.yml build --no-cache backend
       - docker compose -f docker-compose.agentic-e2e.yml up -d
       - |

@@ -101,6 +101,11 @@ services:
       - SEMSTREAMS_NATS_URLS=nats://nats:4222
       - SEMSTREAMS_LOG_LEVEL=debug
       - AGENTIC_LLM_URL=http://mock-llm:8080/v1
+      # R2 source-acquisition tool — registers add_source_repo and
+      # publishes to graph.ingest.add.research. Inert for journeys
+      # that don't list the tool in agentic-tools.allowed_tools.
+      - SEMTEAMS_SEMSOURCE_NAMESPACES=research
+      - SEMTEAMS_SEMSOURCE_DEFAULT_NAMESPACE=research
     volumes:
       - ${BACKEND_CONTEXT:-..}/configs/${AGENTIC_CONFIG:-e2e-agentic.json}:/etc/semstreams/config.json:ro
       - ${BACKEND_CONTEXT:-..}/testdata:/data/testdata:ro
@@ -111,6 +116,53 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
+
+  # SemSource (R2 of ADR-031). Headless mode — shares NATS with semteams,
+  # subscribes to graph.ingest.add.{namespace} per
+  # semsource/docs/adr/0003-programmatic-source-add-api.md, replies to
+  # AddRequest. Only spawned for journeys that exercise the
+  # add_source_repo tool — gate via the `semsource` profile so the
+  # default tool-approval-gate / deep-research / etc. journeys skip the
+  # extra boot cost.
+  #
+  # Image is pulled from ghcr (CI publishes on every main push). For
+  # local development against an unreleased SemSource, override with
+  # SEMSOURCE_IMAGE=local-tag and build it yourself, or point the
+  # context at ../semsource and switch to a `build:` block.
+  semsource:
+    image: ${SEMSOURCE_IMAGE:-ghcr.io/c360studio/semsource:latest}
+    container_name: semteams-ui-agentic-semsource
+    profiles: ["semsource"]
+    depends_on:
+      nats:
+        condition: service_healthy
+      # Wait for the semteams backend to be healthy before booting —
+      # backend's EnsureStreams provisions the GRAPH stream that
+      # semsource's source-manifest publishes its manifest into. If
+      # we boot in parallel, source-manifest publishes before the
+      # stream exists and crashes with "no response from stream",
+      # leaving the AddRequest subscription unregistered. With this
+      # ordering the stream is guaranteed to exist before semsource
+      # tries to publish.
+      backend:
+        condition: service_healthy
+    environment:
+      - NATS_URL=nats://nats:4222
+      - SEMSOURCE_LOG_LEVEL=info
+    volumes:
+      - ${BACKEND_CONTEXT:-..}/test/fixtures/semsource/semsource-e2e.json:/etc/semsource/semsource.json:ro
+      - ${BACKEND_CONTEXT:-..}/test/fixtures/semsource/seed.md:/etc/semsource/seed.md:ro
+    networks:
+      - agentic-net
+    healthcheck:
+      # source-manifest binds an HTTP server at the configured port
+      # (8090 in our test config) once it has registered the
+      # graph.ingest.add subscription. A successful health probe means
+      # it's ready to receive AddRequests on NATS.
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8090/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
 
   # SemTeams UI (same as the non-agentic stack)
   ui:
