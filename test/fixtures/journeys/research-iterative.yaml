@@ -1,0 +1,143 @@
+name: research-iterative
+description: |
+  Journey: R1 of ADR-031. User asks the researcher to identify actor
+  types in OSH's driver framework. The first researcher pass produces
+  an incomplete artifact (Meshtastic actor missing) and terminates via
+  completion. The reviewer applies the OSH-driver-framework checklist,
+  calls decide(action=insufficient) listing the gap. The retry rule
+  fires; researcher pass 2 emits a completion with a complete
+  artifact addressing the gap. Reviewer pass 2 approves.
+
+  Paired spec: ui/e2e/agentic/research-iterative.spec.ts.
+
+  Mock-llm fixture is sequence-based and role-blind. The fixture
+  aligns to the exact order of LLM round-trips across all four
+  loops. NOTE on read_loop_result: the mock-llm has no template
+  substitution layer — `arguments_json` is passed verbatim. The
+  reviewer's read_loop_result calls reference a placeholder loop_id
+  that won't resolve; the tool returns an error which the LLM's
+  next turn (decide) handles per the canned fixture. Real-world
+  LLMs would extract the actual loop_id from their prompt
+  ($entity.id substitution happens in the rule, not the fixture).
+  This is a structural-milestone limitation tracked under R1's
+  scope; R2/R3 may add fixture substitution upstream.
+
+  Sequence (matches the fixture, four loops):
+
+    Loop 1 — researcher (initial pass)
+      1. tool_call: query_entity (stand-in for indexed-corpus query)
+      2. completion: incomplete artifact (no Meshtastic actor)
+         → loop terminates outcome=success → rule 01 fires.
+
+    Loop 2 — research-reviewer (pass 1)
+      3. tool_call: read_loop_result (placeholder; tool errors)
+      4. tool_call: decide(action=insufficient) → loop terminates
+         → rule 02 fires.
+
+    Loop 3 — researcher (retry)
+      5. tool_call: read_loop_result (placeholder; tool errors)
+      6. completion: complete artifact addressing Meshtastic gap
+         → loop terminates outcome=success → rule 01 fires again.
+
+    Loop 4 — research-reviewer (pass 2)
+      7. tool_call: read_loop_result (placeholder; tool errors)
+      8. tool_call: decide(action=approved) → loop terminates;
+         no rule fires; e2e is green.
+
+responses:
+  - tool_call:
+      name: query_entity
+      arguments_json: |
+        {
+          "id": "osh.driver.framework"
+        }
+
+  - completion:
+      content: |
+        Initial research pass on OSH driver framework actors.
+        Identified the OSH driver framework actor and the OGC
+        Connected Systems endpoints actor. Did not yet locate
+        radio interface details.
+
+        ```json
+        {
+          "actors": [
+            {"name": "OSH driver framework", "role": "Implements the IDriver interface; pluggable component that adapts a sensor protocol to OSH's data model"},
+            {"name": "OGC Connected Systems endpoints", "role": "REST/SSE endpoints exposing observations, system descriptions, and control streams"}
+          ],
+          "integration_points": [
+            {"from": "OSH driver framework", "to": "OGC Connected Systems endpoints", "data": "observations, system descriptions", "direction": "write"}
+          ],
+          "seed_requirements": [
+            "Implement OSH IDriver interface to bridge a sensor protocol into OSH's data model"
+          ],
+          "addressed_gaps": [],
+          "open_gaps": ["Meshtastic radio interface specifics — did not search yet"]
+        }
+        ```
+
+  - tool_call:
+      name: read_loop_result
+      arguments_json: |
+        {
+          "loop_id": "researcher-loop-placeholder"
+        }
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "insufficient",
+          "reason": "Checklist for OSH-driver-framework prompt not met:\n- Meshtastic radio actor is absent (the artifact's open_gaps acknowledges this but does not name the actor; the checklist requires it named with role text)\n- Integration point pair Meshtastic-radio ↔ OSH-driver missing\n- Only one seed requirement; expected one of decomposable shape including the Meshtastic backing"
+        }
+
+  - tool_call:
+      name: read_loop_result
+      arguments_json: |
+        {
+          "loop_id": "reviewer-loop-placeholder"
+        }
+
+  - completion:
+      content: |
+        Retry pass addressing reviewer gaps: Meshtastic radio actor
+        and integration point now enumerated. Refined seed
+        requirement to interface granularity.
+
+        ```json
+        {
+          "actors": [
+            {"name": "OSH driver framework", "role": "Implements the IDriver interface; pluggable component that adapts a sensor protocol to OSH's data model"},
+            {"name": "OGC Connected Systems endpoints", "role": "REST/SSE endpoints exposing observations, system descriptions, and control streams"},
+            {"name": "Meshtastic radio", "role": "LoRa-based mesh radio with channel-scoped packets; sensors publish observations as MeshPacket payloads on a configured channel"}
+          ],
+          "integration_points": [
+            {"from": "OSH driver framework", "to": "OGC Connected Systems endpoints", "data": "observations, system descriptions", "direction": "write"},
+            {"from": "Meshtastic radio", "to": "OSH driver framework", "data": "MeshPacket payloads carrying sensor observations", "direction": "read"}
+          ],
+          "seed_requirements": [
+            "Implement OSH IDriver interface backed by a Meshtastic MQTT/serial bridge so MeshPacket observations surface as OGC CS observation events"
+          ],
+          "addressed_gaps": [
+            "Added Meshtastic radio actor with role description",
+            "Added Meshtastic→OSH integration point with read direction",
+            "Refined seed requirement to interface-level granularity citing the Meshtastic backing"
+          ],
+          "open_gaps": []
+        }
+        ```
+
+  - tool_call:
+      name: read_loop_result
+      arguments_json: |
+        {
+          "loop_id": "researcher-retry-loop-placeholder"
+        }
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "approved",
+          "reason": "Checklist met: OSH driver framework actor, OGC Connected Systems endpoints actor, Meshtastic radio actor all named with role text. Both required integration point pairs present with direction. Seed requirement at interface granularity. Approving."
+        }

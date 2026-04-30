@@ -1,0 +1,44 @@
+{
+  "id": "reviewer_rejected_retry_research",
+  "type": "expression",
+  "name": "Research Reviewer Rejected — Retry Researcher",
+  "description": "When the research-reviewer emits decide(action=insufficient), respawn the researcher to address the reviewer's gaps. The reviewer's decide() writes a coordinator.next_action triple on its loop entity (see processor/agentic-tools/decide.go) — this rule matches on that triple and fires a retry. Bounded by max_iterations=5 (Q2 stop condition from research-flow-open-questions.md). Approved decisions match no rule and the loop terminates naturally. R1 of the ADR-031 phasing.",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "agent.loop.role",
+      "operator": "eq",
+      "value": "research-reviewer",
+      "required": true
+    },
+    {
+      "field": "coordinator.next_action",
+      "operator": "eq",
+      "value": "insufficient",
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "max_iterations": 5,
+  "on_enter": [
+    {
+      "type": "publish_agent",
+      "subject": "agent.task.research-retry",
+      "role": "researcher",
+      "model": "general",
+      "tools": ["read_loop_result", "query_entity", "query_entities"],
+      "properties": {
+        "reviewer_loop_id": "$entity.id",
+        "retry": true
+      },
+      "prompt": "Prior reviewer reported gaps. Reviewer loop id: $entity.id. Call read_loop_result with that loop id to read the gaps list (the reviewer's decide reason field), then address the specific gaps in your next pass. Emit a completion containing the updated artifact JSON, populating addressed_gaps with the gaps you covered and open_gaps with anything you could not find."
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "phase": "R1",
+    "adr": "docs/adr/031-research-flow-and-semspec-handoff.md",
+    "stop_condition": "Q2 — MaxIter (=5) + reviewer + opt-in human gate",
+    "max_iterations_note": "max_iterations is informational here. Per rule.stateful_evaluator, rule state keys per-entity, and each reviewer loop is a new entity — so the budget is not enforced as a chain-wide cap. The mock-llm fixture's sequence determines termination in this e2e. Real-world cap belongs at the agentic-loop layer or via a chain-aware iteration tracker. Tracked as a follow-on against research-flow Q2 stop condition."
+  }
+}
