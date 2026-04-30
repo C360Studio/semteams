@@ -168,6 +168,16 @@ func run() error {
 		return fmt.Errorf("register builtin tools: %w", err)
 	}
 
+	// 9d. Register product-shell-local tool executors. R2 of ADR-031
+	// adds add_source_repo, which bridges the agent loop to SemSource's
+	// graph.ingest.add.{namespace} contract. The executor lives in
+	// semteams (not upstream) because the namespace allowlist is
+	// product policy. Tool stays inert if the deployment has no
+	// namespaces configured — see addsource.Config.AllowedNamespaces.
+	if err := registerProductTools(toolRegistry, natsClient, cfg, slog.Default()); err != nil {
+		return fmt.Errorf("register product tools: %w", err)
+	}
+
 	// 10. Create service dependencies, plumbing the shared registries so
 	// every component constructed by the service manager sees the same
 	// tool + payload registry instances.
