@@ -1,28 +1,43 @@
-# Output contract (R3.2.2 stub)
+# Output contract
 
-R3.2.2 proves only that the mode-transition fires. Concrete contract:
-
-1. Call `read_loop_result` on the prior research-reviewer loop ID
-   (passed as a property `research_reviewer_loop_id` on your task)
-   to confirm the artifact is reachable. **If `read_loop_result`
-   errors** (e.g. the placeholder loop_id substitution did not
-   resolve, or the reviewer loop hasn't been written to the
-   AGENT_LOOPS bucket yet), proceed to the completion message
-   anyway — the R3.2.2 smoke check is the persona-swap firing,
-   not the read.
-2. Terminate with a **completion** (assistant text response — no
-   tool call) whose body acknowledges receipt:
+1. Call `read_loop_result` on the prior loop ID. On the first pass
+   that ID is the research-reviewer's loop (`research_reviewer_loop_id`
+   in your task properties). On a retry it is the prior dev-via-spec-
+   reviewer or dev-via-spec-challenger loop (`prior_loop_id`); read
+   their findings to drive the revision.
+2. Synthesise a plan covering goal / context / scope and an
+   epic-shaped decomposition of the research artifact's
+   `seed_requirements`.
+3. Terminate with a single `decide` call:
 
    ```
-   Stabilised research artifact received from reviewer loop
-   <id>. R3.2.2 mode-transition smoke check complete.
-   Full dev-via-spec planning contract lands in R3.3.
+   decide(action="planned",
+          reason="<one-paragraph plan summary covering goal/context/
+                  scope and N epics; reference revision number on
+                  retries>")
    ```
 
-That's it. Do not enumerate epics. Do not propose architecture.
-Do not dispatch sub-agents. R3.3 fills in this contract; for now
-the test of "did the persona-swap rule fire correctly" is the
-only signal R3.2.2 needs.
+The `reason` field is the plan content. Keep it dense — this is
+what the reviewer reads. Use the following structure inside the
+reason text (plain prose, no JSON):
 
-Termination is the completion message itself — no terminal tool
-call. The framework records the completion as the loop's result.
+```
+Goal: <one-sentence outcome>
+Context: <why this work, with one or two artifact actors named>
+Scope:
+  include: <bullet list>
+  exclude: <bullet list>
+  do_not_touch: <bullet list>
+Epics:
+  E1 — <title>: <one-line scope>
+  E2 — <title>: <one-line scope>
+  ...
+```
+
+Termination is the `decide` call itself — no completion message
+needed. Downstream rules match on `coordinator.next_action="planned"`
+to spawn the reviewer.
+
+Do not enumerate tasks (that is downstream of the architect-light
+in SemSpec; we deliberately do not port it). Do not propose
+implementation. Do not call `submit_work`. Use `decide` exclusively.
