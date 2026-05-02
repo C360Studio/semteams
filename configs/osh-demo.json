@@ -1,0 +1,311 @@
+{
+  "version": "1.1.0",
+  "platform": {
+    "org": "c360",
+    "id": "semteams-osh-demo",
+    "type": "agentic",
+    "region": "local",
+    "instance_id": "osh-demo-001",
+    "environment": "demo"
+  },
+  "tier": "agentic",
+  "nats": {
+    "urls": ["nats://localhost:4222"]
+  },
+  "streams": {
+    "USER": {
+      "subjects": ["user.>"],
+      "storage": "file",
+      "max_age": "24h"
+    },
+    "GRAPH": {
+      "subjects": [
+        "graph.ingest.entity",
+        "graph.ingest.batch",
+        "graph.ingest.manifest",
+        "graph.ingest.status",
+        "graph.ingest.predicates",
+        "graph.ingest.add.>",
+        "research.artifact.>"
+      ],
+      "storage": "file",
+      "max_age": "24h"
+    }
+  },
+  "model_registry": {
+    "endpoints": {
+      "gemini-flash": {
+        "provider": "openai",
+        "url": "https://generativelanguage.googleapis.com/v1beta/openai",
+        "model": "gemini-2.5-flash",
+        "api_key_env": "GEMINI_API_KEY",
+        "max_tokens": 1048576,
+        "max_output_tokens": 8192,
+        "supports_tools": true,
+        "tool_format": "openai",
+        "stream": true,
+        "request_timeout": "120s",
+        "max_concurrent": 10,
+        "requests_per_minute": 200
+      },
+      "claude-sonnet": {
+        "provider": "anthropic",
+        "url": "https://api.anthropic.com/v1",
+        "model": "claude-sonnet-4-6",
+        "api_key_env": "ANTHROPIC_API_KEY",
+        "max_tokens": 200000,
+        "max_output_tokens": 8192,
+        "supports_tools": true,
+        "stream": true,
+        "reasoning_effort": "low",
+        "request_timeout": "120s",
+        "max_concurrent": 10,
+        "requests_per_minute": 100
+      },
+      "seminstruct": {
+        "provider": "openai",
+        "url": "http://seminstruct:8083/v1",
+        "model": "qwen3-8b",
+        "max_tokens": 32768,
+        "max_output_tokens": 4096,
+        "supports_tools": true,
+        "tool_format": "openai",
+        "stream": true,
+        "request_timeout": "120s",
+        "max_concurrent": 4
+      },
+      "semembed": {
+        "provider": "openai",
+        "url": "http://semembed:8081/v1",
+        "model": "Snowflake/snowflake-arctic-embed-s",
+        "max_tokens": 0,
+        "supports_tools": false,
+        "request_timeout": "30s",
+        "max_concurrent": 8
+      }
+    },
+    "defaults": {
+      "model": "seminstruct",
+      "capability": "general"
+    },
+    "capabilities": {
+      "general":               { "preferred": ["gemini-flash", "claude-sonnet"], "requires_tools": true },
+      "embedding":             { "preferred": ["semembed"] },
+      "community_summary":     { "preferred": ["seminstruct"] },
+      "anomaly_review":        { "preferred": ["seminstruct"] },
+      "summarization":         { "preferred": ["seminstruct"] },
+      "query_classification":  { "preferred": ["seminstruct"] },
+      "answer_synthesis":      { "preferred": ["seminstruct"] },
+      "intent_classification": { "preferred": ["seminstruct"] },
+      "layer_normalization":   { "preferred": ["seminstruct"] }
+    }
+  },
+  "services": {
+    "service-manager": {
+      "name": "service-manager",
+      "enabled": true,
+      "config": {
+        "http_port": 8080,
+        "swagger_ui": true,
+        "server_info": {
+          "title": "SemTeams OSH Demo (R3.4)",
+          "description": "R3.4 of ADR-031: real-LLM end-to-end run of the OSH-class arc. Builds on R3.3's dev-via-spec chain. Same 9 rules as e2e-dev-via-spec.json (research-mode-transition + dev-via-spec). Cost-discipline routing per ADR-031 model-tier discussion: dev-via-spec chain ('general' capability) routes to gemini-flash with claude-sonnet fallback (the actual demo workload); every internal-graph capability (community_summary, anomaly_review, summarization, query_classification, embedding, intent_classification, layer_normalization, answer_synthesis) routes to local seminstruct/semembed so async background work doesn't pay cloud tokens. Graph-persisting capabilities (community_summary, anomaly_review) are on the qwen3-8b floor to avoid garbage in the substrate. defaults.model is seminstruct (not cloud) so any unbound resolution stays local. SemSource and local-models compose profiles required.",
+          "version": "1.0.0"
+        }
+      }
+    },
+    "component-manager": {
+      "name": "component-manager",
+      "enabled": true,
+      "config": {}
+    },
+    "metrics": {
+      "name": "metrics",
+      "enabled": true,
+      "config": {
+        "port": 9090,
+        "path": "/metrics",
+        "include_go_metrics": true
+      }
+    },
+    "message-logger": {
+      "name": "message-logger",
+      "enabled": true,
+      "config": {
+        "buffer_size": 50000,
+        "monitor_subjects": [
+          "agent.>",
+          "tool.>",
+          "user.>",
+          "graph.mutation.>",
+          "graph.ingest.>",
+          "research.artifact.>"
+        ],
+        "enable_kv_query": true,
+        "log_level": "INFO"
+      }
+    }
+  },
+  "components": {
+    "teams-dispatch": {
+      "type": "processor",
+      "name": "agentic-dispatch",
+      "enabled": true,
+      "config": {
+        "default_role": "researcher",
+        "default_tools": ["read_loop_result", "query_entity", "query_entities", "emit_research_artifact"],
+        "auto_continue": false,
+        "stream_name": "USER",
+        "permissions": {
+          "submit_task": ["*"],
+          "view": ["*"],
+          "approve": ["*"]
+        },
+        "ports": {
+          "inputs": [
+            {"name": "user.message", "type": "jetstream", "subject": "user.message.>", "stream_name": "USER", "required": true, "description": "User messages from any channel"},
+            {"name": "agent.complete", "type": "jetstream", "subject": "agent.complete.*", "stream_name": "AGENT", "required": true, "description": "Agent completion events"}
+          ],
+          "outputs": [
+            {"name": "agent.task", "type": "jetstream", "subject": "agent.task.*", "stream_name": "AGENT", "description": "Task submissions to agent loop"},
+            {"name": "user.response", "type": "nats", "subject": "user.response.*", "description": "Responses back to users"}
+          ]
+        }
+      }
+    },
+    "teams-loop": {
+      "type": "processor",
+      "name": "agentic-loop",
+      "enabled": true,
+      "config": {
+        "max_iterations": 15,
+        "timeout": "300s",
+        "stream_name": "AGENT",
+        "loops_bucket": "AGENT_LOOPS",
+        "consumer": {
+          "ack_wait": "300s",
+          "heartbeat_interval": "30s",
+          "max_deliver": 2
+        },
+        "context": {
+          "compact_threshold": 0.85,
+          "headroom_ratio": 0.1,
+          "headroom_tokens": 4096
+        },
+        "ports": {
+          "inputs": [
+            {"name": "agent.task", "type": "jetstream", "subject": "agent.task.*", "stream_name": "AGENT", "required": true},
+            {"name": "agent.response", "type": "jetstream", "subject": "agent.response.>", "stream_name": "AGENT", "required": true},
+            {"name": "tool.result", "type": "jetstream", "subject": "tool.result.>", "stream_name": "TOOL", "required": true}
+          ],
+          "outputs": [
+            {"name": "agent.request", "type": "jetstream", "subject": "agent.request.*", "stream_name": "AGENT"},
+            {"name": "tool.execute", "type": "jetstream", "subject": "tool.execute.*", "stream_name": "TOOL"},
+            {"name": "agent.complete", "type": "jetstream", "subject": "agent.complete.*", "stream_name": "AGENT"}
+          ],
+          "kv_write": [
+            {"name": "loops", "type": "kv-write", "bucket": "AGENT_LOOPS"},
+            {"name": "trajectories", "type": "kv-write", "bucket": "AGENT_TRAJECTORIES"}
+          ]
+        }
+      }
+    },
+    "agentic-model": {
+      "type": "processor",
+      "name": "agentic-model",
+      "enabled": true,
+      "config": {
+        "stream_name": "AGENT",
+        "timeout": "120s",
+        "retry": {
+          "max_attempts": 3,
+          "backoff": "exponential"
+        },
+        "ports": {
+          "inputs": [
+            {"name": "agent.request", "type": "jetstream", "subject": "agent.request.>", "stream_name": "AGENT", "required": true}
+          ],
+          "outputs": [
+            {"name": "agent.response", "type": "jetstream", "subject": "agent.response.*", "stream_name": "AGENT", "required": true}
+          ]
+        }
+      }
+    },
+    "agentic-tools": {
+      "type": "processor",
+      "name": "agentic-tools",
+      "enabled": true,
+      "config": {
+        "stream_name": "TOOL",
+        "timeout": "60s",
+        "allowed_tools": [
+          "read_loop_result",
+          "query_entity",
+          "query_entities",
+          "decide",
+          "add_source_repo",
+          "emit_research_artifact"
+        ],
+        "approval_required": ["add_source_repo"],
+        "ports": {
+          "inputs": [
+            {"name": "tool.execute", "type": "jetstream", "subject": "tool.execute.>", "stream_name": "TOOL", "required": true}
+          ],
+          "outputs": [
+            {"name": "tool.result", "type": "jetstream", "subject": "tool.result.*", "stream_name": "TOOL", "required": true}
+          ],
+          "kv_read": [
+            {"name": "entity_states", "type": "kv-read", "bucket": "ENTITY_STATES"}
+          ]
+        }
+      }
+    },
+    "rule-processor": {
+      "type": "processor",
+      "name": "rule-processor",
+      "enabled": true,
+      "config": {
+        "rules_files": [
+          "/app/configs/rules/research-mode-transition/01a-research-to-reviewer-after-researcher.json",
+          "/app/configs/rules/research-mode-transition/01b-research-to-reviewer-after-source-acquisition.json",
+          "/app/configs/rules/research-mode-transition/02-reviewer-rejected-retry-with-source.json",
+          "/app/configs/rules/research-mode-transition/03-stabilise-and-transition.json",
+          "/app/configs/rules/dev-via-spec/01-planner-to-reviewer.json",
+          "/app/configs/rules/dev-via-spec/02-reviewer-rejected-retry-planner.json",
+          "/app/configs/rules/dev-via-spec/03-reviewer-approved-to-challenger.json",
+          "/app/configs/rules/dev-via-spec/04-challenger-concerns-retry-planner.json",
+          "/app/configs/rules/dev-via-spec/05-challenger-accept-to-architect.json"
+        ],
+        "enable_graph_integration": true,
+        "entity_watch_buckets": {
+          "ENTITY_STATES": [">"]
+        },
+        "ports": {
+          "inputs": [
+            {"name": "entity_states", "subject": "ENTITY_STATES.>", "type": "kv-watch", "bucket": "ENTITY_STATES"}
+          ],
+          "outputs": [
+            {"name": "agent.task", "subject": "agent.task.*", "type": "jetstream", "stream_name": "AGENT", "description": "Spawn agents from rules"},
+            {"name": "graph.mutation", "subject": "graph.mutation.*", "type": "nats", "description": "Graph triple mutations"}
+          ]
+        }
+      }
+    },
+    "graph-ingest": {
+      "type": "processor",
+      "name": "graph-ingest",
+      "enabled": true,
+      "config": {
+        "enable_hierarchy": true,
+        "ports": {
+          "inputs": [
+            {"name": "graph_mutations", "subject": "graph.mutation.>", "type": "nats"}
+          ],
+          "outputs": [
+            {"name": "entity_states", "subject": "ENTITY_STATES", "type": "kv-write"}
+          ]
+        }
+      }
+    }
+  }
+}

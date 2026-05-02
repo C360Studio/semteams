@@ -564,6 +564,30 @@ tasks:
           COMPOSE_PROFILES: semsource
           SCENARIO: dev-via-spec
 
+  test:e2e:agentic:dev:osh-demo:
+    desc: |
+      Boot the R3.4 OSH-demo stack — real LLM (gemini-flash + claude-sonnet for
+      the dev-via-spec chain), local seminstruct (qwen3-8b) for every
+      internal-graph capability, semembed for embeddings, real SemSource for
+      source acquisition. Manual smoke run; no playwright.
+    summary: |
+      Requires GEMINI_API_KEY and ANTHROPIC_API_KEY in the environment (the
+      compose forwards them through to the backend). First run pulls
+      ghcr.io/c360studio/seminstruct:qwen3-8b (~5GB) and
+      ghcr.io/c360studio/semembed:latest. Allow ~5min for first boot.
+
+      The OSH prompt to send (from ADR-031): "create a driver for
+      OpenSensorHub using OGC Connected Systems for Meshtastic devices" —
+      send via `task test:e2e:agentic:probe:send -- '<prompt>'` after the
+      stack is up, then watch the chain via `task probe:loops`.
+    cmds:
+      - task: test:e2e:agentic:dev:_boot
+        vars:
+          FIXTURE: ""
+          AGENTIC_CONFIG: osh-demo.json
+          COMPOSE_PROFILES: semsource,local-models
+          SCENARIO: osh-demo
+
   test:e2e:agentic:dev:_boot:
     desc: Internal — boot helper for the per-scenario dev tasks
     internal: true
