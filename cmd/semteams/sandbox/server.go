@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 )
 
 // chainMutex serialises operations on a single chain's workspace.
@@ -20,30 +21,71 @@ type chainMutex struct {
 	mu sync.Mutex
 }
 
+// ServerConfig groups the knobs NewServer takes. Adding fields stays
+// non-breaking for callers that build it positionally; tests can use
+// zero-values for anything they don't exercise.
+type ServerConfig struct {
+	WorkspaceRoot      string
+	MaxFileSize        int64
+	MaxReadBytes       int
+	MaxOutputBytes     int
+	DefaultExecTimeout time.Duration
+	MaxExecTimeout     time.Duration
+	Logger             *slog.Logger
+}
+
 // Server handles sandbox HTTP API requests.
 type Server struct {
-	workspaceRoot string
-	maxFileSize   int64
-	maxReadBytes  int
-	logger        *slog.Logger
+	workspaceRoot      string
+	maxFileSize        int64
+	maxReadBytes       int
+	maxOutputBytes     int
+	defaultExecTimeout time.Duration
+	maxExecTimeout     time.Duration
+	logger             *slog.Logger
 
 	mu           sync.Mutex
 	chainMutexes map[string]*chainMutex
 }
 
-// NewServer constructs a Server rooted at workspaceRoot. The directory
-// must exist before handlers are called; main.go ensures this on boot.
+// NewServer constructs a Server from cfg. WorkspaceRoot must exist
+// before handlers are called; main.go ensures this on boot.
 //
-// maxFileSize caps the content size accepted by write_file. maxReadBytes
+// MaxFileSize caps the content size accepted by write_file. MaxReadBytes
 // caps the content returned by read_file (larger files are truncated;
 // the response includes a flag so callers know the file was truncated).
-func NewServer(workspaceRoot string, maxFileSize int64, maxReadBytes int, logger *slog.Logger) *Server {
+// MaxOutputBytes caps stdout/stderr captured per exec call.
+// DefaultExecTimeout / MaxExecTimeout bound exec request timeouts.
+//
+// Zero-valued cfg fields fall back to safe defaults so test harnesses
+// that don't exercise a particular endpoint can leave its knobs unset
+// without silently breaking (e.g., zero MaxOutputBytes would discard
+// every byte of stdout).
+func NewServer(cfg ServerConfig) *Server {
+	if cfg.MaxFileSize == 0 {
+		cfg.MaxFileSize = 1 * 1024 * 1024
+	}
+	if cfg.MaxReadBytes == 0 {
+		cfg.MaxReadBytes = 256 * 1024
+	}
+	if cfg.MaxOutputBytes == 0 {
+		cfg.MaxOutputBytes = 100 * 1024
+	}
+	if cfg.DefaultExecTimeout == 0 {
+		cfg.DefaultExecTimeout = 30 * time.Second
+	}
+	if cfg.MaxExecTimeout == 0 {
+		cfg.MaxExecTimeout = 5 * time.Minute
+	}
 	return &Server{
-		workspaceRoot: workspaceRoot,
-		maxFileSize:   maxFileSize,
-		maxReadBytes:  maxReadBytes,
-		logger:        logger,
-		chainMutexes:  make(map[string]*chainMutex),
+		workspaceRoot:      cfg.WorkspaceRoot,
+		maxFileSize:        cfg.MaxFileSize,
+		maxReadBytes:       cfg.MaxReadBytes,
+		maxOutputBytes:     cfg.MaxOutputBytes,
+		defaultExecTimeout: cfg.DefaultExecTimeout,
+		maxExecTimeout:     cfg.MaxExecTimeout,
+		logger:             cfg.Logger,
+		chainMutexes:       make(map[string]*chainMutex),
 	}
 }
 
@@ -55,6 +97,7 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /workspace/{chainID}", s.handleDeleteWorkspace)
 	mux.HandleFunc("PUT /workspace/{chainID}/files", s.handleWriteFile)
 	mux.HandleFunc("GET /workspace/{chainID}/files", s.handleReadFile)
+	mux.HandleFunc("POST /workspace/{chainID}/exec", s.handleExec)
 }
 
 // =============================================================================
@@ -73,6 +116,20 @@ type fileReadResponse struct {
 	Size      int    `json:"size"`                 // Bytes returned (after truncation).
 	Truncated bool   `json:"truncated,omitempty"`  // True if file was larger than maxReadBytes.
 	TotalSize int64  `json:"total_size,omitempty"` // Real file size on disk; only set when truncated.
+}
+
+// execRequest is the JSON body for POST /workspace/{chainID}/exec.
+type execRequest struct {
+	Command   string `json:"command"`              // Passed to `bash -c`.
+	TimeoutMs int    `json:"timeout_ms,omitempty"` // 0 → DefaultExecTimeout; capped at MaxExecTimeout.
+}
+
+// execResponse is returned from POST /workspace/{chainID}/exec.
+type execResponse struct {
+	Stdout   string `json:"stdout"`
+	Stderr   string `json:"stderr"`
+	ExitCode int    `json:"exit_code"`
+	TimedOut bool   `json:"timed_out"`
 }
 
 // =============================================================================
@@ -301,6 +358,64 @@ func (s *Server) handleReadFile(w http.ResponseWriter, r *http.Request) {
 		resp.TotalSize = totalSize
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+func (s *Server) handleExec(w http.ResponseWriter, r *http.Request) {
+	chainID := r.PathValue("chainID")
+	if !isValidChainID(chainID) {
+		writeError(w, http.StatusBadRequest, "invalid chain ID")
+		return
+	}
+
+	var req execRequest
+	if err := readJSON(r, &req, 64*1024); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if req.Command == "" {
+		writeError(w, http.StatusBadRequest, "command is required")
+		return
+	}
+
+	timeout := s.defaultExecTimeout
+	if req.TimeoutMs > 0 {
+		requested := time.Duration(req.TimeoutMs) * time.Millisecond
+		if s.maxExecTimeout > 0 && requested > s.maxExecTimeout {
+			requested = s.maxExecTimeout
+		}
+		timeout = requested
+	}
+
+	cm := s.getChainMutex(chainID)
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	if !s.workspaceExists(chainID) {
+		writeError(w, http.StatusNotFound, "workspace not found")
+		return
+	}
+
+	workDir := filepath.Join(s.workspaceRoot, chainID)
+	result := execCommand(r.Context(), workDir, req.Command, timeout, s.maxOutputBytes)
+
+	s.logger.Info("command executed",
+		"chain_id", chainID,
+		"command", truncateForLog(req.Command, 100),
+		"exit_code", result.ExitCode,
+		"timed_out", result.TimedOut,
+	)
+	writeJSON(w, http.StatusOK, result)
+}
+
+// truncateForLog bounds a string for log-line readability only.
+// Distinct from cappedWriter (in exec.go) which buffers streaming
+// output with hard memory bounds; this helper assumes its input is
+// already a complete in-memory string.
+func truncateForLog(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "..."
 }
 
 // =============================================================================

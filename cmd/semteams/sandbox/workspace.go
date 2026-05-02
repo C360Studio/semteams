@@ -25,15 +25,15 @@ var (
 //   - absolute path
 //   - .. traversal (filepath.Clean + prefix check)
 //   - symlink whose target resolves outside the workspace
+//   - parent-dir component that's a symlink (R3.6.1.c hardening)
 //
-// Forward-flag for R3.6.1.c (when bash exec lands and CAN create
-// symlinks): this check resolves the target's symlink chain via
-// EvalSymlinks but does not lstat each parent component. A bash
-// command that creates a symlinked subdir could let a subsequent
-// write_file follow that symlink. R3.6.1.c should add per-component
-// lstat or O_NOFOLLOW on the underlying open. R3.6.1.b's file API
-// alone cannot create symlinks, so the gap is theoretical for this
-// slice.
+// Threat-model note for the per-component lstat: the per-chain mutex
+// held by handlers serialises every op within a chain, so there's no
+// race window between resolveChainPath returning and the subsequent
+// open / read / write. A bash exec on chain X holds the mutex for the
+// full command; a concurrent write_file on chain X waits behind it.
+// Cross-chain ops touch independent mutexes and can't influence each
+// other's directory state.
 func (s *Server) resolveChainPath(chainID, relPath string) (string, error) {
 	// Handlers validate chainID before reaching here; defense-in-depth
 	// re-check guards future callers that forget. Returning an error
@@ -56,11 +56,39 @@ func (s *Server) resolveChainPath(chainID, relPath string) (string, error) {
 		return "", errPathEscapes
 	}
 
-	// Symlink-escape check: if the target exists, EvalSymlinks
-	// resolves any symlinks in the path; verify the resolved path is
-	// still inside the workspace. If the target doesn't exist (write
-	// to a new file), EvalSymlinks fails with ENOENT and the prefix
-	// check above is the only line of defense for this slice.
+	// Per-component lstat: walk every existing component from chainRoot
+	// toward absPath; refuse if any is a symlink. Closes the
+	// parent-dir-symlink gap left open in R3.6.1.b (when only the file
+	// API existed and couldn't plant symlinks). R3.6.1.c bash exec can
+	// plant them, so this becomes load-bearing.
+	if absPath != chainRoot {
+		rel := strings.TrimPrefix(absPath, chainRoot+string(filepath.Separator))
+		cur := chainRoot
+		for part := range strings.SplitSeq(rel, string(filepath.Separator)) {
+			if part == "" {
+				continue
+			}
+			cur = filepath.Join(cur, part)
+			info, err := os.Lstat(cur)
+			if os.IsNotExist(err) {
+				// Remaining components don't exist yet. MkdirAll/WriteFile
+				// will create real dirs/files; symlinks can't appear in the
+				// gap because the chain mutex serialises ops.
+				break
+			}
+			if err != nil {
+				return "", err
+			}
+			if info.Mode()&os.ModeSymlink != 0 {
+				return "", errSymlinkEscapes
+			}
+		}
+	}
+
+	// Belt-and-suspenders: EvalSymlinks check on the resolved target
+	// catches the case the per-component walk doesn't (e.g., a chain
+	// where the target component is itself a hostile symlink whose
+	// target lives outside the workspace).
 	if absPath != chainRoot {
 		realPath, err := filepath.EvalSymlinks(absPath)
 		if err == nil {

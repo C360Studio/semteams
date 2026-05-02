@@ -10,19 +10,25 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 func newTestServer(t *testing.T) (*httptest.Server, string) {
 	t.Helper()
 	workspaceRoot := t.TempDir()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	const (
-		testMaxFileSize  = 1 * 1024 * 1024 // 1 MB
-		testMaxReadBytes = 256 * 1024      // 256 KB
-	)
-	srv := NewServer(workspaceRoot, testMaxFileSize, testMaxReadBytes, logger)
+	srv := NewServer(ServerConfig{
+		WorkspaceRoot:      workspaceRoot,
+		MaxFileSize:        1 * 1024 * 1024,
+		MaxReadBytes:       256 * 1024,
+		MaxOutputBytes:     64 * 1024,
+		DefaultExecTimeout: 5 * time.Second,
+		MaxExecTimeout:     10 * time.Second,
+		Logger:             logger,
+	})
 	mux := http.NewServeMux()
 	srv.RegisterRoutes(mux)
 	ts := httptest.NewServer(mux)
@@ -454,7 +460,13 @@ func TestReadFileTruncation(t *testing.T) {
 	// without writing megabytes through the API.
 	workspaceRoot := t.TempDir()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	srv := NewServer(workspaceRoot, 1*1024*1024, 8, logger) // maxRead = 8 bytes
+	srv := NewServer(ServerConfig{
+		WorkspaceRoot:  workspaceRoot,
+		MaxFileSize:    1 * 1024 * 1024,
+		MaxReadBytes:   8, // exercise truncation path
+		MaxOutputBytes: 64 * 1024,
+		Logger:         logger,
+	})
 	mux := http.NewServeMux()
 	srv.RegisterRoutes(mux)
 	ts := httptest.NewServer(mux)
@@ -507,7 +519,13 @@ func TestWriteFileMissingPath(t *testing.T) {
 func TestWriteFileOversized(t *testing.T) {
 	workspaceRoot := t.TempDir()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	srv := NewServer(workspaceRoot, 16, 256*1024, logger) // maxFileSize = 16 bytes
+	srv := NewServer(ServerConfig{
+		WorkspaceRoot:  workspaceRoot,
+		MaxFileSize:    16, // exercise the 413 path
+		MaxReadBytes:   256 * 1024,
+		MaxOutputBytes: 64 * 1024,
+		Logger:         logger,
+	})
 	mux := http.NewServeMux()
 	srv.RegisterRoutes(mux)
 	ts := httptest.NewServer(mux)
@@ -675,10 +693,284 @@ func TestReadFileIsDirectory(t *testing.T) {
 	}
 }
 
+// =============================================================================
+// EXEC — R3.6.1.c
+// =============================================================================
+
+func execRequestBody(command string, timeoutMs int) *strings.Reader {
+	if timeoutMs > 0 {
+		return strings.NewReader(`{"command":` + jsonString(command) + `,"timeout_ms":` + strconv.Itoa(timeoutMs) + `}`)
+	}
+	return strings.NewReader(`{"command":` + jsonString(command) + `}`)
+}
+
+func jsonString(s string) string {
+	b, _ := json.Marshal(s)
+	return string(b)
+}
+
+func postExec(t *testing.T, ts *httptest.Server, chainID, command string, timeoutMs int) *http.Response {
+	t.Helper()
+	body := execRequestBody(command, timeoutMs)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/workspace/"+chainID+"/exec", body)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("exec: %v", err)
+	}
+	return resp
+}
+
+func TestExecEcho(t *testing.T) {
+	ts, _ := newTestServer(t)
+	chainID := "test.chain.exec.echo"
+	createWorkspaceForTest(t, ts, chainID)
+
+	resp := postExec(t, ts, chainID, "echo hello", 0)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status %d", resp.StatusCode)
+	}
+	var got execResponse
+	json.NewDecoder(resp.Body).Decode(&got)
+	if got.ExitCode != 0 {
+		t.Fatalf("exit %d", got.ExitCode)
+	}
+	if !strings.Contains(got.Stdout, "hello") {
+		t.Fatalf("stdout = %q", got.Stdout)
+	}
+}
+
+func TestExecExitCodePropagated(t *testing.T) {
+	ts, _ := newTestServer(t)
+	chainID := "test.chain.exec.exit"
+	createWorkspaceForTest(t, ts, chainID)
+
+	resp := postExec(t, ts, chainID, "exit 7", 0)
+	defer resp.Body.Close()
+	var got execResponse
+	json.NewDecoder(resp.Body).Decode(&got)
+	if got.ExitCode != 7 {
+		t.Fatalf("expected exit=7, got %d", got.ExitCode)
+	}
+}
+
+func TestExecStderrCaptured(t *testing.T) {
+	ts, _ := newTestServer(t)
+	chainID := "test.chain.exec.stderr"
+	createWorkspaceForTest(t, ts, chainID)
+
+	resp := postExec(t, ts, chainID, "echo oops 1>&2", 0)
+	defer resp.Body.Close()
+	var got execResponse
+	json.NewDecoder(resp.Body).Decode(&got)
+	if got.ExitCode != 0 {
+		t.Fatalf("exit %d", got.ExitCode)
+	}
+	if !strings.Contains(got.Stderr, "oops") {
+		t.Fatalf("stderr = %q", got.Stderr)
+	}
+	if strings.Contains(got.Stdout, "oops") {
+		t.Fatalf("stdout leaked stderr: %q", got.Stdout)
+	}
+}
+
+func TestExecChdirToWorkspace(t *testing.T) {
+	ts, workspaceRoot := newTestServer(t)
+	chainID := "test.chain.exec.pwd"
+	createWorkspaceForTest(t, ts, chainID)
+
+	resp := postExec(t, ts, chainID, "pwd", 0)
+	defer resp.Body.Close()
+	var got execResponse
+	json.NewDecoder(resp.Body).Decode(&got)
+	expected := filepath.Join(workspaceRoot, chainID)
+	// macOS may resolve /var to /private/var; compare via EvalSymlinks.
+	resolved, _ := filepath.EvalSymlinks(expected)
+	if !strings.Contains(got.Stdout, resolved) && !strings.Contains(got.Stdout, expected) {
+		t.Fatalf("pwd output %q didn't include workspace path %q (or its resolved form %q)",
+			got.Stdout, expected, resolved)
+	}
+}
+
+func TestExecTimeoutKillsProcess(t *testing.T) {
+	ts, _ := newTestServer(t)
+	chainID := "test.chain.exec.timeout"
+	createWorkspaceForTest(t, ts, chainID)
+
+	start := time.Now()
+	resp := postExec(t, ts, chainID, "sleep 30", 100) // 100ms timeout vs 30s sleep
+	defer resp.Body.Close()
+	elapsed := time.Since(start)
+
+	if elapsed > 5*time.Second {
+		t.Fatalf("timeout didn't kill process in time; elapsed %v", elapsed)
+	}
+	var got execResponse
+	json.NewDecoder(resp.Body).Decode(&got)
+	if !got.TimedOut {
+		t.Fatalf("expected timed_out=true, got %+v", got)
+	}
+}
+
+func TestExecOutputTruncation(t *testing.T) {
+	workspaceRoot := t.TempDir()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	srv := NewServer(ServerConfig{
+		WorkspaceRoot:      workspaceRoot,
+		MaxFileSize:        1024,
+		MaxReadBytes:       1024,
+		MaxOutputBytes:     16, // tiny cap
+		DefaultExecTimeout: 2 * time.Second,
+		MaxExecTimeout:     10 * time.Second,
+		Logger:             logger,
+	})
+	mux := http.NewServeMux()
+	srv.RegisterRoutes(mux)
+	ts := httptest.NewServer(mux)
+	t.Cleanup(ts.Close)
+
+	chainID := "test.chain.exec.trunc"
+	createWorkspaceForTest(t, ts, chainID)
+	resp := postExec(t, ts, chainID, "printf 'this is a long string that exceeds 16 bytes'", 0)
+	defer resp.Body.Close()
+	var got execResponse
+	json.NewDecoder(resp.Body).Decode(&got)
+	if len(got.Stdout) > 16 {
+		t.Fatalf("expected stdout truncated to 16 bytes, got %d (%q)", len(got.Stdout), got.Stdout)
+	}
+}
+
+func TestExecMissingWorkspace(t *testing.T) {
+	ts, _ := newTestServer(t)
+	resp := postExec(t, ts, "test.chain.exec.no.workspace", "echo x", 0)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", resp.StatusCode)
+	}
+}
+
+func TestExecMissingCommand(t *testing.T) {
+	ts, _ := newTestServer(t)
+	chainID := "test.chain.exec.empty"
+	createWorkspaceForTest(t, ts, chainID)
+
+	resp := postExec(t, ts, chainID, "", 0)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", resp.StatusCode)
+	}
+}
+
+func TestExecTimeoutCappedByMax(t *testing.T) {
+	workspaceRoot := t.TempDir()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	srv := NewServer(ServerConfig{
+		WorkspaceRoot:      workspaceRoot,
+		MaxFileSize:        1024,
+		MaxReadBytes:       1024,
+		MaxOutputBytes:     1024,
+		DefaultExecTimeout: 1 * time.Second,
+		MaxExecTimeout:     200 * time.Millisecond, // cap below request
+		Logger:             logger,
+	})
+	mux := http.NewServeMux()
+	srv.RegisterRoutes(mux)
+	ts := httptest.NewServer(mux)
+	t.Cleanup(ts.Close)
+
+	chainID := "test.chain.exec.cap"
+	createWorkspaceForTest(t, ts, chainID)
+
+	start := time.Now()
+	// Request 30s; cap is 200ms; sleep 5s should be killed at 200ms.
+	resp := postExec(t, ts, chainID, "sleep 5", 30000)
+	defer resp.Body.Close()
+	elapsed := time.Since(start)
+	if elapsed > 3*time.Second {
+		t.Fatalf("MaxExecTimeout cap not honored; elapsed %v", elapsed)
+	}
+	var got execResponse
+	json.NewDecoder(resp.Body).Decode(&got)
+	if !got.TimedOut {
+		t.Fatalf("expected timed_out=true")
+	}
+}
+
+// =============================================================================
+// PARENT-SYMLINK HARDENING — R3.6.1.c
+// =============================================================================
+
+func TestResolveChainPathRejectsParentSymlink(t *testing.T) {
+	root := t.TempDir()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	srv := NewServer(ServerConfig{
+		WorkspaceRoot: root,
+		MaxFileSize:   1024,
+		MaxReadBytes:  1024,
+		Logger:        logger,
+	})
+
+	chainID := "test.chain.parent.symlink"
+	chainDir := filepath.Join(root, chainID)
+	if err := os.MkdirAll(chainDir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	outside := filepath.Join(filepath.Dir(root), "outside.target")
+	if err := os.MkdirAll(outside, 0o755); err != nil {
+		t.Fatalf("mkdir outside: %v", err)
+	}
+	t.Cleanup(func() { os.RemoveAll(outside) })
+
+	// Plant a parent-dir symlink inside the chain workspace (simulates
+	// what bash exec could do in R3.6.1.c).
+	if err := os.Symlink(outside, filepath.Join(chainDir, "evil-dir")); err != nil {
+		t.Skipf("symlink not supported: %v", err)
+	}
+
+	// Path through the parent symlink must be refused.
+	_, err := srv.resolveChainPath(chainID, "evil-dir/anything.txt")
+	if err == nil {
+		t.Fatalf("expected error for parent-symlink path; got nil")
+	}
+}
+
+func TestWriteFileRejectsParentSymlink(t *testing.T) {
+	ts, workspaceRoot := newTestServer(t)
+	chainID := "test.chain.write.parent.symlink"
+	createWorkspaceForTest(t, ts, chainID)
+
+	outside := filepath.Join(filepath.Dir(workspaceRoot), "outside.parent")
+	if err := os.MkdirAll(outside, 0o755); err != nil {
+		t.Fatalf("mkdir outside: %v", err)
+	}
+	t.Cleanup(func() { os.RemoveAll(outside) })
+
+	if err := os.Symlink(outside, filepath.Join(workspaceRoot, chainID, "alias-dir")); err != nil {
+		t.Skipf("symlink not supported: %v", err)
+	}
+
+	resp := writeFile(t, ts, chainID, "alias-dir/leak.txt", "x")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d", resp.StatusCode)
+	}
+	// Ensure no file was written outside.
+	if _, err := os.Stat(filepath.Join(outside, "leak.txt")); err == nil {
+		t.Fatalf("leak file written outside workspace despite 403")
+	}
+}
+
 func TestResolveChainPath(t *testing.T) {
 	root := t.TempDir()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	srv := NewServer(root, 1024, 1024, logger)
+	srv := NewServer(ServerConfig{
+		WorkspaceRoot: root,
+		MaxFileSize:   1024,
+		MaxReadBytes:  1024,
+		Logger:        logger,
+	})
 	chainID := "test.resolve"
 	if err := os.MkdirAll(filepath.Join(root, chainID), 0o755); err != nil {
 		t.Fatalf("setup: %v", err)

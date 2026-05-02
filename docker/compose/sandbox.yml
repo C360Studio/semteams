@@ -23,14 +23,23 @@ services:
       - "${SANDBOX_PORT:-8090}:8090"
     volumes:
       - sandbox-workspaces:/workspace
+      # Shared cache volume mounted r/w across all chains (ADR-032 §18).
+      # Without this, every workspace re-downloads Maven Central on
+      # cold start (60–120s). Caches are immutable-by-convention; if
+      # poisoned, nuke the volume.
+      - sandbox-caches-m2:/home/sandbox/.m2
+      - sandbox-caches-go:/go/pkg/mod
+      - sandbox-caches-npm:/home/sandbox/.npm
+      - sandbox-caches-gradle:/home/sandbox/.gradle
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
     cap_drop:
       - ALL
-    # R3.6.1.a needs no extra caps — workspace lifecycle is plain
-    # filesystem ops as the sandbox user. R3.6.1.c (exec) and the
-    # toolchain image will revisit this list.
+    # R3.6.1.c bash exec runs as the sandbox user; no extra caps
+    # needed for `mvn`, `go`, `npm`, etc. since they don't require
+    # privilege escalation. Revisit only if a toolchain step demands
+    # one (e.g., npm install bumping inotify limits).
     read_only: true
     tmpfs:
       - /tmp:size=512M
@@ -64,4 +73,12 @@ networks:
 
 volumes:
   sandbox-workspaces:
+    driver: local
+  sandbox-caches-m2:
+    driver: local
+  sandbox-caches-go:
+    driver: local
+  sandbox-caches-npm:
+    driver: local
+  sandbox-caches-gradle:
     driver: local
