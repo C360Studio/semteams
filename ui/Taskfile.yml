@@ -775,6 +775,32 @@ tasks:
         fi
         curl -sf "http://localhost:3100/graph/triples?predicate=$PREDICATE&limit=20" | jq
 
+  test:e2e:agentic:probe:auto-approve-watcher:
+    desc: |
+      Run the auto-approve chain watcher against the running stack.
+      Polls /teams-dispatch/loops every 5s; logs role transitions to
+      /tmp/<run_id>-events.log; auto-approves any pending tool gate
+      (de-duped by call_id so list-endpoint staleness can't HTTP-409
+      spam). Designed for real-LLM smokes (R3.4 OSH and similar).
+      Mock-llm Playwright specs drive approvals themselves; don't
+      use this for those.
+
+      Usage:
+        task test:e2e:agentic:probe:auto-approve-watcher -- <run_id>
+        task test:e2e:agentic:probe:auto-approve-watcher  # defaults run_id=agentic
+
+      Outputs land in /tmp/<run_id>-* (trajectory.jsonl, events.log,
+      and three internal de-dup files). Watcher exits when every loop
+      is terminal and the count's been stable for ~120s. Ctrl-C is
+      always safe.
+
+      Source: ui/scripts/agentic-chain-watcher.sh
+    cmds:
+      - |
+        RUN_ID="{{.CLI_ARGS}}"
+        RUN_ID="${RUN_ID:-agentic}"
+        bash scripts/agentic-chain-watcher.sh "$RUN_ID" "${E2E_AGENTIC_UI_PORT:-3100}"
+
   test:e2e:agentic:stack:up:
     desc: Start the agentic E2E Docker stack and wait for health
     internal: true
