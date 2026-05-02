@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -959,6 +960,53 @@ func TestWriteFileRejectsParentSymlink(t *testing.T) {
 	// Ensure no file was written outside.
 	if _, err := os.Stat(filepath.Join(outside, "leak.txt")); err == nil {
 		t.Fatalf("leak file written outside workspace despite 403")
+	}
+}
+
+// TestConcurrentChainsIndependent exercises the per-chain mutex map.
+// Two chains running file ops + exec in parallel must not block each
+// other and must not see each other's state. The race detector catches
+// any unsynchronised access to the chainMutexes map itself.
+func TestConcurrentChainsIndependent(t *testing.T) {
+	ts, _ := newTestServer(t)
+	const chainA = "test.chain.concurrent.a"
+	const chainB = "test.chain.concurrent.b"
+	createWorkspaceForTest(t, ts, chainA)
+	createWorkspaceForTest(t, ts, chainB)
+
+	const iters = 20
+	done := make(chan error, 2)
+
+	hammer := func(chainID string) {
+		var lastErr error
+		for i := range iters {
+			path := "f" + strconv.Itoa(i) + ".txt"
+			content := chainID + "-iter-" + strconv.Itoa(i)
+			r := writeFile(t, ts, chainID, path, content)
+			r.Body.Close()
+			if r.StatusCode != http.StatusOK {
+				lastErr = fmt.Errorf("%s write %d: status %d", chainID, i, r.StatusCode)
+				continue
+			}
+			rd := readFile(t, ts, chainID, path)
+			var got fileReadResponse
+			json.NewDecoder(rd.Body).Decode(&got)
+			rd.Body.Close()
+			if got.Content != content {
+				lastErr = fmt.Errorf("%s read %d: cross-chain leak — want %q got %q",
+					chainID, i, content, got.Content)
+			}
+		}
+		done <- lastErr
+	}
+
+	go hammer(chainA)
+	go hammer(chainB)
+
+	for range 2 {
+		if err := <-done; err != nil {
+			t.Fatalf("concurrent chain hammer: %v", err)
+		}
 	}
 }
 

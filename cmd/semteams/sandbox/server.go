@@ -192,6 +192,13 @@ func (s *Server) handleZipWorkspace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Forward-flag (R3.6.3): zipDir streams directly under the chain
+	// mutex. A slow client draining a multi-MB archive will block any
+	// concurrent op on the same chain (write/read/exec). Acceptable
+	// today because zip is a forensics op on a terminal chain; once
+	// the chainMutex graduates to RWMutex (per ADR-032 §3 chainMutex
+	// doc-comment forward note), buffer-or-snapshot the archive under
+	// a read-lock and stream after release.
 	cm := s.getChainMutex(chainID)
 	cm.mu.Lock()
 	defer cm.mu.Unlock()

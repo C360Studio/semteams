@@ -42,14 +42,20 @@ func main() {
 	mux := http.NewServeMux()
 	srv.RegisterRoutes(mux)
 
+	// WriteTimeout must accommodate the longest exec the server will
+	// honor (a cold-cache `mvn dependency:resolve` for a non-trivial
+	// pom can run minutes). Capping below MaxExecTimeout would tear the
+	// response mid-write and leave the agent loop guessing whether the
+	// build succeeded. +10s grace covers JSON encoding + flush.
+	httpWriteTimeout := *maxExecTimeout + 10*time.Second
 	httpServer := &http.Server{
 		Addr:              *addr,
 		Handler:           mux,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       30 * time.Second,
-		WriteTimeout:      60 * time.Second,
+		WriteTimeout:      httpWriteTimeout,
 		IdleTimeout:       60 * time.Second,
-		MaxHeaderBytes:    1 << 14, // 16 KB — defense-in-depth; .b/.c don't need to revisit.
+		MaxHeaderBytes:    1 << 14, // 16 KB — defense-in-depth.
 	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
