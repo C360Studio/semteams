@@ -839,3 +839,118 @@ When designing any new persona contract:
 3. The LLM's natural prose output is the right shape unless a
    deterministic downstream consumer requires structure (rules on
    marker triples, parsers on typed payloads). When in doubt, prose.
+
+## Addendum 2026-05-02 — R3.4b smoke #5: chain converged; demo line moved
+
+**Status:** Accepted (R3.4b empirical confirmation + demo-line clarification).
+
+R3.4b smoke #5 ran the OSH-class prompt against Anthropic
+claude-sonnet-4-6 with the substance-over-format persona pivot,
+the per-segment `$entity.instance` rule substitution, the multi-tool
+dispatch fix from semstreams beta.36, and the new
+`emit_dev_via_spec_artifact` product-shell tool. **Chain converged
+in 6 loops, 6m21s end-to-end.**
+
+### What converged
+
+```
+1. dispatch  researcher                  ~3m50s  emitted artifact
+2. rule-spawn research-reviewer          ~36s    decide(approved) → mode-transition
+3. rule-spawn dev-via-spec-planner       ~43s    decide(planned)
+4. rule-spawn dev-via-spec-reviewer      ~26s    decide(approved)
+5. rule-spawn dev-via-spec-challenger    ~21s    decide(accept)
+6. rule-spawn dev-via-spec-architect     ~26s    emit_dev_via_spec_artifact + decide(seed_requirements_emitted)
+```
+
+Each role passed on first attempt. No retries. No format chase.
+
+### Output
+
+`docs/specs/2026-05-02-meshtastic-mqtt-protobuf-ogc-connected-systems-bridge.md`
+— 5 actors enumerated, 2 integration points (read MQTT → write OGC
+CS), 7 epic-shaped seed requirements, each grounded against named
+actors and integration boundaries, full provenance footer linking
+back to the chain's loops. BMAD/OpenSpec-shaped. Diff-able.
+Human-readable.
+
+### Comparison: smoke #4 (R3.4a) vs smoke #5 (R3.4b)
+
+| | Smoke #4 | Smoke #5 |
+|---|---|---|
+| Personas | format-compliance Goodhart | substance-only |
+| Architect role | reformat into numbered SR list (ceremony) | curator → emit_dev_via_spec_artifact tool (substantive) |
+| Total loops | 22 (aborted, never reached architect) | 6 (terminal artifact written) |
+| Reviewer rejections | 3 of 6 | 0 of 1 |
+| Challenger concerns_raised | 3 of 3 | 0 of 1 |
+| Wall-clock | aborted at ~7m | 6m21s |
+| Cost (sonnet at low effort) | ~$8 | ~$1.50 |
+| Final artifact | none | typed payload + markdown spec in repo |
+
+The smoke #4 → #5 delta empirically confirms the substance-over-format
+pivot. Format compliance was a Goodhart loader the chain optimised
+against without earning anything for any consumer; removing it from
+the persona contracts and moving structural responsibility to the
+deterministic tool-side template (where the consumer is human / git
+diff / file grep) was the right shape.
+
+### Demo-line moved: R3.4 produces the spec; R3.6 produces the driver
+
+The reframe Coby surfaced after smoke #5: *"this is good work but
+it's not the demo — we need a driver written to complete the demo."*
+Correct. The OSH-class arc this ADR named as the north-star demo is
+"working driver in repo," not "structured spec in repo." The spec is
+intermediate output, not terminal.
+
+R3.4 ships:
+
+- The chain end-to-end on real LLM, converging on substance.
+- The structured terminal artifact (`dev_via_spec.artifact.v1`
+  payload + `docs/specs/<slug>.md`).
+- The product-shell + framework wiring proven against Anthropic.
+
+R3.5 (already designed in `project_r35_coordinator_meta_reviewer.md`):
+the `needs_clarification` terminal escape valve. Smoke #5 converged
+without it; deferred to whenever the builder slice surfaces real
+ambiguity.
+
+R3.6 (next big slice; not yet designed): **builder + sandbox**.
+The dev-via-spec-builder reads the spec artifact, writes code, runs
+tests, iterates until passing. This requires a sandboxed code-execution
+environment. Coby's framing on the sandbox problem: "semspec and
+semdragon both have one; both painful; semdragon's seemed to work
+better; semspec's parallel-DAG worktree pain doesn't apply to us
+(serial chain)." Sandbox planning is captured in
+`project_sandbox_planning_open.md` (memory) — to be revisited when
+R3.6 design starts. Critical scope question: stay on OSH (Java +
+OSGi + AbstractSensorModule, real toolchain weight, authentic to
+prompt) vs lighter target (Go bridge with same architectural shape,
+faster iteration, but smells like dodging the hard case). Decide
+deliberately.
+
+### Source acquisition: nudged via substance, not mandated
+
+Smoke #5's dispatch researcher skipped `add_source_repo` entirely —
+sonnet emitted the artifact from training data alone. Defensible
+(the model knows OSH / OGC CS / Meshtastic) but a missed opportunity
+for grounding. The R3.4b closeout adds
+`configs/personas/fragments/researcher/15-source-acquisition.md` —
+a fragment that gives the LLM "good reasons to reach for sources"
+rather than mandating a call. Triggers framed as substance the LLM
+can reason about: training data potentially stale, prompt names a
+specific commit/version/repo, actor enumeration would be vague
+without canonical types, substrate empty AND domain has public
+canonical sources. Same shape as the substance-over-format pivot
+on the reviewer: **don't tell the LLM what to do; give it
+substance to reason about.**
+
+### Smoke discipline captured
+
+`ui/scripts/agentic-chain-watcher.sh` — chain watcher moved out of
+`/tmp` into the repo. Bash 3.2 compatible, parameterised
+(run_id + port), de-dups approval calls by call_id so list-endpoint
+staleness can't HTTP-409 spam. Wired as
+`task test:e2e:agentic:probe:auto-approve-watcher`. The npm
+`test:e2e:cleanup` script now passes `--profile semsource --profile
+local-models` so cleanup actually nukes profile-gated services
+(prior fix-after-fix friction across smokes 1–5).
+
