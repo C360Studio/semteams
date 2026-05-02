@@ -3,8 +3,10 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -21,6 +23,8 @@ type chainMutex struct {
 // Server handles sandbox HTTP API requests.
 type Server struct {
 	workspaceRoot string
+	maxFileSize   int64
+	maxReadBytes  int
 	logger        *slog.Logger
 
 	mu           sync.Mutex
@@ -29,9 +33,15 @@ type Server struct {
 
 // NewServer constructs a Server rooted at workspaceRoot. The directory
 // must exist before handlers are called; main.go ensures this on boot.
-func NewServer(workspaceRoot string, logger *slog.Logger) *Server {
+//
+// maxFileSize caps the content size accepted by write_file. maxReadBytes
+// caps the content returned by read_file (larger files are truncated;
+// the response includes a flag so callers know the file was truncated).
+func NewServer(workspaceRoot string, maxFileSize int64, maxReadBytes int, logger *slog.Logger) *Server {
 	return &Server{
 		workspaceRoot: workspaceRoot,
+		maxFileSize:   maxFileSize,
+		maxReadBytes:  maxReadBytes,
 		logger:        logger,
 		chainMutexes:  make(map[string]*chainMutex),
 	}
@@ -43,6 +53,26 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /workspace/{chainID}", s.handleCreateWorkspace)
 	mux.HandleFunc("GET /workspace/{chainID}", s.handleZipWorkspace)
 	mux.HandleFunc("DELETE /workspace/{chainID}", s.handleDeleteWorkspace)
+	mux.HandleFunc("PUT /workspace/{chainID}/files", s.handleWriteFile)
+	mux.HandleFunc("GET /workspace/{chainID}/files", s.handleReadFile)
+}
+
+// =============================================================================
+// REQUEST / RESPONSE TYPES
+// =============================================================================
+
+// fileWriteRequest is the JSON body for PUT /workspace/{chainID}/files.
+type fileWriteRequest struct {
+	Path    string `json:"path"`    // Workspace-relative path; absolute or .. traversal rejected.
+	Content string `json:"content"` // File content; size capped by maxFileSize.
+}
+
+// fileReadResponse is returned from GET /workspace/{chainID}/files.
+type fileReadResponse struct {
+	Content   string `json:"content"`
+	Size      int    `json:"size"`                 // Bytes returned (after truncation).
+	Truncated bool   `json:"truncated,omitempty"`  // True if file was larger than maxReadBytes.
+	TotalSize int64  `json:"total_size,omitempty"` // Real file size on disk; only set when truncated.
 }
 
 // =============================================================================
@@ -124,6 +154,155 @@ func (s *Server) handleZipWorkspace(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (s *Server) handleWriteFile(w http.ResponseWriter, r *http.Request) {
+	chainID := r.PathValue("chainID")
+	if !isValidChainID(chainID) {
+		writeError(w, http.StatusBadRequest, "invalid chain ID")
+		return
+	}
+
+	// Body cap accounts for JSON-escape worst-case 2x expansion of
+	// content (every byte a `\"` / `\n` / `\\`) plus envelope overhead.
+	// Stricter caps surface as a confusing 400 instead of the explicit
+	// 413 at the size check below.
+	var req fileWriteRequest
+	if err := readJSON(r, &req, s.maxFileSize*2+4096); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if req.Path == "" {
+		writeError(w, http.StatusBadRequest, "path is required")
+		return
+	}
+	if int64(len(req.Content)) > s.maxFileSize {
+		writeError(w, http.StatusRequestEntityTooLarge,
+			fmt.Sprintf("content exceeds max size (%d bytes)", s.maxFileSize))
+		return
+	}
+
+	cm := s.getChainMutex(chainID)
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	if !s.workspaceExists(chainID) {
+		writeError(w, http.StatusNotFound, "workspace not found")
+		return
+	}
+
+	absPath, err := s.resolveChainPath(chainID, req.Path)
+	if err != nil {
+		writeError(w, http.StatusForbidden, err.Error())
+		return
+	}
+
+	// Lstat-before-write: refuse to write through an existing symlink
+	// or onto a directory. Defense-in-depth — resolveChainPath's
+	// EvalSymlinks check already catches symlinks pointing outside the
+	// workspace, but a symlink whose target is *inside* the workspace
+	// is still a footgun (agent could be tricked into clobbering the
+	// real file via a planted alias). The file API never honors
+	// symlinks; that invariant matters more once R3.6.1.c bash exec
+	// can plant them.
+	if existing, statErr := os.Lstat(absPath); statErr == nil {
+		if existing.Mode()&os.ModeSymlink != 0 {
+			writeError(w, http.StatusForbidden, "refusing to write through symlink")
+			return
+		}
+		if existing.IsDir() {
+			writeError(w, http.StatusBadRequest, "path is a directory")
+			return
+		}
+	}
+
+	if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("create parent dir: %v", err))
+		return
+	}
+	if err := os.WriteFile(absPath, []byte(req.Content), 0o644); err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("write file: %v", err))
+		return
+	}
+
+	s.logger.Info("file written", "chain_id", chainID, "path", req.Path, "size", len(req.Content))
+	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "size": len(req.Content)})
+}
+
+func (s *Server) handleReadFile(w http.ResponseWriter, r *http.Request) {
+	chainID := r.PathValue("chainID")
+	if !isValidChainID(chainID) {
+		writeError(w, http.StatusBadRequest, "invalid chain ID")
+		return
+	}
+
+	relPath := r.URL.Query().Get("path")
+	if relPath == "" {
+		writeError(w, http.StatusBadRequest, "path query param is required")
+		return
+	}
+
+	cm := s.getChainMutex(chainID)
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	if !s.workspaceExists(chainID) {
+		writeError(w, http.StatusNotFound, "workspace not found")
+		return
+	}
+
+	absPath, err := s.resolveChainPath(chainID, relPath)
+	if err != nil {
+		writeError(w, http.StatusForbidden, err.Error())
+		return
+	}
+
+	// lstat-not-stat: refuse to read through a symlink even if its target
+	// resolves inside the workspace. Defense in depth — resolveChainPath's
+	// EvalSymlinks check covers symlink-escapes, but a symlink-to-inside
+	// is also a footgun the file API has no business honouring (the agent
+	// should write through the real path, not chase a symlink it didn't
+	// create).
+	info, err := os.Lstat(absPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			writeError(w, http.StatusNotFound, "file not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("stat: %v", err))
+		return
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		writeError(w, http.StatusForbidden, "refusing to read through symlink")
+		return
+	}
+	if info.IsDir() {
+		writeError(w, http.StatusBadRequest, "path is a directory")
+		return
+	}
+
+	totalSize := info.Size()
+	data, err := os.ReadFile(absPath)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("read: %v", err))
+		return
+	}
+
+	truncated := false
+	if len(data) > s.maxReadBytes {
+		data = data[:s.maxReadBytes]
+		truncated = true
+	}
+
+	resp := fileReadResponse{
+		Content: string(data),
+		Size:    len(data),
+	}
+	if truncated {
+		resp.Truncated = true
+		resp.TotalSize = totalSize
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
 // =============================================================================
 // VALIDATION
 // =============================================================================
@@ -192,4 +371,20 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 func writeError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, errorResponse{Error: msg})
+}
+
+// readJSON decodes the request body into v with a per-request size cap.
+// The cap should be slightly larger than any expected payload (e.g.,
+// content + JSON envelope overhead) — if the body exceeds it, decode
+// fails and the caller should return 413.
+func readJSON(r *http.Request, v any, maxBytes int64) error {
+	defer r.Body.Close()
+	if maxBytes <= 0 {
+		maxBytes = 2 * 1024 * 1024 // 2 MB default
+	}
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxBytes))
+	if err != nil {
+		return fmt.Errorf("read body: %w", err)
+	}
+	return json.Unmarshal(body, v)
 }

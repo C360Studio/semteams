@@ -15,6 +15,8 @@ import (
 func main() {
 	addr := flag.String("addr", ":8090", "HTTP listen address")
 	workspaceRoot := flag.String("workspace", "/workspace", "Workspace root directory")
+	maxFileSize := flag.Int64("max-file-size", 1*1024*1024, "Maximum file size for write operations in bytes")
+	maxReadBytes := flag.Int("max-read-bytes", 256*1024, "Maximum file content returned by read in bytes (truncate beyond)")
 	flag.Parse()
 
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -25,7 +27,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	srv := NewServer(*workspaceRoot, logger)
+	srv := NewServer(*workspaceRoot, *maxFileSize, *maxReadBytes, logger)
 	mux := http.NewServeMux()
 	srv.RegisterRoutes(mux)
 
