@@ -717,3 +717,125 @@ For "isn't this just rebuilding SemSpec":
 > components, a per-Plan KV bucket, a state machine, and a fixed
 > processor chain — all of which we explicitly do not port (see
 > table above). The dev-via-spec mode is configs only.
+
+## Addendum 2026-05-02 — R3.4a smoke findings + R3.5 design target
+
+**Status:** Accepted (R3.4a observation pass; R3.5 captured as future target).
+
+R3.4a's first real-LLM OSH smoke ran the full chain end-to-end against
+Anthropic claude-sonnet-4-6. 22 loops total. The chain machinery
+worked correctly: dispatch → researcher arc (1 dispatch + 2
+source-acquisition + 3 reviewer) → mode-transition → dev-via-spec arc
+(7 planner + 6 reviewer + 3 challenger). Never reached architect-light
+terminal. Two findings drive the next slice and the next big design.
+
+### Finding 1 (R3.4b, fix now): format-compliance is Goodhart payload
+
+The dev-via-spec reviewer's checklist (ported from SemSpec verbatim)
+demanded literal markdown sections: `### Goal`, `### Context`,
+`### Scope` with include/exclude/do_not_touch bullet lists. The
+planner produced substantively complete plans as prose; the reviewer
+rejected on format compliance. Each retry was a format chase — the
+plan's substance didn't change, the LLM just re-shuffled to satisfy
+section-header demands.
+
+Why this matters at the design layer:
+
+SemSpec's checklist works because their downstream consumers can be
+parsers. Format compliance is load-bearing for them. **Our chain's
+downstream is always another LLM**: reviewer's reason is read by
+challenger; challenger's by architect-light; architect-light's
+terminal is consumed by future external observers (UI dashboards,
+audit). LLMs reading prose extract substance fine. Format compliance
+substitutes for substance evaluation — a Goodhart loader the chain
+optimises against without earning anything for any consumer.
+
+The fix is narrow:
+
+- Reviewer / challenger / planner / architect-light contracts get
+  rewritten to ask **substance questions, not format questions**.
+- Substance gates STAY (is a goal named? are actors enumerated from
+  the upstream artifact? is each integration_point covered by a
+  scope item?). These are the reviewer-as-enumerator pattern's
+  actual value.
+- Format prescriptions GO (no `### Goal` requirement; no
+  prescribed markdown shape; the LLM's natural communication is
+  fine).
+
+This is consistent with the chain's existing design philosophy:
+deterministic structure where deterministic consumers exist (rule
+routing on `decide` action enums, stabilisation predicate on marker
+triples, `emit_research_artifact` typed payload), LLM judgment where
+no deterministic consumer needs the structure.
+
+### Finding 2 (R3.5, future): coordinator as meta-reviewer
+
+R3.4a's churn surfaced a deeper architectural gap. Every persona's
+terminal contract is binary: `approved | insufficient` (reviewer);
+`accept | concerns_raised` (challenger); etc. When an agent
+encounters something it **cannot decide on its own** — *"is this scope
+creep, or is the artifact's seed_requirements ambitious enough to
+justify this?"* — its only options are to guess (and usually pick
+"insufficient" / "concerns_raised" out of caution) or to retry the
+same question. Neither is right; both burn iterations.
+
+The right architecture adds a third terminal: **`decide(
+action="needs_clarification", reason=<the question>,
+context_pointers=[<entity_id, ...>])`**. A new rule fires on
+`coordinator.next_action="needs_clarification"` and routes the
+question to the **coordinator** — which has the most-capable model
+binding (a separate `coordination` capability, distinct from the
+chain's `general` capability), the workspace context across all
+loops, and the authority to resolve or escalate.
+
+The coordinator becomes a **meta-reviewer** for the chain, not just
+the entry classifier it is today. Its terminal:
+`decide(action="resolved", resolution=<answer>,
+target_loop=<original>)`. Rules route the resolution back to the
+asking loop's parent for retry-with-context.
+
+Why this is load-bearing for the OSH-class arc:
+
+- SemSpec's full-structure path forces deterministic checks; passes
+  reliably with frontier models, chokes on small models, caps agency.
+- Pure-autonomy paths (LangGraph supervisor, AutoGPT) wander.
+- Our current binary-terminal SemTeams chain bounds agency via
+  rule routing on `decide` — but the bounds force the agent to
+  guess on ambiguity, which is the worst of both worlds.
+- Coordinator-as-meta-reviewer is the escape valve: hard questions
+  route UP to the most capable model + full workspace context,
+  rather than forcing the in-loop agent to hallucinate a confident
+  guess.
+
+Cost-discipline implication: the coordinator's binding is the one
+place in the system where we don't trade quality for cost. Coordinator
+decisions cascade across the entire chain; their impact is the
+highest in the system. A separate `coordination` capability points
+to the most-capable model available (e.g. claude-sonnet at
+high reasoning_effort, or claude-opus when accessible).
+
+### What ships in R3.4b vs R3.5
+
+| Slice | Ships |
+|---|---|
+| **R3.4b** (next) | Loosen the four dev-via-spec persona contracts to ask substance, not format. Capture R3.4 patterns into Taskfile (smoke task, watcher script in repo). Re-smoke once. If chain converges to architect-light terminal, R3.4 is done. |
+| **R3.5** (future) | Add `needs_clarification` terminal to all dev-via-spec personas. New `configs/rules/coordinator/` rule routes it. Coordinator persona gets workspace-manager scope. Add `coordination` capability to `model_registry.capabilities`. Update ADR-031 with the third terminal. |
+
+R3.5 is **not pre-built**; R3.4b's smoke will tell us whether the
+binary-terminal contract converges in practice for OSH-class prompts.
+If it converges, R3.5 is improvement. If it doesn't (e.g. challenger
+keeps raising structural concerns the planner can't resolve without
+external context), R3.5 is unlock.
+
+### Reusable principle for future personas
+
+When designing any new persona contract:
+
+1. Default to a `needs_clarification` terminal alongside the
+   role-specific approve/insufficient pair. Don't ship binary-only
+   personas if the role needs to reason about ambiguity.
+2. Ask substance questions in the checklist, not format questions.
+   "Does the plan name a goal?" not "Is there a `### Goal` section?"
+3. The LLM's natural prose output is the right shape unless a
+   deterministic downstream consumer requires structure (rules on
+   marker triples, parsers on typed payloads). When in doubt, prose.
