@@ -1,99 +1,100 @@
 # Failure classes (probe taxonomy)
 
-> Port lineage: SemSpec's `configs/error_categories.json` (failure-
-> class taxonomy used for negative-memory injection). Light port:
-> categories adapted to dev-via-spec planning failures rather than
-> SemSpec's pipeline-specific failures (parse errors, schema
-> violations). ADR-030 (semspec) pairs this taxonomy with the
-> review pattern; we adopt the discipline here.
+> Port lineage: SemSpec's `configs/error_categories.json`. Light
+> port — categories adapted to dev-via-spec planning failures
+> rather than SemSpec's pipeline-specific failures. ADR-031
+> §addendum 2026-05-02 captures the substance-over-format pivot:
+> these are *probe questions*, not rigid format checks.
 
-Walk every failure class. For each, ask "is this plan vulnerable
-to this class of error?" — and ground the answer in evidence
-from the plan and the upstream research artifact.
+For each class, ask: *given the reviewer's summary of the approved
+plan, would this class of failure block successful execution?*
+Polish concerns and minor improvements do **not** count — the bar
+is execution-blocking. The reviewer already gated on completeness;
+you add the falsification pass, focused on what would actually
+break.
 
 ## 1. Decomposition too coarse
 
-Symptoms:
-- An epic covers two distinct integration boundaries.
-- An epic's scope spans both read-side and write-side flows.
-- An epic title ends with "Build" or "Implement" without a
-  named interface or endpoint.
+Would an implementer have to make architectural decisions inside
+a single epic? If the plan groups two distinct integration
+boundaries (e.g. read-side packet ingestion AND write-side
+observation publishing) into one epic, splitting would produce a
+better implementation roadmap. Coarse decomposition is a concern
+when execution would benefit from clearer boundaries.
 
-Probe: count the integration_points the epic touches. If > 1
-distinct flow direction, the epic is a decomposition candidate.
+Probe: would two engineers working on the same epic in parallel
+hit conflicts? If yes, the epic needs splitting.
 
 ## 2. Scope creep
 
-Symptoms:
-- scope.include item names a file or capability not grounded in
-  the research artifact's actors or integration_points.
-- scope.include item adds a redesign or refactor that the artifact
-  does not motivate.
-- scope.include item exceeds the seed_requirements' verb (artifact
-  says "expose"; plan says "redesign").
+Does the plan include work the upstream research artifact does
+not motivate? Look for scope items the reviewer's summary cites
+that don't trace back to an artifact actor or integration_point.
+Creep is a concern when it expands the work beyond what the user
+asked for or what the substrate supports.
 
-Probe: cross-reference every scope.include item to the artifact.
-Items without grounding are creep candidates.
+Probe: would a PM ask "wait, where did *that* come from?" when
+reading the plan? If yes, scope creep is a concern.
 
 ## 3. Missing failure mode
 
-Symptoms:
-- Asynchronous integration points without a timeout / disconnect /
-  retry consideration in any epic.
-- External-system integration without an authentication or
-  authorisation concern.
-- Stateful flows without a recovery-after-crash concern.
+Does the plan handle the failure cases the integration boundaries
+imply? For asynchronous read-side actors (radios, sensors,
+network feeds): is disconnect / packet-loss / timeout owned by
+some epic? For external write-side actors (APIs, databases,
+queues): is back-pressure / rejection / authentication owned?
 
-Probe: for each artifact integration point with `direction: read`
-from an external actor, check whether any epic owns the failure
-case. For each `direction: write`, check whether any epic owns
-the back-pressure or rejection case.
+Probe: if the integration partner went down for an hour, would
+the plan-as-described handle it correctly, or would the system
+silently corrupt state?
 
 ## 4. Unaccounted integration
 
-Symptoms:
-- Artifact enumerates an integration_points entry; no epic's scope
-  includes it; no scope.exclude entry rationalises excluding it.
+Does every integration_point the research artifact enumerates
+appear somewhere in the plan — either delivered by an epic or
+explicitly excluded with rationale? If the artifact named X but
+the plan ignored X, that's a concern (either the plan needs to
+cover it or the plan needs to say why not).
 
-Probe: walk the artifact's `integration_points`. Each one is
-either in some epic's scope, or explicitly excluded with a
-rationale, or a concern.
+Probe: enumerate the artifact's integration_points (visible in
+the reviewer's summary). For each, find the corresponding scope
+or exclusion. Anything left over is the concern.
 
 ## 5. Goal/scope incoherence
 
-Symptoms:
-- Goal sentence implies a capability the scope does not include.
-- Scope includes work the goal does not motivate.
-- Context cites an actor that no epic touches.
+Does the goal sentence describe a capability the scope actually
+delivers? Mismatches: goal claims X but scope only delivers
+prerequisites; goal is narrow but scope keeps adding context that
+doesn't serve it; context names actors no epic touches. Incoherence
+is a concern when implementers would build the wrong thing.
 
-Probe: re-read the goal/context/scope as a coherent narrative. If
-the goal would be unfulfilled even after every epic ships,
-incoherence is a concern.
+Probe: re-read the goal as if you were the implementer. Would
+shipping every epic produce something that satisfies the goal? If
+not, name where the gap is.
 
 ## 6. Revision-respect (only on retry)
 
-Symptoms:
-- Plan claims to address a prior finding but the revision adds no
-  new scope or splits no epic.
-- Plan rebuts a prior finding without adding disambiguation.
-- Plan addresses some prior findings but silently drops others.
+Did the planner address each prior finding visibly, or just
+re-assert the prior position? Pure rebuttal without scope change
+is a concern. Silent dropping of prior findings is a concern.
 
-Probe: if this is a retry, cross-reference your own prior
-`concerns_raised` reason and the reviewer's prior `insufficient`
-reasons. Each prior concern is either addressed (with visible
-revision) or open (still a concern).
+Probe: cross-reference your own prior `concerns_raised` reason
+and the reviewer's prior `insufficient` reasons. Each prior
+concern has visible resolution OR explicit disambiguation OR is
+unresolved (still a concern).
 
 ## What this is NOT
 
 - Not a code review. The plan has no implementation yet.
 - Not an SOP audit. SemSpec's plan-reviewer does that; we don't
-  port the SOP layer for R3.3.
-- Not a security review. Production hardening is downstream of
-  the planner's role.
+  port the SOP layer.
+- Not a security review. Production hardening is downstream.
 - Not a re-run of the reviewer's completeness checklist. The
-  reviewer already approved; you are looking past completeness
-  to falsifiable concerns.
+  reviewer already approved on substance; you're looking past
+  completeness to falsifiable execution risks.
+- Not a polish pass. Wording, naming, or formatting suggestions
+  are not concerns.
 
-If your concerns reduce to "the plan is incomplete," accept and
-let the planner ship — completeness was the reviewer's gate, not
-yours. Your job is the residual after completeness.
+If your concerns reduce to "the plan could be sharper" or "the
+plan is incomplete," **accept**. The chain has retry budget
+elsewhere; spend yours on actual execution risk.

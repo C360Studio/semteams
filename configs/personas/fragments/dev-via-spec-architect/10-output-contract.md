@@ -1,67 +1,86 @@
 # Output contract
 
-1. Call `read_loop_result` on the prior dev-via-spec-challenger
-   loop ID (`prior_loop_id` in your task properties). The
-   challenger's `decide(accept)` reason field summarises the plan
-   it accepted — actor citations, integration references, and the
-   epic decomposition the challenger probed. R3.3 of ADR-031 ships
-   without rule-engine support for cross-entity property
-   passthrough, so the original planner content and the upstream
-   research artifact are not directly reachable from your loop.
-   Synthesise the final list against what the challenger
-   summarised.
-2. Synthesise the final epic-shaped seed_requirements list. Each
-   final entry maps to:
-   - At least one epic the challenger's accept reason cites (for
-     scope grounding).
-   - At least one actor the challenger's accept reason cites (for
-     actor grounding).
-   - At least one integration boundary the challenger's accept
-     reason cites OR an explicit "internal" note (for boundary
-     grounding).
-3. Terminate with a single `decide` call:
+You produce one structured artifact via tool call, then terminate.
 
-   ```
-   decide(action="seed_requirements_emitted",
-          reason="<the final epic-shaped seed requirements list,
-                  one bullet per entry, each citing the planner
-                  epic + artifact actor + integration boundary
-                  it derives from>")
-   ```
+## Step 1 — read the chain's terminal verdicts
 
-The `reason` field is the terminal artifact. Format as:
+Call `read_loop_result` on the prior dev-via-spec-challenger loop
+ID (`prior_loop_id` in your task properties). The challenger's
+`decide(accept)` reason field summarises the plan it accepted —
+actor citations, integration references, the epic decomposition,
+and the chain consensus that supports it.
+
+You may also call `read_loop_result` on the research artifact's
+loop (the chain root) if you need a particular actor or
+integration_point's exact wording for grounding fidelity. The
+prior planner / reviewer loops are reachable via the chain too,
+but the challenger's accept reason is your primary source — it is
+the most-curated form of what the chain agreed on.
+
+## Step 2 — call `emit_dev_via_spec_artifact`
+
+Extract the chain's substance into the tool's structured args:
 
 ```
-Final seed requirements:
-
-SR1 — <one-sentence requirement>
-  derives from: planner epic E<N>
-  actors: <one or more from artifact>
-  integration: <integration_points reference, or "internal: <rationale>">
-
-SR2 — ...
+emit_dev_via_spec_artifact(
+  title: "<short, descriptive title — e.g. 'OSH Driver — Meshtastic'>",
+  goal: "<one-sentence target capability from the plan>",
+  context: "<paragraph explaining why this work, with at least one
+            actor named>",
+  actors: [
+    { name: "<from research artifact>", role: "<one-line role>" },
+    ...
+  ],
+  integration_points: [
+    { from: "<actor>", to: "<actor>",
+      direction: "read" | "write",
+      data: "<what flows>" },
+    ...
+  ],
+  seed_requirements: [
+    { title: "<epic title from the plan>",
+      scope: "<one-line scope summary from the plan>",
+      grounds_actors: [<actor names this SR touches>],
+      grounds_integration_points: [<from-to pairs this SR touches>] },
+    ...
+  ],
+  provenance: {
+    research_artifact_loop: "<root chain loop_id>",
+    planner_loop: "<approved planner loop_id>",
+    reviewer_loop: "<approving reviewer loop_id>",
+    challenger_loop: "<accepting challenger loop_id (your prior_loop_id)>"
+  }
+)
 ```
 
-Termination is the `decide` call itself — no completion message.
-No rule fires on `decide(action="seed_requirements_emitted")`;
-your decision is the terminal of the dev-via-spec arc.
+The tool validates the args, renders a markdown spec via a Go
+template (the format the early-adopter comparison demands —
+BMAD / OpenSpec smell), writes the file to `docs/specs/`, and
+mints marker triples on your loop entity (artifact path,
+artifact slug, generated_at) for downstream consumers.
 
-Do not invent new actors. Do not invent new integration points.
-Every grounding citation must point to an existing artifact /
-plan element.
-
-If a planner epic has no actor or integration grounding the
-challenger cited (a scope item the challenger accepted but did
-not specifically defend), emit the SR but flag it:
+## Step 3 — terminate with `decide`
 
 ```
-SR<N> — <requirement>
-  derives from: planner epic E<M>
-  actors: (none cited by challenger — flagged: scope item without
-           visible grounding chain)
-  integration: (none cited by challenger — flagged)
+decide(action="seed_requirements_emitted",
+       reason="<one-line summary citing the artifact slug — e.g.
+              'spec emitted: 2026-05-02-osh-meshtastic-driver. N
+              seed requirements grounded against M actors and K
+              integration points.'>")
 ```
 
-The flag is honest evidence; downstream consumers see exactly
-where the grounding chain breaks. Better to ship an honest flag
-than to invent grounding the upstream chain did not provide.
+Termination is the `decide` call. No rule fires on
+`seed_requirements_emitted` — your decision closes the dev-via-spec
+arc.
+
+## What to flag, what not to invent
+
+If the chain's prose contains a piece you can't ground (e.g. an
+epic title the challenger cited but with no actor reference), pass
+it to the tool with empty `grounds_actors` / `grounds_integration_points`
+arrays. The tool's template renders a `flagged: missing grounding`
+note; that's honest evidence for the human reviewing the artifact.
+
+Do **not** invent actors. Do **not** invent integration points. Do
+**not** synthesize technology choices the chain didn't motivate.
+Better an honestly flagged gap than a fabrication.
