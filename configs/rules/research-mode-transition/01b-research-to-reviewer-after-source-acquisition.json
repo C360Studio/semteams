@@ -27,9 +27,9 @@
       "model": "general",
       "tools": ["read_loop_result", "decide"],
       "properties": {
-        "researcher_loop_id": "$entity.id"
+        "researcher_loop_id": "$entity.instance"
       },
-      "prompt": "Evaluate the prior researcher-with-source-acquisition loop's submission. Researcher loop id: $entity.id. Call read_loop_result with that loop id to fetch the artifact, apply the active checklist AND the stabilisation gate (if the artifact's substrate_mutations contains any entry whose revision matches artifact.revision, the substrate just changed — decide(insufficient, reason=\"awaiting stabilisation; substrate mutated this revision, re-iterate against augmented corpus\") regardless of other gates). Otherwise call decide(action=\"approved\") if all checklist items are present, or decide(action=\"insufficient\", reason=\"<bullet list of gaps>\") if not."
+      "prompt": "Evaluate the prior researcher-with-source-acquisition loop's submission. Researcher loop id: $entity.instance. Call read_loop_result with that loop id to fetch the artifact, apply the active checklist AND the stabilisation gate (if the artifact's substrate_mutations contains any entry whose revision matches artifact.revision, the substrate just changed — decide(insufficient, reason=\"awaiting stabilisation; substrate mutated this revision, re-iterate against augmented corpus\") regardless of other gates). Otherwise call decide(action=\"approved\") if all checklist items are present, or decide(action=\"insufficient\", reason=\"<bullet list of gaps>\") if not."
     }
   ],
   "on_exit": [],

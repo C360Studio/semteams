@@ -27,9 +27,9 @@
       "model": "general",
       "tools": ["read_loop_result", "decide"],
       "properties": {
-        "prior_loop_id": "$entity.id"
+        "prior_loop_id": "$entity.instance"
       },
-      "prompt": "The dev-via-spec planner emitted a plan via decide(action=planned). Planner loop id: $entity.id (passed as prior_loop_id in your task properties). Call read_loop_result with that loop id to read the plan content (the decide reason field). Apply your completeness checklist per `20-completeness-checklist.md`. If every item is present and well-formed, call decide(action=approved). Otherwise call decide(action=insufficient, reason=\"<bullet list of gaps>\")."
+      "prompt": "The dev-via-spec planner emitted a plan via decide(action=planned). Planner loop id: $entity.instance (passed as prior_loop_id in your task properties). Call read_loop_result with that loop id to read the plan content (the decide reason field). Apply your completeness checklist per `20-completeness-checklist.md`. If every item is present and well-formed, call decide(action=approved). Otherwise call decide(action=insufficient, reason=\"<bullet list of gaps>\")."
     }
   ],
   "on_exit": [],

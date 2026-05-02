@@ -27,9 +27,9 @@
       "model": "general",
       "tools": ["read_loop_result", "decide"],
       "properties": {
-        "prior_loop_id": "$entity.id"
+        "prior_loop_id": "$entity.instance"
       },
-      "prompt": "The dev-via-spec challenger accepted the plan. Challenger loop id: $entity.id (passed as prior_loop_id in your task properties). Call read_loop_result with that loop id to read the challenger's verdict; the chain context is summarised in the verdict's reason field (the challenger summarises the plan it accepted). Synthesise the final epic-shaped seed_requirements list per your `10-output-contract.md`, grounding each final SR to a planner epic the challenger's reason cites. Terminate with decide(action=seed_requirements_emitted, reason=\"<final list>\"). No rule fires on your decision — your terminal closes the dev-via-spec arc."
+      "prompt": "The dev-via-spec challenger accepted the plan. Challenger loop id: $entity.instance (passed as prior_loop_id in your task properties). Call read_loop_result with that loop id to read the challenger's verdict; the chain context is summarised in the verdict's reason field (the challenger summarises the plan it accepted). Synthesise the final epic-shaped seed_requirements list per your `10-output-contract.md`, grounding each final SR to a planner epic the challenger's reason cites. Terminate with decide(action=seed_requirements_emitted, reason=\"<final list>\"). No rule fires on your decision — your terminal closes the dev-via-spec arc."
     }
   ],
   "on_exit": [],

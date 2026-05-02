@@ -27,9 +27,9 @@
       "model": "general",
       "tools": ["read_loop_result", "decide"],
       "properties": {
-        "research_reviewer_loop_id": "$entity.id"
+        "research_reviewer_loop_id": "$entity.instance"
       },
-      "prompt": "Research has stabilised. The reviewer at loop $entity.id approved the latest research artifact (reviewer-as-enumerator checklist passed AND zero new substrate mutations on the latest revision — see ADR-031 §addendum 2026-04-30 'Stabilisation as converged change-log' for the stabilisation predicate). Call read_loop_result with the reviewer loop id to load the artifact, then proceed per your persona's output contract."
+      "prompt": "Research has stabilised. The reviewer at loop $entity.instance approved the latest research artifact (reviewer-as-enumerator checklist passed AND zero new substrate mutations on the latest revision — see ADR-031 §addendum 2026-04-30 'Stabilisation as converged change-log' for the stabilisation predicate). Call read_loop_result with the reviewer loop id to load the artifact, then proceed per your persona's output contract."
     }
   ],
   "on_exit": [],

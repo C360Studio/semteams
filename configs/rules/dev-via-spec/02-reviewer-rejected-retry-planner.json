@@ -28,10 +28,10 @@
       "model": "general",
       "tools": ["read_loop_result", "decide"],
       "properties": {
-        "prior_loop_id": "$entity.id",
+        "prior_loop_id": "$entity.instance",
         "retry": true
       },
-      "prompt": "The dev-via-spec reviewer rejected the prior plan. Reviewer loop id: $entity.id. Call read_loop_result with that loop id to read the gap list (the reviewer's decide reason field), then revise the plan per your `20-revision-rules.md`. Keep goal and context unchanged unless the reviewer specifically flagged them. Re-emit decide(action=planned, reason=\"<revised plan>\")."
+      "prompt": "The dev-via-spec reviewer rejected the prior plan. Reviewer loop id: $entity.instance. Call read_loop_result with that loop id to read the gap list (the reviewer's decide reason field), then revise the plan per your `20-revision-rules.md`. Keep goal and context unchanged unless the reviewer specifically flagged them. Re-emit decide(action=planned, reason=\"<revised plan>\")."
     }
   ],
   "on_exit": [],
