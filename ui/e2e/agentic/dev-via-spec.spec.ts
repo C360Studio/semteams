@@ -9,7 +9,7 @@ import { test, expect } from "@playwright/test";
  * stabilisation rule (R3.2.2 rule_03) spawns the dev-via-spec-planner.
  * From there the dev-via-spec internal rule chain
  * (configs/rules/dev-via-spec/ rules 01/03/05) drives the four-role
- * handoff to architect-light terminal. This spec covers the *golden
+ * handoff to architect terminal. This spec covers the *golden
  * path* — every gate (reviewer + challenger) approves on first pass.
  * The retry rules (02 reviewer-rejected and 04 challenger-concerns)
  * are exercised structurally by the rule's max_iterations metadata
@@ -62,9 +62,9 @@ import { test, expect } from "@playwright/test";
  *   Loop I — dev-via-spec-challenger (first pass, golden path) →
  *            read_loop_result → decide(accept)
  *            → coordinator.next_action=accept → dev-via-spec
- *            rule_05 fires → spawn dev-via-spec-architect-light
+ *            rule_05 fires → spawn dev-via-spec-architect
  *
- *   Loop J — dev-via-spec-architect-light (terminal) →
+ *   Loop J — dev-via-spec-architect (terminal) →
  *            read_loop_result × 3 (challenger / planner /
  *            research-reviewer) →
  *            decide(seed_requirements_emitted) → terminal.
@@ -75,13 +75,13 @@ import { test, expect } from "@playwright/test";
  *     (1 researcher + 2 researcher-with-source-acquisition + 3
  *     research-reviewer + 1 dev-via-spec-planner + 1 dev-via-spec-
  *     reviewer + 1 dev-via-spec-challenger + 1 dev-via-spec-
- *     architect-light) — proves rules 01a, 02 (×2), 01b (×2), 03,
+ *     architect) — proves rules 01a, 02 (×2), 01b (×2), 03,
  *     dev-via-spec rules 01, 03, 05 all fired in order.
  *   - approval_required gate fires for add_source_repo on Loop C.
  *   - The dev-via-spec chain runs autonomously after the research
  *     arc settles (no second approval gate during dev-via-spec).
  *   - Final state: all ten loops complete; no eleventh loop
- *     appears (architect-light terminal does not re-trigger any rule).
+ *     appears (architect terminal does not re-trigger any rule).
  *
  * Required fixture: test/fixtures/journeys/dev-via-spec.yaml
  * Required compose profile: semsource (the SemSource container is
@@ -101,7 +101,7 @@ test.describe("Dev-via-Spec (R3.3)", () => {
   // 180s-for-7-loops baseline.
   test.setTimeout(270_000);
 
-  test("research → stabilisation → dev-via-spec planner / reviewer / challenger / architect-light", async ({
+  test("research → stabilisation → dev-via-spec planner / reviewer / challenger / architect", async ({
     page,
     request,
   }) => {
@@ -195,7 +195,7 @@ test.describe("Dev-via-Spec (R3.3)", () => {
     // autonomous: research arc completes (Loops C through F), the
     // stabilisation rule spawns the dev-via-spec-planner (Loop G),
     // and the dev-via-spec rules drive the four-role chain through
-    // architect-light terminal (Loop J).
+    // architect terminal (Loop J).
     // -----------------------------------------------------------------
     await page.getByTestId("approval-approve").click();
 
@@ -225,7 +225,7 @@ test.describe("Dev-via-Spec (R3.3)", () => {
     // -----------------------------------------------------------------
     // Step 8 — wait for ALL TEN loops to reach terminal complete
     // state. Critical assertions: dev-via-spec rules 01/03/05 must
-    // fire in order, ending with architect-light terminal.
+    // fire in order, ending with architect terminal.
     // -----------------------------------------------------------------
     const allTerminal = await pollUntil(async () => {
       const resp = await request.get("/teams-dispatch/loops");
@@ -237,7 +237,7 @@ test.describe("Dev-via-Spec (R3.3)", () => {
 
     expect(
       allTerminal,
-      "expected all 10 loops to reach terminal complete state (research arc + stabilisation + dev-via-spec planner / reviewer / challenger / architect-light)",
+      "expected all 10 loops to reach terminal complete state (research arc + stabilisation + dev-via-spec planner / reviewer / challenger / architect)",
     ).toBeTruthy();
 
     // -----------------------------------------------------------------
@@ -255,7 +255,7 @@ test.describe("Dev-via-Spec (R3.3)", () => {
     //   1 × dev-via-spec-planner                (Loop G — research rule 03)
     //   1 × dev-via-spec-reviewer               (Loop H — dev-via-spec rule 01)
     //   1 × dev-via-spec-challenger             (Loop I — dev-via-spec rule 03)
-    //   1 × dev-via-spec-architect-light        (Loop J — dev-via-spec rule 05)
+    //   1 × dev-via-spec-architect        (Loop J — dev-via-spec rule 05)
     // -----------------------------------------------------------------
     const finalLoops = await request
       .get("/teams-dispatch/loops")
@@ -287,7 +287,7 @@ test.describe("Dev-via-Spec (R3.3)", () => {
       (r) => r === "dev-via-spec-challenger",
     ).length;
     const architectCount = roles.filter(
-      (r) => r === "dev-via-spec-architect-light",
+      (r) => r === "dev-via-spec-architect",
     ).length;
 
     expect(
@@ -316,7 +316,7 @@ test.describe("Dev-via-Spec (R3.3)", () => {
     ).toBe(1);
     expect(
       architectCount,
-      `expected 1 dev-via-spec-architect-light loop (dev-via-spec rule 05: challenger→architect). Missing → challenger's decide(accept) did not propagate. roles=${JSON.stringify(roles)}`,
+      `expected 1 dev-via-spec-architect loop (dev-via-spec rule 05: challenger→architect). Missing → challenger's decide(accept) did not propagate. roles=${JSON.stringify(roles)}`,
     ).toBe(1);
 
     // -----------------------------------------------------------------
@@ -333,9 +333,9 @@ test.describe("Dev-via-Spec (R3.3)", () => {
 
     // -----------------------------------------------------------------
     // Step 11 — settle assertion: no eleventh loop appears. If
-    // architect-light's decide(seed_requirements_emitted) somehow
+    // architect's decide(seed_requirements_emitted) somehow
     // re-fires a dev-via-spec rule (regression where rule 01 or 03
-    // matches the architect-light role instead of planner/reviewer),
+    // matches the architect role instead of planner/reviewer),
     // an eleventh loop would appear.
     // -----------------------------------------------------------------
     await new Promise((r) => setTimeout(r, 2000));
@@ -344,14 +344,14 @@ test.describe("Dev-via-Spec (R3.3)", () => {
       .then((r) => r.json()) as unknown[];
     expect(
       settledList.length,
-      "architect-light terminal must not spawn an eleventh loop",
+      "architect terminal must not spawn an eleventh loop",
     ).toBe(10);
 
     // -----------------------------------------------------------------
     // Step 12 — verify the typed research.artifact.v1 payload was
     // published per R3.2.1 — three artifacts (one per researcher pass,
     // revisions 1/2/3). The dev-via-spec chain doesn't publish typed
-    // artifacts — its terminal output is the architect-light's
+    // artifacts — its terminal output is the architect's
     // decide(seed_requirements_emitted) reason field, retained on
     // the AGENT_LOOPS bucket.
     // -----------------------------------------------------------------
@@ -377,11 +377,11 @@ test.describe("Dev-via-Spec (R3.3)", () => {
     // Step 13 — Loop J's terminal state literal must be "complete".
     // -----------------------------------------------------------------
     const architectLoop = finalLoops.find(
-      (l) => l.role === "dev-via-spec-architect-light",
+      (l) => l.role === "dev-via-spec-architect",
     );
     expect(
       architectLoop,
-      "dev-via-spec-architect-light loop should exist",
+      "dev-via-spec-architect loop should exist",
     ).toBeTruthy();
     expect(architectLoop?.state).toBe("complete");
   });

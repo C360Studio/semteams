@@ -38,6 +38,6 @@ Termination is the `decide` call itself — no completion message
 needed. Downstream rules match on `coordinator.next_action="planned"`
 to spawn the reviewer.
 
-Do not enumerate tasks (that is downstream of the architect-light
+Do not enumerate tasks (that is downstream of the architect
 in SemSpec; we deliberately do not port it). Do not propose
 implementation. Do not call `submit_work`. Use `decide` exclusively.

@@ -1,77 +1,105 @@
-# Completeness checklist
+# Completeness checklist (substance-grounded)
 
 > Port lineage: SemSpec plan-reviewer's verdict criteria
-> (`prompt/domain/software.go:442-467`). Adapted: SOP-grounding
-> replaced with plan-content-grounding (the plan's own actor
-> citations and integration references are what you check
-> against). One-round checklist (SemSpec runs two rounds; the
-> second adds requirements/scenarios/architecture coverage — we
-> deliberately scope to one for R3.3). Cross-grounding to the
-> upstream research artifact is deferred to R3.4 pending
-> rule-engine support for cross-entity property passthrough
-> (ADR-031 §addendum 2026-04-30 R3.3).
+> (`prompt/domain/software.go:442-467`). Adapted: SemSpec checks
+> against literal markdown-section headers because their downstream
+> can be a parser. Our downstream is always another LLM (challenger,
+> architect), so we evaluate **substance, not format**. Plans
+> may be prose, structured prose, or any shape that communicates the
+> required substance — your job is to read for content, not chase
+> headers. ADR-031 §addendum 2026-05-02 captures the rationale.
 
-Walk every item. Mark each present + well-formed, missing, or
-malformed. Approve only when every item is present + well-formed.
+For each question below, decide: does the plan content answer this?
+"Yes, clearly" → checked. "Implicit but I can't tell which sentence
+addresses it" → flag as a gap with the specific question. "No" →
+gap. **Approve when every substance question is answered in a way
+the next agent (challenger) could verify by re-reading the plan.**
 
 ## 1. Goal
 
-- [ ] Plan has a Goal section with a single concrete sentence.
-- [ ] The goal names the target interface, endpoint, component, or
-      capability — not just "build X."
-- [ ] The goal is testable in principle — a downstream agent could
-      tell whether it has been achieved.
+- [ ] **Is a target capability named concretely?** Look for a single
+      identifiable outcome — a named interface, endpoint, component,
+      or capability. "Build a driver" alone is not concrete; "Implement
+      X interface backed by Y, exposing Z" is. The plan can phrase
+      this however it wants — header, lead sentence, opening
+      paragraph — as long as the answer is unambiguous.
+- [ ] **Is the goal testable in principle?** A downstream agent
+      should be able to tell whether a working implementation has
+      achieved it.
 
 ## 2. Context
 
-- [ ] Plan has a Context section explaining the "why."
-- [ ] At least one actor is named explicitly in the context (the
-      plan's own actor citations from its upstream research
-      input).
-- [ ] The context references the integration boundary the work
-      sits at (the actors-flow direction the plan enumerates).
+- [ ] **Does the plan motivate the work?** The plan should say *why*
+      the work matters — system motivation, downstream consumer need,
+      etc. Doesn't have to be a section called Context.
+- [ ] **Is at least one actor named explicitly?** The plan's
+      narrative should reference the upstream research artifact's
+      actors. "The driver" alone isn't an actor; "the OSH driver
+      framework's `IDriver` interface" is. The actor citation can
+      be inline anywhere in the plan content.
+- [ ] **Is the integration boundary the work sits at named?** Some
+      data flows somewhere; that flow direction (read-side vs
+      write-side) should be evident from the plan.
 
 ## 3. Scope
 
-- [ ] Scope has `include` / `exclude` / `do_not_touch` bullet lists
-      (any of them may be empty, but all three are present).
-- [ ] Every integration point the plan's context names has at
-      least one corresponding scope.include item — the plan
-      touches every flow it cites, OR the plan explicitly
-      excludes it with a one-line rationale.
-- [ ] No scope.include item is an orphan — every entry should be
-      reachable from an actor or integration boundary the plan
-      cites.
+- [ ] **Is what's IN-scope identifiable?** The plan should communicate
+      what the work delivers. Bullet lists are fine. Prose is fine.
+      A pipeline description with each stage named is fine. What
+      matters is that you can list the items.
+- [ ] **Is what's OUT-of-scope identifiable?** The plan should make
+      clear what isn't being built — explicit exclusion is preferred,
+      but a tightly-scoped IN list with no fuzzy edges is also fine.
+- [ ] **Does each artifact integration point map to scope?** Walk the
+      research artifact's `integration_points` (you can see them via
+      the plan's references). Each one is either covered by an
+      in-scope item OR explicitly excluded with a one-line rationale.
+      Missing integration points without rationale is a gap.
 
 ## 4. Epic decomposition
 
-- [ ] Plan has an Epics section with at least one epic.
-- [ ] Each epic cites which integration boundary or actor it
-      addresses (the plan's own internal coherence — every epic
-      grounds against something the context cites).
-- [ ] Each epic has a one-line scope describing what work is in
-      scope for that epic specifically.
-- [ ] No epic is purely aspirational — "Build an X" without scope
-      is malformed; "Implement X interface backed by Y, exposing Z"
-      is well-formed (interface-level granularity).
-- [ ] No two epics overlap in scope without an explicit boundary
-      note.
+- [ ] **Does the plan decompose into epics?** Some unit of work
+      below the goal level. Could be called epics, milestones, work
+      packages — the noun doesn't matter; the decomposition does.
+- [ ] **Is each epic at interface-level granularity?** "Build an X"
+      without scope is too coarse. "Implement X interface backed by
+      Y, exposing Z" is at the right grain. Apply this question to
+      each unit of work in the plan.
+- [ ] **Does each epic ground against an actor or integration
+      boundary the plan cites?** No epic should be aspirational —
+      every epic should connect to something the context names.
+- [ ] **Are epics non-overlapping (or with explicit boundaries)?**
+      Two epics covering the same scope is malformed unless the
+      plan explicitly draws the boundary between them.
 
 ## 5. Revision-respect (only on retry)
 
-- [ ] If this is a retry pass (the planner's `decide` reason cited
-      a revision number > 1, or the prior planner loop's reason
-      field carried prior reviewer findings): every prior finding
-      from the upstream loop is addressed. Cross-reference your
-      own prior `insufficient` reason if you can read it.
-- [ ] If a prior finding genuinely was incorrect, the planner's
-      revision still adds scope coverage that disambiguates.
-      A pure rebuttal without scope change is malformed.
+- [ ] **Does the revised plan address each prior finding?** If the
+      planner was respawned, the prior reviewer/challenger reason
+      field carries the gaps. Each prior gap is either resolved with
+      visible scope/epic change OR explicitly disambiguated in the
+      revised plan.
+- [ ] **No silent rebuttal.** If the planner's revision merely
+      re-asserts a prior position without scope change, that's a
+      gap.
 
 ## Verdict
 
-If every item above is checked: approved.
+If every question above has a clear "yes" answer in the plan content:
+**approved**.
 
-Otherwise: insufficient, with the specific failing items as your
-bullet list. Do not generalise; cite the exact missing or malformed
-artifact + reason.
+If one or more substance questions can't be answered from the plan:
+**insufficient**, with bullet list naming each unanswered question
+and what specifically is missing.
+
+**Do not** reject for format. The plan does not need a `### Goal`
+section; it needs a clear goal. The plan does not need an
+`include / exclude / do_not_touch` triple bullet list; it needs a
+clear in/out delineation. If you find yourself rejecting because
+"the plan doesn't have section X" but the plan's content
+*answers* the substance question that section would have answered,
+**approve**.
+
+You evaluate. You do not plan. If a gap requires a structural
+decision (which epic boundary is right?), say so explicitly and let
+the planner choose — do not author the choice for them.

@@ -125,7 +125,7 @@ port roles and patterns; we assemble our own pipeline.
 Concretely, the port lives at:
 
 - `configs/personas/fragments/dev-via-spec/` — ported persona
-  fragments (reviewer, challenger, architect-light)
+  fragments (reviewer, challenger, architect)
 - `configs/dev-via-spec.json` — flow config wiring the personas
 - `configs/rules/dev-via-spec/` — rules that drive transitions
   within the dev-via-spec arc (plan → review → execute)
@@ -391,7 +391,7 @@ no version coupling, single-product cadence.
 |---|---|
 | **R3.1** | `cmd/semteams/research.Artifact` payload type + `RegisterPayloads(reg)` wired in `main.go`. Type-only; no producer/consumer yet. Unit tests for round-trip + Validate. |
 | **R3.2** | Mode-transition machinery: a tool/executor that emits the artifact onto a stable subject and writes the marker triples; a stabilisation rule that fires when the predicate is true; a coordinator transition rule that swaps personas. |
-| **R3.3** | Dev-via-spec persona fragments (planner / reviewer / challenger / architect-light), flow config, dev-via-spec rules. Configs only. |
+| **R3.3** | Dev-via-spec persona fragments (planner / reviewer / challenger / architect), flow config, dev-via-spec rules. Configs only. |
 | **R3.4** | End-to-end OSH journey. Unbounded prompt → R1+R2.5 chain → stabilisation → mode transition → dev-via-spec → epic-shaped output. The demo. |
 
 Each slice ships a Playwright spec proving the marginal capability;
@@ -541,7 +541,7 @@ prompts.
 |---|---|---|
 | `persona/` package + file-loader | Stable since beta.9; no new primitives in beta.27. | Use the existing digit-prefix fragment-file pattern. |
 | Built-in tool executors (`processor/agentic-tools/executors/`) | `read_loop_result`, `decide`, `emit_diagnosis`, `personas`, `rules`, `flows`, `flow_templates`, `flow_monitor`, `bash`, `github_*`, `graph_query`, `httprequest`, `web_search`, `component_catalog`. | All four R3.3 roles run on `read_loop_result` + `decide` only — no new SemTeams-local tool needed. |
-| `write_artifact` / `read_artifact` / `list_artifacts` | Still listed in ADR-028 §"What's not built here." | The dev-via-spec terminal output stays on the same pattern as R3.2.1: loop completion message + `decide` for downstream rule routing. When the artifact-suite ships, we evaluate migrating the architect-light's terminal output. |
+| `write_artifact` / `read_artifact` / `list_artifacts` | Still listed in ADR-028 §"What's not built here." | The dev-via-spec terminal output stays on the same pattern as R3.2.1: loop completion message + `decide` for downstream rule routing. When the artifact-suite ships, we evaluate migrating the architect's terminal output. |
 | Cron-rule primitive (beta.27) | New, additive. | Not relevant to R3.3 — the dev-via-spec chain is event-driven on `decide` outcomes, not time-triggered. |
 
 ### What we port from SemSpec
@@ -554,7 +554,7 @@ files at `~/Code/c360/semspec/prompt/`:
 | `domain/software.go:336` (planner) | `configs/personas/fragments/dev-via-spec-planner/` | "Decompose intent into a development plan with goal/context/scope; revision path on reviewer rejection." | Input is a stable `research.Artifact` (with `actors[]`, `integration_points[]`, `seed_requirements[]`), not a freshly-shaped intent. |
 | `domain/software.go:426` (plan-reviewer) | `configs/personas/fragments/dev-via-spec-reviewer/` | "Reviewer-as-enumerator: walk an explicit checklist, decide approved/insufficient with bullet-list gaps." | One-round review (not SemSpec's R1+R2 split); checklist is dev-via-spec-shaped (epic decomposition, scope coherence) not SOP-driven. |
 | `domain/software.go:575` + `:1445` (adversarial QA) | `configs/personas/fragments/dev-via-spec-challenger/` | "Adversarial: find what could go wrong, not approve." Standalone role per ADR-031's four-role plan. | Operates on a planner output (not implementation/test artifacts). Probes for decomposition coarseness, scope creep, missing integration concerns. |
-| `domain/software.go:832` (architect) | `configs/personas/fragments/dev-via-spec-architect-light/` | "Map plan to actors / integration points / decisions with rationale." | Lighter — the research artifact already enumerates actors and integration points; the architect's job is to ratify those into final epic-shaped seed requirements. No greenfield architecture decisions. |
+| `domain/software.go:832` (architect) | `configs/personas/fragments/dev-via-spec-architect/` | "Map plan to actors / integration points / decisions with rationale." | Lighter — the research artifact already enumerates actors and integration points; the architect's job is to ratify those into final epic-shaped seed requirements. No greenfield architecture decisions. |
 
 ### What we explicitly do NOT port
 
@@ -579,10 +579,10 @@ planner.decide(planned)                         → rule_01 → reviewer
 reviewer.decide(approved)                       → rule_03 → challenger
 reviewer.decide(insufficient)                   → rule_02 → planner (retry, max_iter=5)
                                                   ↓
-challenger.decide(accept)                       → rule_05 → architect-light
+challenger.decide(accept)                       → rule_05 → architect
 challenger.decide(concerns_raised)              → rule_04 → planner (retry, max_iter=5)
                                                   ↓
-architect-light.decide(seed_requirements_emitted) → terminal (no rule fires)
+architect.decide(seed_requirements_emitted) → terminal (no rule fires)
 ```
 
 The `dev-via-spec` rules dir is loaded only by the new
@@ -595,10 +595,10 @@ dev-via-spec rule loads to spawn an eighth loop.
 
 ### What we ship
 
-- Four persona fragment dirs under `configs/personas/fragments/dev-via-spec-*/`. The `dev-via-spec-planner` stub introduced in R3.2.2 is replaced with the real planner contract; three dirs are new (reviewer, challenger, architect-light).
+- Four persona fragment dirs under `configs/personas/fragments/dev-via-spec-*/`. The `dev-via-spec-planner` stub introduced in R3.2.2 is replaced with the real planner contract; three dirs are new (reviewer, challenger, architect).
 - Five rule files under `configs/rules/dev-via-spec/`.
 - `configs/e2e-dev-via-spec.json` flow config — extends R3.2.2's research-mode-transition config with the new rule chain.
-- `test/fixtures/journeys/dev-via-spec.yaml` mock-llm fixture covering the chain through architect-light terminal.
+- `test/fixtures/journeys/dev-via-spec.yaml` mock-llm fixture covering the chain through architect terminal.
 - `ui/e2e/agentic/dev-via-spec.spec.ts` Playwright journey assertion.
 
 Configs only per ADR-031 — zero Go changes.
@@ -632,7 +632,7 @@ that is the intended shape:
 research-reviewer.loop  ←  planner reads        (R3.2.2 rule 03 forwards prior_loop_id)
 planner.loop            ←  reviewer reads       (dev-via-spec rule 01 forwards prior_loop_id)
 reviewer.loop           ←  challenger reads     (dev-via-spec rule 03 forwards prior_loop_id)
-challenger.loop         ←  architect-light reads(dev-via-spec rule 05 forwards prior_loop_id)
+challenger.loop         ←  architect reads(dev-via-spec rule 05 forwards prior_loop_id)
 ```
 
 Each downstream role grounds against what its prior role
@@ -658,7 +658,7 @@ cross-grounding that this section argues against.
 
 **If R3.4's OSH journey reveals drift, the right mitigation is a
 structural terminal validator, not forward-prop.** A rule (or
-thin Go checker) fires after architect-light emits and asserts:
+thin Go checker) fires after architect emits and asserts:
 
 - Every final seed_requirement cites an actor that exists in the
   original research artifact's `actors[]`.
@@ -695,9 +695,9 @@ R3.3 rather than R3.2.2.
 
 ### Migration posture
 
-- **When upstream ships `write_artifact`** (ADR-028 follow-up): evaluate migrating the architect-light's terminal output onto the typed artifact-store path. The migration is replacing a `decide(action="seed_requirements_emitted")` terminator with a structured `write_artifact` call; persona content adapts; rules unchanged.
+- **When upstream ships `write_artifact`** (ADR-028 follow-up): evaluate migrating the architect's terminal output onto the typed artifact-store path. The migration is replacing a `decide(action="seed_requirements_emitted")` terminator with a structured `write_artifact` call; persona content adapts; rules unchanged.
 - **If R3.4's OSH journey reveals coverage gaps** (planner consistently mis-decomposing, reviewer missing the same class of failure): port more from SemSpec — the failure-class taxonomy (`error_categories.json`) maps to negative-memory-injection in reviewer prompts; the second-round review (R2) maps to a dual reviewer fragment. Document in a follow-up R3.4 addendum.
-- **If a future external consumer wants the dev-via-spec output** (UI dashboard rendering plans, audit observer): add an `output/file` or `output/httppost` component subscribed to whatever the architect-light terminal emits; additive.
+- **If a future external consumer wants the dev-via-spec output** (UI dashboard rendering plans, audit observer): add an `output/file` or `output/httppost` component subscribed to whatever the architect terminal emits; additive.
 
 ### Demo discipline (load-bearing)
 
@@ -726,7 +726,7 @@ R3.4a's first real-LLM OSH smoke ran the full chain end-to-end against
 Anthropic claude-sonnet-4-6. 22 loops total. The chain machinery
 worked correctly: dispatch → researcher arc (1 dispatch + 2
 source-acquisition + 3 reviewer) → mode-transition → dev-via-spec arc
-(7 planner + 6 reviewer + 3 challenger). Never reached architect-light
+(7 planner + 6 reviewer + 3 challenger). Never reached architect
 terminal. Two findings drive the next slice and the next big design.
 
 ### Finding 1 (R3.4b, fix now): format-compliance is Goodhart payload
@@ -744,7 +744,7 @@ Why this matters at the design layer:
 SemSpec's checklist works because their downstream consumers can be
 parsers. Format compliance is load-bearing for them. **Our chain's
 downstream is always another LLM**: reviewer's reason is read by
-challenger; challenger's by architect-light; architect-light's
+challenger; challenger's by architect; architect's
 terminal is consumed by future external observers (UI dashboards,
 audit). LLMs reading prose extract substance fine. Format compliance
 substitutes for substance evaluation — a Goodhart loader the chain
@@ -752,7 +752,7 @@ optimises against without earning anything for any consumer.
 
 The fix is narrow:
 
-- Reviewer / challenger / planner / architect-light contracts get
+- Reviewer / challenger / planner / architect contracts get
   rewritten to ask **substance questions, not format questions**.
 - Substance gates STAY (is a goal named? are actors enumerated from
   the upstream artifact? is each integration_point covered by a
@@ -818,7 +818,7 @@ high reasoning_effort, or claude-opus when accessible).
 
 | Slice | Ships |
 |---|---|
-| **R3.4b** (next) | Loosen the four dev-via-spec persona contracts to ask substance, not format. Capture R3.4 patterns into Taskfile (smoke task, watcher script in repo). Re-smoke once. If chain converges to architect-light terminal, R3.4 is done. |
+| **R3.4b** (next) | Loosen the four dev-via-spec persona contracts to ask substance, not format. Capture R3.4 patterns into Taskfile (smoke task, watcher script in repo). Re-smoke once. If chain converges to architect terminal, R3.4 is done. |
 | **R3.5** (future) | Add `needs_clarification` terminal to all dev-via-spec personas. New `configs/rules/coordinator/` rule routes it. Coordinator persona gets workspace-manager scope. Add `coordination` capability to `model_registry.capabilities`. Update ADR-031 with the third terminal. |
 
 R3.5 is **not pre-built**; R3.4b's smoke will tell us whether the
