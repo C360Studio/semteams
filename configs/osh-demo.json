@@ -241,6 +241,12 @@
           "read_loop_result",
           "query_entity",
           "query_entities",
+          "query_relationships",
+          "query_neighbors",
+          "query_by_type",
+          "list_components",
+          "web_search",
+          "http_request",
           "decide",
           "add_source_repo",
           "emit_research_artifact"
