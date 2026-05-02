@@ -32,8 +32,6 @@ import (
 	rulepkg "github.com/c360studio/semstreams/processor/rule"
 	"github.com/c360studio/semstreams/service"
 	"github.com/c360studio/semstreams/types"
-
-	"github.com/c360studio/semteams/cmd/semteams/research"
 )
 
 // Build information constants
@@ -137,11 +135,9 @@ func run() error {
 	}
 
 	// 9a.1. Register SemTeams-local product payloads on top of the
-	// framework's first-party set. R3.1 of ADR-031: research.Artifact
-	// is a SemTeams-local payload (no upstream consumer). Add further
-	// product-local registrations here as the dev-via-spec slices
-	// (R3.2/R3.3) land.
-	if err := research.RegisterPayloads(payloadReg); err != nil {
+	// framework's first-party set. See registerProductPayloads for the
+	// full set and their ADR references.
+	if err := registerProductPayloads(payloadReg); err != nil {
 		return fmt.Errorf("register product payloads: %w", err)
 	}
 
