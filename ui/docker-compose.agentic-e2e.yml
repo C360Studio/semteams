@@ -185,6 +185,14 @@ services:
     environment:
       - MODEL_ALIAS=qwen3-8b
       - MODEL_REASONING=auto
+      # MODEL_CONTEXT (-c) is divided across MODEL_PARALLEL slots.
+      # Internal-graph capabilities (community_summary, anomaly_review)
+      # send modest prompts (~2k); summarization can hit ~16k. We size
+      # for the worst case + headroom: 32k total / 2 slots = 16k per
+      # slot. Without this the image fell back to llama-server's 512
+      # default and every call ≥512 tokens 400'd.
+      - MODEL_CONTEXT=32768
+      - MODEL_PARALLEL=2
     networks:
       - agentic-net
     healthcheck:

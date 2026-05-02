@@ -84,7 +84,7 @@
       }
     },
     "defaults": {
-      "model": "seminstruct",
+      "model": "claude-sonnet",
       "capability": "general"
     },
     "capabilities": {
