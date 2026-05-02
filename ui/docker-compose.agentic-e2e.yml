@@ -106,6 +106,12 @@ services:
       # that don't list the tool in agentic-tools.allowed_tools.
       - SEMTEAMS_SEMSOURCE_NAMESPACES=research
       - SEMTEAMS_SEMSOURCE_DEFAULT_NAMESPACE=research
+      # Cloud-LLM API keys for R3.4 OSH demo (osh-demo.json's
+      # gemini-flash + claude-sonnet endpoints). Empty defaults keep
+      # mock-llm journeys unaffected — the model_registry endpoints
+      # they use don't reference these env vars.
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
     volumes:
       - ${BACKEND_CONTEXT:-..}/configs/${AGENTIC_CONFIG:-e2e-agentic.json}:/etc/semstreams/config.json:ro
       - ${BACKEND_CONTEXT:-..}/testdata:/data/testdata:ro
@@ -163,6 +169,57 @@ services:
       interval: 5s
       timeout: 3s
       retries: 12
+
+  # SemInstruct — local instruct-tier inference (llama-server with a
+  # baked GGUF). Profile-gated under `local-models` so existing
+  # mock-llm journeys stay slim. R3.4's OSH demo binds it as the
+  # destination for every internal-graph LLM capability
+  # (community_summary, anomaly_review, summarization, etc.) per
+  # ADR-031 §addendum 2026-05-XX. The :qwen3-8b tag is deliberate —
+  # graph-persisting capabilities are on the 8B floor to avoid
+  # garbage in the substrate.
+  seminstruct:
+    image: ${SEMINSTRUCT_IMAGE:-ghcr.io/c360studio/seminstruct:qwen3-8b}
+    container_name: semteams-ui-agentic-seminstruct
+    profiles: ["local-models"]
+    environment:
+      - MODEL_ALIAS=qwen3-8b
+      - MODEL_REASONING=auto
+      # MODEL_CONTEXT (-c) is divided across MODEL_PARALLEL slots.
+      # Internal-graph capabilities (community_summary, anomaly_review)
+      # send modest prompts (~2k); summarization can hit ~16k. We size
+      # for the worst case + headroom: 32k total / 2 slots = 16k per
+      # slot. Without this the image fell back to llama-server's 512
+      # default and every call ≥512 tokens 400'd.
+      - MODEL_CONTEXT=32768
+      - MODEL_PARALLEL=2
+    networks:
+      - agentic-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8083/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 6
+      start_period: 60s
+
+  # SemEmbed — local embedding-tier inference (fastembed-rs + ONNX).
+  # Profile-gated under `local-models`. R3.4's OSH demo binds it as
+  # the `embedding` capability so every new entity vector is local
+  # rather than a cloud round-trip.
+  semembed:
+    image: ${SEMEMBED_IMAGE:-ghcr.io/c360studio/semembed:latest}
+    container_name: semteams-ui-agentic-semembed
+    profiles: ["local-models"]
+    environment:
+      - SEMEMBED_MODEL=Snowflake/snowflake-arctic-embed-s
+    networks:
+      - agentic-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
 
   # SemTeams UI (same as the non-agentic stack)
   ui:

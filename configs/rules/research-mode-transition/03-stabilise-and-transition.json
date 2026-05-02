@@ -2,7 +2,7 @@
   "id": "research_stabilise_and_transition",
   "type": "expression",
   "name": "Research Stabilised → Transition to Dev-via-Spec",
-  "description": "When the research-reviewer emits decide(action=approved), the research arc has stabilised — the reviewer's persona enforces the stabilisation predicate (reviewer-as-enumerator checklist passes AND the latest revision had no new substrate mutations) before approving. This rule fires on that signal and spawns the dev-via-spec planner specialist, transitioning the loop into dev-via-spec mode. R3.2.2 of the ADR-031 phasing introduced the persona-swap gate; R3.3 (ADR-031 §addendum 2026-04-30 'R3.3 dev-via-spec port') replaced the planner stub with the real four-role chain (planner / reviewer / challenger / architect-light). The dev-via-spec rules in configs/rules/dev-via-spec/ drive the chain forward; this rule is the entry point.",
+  "description": "When the research-reviewer emits decide(action=approved), the research arc has stabilised — the reviewer's persona enforces the stabilisation predicate (reviewer-as-enumerator checklist passes AND the latest revision had no new substrate mutations) before approving. This rule fires on that signal and spawns the dev-via-spec planner specialist, transitioning the loop into dev-via-spec mode. R3.2.2 of the ADR-031 phasing introduced the persona-swap gate; R3.3 (ADR-031 §addendum 2026-04-30 'R3.3 dev-via-spec port') replaced the planner stub with the real four-role chain (planner / reviewer / challenger / architect). The dev-via-spec rules in configs/rules/dev-via-spec/ drive the chain forward; this rule is the entry point.",
   "enabled": true,
   "conditions": [
     {
@@ -27,9 +27,9 @@
       "model": "general",
       "tools": ["read_loop_result", "decide"],
       "properties": {
-        "research_reviewer_loop_id": "$entity.id"
+        "research_reviewer_loop_id": "$entity.instance"
       },
-      "prompt": "Research has stabilised. The reviewer at loop $entity.id approved the latest research artifact (reviewer-as-enumerator checklist passed AND zero new substrate mutations on the latest revision — see ADR-031 §addendum 2026-04-30 'Stabilisation as converged change-log' for the stabilisation predicate). Call read_loop_result with the reviewer loop id to load the artifact, then proceed per your persona's output contract."
+      "prompt": "Research has stabilised. The reviewer at loop $entity.instance approved the latest research artifact (reviewer-as-enumerator checklist passed AND zero new substrate mutations on the latest revision — see ADR-031 §addendum 2026-04-30 'Stabilisation as converged change-log' for the stabilisation predicate). Call read_loop_result with the reviewer loop id to load the artifact, then proceed per your persona's output contract."
     }
   ],
   "on_exit": [],

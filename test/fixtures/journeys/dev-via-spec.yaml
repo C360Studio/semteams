@@ -7,7 +7,7 @@ description: |
   approve), then the stabilisation rule (R3.2.2 rule_03) spawns the
   dev-via-spec-planner. From there the dev-via-spec internal rule
   chain (configs/rules/dev-via-spec/ rules 01/03/05) drives the four-
-  role handoff to architect-light terminal. This fixture exercises
+  role handoff to architect terminal. This fixture exercises
   the *golden path* — every gate (reviewer + challenger) approves on
   first pass. Retry paths (rules 02 and 04) are covered by additional
   fixtures or follow-up specs.
@@ -72,11 +72,11 @@ description: |
      23. tool_call: read_loop_result (placeholder; tool errors)
      24. tool_call: decide(accept, reason=<no concerns>)
          → coordinator.next_action=accept → dev-via-spec rule_05 fires
-         (challenger → architect-light handoff).
+         (challenger → architect handoff).
 
-    Loop J — dev-via-spec-architect-light (terminal)
+    Loop J — dev-via-spec-architect (terminal)
      25. tool_call: read_loop_result (placeholder; tool errors —
-         architect-light's three reads are placeholders that all error,
+         architect's three reads are placeholders that all error,
          consumed by the next canned turn)
      26. tool_call: read_loop_result (placeholder; tool errors)
      27. tool_call: read_loop_result (placeholder; tool errors)
@@ -430,10 +430,10 @@ responses:
       arguments_json: |
         {
           "action": "accept",
-          "reason": "Probed for six failure classes; no actionable concerns raised. (1) Decomposition coarseness: E1/E2/E3 each touch a single integration boundary (Meshtastic-read / OGC-write / lifecycle); no epic spans both directions. (2) Scope creep: every scope.include item maps to an artifact actor + integration point; no unmotivated additions. (3) Missing failure mode: E3 explicitly owns the radio-disconnect case for the asynchronous Meshtastic→driver flow. (4) Unaccounted integration: both artifact integration_points are owned by an epic. (5) Goal/scope coherence: scope items deliver the goal; goal motivates context's actor citations. (6) Revision-respect: not applicable — first pass. The plan is well-formed and ready for the architect-light to ratify."
+          "reason": "Probed for six failure classes; no actionable concerns raised. (1) Decomposition coarseness: E1/E2/E3 each touch a single integration boundary (Meshtastic-read / OGC-write / lifecycle); no epic spans both directions. (2) Scope creep: every scope.include item maps to an artifact actor + integration point; no unmotivated additions. (3) Missing failure mode: E3 explicitly owns the radio-disconnect case for the asynchronous Meshtastic→driver flow. (4) Unaccounted integration: both artifact integration_points are owned by an epic. (5) Goal/scope coherence: scope items deliver the goal; goal motivates context's actor citations. (6) Revision-respect: not applicable — first pass. The plan is well-formed and ready for the architect to ratify."
         }
 
-  # ---------- Loop J: dev-via-spec-architect-light (terminal) ----------
+  # ---------- Loop J: dev-via-spec-architect (terminal) ----------
 
   - tool_call:
       name: read_loop_result
@@ -461,5 +461,5 @@ responses:
       arguments_json: |
         {
           "action": "seed_requirements_emitted",
-          "reason": "Final seed requirements:\n\nSR1 — Implement the Meshtastic packet decoder normalising LoRa mesh packets into an internal observation envelope.\n  derives from: planner epic E1\n  actors: Meshtastic radio, OSH driver framework\n  integration: Meshtastic radio → OSH driver (direction: read)\n\nSR2 — Implement the OGC CS observation publisher exposing the IDriver interface, emitting observation messages and system descriptions.\n  derives from: planner epic E2\n  actors: OSH driver framework, OGC CS endpoints\n  integration: OSH driver → OGC CS endpoints (direction: write)\n\nSR3 — Implement IDriver lifecycle hooks (start/stop) plus the radio-disconnect failure mode handler.\n  derives from: planner epic E3\n  actors: OSH driver framework, Meshtastic radio\n  integration: internal — lifecycle + failure-mode coverage spanning the read-side flow.\n\nThe dev-via-spec arc closes here. All three final seed requirements ground against artifact actors and integration points; no flagged scope-without-grounding entries. Three planner epics map to three SRs at interface granularity; no merging or splitting at the architect-light gate."
+          "reason": "Final seed requirements:\n\nSR1 — Implement the Meshtastic packet decoder normalising LoRa mesh packets into an internal observation envelope.\n  derives from: planner epic E1\n  actors: Meshtastic radio, OSH driver framework\n  integration: Meshtastic radio → OSH driver (direction: read)\n\nSR2 — Implement the OGC CS observation publisher exposing the IDriver interface, emitting observation messages and system descriptions.\n  derives from: planner epic E2\n  actors: OSH driver framework, OGC CS endpoints\n  integration: OSH driver → OGC CS endpoints (direction: write)\n\nSR3 — Implement IDriver lifecycle hooks (start/stop) plus the radio-disconnect failure mode handler.\n  derives from: planner epic E3\n  actors: OSH driver framework, Meshtastic radio\n  integration: internal — lifecycle + failure-mode coverage spanning the read-side flow.\n\nThe dev-via-spec arc closes here. All three final seed requirements ground against artifact actors and integration points; no flagged scope-without-grounding entries. Three planner epics map to three SRs at interface granularity; no merging or splitting at the architect gate."
         }

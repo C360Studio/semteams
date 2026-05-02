@@ -1,8 +1,8 @@
 {
   "id": "dev_via_spec_challenger_accept_to_architect",
   "type": "expression",
-  "name": "Dev-via-spec Challenger Accept → Architect-light Handoff",
-  "description": "When the dev-via-spec-challenger emits decide(action=accept), the adversarial gate has passed and the plan is committed. This rule fires on that signal and spawns the dev-via-spec-architect-light specialist for the final shaping pass — mapping the planner's epic decomposition to the research artifact's actors and integration points and emitting the final epic-shaped seed_requirements list. The architect-light's decision is terminal — no further rule fires. R3.3 of the ADR-031 phasing.",
+  "name": "Dev-via-spec Challenger Accept → Architect Handoff",
+  "description": "When the dev-via-spec-challenger emits decide(action=accept), the adversarial gate has passed and the plan is committed. This rule fires on that signal and spawns the dev-via-spec-architect for the curation pass — extracting the chain consensus from the challenger's accept reason, structuring it via emit_dev_via_spec_artifact (R3.4b), which renders a human-readable markdown spec to docs/specs/ and mints marker triples on the calling loop. The architect's decide(seed_requirements_emitted) is terminal — no further rule fires. ADR-031 §addendum 2026-05-02.",
   "enabled": true,
   "conditions": [
     {
@@ -23,21 +23,21 @@
     {
       "type": "publish_agent",
       "subject": "agent.task.dev-via-spec-architect",
-      "role": "dev-via-spec-architect-light",
+      "role": "dev-via-spec-architect",
       "model": "general",
-      "tools": ["read_loop_result", "decide"],
+      "tools": ["read_loop_result", "emit_dev_via_spec_artifact", "decide"],
       "properties": {
-        "prior_loop_id": "$entity.id"
+        "prior_loop_id": "$entity.instance"
       },
-      "prompt": "The dev-via-spec challenger accepted the plan. Challenger loop id: $entity.id (passed as prior_loop_id in your task properties). Call read_loop_result with that loop id to read the challenger's verdict; the chain context is summarised in the verdict's reason field (the challenger summarises the plan it accepted). Synthesise the final epic-shaped seed_requirements list per your `10-output-contract.md`, grounding each final SR to a planner epic the challenger's reason cites. Terminate with decide(action=seed_requirements_emitted, reason=\"<final list>\"). No rule fires on your decision — your terminal closes the dev-via-spec arc."
+      "prompt": "The dev-via-spec challenger accepted the plan. Challenger loop id: $entity.instance (passed as prior_loop_id in your task properties). Call read_loop_result with that loop id to read the challenger's verdict; the chain context is summarised in the verdict's reason field. Extract the chain's substance (goal, context, actors, integration_points, seed_requirements as epic-shaped scope items, provenance loop_ids) and call emit_dev_via_spec_artifact with structured args per your `10-output-contract.md`. The tool renders the markdown spec artifact to docs/specs/ and mints marker triples for downstream audit. Terminate with decide(action=seed_requirements_emitted, reason=\"spec emitted: <slug>. <one-line summary>\"). No rule fires on your decision — your terminal closes the dev-via-spec arc."
     }
   ],
   "on_exit": [],
   "metadata": {
     "phase": "R3.3",
     "adr": "docs/adr/031-research-flow-and-semspec-handoff.md",
-    "pattern": "architect-light (ported from SemSpec architect, scoped down — research artifact provided actors/integration_points)",
-    "terminal_role_note": "architect-light's decide(seed_requirements_emitted) is terminal. No rule matches it. Adding a downstream rule (e.g. publishing to an external consumer) is additive — the typed payload contract for that emission would be a follow-up ADR-031 §addendum, mirroring R3.2.1's emit_research_artifact pattern.",
-    "cross_grounding_caveat": "Same caveat as rules 01 and 03. The architect-light reads only the prior challenger loop. The challenger's accept reason summarises the plan; the architect-light grounds final seed requirements against the epics the challenger cites. Direct addressability of the planner and research-reviewer loops requires rule-engine property-passthrough that beta.27 doesn't ship. R3.4 or upstream improvement should add forward-propagation; until then the architect-light's persona is defensive — its 10-output-contract.md flags any final SR whose grounding chain breaks."
+    "pattern": "architect (ported from SemSpec architect, scoped down — research artifact provided actors/integration_points)",
+    "terminal_role_note": "architect's decide(seed_requirements_emitted) is terminal. No rule matches it. Adding a downstream rule (e.g. publishing to an external consumer) is additive — the typed payload contract for that emission would be a follow-up ADR-031 §addendum, mirroring R3.2.1's emit_research_artifact pattern.",
+    "cross_grounding_caveat": "Same caveat as rules 01 and 03. The architect reads only the prior challenger loop. The challenger's accept reason summarises the plan; the architect grounds final seed requirements against the epics the challenger cites. Direct addressability of the planner and research-reviewer loops requires rule-engine property-passthrough that beta.27 doesn't ship. R3.4 or upstream improvement should add forward-propagation; until then the architect's persona is defensive — its 10-output-contract.md flags any final SR whose grounding chain breaks."
   }
 }

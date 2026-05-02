@@ -28,10 +28,10 @@
       "model": "general",
       "tools": ["read_loop_result", "query_entity", "query_entities", "add_source_repo", "emit_research_artifact"],
       "properties": {
-        "reviewer_loop_id": "$entity.id",
+        "reviewer_loop_id": "$entity.instance",
         "retry": true
       },
-      "prompt": "Prior reviewer reported gaps. Reviewer loop id: $entity.id. Call read_loop_result with that loop id to read the gaps list (the reviewer's decide reason field), then decide which path to take: (a) **corpus gap** — call add_source_repo first, then iterate; (b) **search gap** — re-query the existing corpus without adding sources; (c) **awaiting stabilisation** — if the reviewer's reason names 'awaiting stabilisation', this is a settling pass: re-query the augmented corpus, do NOT call add_source_repo, and carry forward all prior substrate_mutations entries verbatim (no new entries for this revision). When ready to submit: (1) call emit_research_artifact with the full artifact JSON; (2) emit a completion message containing the same artifact JSON for the reviewer to read. Populate addressed_gaps with the gaps you covered (including any source registration) and open_gaps with anything you could not resolve."
+      "prompt": "Prior reviewer reported gaps. Reviewer loop id: $entity.instance. Call read_loop_result with that loop id to read the gaps list (the reviewer's decide reason field), then decide which path to take: (a) **corpus gap** — call add_source_repo first, then iterate; (b) **search gap** — re-query the existing corpus without adding sources; (c) **awaiting stabilisation** — if the reviewer's reason names 'awaiting stabilisation', this is a settling pass: re-query the augmented corpus, do NOT call add_source_repo, and carry forward all prior substrate_mutations entries verbatim (no new entries for this revision). When ready to submit: (1) call emit_research_artifact with the full artifact JSON; (2) emit a completion message containing the same artifact JSON for the reviewer to read. Populate addressed_gaps with the gaps you covered (including any source registration) and open_gaps with anything you could not resolve."
     }
   ],
   "on_exit": [],

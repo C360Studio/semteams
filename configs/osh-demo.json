@@ -2,11 +2,11 @@
   "version": "1.1.0",
   "platform": {
     "org": "c360",
-    "id": "semteams-dev-via-spec",
-    "type": "agentic-e2e",
+    "id": "semteams-osh-demo",
+    "type": "agentic",
     "region": "local",
-    "instance_id": "dev-via-spec-001",
-    "environment": "test"
+    "instance_id": "osh-demo-001",
+    "environment": "demo"
   },
   "tier": "agentic",
   "nats": {
@@ -16,7 +16,7 @@
     "USER": {
       "subjects": ["user.>"],
       "storage": "file",
-      "max_age": "1h"
+      "max_age": "24h"
     },
     "GRAPH": {
       "subjects": [
@@ -28,38 +28,75 @@
         "graph.ingest.add.>",
         "research.artifact.>"
       ],
-      "storage": "memory",
-      "max_age": "1h"
+      "storage": "file",
+      "max_age": "24h"
     }
   },
   "model_registry": {
     "endpoints": {
-      "general": {
-        "provider": "openai",
-        "url": "http://mock-llm:8080/v1",
-        "model": "mock-model",
-        "max_tokens": 4096,
+      "claude-sonnet": {
+        "provider": "anthropic",
+        "url": "https://api.anthropic.com/v1",
+        "model": "claude-sonnet-4-6",
+        "api_key_env": "ANTHROPIC_API_KEY",
+        "max_tokens": 200000,
+        "max_output_tokens": 64000,
         "supports_tools": true,
-        "tool_format": "openai",
-        "stream": true
+        "stream": true,
+        "reasoning_effort": "low",
+        "request_timeout": "180s",
+        "max_concurrent": 10,
+        "requests_per_minute": 100
       },
-      "fast": {
+      "claude-haiku": {
+        "provider": "anthropic",
+        "url": "https://api.anthropic.com/v1",
+        "model": "claude-haiku-4-5-20251001",
+        "api_key_env": "ANTHROPIC_API_KEY",
+        "max_tokens": 200000,
+        "max_output_tokens": 32000,
+        "supports_tools": true,
+        "stream": true,
+        "request_timeout": "180s",
+        "max_concurrent": 10,
+        "requests_per_minute": 200
+      },
+      "seminstruct": {
         "provider": "openai",
-        "url": "http://mock-llm:8080/v1",
-        "model": "mock-model",
-        "max_tokens": 2048,
+        "url": "http://seminstruct:8083/v1",
+        "model": "qwen3-8b",
+        "max_tokens": 32768,
+        "max_output_tokens": 4096,
         "supports_tools": true,
         "tool_format": "openai",
-        "stream": false
+        "stream": true,
+        "request_timeout": "120s",
+        "max_concurrent": 4
+      },
+      "semembed": {
+        "provider": "openai",
+        "url": "http://semembed:8081/v1",
+        "model": "Snowflake/snowflake-arctic-embed-s",
+        "max_tokens": 0,
+        "supports_tools": false,
+        "request_timeout": "30s",
+        "max_concurrent": 8
       }
     },
     "defaults": {
-      "model": "general"
+      "model": "claude-sonnet",
+      "capability": "general"
     },
     "capabilities": {
-      "general": { "preferred": ["general"] },
-      "fast": { "preferred": ["fast"] },
-      "summarization": { "preferred": ["fast"] }
+      "general":               { "preferred": ["claude-sonnet", "claude-haiku"], "requires_tools": true },
+      "embedding":             { "preferred": ["semembed"] },
+      "community_summary":     { "preferred": ["seminstruct"] },
+      "anomaly_review":        { "preferred": ["seminstruct"] },
+      "summarization":         { "preferred": ["seminstruct"] },
+      "query_classification":  { "preferred": ["seminstruct"] },
+      "answer_synthesis":      { "preferred": ["seminstruct"] },
+      "intent_classification": { "preferred": ["seminstruct"] },
+      "layer_normalization":   { "preferred": ["seminstruct"] }
     }
   },
   "services": {
@@ -70,8 +107,8 @@
         "http_port": 8080,
         "swagger_ui": true,
         "server_info": {
-          "title": "SemTeams Dev-via-Spec E2E",
-          "description": "R3.3 of ADR-031: full dev-via-spec chain (planner / reviewer / challenger / architect) ported from SemSpec patterns. Builds on R3.2.2's research-mode-transition: the same six-loop research arc completes (researcher + reviewer + source-acquisition + reviewer + settling pass + reviewer-approve), then the stabilisation rule (R3.2.2 rule_03) spawns the dev-via-spec-planner. From there the dev-via-spec rule chain (configs/rules/dev-via-spec/ rules 01-05) drives the four-role handoff. Stream surface is identical to R3.2.2 (research.artifact.> bound on GRAPH for typed payload retention). max_iterations bumped 8→10 to accommodate the architect's three read_loop_result calls (challenger, planner, research-reviewer) plus its terminal decide. Compose profile: semsource (the SemSource container is required for the substrate-modifying retry pass, same as R2.5/R3.2.2).",
+          "title": "SemTeams OSH Demo (R3.4)",
+          "description": "R3.4 of ADR-031: real-LLM end-to-end run of the OSH-class arc. Builds on R3.3's dev-via-spec chain. Same 9 rules as e2e-dev-via-spec.json (research-mode-transition + dev-via-spec). Cost-discipline routing per ADR-031 model-tier discussion: dev-via-spec chain ('general' capability) routes to claude-sonnet with claude-haiku fallback (Anthropic-only — Gemini is currently saturated by SemSpec test traffic with head-of-line priority); every internal-graph capability (community_summary, anomaly_review, summarization, query_classification, embedding, intent_classification, layer_normalization, answer_synthesis) routes to local seminstruct/semembed so async background work doesn't pay cloud tokens. Graph-persisting capabilities (community_summary, anomaly_review) are on the qwen3-8b floor to avoid garbage in the substrate. defaults.model is seminstruct (not cloud) so any unbound resolution stays local. SemSource and local-models compose profiles required.",
           "version": "1.0.0"
         }
       }
@@ -94,7 +131,7 @@
       "name": "message-logger",
       "enabled": true,
       "config": {
-        "buffer_size": 10000,
+        "buffer_size": 50000,
         "monitor_subjects": [
           "agent.>",
           "tool.>",
@@ -140,19 +177,19 @@
       "name": "agentic-loop",
       "enabled": true,
       "config": {
-        "max_iterations": 10,
-        "timeout": "60s",
+        "max_iterations": 15,
+        "timeout": "300s",
         "stream_name": "AGENT",
         "loops_bucket": "AGENT_LOOPS",
         "consumer": {
-          "ack_wait": "60s",
-          "heartbeat_interval": "10s",
+          "ack_wait": "300s",
+          "heartbeat_interval": "30s",
           "max_deliver": 2
         },
         "context": {
-          "compact_threshold": 1.0,
-          "headroom_ratio": 0.05,
-          "headroom_tokens": 100
+          "compact_threshold": 0.85,
+          "headroom_ratio": 0.1,
+          "headroom_tokens": 4096
         },
         "ports": {
           "inputs": [
@@ -178,9 +215,9 @@
       "enabled": true,
       "config": {
         "stream_name": "AGENT",
-        "timeout": "15s",
+        "timeout": "120s",
         "retry": {
-          "max_attempts": 2,
+          "max_attempts": 3,
           "backoff": "exponential"
         },
         "ports": {
@@ -199,11 +236,17 @@
       "enabled": true,
       "config": {
         "stream_name": "TOOL",
-        "timeout": "30s",
+        "timeout": "60s",
         "allowed_tools": [
           "read_loop_result",
           "query_entity",
           "query_entities",
+          "query_relationships",
+          "query_neighbors",
+          "query_by_type",
+          "list_components",
+          "web_search",
+          "http_request",
           "decide",
           "add_source_repo",
           "emit_research_artifact",

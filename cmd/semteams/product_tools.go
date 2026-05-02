@@ -7,11 +7,15 @@ import (
 	"strings"
 
 	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semstreams/payloadregistry"
 	agentictools "github.com/c360studio/semstreams/processor/agentic-tools"
 	"github.com/c360studio/semstreams/types"
 
+	"github.com/c360studio/semteams/cmd/semteams/devviaspec"
+	"github.com/c360studio/semteams/cmd/semteams/research"
 	"github.com/c360studio/semteams/cmd/semteams/tools/addsource"
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitartifact"
+	"github.com/c360studio/semteams/cmd/semteams/tools/emitspecartifact"
 )
 
 // Environment variables that configure product-shell-local tools.
@@ -33,12 +37,29 @@ const (
 	envSemSourceActor = "SEMTEAMS_SEMSOURCE_ACTOR"
 )
 
+// registerProductPayloads registers all SemTeams-local payload types on top
+// of the framework's first-party payload set (payloadbuiltins.Register).
+// R3.1 (ADR-031): research.Artifact — revision-keyed researcher snapshot.
+// R3.3 (ADR-031 §R3.3): devviaspec.Artifact — terminal architect output.
+// Add new product-local payload registrations here; keep the ADR reference
+// in the comment so future readers know which slice introduced each type.
+func registerProductPayloads(reg *payloadregistry.Registry) error {
+	if err := research.RegisterPayloads(reg); err != nil {
+		return fmt.Errorf("research payloads: %w", err)
+	}
+	if err := devviaspec.RegisterPayloads(reg); err != nil {
+		return fmt.Errorf("dev-via-spec payloads: %w", err)
+	}
+	return nil
+}
+
 // registerProductTools wires product-shell-local tool executors onto
 // the shared registry, after the framework's RegisterBuiltins has
 // populated it with first-party tools. R2 of ADR-031 adds
-// add_source_repo. R3.2.1 adds emit_research_artifact. Re-introduce
-// a *config.Config parameter (or switch to a deps struct) once a tool
-// needs deployment-config visibility.
+// add_source_repo. R3.2.1 adds emit_research_artifact. R3.3 adds
+// emit_dev_via_spec_artifact. Re-introduce a *config.Config parameter
+// (or switch to a deps struct) once a tool needs deployment-config
+// visibility.
 //
 // Discipline gate (commission-not-omission): adding a new tool
 // registration here requires a framework-alignment review per
@@ -53,7 +74,10 @@ func registerProductTools(reg *agentictools.ExecutorRegistry, natsClient *natscl
 	if err := registerAddSource(reg, natsClient, logger); err != nil {
 		return err
 	}
-	return registerEmitArtifact(reg, natsClient, platform, logger)
+	if err := registerEmitArtifact(reg, natsClient, platform, logger); err != nil {
+		return err
+	}
+	return registerEmitSpecArtifact(reg, natsClient, platform, logger)
 }
 
 // registerAddSource wires the R2 add_source_repo executor. Stays inert
@@ -106,6 +130,30 @@ func registerEmitArtifact(reg *agentictools.ExecutorRegistry, natsClient *natscl
 	}
 	logger.Info("Registered product tool",
 		slog.String("name", emitartifact.ToolName),
+		slog.String("org", platform.Org),
+		slog.String("platform", platform.Platform))
+	return nil
+}
+
+// registerEmitSpecArtifact wires the R3.3 emit_dev_via_spec_artifact executor.
+// Always registered when natsClient is non-nil — same "always on" policy as
+// registerEmitArtifact: the tool is product policy, and any deployment running
+// the dev-via-spec flow needs it to close the arc. Output directory defaults
+// to "docs/specs" but is overrideable via SEMTEAMS_DEVVIASPEC_ARTIFACT_DIR.
+func registerEmitSpecArtifact(reg *agentictools.ExecutorRegistry, natsClient *natsclient.Client, platform types.PlatformMeta, logger *slog.Logger) error {
+	if natsClient == nil {
+		logger.Warn("nats client unavailable; emit_dev_via_spec_artifact registration skipped")
+		return nil
+	}
+	triplePublisher := agentictools.NewNATSTriplePublisher(natsClient)
+	// Pass empty outputDir so the constructor reads SEMTEAMS_DEVVIASPEC_ARTIFACT_DIR
+	// or falls back to the package default ("docs/specs").
+	executor := emitspecartifact.NewExecutor(triplePublisher, natsClient, platform, logger, "")
+	if err := reg.RegisterTool(emitspecartifact.ToolName, executor); err != nil {
+		return fmt.Errorf("register %s: %w", emitspecartifact.ToolName, err)
+	}
+	logger.Info("Registered product tool",
+		slog.String("name", emitspecartifact.ToolName),
 		slog.String("org", platform.Org),
 		slog.String("platform", platform.Platform))
 	return nil

@@ -27,9 +27,9 @@
       "model": "general",
       "tools": ["web_search", "read_loop_result", "submit_work"],
       "properties": {
-        "parent_loop_id": "$entity.id"
+        "parent_loop_id": "$entity.instance"
       },
-      "prompt": "A coordinator delegated a research task to you (parent loop $entity.id). Call read_loop_result with loop_id=$entity.id to fetch the user's original question, then use web_search to investigate and produce a concise synthesis. Call submit_work with your final answer."
+      "prompt": "A coordinator delegated a research task to you (parent loop $entity.instance). Call read_loop_result with loop_id=$entity.instance to fetch the user's original question, then use web_search to investigate and produce a concise synthesis. Call submit_work with your final answer."
     }
   ],
   "on_exit": [],

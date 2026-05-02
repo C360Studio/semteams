@@ -564,6 +564,30 @@ tasks:
           COMPOSE_PROFILES: semsource
           SCENARIO: dev-via-spec
 
+  test:e2e:agentic:dev:osh-demo:
+    desc: |
+      Boot the R3.4 OSH-demo stack — real LLM (gemini-flash + claude-sonnet for
+      the dev-via-spec chain), local seminstruct (qwen3-8b) for every
+      internal-graph capability, semembed for embeddings, real SemSource for
+      source acquisition. Manual smoke run; no playwright.
+    summary: |
+      Requires GEMINI_API_KEY and ANTHROPIC_API_KEY in the environment (the
+      compose forwards them through to the backend). First run pulls
+      ghcr.io/c360studio/seminstruct:qwen3-8b (~5GB) and
+      ghcr.io/c360studio/semembed:latest. Allow ~5min for first boot.
+
+      The OSH prompt to send (from ADR-031): "create a driver for
+      OpenSensorHub using OGC Connected Systems for Meshtastic devices" —
+      send via `task test:e2e:agentic:probe:send -- '<prompt>'` after the
+      stack is up, then watch the chain via `task probe:loops`.
+    cmds:
+      - task: test:e2e:agentic:dev:_boot
+        vars:
+          FIXTURE: ""
+          AGENTIC_CONFIG: osh-demo.json
+          COMPOSE_PROFILES: semsource,local-models
+          SCENARIO: osh-demo
+
   test:e2e:agentic:dev:_boot:
     desc: Internal — boot helper for the per-scenario dev tasks
     internal: true
@@ -750,6 +774,32 @@ tasks:
           exit 1
         fi
         curl -sf "http://localhost:3100/graph/triples?predicate=$PREDICATE&limit=20" | jq
+
+  test:e2e:agentic:probe:auto-approve-watcher:
+    desc: |
+      Run the auto-approve chain watcher against the running stack.
+      Polls /teams-dispatch/loops every 5s; logs role transitions to
+      /tmp/<run_id>-events.log; auto-approves any pending tool gate
+      (de-duped by call_id so list-endpoint staleness can't HTTP-409
+      spam). Designed for real-LLM smokes (R3.4 OSH and similar).
+      Mock-llm Playwright specs drive approvals themselves; don't
+      use this for those.
+
+      Usage:
+        task test:e2e:agentic:probe:auto-approve-watcher -- <run_id>
+        task test:e2e:agentic:probe:auto-approve-watcher  # defaults run_id=agentic
+
+      Outputs land in /tmp/<run_id>-* (trajectory.jsonl, events.log,
+      and three internal de-dup files). Watcher exits when every loop
+      is terminal and the count's been stable for ~120s. Ctrl-C is
+      always safe.
+
+      Source: ui/scripts/agentic-chain-watcher.sh
+    cmds:
+      - |
+        RUN_ID="{{.CLI_ARGS}}"
+        RUN_ID="${RUN_ID:-agentic}"
+        bash scripts/agentic-chain-watcher.sh "$RUN_ID" "${E2E_AGENTIC_UI_PORT:-3100}"
 
   test:e2e:agentic:stack:up:
     desc: Start the agentic E2E Docker stack and wait for health

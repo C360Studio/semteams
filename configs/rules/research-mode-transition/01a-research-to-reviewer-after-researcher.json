@@ -27,9 +27,9 @@
       "model": "general",
       "tools": ["read_loop_result", "decide"],
       "properties": {
-        "researcher_loop_id": "$entity.id"
+        "researcher_loop_id": "$entity.instance"
       },
-      "prompt": "Evaluate the prior researcher loop's submission. Researcher loop id: $entity.id. Call read_loop_result with that loop id to fetch the artifact, apply the active checklist, then call decide(action=\"approved\") if all required items are present, or decide(action=\"insufficient\", reason=\"<bullet list of gaps>\") otherwise. If the artifact's open_gaps names a corpus that is not indexed, list 'recommend add_source_repo for <repo>' in your insufficient reason."
+      "prompt": "Evaluate the prior researcher loop's submission. Researcher loop id: $entity.instance. Call read_loop_result with that loop id to fetch the artifact, apply the active checklist, then call decide(action=\"approved\") if all required items are present, or decide(action=\"insufficient\", reason=\"<bullet list of gaps>\") otherwise. If the artifact's open_gaps names a corpus that is not indexed, list 'recommend add_source_repo for <repo>' in your insufficient reason."
     }
   ],
   "on_exit": [],

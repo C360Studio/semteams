@@ -1,0 +1,83 @@
+# Meshtastic MQTT/Protobuf → OGC Connected Systems Bridge
+
+> **Generated**: 2026-05-02T19:54:46.641112883Z
+> **Chain root**: `d9e4ec56-2361-43a2-9847-92f027f53c57`
+> **Slug**: `2026-05-02-meshtastic-mqtt-protobuf-ogc-connected-systems-bridge`
+
+## Goal
+
+Implement a receive-only MQTT/Protobuf bridge that ingests Meshtastic ServiceEnvelope packets from a local MQTT broker and publishes discovered mesh nodes as OGC Connected Systems resources (Systems, Datastreams, Observations), making LoRa mesh sensor data available inside the OpenSensorHub ecosystem.
+
+## Context
+
+Meshtastic is an open-source LoRa mesh-radio platform that encodes telemetry in Protobuf-framed ServiceEnvelope packets and can forward them via an MQTT broker. OpenSensorHub (OSH) exposes sensor resources through the OGC Connected Systems API at /systems, /datastreams, and /observations endpoints. A driver module that bridges these two worlds would let operators ingest low-power, off-grid mesh sensor feeds without any custom middleware. The driver is scoped strictly to the receive path: the MQTT publish path (deliveryComplete) is explicitly excluded to bound scope. Integration point A carries radio packets from the Meshtastic MQTT broker into the driver; integration point B carries structured OGC CS resources from the driver into the OSH node registry.
+
+## Actors
+
+- **Meshtastic MQTT Broker** — Publishes Protobuf-encoded ServiceEnvelope packets on mesh topic hierarchy; consumed read-only by the driver.
+- **OSH Driver Framework** — Provides AbstractSensorModule base class, SPI registration, addSubSystem()/addOutput()/DataEvent lifecycle hooks consumed by the new driver.
+- **MeshtasticSensor Driver** — Core implementation artefact: extends AbstractSensorModule, implements MqttCallbackExtended, decodes Protobuf payloads, and emits OGC CS resources.
+- **OGC Connected Systems API** — Receives /systems, /datastreams, and /observations entries produced by the driver and serves them to API consumers.
+- **Protobuf Decode Layer** — Deserialises raw Meshtastic ServiceEnvelope bytes into typed Java objects for field extraction by the driver.
+
+## Integration Points
+
+- **Meshtastic MQTT Broker → MeshtasticSensor Driver** (read): Raw Protobuf-encoded ServiceEnvelope packets received via MqttCallbackExtended#messageArrived on subscribed mesh topic(s).
+- **MeshtasticSensor Driver → OGC Connected Systems API** (write): Structured OGC CS resources — System descriptors via addSubSystem(), Datastream descriptors via addOutput(), and timestamped Observation records via DataEvent — published into the OSH node registry.
+
+## Seed Requirements
+
+### SR1 — Epic 1 – Driver Scaffold: MeshtasticSensor module skeleton
+
+- **Scope**: backend
+- **Grounds (actors)**: MeshtasticSensor Driver, OSH Driver Framework
+- **Grounds (integration)**: MeshtasticSensor Driver→OGC Connected Systems API
+
+### SR2 — Epic 2 – Configuration: MQTT broker URL, port, topic pattern, and credentials binding
+
+- **Scope**: backend
+- **Grounds (actors)**: MeshtasticSensor Driver, Meshtastic MQTT Broker
+- **Grounds (integration)**: Meshtastic MQTT Broker→MeshtasticSensor Driver
+
+### SR3 — Epic 3 – Protobuf Decode: ServiceEnvelope deserialisation and field extraction
+
+- **Scope**: backend
+- **Grounds (actors)**: Protobuf Decode Layer, MeshtasticSensor Driver
+- **Grounds (integration)**: Meshtastic MQTT Broker→MeshtasticSensor Driver
+
+### SR4 — Epic 4 – MQTT Connectivity: MqttCallbackExtended wiring, subscribe, reconnect logic
+
+- **Scope**: backend
+- **Grounds (actors)**: MeshtasticSensor Driver, Meshtastic MQTT Broker
+- **Grounds (integration)**: Meshtastic MQTT Broker→MeshtasticSensor Driver
+
+### SR5 — Epic 5 – OGC CS Output: addSubSystem(), addOutput(), and DataEvent emission for mesh nodes
+
+- **Scope**: backend
+- **Grounds (actors)**: MeshtasticSensor Driver, OGC Connected Systems API, OSH Driver Framework
+- **Grounds (integration)**: MeshtasticSensor Driver→OGC Connected Systems API
+
+### SR6 — Epic 6 – SPI Registration: OSGi/SPI service descriptor and module factory wiring
+
+- **Scope**: infra
+- **Grounds (actors)**: MeshtasticSensor Driver, OSH Driver Framework
+- **Grounds (integration)**: MeshtasticSensor Driver→OGC Connected Systems API
+
+### SR7 — Epic 7 – Tests: unit tests for Protobuf decode and integration tests for MQTT→OGC CS pipeline
+
+- **Scope**: backend
+- **Grounds (actors)**: MeshtasticSensor Driver, Protobuf Decode Layer, OGC Connected Systems API
+- **Grounds (integration)**: Meshtastic MQTT Broker→MeshtasticSensor Driver; MeshtasticSensor Driver→OGC Connected Systems API
+
+
+## Provenance
+
+- Research artifact loop: `d9e4ec56-2361-43a2-9847-92f027f53c57`
+- Approved planner loop: `d9e4ec56-2361-43a2-9847-92f027f53c57`
+- Approving reviewer loop: `d9e4ec56-2361-43a2-9847-92f027f53c57`
+- Accepting challenger loop: `d9e4ec56-2361-43a2-9847-92f027f53c57`
+- Architect terminal loop: `14bb4cca-eb63-4fda-a3de-e74009985194`
+
+---
+
+*Generated by semteams dev-via-spec arc. This document is the structured terminal output of an LLM-mediated chain (research → mode-transition → planner → reviewer → challenger → architect). Hand-edits to this file will be overwritten if the chain re-runs.*

@@ -27,9 +27,9 @@
       "model": "general",
       "tools": ["read_loop_result", "decide"],
       "properties": {
-        "prior_loop_id": "$entity.id"
+        "prior_loop_id": "$entity.instance"
       },
-      "prompt": "The dev-via-spec reviewer approved a plan for completeness. Reviewer loop id: $entity.id (passed as prior_loop_id in your task properties). Call read_loop_result with that loop id to read the reviewer's verdict; the verdict's reason field summarises the plan that was approved. Probe for falsifiable concerns per your `20-failure-classes.md`. If no actionable concerns surface, call decide(action=accept). Otherwise call decide(action=concerns_raised, reason=\"<bullet list of concerns with evidence pointers>\")."
+      "prompt": "The dev-via-spec reviewer approved a plan for completeness. Reviewer loop id: $entity.instance (passed as prior_loop_id in your task properties). Call read_loop_result with that loop id to read the reviewer's verdict; the verdict's reason field summarises the plan that was approved. Probe for falsifiable concerns per your `20-failure-classes.md`. If no actionable concerns surface, call decide(action=accept). Otherwise call decide(action=concerns_raised, reason=\"<bullet list of concerns with evidence pointers>\")."
     }
   ],
   "on_exit": [],

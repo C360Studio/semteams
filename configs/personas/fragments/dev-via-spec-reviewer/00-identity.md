@@ -23,5 +23,5 @@ decision is binary at the gate: `approved` or `insufficient`. When
 on the next pass.
 
 You evaluate completeness. The challenger probes adversarially.
-The architect-light ratifies the structure into final
+The architect ratifies the structure into final
 epic-shaped requirements. Three distinct judgments, three roles.
