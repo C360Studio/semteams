@@ -249,7 +249,8 @@
           "http_request",
           "decide",
           "add_source_repo",
-          "emit_research_artifact"
+          "emit_research_artifact",
+          "emit_dev_via_spec_artifact"
         ],
         "approval_required": ["add_source_repo"],
         "ports": {
