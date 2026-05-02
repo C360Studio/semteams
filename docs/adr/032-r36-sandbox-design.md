@@ -307,6 +307,77 @@ post-smoke calibration.
    accordingly. No PR attempts R3.6.1 + R3.6.2 in one shot.
 4. **Done**: Coby Accept on this rev (2026-05-02).
 
+## Addendum 2026-05-02 — egress filter + disk quota deferral
+
+Implementation of R3.6.1.d surfaced two incompatibilities with the
+original phasing. Both items are deferred to R3.6.3 with explicit
+rationale so future readers see the why-deferred trail:
+
+### Per-workspace disk quota (Decision #14)
+
+ADR §14 specified "10 GB hard cap via tmpfs `size=` per workspace."
+This is incompatible with the named-cache-volume decision in §18:
+named volumes do not support per-subdirectory size caps. Per-workspace
+quota on a single named volume requires either:
+
+- **XFS project quotas** on the underlying volume — couples sandbox
+  ops to host filesystem choice; brittle across deployment targets.
+- **Per-workspace tmpfs mount** dynamically created — Docker compose
+  doesn't support dynamic per-chain mounts; would need a sidecar
+  workspace-manager that does the mounts via Docker API.
+- **Accept "no per-workspace quota"** with the cache-sharing benefit.
+  Mitigation: monitor total volume usage; nuke + recreate if a
+  runaway chain fills it.
+
+R3.6.1.d ships **option 3** (no per-workspace quota). R3.6.3 revisits
+with real workload data from smoke #6 — if a builder iteration
+genuinely fills 10 GB, project quotas justify the host-OS coupling.
+Until then, the cache-sharing iteration-speed lever (§18) outweighs
+the bounded-blast-radius benefit of per-workspace caps.
+
+### Egress filter (Decision #13)
+
+ADR §13 specified "egress allow-list day-one + full request logging"
+via "Docker network policy or per-container iptables." Implementation
+revealed three constraints:
+
+- **iptables inside the container** is precluded by `cap_drop: ALL`
+  (Decision #7) — adding NET_ADMIN to support iptables would
+  significantly weaken the security posture for an enforcement
+  mechanism the LLM toolchain doesn't need.
+- **Docker network policy alone** doesn't support per-host allow-
+  lists on bridge networks. Requires either an L7-aware mesh
+  (Cilium/Istio — heavy) or a sidecar HTTP/HTTPS-CONNECT proxy
+  bridging an internal-only sandbox network and an egress network.
+- **Sidecar proxy** (~250 lines: Go binary + tests + Dockerfile +
+  compose plumbing + Maven settings.xml + Gradle/npm proxy env)
+  is the right *shape* — privilege-separated container, agent's
+  bash can't kill or reconfigure it — but premature before we've
+  observed what the real builder agent actually reaches for in
+  smoke #6.
+
+R3.6.1.d ships **logging-only egress** (toolchain stdout/stderr
+already captures every URL mvn/npm/go fetches, exposed via the
+exec endpoint and forensics zip). R3.6.3 revisits with real smoke
+#6 data: if the chain only ever hits the §13 allow-list (Maven
+Central, GOPROXY, npm, GitHub, configured SemSource), the proxy
+shape sketched above is the obvious next slice. If the chain
+reaches for unexpected hosts, that's product/security signal worth
+discussing before the mechanism lands.
+
+The "expensive to retrofit" concern in the original §13 rationale
+turns out to be about the *mechanism*, not the *policy*. The
+mechanism is significant work; landing it before we know what to
+allow-list is the wrong order. R3.6.3's egress slice will land the
+proxy as drafted, with the empirical allow-list from smoke #6.
+
+### R3.6.1.d revised scope
+
+With both items deferred, R3.6.1.d collapses to a close-out slice:
+final go-reviewer pass over the assembled R3.6.1 (lifecycle + file
+ops + path confinement + exec + toolchain + cache), full lint /
+race / e2e smoke, and PR.
+
 ## References
 
 - ADR-031 — research-flow + dev-via-spec; R3.4 closeout addendum
