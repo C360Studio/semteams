@@ -152,7 +152,7 @@ func run() error {
 	// returned manager is also threaded into the tool registry below so
 	// Pattern-B persona CRUD tools (read/update/list) can work against
 	// the same bucket.
-	personaMgr := loadPersonaFragments(ctx, natsClient, cliCfg.PersonaFragmentsPath)
+	_ = loadPersonaFragments(ctx, natsClient, cliCfg.PersonaFragmentsPath)
 
 	// 9c. Build the shared tool registry and register first-party tool
 	// executors. Per beta.16: agentic-tools registry is constructor-
@@ -160,19 +160,25 @@ func run() error {
 	// (read_loop_result, decide, emit_diagnosis, graph_query) need NATS
 	// + platform identity. Pattern-B tools (create_rule, update_persona,
 	// list_flows, etc.) each need their matching manager; nil manager →
-	// registerX skips. We wire all four Pattern-B managers so any future
-	// product journey that needs CRUD tooling has it — ADR-029 "product
-	// shell owns its wiring" applies per-manager: wire once, don't drift
-	// silently later.
+	// registerX skips.
+	//
+	// Pattern-B managers are temporarily nil-ed out as a workaround for
+	// an upstream beta.33 tool-list duplication bug: a single executor
+	// registered under N names (RuleExecutor=5, FlowTemplateExecutor=6,
+	// etc.) emits N copies of its full ToolDefinition list during
+	// ExecutorRegistry.ListTools() iteration. Anthropic's API rejects
+	// tool arrays with duplicate names. None of our current flows use
+	// CRUD tools, so nil-ing the managers skips registration cleanly
+	// and dodges the bug. Restore once upstream lands the dedup fix.
 	toolRegistry := agentictools.NewExecutorRegistry()
 	if err := executors.RegisterBuiltins(ctx, toolRegistry, executors.ToolDependencies{
 		NATSClient:          natsClient,
 		Platform:            platform,
 		Logger:              slog.Default(),
-		RuleManager:         buildRuleManager(ctx, natsClient, configManager, slog.Default()),
-		FlowManager:         buildFlowManager(natsClient, slog.Default()),
-		PersonaManager:      personaMgr,
-		FlowTemplateManager: buildFlowTemplateManager(natsClient, slog.Default()),
+		RuleManager:         nil, // workaround: see comment above
+		FlowManager:         nil, // workaround: see comment above
+		PersonaManager:      nil, // workaround: see comment above (persona fragments still loaded via PERSONAS KV — only CRUD tools skipped)
+		FlowTemplateManager: nil, // workaround: see comment above
 		ComponentRegistry:   componentRegistry,
 		LoopsBucket:         extractLoopsBucket(cfg),
 	}); err != nil {
