@@ -292,28 +292,33 @@ tasks:
       - npx playwright test e2e/agentic/research-mode-transition.spec.ts
 
   test:e2e:agentic:dev-via-spec:
-    desc: Run the R3.3 dev-via-spec full-chain journey (planner / reviewer / challenger / architect-light)
+    desc: Run the R3.3 + R3.4b + R3.6.2 dev-via-spec full-chain journey (planner / reviewer / challenger / architect / builder)
     summary: |
-      End-to-end exercise of ADR-031 R3.3: dev-via-spec port from
-      SemSpec patterns. Builds on R3.2.2's research-mode-transition:
-      the same six-loop research arc completes, then the stabilisation
-      rule spawns the dev-via-spec-planner. From there the dev-via-spec
-      internal rule chain (configs/rules/dev-via-spec/ rules 01/03/05)
-      drives the four-role handoff to architect-light terminal.
+      End-to-end exercise of ADR-031 R3.3 (port from SemSpec patterns) +
+      R3.4b (architect emits typed artifact) + R3.6.2 (builder slice).
+      Builds on R3.2.2's research-mode-transition: the six-loop research
+      arc completes, the stabilisation rule spawns the dev-via-spec-
+      planner, and the dev-via-spec internal rule chain (configs/rules/
+      dev-via-spec/ rules 01/03/05/06) drives the five-role handoff to
+      builder terminal.
 
-      Ten loops, twenty-eight LLM round-trips. Covers the golden path
-      — every gate (reviewer + challenger) approves on first pass.
-      Retry rules (02 reviewer-rejected and 04 challenger-concerns)
-      are exercised structurally by max_iterations metadata; covering
-      them under e2e is a follow-up if the OSH journey reveals
-      real-LLM retry behaviour worth pinning.
+      Eleven loops, thirty-three LLM round-trips. Covers the golden
+      path — every gate (reviewer + challenger) approves on first pass;
+      the builder terminates with builder_decide(tests_failing) per
+      the fixture's mock-LLM constraint (it cannot pre-know the
+      architect's dynamically-dated slug, see fixture comment).
+      Retry rules (02 reviewer-rejected, 04 challenger-concerns,
+      builder iteration-budget exhaustion) are exercised structurally
+      by max_iterations metadata; covering them under e2e is a follow-up
+      if the OSH smoke #6 reveals real-LLM retry behaviour worth pinning.
 
-      Requires the SemSource image at ghcr.io/c360studio/semsource:latest;
-      override with SEMSOURCE_IMAGE if testing an unreleased build.
+      Requires the SemSource image at ghcr.io/c360studio/semsource:latest
+      (override with SEMSOURCE_IMAGE if testing an unreleased build) and
+      the sandbox image (built locally from docker/sandbox.Dockerfile).
     vars:
       FIXTURE: dev-via-spec.yaml
       AGENTIC_CONFIG: e2e-dev-via-spec.json
-      COMPOSE_PROFILES: semsource
+      COMPOSE_PROFILES: semsource,sandbox
     cmds:
       - defer: { task: test:e2e:agentic:cleanup }
       - task: test:e2e:agentic:stack:up

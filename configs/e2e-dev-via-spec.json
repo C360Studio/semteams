@@ -101,7 +101,8 @@
           "user.>",
           "graph.mutation.>",
           "graph.ingest.>",
-          "research.artifact.>"
+          "research.artifact.>",
+          "dev_via_spec.artifact.>"
         ],
         "enable_kv_query": true,
         "log_level": "INFO"
