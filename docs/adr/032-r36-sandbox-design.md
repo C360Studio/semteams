@@ -378,6 +378,103 @@ final go-reviewer pass over the assembled R3.6.1 (lifecycle + file
 ops + path confinement + exec + toolchain + cache), full lint /
 race / e2e smoke, and PR.
 
+## Addendum 2026-05-03 — R3.6.1.1 wire-format conformance + read_only_paths
+
+R3.6.1.1 is a follow-up slice driven by two findings made AFTER R3.6.1
+merged:
+
+### Framework-alignment finding
+
+semstreams beta.36 ships `processor/agentic-tools/sandbox.Client` and
+`BashExecutor`. The BashExecutor routes through the client when
+`SANDBOX_URL` is configured. ADR-029 framework-alignment review fires:
+**use upstream's pattern, do not fork a parallel one in the product
+shell.**
+
+The wire format upstream's client expects differs from R3.6.1's
+REST-style endpoints:
+
+| Operation | R3.6.1 (REST) | R3.6.1.1 (upstream-conformant) |
+|---|---|---|
+| Create | `POST /workspace/{chainID}` | `POST /worktree` (body has task_id) |
+| Delete | `DELETE /workspace/{chainID}` | `DELETE /worktree/{taskID}` |
+| Exec | `POST /workspace/{chainID}/exec` | `POST /exec` (body has task_id) |
+| Write | `PUT /workspace/{chainID}/files` | `PUT /file` (body has task_id+path+content) |
+| Read | `GET /workspace/{chainID}/files?path=…` | `GET /file?task_id=…&path=…` |
+| Archive (zip) | `GET /workspace/{chainID}` | `GET /worktree/{taskID}/archive` (product-shell extension; upstream client doesn't use it) |
+
+R3.6.1.1 conforms to the upstream shape so upstream's `BashExecutor`
+reaches our sandbox via `SANDBOX_URL` without an adapter. Internal
+vocabulary tracks the wire (`taskID`, `taskMutex`, `resolveTaskPath`,
+`isValidTaskID`).
+
+### Karpathy-Loop autoresearch feature: read_only_paths
+
+A parallel design conversation surfaced this feature (timely overlap
+with the conformance pass). The autoresearch use case: declare a
+"frozen baseline" the agent's iterations cannot mutate.
+
+**Design (lives in sandbox; bash tool stays simple per "fewer rich
+tools" principle):**
+
+- `POST /worktree` body accepts optional `read_only_paths: []string`
+  (workspace-relative; `..`/abs/empty rejected at create).
+- Sandbox stores `read_only_paths` as in-memory metadata per task.
+- After every successful `PUT /file` and `POST /exec`, sandbox
+  applies a chmod sweep: existing read_only_paths get `555` (dirs)
+  and `444` (files), recursively. Idempotent.
+- `PUT /file` to a chmod-frozen target returns `403` with a clear
+  "read-only" message (mapped from EACCES).
+- Bash exec hitting a chmod-frozen target returns non-zero with
+  EACCES in stderr. Bash naturally surfaces the OS error — no
+  command-string parsing required.
+
+**Why filesystem-level instead of pre-execution refusal:** parsing
+arbitrary bash for "would this write to read_only_paths" is fragile
+with false negatives (sed -i, python writes, here-docs, eval). chmod
+catches every category structurally. The autoresearch threat model
+is "experimental iterations don't accidentally mutate the baseline,"
+not "actively malicious agent escaping" — chmod is the right level.
+
+**Lifecycle:**
+- Empty workspace + read_only_paths at create: paths recorded; no
+  immediate chmod (paths don't exist).
+- Bash seeds the baseline (e.g., `cp -r /seed/* baseline/`); after
+  exec, sandbox chmods the now-existing baseline tree.
+- Subsequent iterations see frozen baseline; writes inside fail.
+
+**DELETE handling:** `removeWorkspace` runs `chmodTreeWritable` first
+so `os.RemoveAll` succeeds across chmod-locked subtrees. Without this,
+delete would fail EACCES on read_only_paths.
+
+### Git init at create time
+
+Workspaces now run `git init -b main` + `git config user.{email,name}`
++ `git commit --allow-empty -m initial` at create. Required for the
+upstream PR's planned `verify_clean` flag to have a meaningful baseline
+(`git status --porcelain` against the initial commit).
+
+### Upstream PR scope (separate from this slice)
+
+Two additive changes proposed to semstreams:
+
+1. `sandbox.Client.CreateWorktree` accepts `read_only_paths []string`
+   in the request body — pure pass-through to the sandbox.
+2. `BashExecutor` adds `verify_clean: bool` argument; when true, the
+   tool runs `git status --porcelain` via a precondition exec and
+   errors if the tree has uncommitted changes outside read_only_paths.
+
+Both are net-additive; existing callers see no behavior change.
+
+### Why no product-shell write_file/read_file tools
+
+Bash subsumes file ops (`echo > file`, `cat file`, `sed -i …`). The
+LLM is trained heavily on bash; small models degrade with more tools.
+Per the "fewer rich tools" principle, we don't expose `write_file` /
+`read_file` to the LLM. Sandbox still exposes them at the HTTP layer
+for non-bash callers (rule actions, future product-shell tools that
+genuinely need typed wire shapes).
+
 ## References
 
 - ADR-031 — research-flow + dev-via-spec; R3.4 closeout addendum

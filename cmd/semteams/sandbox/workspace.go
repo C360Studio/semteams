@@ -2,68 +2,69 @@ package main
 
 import (
 	"archive/zip"
+	"context"
 	"errors"
 	"io"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
-// Path-confinement failure sentinels. All map to HTTP 403 in handlers
-// today; distinct values exist so logs and future tests can
-// distinguish failure shapes.
+// defaultBranch is the git branch initialised in every fresh
+// workspace. Hard-coded rather than relying on the host git's
+// init.defaultBranch so behavior is reproducible across hosts and
+// CI runners.
+const defaultBranch = "main"
+
+// gitInitTimeout bounds how long the git init + initial commit step
+// can take. Plenty for local fs operations; if it times out, the
+// workspace is malformed and the create handler returns 500.
+const gitInitTimeout = 10 * time.Second
+
+// Path-confinement failure sentinels.
 var (
 	errAbsolutePath   = errors.New("absolute paths are not allowed")
 	errPathEscapes    = errors.New("path escapes workspace")
 	errSymlinkEscapes = errors.New("symlink escapes workspace")
 )
 
-// resolveChainPath maps a workspace-relative request path to an
-// absolute filesystem path inside the chain's workspace, rejecting
-// any attempt to escape via:
+// resolveTaskPath maps a workspace-relative request path to an
+// absolute filesystem path inside the task's workspace, rejecting any
+// attempt to escape via:
 //   - absolute path
 //   - .. traversal (filepath.Clean + prefix check)
 //   - symlink whose target resolves outside the workspace
-//   - parent-dir component that's a symlink (R3.6.1.c hardening)
+//   - parent-dir component that's a symlink
 //
-// Threat-model note for the per-component lstat: the per-chain mutex
-// held by handlers serialises every op within a chain, so there's no
-// race window between resolveChainPath returning and the subsequent
-// open / read / write. A bash exec on chain X holds the mutex for the
-// full command; a concurrent write_file on chain X waits behind it.
-// Cross-chain ops touch independent mutexes and can't influence each
-// other's directory state.
-func (s *Server) resolveChainPath(chainID, relPath string) (string, error) {
-	// Handlers validate chainID before reaching here; defense-in-depth
-	// re-check guards future callers that forget. Returning an error
-	// rather than panicking keeps this drop-in for tests and tools.
-	if !isValidChainID(chainID) {
-		return "", errors.New("invalid chain ID")
+// Threat-model note for the per-component lstat: the per-task mutex
+// held by handlers serialises every op within a task, so there's no
+// race window between resolveTaskPath returning and the subsequent
+// open. A bash exec on task X holds the mutex for the full command;
+// a concurrent write_file on task X waits behind it.
+func (s *Server) resolveTaskPath(taskID, relPath string) (string, error) {
+	if !isValidTaskID(taskID) {
+		return "", errors.New("invalid task_id")
 	}
 	if filepath.IsAbs(relPath) {
 		return "", errAbsolutePath
 	}
 
-	chainRoot := filepath.Join(s.workspaceRoot, chainID)
-	absPath := filepath.Join(chainRoot, filepath.Clean(relPath))
+	taskRoot := filepath.Join(s.workspaceRoot, taskID)
+	absPath := filepath.Join(taskRoot, filepath.Clean(relPath))
 
-	// Prefix check: after Clean, absPath must be chainRoot itself or
-	// a descendant. The Separator suffix is required so e.g.
-	// "/workspace/chain1" doesn't false-positive on
-	// "/workspace/chain12".
-	if !strings.HasPrefix(absPath, chainRoot+string(filepath.Separator)) && absPath != chainRoot {
+	if !strings.HasPrefix(absPath, taskRoot+string(filepath.Separator)) && absPath != taskRoot {
 		return "", errPathEscapes
 	}
 
-	// Per-component lstat: walk every existing component from chainRoot
-	// toward absPath; refuse if any is a symlink. Closes the
-	// parent-dir-symlink gap left open in R3.6.1.b (when only the file
-	// API existed and couldn't plant symlinks). R3.6.1.c bash exec can
-	// plant them, so this becomes load-bearing.
-	if absPath != chainRoot {
-		rel := strings.TrimPrefix(absPath, chainRoot+string(filepath.Separator))
-		cur := chainRoot
+	// Per-component lstat: walk every existing component from taskRoot
+	// toward absPath; refuse if any is a symlink. Closes the parent-
+	// dir-symlink gap a bash exec could otherwise plant.
+	if absPath != taskRoot {
+		rel := strings.TrimPrefix(absPath, taskRoot+string(filepath.Separator))
+		cur := taskRoot
 		for part := range strings.SplitSeq(rel, string(filepath.Separator)) {
 			if part == "" {
 				continue
@@ -71,9 +72,6 @@ func (s *Server) resolveChainPath(chainID, relPath string) (string, error) {
 			cur = filepath.Join(cur, part)
 			info, err := os.Lstat(cur)
 			if os.IsNotExist(err) {
-				// Remaining components don't exist yet. MkdirAll/WriteFile
-				// will create real dirs/files; symlinks can't appear in the
-				// gap because the chain mutex serialises ops.
 				break
 			}
 			if err != nil {
@@ -89,12 +87,12 @@ func (s *Server) resolveChainPath(chainID, relPath string) (string, error) {
 	// catches the case the per-component walk doesn't (e.g., a chain
 	// where the target component is itself a hostile symlink whose
 	// target lives outside the workspace).
-	if absPath != chainRoot {
+	if absPath != taskRoot {
 		realPath, err := filepath.EvalSymlinks(absPath)
 		if err == nil {
-			realRoot, rootErr := filepath.EvalSymlinks(chainRoot)
+			realRoot, rootErr := filepath.EvalSymlinks(taskRoot)
 			if rootErr != nil {
-				realRoot = chainRoot
+				realRoot = taskRoot
 			}
 			if !strings.HasPrefix(realPath, realRoot+string(filepath.Separator)) && realPath != realRoot {
 				return "", errSymlinkEscapes
@@ -104,14 +102,17 @@ func (s *Server) resolveChainPath(chainID, relPath string) (string, error) {
 	return absPath, nil
 }
 
-// createWorkspace creates an empty workspace dir for chainID. The bool
-// return is true if the directory was created, false if it already
-// existed (idempotent — repeated POSTs return "exists" not error).
+// createWorkspace creates the task's workspace dir, initialises a git
+// repo on the default branch, and seeds an initial empty commit so
+// `git status --porcelain` has a baseline to diff against (used by
+// upstream's planned BashExecutor verify_clean flag).
 //
-// Caller must hold the per-chain mutex. The stat-then-mkdir pair would
-// race otherwise.
-func (s *Server) createWorkspace(chainID string) (bool, error) {
-	dir := filepath.Join(s.workspaceRoot, chainID)
+// Returns true if the workspace was created, false if it already
+// existed (idempotent — repeated creates return "exists" not error).
+//
+// Caller must hold the per-task mutex.
+func (s *Server) createWorkspace(ctx context.Context, taskID string) (bool, error) {
+	dir := filepath.Join(s.workspaceRoot, taskID)
 	info, err := os.Stat(dir)
 	if err == nil {
 		if !info.IsDir() {
@@ -125,35 +126,164 @@ func (s *Server) createWorkspace(chainID string) (bool, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return false, err
 	}
+	if err := initGitRepo(ctx, dir); err != nil {
+		// Roll back the dir so a retry can re-create cleanly.
+		_ = os.RemoveAll(dir)
+		return false, err
+	}
 	return true, nil
 }
 
-// removeWorkspace deletes the workspace dir for chainID. No-op if it
-// doesn't exist (idempotent — DELETE on a missing workspace returns
-// success).
+// initGitRepo runs `git init -b main` + `git config user.{email,name}`
+// + `git commit --allow-empty` so the workspace is a usable git repo
+// with one commit on main. The commit makes verify_clean's
+// `git status --porcelain` baseline meaningful (the worktree is clean
+// when no further mutations happen vs the initial commit).
+func initGitRepo(ctx context.Context, dir string) error {
+	ctx, cancel := context.WithTimeout(ctx, gitInitTimeout)
+	defer cancel()
+
+	steps := [][]string{
+		{"git", "init", "-b", defaultBranch},
+		{"git", "config", "user.email", "sandbox@semteams"},
+		{"git", "config", "user.name", "Sandbox"},
+		{"git", "commit", "--allow-empty", "-m", "initial"},
+	}
+	for _, args := range steps {
+		cmd := exec.CommandContext(ctx, args[0], args[1:]...)
+		cmd.Dir = dir
+		// Don't inherit the parent's env (unit tests on hosts with
+		// idiosyncratic GIT_* vars would silently misbehave).
+		cmd.Env = []string{
+			"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+			"HOME=" + dir,
+			"GIT_AUTHOR_NAME=Sandbox",
+			"GIT_AUTHOR_EMAIL=sandbox@semteams",
+			"GIT_COMMITTER_NAME=Sandbox",
+			"GIT_COMMITTER_EMAIL=sandbox@semteams",
+		}
+		if out, err := cmd.CombinedOutput(); err != nil {
+			return &os.PathError{Op: strings.Join(args, " "), Path: dir, Err: errFromOutput(err, out)}
+		}
+	}
+	return nil
+}
+
+// errFromOutput wraps a git command failure with stderr context so
+// debugging from logs is possible. Without this, "exit status 128" is
+// the only signal a caller has.
+func errFromOutput(err error, out []byte) error {
+	trimmed := strings.TrimSpace(string(out))
+	if trimmed == "" {
+		return err
+	}
+	return errors.New(err.Error() + ": " + trimmed)
+}
+
+// removeWorkspace deletes the task's workspace dir. No-op if it doesn't
+// exist (idempotent — DELETE on a missing worktree returns success).
 //
-// Caller must hold the per-chain mutex.
-func (s *Server) removeWorkspace(chainID string) error {
-	dir := filepath.Join(s.workspaceRoot, chainID)
+// Before RemoveAll, recursively chmod-w on every entry so chmod-locked
+// read_only_paths can be removed. Without this, RemoveAll would fail
+// with EACCES inside any frozen subtree.
+//
+// Caller must hold the per-task mutex.
+func (s *Server) removeWorkspace(taskID string) error {
+	dir := filepath.Join(s.workspaceRoot, taskID)
 	if _, err := os.Stat(dir); os.IsNotExist(err) {
 		return nil
+	}
+	if err := chmodTreeWritable(dir); err != nil {
+		return err
 	}
 	return os.RemoveAll(dir)
 }
 
-// workspaceExists reports whether the workspace dir for chainID exists.
-// Caller must hold the per-chain mutex if the result will be used to
-// gate further filesystem ops (the stat-then-act pattern).
-func (s *Server) workspaceExists(chainID string) bool {
-	dir := filepath.Join(s.workspaceRoot, chainID)
+// chmodTreeWritable walks dir and adds u+w (0200) to every file and
+// dir, so a subsequent RemoveAll succeeds even when read_only_paths
+// chmod'd things to 555/444.
+func chmodTreeWritable(dir string) error {
+	return filepath.WalkDir(dir, func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		// Re-add u+w. For dirs we also need u+x (already present from
+		// 555 → 755). For files we need u+w only.
+		newMode := info.Mode() | 0o200
+		if d.IsDir() {
+			newMode |= 0o700
+		}
+		return os.Chmod(path, newMode.Perm())
+	})
+}
+
+// workspaceExists reports whether the task's workspace dir exists.
+// Caller must hold the per-task mutex if the result will be used to
+// gate further filesystem ops.
+func (s *Server) workspaceExists(taskID string) bool {
+	dir := filepath.Join(s.workspaceRoot, taskID)
 	info, err := os.Stat(dir)
 	return err == nil && info.IsDir()
 }
 
+// applyReadOnlyChmod walks each path in roPaths (relative to the
+// task's workspace root) and recursively chmods to 555 (dirs) / 444
+// (files). Idempotent — already-frozen trees stay frozen. Paths that
+// don't exist yet are silently skipped (chmod will apply on a future
+// sweep once the path is materialised).
+//
+// Caller must hold the per-task mutex (we walk the filesystem while
+// holding state-modification rights).
+func (s *Server) applyReadOnlyChmod(taskID string, roPaths []string) error {
+	if len(roPaths) == 0 {
+		return nil
+	}
+	taskRoot := filepath.Join(s.workspaceRoot, taskID)
+	var firstErr error
+	for _, rel := range roPaths {
+		abs := filepath.Join(taskRoot, filepath.Clean(rel))
+		// Defense-in-depth prefix check; validateReadOnlyPath at create
+		// time already rejected escape attempts, but a future code path
+		// adding paths post-create could miss the check.
+		if !strings.HasPrefix(abs, taskRoot+string(filepath.Separator)) && abs != taskRoot {
+			if firstErr == nil {
+				firstErr = errPathEscapes
+			}
+			continue
+		}
+		if _, statErr := os.Stat(abs); os.IsNotExist(statErr) {
+			continue
+		}
+		if err := chmodTreeReadOnly(abs); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
+}
+
+// chmodTreeReadOnly recursively chmods abs to 555 (dirs) / 444
+// (files). Idempotent.
+func chmodTreeReadOnly(abs string) error {
+	return filepath.WalkDir(abs, func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		var mode os.FileMode = 0o444
+		if d.IsDir() {
+			mode = 0o555
+		}
+		return os.Chmod(path, mode)
+	})
+}
+
 // zipDir streams a deflate-compressed zip archive of dir's contents to
-// w. Symlinks are skipped defensively — the file API in R3.6.1.b
-// rejects symlink writes, but archiving any pre-existing symlink would
-// be a workspace-escape footgun.
+// w. Symlinks are skipped defensively. Read-only files (frozen via
+// chmod 444) are still readable here — read access is intentional for
+// forensics.
 func zipDir(w io.Writer, dir string) error {
 	zw := zip.NewWriter(w)
 	defer zw.Close()
