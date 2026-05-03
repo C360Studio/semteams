@@ -706,6 +706,193 @@ Per the "fewer rich tools" principle, we don't expose `write_file` /
 for non-bash callers (rule actions, future product-shell tools that
 genuinely need typed wire shapes).
 
+## Addendum 2026-05-03 — R3.6.2.f smoke #6 outcome
+
+Smoke #6 ran the full R3.6 chain on real LLM (claude-sonnet at low
+effort, no cloud-Gemini due to SemSpec saturation). Prompt: *"create
+a driver for OpenSensorHub using OGC Connected Systems for Meshtastic
+devices"*. The chain ran end-to-end through the new builder slice
+(R3.6.2.b through .e); this addendum captures the calibration
+findings the rest of R3.6 was waiting on.
+
+### Convergence
+
+15 loops in ~10 minutes wall-clock:
+
+| # | Time | Role | Notes |
+|---|---|---|---|
+| 1 | 21:20:26 | researcher (dispatch) | 20×http_request + 5×web_search; emitted artifact rev=1 |
+| 2 | 21:22:37 | research-reviewer | decided `insufficient` (corpus gap) |
+| 3 | 21:23:12 | researcher-with-source-acquisition | add_source_repo + emit rev=2 |
+| 4 | 21:23:55 | research-reviewer | decided `approved` — **no stabilisation pass needed** |
+| 5 | 21:24:08 | dev-via-spec-planner | `planned` |
+| 6 | 21:24:37 | dev-via-spec-reviewer | `approved` |
+| 7 | 21:25:00 | dev-via-spec-challenger | **`concerns_raised` (rule 04)** |
+| 8 | 21:25:25 | dev-via-spec-planner (retry) | `planned` |
+| 9 | 21:26:01 | dev-via-spec-reviewer | **`insufficient` (rule 02)** |
+| 10 | 21:26:30 | dev-via-spec-planner (retry) | `planned` |
+| 11 | 21:26:53 | dev-via-spec-reviewer | `approved` |
+| 12 | 21:27:15 | dev-via-spec-challenger | `accept` |
+| 13 | 21:27:39 | dev-via-spec-architect | emit_dev_via_spec_artifact + decide(seed_requirements_emitted) |
+| 14 | 21:28:11 | **dev-via-spec-builder** | bootstrap_workspace + 13×bash; force-failed at iter 15 |
+
+The chain exercised retry paths the mock fixture skipped: rule 02
+(reviewer-rejected → planner retry) AND rule 04 (challenger-concerns
+→ planner retry) both fired once. Real LLM is more rigorous than the
+mock.
+
+The architect's emit_dev_via_spec_artifact rendered
+`docs/specs/2026-05-03-meshtastic-lora-transport-driver.md`. Rule
+06's `$entity.triple.dev_via_spec.artifact.path` substitution
+resolved correctly; bootstrap_workspace seeded SPEC.md into the
+builder's sandbox worktree on first call. End-to-end wiring verified.
+
+### What the builder produced (in 15 iterations)
+
+```
+pom.xml
+SPEC.md
+src/main/java/com/semstreams/meshtastic/
+  codec/{ProtobufCodec,DefaultProtobufCodec}.java
+  config/MeshtasticDriverConfig.java
+  connection/{ConnectionException,ConnectionHandle,ConnectionProvider}.java
+  envelope/{MessageEnvelopeLayer,DefaultMessageEnvelopeLayer}.java
+  transport/{TransportContract,InboundMessage,OutboundMessage,
+             MeshtasticTransportDriver}.java
+src/test/java/com/semstreams/meshtastic/
+  MeshtasticTransportDriverTest.java   (17 unit tests)
+```
+
+12 production sources + 1 test class with 17 unit tests. Reasonable
+package decomposition (codec/config/connection/envelope/transport).
+**`mvn compile` against this tree returns BUILD SUCCESS.** **`mvn
+test` reports `Tests run: 17, Failures: 1, Errors: 0`** — one test
+asserts `IllegalArgumentException` for null inputs while the
+implementation throws `NullPointerException` via
+`Objects.requireNonNull`. Trivial test-vs-impl mismatch the
+builder would have fixed on its next iteration.
+
+### Calibration: max_iterations is empirically too tight
+
+This is the load-bearing finding. **§15 locks `max_iterations` at 8;
+osh-demo's agentic-loop default is 15; the builder needed >15 just
+to finish writing source + tests, before any verification.** Each
+bash heredoc (`cat > path << 'EOF' … EOF`) consumes one iteration
+per file. With 13 files needed, the budget exhausts before
+`mvn compile` even runs. The builder force-failed at iter 15 with
+`state=failed`; no `builder_decide` was emitted because the
+framework killed the loop first.
+
+Workspace persistence held — we ran `mvn compile` and `mvn test`
+manually post-failure to learn what the LLM had produced. That
+forensics path is invaluable; smoke #6 would have been much
+harder to read without it.
+
+**Calibration recommendation (amends §15):**
+
+- Bump default `max_iterations` for the dev-via-spec-builder role
+  from 8 → **30**.
+- Allow per-rule override up to **50** for OSH-class workloads,
+  matching semspec's empirical ceiling.
+- Implementation: rule 06 (`06-architect-emit-to-builder.json`)
+  should set `max_iterations: 30` explicitly on the publish_agent
+  action so the builder gets a budget independent of the
+  agentic-loop component default. (Rule action support for
+  per-spawn `max_iterations` may need an upstream change — verify
+  beta.39's publish_agent payload accepts it; if not, raise as a
+  small upstream PR.)
+
+§15's original "8 (bumped from initial 3 default — bare seed means
+more iteration on Maven/OSGi config)" rationale was directionally
+right but quantitatively too low by ~4×. Smoke #6 surfaced the gap
+the §15 author couldn't have without observation.
+
+### Calibration: persona could batch file-writes
+
+Iteration drain is dominated by one-file-per-bash-call. The builder
+persona doesn't currently encourage batching. A heredoc can carry
+multiple `cat > path << 'EOF' … EOF` blocks in one bash invocation
+— the persona's
+`configs/personas/fragments/dev-via-spec-builder/10-bash-iteration-contract.md`
+shows a single-file example. Updating the example to demonstrate
+multi-file batching could halve iteration consumption, decoupling
+budget from file count.
+
+This is a persona refinement, not a sandbox or rule change. Defer
+to a follow-up R3.6.2.g (or fold into the §15 calibration PR).
+
+### Calibration: Open #19 (model tier)
+
+`claude-sonnet` at low effort produced **compilable Java** with
+**16/17 passing tests on first attempt** — without seeing test
+results, without iterating. Architectural decomposition was sound.
+**No upgrade to opus or higher reasoning_effort needed for OSH-class
+workloads.** Open #19 closes: lock claude-sonnet, low effort.
+
+### Calibration: Open #13 (egress allow-list)
+
+Researcher hit (in order):
+- `github.com`, `raw.githubusercontent.com` (OSH source files)
+- `meshtastic.org`, `python.meshtastic.org`, `buf.build`
+  (Meshtastic protocol docs + protobuf schemas)
+- `opengeospatial.github.io`, `docs.ogc.org` (OGC Connected
+  Systems specs)
+
+All hosts are on §13's day-one allow-list (or `github.com`
+subdomains). **No unexpected egress.** §13's allow-list draft
+holds for OSH-class research; smoke #6 doesn't argue for tightening
+or expanding it.
+
+### Calibration: Open #14 (per-workspace disk quota)
+
+Builder workspace post-failure: 13 source files + Maven `target/`
+directory. Total <1 MB. `mvn compile` populated `target/classes`
+with 12 `.class` files. **No quota concern.** §14's deferral holds
+— if a future smoke produces multi-GB artifacts (e.g. heavy
+generated code), revisit; OSH-Java-Maven bare seed doesn't.
+
+### Cost
+
+Approximately 15 loops × ~10K tokens average = ~150K tokens at
+claude-sonnet pricing (~$3/M input, $15/M output). Total run
+cost: estimated **$2–3**. Acceptable for a calibration smoke.
+
+### Drift signals captured (summary)
+
+1. **Iteration budget too tight** (loadbearing): bump 8 → 30
+   default, 50 ceiling. Either calibrate §15 or override on rule 06.
+2. **Persona batching opportunity**: multi-file heredocs reduce
+   iteration drain.
+3. **Mock fixture under-tests retry paths**: real LLM hit rule 02
+   AND rule 04; mock fixture skipped both. Either expand the mock
+   fixture or accept that smoke #6 is the canonical retry-path
+   coverage.
+4. **Forensics workflow proven**: post-failure workspace inspection
+   via `docker exec` + manual `mvn` is essential and worked. The
+   sandbox's worktree persistence (until DELETE) is what makes this
+   possible; do not change that lifecycle.
+5. **Wire-format end-to-end verified**: rule 06 →
+   bootstrap_workspace → bash → architect's spec content reaches
+   the builder workspace correctly. No bugs in the
+   architect→builder handoff.
+
+### What R3.6.2.f does NOT decide
+
+- Whether the calibration above (`max_iterations: 30`) gets
+  applied as a follow-up slice (R3.6.2.g) or a §15 amendment in
+  this ADR. **Recommend** a follow-up slice so the persona, rule,
+  and ADR change land coherently with a single re-run smoke for
+  verification.
+- Whether the persona should be updated for batching. **Recommend**
+  yes; bundle with the calibration follow-up.
+- Whether to add a builder-retry rule (analogous to planner retry on
+  reject) when the framework force-fails. **Defer** until we see how
+  often the budget bump alone gets the chain to terminal.
+
+R3.6 is functionally complete with the budget caveat captured.
+Closeout follow-up: budget bump + persona batching + smoke #6 re-run
+to confirm `tests_passing` terminal.
+
 ## References
 
 - ADR-031 — research-flow + dev-via-spec; R3.4 closeout addendum
