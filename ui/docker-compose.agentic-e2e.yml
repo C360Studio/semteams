@@ -97,6 +97,12 @@ services:
         condition: service_healthy
       mock-llm:
         condition: service_healthy
+      # required:false so the backend boots when the `sandbox` profile
+      # isn't active. Journeys that need bash-via-sandbox bring it up
+      # via the profile; existing journeys (mock-llm-only) skip it.
+      sandbox:
+        condition: service_healthy
+        required: false
     environment:
       - SEMSTREAMS_NATS_URLS=nats://nats:4222
       - SEMSTREAMS_LOG_LEVEL=debug
@@ -106,6 +112,14 @@ services:
       # that don't list the tool in agentic-tools.allowed_tools.
       - SEMTEAMS_SEMSOURCE_NAMESPACES=research
       - SEMTEAMS_SEMSOURCE_DEFAULT_NAMESPACE=research
+      # R3.6.2 sandbox URL — upstream BashExecutor reads SANDBOX_URL
+      # at boot and routes commands through the sandbox container
+      # when set. Profile-gated below; backend boots either way
+      # (depends_on uses required:false). Journeys that don't run
+      # the sandbox profile won't have the sandbox container, so
+      # bash-via-sandbox calls would 404 — but those journeys
+      # don't list `bash` in allowed_tools either.
+      - SANDBOX_URL=http://sandbox:8090
       # Cloud-LLM API keys for R3.4 OSH demo (osh-demo.json's
       # gemini-flash + claude-sonnet endpoints). Empty defaults keep
       # mock-llm journeys unaffected — the model_registry endpoints
@@ -122,6 +136,66 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
+
+  # SemTeams Builder Sandbox (R3.6.1, ADR-032). Upstream's
+  # BashExecutor routes through this container via SANDBOX_URL when
+  # the agent loop calls the `bash` tool. Hardened posture mirrors
+  # docker/compose/sandbox.yml (the standalone dev compose).
+  #
+  # Inlined rather than `include:`'d on purpose: Compose include would
+  # couple the e2e stack's network (agentic-net) and per-journey
+  # lifecycle to the standalone compose file's, and we'd lose the
+  # `profiles: ["sandbox", "local-models"]` override that's specific
+  # to the e2e shape. Two definitions to keep in sync is the
+  # accepted cost. Hardening posture changes (cap_drop, tmpfs, etc.)
+  # MUST land in both places.
+  #
+  # Profile-gated: journeys that exercise bash (R3.6.2 builder slice
+  # and beyond) bring it up via `--profile sandbox`. Existing mock-
+  # llm journeys skip the boot cost.
+  sandbox:
+    image: semteams-sandbox:dev
+    build:
+      context: ${BACKEND_CONTEXT:-..}
+      dockerfile: docker/sandbox.Dockerfile
+    container_name: semteams-ui-agentic-sandbox
+    profiles: ["sandbox", "local-models"]
+    volumes:
+      - sandbox-agentic-workspaces:/workspace
+      - sandbox-agentic-caches-m2:/home/sandbox/.m2
+      - sandbox-agentic-caches-go:/go/pkg/mod
+      - sandbox-agentic-caches-npm:/home/sandbox/.npm
+      - sandbox-agentic-caches-gradle:/home/sandbox/.gradle
+    networks:
+      - agentic-net
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=512M
+      - /var/tmp:size=256M
+      - /run:size=64M
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 4G
+        reservations:
+          cpus: "0.5"
+          memory: 512M
+    ulimits:
+      nproc: 512
+      nofile:
+        soft: 4096
+        hard: 8192
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8090/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
 
   # SemSource (R2 of ADR-031). Headless mode — shares NATS with semteams,
   # subscribes to graph.ingest.add.{namespace} per
@@ -267,4 +341,14 @@ volumes:
   nats-agentic-data:
     driver: local
   ui-agentic-node-modules:
+    driver: local
+  sandbox-agentic-workspaces:
+    driver: local
+  sandbox-agentic-caches-m2:
+    driver: local
+  sandbox-agentic-caches-go:
+    driver: local
+  sandbox-agentic-caches-npm:
+    driver: local
+  sandbox-agentic-caches-gradle:
     driver: local
