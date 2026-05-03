@@ -378,6 +378,99 @@ final go-reviewer pass over the assembled R3.6.1 (lifecycle + file
 ops + path confinement + exec + toolchain + cache), full lint /
 race / e2e smoke, and PR.
 
+## Addendum 2026-05-03 — R3.6.2.b builder_decide as sibling tool
+
+R3.6.2.b ships the builder terminal validator from §15. The
+framework-alignment review (ADR-029 discipline) settled on a
+**sibling tool** (`builder_decide`) rather than a wrapping
+replacement of upstream `decide`. The evidence trail:
+
+### What §15 left open
+
+The decision row says "Lives in product-shell decide-handler, not
+LLM persona. ADR-032 §15 has the full contract. Shape: a thin
+product-shell tool wrapper or a `decide` pre-validator." Both
+shapes were explicitly authorised; the addendum picks one.
+
+### Why not wrap upstream `decide`
+
+semstreams beta.39 surfaces:
+
+- `agentictools.DecideExecutor` with parameter schema `{action,
+  reason, subtopics, retry_hint}` — the builder evidence fields
+  (`tests_run`, `tests_passed`, `tests_failed`,
+  `artifact_summary`, `failure_summary`, `blocking_question`)
+  aren't in the schema, so the LLM has no path to supply them
+  through the canonical tool.
+- `agentictools.ExecutorRegistry.RegisterTool` returns an error
+  on duplicate name. There is no `Unregister` /
+  `Replace` surface. `executors.RegisterBuiltins` (which the
+  product shell calls in `cmd/semteams/main.go` step 9c)
+  registers `decide` *before* `registerProductTools` fires (step
+  9d), so the product shell cannot register a wrapper under
+  `decide`.
+- The framework's `wrapping_pattern_test.go` demonstrates a
+  wrapping executor — but only when the product shell owns the
+  initial registration. Once the framework's own `RegisterBuiltins`
+  has registered `decide`, that path is closed.
+
+A `decide` pre-validator hook in upstream would close this — but
+adding one is a non-trivial framework change, premature without a
+second product (semspec / semdragon) wanting role-specific
+validators on `decide`. Not worth the upstream cost for one slice
+of one product.
+
+### Why a sibling tool is correct here
+
+`builder_decide` mirrors the canonical agent-terminal-tool
+emission shape (`decide`, `emit_diagnosis`,
+`emit_research_artifact`, `emit_dev_via_spec_artifact`):
+
+- emits `coordinator.next_action` + `coordinator.decision_reason`
+  triples on the loop entity (parity with `decide` so downstream
+  rules can route on the same predicates),
+- adds per-action evidence triples under
+  `dev_via_spec.builder.{tests_run,...}` (counts and references
+  only — never free-text content beyond LLM-authored summaries),
+- returns `StopLoop=true` with the full args in `Content` for
+  `read_loop_result` consumers.
+
+The builder persona's `allowed_tools` lists `builder_decide`
+instead of `decide`. The canonical `decide` remains untouched and
+available for any role that doesn't need evidence validation.
+
+### Migration posture
+
+Stays product-local until upstream ships either (a) a per-role
+terminal-tool primitive, or (b) a `decide`-extension hook that
+lets product code register validators against existing tool
+names. Neither shipped in beta.39. When one ships, revisit:
+
+- If (a): replace `builder_decide` with the upstream primitive,
+  configure with the per-action evidence contract.
+- If (b): drop `builder_decide`, register a validator under
+  `decide` for the builder role.
+
+Either way, the migration is name-only — the action enum, the
+evidence fields, and the triple set are stable design decisions.
+
+### What R3.6.2.b ships
+
+- `cmd/semteams/tools/builderdecide/{doc.go,executor.go,executor_test.go}`
+  — executor, predicates, full TDD test suite covering the action
+  enum, per-action evidence requirements, the
+  `tests_passing`-with-zero-tests gate from §15, JSON-number
+  coercion, negative-count rejection, and triple-publish failure.
+- `cmd/semteams/product_tools.go` — `registerBuilderDecide`
+  wired after `registerEmitSpecArtifact` (always-on when NATS is
+  reachable, mirrors the other product-shell tools).
+- `cmd/semteams/tools/README.md` — tool-table row + migration
+  posture pointer to this addendum.
+
+R3.6.2.c (builder persona fragments), R3.6.2.d (rule that fires
+on builder loop spawn → POST /worktree), R3.6.2.e (mock-LLM
+fixture), and R3.6.2.f (smoke #6) remain on the roadmap.
+
 ## Addendum 2026-05-03 — R3.6.1.1 wire-format conformance + read_only_paths
 
 R3.6.1.1 is a follow-up slice driven by two findings made AFTER R3.6.1
