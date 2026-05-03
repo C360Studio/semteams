@@ -1,0 +1,84 @@
+# SemTeams Builder Sandbox — compose service (ADR-032).
+#
+# Usage:
+#   docker compose -f docker/compose/sandbox.yml --profile sandbox up -d
+#
+# Profiles:
+#   - sandbox: Builder sandbox only.
+#   - all: Builder sandbox alongside other optional services.
+#
+# Hardened posture per ADR-032 §6, §7: cap_drop ALL + minimal cap_add,
+# no-new-privileges, read-only root + tmpfs, 2 CPU / 4 GB hard cap.
+# Resource ulimits mirror semdragon's posture.
+
+services:
+  sandbox:
+    profiles: ["sandbox", "all"]
+    container_name: semteams-sandbox
+    build:
+      context: ../..
+      dockerfile: docker/sandbox.Dockerfile
+    image: semteams-sandbox:dev
+    ports:
+      - "${SANDBOX_PORT:-8090}:8090"
+    volumes:
+      - sandbox-workspaces:/workspace
+      # Shared cache volume mounted r/w across all chains (ADR-032 §18).
+      # Without this, every workspace re-downloads Maven Central on
+      # cold start (60–120s). Caches are immutable-by-convention; if
+      # poisoned, nuke the volume.
+      - sandbox-caches-m2:/home/sandbox/.m2
+      - sandbox-caches-go:/go/pkg/mod
+      - sandbox-caches-npm:/home/sandbox/.npm
+      - sandbox-caches-gradle:/home/sandbox/.gradle
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    # R3.6.1.c bash exec runs as the sandbox user; no extra caps
+    # needed for `mvn`, `go`, `npm`, etc. since they don't require
+    # privilege escalation. Revisit only if a toolchain step demands
+    # one (e.g., npm install bumping inotify limits).
+    read_only: true
+    tmpfs:
+      - /tmp:size=512M
+      - /var/tmp:size=256M
+      - /run:size=64M
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 4G
+        reservations:
+          cpus: "0.5"
+          memory: 512M
+    ulimits:
+      nproc: 512
+      nofile:
+        soft: 4096
+        hard: 8192
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8090/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    networks:
+      - semteams-sandbox
+
+networks:
+  semteams-sandbox:
+    driver: bridge
+
+volumes:
+  sandbox-workspaces:
+    driver: local
+  sandbox-caches-m2:
+    driver: local
+  sandbox-caches-go:
+    driver: local
+  sandbox-caches-npm:
+    driver: local
+  sandbox-caches-gradle:
+    driver: local
