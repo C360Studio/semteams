@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
@@ -171,13 +172,14 @@ func initGitRepo(ctx context.Context, dir string) error {
 
 // errFromOutput wraps a git command failure with stderr context so
 // debugging from logs is possible. Without this, "exit status 128" is
-// the only signal a caller has.
+// the only signal a caller has. Uses fmt.Errorf %w so callers that
+// errors.Is/As against ExitError still match.
 func errFromOutput(err error, out []byte) error {
 	trimmed := strings.TrimSpace(string(out))
 	if trimmed == "" {
 		return err
 	}
-	return errors.New(err.Error() + ": " + trimmed)
+	return fmt.Errorf("%w: %s", err, trimmed)
 }
 
 // removeWorkspace deletes the task's workspace dir. No-op if it doesn't
@@ -266,11 +268,17 @@ func (s *Server) applyReadOnlyChmod(taskID string, roPaths []string) error {
 }
 
 // chmodTreeReadOnly recursively chmods abs to 555 (dirs) / 444
-// (files). Idempotent.
+// (files). Idempotent. Symlinks are skipped — os.Chmod follows them,
+// which would attempt to mutate permissions on the target (potentially
+// outside the workspace, EPERM as non-root). The file API refuses
+// symlink writes anyway, so freezing them serves no purpose.
 func chmodTreeReadOnly(abs string) error {
 	return filepath.WalkDir(abs, func(path string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
+		}
+		if d.Type()&fs.ModeSymlink != 0 {
+			return nil
 		}
 		var mode os.FileMode = 0o444
 		if d.IsDir() {

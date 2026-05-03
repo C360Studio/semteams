@@ -1,5 +1,14 @@
-// Package main implements the SemTeams builder sandbox — a per-chain
+// Package main implements the SemTeams builder sandbox — a per-task
 // workspace service for the dev-via-spec builder agent (R3.6, ADR-032).
+//
+// Wire format conforms to upstream `processor/agentic-tools/sandbox.Client`
+// (semstreams beta.36) for the subset the BashExecutor route needs:
+// CreateWorktree (POST /worktree), DeleteWorktree, Exec, ReadFile,
+// WriteFile. ListDir, Search, GitStatus, GitCommit, GitDiff are
+// intentionally NOT exposed — bash subsumes them, and the LLM-visible
+// tool surface stays minimal per the "fewer rich tools" principle.
+// One product-shell extension: GET /worktree/{taskID}/archive returns
+// a zip for forensics (ADR-032 §10).
 //
 // Posture: standalone binary mirroring semdragon's cmd/sandbox/ shape.
 // Runs in its own hardened container (cap_drop ALL + minimal cap_add,

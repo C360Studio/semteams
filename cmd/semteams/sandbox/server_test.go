@@ -823,6 +823,77 @@ func TestReadOnlyPaths_NoMetadataNoOp(t *testing.T) {
 	}
 }
 
+func TestReadOnlyPaths_MultipleEntries(t *testing.T) {
+	// Two independent read_only_paths must both freeze.
+	ts, _ := newTestServer(t)
+	taskID := "test.task.ro.multi"
+	r := createWorktree(t, ts, taskID, []string{"baseline", "data"})
+	r.Body.Close()
+	if r.StatusCode != http.StatusOK {
+		t.Fatalf("create: %d", r.StatusCode)
+	}
+	seed := postExec(t, ts, taskID,
+		"mkdir baseline data && echo b > baseline/x.txt && echo d > data/y.txt", 0)
+	seed.Body.Close()
+
+	r1 := writeFile(t, ts, taskID, "baseline/sneak.txt", "x")
+	r1.Body.Close()
+	if r1.StatusCode != http.StatusForbidden {
+		t.Fatalf("baseline write: expected 403, got %d", r1.StatusCode)
+	}
+	r2 := writeFile(t, ts, taskID, "data/sneak.txt", "x")
+	r2.Body.Close()
+	if r2.StatusCode != http.StatusForbidden {
+		t.Fatalf("data write: expected 403, got %d", r2.StatusCode)
+	}
+}
+
+func TestReadOnlyPaths_ReadStillWorks(t *testing.T) {
+	// chmod 444 allows read; verify read_file against a frozen file
+	// returns its content.
+	ts, _ := newTestServer(t)
+	taskID := "test.task.ro.read"
+	r := createWorktree(t, ts, taskID, []string{"baseline"})
+	r.Body.Close()
+	seed := postExec(t, ts, taskID, "mkdir baseline && echo seeded > baseline/file.txt", 0)
+	seed.Body.Close()
+
+	rd := readFile(t, ts, taskID, "baseline/file.txt")
+	defer rd.Body.Close()
+	if rd.StatusCode != http.StatusOK {
+		t.Fatalf("read after freeze: status %d", rd.StatusCode)
+	}
+	var got fileReadResponse
+	json.NewDecoder(rd.Body).Decode(&got)
+	if !strings.Contains(got.Content, "seeded") {
+		t.Fatalf("frozen file content lost: %q", got.Content)
+	}
+}
+
+func TestReadOnlyPaths_NeverMaterialised(t *testing.T) {
+	// A path declared in read_only_paths that never gets created must
+	// not cause errors on any subsequent op.
+	ts, _ := newTestServer(t)
+	taskID := "test.task.ro.ghost"
+	r := createWorktree(t, ts, taskID, []string{"never-created"})
+	r.Body.Close()
+	if r.StatusCode != http.StatusOK {
+		t.Fatalf("create: %d", r.StatusCode)
+	}
+	// Exec, write, read should all proceed without errors related to
+	// the missing read_only_path.
+	e := postExec(t, ts, taskID, "echo ok", 0)
+	e.Body.Close()
+	if e.StatusCode != http.StatusOK {
+		t.Fatalf("exec: %d", e.StatusCode)
+	}
+	w := writeFile(t, ts, taskID, "f.txt", "anywhere")
+	w.Body.Close()
+	if w.StatusCode != http.StatusOK {
+		t.Fatalf("write: %d", w.StatusCode)
+	}
+}
+
 func TestReadOnlyPaths_FreezeOnCreate(t *testing.T) {
 	// If read_only_paths exist at create time (pre-populated workspace
 	// dir from a prior run), the chmod sweep applies immediately.

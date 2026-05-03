@@ -220,7 +220,11 @@ func (s *Server) handleCreateWorktree(w http.ResponseWriter, r *http.Request) {
 	s.mu.Unlock()
 
 	// Apply chmod sweep so any read_only_paths that already exist (e.g.
-	// re-create after seed) are immediately frozen.
+	// re-create after seed, or pre-populated workspace dir) are
+	// immediately frozen. Intentionally runs regardless of `created` —
+	// the caller might be re-creating an existing workspace to ADD
+	// read_only_paths, or the workspace dir might have been pre-
+	// populated out-of-band; both cases need the sweep.
 	if err := s.applyReadOnlyChmod(req.TaskID, roPaths); err != nil {
 		s.logger.Warn("read_only_paths chmod sweep had errors",
 			"task_id", req.TaskID, "error", err)
