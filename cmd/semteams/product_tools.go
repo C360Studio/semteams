@@ -14,6 +14,7 @@ import (
 	"github.com/c360studio/semteams/cmd/semteams/devviaspec"
 	"github.com/c360studio/semteams/cmd/semteams/research"
 	"github.com/c360studio/semteams/cmd/semteams/tools/addsource"
+	"github.com/c360studio/semteams/cmd/semteams/tools/builderdecide"
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitartifact"
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitspecartifact"
 )
@@ -41,6 +42,9 @@ const (
 // of the framework's first-party payload set (payloadbuiltins.Register).
 // R3.1 (ADR-031): research.Artifact — revision-keyed researcher snapshot.
 // R3.3 (ADR-031 §R3.3): devviaspec.Artifact — terminal architect output.
+// R3.6.2.b (ADR-032 §15): no payload — builder_decide tool emits triples
+// only; full args round-trip through the tool result Content for
+// read_loop_result consumers.
 // Add new product-local payload registrations here; keep the ADR reference
 // in the comment so future readers know which slice introduced each type.
 func registerProductPayloads(reg *payloadregistry.Registry) error {
@@ -57,9 +61,9 @@ func registerProductPayloads(reg *payloadregistry.Registry) error {
 // the shared registry, after the framework's RegisterBuiltins has
 // populated it with first-party tools. R2 of ADR-031 adds
 // add_source_repo. R3.2.1 adds emit_research_artifact. R3.3 adds
-// emit_dev_via_spec_artifact. Re-introduce a *config.Config parameter
-// (or switch to a deps struct) once a tool needs deployment-config
-// visibility.
+// emit_dev_via_spec_artifact. R3.6.2.b adds builder_decide.
+// Re-introduce a *config.Config parameter (or switch to a deps struct)
+// once a tool needs deployment-config visibility.
 //
 // Discipline gate (commission-not-omission): adding a new tool
 // registration here requires a framework-alignment review per
@@ -77,7 +81,10 @@ func registerProductTools(reg *agentictools.ExecutorRegistry, natsClient *natscl
 	if err := registerEmitArtifact(reg, natsClient, platform, logger); err != nil {
 		return err
 	}
-	return registerEmitSpecArtifact(reg, natsClient, platform, logger)
+	if err := registerEmitSpecArtifact(reg, natsClient, platform, logger); err != nil {
+		return err
+	}
+	return registerBuilderDecide(reg, natsClient, platform, logger)
 }
 
 // registerAddSource wires the R2 add_source_repo executor. Stays inert
@@ -154,6 +161,31 @@ func registerEmitSpecArtifact(reg *agentictools.ExecutorRegistry, natsClient *na
 	}
 	logger.Info("Registered product tool",
 		slog.String("name", emitspecartifact.ToolName),
+		slog.String("org", platform.Org),
+		slog.String("platform", platform.Platform))
+	return nil
+}
+
+// registerBuilderDecide wires the R3.6.2.b builder_decide executor — the
+// dev-via-spec-builder role's terminal validator. Always registered when
+// natsClient is non-nil — same "always on" policy as registerEmitArtifact:
+// the tool is product policy, and any deployment running the dev-via-spec
+// builder slice needs it to close the arc with action-specific evidence.
+// See ADR-032 §15 for the contract and cmd/semteams/tools/builderdecide
+// for the package-level discussion of why this is a sibling tool to
+// upstream `decide` rather than a wrapping replacement.
+func registerBuilderDecide(reg *agentictools.ExecutorRegistry, natsClient *natsclient.Client, platform types.PlatformMeta, logger *slog.Logger) error {
+	if natsClient == nil {
+		logger.Warn("nats client unavailable; builder_decide registration skipped")
+		return nil
+	}
+	triplePublisher := agentictools.NewNATSTriplePublisher(natsClient)
+	executor := builderdecide.NewExecutor(triplePublisher, platform, logger)
+	if err := reg.RegisterTool(builderdecide.ToolName, executor); err != nil {
+		return fmt.Errorf("register %s: %w", builderdecide.ToolName, err)
+	}
+	logger.Info("Registered product tool",
+		slog.String("name", builderdecide.ToolName),
 		slog.String("org", platform.Org),
 		slog.String("platform", platform.Platform))
 	return nil
