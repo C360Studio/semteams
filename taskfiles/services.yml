@@ -34,6 +34,25 @@ tasks:
       - docker compose -f docker/compose/services.yml --profile all up -d
       - echo "[OK] All optional services started"
 
+  sandbox:up:
+    desc: Start the builder sandbox container (R3.6, ADR-032). Exposes 8090.
+    cmds:
+      - echo "[SERVICES] Starting sandbox..."
+      - docker compose -f docker/compose/sandbox.yml --profile sandbox up -d --build
+      - 'echo "[OK] Sandbox up at http://localhost:8090 (set SANDBOX_URL=http://localhost:8090 when running task dev:backend:start)"'
+
+  sandbox:down:
+    desc: Stop the builder sandbox + nuke its volumes
+    cmds:
+      - echo "[SERVICES] Stopping sandbox..."
+      - docker compose -f docker/compose/sandbox.yml --profile sandbox down -v
+      - echo "[OK] Sandbox stopped, volumes removed"
+
+  sandbox:logs:
+    desc: Tail sandbox container logs
+    cmds:
+      - docker compose -f docker/compose/sandbox.yml --profile sandbox logs -f
+
   stop:
     desc: Stop all optional services
     cmds:
