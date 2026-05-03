@@ -471,6 +471,144 @@ R3.6.2.c (builder persona fragments), R3.6.2.d (rule that fires
 on builder loop spawn → POST /worktree), R3.6.2.e (mock-LLM
 fixture), and R3.6.2.f (smoke #6) remain on the roadmap.
 
+## Addendum 2026-05-03 — R3.6.2.d spawn rule + bootstrap_workspace tool
+
+R3.6.2.d ships the rule that fires when the architect emits a
+spec artifact, plus the product-shell tool that bootstraps the
+builder's sandbox workspace. The framework-alignment review
+(ADR-029 discipline) revealed an architectural gap that pulled
+the design away from this ADR's original §R3.6.2.d framing.
+
+### What §R3.6.2.d originally proposed
+
+The R3.6.2.d row in the §Phasing section read:
+
+> **.d** — rule that fires on builder loop spawn (matching marker
+> triple from architect's artifact emit): POST /worktree on
+> sandbox via `http_request` rule action.
+
+Two assumptions in that sentence don't survive contact with
+beta.39:
+
+1. **No `http_request` rule action exists.** Upstream beta.39
+   ships these rule actions: `publish`, `add_triple`,
+   `remove_triple`, `update_triple`, `publish_agent`,
+   `trigger_workflow`, `publish_boid_signal`, `update_kv`,
+   `deny`. A generic outbound-HTTP primitive would be useful for
+   any product but isn't in scope upstream.
+
+2. **`publish_agent` generates the spawned task_id internally.**
+   `processor/rule/actions.go:587` computes
+   `taskID := fmt.Sprintf("rule-%s-%d", entityID,
+   time.Now().UnixNano())` at action-execution time and embeds
+   that into the published TaskMessage. The rule cannot
+   pre-create a sandbox worktree at the new loop's task_id
+   because the task_id doesn't exist until publish_agent runs;
+   even with `http_request` available, you'd need a substitution
+   variable (e.g. `${rule.spawned_task}`) that exposes the
+   to-be-generated task_id to subsequent on_enter actions in the
+   same firing.
+
+### Options considered
+
+The framework-alignment review weighed three paths:
+
+1. **Land both upstream changes** (`http_request` action +
+   `${rule.spawned_task}` substitution). Heaviest path; blocks
+   R3.6.2.d on multiple upstream slices; the `http_request`
+   action is generally useful but requires careful design (auth,
+   timeouts, response handling) that's premature without a
+   second product wanting it.
+
+2. **Add a dispatcher pre-loop hook** at `agentic-loop` that the
+   product shell can install for specific roles. Generic but
+   intrusive; requires a framework-side extension point that
+   doesn't exist.
+
+3. **A product-shell `bootstrap_workspace` tool the builder
+   calls as iteration 1.** Self-contained; no upstream
+   dependency; documented migration target. Costs one iteration
+   of the 8-budget and one extra tool surface (3 → 4: bash,
+   read_loop_result, builder_decide, bootstrap_workspace).
+
+We picked option 3.
+
+### Why bash cannot subsume bootstrap_workspace
+
+Per Coby's "fewer rich tools" principle (feedback memory
+2026-05-03), net-new product-shell tools must clear a
+"bash-genuinely-insufficient" bar. Bash inside the sandbox
+cannot:
+
+- Reach the host filesystem to read the rendered spec markdown
+  at `$SEMTEAMS_DEVVIASPEC_ARTIFACT_DIR/<slug>.md` — sandbox
+  workspaces are isolated from the host fs.
+- POST `/worktree` to create the workspace itself — upstream
+  `BashExecutor` requires an existing worktree (the integration
+  test in `cmd/semteams/sandbox/integration_test.go:54-58`
+  documents this contract: "Upstream's BashExecutor doesn't
+  auto-create; the framework's rule layer (R3.6.2.d) will fire
+  CreateWorktree on builder spawn.").
+- PUT `/file` from outside the sandbox network without the
+  `SANDBOX_URL` credential and HTTP client.
+
+All three operations need host-side execution before bash inside
+the sandbox is even reachable. bootstrap_workspace closes that
+gap; bash takes over from iteration 2 onward.
+
+### What R3.6.2.d ships
+
+- `cmd/semteams/tools/bootstrapworkspace/{doc.go,executor.go,executor_test.go}`
+  — single-tool executor with the `spec_path` arg, path-traversal
+  guard against `SEMTEAMS_DEVVIASPEC_ARTIFACT_DIR`, idempotent
+  worktree create + SPEC.md seed via upstream `sandbox.Client`.
+  Full TDD coverage (missing args, traversal, lookalike-prefix,
+  file-not-found, sandbox failures, idempotent re-create).
+- `cmd/semteams/product_tools.go` — `registerBootstrapWorkspace`
+  skipped when `SANDBOX_URL` is unset (the dev-via-spec-builder
+  loop is non-functional without a sandbox; same env var the
+  upstream BashExecutor already consumes, so an unset value
+  disables the entire builder slice consistently).
+- `configs/rules/dev-via-spec/06-architect-emit-to-builder.json`
+  — fires on `agent.loop.role=dev-via-spec-architect` AND
+  `coordinator.next_action=seed_requirements_emitted` AND
+  `dev_via_spec.artifact.path` exists. Spawns the builder via
+  `publish_agent` with tools `[bootstrap_workspace, bash,
+  read_loop_result, builder_decide]` and the rule's prompt
+  substitutes `$entity.triple.dev_via_spec.artifact.path` so the
+  LLM sees the literal path.
+- `configs/e2e-dev-via-spec.json` + `configs/osh-demo.json` —
+  rules_files appended; allowed_tools extended with the three
+  builder-side tools.
+- `configs/personas/fragments/dev-via-spec-builder/{00-identity,
+  10-bash-iteration-contract}.md` — updated to reflect the new
+  4-tool surface (bootstrap_workspace added) and the
+  iteration-1 setup contract; the missing-SPEC.md boot-failure
+  terminal is reframed as a missing-bootstrap-workspace failure.
+- `cmd/semteams/tools/README.md` — tool-table row +
+  migration-target pointer back to this addendum.
+
+### Migration target
+
+`bootstrap_workspace` is product-local with a documented exit
+condition: when upstream ships `http_request` rule action **plus**
+`${rule.spawned_task}` substitution (or equivalent — anything
+that lets a rule sequence "POST /worktree → PUT /file →
+publish_agent" inline with the new task_id known to the first
+two actions), this tool deletes:
+
+- The rule's on_enter array gains two `http_request` entries
+  before publish_agent.
+- The persona's iteration 1 becomes its real first iteration.
+- The 8-iteration budget recovers one slot.
+
+When that day comes, this addendum is the historical record of
+why we shipped product-local first.
+
+R3.6.2.e (mock-LLM fixture exercising the chain through
+builder terminal) and R3.6.2.f (smoke #6, real-LLM
+OSH-Java-Maven bare seed) remain on the roadmap.
+
 ## Addendum 2026-05-03 — R3.6.1.1 wire-format conformance + read_only_paths
 
 R3.6.1.1 is a follow-up slice driven by two findings made AFTER R3.6.1
