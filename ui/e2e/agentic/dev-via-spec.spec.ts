@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 
 /**
- * Journey: Dev-via-Spec (R3.3 of ADR-031)
+ * Journey: Dev-via-Spec (R3.3 + R3.4b + R3.6.2 of ADR-031/ADR-032)
  *
  * Builds on R3.2.2's research-mode-transition: the same six-loop
  * research arc completes (researcher + reviewer + source-acquisition
@@ -9,16 +9,19 @@ import { test, expect } from "@playwright/test";
  * stabilisation rule (R3.2.2 rule_03) spawns the dev-via-spec-planner.
  * From there the dev-via-spec internal rule chain
  * (configs/rules/dev-via-spec/ rules 01/03/05) drives the four-role
- * handoff to architect terminal. This spec covers the *golden
- * path* — every gate (reviewer + challenger) approves on first pass.
- * The retry rules (02 reviewer-rejected and 04 challenger-concerns)
- * are exercised structurally by the rule's max_iterations metadata
- * and persona-content discipline; covering them under e2e is a
- * follow-up if R3.4's OSH journey reveals real-LLM retry behaviour
- * worth pinning.
+ * handoff to the architect (R3.4b: emits typed artifact +
+ * decide(seed_requirements_emitted)). Rule 06 (R3.6.2.d) then spawns
+ * the dev-via-spec-builder, which terminates with builder_decide.
+ * This spec covers the *golden path* — every gate (reviewer +
+ * challenger) approves on first pass. The retry rules (02
+ * reviewer-rejected, 04 challenger-concerns, builder iteration-budget
+ * exhaustion) are exercised structurally by the rule's
+ * max_iterations metadata and persona-content discipline; covering
+ * them under e2e is a follow-up if smoke #6 (R3.6.2.f) reveals
+ * real-LLM retry behaviour worth pinning.
  *
- * Sequence (matches dev-via-spec.yaml — ten loops, twenty-eight LLM
- * round-trips):
+ * Sequence (matches dev-via-spec.yaml — eleven loops, thirty-three
+ * LLM round-trips):
  *
  *   Loop A — researcher (default_role, revision=1) → query_entity →
  *            emit_research_artifact (revision=1, empty) → completion
@@ -64,44 +67,61 @@ import { test, expect } from "@playwright/test";
  *            → coordinator.next_action=accept → dev-via-spec
  *            rule_05 fires → spawn dev-via-spec-architect
  *
- *   Loop J — dev-via-spec-architect (terminal) →
+ *   Loop J — dev-via-spec-architect (R3.4b emits artifact) →
  *            read_loop_result × 3 (challenger / planner /
  *            research-reviewer) →
- *            decide(seed_requirements_emitted) → terminal.
- *            No rule fires.
+ *            emit_dev_via_spec_artifact (renders markdown +
+ *            mints dev_via_spec.artifact.{path,slug,...} triples) →
+ *            decide(seed_requirements_emitted) →
+ *            coordinator.next_action=seed_requirements_emitted →
+ *            dev-via-spec rule_06 fires (R3.6.2.d) → spawn builder.
+ *
+ *   Loop K — dev-via-spec-builder (R3.6.2.e terminal) →
+ *            bootstrap_workspace (iteration 1) → bash × 2 →
+ *            builder_decide(needs_clarification) — the fixture
+ *            cannot pre-know the architect's dynamically-dated
+ *            slug, so a hardcoded spec_path won't resolve on most
+ *            days; needs_clarification is the persona-canonical
+ *            boot-failure terminal (configs/personas/fragments/
+ *            dev-via-spec-builder/10-bash-iteration-contract.md
+ *            Step 0).
  *
  * Validates:
- *   - All ten loops appear with the expected role distribution
+ *   - All eleven loops appear with the expected role distribution
  *     (1 researcher + 2 researcher-with-source-acquisition + 3
  *     research-reviewer + 1 dev-via-spec-planner + 1 dev-via-spec-
  *     reviewer + 1 dev-via-spec-challenger + 1 dev-via-spec-
- *     architect) — proves rules 01a, 02 (×2), 01b (×2), 03,
- *     dev-via-spec rules 01, 03, 05 all fired in order.
+ *     architect + 1 dev-via-spec-builder) — proves rules 01a,
+ *     02 (×2), 01b (×2), 03, dev-via-spec rules 01, 03, 05, 06
+ *     all fired in order.
  *   - approval_required gate fires for add_source_repo on Loop C.
  *   - The dev-via-spec chain runs autonomously after the research
  *     arc settles (no second approval gate during dev-via-spec).
- *   - Final state: all ten loops complete; no eleventh loop
- *     appears (architect terminal does not re-trigger any rule).
+ *   - Final state: all eleven loops complete; no twelfth loop
+ *     appears (builder terminal does not re-trigger any rule).
  *
  * Required fixture: test/fixtures/journeys/dev-via-spec.yaml
- * Required compose profile: semsource (the SemSource container is
- * required for the substrate-modifying retry pass).
+ * Required compose profiles: semsource (substrate-modifying retry
+ * pass) and sandbox (R3.6.2 builder loop calls bootstrap_workspace
+ * + bash via the sandbox container).
  */
 
-test.describe("Dev-via-Spec (R3.3)", () => {
+test.describe("Dev-via-Spec (R3.3 + R3.4b + R3.6.2)", () => {
   test.beforeAll(async ({ request }) => {
     const health = await request.get("/health");
     expect(health.ok()).toBe(true);
   });
 
-  // Ten loops + approval round-trip + SemSource AddRequest +
-  // settling pass + four-role dev-via-spec chain. Allow 4.5
-  // minutes to match the sum of inner poll budgets (60 + 60 + 60
-  // + 150) and maintain headroom comparable to R3.2.2's
-  // 180s-for-7-loops baseline.
-  test.setTimeout(270_000);
+  // Eleven loops + approval round-trip + SemSource AddRequest +
+  // settling pass + four-role dev-via-spec chain + builder. Allow
+  // 6 minutes (60 + 60 + 60 + 210 + 30 headroom) — the builder
+  // loop runs four real tool calls (bootstrap_workspace + bash ×
+  // 2 + builder_decide) plus rule-engine roundtrips before
+  // terminal. Headroom protects against cold-sandbox HTTP latency
+  // on slow CI per the R3.6.2.e reviewer pass.
+  test.setTimeout(360_000);
 
-  test("research → stabilisation → dev-via-spec planner / reviewer / challenger / architect", async ({
+  test("research → stabilisation → dev-via-spec planner / reviewer / challenger / architect / builder", async ({
     page,
     request,
   }) => {
@@ -223,21 +243,21 @@ test.describe("Dev-via-Spec (R3.3)", () => {
     ).toBeTruthy();
 
     // -----------------------------------------------------------------
-    // Step 8 — wait for ALL TEN loops to reach terminal complete
-    // state. Critical assertions: dev-via-spec rules 01/03/05 must
-    // fire in order, ending with architect terminal.
+    // Step 8 — wait for ALL ELEVEN loops to reach terminal complete
+    // state. Critical assertions: dev-via-spec rules 01/03/05/06 must
+    // fire in order, ending with builder terminal.
     // -----------------------------------------------------------------
     const allTerminal = await pollUntil(async () => {
       const resp = await request.get("/teams-dispatch/loops");
       if (!resp.ok()) return null;
       const list = (await resp.json()) as Array<{ state: string }>;
-      if (list.length !== 10) return null;
+      if (list.length !== 11) return null;
       return list.every((l) => l.state === "complete") ? list : null;
-    }, { timeoutMs: 150000 });
+    }, { timeoutMs: 210000 });
 
     expect(
       allTerminal,
-      "expected all 10 loops to reach terminal complete state (research arc + stabilisation + dev-via-spec planner / reviewer / challenger / architect)",
+      "expected all 11 loops to reach terminal complete state (research arc + stabilisation + dev-via-spec planner / reviewer / challenger / architect / builder)",
     ).toBeTruthy();
 
     // -----------------------------------------------------------------
@@ -255,7 +275,8 @@ test.describe("Dev-via-Spec (R3.3)", () => {
     //   1 × dev-via-spec-planner                (Loop G — research rule 03)
     //   1 × dev-via-spec-reviewer               (Loop H — dev-via-spec rule 01)
     //   1 × dev-via-spec-challenger             (Loop I — dev-via-spec rule 03)
-    //   1 × dev-via-spec-architect        (Loop J — dev-via-spec rule 05)
+    //   1 × dev-via-spec-architect              (Loop J — dev-via-spec rule 05)
+    //   1 × dev-via-spec-builder                (Loop K — dev-via-spec rule 06)
     // -----------------------------------------------------------------
     const finalLoops = await request
       .get("/teams-dispatch/loops")
@@ -289,6 +310,9 @@ test.describe("Dev-via-Spec (R3.3)", () => {
     const architectCount = roles.filter(
       (r) => r === "dev-via-spec-architect",
     ).length;
+    const builderCount = roles.filter(
+      (r) => r === "dev-via-spec-builder",
+    ).length;
 
     expect(
       researcherCount,
@@ -318,6 +342,10 @@ test.describe("Dev-via-Spec (R3.3)", () => {
       architectCount,
       `expected 1 dev-via-spec-architect loop (dev-via-spec rule 05: challenger→architect). Missing → challenger's decide(accept) did not propagate. roles=${JSON.stringify(roles)}`,
     ).toBe(1);
+    expect(
+      builderCount,
+      `expected 1 dev-via-spec-builder loop (dev-via-spec rule 06: architect→builder). Missing → architect's decide(seed_requirements_emitted) did not propagate or rule 06's prompt-substitution failed. roles=${JSON.stringify(roles)}`,
+    ).toBe(1);
 
     // -----------------------------------------------------------------
     // Step 10 — only Loop C should ever have required approval. The
@@ -332,11 +360,10 @@ test.describe("Dev-via-Spec (R3.3)", () => {
     ).toBeUndefined();
 
     // -----------------------------------------------------------------
-    // Step 11 — settle assertion: no eleventh loop appears. If
-    // architect's decide(seed_requirements_emitted) somehow
-    // re-fires a dev-via-spec rule (regression where rule 01 or 03
-    // matches the architect role instead of planner/reviewer),
-    // an eleventh loop would appear.
+    // Step 11 — settle assertion: no twelfth loop appears. If the
+    // builder's decide(needs_clarification) somehow re-fires a
+    // dev-via-spec rule (regression where any rule matches the
+    // builder role), a twelfth loop would appear.
     // -----------------------------------------------------------------
     await new Promise((r) => setTimeout(r, 2000));
     const settledList = await request
@@ -344,8 +371,8 @@ test.describe("Dev-via-Spec (R3.3)", () => {
       .then((r) => r.json()) as unknown[];
     expect(
       settledList.length,
-      "architect terminal must not spawn an eleventh loop",
-    ).toBe(10);
+      "builder terminal must not spawn a twelfth loop",
+    ).toBe(11);
 
     // -----------------------------------------------------------------
     // Step 12 — verify the typed research.artifact.v1 payload was
@@ -374,7 +401,8 @@ test.describe("Dev-via-Spec (R3.3)", () => {
     ).toBeGreaterThanOrEqual(3);
 
     // -----------------------------------------------------------------
-    // Step 13 — Loop J's terminal state literal must be "complete".
+    // Step 13 — Loop J's and Loop K's terminal states must be
+    // "complete". The builder's terminal closes the chain.
     // -----------------------------------------------------------------
     const architectLoop = finalLoops.find(
       (l) => l.role === "dev-via-spec-architect",
@@ -384,6 +412,27 @@ test.describe("Dev-via-Spec (R3.3)", () => {
       "dev-via-spec-architect loop should exist",
     ).toBeTruthy();
     expect(architectLoop?.state).toBe("complete");
+
+    const builderLoop = finalLoops.find(
+      (l) => l.role === "dev-via-spec-builder",
+    );
+    expect(
+      builderLoop,
+      "dev-via-spec-builder loop should exist (rule 06 fired)",
+    ).toBeTruthy();
+    expect(builderLoop?.state).toBe("complete");
+
+    // -----------------------------------------------------------------
+    // Step 14 — verify the typed dev_via_spec.artifact.v1 payload was
+    // published by the architect's emit_dev_via_spec_artifact (R3.4b).
+    // -----------------------------------------------------------------
+    const specArtifactSubjects = entries
+      .map((e) => e.subject)
+      .filter((s) => s.startsWith("dev_via_spec.artifact."));
+    expect(
+      specArtifactSubjects.length,
+      `expected at least 1 dev_via_spec.artifact.<loop_id> publish from the architect, got ${specArtifactSubjects.length}: ${JSON.stringify(specArtifactSubjects)}`,
+    ).toBeGreaterThanOrEqual(1);
   });
 });
 

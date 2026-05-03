@@ -1,23 +1,28 @@
 name: dev-via-spec
 description: |
   Journey: R3.3 of ADR-031 (§addendum 2026-04-30 "R3.3 dev-via-spec
-  port — pattern-source survey"). Builds on R3.2.2's research-mode-
-  transition: the same six-loop research arc completes (researcher +
-  reviewer + source-acquisition + reviewer + settling pass + reviewer-
-  approve), then the stabilisation rule (R3.2.2 rule_03) spawns the
-  dev-via-spec-planner. From there the dev-via-spec internal rule
-  chain (configs/rules/dev-via-spec/ rules 01/03/05) drives the four-
-  role handoff to architect terminal. This fixture exercises
-  the *golden path* — every gate (reviewer + challenger) approves on
-  first pass. Retry paths (rules 02 and 04) are covered by additional
-  fixtures or follow-up specs.
+  port — pattern-source survey") + R3.4b (§addendum 2026-05-02
+  "architect renders markdown spec via emit_dev_via_spec_artifact") +
+  R3.6.2.b/c/d/e of ADR-032 (§R3.6.2 "builder slice"). Builds on
+  R3.2.2's research-mode-transition: the same six-loop research arc
+  completes (researcher + reviewer + source-acquisition + reviewer +
+  settling pass + reviewer-approve), then the stabilisation rule
+  (R3.2.2 rule_03) spawns the dev-via-spec-planner. From there the
+  dev-via-spec internal rule chain (configs/rules/dev-via-spec/ rules
+  01/03/05) drives the four-role handoff to architect; rule 06
+  (R3.6.2.d) spawns the builder once the architect emits the spec
+  artifact. This fixture exercises the *golden path* — every gate
+  (reviewer, challenger, builder tests) succeeds on first pass.
+  Retry paths (rules 02 and 04, builder iteration_budget exhaustion)
+  are covered by additional fixtures or follow-up specs.
 
   Paired spec: ui/e2e/agentic/dev-via-spec.spec.ts.
-  Required compose profile: semsource (the SemSource container is
-  required for the substrate-modifying retry pass, same as R2.5/
-  R3.2.2).
+  Required compose profiles: semsource (substrate-modifying retry
+  pass, same as R2.5/R3.2.2) **and** sandbox (the dev-via-spec-builder
+  loop calls bootstrap_workspace + bash; both route through the
+  sandbox container per ADR-032 §R3.6.2.a wiring).
 
-  Sequence (ten loops, twenty-eight LLM round-trips):
+  Sequence (eleven loops, thirty-three LLM round-trips):
 
     Loop A — researcher (initial pass, revision=1, default_role)
       1. tool_call: query_entity (corpus probe, returns nothing)
@@ -74,29 +79,67 @@ description: |
          → coordinator.next_action=accept → dev-via-spec rule_05 fires
          (challenger → architect handoff).
 
-    Loop J — dev-via-spec-architect (terminal)
+    Loop J — dev-via-spec-architect (R3.4b, emits typed artifact)
      25. tool_call: read_loop_result (placeholder; tool errors —
          architect's three reads are placeholders that all error,
          consumed by the next canned turn)
      26. tool_call: read_loop_result (placeholder; tool errors)
      27. tool_call: read_loop_result (placeholder; tool errors)
-     28. tool_call: decide(seed_requirements_emitted, reason=<final SR list>)
-         → terminal. No rule fires on action=seed_requirements_emitted.
+     28. tool_call: emit_dev_via_spec_artifact (renders markdown to
+         docs/specs/<slug>.md AND mints dev_via_spec.artifact.{path,
+         slug,...} marker triples on this loop entity)
+     29. tool_call: decide(seed_requirements_emitted, reason=<final SR list>)
+         → coordinator.next_action=seed_requirements_emitted →
+         dev-via-spec rule_06 fires (R3.6.2.d: architect→builder).
+
+    Loop K — dev-via-spec-builder (R3.6.2.e terminal)
+     30. tool_call: bootstrap_workspace (iteration 1; the
+         hardcoded spec_path will not match the architect's
+         dynamically-dated emit on most days, so the tool surfaces
+         a "spec file not found" error — same placeholder-doesn't-
+         resolve convention as the read_loop_result calls earlier;
+         the next canned turn handles it. On the slug-matching day
+         the call succeeds harmlessly and the sequence-based
+         mock-llm still drives builder_decide as the 4th call.).
+     31. tool_call: bash ls SPEC.md (workspace either doesn't
+         exist or contains the seeded SPEC.md — either way the
+         next canned turn handles whatever bash returns).
+     32. tool_call: bash echo "iteration budget audit" (echoes
+         and returns; the next canned turn handles it).
+     33. tool_call: builder_decide(needs_clarification,
+         reason=<...>, blocking_question=<...>)
+         → terminal. coordinator.next_action=needs_clarification
+         fires no rule today; the builder's terminal closes the
+         chain.
 
   Mock-llm is sequence-based and role-blind. The fixture aligns to
-  the exact order of LLM round-trips across all ten loops. Same
-  read_loop_result placeholder caveat as R1/R2.5/R3.2.2: arguments_json
-  passes verbatim, the placeholder loop_id will not resolve, the tool
+  the exact order of LLM round-trips across all eleven loops. Same
+  read_loop_result / bootstrap_workspace / bash placeholder caveat
+  as R1/R2.5/R3.2.2: arguments_json passes verbatim, the tool
   returns an error, the next canned turn handles it. The structural
   assertion (rule chain firing in order + role distribution + final
   state) is unaffected.
 
+  Builder-loop terminal choice: needs_clarification is the
+  persona-canonical boot-failure terminal (see
+  configs/personas/fragments/dev-via-spec-builder/10-bash-iteration-
+  contract.md "Step 0" — this is the prescribed shape when
+  bootstrap_workspace cannot resolve a spec). The fixture cannot
+  pre-know the architect's emit_dev_via_spec_artifact-generated
+  slug (the slug derives from time.Now().Format("2006-01-02") so
+  it changes daily), so a hardcoded bootstrap_workspace spec_path
+  will not match on most days. needs_clarification correctly
+  signals "wiring or infrastructure issue" rather than faking a
+  test outcome. Smoke #6 (R3.6.2.f) is where the builder LLM
+  actually generates code and runs `mvn test`; this fixture proves
+  the wiring only.
+
   This spec covers only the golden path. The retry paths (reviewer
   rejection → planner retry via rule 02, challenger concerns → planner
-  retry via rule 04) are exercised by the rules' max_iterations metadata
-  and persona-content discipline; a follow-up retry-path fixture can
-  exercise them under e2e if R3.4's OSH journey reveals real-LLM
-  retry behaviour worth pinning.
+  retry via rule 04, builder iteration-budget exhaustion → tests_failing)
+  are exercised by the rules' max_iterations metadata and persona-content
+  discipline; a follow-up retry-path fixture can exercise them under
+  e2e if smoke #6 reveals real-LLM retry behaviour worth pinning.
 
 responses:
   # ---------- Loop A: researcher (initial pass, revision=1) ----------
@@ -433,7 +476,7 @@ responses:
           "reason": "Probed for six failure classes; no actionable concerns raised. (1) Decomposition coarseness: E1/E2/E3 each touch a single integration boundary (Meshtastic-read / OGC-write / lifecycle); no epic spans both directions. (2) Scope creep: every scope.include item maps to an artifact actor + integration point; no unmotivated additions. (3) Missing failure mode: E3 explicitly owns the radio-disconnect case for the asynchronous Meshtastic→driver flow. (4) Unaccounted integration: both artifact integration_points are owned by an epic. (5) Goal/scope coherence: scope items deliver the goal; goal motivates context's actor citations. (6) Revision-respect: not applicable — first pass. The plan is well-formed and ready for the architect to ratify."
         }
 
-  # ---------- Loop J: dev-via-spec-architect (terminal) ----------
+  # ---------- Loop J: dev-via-spec-architect (R3.4b, emits typed artifact) ----------
 
   - tool_call:
       name: read_loop_result
@@ -457,9 +500,84 @@ responses:
         }
 
   - tool_call:
+      name: emit_dev_via_spec_artifact
+      arguments_json: |
+        {
+          "title": "OSH Meshtastic Driver",
+          "goal": "Implement the OSH IDriver interface backed by Meshtastic radio packets, exposing OGC CS observation endpoints.",
+          "context": "The research arc enumerated the OSH driver framework (hosts the IDriver interface), OGC CS endpoints (observation surface), and Meshtastic radio (telemetry source). The driver sits at the boundary between Meshtastic packet ingestion (read) and OGC CS observation publishing (write).",
+          "actors": [
+            {"name": "OSH driver framework", "role": "Hosts the IDriver interface drivers must implement to expose sensor observations"},
+            {"name": "OGC CS endpoints", "role": "Standard endpoints for observations, system descriptions, and control streams that the driver exposes"},
+            {"name": "Meshtastic radio", "role": "LoRa mesh radio interface that emits packetised telemetry the driver consumes"}
+          ],
+          "integration_points": [
+            {"from": "Meshtastic radio", "to": "OSH driver framework", "direction": "read", "data": "packetised radio telemetry"},
+            {"from": "OSH driver framework", "to": "OGC CS endpoints", "direction": "write", "data": "observation messages and system descriptions"}
+          ],
+          "seed_requirements": [
+            {
+              "title": "Meshtastic packet decoder",
+              "scope": "backend",
+              "grounds_actors": ["Meshtastic radio", "OSH driver framework"],
+              "grounds_integration_points": ["Meshtastic radio→OSH driver framework"]
+            },
+            {
+              "title": "OGC CS observation publisher",
+              "scope": "backend",
+              "grounds_actors": ["OSH driver framework", "OGC CS endpoints"],
+              "grounds_integration_points": ["OSH driver framework→OGC CS endpoints"]
+            },
+            {
+              "title": "IDriver lifecycle and failure-mode handler",
+              "scope": "backend",
+              "grounds_actors": ["OSH driver framework", "Meshtastic radio"]
+            }
+          ],
+          "provenance": {
+            "research_artifact_loop": "researcher-with-source-loop-E",
+            "planner_loop": "planner-loop-G",
+            "reviewer_loop": "reviewer-loop-H",
+            "challenger_loop": "challenger-loop-I"
+          }
+        }
+
+  - tool_call:
       name: decide
       arguments_json: |
         {
           "action": "seed_requirements_emitted",
-          "reason": "Final seed requirements:\n\nSR1 — Implement the Meshtastic packet decoder normalising LoRa mesh packets into an internal observation envelope.\n  derives from: planner epic E1\n  actors: Meshtastic radio, OSH driver framework\n  integration: Meshtastic radio → OSH driver (direction: read)\n\nSR2 — Implement the OGC CS observation publisher exposing the IDriver interface, emitting observation messages and system descriptions.\n  derives from: planner epic E2\n  actors: OSH driver framework, OGC CS endpoints\n  integration: OSH driver → OGC CS endpoints (direction: write)\n\nSR3 — Implement IDriver lifecycle hooks (start/stop) plus the radio-disconnect failure mode handler.\n  derives from: planner epic E3\n  actors: OSH driver framework, Meshtastic radio\n  integration: internal — lifecycle + failure-mode coverage spanning the read-side flow.\n\nThe dev-via-spec arc closes here. All three final seed requirements ground against artifact actors and integration points; no flagged scope-without-grounding entries. Three planner epics map to three SRs at interface granularity; no merging or splitting at the architect gate."
+          "reason": "Spec artifact emitted at docs/specs/<slug>.md. Three seed requirements grounded against three actors and two integration points: SR1 (Meshtastic decoder, read-side), SR2 (OGC CS publisher, write-side), SR3 (IDriver lifecycle + failure-mode handler). Planner epics E1/E2/E3 map cleanly to SR1/SR2/SR3. The dev-via-spec arc closes here; rule 06 spawns the builder."
+        }
+
+  # ---------- Loop K: dev-via-spec-builder (R3.6.2.e terminal) ----------
+
+  - tool_call:
+      name: bootstrap_workspace
+      arguments_json: |
+        {
+          "spec_path": "docs/specs/2026-05-03-osh-meshtastic-driver.md"
+        }
+
+  - tool_call:
+      name: bash
+      arguments_json: |
+        {
+          "command": "ls SPEC.md"
+        }
+
+  - tool_call:
+      name: bash
+      arguments_json: |
+        {
+          "command": "echo 'iteration budget audit'"
+        }
+
+  - tool_call:
+      name: builder_decide
+      arguments_json: |
+        {
+          "action": "needs_clarification",
+          "reason": "bootstrap_workspace could not resolve the spec path supplied in the spawn-rule prompt; without a seeded SPEC.md the builder cannot proceed. This is the persona-canonical boot-failure terminal (10-bash-iteration-contract.md Step 0).",
+          "blocking_question": "confirm the dev-via-spec-builder spawn rule (R3.6.2.d) supplied a valid spec_path, that the spec file exists at that path on the backend host, and that SANDBOX_URL points at a reachable sandbox. Smoke #6 (R3.6.2.f) exercises the success path with a real LLM that observes the architect's actual emit_dev_via_spec_artifact result before calling bootstrap_workspace."
         }
