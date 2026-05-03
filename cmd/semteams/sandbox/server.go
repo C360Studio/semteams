@@ -8,22 +8,30 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
 )
 
-// chainMutex serialises operations on a single chain's workspace.
-// Per ADR-032 Decision #3 we use a per-chain mutex map even though
-// today's contention is ~zero — costs ~10 lines of API and dodges
-// "what if we add concurrent chains later" cleanly.
-type chainMutex struct {
+// taskMutex serialises operations on a single task's workspace.
+// Per ADR-032 Decision #3 (R3.6.1.1 conformance: chainID → taskID for
+// upstream wire alignment) we use a per-task mutex map even though
+// today's contention is ~zero — costs ~10 lines and dodges "what if
+// we add concurrent tasks later" cleanly.
+type taskMutex struct {
 	mu sync.Mutex
 }
 
-// ServerConfig groups the knobs NewServer takes. Adding fields stays
-// non-breaking for callers that build it positionally; tests can use
-// zero-values for anything they don't exercise.
+// workspaceMeta holds per-task workspace metadata. Today: only
+// read_only_paths. In-memory only; on sandbox restart, on-disk chmod
+// is the source of truth so lost metadata doesn't reduce enforcement
+// (already-frozen paths stay frozen at the filesystem layer).
+type workspaceMeta struct {
+	ReadOnlyPaths []string
+}
+
+// ServerConfig groups the knobs NewServer takes.
 type ServerConfig struct {
 	WorkspaceRoot      string
 	MaxFileSize        int64
@@ -44,8 +52,9 @@ type Server struct {
 	maxExecTimeout     time.Duration
 	logger             *slog.Logger
 
-	mu           sync.Mutex
-	chainMutexes map[string]*chainMutex
+	mu          sync.Mutex
+	taskMutexes map[string]*taskMutex
+	taskMeta    map[string]*workspaceMeta
 }
 
 // NewServer constructs a Server from cfg. WorkspaceRoot must exist
@@ -59,8 +68,7 @@ type Server struct {
 //
 // Zero-valued cfg fields fall back to safe defaults so test harnesses
 // that don't exercise a particular endpoint can leave its knobs unset
-// without silently breaking (e.g., zero MaxOutputBytes would discard
-// every byte of stdout).
+// without silently breaking.
 func NewServer(cfg ServerConfig) *Server {
 	if cfg.MaxFileSize == 0 {
 		cfg.MaxFileSize = 1 * 1024 * 1024
@@ -85,46 +93,73 @@ func NewServer(cfg ServerConfig) *Server {
 		defaultExecTimeout: cfg.DefaultExecTimeout,
 		maxExecTimeout:     cfg.MaxExecTimeout,
 		logger:             cfg.Logger,
-		chainMutexes:       make(map[string]*chainMutex),
+		taskMutexes:        make(map[string]*taskMutex),
+		taskMeta:           make(map[string]*workspaceMeta),
 	}
 }
 
-// RegisterRoutes wires the sandbox HTTP API onto mux.
+// RegisterRoutes wires the sandbox HTTP API onto mux. Endpoints conform
+// to the upstream sandbox.Client wire format (semstreams beta.36) so
+// upstream BashExecutor reaches our sandbox via SANDBOX_URL without any
+// adapter layer. The single product-shell extension is
+// `GET /worktree/{taskID}/archive` for forensics zip (ADR-032 §10);
+// upstream sandbox.Client doesn't try to use it.
 func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /health", s.handleHealth)
-	mux.HandleFunc("POST /workspace/{chainID}", s.handleCreateWorkspace)
-	mux.HandleFunc("GET /workspace/{chainID}", s.handleZipWorkspace)
-	mux.HandleFunc("DELETE /workspace/{chainID}", s.handleDeleteWorkspace)
-	mux.HandleFunc("PUT /workspace/{chainID}/files", s.handleWriteFile)
-	mux.HandleFunc("GET /workspace/{chainID}/files", s.handleReadFile)
-	mux.HandleFunc("POST /workspace/{chainID}/exec", s.handleExec)
+	mux.HandleFunc("POST /worktree", s.handleCreateWorktree)
+	mux.HandleFunc("DELETE /worktree/{taskID}", s.handleDeleteWorktree)
+	mux.HandleFunc("POST /exec", s.handleExec)
+	mux.HandleFunc("PUT /file", s.handleWriteFile)
+	mux.HandleFunc("GET /file", s.handleReadFile)
+	mux.HandleFunc("GET /worktree/{taskID}/archive", s.handleZipWorkspace)
 }
 
 // =============================================================================
 // REQUEST / RESPONSE TYPES
 // =============================================================================
 
-// fileWriteRequest is the JSON body for PUT /workspace/{chainID}/files.
-type fileWriteRequest struct {
-	Path    string `json:"path"`    // Workspace-relative path; absolute or .. traversal rejected.
-	Content string `json:"content"` // File content; size capped by maxFileSize.
+// createWorktreeRequest mirrors upstream sandbox.Client.CreateWorktree
+// body shape. The read_only_paths extension (ADR-032 §addendum
+// 2026-05-03) is deliberately additive: upstream's current client omits
+// the field; future upstream PR will add it pass-through.
+type createWorktreeRequest struct {
+	TaskID        string   `json:"task_id"`
+	ReadOnlyPaths []string `json:"read_only_paths,omitempty"`
 }
 
-// fileReadResponse is returned from GET /workspace/{chainID}/files.
+// worktreeInfo is the response shape for POST /worktree, mirroring
+// upstream sandbox.Client.WorktreeInfo (Status/Path/Branch).
+type worktreeInfo struct {
+	Status string `json:"status"`
+	Path   string `json:"path"`
+	Branch string `json:"branch"`
+}
+
+// fileWriteRequest mirrors upstream sandbox.Client.WriteFile body shape.
+type fileWriteRequest struct {
+	TaskID  string `json:"task_id"`
+	Path    string `json:"path"`
+	Content string `json:"content"`
+}
+
+// fileReadResponse extends upstream's {content} with size/truncation
+// hints so callers can tell when a large file was clipped. Upstream's
+// json decoder ignores unknown fields, so the extension is wire-safe.
 type fileReadResponse struct {
 	Content   string `json:"content"`
-	Size      int    `json:"size"`                 // Bytes returned (after truncation).
-	Truncated bool   `json:"truncated,omitempty"`  // True if file was larger than maxReadBytes.
-	TotalSize int64  `json:"total_size,omitempty"` // Real file size on disk; only set when truncated.
+	Size      int    `json:"size"`
+	Truncated bool   `json:"truncated,omitempty"`
+	TotalSize int64  `json:"total_size,omitempty"`
 }
 
-// execRequest is the JSON body for POST /workspace/{chainID}/exec.
+// execRequest mirrors upstream sandbox.Client.Exec body shape.
 type execRequest struct {
-	Command   string `json:"command"`              // Passed to `bash -c`.
-	TimeoutMs int    `json:"timeout_ms,omitempty"` // 0 → DefaultExecTimeout; capped at MaxExecTimeout.
+	TaskID    string `json:"task_id"`
+	Command   string `json:"command"`
+	TimeoutMs int    `json:"timeout_ms,omitempty"`
 }
 
-// execResponse is returned from POST /workspace/{chainID}/exec.
+// execResponse mirrors upstream sandbox.Client.ExecResult.
 type execResponse struct {
 	Stdout   string `json:"stdout"`
 	Stderr   string `json:"stderr"`
@@ -140,98 +175,137 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
-func (s *Server) handleCreateWorkspace(w http.ResponseWriter, r *http.Request) {
-	chainID := r.PathValue("chainID")
-	if !isValidChainID(chainID) {
-		writeError(w, http.StatusBadRequest, "invalid chain ID")
+func (s *Server) handleCreateWorktree(w http.ResponseWriter, r *http.Request) {
+	var req createWorktreeRequest
+	if err := readJSON(r, &req, 64*1024); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if !isValidTaskID(req.TaskID) {
+		writeError(w, http.StatusBadRequest, "invalid task_id")
+		return
+	}
+	for _, p := range req.ReadOnlyPaths {
+		if err := validateReadOnlyPath(p); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
+
+	tm := s.getTaskMutex(req.TaskID)
+	tm.mu.Lock()
+	defer tm.mu.Unlock()
+
+	created, err := s.createWorkspace(r.Context(), req.TaskID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("create worktree: %v", err))
 		return
 	}
 
-	cm := s.getChainMutex(chainID)
-	cm.mu.Lock()
-	defer cm.mu.Unlock()
+	// Record / merge read_only_paths metadata. Re-create on an existing
+	// workspace adds new paths to the existing set.
+	s.mu.Lock()
+	meta, ok := s.taskMeta[req.TaskID]
+	if !ok {
+		meta = &workspaceMeta{}
+		s.taskMeta[req.TaskID] = meta
+	}
+	for _, p := range req.ReadOnlyPaths {
+		clean := filepath.Clean(p)
+		if !slices.Contains(meta.ReadOnlyPaths, clean) {
+			meta.ReadOnlyPaths = append(meta.ReadOnlyPaths, clean)
+		}
+	}
+	roPaths := slices.Clone(meta.ReadOnlyPaths)
+	s.mu.Unlock()
 
-	created, err := s.createWorkspace(chainID)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, fmt.Sprintf("create workspace: %v", err))
-		return
+	// Apply chmod sweep so any read_only_paths that already exist (e.g.
+	// re-create after seed, or pre-populated workspace dir) are
+	// immediately frozen. Intentionally runs regardless of `created` —
+	// the caller might be re-creating an existing workspace to ADD
+	// read_only_paths, or the workspace dir might have been pre-
+	// populated out-of-band; both cases need the sweep.
+	if err := s.applyReadOnlyChmod(req.TaskID, roPaths); err != nil {
+		s.logger.Warn("read_only_paths chmod sweep had errors",
+			"task_id", req.TaskID, "error", err)
 	}
 
 	status := "created"
 	if !created {
 		status = "exists"
 	}
-	s.logger.Info("workspace create", "chain_id", chainID, "status", status)
-	writeJSON(w, http.StatusOK, map[string]string{"status": status})
+	s.logger.Info("worktree create",
+		"task_id", req.TaskID,
+		"status", status,
+		"read_only_paths", len(roPaths))
+
+	writeJSON(w, http.StatusOK, worktreeInfo{
+		Status: status,
+		Path:   filepath.Join(s.workspaceRoot, req.TaskID),
+		Branch: defaultBranch,
+	})
 }
 
-func (s *Server) handleDeleteWorkspace(w http.ResponseWriter, r *http.Request) {
-	chainID := r.PathValue("chainID")
-	if !isValidChainID(chainID) {
-		writeError(w, http.StatusBadRequest, "invalid chain ID")
+func (s *Server) handleDeleteWorktree(w http.ResponseWriter, r *http.Request) {
+	taskID := r.PathValue("taskID")
+	if !isValidTaskID(taskID) {
+		writeError(w, http.StatusBadRequest, "invalid task_id")
 		return
 	}
 
-	cm := s.getChainMutex(chainID)
-	cm.mu.Lock()
-	defer cm.mu.Unlock()
+	tm := s.getTaskMutex(taskID)
+	tm.mu.Lock()
+	defer tm.mu.Unlock()
 
-	if err := s.removeWorkspace(chainID); err != nil {
-		writeError(w, http.StatusInternalServerError, fmt.Sprintf("delete workspace: %v", err))
+	if err := s.removeWorkspace(taskID); err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("delete worktree: %v", err))
 		return
 	}
+	s.mu.Lock()
+	delete(s.taskMeta, taskID)
+	s.mu.Unlock()
 
-	s.logger.Info("workspace deleted", "chain_id", chainID)
+	s.logger.Info("worktree deleted", "task_id", taskID)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
 func (s *Server) handleZipWorkspace(w http.ResponseWriter, r *http.Request) {
-	chainID := r.PathValue("chainID")
-	if !isValidChainID(chainID) {
-		writeError(w, http.StatusBadRequest, "invalid chain ID")
+	taskID := r.PathValue("taskID")
+	if !isValidTaskID(taskID) {
+		writeError(w, http.StatusBadRequest, "invalid task_id")
 		return
 	}
 
-	// Forward-flag (R3.6.3): zipDir streams directly under the chain
-	// mutex. A slow client draining a multi-MB archive will block any
-	// concurrent op on the same chain (write/read/exec). Acceptable
-	// today because zip is a forensics op on a terminal chain; once
-	// the chainMutex graduates to RWMutex (per ADR-032 §3 chainMutex
-	// doc-comment forward note), buffer-or-snapshot the archive under
-	// a read-lock and stream after release.
-	cm := s.getChainMutex(chainID)
-	cm.mu.Lock()
-	defer cm.mu.Unlock()
+	// Forward-flag (R3.6.3): zipDir streams directly under the task
+	// mutex. A slow client draining a multi-MB archive blocks any
+	// concurrent op on the same task. Acceptable today (zip is a
+	// forensics op on a terminal task); once taskMutex graduates to
+	// sync.RWMutex, switch to read-lock + buffer-then-stream.
+	tm := s.getTaskMutex(taskID)
+	tm.mu.Lock()
+	defer tm.mu.Unlock()
 
-	if !s.workspaceExists(chainID) {
-		writeError(w, http.StatusNotFound, "workspace not found")
+	if !s.workspaceExists(taskID) {
+		writeError(w, http.StatusNotFound, "worktree not found")
 		return
 	}
 
-	dir := filepath.Join(s.workspaceRoot, chainID)
+	dir := filepath.Join(s.workspaceRoot, taskID)
 	w.Header().Set("Content-Type", "application/zip")
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename=%q`, chainID+".zip"))
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename=%q`, taskID+".zip"))
 	if err := zipDir(w, dir); err != nil {
-		// Headers already flushed; log and bail. Client sees a truncated
-		// zip — a forensics-helper failure is not load-bearing.
-		s.logger.Error("zip workspace failed", "chain_id", chainID, "error", err)
+		s.logger.Error("zip workspace failed", "task_id", taskID, "error", err)
 	}
 }
 
 func (s *Server) handleWriteFile(w http.ResponseWriter, r *http.Request) {
-	chainID := r.PathValue("chainID")
-	if !isValidChainID(chainID) {
-		writeError(w, http.StatusBadRequest, "invalid chain ID")
-		return
-	}
-
-	// Body cap accounts for JSON-escape worst-case 2x expansion of
-	// content (every byte a `\"` / `\n` / `\\`) plus envelope overhead.
-	// Stricter caps surface as a confusing 400 instead of the explicit
-	// 413 at the size check below.
 	var req fileWriteRequest
 	if err := readJSON(r, &req, s.maxFileSize*2+4096); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if !isValidTaskID(req.TaskID) {
+		writeError(w, http.StatusBadRequest, "invalid task_id")
 		return
 	}
 	if req.Path == "" {
@@ -244,29 +318,24 @@ func (s *Server) handleWriteFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cm := s.getChainMutex(chainID)
-	cm.mu.Lock()
-	defer cm.mu.Unlock()
+	tm := s.getTaskMutex(req.TaskID)
+	tm.mu.Lock()
+	defer tm.mu.Unlock()
 
-	if !s.workspaceExists(chainID) {
-		writeError(w, http.StatusNotFound, "workspace not found")
+	if !s.workspaceExists(req.TaskID) {
+		writeError(w, http.StatusNotFound, "worktree not found")
 		return
 	}
 
-	absPath, err := s.resolveChainPath(chainID, req.Path)
+	absPath, err := s.resolveTaskPath(req.TaskID, req.Path)
 	if err != nil {
 		writeError(w, http.StatusForbidden, err.Error())
 		return
 	}
 
 	// Lstat-before-write: refuse to write through an existing symlink
-	// or onto a directory. Defense-in-depth — resolveChainPath's
-	// EvalSymlinks check already catches symlinks pointing outside the
-	// workspace, but a symlink whose target is *inside* the workspace
-	// is still a footgun (agent could be tricked into clobbering the
-	// real file via a planted alias). The file API never honors
-	// symlinks; that invariant matters more once R3.6.1.c bash exec
-	// can plant them.
+	// or onto a directory. Defense-in-depth on top of resolveTaskPath's
+	// EvalSymlinks check; the file API never honors symlinks.
 	if existing, statErr := os.Lstat(absPath); statErr == nil {
 		if existing.Mode()&os.ModeSymlink != 0 {
 			writeError(w, http.StatusForbidden, "refusing to write through symlink")
@@ -283,18 +352,37 @@ func (s *Server) handleWriteFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := os.WriteFile(absPath, []byte(req.Content), 0o644); err != nil {
+		// EACCES from os.WriteFile is the load-bearing signal that the
+		// path is read-only (chmod'd by a prior read_only_paths sweep).
+		// Map to 403 with a clear message so callers don't have to
+		// re-derive it from a generic 500.
+		if os.IsPermission(err) {
+			writeError(w, http.StatusForbidden,
+				fmt.Sprintf("path %q is read-only (read_only_paths)", req.Path))
+			return
+		}
 		writeError(w, http.StatusInternalServerError, fmt.Sprintf("write file: %v", err))
 		return
 	}
 
-	s.logger.Info("file written", "chain_id", chainID, "path", req.Path, "size", len(req.Content))
+	// After-write chmod sweep: any read_only_paths that exist now (this
+	// write may have just created files inside one) get frozen.
+	roPaths := s.snapshotReadOnlyPaths(req.TaskID)
+	if len(roPaths) > 0 {
+		if sweepErr := s.applyReadOnlyChmod(req.TaskID, roPaths); sweepErr != nil {
+			s.logger.Warn("read_only_paths chmod sweep had errors",
+				"task_id", req.TaskID, "error", sweepErr)
+		}
+	}
+
+	s.logger.Info("file written", "task_id", req.TaskID, "path", req.Path, "size", len(req.Content))
 	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "size": len(req.Content)})
 }
 
 func (s *Server) handleReadFile(w http.ResponseWriter, r *http.Request) {
-	chainID := r.PathValue("chainID")
-	if !isValidChainID(chainID) {
-		writeError(w, http.StatusBadRequest, "invalid chain ID")
+	taskID := r.URL.Query().Get("task_id")
+	if !isValidTaskID(taskID) {
+		writeError(w, http.StatusBadRequest, "invalid task_id")
 		return
 	}
 
@@ -304,27 +392,21 @@ func (s *Server) handleReadFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cm := s.getChainMutex(chainID)
-	cm.mu.Lock()
-	defer cm.mu.Unlock()
+	tm := s.getTaskMutex(taskID)
+	tm.mu.Lock()
+	defer tm.mu.Unlock()
 
-	if !s.workspaceExists(chainID) {
-		writeError(w, http.StatusNotFound, "workspace not found")
+	if !s.workspaceExists(taskID) {
+		writeError(w, http.StatusNotFound, "worktree not found")
 		return
 	}
 
-	absPath, err := s.resolveChainPath(chainID, relPath)
+	absPath, err := s.resolveTaskPath(taskID, relPath)
 	if err != nil {
 		writeError(w, http.StatusForbidden, err.Error())
 		return
 	}
 
-	// lstat-not-stat: refuse to read through a symlink even if its target
-	// resolves inside the workspace. Defense in depth — resolveChainPath's
-	// EvalSymlinks check covers symlink-escapes, but a symlink-to-inside
-	// is also a footgun the file API has no business honouring (the agent
-	// should write through the real path, not chase a symlink it didn't
-	// create).
 	info, err := os.Lstat(absPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -368,15 +450,13 @@ func (s *Server) handleReadFile(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleExec(w http.ResponseWriter, r *http.Request) {
-	chainID := r.PathValue("chainID")
-	if !isValidChainID(chainID) {
-		writeError(w, http.StatusBadRequest, "invalid chain ID")
-		return
-	}
-
 	var req execRequest
 	if err := readJSON(r, &req, 64*1024); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if !isValidTaskID(req.TaskID) {
+		writeError(w, http.StatusBadRequest, "invalid task_id")
 		return
 	}
 	if req.Command == "" {
@@ -393,20 +473,31 @@ func (s *Server) handleExec(w http.ResponseWriter, r *http.Request) {
 		timeout = requested
 	}
 
-	cm := s.getChainMutex(chainID)
-	cm.mu.Lock()
-	defer cm.mu.Unlock()
+	tm := s.getTaskMutex(req.TaskID)
+	tm.mu.Lock()
+	defer tm.mu.Unlock()
 
-	if !s.workspaceExists(chainID) {
-		writeError(w, http.StatusNotFound, "workspace not found")
+	if !s.workspaceExists(req.TaskID) {
+		writeError(w, http.StatusNotFound, "worktree not found")
 		return
 	}
 
-	workDir := filepath.Join(s.workspaceRoot, chainID)
+	workDir := filepath.Join(s.workspaceRoot, req.TaskID)
 	result := execCommand(r.Context(), workDir, req.Command, timeout, s.maxOutputBytes)
 
+	// After-exec chmod sweep. A bash command that just created files
+	// inside a read_only_path triggers this freeze; subsequent calls
+	// hit EACCES naturally.
+	roPaths := s.snapshotReadOnlyPaths(req.TaskID)
+	if len(roPaths) > 0 {
+		if sweepErr := s.applyReadOnlyChmod(req.TaskID, roPaths); sweepErr != nil {
+			s.logger.Warn("read_only_paths chmod sweep had errors",
+				"task_id", req.TaskID, "error", sweepErr)
+		}
+	}
+
 	s.logger.Info("command executed",
-		"chain_id", chainID,
+		"task_id", req.TaskID,
 		"command", truncateForLog(req.Command, 100),
 		"exit_code", result.ExitCode,
 		"timed_out", result.TimedOut,
@@ -416,8 +507,7 @@ func (s *Server) handleExec(w http.ResponseWriter, r *http.Request) {
 
 // truncateForLog bounds a string for log-line readability only.
 // Distinct from cappedWriter (in exec.go) which buffers streaming
-// output with hard memory bounds; this helper assumes its input is
-// already a complete in-memory string.
+// output with hard memory bounds.
 func truncateForLog(s string, n int) string {
 	if len(s) <= n {
 		return s
@@ -426,24 +516,53 @@ func truncateForLog(s string, n int) string {
 }
 
 // =============================================================================
+// READ_ONLY_PATHS METADATA
+// =============================================================================
+
+// snapshotReadOnlyPaths returns a copy of the task's read_only_paths
+// list. Returns nil for tasks with no metadata. Holding the result
+// across the per-task mutex release is safe (slice is a copy).
+func (s *Server) snapshotReadOnlyPaths(taskID string) []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	meta, ok := s.taskMeta[taskID]
+	if !ok || len(meta.ReadOnlyPaths) == 0 {
+		return nil
+	}
+	return slices.Clone(meta.ReadOnlyPaths)
+}
+
+// validateReadOnlyPath rejects entries that would escape the workspace
+// or aren't workspace-relative. Same shape as resolveTaskPath's
+// validation but without needing taskID context (this runs at create
+// time before the workspace exists).
+func validateReadOnlyPath(p string) error {
+	if p == "" {
+		return fmt.Errorf("read_only_path entry is empty")
+	}
+	if filepath.IsAbs(p) {
+		return fmt.Errorf("read_only_path %q must be workspace-relative", p)
+	}
+	clean := filepath.Clean(p)
+	if clean == ".." || strings.HasPrefix(clean, "../") {
+		return fmt.Errorf("read_only_path %q escapes workspace", p)
+	}
+	return nil
+}
+
+// =============================================================================
 // VALIDATION
 // =============================================================================
 
-// isValidChainID restricts the charset to alphanumerics, dot, hyphen,
-// underscore — the same set semdragon's quest IDs allow. Entity IDs in
-// the framework use dot-delimited segments (e.g.
-// "c360.prod.app.chain.abc123"), so dots must be permitted.
-//
+// isValidTaskID restricts the charset to alphanumerics, dot, hyphen,
+// underscore — matches semdragon's quest IDs and upstream's task IDs.
 // Defense-in-depth: explicitly reject "..", ".", and any embedded "..".
-// filepath.Join would normalise these later, but rejecting at the
-// validator surfaces the error closer to the caller and removes one
-// class of bypass attempts.
 //
 // Note: net/http's ServeMux already URL-decodes path values before
-// passing to PathValue, so URL-encoded bypass attempts (`%2F` → `/`,
-// `%2E%2E` → `..`) reach this validator in their decoded form and are
-// rejected by the charset whitelist / dotdot check.
-func isValidChainID(id string) bool {
+// PathValue, so URL-encoded bypass attempts (`%2F` → `/`, `%2E%2E` →
+// `..`) reach this validator decoded and are rejected by the charset
+// whitelist / dotdot check.
+func isValidTaskID(id string) bool {
 	if id == "" || len(id) > 256 {
 		return false
 	}
@@ -456,24 +575,21 @@ func isValidChainID(id string) bool {
 	return id != "." && id != ".." && !strings.Contains(id, "..")
 }
 
-// getChainMutex returns the per-chain mutex, creating it lazily.
-// The outer s.mu is held only briefly to look up / insert.
+// getTaskMutex returns the per-task mutex, creating it lazily.
 //
 // The map grows without bound; for R3.6.1's single-process demo with
-// short-lived chains this is irrelevant. R3.6.3 (production-readiness)
-// can add ref-counted eviction if needed. The chainMutex struct
-// wrapper exists so a future swap to sync.RWMutex (e.g., to let zip
-// proceed while exec holds a write lock — see ADR-032 R3.6.1.c notes)
-// doesn't churn callers.
-func (s *Server) getChainMutex(chainID string) *chainMutex {
+// short-lived tasks this is irrelevant. R3.6.3 (production-readiness)
+// can add ref-counted eviction. The struct wrapper around sync.Mutex
+// makes a future swap to sync.RWMutex non-churn for callers.
+func (s *Server) getTaskMutex(taskID string) *taskMutex {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	cm, ok := s.chainMutexes[chainID]
+	tm, ok := s.taskMutexes[taskID]
 	if !ok {
-		cm = &chainMutex{}
-		s.chainMutexes[chainID] = cm
+		tm = &taskMutex{}
+		s.taskMutexes[taskID] = tm
 	}
-	return cm
+	return tm
 }
 
 // =============================================================================
@@ -496,13 +612,13 @@ func writeError(w http.ResponseWriter, status int, msg string) {
 }
 
 // readJSON decodes the request body into v with a per-request size cap.
-// The cap should be slightly larger than any expected payload (e.g.,
-// content + JSON envelope overhead) — if the body exceeds it, decode
-// fails and the caller should return 413.
+// Stricter caps than the actual content size surface as a confusing
+// 400 instead of the explicit 413 at the size check; sizing the cap is
+// the caller's responsibility.
 func readJSON(r *http.Request, v any, maxBytes int64) error {
 	defer r.Body.Close()
 	if maxBytes <= 0 {
-		maxBytes = 2 * 1024 * 1024 // 2 MB default
+		maxBytes = 2 * 1024 * 1024
 	}
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxBytes))
 	if err != nil {
