@@ -382,8 +382,14 @@ test.describe("Dev-via-Spec (R3.3 + R3.4b + R3.6.2)", () => {
     // decide(seed_requirements_emitted) reason field, retained on
     // the AGENT_LOOPS bucket.
     // -----------------------------------------------------------------
+    // limit=10000 (the message-logger's hard cap per
+    // services/message-logger/handleGetEntries) — the filter is
+    // applied AFTER limit-truncation, so a smaller limit risks
+    // evicting early-loop publishes (research.artifact from Loop A)
+    // before the assertion sees them. The 11-loop chain produces
+    // 1000+ entries, so the previous limit=1000 was racy.
     const messageLoggerResp = await request.get(
-      "/message-logger/entries?limit=1000",
+      "/message-logger/entries?limit=10000",
     );
     expect(
       messageLoggerResp.ok(),
