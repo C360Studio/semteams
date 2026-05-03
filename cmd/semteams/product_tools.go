@@ -9,11 +9,13 @@ import (
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/payloadregistry"
 	agentictools "github.com/c360studio/semstreams/processor/agentic-tools"
+	"github.com/c360studio/semstreams/processor/agentic-tools/sandbox"
 	"github.com/c360studio/semstreams/types"
 
 	"github.com/c360studio/semteams/cmd/semteams/devviaspec"
 	"github.com/c360studio/semteams/cmd/semteams/research"
 	"github.com/c360studio/semteams/cmd/semteams/tools/addsource"
+	"github.com/c360studio/semteams/cmd/semteams/tools/bootstrapworkspace"
 	"github.com/c360studio/semteams/cmd/semteams/tools/builderdecide"
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitartifact"
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitspecartifact"
@@ -36,6 +38,14 @@ const (
 	// envSemSourceActor overrides the Provenance.Actor stamp on
 	// outgoing AddRequests. Defaults to "semteams.researcher".
 	envSemSourceActor = "SEMTEAMS_SEMSOURCE_ACTOR"
+
+	// envSandboxURL is the base URL of the sandbox HTTP server.
+	// Mirrors upstream BashExecutor's SANDBOX_URL: the bootstrap
+	// tool reuses the same env var so operators don't have to wire
+	// two URLs that should always be the same. Empty disables
+	// bootstrap_workspace registration; the dev-via-spec-builder
+	// loop is non-functional without it.
+	envSandboxURL = "SANDBOX_URL"
 )
 
 // registerProductPayloads registers all SemTeams-local payload types on top
@@ -61,7 +71,8 @@ func registerProductPayloads(reg *payloadregistry.Registry) error {
 // the shared registry, after the framework's RegisterBuiltins has
 // populated it with first-party tools. R2 of ADR-031 adds
 // add_source_repo. R3.2.1 adds emit_research_artifact. R3.3 adds
-// emit_dev_via_spec_artifact. R3.6.2.b adds builder_decide.
+// emit_dev_via_spec_artifact. R3.6.2.b adds builder_decide. R3.6.2.d
+// adds bootstrap_workspace.
 // Re-introduce a *config.Config parameter (or switch to a deps struct)
 // once a tool needs deployment-config visibility.
 //
@@ -84,7 +95,10 @@ func registerProductTools(reg *agentictools.ExecutorRegistry, natsClient *natscl
 	if err := registerEmitSpecArtifact(reg, natsClient, platform, logger); err != nil {
 		return err
 	}
-	return registerBuilderDecide(reg, natsClient, platform, logger)
+	if err := registerBuilderDecide(reg, natsClient, platform, logger); err != nil {
+		return err
+	}
+	return registerBootstrapWorkspace(reg, logger)
 }
 
 // registerAddSource wires the R2 add_source_repo executor. Stays inert
@@ -188,6 +202,36 @@ func registerBuilderDecide(reg *agentictools.ExecutorRegistry, natsClient *natsc
 		slog.String("name", builderdecide.ToolName),
 		slog.String("org", platform.Org),
 		slog.String("platform", platform.Platform))
+	return nil
+}
+
+// registerBootstrapWorkspace wires the R3.6.2.d bootstrap_workspace
+// executor — the dev-via-spec-builder role's iteration-1 setup hook.
+// Skipped when SANDBOX_URL is unset: the dev-via-spec-builder loop is
+// non-functional without a sandbox, and the upstream BashExecutor uses
+// the same env var to route bash to the sandbox, so an unset value
+// disables the entire builder slice consistently. See ADR-032 §addendum
+// 2026-05-03 R3.6.2.d for why this lives in product code (chicken-and-
+// egg between rule action timing and publish_agent's task_id generation).
+func registerBootstrapWorkspace(reg *agentictools.ExecutorRegistry, logger *slog.Logger) error {
+	sandboxURL := strings.TrimSpace(os.Getenv(envSandboxURL))
+	if sandboxURL == "" {
+		logger.Info("Product tool not registered (SANDBOX_URL unset)",
+			slog.String("name", bootstrapworkspace.ToolName),
+			slog.String("env_var", envSandboxURL))
+		return nil
+	}
+	client := sandbox.NewClient(sandboxURL)
+	executor, err := bootstrapworkspace.NewExecutor(client, logger, "")
+	if err != nil {
+		return fmt.Errorf("construct %s executor: %w", bootstrapworkspace.ToolName, err)
+	}
+	if err := reg.RegisterTool(bootstrapworkspace.ToolName, executor); err != nil {
+		return fmt.Errorf("register %s: %w", bootstrapworkspace.ToolName, err)
+	}
+	logger.Info("Registered product tool",
+		slog.String("name", bootstrapworkspace.ToolName),
+		slog.String("sandbox_url", sandboxURL))
 	return nil
 }
 

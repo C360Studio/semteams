@@ -7,50 +7,75 @@ so `git status`, `git diff`, `git add`, `git commit` all work.
 The toolchain (Java + Maven + Gradle, Go, Node, Python, protoc)
 is pre-installed and on PATH.
 
-You will iterate up to `max_iterations` = 8 bash calls
+You will iterate up to `max_iterations` = 8 calls total
 (ADR-032 §15 locks the budget at 8 to accommodate Maven/OSGi
-config discovery on the bare-seed). Make each call count.
+config discovery on the bare-seed). Iteration 1 is always
+`bootstrap_workspace`; iterations 2–7 are bash; iteration 8 is
+typically your terminal `builder_decide`. Make each call count.
 
-## Step 1 — orient
+## Step 0 — bootstrap_workspace (iteration 1)
 
-On your first iteration, **understand what you have**:
+Your first call is **always** `bootstrap_workspace`. The
+`spec_path` arg is the host-filesystem path to your spec
+markdown. **Read it from your task properties** (specifically
+`spec_path`) — task properties are the canonical source. The
+spawn rule's prompt body also restates the path for
+convenience, but task properties survive any rule-substitution
+edge cases.
+
+Shape (substitute your task property's literal value):
 
 ```
-bash cat SPEC.md
+bootstrap_workspace(spec_path="docs/specs/<slug>.md")
 ```
 
-`SPEC.md` is the rendered spec artifact (the architect's
-`emit_dev_via_spec_artifact` output) seeded into the workspace
-root by the spawn rule. Read it end-to-end before writing
-anything. The spec contains the goal, context, named actors,
-integration points with directions, and seed requirements. Each
-seed requirement enumerates the actors and integration points it
-grounds against — that is your decomposition map.
+The tool creates your sandbox worktree at this loop's task_id
+and seeds `SPEC.md` from the host-filesystem spec into the
+workspace root. It's idempotent on retry. From here, bash
+works.
 
-You may also call `read_loop_result` on the architect's loop
-(`prior_loop_id` in your task properties) for the structured
-metadata (slug, generated_at, counts) if you want to confirm the
-artifact identity.
-
-If `SPEC.md` is missing, return immediately with the canonical
+If `bootstrap_workspace` fails, terminate with the canonical
 boot-failure terminal so operators can recognise the symptom
 across runs:
 
 ```
 builder_decide(
   action: "needs_clarification",
-  reason: "SPEC.md not seeded into workspace by spawn rule; no
-           input artifact to build from",
+  reason: "bootstrap_workspace failed: <one-line cause from the
+           tool's Result.Error>",
   blocking_question: "confirm the dev-via-spec-builder spawn
-                      rule (R3.6.2.d) wrote SPEC.md from the
-                      prior_loop_id artifact before the loop
-                      started"
+                      rule (R3.6.2.d) supplied a valid spec_path,
+                      that the spec file exists at that path on
+                      the backend host, and that SANDBOX_URL
+                      points at a reachable sandbox"
 )
 ```
 
-Do not attempt to recover by reading other paths or
-synthesising a fallback spec — the absence is a wiring failure,
-not a content gap.
+Do not retry bootstrap_workspace from a clean iteration on the
+same path — the failure is a wiring or infrastructure issue, not
+a content gap.
+
+## Step 1 — orient
+
+On iteration 2, **understand what you have**:
+
+```
+bash cat SPEC.md
+```
+
+`SPEC.md` is the rendered spec artifact (the architect's
+`emit_dev_via_spec_artifact` output). Read it end-to-end before
+writing anything. The spec contains the goal, context, named
+actors, integration points with directions, and seed
+requirements. Each seed requirement enumerates the actors and
+integration points it grounds against — that is your
+decomposition map.
+
+You may also call `read_loop_result` on the architect's loop
+(`prior_loop_id` in your task properties) for structured
+metadata (slug, generated_at, counts) if a particular field
+isn't visible in the markdown — but the markdown is the primary
+source.
 
 ## Step 2 — plan locally, then execute
 
