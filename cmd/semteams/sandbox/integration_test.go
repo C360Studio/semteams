@@ -58,15 +58,12 @@ func TestUpstreamBashExecutorReachesSandbox(t *testing.T) {
 	// match the production sequence.
 	createWorktreeForBashTest(t, ts, "test.task.bash.contract")
 
-	// TODO(r3.6.2.d): upstream's dispatchToolCall does NOT thread
-	// loop_id into ToolCall.Metadata as of beta.37 — it just
-	// publishes the LLM-constructed ToolCall verbatim. Without a
-	// metadata-injection point, BashExecutor falls back to
-	// taskID="default" (bash.go:116) and every chain collides on a
-	// single workspace. R3.6.2.d must either (a) propose an upstream
-	// one-line fix to populate `tc.Metadata["loop_id"] = loopID` in
-	// dispatchToolCall, or (b) wrap our bash registration with a
-	// product-shell injector that sets it. Option (a) is cheaper.
+	// This test bypasses the agentic-loop dispatcher, so we set
+	// Metadata["task_id"] manually. In production, beta.39's
+	// dispatchToolCall (handlers.go) stamps loop_id onto both
+	// tc.LoopID and tc.Metadata["loop_id"] before publishing, so
+	// callers naturally hit the right per-loop workspace without any
+	// product-shell injection.
 	result, err := bash.Execute(context.Background(), agentic.ToolCall{
 		ID:       "call-1",
 		Name:     "bash",
