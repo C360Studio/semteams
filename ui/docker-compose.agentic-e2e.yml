@@ -140,9 +140,15 @@ services:
   # SemTeams Builder Sandbox (R3.6.1, ADR-032). Upstream's
   # BashExecutor routes through this container via SANDBOX_URL when
   # the agent loop calls the `bash` tool. Hardened posture mirrors
-  # docker/compose/sandbox.yml (the standalone dev compose) — kept
-  # inline here rather than via `include:` so the e2e network
-  # (agentic-net) and per-journey lifecycle are self-contained.
+  # docker/compose/sandbox.yml (the standalone dev compose).
+  #
+  # Inlined rather than `include:`'d on purpose: Compose include would
+  # couple the e2e stack's network (agentic-net) and per-journey
+  # lifecycle to the standalone compose file's, and we'd lose the
+  # `profiles: ["sandbox", "local-models"]` override that's specific
+  # to the e2e shape. Two definitions to keep in sync is the
+  # accepted cost. Hardening posture changes (cap_drop, tmpfs, etc.)
+  # MUST land in both places.
   #
   # Profile-gated: journeys that exercise bash (R3.6.2 builder slice
   # and beyond) bring it up via `--profile sandbox`. Existing mock-

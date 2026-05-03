@@ -58,6 +58,15 @@ func TestUpstreamBashExecutorReachesSandbox(t *testing.T) {
 	// match the production sequence.
 	createWorktreeForBashTest(t, ts, "test.task.bash.contract")
 
+	// TODO(r3.6.2.d): upstream's dispatchToolCall does NOT thread
+	// loop_id into ToolCall.Metadata as of beta.37 — it just
+	// publishes the LLM-constructed ToolCall verbatim. Without a
+	// metadata-injection point, BashExecutor falls back to
+	// taskID="default" (bash.go:116) and every chain collides on a
+	// single workspace. R3.6.2.d must either (a) propose an upstream
+	// one-line fix to populate `tc.Metadata["loop_id"] = loopID` in
+	// dispatchToolCall, or (b) wrap our bash registration with a
+	// product-shell injector that sets it. Option (a) is cheaper.
 	result, err := bash.Execute(context.Background(), agentic.ToolCall{
 		ID:       "call-1",
 		Name:     "bash",
@@ -134,9 +143,15 @@ func TestUpstreamBashExecutorReadOnlyPathsRefused(t *testing.T) {
 	if err != nil {
 		t.Fatalf("verify_clean call: %v", err)
 	}
+	// Two separate assertions so a refactor of upstream's error wording
+	// fails on the substring check (recoverable) rather than masking a
+	// "no error returned at all" regression (silent passing).
 	if r2.Error == "" {
 		t.Fatalf("expected verify_clean to refuse the command; got success: %s", r2.Content)
 	}
+	// Substring lock-in is the same one upstream's own bash_test.go uses
+	// (executors/bash_test.go:434). If upstream tweaks the wording, this
+	// fails loudly; update the substring rather than the assertion shape.
 	if !strings.Contains(strings.ToLower(r2.Error), "verify_clean") {
 		t.Fatalf("error should mention verify_clean: %q", r2.Error)
 	}
