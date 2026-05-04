@@ -271,17 +271,23 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 	}
 
 	mutationCount := artifact.LatestRevisionMutationCount()
-	resultJSON, err := json.Marshal(map[string]any{
+	resultMap := map[string]any{
 		"loop_id":                      artifact.LoopID,
 		"revision":                     artifact.Revision,
 		"actors_count":                 len(artifact.Actors),
 		"integration_points_count":     len(artifact.IntegrationPoints),
 		"seed_requirements_count":      len(artifact.SeedRequirements),
 		"last_revision_mutation_count": mutationCount,
-		"harness":                      artifact.Harness,
 		"payload_subject":              subject,
 		"loop_entity_id":               loopEntityID,
-	})
+	}
+	// Mirror the wire-payload + triple discipline: presence is the
+	// signal, absence is the catalog-miss case. Avoid leaking an
+	// explicit empty string to the next-turn LLM.
+	if artifact.Harness != "" {
+		resultMap["harness"] = artifact.Harness
+	}
+	resultJSON, err := json.Marshal(resultMap)
 	if err != nil {
 		return agentic.ToolResult{
 			CallID:    call.ID,

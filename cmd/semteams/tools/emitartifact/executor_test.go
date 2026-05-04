@@ -519,6 +519,15 @@ func TestExecute_HarnessSet_EmitsHarnessTriple(t *testing.T) {
 	if roundTrip["harness"] != "meshtasticd-3.x" {
 		t.Errorf("payload.harness = %v, want meshtasticd-3.x", roundTrip["harness"])
 	}
+
+	// Result content (next-turn LLM-visible) carries the harness key.
+	var resultMap map[string]any
+	if err := json.Unmarshal([]byte(res.Content), &resultMap); err != nil {
+		t.Fatalf("decode result content: %v", err)
+	}
+	if resultMap["harness"] != "meshtasticd-3.x" {
+		t.Errorf("result.harness = %v, want meshtasticd-3.x", resultMap["harness"])
+	}
 }
 
 func TestExecute_HarnessUnset_OmitsHarnessTriple(t *testing.T) {
@@ -546,6 +555,12 @@ func TestExecute_HarnessUnset_OmitsHarnessTriple(t *testing.T) {
 	_, data, _ := pub.snapshot()
 	if got := string(data); strings.Contains(got, `"harness"`) {
 		t.Errorf("expected harness omitted from payload, got %s", got)
+	}
+
+	// Result content (next-turn LLM-visible) also omits the key so the
+	// next-turn LLM doesn't see "harness":"" as an explicit empty.
+	if got := res.Content; strings.Contains(got, `"harness"`) {
+		t.Errorf("expected harness omitted from result content, got %s", got)
 	}
 }
 
