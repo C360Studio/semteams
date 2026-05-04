@@ -126,6 +126,13 @@ services:
       # they use don't reference these env vars.
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      # R3.7.1 harness catalog path. Default points at the empty
+      # operator-curated file baked into the image; per-journey
+      # tasks override (e.g. research-harness-hit sets it to
+      # configs/harnesses-stub.json) so a single image services
+      # both empty-catalog and stub-catalog journeys without a
+      # rebuild. ADR-033.
+      - SEMTEAMS_HARNESS_CATALOG_PATH=${SEMTEAMS_HARNESS_CATALOG_PATH:-/app/configs/harnesses.json}
     volumes:
       - ${BACKEND_CONTEXT:-..}/configs/${AGENTIC_CONFIG:-e2e-agentic.json}:/etc/semstreams/config.json:ro
       - ${BACKEND_CONTEXT:-..}/testdata:/data/testdata:ro

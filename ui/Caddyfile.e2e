@@ -44,6 +44,13 @@
 		reverse_proxy backend:8080
 	}
 
+	# Harness catalog read API (R3.7.1.f, ADR-033). Operator/UI-facing
+	# read-only — the chain consults the catalog via persona-fragment
+	# auto-render, not via this endpoint.
+	handle /harnesses* {
+		reverse_proxy backend:8080
+	}
+
 	# Prometheus metrics
 	handle /metrics {
 		reverse_proxy backend:9090

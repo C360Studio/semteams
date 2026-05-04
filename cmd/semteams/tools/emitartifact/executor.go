@@ -79,6 +79,14 @@ const (
 	predicateOpenGapsCount             = "research.artifact.open_gaps_count"
 	predicateLastRevisionMutationCount = "research.artifact.last_revision_mutation_count"
 	predicateProducedAt                = "research.artifact.produced_at"
+	// predicateHarness is emitted only when the researcher chose a
+	// catalog harness (Artifact.Harness != ""). Absence of the triple
+	// is the catalog-miss signal — paired with a `needs_harness:` line
+	// in OpenGaps. R3.7.3 coordinator routing keys off this triple's
+	// presence to decide between auto-resume and harness-via-spec
+	// escalation. Object is the harness name (a stable catalog key,
+	// not free-text content) — discipline rule preserved.
+	predicateHarness = "research.artifact.harness"
 )
 
 // PayloadPublisher is the narrow surface the executor uses to publish
@@ -167,8 +175,9 @@ func (e *Executor) ListTools() []agentic.ToolDefinition {
 				"integration_points":  map[string]any{"type": "array", "items": integrationPointSchema, "description": "Actor-to-actor data flows with direction."},
 				"seed_requirements":   map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Decomposable-grain requirements derived from the research."},
 				"addressed_gaps":      map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Reviewer-flagged gaps this pass closed."},
-				"open_gaps":           map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Reviewer-flagged gaps still outstanding after this pass."},
+				"open_gaps":           map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Reviewer-flagged gaps still outstanding after this pass. If no harness in the catalog matches this work, include a 'needs_harness: <one-line description of the integration target>' entry here so the reviewer can route the gap; the chain treats `needs_harness` as a structured marker, not free text."},
 				"substrate_mutations": map[string]any{"type": "array", "items": mutationSchema, "description": "Append-only log of substrate-modifying tool calls across all revisions of this artifact (e.g. add_source_repo). Include prior revisions' entries verbatim plus any new ones from this pass."},
+				"harness":             map[string]any{"type": "string", "description": "Name of the harness from configs/harnesses.json that will verify the integration this research describes. Omit (or leave empty) if no catalog entry matches; in that case ALSO add a `needs_harness: ...` line to open_gaps so the reviewer sees the gap explicitly. The reviewer enforces the either/or."},
 			},
 			"required": []string{"revision", "actors", "integration_points", "seed_requirements"},
 		},
@@ -262,7 +271,7 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 	}
 
 	mutationCount := artifact.LatestRevisionMutationCount()
-	resultJSON, err := json.Marshal(map[string]any{
+	resultMap := map[string]any{
 		"loop_id":                      artifact.LoopID,
 		"revision":                     artifact.Revision,
 		"actors_count":                 len(artifact.Actors),
@@ -271,7 +280,14 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 		"last_revision_mutation_count": mutationCount,
 		"payload_subject":              subject,
 		"loop_entity_id":               loopEntityID,
-	})
+	}
+	// Mirror the wire-payload + triple discipline: presence is the
+	// signal, absence is the catalog-miss case. Avoid leaking an
+	// explicit empty string to the next-turn LLM.
+	if artifact.Harness != "" {
+		resultMap["harness"] = artifact.Harness
+	}
+	resultJSON, err := json.Marshal(resultMap)
 	if err != nil {
 		return agentic.ToolResult{
 			CallID:    call.ID,
@@ -288,6 +304,7 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 		slog.Int("integration_points", len(artifact.IntegrationPoints)),
 		slog.Int("seed_requirements", len(artifact.SeedRequirements)),
 		slog.Int("last_revision_mutations", mutationCount),
+		slog.String("harness", artifact.Harness),
 		slog.String("subject", subject))
 
 	return agentic.ToolResult{
@@ -361,7 +378,7 @@ func buildTriples(loopEntityID string, a *research.Artifact, now time.Time) []me
 			Confidence: 1.0,
 		}
 	}
-	triples := make([]message.Triple, 0, 8)
+	triples := make([]message.Triple, 0, 9)
 	triples = append(triples,
 		base(predicateRevision, a.Revision),
 		base(predicateActorsCount, len(a.Actors)),
@@ -372,5 +389,8 @@ func buildTriples(loopEntityID string, a *research.Artifact, now time.Time) []me
 		base(predicateLastRevisionMutationCount, a.LatestRevisionMutationCount()),
 		base(predicateProducedAt, a.ProducedAt.UTC().Format(time.RFC3339Nano)),
 	)
+	if a.Harness != "" {
+		triples = append(triples, base(predicateHarness, a.Harness))
+	}
 	return triples
 }

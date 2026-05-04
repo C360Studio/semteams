@@ -255,6 +255,30 @@ tasks:
           AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
       - npx playwright test e2e/agentic/research-iterative.spec.ts
 
+  test:e2e:agentic:research-harness-hit:
+    desc: Run the harness-catalog-hit journey (R3.7.1.e of ADR-033)
+    summary: |
+      Single-pass researcher emits an artifact whose `harness` field
+      references the `stub` entry in configs/harnesses-stub.json,
+      mounted via SEMTEAMS_HARNESS_CATALOG_PATH override. Verifies
+      boot-time catalog load + persona-fragment auto-render +
+      emit_research_artifact harness-field plumbing end-to-end.
+      Catalog-miss is structurally a strict subset of this fixture
+      (omit harness field) and is implicitly tested by the existing
+      research-iterative journey.
+    vars:
+      FIXTURE: research-harness-hit.yaml
+      AGENTIC_CONFIG: e2e-research-harness-hit.json
+      SEMTEAMS_HARNESS_CATALOG_PATH: /app/configs/harnesses-stub.json
+    cmds:
+      - defer: { task: test:e2e:agentic:cleanup }
+      - task: test:e2e:agentic:stack:up
+        vars:
+          FIXTURE: "{{.FIXTURE}}"
+          AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
+          SEMTEAMS_HARNESS_CATALOG_PATH: "{{.SEMTEAMS_HARNESS_CATALOG_PATH}}"
+      - npx playwright test e2e/agentic/research-harness-hit.spec.ts
+
   test:e2e:agentic:research-mode-transition:
     desc: Run the R3.2.2 research → dev-via-spec mode-transition journey
     summary: |
@@ -817,11 +841,17 @@ tasks:
       # Empty default keeps existing journeys boot-fast; the
       # research-with-source journey sets COMPOSE_PROFILES=semsource.
       COMPOSE_PROFILES: '{{.COMPOSE_PROFILES | default ""}}'
+      # R3.7.1: per-journey harness catalog override. Default falls
+      # through to the empty configs/harnesses.json baked into the
+      # image; journeys that need a stub harness (research-harness-
+      # hit) set this to /app/configs/harnesses-stub.json.
+      SEMTEAMS_HARNESS_CATALOG_PATH: '{{.SEMTEAMS_HARNESS_CATALOG_PATH | default "/app/configs/harnesses.json"}}'
     env:
       FIXTURE: "{{.FIXTURE}}"
       AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
       E2E_AGENTIC_UI_PORT: "{{.E2E_AGENTIC_UI_PORT}}"
       COMPOSE_PROFILES: "{{.COMPOSE_PROFILES}}"
+      SEMTEAMS_HARNESS_CATALOG_PATH: "{{.SEMTEAMS_HARNESS_CATALOG_PATH}}"
     cmds:
       - echo "Stack config → AGENTIC_CONFIG={{.AGENTIC_CONFIG}} FIXTURE={{.FIXTURE}} PROFILES={{.COMPOSE_PROFILES}}"
       - docker compose -f docker-compose.agentic-e2e.yml build --no-cache backend

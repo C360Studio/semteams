@@ -137,7 +137,7 @@ func TestListTools_SchemaShape(t *testing.T) {
 	if !ok {
 		t.Fatalf("schema missing properties: %#v", def.Parameters)
 	}
-	for _, key := range []string{"revision", "actors", "integration_points", "seed_requirements", "addressed_gaps", "open_gaps", "substrate_mutations"} {
+	for _, key := range []string{"revision", "actors", "integration_points", "seed_requirements", "addressed_gaps", "open_gaps", "substrate_mutations", "harness"} {
 		if _, ok := props[key]; !ok {
 			t.Errorf("missing property %q in tool schema", key)
 		}
@@ -478,6 +478,89 @@ func TestExecute_MutationCount_WithCurrentRevisionEntry(t *testing.T) {
 	}
 	if got := gotPredicates[predicateLastRevisionMutationCount]; got != 1 {
 		t.Errorf("last_revision_mutation_count = %v, want 1 (one mutation at revision 2)", got)
+	}
+}
+
+// ---------------------------------------------------------------------
+// R3.7.1.b — harness field handling
+// ---------------------------------------------------------------------
+
+func TestExecute_HarnessSet_EmitsHarnessTriple(t *testing.T) {
+	exec, tp, pub := newExecutor(t)
+	args := defaultArtifactArgs()
+	args["harness"] = "meshtasticd-3.x"
+
+	res, err := exec.Execute(context.Background(), defaultCall(args))
+	if err != nil {
+		t.Fatalf("Execute err: %v", err)
+	}
+	if res.Error != "" {
+		t.Fatalf("Result.Error = %q, want empty", res.Error)
+	}
+
+	gotPredicates := map[string]any{}
+	for _, tr := range tp.snapshot() {
+		gotPredicates[tr.Predicate] = tr.Object
+	}
+	got, ok := gotPredicates[predicateHarness]
+	if !ok {
+		t.Fatalf("harness triple not emitted; predicates: %v", gotPredicates)
+	}
+	if got != "meshtasticd-3.x" {
+		t.Errorf("harness object = %v, want meshtasticd-3.x", got)
+	}
+
+	// Payload also carries the field round-trip.
+	_, data, _ := pub.snapshot()
+	var roundTrip map[string]any
+	if err := json.Unmarshal(data, &roundTrip); err != nil {
+		t.Fatalf("decode payload: %v", err)
+	}
+	if roundTrip["harness"] != "meshtasticd-3.x" {
+		t.Errorf("payload.harness = %v, want meshtasticd-3.x", roundTrip["harness"])
+	}
+
+	// Result content (next-turn LLM-visible) carries the harness key.
+	var resultMap map[string]any
+	if err := json.Unmarshal([]byte(res.Content), &resultMap); err != nil {
+		t.Fatalf("decode result content: %v", err)
+	}
+	if resultMap["harness"] != "meshtasticd-3.x" {
+		t.Errorf("result.harness = %v, want meshtasticd-3.x", resultMap["harness"])
+	}
+}
+
+func TestExecute_HarnessUnset_OmitsHarnessTriple(t *testing.T) {
+	exec, tp, pub := newExecutor(t)
+	args := defaultArtifactArgs()
+	// Explicit catalog-miss path — researcher flags the gap in open_gaps.
+	args["open_gaps"] = []any{"needs_harness: real Meshtastic radio over LoRa"}
+
+	res, err := exec.Execute(context.Background(), defaultCall(args))
+	if err != nil {
+		t.Fatalf("Execute err: %v", err)
+	}
+	if res.Error != "" {
+		t.Fatalf("Result.Error = %q, want empty", res.Error)
+	}
+
+	for _, tr := range tp.snapshot() {
+		if tr.Predicate == predicateHarness {
+			t.Errorf("harness triple emitted with empty harness field; object=%v", tr.Object)
+		}
+	}
+
+	// Payload omits the field via omitempty so older v1 consumers see no
+	// drift.
+	_, data, _ := pub.snapshot()
+	if got := string(data); strings.Contains(got, `"harness"`) {
+		t.Errorf("expected harness omitted from payload, got %s", got)
+	}
+
+	// Result content (next-turn LLM-visible) also omits the key so the
+	// next-turn LLM doesn't see "harness":"" as an explicit empty.
+	if got := res.Content; strings.Contains(got, `"harness"`) {
+		t.Errorf("expected harness omitted from result content, got %s", got)
 	}
 }
 

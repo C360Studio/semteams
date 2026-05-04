@@ -2,6 +2,7 @@ package research
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -71,6 +72,62 @@ func TestArtifact_RoundTrip(t *testing.T) {
 	if !got.ProducedAt.Equal(orig.ProducedAt) {
 		t.Errorf("produced_at: got %v, want %v", got.ProducedAt, orig.ProducedAt)
 	}
+}
+
+func TestArtifact_Harness_RoundTrip(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+
+	t.Run("harness set round-trips", func(t *testing.T) {
+		t.Parallel()
+		orig := &Artifact{
+			LoopID:     "loop_abc",
+			Revision:   1,
+			Harness:    "meshtasticd-3.x",
+			ProducedAt: now,
+		}
+		data, err := json.Marshal(orig)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got Artifact
+		if err := json.Unmarshal(data, &got); err != nil {
+			t.Fatal(err)
+		}
+		if got.Harness != orig.Harness {
+			t.Errorf("harness: got %q, want %q", got.Harness, orig.Harness)
+		}
+	})
+
+	t.Run("harness omitempty", func(t *testing.T) {
+		t.Parallel()
+		a := &Artifact{LoopID: "loop_abc", Revision: 1, ProducedAt: now}
+		data, err := json.Marshal(a)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// JSON omitempty: empty string Harness should not be present in
+		// the wire bytes — guards against breaking older v1 consumers.
+		if got := string(data); strings.Contains(got, `"harness"`) {
+			t.Errorf("expected harness to be omitted when empty, got %s", got)
+		}
+	})
+
+	t.Run("validate accepts both presence and absence", func(t *testing.T) {
+		t.Parallel()
+		// The Validate() boundary is structural — semantic either-or
+		// (harness OR needs_harness gap) is the reviewer persona's job.
+		// Both shapes must pass Validate.
+		hit := Artifact{LoopID: "x", Revision: 1, Harness: "stub", ProducedAt: now}
+		miss := Artifact{LoopID: "x", Revision: 1, OpenGaps: []string{"needs_harness: real Meshtastic radio"}, ProducedAt: now}
+		if err := hit.Validate(); err != nil {
+			t.Errorf("hit case: %v", err)
+		}
+		if err := miss.Validate(); err != nil {
+			t.Errorf("miss case: %v", err)
+		}
+	})
 }
 
 func TestArtifact_Validate(t *testing.T) {

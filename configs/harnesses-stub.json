@@ -1,0 +1,12 @@
+{
+  "$comment": "Stub harness catalog. Plumbed in via SEMTEAMS_HARNESS_CATALOG_PATH so journeys can swap from the empty default to a non-empty catalog without rebuilding the image. The 'stub' entry is intentionally minimal — its only role is to verify the boot-time render path produces a non-empty researcher fragment. Real catalog entries ship in R3.7.2 (meshtasticd-3.x) and beyond.",
+  "harnesses": [
+    {
+      "name": "stub",
+      "compose_profile": "harness-stub",
+      "image": "scratch",
+      "smoke_contract_schema": "stub.smoke_contract.v1",
+      "domain_description": "Stub harness for e2e wiring verification. Not a real test harness; do not reference outside the research-harness-hit journey."
+    }
+  ]
+}

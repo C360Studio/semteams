@@ -906,3 +906,119 @@ to hide.
 - OpenSpec opsx workflow (verified 2026-05-03) — comparison
   framework; specs explicitly forbid library declarations; verify
   step does not run code; no harness primitive.
+
+## Addendum 2026-05-04 — R3.7.1 framework-alignment review
+
+R3.7.1 landed the harness catalog primitive across six slices on
+PR #55: `.a` Pattern-B catalog manager + boot-time file loader,
+`.b` `research.Artifact.harness` field + emit-tool plumbing,
+`.c` researcher persona consults catalog (static instructions
+fragment + auto-rendered list), `.d` research-reviewer enforces
+the harness selection gate, `.e` mock-LLM e2e fixture verifying
+the catalog-hit wire-shape end-to-end, `.f` `/harnesses` HTTP
+read API. Recording the framework-alignment review here per
+the project's product-shell-tool discipline (CLAUDE.md "Product-
+Shell-Tool Discipline") so future agents don't re-litigate the
+shape choices.
+
+### Survey of upstream beta.39
+
+- **Catalog primitive**: none. Closest analogues are
+  `flowtemplate.Manager` (parameterised flow definitions),
+  `flowstore.Manager` (flow instances), `persona.Manager`
+  (prompt fragments), `rule.ConfigManager` (rule definitions).
+  All are KV-backed Pattern-B managers per ADR-029. No
+  test-harness / verification-target / sidecar-registry concept
+  exists in the framework.
+- **HTTP routing for product code**: components own
+  `RegisterHTTPHandlers(prefix, mux)`; gateways the same. No
+  public mux accessor on `service.Manager`. The only product-
+  shell hook for wrapping framework routes is
+  `Manager.UseHTTPMiddleware`.
+- **Persona-fragment runtime injection**: `persona.Manager.Upsert`
+  is public and idempotent against the PERSONAS KV bucket.
+  `persona.LoadFromDirectory` doesn't parse the `\d+-` filename
+  prefix into Priority — every file-loaded fragment defaults to
+  `Category=0` / `Priority=0`. Intra-priority ordering is then
+  governed by map-iteration order (a pre-existing framework gap;
+  the chain works in practice because LLMs read prose well).
+- **Tool surface**: `agentictools.NewNATSTriplePublisher` is the
+  shared shape for tools that publish marker triples on the
+  graph via request/reply on `graph.mutation.triple.add`. The
+  product-shell `emit_research_artifact` tool (R3.2.2) uses it.
+  No upstream tool authors a "consult external catalog" pattern
+  — confirms LLM-facing catalog query is not framework-shaped.
+
+### Decisions taken in R3.7.1
+
+| Move | Choice | Rationale |
+|---|---|---|
+| Manager pattern | Mirror `flowtemplate.Manager` (KV-backed Pattern-B, History:5, file loader on boot) | Closest upstream analogue; pre-existing convention. |
+| Bucket name | `HARNESSES` | Matches upstream all-caps convention (`FLOW_TEMPLATES`, `PERSONAS`, `RULES`). |
+| LLM consultation | Persona-fragment auto-render (no new tool) | Coby's 2026-05-03 fewer-rich-tools principle. Catalog data is small, ambient, read-only — prompt context is the cleaner injection. A `query_harnesses` tool would force every researcher run to pay a tool-call round-trip for ambient data. |
+| Synthetic fragment ID | `harness-catalog.rendered` (dot-separator, prefix-less) | Visibly synthetic; operators conventionally use `\d+-name.md`. |
+| Synthetic fragment Category/Priority | `Category=0` (matches project baseline), `Priority=45` | Sorts after the static `40-harness-catalog.md` instructions within the same category. Pre-existing nondeterminism between Priority=0 peers remains. |
+| Reviewer gate | Reviewer-as-enumerator: presence-or-honest-gap + membership in catalog | Reviewer can verify membership because the rendered catalog is in its prompt context (multi-role record). Architect verifies fitness in R3.7.2. |
+| `harness` field on artifact | Additive `omitempty` on v1 | No schema bump; older v1 consumers see no drift. Validate stays structural; semantic XOR is reviewer's job. |
+| Catalog-miss signal | `needs_harness: <description>` in `open_gaps` | No new `decide` action; structured marker fits within existing reviewer-as-enumerator pattern. |
+| Triple emission | Conditional — `research.artifact.harness` triple emitted only when `harness != ""` | Triple absence = catalog-miss signal. Easier downstream rule shape (presence-test) than always-emit-with-empty-string. |
+| HTTP path | `/harnesses` (not `/teams-dispatch/harnesses`) | LLM doesn't consume it; clean separation of operator/UI surface from chain-internal `/teams-dispatch/*`. |
+| HTTP wiring mechanism | Product middleware (`Manager.UseHTTPMiddleware`) | Service-manager owns the chain mux internally; middleware is the only public hook for product-shell HTTP. Foundational for any future product-shell endpoint outside the component-owned namespace. |
+| Test split | unit (pure-Go renderer + middleware routing); integration (KV-backed Manager + persona injection); e2e (Playwright catalog-hit); skipping a separate catalog-miss e2e because every existing journey emits artifacts without `harness` and thus implicitly tests the miss path | Marginal coverage of a dedicated catalog-miss fixture is low; it duplicates the structural shape of every research-iterative journey. |
+
+### Migration posture
+
+The harness catalog is **product-shell-local** in v1 because the
+harness concept is currently SemTeams-specific (no semspec /
+semdragon use case yet). Mirror the shape upstream when a 2nd
+product needs it. Until then the package's `cmd/semteams/harness/`
+location and the product-shell-tool README's migration table are
+the operator-readable trail.
+
+### Drift signals captured during the slice
+
+These came up while building R3.7.1; future agents working in
+this space should push back on them:
+
+- "Render the catalog into the source-tree fragment file at boot."
+  No — mutates `configs/personas/fragments/researcher/`, makes
+  every boot a git-diff. Use `persona.Manager.Upsert` directly.
+- "Use NATS-style `>` wildcard in message-logger filter."
+  No — message-logger's filter is `*` wildcard, applied AFTER
+  the limit window. Documented inline in
+  `ui/e2e/agentic/research-harness-hit.spec.ts`.
+- "Bind `graph.mutation.>` to a JetStream stream so message-logger
+  retains decide's triples." NO — JetStream binding intercepts
+  the request before graph-ingest's NATS request/reply responder
+  can answer, breaking decide and emit_research_artifact.
+  Mode-transition's GRAPH stream binds `graph.ingest.*` (the
+  source-acquisition namespace) which is a different shape.
+- "Add a `query_harnesses` tool so the researcher can re-fetch the
+  catalog mid-loop." No — the catalog state is stable for the
+  duration of a chain (no live mutations from agent code in v1)
+  so the persona-fragment snapshot is sufficient. R3.7.4 may
+  revisit if `harness-via-spec`'s candidate-promotion path
+  introduces mid-chain catalog updates.
+
+### Verification evidence
+
+Smoke evidence that the wire works end-to-end:
+
+- Unit + integration tests green: `task test`, `task test:race`,
+  `go test -tags=integration ./cmd/semteams/harness/...`
+- Mock-LLM e2e green: `task test:e2e:agentic:research-harness-hit`
+  asserts loop-count, role distribution, terminal convergence,
+  and `research.artifact.{loop_id}` payload carrying
+  `harness: "stub"`.
+- Boot-log evidence: `harness catalog loaded entries_loaded=1`
+  + `harness catalog: rendered persona fragment injected
+  fragment_id=harness-catalog.rendered catalog_entries=1
+  roles=[researcher researcher-with-source-acquisition
+  research-reviewer]`.
+- Manual HTTP smoke: `GET /harnesses` returns the catalog,
+  `GET /harnesses/stub` returns the entry, `GET /harnesses/ghost`
+  returns 404 + structured error.
+
+R3.7.2 (smoke contract execution against `meshtasticd-3.x`) is
+the next slice; the harness catalog primitive built here is its
+foundation.

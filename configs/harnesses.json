@@ -1,0 +1,4 @@
+{
+  "$comment": "Operator-curated harness catalog. See ADR-033 §1. Empty in R3.7.1; first entry (meshtasticd-3.x) lands with R3.7.2.",
+  "harnesses": []
+}
