@@ -1,11 +1,16 @@
-# ADR-034: Verification execution via qa-runner pattern
+# ADR-034: Verification execution via verification-runner pattern
 
 ## Status
 
-Proposed — 2026-05-04. Pivots R3.7.2 line away from bespoke
-family/runtime/template orchestration toward the qa-runner pattern
-already extant in semspec. R3.7.2.a/b/c remain valid; R3.7.2.d
-(closed in PR #59) and the planned R3.7.2.e/f/g/h/i are reshaped.
+Proposed — 2026-05-04 (revised same day for verification-class
+boundaries + brownfield support + naming).
+
+Pivots R3.7.2 line away from bespoke (family × runtime) orchestration
+toward an event-driven verification-runner pattern, with sandbox+
+Testcontainers handling unit/integration cases and the runner reserved
+for genuine browser-flow / e2e / greenfield-no-CI cases. R3.7.2.a/b/c
+remain valid; R3.7.2.d (closed in PR #59) and the planned R3.7.2.e/f/g/h/i
+are reshaped.
 
 ## Context
 
@@ -15,8 +20,7 @@ R3.7.2's working design was a (family × runtime) matrix:
   level contracts, ships per-family JSON-shape validators.
 - **Test runtime** (driver-side, per-language): owns invocation
   command (`mvn verify`, `go test`, `npx playwright test`) and
-  per-family rendering templates that turn smoke contracts into
-  real test code.
+  per-family rendering templates.
 - **Harness catalog**: operator-curated `configs/harnesses.json`
   with `compose_profile` field referencing docker-compose services.
 
@@ -24,13 +28,20 @@ R3.7.2.d (PR #59, closed before merge) shipped the family + runtime
 registries with one entry each (`tcp.binary-protobuf.v1`,
 `java-junit-testcontainers`).
 
-A pro-devops review surfaced that the `compose_profile` field bakes
-the orchestrator into the wire format, that we have no GitOps or
-multi-tenancy story, that we'd reinvented orchestration from scratch.
-While walking through the gaps, surveying our sibling repo
-**semspec** turned up a `qa-runner` component that solves nearly
-all of them — and is the pattern a senior devops person would have
-designed if they'd been on this from day one.
+A pro-devops review surfaced the design's gaps: the `compose_profile`
+field bakes the orchestrator into the wire format; we have no GitOps
+or multi-tenancy story; we'd reinvented orchestration. While walking
+through gaps, surveying our sibling repo **semspec** turned up a
+`qa-runner` component that's structurally well-shaped — and is the
+pattern a senior devops person would have designed if they'd been on
+this from day one.
+
+A second-pass review of that proposal (this revision) surfaced two
+sharpenings: lean on the language ecosystem's standard (Testcontainers)
+for integration tests rather than routing everything through act; and
+treat brownfield projects (existing CI, existing test runner, existing
+conventions) as the common-case rather than the edge case. Both
+narrow the runner's scope and improve the design.
 
 ### What semspec's qa-runner is
 
@@ -52,267 +63,346 @@ qa-runner ──qa.completed──> NATS ──> qa-reviewer (LLM)
 
 Key properties:
 
-1. **Event-driven decoupling**. Chain publishes a job, runner
-   consumes, chain consumes the result. Chain doesn't know how or
+1. **Event-driven decoupling**: chain publishes a job; runner
+   consumes; chain consumes the result. Chain doesn't know how or
    where tests ran.
 2. **`act` as execution engine** (GitHub Actions emulator). Local
-   runs of `.github/workflows/qa.yml` against `catthehacker/ubuntu:
-   act-latest` images. Universal CI vernacular — every devops
-   person already knows the YAML shape.
-3. **Workspace bind-mount** via Docker socket. Runner mounts the
-   chain's workspace into act's container; tests see the
-   implementation under test.
-4. **Standardized result envelope**: `QAFailure` (job/step/test
-   name + log excerpt), `QAArtifactRef` (workspace-relative path +
-   type + purpose), duration, runner error distinguished from test
-   failures.
-5. **Mode-based routing**: `unit` → sandbox (process-local,
-   cheap), `integration|full` → act (real-stack, sidecars
-   declared in workflow `services:`).
-6. **ARC-compatible swap path** for k8s. `act` is the local
-   backend; a future k8s deployment swaps qa-runner's executor for
-   GitHub Actions Runner Controller (or Tekton, or Argo Workflows)
-   without changing the event shape.
+   runs of `.github/workflows/qa.yml` against
+   `catthehacker/ubuntu:act-latest` images. Universal CI vernacular.
+3. **Workspace bind-mount** via Docker socket.
+4. **Standardized result envelope**: `QAFailure`, `QAArtifactRef`,
+   duration, runner error vs test failure distinction.
+5. **Mode-based routing**: unit → sandbox; integration|full → act.
+6. **ARC-compatible swap path** for k8s without changing event shape.
 
 ### Honest assessment of qa-runner maturity
 
-The qa-runner is **DESIGNED + BUILT but mostly UNUSED in semspec**.
-Six weeks old (April 2026). A few smoke tests have run through it;
-no production load. The pattern is right; the implementation is
-fresh and likely needs SemTeams-specific refinement.
+semspec's qa-runner is **DESIGNED + BUILT but mostly UNUSED** —
+six weeks old (April 2026), fresh implementation, NOT battle-tested
+production-grade. The pattern is right; the implementation needs
+SemTeams-specific refinement during the port.
 
-This ADR is NOT proposing we adopt a battle-tested production
-component. It IS proposing we adopt a structurally-correct
-pattern that already exists in our ecosystem, vs. building a
-parallel bespoke solution.
+### Naming
+
+semspec calls it `qa-runner` because semspec has a "qa" role
+controlling it. SemTeams has no qa role; the runner is mechanical
+infrastructure that responds to events. We name our component
+**`verification-runner`** — matches our ADR-033 vocabulary
+(verification-commitment, evidence-gate, verification-runner) and
+matches GitHub Actions / CI vernacular every devops engineer
+recognizes. References to semspec's component keep its `qa-runner`
+name (that's what they call it).
 
 ## Decision
 
-**Pivot R3.7.2's execution boundary to the qa-runner pattern.**
+**Pivot R3.7.2's execution boundary to a verification-runner
+pattern, with carefully-bounded scope:**
 
-Specifically:
+1. The architect's `Approach` enum (R3.7.2.a) drives executor
+   selection. The runner is invoked only when act's workflow-level
+   orchestration buys something the sandbox can't deliver.
 
-1. Verification execution moves from "builder runs `mvn verify`
-   directly inside sandbox against operator-curated compose
-   sidecar" to "builder publishes a `qa.requested`-shaped event
-   with workspace + workflow path; qa-runner consumes; result
-   event drives `decide`."
+2. **Most verification execution stays in the sandbox**, augmented
+   with DinD (Docker-in-Docker) so Testcontainers can manage sidecar
+   lifecycle from in-process. This is the language-ecosystem-standard
+   pattern and works across Java, Go, Python, Node, Rust, .NET.
 
-2. The verification commitment's `target` and `convention` fields
-   point at a workflow YAML the architect/builder author
-   (`workflow_path: .github/workflows/qa.yml` by convention).
-   The workflow's `services:` block declares sidecars; its
-   `runs-on:` declares the runner image; its `jobs.*.steps`
-   declare the test invocation. **All in one file, in a format
-   every devops person already reads.**
+3. **verification-runner is invoked specifically for**:
+   - `browser-flow` Approach (Playwright/Cypress against an
+     orchestrated stack)
+   - Greenfield e2e where no existing CI exists to extend
+   - Cases where workflow YAML's job-level orchestration is genuinely
+     needed (multi-job pipelines, artifact uploads, CI-parity
+     verification)
 
-3. SemTeams ports qa-runner from semspec. Subtree-import vs
-   reimplement is an open question (see §Open questions). Either
-   way the event types (`QARequestedEvent`, `QACompletedEvent`,
-   `QAVerdictEvent`) move into shared territory — likely
-   upstreamed to semstreams as Pattern-B verification primitives.
+4. **Brownfield is a first-class case**: when the project has
+   existing CI / test runner / conventions, the chain extends them
+   rather than authoring parallel verification surfaces. The
+   architect discovers the project's conventions before emitting
+   commitments; the builder writes test code matching the project's
+   idiom; sandbox runs the project-native invocation.
 
-4. The bespoke (family × runtime) matrix is **withdrawn**.
+5. The bespoke (family × runtime) matrix is **withdrawn**.
    `verification.Commitment` (R3.7.2.a, merged) and the artifact
    widening (R3.7.2.b, merged) remain valid. Upstream verifiability
    personas (R3.7.2.c, merged) remain valid. The harness catalog
    (R3.7.1, merged) survives in modified shape — declares
-   "available services to reference in workflows" rather than
-   "compose profiles to provision."
+   "available services" rather than "compose profiles."
+
+## Verification class → execution mapping
+
+This table is the central contract. The architect's `Approach`
+choice — combined with the brownfield/greenfield discrimination
+already encoded in `ConventionRef.type` — determines the executor.
+
+| Approach | ConventionRef.type | Executor | Mechanism |
+|---|---|---|---|
+| `in-process-unit` | filepath (brownfield) | sandbox | builder runs project-native command (`mvn test -DskipITs`, `go test ./...`, `pytest -m unit`, etc.) |
+| `in-process-unit` | template_id (greenfield) | sandbox | builder writes test from template; runs language-native test runner |
+| `process-local-testcontainer` | filepath (brownfield) | sandbox + DinD | builder writes test code matching existing conventions; project-native command (e.g. `mvn verify`); Testcontainers manages sidecar in-process |
+| `process-local-testcontainer` | template_id (greenfield) | sandbox + DinD | builder writes test from template using Testcontainers library; runs language-native command |
+| `external-sidecar` | filepath (brownfield) | sandbox + project-managed sidecar | tests connect to operator-/CI-managed sidecar via DNS; project-native test invocation |
+| `external-sidecar` | template_id (greenfield) | sandbox + harness-catalog sidecar | operator pre-provisioned the sidecar via R3.7.1 harness catalog; tests connect via declared port |
+| `browser-flow` | filepath (brownfield) | sandbox runs project's existing Playwright invocation | new spec file in project's `e2e/` dir; existing `npx playwright test` finds it; works against project's stack |
+| `browser-flow` | template_id (greenfield) | **verification-runner via act** | chain authors `.github/workflows/qa.yml` with browser + backend services; act runs it; result event drives chain |
+| `static-analysis` | either | sandbox | project-native linter/type-check (`go vet`, `mvn checkstyle`, `mypy`, etc.) |
+
+Two boundaries set the runner's scope:
+
+- **unit ↔ integration**: does the test need real Docker infra? If
+  yes, integration. Sandbox grows DinD; everything stays local.
+- **integration ↔ e2e**: multiple components OR browser
+  orchestration? If yes, e2e — and only the greenfield-no-existing-
+  CI case routes to verification-runner.
+
+Most real adoption ships under the brownfield rows. The runner
+appears in maybe 20–30% of cases over the project lifetime —
+specifically OSH-Meshtastic-style smoke #7 (greenfield from-scratch
+project) and any multi-component browser-flow work. Bias the scope
+of work this ADR generates accordingly.
+
+## Brownfield support
+
+**Brownfield is the common case.** Most adoption targets are:
+- Repositories with existing test runners (`mvn`, `go test`, `npm
+  test`, `pytest`, `cargo test`)
+- Established CI workflows (`.github/workflows/ci.yml`,
+  `.gitlab-ci.yml`, `Jenkinsfile`)
+- Project-specific conventions (test directory layout, fixture
+  patterns, mock infrastructure)
+- Project-specific helpers (database fixtures, test data factories,
+  custom matchers)
+
+The chain must DISCOVER and EXTEND these — not author parallel
+verification surfaces. The first-user WTF is "the chain wrote a
+new `.github/workflows/qa.yml` that runs the same tests my
+existing CI runs, but reports to a different dashboard."
+
+### Discovery is the architect's job (persona discipline)
+
+Before emitting commitments, the architect explores the workspace
+via bash:
+
+- `cat pom.xml` / `cat go.mod` / `cat package.json` — language and
+  build system
+- `ls -la .github/workflows .gitlab-ci.yml Jenkinsfile` — existing
+  CI
+- `find . -path "*/test/*" -o -name "*_test.go" -o -name "*Test.java"
+  | head -10` — test convention
+- `cat Makefile | grep -E "^test|^check|^ci"` — common project
+  test targets
+- Read 1–2 existing test files to learn the convention pattern
+
+The commitment then references the existing convention via
+`ConventionRef.type=filepath`. The architect transcribes the planner's
+verifiable outcomes into the project's idiom — not a foreign one.
+
+### When verification-runner is NOT used in brownfield
+
+Almost always. The runner is event-driven by design; for projects
+that already have `mvn test` or equivalent, the chain calls bash
+in sandbox to run the project's native command. Sandbox returns
+the output; builder reads and acts. No qa.requested round-trip.
+
+### When verification-runner IS used in brownfield
+
+Rare cases: the project has e2e tests but no CI configured for
+them, or the new verification needs orchestration the project's CI
+doesn't yet provide. In those cases the chain may author a small
+workflow YAML the runner executes — but it's an exception path,
+not the default.
+
+### Open: discovery tool vs persona discipline
+
+Should we ship a `discover_test_setup` tool that returns
+structured project conventions? Pro: consistent surface; LLM
+doesn't need to bash-walk. Con: more tool sprawl (Coby's 2026-05-03
+fewer-rich-tools principle), and the discovery is genuinely
+project-specific in ways structured tools struggle to capture.
+
+**Lean: persona discipline now; tool only if real adoption shows
+the bash-walk is the bottleneck.** Doc fragments per architect role
+will spell out the discovery sequence; bash is the primitive.
 
 ## Consequences
 
 ### What R3.7.2 work is preserved
 
 - **R3.7.2.a `verification.Commitment` primitive (PR #56)** —
-  unchanged. `target`/`approach`/`convention`/`evidence` are all
-  still meaningful in a workflow-based world.
+  unchanged. `target`/`approach`/`convention`/`evidence` all still
+  meaningful. The `Approach` enum becomes the routing-classifier
+  per the mapping table above.
 - **R3.7.2.b `dev_via_spec.artifact.VerificationCommitments[]`
-  widening (PR #57)** — unchanged. The artifact still carries the
-  architect's commitments.
+  widening (PR #57)** — unchanged.
 - **R3.7.2.c upstream verifiability personas (PR #58)** —
-  unchanged. Planner enumerates outcomes; reviewer gates;
-  challenger probes; architect transcribes. The transcription
-  target is now a workflow YAML scenario rather than a JUnit
-  Given/When/Then — but the discipline is identical.
-- **Harness catalog (R3.7.1, merged in PR #55)** — partially
-  preserved. Catalog still declares "what's available to this
-  deployment"; the `compose_profile` field becomes a `services_yaml`
-  fragment or workflow-include reference.
+  unchanged. The transcription target (commitment.target) is now a
+  workflow scenario / a project-native test description, but the
+  discipline is identical.
+- **Harness catalog (R3.7.1, PR #55)** — partially preserved.
+  `compose_profile` field becomes `services_yaml` fragment or
+  workflow-include reference; remains optional.
 
 ### What changes / is replaced
 
 - **R3.7.2.d (closed in PR #59)** — `families.Registry` /
-  `runtimes.Registry` interfaces and registrations. Gone. The
-  matrix is implicit in workflow YAML's `runs-on` + `services:`
-  shape, which act handles natively.
+  `runtimes.Registry` interfaces. Withdrawn. The matrix is implicit
+  in workflow YAML (`runs-on:` + `services:`) for greenfield
+  browser-flow cases; for everything else, the language ecosystem's
+  standard (Testcontainers + native test runner) is the matrix.
 - **R3.7.2.e (planned: first sidecar harness `meshtasticd-3.x`)**
-   — reshaped. Becomes "first workflow YAML referencing a
-   meshtasticd service." The catalog entry is the operator's
-   declaration of "meshtasticd is available"; the workflow file
-   is the chain's declaration of "I'm using it like this."
+   — reshaped for greenfield browser-flow OR external-sidecar
+   testcontainer cases. The catalog declares "meshtasticd is
+   available"; chain consumes via Testcontainers (greenfield) or
+   workflow `services:` (when using act).
 - **R3.7.2.f (planned: evidence-rule registry + architect
-  contract)** — reshaped. Evidence rules become structural checks
-  on the workflow YAML (e.g. `workflow_uses_services`,
-  `workflow_runs_real_command`) rather than checks on Go/Java
-  test source code. The architect contract still requires emitting
-  commitments; the convention's `template_id` points at a workflow
-  template instead of a JUnit template.
+  contract)** — reshaped. Evidence rules check the appropriate
+  artifact for the executor: project-native test source for
+  brownfield, workflow YAML for verification-runner cases.
 - **R3.7.2.g (planned: builder + sidecar TCP probe + mvn)** —
-  replaced. Builder writes the workflow YAML and code; chain
-  publishes `qa.requested`; qa-runner handles execution. No
-  sandbox-level TCP probe needed because act manages service
-  readiness via the workflow's `services.<n>.options.--health-cmd`
-  directives.
-- **R3.7.2.h (planned: evidence gate as separate rule)** —
-  reshaped. The evidence gate consumes `qa.completed` events and
-  walks the structured `Failures` / `Artifacts` envelope. Goodhart
-  resistance is built in: the runner's verdict is mechanical
-  (test pass/fail, real bytes), not LLM-judged.
-- **R3.7.2.i (planned: reviewer reads evidence report)** —
-  becomes the qa-reviewer pattern semspec already has. LLM role
-  consumes `QACompletedEvent`, judges, publishes `QAVerdictEvent`.
+  largely subsumed. The sandbox running the project's native test
+  command IS the builder verification path; the TCP probe becomes
+  Testcontainers' built-in `waitingFor(...)` mechanism.
+- **R3.7.2.h (planned: evidence gate)** — unchanged in spirit.
+  Consumes structured envelopes (sandbox output for in-sandbox
+  routes; `verification.completed` event for runner routes).
+- **R3.7.2.i (planned: reviewer reads evidence)** — reshaped to
+  the qa-reviewer pattern.
 
 ### New work
 
-- **Port qa-runner from semspec.** Standalone binary; needs
-  SemTeams-specific event subjects (or shared with semspec; TBD).
-- **Workspace bind-mount story for SemTeams sandbox.** Today our
-  sandbox is hardened via cap_drop + read-only root + tmpfs. The
-  qa-runner pattern needs the workspace path to be reachable from
-  act's sibling-container Docker socket. Reconcile the security
-  model.
-- **Workflow YAML template registry.** Replaces the JUnit-template
-  registry from R3.7.2.d. One template per language ecosystem
-  (Java/Maven, Go, Node, Python). Templates are simpler than the
-  JUnit class shape was — they're just `.yml` snippets the
-  architect populates with smoke contract scenarios.
-- **Compose stack updates**. Add qa-runner service alongside
-  sandbox / mock-llm / nats / backend. `act` toolchain in the
-  qa-runner image.
-- **Evidence-rule kinds for workflow shape.** Examples: 
-  `workflow_has_services`, `workflow_step_invokes_real_command`,
-  `workflow_artifacts_uploaded`. These check the workflow YAML
-  before submission, in the same vein as R3.7.2.e's evidence
-  registry but operating on a different artifact type.
+- **Port qa-runner from semspec**, rename to `verification-runner`.
+  Subtree-import vs reimplement vs upstream-extract → open question
+  (see §Open questions).
+- **Sandbox DinD support**: sandbox grows Docker-in-Docker so
+  Testcontainers can manage sidecar lifecycle from in-process tests.
+  Trust-boundary work: tests can spawn arbitrary containers; DinD
+  isolates per-sandbox-instance vs sharing host's Docker daemon.
+- **Brownfield discovery persona fragments** for architect
+  (1 fragment) explaining the bash-walk for project conventions.
+- **Compose stack updates**: add verification-runner service
+  alongside sandbox / mock-llm / nats / backend. `act` toolchain
+  in the runner image.
+- **Evidence-rule kinds for sandbox-route output**: parse
+  language-native test runner output (mvn surefire reports, go test
+  output, pytest junit XML, npm test JSON) into the evidence
+  envelope. R3.7.2.f scope.
 
 ### What's deferred (NOT decided in this ADR)
 
-- **k8s backend**. The pattern supports it (swap qa-runner's
-  executor for ARC); when we actually need it, a follow-on ADR
-  ships the swap. Not now.
-- **Multi-tenancy isolation specifics**. Multiple runners in
-  multiple namespaces is the obvious shape; per-tenant
+- **k8s backend**. The runner pattern supports it (swap executor for
+  ARC); when actually needed, follow-on ADR ships the swap.
+- **Multi-tenancy isolation specifics**. Multiple runners +
+  sandboxes in multiple namespaces is the obvious shape; per-tenant
   authentication, secrets, network policy — separate ADR when
-  we have a tenant.
+  driven by a tenant.
 - **Secrets primitives**. GitHub Actions `secrets:` syntax exists;
-  what backs it (Vault, k8s Secrets, env vars) is operator-policy.
-  Catalog gains a `secret_refs` field in a future slice.
-- **Subtree-import vs reimplement**. Ports semspec's qa-runner to
-  semteams; design choice deferred to first slice of the resumed
-  R3.7.2 line.
-- **Event subject namespace.** Whether `workflow.events.qa.*` is
-  shared between semspec and semteams or per-product is an
-  upstream-coordination question.
+  what backs it is operator policy. Catalog gains a `secret_refs`
+  field in a future slice when needed.
+- **Subtree-import vs reimplement vs upstream**. Open question
+  below.
+- **Event subject namespace**. Inherit semspec's
+  `workflow.events.qa.*` (and align names) vs adopt our own
+  (`verification.events.run.*`)? Coordinate with semspec.
+- **Discovery tool vs persona-only**. Lean persona-only; revisit
+  if real adoption shows bash-walk friction.
+- **`act` image footprint** in production deployments.
 
 ## Cost / benefit
 
 ### Cost
 
 - **2-3 weeks scope shift on R3.7.2.** R3.7.2.d is gone. R3.7.2.e
-  through .i are reshaped. Smoke #7 timeline pushes out by a
-  similar interval.
-- **Net-new code to port + adapt.** semspec qa-runner is ~600 LOC
-  including tests; porting + adapting to SemTeams's NATS surface
-  + sandbox model is non-trivial.
-- **Coordinate event subject shape with semspec**. Either
-  upstream the events to semstreams (best long-term) or
-  duplicate with namespace prefix (faster). Open question.
+  through .i are reshaped. Smoke #7 timeline pushes out by similar.
+- **Net-new code to port + adapt.** semspec verification-runner is
+  ~600 LOC; SemTeams adaptation includes renaming + sandbox DinD
+  reconciliation + brownfield-discovery persona work.
+- **Coordinate event subject shape with semspec**. Best done by
+  upstreaming to semstreams.
 
 ### Benefit
 
-- **Devops vernacular**. `.github/workflows/qa.yml` is the most
-  widely-recognized CI format on the planet. Onboarding any
-  devops engineer drops from "explain custom orchestration" to
-  "you know GitHub Actions, right?"
-- **k8s migration path is real**. ARC + GitHub Actions Runner
-  Controller is a one-line config change to qa-runner; the chain
-  remains agnostic. Today's bespoke-orchestration design has no
-  k8s story.
-- **Reuse vs reinvent**. semspec already sunk the design effort
-  on event shapes and runner protocol. We get to apply that
-  thinking instead of redoing it.
-- **Multi-language by design**. GitHub Actions YAML supports
-  every language ecosystem with the same shape. Java, Go, Node,
-  Python, Rust — all `runs-on:` + `steps:` invocations. Our
-  bespoke (family × runtime) matrix would have needed per-language
-  template work for each new ecosystem.
-- **Goodhart resistance is mechanical**. qa-runner returns the
-  raw act exit code + structured failure parsing. The chain
-  cannot fake a test pass; act either ran the workflow or didn't.
-- **Multi-tenancy is achievable** without a major redesign.
-  Multiple qa-runner instances in multiple namespaces.
+- **Devops vernacular**. Workflow YAML for the cases where the
+  runner runs; project-native commands for everything else. Both
+  immediately recognizable to any devops engineer.
+- **k8s migration path is real**. Runner backend swap (ARC), no
+  event-shape changes. Sandbox already runs in containers.
+- **Testcontainers leverage**. Mature library across Java, Go,
+  Python, Node, Rust, .NET. Cross-language integration testing
+  comes for free.
+- **Brownfield support is structural**, not retrofit. The
+  ConventionRef discriminator already drives it; persona fragments
+  do the discovery.
+- **Multi-language by design**. Each language's test runner +
+  Testcontainers library handles its own integration story.
+- **Goodhart resistance is mechanical**. Project-native test
+  runner exit codes + structured output parsing for sandbox routes;
+  act exit + structured failure parsing for runner routes. Chain
+  cannot fake a pass.
+- **Multi-tenancy is achievable**. Runner pools per tenant;
+  sandbox per builder loop; standard isolation patterns.
+- **Smaller verification-runner footprint** than the original
+  ADR. Fewer cases to handle; sharper boundary.
 
 ## Open questions
 
-1. **Subtree-import vs reimplement vs upstream.** Three
-   options:
-   - **Subtree-import** semspec's `cmd/qa-runner/` directly into
-     semteams. Cheap; couples our runner to semspec's event
-     namespace.
+1. **Subtree-import vs reimplement vs upstream-to-semstreams.**
+   Three options:
+   - **Subtree-import** semspec's `cmd/qa-runner/` directly,
+     rename to verification-runner. Cheap; couples our runner to
+     semspec's event namespace.
    - **Reimplement** the runner in semteams from semspec's
-     design. Independent codebases; more freedom; risk of drift.
-   - **Upstream to semstreams** as a shared component
-     (`semstreams/processor/qa-runner` or similar). Best long-
+     design. Independent codebases; freedom to adapt; risk of drift.
+   - **Upstream to semstreams** as a shared component. Best long-
      term; requires upstream coordination + ADR there.
 
-   Lean: upstream. The pattern is generic, both products will use
-   it, framework is the right home. But timeline depends on
-   upstream's R3.7 priorities.
+   Lean: **upstream**. Pattern is generic, both products will use
+   it, framework is the right home. Timeline depends on upstream
+   priorities.
 
-2. **Workspace bind-mount + sandbox security model.** Today's
-   sandbox container is hardened (cap_drop, read-only, tmpfs).
-   qa-runner needs Docker socket access to spawn `act`'s sibling
-   container. Two possible shapes:
-   - **qa-runner is its own container, NOT sandbox-hardened.** Has
-     Docker socket access; runs act; mounts workspace from the
-     sandbox's volume. Sandbox stays hardened for builder bash;
-     qa-runner is a separate trust boundary.
-   - **Sandbox runs act directly.** Higher-trust sandbox. Worse
-     security posture but fewer moving parts.
+2. **Sandbox DinD trust-boundary reconciliation.** Today's
+   sandbox is hardened (cap_drop ALL, read-only root, tmpfs). DinD
+   needs Docker daemon access from inside the sandbox. Two shapes:
+   - **DinD inside sandbox**: sandbox runs its own dockerd in a
+     nested container. Slower; properly isolated.
+   - **DooD via Docker socket**: sandbox shares host's Docker via
+     /var/run/docker.sock mount. Faster; weaker isolation; the
+     verification-runner pattern uses this for act.
 
-   Lean: separate container with separate trust boundary. The
-   sandbox's cap_drop ALL is load-bearing for the bash code-
-   execution surface; qa-runner doesn't need to share it.
+   Lean: **DinD for sandbox** (per-test isolation), **DooD for
+   verification-runner** (single trust boundary at runner level
+   already). Two trust boundaries; clear separation.
 
-3. **Event subject collision with semspec.** semspec uses
-   `workflow.events.qa.*`. Two products on the same NATS cluster
-   would collide. Options:
-   - Per-product namespace prefix: `semteams.workflow.events.qa.*`
-   - Per-deployment cluster (already common pattern).
-   - Upstream the events to semstreams with a per-product `domain`
-     field on the envelope.
+3. **Event subject namespace.** semspec uses
+   `workflow.events.qa.*`. Options for SemTeams:
+   - Align: use the same subjects (requires upstream coordination
+     or shared cluster).
+   - Per-product prefix: `semteams.workflow.events.qa.*` →
+     `semteams.verification.events.run.*` (rename + namespace).
+   - Upstream the events to semstreams with a `domain` field on
+     the envelope.
 
-   Lean: upstream with `domain` field once we upstream the runner
-   itself.
+   Lean: upstream when we upstream the runner itself; until then,
+   per-product namespace prefix to avoid cluster collisions.
 
-4. **`act` image footprint**. `catthehacker/ubuntu:act-latest`
-   is ~1GB pulled. SemTeams's compose stack already pulls the
-   sandbox toolchain image (Java 21 + Maven + Gradle + Go + Node
-   + Python). Adding act doubles the disk footprint. Acceptable
-   for dev and smoke testing; production deployments may want a
-   smaller act image variant.
+4. **Discovery tool vs persona-only for brownfield**. Lean
+   persona-only initially; revisit if real adoption shows the
+   bash-walk is friction.
+
+5. **`act` image footprint.** ~1GB pulled. Acceptable for dev
+   and smoke; production deployments may want a smaller variant.
+   Operator concern, not framework.
 
 ## What this ADR explicitly does NOT decide
 
-- The exact event subject namespace
-- The exact qa-runner port path (subtree / reimplement / upstream)
+- The exact event subject namespace (open question 3)
+- The exact verification-runner port path (open question 1)
 - k8s backend implementation
 - Multi-tenancy / per-tenant runner pools
 - Secrets management
 - Workflow YAML template content (deferred to resumed R3.7.2 line)
-- Whether to upstream qa-runner to semstreams (likely yes, but
-  timing depends on upstream coordination)
+- Whether to upstream verification-runner to semstreams (likely
+  yes, but timing depends on upstream coordination)
+- Brownfield discovery tool shape (lean persona-only for now)
 
 ## Relationship to prior ADRs
 
@@ -320,26 +410,43 @@ Specifically:
   upstream of verification. Architect emits artifact; this ADR
   reshapes what comes after.
 - **ADR-032** (R3.6 sandbox): the sandbox stays as the bash
-  code-execution surface for the builder. This ADR adds qa-runner
-  as a separate trust boundary for verification execution.
+  code-execution surface for the builder AND becomes the primary
+  verification execution surface (via project-native test
+  invocation + Testcontainers DinD). verification-runner is a
+  separate trust boundary for the genuine e2e/browser-flow case.
 - **ADR-033** (harness-anchored verification + coordinator
   authority): the §1 harness catalog primitive survives in
   modified shape. The §2 smoke-contract-execution design is
-  largely replaced by the qa-runner pattern (workflow YAML IS
-  the smoke contract, mechanically).
+  largely replaced — for greenfield browser-flow it's a workflow
+  YAML; for everything else it's the project's native test runner.
 
 ## References
 
 - semspec qa-runner: `/cmd/qa-runner/{main,runner,qa_subscriber}.go`
   (semspec repo)
-- semspec ADR-031 (qa-test-execution): `/docs/adr/ADR-031-qa-test-execution.md`
-  (semspec repo)
+- semspec ADR-031 (qa-test-execution):
+  `/docs/adr/ADR-031-qa-test-execution.md` (semspec repo)
 - Event types: `semspec/workflow/subjects.go` —
   `QARequestedEvent`, `QACompletedEvent`, `QAFailure`,
   `QAArtifactRef`, `QAVerdictEvent`
 - act (GitHub Actions emulator): https://github.com/nektos/act
 - ARC (Actions Runner Controller for k8s):
   https://github.com/actions/actions-runner-controller
+- Testcontainers (multi-language): https://testcontainers.com/
 - ADR-033 §addendum 2026-05-04 (R3.7.1 framework-alignment review):
-  upstream-survey precedent; this ADR follows the same
-  before/decision/migration structure.
+  upstream-survey precedent.
+
+## Revision history
+
+- 2026-05-04 — initial proposal: full pivot to qa-runner pattern
+  for all verification execution.
+- 2026-05-04 (same day) — revised after team review:
+  - Added §"Verification class → execution mapping" sharpening
+    when sandbox vs verification-runner is the right executor.
+  - Added §"Brownfield support" treating projects with existing
+    CI / conventions as the common case.
+  - Renamed our component qa-runner → verification-runner (semspec
+    name reflects their qa role; we have no qa role).
+  - Narrowed verification-runner scope to greenfield browser-flow
+    and genuine multi-component e2e; sandbox + Testcontainers
+    handles unit/integration via project-native invocation.
