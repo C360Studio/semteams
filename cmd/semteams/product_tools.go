@@ -110,36 +110,13 @@ func registerProductFamiliesAndRuntimes(logger *slog.Logger) (*families.Registry
 		runtimeReg = nil
 	}
 
+	// Both Registry types' Len() methods are nil-safe (return 0 for
+	// nil receiver), so the log line is correct even when registration
+	// failure has nilled either ref above.
 	logger.Info("verification matrix registries initialised",
-		slog.Int("families", regLen(familyReg)),
-		slog.Int("runtimes", regLen(runtimeReg)))
+		slog.Int("families", familyReg.Len()),
+		slog.Int("runtimes", runtimeReg.Len()))
 	return familyReg, runtimeReg
-}
-
-// regLen returns 0 for a nil registry, or registry.Len() otherwise.
-// Helper exists so the boot log line stays readable when a
-// registration failure has nilled out a registry.
-func regLen(r interface{ Len() int }) int {
-	if r == nil {
-		return 0
-	}
-	// Reflect-safe nil check via type-assert path; the typed nils
-	// (*families.Registry)(nil) and (*runtimes.Registry)(nil) flow
-	// through the interface unscathed and would NPE on .Len(). Guard.
-	switch reg := r.(type) {
-	case *families.Registry:
-		if reg == nil {
-			return 0
-		}
-		return reg.Len()
-	case *runtimes.Registry:
-		if reg == nil {
-			return 0
-		}
-		return reg.Len()
-	default:
-		return r.Len()
-	}
 }
 
 // registerProductTools wires product-shell-local tool executors onto

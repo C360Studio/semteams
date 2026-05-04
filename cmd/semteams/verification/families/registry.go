@@ -116,10 +116,15 @@ func (r *Registry) List() []Family {
 	return out
 }
 
-// Len returns the count of registered families. Cheaper than
-// len(List()) for callers that just want to know "is anything
-// registered?"
+// Len returns the count of registered families. Nil-safe: a nil
+// receiver returns 0. Cheaper than len(List()) for callers that
+// just want to know "is anything registered?" and avoids the
+// typed-nil-through-interface gotcha when boot-time registration
+// has failed and the registry is nil at the call site.
 func (r *Registry) Len() int {
+	if r == nil {
+		return 0
+	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return len(r.families)

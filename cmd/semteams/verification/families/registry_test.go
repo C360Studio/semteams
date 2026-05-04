@@ -141,6 +141,18 @@ func TestRegistry_Len(t *testing.T) {
 	}
 }
 
+func TestRegistry_Len_NilReceiver(t *testing.T) {
+	t.Parallel()
+	// Nil-safe: boot-time-failure paths may pass a typed-nil
+	// *Registry into logging / inspection without NPE. Lock the
+	// contract — callers depend on this in
+	// registerProductFamiliesAndRuntimes' log line.
+	var r *Registry
+	if r.Len() != 0 {
+		t.Errorf("nil receiver Len(): got %d, want 0", r.Len())
+	}
+}
+
 func TestRegistry_ConcurrentRegisterAndGet(t *testing.T) {
 	t.Parallel()
 	// Race detector should not surface anything during concurrent

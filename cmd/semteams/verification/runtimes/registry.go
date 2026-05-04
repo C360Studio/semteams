@@ -115,8 +115,14 @@ func (r *Registry) List() []Runtime {
 	return out
 }
 
-// Len returns the count of registered runtimes.
+// Len returns the count of registered runtimes. Nil-safe: a nil
+// receiver returns 0. Mirrors families.Registry.Len's contract so
+// boot-time-failure paths can pass nil registries to logging /
+// inspection without typed-nil-through-interface NPEs.
 func (r *Registry) Len() int {
+	if r == nil {
+		return 0
+	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return len(r.runtimes)

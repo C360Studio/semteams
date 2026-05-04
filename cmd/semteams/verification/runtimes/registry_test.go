@@ -131,6 +131,18 @@ func TestRegistry_SupportedFamilies_Empty(t *testing.T) {
 	}
 }
 
+func TestRegistry_Len_NilReceiver(t *testing.T) {
+	t.Parallel()
+	// Nil-safe: mirrors families.Registry.Len's contract so
+	// boot-time-failure paths can pass nil registries to logging
+	// without typed-nil NPE. Callers in
+	// registerProductFamiliesAndRuntimes depend on this.
+	var r *Registry
+	if r.Len() != 0 {
+		t.Errorf("nil receiver Len(): got %d, want 0", r.Len())
+	}
+}
+
 func TestRegistry_ConcurrentAccess(t *testing.T) {
 	t.Parallel()
 	r := NewRegistry()
