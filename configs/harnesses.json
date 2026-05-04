@@ -1,4 +1,26 @@
 {
-  "$comment": "Operator-curated harness catalog. See ADR-033 §1. Empty in R3.7.1; first entry (meshtasticd-3.x) lands with R3.7.2.",
-  "harnesses": []
+  "$comment": "Operator-curated harness catalog (ADR-033 §1, schema revised by ADR-034 §'What R3.7.2 work is preserved' to make compose_profile optional). Entries: meshtasticd-3.x (R3.7.2.e′, ADR-034 process-local-testcontainer Approach via sandbox DooD).",
+  "harnesses": [
+    {
+      "name": "meshtasticd-3.x",
+      "image": "meshtastic/meshtasticd:3.5.0",
+      "exposes": {
+        "tcp": [
+          {
+            "port": 4403,
+            "protocol": "meshtastic-protobuf"
+          }
+        ]
+      },
+      "smoke_contract_schema": "meshtasticd.smoke_contract.v1",
+      "real_dependencies": [
+        {
+          "groupId": "com.geeksville.mesh",
+          "artifactId": "meshtastic-protobufs",
+          "version_range": "[3.0,4.0)"
+        }
+      ],
+      "domain_description": "Real Meshtastic protocol over TCP, exposed by the upstream meshtasticd daemon (no hardware in the loop). Lifecycle managed in-process by Testcontainers under sandbox DooD (ADR-034 process-local-testcontainer Approach). Use this harness when work transcribes to behaviour at the meshtastic-protobuf wire boundary — POSITION_APP, NODEINFO_APP, TEXT_MESSAGE_APP, etc. Do NOT use this harness for RF-physics or LoRa-radio behaviour; meshtasticd is a daemon, not a radio simulator."
+    }
+  ]
 }

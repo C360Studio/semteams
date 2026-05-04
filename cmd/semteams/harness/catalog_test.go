@@ -60,7 +60,19 @@ func TestHarnessValidate(t *testing.T) {
 			},
 		},
 		{name: "missing name", h: Harness{ComposeProfile: "p", Image: "i", SmokeContractSchema: "s", DomainDescription: "d"}, wantErr: "name required"},
-		{name: "missing compose_profile", h: Harness{Name: "n", Image: "i", SmokeContractSchema: "s", DomainDescription: "d"}, wantErr: "compose_profile required"},
+		{
+			// ADR-034 §"What R3.7.2 work is preserved": compose_profile
+			// is optional. A Testcontainers-managed harness (process-
+			// local-testcontainer Approach) ships with no profile.
+			name: "no compose_profile is valid",
+			h: Harness{
+				Name:                "meshtasticd-3.x",
+				Image:               "meshtastic/meshtasticd:3.5.0",
+				SmokeContractSchema: "meshtasticd.smoke_contract.v1",
+				DomainDescription:   "Real Meshtastic protocol over TCP via Testcontainers.",
+				Exposes:             Exposes{TCP: []PortExpose{{Port: 4403, Protocol: "meshtastic-protobuf"}}},
+			},
+		},
 		{name: "missing image", h: Harness{Name: "n", ComposeProfile: "p", SmokeContractSchema: "s", DomainDescription: "d"}, wantErr: "image required"},
 		{name: "missing schema", h: Harness{Name: "n", ComposeProfile: "p", Image: "i", DomainDescription: "d"}, wantErr: "smoke_contract_schema required"},
 		{name: "missing domain_description", h: Harness{Name: "n", ComposeProfile: "p", Image: "i", SmokeContractSchema: "s"}, wantErr: "domain_description required"},

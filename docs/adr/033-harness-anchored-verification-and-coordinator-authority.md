@@ -1022,3 +1022,67 @@ Smoke evidence that the wire works end-to-end:
 R3.7.2 (smoke contract execution against `meshtasticd-3.x`) is
 the next slice; the harness catalog primitive built here is its
 foundation.
+
+## Addendum 2026-05-04 #2 — R3.7.2.e′ schema relaxation + first real entry
+
+R3.7.2.e′ ships the first real catalog entry (`meshtasticd-3.x`)
+and relaxes the schema to match the post-ADR-034 execution model.
+Recorded here so a future agent reading §1 standalone doesn't
+infer the original `compose_profile`-required shape is still
+canonical.
+
+### Schema change
+
+- `compose_profile` is now OPTIONAL. ADR-034 §"What R3.7.2 work
+  is preserved" makes the field meaningful only for the
+  external-sidecar Approach (operator pre-provisions the sidecar
+  via a compose profile). The dominant path going forward —
+  process-local-testcontainer (sandbox + DooD + Testcontainers
+  managing lifecycle in-process) — does not consult the field.
+  Greenfield browser-flow chains via verification-runner inline
+  `services:` in workflow YAML and also don't consult it.
+- `Validate()` no longer rejects entries that omit
+  `compose_profile`. When set, the field is still parsed +
+  preserved on the wire (entries authored under R3.7.1's
+  required-field schema, including `configs/harnesses-stub.json`,
+  remain valid and demonstrate the field's continued use for
+  external-sidecar flows).
+
+### Field corrections vs. §1's example
+
+The §1 example was the design-time sketch; the shipped entry
+deviates in two places that are intentional, not drift:
+
+- **`smoke_contract_schema`**: §1 had `meshtastic.smoke_contract.v1`;
+  shipped is `meshtasticd.smoke_contract.v1`. The harness name is
+  `meshtasticd-3.x` (the daemon, not the protocol family);
+  daemon-specific schema name keeps a future
+  `meshtastic-radio-x` (LoRa physics, RF behaviour) free to ship
+  its own schema rather than overloading a shared `meshtastic.*`
+  umbrella. The `domain_description` on `meshtasticd-3.x`
+  explicitly excludes RF physics, making the namespace fork
+  intentional.
+- **`real_dependencies[0].version_range`**: §1 had `[2.x,3.x)`;
+  shipped is `[3.0,4.0)`. The harness name carries `-3.x`, so a
+  2.x-through-pre-3.x range was a §1 typo or stale-during-drafting
+  artifact; the corrected range matches the daemon's 3.x line.
+
+### Slice scope and verification
+
+- `cmd/semteams/harness/catalog.go` `Validate` no longer requires
+  `compose_profile`; struct tag becomes `omitempty`.
+- `configs/harnesses.json` ships the meshtasticd-3.x entry per
+  the corrected shape above (no `compose_profile`).
+- `test/contract/harness_catalog_contract_test.go` (new) globs
+  `configs/harnesses*.json`, parses + validates each, and pins
+  the meshtasticd-3.x entry's stable fields (schema name,
+  protobuf port, `compose_profile` absence). Image tag pinned to
+  the repository (`meshtastic/meshtasticd:`) but version floats
+  so routine upstream bumps don't masquerade as contract breaks.
+- `cmd/semteams/harness/doc.go` example block updated to the
+  corrected shape.
+
+The renderer (`harness.RenderResearcherFragment`) was already
+agnostic to `compose_profile` (the field never appeared in the
+fragment) — no renderer change required. Smoke-contract execution
+against this entry lands with R3.7.2.h′ + smoke #7.

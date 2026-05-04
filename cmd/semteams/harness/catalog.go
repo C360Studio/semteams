@@ -28,10 +28,22 @@ type Dependency struct {
 	VersionRange string `json:"version_range"`
 }
 
-// Harness is one entry in the catalog. Schema mirrors ADR-033 §1.
+// Harness is one entry in the catalog. Schema mirrors ADR-033 §1
+// (revised by ADR-034 to make ComposeProfile optional — see
+// Validate).
 type Harness struct {
-	Name                string       `json:"name"`
-	ComposeProfile      string       `json:"compose_profile"`
+	Name string `json:"name"`
+	// ComposeProfile names a docker-compose profile that the operator
+	// has wired up to bring the sidecar online out-of-process.
+	// OPTIONAL as of ADR-034: chains running under the process-local-
+	// testcontainer Approach (sandbox + DooD/DinD + Testcontainers)
+	// manage the sidecar lifecycle in-process and don't consult this
+	// field. Greenfield browser-flow chains via verification-runner
+	// inline `services:` in workflow YAML and also don't consult it.
+	// External-sidecar Approach (operator pre-provisions) still uses
+	// it. Empty string == "no profile registered for this harness;
+	// chains must use a Testcontainers-managed lifecycle".
+	ComposeProfile      string       `json:"compose_profile,omitempty"`
 	Image               string       `json:"image"`
 	Exposes             Exposes      `json:"exposes"`
 	SmokeContractSchema string       `json:"smoke_contract_schema"`
@@ -41,15 +53,19 @@ type Harness struct {
 
 // Validate checks structural well-formedness. Substantive checks
 // (image pullability, compose profile actually exists in the
-// deployment's docker-compose file, smoke schema registered as a
-// payload type) are deployment-level concerns, not catalog-load
+// deployment's docker-compose file when set, smoke schema registered
+// as a payload type) are deployment-level concerns, not catalog-load
 // concerns.
+//
+// ComposeProfile is intentionally NOT required (ADR-034 §"What R3.7.2
+// work is preserved"). A harness consumed exclusively via
+// Testcontainers (the dominant path in ADR-034's verification class
+// table) ships with no compose_profile field and is still well-
+// formed. If the field is set, it must be non-empty; trimming /
+// charset rules stay deployment-level.
 func (h *Harness) Validate() error {
 	if h.Name == "" {
 		return fmt.Errorf("name required")
-	}
-	if h.ComposeProfile == "" {
-		return fmt.Errorf("compose_profile required")
 	}
 	if h.Image == "" {
 		return fmt.Errorf("image required")
