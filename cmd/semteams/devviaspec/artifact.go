@@ -30,6 +30,7 @@ import (
 
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/payloadregistry"
+	"github.com/c360studio/semteams/cmd/semteams/verification"
 )
 
 // Payload type metadata (domain.category.version → "dev_via_spec.artifact.v1").
@@ -96,7 +97,12 @@ type Provenance struct {
 // neither sees nor sets them (mirrors research.Artifact's server-side
 // LoopID / ProducedAt pattern).
 //
-// Schema: dev_via_spec.artifact.v1.
+// Schema: dev_via_spec.artifact.v1. The VerificationCommitments field
+// (added R3.7.2.b per ADR-033 §addendum 2026-05-04) is omitempty so
+// existing v1 consumers (the builder loop's read_loop_result, audit
+// subscribers) see no drift when the architect hasn't populated it
+// yet. This is an additive widening — no schema-version bump —
+// matching the precedent set by research.Artifact.Harness in R3.7.1.b.
 type Artifact struct {
 	Title             string             `json:"title"`
 	Goal              string             `json:"goal"`
@@ -104,9 +110,19 @@ type Artifact struct {
 	Actors            []Actor            `json:"actors"`
 	IntegrationPoints []IntegrationPoint `json:"integration_points"`
 	SeedRequirements  []SeedRequirement  `json:"seed_requirements"`
-	Provenance        Provenance         `json:"provenance"`
-	GeneratedAt       string             `json:"generated_at"` // RFC3339, set by executor
-	Slug              string             `json:"slug"`         // kebab-case with YYYY-MM-DD- prefix, set by executor
+	// VerificationCommitments captures the architect's structured
+	// commitment to verification surfaces (target / approach / harness
+	// / runtime / convention / evidence). Each commitment is the
+	// architect's promise about what is verified and against what; the
+	// reviewer judges coverage adequacy and the evidence gate (R3.7.2.h)
+	// runs the structural checkers post-build. Empty during the v1
+	// transition; the architect persona contract (R3.7.2.f) will
+	// require at least one commitment for any artifact whose work
+	// touches an external integration_point.
+	VerificationCommitments []verification.Commitment `json:"verification_commitments,omitempty"`
+	Provenance              Provenance                `json:"provenance"`
+	GeneratedAt             string                    `json:"generated_at"` // RFC3339, set by executor
+	Slug                    string                    `json:"slug"`         // kebab-case with YYYY-MM-DD- prefix, set by executor
 }
 
 // Schema implements message.Payload.
@@ -154,6 +170,11 @@ func (a *Artifact) Validate() error {
 	}
 	if a.Provenance.ChallengerLoop == "" {
 		return fmt.Errorf("provenance.challenger_loop required")
+	}
+	for i := range a.VerificationCommitments {
+		if err := a.VerificationCommitments[i].Validate(); err != nil {
+			return fmt.Errorf("verification_commitments[%d]: %w", i, err)
+		}
 	}
 	return nil
 }
