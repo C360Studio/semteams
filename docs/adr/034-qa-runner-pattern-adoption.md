@@ -540,3 +540,86 @@ land." The other open questions remain.
 - 2026-05-04 §addendum #2 — DooD-first decision for sandbox
   Docker mode. DinD follows when multi-tenant deployments
   materialize. Resolves Open Question 2.
+- 2026-05-04 §addendum #3 — R3.7.2.l′ smoke #7 wiring landed.
+  See "R3.7.2.l′ smoke #7 prep" below.
+
+## §addendum 2026-05-04 — R3.7.2.l′ smoke #7 prep
+
+R3.7.2.l′ scope as landed (in this slice): real-LLM smoke
+**preparation** for the OSH-Meshtastic exercise. The slice
+configures the chain end-to-end and documents the procedure;
+the smoke run itself is operator-driven (real-API spend).
+
+### What landed
+
+- `configs/osh-demo.json` — registers rule 07
+  (`07-builder-decide-to-qa-reviewer.json` from R3.7.2.k′) in
+  `rules_files`. Same rule set as `e2e-dev-via-spec.json` plus the
+  qa-reviewer hop. Description now names eleven rules
+  (research-mode-transition 4 + dev-via-spec 7) and explicitly
+  warns that the spawn-rule embeds the R3.7.2.k′ stub.
+- `ui/Taskfile.yml`'s `test:e2e:agentic:dev:osh-demo` —
+  COMPOSE_PROFILES gains `sandbox` (the dev-via-spec-builder
+  loop's `bootstrap_workspace` + `bash` route through the sandbox
+  container per ADR-032 §R3.6.2.a). Summary spells out the
+  twelve-loop expectation and the qa-reviewer caveat.
+- `docs/smoke7-osh-meshtastic.md` — the playbook. Procedure,
+  per-phase verification, capture-of-findings template,
+  failure-mode quick-reference. Cost estimate (~$2-5 per full
+  run on claude-sonnet-4-6).
+
+### What did NOT land
+
+- Real evidence-summary plumbing. The spawn-rule still embeds the
+  `(stub)` block from R3.7.2.k′. The smoke is designed to surface
+  the right shape decision — see `project_smoke7_open_plumbing.md`
+  §2 for the three viable shapes (rule action, tool, preprocessor).
+- A Playwright spec for OSH-demo. Real-LLM in CI is too slow + too
+  expensive; the smoke stays manual. The findings synthesis (see
+  playbook §"Capture findings") is the deliverable, not a green
+  test.
+
+### Expected first-run outcome
+
+- Twelve loops complete in ~15-25 minutes wallclock. Eleven
+  rules drive the chain (research-mode-transition 4 +
+  dev-via-spec 7); the loop-vs-rule mismatch is because the
+  research-mode-transition arc fires its retry rule twice (rule
+  02 → researcher-with-source-acquisition spawns), producing
+  six research loops from four rules.
+- qa-reviewer's terminal verdict is **prompt-driven** expected
+  to be `decide(needs_clarification)`. The spawn rule
+  (`07-builder-decide-to-qa-reviewer.json`) explicitly
+  instructs the LLM to treat the `(stub)` block as Empty
+  Evidence per the persona's Rule 3; this is prompt
+  engineering, not a persona-derivable trigger (Rule 3's
+  documented triggers cover three other shapes — all results
+  UnknownKind, empty Image harness, target-test mismatch).
+  The smoke is in part a test of whether that prompt
+  instruction is robust against real-LLM pattern-matching. If
+  the LLM emits accept/reject instead, the stub marker isn't
+  strong enough — capture for follow-on plumbing decision.
+
+### What the smoke is the forcing function for
+
+1. **Architect-side workspace bootstrap** (carried over from
+   R3.7.2.g′). The brownfield-discovery persona tells the
+   architect to bash-walk the workspace before emit. The
+   architect's sandbox workspace isn't pre-bootstrapped today;
+   the persona's documented fallback is "read research artifact;
+   default to template_id; needs_clarification when blocked."
+   For OSH-Meshtastic (greenfield, harness=meshtasticd-3.x), the
+   template_id path doesn't require bash-walking — the architect
+   should converge without hitting this gap. If the smoke shows
+   real-LLM trying to bash-walk and getting stuck, the gap is
+   blocking and a follow-on slice must add the bootstrap surface.
+2. **Evidence-summary plumbing shape** (R3.7.2.k′ §"Open for k′").
+   The smoke produces a real builder terminal + a real qa-reviewer
+   reading the stub. Operator's findings synthesis names which
+   shape (rule action / tool / preprocessor) makes the most sense
+   given the smoke's actual chain shape.
+3. **Real-LLM persona convergence**. Mock-LLM proves chain shape
+   only. The smoke proves the personas (planner / reviewer /
+   challenger / architect / builder / qa-reviewer) actually
+   converge on real prompts and tool-call variability. Drift
+   captured per playbook §"Capture findings" item 3.
