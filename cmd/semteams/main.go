@@ -143,15 +143,14 @@ func run() error {
 	}
 
 	// 9b. Load operator-curated platform assets (harness catalog +
-	// persona fragments). Harness catalog (ADR-033 R3.7.1) is built
-	// BEFORE personas so R3.7.1.c can render harness content as a
-	// researcher persona fragment before persona.LoadFromDirectory
-	// runs. Persona fragments populate PERSONAS KV bucket so
-	// agentic-loop's prompt.Registry sees them; the persona manager
-	// also feeds the tool registry below for Pattern-B persona CRUD.
-	// The harness manager will be returned and threaded into HTTP /
-	// persona-render wiring in R3.7.1.{c,f}.
-	personaMgr := loadPlatformAssets(ctx, natsClient, cliCfg, slog.Default())
+	// persona fragments + rendered harness fragment for researcher
+	// roles). Harness catalog (ADR-033 R3.7.1) is built FIRST so
+	// the rendered fragment reflects the curated state; persona
+	// file load runs next; the rendered list is upserted into the
+	// PERSONAS bucket last. Both managers are returned — persona
+	// feeds the tool registry below for Pattern-B persona CRUD,
+	// harness feeds the HTTP endpoint in R3.7.1.f.
+	personaMgr, _ := loadPlatformAssets(ctx, natsClient, cliCfg, slog.Default())
 
 	// 9c. Build the shared tool registry and register first-party tool
 	// executors. Per beta.16: agentic-tools registry is constructor-
@@ -312,20 +311,59 @@ func buildFlowTemplateManager(natsClient *natsclient.Client, logger *slog.Logger
 
 // loadPlatformAssets builds the harness catalog (operator-curated
 // test-harness registry; ADR-033 R3.7.1) and seeds the PERSONAS KV
-// bucket from on-disk fragment files. Harness load runs FIRST so
-// follow-on slices (R3.7.1.c) can render harness content as a
-// researcher persona fragment before persona.LoadFromDirectory
-// scans the fragments directory.
+// bucket from on-disk fragment files plus a synthetic researcher
+// fragment rendered from the live catalog. Harness load runs FIRST
+// so the rendered list reflects the catalog state operators just
+// curated; persona.LoadFromDirectory then loads the static
+// fragments; finally the rendered list is upserted under a stable
+// fragment ID — Upsert rather than file-write keeps the source
+// tree clean (no boot-time git diffs in configs/personas/).
+func loadPlatformAssets(ctx context.Context, natsClient *natsclient.Client, cliCfg *CLIConfig, logger *slog.Logger) (*persona.Manager, *harness.Manager) {
+	harnessMgr := buildHarnessManager(ctx, natsClient, cliCfg.HarnessCatalogPath, logger)
+	personaMgr := loadPersonaFragments(ctx, natsClient, cliCfg.PersonaFragmentsPath)
+	injectRenderedHarnessFragment(ctx, personaMgr, harnessMgr, logger)
+	return personaMgr, harnessMgr
+}
+
+// injectRenderedHarnessFragment renders the live harness catalog
+// into a researcher persona fragment and upserts it into the
+// PERSONAS KV bucket. Skipped when either manager is nil (tests,
+// or boot-time KV failure that already logged its own warning).
+// Uses multi-role on the Persona so a single record applies to
+// both `researcher` and `researcher-with-source-acquisition`.
 //
-// Returns only the persona manager in this slice; the harness
-// manager has no consumer yet — R3.7.1.{c,f} will widen the return
-// shape when persona-render and HTTP wiring need it. The harness
-// manager itself remains live (KV-backed) so its boot-time side
-// effects (load configs/harnesses.json into the HARNESSES bucket)
-// take effect.
-func loadPlatformAssets(ctx context.Context, natsClient *natsclient.Client, cliCfg *CLIConfig, logger *slog.Logger) *persona.Manager {
-	_ = buildHarnessManager(ctx, natsClient, cliCfg.HarnessCatalogPath, logger)
-	return loadPersonaFragments(ctx, natsClient, cliCfg.PersonaFragmentsPath)
+// Fragment ID `45-harness-catalog-rendered` is product-shell-
+// specific by design — operators won't accidentally author a
+// markdown file under that name; if they do, the file loader's
+// next-restart sweep correctly overrides this synthetic record
+// with the file's content (file-is-source-of-truth semantics).
+func injectRenderedHarnessFragment(ctx context.Context, personaMgr *persona.Manager, harnessMgr *harness.Manager, logger *slog.Logger) {
+	if personaMgr == nil || harnessMgr == nil {
+		return
+	}
+	catalog, err := harnessMgr.List(ctx)
+	if err != nil {
+		logger.Warn("harness catalog: skipped persona-render injection (List failed)",
+			"error", err)
+		return
+	}
+	body := harness.RenderResearcherFragment(catalog)
+	p := &persona.Persona{
+		ID:          "45-harness-catalog-rendered",
+		Content:     body,
+		Roles:       []string{"researcher", "researcher-with-source-acquisition"},
+		Description: "Auto-generated from configs/harnesses.json at boot (ADR-033 R3.7.1).",
+	}
+	if err := personaMgr.Upsert(ctx, p); err != nil {
+		logger.Warn("harness catalog: synthetic persona fragment upsert failed",
+			"fragment_id", p.ID,
+			"error", err)
+		return
+	}
+	logger.Info("harness catalog: rendered persona fragment injected",
+		"fragment_id", p.ID,
+		"catalog_entries", len(catalog),
+		"roles", p.Roles)
 }
 
 // buildHarnessManager constructs the SemTeams harness catalog manager
