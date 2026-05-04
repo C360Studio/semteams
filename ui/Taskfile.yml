@@ -352,6 +352,40 @@ tasks:
           COMPOSE_PROFILES: "{{.COMPOSE_PROFILES}}"
       - npx playwright test e2e/agentic/dev-via-spec.spec.ts
 
+  test:e2e:agentic:dev-via-spec-qa:
+    desc: Run the R3.7.2.k′ dev-via-spec full-chain journey extended through the qa-reviewer terminal
+    summary: |
+      End-to-end exercise of ADR-034 R3.7.2.k′ — the post-build
+      review hop. Runs the same eleven loops as
+      test:e2e:agentic:dev-via-spec, but the builder terminates with
+      builder_decide(tests_passing) instead of needs_clarification,
+      which triggers configs/rules/dev-via-spec/07-builder-decide-to-
+      qa-reviewer.json and spawns the dev-via-spec-qa-reviewer
+      (R3.7.2.j′ persona) as Loop L. The qa-reviewer reads the
+      builder's terminal and emits decide(needs_clarification)
+      because the spawn-rule supplies a hardcoded "(stub)" evidence
+      summary — real evidence-rendering plumbing is deferred. See
+      project_smoke7_open_plumbing.md §2.
+
+      Twelve loops, thirty-five LLM round-trips. Mock-LLM only —
+      real LLM exercise lands in smoke #7 (R3.7.2.l′).
+
+      Requires the SemSource image at ghcr.io/c360studio/semsource:latest
+      (override with SEMSOURCE_IMAGE if testing an unreleased build) and
+      the sandbox image (built locally from docker/sandbox.Dockerfile).
+    vars:
+      FIXTURE: dev-via-spec-qa.yaml
+      AGENTIC_CONFIG: e2e-dev-via-spec.json
+      COMPOSE_PROFILES: semsource,sandbox
+    cmds:
+      - defer: { task: test:e2e:agentic:cleanup }
+      - task: test:e2e:agentic:stack:up
+        vars:
+          FIXTURE: "{{.FIXTURE}}"
+          AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
+          COMPOSE_PROFILES: "{{.COMPOSE_PROFILES}}"
+      - npx playwright test e2e/agentic/dev-via-spec-qa.spec.ts
+
   test:e2e:agentic:research-with-source-acquisition:
     desc: Run the chained research + source-acquisition journey (R2.5 of ADR-031)
     summary: |
@@ -592,6 +626,16 @@ tasks:
           AGENTIC_CONFIG: e2e-dev-via-spec.json
           COMPOSE_PROFILES: semsource
           SCENARIO: dev-via-spec
+
+  test:e2e:agentic:dev:dev-via-spec-qa:
+    desc: Boot stack for the R3.7.2.k′ dev-via-spec-qa scenario (full chain extended through qa-reviewer terminal). No playwright.
+    cmds:
+      - task: test:e2e:agentic:dev:_boot
+        vars:
+          FIXTURE: dev-via-spec-qa.yaml
+          AGENTIC_CONFIG: e2e-dev-via-spec.json
+          COMPOSE_PROFILES: semsource,sandbox
+          SCENARIO: dev-via-spec-qa
 
   test:e2e:agentic:dev:osh-demo:
     desc: |
