@@ -2,9 +2,11 @@ package devviaspec
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/c360studio/semstreams/payloadregistry"
+	"github.com/c360studio/semteams/cmd/semteams/verification"
 )
 
 // minimalValidArtifact returns the smallest Artifact that passes Validate.
@@ -279,5 +281,130 @@ func TestRegisterPayloads(t *testing.T) {
 	// Second call must error — duplicate registration is a boot-time misconfiguration.
 	if err := RegisterPayloads(reg); err == nil {
 		t.Errorf("RegisterPayloads: expected duplicate-registration error on second call")
+	}
+}
+
+// ---------------------------------------------------------------------
+// R3.7.2.b — VerificationCommitments wiring
+// ---------------------------------------------------------------------
+
+// validCommitment is a happy-path commitment used across the
+// commitment-related tests. Brownfield convention pointing at the
+// repo's own existing integration test pattern.
+func validCommitment() verification.Commitment {
+	return verification.Commitment{
+		Target:   "executor publishes the expected subject on success",
+		Approach: verification.ApproachProcessLocalTestcontainer,
+		Harness:  "nats-jetstream",
+		Runtime:  "go-testing-net",
+		Convention: verification.ConventionRef{
+			Type: verification.ConventionFilepath,
+			Path: "cmd/semteams/sandbox/integration_test.go",
+		},
+		Evidence: []verification.EvidenceRule{
+			{Kind: "test_uses_build_tag", Args: map[string]any{"tag": "integration"}},
+		},
+	}
+}
+
+func TestArtifact_Commitments_RoundTrip(t *testing.T) {
+	t.Parallel()
+	orig := minimalValidArtifact()
+	orig.VerificationCommitments = []verification.Commitment{
+		validCommitment(),
+		{
+			Target:   "executor returns ToolErrorInvalidArgs for malformed args",
+			Approach: verification.ApproachInProcessUnit,
+			Convention: verification.ConventionRef{
+				Type: verification.ConventionFilepath,
+				Path: "cmd/semteams/tools/x/executor_test.go",
+			},
+		},
+	}
+	data, err := json.Marshal(orig)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var got Artifact
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(got.VerificationCommitments) != 2 {
+		t.Fatalf("commitments len: got %d, want 2", len(got.VerificationCommitments))
+	}
+	if got.VerificationCommitments[0].Approach != verification.ApproachProcessLocalTestcontainer {
+		t.Errorf("commitments[0].approach: got %q", got.VerificationCommitments[0].Approach)
+	}
+	if got.VerificationCommitments[0].Harness != "nats-jetstream" {
+		t.Errorf("commitments[0].harness: got %q", got.VerificationCommitments[0].Harness)
+	}
+	if got.VerificationCommitments[1].Approach != verification.ApproachInProcessUnit {
+		t.Errorf("commitments[1].approach: got %q", got.VerificationCommitments[1].Approach)
+	}
+}
+
+func TestArtifact_Commitments_OmitemptyWhenNil(t *testing.T) {
+	t.Parallel()
+	a := minimalValidArtifact()
+	// VerificationCommitments unset (zero-value nil slice).
+	data, err := json.Marshal(&a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := string(data); strings.Contains(got, `"verification_commitments"`) {
+		t.Errorf("expected verification_commitments to be omitted when nil; body=%s", got)
+	}
+}
+
+func TestArtifact_Commitments_OmitemptyWhenEmptySlice(t *testing.T) {
+	t.Parallel()
+	a := minimalValidArtifact()
+	a.VerificationCommitments = []verification.Commitment{}
+	data, err := json.Marshal(&a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := string(data); strings.Contains(got, `"verification_commitments"`) {
+		t.Errorf("expected verification_commitments to be omitted when empty slice; body=%s", got)
+	}
+}
+
+func TestArtifact_Validate_CascadesIntoCommitments(t *testing.T) {
+	t.Parallel()
+	a := minimalValidArtifact()
+	a.VerificationCommitments = []verification.Commitment{
+		validCommitment(),
+		{
+			// Invalid: testcontainer approach without a harness.
+			Target:   "x",
+			Approach: verification.ApproachProcessLocalTestcontainer,
+			Runtime:  "go-testing-net",
+			Convention: verification.ConventionRef{
+				Type: verification.ConventionFilepath,
+				Path: "x_test.go",
+			},
+		},
+	}
+	err := a.Validate()
+	if err == nil {
+		t.Fatal("expected error from cascade into commitments[1], got nil")
+	}
+	if !strings.Contains(err.Error(), "verification_commitments[1]") {
+		t.Errorf("expected error to name commitments[1], got %v", err)
+	}
+	if !strings.Contains(err.Error(), "requires a harness") {
+		t.Errorf("expected error to include underlying validate message, got %v", err)
+	}
+}
+
+func TestArtifact_Validate_AcceptsNoCommitments(t *testing.T) {
+	t.Parallel()
+	// The architect-persona contract that requires commitments for
+	// external-actor work lands in R3.7.2.f. At the structural
+	// validation boundary, an artifact with zero commitments is
+	// still valid (e.g. truly pure work, or transition window).
+	a := minimalValidArtifact()
+	if err := a.Validate(); err != nil {
+		t.Fatalf("expected nil, got %v", err)
 	}
 }

@@ -149,9 +149,18 @@ func TestListTools_SchemaShape(t *testing.T) {
 	if !ok {
 		t.Fatalf("schema missing properties: %#v", def.Parameters)
 	}
-	for _, key := range []string{"title", "goal", "context", "actors", "integration_points", "seed_requirements", "provenance"} {
+	for _, key := range []string{"title", "goal", "context", "actors", "integration_points", "seed_requirements", "verification_commitments", "provenance"} {
 		if _, ok := props[key]; !ok {
 			t.Errorf("missing property %q in tool schema", key)
+		}
+	}
+	// verification_commitments is optional at the wire level (the
+	// architect-persona contract for required emission lands in
+	// R3.7.2.f); confirm it's NOT in `required`.
+	requiredList, _ := def.Parameters["required"].([]string)
+	for _, r := range requiredList {
+		if r == "verification_commitments" {
+			t.Errorf("verification_commitments must not be in required (R3.7.2.f extends the contract): %v", requiredList)
 		}
 	}
 	// Server-supplied fields must not appear in the LLM-facing schema.
@@ -439,6 +448,14 @@ func TestExecute_HappyPath_TripleSet(t *testing.T) {
 	triples := tp.snapshot()
 	wantLoopEntityID := "c360.semteams.agent.agentic-loop.execution.loop-architect-abc"
 
+	// Triple count is load-bearing for downstream rule wiring (R3.7.2.h
+	// fires on the count triple). Drift in either direction (drop a
+	// triple, accidentally duplicate one) should fail loudly here.
+	const wantTripleCount = 8 // path, slug, generated_at, actor_count, integration_point_count, seed_requirement_count, commitment_count, research_root_loop
+	if len(triples) != wantTripleCount {
+		t.Errorf("triple count = %d, want %d", len(triples), wantTripleCount)
+	}
+
 	gotPredicates := map[string]any{}
 	for _, tr := range triples {
 		if tr.Subject != wantLoopEntityID {
@@ -459,6 +476,11 @@ func TestExecute_HappyPath_TripleSet(t *testing.T) {
 	}
 	if got := gotPredicates[predicateSeedRequirementCount]; got != 2 {
 		t.Errorf("triple %q = %v, want 2", predicateSeedRequirementCount, got)
+	}
+	// commitment_count is emitted unconditionally (zero is meaningful);
+	// defaultArtifactArgs() emits no commitments for back-compat.
+	if got := gotPredicates[predicateCommitmentCount]; got != 0 {
+		t.Errorf("triple %q = %v, want 0 (default args have no commitments)", predicateCommitmentCount, got)
 	}
 	if got := gotPredicates[predicateResearchRootLoop]; got != "loop-research-001" {
 		t.Errorf("triple %q = %v, want loop-research-001", predicateResearchRootLoop, got)
@@ -861,5 +883,207 @@ func TestDeriveSlug(t *testing.T) {
 				t.Errorf("deriveSlug(%q) = %q, want %q", tc.title, got, tc.want)
 			}
 		})
+	}
+}
+
+// ---------------------------------------------------------------------
+// R3.7.2.b — verification_commitments wiring
+// ---------------------------------------------------------------------
+
+// argsWithCommitments returns defaultArtifactArgs() plus a
+// representative pair of commitments — one testcontainer (real-stack),
+// one in-process unit. Used across the R3.7.2.b tests.
+func argsWithCommitments() map[string]any {
+	args := defaultArtifactArgs()
+	args["verification_commitments"] = []any{
+		map[string]any{
+			"target":   "executor publishes graph.mutation.entity.add on success",
+			"approach": "process-local-testcontainer",
+			"harness":  "nats-jetstream",
+			"runtime":  "go-testing-net",
+			"convention": map[string]any{
+				"type": "filepath",
+				"path": "cmd/semteams/sandbox/integration_test.go",
+			},
+			"evidence": []any{
+				map[string]any{"kind": "test_uses_build_tag", "args": map[string]any{"tag": "integration"}},
+			},
+		},
+		map[string]any{
+			"target":   "executor returns ToolErrorInvalidArgs on malformed input",
+			"approach": "in-process-unit",
+			"convention": map[string]any{
+				"type": "filepath",
+				"path": "cmd/semteams/tools/x/executor_test.go",
+			},
+		},
+	}
+	return args
+}
+
+func TestExecute_HappyPath_WithCommitments_TripleSet(t *testing.T) {
+	exec, tp, _, _ := newExecutorWithDir(t)
+	res, err := exec.Execute(context.Background(), defaultCall(argsWithCommitments()))
+	if err != nil {
+		t.Fatalf("Execute err: %v", err)
+	}
+	if res.Error != "" {
+		t.Fatalf("Result.Error = %q, want empty", res.Error)
+	}
+
+	gotPredicates := map[string]any{}
+	for _, tr := range tp.snapshot() {
+		gotPredicates[tr.Predicate] = tr.Object
+	}
+	if got := gotPredicates[predicateCommitmentCount]; got != 2 {
+		t.Errorf("triple %q = %v, want 2", predicateCommitmentCount, got)
+	}
+}
+
+func TestExecute_WithCommitments_PayloadRoundTrips(t *testing.T) {
+	exec, _, pub, _ := newExecutorWithDir(t)
+	_, err := exec.Execute(context.Background(), defaultCall(argsWithCommitments()))
+	if err != nil {
+		t.Fatalf("Execute err: %v", err)
+	}
+	_, data, _ := pub.snapshot()
+	var roundTrip map[string]any
+	if err := json.Unmarshal(data, &roundTrip); err != nil {
+		t.Fatalf("decode payload: %v", err)
+	}
+	commitments, ok := roundTrip["verification_commitments"].([]any)
+	if !ok {
+		t.Fatalf("payload missing verification_commitments array; payload=%s", data)
+	}
+	if len(commitments) != 2 {
+		t.Errorf("verification_commitments len: got %d, want 2", len(commitments))
+	}
+	first, ok := commitments[0].(map[string]any)
+	if !ok {
+		t.Fatalf("commitments[0] not a map: %T", commitments[0])
+	}
+	if first["approach"] != "process-local-testcontainer" {
+		t.Errorf("commitments[0].approach: got %v", first["approach"])
+	}
+	if first["harness"] != "nats-jetstream" {
+		t.Errorf("commitments[0].harness: got %v", first["harness"])
+	}
+}
+
+func TestExecute_WithoutCommitments_PayloadOmitsField(t *testing.T) {
+	exec, _, pub, _ := newExecutorWithDir(t)
+	_, err := exec.Execute(context.Background(), defaultCall(defaultArtifactArgs()))
+	if err != nil {
+		t.Fatalf("Execute err: %v", err)
+	}
+	_, data, _ := pub.snapshot()
+	if got := string(data); strings.Contains(got, `"verification_commitments"`) {
+		t.Errorf("expected verification_commitments to be omitted from payload; payload=%s", got)
+	}
+}
+
+func TestExecute_BadCommitment_FailsValidation(t *testing.T) {
+	exec, _, _, _ := newExecutorWithDir(t)
+	args := defaultArtifactArgs()
+	// testcontainer approach without harness → Validate cascade rejects
+	args["verification_commitments"] = []any{
+		map[string]any{
+			"target":   "x",
+			"approach": "process-local-testcontainer",
+			"runtime":  "go-testing-net",
+			"convention": map[string]any{
+				"type": "filepath",
+				"path": "x_test.go",
+			},
+		},
+	}
+	res, err := exec.Execute(context.Background(), defaultCall(args))
+	if err != nil {
+		t.Fatalf("Execute err: %v", err)
+	}
+	if res.Error == "" {
+		t.Fatal("expected validation error from invalid commitment, got nil")
+	}
+	if !strings.Contains(res.Error, "verification_commitments[0]") {
+		t.Errorf("error should name the offending commitment index, got %q", res.Error)
+	}
+	if res.ErrorKind != agentic.ToolErrorInvalidArgs {
+		t.Errorf("ErrorKind: got %v, want ToolErrorInvalidArgs", res.ErrorKind)
+	}
+}
+
+func TestExecute_WithCommitments_MarkdownContainsSection(t *testing.T) {
+	exec, _, _, dir := newExecutorWithDir(t)
+	res, err := exec.Execute(context.Background(), defaultCall(argsWithCommitments()))
+	if err != nil {
+		t.Fatalf("Execute err: %v", err)
+	}
+	if res.Error != "" {
+		t.Fatalf("Result.Error = %q, want empty", res.Error)
+	}
+	// Find the rendered file (slug is dynamic; one .md file in dir).
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var mdPath string
+	for _, e := range entries {
+		if strings.HasSuffix(e.Name(), ".md") {
+			mdPath = filepath.Join(dir, e.Name())
+			break
+		}
+	}
+	if mdPath == "" {
+		t.Fatal("no rendered markdown file found")
+	}
+	body, err := os.ReadFile(mdPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rendered := string(body)
+	for _, want := range []string{
+		"## Verification Commitments",
+		"VC1 — executor publishes graph.mutation.entity.add",
+		"`process-local-testcontainer`",
+		"`nats-jetstream`",
+		"`go-testing-net`",
+		"`test_uses_build_tag`",
+		"VC2 — executor returns ToolErrorInvalidArgs",
+		"`in-process-unit`",
+		"_none — reviewer may flag as under-specified_",
+	} {
+		if !strings.Contains(rendered, want) {
+			t.Errorf("markdown missing %q\n--- got ---\n%s", want, rendered)
+		}
+	}
+}
+
+func TestExecute_WithoutCommitments_MarkdownShowsReviewerHint(t *testing.T) {
+	exec, _, _, dir := newExecutorWithDir(t)
+	_, err := exec.Execute(context.Background(), defaultCall(defaultArtifactArgs()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var mdPath string
+	for _, e := range entries {
+		if strings.HasSuffix(e.Name(), ".md") {
+			mdPath = filepath.Join(dir, e.Name())
+			break
+		}
+	}
+	body, err := os.ReadFile(mdPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rendered := string(body)
+	if !strings.Contains(rendered, "## Verification Commitments") {
+		t.Errorf("markdown missing section header")
+	}
+	if !strings.Contains(rendered, "No verification commitments emitted") {
+		t.Errorf("markdown should call out missing commitments for reviewer attention")
 	}
 }

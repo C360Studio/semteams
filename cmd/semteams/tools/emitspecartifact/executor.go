@@ -86,6 +86,11 @@ const (
 	predicateIntegrationPointCount = "dev_via_spec.artifact.integration_point_count"
 	predicateSeedRequirementCount  = "dev_via_spec.artifact.seed_requirement_count"
 	predicateResearchRootLoop      = "dev_via_spec.artifact.research_root_loop"
+	// predicateCommitmentCount is emitted regardless of whether commitments
+	// are populated (zero is a meaningful signal: "architect emitted but
+	// claimed no verification surface"). R3.7.2.h's evidence gate fires
+	// per-commitment, so the count is its branching predicate.
+	predicateCommitmentCount = "dev_via_spec.artifact.commitment_count"
 )
 
 // PayloadPublisher is the narrow surface the executor uses to publish the
@@ -185,19 +190,58 @@ func (e *Executor) ListTools() []agentic.ToolDefinition {
 		"required": []string{"research_artifact_loop", "planner_loop", "reviewer_loop", "challenger_loop"},
 	}
 
+	// R3.7.2.b: verification_commitments[] is the architect's structured
+	// statement of WHAT is verified, AGAINST WHAT, and with WHAT
+	// EVIDENCE. Each commitment fills a verification surface (unit /
+	// testcontainer / sidecar / browser-flow / static-analysis) and
+	// names a harness from configs/harnesses.json when applicable. The
+	// architect persona contract requiring at least one real-stack
+	// commitment for external-actor work lands in R3.7.2.f; for now
+	// the field is optional at the wire level.
+	conventionRefSchema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"type": map[string]any{"type": "string", "enum": []string{"filepath", "template_id"}, "description": "Discriminates the union: filepath for brownfield (cite an existing test file in the repo); template_id for greenfield (name a framework-shipped template)."},
+			"path": map[string]any{"type": "string", "description": "Workspace-relative path to the convention test file. Required when type=filepath; must be empty otherwise."},
+			"id":   map[string]any{"type": "string", "description": "Framework-shipped template identifier. Required when type=template_id; must be empty otherwise."},
+		},
+		"required": []string{"type"},
+	}
+	evidenceRuleSchema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"kind": map[string]any{"type": "string", "description": "Evidence rule kind. Lowercase ASCII + digits + underscores, must start with a letter (matches ^[a-z][a-z0-9_]*$). Concrete checker kinds ship with the evidence-rule registry in R3.7.2.e."},
+			"args": map[string]any{"type": "object", "description": "Kind-specific arguments. Shape is registry-validated at evidence-gate time; not constrained here."},
+		},
+		"required": []string{"kind"},
+	}
+	commitmentSchema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"target":     map[string]any{"type": "string", "description": "Natural-language description of WHAT is verified by this commitment."},
+			"approach":   map[string]any{"type": "string", "enum": []string{"in-process-unit", "process-local-testcontainer", "external-sidecar", "browser-flow", "static-analysis"}, "description": "Verification approach. testcontainer/sidecar/browser-flow REQUIRE harness; unit/static-analysis FORBID it. testcontainer/sidecar/browser-flow REQUIRE runtime."},
+			"harness":    map[string]any{"type": "string", "description": "Name of a catalog entry from configs/harnesses.json. Required for testcontainer/sidecar/browser-flow approaches; must be omitted otherwise."},
+			"runtime":    map[string]any{"type": "string", "description": "Test runtime name (e.g. \"java-junit-testcontainers\", \"go-testing-net\", \"playwright-typescript\"). Required when harness is named."},
+			"convention": conventionRefSchema,
+			"evidence":   map[string]any{"type": "array", "items": evidenceRuleSchema, "description": "Structurally-checkable assertions the evidence gate runs post-build. Empty is permitted; the reviewer may flag commitments without evidence as under-specified."},
+		},
+		"required": []string{"target", "approach", "convention"},
+	}
+
 	return []agentic.ToolDefinition{{
 		Name:        ToolName,
 		Description: "Emit the dev-via-spec artifact as the architect's terminal action. Writes a human-readable markdown spec to disk, mints marker triples on this loop entity for downstream rule matching, and publishes the typed dev_via_spec.artifact.v1 payload for audit. Call once after the planner/reviewer/challenger chain converges, before submit_work.",
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
-				"title":              map[string]any{"type": "string", "description": "Short artifact title, used as the markdown H1 and to derive the file slug."},
-				"goal":               map[string]any{"type": "string", "description": "The 'why' — what this work achieves."},
-				"context":            map[string]any{"type": "string", "description": "Background that grounds the goal in the research corpus."},
-				"actors":             map[string]any{"type": "array", "items": actorSchema, "description": "Systems, frameworks, or services this work touches."},
-				"integration_points": map[string]any{"type": "array", "items": integrationPointSchema, "description": "Actor-to-actor data flows with direction."},
-				"seed_requirements":  map[string]any{"type": "array", "items": seedRequirementSchema, "description": "Decomposable-grain requirements, each grounded in at least one actor."},
-				"provenance":         provenanceSchema,
+				"title":                    map[string]any{"type": "string", "description": "Short artifact title, used as the markdown H1 and to derive the file slug."},
+				"goal":                     map[string]any{"type": "string", "description": "The 'why' — what this work achieves."},
+				"context":                  map[string]any{"type": "string", "description": "Background that grounds the goal in the research corpus."},
+				"actors":                   map[string]any{"type": "array", "items": actorSchema, "description": "Systems, frameworks, or services this work touches."},
+				"integration_points":       map[string]any{"type": "array", "items": integrationPointSchema, "description": "Actor-to-actor data flows with direction."},
+				"seed_requirements":        map[string]any{"type": "array", "items": seedRequirementSchema, "description": "Decomposable-grain requirements, each grounded in at least one actor."},
+				"verification_commitments": map[string]any{"type": "array", "items": commitmentSchema, "description": "Structured commitments to verification surfaces. Each commitment names target / approach / harness / runtime / convention / evidence. Multi-layer is normal — typically a unit-level commitment for in-language behaviour PLUS a real-stack commitment (testcontainer/sidecar/browser-flow) for external integration. The architect-persona contract requiring at least one real-stack commitment for external-actor work lands in R3.7.2.f; for now the field is optional but the reviewer may flag artifacts that omit it for external integration_points."},
+				"provenance":               provenanceSchema,
 			},
 			"required": []string{"title", "goal", "context", "actors", "seed_requirements", "provenance"},
 		},
@@ -323,6 +367,7 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 		"actor_count":             len(artifact.Actors),
 		"integration_point_count": len(artifact.IntegrationPoints),
 		"seed_requirement_count":  len(artifact.SeedRequirements),
+		"commitment_count":        len(artifact.VerificationCommitments),
 		"research_root_loop":      artifact.Provenance.ResearchArtifactLoop,
 		"payload_subject":         subject,
 		"loop_entity_id":          loopEntityID,
@@ -343,6 +388,7 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 		slog.Int("actors", len(artifact.Actors)),
 		slog.Int("integration_points", len(artifact.IntegrationPoints)),
 		slog.Int("seed_requirements", len(artifact.SeedRequirements)),
+		slog.Int("commitments", len(artifact.VerificationCommitments)),
 		slog.String("research_root_loop", artifact.Provenance.ResearchArtifactLoop),
 		slog.String("subject", subject))
 
@@ -355,6 +401,7 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 			"slug":                   artifact.Slug,
 			"path":                   relPath,
 			"seed_requirement_count": len(artifact.SeedRequirements),
+			"commitment_count":       len(artifact.VerificationCommitments),
 		},
 	}, nil
 }
@@ -469,6 +516,7 @@ func buildTriples(loopEntityID string, a *devviaspec.Artifact, relPath string, n
 		base(predicateActorCount, len(a.Actors)),
 		base(predicateIntegrationPointCount, len(a.IntegrationPoints)),
 		base(predicateSeedRequirementCount, len(a.SeedRequirements)),
+		base(predicateCommitmentCount, len(a.VerificationCommitments)),
 		base(predicateResearchRootLoop, a.Provenance.ResearchArtifactLoop),
 	}
 }
@@ -520,7 +568,21 @@ const artifactTemplateText = `# {{.Title}}
 - **Grounds (integration)**: {{if $sr.GroundsIntegrationPoints}}{{join $sr.GroundsIntegrationPoints "; "}}{{else}}_flagged: missing grounding_{{end}}
 
 {{end}}
-## Provenance
+## Verification Commitments
+
+{{if .VerificationCommitments}}{{range $i, $c := .VerificationCommitments}}### VC{{add $i 1}} — {{$c.Target}}
+
+- **Approach**: ` + "`" + `{{$c.Approach}}` + "`" + `
+{{if $c.Harness}}- **Harness**: ` + "`" + `{{$c.Harness}}` + "`" + `
+{{end}}{{if $c.Runtime}}- **Runtime**: ` + "`" + `{{$c.Runtime}}` + "`" + `
+{{end}}- **Convention**: {{if eq (printf "%s" $c.Convention.Type) "filepath"}}filepath ` + "`" + `{{$c.Convention.Path}}` + "`" + `{{else}}template ` + "`" + `{{$c.Convention.ID}}` + "`" + `{{end}}
+{{if $c.Evidence}}- **Evidence rules**:
+{{range $c.Evidence}}  - ` + "`" + `{{.Kind}}` + "`" + `
+{{end}}{{else}}- **Evidence rules**: _none — reviewer may flag as under-specified_
+{{end}}
+{{end}}{{else}}_No verification commitments emitted. The reviewer is expected to flag this for any artifact whose integration_points reference external actors._
+
+{{end}}## Provenance
 
 - Research artifact loop: ` + "`" + `{{.Provenance.ResearchArtifactLoop}}` + "`" + `
 - Approved planner loop: ` + "`" + `{{.Provenance.PlannerLoop}}` + "`" + `
