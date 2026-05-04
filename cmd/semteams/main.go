@@ -33,6 +33,8 @@ import (
 	"github.com/c360studio/semstreams/service"
 	"github.com/c360studio/semstreams/types"
 	"github.com/c360studio/semteams/cmd/semteams/harness"
+	"github.com/c360studio/semteams/cmd/semteams/verification/families"
+	"github.com/c360studio/semteams/cmd/semteams/verification/runtimes"
 )
 
 // Build information constants
@@ -142,15 +144,16 @@ func run() error {
 		return fmt.Errorf("register product payloads: %w", err)
 	}
 
-	// 9b. Load operator-curated platform assets (harness catalog +
-	// persona fragments + rendered harness fragment for researcher
-	// roles). Harness catalog (ADR-033 R3.7.1) is built FIRST so
-	// the rendered fragment reflects the curated state; persona
-	// file load runs next; the rendered list is upserted into the
-	// PERSONAS bucket last. Both managers are returned — persona
-	// feeds the tool registry below for Pattern-B persona CRUD,
-	// harness feeds the /harnesses HTTP middleware (R3.7.1.f).
-	personaMgr, harnessMgr := loadPlatformAssets(ctx, natsClient, cliCfg, slog.Default())
+	// 9b. Load operator-curated platform assets + build the verification
+	// matrix registries. Harness catalog (ADR-033 R3.7.1) loads from
+	// configs/harnesses.json; persona fragments load from disk; the
+	// rendered harness fragment is upserted into PERSONAS for the
+	// researcher roles. The (family × runtime) registries (R3.7.2.d,
+	// ADR-033 §addendum 2026-05-04) are Pattern-A boot-registries —
+	// framework code, no operator state. familyReg/runtimeReg are
+	// threaded into the schema gate in R3.7.2.e and into builder
+	// invocation in R3.7.2.h.
+	personaMgr, harnessMgr, _, _ := loadPlatformAssets(ctx, natsClient, cliCfg, slog.Default())
 
 	// 9c. Build the shared tool registry and register first-party tool
 	// executors. Per beta.16: agentic-tools registry is constructor-
@@ -310,19 +313,33 @@ func buildFlowTemplateManager(natsClient *natsclient.Client, logger *slog.Logger
 }
 
 // loadPlatformAssets builds the harness catalog (operator-curated
-// test-harness registry; ADR-033 R3.7.1) and seeds the PERSONAS KV
+// test-harness registry; ADR-033 R3.7.1), seeds the PERSONAS KV
 // bucket from on-disk fragment files plus a synthetic researcher
-// fragment rendered from the live catalog. Harness load runs FIRST
-// so the rendered list reflects the catalog state operators just
-// curated; persona.LoadFromDirectory then loads the static
-// fragments; finally the rendered list is upserted under a stable
-// fragment ID — Upsert rather than file-write keeps the source
-// tree clean (no boot-time git diffs in configs/personas/).
-func loadPlatformAssets(ctx context.Context, natsClient *natsclient.Client, cliCfg *CLIConfig, logger *slog.Logger) (*persona.Manager, *harness.Manager) {
+// fragment rendered from the live catalog, and constructs the
+// (family × runtime) verification matrix registries (R3.7.2.d).
+//
+// Boot order: harness catalog FIRST so the rendered persona fragment
+// reflects curated state; persona.LoadFromDirectory loads static
+// fragments; the rendered list is upserted under a stable fragment
+// ID; verification registries are built last (Pattern-A in-memory,
+// independent of NATS).
+//
+// Returns:
+//   - persona.Manager: threads into tool registry for Pattern-B persona CRUD
+//   - harness.Manager: threads into /harnesses HTTP middleware (R3.7.1.f)
+//   - families.Registry: threads into schema gate in R3.7.2.e
+//   - runtimes.Registry: threads into schema gate in R3.7.2.e and
+//     builder invocation in R3.7.2.h
+//
+// Any of the registries may be nil on registration failure (the
+// helper logs WARN and returns nil so downstream gates fail loudly
+// at the right layer rather than silently passing).
+func loadPlatformAssets(ctx context.Context, natsClient *natsclient.Client, cliCfg *CLIConfig, logger *slog.Logger) (*persona.Manager, *harness.Manager, *families.Registry, *runtimes.Registry) {
 	harnessMgr := buildHarnessManager(ctx, natsClient, cliCfg.HarnessCatalogPath, logger)
 	personaMgr := loadPersonaFragments(ctx, natsClient, cliCfg.PersonaFragmentsPath)
 	injectRenderedHarnessFragment(ctx, personaMgr, harnessMgr, logger)
-	return personaMgr, harnessMgr
+	familyReg, runtimeReg := registerProductFamiliesAndRuntimes(logger)
+	return personaMgr, harnessMgr, familyReg, runtimeReg
 }
 
 // injectRenderedHarnessFragment renders the live harness catalog

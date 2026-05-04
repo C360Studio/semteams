@@ -20,6 +20,10 @@ import (
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitartifact"
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitspecartifact"
 	"github.com/c360studio/semteams/cmd/semteams/verification"
+	"github.com/c360studio/semteams/cmd/semteams/verification/families"
+	"github.com/c360studio/semteams/cmd/semteams/verification/families/tcpbinaryprotobuf"
+	"github.com/c360studio/semteams/cmd/semteams/verification/runtimes"
+	"github.com/c360studio/semteams/cmd/semteams/verification/runtimes/javajunittestcontainers"
 )
 
 // Environment variables that configure product-shell-local tools.
@@ -73,6 +77,69 @@ func registerProductPayloads(reg *payloadregistry.Registry) error {
 		return fmt.Errorf("verification payloads: %w", err)
 	}
 	return nil
+}
+
+// registerProductFamiliesAndRuntimes builds the (family × runtime)
+// verification matrix registries (R3.7.2.d, ADR-033 §addendum
+// 2026-05-04). Pattern-A boot-registries: framework code, no
+// operator-curated state, dependency-injected into the schema gate
+// (R3.7.2.e) and builder invocation (R3.7.2.h).
+//
+// R3.7.2.d ships ONE family (tcp.binary-protobuf.v1) and ONE runtime
+// (java-junit-testcontainers). Future families/runtimes are pure
+// additions: drop a new sub-package, add a Register call here.
+//
+// Returns nil registries on registration failure so the chain still
+// boots; the schema gate then rejects every commitment that names a
+// family or runtime, which is the right loud-failure mode. A registry
+// initialisation error is logged at WARN with the underlying cause.
+func registerProductFamiliesAndRuntimes(logger *slog.Logger) (*families.Registry, *runtimes.Registry) {
+	familyReg := families.NewRegistry()
+	if err := tcpbinaryprotobuf.Register(familyReg); err != nil {
+		logger.Warn("verification family registration failed; schema gate will reject all commitments referencing families",
+			slog.String("family", "tcp.binary-protobuf.v1"),
+			slog.Any("error", err))
+		familyReg = nil
+	}
+
+	runtimeReg := runtimes.NewRegistry()
+	if err := javajunittestcontainers.Register(runtimeReg); err != nil {
+		logger.Warn("verification runtime registration failed; schema gate will reject all commitments referencing runtimes",
+			slog.String("runtime", "java-junit-testcontainers"),
+			slog.Any("error", err))
+		runtimeReg = nil
+	}
+
+	logger.Info("verification matrix registries initialised",
+		slog.Int("families", regLen(familyReg)),
+		slog.Int("runtimes", regLen(runtimeReg)))
+	return familyReg, runtimeReg
+}
+
+// regLen returns 0 for a nil registry, or registry.Len() otherwise.
+// Helper exists so the boot log line stays readable when a
+// registration failure has nilled out a registry.
+func regLen(r interface{ Len() int }) int {
+	if r == nil {
+		return 0
+	}
+	// Reflect-safe nil check via type-assert path; the typed nils
+	// (*families.Registry)(nil) and (*runtimes.Registry)(nil) flow
+	// through the interface unscathed and would NPE on .Len(). Guard.
+	switch reg := r.(type) {
+	case *families.Registry:
+		if reg == nil {
+			return 0
+		}
+		return reg.Len()
+	case *runtimes.Registry:
+		if reg == nil {
+			return 0
+		}
+		return reg.Len()
+	default:
+		return r.Len()
+	}
 }
 
 // registerProductTools wires product-shell-local tool executors onto
