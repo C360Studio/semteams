@@ -47,7 +47,7 @@ func TestInjectRenderedHarnessFragment_HappyPath(t *testing.T) {
 	require.Equal(t, "harness-catalog.rendered", got.ID)
 	require.Equal(t, 0, got.Category, "synthetic fragment should match project baseline (Category=0)")
 	require.Equal(t, 45, got.Priority, "synthetic should sort after static 40-harness-catalog within Category=0")
-	require.ElementsMatch(t, []string{"researcher", "researcher-with-source-acquisition"}, got.Roles)
+	require.ElementsMatch(t, []string{"researcher", "researcher-with-source-acquisition", "research-reviewer"}, got.Roles)
 	require.Contains(t, got.Content, "1. `stub`", "rendered body should list the seeded harness")
 }
 

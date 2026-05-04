@@ -361,11 +361,14 @@ func injectRenderedHarnessFragment(ctx context.Context, personaMgr *persona.Mana
 	}
 	body := harness.RenderResearcherFragment(catalog)
 	p := &persona.Persona{
-		ID:          "harness-catalog.rendered",
-		Category:    0, // CategorySystem — matches project baseline; see doc-comment.
-		Priority:    45,
-		Content:     body,
-		Roles:       []string{"researcher", "researcher-with-source-acquisition"},
+		ID:       "harness-catalog.rendered",
+		Category: 0, // CategorySystem — matches project baseline; see doc-comment.
+		Priority: 45,
+		Content:  body,
+		// research-reviewer needs the same view of the catalog so it can
+		// verify the researcher's `harness` field references a real
+		// registered entry (membership check, R3.7.1.d gate).
+		Roles:       []string{"researcher", "researcher-with-source-acquisition", "research-reviewer"},
 		Description: "Auto-generated from configs/harnesses.json at boot (ADR-033 R3.7.1).",
 	}
 	if err := personaMgr.Upsert(ctx, p); err != nil {
