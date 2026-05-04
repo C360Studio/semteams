@@ -47,7 +47,25 @@ import (
 	"github.com/c360studio/semstreams/types"
 
 	"github.com/c360studio/semteams/cmd/semteams/devviaspec"
+	"github.com/c360studio/semteams/cmd/semteams/harness"
 )
+
+// HarnessResolver looks up a harness catalog entry by name. Returns
+// nil + non-nil error on lookup failure (catalog miss, transport
+// error). Used by the renderer to project the architect-cited
+// harness NAME into the concrete fields the builder needs to
+// transcribe (Image, TCP exposes) — without those fields rendered
+// inline in SPEC.md, the builder has no in-sandbox path to resolve
+// the catalog (the catalog file lives on the backend host, not in
+// the builder's sandbox workspace). R3.7.2.h′ closes that gap.
+//
+// nil is permitted; the executor falls back to rendering the
+// commitment without resolved fields (the architect's name still
+// ships, just no image/port projection). Operators running
+// dev-via-spec with no harness manager wired will see commitments
+// without resolution; operators running it WITH the manager will
+// see commitments fully grounded.
+type HarnessResolver func(ctx context.Context, name string) (*harness.Harness, error)
 
 // ToolName is the LLM-facing tool name. Listed in agentic-tools
 // allowed_tools per deployment that runs the dev-via-spec flow.
@@ -107,11 +125,12 @@ type PayloadPublisher interface {
 // of marker triples on the calling loop entity, and publishes the typed
 // payload on a stable subject.
 type Executor struct {
-	publisher   agentictools.TriplePublisher
-	natsPublish PayloadPublisher
-	platform    types.PlatformMeta
-	logger      *slog.Logger
-	outputDir   string
+	publisher       agentictools.TriplePublisher
+	natsPublish     PayloadPublisher
+	platform        types.PlatformMeta
+	logger          *slog.Logger
+	outputDir       string
+	harnessResolver HarnessResolver
 }
 
 // NewExecutor constructs an Executor. outputDir is the directory where
@@ -119,7 +138,12 @@ type Executor struct {
 // SEMTEAMS_DEVVIASPEC_ARTIFACT_DIR is checked, then the default "docs/specs".
 // Injecting outputDir directly lets tests write to a temp directory without
 // environment-variable side effects.
-func NewExecutor(publisher agentictools.TriplePublisher, natsPublish PayloadPublisher, platform types.PlatformMeta, logger *slog.Logger, outputDir string) *Executor {
+//
+// resolver may be nil — the renderer falls back to rendering the
+// architect's harness NAME without resolved fields (Image, TCP
+// exposes). Production wiring (cmd/semteams/product_tools.go) passes
+// the harness manager's Get adapter; tests typically pass nil.
+func NewExecutor(publisher agentictools.TriplePublisher, natsPublish PayloadPublisher, platform types.PlatformMeta, logger *slog.Logger, outputDir string, resolver HarnessResolver) *Executor {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -131,11 +155,12 @@ func NewExecutor(publisher agentictools.TriplePublisher, natsPublish PayloadPubl
 		}
 	}
 	return &Executor{
-		publisher:   publisher,
-		natsPublish: natsPublish,
-		platform:    platform,
-		logger:      logger,
-		outputDir:   outputDir,
+		publisher:       publisher,
+		natsPublish:     natsPublish,
+		platform:        platform,
+		logger:          logger,
+		outputDir:       outputDir,
+		harnessResolver: resolver,
 	}
 }
 
@@ -314,7 +339,7 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 	// Render markdown to disk before minting triples. If the disk write
 	// fails, we return early without any side effects so the LLM can
 	// retry after an operator fixes the path or permissions.
-	relPath, err := e.renderMarkdown(artifact)
+	relPath, err := e.renderMarkdown(ctx, artifact)
 	if err != nil {
 		return agentic.ToolResult{
 			CallID:    call.ID,
@@ -479,13 +504,44 @@ func deriveSlug(title string, t time.Time) string {
 // (os.MkdirAll). Existing files are overwritten — idempotent on re-run of
 // the same arc (same title → same slug → same path). Returns the relative
 // path written (for the marker triple and tool result).
-func (e *Executor) renderMarkdown(a *devviaspec.Artifact) (string, error) {
+func (e *Executor) renderMarkdown(ctx context.Context, a *devviaspec.Artifact) (string, error) {
 	if err := os.MkdirAll(e.outputDir, 0o755); err != nil {
 		return "", fmt.Errorf("create output dir %s: %w", e.outputDir, err)
 	}
 
+	// Resolve any architect-cited harness names into catalog entries
+	// up front so the per-call template's lookup funcs read from a
+	// closure-captured map rather than re-querying the KV bucket per
+	// commitment. A failed lookup is silently dropped from the map —
+	// the rendered SPEC ships the architect's harness name without
+	// the resolved Image/TCP, which the builder will surface as a
+	// `needs_clarification` rather than fabricate. Catalog churn
+	// between architect emit-time and builder iteration would
+	// otherwise produce a worse failure mode (silent stale fields).
+	harnessByName := e.resolveHarnesses(ctx, a)
+
+	tmpl, err := template.New("artifact").Funcs(template.FuncMap{
+		"add":  func(i, n int) int { return i + n },
+		"join": strings.Join,
+		"harnessImage": func(name string) string {
+			if h, ok := harnessByName[name]; ok {
+				return h.Image
+			}
+			return ""
+		},
+		"harnessTCP": func(name string) []harness.PortExpose {
+			if h, ok := harnessByName[name]; ok {
+				return h.Exposes.TCP
+			}
+			return nil
+		},
+	}).Parse(artifactTemplateText)
+	if err != nil {
+		return "", fmt.Errorf("parse markdown template: %w", err)
+	}
+
 	var buf bytes.Buffer
-	if err := artifactTemplate.Execute(&buf, a); err != nil {
+	if err := tmpl.Execute(&buf, a); err != nil {
 		return "", fmt.Errorf("execute markdown template: %w", err)
 	}
 
@@ -496,6 +552,41 @@ func (e *Executor) renderMarkdown(a *devviaspec.Artifact) (string, error) {
 	}
 
 	return filepath.Join(e.outputDir, filename), nil
+}
+
+// resolveHarnesses returns a name → catalog-entry map for every
+// distinct harness named on a's verification commitments. nil
+// resolver returns an empty map; lookup errors are logged at WARN
+// and the entry is dropped from the map (the renderer just omits
+// the resolved fields rather than aborting emission). Distinct
+// names are looked up once even if the artifact carries multiple
+// commitments referencing the same harness.
+func (e *Executor) resolveHarnesses(ctx context.Context, a *devviaspec.Artifact) map[string]*harness.Harness {
+	out := map[string]*harness.Harness{}
+	if e.harnessResolver == nil {
+		return out
+	}
+	for i := range a.VerificationCommitments {
+		name := a.VerificationCommitments[i].Harness
+		if name == "" {
+			continue
+		}
+		if _, seen := out[name]; seen {
+			continue
+		}
+		h, err := e.harnessResolver(ctx, name)
+		if err != nil {
+			e.logger.Warn("harness lookup failed; SPEC will render name without resolved fields",
+				slog.String("harness", name),
+				slog.String("error", err.Error()))
+			continue
+		}
+		if h == nil {
+			continue
+		}
+		out[name] = h
+	}
+	return out
 }
 
 // buildTriples assembles the deterministic triple set in publish order.
@@ -524,10 +615,18 @@ func buildTriples(loopEntityID string, a *devviaspec.Artifact, relPath string, n
 	}
 }
 
-// artifactTemplate is the markdown template for the rendered spec file.
+// artifactTemplateText is the markdown template body for the rendered
+// spec file. Parsed per-call by renderMarkdown so the harness lookup
+// funcs can close over a per-call resolver map (see resolveHarnesses).
+// Per-call parse cost is sub-millisecond for a ~2 KB template; cheaper
+// than threading a richer data shape through the template that would
+// otherwise need to carry the harness projection per-VC at value level.
+//
 // Template functions:
 //   - add(i, n): integer addition for 1-indexed SR headings.
 //   - join(elems, sep): strings.Join wrapper.
+//   - harnessImage(name): catalog-resolved image string, "" when miss.
+//   - harnessTCP(name): catalog-resolved TCP exposes, nil when miss.
 //
 // Overwrite policy: same slug (same title + same day) overwrites the existing
 // file. This makes the architect's terminal tool idempotent on retry and
@@ -535,11 +634,6 @@ func buildTriples(loopEntityID string, a *devviaspec.Artifact, relPath string, n
 // produces the same slug on the same day (unlikely in practice), the second
 // arc overwrites the first. Operators who need to preserve all versions should
 // use git history or the payload audit trail on dev_via_spec.artifact.{loop_id}.
-var artifactTemplate = template.Must(template.New("artifact").Funcs(template.FuncMap{
-	"add":  func(i, n int) int { return i + n },
-	"join": strings.Join,
-}).Parse(artifactTemplateText))
-
 const artifactTemplateText = `# {{.Title}}
 
 > **Generated**: {{.GeneratedAt}}
@@ -577,7 +671,9 @@ const artifactTemplateText = `# {{.Title}}
 
 - **Approach**: ` + "`" + `{{$c.Approach}}` + "`" + `
 {{if $c.Harness}}- **Harness**: ` + "`" + `{{$c.Harness}}` + "`" + `
-{{end}}{{if $c.Runtime}}- **Runtime**: ` + "`" + `{{$c.Runtime}}` + "`" + `
+{{with harnessImage $c.Harness}}- **Image**: ` + "`" + `{{.}}` + "`" + `
+{{end}}{{with harnessTCP $c.Harness}}- **TCP exposes**: {{range $j, $p := .}}{{if $j}}, {{end}}port {{$p.Port}} (` + "`" + `{{$p.Protocol}}` + "`" + `){{end}}
+{{end}}{{end}}{{if $c.Runtime}}- **Runtime**: ` + "`" + `{{$c.Runtime}}` + "`" + `
 {{end}}- **Convention**: {{if eq (printf "%s" $c.Convention.Type) "filepath"}}filepath ` + "`" + `{{$c.Convention.Path}}` + "`" + `{{else}}template ` + "`" + `{{$c.Convention.ID}}` + "`" + `{{end}}
 {{if $c.Evidence}}- **Evidence rules**:
 {{range $c.Evidence}}  - ` + "`" + `{{.Kind}}` + "`" + `

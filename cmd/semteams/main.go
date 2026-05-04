@@ -186,7 +186,7 @@ func run() error {
 	// (namespace allowlist; product-local payload type) is product
 	// policy. add_source_repo stays inert if the deployment has no
 	// namespaces configured — see addsource.Config.AllowedNamespaces.
-	if err := registerProductTools(toolRegistry, natsClient, platform, slog.Default()); err != nil {
+	if err := registerProductTools(toolRegistry, natsClient, platform, harnessMgr, slog.Default()); err != nil {
 		return fmt.Errorf("register product tools: %w", err)
 	}
 

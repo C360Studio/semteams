@@ -14,6 +14,8 @@ import (
 	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/types"
+
+	"github.com/c360studio/semteams/cmd/semteams/harness"
 )
 
 // ---------------------------------------------------------------------
@@ -85,7 +87,7 @@ func newExecutorWithDir(t *testing.T) (*Executor, *fakeTriplePublisher, *fakePub
 	tmpDir := t.TempDir()
 	tp := &fakeTriplePublisher{}
 	pub := &fakePublisher{}
-	exec := NewExecutor(tp, pub, types.PlatformMeta{Org: "c360", Platform: "semteams"}, nil, tmpDir)
+	exec := NewExecutor(tp, pub, types.PlatformMeta{Org: "c360", Platform: "semteams"}, nil, tmpDir, nil)
 	return exec, tp, pub, tmpDir
 }
 
@@ -727,7 +729,7 @@ func TestExecute_OutputDirAutoCreated(t *testing.T) {
 	pub := &fakePublisher{}
 	tmpBase := t.TempDir()
 	nestedDir := filepath.Join(tmpBase, "deep", "nested", "specs")
-	exec := NewExecutor(tp, pub, types.PlatformMeta{Org: "c360", Platform: "semteams"}, nil, nestedDir)
+	exec := NewExecutor(tp, pub, types.PlatformMeta{Org: "c360", Platform: "semteams"}, nil, nestedDir, nil)
 
 	res, err := exec.Execute(context.Background(), defaultCall(defaultArtifactArgs()))
 	if err != nil {
@@ -753,7 +755,7 @@ func TestExecute_OutputDirEnvOverride(t *testing.T) {
 	tp := &fakeTriplePublisher{}
 	pub := &fakePublisher{}
 	// Pass empty outputDir so the constructor picks up the env var.
-	exec := NewExecutor(tp, pub, types.PlatformMeta{Org: "c360", Platform: "semteams"}, nil, "")
+	exec := NewExecutor(tp, pub, types.PlatformMeta{Org: "c360", Platform: "semteams"}, nil, "", nil)
 
 	res, err := exec.Execute(context.Background(), defaultCall(defaultArtifactArgs()))
 	if err != nil {
@@ -781,7 +783,7 @@ func TestExecute_OutputDirCallerBeatsEnv(t *testing.T) {
 
 	tp := &fakeTriplePublisher{}
 	pub := &fakePublisher{}
-	exec := NewExecutor(tp, pub, types.PlatformMeta{Org: "c360", Platform: "semteams"}, nil, constructorDir)
+	exec := NewExecutor(tp, pub, types.PlatformMeta{Org: "c360", Platform: "semteams"}, nil, constructorDir, nil)
 
 	res, err := exec.Execute(context.Background(), defaultCall(defaultArtifactArgs()))
 	if err != nil {
@@ -979,6 +981,135 @@ func TestExecute_WithoutCommitments_PayloadOmitsField(t *testing.T) {
 	_, data, _ := pub.snapshot()
 	if got := string(data); strings.Contains(got, `"verification_commitments"`) {
 		t.Errorf("expected verification_commitments to be omitted from payload; payload=%s", got)
+	}
+}
+
+// ---------------------------------------------------------------------
+// R3.7.2.h′ — harness resolver projects Image + TCP exposes into SPEC.md
+// ---------------------------------------------------------------------
+
+// TestRenderMarkdown_ResolvedHarnessFieldsRendered pins the
+// trust-boundary fix the reviewer caught: without resolved fields in
+// SPEC.md the builder has no in-sandbox path to look up the catalog.
+// With the resolver wired, the rendered markdown carries `**Image**`
+// and `**TCP exposes**` lines next to `**Harness**` for every VC
+// whose harness resolves; the builder transcribes them verbatim into
+// test code (configs/personas/fragments/dev-via-spec-builder/
+// 15-commitment-driven-authoring.md).
+func TestRenderMarkdown_ResolvedHarnessFieldsRendered(t *testing.T) {
+	tmpDir := t.TempDir()
+	tp := &fakeTriplePublisher{}
+	pub := &fakePublisher{}
+	resolver := func(_ context.Context, name string) (*harness.Harness, error) {
+		if name == "meshtasticd-3.x" {
+			return &harness.Harness{
+				Name:                "meshtasticd-3.x",
+				Image:               "meshtastic/meshtasticd:3.5.0",
+				SmokeContractSchema: "meshtasticd.smoke_contract.v1",
+				DomainDescription:   "test fixture",
+				Exposes: harness.Exposes{
+					TCP: []harness.PortExpose{{Port: 4403, Protocol: "meshtastic-protobuf"}},
+				},
+			}, nil
+		}
+		return nil, errors.New("not in catalog")
+	}
+	exec := NewExecutor(tp, pub, types.PlatformMeta{Org: "c360", Platform: "semteams"}, nil, tmpDir, resolver)
+
+	args := defaultArtifactArgs()
+	args["verification_commitments"] = []any{
+		map[string]any{
+			"target":   "driver emits CS API observation when meshtasticd publishes POSITION_APP",
+			"approach": "process-local-testcontainer",
+			"harness":  "meshtasticd-3.x",
+			"runtime":  "java-junit-testcontainers",
+			"convention": map[string]any{
+				"type": "filepath",
+				"path": "src/test/java/com/example/FooIT.java",
+			},
+		},
+	}
+
+	res, err := exec.Execute(context.Background(), defaultCall(args))
+	if err != nil {
+		t.Fatalf("Execute err: %v", err)
+	}
+	if res.Error != "" {
+		t.Fatalf("Result.Error = %q, want empty", res.Error)
+	}
+
+	// Find the rendered file.
+	entries, err := os.ReadDir(tmpDir)
+	if err != nil {
+		t.Fatalf("read tmpDir: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("expected exactly one rendered file, got %d", len(entries))
+	}
+	body, err := os.ReadFile(filepath.Join(tmpDir, entries[0].Name()))
+	if err != nil {
+		t.Fatalf("read rendered: %v", err)
+	}
+	got := string(body)
+
+	for _, want := range []string{
+		"**Harness**: `meshtasticd-3.x`",
+		"**Image**: `meshtastic/meshtasticd:3.5.0`",
+		"**TCP exposes**: port 4403 (`meshtastic-protobuf`)",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("rendered SPEC.md missing %q\nfull body:\n%s", want, got)
+		}
+	}
+}
+
+// TestRenderMarkdown_ResolverMiss_NameOnly pins the fallback shape:
+// when the resolver returns an error, the rendered SPEC carries the
+// architect's harness NAME without the resolved Image / TCP fields.
+// The builder's contract reads this as a chain gap and surfaces
+// needs_clarification rather than fabricating; here we just verify
+// the renderer doesn't blow up and the name still ships.
+func TestRenderMarkdown_ResolverMiss_NameOnly(t *testing.T) {
+	tmpDir := t.TempDir()
+	tp := &fakeTriplePublisher{}
+	pub := &fakePublisher{}
+	resolver := func(_ context.Context, _ string) (*harness.Harness, error) {
+		return nil, errors.New("simulated catalog miss")
+	}
+	exec := NewExecutor(tp, pub, types.PlatformMeta{Org: "c360", Platform: "semteams"}, nil, tmpDir, resolver)
+
+	args := defaultArtifactArgs()
+	args["verification_commitments"] = []any{
+		map[string]any{
+			"target":   "x",
+			"approach": "process-local-testcontainer",
+			"harness":  "ghost-harness",
+			"runtime":  "go-testing-net",
+			"convention": map[string]any{
+				"type": "filepath",
+				"path": "x_test.go",
+			},
+		},
+	}
+	res, err := exec.Execute(context.Background(), defaultCall(args))
+	if err != nil {
+		t.Fatalf("Execute err: %v", err)
+	}
+	if res.Error != "" {
+		t.Fatalf("Result.Error = %q, want empty", res.Error)
+	}
+
+	entries, _ := os.ReadDir(tmpDir)
+	body, _ := os.ReadFile(filepath.Join(tmpDir, entries[0].Name()))
+	got := string(body)
+	if !strings.Contains(got, "**Harness**: `ghost-harness`") {
+		t.Errorf("expected harness name to render even on resolver miss; body:\n%s", got)
+	}
+	if strings.Contains(got, "**Image**:") {
+		t.Errorf("expected NO **Image** line on resolver miss; body:\n%s", got)
+	}
+	if strings.Contains(got, "**TCP exposes**:") {
+		t.Errorf("expected NO **TCP exposes** line on resolver miss; body:\n%s", got)
 	}
 }
 
