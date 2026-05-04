@@ -448,6 +448,14 @@ func TestExecute_HappyPath_TripleSet(t *testing.T) {
 	triples := tp.snapshot()
 	wantLoopEntityID := "c360.semteams.agent.agentic-loop.execution.loop-architect-abc"
 
+	// Triple count is load-bearing for downstream rule wiring (R3.7.2.h
+	// fires on the count triple). Drift in either direction (drop a
+	// triple, accidentally duplicate one) should fail loudly here.
+	const wantTripleCount = 8 // path, slug, generated_at, actor_count, integration_point_count, seed_requirement_count, commitment_count, research_root_loop
+	if len(triples) != wantTripleCount {
+		t.Errorf("triple count = %d, want %d", len(triples), wantTripleCount)
+	}
+
 	gotPredicates := map[string]any{}
 	for _, tr := range triples {
 		if tr.Subject != wantLoopEntityID {

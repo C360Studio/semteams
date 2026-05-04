@@ -401,6 +401,7 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 			"slug":                   artifact.Slug,
 			"path":                   relPath,
 			"seed_requirement_count": len(artifact.SeedRequirements),
+			"commitment_count":       len(artifact.VerificationCommitments),
 		},
 	}, nil
 }
