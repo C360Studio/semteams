@@ -332,11 +332,23 @@ func loadPlatformAssets(ctx context.Context, natsClient *natsclient.Client, cliC
 // Uses multi-role on the Persona so a single record applies to
 // both `researcher` and `researcher-with-source-acquisition`.
 //
-// Fragment ID `45-harness-catalog-rendered` is product-shell-
-// specific by design — operators won't accidentally author a
-// markdown file under that name; if they do, the file loader's
-// next-restart sweep correctly overrides this synthetic record
-// with the file's content (file-is-source-of-truth semantics).
+// Fragment ID `harness-catalog.rendered` is intentionally NOT in
+// the project's `\d+-` prefix style operators use for hand-
+// authored markdown files — the dot-separator and prefix-less
+// shape mark it as synthetic. The persona file loader keys
+// Upserts on ID, so an operator who later authors a file at
+// `harness-catalog.rendered.md` would still collide; the visual
+// distinctness is the operator-facing breadcrumb.
+//
+// Category=0 / Priority=45: Category matches the project's
+// existing baseline (every hand-authored fragment defaults to
+// Category=0 → CategorySystem because the file loader doesn't
+// parse front-matter). Priority=45 places this record AFTER our
+// static 40-harness-catalog.md instructions within the same
+// category, which is the design intent. Intra-Priority ordering
+// for Priority=0 fragments is governed by map-iteration order
+// (pre-existing framework nondeterminism, see ADR-033 §addendum
+// 2026-05-03).
 func injectRenderedHarnessFragment(ctx context.Context, personaMgr *persona.Manager, harnessMgr *harness.Manager, logger *slog.Logger) {
 	if personaMgr == nil || harnessMgr == nil {
 		return
@@ -349,7 +361,9 @@ func injectRenderedHarnessFragment(ctx context.Context, personaMgr *persona.Mana
 	}
 	body := harness.RenderResearcherFragment(catalog)
 	p := &persona.Persona{
-		ID:          "45-harness-catalog-rendered",
+		ID:          "harness-catalog.rendered",
+		Category:    0, // CategorySystem — matches project baseline; see doc-comment.
+		Priority:    45,
 		Content:     body,
 		Roles:       []string{"researcher", "researcher-with-source-acquisition"},
 		Description: "Auto-generated from configs/harnesses.json at boot (ADR-033 R3.7.1).",
@@ -360,10 +374,16 @@ func injectRenderedHarnessFragment(ctx context.Context, personaMgr *persona.Mana
 			"error", err)
 		return
 	}
-	logger.Info("harness catalog: rendered persona fragment injected",
-		"fragment_id", p.ID,
-		"catalog_entries", len(catalog),
-		"roles", p.Roles)
+	if len(catalog) == 0 {
+		logger.Info("harness catalog: rendered persona fragment injected (empty catalog notice)",
+			"fragment_id", p.ID,
+			"roles", p.Roles)
+	} else {
+		logger.Info("harness catalog: rendered persona fragment injected",
+			"fragment_id", p.ID,
+			"catalog_entries", len(catalog),
+			"roles", p.Roles)
+	}
 }
 
 // buildHarnessManager constructs the SemTeams harness catalog manager

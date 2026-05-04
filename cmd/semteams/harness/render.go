@@ -25,10 +25,9 @@ import (
 func RenderResearcherFragment(catalog []*Harness) string {
 	var b strings.Builder
 	b.WriteString("# Available test harnesses\n\n")
-	b.WriteString("This list is rendered from `configs/harnesses.json` at boot — it shows every test harness registered for THIS deployment, which is what your `harness` selection on the artifact must reference.\n\n")
 
 	if len(catalog) == 0 {
-		b.WriteString("**No harnesses are currently registered for this deployment.**\n\n")
+		b.WriteString("**No harnesses are currently registered for this deployment.** The operator's catalog file (`configs/harnesses.json`) is empty.\n\n")
 		b.WriteString("If the work this artifact describes needs integration verification against an external system (a real protocol, a real broker, a real upstream service), leave `harness` unset and add a single line to `open_gaps` of the form:\n\n")
 		b.WriteString("    needs_harness: <one-line description of the integration target>\n\n")
 		b.WriteString("Examples of well-formed `needs_harness` lines:\n\n")
@@ -39,6 +38,7 @@ func RenderResearcherFragment(catalog []*Harness) string {
 		return b.String()
 	}
 
+	b.WriteString("This list is rendered from `configs/harnesses.json` at boot — it shows every test harness registered for THIS deployment, which is what your `harness` selection on the artifact must reference.\n\n")
 	b.WriteString(fmt.Sprintf("**%d harness(es) registered.** Pick the one whose domain best matches the integration target your work describes.\n\n", len(catalog)))
 	for i, h := range catalog {
 		b.WriteString(fmt.Sprintf("## %d. `%s`\n\n", i+1, h.Name))

@@ -11,6 +11,7 @@ func TestRenderResearcherFragment_Empty(t *testing.T) {
 	for _, want := range []string{
 		"# Available test harnesses",
 		"No harnesses are currently registered for this deployment",
+		"`configs/harnesses.json`) is empty",
 		"needs_harness:",
 		"DO NOT add a `needs_harness:` gap",
 	} {
