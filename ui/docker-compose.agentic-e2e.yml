@@ -167,12 +167,53 @@ services:
       dockerfile: docker/sandbox.Dockerfile
     container_name: semteams-ui-agentic-sandbox
     profiles: ["sandbox", "local-models"]
+    # Default to DooD (Docker-out-of-Docker, ADR-034 §addendum #2) so
+    # testcontainer-flavored chains (process-local-testcontainer
+    # Approach in ADR-034's verification class table) can spawn sibling
+    # containers on the host's daemon. Operators who want an
+    # isolation-only sandbox set SANDBOX_DOCKER_MODE=none to skip the
+    # socket mount semantics; the bind mount is harmless when chains
+    # don't use it.
+    environment:
+      - SANDBOX_DOCKER_MODE=${SANDBOX_DOCKER_MODE:-dood}
+    # --docker-mode-strict turns a missing socket mount into a boot
+    # failure rather than warn-and-continue. Compose-driven stacks
+    # always supply the mount below, so a missing socket here is a
+    # configuration regression, not an intentional dev-mode toggle —
+    # fail-fast surfaces it before the first chain hits EACCES.
+    command:
+      [
+        "--addr",
+        ":8090",
+        "--workspace",
+        "/workspace",
+        "--docker-mode-strict",
+      ]
+    # group_add wires the host docker socket's GID so the unprivileged
+    # `sandbox` user (uid 1001, no docker group) gets supplementary
+    # group access to the mode-0660 socket. Default 0 matches Docker
+    # Desktop on macOS where the bind-mounted socket appears as
+    # root:root inside containers; Linux dev hosts override via
+    # SANDBOX_DOCKER_SOCK_GID=$(stat -c '%g' /var/run/docker.sock).
+    # Keeps cap_drop ALL + USER sandbox hardening intact — only
+    # supplementary-group membership widens, which is the minimum
+    # required for socket reachability.
+    group_add:
+      - "${SANDBOX_DOCKER_SOCK_GID:-0}"
     volumes:
       - sandbox-agentic-workspaces:/workspace
       - sandbox-agentic-caches-m2:/home/sandbox/.m2
       - sandbox-agentic-caches-go:/go/pkg/mod
       - sandbox-agentic-caches-npm:/home/sandbox/.npm
       - sandbox-agentic-caches-gradle:/home/sandbox/.gradle
+      # Host docker socket bind mount — DooD trust boundary delta per
+      # ADR-034 §addendum #2. Tests inside sandbox can spawn arbitrary
+      # sibling containers on the host's Docker daemon. For the
+      # single-tenant dev workflow targeted by smoke #7 this is
+      # equivalent to running `mvn verify` on a developer laptop.
+      # Multi-tenant production deployments need DinD or sysbox-runc
+      # (R3.7.2.d′-dind follow-on); see ADR.
+      - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - agentic-net
     security_opt:

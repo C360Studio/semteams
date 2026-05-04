@@ -883,6 +883,78 @@ tasks:
     cmds:
       - npm run test:e2e:cleanup
 
+  test:e2e:sandbox:dood:smoke:
+    desc: Smoke #d′ — sandbox DooD trust-boundary verification (ADR-034 §addendum #2)
+    summary: |
+      Brings up the sandbox container alone (no backend / mock-llm /
+      semsource) with --docker-mode=dood, runs the
+      TestSandboxDooDSmoke integration test which verifies:
+
+        1. `docker` CLI inside the sandbox can talk to the host
+           daemon (mounted /var/run/docker.sock + group_add 0).
+        2. The sandbox can spawn a sibling nats:2.10-alpine
+           container on the shared agentic-net network.
+        3. The sandbox process can complete a TCP handshake to the
+           sibling's :4222 (the actual cross-container reachability
+           that builder testcontainer flows depend on).
+
+      Tears the sandbox down (and the nats sibling on best-effort)
+      regardless of test outcome.
+
+      Linux dev hosts where the docker socket is owned by a non-root
+      group export SANDBOX_DOCKER_SOCK_GID=$(stat -c '%g' /var/run/docker.sock)
+      before running this task; the default of 0 is correct for Mac
+      / Docker Desktop where the bind-mounted socket appears as
+      root:root inside containers.
+    cmds:
+      - defer: { task: test:e2e:sandbox:dood:smoke:cleanup }
+      # Linux dev hosts where /var/run/docker.sock is owned by a
+      # non-root group need SANDBOX_DOCKER_SOCK_GID set; emit the
+      # hint up front so the operator gets a clean override line
+      # instead of decoding an EACCES later. Mac / Docker Desktop
+      # ships GID 0 inside containers and falls through to the
+      # group_add 0 default in compose.
+      - |
+        if [ "$(uname -s)" = "Linux" ] && [ -e /var/run/docker.sock ]; then
+          DOCKER_SOCK_GID=$(stat -c '%g' /var/run/docker.sock)
+          if [ -z "${SANDBOX_DOCKER_SOCK_GID:-}" ] && [ "$DOCKER_SOCK_GID" != "0" ]; then
+            echo "ℹ️  Linux host detected with docker socket GID=$DOCKER_SOCK_GID;"
+            echo "    set SANDBOX_DOCKER_SOCK_GID=$DOCKER_SOCK_GID before re-running this task"
+            echo "    if the smoke fails on socket EACCES."
+          fi
+        fi
+      - docker compose -f docker-compose.agentic-e2e.yml --profile sandbox build sandbox
+      - docker compose -f docker-compose.agentic-e2e.yml --profile sandbox up -d sandbox
+      # Healthcheck loop — `up -d` returns immediately, but the
+      # sandbox HTTP server (and the boot-time DooD probe in
+      # main.go) need a few seconds to settle. Poll the health
+      # endpoint via docker exec to avoid needing a port publish.
+      - |
+        for i in $(seq 1 20); do
+          if docker exec semteams-ui-agentic-sandbox wget -q --spider http://localhost:8090/health 2>/dev/null; then
+            echo "✅ sandbox healthy after ~${i}s"
+            break
+          fi
+          if [ "$i" = "20" ]; then
+            echo "❌ sandbox failed to become healthy"
+            docker logs semteams-ui-agentic-sandbox --tail 30
+            exit 1
+          fi
+          sleep 1
+        done
+      - cd .. && SANDBOX_DOOD_SMOKE=1 go test -tags=integration -count=1 -v -run TestSandboxDooDSmoke ./test/integration/...
+
+  test:e2e:sandbox:dood:smoke:cleanup:
+    internal: true
+    cmds:
+      # Sweep any DooD-smoke-spawned sibling containers that escaped
+      # the test's t.Cleanup (test SIGKILL'd between `docker run -d`
+      # and `docker stop`). Without this, a leaked sibling holds an
+      # endpoint on agentic-net and the subsequent `down -v` errors
+      # with "network has active endpoints".
+      - docker ps -aq --filter label=org.semteams.dood-smoke=1 | xargs -r docker rm -f >/dev/null 2>&1 || true
+      - docker compose -f docker-compose.agentic-e2e.yml --profile sandbox down -v
+
   # === Linting and Formatting ===
 
   lint:
