@@ -23,6 +23,7 @@ func TestApproachKind_IsValid(t *testing.T) {
 		{"unknown", false},
 		{"INPROCESS_UNIT", false}, // case-sensitive
 		{"in-process-unit ", false},
+		{"in_process_unit", false}, // underscore typo, common LLM emission failure mode
 	}
 	for _, c := range cases {
 		t.Run(string(c.k), func(t *testing.T) {
@@ -150,6 +151,54 @@ func TestCommitment_Validate(t *testing.T) {
 				Approach:   ApproachStaticAnalysis,
 				Convention: validConv,
 			},
+		},
+		{
+			name: "happy path — unit ALLOWS runtime (asymmetry: harness forbidden, runtime permitted)",
+			c: Commitment{
+				Target:     "executor returns ToolErrorInvalidArgs for malformed args",
+				Approach:   ApproachInProcessUnit,
+				Runtime:    "go-testing",
+				Convention: validConv,
+			},
+		},
+		{
+			name: "happy path — static-analysis ALLOWS runtime (language-specific linter)",
+			c: Commitment{
+				Target:     "no exported function returns naked errors.New",
+				Approach:   ApproachStaticAnalysis,
+				Runtime:    "go-vet",
+				Convention: validConv,
+			},
+		},
+		{
+			name: "evidence kind PascalCase is rejected",
+			c: Commitment{
+				Target:     "x",
+				Approach:   ApproachInProcessUnit,
+				Convention: validConv,
+				Evidence:   []EvidenceRule{{Kind: "TestFileExists"}},
+			},
+			wantErr: "must match",
+		},
+		{
+			name: "evidence kind with hyphen is rejected",
+			c: Commitment{
+				Target:     "x",
+				Approach:   ApproachInProcessUnit,
+				Convention: validConv,
+				Evidence:   []EvidenceRule{{Kind: "test-file-exists"}},
+			},
+			wantErr: "must match",
+		},
+		{
+			name: "evidence kind starting with digit is rejected",
+			c: Commitment{
+				Target:     "x",
+				Approach:   ApproachInProcessUnit,
+				Convention: validConv,
+				Evidence:   []EvidenceRule{{Kind: "1test_file_exists"}},
+			},
+			wantErr: "must match",
 		},
 		{name: "missing target", c: Commitment{Approach: ApproachInProcessUnit, Convention: validConv}, wantErr: "target required"},
 		{name: "invalid approach", c: Commitment{Target: "x", Approach: "wishful-thinking", Convention: validConv}, wantErr: "not a recognised ApproachKind"},

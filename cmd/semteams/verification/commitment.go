@@ -3,10 +3,20 @@ package verification
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/payloadregistry"
 )
+
+// evidenceKindPattern is the structural shape every EvidenceRule.Kind
+// must match: lowercase ASCII, digits, and underscores; first char must
+// be a letter. Catches typo'd or PascalCase emissions at validate-time
+// rather than fail-closing them at the gate (R3.7.2.h) with a worse
+// error message after a builder cycle has burned. The pattern is
+// deliberately tight — operators authoring new Kind values via the
+// R3.7.2.e registry inherit the same constraint by convention.
+var evidenceKindPattern = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
 
 // Payload type metadata (domain.category.version).
 const (
@@ -26,9 +36,9 @@ type ApproachKind string
 // ApproachKind values.
 const (
 	// ApproachInProcessUnit — tests against in-language fakes/mocks.
-	// No external infrastructure. Cheapest, most. Goodhart-vulnerable
-	// without evidence rules. Harness MUST be empty; runtime MAY be
-	// set (e.g. go-testing for the language target).
+	// No external infrastructure. Cheapest, most common. Goodhart-
+	// vulnerable without evidence rules. Harness MUST be empty;
+	// runtime MAY be set (e.g. go-testing for the language target).
 	ApproachInProcessUnit ApproachKind = "in-process-unit"
 
 	// ApproachProcessLocalTestcontainer — tests boot/tear infra in
@@ -83,6 +93,10 @@ func (k ApproachKind) RequiresHarness() bool {
 // approach needs a language/test-runner pairing. Kept as a separate
 // predicate because static-analysis MAY name a runtime (e.g. for
 // language-specific linters) without needing a harness.
+//
+// TODO(R3.7.2.c): collapse this back into RequiresHarness if
+// static-analysis still doesn't name a runtime by the time the
+// runtime registry ships. Don't survive on inertia.
 func (k ApproachKind) RequiresRuntime() bool {
 	return k.RequiresHarness()
 }
@@ -216,6 +230,10 @@ func (c *Commitment) Validate() error {
 	for i, e := range c.Evidence {
 		if e.Kind == "" {
 			return fmt.Errorf("evidence[%d].kind required", i)
+		}
+		if !evidenceKindPattern.MatchString(e.Kind) {
+			return fmt.Errorf("evidence[%d].kind %q must match %s (lowercase, digits, underscores; first char a letter)",
+				i, e.Kind, evidenceKindPattern.String())
 		}
 	}
 	return nil
