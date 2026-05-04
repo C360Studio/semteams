@@ -436,6 +436,93 @@ will spell out the discovery sequence; bash is the primitive.
 - ADR-033 §addendum 2026-05-04 (R3.7.1 framework-alignment review):
   upstream-survey precedent.
 
+## Addendum 2026-05-04 #2 — Sandbox DinD vs DooD: DooD-first
+
+Resolves Open Question 2 ("Sandbox DinD trust-boundary
+reconciliation") with a phased answer.
+
+### Decision
+
+**Ship DooD (Docker-out-of-Docker) first as `--docker-mode=dood`,
+add DinD (`--docker-mode=dind`) as a follow-on slice when
+multi-tenant deployments materialize. Default mode follows the
+deployment's threat model.**
+
+- `--docker-mode=none` (current state): sandbox has no Docker
+  access. Existing R3.6 builder bash work is unaffected.
+- `--docker-mode=dood` (R3.7.2.d′ first): sandbox mounts host
+  `/var/run/docker.sock`. Tests use Testcontainers libraries which
+  spawn sibling containers on the host's Docker daemon. Cleanup
+  via `--rm` discipline + Testcontainers' Ryuk reaper. Hardening
+  (cap_drop ALL, read_only root, tmpfs) preserved; the socket
+  mount is the ONLY relaxation.
+- `--docker-mode=dind` (R3.7.2.d′-dind follow-on): sandbox runs
+  its own dockerd nested. Requires `--privileged` or sysbox runc.
+  Per-sandbox-instance isolation; multi-tenant-safe. Slower boot
+  (~30s for nested daemon).
+
+Default in compose stack: **dood for dev/smoke; dind in any
+deployment running multiple chains concurrently per sandbox
+service.**
+
+### Why DooD first
+
+1. **Smoke #7 is single-tenant dev work.** OSH-Meshtastic smoke
+   target runs on Coby's laptop / a dev cluster. DooD's weaker
+   isolation isn't a real threat in that context.
+2. **DooD is cheap to ship.** Mount the socket, set the env var,
+   test that Testcontainers boots a known image. ~1-2 days vs
+   3-5 for DinD.
+3. **DinD complexity isn't bleeding-edge but isn't free.** Need
+   privileged containers (or sysbox), nested dockerd lifecycle
+   (boot wait + cleanup), storage management for the nested
+   daemon's containers. Deferred until a real driver requires it.
+4. **The decision is reversible by config.** Both modes coexist;
+   operators choose at deploy time. No wire-format lock-in.
+
+### Trust boundary delta
+
+DooD weakens the sandbox's isolation in one specific way: tests
+running inside the sandbox can spawn arbitrary containers on the
+host's Docker daemon, including privileged ones. For a single-
+tenant dev environment, this is equivalent to running tests
+locally — same trust boundary as `mvn verify` on a developer
+laptop. For a multi-tenant production deployment, this would let
+tenant A spawn containers visible to tenant B, which is
+unacceptable. DinD or sysbox-runc closes that gap.
+
+**Mitigation today**: deployment-level network policies + the
+existing sandbox cap_drop ALL hardening still apply to the
+sandbox process itself. The socket mount only widens what the
+process can do via Docker API; the process's own kernel-level
+capabilities remain dropped.
+
+### Implementation summary for R3.7.2.d′
+
+The slice ships:
+- `SANDBOX_DOCKER_MODE` env var with values `none|dood`
+- Compose stack updates: socket mount + env passthrough,
+  optionally remove `read_only: true` only when mode != none
+- Smoke test from inside sandbox: testcontainers-go boots
+  `nats:2.10-alpine`, opens TCP, asserts subject responds
+- Existing R3.6 bash builder work unaffected (default stays
+  `none` until persona work in R3.7.2.h′ ships testcontainer
+  flow)
+
+DinD support is a separate slice (R3.7.2.d′-dind) that adds:
+- `SANDBOX_DOCKER_MODE=dind` value
+- Sandbox image grows dockerd
+- `privileged: true` (or sysbox-runc runtime selection)
+- dockerd lifecycle in sandbox container entrypoint
+- Storage volume for nested daemon
+
+### Re-renders one open question as resolved
+
+Open Question 2 from the original ADR (DinD vs DooD trust-
+boundary reconciliation): **resolved by addendum.** Answer is
+"both, but DooD first; DinD follows when multi-tenant deployments
+land." The other open questions remain.
+
 ## Revision history
 
 - 2026-05-04 — initial proposal: full pivot to qa-runner pattern
@@ -450,3 +537,6 @@ will spell out the discovery sequence; bash is the primitive.
   - Narrowed verification-runner scope to greenfield browser-flow
     and genuine multi-component e2e; sandbox + Testcontainers
     handles unit/integration via project-native invocation.
+- 2026-05-04 §addendum #2 — DooD-first decision for sandbox
+  Docker mode. DinD follows when multi-tenant deployments
+  materialize. Resolves Open Question 2.

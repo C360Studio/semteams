@@ -61,6 +61,29 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
 
+# Docker CLI (client only — daemon stays on the host).
+# When the sandbox runs with --docker-mode=dood (ADR-034 §addendum #2),
+# the host's /var/run/docker.sock is bind-mounted and chains use this
+# `docker` binary (and Testcontainers libs that shell out to it) to
+# spawn sibling containers on the host's daemon.
+#
+# Static binary from Docker's official mirror keeps the image lean
+# vs. apt-installing docker.io (which pulls daemon + containerd we
+# never run). Pinned to a stable channel; bump on Docker Engine
+# major releases when the wire protocol changes. Both amd64 and arm64
+# tarballs are published from the same path.
+ARG DOCKER_CLI_VERSION=27.5.1
+RUN ARCH=$(dpkg --print-architecture) \
+    && case "$ARCH" in \
+        amd64) DOCKER_ARCH=x86_64 ;; \
+        arm64) DOCKER_ARCH=aarch64 ;; \
+        *) echo "unsupported arch: $ARCH"; exit 1 ;; \
+    esac \
+    && curl -fsSL "https://download.docker.com/linux/static/stable/${DOCKER_ARCH}/docker-${DOCKER_CLI_VERSION}.tgz" -o /tmp/docker.tgz \
+    && tar -xzf /tmp/docker.tgz -C /tmp docker/docker \
+    && install -o root -g root -m 0755 /tmp/docker/docker /usr/local/bin/docker \
+    && rm -rf /tmp/docker /tmp/docker.tgz
+
 # Sandbox user owns /workspace and the cache mount points. Cache dirs
 # are mount targets (compose mounts a shared named volume here r/w);
 # pre-creating + chowning them so a fresh deploy works without manual

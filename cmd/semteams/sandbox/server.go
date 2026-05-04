@@ -39,7 +39,15 @@ type ServerConfig struct {
 	MaxOutputBytes     int
 	DefaultExecTimeout time.Duration
 	MaxExecTimeout     time.Duration
-	Logger             *slog.Logger
+	// DockerMode is the resolved Docker access mode. Defaults to
+	// dockerModeNone when zero-valued. The request-path consults it
+	// when a future harness or tool gate needs to refuse a chain that
+	// requires testcontainer execution under mode=none; today no such
+	// gate exists, but the field is plumbed so adding one doesn't
+	// require widening the constructor surface. Also feeds ops-facing
+	// diagnostics and the future DinD lifecycle hook (R3.7.2.d′-dind).
+	DockerMode dockerMode
+	Logger     *slog.Logger
 }
 
 // Server handles sandbox HTTP API requests.
@@ -50,6 +58,7 @@ type Server struct {
 	maxOutputBytes     int
 	defaultExecTimeout time.Duration
 	maxExecTimeout     time.Duration
+	dockerMode         dockerMode
 	logger             *slog.Logger
 
 	mu          sync.Mutex
@@ -85,6 +94,9 @@ func NewServer(cfg ServerConfig) *Server {
 	if cfg.MaxExecTimeout == 0 {
 		cfg.MaxExecTimeout = 5 * time.Minute
 	}
+	if cfg.DockerMode == "" {
+		cfg.DockerMode = dockerModeNone
+	}
 	return &Server{
 		workspaceRoot:      cfg.WorkspaceRoot,
 		maxFileSize:        cfg.MaxFileSize,
@@ -92,6 +104,7 @@ func NewServer(cfg ServerConfig) *Server {
 		maxOutputBytes:     cfg.MaxOutputBytes,
 		defaultExecTimeout: cfg.DefaultExecTimeout,
 		maxExecTimeout:     cfg.MaxExecTimeout,
+		dockerMode:         cfg.DockerMode,
 		logger:             cfg.Logger,
 		taskMutexes:        make(map[string]*taskMutex),
 		taskMeta:           make(map[string]*workspaceMeta),
