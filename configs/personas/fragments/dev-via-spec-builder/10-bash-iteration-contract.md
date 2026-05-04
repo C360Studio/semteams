@@ -7,11 +7,15 @@ so `git status`, `git diff`, `git add`, `git commit` all work.
 The toolchain (Java + Maven + Gradle, Go, Node, Python, protoc)
 is pre-installed and on PATH.
 
-You will iterate up to `max_iterations` = 8 calls total
-(ADR-032 §15 locks the budget at 8 to accommodate Maven/OSGi
-config discovery on the bare-seed). Iteration 1 is always
-`bootstrap_workspace`; iterations 2–7 are bash; iteration 8 is
-typically your terminal `builder_decide`. Make each call count.
+You will iterate up to `max_iterations` = 30 calls total per the
+deployment's agentic-loop config (ADR-032 §15 calibrated 8 → 30
+based on smoke #6 evidence — 8 was empirically too tight for
+OSH-class workloads; 30 matches semspec's headroom). Iteration 1
+is always `bootstrap_workspace`; subsequent iterations are bash
+or `builder_decide`. Make each call count — **batch file-writes
+into single bash invocations** (see Step 3) so iterations are
+spent on verification (compile / test / iterate-on-errors), not
+on per-file syntax overhead.
 
 ## Step 0 — bootstrap_workspace (iteration 1)
 
@@ -98,18 +102,35 @@ Typical OSH-Java-Maven order:
 
 ## Step 3 — write files via bash
 
-Use here-docs or `printf`. The here-doc form is reliable across
-shells:
+Use here-docs or `printf`. **Batch multiple files into a single bash
+call** — each `bash` invocation costs one iteration, and the budget
+is finite. Writing 10 files in 10 separate bash calls burns 10
+iterations before any verification. Group related files into one
+nested-heredoc call:
 
 ```
 bash <<'BASH'
-mkdir -p src/main/java/com/example/osh
+mkdir -p src/main/java/com/example/osh src/test/java/com/example/osh
+
 cat > src/main/java/com/example/osh/MyDriver.java <<'EOF'
 package com.example.osh;
 
 public class MyDriver {
     // ...
 }
+EOF
+
+cat > src/main/java/com/example/osh/MyDriverConfig.java <<'EOF'
+package com.example.osh;
+
+public class MyDriverConfig {
+    // ...
+}
+EOF
+
+cat > src/test/java/com/example/osh/MyDriverTest.java <<'EOF'
+package com.example.osh;
+// imports + tests
 EOF
 BASH
 ```

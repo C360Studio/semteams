@@ -165,7 +165,7 @@ provenance in the Rationale column is recommended.
 | 12 | **Approval gate on bash/write_file** | **No, auto-fire** (mirror both sibling repos). | Path confinement (#16) + egress allow-list (#13) + deny-list residual (#23) cover the safety story structurally. Per-call approval would gate every iteration; unworkable for a 5–8 retry loop. |
 | 13 | **Network policy** | **Egress allow-list day-one + full request logging.** Allow: Maven Central (`repo1.maven.org`, `repo.maven.apache.org`), GOPROXY (`proxy.golang.org`, `sum.golang.org`), npm (`registry.npmjs.org`), GitHub (`github.com`, `api.github.com`, `raw.githubusercontent.com`, `objects.githubusercontent.com`), configured SemSource host. | Open day-one is cheaper to ship but expensive to retrofit. With OSH-Java-Maven locked, the LLM hits Maven Central on iteration 1 — we want every fetch logged from the start so we can see dep drift across runs and tighten if needed. Mechanism (Docker network policy or per-container iptables) is the load-bearing piece; policy is config. |
 | 14 | **Per-workspace disk quota** | **10 GB hard cap via tmpfs `size=` per workspace.** | Cheap to land day-one. Maven dependency download + build artifacts could fill an unbounded volume in one runaway loop. |
-| 15 | **Builder terminal contract** | **`decide(action, ...)` with action ∈ {tests_passing, tests_failing, needs_clarification}** and required evidence fields. `max_iterations` cap **8** (bumped from initial 3 default — bare seed means more iteration on Maven/OSGi config). | Validator rejects terminal payloads missing required fields:<br>• `tests_passing`: `tests_run` (must be >0), `tests_passed`, `tests_failed`, `artifact_summary`<br>• `tests_failing`: `tests_run`, `tests_failed`, `failure_summary`, `retry_hint`<br>• `needs_clarification`: `reason`, `blocking_question` — slot baked in for R3.5 rule landing additively.<br>Closes the "exit 0 with no tests" loophole; pre-bakes R3.5. |
+| 15 | **Builder terminal contract** | **`decide(action, ...)` with action ∈ {tests_passing, tests_failing, needs_clarification}** and required evidence fields. `max_iterations` cap **30** (recalibrated from initial 8 per the §addendum 2026-05-03 R3.6.2.f smoke; ceiling 50 matching semspec). 8 was empirically too low by ~4× — even at 15 the builder force-failed before reaching `mvn`. Per-rule override of max_iterations isn't supported in beta.39's `rule.Action`; bump applies at the agentic-loop component-level config. | Validator rejects terminal payloads missing required fields:<br>• `tests_passing`: `tests_run` (must be >0), `tests_passed`, `tests_failed`, `artifact_summary`<br>• `tests_failing`: `tests_run`, `tests_failed`, `failure_summary`, `retry_hint`<br>• `needs_clarification`: `reason`, `blocking_question` — slot baked in for R3.5 rule landing additively.<br>Closes the "exit 0 with no tests" loophole; pre-bakes R3.5. |
 | 16 | **Path confinement (safety boundary)** | **Structural at API boundary, day-one.** `write_file` accepts only workspace-relative paths after `filepath.Clean` + prefix check; rejects absolute paths and `..` traversal. `bash` exec runs with `chdir` set to workspace and rejects `..` in args. | Stronger than pattern-match deny-list. ~20 lines of validation closes the bulk of the safety story. Residual deny-list (e.g., `rm -rf` patterns hitting workspace-internal paths) deferred to R3.6.3 — see Open #23. |
 | 17 | **Target choice** | **OSH-Java-Maven, bare seed.** | Toolchain-in-sandbox is the responsibility line: product provides Java/Maven/OSGi/protoc tooling pre-installed; LLM produces every artifact (pom.xml, OSGi bundle metadata, abstract base class wiring, surefire harness, sensor adapter logic) from the spec. Pre-built scaffolding seeds rejected as demo-gaming — the early-adopter comparison ("agents wrote a real OSH driver, not a hello-world") only holds if the agents wrote the boilerplate too. |
 | 18 | **Shared cache volume** | **Named Docker volume mounted r/w across all workspaces** at `~/.m2`, `$GOPATH/pkg/mod`, `~/.npm`. Caches treated as immutable-by-convention; nuke the volume if poisoned. | Without this, every workspace's first `mvn install` re-downloads the world (60–120s). With OSH-Java-Maven + bare seed locked, this is the load-bearing iteration-speed lever. Verify semdragon's pattern matches before locking exact mount paths. |
@@ -892,6 +892,157 @@ cost: estimated **$2–3**. Acceptable for a calibration smoke.
 R3.6 is functionally complete with the budget caveat captured.
 Closeout follow-up: budget bump + persona batching + smoke #6 re-run
 to confirm `tests_passing` terminal.
+
+## Addendum 2026-05-03 — R3.6.2.g closeout: smoke #6 re-run, tests_passing confirmed
+
+R3.6.2.g applied the calibration recommendations from R3.6.2.f and
+re-ran smoke #6 against real LLM. **The chain converged to
+`builder_decide(tests_passing)` with 18/18 unit tests green.** R3.6
+fully closed.
+
+### Calibration applied
+
+- `configs/osh-demo.json`: `agentic-loop.max_iterations` 15 → **30**;
+  `agentic-loop.timeout` 300s → **1200s** (and `consumer.ack_wait`
+  matched). The timeout bump was a lesson from a first re-run attempt
+  that hit the 300s wall during `add_source_repo` approval delay
+  (paid LLM is fast, but the human-in-the-loop approval gate makes
+  per-loop wall-clock unpredictable; 1200s gives operators headroom).
+- `configs/personas/fragments/dev-via-spec-builder/10-bash-iteration-contract.md`:
+  iteration budget callout updated 8 → 30; Step 3 example rewritten
+  to demonstrate **multi-file heredoc batching** in a single bash
+  call (one `mkdir` + N `cat > path << 'EOF' … EOF` blocks). Each
+  bash invocation costs one iteration; batching trades a long heredoc
+  for many separate calls.
+- ADR §15 (Decided table): `max_iterations` cap recalibrated 8 → 30
+  with rationale + ceiling 50 matching semspec; explicit note that
+  beta.39's `rule.Action` doesn't expose per-rule
+  `max_iterations` override (bump applies at agentic-loop component).
+
+### Smoke #6 re-run convergence
+
+11 loops in ~12 minutes wall-clock (same chain shape as R3.6.2.f
+but converging cleanly):
+
+| # | Time | Role | State / outcome |
+|---|---|---|---|
+| 1 | 21:56:23 | researcher (dispatch) | http_request + web_search + emit rev=1 |
+| 2 | 21:58:22 | research-reviewer | `insufficient` (corpus gap) |
+| 3 | 21:58:50 | researcher-with-source-acquisition | add_source_repo (auto-approved) + emit rev=2 |
+| 4 | 22:01:21 | research-reviewer | `approved` (no stabilisation pass) |
+| 5 | 22:01:46 | dev-via-spec-planner | `planned` |
+| 6 | 22:02:24 | dev-via-spec-reviewer | `insufficient` (rule 02) |
+| 7 | 22:02:56 | dev-via-spec-planner (retry) | `planned` |
+| 8 | 22:03:29 | dev-via-spec-reviewer | `approved` (rule 03) |
+| 9 | 22:03:57 | dev-via-spec-challenger | `accept` (rule 05) |
+| 10 | 22:04:23 | dev-via-spec-architect | emit_dev_via_spec_artifact + decide |
+| 11 | 22:04:49 | **dev-via-spec-builder** | **builder_decide(tests_passing) at iter 9 of 30** |
+
+### Builder's actual trajectory (iter 1–9)
+
+```
+22:04:51 bootstrap_workspace
+22:04:53 bash cat SPEC.md
+22:05:02 bash mkdir + write source files (batch 1)
+22:06:05 bash write more source files (batch 2)
+22:06:52 bash write test files (batch)
+22:06:55 bash mvn -B -ntp compile         ← BUILD SUCCESS
+22:07:15 bash mvn -B -ntp test            ← Tests run: 18, Failures: 0
+22:07:27 bash cat target/surefire-reports/*.txt
+22:07:37 builder_decide(tests_passing, tests_run=18, tests_passed=18)
+```
+
+**Persona batching cut iteration drain by ~75%.** R3.6.2.f burned
+13 bash calls writing one file per call before failing at iter 15
+without reaching `mvn`. R3.6.2.g wrote everything in 3 batched bash
+calls and reached `mvn test` at iter 7. Net: 9 iterations to a
+compiling, fully-tested driver.
+
+### What the builder produced
+
+`builder_decide` payload:
+
+```json
+{
+  "action": "tests_passing",
+  "reason": "MeshtasticSensorModule (OSH AbstractSensorModule subclass)
+             implements all 5 SRs — plugin manifest (SR1),
+             MeshtasticTransport serial/TCP connect/reconnect loop (SR2),
+             module lifecycle init/start/stop orchestration (SR3),
+             IProcessChain protobuf-to-O&M DataBlock wiring + SensorML
+             schema registration (SR4), and CS API publish-path
+             smoke/integration test (SR5); surefire reports 18/18
+             tests passing across 4 test classes.",
+  "tests_run": 18,
+  "tests_passed": 18,
+  "tests_failed": 0,
+  "artifact_summary": "Maven JAR osh-meshtastic-driver-1.0.0.jar; 11
+                      main-source files (MeshtasticSensorModule,
+                      MeshtasticTransport, MeshPacketProcessChain,
+                      IProcessChain, AbstractSensorModule,
+                      MeshtasticConfig, MeshPacket, DataBlock,
+                      DataComponent, PacketListener, TransportException)
+                      + META-INF/osh-module.properties; 4 JUnit 5 test
+                      classes covering SR1–SR5 integration points."
+}
+```
+
+11 production-source files + manifest + 4 test classes (18 tests
+total: MeshPacketTest 1, MeshPacketProcessChainTest 4,
+MeshtasticTransportTest 6, MeshtasticSensorModuleTest 7). All
+passing on first build. The test/impl null-handling mismatch from
+R3.6.2.f didn't recur — the LLM produced more careful contract
+matching this run.
+
+### Drift signals captured (R3.6.2.g additions to R3.6.2.f's list)
+
+1. **Per-loop timeout × approval-gate latency** (from the failed
+   first re-run attempt). 300s timeout fires while researcher is
+   blocked waiting for human approval of `add_source_repo`. Bumped
+   to 1200s; for production, a coordinator-as-source-approver
+   pattern (see #4 below) is the right structural fix.
+2. **Researcher LLM called wrong tools** — the dispatch researcher
+   in this run made 1 `bootstrap_workspace` call and 1 `bash` call
+   despite those being builder-only tools. `agentic-tools.allowed_tools`
+   is global (all tools available to all roles); the persona is
+   what tells the role what it should/shouldn't use. Real LLMs
+   sometimes pick from the global set anyway. Calls failed
+   silently (bootstrap_workspace got no spec_path; bash got an
+   echo) and the chain recovered. Consider per-role
+   `allowed_tools` enforcement at the framework level (or simply
+   drop builder-only tools from the global allowed_tools and rely
+   on rule-level tool injection per role).
+3. **add_source_repo namespace mismatch on first attempt**. LLM
+   first called with `namespace=default` which isn't in the
+   per-deployment allowlist (`SEMTEAMS_SEMSOURCE_NAMESPACES=research`).
+   Tool rejected without surfacing the allowlist hint. LLM
+   self-corrected on retry with `namespace=research`. Consider
+   surfacing the allowed-namespace list in the tool's error
+   response so the LLM doesn't waste an iteration discovering it.
+4. **Coordinator-as-source-approver** (Coby's framing during the
+   monitoring session). In a fully autonomous deployment, the
+   coordinator role should hold the approval policy for
+   `add_source_repo` (and other gated tools). Coordinator inspects
+   URL host, namespace, prior corpus state, and the originating
+   prompt's intent; approves or rejects with a documented reason.
+   Replaces the current "human in the loop" pattern AND replaces
+   ad-hoc bash auto-approvers used for smokes. Future ADR-027
+   Phase 2 extension or a focused R3.7 slice. Logged for follow-up.
+
+### What remains in R3.6 scope
+
+Nothing. R3.6 is closed. R3.6.2.b (validator) + .c (persona) +
+.d (rule + bootstrap) + .e (mock fixture) + .f (smoke + calibration
+findings) + .g (calibration applied + smoke confirmed) — all
+shipped. Drift signals 2–4 above are out-of-scope for R3.6 and
+become independent slices.
+
+### Cost
+
+~$2–3 for ~12 minutes of real-LLM activity at claude-sonnet/low
+effort. 11 loops × ~10K tokens average. Same as R3.6.2.f. Persona
+batching had no cost impact (same total LLM work, fewer round-trips
+on the builder side).
 
 ## References
 
