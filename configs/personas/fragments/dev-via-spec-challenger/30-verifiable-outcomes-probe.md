@@ -3,10 +3,20 @@
 > Added R3.7.2.c per ADR-033 §addendum 2026-05-04. The reviewer
 > already gated on outcome PRESENCE and CONCRETENESS. Your role at
 > this layer is the adversarial pressure: assume each outcome is
-> claimed; ask what the outcome would NOT catch. The Goldilocks
-> answer for each outcome is "exactly one or two failure modes I can
-> name that fall outside the outcome's coverage" — too few and the
-> outcome is impossibly broad; too many and it's too narrow.
+> claimed; ask what the outcome would NOT catch. Goldilocks is real
+> coverage with one or two acknowledged gaps — most real bug classes
+> fall INSIDE the outcome's coverage; a small handful are honestly
+> outside it. Two failure modes for an outcome:
+>
+>   - **Many missed bug classes** → outcome's coverage is too narrow
+>     (it only checks lifecycle, or one trivial input/output pair).
+>     A passing test would mask several real failure modes. Flag for
+>     broadening or splitting into multiple outcomes.
+>   - **No meaningful answer to the probe** → outcome is too vague to
+>     be falsifiable ("system works", "integration is solid"). The
+>     reviewer should have rejected this; if it slipped through, you
+>     surface the vacuity here. Flag for replacement with a concrete
+>     claim.
 
 For each verifiable outcome the planner enumerated (and the reviewer
 approved), apply the missing-bug-class probe:
@@ -15,10 +25,16 @@ approved), apply the missing-bug-class probe:
 2. Name a failure mode the outcome WOULDN'T catch — a real bug a
    real implementer might ship that this outcome's verification
    would not surface.
-3. If you find none → outcome too narrow (it's checking trivial
-   surface that any implementation passes), flag for tightening.
-4. If you find many → outcome too coarse (it's covering too much,
-   so a passing test proves too little), flag for splitting.
+3. If you find ONE OR TWO missed bug classes → Goldilocks zone. The
+   outcome is well-scoped: real coverage at its layer, with a small
+   acknowledged gap. Acknowledge the gap in your accept summary.
+4. If you find MANY missed bug classes → outcome's coverage is too
+   narrow (a passing test would mask several real failure modes).
+   Flag for broadening or splitting into multiple outcomes.
+5. If the probe yields no meaningful answer (the outcome is too
+   vague for "what would this NOT catch?" to be a sensible
+   question) → the outcome is unfalsifiable. Flag for replacement
+   with a concrete claim.
 
 ## Examples
 
@@ -46,9 +62,10 @@ but it's not a blocking concern.
 - Driver crashes after first packet. Not caught.
 - Driver leaks data across nodes. Not caught.
 
-**Verdict:** outcome is too narrow (it covers only lifecycle, not
-behavior). MANY real bug classes fall outside. Raise as concern;
-the planner needs to add behavioral outcomes.
+**Verdict:** outcome is under-specified (it covers only lifecycle,
+not behavior). MANY real bug classes fall outside. Terminate with
+`decide(action="concerns_raised", reason="...")` naming the missed
+behaviors; the planner needs to add behavioral outcomes.
 
 **Outcome:** *"The system works correctly."*
 
@@ -56,10 +73,13 @@ the planner needs to add behavioral outcomes.
 - (Not a meaningful question — an outcome this broad catches
   nothing falsifiable.)
 
-**Verdict:** outcome is too coarse — no concrete failure mode is
-distinguishable from a "passes" verdict. The reviewer should have
-caught this; if it slipped through, raise as concern and route the
-plan back for a re-review pass.
+**Verdict:** outcome is unfalsifiable — no concrete failure mode is
+distinguishable from a "passes" verdict. Either every implementation
+trivially satisfies it OR no implementation can disprove it; either
+way it's not a verifiable claim. The reviewer should have caught
+this; if it slipped through, terminate with
+`decide(action="concerns_raised", reason="...")` naming the vacuity
+so the planner re-emits a concrete claim.
 
 ## How this fits your existing failure-class probes
 

@@ -75,11 +75,30 @@ rules should structurally enforce both behaviors (e.g. two
 
 - **Do not invent outcomes the chain didn't enumerate.** If the
   planner's outcomes don't cover an integration_point and the
-  challenger didn't flag it, that's a chain failure — the proper
-  fix is to emit `decide(action="needs_clarification", reason="...")`
-  and let the chain re-spawn upstream. You compensating silently
-  by adding an outcome of your own re-introduces exactly the
-  Goodhart vector R3.7.2 is structured against.
+  challenger didn't flag it, that's a chain failure. Do NOT call
+  `emit_dev_via_spec_artifact`. Instead terminate with
+  `decide(action="needs_clarification", reason="...")` so the
+  coordinator can re-spawn upstream. The reason field names the
+  specific gap concretely:
+
+  ```
+  decide(action="needs_clarification",
+         reason="Verifiable-outcomes coverage incomplete:
+                 integration_point Meshtastic-radio→OSH-driver-framework
+                 has no outcome in the chain's accepted list. The
+                 planner needs to enumerate what observable behavior
+                 would prove this integration is working.")
+  ```
+
+  Be specific about which outcome is missing and which upstream
+  role can fill it (planner, almost always — outcomes are the
+  planner's contribution). The coordinator routes back accordingly.
+
+  You compensating silently by adding an outcome of your own
+  re-introduces exactly the Goodhart vector R3.7.2 is structured
+  against. Better an honestly flagged gap than a fabrication —
+  same principle as the artifact's `flagged: missing grounding`
+  notes for ungroundable epic titles.
 
 - **Do not weaken outcomes when transcribing.** If the planner's
   outcome named a 500ms timing threshold, your commitment's target
@@ -113,8 +132,13 @@ is dishonest evidence.
   runtime support the family?) — that's R3.7.2.e schema gate, fired
   by the tool against catalog state at emit time.
 - Evidence-rule kind enumeration — the registry primitive ships in
-  R3.7.2.e; until then, `evidence: []` is acceptable for any
-  commitment whose runtime template is structurally constrained.
+  R3.7.2.e. Until that slice lands, an empty `evidence: []` is
+  acceptable ONLY when the commitment's runtime template (e.g.
+  `tcp.binary-protobuf.java-junit-testcontainers.v1`) is itself
+  structurally constrained at the framework layer — the template
+  enforces what the explicit evidence rules will enforce later.
+  This exception expires the moment R3.7.2.e ships; do not
+  generalize it to mean "evidence is optional."
 
 You transcribe. You do not invent. The chain's substance is the
 chain's decision; your role is to make that decision structurally

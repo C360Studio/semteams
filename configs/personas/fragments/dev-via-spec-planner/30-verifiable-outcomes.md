@@ -72,7 +72,8 @@ form below is the cheapest shape that downstream agents can read:
 
 - E1 — <outcome>
 - E2 — <outcome>
-- E2 — <second outcome covering the second boundary, if applicable>
+- E2 — <second outcome on E2 covering an additional boundary, if applicable>
+- E3 — <outcome>
 - ...
 ```
 
