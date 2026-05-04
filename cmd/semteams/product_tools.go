@@ -13,6 +13,7 @@ import (
 	"github.com/c360studio/semstreams/types"
 
 	"github.com/c360studio/semteams/cmd/semteams/devviaspec"
+	"github.com/c360studio/semteams/cmd/semteams/harness"
 	"github.com/c360studio/semteams/cmd/semteams/research"
 	"github.com/c360studio/semteams/cmd/semteams/tools/addsource"
 	"github.com/c360studio/semteams/cmd/semteams/tools/bootstrapworkspace"
@@ -93,14 +94,14 @@ func registerProductPayloads(reg *payloadregistry.Registry) error {
 // port don't fork; if it's planned but not shipped (e.g. upstream's
 // write_artifact suite per ADR-028 §What's not built here), document
 // the migration target in tools/README.md and an ADR addendum.
-func registerProductTools(reg *agentictools.ExecutorRegistry, natsClient *natsclient.Client, platform types.PlatformMeta, logger *slog.Logger) error {
+func registerProductTools(reg *agentictools.ExecutorRegistry, natsClient *natsclient.Client, platform types.PlatformMeta, harnessMgr *harness.Manager, logger *slog.Logger) error {
 	if err := registerAddSource(reg, natsClient, logger); err != nil {
 		return err
 	}
 	if err := registerEmitArtifact(reg, natsClient, platform, logger); err != nil {
 		return err
 	}
-	if err := registerEmitSpecArtifact(reg, natsClient, platform, logger); err != nil {
+	if err := registerEmitSpecArtifact(reg, natsClient, platform, harnessMgr, logger); err != nil {
 		return err
 	}
 	if err := registerBuilderDecide(reg, natsClient, platform, logger); err != nil {
@@ -169,15 +170,29 @@ func registerEmitArtifact(reg *agentictools.ExecutorRegistry, natsClient *natscl
 // registerEmitArtifact: the tool is product policy, and any deployment running
 // the dev-via-spec flow needs it to close the arc. Output directory defaults
 // to "docs/specs" but is overrideable via SEMTEAMS_DEVVIASPEC_ARTIFACT_DIR.
-func registerEmitSpecArtifact(reg *agentictools.ExecutorRegistry, natsClient *natsclient.Client, platform types.PlatformMeta, logger *slog.Logger) error {
+//
+// harnessMgr resolves catalog names (the architect's commitment.harness
+// field) into concrete entries the renderer projects into SPEC.md
+// (R3.7.2.h′). Without resolution the builder can't reach the catalog
+// from inside its sandbox; rendered fields close that gap. nil harnessMgr
+// is permitted (rare deployments without harness wiring) — the renderer
+// falls back to rendering the harness name without resolved fields.
+func registerEmitSpecArtifact(reg *agentictools.ExecutorRegistry, natsClient *natsclient.Client, platform types.PlatformMeta, harnessMgr *harness.Manager, logger *slog.Logger) error {
 	if natsClient == nil {
 		logger.Warn("nats client unavailable; emit_dev_via_spec_artifact registration skipped")
 		return nil
 	}
 	triplePublisher := agentictools.NewNATSTriplePublisher(natsClient)
+	// Adapt the harness manager's Get signature to the executor's
+	// HarnessResolver function type. nil manager → nil resolver →
+	// renderer falls back to name-only rendering.
+	var resolver emitspecartifact.HarnessResolver
+	if harnessMgr != nil {
+		resolver = harnessMgr.Get
+	}
 	// Pass empty outputDir so the constructor reads SEMTEAMS_DEVVIASPEC_ARTIFACT_DIR
 	// or falls back to the package default ("docs/specs").
-	executor := emitspecartifact.NewExecutor(triplePublisher, natsClient, platform, logger, "")
+	executor := emitspecartifact.NewExecutor(triplePublisher, natsClient, platform, logger, "", resolver)
 	if err := reg.RegisterTool(emitspecartifact.ToolName, executor); err != nil {
 		return fmt.Errorf("register %s: %w", emitspecartifact.ToolName, err)
 	}
