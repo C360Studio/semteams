@@ -19,6 +19,7 @@ import (
 	"github.com/c360studio/semteams/cmd/semteams/tools/builderdecide"
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitartifact"
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitspecartifact"
+	"github.com/c360studio/semteams/cmd/semteams/verification"
 )
 
 // Environment variables that configure product-shell-local tools.
@@ -55,6 +56,10 @@ const (
 // R3.6.2.b (ADR-032 §15): no payload — builder_decide tool emits triples
 // only; full args round-trip through the tool result Content for
 // read_loop_result consumers.
+// R3.7.2.a (ADR-033 §addendum 2026-05-04): verification.Commitment —
+// architect's structured commitment to a verification surface (target /
+// approach / harness / runtime / convention / evidence). Wired into
+// dev_via_spec.artifact.v2 in R3.7.2.b.
 // Add new product-local payload registrations here; keep the ADR reference
 // in the comment so future readers know which slice introduced each type.
 func registerProductPayloads(reg *payloadregistry.Registry) error {
@@ -63,6 +68,9 @@ func registerProductPayloads(reg *payloadregistry.Registry) error {
 	}
 	if err := devviaspec.RegisterPayloads(reg); err != nil {
 		return fmt.Errorf("dev-via-spec payloads: %w", err)
+	}
+	if err := verification.RegisterPayloads(reg); err != nil {
+		return fmt.Errorf("verification payloads: %w", err)
 	}
 	return nil
 }
