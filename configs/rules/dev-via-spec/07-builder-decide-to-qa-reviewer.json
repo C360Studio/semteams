@@ -1,0 +1,43 @@
+{
+  "id": "dev_via_spec_builder_decide_to_qa_reviewer",
+  "type": "expression",
+  "name": "Dev-via-spec Builder → QA-Reviewer Handoff",
+  "description": "When the dev-via-spec-builder terminates with builder_decide(action=tests_passing|tests_failing), this rule spawns the dev-via-spec-qa-reviewer (R3.7.2.j′ persona) to grade the build deliverable against the architect's commitments. R3.7.2.k′ of ADR-034. needs_clarification from the builder is intentionally NOT a trigger here — that's a chain-coverage gap the operator (today) or R3.5 coordinator-as-meta-reviewer (future) handles, not a build to review.",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "agent.loop.role",
+      "operator": "eq",
+      "value": "dev-via-spec-builder",
+      "required": true
+    },
+    {
+      "field": "coordinator.next_action",
+      "operator": "in",
+      "value": ["tests_passing", "tests_failing"],
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "publish_agent",
+      "subject": "agent.task.dev-via-spec-qa-reviewer",
+      "role": "dev-via-spec-qa-reviewer",
+      "model": "general",
+      "tools": ["read_loop_result", "decide"],
+      "properties": {
+        "prior_loop_id": "$entity.instance"
+      },
+      "prompt": "The dev-via-spec-builder has terminated with builder_decide. Builder loop id: $entity.instance. Verdict: $entity.triple.coordinator.next_action. Reason: $entity.triple.coordinator.decision_reason.\n\nIteration 1 — call read_loop_result on $entity.instance to inspect the builder's structured terminal (action, tests_run, tests_passed, tests_failed, artifact_summary OR failure_summary + retry_hint).\n\nEvidence summary (from the architect's verification_commitments[] graded against the builder's workspace):\n\n```\n(stub for R3.7.2.k′ — the evidence-rule registry exists in cmd/semteams/evidence/ as of R3.7.2.i′, and evidence.Summarize is the renderer, but the integration plumbing that runs the gate at builder-terminal time and substitutes the rendered output here is deferred. See project memory project_smoke7_open_plumbing.md §2 for the two viable shapes and the lean choice. Until that plumbing lands, treat the evidence summary as Empty Evidence per your 10-evaluation-contract.md Rule 3 — needs_clarification is the persona-correct verdict because the builder cannot fix this by retrying; the architect chain needs the gate plumbing to land.)\n```\n\nIteration 2 — emit decide(action=accept|reject|needs_clarification, reason=<concrete>, blocking_question=<if needs_clarification>) per your 10-evaluation-contract.md three-rule grading. Until the evidence plumbing lands, the persona-correct path is decide(action=needs_clarification, reason=\"evidence summary not yet wired (R3.7.2.k′ stub)\", blocking_question=\"<which integration shape lands next: rule action / tool / preprocessor>\")."
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "phase": "R3.7.2.k′",
+    "adr": "docs/adr/034-qa-runner-pattern-adoption.md",
+    "pattern": "post-build review spawn — fires on the builder's tests_passing/tests_failing terminal and routes to the qa-reviewer persona (R3.7.2.j′). needs_clarification from the builder bypasses this rule by design (chain-coverage gap, not a buildable artifact).",
+    "evidence_summary_plumbing": "The evidence_summary block in the spawn prompt is a literal stub for R3.7.2.k′ — sufficient to prove the chain shape end-to-end on mock-LLM. Real rendering (rule action, tool, or pre-publish preprocessor) lands in a follow-on slice. project_smoke7_open_plumbing.md §2 records the lean choice (rule action — gate is structural infra, not LLM-facing decision-making).",
+    "next_action_filter": "tests_passing OR tests_failing only. needs_clarification from the builder is the persona-canonical boot-failure terminal (10-bash-iteration-contract.md Step 0); routing it back through qa-reviewer would mis-categorise wiring failure as build failure. R3.5 coordinator-as-meta-reviewer (ADR-031 §addendum 2026-05-02) is the right home for needs_clarification routing once it ships."
+  }
+}

@@ -1,6 +1,15 @@
 import { test, expect } from "@playwright/test";
 
 /**
+ * Note (R3.7.2.k′): the e2e config this spec runs against now also
+ * loads configs/rules/dev-via-spec/07-builder-decide-to-qa-reviewer.json,
+ * which fires only on `coordinator.next_action in [tests_passing,
+ * tests_failing]`. This fixture's builder ends with
+ * `needs_clarification`, which is intentionally NOT in that trigger
+ * set, so rule 07 stays inert here and the eleven-loop count is
+ * preserved. The qa-reviewer hop is exercised by the sibling spec
+ * `dev-via-spec-qa.spec.ts` against `dev-via-spec-qa.yaml`.
+ *
  * Journey: Dev-via-Spec (R3.3 + R3.4b + R3.6.2 of ADR-031/ADR-032)
  *
  * Builds on R3.2.2's research-mode-transition: the same six-loop
