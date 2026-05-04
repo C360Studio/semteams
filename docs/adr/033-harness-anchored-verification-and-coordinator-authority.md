@@ -293,7 +293,141 @@ common case (an upstream image exists). For novel domains the
 chain still works but takes longer and may need real hardware as
 a ground-truth oracle.
 
-### How the four combine on the OSH-Meshtastic demo
+### 5. Dependency management between arcs — sequential, gated, re-spawn
+
+The dev-via-spec arc and harness-via-spec arc have a **hard
+dependency**: dev-via-spec cannot run smoke contracts against a
+harness that doesn't exist yet. v1 manages this with the simplest
+shape that's correct, even at the cost of extra wall-clock time.
+
+#### Organic discovery in research, not catalog lookup
+
+The research artifact gains a `verification_strategy` field. The
+researcher's job grows from *"name actors and integrations"* to
+*"name actors, integrations, AND for each integration boundary
+the verification harness it requires."*
+
+```json
+"verification_strategy": {
+  "required_harnesses": [
+    {
+      "boundary_id": "meshtastic-radio→osh-driver",
+      "name": "meshtasticd-3.x",
+      "status": "available" | "needs_to_be_built" | "needs_hardware",
+      "rationale": "Meshtastic protocol verification requires a
+                    real-protocol SITL or daemon. The official
+                    upstream image meshtastic/meshtasticd:3.x
+                    runs the same protobuf surface as hardware.",
+      "upstream_source": "meshtastic/meshtasticd:3.x",
+      "catalog_match": null   // or harness name if status=available
+    }
+  ]
+}
+```
+
+This is **organic discovery**, not mechanical lookup. The
+researcher consults the catalog (already done in §1) but ALSO
+reasons about each integration boundary: *what does it take to
+verify real behaviour across this boundary?* If the catalog has
+nothing matching, the researcher names what *would* match, and
+why. If the verification fundamentally requires hardware (e.g.,
+RF physics, custom PCB), the researcher emits
+`status="needs_hardware"` — the chain cannot synthesize hardware
+and the coordinator escalates to operator.
+
+The reviewer gates on **honesty**: every named integration
+boundary must have a verification entry, and each entry's
+rationale must be specific (not "we'll figure it out later").
+The challenger probes the OPPOSITE: are any of the named
+harnesses overkill for the integration boundary they cover? A
+prompt that needs a Meshtastic SITL probably doesn't ALSO need a
+full LoRa-physics simulator.
+
+#### Sequential, gated execution
+
+When the dev-via-spec research arc completes with a
+`verification_strategy` containing one or more
+`needs_to_be_built` entries, the dev arc **terminates cleanly**
+with `decide(action="needs_harness", reason="...",
+required_harnesses=[...])`. No further dev-via-spec work
+happens.
+
+The coordinator picks up the terminal:
+
+1. **Catalog match check** — if all entries are now `available`
+   (catalog could have been updated mid-run), proceed to dev-via-
+   spec re-spawn (skip step 2).
+2. **Authorisation check** — for each `needs_to_be_built` entry,
+   consult `coordinator_authority.escalate_to_harness_via_spec`
+   AND `coordinator_authority.author_harness.allowed_publishers`
+   for the named upstream source. If any check fails, escalate
+   to operator with structured rationale; stop.
+3. **Sequential harness builds** — for each authorised entry,
+   spawn a harness-via-spec arc. Wait for completion AND catalog
+   promotion (per `coordinator_authority.author_harness.
+   auto_promote_if`) before starting the next.
+4. **Re-spawn dev-via-spec** — once all required harnesses are in
+   the catalog, the coordinator re-issues the user's original
+   prompt as a fresh dev-via-spec arc. The new arc's research
+   pass finds all harnesses available; the chain proceeds to
+   completion.
+
+**No parallelism in v1.** Each harness-via-spec arc runs to
+completion before the next starts. The dev-via-spec re-spawn
+waits for all harnesses to land. Total wall-clock cost is
+sum-of-arcs, not max. We accept that cost.
+
+**No resume-from-pause.** When dev-via-spec terminates with
+`needs_harness`, the arc IS DONE. We do not park its state and
+resume later. The new dev-via-spec arc that runs after harness
+build is a fresh chain instance with its own loop IDs, its own
+research, its own audit trail. The cost is one duplicated
+research arc; the benefit is statelessness — every coordinator
+decision is independent and replayable.
+
+#### Why sequential + re-spawn is right for v1
+
+Three reasons, all decided up-front:
+
+1. **Right > fast.** Parallelism is a coordination problem with
+   partial-failure modes (one arc fails, others succeed; how do
+   we resume?). Sequential has one failure mode: the slow path
+   fails, the slow path is retried. We deal with one bug at a
+   time.
+2. **Audit-clean.** Each arc has its own loop IDs, own typed
+   payloads, own decisions. No cross-arc state. Operator review
+   is "did this arc do what it should have, given its inputs?" —
+   not "what was the global system state when this decision was
+   made?"
+3. **Re-spawnability is a property we want anyway.** If a
+   harness build fails partway, the operator should be able to
+   fix it and re-run the dev-via-spec arc by re-issuing the
+   prompt. If we'd built dev-via-spec to resume from pause, we'd
+   have made the failure-recovery path *more* complex, not less.
+
+#### What v2 might add (not now)
+
+- **Pipelining**: dev-via-spec research could run in parallel
+  with harness build, since research doesn't need the harness
+  yet. Saves the duplicated research cost on re-spawn. Adds
+  "wait state" complexity to dev-via-spec. Defer until research
+  cost is observed to matter.
+- **Parallel harness builds**: when multiple `needs_to_be_built`
+  entries are independent, build them concurrently. Adds
+  failure-mode complexity. Defer until prompt classes naturally
+  produce multi-harness deps.
+- **Coordinator-led upfront orchestration**: coordinator does
+  prompt analysis BEFORE spawning any arc, identifies the full
+  dependency graph, then schedules. More elegant; requires
+  coordinator to be smarter about prompts than v1's coordinator
+  is. Defer until coordinator has more decision classes wired.
+
+v1's shape is deliberately the simplest correct one. The OSH-
+Meshtastic showcase uses sequential re-spawn; the audit trail is
+linear and easy to follow. If wall-clock becomes the constraint
+on adoption, parallelism follows the data, not theory.
+
+### How the five combine on the OSH-Meshtastic demo
 
 **Catalog-hit path** (deployment already has `meshtasticd-3.x`):
 
@@ -365,11 +499,17 @@ User prompt: "Build OSH driver for Meshtastic..."
                 (upstream image on allowlist + assertions ≥ minimum)
                 → promote to catalog
               - else → route to operator approval
-======= back to dev-via-spec arc =======
+              (each blocking; sequential not parallel — see §5)
+======= coordinator re-spawns dev-via-spec =======
      ↓
-[dev-via-spec] resumes from the original prompt; researcher now
-               finds meshtasticd-3.x in the catalog (just promoted);
-               chain proceeds as in catalog-hit path
+[coordinator] re-issues the user's original prompt as a fresh
+              dev-via-spec arc. New loop IDs, new audit trail. Old
+              arc remains terminated (no resume).
+     ↓
+[dev-via-spec] researcher now finds meshtasticd-3.x in the catalog
+               (just promoted); verification_strategy entries all
+               status="available"; chain proceeds as in catalog-hit
+               path.
      ↓
 DONE — operator gets:
   - a working OSH-Meshtastic driver
