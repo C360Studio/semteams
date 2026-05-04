@@ -12,6 +12,7 @@ import (
 type CLIConfig struct {
 	ConfigPath           string
 	PersonaFragmentsPath string
+	HarnessCatalogPath   string
 	LogLevel             string
 	LogFormat            string
 	Debug                bool
@@ -38,6 +39,10 @@ func parseFlags() *CLIConfig {
 	flag.StringVar(&cfg.PersonaFragmentsPath, "persona-fragments",
 		getEnv("SEMSTREAMS_PERSONA_FRAGMENTS_PATH", "configs/personas/fragments"),
 		"Directory tree of per-role persona fragment files (env: SEMSTREAMS_PERSONA_FRAGMENTS_PATH). Missing dir is a warning, not fatal.")
+
+	flag.StringVar(&cfg.HarnessCatalogPath, "harness-catalog",
+		getEnv("SEMTEAMS_HARNESS_CATALOG_PATH", "configs/harnesses.json"),
+		"Path to operator-curated harness catalog (env: SEMTEAMS_HARNESS_CATALOG_PATH). Missing file is not an error — catalog stays empty. See ADR-033.")
 
 	flag.StringVar(&cfg.LogLevel, "log-level",
 		getEnv("SEMSTREAMS_LOG_LEVEL", "info"),

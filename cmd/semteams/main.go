@@ -32,6 +32,7 @@ import (
 	rulepkg "github.com/c360studio/semstreams/processor/rule"
 	"github.com/c360studio/semstreams/service"
 	"github.com/c360studio/semstreams/types"
+	"github.com/c360studio/semteams/cmd/semteams/harness"
 )
 
 // Build information constants
@@ -141,14 +142,14 @@ func run() error {
 		return fmt.Errorf("register product payloads: %w", err)
 	}
 
-	// 9b. Populate the PERSONAS KV bucket from disk so per-role prompt
-	// fragments are available to agentic-loop's prompt.Registry. The
-	// agentic-loop component creates its own persona.Manager against the
-	// same KV bucket — this step just seeds the bucket at startup. The
-	// returned manager is also threaded into the tool registry below so
-	// Pattern-B persona CRUD tools (read/update/list) can work against
-	// the same bucket.
-	personaMgr := loadPersonaFragments(ctx, natsClient, cliCfg.PersonaFragmentsPath)
+	// 9b. Load operator-curated platform assets (harness catalog +
+	// persona fragments). Harness catalog (ADR-033 R3.7.1) is built
+	// BEFORE personas so R3.7.1.c can render harness content as a
+	// researcher persona fragment before persona.LoadFromDirectory
+	// runs. Persona fragments populate PERSONAS KV bucket so
+	// agentic-loop's prompt.Registry sees them; the returned manager
+	// also feeds the tool registry below for Pattern-B persona CRUD.
+	personaMgr, _ := loadPlatformAssets(ctx, natsClient, cliCfg, slog.Default())
 
 	// 9c. Build the shared tool registry and register first-party tool
 	// executors. Per beta.16: agentic-tools registry is constructor-
@@ -304,6 +305,44 @@ func buildFlowTemplateManager(natsClient *natsclient.Client, logger *slog.Logger
 			"error", err)
 		return nil
 	}
+	return mgr
+}
+
+// loadPlatformAssets builds the harness catalog (operator-curated
+// test-harness registry; ADR-033 R3.7.1) and seeds the PERSONAS KV
+// bucket from on-disk fragment files. Harness load runs FIRST so
+// follow-on slices (R3.7.1.c) can render harness content as a
+// researcher persona fragment before persona.LoadFromDirectory
+// scans the fragments directory.
+func loadPlatformAssets(ctx context.Context, natsClient *natsclient.Client, cliCfg *CLIConfig, logger *slog.Logger) (*persona.Manager, *harness.Manager) {
+	harnessMgr := buildHarnessManager(ctx, natsClient, cliCfg.HarnessCatalogPath, logger)
+	personaMgr := loadPersonaFragments(ctx, natsClient, cliCfg.PersonaFragmentsPath)
+	return personaMgr, harnessMgr
+}
+
+// buildHarnessManager constructs the SemTeams harness catalog manager
+// (R3.7.1, ADR-033) and seeds it from the operator-curated JSON file.
+// Returns nil if the KV bucket cannot be opened — the chain still
+// boots; `needs_harness` paths report that no catalog is available.
+// A missing catalog file is NOT an error: deployments that don't use
+// harnesses simply have an empty catalog.
+func buildHarnessManager(ctx context.Context, natsClient *natsclient.Client, catalogPath string, logger *slog.Logger) *harness.Manager {
+	mgr, err := harness.NewManager(natsClient)
+	if err != nil {
+		logger.Warn("harness catalog disabled: could not initialise HARNESSES KV bucket",
+			"error", err)
+		return nil
+	}
+	n, err := mgr.LoadFromFile(ctx, catalogPath)
+	if err != nil {
+		logger.Warn("harness catalog file load failed; catalog left in current state",
+			"path", catalogPath,
+			"error", err)
+		return mgr
+	}
+	logger.Info("harness catalog loaded",
+		"path", catalogPath,
+		"entries_loaded", n)
 	return mgr
 }
 
