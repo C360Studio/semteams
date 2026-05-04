@@ -427,7 +427,117 @@ Meshtastic showcase uses sequential re-spawn; the audit trail is
 linear and easy to follow. If wall-clock becomes the constraint
 on adoption, parallelism follows the data, not theory.
 
-### How the five combine on the OSH-Meshtastic demo
+### 6. Intent stability and inter-arc escalation
+
+The chain shape above (research arc finds harness gap → coordinator
+escalates to harness-via-spec → coordinator re-spawns dev-via-spec)
+preserves a critical invariant: **the user's intent is stable for
+the duration of a chain.** The coordinator's escalation handles
+*tactical sub-dependencies* within the user's intent; it does not
+change the intent.
+
+This invariant is load-bearing. Without it, a researcher persona
+could decide unilaterally to start writing code, a planner could
+escalate to ops, and the audit trail would just say *"the LLM
+decided to switch."* That's the BMAD-style "agent figures everything
+out" trap. We don't want it.
+
+#### Where intent is classified
+
+Intent classification is **a coordinator function**, not a
+dispatch-processor function. The upstream
+`agentic-dispatch.enable_intent_classification` flag is a legacy
+fast-path that bypasses the actual decision-maker; it remains
+available for deployments that want a cheap shortcut, but
+el-jefe deployments leave it off (as semspec and semteams already
+do today). Classification belongs to the role that owns reasoning,
+audit, policy, and escalation — that's coordinator.
+
+The coordinator-authority block extends naturally:
+
+```json
+{
+  "coordinator_authority": {
+    "classify_intent": {
+      "enabled": true,
+      "supported_intents": ["research", "dev", "ops", "onboarding"],
+      "ambiguity_action": "ask_user"
+        // or "default_to_research" / "reject"
+    },
+    // ... approve_add_source_repo, author_harness, etc.
+  }
+}
+```
+
+Slash commands (`/research`, `/build`, `/onboard`) bypass the
+classifier — they're rule-routed deterministically, since the
+intent is unambiguous (per
+`feedback_rules_cant_classify_chat.md`). Free-form prose hits the
+coordinator's classifier, which emits a typed
+`intent.classification.v1` payload on the graph, and a rule fires
+on the classification to spawn the appropriate downstream flow.
+Same audit-able pattern as every other coordinator decision.
+
+#### What roles within an arc may NOT do
+
+A role inside an arc emits a terminal payload. **No role may
+change the user's intent.** Specifically:
+
+- A `dev-via-spec-architect` who realises mid-chain that the work
+  is actually purely research **terminates with `decide(action=
+  needs_clarification, ...)`** — does NOT escalate to a research
+  arc. Coordinator decides.
+- A `researcher` who realises the prompt requires building
+  something **terminates with the research artifact + a
+  `dev_implication` field** — does NOT spawn a dev arc.
+  Coordinator decides (and per default config, this means
+  returning the research result to the user; the user re-prompts
+  with dev intent if they want it built).
+- An `ops-analyst` who finds a bug **emits `emit_diagnosis(...)`**
+  — does NOT spawn a dev arc. Coordinator decides per
+  `coordinator_authority.escalate_diagnosis_to_dev` config (which
+  defaults to `enabled: false`).
+
+The pattern: **roles emit terminal payloads; coordinator decides
+what comes next.** Within-arc tactical recursion (dev → harness-
+via-spec → dev) is fine because the user's intent is preserved.
+Inter-intent escalation (research → dev, diagnosis → dev) is a
+COORDINATOR decision gated by config, not a role's decision.
+
+#### Inter-intent escalation policy
+
+Same primitive as the harness escalation. Operator decides
+pre-runtime which inter-intent escalations the coordinator may
+authorise; coordinator decides per-prompt within those bounds:
+
+| Escalation | Default | Operator can extend to |
+|---|---|---|
+| `research → dev` | Disabled (research artifact returned to user) | Coordinator escalates if config permits, with optional `require_user_confirmation` |
+| `diagnosis → dev` | Disabled | Same shape; high-stakes, default off |
+| `onboarding → research` | Disabled | Could enable for "auto-explore my org's stack" workflows |
+
+Each escalation produces a typed payload (e.g.,
+`intent.escalation.v1`) capturing: source intent, target intent,
+reason, the source artifact that motivated escalation, the policy
+rule that authorised it. Audit-trail-complete.
+
+#### Why this matters more than it looks
+
+Without this invariant explicitly stated, a careless persona
+update could make a researcher persona that "helpfully" starts
+writing code when it sees a gap. That's a slippery slope into
+BMAD-shape "the LLM does whatever seems right." The invariant is
+a structural promise: **what the user asked for is what gets
+done; if more is needed, the coordinator says so explicitly,
+and the operator's policy bounded that decision pre-runtime.**
+
+That promise is exactly what makes the platform pitch defensible:
+"audit + policy + bounded autonomy" requires that intent be
+tracked first-class through the chain. ADR-033 makes intent a
+typed payload, not a derivable property of whichever role last
+spoke.
+
+### How the six combine on the OSH-Meshtastic demo
 
 **Catalog-hit path** (deployment already has `meshtasticd-3.x`):
 
@@ -652,20 +762,32 @@ deliver the showcase demo.
   passes integration smoke against the operator-curated
   `meshtasticd-3.x` harness.
 
-### R3.7.3 — Coordinator-as-decision-authority (config + first wiring)
+### R3.7.3 — Coordinator-as-decision-authority (config + first wirings)
 
 - `coordinator_authority` config block in deployment configs.
-- Coordinator persona gains decision-class fragments
-  (`approve_add_source_repo`, `resolve_needs_clarification`,
-  `resolve_needs_harness` shell — the latter is "consult catalog;
-  if no match and no escalation enabled, escalate to operator").
-- Wire the first decision: `approve_add_source_repo` per per-
-  deployment URL/namespace allowlist. Replaces the current human-
-  only approval gate when configured; falls back to human
-  otherwise.
-- e2e fixture: prompt that triggers `add_source_repo`;
-  coordinator approves per config; chain resumes without human
-  intervention.
+- Coordinator persona gains decision-class fragments:
+  - `05-intent-classification.md` — runs on free-form
+    `user.message` prose; emits `intent.classification.v1`
+    typed payload; rule routes downstream flow per
+    classification. Per §6, this **replaces** the legacy
+    `agentic-dispatch.enable_intent_classification` for
+    el-jefe deployments.
+  - `10-approve-add-source-repo.md` — per per-deployment
+    URL/namespace allowlist; replaces human-only approval
+    when configured.
+  - `20-resolve-needs-clarification.md` — shell for the R3.5
+    routing pattern.
+  - `30-resolve-needs-harness.md` — shell that consults
+    catalog; if no match + no escalation enabled, returns to
+    operator with rationale. Full escalation lands in R3.7.4
+    once `harness-via-spec` exists.
+- Slash-command rules continue to route deterministically;
+  classifier only fires on prose.
+- e2e fixture: TWO scenarios — (a) prose prompt → coordinator
+  classifies → routes to dev-via-spec; (b) prose prompt that
+  triggers `add_source_repo` → coordinator approves per config →
+  chain resumes without human intervention. Both verify
+  classification + approval via typed-payload audit trail.
 
 ### R3.7.4 — `harness-via-spec` arc
 
