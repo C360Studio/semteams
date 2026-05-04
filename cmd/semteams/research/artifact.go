@@ -90,7 +90,9 @@ type Mutation struct {
 // researcher-pass snapshot. Revisions are monotonic from 1; the
 // mutation log is monotonic and append-only across revisions.
 //
-// Schema: research.artifact.v1.
+// Schema: research.artifact.v1. The `harness` field (added R3.7.1.b
+// per ADR-033) is omitempty so existing v1 consumers are unaffected;
+// this is an additive widening, not a schema bump.
 type Artifact struct {
 	LoopID             string             `json:"loop_id"`
 	Revision           int                `json:"revision"`
@@ -100,7 +102,18 @@ type Artifact struct {
 	AddressedGaps      []string           `json:"addressed_gaps,omitempty"`
 	OpenGaps           []string           `json:"open_gaps,omitempty"`
 	SubstrateMutations []Mutation         `json:"substrate_mutations,omitempty"`
-	ProducedAt         time.Time          `json:"produced_at"`
+	// Harness names a `configs/harnesses.json` entry the researcher
+	// has selected as the verification target for the work this
+	// artifact describes. Empty when the researcher could not find a
+	// matching catalog entry; the researcher then flags the gap with
+	// a `needs_harness: <description>` line in OpenGaps. The reviewer
+	// (research-reviewer persona) gates on either Harness != "" or
+	// the needs_harness gap being explicitly stated — this struct
+	// does NOT enforce that semantic invariant; reviewer-as-
+	// enumerator does (consistent with other artifact fields whose
+	// presence rules are persona-side, not Validate-side).
+	Harness    string    `json:"harness,omitempty"`
+	ProducedAt time.Time `json:"produced_at"`
 }
 
 // Schema implements message.Payload.
