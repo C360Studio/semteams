@@ -37,6 +37,28 @@ func TestHarnessValidate(t *testing.T) {
 				DomainDescription:   "stub for testing",
 			},
 		},
+		{
+			name: "empty exposes struct (Exposes{TCP:nil}) is valid",
+			h: Harness{
+				Name:                "stub",
+				ComposeProfile:      "harness-stub",
+				Image:               "scratch",
+				SmokeContractSchema: "stub.smoke_contract.v1",
+				DomainDescription:   "stub for testing",
+				Exposes:             Exposes{TCP: nil},
+			},
+		},
+		{
+			name: "explicit empty TCP slice (Exposes{TCP:[]}) is valid",
+			h: Harness{
+				Name:                "stub",
+				ComposeProfile:      "harness-stub",
+				Image:               "scratch",
+				SmokeContractSchema: "stub.smoke_contract.v1",
+				DomainDescription:   "stub for testing",
+				Exposes:             Exposes{TCP: []PortExpose{}},
+			},
+		},
 		{name: "missing name", h: Harness{ComposeProfile: "p", Image: "i", SmokeContractSchema: "s", DomainDescription: "d"}, wantErr: "name required"},
 		{name: "missing compose_profile", h: Harness{Name: "n", Image: "i", SmokeContractSchema: "s", DomainDescription: "d"}, wantErr: "compose_profile required"},
 		{name: "missing image", h: Harness{Name: "n", ComposeProfile: "p", SmokeContractSchema: "s", DomainDescription: "d"}, wantErr: "image required"},

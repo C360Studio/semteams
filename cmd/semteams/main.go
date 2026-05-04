@@ -147,9 +147,11 @@ func run() error {
 	// BEFORE personas so R3.7.1.c can render harness content as a
 	// researcher persona fragment before persona.LoadFromDirectory
 	// runs. Persona fragments populate PERSONAS KV bucket so
-	// agentic-loop's prompt.Registry sees them; the returned manager
+	// agentic-loop's prompt.Registry sees them; the persona manager
 	// also feeds the tool registry below for Pattern-B persona CRUD.
-	personaMgr, _ := loadPlatformAssets(ctx, natsClient, cliCfg, slog.Default())
+	// The harness manager will be returned and threaded into HTTP /
+	// persona-render wiring in R3.7.1.{c,f}.
+	personaMgr := loadPlatformAssets(ctx, natsClient, cliCfg, slog.Default())
 
 	// 9c. Build the shared tool registry and register first-party tool
 	// executors. Per beta.16: agentic-tools registry is constructor-
@@ -314,10 +316,16 @@ func buildFlowTemplateManager(natsClient *natsclient.Client, logger *slog.Logger
 // follow-on slices (R3.7.1.c) can render harness content as a
 // researcher persona fragment before persona.LoadFromDirectory
 // scans the fragments directory.
-func loadPlatformAssets(ctx context.Context, natsClient *natsclient.Client, cliCfg *CLIConfig, logger *slog.Logger) (*persona.Manager, *harness.Manager) {
-	harnessMgr := buildHarnessManager(ctx, natsClient, cliCfg.HarnessCatalogPath, logger)
-	personaMgr := loadPersonaFragments(ctx, natsClient, cliCfg.PersonaFragmentsPath)
-	return personaMgr, harnessMgr
+//
+// Returns only the persona manager in this slice; the harness
+// manager has no consumer yet — R3.7.1.{c,f} will widen the return
+// shape when persona-render and HTTP wiring need it. The harness
+// manager itself remains live (KV-backed) so its boot-time side
+// effects (load configs/harnesses.json into the HARNESSES bucket)
+// take effect.
+func loadPlatformAssets(ctx context.Context, natsClient *natsclient.Client, cliCfg *CLIConfig, logger *slog.Logger) *persona.Manager {
+	_ = buildHarnessManager(ctx, natsClient, cliCfg.HarnessCatalogPath, logger)
+	return loadPersonaFragments(ctx, natsClient, cliCfg.PersonaFragmentsPath)
 }
 
 // buildHarnessManager constructs the SemTeams harness catalog manager

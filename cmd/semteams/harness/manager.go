@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"sort"
 
@@ -18,10 +19,10 @@ const bucketName = "HARNESSES"
 
 // Manager provides read access to the harness catalog backed by a
 // NATS KV bucket. Writes happen via LoadFromFile (operator-curated
-// path) and Put (forward-compat for R3.7.4 candidate promotion);
-// CRUD exposure stays minimal in v1 — no public Update / Delete
-// because nothing in this slice authors catalog entries from agent
-// loops.
+// path) and Put (forward-compat for R3.7.4 candidate promotion).
+// CRUD surface stays minimal in v1: no separate Update / Delete —
+// Put upserts (KV last-writer-wins) and operators editing the
+// catalog file followed by a reload is the supported edit path.
 type Manager struct {
 	kv *natsclient.KVStore
 }
@@ -60,7 +61,10 @@ func (m *Manager) Get(ctx context.Context, name string) (*Harness, error) {
 }
 
 // List returns every harness sorted by name. The catalog is small
-// (typically <20 entries per deployment) — no pagination.
+// (typically <20 entries per deployment) — no pagination. A
+// corrupt entry (unmarshal failure) is logged at WARN and skipped
+// rather than aborting the whole list — the operator's other
+// harnesses stay usable while they fix the bad one.
 func (m *Manager) List(ctx context.Context) ([]*Harness, error) {
 	keys, err := m.kv.Keys(ctx)
 	if err != nil {
@@ -71,6 +75,9 @@ func (m *Manager) List(ctx context.Context) ([]*Harness, error) {
 	for _, k := range keys {
 		h, err := m.Get(ctx, k)
 		if err != nil {
+			slog.Warn("harness catalog: skipping unreadable entry",
+				"key", k,
+				"error", err)
 			continue
 		}
 		out = append(out, h)
@@ -102,8 +109,16 @@ func (m *Manager) Put(ctx context.Context, h *Harness) error {
 // it, and writes each entry into the KV bucket. Existing KV entries
 // not present in the file are NOT removed in this slice — operators
 // can use semstreams admin tooling, or `Delete` lands when R3.7.4
-// promotion churns the catalog. Returns the number of entries
-// loaded.
+// promotion churns the catalog.
+//
+// Returns the number of entries SUCCESSFULLY written. ParseFile
+// validates the entire document up-front (well-formedness,
+// per-entry validate, duplicate names) so by the time the Put loop
+// runs the only realistic failure is a transient KV error. On such
+// a failure the bucket is left partially populated with the first N
+// entries; the count returned is N (not 0). The caller can choose
+// whether to retry or surface the error; the partial state remains
+// readable via Get / List.
 //
 // A missing file is NOT an error: the catalog starts empty and
 // operators add the file when they curate their first harness. This
@@ -123,7 +138,7 @@ func (m *Manager) LoadFromFile(ctx context.Context, path string) (int, error) {
 	}
 	for i := range entries {
 		if err := m.Put(ctx, &entries[i]); err != nil {
-			return 0, fmt.Errorf("load entry %d (%q): %w", i, entries[i].Name, err)
+			return i, fmt.Errorf("load entry %d (%q): %w", i, entries[i].Name, err)
 		}
 	}
 	return len(entries), nil
