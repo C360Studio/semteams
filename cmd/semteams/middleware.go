@@ -1,11 +1,13 @@
 package main
 
 import (
+	"log/slog"
 	"net/http"
 	"strings"
 
 	agenticdispatch "github.com/c360studio/semstreams/processor/agentic-dispatch"
 	"github.com/c360studio/semstreams/service"
+	"github.com/c360studio/semteams/cmd/semteams/harness"
 )
 
 // xUserIDHeader is the product-shell convention for naming the
@@ -71,19 +73,30 @@ func sanitiseIdentity(raw string) string {
 // every framework HTTP route. Outermost-first per service.HTTPMiddleware
 // contract: index 0 sees the request first.
 //
-// Today the chain is just the identity lift. When extending:
+// Order:
+//
+//  1. xUserIDIdentityMiddleware — lift X-User-Id into ctx so downstream
+//     handlers see the caller. Runs first so identity is bound before
+//     any product handler that wants to log it.
+//  2. harness HTTP middleware — intercepts /harnesses* GETs and serves
+//     the operator/UI catalog read API. Pass-through for all other
+//     paths. Nil-safe: a deployment without a harness manager (boot-
+//     time KV failure) skips the intercept transparently.
+//
+// When extending:
 //
 //   - To add panic recovery: prepend (index 0) so panics in any later
 //     middleware are caught.
 //   - To add request logging that observes the resolved identity:
-//     append (after xUserIDIdentityMiddleware) so ctx already carries
+//     append after xUserIDIdentityMiddleware so ctx already carries
 //     the identity by the time logging runs.
 //   - To add real auth (OAuth/JWT/mTLS): prepend the authenticator
 //     and have it overwrite the X-User-Id header (or call
 //     agenticdispatch.WithIdentity directly). xUserIDIdentityMiddleware
 //     trusts whatever header reaches it.
-func productMiddleware() []service.HTTPMiddleware {
+func productMiddleware(harnessMgr *harness.Manager, logger *slog.Logger) []service.HTTPMiddleware {
 	return []service.HTTPMiddleware{
 		xUserIDIdentityMiddleware,
+		harness.HTTPMiddleware(harnessMgr, logger),
 	}
 }

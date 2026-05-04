@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -116,7 +117,7 @@ func TestXUserIDIdentityMiddleware_RejectsControlChars(t *testing.T) {
 // it is deferred to Playwright.
 func TestMainWiringSmoke(_ *testing.T) {
 	m := service.NewServiceManager(service.NewServiceRegistry())
-	m.UseHTTPMiddleware(productMiddleware()...)
+	m.UseHTTPMiddleware(productMiddleware(nil, slog.Default())...)
 	// No assertion: compile-time success is the contract. If
 	// productMiddleware() drifts to an incompatible element type, this
 	// test fails to build.
@@ -126,11 +127,12 @@ func TestMainWiringSmoke(_ *testing.T) {
 // future additions don't reshuffle the identity middleware's slot
 // without an explicit decision.
 func TestProductMiddleware_OrderedOutermostFirst(t *testing.T) {
-	chain := productMiddleware()
-	if len(chain) != 1 {
-		t.Fatalf("chain length = %d, want 1 (only identity middleware today)", len(chain))
+	chain := productMiddleware(nil, slog.Default())
+	if len(chain) != 2 {
+		t.Fatalf("chain length = %d, want 2 (identity + harness)", len(chain))
 	}
-	// Identity check via behaviour: the single entry must lift the header.
+	// Identity check via behaviour: the FIRST entry must lift the header
+	// so downstream middleware (and handlers) see the resolved identity.
 	var observed string
 	inner := http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		observed = agenticdispatch.IdentityFromRequest(r, "")
@@ -142,4 +144,7 @@ func TestProductMiddleware_OrderedOutermostFirst(t *testing.T) {
 	if observed != "carol" {
 		t.Fatalf("chain[0] is not the identity middleware: observed = %q", observed)
 	}
+	// Harness middleware is index 1 — pass-through when manager is nil
+	// (verified by the chain accepting a nil manager without panicking
+	// during the identity probe above).
 }

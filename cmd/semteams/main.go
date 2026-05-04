@@ -149,8 +149,8 @@ func run() error {
 	// file load runs next; the rendered list is upserted into the
 	// PERSONAS bucket last. Both managers are returned — persona
 	// feeds the tool registry below for Pattern-B persona CRUD,
-	// harness feeds the HTTP endpoint in R3.7.1.f.
-	personaMgr, _ := loadPlatformAssets(ctx, natsClient, cliCfg, slog.Default())
+	// harness feeds the /harnesses HTTP middleware (R3.7.1.f).
+	personaMgr, harnessMgr := loadPlatformAssets(ctx, natsClient, cliCfg, slog.Default())
 
 	// 9c. Build the shared tool registry and register first-party tool
 	// executors. Per beta.16: agentic-tools registry is constructor-
@@ -213,7 +213,7 @@ func run() error {
 	// runWithSignalHandling works. Moving it after StartAll silently
 	// drops the chain — the framework logs a warning, but the binary
 	// boots green and X-User-Id is ignored.
-	manager.UseHTTPMiddleware(productMiddleware()...)
+	manager.UseHTTPMiddleware(productMiddleware(harnessMgr, slog.Default())...)
 
 	// 13. Run application with signal handling
 	return runWithSignalHandling(ctx, manager, cliCfg.ShutdownTimeout)
