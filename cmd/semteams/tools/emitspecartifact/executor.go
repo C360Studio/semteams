@@ -194,10 +194,13 @@ func (e *Executor) ListTools() []agentic.ToolDefinition {
 	// statement of WHAT is verified, AGAINST WHAT, and with WHAT
 	// EVIDENCE. Each commitment fills a verification surface (unit /
 	// testcontainer / sidecar / browser-flow / static-analysis) and
-	// names a harness from configs/harnesses.json when applicable. The
-	// architect persona contract requiring at least one real-stack
-	// commitment for external-actor work lands in R3.7.2.f; for now
-	// the field is optional at the wire level.
+	// names a harness from configs/harnesses.json when applicable.
+	// The architect persona contract (R3.7.2.f′,
+	// configs/personas/fragments/dev-via-spec-architect/30-commitment-
+	// contract.md) requires at least one commitment for any artifact
+	// whose integration_points[] names an external actor. The field
+	// stays optional at the wire level so v1 consumers see no schema
+	// drift; the dvs-reviewer (R3.7.2.j′) enforces coverage adequacy.
 	conventionRefSchema := map[string]any{
 		"type": "object",
 		"properties": map[string]any{
@@ -240,7 +243,7 @@ func (e *Executor) ListTools() []agentic.ToolDefinition {
 				"actors":                   map[string]any{"type": "array", "items": actorSchema, "description": "Systems, frameworks, or services this work touches."},
 				"integration_points":       map[string]any{"type": "array", "items": integrationPointSchema, "description": "Actor-to-actor data flows with direction."},
 				"seed_requirements":        map[string]any{"type": "array", "items": seedRequirementSchema, "description": "Decomposable-grain requirements, each grounded in at least one actor."},
-				"verification_commitments": map[string]any{"type": "array", "items": commitmentSchema, "description": "Structured commitments to verification surfaces. Each commitment names target / approach / harness / runtime / convention / evidence. Multi-layer is normal — typically a unit-level commitment for in-language behaviour PLUS a real-stack commitment (testcontainer/sidecar/browser-flow) for external integration. The architect-persona contract requiring at least one real-stack commitment for external-actor work lands in R3.7.2.f; for now the field is optional but the reviewer may flag artifacts that omit it for external integration_points."},
+				"verification_commitments": map[string]any{"type": "array", "items": commitmentSchema, "description": "Structured commitments to verification surfaces. Each commitment names target / approach / harness / runtime / convention / evidence. Multi-layer is normal — typically a unit-level commitment for in-language behaviour PLUS a real-stack commitment (testcontainer/sidecar/browser-flow) for external integration. Architect persona contract (R3.7.2.f′, see 30-commitment-contract.md): REQUIRED when integration_points[] names any external actor; optional at the wire level so v1 consumers see no schema drift. The dvs-reviewer (R3.7.2.j′) enforces coverage adequacy and rejects artifacts with external integration_points but empty verification_commitments[]."},
 				"provenance":               provenanceSchema,
 			},
 			"required": []string{"title", "goal", "context", "actors", "seed_requirements", "provenance"},
