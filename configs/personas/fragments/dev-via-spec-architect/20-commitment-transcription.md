@@ -1,11 +1,11 @@
 # Commitment transcription
 
-> Added R3.7.2.c per ADR-033 §addendum 2026-05-04. The full
-> commitment-emission contract (architect must emit at least one
-> real-stack commitment for external-actor work) lands in R3.7.2.f.
-> THIS fragment is the upstream-discipline anchor: when you DO emit
-> commitments, you transcribe from the planner's verifiable
-> outcomes — you do not invent.
+> Added R3.7.2.c per ADR-033 §addendum 2026-05-04. THIS fragment is
+> the upstream-discipline anchor: when you emit commitments, you
+> transcribe from the planner's verifiable outcomes — you do not
+> invent. The structural contract (when commitments are required,
+> how to pick `approach`, brownfield vs greenfield convention)
+> lives in `30-commitment-contract.md` (R3.7.2.f′).
 
 The planner's `decide.reason` enumerated **Verifiable Outcomes**.
 The dvs-reviewer enforced their presence and concreteness. The
@@ -127,17 +127,17 @@ is dishonest evidence.
 ## What this fragment does NOT cover
 
 - The structural REQUIREMENT to emit at least one commitment for
-  external-actor work (lands in R3.7.2.f's contract update).
+  external-actor work — see `30-commitment-contract.md`.
 - Catalog-bound validation (does the named harness exist? does the
-  runtime support the family?) — that's R3.7.2.e schema gate, fired
-  by the tool against catalog state at emit time.
+  runtime support the family?) — that's the schema gate (R3.7.2.h′),
+  fired against catalog state at emit time.
 - Evidence-rule kind enumeration — the registry primitive ships in
-  R3.7.2.e. Until that slice lands, an empty `evidence: []` is
+  R3.7.2.i′. Until that slice lands, an empty `evidence: []` is
   acceptable ONLY when the commitment's runtime template (e.g.
   `tcp.binary-protobuf.java-junit-testcontainers.v1`) is itself
   structurally constrained at the framework layer — the template
   enforces what the explicit evidence rules will enforce later.
-  This exception expires the moment R3.7.2.e ships; do not
+  This exception expires the moment R3.7.2.i′ ships; do not
   generalize it to mean "evidence is optional."
 
 You transcribe. You do not invent. The chain's substance is the

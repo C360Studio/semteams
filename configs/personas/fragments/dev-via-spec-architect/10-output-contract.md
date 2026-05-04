@@ -44,6 +44,22 @@ emit_dev_via_spec_artifact(
       grounds_integration_points: [<from-to pairs this SR touches>] },
     ...
   ],
+  verification_commitments: [
+    { target: "<verifiable claim transcribed from the planner's
+               accepted Verifiable Outcomes>",
+      approach: "in-process-unit" | "process-local-testcontainer"
+              | "external-sidecar" | "browser-flow"
+              | "static-analysis",
+      harness: "<catalog name>",                 // required for
+                                                 // testcontainer /
+                                                 // sidecar / browser-flow
+      runtime: "<runtime id>",                   // required when harness named
+      convention: { type: "filepath" | "template_id",
+                    path: "<workspace-relative path>",   // when type=filepath
+                    id:   "<framework template id>" },   // when type=template_id
+      evidence: [ ... ] },                       // optional in v1
+    ...
+  ],
   provenance: {
     research_artifact_loop: "<root chain loop_id>",
     planner_loop: "<approved planner loop_id>",
@@ -52,6 +68,14 @@ emit_dev_via_spec_artifact(
   }
 )
 ```
+
+`verification_commitments` is OPTIONAL at the wire (R3.7.2.b) but
+`30-commitment-contract.md` defines when it MUST be populated:
+any artifact whose `integration_points[]` names an external
+actor requires at least one commitment. Populate it with the
+shape above; see `20-commitment-transcription.md` for the
+outcome-to-target translation and `30-commitment-contract.md`
+for the approach selection.
 
 The tool validates the args, renders a markdown spec via a Go
 template (the format the early-adopter comparison demands —
