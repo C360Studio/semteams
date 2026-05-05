@@ -26,6 +26,7 @@
       "role": "research-reviewer",
       "model": "general",
       "tools": ["read_loop_result", "decide"],
+      "action_allowlist": ["approved", "insufficient"],
       "properties": {
         "researcher_loop_id": "$entity.instance"
       },

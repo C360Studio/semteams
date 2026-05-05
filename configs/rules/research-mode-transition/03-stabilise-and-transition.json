@@ -26,6 +26,7 @@
       "role": "dev-via-spec-planner",
       "model": "general",
       "tools": ["read_loop_result", "decide"],
+      "action_allowlist": ["planned"],
       "properties": {
         "research_reviewer_loop_id": "$entity.instance"
       },

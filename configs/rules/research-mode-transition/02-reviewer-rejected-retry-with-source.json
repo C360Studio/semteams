@@ -27,6 +27,7 @@
       "role": "researcher-with-source-acquisition",
       "model": "general",
       "tools": ["read_loop_result", "query_entity", "query_entities", "add_source_repo", "emit_research_artifact"],
+      "max_iterations": 3,
       "properties": {
         "reviewer_loop_id": "$entity.instance",
         "retry": true
