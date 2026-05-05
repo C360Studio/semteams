@@ -63,7 +63,7 @@
         },
         "bind": "0.0.0.0",
         "port": 14550,
-        "buffer_size": 65536
+        "max_entries": 65536
       }
     },
     "json_filter": {

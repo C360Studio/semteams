@@ -70,7 +70,7 @@
       "name": "message-logger",
       "enabled": true,
       "config": {
-        "buffer_size": 10000,
+        "max_entries": 10000,
         "monitor_subjects": [
           "agent.>",
           "tool.>",
