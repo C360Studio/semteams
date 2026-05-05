@@ -89,6 +89,12 @@ fail loud with remediation guidance.
 
 Evidence lands in `/tmp/smoke7-<timestamp>/` (or `/tmp/$RUN_ID/`):
 
+- `wedge-report.txt` — chain-shape diagnosis: per-loop terminal
+  action table, final-role match against
+  `WEDGE_EXPECTED_TERMINAL_ROLE` (default
+  `dev-via-spec-qa-reviewer`), tool-issue tally. **Read this
+  first** — it tells you whether the chain reached the
+  expected terminal or wedged mid-flight, and at which loop.
 - `watcher-trajectory.jsonl` + `watcher-events.log` — the
   auto-approve watcher's per-poll snapshot + role-transition log
   (relocated into the capture dir at exit).
@@ -98,6 +104,17 @@ Evidence lands in `/tmp/smoke7-<timestamp>/` (or `/tmp/$RUN_ID/`):
 - `messages.json` — message-logger entries (subject + payload).
 - `triples.json` — graph triples snapshot (where
   `coordinator.decision_reason` and friends live).
+- `tool-issues.log` — backend slog ERROR-level tool failures
+  scanned at capture time. Empty file is clean.
+
+To regenerate `wedge-report.txt` post-hoc against an existing
+capture dir (no stack required):
+
+```bash
+RUN_ID=smoke7-run1 task ui:test:e2e:agentic:smoke7:wedge-report
+WEDGE_EXPECTED_TERMINAL_ROLE=dev-via-spec-architect RUN_ID=... \
+  task ui:test:e2e:agentic:smoke7:wedge-report   # for partial-chain expectations
+```
 
 Cleanup is deferred so an abort still tears the stack down.
 The watcher is hard-capped at 30 minutes (~2× the upper-bound

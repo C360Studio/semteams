@@ -736,12 +736,16 @@ tasks:
       - timeout 1800 task test:e2e:agentic:probe:auto-approve-watcher -- {{.RUN_ID}}
 
   test:e2e:agentic:smoke7:capture:
-    desc: Dump per-loop trajectories + message-log for smoke #7 findings synthesis
+    desc: Dump per-loop trajectories + message-log + wedge-report for smoke #7 findings synthesis
     internal: true
     vars:
       RUN_ID: '{{.RUN_ID | default "smoke7-manual"}}'
       OUT_DIR: '/tmp/{{.RUN_ID}}'
       PORT: '{{.E2E_AGENTIC_UI_PORT | default "3100"}}'
+      # The role the smoke is expected to end on. Smoke #7 expects the
+      # qa-reviewer (R3.7.2.k′ chain shape). Override via env var for
+      # other flows. Empty = skip the chain-shape check.
+      WEDGE_EXPECTED_TERMINAL_ROLE: '{{.WEDGE_EXPECTED_TERMINAL_ROLE | default "dev-via-spec-qa-reviewer"}}'
     cmds:
       - mkdir -p {{.OUT_DIR}}
       - |
@@ -784,9 +788,116 @@ tasks:
         curl -sf "http://localhost:${PORT}/graph/triples?limit=10000" \
           > "${OUT_DIR}/triples.json" \
           || echo "warn: graph triples fetch failed" >&2
+        # Tool-issue scan from the backend logs while the container is
+        # still up. Catches the smoke-#7 "kv: key not found" pattern and
+        # any other tool execution failures. Empty file is fine (means
+        # no tool errors logged at ERROR level).
+        if docker ps --format '{{`{{.Names}}`}}' | grep -q '^semteams-ui-agentic-backend$'; then
+          docker logs semteams-ui-agentic-backend 2>&1 \
+            | grep -E '"msg":"Failed to execute tool"|"tool_status":"error"|"msg":"Tool .* not found"' \
+            > "${OUT_DIR}/tool-issues.log" \
+            || echo "(no tool-issue log lines matched filter — likely a clean run)" > "${OUT_DIR}/tool-issues.log"
+        else
+          echo "(backend container not running at capture time — tool-issue scan skipped)" > "${OUT_DIR}/tool-issues.log"
+        fi
+      # F3 chain-wedge report. Synthesises a wedge-report.txt over the
+      # captured evidence. Factored into smoke7:wedge-report so it can
+      # be re-run against an existing /tmp/<RUN_ID>/ post-hoc without
+      # re-running the smoke.
+      - task: test:e2e:agentic:smoke7:wedge-report
+        vars:
+          RUN_ID: "{{.RUN_ID}}"
+          WEDGE_EXPECTED_TERMINAL_ROLE: "{{.WEDGE_EXPECTED_TERMINAL_ROLE}}"
+      - |
         echo ""
-        echo "▶︎  Smoke #7 evidence dumped to ${OUT_DIR}/:"
-        ls -la "${OUT_DIR}/"
+        echo "▶︎  Smoke #7 evidence dumped to {{.OUT_DIR}}/:"
+        ls -la "{{.OUT_DIR}}/"
+
+  test:e2e:agentic:smoke7:wedge-report:
+    desc: |
+      F3 chain-wedge diagnosis: synthesise a wedge-report.txt over an
+      already-captured /tmp/<RUN_ID>/ evidence directory. Prints
+      per-loop terminal action, chain-shape match against
+      $WEDGE_EXPECTED_TERMINAL_ROLE, and tool-issue tally.
+
+      Usage:
+        task ui:test:e2e:agentic:smoke7:wedge-report                 # RUN_ID=smoke7-manual
+        RUN_ID=smoke7-run1 task ui:test:e2e:agentic:smoke7:wedge-report
+        WEDGE_EXPECTED_TERMINAL_ROLE=dev-via-spec-architect RUN_ID=smoke7-run1 task ui:test:e2e:agentic:smoke7:wedge-report
+
+      Reads (best-effort): /tmp/$RUN_ID/loops.json,
+      /tmp/$RUN_ID/trajectory-*.json, /tmp/$RUN_ID/tool-issues.log.
+      Writes: /tmp/$RUN_ID/wedge-report.txt and stdout.
+    vars:
+      RUN_ID: '{{.RUN_ID | default "smoke7-manual"}}'
+      OUT_DIR: '/tmp/{{.RUN_ID}}'
+      WEDGE_EXPECTED_TERMINAL_ROLE: '{{.WEDGE_EXPECTED_TERMINAL_ROLE | default "dev-via-spec-qa-reviewer"}}'
+    cmds:
+      - |
+        OUT_DIR="{{.OUT_DIR}}"
+        EXPECTED="{{.WEDGE_EXPECTED_TERMINAL_ROLE}}"
+        REPORT="${OUT_DIR}/wedge-report.txt"
+        if [ ! -d "$OUT_DIR" ]; then
+          echo "no capture directory at $OUT_DIR — set RUN_ID to a directory that exists" >&2
+          exit 1
+        fi
+        {
+          echo "# Smoke wedge-report ($(date -u +%Y-%m-%dT%H:%M:%SZ))"
+          echo ""
+          if [ ! -f "${OUT_DIR}/loops.json" ]; then
+            echo "loops.json missing — stack was torn down before capture; cannot diagnose chain shape."
+          else
+            LOOP_COUNT=$(jq 'length' "${OUT_DIR}/loops.json")
+            echo "Loop count: ${LOOP_COUNT}"
+            echo ""
+            echo "## Per-loop terminal actions"
+            echo ""
+            jq -r '.[] | "\(.loop_id)\t\(.role // "(dispatch)")\t\(.state)"' "${OUT_DIR}/loops.json" | while IFS=$'\t' read -r LOOP_ID ROLE STATE; do
+              TRAJ="${OUT_DIR}/trajectory-${LOOP_ID}.json"
+              if [ ! -f "$TRAJ" ]; then
+                printf "%s\trole=%s\tstate=%s\tterminal=(no trajectory)\n" "${LOOP_ID:0:12}" "$ROLE" "$STATE"
+                continue
+              fi
+              TERMINAL=$(jq -r '
+                [.steps[] | select(.step_type=="tool_call")][-1] as $last
+                | if $last == null then "(no tool calls)"
+                  elif ($last.tool_arguments.action // null) != null then
+                    "\($last.tool_name)(action=\($last.tool_arguments.action))"
+                  else $last.tool_name end' "$TRAJ" 2>/dev/null)
+              printf "%s\trole=%s\tstate=%s\tterminal=%s\n" "${LOOP_ID:0:12}" "$ROLE" "$STATE" "$TERMINAL"
+            done | column -t -s $'\t'
+            echo ""
+            echo "## Chain-shape check"
+            echo ""
+            LAST_ROLE=$(jq -r 'sort_by(.created_at)[-1] | .role // "(dispatch)"' "${OUT_DIR}/loops.json" 2>/dev/null)
+            if [ -z "$EXPECTED" ]; then
+              echo "WEDGE_EXPECTED_TERMINAL_ROLE unset — skipping role match. Final terminal role: ${LAST_ROLE}"
+            elif [ "$LAST_ROLE" = "$EXPECTED" ]; then
+              echo "OK — final terminal role matches expected: ${LAST_ROLE}"
+            else
+              echo "WEDGE — final terminal role is '${LAST_ROLE}', expected '${EXPECTED}'."
+              echo "       The chain stopped before reaching the expected end role."
+              echo "       Inspect the last loop's trajectory + triples for the"
+              echo "       coordinator.next_action that no rule matched."
+            fi
+          fi
+          echo ""
+          echo "## Tool-issue tally (from ${OUT_DIR}/tool-issues.log)"
+          echo ""
+          ISSUES_LOG="${OUT_DIR}/tool-issues.log"
+          if [ -f "$ISSUES_LOG" ] && [ -s "$ISSUES_LOG" ]; then
+            COUNT=$(jq -r '.tool' "$ISSUES_LOG" 2>/dev/null | sort | uniq -c | sort -rn)
+            if [ -n "$COUNT" ]; then
+              echo "$COUNT"
+            else
+              head -20 "$ISSUES_LOG"
+            fi
+          else
+            echo "(no tool errors recorded — clean run or backend not running at capture time)"
+          fi
+        } > "$REPORT" 2>&1
+        echo ""
+        cat "$REPORT"
 
   test:e2e:agentic:dev:_boot:
     desc: Internal — boot helper for the per-scenario dev tasks
