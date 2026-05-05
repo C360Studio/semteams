@@ -66,7 +66,7 @@
       "name": "message-logger",
       "enabled": true,
       "config": {
-        "buffer_size": 10000,
+        "max_entries": 10000,
         "monitor_subjects": ["*"],
         "enable_kv_query": true,
         "log_level": "INFO"
@@ -108,7 +108,7 @@
         },
         "bind": "0.0.0.0",
         "port": 14550,
-        "buffer_size": 65536
+        "max_entries": 65536
       }
     },
     "file_documents": {
