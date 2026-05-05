@@ -8,12 +8,8 @@ github.com/Microsoft/go-winio v0.6.2 h1:F2VQgta7ecxGYO8k3ZZz3RS8fVIXVxONVUPlNERo
 github.com/Microsoft/go-winio v0.6.2/go.mod h1:yd8OoFMLzJbo9gZq8j5qaps8bJ9aShtEA8Ipt1oGCvU=
 github.com/beorn7/perks v1.0.1 h1:VlbKKnNfV8bJzeqoa4cOKqO6bYr3WgKZxO8Z16+hsOM=
 github.com/beorn7/perks v1.0.1/go.mod h1:G2ZrVWU2WbWT9wwq4/hrbKbnv/1ERSJQ0ibhJ6rlkpw=
-github.com/c360studio/semstreams v1.0.0-beta.36 h1:MMbuE+YtRXmFEaPZ09mYRofBk4WXcod9cH+pXFsu/HI=
-github.com/c360studio/semstreams v1.0.0-beta.36/go.mod h1:bvsStnrdHLJhEot5zL2+jNbpJDpKkNuCs0rRwS+cT7A=
-github.com/c360studio/semstreams v1.0.0-beta.37 h1:9K3dSKkkiHyPZfHnTFcfBj+wdn3Res2ULFm674ob2zU=
-github.com/c360studio/semstreams v1.0.0-beta.37/go.mod h1:bvsStnrdHLJhEot5zL2+jNbpJDpKkNuCs0rRwS+cT7A=
-github.com/c360studio/semstreams v1.0.0-beta.39 h1:gy9umQD37cgMrPXUgKKuGy/0qVy3x7gRES1fUMcxE+M=
-github.com/c360studio/semstreams v1.0.0-beta.39/go.mod h1:bvsStnrdHLJhEot5zL2+jNbpJDpKkNuCs0rRwS+cT7A=
+github.com/c360studio/semstreams v1.0.0-beta.43 h1:88A4LzoFS9ojYHNIXNpLAnVNnlvErjflN2ATb6ary/U=
+github.com/c360studio/semstreams v1.0.0-beta.43/go.mod h1:bvsStnrdHLJhEot5zL2+jNbpJDpKkNuCs0rRwS+cT7A=
 github.com/cenkalti/backoff/v4 v4.3.0 h1:MyRJ/UdXutAwSAT+s3wNd7MfTIcy71VQueUuFK343L8=
 github.com/cenkalti/backoff/v4 v4.3.0/go.mod h1:Y3VNntkOUPxTVeUxJ/G5vcM//AlwfmyYozVcomhLiZE=
 github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UFvs=
