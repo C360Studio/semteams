@@ -108,7 +108,7 @@
         "swagger_ui": true,
         "server_info": {
           "title": "SemTeams OSH Demo (R3.4)",
-          "description": "R3.4 of ADR-031: real-LLM end-to-end run of the OSH-class arc. Builds on R3.3's dev-via-spec chain. Same 9 rules as e2e-dev-via-spec.json (research-mode-transition + dev-via-spec). Cost-discipline routing per ADR-031 model-tier discussion: dev-via-spec chain ('general' capability) routes to claude-sonnet with claude-haiku fallback (Anthropic-only — Gemini is currently saturated by SemSpec test traffic with head-of-line priority); every internal-graph capability (community_summary, anomaly_review, summarization, query_classification, embedding, intent_classification, layer_normalization, answer_synthesis) routes to local seminstruct/semembed so async background work doesn't pay cloud tokens. Graph-persisting capabilities (community_summary, anomaly_review) are on the qwen3-8b floor to avoid garbage in the substrate. defaults.model is seminstruct (not cloud) so any unbound resolution stays local. SemSource and local-models compose profiles required.",
+          "description": "R3.4 of ADR-031, extended for R3.7.2.l′ smoke #7 of ADR-034: real-LLM end-to-end run of the OSH-class arc through the qa-reviewer terminal. Builds on R3.3's dev-via-spec chain + R3.7.2.k′'s post-build review hop. Eleven rules: research-mode-transition (01a/01b/02/03) + dev-via-spec (01-07). Cost-discipline routing per ADR-031 model-tier discussion: dev-via-spec chain ('general' capability) routes to claude-sonnet with claude-haiku fallback (Anthropic-only — Gemini is currently saturated by SemSpec test traffic with head-of-line priority); every internal-graph capability (community_summary, anomaly_review, summarization, query_classification, embedding, intent_classification, layer_normalization, answer_synthesis) routes to local seminstruct/semembed so async background work doesn't pay cloud tokens. Graph-persisting capabilities (community_summary, anomaly_review) are on the qwen3-8b floor to avoid garbage in the substrate. defaults.model is seminstruct (not cloud) so any unbound resolution stays local. SemSource, local-models, and sandbox compose profiles required (sandbox added for the dev-via-spec-builder loop's bootstrap_workspace + bash routing per ADR-032 §R3.6.2.a). Note: the spawn-rule for dev-via-spec-qa-reviewer (rule 07) embeds a literal '(stub)' evidence_summary block per R3.7.2.k′; the qa-reviewer's persona-correct verdict against stubbed evidence is decide(needs_clarification). Real evidence-summary plumbing is the open work surfaced by this smoke; see project_smoke7_open_plumbing.md §2.",
           "version": "1.0.0"
         }
       }
@@ -284,7 +284,8 @@
           "/app/configs/rules/dev-via-spec/03-reviewer-approved-to-challenger.json",
           "/app/configs/rules/dev-via-spec/04-challenger-concerns-retry-planner.json",
           "/app/configs/rules/dev-via-spec/05-challenger-accept-to-architect.json",
-          "/app/configs/rules/dev-via-spec/06-architect-emit-to-builder.json"
+          "/app/configs/rules/dev-via-spec/06-architect-emit-to-builder.json",
+          "/app/configs/rules/dev-via-spec/07-builder-decide-to-qa-reviewer.json"
         ],
         "enable_graph_integration": true,
         "entity_watch_buckets": {
