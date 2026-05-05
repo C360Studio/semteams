@@ -26,6 +26,7 @@
       "role": "dev-via-spec-qa-reviewer",
       "model": "general",
       "tools": ["read_loop_result", "decide"],
+      "action_allowlist": ["accept", "reject", "needs_clarification"],
       "properties": {
         "prior_loop_id": "$entity.instance"
       },
