@@ -67,10 +67,49 @@ iteration.
 
 ## Procedure
 
-### 1. Boot the stack
+### Recommended one-task path
+
+If you just want to run the smoke and capture findings, the
+single-task entry point handles boot + prompt + watcher + capture
++ teardown. **Run from the project root**:
 
 ```bash
-export ANTHROPIC_API_KEY=<your key>
+cd /path/to/semteams         # if not already there
+task ui:test:e2e:agentic:smoke7:run
+# or to label the run for the evidence dump:
+RUN_ID=ticket-123 task ui:test:e2e:agentic:smoke7:run
+```
+
+The project root invocation matters: the root `Taskfile.yml`
+loads `.env` via its top-level `dotenv:` directive, which is
+how `ANTHROPIC_API_KEY` flows through to docker-compose. Task
+forbids `dotenv:` in included Taskfiles, so direct invocation
+from `ui/` skips that load and the smoke7 precondition will
+fail loud with remediation guidance.
+
+Evidence lands in `/tmp/smoke7-<timestamp>/` (or `/tmp/$RUN_ID/`):
+
+- `watcher-trajectory.jsonl` + `watcher-events.log` — the
+  auto-approve watcher's per-poll snapshot + role-transition log
+  (relocated into the capture dir at exit).
+- `loops.json` — final loops snapshot from
+  `/teams-dispatch/loops`.
+- `trajectory-<loop_id>.json` — one per loop.
+- `messages.json` — message-logger entries (subject + payload).
+- `triples.json` — graph triples snapshot (where
+  `coordinator.decision_reason` and friends live).
+
+Cleanup is deferred so an abort still tears the stack down.
+The watcher is hard-capped at 30 minutes (~2× the upper-bound
+estimate) to bound real-LLM spend on a wedged chain.
+
+The rest of this section walks the same flow manually for
+debugging, adding probe steps mid-run, or operating against a
+stack that's already booted.
+
+### 1. Boot the stack (manual)
+
+```bash
 task test:e2e:agentic:dev:osh-demo
 ```
 
@@ -205,15 +244,24 @@ trajectory either way.
 
 ## Capture findings
 
-Save the following artefacts to a scratch file
-(`/tmp/smoke7-<date>.md` or similar — do NOT commit):
+If you used `task test:e2e:agentic:smoke7:run`, the deferred
+`smoke7:capture` step has already dumped the mechanical evidence
+(loops snapshot, per-loop trajectories, message-logger entries)
+to `/tmp/smoke7-<RUN_ID>/`. The synthesis step below is the
+human-judgment layer over that evidence.
 
-1. **Loop list** — `task test:e2e:agentic:probe:loops` output at
-   terminal.
-2. **Loop trajectories for K and L** —
-   `curl -sf http://localhost:3100/teams-loop/trajectories/<loop_id>`.
+Save the following synthesis to a scratch file
+(`/tmp/smoke7-<RUN_ID>/findings.md` or similar — do NOT commit):
+
+1. **Loop list snapshot** — read `/tmp/<RUN_ID>/loops.json`
+   (auto-captured) or run `task test:e2e:agentic:probe:loops`
+   on a still-running stack.
+2. **Loop trajectories for K and L** — read
+   `/tmp/<RUN_ID>/trajectory-<loop_id>.json` (auto-captured).
 3. **qa-reviewer terminal triples** —
-   `task test:e2e:agentic:probe:triples -- coordinator.decision_reason`.
+   `task test:e2e:agentic:probe:triples -- coordinator.decision_reason`
+   (run on the still-running stack before cleanup, or grep
+   `messages.json` for `coordinator.decision_reason` payloads).
 4. **Cost** — Anthropic console for token usage if you can
    correlate by time window.
 5. **Anomalies** — any of:

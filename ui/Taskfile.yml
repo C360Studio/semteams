@@ -1,5 +1,14 @@
 version: "3"
 
+# Note on env-var loading for real-LLM scenarios (smoke #7, osh-demo):
+# Task forbids `dotenv:` in included Taskfiles. The project-root
+# Taskfile already loads `.env` via its top-level `dotenv: ['.env']`
+# directive; for real-LLM tasks here, invoke from the project root —
+# e.g. `task ui:test:e2e:agentic:smoke7:run` — so the parent
+# Taskfile's dotenv runs and ANTHROPIC_API_KEY etc. flow through.
+# Direct `task ...` invocation from `ui/` skips that and the smoke7
+# precondition will fail loud with remediation guidance.
+
 env:
   # Pin the docker-compose project name so we don't collide with sibling
   # products (semspec, semdragons) whose compose files live in directories
@@ -672,6 +681,108 @@ tasks:
           AGENTIC_CONFIG: osh-demo.json
           COMPOSE_PROFILES: semsource,local-models,sandbox
           SCENARIO: osh-demo
+
+  test:e2e:agentic:smoke7:run:
+    desc: Run smoke #7 (OSH-Meshtastic real-LLM) end-to-end with cleanup
+    summary: |
+      Real-LLM smoke run for R3.7.2.l′ of ADR-034. Boots the osh-demo
+      stack, sends the canonical OSH prompt, runs the auto-approve
+      watcher (which blocks until every loop terminates), captures
+      trajectories + message log to /tmp/smoke7-<RUN_ID>/, then tears
+      the stack down — same shape as the dev-via-spec scenario task,
+      but with real-LLM cost discipline (defer cleanup so an abort
+      still releases the Docker stack).
+
+      Real Anthropic spend (~$2-5 per full run on claude-sonnet-4-6).
+      ANTHROPIC_API_KEY required: invoke from the project root so the
+      parent Taskfile's `dotenv: ['.env']` loads it, or export it
+      manually before invoking from this directory.
+
+      Usage (from project root):
+        task ui:test:e2e:agentic:smoke7:run                  # RUN_ID defaults to a date stamp
+        RUN_ID=ticket-123 task ui:test:e2e:agentic:smoke7:run
+
+      Findings synthesis lands as ADR-034 §addendum #4 OR as
+      project_smoke7_findings.md memory record per the playbook
+      (docs/smoke7-osh-meshtastic.md §"Capture findings").
+    vars:
+      RUN_ID: '{{.RUN_ID | default (printf "smoke7-%s" (now | date "20060102-150405"))}}'
+      AGENTIC_CONFIG: osh-demo.json
+      COMPOSE_PROFILES: semsource,local-models,sandbox
+      PROMPT: "create a driver for OpenSensorHub using OGC Connected Systems for Meshtastic devices"
+    preconditions:
+      - sh: '[ -n "$ANTHROPIC_API_KEY" ]'
+        msg: "ANTHROPIC_API_KEY is unset. Add it to the project-root .env (auto-loaded when invoking from project root) or export it in your shell. Smoke #7 routes the dev-via-spec chain to claude-sonnet-4-6; without a key the run cannot start."
+    cmds:
+      - echo "▶︎  Smoke #7 starting (RUN_ID={{.RUN_ID}}); evidence will land in /tmp/{{.RUN_ID}}/"
+      - defer: { task: test:e2e:agentic:cleanup }
+      - defer: { task: test:e2e:agentic:smoke7:capture, vars: { RUN_ID: "{{.RUN_ID}}" } }
+      - task: test:e2e:agentic:stack:up
+        vars:
+          FIXTURE: ""
+          AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
+          COMPOSE_PROFILES: "{{.COMPOSE_PROFILES}}"
+      - task: test:e2e:agentic:probe:send
+        vars:
+          CLI_ARGS: '{{.PROMPT}}'
+      # Hard cap on the watcher to bound real-LLM spend if the chain
+      # wedges (e.g. a loop iterates indefinitely against tool-result
+      # errors). 1800s = 30 min, ~2x the playbook's 25-min upper bound
+      # estimate. Cleanup + capture defers fire either way.
+      - timeout 1800 task test:e2e:agentic:probe:auto-approve-watcher -- {{.RUN_ID}}
+
+  test:e2e:agentic:smoke7:capture:
+    desc: Dump per-loop trajectories + message-log for smoke #7 findings synthesis
+    internal: true
+    vars:
+      RUN_ID: '{{.RUN_ID | default "smoke7-manual"}}'
+      OUT_DIR: '/tmp/{{.RUN_ID}}'
+      PORT: '{{.E2E_AGENTIC_UI_PORT | default "3100"}}'
+    cmds:
+      - mkdir -p {{.OUT_DIR}}
+      - |
+        PORT="{{.PORT}}"
+        OUT_DIR="{{.OUT_DIR}}"
+        RUN_ID="{{.RUN_ID}}"
+        # Consolidate watcher artefacts (sibling files at /tmp/<RUN_ID>-*)
+        # into the capture directory so the operator has one path to the
+        # full evidence set. Watcher writes -trajectory.jsonl,
+        # -events.log, -seen/-states/-approved.txt; only the first two are
+        # findings-relevant.
+        for SUFFIX in trajectory.jsonl events.log; do
+          SRC="/tmp/${RUN_ID}-${SUFFIX}"
+          if [ -f "$SRC" ]; then
+            mv "$SRC" "${OUT_DIR}/watcher-${SUFFIX}" 2>/dev/null \
+              || echo "warn: failed to relocate ${SRC}" >&2
+          fi
+        done
+        # Loops snapshot — input for the trajectory loop below.
+        if ! curl -sf "http://localhost:${PORT}/teams-dispatch/loops" > "${OUT_DIR}/loops.json"; then
+          echo "warn: stack already torn down or unreachable at port ${PORT}; live-state capture skipped" >&2
+          echo "▶︎  Watcher evidence preserved in ${OUT_DIR}/:"
+          ls -la "${OUT_DIR}/" 2>/dev/null
+          exit 0
+        fi
+        # Per-loop trajectories. Best-effort: a single 404 doesn't abort the others.
+        jq -r '.[].loop_id' "${OUT_DIR}/loops.json" 2>/dev/null | while read -r LOOP_ID; do
+          [ -n "$LOOP_ID" ] || continue
+          curl -sf "http://localhost:${PORT}/teams-loop/trajectories/${LOOP_ID}" \
+            > "${OUT_DIR}/trajectory-${LOOP_ID}.json" \
+            || echo "warn: trajectory fetch failed for ${LOOP_ID}" >&2
+        done
+        # Message-logger entries (subjects + payloads) — input for "what fired" forensics.
+        curl -sf "http://localhost:${PORT}/message-logger/entries?limit=10000" \
+          > "${OUT_DIR}/messages.json" \
+          || echo "warn: message-logger fetch failed" >&2
+        # Graph triples snapshot — the qa-reviewer's coordinator.decision_reason
+        # lives here and is the substantive output the playbook asks operators
+        # to grep. Best-effort same as the others.
+        curl -sf "http://localhost:${PORT}/graph/triples?limit=10000" \
+          > "${OUT_DIR}/triples.json" \
+          || echo "warn: graph triples fetch failed" >&2
+        echo ""
+        echo "▶︎  Smoke #7 evidence dumped to ${OUT_DIR}/:"
+        ls -la "${OUT_DIR}/"
 
   test:e2e:agentic:dev:_boot:
     desc: Internal — boot helper for the per-scenario dev tasks
