@@ -315,6 +315,15 @@ services:
       # default and every call ≥512 tokens 400'd.
       - MODEL_CONTEXT=32768
       - MODEL_PARALLEL=2
+      # MODEL_THREADS caps llama.cpp's OpenMP thread count. WITHOUT
+      # this set, llama.cpp grabs all available host cores and
+      # competes with sibling containers (semembed + sandbox + the
+      # backend), oversubscribing CPU ~4× on a 12-core host (semspec
+      # 2026-05 evidence). Docker's `cpus: 2` deploy limit caps
+      # container CPU but llama.cpp's worker pool still launches with
+      # whatever the kernel reports — MODEL_THREADS=2 makes the worker
+      # pool match the cgroup cap. Keep these two values in sync.
+      - MODEL_THREADS=2
     networks:
       - agentic-net
     healthcheck:
@@ -323,6 +332,16 @@ services:
       timeout: 10s
       retries: 6
       start_period: 60s
+    # 8GB matches llama.cpp's qwen3-8b Q4_K_M working set at
+    # MODEL_CONTEXT=32768 + MODEL_PARALLEL=2 (~6GB resident + KV-cache
+    # headroom). Without this cap, the seminstruct OOM kill order on a
+    # contended host was unpredictable. cpus=2 mirrors semspec's
+    # validated config (configs/docker/compose/e2e.yml).
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 8G
 
   # SemEmbed — local embedding-tier inference (fastembed-rs + ONNX).
   # Profile-gated under `local-models`. R3.4's OSH demo binds it as
@@ -336,12 +355,32 @@ services:
       - SEMEMBED_MODEL=Snowflake/snowflake-arctic-embed-s
     networks:
       - agentic-net
+    # Probe the real embeddings endpoint, not /health. semspec caught
+    # 2026-05-02: /health returns 200 ~939ms before the Rust HTTP
+    # listener actually accepts POSTs, so service_healthy fired early
+    # and graph-embedding's first 5 entities got connection-refused.
+    # POST /v1/embeddings exercises the full handler chain — only
+    # passes once the listener is genuinely serving requests.
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
-      interval: 30s
+      test:
+        - CMD-SHELL
+        - >-
+          curl -fsS -X POST http://localhost:8081/v1/embeddings
+          -H 'Content-Type: application/json'
+          -d '{"model":"Snowflake/snowflake-arctic-embed-s","input":"x"}'
+          >/dev/null
+      interval: 10s
       timeout: 5s
-      retries: 6
+      retries: 5
       start_period: 30s
+    # 1 CPU is plenty for arctic-embed-s (small model, batch friendly).
+    # semspec validated this on a 12-core host; the cap prevents the
+    # Rust runtime from competing with seminstruct + the backend for
+    # cores during entity-bulk-embed bursts.
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
 
   # SemTeams UI (same as the non-agentic stack)
   ui:
