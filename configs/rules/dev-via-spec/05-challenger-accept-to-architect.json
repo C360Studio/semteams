@@ -24,7 +24,7 @@
       "type": "publish_agent",
       "subject": "agent.task.dev-via-spec-architect",
       "role": "dev-via-spec-architect",
-      "model": "general",
+      "model": "architecture",
       "tools": ["read_loop_result", "emit_dev_via_spec_artifact", "decide"],
       "action_allowlist": ["seed_requirements_emitted", "needs_clarification"],
       "properties": {

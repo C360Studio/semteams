@@ -34,6 +34,30 @@
   },
   "model_registry": {
     "endpoints": {
+      "gemini-pro": {
+        "provider": "openai",
+        "url": "https://generativelanguage.googleapis.com/v1beta/openai",
+        "model": "gemini-2.5-pro",
+        "api_key_env": "GEMINI_API_KEY",
+        "max_tokens": 1048576,
+        "supports_tools": true,
+        "tool_format": "openai",
+        "stream": false,
+        "reasoning_effort": "low",
+        "request_timeout": "300s"
+      },
+      "gemini-flash": {
+        "provider": "openai",
+        "url": "https://generativelanguage.googleapis.com/v1beta/openai",
+        "model": "gemini-2.5-flash",
+        "api_key_env": "GEMINI_API_KEY",
+        "max_tokens": 1048576,
+        "supports_tools": true,
+        "tool_format": "openai",
+        "stream": false,
+        "reasoning_effort": "low",
+        "request_timeout": "180s"
+      },
       "claude-sonnet": {
         "provider": "anthropic",
         "url": "https://api.anthropic.com/v1",
@@ -44,8 +68,8 @@
         "supports_tools": true,
         "stream": true,
         "reasoning_effort": "low",
-        "request_timeout": "180s",
-        "max_concurrent": 10,
+        "request_timeout": "300s",
+        "max_concurrent": 4,
         "requests_per_minute": 100
       },
       "claude-haiku": {
@@ -57,8 +81,8 @@
         "max_output_tokens": 32000,
         "supports_tools": true,
         "stream": true,
-        "request_timeout": "180s",
-        "max_concurrent": 10,
+        "request_timeout": "300s",
+        "max_concurrent": 4,
         "requests_per_minute": 200
       },
       "seminstruct": {
@@ -84,11 +108,15 @@
       }
     },
     "defaults": {
-      "model": "claude-sonnet",
-      "capability": "general"
+      "model": "general"
     },
     "capabilities": {
-      "general":               { "preferred": ["claude-sonnet", "claude-haiku"], "requires_tools": true },
+      "general":               { "preferred": ["gemini-pro"], "fallback": ["claude-sonnet", "gemini-flash"], "requires_tools": true },
+      "planning":              { "preferred": ["gemini-pro"], "fallback": ["claude-sonnet", "gemini-flash"], "requires_tools": true },
+      "architecture":          { "preferred": ["gemini-pro"], "fallback": ["claude-sonnet", "gemini-flash"], "requires_tools": true },
+      "qa":                    { "preferred": ["gemini-pro"], "fallback": ["claude-sonnet", "gemini-flash"], "requires_tools": true },
+      "reviewing":             { "preferred": ["claude-sonnet"], "fallback": ["gemini-pro", "gemini-flash"], "requires_tools": true },
+      "coding":                { "preferred": ["claude-sonnet"], "fallback": ["gemini-pro"], "requires_tools": true },
       "embedding":             { "preferred": ["semembed"] },
       "community_summary":     { "preferred": ["seminstruct"] },
       "anomaly_review":        { "preferred": ["seminstruct"] },
@@ -108,7 +136,7 @@
         "swagger_ui": true,
         "server_info": {
           "title": "SemTeams OSH Demo (R3.4)",
-          "description": "R3.4 of ADR-031, extended for R3.7.2.l′ smoke #7 of ADR-034: real-LLM end-to-end run of the OSH-class arc through the qa-reviewer terminal. Builds on R3.3's dev-via-spec chain + R3.7.2.k′'s post-build review hop. Eleven rules: research-mode-transition (01a/01b/02/03) + dev-via-spec (01-07). Cost-discipline routing per ADR-031 model-tier discussion: dev-via-spec chain ('general' capability) routes to claude-sonnet with claude-haiku fallback (Anthropic-only — Gemini is currently saturated by SemSpec test traffic with head-of-line priority); every internal-graph capability (community_summary, anomaly_review, summarization, query_classification, embedding, intent_classification, layer_normalization, answer_synthesis) routes to local seminstruct/semembed so async background work doesn't pay cloud tokens. Graph-persisting capabilities (community_summary, anomaly_review) are on the qwen3-8b floor to avoid garbage in the substrate. defaults.model is seminstruct (not cloud) so any unbound resolution stays local. SemSource, local-models, and sandbox compose profiles required (sandbox added for the dev-via-spec-builder loop's bootstrap_workspace + bash routing per ADR-032 §R3.6.2.a). Note: the spawn-rule for dev-via-spec-qa-reviewer (rule 07) embeds a literal '(stub)' evidence_summary block per R3.7.2.k′; the qa-reviewer's persona-correct verdict against stubbed evidence is decide(needs_clarification). Real evidence-summary plumbing is the open work surfaced by this smoke; see project_smoke7_open_plumbing.md §2.",
+          "description": "R3.4 of ADR-031, extended for R3.7.2.l′ smoke #7 of ADR-034: real-LLM end-to-end run of the OSH-class arc through the qa-reviewer terminal. Builds on R3.3's dev-via-spec chain + R3.7.2.k′'s post-build review hop. Eleven rules: research-mode-transition (01a/01b/02/03) + dev-via-spec (01-07). Hybrid model routing per semspec evidence (configs/e2e-hybrid.json, run-data 2026-05): gemini-pro for heavy reasoning (research, planning, architecture, decomposition, qa) — gemini's higher per-key throughput + non-saturated tier carry the chain's bulk; claude-sonnet reserved for code-generation and code-review (the builder + reviewer/challenger roles where sonnet is empirically strongest). Smoke #7 run-2 (2026-05-05) timed out a single 180s sonnet completion after Loop A consumed ~423k input tokens — strong signal that routing the heavy researcher through sonnet is the wrong shape. Internal-graph capabilities (community_summary, anomaly_review, summarization, query_classification, embedding, intent_classification, layer_normalization, answer_synthesis) stay on local seminstruct/semembed — async background work shouldn't pay cloud tokens, and graph-persisting capabilities are on qwen3-8b to avoid garbage in the substrate. SemSource, local-models, and sandbox compose profiles required. Note: the spawn-rule for dev-via-spec-qa-reviewer (rule 07) embeds a literal '(stub)' evidence_summary block per R3.7.2.k′; the qa-reviewer's persona-correct verdict against stubbed evidence is decide(needs_clarification). Real evidence-summary plumbing is the open work surfaced by this smoke; see project_smoke7_open_plumbing.md §2. Requires GEMINI_API_KEY and ANTHROPIC_API_KEY.",
           "version": "1.0.0"
         }
       }

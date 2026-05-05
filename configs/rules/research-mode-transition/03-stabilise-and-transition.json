@@ -24,7 +24,7 @@
       "type": "publish_agent",
       "subject": "agent.task.dev-via-spec-plan",
       "role": "dev-via-spec-planner",
-      "model": "general",
+      "model": "planning",
       "tools": ["read_loop_result", "decide"],
       "action_allowlist": ["planned"],
       "properties": {

@@ -24,7 +24,7 @@
       "type": "publish_agent",
       "subject": "agent.task.dev-via-spec-review",
       "role": "dev-via-spec-reviewer",
-      "model": "general",
+      "model": "reviewing",
       "tools": ["read_loop_result", "decide"],
       "action_allowlist": ["approved", "insufficient"],
       "properties": {

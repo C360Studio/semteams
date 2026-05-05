@@ -25,7 +25,7 @@
       "type": "publish_agent",
       "subject": "agent.task.dev-via-spec-plan-retry",
       "role": "dev-via-spec-planner",
-      "model": "general",
+      "model": "planning",
       "tools": ["read_loop_result", "decide"],
       "action_allowlist": ["planned"],
       "max_iterations": 3,
