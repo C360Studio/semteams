@@ -714,7 +714,11 @@ tasks:
       - sh: '[ -n "$ANTHROPIC_API_KEY" ]'
         msg: "ANTHROPIC_API_KEY is unset. Add it to the project-root .env (auto-loaded when invoking from project root) or export it in your shell. Smoke #7 routes the dev-via-spec chain to claude-sonnet-4-6; without a key the run cannot start."
     cmds:
-      - echo "▶︎  Smoke #7 starting (RUN_ID={{.RUN_ID}}); evidence will land in /tmp/{{.RUN_ID}}/"
+      # Single-quoted YAML scalar so the `#` in "Smoke #7" doesn't trip
+      # YAML's flow-scalar comment rule. Single-quoted strings in YAML are
+      # literal; the Go template `{{.RUN_ID}}` is rendered by Task before
+      # the shell sees the line.
+      - 'echo "▶︎  Smoke #7 starting (RUN_ID={{.RUN_ID}}); evidence will land in /tmp/{{.RUN_ID}}/"'
       - defer: { task: test:e2e:agentic:cleanup }
       - defer: { task: test:e2e:agentic:smoke7:capture, vars: { RUN_ID: "{{.RUN_ID}}" } }
       - task: test:e2e:agentic:stack:up
