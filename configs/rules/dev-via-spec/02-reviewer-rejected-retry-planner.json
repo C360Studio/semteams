@@ -27,6 +27,8 @@
       "role": "dev-via-spec-planner",
       "model": "general",
       "tools": ["read_loop_result", "decide"],
+      "action_allowlist": ["planned"],
+      "max_iterations": 3,
       "properties": {
         "prior_loop_id": "$entity.instance",
         "retry": true

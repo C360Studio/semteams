@@ -26,6 +26,7 @@
       "role": "dev-via-spec-architect",
       "model": "general",
       "tools": ["read_loop_result", "emit_dev_via_spec_artifact", "decide"],
+      "action_allowlist": ["seed_requirements_emitted", "needs_clarification"],
       "properties": {
         "prior_loop_id": "$entity.instance"
       },
