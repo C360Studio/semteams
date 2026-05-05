@@ -24,7 +24,7 @@
       "type": "publish_agent",
       "subject": "agent.task.dev-via-spec-builder",
       "role": "dev-via-spec-builder",
-      "model": "general",
+      "model": "coding",
       "tools": ["bootstrap_workspace", "bash", "read_loop_result", "builder_decide"],
       "properties": {
         "prior_loop_id": "$entity.instance",

@@ -800,6 +800,19 @@ tasks:
         else
           echo "(backend container not running at capture time — tool-issue scan skipped)" > "${OUT_DIR}/tool-issues.log"
         fi
+        # Rate-limit / model-error scan. Captures 429 indicators, retry-
+        # with-backoff messages, context-deadline errors. Empty file =
+        # clean run. Surfaced in wedge-report.txt so operator sees
+        # rate-limit pressure at a glance. Smoke #7 run-2 (2026-05-05)
+        # hit a 180s sonnet timeout — this scan would have caught it.
+        if docker ps --format '{{`{{.Names}}`}}' | grep -q '^semteams-ui-agentic-backend$'; then
+          docker logs semteams-ui-agentic-backend 2>&1 \
+            | grep -iE '"msg":"Failed to complete chat"|"status_code":429|rate.?limit|context deadline exceeded|retry-attempt|backoff.*sleep' \
+            > "${OUT_DIR}/rate-limit-issues.log" \
+            || echo "(no rate-limit indicators in backend logs — clean run)" > "${OUT_DIR}/rate-limit-issues.log"
+        else
+          echo "(backend container not running at capture time — rate-limit scan skipped)" > "${OUT_DIR}/rate-limit-issues.log"
+        fi
       # F3 chain-wedge report. Synthesises a wedge-report.txt over the
       # captured evidence. Factored into smoke7:wedge-report so it can
       # be re-run against an existing /tmp/<RUN_ID>/ post-hoc without
@@ -894,6 +907,19 @@ tasks:
             fi
           else
             echo "(no tool errors recorded — clean run or backend not running at capture time)"
+          fi
+          echo ""
+          echo "## Rate-limit indicators (from ${OUT_DIR}/rate-limit-issues.log)"
+          echo ""
+          RATE_LOG="${OUT_DIR}/rate-limit-issues.log"
+          if [ -f "$RATE_LOG" ] && [ -s "$RATE_LOG" ]; then
+            jq -r '.error // .msg // empty' "$RATE_LOG" 2>/dev/null \
+              | awk '{print substr($0,1,80)}' | sort | uniq -c | sort -rn | head -10 \
+              || head -10 "$RATE_LOG"
+            echo ""
+            echo "Total rate-limit-shaped events: $(wc -l < "$RATE_LOG" | tr -d ' ')"
+          else
+            echo "(no rate-limit indicators — model providers healthy or backend not running)"
           fi
         } > "$REPORT" 2>&1
         echo ""

@@ -25,7 +25,7 @@
       "type": "publish_agent",
       "subject": "agent.task.research-with-source-retry",
       "role": "researcher-with-source-acquisition",
-      "model": "general",
+      "model": "architecture",
       "tools": ["read_loop_result", "query_entity", "query_entities", "add_source_repo", "emit_research_artifact"],
       "max_iterations": 3,
       "properties": {
