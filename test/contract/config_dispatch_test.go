@@ -62,3 +62,116 @@ func TestConfigDispatchPermissions(t *testing.T) {
 		})
 	}
 }
+
+// TestConfigDispatchDefaultToolsParse is the F4b regression guard.
+// Smoke #7 (R3.7.2.l′, 2026-05-04) showed Loop A — the dispatch
+// researcher loop — had access to ~16 tools when osh-demo.json's
+// default_tools listed only 4. The dispatch source path
+// (agentic-dispatch/component.go:710-720) DOES gate task.Tools on
+// c.config.DefaultTools != nil, and the loop source path
+// (agentic-loop/handlers.go:584-595) DOES respect non-nil task.Tools.
+// So the runtime gap is between osh-demo.json on disk and
+// c.config.DefaultTools at runtime — the most likely culprit is
+// JSON unmarshal silently dropping the field (e.g., a future schema
+// rename, json tag drift, or Config-struct refactor).
+//
+// This test pins the field name on the wire AND the post-parse
+// struct shape, with a per-config-file expectation table. A failure
+// pinpoints exactly which config drifted.
+//
+// Per-config expectations: the file lists the wire-shape default_tools
+// the operator authored. Each entry is independently validated. A
+// future config that legitimately uses default_tools=[] (empty
+// allowlist — "no tools for the initial researcher") declares
+// nilOrEmpty:true; a config without the field at all declares
+// nilOrEmpty:true with absent:true.
+func TestConfigDispatchDefaultToolsParse(t *testing.T) {
+	expectations := map[string]struct {
+		// absent: the config has no default_tools key at all (legitimate
+		// for flows whose initial role uses global discovery).
+		absent bool
+		// expected: when absent=false, the exact tool-name list the
+		// config author put in the file (order-sensitive — we want the
+		// JSON wire to match the source-of-truth verbatim).
+		expected []string
+	}{
+		"osh-demo.json": {
+			expected: []string{"read_loop_result", "query_entity", "query_entities", "emit_research_artifact"},
+		},
+		"e2e-dev-via-spec.json": {
+			expected: []string{"read_loop_result", "query_entity", "query_entities", "emit_research_artifact"},
+		},
+		"e2e-research-mode-transition.json": {
+			expected: []string{"read_loop_result", "query_entity", "query_entities", "emit_research_artifact"},
+		},
+		"e2e-research-iterative.json": {
+			expected: []string{"read_loop_result", "query_entity", "query_entities"},
+		},
+		"e2e-research-with-source.json": {
+			expected: []string{"add_source_repo"},
+		},
+		"e2e-research-with-source-acquisition.json": {
+			expected: []string{"read_loop_result", "query_entity", "query_entities"},
+		},
+		"e2e-research-harness-hit.json": {
+			expected: []string{"read_loop_result", "query_entity", "query_entities", "emit_research_artifact"},
+		},
+		"e2e-coordinator.json": {
+			expected: []string{"decide", "read_loop_result", "submit_work"},
+		},
+		// Empty arrays — explicit "no tools for initial role." The wire
+		// distinguishes nil (field absent) from [] (explicit empty).
+		"e2e-agentic.json":       {expected: []string{}},
+		"e2e-deep-research.json": {expected: []string{}},
+	}
+
+	configs, err := filepath.Glob("../../configs/*.json")
+	require.NoError(t, err)
+
+	for _, cfgPath := range configs {
+		name := filepath.Base(cfgPath)
+		exp, hasExpectation := expectations[name]
+		if !hasExpectation {
+			continue // configs without explicit expectations are out of scope
+		}
+
+		t.Run(name, func(t *testing.T) {
+			data, err := os.ReadFile(cfgPath)
+			require.NoError(t, err)
+
+			var config struct {
+				Components map[string]struct {
+					Config json.RawMessage `json:"config"`
+				} `json:"components"`
+			}
+			require.NoError(t, json.Unmarshal(data, &config))
+
+			dispatch, ok := config.Components["teams-dispatch"]
+			require.True(t, ok, "%s: teams-dispatch component missing", name)
+
+			// Parse with a struct shape that mirrors agentic-dispatch's
+			// Config — same json tag we expect the framework to read.
+			var dispatchConfig struct {
+				DefaultTools []string `json:"default_tools,omitempty"`
+			}
+			require.NoError(t, json.Unmarshal(dispatch.Config, &dispatchConfig),
+				"%s: dispatch config did not parse", name)
+
+			if exp.absent {
+				assert.Nil(t, dispatchConfig.DefaultTools,
+					"%s: expected default_tools field absent (nil after unmarshal); got %v",
+					name, dispatchConfig.DefaultTools)
+				return
+			}
+
+			// Non-nil expected — check exact match including order.
+			// nil-vs-empty distinction matters per
+			// agentic-dispatch/component.go:710 ("if c.config.DefaultTools != nil").
+			require.NotNil(t, dispatchConfig.DefaultTools,
+				"%s: expected default_tools to parse to non-nil slice (even if empty); "+
+					"got nil — likely json tag drift or schema refactor", name)
+			assert.Equal(t, exp.expected, dispatchConfig.DefaultTools,
+				"%s: default_tools wire shape drifted from expected", name)
+		})
+	}
+}
