@@ -108,7 +108,8 @@
       }
     },
     "defaults": {
-      "model": "general"
+      "model": "gemini-pro",
+      "capability": "general"
     },
     "capabilities": {
       "general":               { "preferred": ["gemini-pro"], "fallback": ["claude-sonnet", "gemini-flash"], "requires_tools": true },
