@@ -174,6 +174,8 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 		}, nil
 	}
 
+	e.maybeWriteCommitmentsSidecar(ctx, taskID, resolvedPath)
+
 	resultJSON, err := json.Marshal(map[string]any{
 		"task_id":             taskID,
 		"workspace_path":      wtInfo.Path,
@@ -208,6 +210,60 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 			"spec_workspace_path": SpecFilename,
 		},
 	}, nil
+}
+
+// CommitmentsFilename is the workspace-relative path where the commitments
+// sidecar is seeded. PR #2's preprocessor reads this path when running the
+// evidence gate after a builder loop terminates.
+const CommitmentsFilename = ".evidence/commitments.json"
+
+// maybeWriteCommitmentsSidecar looks for a <slug>.commitments.json file
+// adjacent to the resolved spec file (written by emitspecartifact when the
+// architect emits VerificationCommitments). If present, it writes the content
+// into the builder's workspace at .evidence/commitments.json via sandbox.WriteFile
+// (which handles intermediate directories via os.MkdirAll on the server side).
+//
+// Absence is silently skipped — backward-compat for chains whose specs pre-date
+// the sidecar feature. Errors reading or writing are logged at Error and do NOT
+// fail the bootstrap; PR #2's preprocessor treats a missing file as a
+// no-commitments summary and routes qa-reviewer to needs_clarification.
+func (e *Executor) maybeWriteCommitmentsSidecar(ctx context.Context, taskID, resolvedSpecPath string) {
+	sidecarPath := commitmentsSidecarPath(resolvedSpecPath)
+	if sidecarPath == "" {
+		return
+	}
+	data, err := os.ReadFile(sidecarPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			e.logger.Debug("no commitments sidecar adjacent to spec_path; skipping",
+				slog.String("sidecar_path", sidecarPath))
+			return
+		}
+		// Permission/IO errors aren't transient but are operator-actionable —
+		// Warn so a misconfigured deployment surfaces without spamming Error.
+		e.logger.Warn("read commitments sidecar failed; skipping",
+			slog.String("sidecar_path", sidecarPath),
+			slog.String("error", err.Error()))
+		return
+	}
+	if err := e.sandbox.WriteFile(ctx, taskID, CommitmentsFilename, string(data)); err != nil {
+		e.logger.Error("write commitments sidecar into workspace failed; skipping",
+			slog.String("task_id", taskID),
+			slog.String("workspace_path", CommitmentsFilename),
+			slog.String("error", err.Error()))
+	}
+}
+
+// commitmentsSidecarPath derives the expected sidecar path from a resolved
+// .md spec path. Returns "" for non-.md inputs — the in-band contract is
+// always <slug>.md (rule_06 injects dev_via_spec.artifact.path), so any
+// other extension is a chain-shape bug and we'd rather skip than synthesise
+// a sidecar path the architect never wrote.
+func commitmentsSidecarPath(resolvedSpecPath string) string {
+	if filepath.Ext(resolvedSpecPath) != ".md" {
+		return ""
+	}
+	return resolvedSpecPath[:len(resolvedSpecPath)-len(".md")] + ".commitments.json"
 }
 
 // readSpec validates the LLM-supplied spec_path and reads the content.

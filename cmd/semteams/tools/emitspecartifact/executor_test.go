@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -79,6 +80,23 @@ func (f *fakePublisher) snapshot() (subject string, data []byte, calls int) {
 // ---------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------
+
+// readMarkdownFile finds and reads the single .md file in dir. Returns an
+// error if no .md file is found. Used by tests that need to read the rendered
+// spec after the executor may also have written a .commitments.json sidecar.
+func readMarkdownFile(t *testing.T, dir string) ([]byte, error) {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	for _, e := range entries {
+		if strings.HasSuffix(e.Name(), ".md") {
+			return os.ReadFile(filepath.Join(dir, e.Name()))
+		}
+	}
+	return nil, fmt.Errorf("no .md file found in %s", dir)
+}
 
 // newExecutorWithDir constructs an Executor writing to a temp directory.
 // The temp dir is automatically cleaned up at test end.
@@ -1038,17 +1056,11 @@ func TestRenderMarkdown_ResolvedHarnessFieldsRendered(t *testing.T) {
 		t.Fatalf("Result.Error = %q, want empty", res.Error)
 	}
 
-	// Find the rendered file.
-	entries, err := os.ReadDir(tmpDir)
+	// Find the rendered markdown file (slug is dynamic; executor also writes a
+	// .commitments.json sidecar when commitments are present).
+	body, err := readMarkdownFile(t, tmpDir)
 	if err != nil {
-		t.Fatalf("read tmpDir: %v", err)
-	}
-	if len(entries) != 1 {
-		t.Fatalf("expected exactly one rendered file, got %d", len(entries))
-	}
-	body, err := os.ReadFile(filepath.Join(tmpDir, entries[0].Name()))
-	if err != nil {
-		t.Fatalf("read rendered: %v", err)
+		t.Fatalf("read rendered markdown: %v", err)
 	}
 	got := string(body)
 
@@ -1099,8 +1111,10 @@ func TestRenderMarkdown_ResolverMiss_NameOnly(t *testing.T) {
 		t.Fatalf("Result.Error = %q, want empty", res.Error)
 	}
 
-	entries, _ := os.ReadDir(tmpDir)
-	body, _ := os.ReadFile(filepath.Join(tmpDir, entries[0].Name()))
+	body, err := readMarkdownFile(t, tmpDir)
+	if err != nil {
+		t.Fatalf("read rendered markdown: %v", err)
+	}
 	got := string(body)
 	if !strings.Contains(got, "**Harness**: `ghost-harness`") {
 		t.Errorf("expected harness name to render even on resolver miss; body:\n%s", got)
@@ -1186,6 +1200,124 @@ func TestExecute_WithCommitments_MarkdownContainsSection(t *testing.T) {
 		if !strings.Contains(rendered, want) {
 			t.Errorf("markdown missing %q\n--- got ---\n%s", want, rendered)
 		}
+	}
+}
+
+// ---------------------------------------------------------------------
+// R3.7.2.PR1 — commitments sidecar written by renderCommitmentsJSON
+// ---------------------------------------------------------------------
+
+// TestExecute_WithCommitments_SidecarWritten verifies that emitting an artifact
+// with commitments writes both <slug>.md and <slug>.commitments.json, and that
+// the JSON content matches the input commitments.
+func TestExecute_WithCommitments_SidecarWritten(t *testing.T) {
+	exec, _, _, dir := newExecutorWithDir(t)
+	res, err := exec.Execute(context.Background(), defaultCall(argsWithCommitments()))
+	if err != nil {
+		t.Fatalf("Execute err: %v", err)
+	}
+	if res.Error != "" {
+		t.Fatalf("Result.Error = %q, want empty", res.Error)
+	}
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("ReadDir: %v", err)
+	}
+	// Expect exactly 2 files: <slug>.md and <slug>.commitments.json.
+	if len(entries) != 2 {
+		names := make([]string, len(entries))
+		for i, e := range entries {
+			names[i] = e.Name()
+		}
+		t.Fatalf("expected 2 files (md + commitments.json), got %d: %v", len(entries), names)
+	}
+
+	// Decode the result to get the slug so we can find the sidecar by name.
+	var content struct {
+		Slug string `json:"slug"`
+	}
+	if err := json.Unmarshal([]byte(res.Content), &content); err != nil {
+		t.Fatalf("decode result: %v", err)
+	}
+
+	sidecarPath := filepath.Join(dir, content.Slug+".commitments.json")
+	data, err := os.ReadFile(sidecarPath)
+	if err != nil {
+		t.Fatalf("read sidecar %q: %v", sidecarPath, err)
+	}
+
+	// The JSON must unmarshal to a non-empty array.
+	var decoded []map[string]any
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("decode commitments JSON: %v\nraw=%s", err, data)
+	}
+	if len(decoded) != 2 {
+		t.Errorf("commitments JSON len = %d, want 2", len(decoded))
+	}
+	// Spot-check the first commitment's approach to confirm round-trip fidelity.
+	if decoded[0]["approach"] != "process-local-testcontainer" {
+		t.Errorf("commitments[0].approach = %v, want process-local-testcontainer", decoded[0]["approach"])
+	}
+	// Confirm the JSON is indented (deterministic human-diffable format).
+	if !strings.Contains(string(data), "\n  ") {
+		t.Errorf("commitments JSON does not appear to be indented; got:\n%s", data)
+	}
+}
+
+// TestExecute_WithoutCommitments_NoSidecar verifies that emitting an artifact
+// with zero commitments does NOT write a commitments sidecar file. File
+// presence is a signal to PR #2's preprocessor; an empty-array file would
+// be misleading.
+func TestExecute_WithoutCommitments_NoSidecar(t *testing.T) {
+	exec, _, _, dir := newExecutorWithDir(t)
+	_, err := exec.Execute(context.Background(), defaultCall(defaultArtifactArgs()))
+	if err != nil {
+		t.Fatalf("Execute err: %v", err)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("ReadDir: %v", err)
+	}
+	// Only the markdown file must be written.
+	if len(entries) != 1 {
+		names := make([]string, len(entries))
+		for i, e := range entries {
+			names[i] = e.Name()
+		}
+		t.Errorf("expected 1 file (md only), got %d: %v", len(entries), names)
+	}
+	if !strings.HasSuffix(entries[0].Name(), ".md") {
+		t.Errorf("expected the single file to be .md, got %q", entries[0].Name())
+	}
+}
+
+// TestExecute_WithCommitments_TriplePublisherFails_SidecarPersists verifies
+// that when commitments are present and the triple publisher fails, both the
+// markdown AND the sidecar persist (same idempotent-retry contract as the
+// no-commitments case).
+func TestExecute_WithCommitments_TriplePublisherFails_SidecarPersists(t *testing.T) {
+	exec, tp, _, dir := newExecutorWithDir(t)
+	tp.err = errors.New("graph-ingest unreachable")
+
+	res, err := exec.Execute(context.Background(), defaultCall(argsWithCommitments()))
+	if err != nil {
+		t.Fatalf("Execute err: %v", err)
+	}
+	if res.ErrorKind != agentic.ToolErrorNetwork {
+		t.Errorf("ErrorKind = %v, want ToolErrorNetwork", res.ErrorKind)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("ReadDir: %v", err)
+	}
+	// Both markdown and sidecar persist for idempotent retry.
+	if len(entries) != 2 {
+		names := make([]string, len(entries))
+		for i, e := range entries {
+			names[i] = e.Name()
+		}
+		t.Errorf("expected 2 files (md + sidecar) to persist after triple failure, got %d: %v", len(entries), names)
 	}
 }
 

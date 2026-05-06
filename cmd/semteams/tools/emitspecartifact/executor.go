@@ -551,7 +551,34 @@ func (e *Executor) renderMarkdown(ctx context.Context, a *devviaspec.Artifact) (
 		return "", fmt.Errorf("write spec file %s: %w", fullPath, err)
 	}
 
+	// Markdown is written first (human-readable artifact), then the
+	// commitments sidecar. If the sidecar write fails, the caller returns
+	// early before any triples are minted — same abort policy as above.
+	if err := e.renderCommitmentsJSON(a); err != nil {
+		return "", err
+	}
+
 	return filepath.Join(e.outputDir, filename), nil
+}
+
+// renderCommitmentsJSON writes <slug>.commitments.json next to the markdown
+// file. Skipped when the artifact carries no commitments — file presence is a
+// signal to PR #2's preprocessor (absent file → no-commitments summary, not a
+// hard error). Uses json.MarshalIndent for human-diffable output, ensuring
+// deterministic content for the same input.
+func (e *Executor) renderCommitmentsJSON(a *devviaspec.Artifact) error {
+	if len(a.VerificationCommitments) == 0 {
+		return nil
+	}
+	data, err := json.MarshalIndent(a.VerificationCommitments, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal commitments JSON for slug %s: %w", a.Slug, err)
+	}
+	fullPath := filepath.Join(e.outputDir, a.Slug+".commitments.json")
+	if err := os.WriteFile(fullPath, data, 0o644); err != nil {
+		return fmt.Errorf("write commitments file %s: %w", fullPath, err)
+	}
+	return nil
 }
 
 // resolveHarnesses returns a name → catalog-entry map for every
