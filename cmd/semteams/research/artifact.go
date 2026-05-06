@@ -90,30 +90,32 @@ type Mutation struct {
 // researcher-pass snapshot. Revisions are monotonic from 1; the
 // mutation log is monotonic and append-only across revisions.
 //
-// Schema: research.artifact.v1. The `harness` field (added R3.7.1.b
-// per ADR-033) is omitempty so existing v1 consumers are unaffected;
-// this is an additive widening, not a schema bump.
+// Schema: research.artifact.v1. The `test_harness` field (added
+// R3.7.1.b per ADR-033, renamed from `harness` in Slice 2) is
+// omitempty so existing v1 consumers are unaffected; this is an
+// additive widening, not a schema bump.
 type Artifact struct {
 	LoopID             string             `json:"loop_id"`
 	Revision           int                `json:"revision"`
 	Actors             []Actor            `json:"actors"`
 	IntegrationPoints  []IntegrationPoint `json:"integration_points"`
-	SeedRequirements   []string           `json:"seed_requirements"`
+	Tasks              []string           `json:"tasks"`
 	AddressedGaps      []string           `json:"addressed_gaps,omitempty"`
 	OpenGaps           []string           `json:"open_gaps,omitempty"`
 	SubstrateMutations []Mutation         `json:"substrate_mutations,omitempty"`
-	// Harness names a `configs/harnesses.json` entry the researcher
-	// has selected as the verification target for the work this
-	// artifact describes. Empty when the researcher could not find a
-	// matching catalog entry; the researcher then flags the gap with
-	// a `needs_harness: <description>` line in OpenGaps. The reviewer
-	// (research-reviewer persona) gates on either Harness != "" or
-	// the needs_harness gap being explicitly stated — this struct
-	// does NOT enforce that semantic invariant; reviewer-as-
-	// enumerator does (consistent with other artifact fields whose
-	// presence rules are persona-side, not Validate-side).
-	Harness    string    `json:"harness,omitempty"`
-	ProducedAt time.Time `json:"produced_at"`
+	// TestHarness names a `configs/harnesses.json` entry the
+	// researcher has selected as the verification target for the
+	// work this artifact describes. Empty when the researcher could
+	// not find a matching catalog entry; the researcher then flags
+	// the gap with a `needs_test_harness: <description>` line in
+	// OpenGaps. The reviewer (research-reviewer persona) gates on
+	// either TestHarness != "" or the needs_test_harness gap being
+	// explicitly stated — this struct does NOT enforce that semantic
+	// invariant; reviewer-as-enumerator does (consistent with other
+	// artifact fields whose presence rules are persona-side, not
+	// Validate-side).
+	TestHarness string    `json:"test_harness,omitempty"`
+	ProducedAt  time.Time `json:"produced_at"`
 }
 
 // Schema implements message.Payload.
@@ -124,9 +126,9 @@ func (a *Artifact) Schema() message.Type {
 // Validate implements message.Payload. Validates structural
 // well-formedness only; reviewer-as-enumerator semantic checks
 // (required actors named, integration-point directions present,
-// seed-requirement granularity) live in the reviewer persona, not
-// here. An in-flight artifact may legitimately have empty actors
-// or empty directions while the run is still iterating.
+// task granularity) live in the reviewer persona, not here. An
+// in-flight artifact may legitimately have empty actors or empty
+// directions while the run is still iterating.
 func (a *Artifact) Validate() error {
 	if a.LoopID == "" {
 		return fmt.Errorf("loop_id required")

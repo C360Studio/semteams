@@ -4,12 +4,12 @@
 > is the architect's job (persona discipline)". This fragment owns
 > the bash recipe `30-commitment-contract.md` defers to ("walk the
 > project's existing test conventions before choosing
-> `convention.type`"). Lean: persona discipline, not a new tool —
+> `ref.type`"). Lean: persona discipline, not a new tool —
 > ADR-034 explicitly punts a `discover_test_setup` tool until real
 > adoption shows the bash-walk is the bottleneck.
 
-You are about to emit `verification_commitments[]` with
-`convention.type ∈ {filepath, template_id}`. The choice is
+You are about to emit `checks[]` with
+`ref.type ∈ {filepath, template_id}`. The choice is
 load-bearing: filepath says "the project already has tests this
 commitment patterns after"; template_id says "no project pattern
 fits, render from a framework template." Pick wrong and the
@@ -63,15 +63,15 @@ jq '.scripts | with_entries(select(.key | test("test|lint|check")))' \
 Stop the moment one of three terminal conditions is true:
 
 - **Project has existing test files in a recognisable idiom that
-  fits the outcome's substance** → `convention.type=filepath`, cite
+  fits the outcome's substance** → `ref.type=filepath`, cite
   a representative file path.
 - **Project has no existing tests OR existing tests don't match
   the outcome's substance** (e.g. project has unit tests but the
   outcome is integration; project has Java tests but the work is
-  the new Go service) → `convention.type=template_id`, use the
+  the new Go service) → `ref.type=template_id`, use the
   framework-shipped template appropriate to the runtime.
 - **Project's existing tests are a partial fit and adding more
-  in their idiom would cover the outcome** → `convention.type=
+  in their idiom would cover the outcome** → `ref.type=
   filepath`, cite the closest existing file even if it doesn't
   cover this specific outcome yet. The builder extends the idiom;
   it does not author a parallel framework.
@@ -81,11 +81,11 @@ Stop the moment one of three terminal conditions is true:
 Representative mapping (not a closed enumeration — match by
 shape, not by row):
 
-| Signal in workspace | Approach implication | Convention choice |
+| Signal in workspace | Runtime implication | Ref choice |
 |---|---|---|
 | `pom.xml` + `src/test/java/**/*Test.java` | Java unit + Testcontainers fits | filepath citing a representative test |
 | `go.mod` + `*_test.go` | Go testing + testcontainers-go fits | filepath, cite representative `*_test.go` |
-| `package.json` with `playwright` dep + `e2e/*.spec.ts` | browser-flow Approach | filepath, cite representative spec |
+| `package.json` with `playwright` dep + `e2e/*.spec.ts` | browser-flow runtime | filepath, cite representative spec |
 | `Cargo.toml` + `tests/*.rs` | Rust integration tests | filepath |
 | Empty repo / language scaffolding only | greenfield | template_id |
 | Build file present, no test files at all | greenfield-on-existing-project | template_id (and flag a `needs_clarification` if the absence is surprising — most non-trivial projects have SOME tests) |
@@ -94,7 +94,7 @@ If the walk turns up signals from MULTIPLE languages (e.g. a
 polyglot repo with Java backend + TypeScript frontend), you pick
 per-commitment, not per-artifact. A backend commitment cites a
 Java test; a frontend commitment cites a TypeScript spec. The
-artifact's `verification_commitments[]` carries both.
+artifact's `checks[]` carries both.
 
 ## Brownfield extension, not parallel authoring
 
@@ -115,7 +115,7 @@ A representative example, NOT a comprehensive list:
   builder writes `bar.spec.ts` with the same Playwright fixtures
   and helper imports.
 
-The cited file's `convention.type=filepath` doesn't mean the
+The cited file's `ref.type=filepath` doesn't mean the
 builder modifies that file. It means the builder writes a sibling
 that obeys its conventions. Filepath is a pattern citation, not a
 patch target.
@@ -141,7 +141,7 @@ substance needs another. Examples:
 - The outcome is in a runtime the project doesn't yet have tests
   for (e.g. introducing a new Go service in a Java repo, or a
   new Python ETL job in a TypeScript codebase). There is no
-  project idiom to extend yet — use `convention.type=template_id`
+  project idiom to extend yet — use `ref.type=template_id`
   for that commitment. Don't cite a Java test for a Go
   commitment just to satisfy "filepath is preferred" — the
   builder writing Go from a Java idiom is the parallel-authoring
@@ -166,7 +166,7 @@ If the walk doesn't yield enough signal — e.g. the project is
 genuinely new, or the outcomes don't map to anything you found
 — DO NOT guess. Either:
 
-- Use `convention.type=template_id` and name the framework-
+- Use `ref.type=template_id` and name the framework-
   shipped template appropriate to the outcome's runtime (this
   is the legitimate greenfield branch); OR
 - Terminate with `decide(action="needs_clarification",

@@ -20,7 +20,7 @@ func minimalValidArtifact() Artifact {
 		Actors: []Actor{
 			{Name: "OSH driver framework", Role: "host of the IDriver interface"},
 		},
-		SeedRequirements: []SeedRequirement{
+		Tasks: []Task{
 			{Title: "Implement IDriver", Scope: "backend", GroundsActors: []string{"OSH driver framework"}},
 		},
 		Provenance: Provenance{
@@ -51,7 +51,7 @@ func TestArtifact_RoundTrip(t *testing.T) {
 			{From: "Meshtastic radio", To: "OSH driver framework", Direction: DirectionRead, Data: "MeshPacket payloads"},
 			{From: "OSH driver framework", To: "OGC CS endpoints", Direction: DirectionWrite, Data: "SensorML observations"},
 		},
-		SeedRequirements: []SeedRequirement{
+		Tasks: []Task{
 			{
 				Title:                    "Implement IDriver",
 				Scope:                    "backend",
@@ -103,11 +103,11 @@ func TestArtifact_RoundTrip(t *testing.T) {
 	if got.IntegrationPoints[0].Direction != DirectionRead {
 		t.Errorf("integration_points[0].direction: got %q, want %q", got.IntegrationPoints[0].Direction, DirectionRead)
 	}
-	if len(got.SeedRequirements) != len(orig.SeedRequirements) {
-		t.Fatalf("seed_requirements len: got %d, want %d", len(got.SeedRequirements), len(orig.SeedRequirements))
+	if len(got.Tasks) != len(orig.Tasks) {
+		t.Fatalf("tasks len: got %d, want %d", len(got.Tasks), len(orig.Tasks))
 	}
-	if got.SeedRequirements[0].Title != orig.SeedRequirements[0].Title {
-		t.Errorf("seed_requirements[0].title: got %q, want %q", got.SeedRequirements[0].Title, orig.SeedRequirements[0].Title)
+	if got.Tasks[0].Title != orig.Tasks[0].Title {
+		t.Errorf("tasks[0].title: got %q, want %q", got.Tasks[0].Title, orig.Tasks[0].Title)
 	}
 	if got.Provenance.ResearchArtifactLoop != orig.Provenance.ResearchArtifactLoop {
 		t.Errorf("provenance.research_artifact_loop: got %q, want %q", got.Provenance.ResearchArtifactLoop, orig.Provenance.ResearchArtifactLoop)
@@ -188,9 +188,9 @@ func TestArtifact_Validate_Table(t *testing.T) {
 			wantErrContains: "actors",
 		},
 		{
-			name:            "no seed requirements",
-			mutate:          func(a *Artifact) { a.SeedRequirements = nil },
-			wantErrContains: "seed_requirements",
+			name:            "no tasks",
+			mutate:          func(a *Artifact) { a.Tasks = nil },
+			wantErrContains: "tasks",
 		},
 		{
 			name: "invalid integration point direction",
@@ -285,20 +285,19 @@ func TestRegisterPayloads(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------
-// R3.7.2.b — VerificationCommitments wiring
+// R3.7.2.b — Checks wiring
 // ---------------------------------------------------------------------
 
-// validCommitment is a happy-path commitment used across the
-// commitment-related tests. Brownfield convention pointing at the
-// repo's own existing integration test pattern.
-func validCommitment() verification.Commitment {
-	return verification.Commitment{
-		Target:   "executor publishes the expected subject on success",
-		Approach: verification.ApproachProcessLocalTestcontainer,
-		Harness:  "nats-jetstream",
-		Runtime:  "go-testing-net",
-		Convention: verification.ConventionRef{
-			Type: verification.ConventionFilepath,
+// validCheck is a happy-path check used across the check-related tests.
+// Brownfield ref pointing at the repo's own existing integration test pattern.
+func validCheck() verification.Check {
+	return verification.Check{
+		Target:      "executor publishes the expected subject on success",
+		Runtime:     verification.RuntimeProcessLocalTestcontainer,
+		TestHarness: "nats-jetstream",
+		TestRuntime: "go-testing-net",
+		Ref: verification.Ref{
+			Type: verification.RefFilepath,
 			Path: "cmd/semteams/sandbox/integration_test.go",
 		},
 		Evidence: []verification.EvidenceRule{
@@ -307,16 +306,16 @@ func validCommitment() verification.Commitment {
 	}
 }
 
-func TestArtifact_Commitments_RoundTrip(t *testing.T) {
+func TestArtifact_Checks_RoundTrip(t *testing.T) {
 	t.Parallel()
 	orig := minimalValidArtifact()
-	orig.VerificationCommitments = []verification.Commitment{
-		validCommitment(),
+	orig.Checks = []verification.Check{
+		validCheck(),
 		{
-			Target:   "executor returns ToolErrorInvalidArgs for malformed args",
-			Approach: verification.ApproachInProcessUnit,
-			Convention: verification.ConventionRef{
-				Type: verification.ConventionFilepath,
+			Target:  "executor returns ToolErrorInvalidArgs for malformed args",
+			Runtime: verification.RuntimeInProcessUnit,
+			Ref: verification.Ref{
+				Type: verification.RefFilepath,
 				Path: "cmd/semteams/tools/x/executor_test.go",
 			},
 		},
@@ -329,79 +328,79 @@ func TestArtifact_Commitments_RoundTrip(t *testing.T) {
 	if err := json.Unmarshal(data, &got); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if len(got.VerificationCommitments) != 2 {
-		t.Fatalf("commitments len: got %d, want 2", len(got.VerificationCommitments))
+	if len(got.Checks) != 2 {
+		t.Fatalf("checks len: got %d, want 2", len(got.Checks))
 	}
-	if got.VerificationCommitments[0].Approach != verification.ApproachProcessLocalTestcontainer {
-		t.Errorf("commitments[0].approach: got %q", got.VerificationCommitments[0].Approach)
+	if got.Checks[0].Runtime != verification.RuntimeProcessLocalTestcontainer {
+		t.Errorf("checks[0].runtime: got %q", got.Checks[0].Runtime)
 	}
-	if got.VerificationCommitments[0].Harness != "nats-jetstream" {
-		t.Errorf("commitments[0].harness: got %q", got.VerificationCommitments[0].Harness)
+	if got.Checks[0].TestHarness != "nats-jetstream" {
+		t.Errorf("checks[0].test_harness: got %q", got.Checks[0].TestHarness)
 	}
-	if got.VerificationCommitments[1].Approach != verification.ApproachInProcessUnit {
-		t.Errorf("commitments[1].approach: got %q", got.VerificationCommitments[1].Approach)
+	if got.Checks[1].Runtime != verification.RuntimeInProcessUnit {
+		t.Errorf("checks[1].runtime: got %q", got.Checks[1].Runtime)
 	}
 }
 
-func TestArtifact_Commitments_OmitemptyWhenNil(t *testing.T) {
+func TestArtifact_Checks_OmitemptyWhenNil(t *testing.T) {
 	t.Parallel()
 	a := minimalValidArtifact()
-	// VerificationCommitments unset (zero-value nil slice).
+	// Checks unset (zero-value nil slice).
 	data, err := json.Marshal(&a)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := string(data); strings.Contains(got, `"verification_commitments"`) {
-		t.Errorf("expected verification_commitments to be omitted when nil; body=%s", got)
+	if got := string(data); strings.Contains(got, `"checks"`) {
+		t.Errorf("expected checks to be omitted when nil; body=%s", got)
 	}
 }
 
-func TestArtifact_Commitments_OmitemptyWhenEmptySlice(t *testing.T) {
+func TestArtifact_Checks_OmitemptyWhenEmptySlice(t *testing.T) {
 	t.Parallel()
 	a := minimalValidArtifact()
-	a.VerificationCommitments = []verification.Commitment{}
+	a.Checks = []verification.Check{}
 	data, err := json.Marshal(&a)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := string(data); strings.Contains(got, `"verification_commitments"`) {
-		t.Errorf("expected verification_commitments to be omitted when empty slice; body=%s", got)
+	if got := string(data); strings.Contains(got, `"checks"`) {
+		t.Errorf("expected checks to be omitted when empty slice; body=%s", got)
 	}
 }
 
-func TestArtifact_Validate_CascadesIntoCommitments(t *testing.T) {
+func TestArtifact_Validate_CascadesIntoChecks(t *testing.T) {
 	t.Parallel()
 	a := minimalValidArtifact()
-	a.VerificationCommitments = []verification.Commitment{
-		validCommitment(),
+	a.Checks = []verification.Check{
+		validCheck(),
 		{
-			// Invalid: testcontainer approach without a harness.
-			Target:   "x",
-			Approach: verification.ApproachProcessLocalTestcontainer,
-			Runtime:  "go-testing-net",
-			Convention: verification.ConventionRef{
-				Type: verification.ConventionFilepath,
+			// Invalid: testcontainer runtime without a test_harness.
+			Target:      "x",
+			Runtime:     verification.RuntimeProcessLocalTestcontainer,
+			TestRuntime: "go-testing-net",
+			Ref: verification.Ref{
+				Type: verification.RefFilepath,
 				Path: "x_test.go",
 			},
 		},
 	}
 	err := a.Validate()
 	if err == nil {
-		t.Fatal("expected error from cascade into commitments[1], got nil")
+		t.Fatal("expected error from cascade into checks[1], got nil")
 	}
-	if !strings.Contains(err.Error(), "verification_commitments[1]") {
-		t.Errorf("expected error to name commitments[1], got %v", err)
+	if !strings.Contains(err.Error(), "checks[1]") {
+		t.Errorf("expected error to name checks[1], got %v", err)
 	}
-	if !strings.Contains(err.Error(), "requires a harness") {
+	if !strings.Contains(err.Error(), "requires a test_harness") {
 		t.Errorf("expected error to include underlying validate message, got %v", err)
 	}
 }
 
-func TestArtifact_Validate_AcceptsNoCommitments(t *testing.T) {
+func TestArtifact_Validate_AcceptsNoChecks(t *testing.T) {
 	t.Parallel()
-	// The architect-persona contract that requires commitments for
+	// The architect-persona contract that requires checks for
 	// external-actor work lands in R3.7.2.f. At the structural
-	// validation boundary, an artifact with zero commitments is
+	// validation boundary, an artifact with zero checks is
 	// still valid (e.g. truly pure work, or transition window).
 	a := minimalValidArtifact()
 	if err := a.Validate(); err != nil {

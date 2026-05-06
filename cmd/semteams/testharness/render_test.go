@@ -1,4 +1,4 @@
-package harness
+package testharness
 
 import (
 	"strings"
@@ -10,17 +10,17 @@ func TestRenderResearcherFragment_Empty(t *testing.T) {
 
 	for _, want := range []string{
 		"# Available test harnesses",
-		"No harnesses are currently registered for this deployment",
+		"No test harnesses are currently registered for this deployment",
 		"`configs/harnesses.json`) is empty",
-		"needs_harness:",
-		"DO NOT add a `needs_harness:` gap",
+		"needs_test_harness:",
+		"DO NOT add a `needs_test_harness:` gap",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("rendered fragment missing %q\n--- got ---\n%s", want, out)
 		}
 	}
 
-	// Should not name a specific harness when empty.
+	// Should not name a specific test harness when empty.
 	for _, forbidden := range []string{"meshtasticd", "Image:", "Smoke contract schema"} {
 		if strings.Contains(out, forbidden) {
 			t.Errorf("rendered empty fragment unexpectedly contains %q", forbidden)
@@ -29,7 +29,7 @@ func TestRenderResearcherFragment_Empty(t *testing.T) {
 }
 
 func TestRenderResearcherFragment_WithEntries(t *testing.T) {
-	catalog := []*Harness{
+	catalog := []*TestHarness{
 		{
 			Name:                "meshtasticd-3.x",
 			ComposeProfile:      "harness-meshtasticd",
@@ -54,7 +54,7 @@ func TestRenderResearcherFragment_WithEntries(t *testing.T) {
 	out := RenderResearcherFragment(catalog)
 
 	for _, want := range []string{
-		"2 harness(es) registered",
+		"2 test harness(es) registered",
 		"1. `meshtasticd-3.x`",
 		"2. `kafka-stub`",
 		"meshtastic/meshtasticd:3.5.0",
@@ -63,7 +63,7 @@ func TestRenderResearcherFragment_WithEntries(t *testing.T) {
 		"com.geeksville.mesh:meshtastic-protobufs [2.x,3.x)",
 		"confluentinc/cp-kafka:7.5.0",
 		"kafka.smoke_contract.v1",
-		"If NONE of the registered harnesses fits",
+		"If NONE of the registered test harnesses fits",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("rendered fragment missing %q\n--- got ---\n%s", want, out)
@@ -82,7 +82,7 @@ func TestRenderResearcherFragment_WithEntries(t *testing.T) {
 }
 
 func TestRenderResearcherFragment_DeterministicAcrossCalls(t *testing.T) {
-	catalog := []*Harness{
+	catalog := []*TestHarness{
 		{Name: "a", ComposeProfile: "p", Image: "i", SmokeContractSchema: "s.v1", DomainDescription: "d"},
 	}
 	got1 := RenderResearcherFragment(catalog)

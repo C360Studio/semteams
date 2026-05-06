@@ -68,7 +68,7 @@ responses:
           "integration_points": [
             {"from": "OSH driver framework", "to": "OGC Connected Systems endpoints", "data": "observations, system descriptions", "direction": "write"}
           ],
-          "seed_requirements": [
+          "tasks": [
             "Implement OSH IDriver interface to bridge a sensor protocol into OSH's data model"
           ],
           "addressed_gaps": [],
@@ -115,7 +115,7 @@ responses:
             {"from": "OSH driver framework", "to": "OGC Connected Systems endpoints", "data": "observations, system descriptions", "direction": "write"},
             {"from": "Meshtastic radio", "to": "OSH driver framework", "data": "MeshPacket payloads carrying sensor observations", "direction": "read"}
           ],
-          "seed_requirements": [
+          "tasks": [
             "Implement OSH IDriver interface backed by a Meshtastic MQTT/serial bridge so MeshPacket observations surface as OGC CS observation events"
           ],
           "addressed_gaps": [

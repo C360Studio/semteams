@@ -110,7 +110,7 @@ func defaultArtifactArgs() map[string]any {
 		"integration_points": []any{
 			map[string]any{"from": "OSH driver", "to": "OGC CS endpoints", "data": "observation messages", "direction": "write"},
 		},
-		"seed_requirements": []any{
+		"tasks": []any{
 			"implement OSH IDriver backed by Meshtastic events",
 			"expose observations on OGC CS endpoints",
 		},
@@ -137,7 +137,7 @@ func TestListTools_SchemaShape(t *testing.T) {
 	if !ok {
 		t.Fatalf("schema missing properties: %#v", def.Parameters)
 	}
-	for _, key := range []string{"revision", "actors", "integration_points", "seed_requirements", "addressed_gaps", "open_gaps", "substrate_mutations", "harness"} {
+	for _, key := range []string{"revision", "actors", "integration_points", "tasks", "addressed_gaps", "open_gaps", "substrate_mutations", "test_harness"} {
 		if _, ok := props[key]; !ok {
 			t.Errorf("missing property %q in tool schema", key)
 		}
@@ -150,7 +150,7 @@ func TestListTools_SchemaShape(t *testing.T) {
 		}
 	}
 	required, _ := def.Parameters["required"].([]string)
-	wantRequired := map[string]bool{"revision": true, "actors": true, "integration_points": true, "seed_requirements": true}
+	wantRequired := map[string]bool{"revision": true, "actors": true, "integration_points": true, "tasks": true}
 	got := map[string]bool{}
 	for _, r := range required {
 		got[r] = true
@@ -309,7 +309,7 @@ func TestExecute_HappyPath_TripleSet(t *testing.T) {
 		predicateRevision:                  1,
 		predicateActorsCount:               2,
 		predicateIntegrationPointsCount:    1,
-		predicateSeedRequirementsCount:     2,
+		predicateTasksCount:                2,
 		predicateAddressedGapsCount:        0,
 		predicateOpenGapsCount:             0,
 		predicateLastRevisionMutationCount: 0,
@@ -372,7 +372,7 @@ func TestExecute_ResultContent_ShapeAndCounts(t *testing.T) {
 		Revision                  int    `json:"revision"`
 		ActorsCount               int    `json:"actors_count"`
 		IntegrationPointsCount    int    `json:"integration_points_count"`
-		SeedRequirementsCount     int    `json:"seed_requirements_count"`
+		TasksCount                int    `json:"tasks_count"`
 		LastRevisionMutationCount int    `json:"last_revision_mutation_count"`
 		PayloadSubject            string `json:"payload_subject"`
 		LoopEntityID              string `json:"loop_entity_id"`
@@ -482,13 +482,13 @@ func TestExecute_MutationCount_WithCurrentRevisionEntry(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------
-// R3.7.1.b — harness field handling
+// R3.7.1.b — test_harness field handling
 // ---------------------------------------------------------------------
 
-func TestExecute_HarnessSet_EmitsHarnessTriple(t *testing.T) {
+func TestExecute_TestHarnessSet_EmitsTestHarnessTriple(t *testing.T) {
 	exec, tp, pub := newExecutor(t)
 	args := defaultArtifactArgs()
-	args["harness"] = "meshtasticd-3.x"
+	args["test_harness"] = "meshtasticd-3.x"
 
 	res, err := exec.Execute(context.Background(), defaultCall(args))
 	if err != nil {
@@ -502,12 +502,12 @@ func TestExecute_HarnessSet_EmitsHarnessTriple(t *testing.T) {
 	for _, tr := range tp.snapshot() {
 		gotPredicates[tr.Predicate] = tr.Object
 	}
-	got, ok := gotPredicates[predicateHarness]
+	got, ok := gotPredicates[predicateTestHarness]
 	if !ok {
-		t.Fatalf("harness triple not emitted; predicates: %v", gotPredicates)
+		t.Fatalf("test_harness triple not emitted; predicates: %v", gotPredicates)
 	}
 	if got != "meshtasticd-3.x" {
-		t.Errorf("harness object = %v, want meshtasticd-3.x", got)
+		t.Errorf("test_harness object = %v, want meshtasticd-3.x", got)
 	}
 
 	// Payload also carries the field round-trip.
@@ -516,25 +516,25 @@ func TestExecute_HarnessSet_EmitsHarnessTriple(t *testing.T) {
 	if err := json.Unmarshal(data, &roundTrip); err != nil {
 		t.Fatalf("decode payload: %v", err)
 	}
-	if roundTrip["harness"] != "meshtasticd-3.x" {
-		t.Errorf("payload.harness = %v, want meshtasticd-3.x", roundTrip["harness"])
+	if roundTrip["test_harness"] != "meshtasticd-3.x" {
+		t.Errorf("payload.test_harness = %v, want meshtasticd-3.x", roundTrip["test_harness"])
 	}
 
-	// Result content (next-turn LLM-visible) carries the harness key.
+	// Result content (next-turn LLM-visible) carries the test_harness key.
 	var resultMap map[string]any
 	if err := json.Unmarshal([]byte(res.Content), &resultMap); err != nil {
 		t.Fatalf("decode result content: %v", err)
 	}
-	if resultMap["harness"] != "meshtasticd-3.x" {
-		t.Errorf("result.harness = %v, want meshtasticd-3.x", resultMap["harness"])
+	if resultMap["test_harness"] != "meshtasticd-3.x" {
+		t.Errorf("result.test_harness = %v, want meshtasticd-3.x", resultMap["test_harness"])
 	}
 }
 
-func TestExecute_HarnessUnset_OmitsHarnessTriple(t *testing.T) {
+func TestExecute_TestHarnessUnset_OmitsTestHarnessTriple(t *testing.T) {
 	exec, tp, pub := newExecutor(t)
 	args := defaultArtifactArgs()
 	// Explicit catalog-miss path — researcher flags the gap in open_gaps.
-	args["open_gaps"] = []any{"needs_harness: real Meshtastic radio over LoRa"}
+	args["open_gaps"] = []any{"needs_test_harness: real Meshtastic radio over LoRa"}
 
 	res, err := exec.Execute(context.Background(), defaultCall(args))
 	if err != nil {
@@ -545,22 +545,22 @@ func TestExecute_HarnessUnset_OmitsHarnessTriple(t *testing.T) {
 	}
 
 	for _, tr := range tp.snapshot() {
-		if tr.Predicate == predicateHarness {
-			t.Errorf("harness triple emitted with empty harness field; object=%v", tr.Object)
+		if tr.Predicate == predicateTestHarness {
+			t.Errorf("test_harness triple emitted with empty test_harness field; object=%v", tr.Object)
 		}
 	}
 
 	// Payload omits the field via omitempty so older v1 consumers see no
 	// drift.
 	_, data, _ := pub.snapshot()
-	if got := string(data); strings.Contains(got, `"harness"`) {
-		t.Errorf("expected harness omitted from payload, got %s", got)
+	if got := string(data); strings.Contains(got, `"test_harness"`) {
+		t.Errorf("expected test_harness omitted from payload, got %s", got)
 	}
 
 	// Result content (next-turn LLM-visible) also omits the key so the
-	// next-turn LLM doesn't see "harness":"" as an explicit empty.
-	if got := res.Content; strings.Contains(got, `"harness"`) {
-		t.Errorf("expected harness omitted from result content, got %s", got)
+	// next-turn LLM doesn't see "test_harness":"" as an explicit empty.
+	if got := res.Content; strings.Contains(got, `"test_harness"`) {
+		t.Errorf("expected test_harness omitted from result content, got %s", got)
 	}
 }
 

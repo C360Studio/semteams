@@ -1,7 +1,7 @@
 // Package evidence implements the post-build evidence gate the
 // dev-via-spec dvs-reviewer (R3.7.2.j′) consults to grade an
-// architect's verification commitments. Each architect commitment
-// (verification.Commitment, R3.7.2.a) carries an Evidence []EvidenceRule
+// architect's verification checks. Each architect check
+// (verification.Check, R3.7.2.a) carries an Evidence []EvidenceRule
 // slice; this package owns the executor that dispatches each rule's
 // Kind to a concrete Checker against a populated Context
 // (workspace, runner output paths) and reports per-rule + aggregate
@@ -19,7 +19,7 @@
 //
 // # Closed-fail on unknown kinds
 //
-// Per the comment in cmd/semteams/verification/commitment.go on
+// Per the comment in cmd/semteams/verification/check.go on
 // EvidenceRule, unknown kinds are fail-closed at gate time, NOT at
 // validate time. This package's Run dispatcher returns
 // ResultUnknownKind for any rule whose Kind is not registered; the

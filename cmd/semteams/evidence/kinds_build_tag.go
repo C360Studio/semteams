@@ -11,12 +11,12 @@ import (
 
 // KindTestUsesBuildTag is the registered kind name for the Go
 // integration-tag checker. Narrow on purpose: an architect's
-// process-local-testcontainer commitment naming
-// `runtime: go-testing-net` typically wants the test gated behind
+// process-local-testcontainer check naming
+// `test_runtime: go-testing-net` typically wants the test gated behind
 // a build tag (e.g. `//go:build integration`) so a default
 // `go test` run doesn't try to spin up containers. Without this
 // rule, a builder writing an in-process unit test against a fake
-// satisfies the wire shape but defeats the commitment.
+// satisfies the wire shape but defeats the check.
 const KindTestUsesBuildTag = "test_uses_build_tag"
 
 // BuildTagChecker validates that a Go test file declares the cited

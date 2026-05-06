@@ -23,7 +23,7 @@ func TestArtifact_RoundTrip(t *testing.T) {
 			{From: "OSH driver framework", To: "OGC CS endpoints", Data: "observations", Direction: DirectionWrite},
 			{From: "Meshtastic radio", To: "OSH driver framework", Data: "MeshPacket payloads", Direction: DirectionRead},
 		},
-		SeedRequirements: []string{
+		Tasks: []string{
 			"Implement OSH IDriver backed by Meshtastic radio events",
 		},
 		AddressedGaps: []string{
@@ -74,18 +74,18 @@ func TestArtifact_RoundTrip(t *testing.T) {
 	}
 }
 
-func TestArtifact_Harness_RoundTrip(t *testing.T) {
+func TestArtifact_TestHarness_RoundTrip(t *testing.T) {
 	t.Parallel()
 
 	now := time.Now().UTC()
 
-	t.Run("harness set round-trips", func(t *testing.T) {
+	t.Run("test_harness set round-trips", func(t *testing.T) {
 		t.Parallel()
 		orig := &Artifact{
-			LoopID:     "loop_abc",
-			Revision:   1,
-			Harness:    "meshtasticd-3.x",
-			ProducedAt: now,
+			LoopID:      "loop_abc",
+			Revision:    1,
+			TestHarness: "meshtasticd-3.x",
+			ProducedAt:  now,
 		}
 		data, err := json.Marshal(orig)
 		if err != nil {
@@ -95,32 +95,32 @@ func TestArtifact_Harness_RoundTrip(t *testing.T) {
 		if err := json.Unmarshal(data, &got); err != nil {
 			t.Fatal(err)
 		}
-		if got.Harness != orig.Harness {
-			t.Errorf("harness: got %q, want %q", got.Harness, orig.Harness)
+		if got.TestHarness != orig.TestHarness {
+			t.Errorf("test_harness: got %q, want %q", got.TestHarness, orig.TestHarness)
 		}
 	})
 
-	t.Run("harness omitempty", func(t *testing.T) {
+	t.Run("test_harness omitempty", func(t *testing.T) {
 		t.Parallel()
 		a := &Artifact{LoopID: "loop_abc", Revision: 1, ProducedAt: now}
 		data, err := json.Marshal(a)
 		if err != nil {
 			t.Fatal(err)
 		}
-		// JSON omitempty: empty string Harness should not be present in
-		// the wire bytes — guards against breaking older v1 consumers.
-		if got := string(data); strings.Contains(got, `"harness"`) {
-			t.Errorf("expected harness to be omitted when empty, got %s", got)
+		// JSON omitempty: empty string TestHarness should not be present
+		// in the wire bytes — guards against breaking older v1 consumers.
+		if got := string(data); strings.Contains(got, `"test_harness"`) {
+			t.Errorf("expected test_harness to be omitted when empty, got %s", got)
 		}
 	})
 
 	t.Run("validate accepts both presence and absence", func(t *testing.T) {
 		t.Parallel()
 		// The Validate() boundary is structural — semantic either-or
-		// (harness OR needs_harness gap) is the reviewer persona's job.
-		// Both shapes must pass Validate.
-		hit := Artifact{LoopID: "x", Revision: 1, Harness: "stub", ProducedAt: now}
-		miss := Artifact{LoopID: "x", Revision: 1, OpenGaps: []string{"needs_harness: real Meshtastic radio"}, ProducedAt: now}
+		// (test_harness OR needs_test_harness gap) is the reviewer
+		// persona's job. Both shapes must pass Validate.
+		hit := Artifact{LoopID: "x", Revision: 1, TestHarness: "stub", ProducedAt: now}
+		miss := Artifact{LoopID: "x", Revision: 1, OpenGaps: []string{"needs_test_harness: real Meshtastic radio"}, ProducedAt: now}
 		if err := hit.Validate(); err != nil {
 			t.Errorf("hit case: %v", err)
 		}

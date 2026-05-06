@@ -1,6 +1,6 @@
 //go:build integration
 
-package harness
+package testharness
 
 import (
 	"context"
@@ -74,14 +74,14 @@ func (s *HTTPIntegrationSuite) TestList_Empty() {
 }
 
 func (s *HTTPIntegrationSuite) TestList_WithEntries() {
-	require.NoError(s.T(), s.manager.Put(s.ctx, &Harness{
+	require.NoError(s.T(), s.manager.Put(s.ctx, &TestHarness{
 		Name:                "alpha",
 		ComposeProfile:      "p",
 		Image:               "i",
 		SmokeContractSchema: "s.v1",
 		DomainDescription:   "first",
 	}))
-	require.NoError(s.T(), s.manager.Put(s.ctx, &Harness{
+	require.NoError(s.T(), s.manager.Put(s.ctx, &TestHarness{
 		Name:                "bravo",
 		ComposeProfile:      "p",
 		Image:               "i",
@@ -103,7 +103,7 @@ func (s *HTTPIntegrationSuite) TestList_WithEntries() {
 }
 
 func (s *HTTPIntegrationSuite) TestGet_ByName() {
-	require.NoError(s.T(), s.manager.Put(s.ctx, &Harness{
+	require.NoError(s.T(), s.manager.Put(s.ctx, &TestHarness{
 		Name:                "stub",
 		ComposeProfile:      "harness-stub",
 		Image:               "scratch",
@@ -116,7 +116,7 @@ func (s *HTTPIntegrationSuite) TestGet_ByName() {
 	s.wrapped.ServeHTTP(rr, req)
 
 	require.Equal(s.T(), http.StatusOK, rr.Code)
-	var got Harness
+	var got TestHarness
 	body, _ := io.ReadAll(rr.Body)
 	require.NoError(s.T(), json.Unmarshal(body, &got))
 	require.Equal(s.T(), "stub", got.Name)

@@ -1,10 +1,10 @@
-# Commitment transcription
+# Check transcription
 
 > Added R3.7.2.c per ADR-033 §addendum 2026-05-04. THIS fragment is
-> the upstream-discipline anchor: when you emit commitments, you
+> the upstream-discipline anchor: when you emit checks, you
 > transcribe from the planner's verifiable outcomes — you do not
-> invent. The structural contract (when commitments are required,
-> how to pick `approach`, brownfield vs greenfield convention)
+> invent. The structural contract (when checks are required,
+> how to pick `runtime`, brownfield vs greenfield ref)
 > lives in `30-commitment-contract.md` (R3.7.2.f′).
 
 The planner's `decide.reason` enumerated **Verifiable Outcomes**.
@@ -14,62 +14,62 @@ final list into its `decide(accept).reason`.
 
 By the time you read the challenger's accept summary, you have a
 **vetted list of falsifiable claims**. Your job in populating
-`verification_commitments[]` on the artifact is to TRANSCRIBE them
-into the structured form, not to invent new ones.
+`checks[]` on the artifact is to TRANSCRIBE them into the
+structured form, not to invent new ones.
 
 ## What transcription means
 
 For each verifiable outcome the upstream chain accepted, emit one
-or more commitments where the commitment's `target` field is the
-outcome's substance:
+or more checks where the check's `target` field is the outcome's
+substance:
 
 - Outcome (planner prose): *"When meshtasticd publishes POSITION_APP
   from node 0xABCD on TCP/4403, the driver emits a CS API observation
   within 500ms with non-null SensorML schema and matching node_id."*
 
-- Commitment (your transcription):
+- Check (your transcription):
   ```
   {
     target: "driver emits CS API observation within 500ms when
              meshtasticd publishes POSITION_APP from node 0xABCD on
              TCP/4403; observation has non-null SensorML schema and
              matching node_id",
-    approach: "external-sidecar",
-    harness: "meshtasticd-3.x",
-    runtime: "java-junit-testcontainers",
-    convention: { type: "template_id",
-                  id: "tcp.binary-protobuf.java-junit-testcontainers.v1" },
+    runtime: "external-sidecar",
+    test_harness: "meshtasticd-3.x",
+    test_runtime: "java-junit-testcontainers",
+    ref: { type: "template_id",
+           id: "tcp.binary-protobuf.java-junit-testcontainers.v1" },
     evidence: [...]
   }
   ```
 
 The `target` is the planner's outcome restated in claim-shape. The
-`approach` / `harness` / `runtime` / `convention` / `evidence` are
-your judgment — they're the MECHANISM that proves the claim.
+`runtime` / `test_harness` / `test_runtime` / `ref` / `evidence`
+are your judgment — they're the MECHANISM that proves the claim.
 
-## When one outcome → multiple commitments
+## When one outcome → multiple checks
 
 If a single outcome has both unit-testable AND integration-testable
-substance, emit one commitment per layer:
+substance, emit one check per layer:
 
-- Unit-level: `approach: in-process-unit` covers the in-language
+- Unit-level: `runtime: in-process-unit` covers the in-language
   logic (e.g. "POSITION_APP unmarshalling produces correct
   SensorML field mapping").
-- Integration-level: `approach: external-sidecar` covers the
+- Integration-level: `runtime: external-sidecar` covers the
   end-to-end claim ("real meshtasticd → real observation").
 
 Both targets paraphrase the same outcome at different abstraction
 levels. The reviewer's coverage check is satisfied by either layer
-having at least one commitment.
+having at least one check.
 
-## When one commitment → multiple outcomes
+## When one check → multiple outcomes
 
 If two outcomes describe behaviors a single integration test
 naturally exercises (e.g. "POSITION_APP → observation" AND
-"non-POSITION_APP → no observation"), one commitment whose
-`target` references both is fine — but the commitment's evidence
-rules should structurally enforce both behaviors (e.g. two
-`test_asserts_subject` rules with different expected counts).
+"non-POSITION_APP → no observation"), one check whose `target`
+references both is fine — but the check's evidence rules should
+structurally enforce both behaviors (e.g. two `test_asserts_subject`
+rules with different expected counts).
 
 ## What you must NOT do
 
@@ -101,11 +101,11 @@ rules should structurally enforce both behaviors (e.g. two
   notes for ungroundable epic titles.
 
 - **Do not weaken outcomes when transcribing.** If the planner's
-  outcome named a 500ms timing threshold, your commitment's target
+  outcome named a 500ms timing threshold, your check's target
   preserves it. You may rephrase for clarity; you may not relax.
 
 - **Do not skip outcomes.** Every outcome in the challenger's
-  curated list gets at least one commitment. Reviewer rejects on
+  curated list gets at least one check. Reviewer rejects on
   missing coverage.
 
 ## Cross-reference for self-check
@@ -113,9 +113,9 @@ rules should structurally enforce both behaviors (e.g. two
 Before calling `emit_dev_via_spec_artifact`, walk the challenger's
 accept-summary verifiable-outcomes list one final time. For each:
 
-- Did I emit at least one commitment whose target captures this
+- Did I emit at least one check whose target captures this
   outcome's substance?
-- Does the commitment's approach / harness / runtime fit the
+- Does the check's runtime / test_harness / test_runtime fit the
   outcome's substance? (e.g. an outcome about "real meshtasticd
   packet" needs `external-sidecar`, not `in-process-unit`.)
 
@@ -126,14 +126,14 @@ is dishonest evidence.
 
 ## What this fragment does NOT cover
 
-- The structural REQUIREMENT to emit at least one commitment for
+- The structural REQUIREMENT to emit at least one check for
   external-actor work — see `30-commitment-contract.md`.
-- Catalog-bound validation (does the named harness exist? does the
-  runtime support the family?) — that's the schema gate (R3.7.2.h′),
+- Catalog-bound validation (does the named test_harness exist? does
+  the runtime support the family?) — that's the schema gate (R3.7.2.h′),
   fired against catalog state at emit time.
 - Evidence-rule kind enumeration — the registry primitive ships in
   R3.7.2.i′. Until that slice lands, an empty `evidence: []` is
-  acceptable ONLY when the commitment's runtime template (e.g.
+  acceptable ONLY when the check's runtime template (e.g.
   `tcp.binary-protobuf.java-junit-testcontainers.v1`) is itself
   structurally constrained at the framework layer — the template
   enforces what the explicit evidence rules will enforce later.

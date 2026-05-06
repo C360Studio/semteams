@@ -7,13 +7,13 @@ import (
 
 func TestSummarize_EmptyInput(t *testing.T) {
 	out := Summarize(nil)
-	if !strings.Contains(out, "(no commitments)") {
+	if !strings.Contains(out, "(no checks)") {
 		t.Errorf("empty input should render placeholder; got:\n%s", out)
 	}
 }
 
 func TestSummarize_SingleAllPassed(t *testing.T) {
-	out := Summarize([]CommitmentSummary{{
+	out := Summarize([]CheckSummary{{
 		Index:  1,
 		Target: "driver emits CS API observation",
 		Results: []Result{
@@ -23,7 +23,7 @@ func TestSummarize_SingleAllPassed(t *testing.T) {
 	}})
 
 	for _, want := range []string{
-		"## Commitment 1 — driver emits CS API observation",
+		"## Check 1 — driver emits CS API observation",
 		"2 pass / 0 fail / 0 unknown / 0 error / total 2 — ALL PASSED",
 		"- [pass] test_file_exists",
 		"- [pass] surefire_passing_count",
@@ -35,7 +35,7 @@ func TestSummarize_SingleAllPassed(t *testing.T) {
 }
 
 func TestSummarize_MixedStatusesEchoDetail(t *testing.T) {
-	out := Summarize([]CommitmentSummary{{
+	out := Summarize([]CheckSummary{{
 		Index:  1,
 		Target: "driver emits CS API observation",
 		Results: []Result{
@@ -59,16 +59,16 @@ func TestSummarize_MixedStatusesEchoDetail(t *testing.T) {
 	}
 }
 
-func TestSummarize_EmptyRulesOnCommitment(t *testing.T) {
-	out := Summarize([]CommitmentSummary{{
+func TestSummarize_EmptyRulesOnCheck(t *testing.T) {
+	out := Summarize([]CheckSummary{{
 		Index:   1,
 		Target:  "x",
 		Results: nil,
 	}})
 
 	for _, want := range []string{
-		"## Commitment 1 — x",
-		"total 0 — (no rules on this commitment)",
+		"## Check 1 — x",
+		"total 0 — (no rules on this check)",
 		"Per-rule: (none)",
 	} {
 		if !strings.Contains(out, want) {
@@ -77,8 +77,8 @@ func TestSummarize_EmptyRulesOnCommitment(t *testing.T) {
 	}
 }
 
-func TestSummarize_MultiCommitmentSeparated(t *testing.T) {
-	out := Summarize([]CommitmentSummary{
+func TestSummarize_MultiCheckSeparated(t *testing.T) {
+	out := Summarize([]CheckSummary{
 		{
 			Index:   1,
 			Target:  "real-stack claim",
@@ -91,20 +91,20 @@ func TestSummarize_MultiCommitmentSeparated(t *testing.T) {
 		},
 	})
 
-	idx1 := strings.Index(out, "## Commitment 1 — real-stack claim")
+	idx1 := strings.Index(out, "## Check 1 — real-stack claim")
 	if idx1 < 0 {
-		t.Fatalf("missing first commitment heading; got:\n%s", out)
+		t.Fatalf("missing first check heading; got:\n%s", out)
 	}
-	idx2 := strings.Index(out, "## Commitment 2 — in-process unit claim")
+	idx2 := strings.Index(out, "## Check 2 — in-process unit claim")
 	if idx2 < 0 {
-		t.Fatalf("missing second commitment heading; got:\n%s", out)
+		t.Fatalf("missing second check heading; got:\n%s", out)
 	}
 	if idx1 >= idx2 {
-		t.Errorf("commitments rendered out of order (idx1=%d idx2=%d); rendering must preserve input order", idx1, idx2)
+		t.Errorf("checks rendered out of order (idx1=%d idx2=%d); rendering must preserve input order", idx1, idx2)
 	}
-	// Two ALL-PASSED headlines, one per commitment.
+	// Two ALL-PASSED headlines, one per check.
 	if got := strings.Count(out, "ALL PASSED"); got != 2 {
-		t.Errorf("ALL PASSED count = %d, want 2 (one per commitment)", got)
+		t.Errorf("ALL PASSED count = %d, want 2 (one per check)", got)
 	}
 }
 
@@ -113,7 +113,7 @@ func TestSummarize_PassWithoutDetail_NoTrailingColon(t *testing.T) {
 	// `- [pass] kind: ` with a dangling colon. The reviewer's
 	// example fragment relies on the no-colon shape for "pass-and-
 	// nothing-to-report" cases.
-	out := Summarize([]CommitmentSummary{{
+	out := Summarize([]CheckSummary{{
 		Index:   1,
 		Target:  "x",
 		Results: []Result{{Kind: "k", Status: StatusPass}},

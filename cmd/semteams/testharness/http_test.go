@@ -1,4 +1,4 @@
-package harness
+package testharness
 
 import (
 	"encoding/json"
@@ -88,7 +88,7 @@ func TestHTTPMiddleware_NestedPath_PassThrough(t *testing.T) {
 
 func TestWriteJSONError_Shape(t *testing.T) {
 	rr := httptest.NewRecorder()
-	writeJSONError(rr, http.StatusNotFound, "no such harness")
+	writeJSONError(rr, http.StatusNotFound, "no such test_harness")
 	if rr.Code != http.StatusNotFound {
 		t.Errorf("status: got %d, want 404", rr.Code)
 	}
@@ -100,14 +100,14 @@ func TestWriteJSONError_Shape(t *testing.T) {
 	if err := json.Unmarshal(body, &got); err != nil {
 		t.Fatalf("unmarshal: %v; body=%s", err, body)
 	}
-	if got["error"] != "no such harness" {
-		t.Errorf("error field: got %q, want %q", got["error"], "no such harness")
+	if got["error"] != "no such test_harness" {
+		t.Errorf("error field: got %q, want %q", got["error"], "no such test_harness")
 	}
 }
 
 func TestWriteJSON_ListResponseShape(t *testing.T) {
 	rr := httptest.NewRecorder()
-	writeJSON(rr, http.StatusOK, listResponse{Harnesses: []*Harness{
+	writeJSON(rr, http.StatusOK, listResponse{Harnesses: []*TestHarness{
 		{
 			Name:                "stub",
 			ComposeProfile:      "harness-stub",
@@ -124,6 +124,6 @@ func TestWriteJSON_ListResponseShape(t *testing.T) {
 		t.Errorf("body missing 'harnesses' key: %s", body)
 	}
 	if !strings.Contains(string(body), `"name":"stub"`) {
-		t.Errorf("body missing harness name: %s", body)
+		t.Errorf("body missing test_harness name: %s", body)
 	}
 }

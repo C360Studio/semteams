@@ -42,7 +42,7 @@ description: |
       8. tool_call: query_entity (now against augmented corpus; finds
          OSH driver framework + Meshtastic radio actors)
       9. tool_call: emit_research_artifact (revision=2, full actors/
-         integration_points/seed_requirements, substrate_mutations
+         integration_points/tasks, substrate_mutations
          carries one entry with revision=2 for the add_source_repo call)
      10. completion: artifact JSON.
          → outcome=success → rule_01b fires.
@@ -108,7 +108,7 @@ responses:
           "revision": 1,
           "actors": [],
           "integration_points": [],
-          "seed_requirements": [],
+          "tasks": [],
           "addressed_gaps": [],
           "open_gaps": [
             "OSH driver framework documentation not indexed — query_entity for osh.driver.framework returned nothing. Recommend add_source_repo for the osh-core repository."
@@ -130,7 +130,7 @@ responses:
           "revision": 1,
           "actors": [],
           "integration_points": [],
-          "seed_requirements": [],
+          "tasks": [],
           "addressed_gaps": [],
           "open_gaps": [
             "OSH driver framework documentation not indexed — query_entity for osh.driver.framework returned nothing. Recommend add_source_repo for the osh-core repository."
@@ -195,7 +195,7 @@ responses:
             {"from": "OSH driver", "to": "OGC CS endpoints", "data": "observation messages and system descriptions", "direction": "write"},
             {"from": "Meshtastic radio", "to": "OSH driver", "data": "packetised radio telemetry", "direction": "read"}
           ],
-          "seed_requirements": [
+          "tasks": [
             "Implement OSH `IDriver` interface backed by Meshtastic radio events, exposing OGC CS observation endpoints"
           ],
           "addressed_gaps": [
@@ -240,7 +240,7 @@ responses:
             {"from": "OSH driver", "to": "OGC CS endpoints", "data": "observation messages and system descriptions", "direction": "write"},
             {"from": "Meshtastic radio", "to": "OSH driver", "data": "packetised radio telemetry", "direction": "read"}
           ],
-          "seed_requirements": [
+          "tasks": [
             "Implement OSH `IDriver` interface backed by Meshtastic radio events, exposing OGC CS observation endpoints"
           ],
           "addressed_gaps": [
@@ -300,7 +300,7 @@ responses:
             {"from": "OSH driver", "to": "OGC CS endpoints", "data": "observation messages and system descriptions", "direction": "write"},
             {"from": "Meshtastic radio", "to": "OSH driver", "data": "packetised radio telemetry", "direction": "read"}
           ],
-          "seed_requirements": [
+          "tasks": [
             "Implement OSH `IDriver` interface backed by Meshtastic radio events, exposing OGC CS observation endpoints"
           ],
           "addressed_gaps": [
@@ -345,7 +345,7 @@ responses:
             {"from": "OSH driver", "to": "OGC CS endpoints", "data": "observation messages and system descriptions", "direction": "write"},
             {"from": "Meshtastic radio", "to": "OSH driver", "data": "packetised radio telemetry", "direction": "read"}
           ],
-          "seed_requirements": [
+          "tasks": [
             "Implement OSH `IDriver` interface backed by Meshtastic radio events, exposing OGC CS observation endpoints"
           ],
           "addressed_gaps": [

@@ -5,25 +5,25 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/c360studio/semteams/cmd/semteams/harness"
+	"github.com/c360studio/semteams/cmd/semteams/testharness"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// TestOperatorHarnessCatalogParses verifies the operator-shipped
-// harness catalogs in configs/harnesses*.json all parse + validate
-// against the schema in cmd/semteams/harness/catalog.go. Without
+// TestOperatorTestHarnessCatalogParses verifies the operator-shipped
+// test harness catalogs in configs/harnesses*.json all parse + validate
+// against the schema in cmd/semteams/testharness/catalog.go. Without
 // this contract pin, a typo in the JSON would only surface at
 // container boot — and the boot path tolerates a missing file
 // (catalog stays empty, see flags.go:44 SEMTEAMS_HARNESS_CATALOG_PATH
 // help text), so a malformed file would silently render the
-// "no harnesses" fragment instead of failing fast.
+// "no test harnesses" fragment instead of failing fast.
 //
 // Every file matching the glob is parsed; named-entry assertions
 // keep the meshtasticd-3.x catalog (R3.7.2.e′) honest as fields
-// evolve. Add per-harness assertions here when new entries land,
+// evolve. Add per-test-harness assertions here when new entries land,
 // not at the catalog.go schema layer (which stays structural-only).
-func TestOperatorHarnessCatalogParses(t *testing.T) {
+func TestOperatorTestHarnessCatalogParses(t *testing.T) {
 	files, err := filepath.Glob("../../configs/harnesses*.json")
 	require.NoError(t, err)
 	require.NotEmpty(t, files, "no configs/harnesses*.json files found — wrong working directory?")
@@ -34,7 +34,7 @@ func TestOperatorHarnessCatalogParses(t *testing.T) {
 			data, err := os.ReadFile(path)
 			require.NoError(t, err)
 
-			entries, err := harness.ParseFile(data)
+			entries, err := testharness.ParseFile(data)
 			require.NoError(t, err, "%s failed schema parse/validate", name)
 			t.Logf("%s parsed %d entries", name, len(entries))
 		})
@@ -51,10 +51,10 @@ func TestMeshtasticdEntryShape(t *testing.T) {
 	data, err := os.ReadFile("../../configs/harnesses.json")
 	require.NoError(t, err)
 
-	entries, err := harness.ParseFile(data)
+	entries, err := testharness.ParseFile(data)
 	require.NoError(t, err)
 
-	var got *harness.Harness
+	var got *testharness.TestHarness
 	for i := range entries {
 		if entries[i].Name == "meshtasticd-3.x" {
 			got = &entries[i]
@@ -64,7 +64,7 @@ func TestMeshtasticdEntryShape(t *testing.T) {
 	require.NotNil(t, got, "meshtasticd-3.x entry missing from configs/harnesses.json")
 
 	assert.Empty(t, got.ComposeProfile,
-		"meshtasticd-3.x must NOT set compose_profile — process-local-testcontainer Approach manages lifecycle in-process via Testcontainers under sandbox DooD (ADR-034)")
+		"meshtasticd-3.x must NOT set compose_profile — process-local-testcontainer runtime manages lifecycle in-process via Testcontainers under sandbox DooD (ADR-034)")
 	// Image tag is loosened on purpose: the upstream image will rev
 	// (3.5.0 → 3.6.0 → ...) faster than this contract test's review
 	// cadence. Pin the repository so a typo regression

@@ -1,19 +1,19 @@
-package harness
+package testharness
 
 import (
 	"strings"
 	"testing"
 )
 
-func TestHarnessValidate(t *testing.T) {
+func TestTestHarnessValidate(t *testing.T) {
 	tests := []struct {
 		name    string
-		h       Harness
+		h       TestHarness
 		wantErr string // substring; "" = expect nil
 	}{
 		{
-			name: "complete valid harness",
-			h: Harness{
+			name: "complete valid test harness",
+			h: TestHarness{
 				Name:                "meshtasticd-3.x",
 				ComposeProfile:      "harness-meshtasticd",
 				Image:               "meshtastic/meshtasticd:3.5.0",
@@ -29,7 +29,7 @@ func TestHarnessValidate(t *testing.T) {
 		},
 		{
 			name: "no exposes is valid (UDP / unix sockets land later)",
-			h: Harness{
+			h: TestHarness{
 				Name:                "stub",
 				ComposeProfile:      "harness-stub",
 				Image:               "scratch",
@@ -39,7 +39,7 @@ func TestHarnessValidate(t *testing.T) {
 		},
 		{
 			name: "empty exposes struct (Exposes{TCP:nil}) is valid",
-			h: Harness{
+			h: TestHarness{
 				Name:                "stub",
 				ComposeProfile:      "harness-stub",
 				Image:               "scratch",
@@ -50,7 +50,7 @@ func TestHarnessValidate(t *testing.T) {
 		},
 		{
 			name: "explicit empty TCP slice (Exposes{TCP:[]}) is valid",
-			h: Harness{
+			h: TestHarness{
 				Name:                "stub",
 				ComposeProfile:      "harness-stub",
 				Image:               "scratch",
@@ -59,13 +59,13 @@ func TestHarnessValidate(t *testing.T) {
 				Exposes:             Exposes{TCP: []PortExpose{}},
 			},
 		},
-		{name: "missing name", h: Harness{ComposeProfile: "p", Image: "i", SmokeContractSchema: "s", DomainDescription: "d"}, wantErr: "name required"},
+		{name: "missing name", h: TestHarness{ComposeProfile: "p", Image: "i", SmokeContractSchema: "s", DomainDescription: "d"}, wantErr: "name required"},
 		{
 			// ADR-034 §"What R3.7.2 work is preserved": compose_profile
-			// is optional. A Testcontainers-managed harness (process-
-			// local-testcontainer Approach) ships with no profile.
+			// is optional. A Testcontainers-managed test harness (process-
+			// local-testcontainer runtime) ships with no profile.
 			name: "no compose_profile is valid",
-			h: Harness{
+			h: TestHarness{
 				Name:                "meshtasticd-3.x",
 				Image:               "meshtastic/meshtasticd:3.5.0",
 				SmokeContractSchema: "meshtasticd.smoke_contract.v1",
@@ -73,12 +73,12 @@ func TestHarnessValidate(t *testing.T) {
 				Exposes:             Exposes{TCP: []PortExpose{{Port: 4403, Protocol: "meshtastic-protobuf"}}},
 			},
 		},
-		{name: "missing image", h: Harness{Name: "n", ComposeProfile: "p", SmokeContractSchema: "s", DomainDescription: "d"}, wantErr: "image required"},
-		{name: "missing schema", h: Harness{Name: "n", ComposeProfile: "p", Image: "i", DomainDescription: "d"}, wantErr: "smoke_contract_schema required"},
-		{name: "missing domain_description", h: Harness{Name: "n", ComposeProfile: "p", Image: "i", SmokeContractSchema: "s"}, wantErr: "domain_description required"},
+		{name: "missing image", h: TestHarness{Name: "n", ComposeProfile: "p", SmokeContractSchema: "s", DomainDescription: "d"}, wantErr: "image required"},
+		{name: "missing schema", h: TestHarness{Name: "n", ComposeProfile: "p", Image: "i", DomainDescription: "d"}, wantErr: "smoke_contract_schema required"},
+		{name: "missing domain_description", h: TestHarness{Name: "n", ComposeProfile: "p", Image: "i", SmokeContractSchema: "s"}, wantErr: "domain_description required"},
 		{
 			name: "port out of range",
-			h: Harness{
+			h: TestHarness{
 				Name: "n", ComposeProfile: "p", Image: "i", SmokeContractSchema: "s", DomainDescription: "d",
 				Exposes: Exposes{TCP: []PortExpose{{Port: 70000, Protocol: "x"}}},
 			},
@@ -86,7 +86,7 @@ func TestHarnessValidate(t *testing.T) {
 		},
 		{
 			name: "port protocol missing",
-			h: Harness{
+			h: TestHarness{
 				Name: "n", ComposeProfile: "p", Image: "i", SmokeContractSchema: "s", DomainDescription: "d",
 				Exposes: Exposes{TCP: []PortExpose{{Port: 1234}}},
 			},
@@ -94,7 +94,7 @@ func TestHarnessValidate(t *testing.T) {
 		},
 		{
 			name: "dep missing groupId",
-			h: Harness{
+			h: TestHarness{
 				Name: "n", ComposeProfile: "p", Image: "i", SmokeContractSchema: "s", DomainDescription: "d",
 				RealDependencies: []Dependency{{ArtifactID: "x", VersionRange: "[1,)"}},
 			},
@@ -102,7 +102,7 @@ func TestHarnessValidate(t *testing.T) {
 		},
 		{
 			name: "dep missing artifactId",
-			h: Harness{
+			h: TestHarness{
 				Name: "n", ComposeProfile: "p", Image: "i", SmokeContractSchema: "s", DomainDescription: "d",
 				RealDependencies: []Dependency{{GroupID: "x", VersionRange: "[1,)"}},
 			},

@@ -81,7 +81,7 @@ responses:
         {
           "actors": [],
           "integration_points": [],
-          "seed_requirements": [],
+          "tasks": [],
           "addressed_gaps": [],
           "open_gaps": [
             "Corpus missing: OSH driver framework is not indexed in our test SemSource (queried osh.driver.framework, no match). Recommend add_source_repo for the OSH core repo before continuing."
@@ -149,7 +149,7 @@ responses:
             {"from": "OSH driver framework", "to": "OGC Connected Systems endpoints", "data": "observations, system descriptions", "direction": "write"},
             {"from": "Meshtastic radio", "to": "OSH driver framework", "data": "MeshPacket payloads carrying sensor observations", "direction": "read"}
           ],
-          "seed_requirements": [
+          "tasks": [
             "Implement OSH IDriver interface backed by a Meshtastic MQTT/serial bridge so MeshPacket observations surface as OGC CS observation events"
           ],
           "addressed_gaps": [

@@ -1,6 +1,6 @@
 //go:build integration
 
-package harness
+package testharness
 
 import (
 	"context"
@@ -53,7 +53,7 @@ func TestManagerIntegrationSuite(t *testing.T) {
 }
 
 func (s *ManagerIntegrationSuite) TestPutGet() {
-	h := &Harness{
+	h := &TestHarness{
 		Name:                "stub",
 		ComposeProfile:      "harness-stub",
 		Image:               "scratch",
@@ -74,7 +74,7 @@ func (s *ManagerIntegrationSuite) TestGetMissing() {
 }
 
 func (s *ManagerIntegrationSuite) TestPutValidationFails() {
-	bad := &Harness{Name: ""} // missing required fields
+	bad := &TestHarness{Name: ""} // missing required fields
 	err := s.manager.Put(s.ctx, bad)
 	require.Error(s.T(), err)
 	require.Contains(s.T(), err.Error(), "validate")
@@ -88,7 +88,7 @@ func (s *ManagerIntegrationSuite) TestListEmpty() {
 
 func (s *ManagerIntegrationSuite) TestListSorted() {
 	for _, name := range []string{"charlie", "alpha", "bravo"} {
-		require.NoError(s.T(), s.manager.Put(s.ctx, &Harness{
+		require.NoError(s.T(), s.manager.Put(s.ctx, &TestHarness{
 			Name:                name,
 			ComposeProfile:      "p",
 			Image:               "i",

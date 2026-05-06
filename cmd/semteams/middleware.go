@@ -7,7 +7,7 @@ import (
 
 	agenticdispatch "github.com/c360studio/semstreams/processor/agentic-dispatch"
 	"github.com/c360studio/semstreams/service"
-	"github.com/c360studio/semteams/cmd/semteams/harness"
+	"github.com/c360studio/semteams/cmd/semteams/testharness"
 )
 
 // xUserIDHeader is the product-shell convention for naming the
@@ -78,9 +78,9 @@ func sanitiseIdentity(raw string) string {
 //  1. xUserIDIdentityMiddleware — lift X-User-Id into ctx so downstream
 //     handlers see the caller. Runs first so identity is bound before
 //     any product handler that wants to log it.
-//  2. harness HTTP middleware — intercepts /harnesses* GETs and serves
+//  2. test_harness HTTP middleware — intercepts /harnesses* GETs and serves
 //     the operator/UI catalog read API. Pass-through for all other
-//     paths. Nil-safe: a deployment without a harness manager (boot-
+//     paths. Nil-safe: a deployment without a test_harness manager (boot-
 //     time KV failure) skips the intercept transparently.
 //
 // When extending:
@@ -94,9 +94,9 @@ func sanitiseIdentity(raw string) string {
 //     and have it overwrite the X-User-Id header (or call
 //     agenticdispatch.WithIdentity directly). xUserIDIdentityMiddleware
 //     trusts whatever header reaches it.
-func productMiddleware(harnessMgr *harness.Manager, logger *slog.Logger) []service.HTTPMiddleware {
+func productMiddleware(testHarnessMgr *testharness.Manager, logger *slog.Logger) []service.HTTPMiddleware {
 	return []service.HTTPMiddleware{
 		xUserIDIdentityMiddleware,
-		harness.HTTPMiddleware(harnessMgr, logger),
+		testharness.HTTPMiddleware(testHarnessMgr, logger),
 	}
 }
