@@ -267,3 +267,43 @@ findings.
 - testcontainers-go: <https://golang.testcontainers.org/>
 - ADR-033 §1, §2, §addendum 2026-05-04 #2 — test-harness catalog
   decisions ADR-036 inherits.
+
+### §addendum 2026-05-06 — Phase 2 shipped (evidence preprocessor)
+
+Phase 2 of ADR-036 implementation landed (slice 4). The
+preprocessor in `cmd/semteams/evidence/preprocessor.go` subscribes
+to `agent.complete.>` (the NATS subject the agentic-loop processor
+publishes builder loop completions on) and, for every
+`dev-via-spec-builder` loop with `Outcome=success`, reads
+`.evidence/checks.json` from the builder's workspace (projected
+there by `bootstrap_workspace` via the slice 3 plumbing), runs
+`evidence.Registry.Run` against each check, renders
+`evidence.Summarize`, and stamps:
+
+- `evidence.summary` — rendered markdown block-list for the
+  qa-reviewer to grade.
+- `evidence.summary_ready` — synthetic `"true"` triple that acts
+  as the ordering barrier for rule_07's two-AND condition.
+
+The `evidence.summary_ready` predicate resolves the ordering
+invariant verified in `processor/rule/stateful_rule_test.go` at
+beta.45: the `false→true` transition fires `on_enter` exactly
+once regardless of which triple (`coordinator.next_action` or
+`evidence.summary_ready`) writes last.
+
+Fail-soft contract: any error in reading or parsing
+`.evidence/checks.json` stamps a
+`(no checks file — chain plumbing failure: <reason>)` summary AND
+still stamps `evidence.summary_ready=true` so rule_07 unblocks.
+The qa-reviewer's `20-evidence-grading.md` Rule 3 routes this to
+`needs_clarification`.
+
+Compose wiring: `ui/docker-compose.agentic-e2e.yml` adds a `:ro`
+bind of `sandbox-agentic-workspaces:/workspace` to the backend
+service and sets `SEMTEAMS_WORKSPACE_ROOT=/workspace`. The `:ro`
+mount is load-bearing for the D2 separation (measurer/measured)
+from ADR-033: the backend reads evidence outputs written by the
+sandbox; it never writes into the workspace.
+
+Phase 3 (substantive smoke #8 with Testcontainers and a real
+architect sidecar) is the next slice.

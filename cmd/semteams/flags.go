@@ -13,15 +13,23 @@ type CLIConfig struct {
 	ConfigPath           string
 	PersonaFragmentsPath string
 	HarnessCatalogPath   string
-	LogLevel             string
-	LogFormat            string
-	Debug                bool
-	DebugPort            int
-	ShutdownTimeout      time.Duration
-	HealthPort           int
-	ShowVersion          bool
-	ShowHelp             bool
-	Validate             bool
+	// WorkspaceRoot is the absolute path where the sandbox mounts builder
+	// workspaces (one sub-directory per loopID). The evidence preprocessor
+	// reads <WorkspaceRoot>/<loopID>/.evidence/checks.json at builder-loop
+	// completion time. Empty string disables the preprocessor — non-sandbox
+	// deployments leave this unset. In the Compose stack, this is /workspace
+	// (the bind mount shared with the sandbox container; :ro on the backend
+	// side to enforce the D2 measurer/measured separation from ADR-033).
+	WorkspaceRoot   string
+	LogLevel        string
+	LogFormat       string
+	Debug           bool
+	DebugPort       int
+	ShutdownTimeout time.Duration
+	HealthPort      int
+	ShowVersion     bool
+	ShowHelp        bool
+	Validate        bool
 }
 
 func parseFlags() *CLIConfig {
@@ -43,6 +51,10 @@ func parseFlags() *CLIConfig {
 	flag.StringVar(&cfg.HarnessCatalogPath, "harness-catalog",
 		getEnv("SEMTEAMS_HARNESS_CATALOG_PATH", "configs/harnesses.json"),
 		"Path to operator-curated harness catalog (env: SEMTEAMS_HARNESS_CATALOG_PATH). Missing file is not an error — catalog stays empty. See ADR-033.")
+
+	flag.StringVar(&cfg.WorkspaceRoot, "workspace-root",
+		getEnv("SEMTEAMS_WORKSPACE_ROOT", ""),
+		"Absolute path to the sandbox workspace mount (env: SEMTEAMS_WORKSPACE_ROOT). Empty disables the evidence preprocessor. In Compose stacks, set to /workspace (the :ro bind mount shared with the sandbox container). See ADR-036 §Phase 2.")
 
 	flag.StringVar(&cfg.LogLevel, "log-level",
 		getEnv("SEMSTREAMS_LOG_LEVEL", "info"),

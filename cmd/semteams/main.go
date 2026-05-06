@@ -32,6 +32,7 @@ import (
 	rulepkg "github.com/c360studio/semstreams/processor/rule"
 	"github.com/c360studio/semstreams/service"
 	"github.com/c360studio/semstreams/types"
+	"github.com/c360studio/semteams/cmd/semteams/evidence"
 	"github.com/c360studio/semteams/cmd/semteams/testharness"
 )
 
@@ -152,42 +153,13 @@ func run() error {
 	// testHarnessMgr feeds the /harnesses HTTP middleware (R3.7.1.f).
 	personaMgr, testHarnessMgr := loadPlatformAssets(ctx, natsClient, cliCfg, slog.Default())
 
-	// 9c. Build the shared tool registry and register first-party tool
-	// executors. Per beta.16: agentic-tools registry is constructor-
-	// injected via component.Dependencies.ToolRegistry. Stateful tools
-	// (read_loop_result, decide, emit_diagnosis, graph_query) need NATS
-	// + platform identity. Pattern-B tools (create_rule, update_persona,
-	// list_flows, etc.) each need their matching manager; nil manager →
-	// registerX skips. We wire all four Pattern-B managers so any future
-	// product journey that needs CRUD tooling has it — ADR-029 "product
-	// shell owns its wiring" applies per-manager: wire once, don't drift
-	// silently later.
-	toolRegistry := agentictools.NewExecutorRegistry()
-	if err := executors.RegisterBuiltins(ctx, toolRegistry, executors.ToolDependencies{
-		NATSClient:          natsClient,
-		Platform:            platform,
-		Logger:              slog.Default(),
-		RuleManager:         buildRuleManager(ctx, natsClient, configManager, slog.Default()),
-		FlowManager:         buildFlowManager(natsClient, slog.Default()),
-		PersonaManager:      personaMgr,
-		FlowTemplateManager: buildFlowTemplateManager(natsClient, slog.Default()),
-		ComponentRegistry:   componentRegistry,
-		LoopsBucket:         extractLoopsBucket(cfg),
-	}); err != nil {
-		return fmt.Errorf("register builtin tools: %w", err)
-	}
-
-	// 9d. Register product-shell-local tool executors. R2 of ADR-031
-	// adds add_source_repo, which bridges the agent loop to SemSource's
-	// graph.ingest.add.{namespace} contract. R3.2.1 adds
-	// emit_research_artifact, which writes marker triples and publishes
-	// the typed research.artifact.v1 payload onto a stable subject.
-	// These tools live in semteams (not upstream) because their config
-	// (namespace allowlist; product-local payload type) is product
-	// policy. add_source_repo stays inert if the deployment has no
-	// namespaces configured — see addsource.Config.AllowedNamespaces.
-	if err := registerProductTools(toolRegistry, natsClient, platform, testHarnessMgr, slog.Default()); err != nil {
-		return fmt.Errorf("register product tools: %w", err)
+	// 9c–9e. Build + register tool executors and start the evidence
+	// preprocessor (ADR-036 §Phase 2). Extracted to keep run() under
+	// revive's function-length threshold while keeping the ordering
+	// invariant: tools before svcDeps, preprocessor after tools.
+	toolRegistry, err := setupToolsAndPreprocessor(ctx, cfg, natsClient, platform, configManager, componentRegistry, personaMgr, testHarnessMgr, cliCfg.WorkspaceRoot, slog.Default())
+	if err != nil {
+		return err
 	}
 
 	// 10. Create service dependencies, plumbing the shared registries so
@@ -217,6 +189,88 @@ func run() error {
 
 	// 13. Run application with signal handling
 	return runWithSignalHandling(ctx, manager, cliCfg.ShutdownTimeout)
+}
+
+// setupToolsAndPreprocessor groups the ordered tool-registry + evidence-
+// preprocessor wiring so run()'s statement count stays under revive's
+// function-length limit. Ordering within this function is load-bearing:
+// tools must be registered before svcDeps is built; the preprocessor
+// subscribes after tools so its triple-publisher is live.
+func setupToolsAndPreprocessor(
+	ctx context.Context,
+	cfg *config.Config,
+	natsClient *natsclient.Client,
+	platform types.PlatformMeta,
+	configManager *config.Manager,
+	componentRegistry *component.Registry,
+	personaMgr *persona.Manager,
+	testHarnessMgr *testharness.Manager,
+	workspaceRoot string,
+	logger *slog.Logger,
+) (*agentictools.ExecutorRegistry, error) {
+	// 9c. First-party tool executors. Pattern-B tools (create_rule, etc.)
+	// each need their matching manager; nil manager → registerX skips.
+	toolRegistry := agentictools.NewExecutorRegistry()
+	if err := executors.RegisterBuiltins(ctx, toolRegistry, executors.ToolDependencies{
+		NATSClient:          natsClient,
+		Platform:            platform,
+		Logger:              logger,
+		RuleManager:         buildRuleManager(ctx, natsClient, configManager, logger),
+		FlowManager:         buildFlowManager(natsClient, logger),
+		PersonaManager:      personaMgr,
+		FlowTemplateManager: buildFlowTemplateManager(natsClient, logger),
+		ComponentRegistry:   componentRegistry,
+		LoopsBucket:         extractLoopsBucket(cfg),
+	}); err != nil {
+		return nil, fmt.Errorf("register builtin tools: %w", err)
+	}
+
+	// 9d. Product-shell-local tool executors (add_source_repo,
+	// emit_research_artifact, emit_dev_via_spec_artifact, builder_decide,
+	// bootstrap_workspace). Each tool's registration comment lives in
+	// registerProductTools; see ADR-029 + tools/README.md for discipline.
+	if err := registerProductTools(toolRegistry, natsClient, platform, testHarnessMgr, logger); err != nil {
+		return nil, fmt.Errorf("register product tools: %w", err)
+	}
+
+	// 9e. Evidence preprocessor (ADR-036 §Phase 2, R3.7.2.k′-bis).
+	// Subscribes to agent.complete.> and stamps evidence.summary +
+	// evidence.summary_ready on dev-via-spec-builder loop entities.
+	// Disabled when workspaceRoot is empty — non-sandbox deployments.
+	if err := startEvidencePreprocessor(ctx, natsClient, platform, workspaceRoot, logger); err != nil {
+		return nil, fmt.Errorf("start evidence preprocessor: %w", err)
+	}
+	return toolRegistry, nil
+}
+
+// startEvidencePreprocessor builds the evidence registry with builtins,
+// wraps it in a Preprocessor, and starts its NATS subscription. The
+// subscription is bound to ctx — cancelling ctx (on shutdown signal) will
+// unsubscribe cleanly.
+//
+// workspaceRoot="" disables the preprocessor; the Preprocessor's
+// HandleLoopCompleted returns immediately for every event. This keeps
+// non-sandbox deployments booting without error.
+func startEvidencePreprocessor(ctx context.Context, natsClient *natsclient.Client, platform types.PlatformMeta, workspaceRoot string, logger *slog.Logger) error {
+	reg, err := evidence.NewWithBuiltins()
+	if err != nil {
+		return fmt.Errorf("build evidence registry: %w", err)
+	}
+	triplePublisher := agentictools.NewNATSTriplePublisher(natsClient)
+	preprocessor := evidence.New(reg, triplePublisher, workspaceRoot, platform, logger)
+	sub := evidence.NewNATSSubscriber(preprocessor, logger)
+	if err := sub.Start(ctx, natsClient); err != nil {
+		return fmt.Errorf("subscribe to loop completed events: %w", err)
+	}
+	if workspaceRoot != "" {
+		logger.Info("evidence preprocessor started",
+			slog.String("workspace_root", workspaceRoot),
+			slog.String("org", platform.Org),
+			slog.String("platform", platform.Platform))
+	} else {
+		logger.Info("evidence preprocessor disabled (workspace-root unset; set --workspace-root for sandbox deployments)")
+	}
+	return nil
 }
 
 // loadPersonaFragments seeds the PERSONAS KV bucket from a directory

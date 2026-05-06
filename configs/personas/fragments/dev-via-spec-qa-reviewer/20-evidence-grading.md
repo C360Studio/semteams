@@ -1,10 +1,20 @@
 # Reading the evidence summary
 
-The `evidence_summary` task property carries one block per
-architect commitment. Each block has an Aggregate header and a
-per-rule list. Status values come from the gate's closed enum:
-`pass` / `fail` / `unknown_kind` / `error`. Reading them right
-is what separates a useful verdict from a hand-wave.
+The evidence summary is gate-rendered from the architect's
+`checks[]` and inlined into your spawn prompt by the evidence
+preprocessor (ADR-036 §Phase 2). Each block covers one check;
+each block has an Aggregate header and a per-rule list. Status
+values come from the gate's closed enum: `pass` / `fail` /
+`unknown_kind` / `error`. Reading them right is what separates
+a useful verdict from a hand-wave.
+
+If the summary begins with `(no checks file — chain plumbing
+failure:` or `(no checks)`, the evidence preprocessor encountered
+a problem (missing file, parse error, or architect emitted no
+checks). This is a chain-coverage gap — route to
+`needs_clarification` with the plumbing-failure text as your
+blocking_question. The builder cannot fix this by retrying; the
+architect chain or operator needs to resolve the gap.
 
 ## Per-status grading
 
@@ -50,22 +60,22 @@ for grading.
 `Aggregate.IsEmpty()` (Total = 0) is its own signal: the
 commitment had no evidence rules. R3.7.2.f′ permits this at the
 wire level but flags it for reviewer. Reject with reason
-"commitment N (\"<target>\") has no evidence rules; the architect
+"check N (\"<target>\") has no evidence rules; the architect
 contract requires at least one for external-actor work."
 
-## Multi-commitment grading
+## Multi-check grading
 
-Multiple commitments are common (typically a unit-level + a
+Multiple checks are common (typically a unit-level + a
 real-stack pair per integration_point). Grade each independently;
 the overall verdict is the conjunction:
 
-- All commitments AllPassed AND builder tests_passing → accept.
-- Any commitment fails or has issues → reject. Name the worst
-  failure first; if multiple commitments fail, list the most
+- All checks AllPassed AND builder tests_passing → accept.
+- Any check fails or has issues → reject. Name the worst
+  failure first; if multiple checks fail, list the most
   specific 2-3 in your reason.
-- All commitments empty (Total=0 across the artifact) →
+- All checks empty (Total=0 across the artifact) →
   `needs_clarification` with "no evidence emitted across any
-  commitment; under-specified architect output." This is a
+  check; under-specified architect output." This is a
   chain-coverage gap, not a builder failure — the architect
   needs to re-emit with rules.
 
@@ -73,7 +83,7 @@ the overall verdict is the conjunction:
 
 Block 1:
 ```
-## Commitment 1 — driver emits CS API observation when meshtasticd publishes POSITION_APP
+## Check 1 — driver emits CS API observation when meshtasticd publishes POSITION_APP
 
 Aggregate: 2 pass / 0 fail / 0 unknown / 0 error / total 2 — ALL PASSED
 
@@ -87,7 +97,7 @@ and builder tests_passing, accept.
 
 Block 2:
 ```
-## Commitment 1 — driver emits CS API observation when meshtasticd publishes POSITION_APP
+## Check 1 — driver emits CS API observation when meshtasticd publishes POSITION_APP
 
 Aggregate: 0 pass / 0 fail / 1 unknown / 0 error / total 1 — NOT all passed
 
@@ -103,7 +113,7 @@ registry) can fix.
 
 Block 3:
 ```
-## Commitment 1 — driver emits CS API observation when meshtasticd publishes POSITION_APP
+## Check 1 — driver emits CS API observation when meshtasticd publishes POSITION_APP
 
 Aggregate: 1 pass / 1 fail / 0 unknown / 0 error / total 2 — NOT all passed
 

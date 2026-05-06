@@ -1,6 +1,6 @@
 name: dev-via-spec-qa
 description: |
-  Journey: R3.7.2.k′ of ADR-034 — full architect → builder →
+  Journey: R3.7.2.k′-bis of ADR-036 — full architect → builder →
   qa-reviewer chain on mock-LLM. Extends dev-via-spec.yaml (R3.3 +
   R3.4b + R3.6.2 of ADR-031/ADR-032) with two changes at the tail:
 
@@ -15,25 +15,29 @@ description: |
 
     2. Loop L (NEW) is the dev-via-spec-qa-reviewer (R3.7.2.j′ persona),
        spawned by configs/rules/dev-via-spec/07-builder-decide-to-
-       qa-reviewer.json. It reads the builder's terminal via
-       read_loop_result and emits decide(needs_clarification) — the
-       persona-correct verdict for the R3.7.2.k′ stub state where
-       evidence_summary is hardcoded as a "(stub)" block in the spawn
-       rule's prompt. Real evidence-rendering plumbing arrives in a
-       follow-on slice (project_smoke7_open_plumbing.md §2 records
-       the lean choice: rule action over tool).
+       qa-reviewer.json once the evidence preprocessor has stamped
+       evidence.summary_ready=true (ADR-036 §Phase 2). It reads the
+       builder's terminal via read_loop_result and emits
+       decide(needs_clarification) — the correct verdict when the
+       evidence summary contains "(no checks)" (empty checks.json,
+       because mock-LLM bootstrap_workspace doesn't seed a real sidecar).
+       The mock-LLM is sequence-based and does NOT read prompt content,
+       so the verdict is canned regardless of what the preprocessor
+       stamped.
 
   This fixture proves the chain SHAPE end-to-end on mock-LLM:
-  rule 07 fires on tests_passing, qa-reviewer spawns + reads + emits
-  a terminal decide, the chain settles at twelve loops. It does NOT
-  prove substantive evidence grading — that's deferred until the
-  evidence-summary integration plumbing lands.
+  rule 07's two-AND condition fires (tests_passing + evidence.summary_ready),
+  qa-reviewer spawns + reads + emits a terminal decide, the chain
+  settles at twelve loops. Substantive evidence grading (smoke #8
+  on real LLM with Testcontainers) is slice 5.
 
   Paired spec: ui/e2e/agentic/dev-via-spec-qa.spec.ts.
   Required compose profiles: semsource (substrate-modifying retry
   pass, same as R2.5/R3.2.2) **and** sandbox (the dev-via-spec-builder
   loop calls bootstrap_workspace + bash; both route through the
-  sandbox container per ADR-032 §R3.6.2.a wiring).
+  sandbox container per ADR-032 §R3.6.2.a wiring). The sandbox
+  profile also brings up the workspace volume that the evidence
+  preprocessor reads via its :ro bind mount.
 
   Sequence (twelve loops, thirty-five LLM round-trips):
 
@@ -122,13 +126,16 @@ description: |
          dev-via-spec rule_07 fires (R3.7.2.k′:
          builder→qa-reviewer).
 
-    Loop L — dev-via-spec-qa-reviewer (R3.7.2.k′ terminal)
+    Loop L — dev-via-spec-qa-reviewer (R3.7.2.k′-bis terminal)
      34. tool_call: read_loop_result (placeholder against the
          builder loop_id; tool errors — same convention as the
          placeholder reads in Loops B/C/D/E/F/G/H/I/J above).
      35. tool_call: decide(needs_clarification,
-         reason="evidence summary not yet wired (R3.7.2.k′ stub)",
-         blocking_question=<which integration shape lands next>)
+         reason="evidence summary is (no checks) — architect emitted
+         no checks in this mock-LLM journey; the qa-reviewer cannot
+         accept without evidence rules per 10-evaluation-contract.md
+         Rule 3",
+         blocking_question=<architect must re-emit with evidence rules>)
          → terminal. coordinator.next_action=needs_clarification
          fires no rule today (R3.5 routing not yet wired).
 
@@ -145,25 +152,35 @@ description: |
   unconditionally given the args; mock-LLM does not actually run
   tests in the workspace. The artifact_summary string is decorative
   — qa-reviewer mock-LLM does not read prompt content. This is a
-  shape proof, not a substance proof; smoke #7 (R3.7.2.l′ on real
-  LLM) is where actual mvn test runs. The needs_clarification
-  variant of this fixture is preserved at dev-via-spec.yaml.
+  shape proof, not a substance proof; smoke #8 (slice 5) is where
+  actual mvn test runs. The needs_clarification variant of this
+  fixture is preserved at dev-via-spec.yaml.
 
-  QA-reviewer-loop terminal choice: needs_clarification is the
-  persona-correct verdict for the R3.7.2.k′ stub state. The j′
-  persona's 10-evaluation-contract.md Rule 3 ("evidence summary
-  shows '(no commitments)' or all rules report UnknownKind") aligns
-  with the spawn-rule's hardcoded "(stub)" evidence block; the
-  upstream chain needs the gate plumbing to land before the
-  qa-reviewer can grade substantively. The decide closes the chain
-  cleanly without faking accept/reject on stubbed evidence.
+  Evidence preprocessor (ADR-036 §Phase 2): the preprocessor
+  subscribes to agent.complete.> and stamps evidence.summary +
+  evidence.summary_ready on the builder entity when the loop
+  completes. In this mock-LLM journey, bootstrap_workspace uses a
+  hardcoded spec_path that won't match a real artifact, so the sidecar
+  projection (and therefore .evidence/checks.json) may be absent.
+  The preprocessor stamps a plumbing-failure summary in that case
+  and still stamps evidence.summary_ready=true so rule_07's two-AND
+  condition fires. The qa-reviewer sees "(no checks file …)" or
+  "(no checks)" in its prompt and routes needs_clarification per Rule 3.
+
+  QA-reviewer-loop terminal choice: needs_clarification is correct
+  for a journey where no architect checks reached the workspace
+  (mock-LLM doesn't seed a real sidecar). The j′ persona's
+  10-evaluation-contract.md Rule 3 handles both "(no checks)" and
+  chain-plumbing-failure summaries by routing needs_clarification.
+  The mock-LLM does not read the summary (sequence-based); the canned
+  decide aligns with the expected persona behaviour.
 
   This spec covers only the golden path. The retry paths (reviewer
   rejection → planner retry via rule 02, challenger concerns → planner
   retry via rule 04, builder iteration-budget exhaustion → tests_failing)
   are exercised by the rules' max_iterations metadata and persona-content
   discipline; a follow-up retry-path fixture can exercise them under
-  e2e if smoke #6 reveals real-LLM retry behaviour worth pinning.
+  e2e if smoke #8 reveals real-LLM retry behaviour worth pinning.
 
 responses:
   # ---------- Loop A: researcher (initial pass, revision=1) ----------
@@ -623,6 +640,6 @@ responses:
       arguments_json: |
         {
           "action": "needs_clarification",
-          "reason": "evidence summary not yet wired (R3.7.2.k′ stub) — the spawn-rule prompt supplied a hardcoded '(stub)' evidence block per project_smoke7_open_plumbing.md §2. Per j′ 10-evaluation-contract.md Rule 3, Empty Evidence routes to needs_clarification because the builder cannot fix this by retrying — the architect chain needs the evidence-summary integration plumbing to land first.",
-          "blocking_question": "Which evidence-summary integration shape lands next: a rule-action that runs evidence.Registry.Run + evidence.Summarize at builder-terminal time and substitutes into the spawn-rule prompt (lean per project_smoke7_open_plumbing.md §2), a tool the qa-reviewer calls (read_evidence — adds tool surface, against fewer-rich-tools), or a pre-publish preprocessor that mints an evidence.summary triple on the builder entity? Until that decision is made + landed, the qa-reviewer cannot grade substantively."
+          "reason": "evidence summary is (no checks) — the architect emitted no checks in this mock-LLM journey (bootstrap_workspace placeholder path didn't resolve a real sidecar). Per 10-evaluation-contract.md Rule 3, empty evidence across all checks routes to needs_clarification because this is a chain-coverage gap, not a builder failure — the architect needs to re-emit with evidence rules.",
+          "blocking_question": "Architect must re-emit the spec artifact with at least one check containing evidence rules. The dev-via-spec-builder ran against a workspace without .evidence/checks.json because this is a mock-LLM journey; smoke #8 (slice 5) will exercise real evidence grading with Testcontainers."
         }
