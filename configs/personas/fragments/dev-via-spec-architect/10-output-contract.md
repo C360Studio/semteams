@@ -37,27 +37,27 @@ emit_dev_via_spec_artifact(
       data: "<what flows>" },
     ...
   ],
-  seed_requirements: [
+  tasks: [
     { title: "<epic title from the plan>",
       scope: "<one-line scope summary from the plan>",
-      grounds_actors: [<actor names this SR touches>],
-      grounds_integration_points: [<from-to pairs this SR touches>] },
+      grounds_actors: [<actor names this task touches>],
+      grounds_integration_points: [<from-to pairs this task touches>] },
     ...
   ],
-  verification_commitments: [
+  checks: [
     { target: "<verifiable claim transcribed from the planner's
                accepted Verifiable Outcomes>",
-      approach: "in-process-unit" | "process-local-testcontainer"
-              | "external-sidecar" | "browser-flow"
-              | "static-analysis",
-      harness: "<catalog name>",                 // required for
-                                                 // testcontainer /
-                                                 // sidecar / browser-flow
-      runtime: "<runtime id>",                   // required when harness named
-      convention: { type: "filepath" | "template_id",
-                    path: "<workspace-relative path>",   // when type=filepath
-                    id:   "<framework template id>" },   // when type=template_id
-      evidence: [ ... ] },                       // optional in v1
+      runtime: "in-process-unit" | "process-local-testcontainer"
+             | "external-sidecar" | "browser-flow"
+             | "static-analysis",
+      test_harness: "<catalog name>",              // required for
+                                                   // testcontainer /
+                                                   // sidecar / browser-flow
+      test_runtime: "<runtime id>",                // required when test_harness named
+      ref: { type: "filepath" | "template_id",
+             path: "<workspace-relative path>",    // when type=filepath
+             id:   "<framework template id>" },    // when type=template_id
+      evidence: [ ... ] },                         // optional in v1
     ...
   ],
   provenance: {
@@ -69,13 +69,13 @@ emit_dev_via_spec_artifact(
 )
 ```
 
-`verification_commitments` is OPTIONAL at the wire (R3.7.2.b) but
+`checks` is OPTIONAL at the wire (R3.7.2.b) but
 `30-commitment-contract.md` defines when it MUST be populated:
 any artifact whose `integration_points[]` names an external
-actor requires at least one commitment. Populate it with the
+actor requires at least one check. Populate it with the
 shape above; see `20-commitment-transcription.md` for the
 outcome-to-target translation and `30-commitment-contract.md`
-for the approach selection.
+for the runtime selection.
 
 The tool validates the args, renders a markdown spec via a Go
 template (the format the early-adopter comparison demands —
@@ -86,16 +86,15 @@ artifact slug, generated_at) for downstream consumers.
 ## Step 3 — terminate with `decide`
 
 ```
-decide(action="seed_requirements_emitted",
+decide(action="tasks_emitted",
        reason="<one-line summary citing the artifact slug — e.g.
               'spec emitted: 2026-05-02-osh-meshtastic-driver. N
-              seed requirements grounded against M actors and K
+              tasks grounded against M actors and K
               integration points.'>")
 ```
 
 Termination is the `decide` call. No rule fires on
-`seed_requirements_emitted` — your decision closes the dev-via-spec
-arc.
+`tasks_emitted` — your decision closes the dev-via-spec arc.
 
 ## What to flag, what not to invent
 

@@ -129,11 +129,11 @@ incomplete, not the build itself). Trigger when:
 - All gate results are `UnknownKind` AND the spec was emitted
   before R3.7.2.i′ was registered (the kind set drifted —
   upstream catalog problem, not a builder failure).
-- The architect's commitment cites a harness whose Image line
+- The architect's check cites a test_harness whose Image line
   is empty in the rendered SPEC (catalog miss the architect's
   tool surfaced; the builder couldn't possibly satisfy it).
-- The commitment's `target` describes a behaviour the test
-  shape literally cannot exercise (e.g. unit-test approach for
+- The check's `target` describes a behaviour the test shape
+  literally cannot exercise (e.g. in-process-unit runtime for
   a real-protocol claim) — but this is rare and almost
   certainly an upstream-review failure.
 

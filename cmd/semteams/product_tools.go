@@ -13,8 +13,8 @@ import (
 	"github.com/c360studio/semstreams/types"
 
 	"github.com/c360studio/semteams/cmd/semteams/devviaspec"
-	"github.com/c360studio/semteams/cmd/semteams/harness"
 	"github.com/c360studio/semteams/cmd/semteams/research"
+	"github.com/c360studio/semteams/cmd/semteams/testharness"
 	"github.com/c360studio/semteams/cmd/semteams/tools/addsource"
 	"github.com/c360studio/semteams/cmd/semteams/tools/bootstrapworkspace"
 	"github.com/c360studio/semteams/cmd/semteams/tools/builderdecide"
@@ -57,9 +57,9 @@ const (
 // R3.6.2.b (ADR-032 §15): no payload — builder_decide tool emits triples
 // only; full args round-trip through the tool result Content for
 // read_loop_result consumers.
-// R3.7.2.a (ADR-033 §addendum 2026-05-04): verification.Commitment —
-// architect's structured commitment to a verification surface (target /
-// approach / harness / runtime / convention / evidence). Wired into
+// R3.7.2.a (ADR-033 §addendum 2026-05-04): verification.Check —
+// architect's structured check against a verification surface (target /
+// runtime / test_harness / test_runtime / ref / evidence). Wired into
 // dev_via_spec.artifact.v2 in R3.7.2.b.
 // Add new product-local payload registrations here; keep the ADR reference
 // in the comment so future readers know which slice introduced each type.
@@ -94,14 +94,14 @@ func registerProductPayloads(reg *payloadregistry.Registry) error {
 // port don't fork; if it's planned but not shipped (e.g. upstream's
 // write_artifact suite per ADR-028 §What's not built here), document
 // the migration target in tools/README.md and an ADR addendum.
-func registerProductTools(reg *agentictools.ExecutorRegistry, natsClient *natsclient.Client, platform types.PlatformMeta, harnessMgr *harness.Manager, logger *slog.Logger) error {
+func registerProductTools(reg *agentictools.ExecutorRegistry, natsClient *natsclient.Client, platform types.PlatformMeta, testHarnessMgr *testharness.Manager, logger *slog.Logger) error {
 	if err := registerAddSource(reg, natsClient, logger); err != nil {
 		return err
 	}
 	if err := registerEmitArtifact(reg, natsClient, platform, logger); err != nil {
 		return err
 	}
-	if err := registerEmitSpecArtifact(reg, natsClient, platform, harnessMgr, logger); err != nil {
+	if err := registerEmitSpecArtifact(reg, natsClient, platform, testHarnessMgr, logger); err != nil {
 		return err
 	}
 	if err := registerBuilderDecide(reg, natsClient, platform, logger); err != nil {
@@ -171,24 +171,24 @@ func registerEmitArtifact(reg *agentictools.ExecutorRegistry, natsClient *natscl
 // the dev-via-spec flow needs it to close the arc. Output directory defaults
 // to "docs/specs" but is overrideable via SEMTEAMS_DEVVIASPEC_ARTIFACT_DIR.
 //
-// harnessMgr resolves catalog names (the architect's commitment.harness
+// testHarnessMgr resolves catalog names (the architect's check.test_harness
 // field) into concrete entries the renderer projects into SPEC.md
 // (R3.7.2.h′). Without resolution the builder can't reach the catalog
-// from inside its sandbox; rendered fields close that gap. nil harnessMgr
-// is permitted (rare deployments without harness wiring) — the renderer
-// falls back to rendering the harness name without resolved fields.
-func registerEmitSpecArtifact(reg *agentictools.ExecutorRegistry, natsClient *natsclient.Client, platform types.PlatformMeta, harnessMgr *harness.Manager, logger *slog.Logger) error {
+// from inside its sandbox; rendered fields close that gap. nil testHarnessMgr
+// is permitted (rare deployments without test_harness wiring) — the renderer
+// falls back to rendering the test_harness name without resolved fields.
+func registerEmitSpecArtifact(reg *agentictools.ExecutorRegistry, natsClient *natsclient.Client, platform types.PlatformMeta, testHarnessMgr *testharness.Manager, logger *slog.Logger) error {
 	if natsClient == nil {
 		logger.Warn("nats client unavailable; emit_dev_via_spec_artifact registration skipped")
 		return nil
 	}
 	triplePublisher := agentictools.NewNATSTriplePublisher(natsClient)
-	// Adapt the harness manager's Get signature to the executor's
-	// HarnessResolver function type. nil manager → nil resolver →
+	// Adapt the test harness manager's Get signature to the executor's
+	// TestHarnessResolver function type. nil manager → nil resolver →
 	// renderer falls back to name-only rendering.
-	var resolver emitspecartifact.HarnessResolver
-	if harnessMgr != nil {
-		resolver = harnessMgr.Get
+	var resolver emitspecartifact.TestHarnessResolver
+	if testHarnessMgr != nil {
+		resolver = testHarnessMgr.Get
 	}
 	// Pass empty outputDir so the constructor reads SEMTEAMS_DEVVIASPEC_ARTIFACT_DIR
 	// or falls back to the package default ("docs/specs").

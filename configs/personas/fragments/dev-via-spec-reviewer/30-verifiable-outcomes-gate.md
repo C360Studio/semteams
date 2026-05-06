@@ -49,8 +49,7 @@ modes from one outcome; either split the outcome or split the epics.
 ## Examples of substance gaps that warrant `insufficient`
 
 - *"No verifiable outcomes section — only epic decomposition. Cannot
-  proceed: architect has no outcomes to transcribe into
-  verification_commitments."*
+  proceed: architect has no outcomes to transcribe into checks."*
 - *"E2 has no verifiable outcome. Plan covers the
   Meshtastic→driver integration boundary but doesn't name what
   observable behavior would prove that integration is working."*

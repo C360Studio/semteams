@@ -15,7 +15,7 @@ import (
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/types"
 
-	"github.com/c360studio/semteams/cmd/semteams/harness"
+	"github.com/c360studio/semteams/cmd/semteams/testharness"
 )
 
 // ---------------------------------------------------------------------
@@ -113,7 +113,7 @@ func defaultArtifactArgs() map[string]any {
 		"integration_points": []any{
 			map[string]any{"from": "Meshtastic radio", "to": "OSH driver framework", "data": "MeshPacket payloads", "direction": "read"},
 		},
-		"seed_requirements": []any{
+		"tasks": []any{
 			map[string]any{
 				"title":          "Implement IDriver",
 				"scope":          "backend",
@@ -151,18 +151,17 @@ func TestListTools_SchemaShape(t *testing.T) {
 	if !ok {
 		t.Fatalf("schema missing properties: %#v", def.Parameters)
 	}
-	for _, key := range []string{"title", "goal", "context", "actors", "integration_points", "seed_requirements", "verification_commitments", "provenance"} {
+	for _, key := range []string{"title", "goal", "context", "actors", "integration_points", "tasks", "checks", "provenance"} {
 		if _, ok := props[key]; !ok {
 			t.Errorf("missing property %q in tool schema", key)
 		}
 	}
-	// verification_commitments is optional at the wire level (the
-	// architect-persona contract for required emission lands in
-	// R3.7.2.f); confirm it's NOT in `required`.
+	// checks is optional at the wire level (the architect-persona contract
+	// for required emission lands in R3.7.2.f); confirm it's NOT in `required`.
 	requiredList, _ := def.Parameters["required"].([]string)
 	for _, r := range requiredList {
-		if r == "verification_commitments" {
-			t.Errorf("verification_commitments must not be in required (R3.7.2.f extends the contract): %v", requiredList)
+		if r == "checks" {
+			t.Errorf("checks must not be in required (R3.7.2.f extends the contract): %v", requiredList)
 		}
 	}
 	// Server-supplied fields must not appear in the LLM-facing schema.
@@ -172,7 +171,7 @@ func TestListTools_SchemaShape(t *testing.T) {
 		}
 	}
 	required, _ := def.Parameters["required"].([]string)
-	wantRequired := map[string]bool{"title": true, "goal": true, "context": true, "actors": true, "seed_requirements": true, "provenance": true}
+	wantRequired := map[string]bool{"title": true, "goal": true, "context": true, "actors": true, "tasks": true, "provenance": true}
 	got := map[string]bool{}
 	for _, r := range required {
 		got[r] = true
@@ -257,16 +256,16 @@ func TestExecute_NoActors_FailsValidation(t *testing.T) {
 	}
 }
 
-func TestExecute_NoSeedRequirements_FailsValidation(t *testing.T) {
+func TestExecute_NoTasks_FailsValidation(t *testing.T) {
 	exec, _, _, _ := newExecutorWithDir(t)
 	args := defaultArtifactArgs()
-	args["seed_requirements"] = []any{}
+	args["tasks"] = []any{}
 	res, _ := exec.Execute(context.Background(), defaultCall(args))
 	if res.ErrorKind != agentic.ToolErrorInvalidArgs {
 		t.Errorf("ErrorKind = %v, want %v", res.ErrorKind, agentic.ToolErrorInvalidArgs)
 	}
-	if !strings.Contains(res.Error, "seed_requirements") {
-		t.Errorf("Result.Error = %q, want contains 'seed_requirements'", res.Error)
+	if !strings.Contains(res.Error, "tasks") {
+		t.Errorf("Result.Error = %q, want contains 'tasks'", res.Error)
 	}
 }
 
@@ -453,7 +452,7 @@ func TestExecute_HappyPath_TripleSet(t *testing.T) {
 	// Triple count is load-bearing for downstream rule wiring (R3.7.2.h
 	// fires on the count triple). Drift in either direction (drop a
 	// triple, accidentally duplicate one) should fail loudly here.
-	const wantTripleCount = 8 // path, slug, generated_at, actor_count, integration_point_count, seed_requirement_count, commitment_count, research_root_loop
+	const wantTripleCount = 8 // path, slug, generated_at, actor_count, integration_point_count, task_count, check_count, research_root_loop
 	if len(triples) != wantTripleCount {
 		t.Errorf("triple count = %d, want %d", len(triples), wantTripleCount)
 	}
@@ -476,13 +475,13 @@ func TestExecute_HappyPath_TripleSet(t *testing.T) {
 	if got := gotPredicates[predicateIntegrationPointCount]; got != 1 {
 		t.Errorf("triple %q = %v, want 1", predicateIntegrationPointCount, got)
 	}
-	if got := gotPredicates[predicateSeedRequirementCount]; got != 2 {
-		t.Errorf("triple %q = %v, want 2", predicateSeedRequirementCount, got)
+	if got := gotPredicates[predicateTaskCount]; got != 2 {
+		t.Errorf("triple %q = %v, want 2", predicateTaskCount, got)
 	}
-	// commitment_count is emitted unconditionally (zero is meaningful);
-	// defaultArtifactArgs() emits no commitments for back-compat.
-	if got := gotPredicates[predicateCommitmentCount]; got != 0 {
-		t.Errorf("triple %q = %v, want 0 (default args have no commitments)", predicateCommitmentCount, got)
+	// check_count is emitted unconditionally (zero is meaningful);
+	// defaultArtifactArgs() emits no checks for back-compat.
+	if got := gotPredicates[predicateCheckCount]; got != 0 {
+		t.Errorf("triple %q = %v, want 0 (default args have no checks)", predicateCheckCount, got)
 	}
 	if got := gotPredicates[predicateResearchRootLoop]; got != "loop-research-001" {
 		t.Errorf("triple %q = %v, want loop-research-001", predicateResearchRootLoop, got)
@@ -579,7 +578,7 @@ func TestExecute_ResultContent_ShapeAndCounts(t *testing.T) {
 		GeneratedAt           string `json:"generated_at"`
 		ActorCount            int    `json:"actor_count"`
 		IntegrationPointCount int    `json:"integration_point_count"`
-		SeedRequirementCount  int    `json:"seed_requirement_count"`
+		TaskCount             int    `json:"task_count"`
 		ResearchRootLoop      string `json:"research_root_loop"`
 		PayloadSubject        string `json:"payload_subject"`
 		LoopEntityID          string `json:"loop_entity_id"`
@@ -599,8 +598,8 @@ func TestExecute_ResultContent_ShapeAndCounts(t *testing.T) {
 	if content.IntegrationPointCount != 1 {
 		t.Errorf("integration_point_count = %d, want 1", content.IntegrationPointCount)
 	}
-	if content.SeedRequirementCount != 2 {
-		t.Errorf("seed_requirement_count = %d, want 2", content.SeedRequirementCount)
+	if content.TaskCount != 2 {
+		t.Errorf("task_count = %d, want 2", content.TaskCount)
 	}
 	if content.ResearchRootLoop != "loop-research-001" {
 		t.Errorf("research_root_loop = %q, want loop-research-001", content.ResearchRootLoop)
@@ -649,9 +648,9 @@ func TestExecute_HappyPath_MarkdownFileWritten(t *testing.T) {
 		"## Context",
 		"## Actors",
 		"## Integration Points",
-		"## Seed Requirements",
-		"### SR1 — Implement IDriver",
-		"### SR2 — Expose OGC CS endpoints",
+		"## Tasks",
+		"### T1 — Implement IDriver",
+		"### T2 — Expose OGC CS endpoints",
 		"## Provenance",
 		"loop-research-001",
 		"loop-planner-001",
@@ -889,21 +888,21 @@ func TestDeriveSlug(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------
-// R3.7.2.b — verification_commitments wiring
+// R3.7.2.b — checks wiring
 // ---------------------------------------------------------------------
 
-// argsWithCommitments returns defaultArtifactArgs() plus a
-// representative pair of commitments — one testcontainer (real-stack),
-// one in-process unit. Used across the R3.7.2.b tests.
-func argsWithCommitments() map[string]any {
+// argsWithChecks returns defaultArtifactArgs() plus a representative
+// pair of checks — one testcontainer (real-stack), one in-process unit.
+// Used across the R3.7.2.b tests.
+func argsWithChecks() map[string]any {
 	args := defaultArtifactArgs()
-	args["verification_commitments"] = []any{
+	args["checks"] = []any{
 		map[string]any{
-			"target":   "executor publishes graph.mutation.entity.add on success",
-			"approach": "process-local-testcontainer",
-			"harness":  "nats-jetstream",
-			"runtime":  "go-testing-net",
-			"convention": map[string]any{
+			"target":       "executor publishes graph.mutation.entity.add on success",
+			"runtime":      "process-local-testcontainer",
+			"test_harness": "nats-jetstream",
+			"test_runtime": "go-testing-net",
+			"ref": map[string]any{
 				"type": "filepath",
 				"path": "cmd/semteams/sandbox/integration_test.go",
 			},
@@ -912,9 +911,9 @@ func argsWithCommitments() map[string]any {
 			},
 		},
 		map[string]any{
-			"target":   "executor returns ToolErrorInvalidArgs on malformed input",
-			"approach": "in-process-unit",
-			"convention": map[string]any{
+			"target":  "executor returns ToolErrorInvalidArgs on malformed input",
+			"runtime": "in-process-unit",
+			"ref": map[string]any{
 				"type": "filepath",
 				"path": "cmd/semteams/tools/x/executor_test.go",
 			},
@@ -923,9 +922,9 @@ func argsWithCommitments() map[string]any {
 	return args
 }
 
-func TestExecute_HappyPath_WithCommitments_TripleSet(t *testing.T) {
+func TestExecute_HappyPath_WithChecks_TripleSet(t *testing.T) {
 	exec, tp, _, _ := newExecutorWithDir(t)
-	res, err := exec.Execute(context.Background(), defaultCall(argsWithCommitments()))
+	res, err := exec.Execute(context.Background(), defaultCall(argsWithChecks()))
 	if err != nil {
 		t.Fatalf("Execute err: %v", err)
 	}
@@ -937,14 +936,14 @@ func TestExecute_HappyPath_WithCommitments_TripleSet(t *testing.T) {
 	for _, tr := range tp.snapshot() {
 		gotPredicates[tr.Predicate] = tr.Object
 	}
-	if got := gotPredicates[predicateCommitmentCount]; got != 2 {
-		t.Errorf("triple %q = %v, want 2", predicateCommitmentCount, got)
+	if got := gotPredicates[predicateCheckCount]; got != 2 {
+		t.Errorf("triple %q = %v, want 2", predicateCheckCount, got)
 	}
 }
 
-func TestExecute_WithCommitments_PayloadRoundTrips(t *testing.T) {
+func TestExecute_WithChecks_PayloadRoundTrips(t *testing.T) {
 	exec, _, pub, _ := newExecutorWithDir(t)
-	_, err := exec.Execute(context.Background(), defaultCall(argsWithCommitments()))
+	_, err := exec.Execute(context.Background(), defaultCall(argsWithChecks()))
 	if err != nil {
 		t.Fatalf("Execute err: %v", err)
 	}
@@ -953,34 +952,34 @@ func TestExecute_WithCommitments_PayloadRoundTrips(t *testing.T) {
 	if err := json.Unmarshal(data, &roundTrip); err != nil {
 		t.Fatalf("decode payload: %v", err)
 	}
-	commitments, ok := roundTrip["verification_commitments"].([]any)
+	checks, ok := roundTrip["checks"].([]any)
 	if !ok {
-		t.Fatalf("payload missing verification_commitments array; payload=%s", data)
+		t.Fatalf("payload missing checks array; payload=%s", data)
 	}
-	if len(commitments) != 2 {
-		t.Errorf("verification_commitments len: got %d, want 2", len(commitments))
+	if len(checks) != 2 {
+		t.Errorf("checks len: got %d, want 2", len(checks))
 	}
-	first, ok := commitments[0].(map[string]any)
+	first, ok := checks[0].(map[string]any)
 	if !ok {
-		t.Fatalf("commitments[0] not a map: %T", commitments[0])
+		t.Fatalf("checks[0] not a map: %T", checks[0])
 	}
-	if first["approach"] != "process-local-testcontainer" {
-		t.Errorf("commitments[0].approach: got %v", first["approach"])
+	if first["runtime"] != "process-local-testcontainer" {
+		t.Errorf("checks[0].runtime: got %v", first["runtime"])
 	}
-	if first["harness"] != "nats-jetstream" {
-		t.Errorf("commitments[0].harness: got %v", first["harness"])
+	if first["test_harness"] != "nats-jetstream" {
+		t.Errorf("checks[0].test_harness: got %v", first["test_harness"])
 	}
 }
 
-func TestExecute_WithoutCommitments_PayloadOmitsField(t *testing.T) {
+func TestExecute_WithoutChecks_PayloadOmitsField(t *testing.T) {
 	exec, _, pub, _ := newExecutorWithDir(t)
 	_, err := exec.Execute(context.Background(), defaultCall(defaultArtifactArgs()))
 	if err != nil {
 		t.Fatalf("Execute err: %v", err)
 	}
 	_, data, _ := pub.snapshot()
-	if got := string(data); strings.Contains(got, `"verification_commitments"`) {
-		t.Errorf("expected verification_commitments to be omitted from payload; payload=%s", got)
+	if got := string(data); strings.Contains(got, `"checks"`) {
+		t.Errorf("expected checks to be omitted from payload; payload=%s", got)
 	}
 }
 
@@ -988,27 +987,27 @@ func TestExecute_WithoutCommitments_PayloadOmitsField(t *testing.T) {
 // R3.7.2.h′ — harness resolver projects Image + TCP exposes into SPEC.md
 // ---------------------------------------------------------------------
 
-// TestRenderMarkdown_ResolvedHarnessFieldsRendered pins the
+// TestRenderMarkdown_ResolvedTestHarnessFieldsRendered pins the
 // trust-boundary fix the reviewer caught: without resolved fields in
 // SPEC.md the builder has no in-sandbox path to look up the catalog.
 // With the resolver wired, the rendered markdown carries `**Image**`
-// and `**TCP exposes**` lines next to `**Harness**` for every VC
-// whose harness resolves; the builder transcribes them verbatim into
-// test code (configs/personas/fragments/dev-via-spec-builder/
+// and `**TCP exposes**` lines next to `**Test harness**` for every C
+// whose test_harness resolves; the builder transcribes them verbatim
+// into test code (configs/personas/fragments/dev-via-spec-builder/
 // 15-commitment-driven-authoring.md).
-func TestRenderMarkdown_ResolvedHarnessFieldsRendered(t *testing.T) {
+func TestRenderMarkdown_ResolvedTestHarnessFieldsRendered(t *testing.T) {
 	tmpDir := t.TempDir()
 	tp := &fakeTriplePublisher{}
 	pub := &fakePublisher{}
-	resolver := func(_ context.Context, name string) (*harness.Harness, error) {
+	resolver := func(_ context.Context, name string) (*testharness.TestHarness, error) {
 		if name == "meshtasticd-3.x" {
-			return &harness.Harness{
+			return &testharness.TestHarness{
 				Name:                "meshtasticd-3.x",
 				Image:               "meshtastic/meshtasticd:3.5.0",
 				SmokeContractSchema: "meshtasticd.smoke_contract.v1",
 				DomainDescription:   "test fixture",
-				Exposes: harness.Exposes{
-					TCP: []harness.PortExpose{{Port: 4403, Protocol: "meshtastic-protobuf"}},
+				Exposes: testharness.Exposes{
+					TCP: []testharness.PortExpose{{Port: 4403, Protocol: "meshtastic-protobuf"}},
 				},
 			}, nil
 		}
@@ -1017,13 +1016,13 @@ func TestRenderMarkdown_ResolvedHarnessFieldsRendered(t *testing.T) {
 	exec := NewExecutor(tp, pub, types.PlatformMeta{Org: "c360", Platform: "semteams"}, nil, tmpDir, resolver)
 
 	args := defaultArtifactArgs()
-	args["verification_commitments"] = []any{
+	args["checks"] = []any{
 		map[string]any{
-			"target":   "driver emits CS API observation when meshtasticd publishes POSITION_APP",
-			"approach": "process-local-testcontainer",
-			"harness":  "meshtasticd-3.x",
-			"runtime":  "java-junit-testcontainers",
-			"convention": map[string]any{
+			"target":       "driver emits CS API observation when meshtasticd publishes POSITION_APP",
+			"runtime":      "process-local-testcontainer",
+			"test_harness": "meshtasticd-3.x",
+			"test_runtime": "java-junit-testcontainers",
+			"ref": map[string]any{
 				"type": "filepath",
 				"path": "src/test/java/com/example/FooIT.java",
 			},
@@ -1053,7 +1052,7 @@ func TestRenderMarkdown_ResolvedHarnessFieldsRendered(t *testing.T) {
 	got := string(body)
 
 	for _, want := range []string{
-		"**Harness**: `meshtasticd-3.x`",
+		"**Test harness**: `meshtasticd-3.x`",
 		"**Image**: `meshtastic/meshtasticd:3.5.0`",
 		"**TCP exposes**: port 4403 (`meshtastic-protobuf`)",
 	} {
@@ -1065,7 +1064,7 @@ func TestRenderMarkdown_ResolvedHarnessFieldsRendered(t *testing.T) {
 
 // TestRenderMarkdown_ResolverMiss_NameOnly pins the fallback shape:
 // when the resolver returns an error, the rendered SPEC carries the
-// architect's harness NAME without the resolved Image / TCP fields.
+// architect's test_harness NAME without the resolved Image / TCP fields.
 // The builder's contract reads this as a chain gap and surfaces
 // needs_clarification rather than fabricating; here we just verify
 // the renderer doesn't blow up and the name still ships.
@@ -1073,19 +1072,19 @@ func TestRenderMarkdown_ResolverMiss_NameOnly(t *testing.T) {
 	tmpDir := t.TempDir()
 	tp := &fakeTriplePublisher{}
 	pub := &fakePublisher{}
-	resolver := func(_ context.Context, _ string) (*harness.Harness, error) {
+	resolver := func(_ context.Context, _ string) (*testharness.TestHarness, error) {
 		return nil, errors.New("simulated catalog miss")
 	}
 	exec := NewExecutor(tp, pub, types.PlatformMeta{Org: "c360", Platform: "semteams"}, nil, tmpDir, resolver)
 
 	args := defaultArtifactArgs()
-	args["verification_commitments"] = []any{
+	args["checks"] = []any{
 		map[string]any{
-			"target":   "x",
-			"approach": "process-local-testcontainer",
-			"harness":  "ghost-harness",
-			"runtime":  "go-testing-net",
-			"convention": map[string]any{
+			"target":       "x",
+			"runtime":      "process-local-testcontainer",
+			"test_harness": "ghost-harness",
+			"test_runtime": "go-testing-net",
+			"ref": map[string]any{
 				"type": "filepath",
 				"path": "x_test.go",
 			},
@@ -1102,8 +1101,8 @@ func TestRenderMarkdown_ResolverMiss_NameOnly(t *testing.T) {
 	entries, _ := os.ReadDir(tmpDir)
 	body, _ := os.ReadFile(filepath.Join(tmpDir, entries[0].Name()))
 	got := string(body)
-	if !strings.Contains(got, "**Harness**: `ghost-harness`") {
-		t.Errorf("expected harness name to render even on resolver miss; body:\n%s", got)
+	if !strings.Contains(got, "**Test harness**: `ghost-harness`") {
+		t.Errorf("expected test_harness name to render even on resolver miss; body:\n%s", got)
 	}
 	if strings.Contains(got, "**Image**:") {
 		t.Errorf("expected NO **Image** line on resolver miss; body:\n%s", got)
@@ -1113,16 +1112,16 @@ func TestRenderMarkdown_ResolverMiss_NameOnly(t *testing.T) {
 	}
 }
 
-func TestExecute_BadCommitment_FailsValidation(t *testing.T) {
+func TestExecute_BadCheck_FailsValidation(t *testing.T) {
 	exec, _, _, _ := newExecutorWithDir(t)
 	args := defaultArtifactArgs()
-	// testcontainer approach without harness → Validate cascade rejects
-	args["verification_commitments"] = []any{
+	// testcontainer runtime without test_harness → Validate cascade rejects
+	args["checks"] = []any{
 		map[string]any{
-			"target":   "x",
-			"approach": "process-local-testcontainer",
-			"runtime":  "go-testing-net",
-			"convention": map[string]any{
+			"target":       "x",
+			"runtime":      "process-local-testcontainer",
+			"test_runtime": "go-testing-net",
+			"ref": map[string]any{
 				"type": "filepath",
 				"path": "x_test.go",
 			},
@@ -1133,19 +1132,19 @@ func TestExecute_BadCommitment_FailsValidation(t *testing.T) {
 		t.Fatalf("Execute err: %v", err)
 	}
 	if res.Error == "" {
-		t.Fatal("expected validation error from invalid commitment, got nil")
+		t.Fatal("expected validation error from invalid check, got nil")
 	}
-	if !strings.Contains(res.Error, "verification_commitments[0]") {
-		t.Errorf("error should name the offending commitment index, got %q", res.Error)
+	if !strings.Contains(res.Error, "checks[0]") {
+		t.Errorf("error should name the offending check index, got %q", res.Error)
 	}
 	if res.ErrorKind != agentic.ToolErrorInvalidArgs {
 		t.Errorf("ErrorKind: got %v, want ToolErrorInvalidArgs", res.ErrorKind)
 	}
 }
 
-func TestExecute_WithCommitments_MarkdownContainsSection(t *testing.T) {
+func TestExecute_WithChecks_MarkdownContainsSection(t *testing.T) {
 	exec, _, _, dir := newExecutorWithDir(t)
-	res, err := exec.Execute(context.Background(), defaultCall(argsWithCommitments()))
+	res, err := exec.Execute(context.Background(), defaultCall(argsWithChecks()))
 	if err != nil {
 		t.Fatalf("Execute err: %v", err)
 	}
@@ -1173,13 +1172,13 @@ func TestExecute_WithCommitments_MarkdownContainsSection(t *testing.T) {
 	}
 	rendered := string(body)
 	for _, want := range []string{
-		"## Verification Commitments",
-		"VC1 — executor publishes graph.mutation.entity.add",
+		"## Verification Checks",
+		"C1 — executor publishes graph.mutation.entity.add",
 		"`process-local-testcontainer`",
 		"`nats-jetstream`",
 		"`go-testing-net`",
 		"`test_uses_build_tag`",
-		"VC2 — executor returns ToolErrorInvalidArgs",
+		"C2 — executor returns ToolErrorInvalidArgs",
 		"`in-process-unit`",
 		"_none — reviewer may flag as under-specified_",
 	} {
@@ -1189,7 +1188,7 @@ func TestExecute_WithCommitments_MarkdownContainsSection(t *testing.T) {
 	}
 }
 
-func TestExecute_WithoutCommitments_MarkdownShowsReviewerHint(t *testing.T) {
+func TestExecute_WithoutChecks_MarkdownShowsReviewerHint(t *testing.T) {
 	exec, _, _, dir := newExecutorWithDir(t)
 	_, err := exec.Execute(context.Background(), defaultCall(defaultArtifactArgs()))
 	if err != nil {
@@ -1211,10 +1210,10 @@ func TestExecute_WithoutCommitments_MarkdownShowsReviewerHint(t *testing.T) {
 		t.Fatal(err)
 	}
 	rendered := string(body)
-	if !strings.Contains(rendered, "## Verification Commitments") {
+	if !strings.Contains(rendered, "## Verification Checks") {
 		t.Errorf("markdown missing section header")
 	}
-	if !strings.Contains(rendered, "No verification commitments emitted") {
-		t.Errorf("markdown should call out missing commitments for reviewer attention")
+	if !strings.Contains(rendered, "No verification checks emitted") {
+		t.Errorf("markdown should call out missing checks for reviewer attention")
 	}
 }

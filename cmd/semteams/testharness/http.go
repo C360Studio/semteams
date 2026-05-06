@@ -1,4 +1,4 @@
-package harness
+package testharness
 
 import (
 	"context"
@@ -71,18 +71,18 @@ func HTTPMiddleware(mgr *Manager, logger *slog.Logger) func(http.Handler) http.H
 // (timestamps, total counts, deployment id) is additive, not a
 // shape break for clients that already parse the array directly.
 type listResponse struct {
-	Harnesses []*Harness `json:"harnesses"`
+	Harnesses []*TestHarness `json:"harnesses"`
 }
 
 func writeListJSON(ctx context.Context, mgr *Manager, w http.ResponseWriter, logger *slog.Logger) {
 	entries, err := mgr.List(ctx)
 	if err != nil {
-		logger.Warn("harness catalog HTTP: List failed", "error", err)
+		logger.Warn("test-harness catalog HTTP: List failed", "error", err)
 		writeJSONError(w, http.StatusInternalServerError, "list catalog: "+err.Error())
 		return
 	}
 	if entries == nil {
-		entries = []*Harness{}
+		entries = []*TestHarness{}
 	}
 	writeJSON(w, http.StatusOK, listResponse{Harnesses: entries})
 }
@@ -98,11 +98,11 @@ func writeGetJSON(ctx context.Context, mgr *Manager, name string, w http.Respons
 		// the right status. Get wraps jetstream.ErrKeyNotFound when the
 		// entry is missing.
 		if isNotFound(err) {
-			writeJSONError(w, http.StatusNotFound, "harness not found: "+name)
+			writeJSONError(w, http.StatusNotFound, "test_harness not found: "+name)
 			return
 		}
-		logger.Warn("harness catalog HTTP: Get failed", "name", name, "error", err)
-		writeJSONError(w, http.StatusInternalServerError, "get harness: "+err.Error())
+		logger.Warn("test-harness catalog HTTP: Get failed", "name", name, "error", err)
+		writeJSONError(w, http.StatusInternalServerError, "get test_harness: "+err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, h)

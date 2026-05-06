@@ -106,8 +106,7 @@ Concerns are NOT execution-blocking when:
 If the outcomes pass: include them in your `accept` summary so the
 architect downstream has the curated list. Densify — cite the
 outcome verbatim, then note the bug class(es) the outcome focuses
-on. The architect uses this as transcription material for
-verification_commitments.
+on. The architect uses this as transcription material for checks.
 
 If outcomes fail the probe: name the specific outcome AND the
 specific failure mode it doesn't cover, with the proposed

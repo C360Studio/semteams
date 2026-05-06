@@ -5,66 +5,65 @@ import (
 	"strings"
 )
 
-// CommitmentSummary pairs the architect-cited target prose with
-// the gate's per-commitment results. The qa-reviewer persona
-// (R3.7.2.j′) reads one block per CommitmentSummary in its prompt;
-// the rendering helper below produces that exact block shape.
+// CheckSummary pairs the architect-cited target prose with the
+// gate's per-check results. The qa-reviewer persona (R3.7.2.j′)
+// reads one block per CheckSummary in its prompt; the rendering
+// helper below produces that exact block shape.
 //
 // The caller (the future rule action / tool that wires the gate
 // into the qa-reviewer's prompt, R3.7.2.k′) is responsible for
 // assembling these from the architect's artifact +
-// Registry.Run output: one summary per VC, in the artifact's
-// VerificationCommitments[] order so the block headings number
-// stably.
+// Registry.Run output: one summary per check, in the artifact's
+// Checks[] order so the block headings number stably.
 //
 // Aggregate is intentionally NOT a field — Summarize derives it
 // from Results so a caller cannot construct an inconsistent
-// CommitmentSummary (Aggregate.Total = 99 with len(Results) = 3).
+// CheckSummary (Aggregate.Total = 99 with len(Results) = 3).
 // Registry.Run already returns the Aggregate alongside Results;
 // the k′ caller discards it when assembling these structs and
 // the renderer recomputes from the canonical Results list.
-type CommitmentSummary struct {
-	// Index is the 1-based commitment ordinal, mirroring the SPEC
-	// template's `### VC{i+1}` heading. Used as the block heading
+type CheckSummary struct {
+	// Index is the 1-based check ordinal, mirroring the SPEC
+	// template's `### C{i+1}` heading. Used as the block heading
 	// number so the qa-reviewer's reject-reason citations align
 	// with the spec's prose.
 	Index int
 
 	// Target is the architect's verifiable-claim text from
-	// commitment.Target. Quoted verbatim in the heading so the
+	// check.Target. Quoted verbatim in the heading so the
 	// reviewer can ground its verdict against what was promised.
 	Target string
 
 	// Results is the per-rule outcome list from Registry.Run.
-	// Order matches commitment.Evidence; the reviewer reads
+	// Order matches check.Evidence; the reviewer reads
 	// in-order to grade rule-by-rule.
 	Results []Result
 }
 
-// Summarize renders one or more commitment summaries as the prose
+// Summarize renders one or more check summaries as the prose
 // block-list the qa-reviewer's `evidence_summary` task property
 // will carry. Format is intentionally markdown-flavoured (## for
-// commitment headings, [status] prefixes on per-rule lines)
+// check headings, [status] prefixes on per-rule lines)
 // because small LLMs read prose well and the reviewer's evaluation
 // contract grounds its rules against this exact shape.
 //
-// Empty input yields a single line ("(no commitments)") so the
+// Empty input yields a single line ("(no checks)") so the
 // reviewer can still grade — Aggregate.IsEmpty across the whole
 // artifact is the R3.7.2.f′ "under-specified architect" condition
 // the reviewer rejects on.
 //
 // Per-Result Detail strings are echoed verbatim; they're already
 // in operator-readable form (the checker's responsibility).
-func Summarize(commitments []CommitmentSummary) string {
-	if len(commitments) == 0 {
-		return "(no commitments)\n"
+func Summarize(checks []CheckSummary) string {
+	if len(checks) == 0 {
+		return "(no checks)\n"
 	}
 	var b strings.Builder
-	for i, cs := range commitments {
+	for i, cs := range checks {
 		if i > 0 {
 			b.WriteString("\n")
 		}
-		b.WriteString(fmt.Sprintf("## Commitment %d — %s\n\n", cs.Index, cs.Target))
+		b.WriteString(fmt.Sprintf("## Check %d — %s\n\n", cs.Index, cs.Target))
 		writeAggregateLine(&b, deriveAggregate(cs.Results))
 		b.WriteString("\n")
 		writePerRuleLines(&b, cs.Results)
@@ -104,21 +103,21 @@ func deriveAggregate(results []Result) Aggregate {
 //	Aggregate: 3 pass / 1 fail / 0 unknown / 0 error / total 4 — NOT all passed
 //
 // Headline ("ALL PASSED" vs "NOT all passed" vs "(no rules on this
-// commitment)") encodes the routing-relevant cases. The qa-reviewer
+// check)") encodes the routing-relevant cases. The qa-reviewer
 // can scan the headline first and only descend into per-rule when
 // the Aggregate is non-trivial.
 func writeAggregateLine(b *strings.Builder, agg Aggregate) {
 	headline := "NOT all passed"
 	switch {
 	case agg.IsEmpty():
-		headline = "(no rules on this commitment)"
+		headline = "(no rules on this check)"
 	case agg.AllPassed():
 		headline = "ALL PASSED"
 	case agg.Pass+agg.Fail+agg.UnknownKind+agg.Error != agg.Total:
 		// Defensive: if Total drifts from the typed counters
 		// (a future Status value the renderer didn't learn
 		// about, a caller hand-constructing Aggregate
-		// inconsistently — which CommitmentSummary's design
+		// inconsistently — which CheckSummary's design
 		// already prevents, but this is belt-and-suspenders),
 		// surface loudly so the operator routes correctly.
 		headline = "(counter mismatch — out-of-enum Status?)"

@@ -18,7 +18,7 @@ const KindTestFileExists = "test_file_exists"
 //	{"path": "src/test/java/com/example/FooIT.java"}
 //
 // The checker rejects directories with a clear Detail (the
-// architect's commitment is meant to assert a single file's
+// architect's check is meant to assert a single file's
 // existence; passing a directory is an args mistake the reviewer
 // should see).
 type FileExistsChecker struct{}

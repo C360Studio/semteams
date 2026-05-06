@@ -11,14 +11,14 @@
 //   - Goal + Context: the "why" grounding from the upstream research arc.
 //   - Actors + IntegrationPoints: the structural inventory the architect
 //     condenses from the planner/reviewer/challenger exchange.
-//   - SeedRequirements: decomposable-grain work items, each grounded in
+//   - Tasks: decomposable-grain work items, each grounded in
 //     at least one actor and one integration point so they cannot float
 //     free of the structural model.
 //   - Provenance: the loop-ID chain so the artifact is traceable back
 //     through every role that contributed to it.
 //
 // The Validate method enforces structural well-formedness only. Semantic
-// checks (e.g. "every seed requirement is grounded in a named actor that
+// checks (e.g. "every task is grounded in a named actor that
 // exists in the Actors list") are reviewer-persona concerns, not
 // executor concerns. The terminal architect calls this after the chain
 // converges; at that point all structural fields should be present.
@@ -65,11 +65,11 @@ type IntegrationPoint struct {
 	Data      string `json:"data"`
 }
 
-// SeedRequirement is a decomposable-grain work item that the architect
+// Task is a decomposable-grain work item that the architect
 // scoped from the planner/reviewer/challenger exchange. Grounding fields
 // trace it back to the structural inventory so future implementors know
-// which actors and data flows a requirement touches.
-type SeedRequirement struct {
+// which actors and data flows a task touches.
+type Task struct {
 	Title                    string   `json:"title"`
 	Scope                    string   `json:"scope"`
 	GroundsActors            []string `json:"grounds_actors,omitempty"`
@@ -97,8 +97,9 @@ type Provenance struct {
 // neither sees nor sets them (mirrors research.Artifact's server-side
 // LoopID / ProducedAt pattern).
 //
-// Schema: dev_via_spec.artifact.v1. The VerificationCommitments field
-// (added R3.7.2.b per ADR-033 §addendum 2026-05-04) is omitempty so
+// Schema: dev_via_spec.artifact.v1. The Checks field
+// (added R3.7.2.b per ADR-033 §addendum 2026-05-04, renamed from
+// VerificationCommitments in Slice 2 per ADR-036) is omitempty so
 // existing v1 consumers (the builder loop's read_loop_result, audit
 // subscribers) see no drift when the architect hasn't populated it
 // yet. This is an additive widening — no schema-version bump —
@@ -109,20 +110,19 @@ type Artifact struct {
 	Context           string             `json:"context"`
 	Actors            []Actor            `json:"actors"`
 	IntegrationPoints []IntegrationPoint `json:"integration_points"`
-	SeedRequirements  []SeedRequirement  `json:"seed_requirements"`
-	// VerificationCommitments captures the architect's structured
-	// commitment to verification surfaces (target / approach / harness
-	// / runtime / convention / evidence). Each commitment is the
-	// architect's promise about what is verified and against what; the
-	// reviewer judges coverage adequacy and the evidence gate (R3.7.2.h)
-	// runs the structural checkers post-build. Empty during the v1
-	// transition; the architect persona contract (R3.7.2.f) will
-	// require at least one commitment for any artifact whose work
-	// touches an external integration_point.
-	VerificationCommitments []verification.Commitment `json:"verification_commitments,omitempty"`
-	Provenance              Provenance                `json:"provenance"`
-	GeneratedAt             string                    `json:"generated_at"` // RFC3339, set by executor
-	Slug                    string                    `json:"slug"`         // kebab-case with YYYY-MM-DD- prefix, set by executor
+	Tasks             []Task             `json:"tasks"`
+	// Checks captures the architect's structured checks of verification
+	// surfaces (target / runtime / test_harness / test_runtime / ref /
+	// evidence). Each check specifies what is verified and against what;
+	// the reviewer judges coverage adequacy and the evidence gate
+	// (R3.7.2.h) runs the structural checkers post-build. Empty during
+	// the v1 transition; the architect persona contract (R3.7.2.f) will
+	// require at least one check for any artifact whose work touches an
+	// external integration_point.
+	Checks      []verification.Check `json:"checks,omitempty"`
+	Provenance  Provenance           `json:"provenance"`
+	GeneratedAt string               `json:"generated_at"` // RFC3339, set by executor
+	Slug        string               `json:"slug"`         // kebab-case with YYYY-MM-DD- prefix, set by executor
 }
 
 // Schema implements message.Payload.
@@ -131,8 +131,8 @@ func (a *Artifact) Schema() message.Type {
 }
 
 // Validate implements message.Payload. Validates structural well-formedness
-// only: required fields present, ≥1 actor, ≥1 seed requirement, integration
-// point directions in {"read","write",""}. Semantic checks (e.g. every SR
+// only: required fields present, ≥1 actor, ≥1 task, integration
+// point directions in {"read","write",""}. Semantic checks (e.g. every task
 // references an actor that exists in the Actors slice) are architect-persona
 // concerns; Validate is called by the executor before writing any triples.
 func (a *Artifact) Validate() error {
@@ -148,8 +148,8 @@ func (a *Artifact) Validate() error {
 	if len(a.Actors) == 0 {
 		return fmt.Errorf("actors: at least one actor required")
 	}
-	if len(a.SeedRequirements) == 0 {
-		return fmt.Errorf("seed_requirements: at least one seed requirement required")
+	if len(a.Tasks) == 0 {
+		return fmt.Errorf("tasks: at least one task required")
 	}
 	for i, ip := range a.IntegrationPoints {
 		switch ip.Direction {
@@ -171,9 +171,9 @@ func (a *Artifact) Validate() error {
 	if a.Provenance.ChallengerLoop == "" {
 		return fmt.Errorf("provenance.challenger_loop required")
 	}
-	for i := range a.VerificationCommitments {
-		if err := a.VerificationCommitments[i].Validate(); err != nil {
-			return fmt.Errorf("verification_commitments[%d]: %w", i, err)
+	for i := range a.Checks {
+		if err := a.Checks[i].Validate(); err != nil {
+			return fmt.Errorf("checks[%d]: %w", i, err)
 		}
 	}
 	return nil

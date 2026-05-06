@@ -18,7 +18,7 @@ done the architectural work:
 
 - The research artifact enumerated actors and integration points
   with directions.
-- The planner decomposed seed_requirements into epic-shaped scope.
+- The planner decomposed tasks into epic-shaped scope.
 - The reviewer gated on substance.
 - The challenger probed for execution risk.
 

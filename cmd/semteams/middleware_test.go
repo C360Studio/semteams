@@ -129,7 +129,7 @@ func TestMainWiringSmoke(_ *testing.T) {
 func TestProductMiddleware_OrderedOutermostFirst(t *testing.T) {
 	chain := productMiddleware(nil, slog.Default())
 	if len(chain) != 2 {
-		t.Fatalf("chain length = %d, want 2 (identity + harness)", len(chain))
+		t.Fatalf("chain length = %d, want 2 (identity + test_harness)", len(chain))
 	}
 	// Identity check via behaviour: the FIRST entry must lift the header
 	// so downstream middleware (and handlers) see the resolved identity.
@@ -144,7 +144,7 @@ func TestProductMiddleware_OrderedOutermostFirst(t *testing.T) {
 	if observed != "carol" {
 		t.Fatalf("chain[0] is not the identity middleware: observed = %q", observed)
 	}
-	// Harness middleware is index 1 — pass-through when manager is nil
+	// Test harness middleware is index 1 — pass-through when manager is nil
 	// (verified by the chain accepting a nil manager without panicking
 	// during the identity probe above).
 }

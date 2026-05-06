@@ -1,4 +1,4 @@
-package harness
+package testharness
 
 import (
 	"context"
@@ -12,12 +12,12 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 )
 
-// bucketName is the NATS KV bucket where harness catalog entries
+// bucketName is the NATS KV bucket where test-harness catalog entries
 // persist. History:5 mirrors flowtemplate / flowstore so operators
 // can audit recent catalog edits.
 const bucketName = "HARNESSES"
 
-// Manager provides read access to the harness catalog backed by a
+// Manager provides read access to the test-harness catalog backed by a
 // NATS KV bucket. Writes happen via LoadFromFile (operator-curated
 // path) and Put (forward-compat for R3.7.4 candidate promotion).
 // CRUD surface stays minimal in v1: no separate Update / Delete —
@@ -34,48 +34,48 @@ func NewManager(natsClient *natsclient.Client) (*Manager, error) {
 	}
 	bucket, err := natsClient.CreateKeyValueBucket(context.Background(), jetstream.KeyValueConfig{
 		Bucket:      bucketName,
-		Description: "Harness catalog: operator-curated test harnesses for dev-via-spec verification (ADR-033)",
+		Description: "Test-harness catalog: operator-curated test harnesses for dev-via-spec verification (ADR-033, ADR-036)",
 		History:     5,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("create harness KV bucket: %w", err)
+		return nil, fmt.Errorf("create test-harness KV bucket: %w", err)
 	}
 	return &Manager{kv: natsClient.NewKVStore(bucket)}, nil
 }
 
-// Get retrieves a harness by name. Returns an error wrapping
-// jetstream.ErrKeyNotFound if the harness is not registered.
-func (m *Manager) Get(ctx context.Context, name string) (*Harness, error) {
+// Get retrieves a test harness by name. Returns an error wrapping
+// jetstream.ErrKeyNotFound if the test harness is not registered.
+func (m *Manager) Get(ctx context.Context, name string) (*TestHarness, error) {
 	if name == "" {
 		return nil, fmt.Errorf("name cannot be empty")
 	}
 	entry, err := m.kv.Get(ctx, name)
 	if err != nil {
-		return nil, fmt.Errorf("get harness %q: %w", name, err)
+		return nil, fmt.Errorf("get test_harness %q: %w", name, err)
 	}
-	var h Harness
+	var h TestHarness
 	if err := json.Unmarshal(entry.Value, &h); err != nil {
-		return nil, fmt.Errorf("unmarshal harness %q: %w", name, err)
+		return nil, fmt.Errorf("unmarshal test_harness %q: %w", name, err)
 	}
 	return &h, nil
 }
 
-// List returns every harness sorted by name. The catalog is small
+// List returns every test harness sorted by name. The catalog is small
 // (typically <20 entries per deployment) — no pagination. A
 // corrupt entry (unmarshal failure) is logged at WARN and skipped
 // rather than aborting the whole list — the operator's other
-// harnesses stay usable while they fix the bad one.
-func (m *Manager) List(ctx context.Context) ([]*Harness, error) {
+// test harnesses stay usable while they fix the bad one.
+func (m *Manager) List(ctx context.Context) ([]*TestHarness, error) {
 	keys, err := m.kv.Keys(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("list harness keys: %w", err)
+		return nil, fmt.Errorf("list test_harness keys: %w", err)
 	}
 	sort.Strings(keys)
-	out := make([]*Harness, 0, len(keys))
+	out := make([]*TestHarness, 0, len(keys))
 	for _, k := range keys {
 		h, err := m.Get(ctx, k)
 		if err != nil {
-			slog.Warn("harness catalog: skipping unreadable entry",
+			slog.Warn("test-harness catalog: skipping unreadable entry",
 				"key", k,
 				"error", err)
 			continue
@@ -85,22 +85,22 @@ func (m *Manager) List(ctx context.Context) ([]*Harness, error) {
 	return out, nil
 }
 
-// Put writes a harness entry. Forward-compat for R3.7.4 (coordinator
+// Put writes a test-harness entry. Forward-compat for R3.7.4 (coordinator
 // promotes harness-via-spec candidates into the catalog). In R3.7.1
 // this is exercised only from LoadFromFile.
-func (m *Manager) Put(ctx context.Context, h *Harness) error {
+func (m *Manager) Put(ctx context.Context, h *TestHarness) error {
 	if h == nil {
-		return fmt.Errorf("harness cannot be nil")
+		return fmt.Errorf("test_harness cannot be nil")
 	}
 	if err := h.Validate(); err != nil {
-		return fmt.Errorf("validate harness %q: %w", h.Name, err)
+		return fmt.Errorf("validate test_harness %q: %w", h.Name, err)
 	}
 	data, err := json.Marshal(h)
 	if err != nil {
-		return fmt.Errorf("marshal harness %q: %w", h.Name, err)
+		return fmt.Errorf("marshal test_harness %q: %w", h.Name, err)
 	}
 	if _, err := m.kv.Put(ctx, h.Name, data); err != nil {
-		return fmt.Errorf("put harness %q: %w", h.Name, err)
+		return fmt.Errorf("put test_harness %q: %w", h.Name, err)
 	}
 	return nil
 }
@@ -121,8 +121,8 @@ func (m *Manager) Put(ctx context.Context, h *Harness) error {
 // readable via Get / List.
 //
 // A missing file is NOT an error: the catalog starts empty and
-// operators add the file when they curate their first harness. This
-// matches the boot-time wiring: deployments that don't use harnesses
+// operators add the file when they curate their first test harness. This
+// matches the boot-time wiring: deployments that don't use test harnesses
 // shouldn't fail to boot.
 func (m *Manager) LoadFromFile(ctx context.Context, path string) (int, error) {
 	data, err := os.ReadFile(path)

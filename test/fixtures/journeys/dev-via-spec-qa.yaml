@@ -101,8 +101,8 @@ description: |
      28. tool_call: emit_dev_via_spec_artifact (renders markdown to
          docs/specs/<slug>.md AND mints dev_via_spec.artifact.{path,
          slug,...} marker triples on this loop entity)
-     29. tool_call: decide(seed_requirements_emitted, reason=<final SR list>)
-         → coordinator.next_action=seed_requirements_emitted →
+     29. tool_call: decide(tasks_emitted, reason=<final task list>)
+         → coordinator.next_action=tasks_emitted →
          dev-via-spec rule_06 fires (R3.6.2.d: architect→builder).
 
     Loop K — dev-via-spec-builder (R3.6.2.e + R3.7.2.k′)
@@ -182,7 +182,7 @@ responses:
           "revision": 1,
           "actors": [],
           "integration_points": [],
-          "seed_requirements": [],
+          "tasks": [],
           "addressed_gaps": [],
           "open_gaps": [
             "OSH driver framework documentation not indexed — query_entity for osh.driver.framework returned nothing. Recommend add_source_repo for the osh-core repository."
@@ -204,7 +204,7 @@ responses:
           "revision": 1,
           "actors": [],
           "integration_points": [],
-          "seed_requirements": [],
+          "tasks": [],
           "addressed_gaps": [],
           "open_gaps": [
             "OSH driver framework documentation not indexed — query_entity for osh.driver.framework returned nothing. Recommend add_source_repo for the osh-core repository."
@@ -269,7 +269,7 @@ responses:
             {"from": "OSH driver", "to": "OGC CS endpoints", "data": "observation messages and system descriptions", "direction": "write"},
             {"from": "Meshtastic radio", "to": "OSH driver", "data": "packetised radio telemetry", "direction": "read"}
           ],
-          "seed_requirements": [
+          "tasks": [
             "Implement OSH `IDriver` interface backed by Meshtastic radio events, exposing OGC CS observation endpoints"
           ],
           "addressed_gaps": [
@@ -314,7 +314,7 @@ responses:
             {"from": "OSH driver", "to": "OGC CS endpoints", "data": "observation messages and system descriptions", "direction": "write"},
             {"from": "Meshtastic radio", "to": "OSH driver", "data": "packetised radio telemetry", "direction": "read"}
           ],
-          "seed_requirements": [
+          "tasks": [
             "Implement OSH `IDriver` interface backed by Meshtastic radio events, exposing OGC CS observation endpoints"
           ],
           "addressed_gaps": [
@@ -374,7 +374,7 @@ responses:
             {"from": "OSH driver", "to": "OGC CS endpoints", "data": "observation messages and system descriptions", "direction": "write"},
             {"from": "Meshtastic radio", "to": "OSH driver", "data": "packetised radio telemetry", "direction": "read"}
           ],
-          "seed_requirements": [
+          "tasks": [
             "Implement OSH `IDriver` interface backed by Meshtastic radio events, exposing OGC CS observation endpoints"
           ],
           "addressed_gaps": [
@@ -419,7 +419,7 @@ responses:
             {"from": "OSH driver", "to": "OGC CS endpoints", "data": "observation messages and system descriptions", "direction": "write"},
             {"from": "Meshtastic radio", "to": "OSH driver", "data": "packetised radio telemetry", "direction": "read"}
           ],
-          "seed_requirements": [
+          "tasks": [
             "Implement OSH `IDriver` interface backed by Meshtastic radio events, exposing OGC CS observation endpoints"
           ],
           "addressed_gaps": [
@@ -539,7 +539,7 @@ responses:
             {"from": "Meshtastic radio", "to": "OSH driver framework", "direction": "read", "data": "packetised radio telemetry"},
             {"from": "OSH driver framework", "to": "OGC CS endpoints", "direction": "write", "data": "observation messages and system descriptions"}
           ],
-          "seed_requirements": [
+          "tasks": [
             {
               "title": "Meshtastic packet decoder",
               "scope": "backend",
@@ -570,7 +570,7 @@ responses:
       name: decide
       arguments_json: |
         {
-          "action": "seed_requirements_emitted",
+          "action": "tasks_emitted",
           "reason": "Spec artifact emitted at docs/specs/<slug>.md. Three seed requirements grounded against three actors and two integration points: SR1 (Meshtastic decoder, read-side), SR2 (OGC CS publisher, write-side), SR3 (IDriver lifecycle + failure-mode handler). Planner epics E1/E2/E3 map cleanly to SR1/SR2/SR3. The dev-via-spec arc closes here; rule 06 spawns the builder."
         }
 

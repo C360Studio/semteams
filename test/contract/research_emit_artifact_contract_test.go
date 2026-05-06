@@ -61,7 +61,7 @@ func TestEmitResearchArtifactToolDefinitionShape(t *testing.T) {
 	if !ok {
 		t.Fatalf("schema missing properties: %#v", def.Parameters)
 	}
-	for _, key := range []string{"revision", "actors", "integration_points", "seed_requirements", "substrate_mutations"} {
+	for _, key := range []string{"revision", "actors", "integration_points", "tasks", "substrate_mutations"} {
 		if _, ok := props[key]; !ok {
 			t.Errorf("schema missing field %q (LLM-facing contract)", key)
 		}
@@ -81,7 +81,7 @@ func TestEmitResearchArtifactToolDefinitionShape(t *testing.T) {
 	for _, r := range required {
 		gotRequired[r] = true
 	}
-	for _, must := range []string{"revision", "actors", "integration_points", "seed_requirements"} {
+	for _, must := range []string{"revision", "actors", "integration_points", "tasks"} {
 		if !gotRequired[must] {
 			t.Errorf("required-fields set missing %q (have %v)", must, required)
 		}

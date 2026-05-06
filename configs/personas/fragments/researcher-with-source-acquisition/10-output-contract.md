@@ -14,7 +14,7 @@ as a code block:
   "integration_points": [
     {"from": "ActorA", "to": "ActorB", "data": "what flows", "direction": "read | write"}
   ],
-  "seed_requirements": [
+  "tasks": [
     "Implement X interface backed by Y so that Z"
   ],
   "addressed_gaps": [
@@ -32,7 +32,7 @@ Notes on shape:
   the prompt's target work touches.
 - `integration_points` enumerates every actor-to-actor data flow
   with direction. Be explicit about which actor reads from which.
-- `seed_requirements` are decomposable, not aspirational. "Build an
+- `tasks` are decomposable, not aspirational. "Build an
   X" is too coarse. "Implement OSH `IDriver` interface backed by
   Meshtastic radio events, exposing OGC CS observation endpoints"
   is the right granularity.

@@ -18,7 +18,7 @@ contract — no nesting under a wrapping object. Pass:
     properties contain `revision`, use that; otherwise read
     the prior reviewer's loop result and increment from the
     artifact you find there.
-- `actors`, `integration_points`, `seed_requirements` — the
+- `actors`, `integration_points`, `tasks` — the
   enumerated content; same shape your completion message
   carries.
 - `addressed_gaps`, `open_gaps` — same as the completion

@@ -1,10 +1,10 @@
 # Verifiable outcomes
 
 > Added R3.7.2.c per ADR-033 §addendum 2026-05-04. The architect role
-> downstream emits structured `verification_commitments[]` on the
-> dev-via-spec artifact (R3.7.2.b). To keep that emission honest, the
-> verifiability claim has to be made HERE — at the planner layer —
-> not invented later by the architect under emission pressure.
+> downstream emits structured `checks[]` on the dev-via-spec artifact
+> (R3.7.2.b). To keep that emission honest, the verifiability claim
+> has to be made HERE — at the planner layer — not invented later by
+> the architect under emission pressure.
 
 In addition to goal / context / scope / epics, your `decide.reason`
 MUST include a clearly-marked **Verifiable Outcomes** section. One
@@ -84,10 +84,10 @@ epic(s) it covers.
 
 ## Why this is YOUR job, not the architect's
 
-The architect downstream has to emit `verification_commitments[]` on
-the structured artifact. Each commitment's `target` field is a
-verifiable claim; the architect TRANSCRIBES from your outcomes, not
-INVENTS from your epic prose. If you don't enumerate outcomes, the
+The architect downstream has to emit `checks[]` on the structured
+artifact. Each check's `target` field is a verifiable claim; the
+architect TRANSCRIBES from your outcomes, not INVENTS from your epic
+prose. If you don't enumerate outcomes, the
 architect ends up doing your job under emission pressure — and that's
 the small-LLM capability wall ADR-033 §addendum 2026-05-04 explicitly
 budgets against.

@@ -47,25 +47,25 @@ import (
 	"github.com/c360studio/semstreams/types"
 
 	"github.com/c360studio/semteams/cmd/semteams/devviaspec"
-	"github.com/c360studio/semteams/cmd/semteams/harness"
+	"github.com/c360studio/semteams/cmd/semteams/testharness"
 )
 
-// HarnessResolver looks up a harness catalog entry by name. Returns
+// TestHarnessResolver looks up a test-harness catalog entry by name. Returns
 // nil + non-nil error on lookup failure (catalog miss, transport
 // error). Used by the renderer to project the architect-cited
-// harness NAME into the concrete fields the builder needs to
+// test_harness NAME into the concrete fields the builder needs to
 // transcribe (Image, TCP exposes) — without those fields rendered
 // inline in SPEC.md, the builder has no in-sandbox path to resolve
 // the catalog (the catalog file lives on the backend host, not in
 // the builder's sandbox workspace). R3.7.2.h′ closes that gap.
 //
 // nil is permitted; the executor falls back to rendering the
-// commitment without resolved fields (the architect's name still
+// check without resolved fields (the architect's name still
 // ships, just no image/port projection). Operators running
-// dev-via-spec with no harness manager wired will see commitments
+// dev-via-spec with no test-harness manager wired will see checks
 // without resolution; operators running it WITH the manager will
-// see commitments fully grounded.
-type HarnessResolver func(ctx context.Context, name string) (*harness.Harness, error)
+// see checks fully grounded.
+type TestHarnessResolver func(ctx context.Context, name string) (*testharness.TestHarness, error)
 
 // ToolName is the LLM-facing tool name. Listed in agentic-tools
 // allowed_tools per deployment that runs the dev-via-spec flow.
@@ -102,13 +102,13 @@ const (
 	predicateGeneratedAt           = "dev_via_spec.artifact.generated_at"
 	predicateActorCount            = "dev_via_spec.artifact.actor_count"
 	predicateIntegrationPointCount = "dev_via_spec.artifact.integration_point_count"
-	predicateSeedRequirementCount  = "dev_via_spec.artifact.seed_requirement_count"
+	predicateTaskCount             = "dev_via_spec.artifact.task_count"
 	predicateResearchRootLoop      = "dev_via_spec.artifact.research_root_loop"
-	// predicateCommitmentCount is emitted regardless of whether commitments
+	// predicateCheckCount is emitted regardless of whether checks
 	// are populated (zero is a meaningful signal: "architect emitted but
 	// claimed no verification surface"). R3.7.2.h's evidence gate fires
-	// per-commitment, so the count is its branching predicate.
-	predicateCommitmentCount = "dev_via_spec.artifact.commitment_count"
+	// per-check, so the count is its branching predicate.
+	predicateCheckCount = "dev_via_spec.artifact.check_count"
 )
 
 // PayloadPublisher is the narrow surface the executor uses to publish the
@@ -125,12 +125,12 @@ type PayloadPublisher interface {
 // of marker triples on the calling loop entity, and publishes the typed
 // payload on a stable subject.
 type Executor struct {
-	publisher       agentictools.TriplePublisher
-	natsPublish     PayloadPublisher
-	platform        types.PlatformMeta
-	logger          *slog.Logger
-	outputDir       string
-	harnessResolver HarnessResolver
+	publisher           agentictools.TriplePublisher
+	natsPublish         PayloadPublisher
+	platform            types.PlatformMeta
+	logger              *slog.Logger
+	outputDir           string
+	testHarnessResolver TestHarnessResolver
 }
 
 // NewExecutor constructs an Executor. outputDir is the directory where
@@ -140,10 +140,10 @@ type Executor struct {
 // environment-variable side effects.
 //
 // resolver may be nil — the renderer falls back to rendering the
-// architect's harness NAME without resolved fields (Image, TCP
+// architect's test_harness NAME without resolved fields (Image, TCP
 // exposes). Production wiring (cmd/semteams/product_tools.go) passes
-// the harness manager's Get adapter; tests typically pass nil.
-func NewExecutor(publisher agentictools.TriplePublisher, natsPublish PayloadPublisher, platform types.PlatformMeta, logger *slog.Logger, outputDir string, resolver HarnessResolver) *Executor {
+// the testharness manager's Get adapter; tests typically pass nil.
+func NewExecutor(publisher agentictools.TriplePublisher, natsPublish PayloadPublisher, platform types.PlatformMeta, logger *slog.Logger, outputDir string, resolver TestHarnessResolver) *Executor {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -155,12 +155,12 @@ func NewExecutor(publisher agentictools.TriplePublisher, natsPublish PayloadPubl
 		}
 	}
 	return &Executor{
-		publisher:       publisher,
-		natsPublish:     natsPublish,
-		platform:        platform,
-		logger:          logger,
-		outputDir:       outputDir,
-		harnessResolver: resolver,
+		publisher:           publisher,
+		natsPublish:         natsPublish,
+		platform:            platform,
+		logger:              logger,
+		outputDir:           outputDir,
+		testHarnessResolver: resolver,
 	}
 }
 
@@ -186,20 +186,20 @@ func (e *Executor) ListTools() []agentic.ToolDefinition {
 		},
 		"required": []string{"from", "to"},
 	}
-	seedRequirementSchema := map[string]any{
+	taskSchema := map[string]any{
 		"type": "object",
 		"properties": map[string]any{
-			"title": map[string]any{"type": "string", "description": "Short requirement title."},
+			"title": map[string]any{"type": "string", "description": "Short task title."},
 			"scope": map[string]any{"type": "string", "description": "Implementation scope (e.g. \"backend\", \"ui\", \"infra\")."},
 			"grounds_actors": map[string]any{
 				"type":        "array",
 				"items":       map[string]any{"type": "string"},
-				"description": "Actor names this requirement is grounded in.",
+				"description": "Actor names this task is grounded in.",
 			},
 			"grounds_integration_points": map[string]any{
 				"type":        "array",
 				"items":       map[string]any{"type": "string"},
-				"description": "Freeform \"from→to\" strings identifying integration points this requirement touches.",
+				"description": "Freeform \"from→to\" strings identifying integration points this task touches.",
 			},
 		},
 		"required": []string{"title", "scope"},
@@ -215,22 +215,21 @@ func (e *Executor) ListTools() []agentic.ToolDefinition {
 		"required": []string{"research_artifact_loop", "planner_loop", "reviewer_loop", "challenger_loop"},
 	}
 
-	// R3.7.2.b: verification_commitments[] is the architect's structured
-	// statement of WHAT is verified, AGAINST WHAT, and with WHAT
-	// EVIDENCE. Each commitment fills a verification surface (unit /
-	// testcontainer / sidecar / browser-flow / static-analysis) and
-	// names a harness from configs/harnesses.json when applicable.
-	// The architect persona contract (R3.7.2.f′,
+	// R3.7.2.b: checks[] is the architect's structured statement of WHAT is
+	// verified, AGAINST WHAT, and with WHAT EVIDENCE. Each check fills a
+	// verification surface (unit / testcontainer / sidecar / browser-flow /
+	// static-analysis) and names a test_harness from configs/harnesses.json
+	// when applicable. The architect persona contract (R3.7.2.f′,
 	// configs/personas/fragments/dev-via-spec-architect/30-commitment-
-	// contract.md) requires at least one commitment for any artifact
-	// whose integration_points[] names an external actor. The field
-	// stays optional at the wire level so v1 consumers see no schema
-	// drift; the dvs-reviewer (R3.7.2.j′) enforces coverage adequacy.
-	conventionRefSchema := map[string]any{
+	// contract.md) requires at least one check for any artifact whose
+	// integration_points[] names an external actor. The field stays optional
+	// at the wire level so v1 consumers see no schema drift; the
+	// dvs-reviewer (R3.7.2.j′) enforces coverage adequacy.
+	refSchema := map[string]any{
 		"type": "object",
 		"properties": map[string]any{
 			"type": map[string]any{"type": "string", "enum": []string{"filepath", "template_id"}, "description": "Discriminates the union: filepath for brownfield (cite an existing test file in the repo); template_id for greenfield (name a framework-shipped template)."},
-			"path": map[string]any{"type": "string", "description": "Workspace-relative path to the convention test file. Required when type=filepath; must be empty otherwise."},
+			"path": map[string]any{"type": "string", "description": "Workspace-relative path to the reference test file. Required when type=filepath; must be empty otherwise."},
 			"id":   map[string]any{"type": "string", "description": "Framework-shipped template identifier. Required when type=template_id; must be empty otherwise."},
 		},
 		"required": []string{"type"},
@@ -243,17 +242,17 @@ func (e *Executor) ListTools() []agentic.ToolDefinition {
 		},
 		"required": []string{"kind"},
 	}
-	commitmentSchema := map[string]any{
+	checkSchema := map[string]any{
 		"type": "object",
 		"properties": map[string]any{
-			"target":     map[string]any{"type": "string", "description": "Natural-language description of WHAT is verified by this commitment."},
-			"approach":   map[string]any{"type": "string", "enum": []string{"in-process-unit", "process-local-testcontainer", "external-sidecar", "browser-flow", "static-analysis"}, "description": "Verification approach. testcontainer/sidecar/browser-flow REQUIRE harness; unit/static-analysis FORBID it. testcontainer/sidecar/browser-flow REQUIRE runtime."},
-			"harness":    map[string]any{"type": "string", "description": "Name of a catalog entry from configs/harnesses.json. Required for testcontainer/sidecar/browser-flow approaches; must be omitted otherwise."},
-			"runtime":    map[string]any{"type": "string", "description": "Test runtime name (e.g. \"java-junit-testcontainers\", \"go-testing-net\", \"playwright-typescript\"). Required when harness is named."},
-			"convention": conventionRefSchema,
-			"evidence":   map[string]any{"type": "array", "items": evidenceRuleSchema, "description": "Structurally-checkable assertions the evidence gate runs post-build. Empty is permitted; the reviewer may flag commitments without evidence as under-specified."},
+			"target":       map[string]any{"type": "string", "description": "Natural-language description of WHAT is verified by this check."},
+			"runtime":      map[string]any{"type": "string", "enum": []string{"in-process-unit", "process-local-testcontainer", "external-sidecar", "browser-flow", "static-analysis"}, "description": "Verification runtime. testcontainer/sidecar/browser-flow REQUIRE test_harness; unit/static-analysis FORBID it. testcontainer/sidecar/browser-flow REQUIRE test_runtime."},
+			"test_harness": map[string]any{"type": "string", "description": "Name of a catalog entry from configs/harnesses.json. Required for testcontainer/sidecar/browser-flow runtimes; must be omitted otherwise."},
+			"test_runtime": map[string]any{"type": "string", "description": "Test runtime name (e.g. \"java-junit-testcontainers\", \"go-testing-net\", \"playwright-typescript\"). Required when test_harness is named."},
+			"ref":          refSchema,
+			"evidence":     map[string]any{"type": "array", "items": evidenceRuleSchema, "description": "Structurally-checkable assertions the evidence gate runs post-build. Empty is permitted; the reviewer may flag checks without evidence as under-specified."},
 		},
-		"required": []string{"target", "approach", "convention"},
+		"required": []string{"target", "runtime", "ref"},
 	}
 
 	return []agentic.ToolDefinition{{
@@ -262,16 +261,16 @@ func (e *Executor) ListTools() []agentic.ToolDefinition {
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
-				"title":                    map[string]any{"type": "string", "description": "Short artifact title, used as the markdown H1 and to derive the file slug."},
-				"goal":                     map[string]any{"type": "string", "description": "The 'why' — what this work achieves."},
-				"context":                  map[string]any{"type": "string", "description": "Background that grounds the goal in the research corpus."},
-				"actors":                   map[string]any{"type": "array", "items": actorSchema, "description": "Systems, frameworks, or services this work touches."},
-				"integration_points":       map[string]any{"type": "array", "items": integrationPointSchema, "description": "Actor-to-actor data flows with direction."},
-				"seed_requirements":        map[string]any{"type": "array", "items": seedRequirementSchema, "description": "Decomposable-grain requirements, each grounded in at least one actor."},
-				"verification_commitments": map[string]any{"type": "array", "items": commitmentSchema, "description": "Structured commitments to verification surfaces. Each commitment names target / approach / harness / runtime / convention / evidence. Multi-layer is normal — typically a unit-level commitment for in-language behaviour PLUS a real-stack commitment (testcontainer/sidecar/browser-flow) for external integration. Architect persona contract (R3.7.2.f′, see 30-commitment-contract.md): REQUIRED when integration_points[] names any external actor; optional at the wire level so v1 consumers see no schema drift. The dvs-reviewer (R3.7.2.j′) enforces coverage adequacy and rejects artifacts with external integration_points but empty verification_commitments[]."},
-				"provenance":               provenanceSchema,
+				"title":              map[string]any{"type": "string", "description": "Short artifact title, used as the markdown H1 and to derive the file slug."},
+				"goal":               map[string]any{"type": "string", "description": "The 'why' — what this work achieves."},
+				"context":            map[string]any{"type": "string", "description": "Background that grounds the goal in the research corpus."},
+				"actors":             map[string]any{"type": "array", "items": actorSchema, "description": "Systems, frameworks, or services this work touches."},
+				"integration_points": map[string]any{"type": "array", "items": integrationPointSchema, "description": "Actor-to-actor data flows with direction."},
+				"tasks":              map[string]any{"type": "array", "items": taskSchema, "description": "Decomposable-grain tasks, each grounded in at least one actor."},
+				"checks":             map[string]any{"type": "array", "items": checkSchema, "description": "Structured checks of verification surfaces. Each check names target / runtime / test_harness / test_runtime / ref / evidence. Multi-layer is normal — typically a unit-level check for in-language behaviour PLUS a real-stack check (testcontainer/sidecar/browser-flow) for external integration. Architect persona contract (R3.7.2.f′, see 30-commitment-contract.md): REQUIRED when integration_points[] names any external actor; optional at the wire level so v1 consumers see no schema drift. The dvs-reviewer (R3.7.2.j′) enforces coverage adequacy and rejects artifacts with external integration_points but empty checks[]."},
+				"provenance":         provenanceSchema,
 			},
-			"required": []string{"title", "goal", "context", "actors", "seed_requirements", "provenance"},
+			"required": []string{"title", "goal", "context", "actors", "tasks", "provenance"},
 		},
 	}}
 }
@@ -394,8 +393,8 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 		"generated_at":            artifact.GeneratedAt,
 		"actor_count":             len(artifact.Actors),
 		"integration_point_count": len(artifact.IntegrationPoints),
-		"seed_requirement_count":  len(artifact.SeedRequirements),
-		"commitment_count":        len(artifact.VerificationCommitments),
+		"task_count":              len(artifact.Tasks),
+		"check_count":             len(artifact.Checks),
 		"research_root_loop":      artifact.Provenance.ResearchArtifactLoop,
 		"payload_subject":         subject,
 		"loop_entity_id":          loopEntityID,
@@ -415,8 +414,8 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 		slog.String("path", relPath),
 		slog.Int("actors", len(artifact.Actors)),
 		slog.Int("integration_points", len(artifact.IntegrationPoints)),
-		slog.Int("seed_requirements", len(artifact.SeedRequirements)),
-		slog.Int("commitments", len(artifact.VerificationCommitments)),
+		slog.Int("tasks", len(artifact.Tasks)),
+		slog.Int("checks", len(artifact.Checks)),
 		slog.String("research_root_loop", artifact.Provenance.ResearchArtifactLoop),
 		slog.String("subject", subject))
 
@@ -425,11 +424,11 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 		Name:    call.Name,
 		Content: string(resultJSON),
 		Metadata: map[string]any{
-			"loop_entity_id":         loopEntityID,
-			"slug":                   artifact.Slug,
-			"path":                   relPath,
-			"seed_requirement_count": len(artifact.SeedRequirements),
-			"commitment_count":       len(artifact.VerificationCommitments),
+			"loop_entity_id": loopEntityID,
+			"slug":           artifact.Slug,
+			"path":           relPath,
+			"task_count":     len(artifact.Tasks),
+			"check_count":    len(artifact.Checks),
 		},
 	}, nil
 }
@@ -509,16 +508,16 @@ func (e *Executor) renderMarkdown(ctx context.Context, a *devviaspec.Artifact) (
 		return "", fmt.Errorf("create output dir %s: %w", e.outputDir, err)
 	}
 
-	// Resolve any architect-cited harness names into catalog entries
+	// Resolve any architect-cited test_harness names into catalog entries
 	// up front so the per-call template's lookup funcs read from a
 	// closure-captured map rather than re-querying the KV bucket per
-	// commitment. A failed lookup is silently dropped from the map —
-	// the rendered SPEC ships the architect's harness name without
+	// check. A failed lookup is silently dropped from the map —
+	// the rendered SPEC ships the architect's test_harness name without
 	// the resolved Image/TCP, which the builder will surface as a
 	// `needs_clarification` rather than fabricate. Catalog churn
 	// between architect emit-time and builder iteration would
 	// otherwise produce a worse failure mode (silent stale fields).
-	harnessByName := e.resolveHarnesses(ctx, a)
+	harnessByName := e.resolveTestHarnesses(ctx, a)
 
 	tmpl, err := template.New("artifact").Funcs(template.FuncMap{
 		"add":  func(i, n int) int { return i + n },
@@ -529,7 +528,7 @@ func (e *Executor) renderMarkdown(ctx context.Context, a *devviaspec.Artifact) (
 			}
 			return ""
 		},
-		"harnessTCP": func(name string) []harness.PortExpose {
+		"harnessTCP": func(name string) []testharness.PortExpose {
 			if h, ok := harnessByName[name]; ok {
 				return h.Exposes.TCP
 			}
@@ -554,30 +553,29 @@ func (e *Executor) renderMarkdown(ctx context.Context, a *devviaspec.Artifact) (
 	return filepath.Join(e.outputDir, filename), nil
 }
 
-// resolveHarnesses returns a name → catalog-entry map for every
-// distinct harness named on a's verification commitments. nil
-// resolver returns an empty map; lookup errors are logged at WARN
-// and the entry is dropped from the map (the renderer just omits
-// the resolved fields rather than aborting emission). Distinct
-// names are looked up once even if the artifact carries multiple
-// commitments referencing the same harness.
-func (e *Executor) resolveHarnesses(ctx context.Context, a *devviaspec.Artifact) map[string]*harness.Harness {
-	out := map[string]*harness.Harness{}
-	if e.harnessResolver == nil {
+// resolveTestHarnesses returns a name → catalog-entry map for every
+// distinct test_harness named on a's checks. nil resolver returns an
+// empty map; lookup errors are logged at WARN and the entry is dropped
+// from the map (the renderer just omits the resolved fields rather than
+// aborting emission). Distinct names are looked up once even if the
+// artifact carries multiple checks referencing the same test_harness.
+func (e *Executor) resolveTestHarnesses(ctx context.Context, a *devviaspec.Artifact) map[string]*testharness.TestHarness {
+	out := map[string]*testharness.TestHarness{}
+	if e.testHarnessResolver == nil {
 		return out
 	}
-	for i := range a.VerificationCommitments {
-		name := a.VerificationCommitments[i].Harness
+	for i := range a.Checks {
+		name := a.Checks[i].TestHarness
 		if name == "" {
 			continue
 		}
 		if _, seen := out[name]; seen {
 			continue
 		}
-		h, err := e.harnessResolver(ctx, name)
+		h, err := e.testHarnessResolver(ctx, name)
 		if err != nil {
-			e.logger.Warn("harness lookup failed; SPEC will render name without resolved fields",
-				slog.String("harness", name),
+			e.logger.Warn("test_harness lookup failed; SPEC will render name without resolved fields",
+				slog.String("test_harness", name),
 				slog.String("error", err.Error()))
 			continue
 		}
@@ -609,18 +607,18 @@ func buildTriples(loopEntityID string, a *devviaspec.Artifact, relPath string, n
 		base(predicateGeneratedAt, now.Format(time.RFC3339Nano)),
 		base(predicateActorCount, len(a.Actors)),
 		base(predicateIntegrationPointCount, len(a.IntegrationPoints)),
-		base(predicateSeedRequirementCount, len(a.SeedRequirements)),
-		base(predicateCommitmentCount, len(a.VerificationCommitments)),
+		base(predicateTaskCount, len(a.Tasks)),
+		base(predicateCheckCount, len(a.Checks)),
 		base(predicateResearchRootLoop, a.Provenance.ResearchArtifactLoop),
 	}
 }
 
 // artifactTemplateText is the markdown template body for the rendered
-// spec file. Parsed per-call by renderMarkdown so the harness lookup
-// funcs can close over a per-call resolver map (see resolveHarnesses).
+// spec file. Parsed per-call by renderMarkdown so the test_harness lookup
+// funcs can close over a per-call resolver map (see resolveTestHarnesses).
 // Per-call parse cost is sub-millisecond for a ~2 KB template; cheaper
 // than threading a richer data shape through the template that would
-// otherwise need to carry the harness projection per-VC at value level.
+// otherwise need to carry the test_harness projection per-check at value level.
 //
 // Template functions:
 //   - add(i, n): integer addition for 1-indexed SR headings.
@@ -656,30 +654,30 @@ const artifactTemplateText = `# {{.Title}}
 
 {{range .IntegrationPoints}}- **{{.From}} → {{.To}}**{{if .Direction}} ({{.Direction}}){{end}}: {{.Data}}
 {{end}}
-## Seed Requirements
+## Tasks
 
-{{range $i, $sr := .SeedRequirements}}### SR{{add $i 1}} — {{$sr.Title}}
+{{range $i, $t := .Tasks}}### T{{add $i 1}} — {{$t.Title}}
 
-- **Scope**: {{$sr.Scope}}
-- **Grounds (actors)**: {{if $sr.GroundsActors}}{{join $sr.GroundsActors ", "}}{{else}}_flagged: missing grounding_{{end}}
-- **Grounds (integration)**: {{if $sr.GroundsIntegrationPoints}}{{join $sr.GroundsIntegrationPoints "; "}}{{else}}_flagged: missing grounding_{{end}}
+- **Scope**: {{$t.Scope}}
+- **Grounds (actors)**: {{if $t.GroundsActors}}{{join $t.GroundsActors ", "}}{{else}}_flagged: missing grounding_{{end}}
+- **Grounds (integration)**: {{if $t.GroundsIntegrationPoints}}{{join $t.GroundsIntegrationPoints "; "}}{{else}}_flagged: missing grounding_{{end}}
 
 {{end}}
-## Verification Commitments
+## Verification Checks
 
-{{if .VerificationCommitments}}{{range $i, $c := .VerificationCommitments}}### VC{{add $i 1}} — {{$c.Target}}
+{{if .Checks}}{{range $i, $c := .Checks}}### C{{add $i 1}} — {{$c.Target}}
 
-- **Approach**: ` + "`" + `{{$c.Approach}}` + "`" + `
-{{if $c.Harness}}- **Harness**: ` + "`" + `{{$c.Harness}}` + "`" + `
-{{with harnessImage $c.Harness}}- **Image**: ` + "`" + `{{.}}` + "`" + `
-{{end}}{{with harnessTCP $c.Harness}}- **TCP exposes**: {{range $j, $p := .}}{{if $j}}, {{end}}port {{$p.Port}} (` + "`" + `{{$p.Protocol}}` + "`" + `){{end}}
-{{end}}{{end}}{{if $c.Runtime}}- **Runtime**: ` + "`" + `{{$c.Runtime}}` + "`" + `
-{{end}}- **Convention**: {{if eq (printf "%s" $c.Convention.Type) "filepath"}}filepath ` + "`" + `{{$c.Convention.Path}}` + "`" + `{{else}}template ` + "`" + `{{$c.Convention.ID}}` + "`" + `{{end}}
+- **Runtime**: ` + "`" + `{{$c.Runtime}}` + "`" + `
+{{if $c.TestHarness}}- **Test harness**: ` + "`" + `{{$c.TestHarness}}` + "`" + `
+{{with harnessImage $c.TestHarness}}- **Image**: ` + "`" + `{{.}}` + "`" + `
+{{end}}{{with harnessTCP $c.TestHarness}}- **TCP exposes**: {{range $j, $p := .}}{{if $j}}, {{end}}port {{$p.Port}} (` + "`" + `{{$p.Protocol}}` + "`" + `){{end}}
+{{end}}{{end}}{{if $c.TestRuntime}}- **Test runtime**: ` + "`" + `{{$c.TestRuntime}}` + "`" + `
+{{end}}- **Ref**: {{if eq (printf "%s" $c.Ref.Type) "filepath"}}filepath ` + "`" + `{{$c.Ref.Path}}` + "`" + `{{else}}template ` + "`" + `{{$c.Ref.ID}}` + "`" + `{{end}}
 {{if $c.Evidence}}- **Evidence rules**:
 {{range $c.Evidence}}  - ` + "`" + `{{.Kind}}` + "`" + `
 {{end}}{{else}}- **Evidence rules**: _none — reviewer may flag as under-specified_
 {{end}}
-{{end}}{{else}}_No verification commitments emitted. The reviewer is expected to flag this for any artifact whose integration_points reference external actors._
+{{end}}{{else}}_No verification checks emitted. The reviewer is expected to flag this for any artifact whose integration_points reference external actors._
 
 {{end}}## Provenance
 

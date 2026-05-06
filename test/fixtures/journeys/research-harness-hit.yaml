@@ -18,7 +18,7 @@ description: |
     - the marker triple research.artifact.harness=stub is emitted
     - the chain runs end-to-end without hanging
 
-  Catalog-miss path (harness omitted, needs_harness in open_gaps) is
+  Catalog-miss path (test_harness omitted, needs_test_harness in open_gaps) is
   structurally a strict subset of this fixture and is exercised by
   the existing research-iterative journey, which emits artifacts
   without a harness field.
@@ -59,12 +59,12 @@ responses:
             {"from": "OSH driver framework", "to": "OGC Connected Systems endpoints", "data": "observations, system descriptions", "direction": "write"},
             {"from": "Meshtastic radio", "to": "OSH driver framework", "data": "MeshPacket payloads carrying sensor observations", "direction": "read"}
           ],
-          "seed_requirements": [
+          "tasks": [
             "Implement OSH IDriver interface backed by a Meshtastic MQTT/serial bridge so MeshPacket observations surface as OGC CS observation events"
           ],
           "addressed_gaps": [],
           "open_gaps": [],
-          "harness": "stub"
+          "test_harness": "stub"
         }
 
   - completion:
@@ -87,12 +87,12 @@ responses:
             {"from": "OSH driver framework", "to": "OGC Connected Systems endpoints", "data": "observations, system descriptions", "direction": "write"},
             {"from": "Meshtastic radio", "to": "OSH driver framework", "data": "MeshPacket payloads carrying sensor observations", "direction": "read"}
           ],
-          "seed_requirements": [
+          "tasks": [
             "Implement OSH IDriver interface backed by a Meshtastic MQTT/serial bridge so MeshPacket observations surface as OGC CS observation events"
           ],
           "addressed_gaps": [],
           "open_gaps": [],
-          "harness": "stub"
+          "test_harness": "stub"
         }
         ```
 

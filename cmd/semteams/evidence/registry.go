@@ -41,7 +41,7 @@ const (
 )
 
 // Result is the per-rule outcome the gate emits and the reviewer
-// reads. One Result per EvidenceRule on the commitment.
+// reads. One Result per EvidenceRule on the check.
 type Result struct {
 	// Kind is the rule's Kind string, echoed for the reviewer.
 	Kind string
@@ -148,7 +148,7 @@ func (r *Registry) Kinds() []string {
 //
 // The dispatcher does NOT short-circuit: every rule runs even after
 // the first failure. The reviewer needs the full picture (all
-// failures, not just the first) to grade the commitment honestly
+// failures, not just the first) to grade the check honestly
 // and to give the builder a complete retry hint.
 func (r *Registry) Run(ctx context.Context, rules []verification.EvidenceRule, ec *Context) ([]Result, Aggregate) {
 	results := make([]Result, len(rules))
@@ -208,7 +208,7 @@ func (r *Registry) runOne(ctx context.Context, rule verification.EvidenceRule, e
 	return res
 }
 
-// Aggregate is the gate's summary across one commitment's rules.
+// Aggregate is the gate's summary across one check's rules.
 // Total = Pass + Fail + UnknownKind + Error. Operators logging the
 // gate result and the reviewer's grading prompt both consume this
 // shape; keeping it as a small struct (not a map) means the field
@@ -225,7 +225,7 @@ type Aggregate struct {
 // empty from "all-passed" matters at the reviewer's call site:
 // `if agg.IsEmpty() { flag-as-under-specified } else if !agg.AllPassed()
 // { reject }` is the standard shape. The R3.7.2.f′ contract permits
-// commitments with empty Evidence at the wire level; the reviewer
+// checks with empty Evidence at the wire level; the reviewer
 // flags them — IsEmpty is the explicit signal.
 func (a Aggregate) IsEmpty() bool {
 	return a.Total == 0
@@ -233,7 +233,7 @@ func (a Aggregate) IsEmpty() bool {
 
 // AllPassed is shorthand for "every rule passed" — the most common
 // reviewer query. Returns false when no rules ran (Total=0), so the
-// reviewer cannot accidentally accept an empty-Evidence commitment
+// reviewer cannot accidentally accept an empty-Evidence check
 // via this predicate; pair with IsEmpty when distinguishing the
 // two cases matters.
 func (a Aggregate) AllPassed() bool {

@@ -32,7 +32,7 @@ import (
 	rulepkg "github.com/c360studio/semstreams/processor/rule"
 	"github.com/c360studio/semstreams/service"
 	"github.com/c360studio/semstreams/types"
-	"github.com/c360studio/semteams/cmd/semteams/harness"
+	"github.com/c360studio/semteams/cmd/semteams/testharness"
 )
 
 // Build information constants
@@ -142,15 +142,15 @@ func run() error {
 		return fmt.Errorf("register product payloads: %w", err)
 	}
 
-	// 9b. Load operator-curated platform assets (harness catalog +
-	// persona fragments + rendered harness fragment for researcher
-	// roles). Harness catalog (ADR-033 R3.7.1) is built FIRST so
+	// 9b. Load operator-curated platform assets (test_harness catalog +
+	// persona fragments + rendered test_harness fragment for researcher
+	// roles). Test harness catalog (ADR-033 R3.7.1) is built FIRST so
 	// the rendered fragment reflects the curated state; persona
 	// file load runs next; the rendered list is upserted into the
 	// PERSONAS bucket last. Both managers are returned — persona
 	// feeds the tool registry below for Pattern-B persona CRUD,
-	// harness feeds the /harnesses HTTP middleware (R3.7.1.f).
-	personaMgr, harnessMgr := loadPlatformAssets(ctx, natsClient, cliCfg, slog.Default())
+	// testHarnessMgr feeds the /harnesses HTTP middleware (R3.7.1.f).
+	personaMgr, testHarnessMgr := loadPlatformAssets(ctx, natsClient, cliCfg, slog.Default())
 
 	// 9c. Build the shared tool registry and register first-party tool
 	// executors. Per beta.16: agentic-tools registry is constructor-
@@ -186,7 +186,7 @@ func run() error {
 	// (namespace allowlist; product-local payload type) is product
 	// policy. add_source_repo stays inert if the deployment has no
 	// namespaces configured — see addsource.Config.AllowedNamespaces.
-	if err := registerProductTools(toolRegistry, natsClient, platform, harnessMgr, slog.Default()); err != nil {
+	if err := registerProductTools(toolRegistry, natsClient, platform, testHarnessMgr, slog.Default()); err != nil {
 		return fmt.Errorf("register product tools: %w", err)
 	}
 
@@ -213,7 +213,7 @@ func run() error {
 	// runWithSignalHandling works. Moving it after StartAll silently
 	// drops the chain — the framework logs a warning, but the binary
 	// boots green and X-User-Id is ignored.
-	manager.UseHTTPMiddleware(productMiddleware(harnessMgr, slog.Default())...)
+	manager.UseHTTPMiddleware(productMiddleware(testHarnessMgr, slog.Default())...)
 
 	// 13. Run application with signal handling
 	return runWithSignalHandling(ctx, manager, cliCfg.ShutdownTimeout)
@@ -318,26 +318,26 @@ func buildFlowTemplateManager(natsClient *natsclient.Client, logger *slog.Logger
 // fragments; finally the rendered list is upserted under a stable
 // fragment ID — Upsert rather than file-write keeps the source
 // tree clean (no boot-time git diffs in configs/personas/).
-func loadPlatformAssets(ctx context.Context, natsClient *natsclient.Client, cliCfg *CLIConfig, logger *slog.Logger) (*persona.Manager, *harness.Manager) {
-	harnessMgr := buildHarnessManager(ctx, natsClient, cliCfg.HarnessCatalogPath, logger)
+func loadPlatformAssets(ctx context.Context, natsClient *natsclient.Client, cliCfg *CLIConfig, logger *slog.Logger) (*persona.Manager, *testharness.Manager) {
+	testHarnessMgr := buildTestHarnessManager(ctx, natsClient, cliCfg.HarnessCatalogPath, logger)
 	personaMgr := loadPersonaFragments(ctx, natsClient, cliCfg.PersonaFragmentsPath)
-	injectRenderedHarnessFragment(ctx, personaMgr, harnessMgr, logger)
-	return personaMgr, harnessMgr
+	injectRenderedTestHarnessFragment(ctx, personaMgr, testHarnessMgr, logger)
+	return personaMgr, testHarnessMgr
 }
 
-// injectRenderedHarnessFragment renders the live harness catalog
+// injectRenderedTestHarnessFragment renders the live test harness catalog
 // into a researcher persona fragment and upserts it into the
 // PERSONAS KV bucket. Skipped when either manager is nil (tests,
 // or boot-time KV failure that already logged its own warning).
 // Uses multi-role on the Persona so a single record applies to
 // both `researcher` and `researcher-with-source-acquisition`.
 //
-// Fragment ID `harness-catalog.rendered` is intentionally NOT in
+// Fragment ID `test-harness-catalog.rendered` is intentionally NOT in
 // the project's `\d+-` prefix style operators use for hand-
 // authored markdown files — the dot-separator and prefix-less
 // shape mark it as synthetic. The persona file loader keys
 // Upserts on ID, so an operator who later authors a file at
-// `harness-catalog.rendered.md` would still collide; the visual
+// `test-harness-catalog.rendered.md` would still collide; the visual
 // distinctness is the operator-facing breadcrumb.
 //
 // Category=0 / Priority=45: Category matches the project's
@@ -349,67 +349,67 @@ func loadPlatformAssets(ctx context.Context, natsClient *natsclient.Client, cliC
 // for Priority=0 fragments is governed by map-iteration order
 // (pre-existing framework nondeterminism, see ADR-033 §addendum
 // 2026-05-03).
-func injectRenderedHarnessFragment(ctx context.Context, personaMgr *persona.Manager, harnessMgr *harness.Manager, logger *slog.Logger) {
-	if personaMgr == nil || harnessMgr == nil {
+func injectRenderedTestHarnessFragment(ctx context.Context, personaMgr *persona.Manager, testHarnessMgr *testharness.Manager, logger *slog.Logger) {
+	if personaMgr == nil || testHarnessMgr == nil {
 		return
 	}
-	catalog, err := harnessMgr.List(ctx)
+	catalog, err := testHarnessMgr.List(ctx)
 	if err != nil {
-		logger.Warn("harness catalog: skipped persona-render injection (List failed)",
+		logger.Warn("test_harness catalog: skipped persona-render injection (List failed)",
 			"error", err)
 		return
 	}
-	body := harness.RenderResearcherFragment(catalog)
+	body := testharness.RenderResearcherFragment(catalog)
 	p := &persona.Persona{
-		ID:       "harness-catalog.rendered",
+		ID:       "test-harness-catalog.rendered",
 		Category: 0, // CategorySystem — matches project baseline; see doc-comment.
 		Priority: 45,
 		Content:  body,
 		// research-reviewer needs the same view of the catalog so it can
-		// verify the researcher's `harness` field references a real
+		// verify the researcher's `test_harness` field references a real
 		// registered entry (membership check, R3.7.1.d gate).
 		Roles:       []string{"researcher", "researcher-with-source-acquisition", "research-reviewer"},
 		Description: "Auto-generated from configs/harnesses.json at boot (ADR-033 R3.7.1).",
 	}
 	if err := personaMgr.Upsert(ctx, p); err != nil {
-		logger.Warn("harness catalog: synthetic persona fragment upsert failed",
+		logger.Warn("test_harness catalog: synthetic persona fragment upsert failed",
 			"fragment_id", p.ID,
 			"error", err)
 		return
 	}
 	if len(catalog) == 0 {
-		logger.Info("harness catalog: rendered persona fragment injected (empty catalog notice)",
+		logger.Info("test_harness catalog: rendered persona fragment injected (empty catalog notice)",
 			"fragment_id", p.ID,
 			"roles", p.Roles)
 	} else {
-		logger.Info("harness catalog: rendered persona fragment injected",
+		logger.Info("test_harness catalog: rendered persona fragment injected",
 			"fragment_id", p.ID,
 			"catalog_entries", len(catalog),
 			"roles", p.Roles)
 	}
 }
 
-// buildHarnessManager constructs the SemTeams harness catalog manager
+// buildTestHarnessManager constructs the SemTeams test harness catalog manager
 // (R3.7.1, ADR-033) and seeds it from the operator-curated JSON file.
 // Returns nil if the KV bucket cannot be opened — the chain still
-// boots; `needs_harness` paths report that no catalog is available.
+// boots; `needs_test_harness` paths report that no catalog is available.
 // A missing catalog file is NOT an error: deployments that don't use
-// harnesses simply have an empty catalog.
-func buildHarnessManager(ctx context.Context, natsClient *natsclient.Client, catalogPath string, logger *slog.Logger) *harness.Manager {
-	mgr, err := harness.NewManager(natsClient)
+// test harnesses simply have an empty catalog.
+func buildTestHarnessManager(ctx context.Context, natsClient *natsclient.Client, catalogPath string, logger *slog.Logger) *testharness.Manager {
+	mgr, err := testharness.NewManager(natsClient)
 	if err != nil {
-		logger.Warn("harness catalog disabled: could not initialise HARNESSES KV bucket",
+		logger.Warn("test_harness catalog disabled: could not initialise HARNESSES KV bucket",
 			"error", err)
 		return nil
 	}
 	n, err := mgr.LoadFromFile(ctx, catalogPath)
 	if err != nil {
-		logger.Warn("harness catalog file load failed; catalog left in current state",
+		logger.Warn("test_harness catalog file load failed; catalog left in current state",
 			"path", catalogPath,
 			"error", err)
 		return mgr
 	}
-	logger.Info("harness catalog loaded",
+	logger.Info("test_harness catalog loaded",
 		"path", catalogPath,
 		"entries_loaded", n)
 	return mgr

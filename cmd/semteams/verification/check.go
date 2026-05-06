@@ -20,104 +20,104 @@ var evidenceKindPattern = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
 
 // Payload type metadata (domain.category.version).
 const (
-	Domain             = "verification"
-	CategoryCommitment = "commitment"
-	SchemaVersion      = "v1"
+	Domain        = "verification"
+	CategoryCheck = "check"
+	SchemaVersion = "v1"
 )
 
-// ApproachKind enumerates the closed set of verification approaches
+// RuntimeKind enumerates the closed set of verification runtimes
 // the framework recognises. CLOSED enum: each value has structurally
 // distinct framework semantics (different lifecycle, different
 // reviewer prompts, different evidence-checker shapes), so adding a
 // 6th IS an architectural decision that requires ADR amendment, not
 // silent operator extension.
-type ApproachKind string
+type RuntimeKind string
 
-// ApproachKind values.
+// RuntimeKind values.
 const (
-	// ApproachInProcessUnit — tests against in-language fakes/mocks.
+	// RuntimeInProcessUnit — tests against in-language fakes/mocks.
 	// No external infrastructure. Cheapest, most common. Goodhart-
-	// vulnerable without evidence rules. Harness MUST be empty;
+	// vulnerable without evidence rules. TestHarness MUST be empty;
 	// runtime MAY be set (e.g. go-testing for the language target).
-	ApproachInProcessUnit ApproachKind = "in-process-unit"
+	RuntimeInProcessUnit RuntimeKind = "in-process-unit"
 
-	// ApproachProcessLocalTestcontainer — tests boot/tear infra in
+	// RuntimeProcessLocalTestcontainer — tests boot/tear infra in
 	// the test process (Go: testcontainers-go, Java: Testcontainers,
 	// Python: testcontainers-python). Real bytes, fast iteration.
-	// Harness REQUIRED (names the testcontainer-style catalog entry).
+	// TestHarness REQUIRED (names the testcontainer-style catalog entry).
 	// Runtime REQUIRED.
-	ApproachProcessLocalTestcontainer ApproachKind = "process-local-testcontainer"
+	RuntimeProcessLocalTestcontainer RuntimeKind = "process-local-testcontainer"
 
-	// ApproachExternalSidecar — tests against a long-lived
+	// RuntimeExternalSidecar — tests against a long-lived
 	// docker-compose service. Operator pre-boots; chain connects.
-	// Real bytes, real protocol. Harness REQUIRED (names a sidecar-
+	// Real bytes, real protocol. TestHarness REQUIRED (names a sidecar-
 	// style catalog entry). Runtime REQUIRED.
-	ApproachExternalSidecar ApproachKind = "external-sidecar"
+	RuntimeExternalSidecar RuntimeKind = "external-sidecar"
 
-	// ApproachBrowserFlow — Playwright-style human-flow simulation
+	// RuntimeBrowserFlow — Playwright-style human-flow simulation
 	// against a known stack. Substance is "the right pages render +
-	// the right network calls happen". Harness REQUIRED (names the
+	// the right network calls happen". TestHarness REQUIRED (names the
 	// docker-compose stack as a browser-fixture). Runtime REQUIRED
 	// (typically playwright-typescript).
-	ApproachBrowserFlow ApproachKind = "browser-flow"
+	RuntimeBrowserFlow RuntimeKind = "browser-flow"
 
-	// ApproachStaticAnalysis — type checker, linter, structural
-	// property check. No execution. Substance is structural. Harness
+	// RuntimeStaticAnalysis — type checker, linter, structural
+	// property check. No execution. Substance is structural. TestHarness
 	// MUST be empty; runtime MAY be set.
-	ApproachStaticAnalysis ApproachKind = "static-analysis"
+	RuntimeStaticAnalysis RuntimeKind = "static-analysis"
 )
 
 // IsValid reports whether k is one of the closed-enum values.
-func (k ApproachKind) IsValid() bool {
+func (k RuntimeKind) IsValid() bool {
 	switch k {
-	case ApproachInProcessUnit, ApproachProcessLocalTestcontainer,
-		ApproachExternalSidecar, ApproachBrowserFlow, ApproachStaticAnalysis:
+	case RuntimeInProcessUnit, RuntimeProcessLocalTestcontainer,
+		RuntimeExternalSidecar, RuntimeBrowserFlow, RuntimeStaticAnalysis:
 		return true
 	}
 	return false
 }
 
-// RequiresHarness reports whether an approach must name a harness
+// RequiresTestHarness reports whether a runtime must name a test_harness
 // catalog entry. testcontainer/sidecar/browser-flow all need a
 // real backing target; unit and static-analysis don't.
-func (k ApproachKind) RequiresHarness() bool {
+func (k RuntimeKind) RequiresTestHarness() bool {
 	switch k {
-	case ApproachProcessLocalTestcontainer, ApproachExternalSidecar, ApproachBrowserFlow:
+	case RuntimeProcessLocalTestcontainer, RuntimeExternalSidecar, RuntimeBrowserFlow:
 		return true
 	}
 	return false
 }
 
-// RequiresRuntime reports whether the approach must name a test
-// runtime. Same set as RequiresHarness today — every real-stack
-// approach needs a language/test-runner pairing. Kept as a separate
+// RequiresRuntime reports whether the runtime kind must name a test
+// runtime. Same set as RequiresTestHarness today — every real-stack
+// runtime needs a language/test-runner pairing. Kept as a separate
 // predicate because static-analysis MAY name a runtime (e.g. for
-// language-specific linters) without needing a harness.
+// language-specific linters) without needing a test_harness.
 //
-// TODO(R3.7.2.c): collapse this back into RequiresHarness if
+// TODO(R3.7.2.c): collapse this back into RequiresTestHarness if
 // static-analysis still doesn't name a runtime by the time the
 // runtime registry ships. Don't survive on inertia.
-func (k ApproachKind) RequiresRuntime() bool {
-	return k.RequiresHarness()
+func (k RuntimeKind) RequiresRuntime() bool {
+	return k.RequiresTestHarness()
 }
 
-// ConventionRefType discriminates the union shape of ConventionRef.
+// RefType discriminates the union shape of Ref.
 // Closed enum: filepath (brownfield) or template_id (greenfield).
-type ConventionRefType string
+type RefType string
 
-// ConventionRefType values.
+// RefType values.
 const (
-	ConventionFilepath   ConventionRefType = "filepath"
-	ConventionTemplateID ConventionRefType = "template_id"
+	RefFilepath   RefType = "filepath"
+	RefTemplateID RefType = "template_id"
 )
 
 // IsValid reports whether the type is one of the closed-enum values.
-func (t ConventionRefType) IsValid() bool {
-	return t == ConventionFilepath || t == ConventionTemplateID
+func (t RefType) IsValid() bool {
+	return t == RefFilepath || t == RefTemplateID
 }
 
-// ConventionRef points at the convention this commitment models its
-// tests after. Discriminated union by Type:
+// Ref points at the reference this check models its tests after.
+// Discriminated union by Type:
 //
 //   - filepath:    Path is a workspace-relative path to an existing
 //     test file the chain should pattern-match against.
@@ -130,10 +130,10 @@ func (t ConventionRefType) IsValid() bool {
 //     pattern fits.
 //
 // Exactly one of Path / ID must be populated — Validate enforces.
-type ConventionRef struct {
-	Type ConventionRefType `json:"type"`
-	Path string            `json:"path,omitempty"`
-	ID   string            `json:"id,omitempty"`
+type Ref struct {
+	Type RefType `json:"type"`
+	Path string  `json:"path,omitempty"`
+	ID   string  `json:"id,omitempty"`
 }
 
 // EvidenceRule is one structural assertion the evidence gate runs
@@ -148,84 +148,84 @@ type EvidenceRule struct {
 	Args map[string]any `json:"args,omitempty"`
 }
 
-// Commitment is the typed payload an architect emits on the
-// dev_via_spec.artifact (R3.7.2.b) to commit to a verification
-// surface. One artifact may carry many commitments — typically a
+// Check is the typed payload an architect emits on the
+// dev_via_spec.artifact (R3.7.2.b) to specify a verification
+// surface. One artifact may carry many checks — typically a
 // unit-level one for in-language behaviour and an integration-
-// level one against a real harness.
+// level one against a real test_harness.
 //
-// Schema: verification.commitment.v1.
-type Commitment struct {
+// Schema: verification.check.v1.
+type Check struct {
 	// Target is the natural-language description of WHAT is
-	// verified by this commitment. Reviewer judges adequacy
+	// verified by this check. Reviewer judges adequacy
 	// against the artifact's overall integration_points.
 	Target string `json:"target"`
 
-	// Approach is the closed-enum kind. Drives required-field
-	// validation: ApproachInProcessUnit forbids Harness; others
+	// Runtime is the closed-enum kind. Drives required-field
+	// validation: RuntimeInProcessUnit forbids TestHarness; others
 	// require it.
-	Approach ApproachKind `json:"approach"`
+	Runtime RuntimeKind `json:"runtime"`
 
-	// Harness names a catalog entry by its `name` field. Required
-	// when Approach.RequiresHarness(); empty otherwise. The
-	// existence of the named harness is verified at the schema-
+	// TestHarness names a catalog entry by its `name` field. Required
+	// when Runtime.RequiresTestHarness(); empty otherwise. The
+	// existence of the named test_harness is verified at the schema-
 	// gate (R3.7.2.e) via catalog lookup, not here.
-	Harness string `json:"harness,omitempty"`
+	TestHarness string `json:"test_harness,omitempty"`
 
-	// Runtime names a registered test runtime (e.g.
+	// TestRuntime names a registered test runtime (e.g.
 	// "java-junit-testcontainers", "go-testing-net",
 	// "playwright-typescript"). Required when
-	// Approach.RequiresRuntime(); the registry is shipped
+	// Runtime.RequiresRuntime(); the registry is shipped
 	// piecewise per language (R3.7.2.c first; additions are pure
 	// adds).
-	Runtime string `json:"runtime,omitempty"`
+	TestRuntime string `json:"test_runtime,omitempty"`
 
-	// Convention points at the test pattern this commitment
-	// models its rendered tests after. Required for every
-	// approach (greenfield → template_id; brownfield → filepath).
-	Convention ConventionRef `json:"convention"`
+	// Ref points at the test pattern this check models its
+	// rendered tests after. Required for every runtime (greenfield
+	// → template_id; brownfield → filepath).
+	Ref Ref `json:"ref"`
 
 	// Evidence is the structurally-checkable assertions the
 	// evidence gate runs post-build. May be empty in v1 if the
-	// commitment relies entirely on the framework's per-runtime
+	// check relies entirely on the framework's per-runtime
 	// template (which is itself structurally constrained), but
-	// then the reviewer will likely flag the commitment as
-	// under-specified for non-template approaches.
+	// then the reviewer will likely flag the check as
+	// under-specified for non-template runtimes.
 	Evidence []EvidenceRule `json:"evidence,omitempty"`
 }
 
 // Schema implements message.Payload.
-func (c *Commitment) Schema() message.Type {
-	return message.Type{Domain: Domain, Category: CategoryCommitment, Version: SchemaVersion}
+func (c *Check) Schema() message.Type {
+	return message.Type{Domain: Domain, Category: CategoryCheck, Version: SchemaVersion}
 }
 
 // Validate enforces structural well-formedness only — closed-enum
-// membership, required-field presence per Approach, ConventionRef
-// shape. Catalog-bound checks (does Harness exist? does Runtime
+// membership, required-field presence per Runtime, Ref shape.
+// Catalog-bound checks (does TestHarness exist? does TestRuntime
 // support this family?) are the schema gate's job (R3.7.2.e), not
 // Validate's, because Validate runs without access to the catalog.
 //
 // The split mirrors research.Artifact.Validate / dev_via_spec
 // .Artifact.Validate: structural always; semantic at the
 // reviewer/gate boundary.
-func (c *Commitment) Validate() error {
+func (c *Check) Validate() error {
 	if c.Target == "" {
 		return fmt.Errorf("target required")
 	}
-	if !c.Approach.IsValid() {
-		return fmt.Errorf("approach %q is not a recognised ApproachKind", c.Approach)
+	if !c.Runtime.IsValid() {
+		return fmt.Errorf("runtime %q is not a recognised RuntimeKind", c.Runtime)
 	}
-	if c.Approach.RequiresHarness() && c.Harness == "" {
-		return fmt.Errorf("approach %q requires a harness", c.Approach)
+	if c.Runtime.RequiresTestHarness() && c.TestHarness == "" {
+		return fmt.Errorf("runtime %q requires a test_harness", c.Runtime)
 	}
-	if !c.Approach.RequiresHarness() && c.Harness != "" {
-		return fmt.Errorf("approach %q must not name a harness (got %q)", c.Approach, c.Harness)
+	if !c.Runtime.RequiresTestHarness() && c.TestHarness != "" {
+		return fmt.Errorf("runtime %q must not name a test_harness (got %q)", c.Runtime, c.TestHarness)
 	}
-	if c.Approach.RequiresRuntime() && c.Runtime == "" {
-		return fmt.Errorf("approach %q requires a runtime", c.Approach)
+	if c.Runtime.RequiresRuntime() && c.TestRuntime == "" {
+		return fmt.Errorf("runtime %q requires a test_runtime", c.Runtime)
 	}
-	if err := c.Convention.Validate(); err != nil {
-		return fmt.Errorf("convention: %w", err)
+	if err := c.Ref.Validate(); err != nil {
+		return fmt.Errorf("ref: %w", err)
 	}
 	for i, e := range c.Evidence {
 		if e.Kind == "" {
@@ -239,22 +239,22 @@ func (c *Commitment) Validate() error {
 	return nil
 }
 
-// Validate enforces ConventionRef's discriminated-union shape:
+// Validate enforces Ref's discriminated-union shape:
 // Type closed-enum, exactly-one populated path/id field, no
 // cross-population.
-func (r *ConventionRef) Validate() error {
+func (r *Ref) Validate() error {
 	if !r.Type.IsValid() {
 		return fmt.Errorf("type %q is not one of {filepath, template_id}", r.Type)
 	}
 	switch r.Type {
-	case ConventionFilepath:
+	case RefFilepath:
 		if r.Path == "" {
 			return fmt.Errorf("type=filepath requires non-empty path")
 		}
 		if r.ID != "" {
 			return fmt.Errorf("type=filepath must not set id (got %q)", r.ID)
 		}
-	case ConventionTemplateID:
+	case RefTemplateID:
 		if r.ID == "" {
 			return fmt.Errorf("type=template_id requires non-empty id")
 		}
@@ -269,28 +269,28 @@ func (r *ConventionRef) Validate() error {
 // custom shape vs the struct tags. Present for forward-compat —
 // future additive fields can land without breaking consumers that
 // explicitly round-trip.
-func (c *Commitment) MarshalJSON() ([]byte, error) {
-	type Alias Commitment
+func (c *Check) MarshalJSON() ([]byte, error) {
+	type Alias Check
 	return json.Marshal((*Alias)(c))
 }
 
 // UnmarshalJSON implements json.Unmarshaler. See MarshalJSON.
-func (c *Commitment) UnmarshalJSON(data []byte) error {
-	type Alias Commitment
+func (c *Check) UnmarshalJSON(data []byte) error {
+	type Alias Check
 	return json.Unmarshal(data, (*Alias)(c))
 }
 
-// RegisterPayloads registers verification.commitment.v1 with the
+// RegisterPayloads registers verification.check.v1 with the
 // supplied payloadregistry. Call from cmd/semteams/main.go's
 // registerProductPayloads after research.RegisterPayloads /
 // devviaspec.RegisterPayloads. Same pattern as the other product-
 // local payloads.
 func RegisterPayloads(reg *payloadregistry.Registry) error {
 	return reg.Register(&payloadregistry.Registration{
-		Factory:     func() any { return &Commitment{} },
+		Factory:     func() any { return &Check{} },
 		Domain:      Domain,
-		Category:    CategoryCommitment,
+		Category:    CategoryCheck,
 		Version:     SchemaVersion,
-		Description: "SemTeams verification commitment — architect's structured commitment to a verification surface (target / approach / harness / runtime / convention / evidence). ADR-033 §addendum 2026-05-04.",
+		Description: "SemTeams verification check — architect's structured check of a verification surface (target / runtime / test_harness / test_runtime / ref / evidence). ADR-036.",
 	})
 }

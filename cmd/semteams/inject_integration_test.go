@@ -11,14 +11,14 @@ import (
 
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/persona"
-	"github.com/c360studio/semteams/cmd/semteams/harness"
+	"github.com/c360studio/semteams/cmd/semteams/testharness"
 	"github.com/stretchr/testify/require"
 )
 
-// TestInjectRenderedHarnessFragment_HappyPath wires real KV-backed
+// TestInjectRenderedTestHarnessFragment_HappyPath wires real KV-backed
 // managers and verifies the synthetic fragment lands with the
 // expected ID, Roles, Category, Priority, and rendered content.
-func TestInjectRenderedHarnessFragment_HappyPath(t *testing.T) {
+func TestInjectRenderedTestHarnessFragment_HappyPath(t *testing.T) {
 	tc := natsclient.NewTestClient(t,
 		natsclient.WithJetStream(),
 		natsclient.WithKV())
@@ -26,13 +26,13 @@ func TestInjectRenderedHarnessFragment_HappyPath(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	hMgr, err := harness.NewManager(tc.Client)
+	thMgr, err := testharness.NewManager(tc.Client)
 	require.NoError(t, err)
 	pMgr, err := persona.NewManager(tc.Client)
 	require.NoError(t, err)
 
-	// Seed one harness so the renderer produces the with-entries body.
-	require.NoError(t, hMgr.Put(ctx, &harness.Harness{
+	// Seed one test harness so the renderer produces the with-entries body.
+	require.NoError(t, thMgr.Put(ctx, &testharness.TestHarness{
 		Name:                "stub",
 		ComposeProfile:      "harness-stub",
 		Image:               "scratch",
@@ -40,22 +40,23 @@ func TestInjectRenderedHarnessFragment_HappyPath(t *testing.T) {
 		DomainDescription:   "test stub for integration verification.",
 	}))
 
-	injectRenderedHarnessFragment(ctx, pMgr, hMgr, slog.Default())
+	injectRenderedTestHarnessFragment(ctx, pMgr, thMgr, slog.Default())
 
-	got, err := pMgr.Get(ctx, "harness-catalog.rendered")
+	got, err := pMgr.Get(ctx, "test-harness-catalog.rendered")
 	require.NoError(t, err)
-	require.Equal(t, "harness-catalog.rendered", got.ID)
+	require.Equal(t, "test-harness-catalog.rendered", got.ID)
 	require.Equal(t, 0, got.Category, "synthetic fragment should match project baseline (Category=0)")
 	require.Equal(t, 45, got.Priority, "synthetic should sort after static 40-harness-catalog within Category=0")
 	require.ElementsMatch(t, []string{"researcher", "researcher-with-source-acquisition", "research-reviewer"}, got.Roles)
-	require.Contains(t, got.Content, "1. `stub`", "rendered body should list the seeded harness")
+	require.Contains(t, got.Content, "1. `stub`", "rendered body should list the seeded test harness")
 }
 
-// TestInjectRenderedHarnessFragment_EmptyCatalog covers the
+// TestInjectRenderedTestHarnessFragment_EmptyCatalog covers the
 // catalog-miss path: the synthetic fragment must still upsert (with
-// the "no harnesses registered" body) so the LLM consistently sees
-// the same fragment-ID structure regardless of catalog state.
-func TestInjectRenderedHarnessFragment_EmptyCatalog(t *testing.T) {
+// the "No test harnesses are currently registered" body) so the LLM
+// consistently sees the same fragment-ID structure regardless of
+// catalog state.
+func TestInjectRenderedTestHarnessFragment_EmptyCatalog(t *testing.T) {
 	tc := natsclient.NewTestClient(t,
 		natsclient.WithJetStream(),
 		natsclient.WithKV())
@@ -63,15 +64,15 @@ func TestInjectRenderedHarnessFragment_EmptyCatalog(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	hMgr, err := harness.NewManager(tc.Client)
+	thMgr, err := testharness.NewManager(tc.Client)
 	require.NoError(t, err)
 	pMgr, err := persona.NewManager(tc.Client)
 	require.NoError(t, err)
 
-	injectRenderedHarnessFragment(ctx, pMgr, hMgr, slog.Default())
+	injectRenderedTestHarnessFragment(ctx, pMgr, thMgr, slog.Default())
 
-	got, err := pMgr.Get(ctx, "harness-catalog.rendered")
+	got, err := pMgr.Get(ctx, "test-harness-catalog.rendered")
 	require.NoError(t, err)
-	require.Contains(t, got.Content, "No harnesses are currently registered")
+	require.Contains(t, got.Content, "No test harnesses are currently registered")
 	require.NotContains(t, strings.ToLower(got.Content), "image:")
 }

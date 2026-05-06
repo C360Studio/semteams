@@ -36,16 +36,15 @@ commitments.
   failure_summary / retry_hint). Read via `read_loop_result` on
   your `prior_loop_id` task property.
 - The architect's spec at `docs/specs/<slug>.md` if you need to
-  see the verification_commitments[] in their original prose
-  form. The slug is on your loop entity via the
-  `dev_via_spec.artifact.slug` triple from the architect's emit.
+  see the checks[] in their original prose form. The slug is on
+  your loop entity via the `dev_via_spec.artifact.slug` triple
+  from the architect's emit.
 - The evidence gate's structured summary, injected into your
   task properties at spawn time. The shape comes from
   `evidence.Summarize` (R3.7.2.i′): a per-result list with
   Kind / Status / Detail plus an Aggregate carrying Pass / Fail /
-  UnknownKind / Error / Total counts. Each commitment's evidence
-  is one rendered block; multiple commitments produce multiple
-  blocks.
+  UnknownKind / Error / Total counts. Each check's evidence is
+  one rendered block; multiple checks produce multiple blocks.
 
 The integration plumbing that delivers the evidence summary into
 your prompt (rule action or tool, R3.7.2.k′) is not yet wired —
