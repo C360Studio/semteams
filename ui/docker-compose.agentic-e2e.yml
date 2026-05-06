@@ -133,9 +133,25 @@ services:
       # both empty-catalog and stub-catalog journeys without a
       # rebuild. ADR-033.
       - SEMTEAMS_HARNESS_CATALOG_PATH=${SEMTEAMS_HARNESS_CATALOG_PATH:-/app/configs/harnesses.json}
+      # ADR-036 §Phase 2 — evidence preprocessor reads builder workspace
+      # files at builder-loop completion time. Must match the sandbox
+      # container's --workspace arg. :ro enforces D2 (measurer/measured
+      # separation from ADR-033): the backend reads evidence outputs written
+      # by the sandbox; it must never write into the workspace directly.
+      - SEMTEAMS_WORKSPACE_ROOT=/workspace
     volumes:
       - ${BACKEND_CONTEXT:-..}/configs/${AGENTIC_CONFIG:-e2e-agentic.json}:/etc/semstreams/config.json:ro
       - ${BACKEND_CONTEXT:-..}/testdata:/data/testdata:ro
+      # ADR-036 §Phase 2 — read-only bind of sandbox workspaces so the
+      # evidence preprocessor can read .evidence/checks.json at
+      # builder-loop completion time. :ro is load-bearing: D2 separation
+      # (ADR-033) requires the backend never writes into the workspace.
+      # The named volume is auto-created by Docker; when the sandbox
+      # profile is inactive the volume stays empty and the preprocessor's
+      # fail-soft path stamps the plumbing-failure summary, which routes
+      # qa-reviewer to needs_clarification — correct behaviour for
+      # mock-LLM journeys that never spawn a real builder.
+      - sandbox-agentic-workspaces:/workspace:ro
     networks:
       - agentic-net
     healthcheck:
