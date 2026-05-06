@@ -95,6 +95,47 @@ func (h *TestHarness) Validate() error {
 	return nil
 }
 
+// ResolvedManifest is the subset of TestHarness fields the builder
+// needs to instantiate a Testcontainers client — image, exposed ports,
+// environment, and optional healthcheck. It is derived from a catalog
+// TestHarness at emit time by emitspecartifact, embedded in the
+// <slug>.checks.json sidecar, and projected by bootstrapworkspace
+// into .test-harness/manifest.json in the builder's workspace.
+//
+// Keeping it here (rather than in emitspecartifact or bootstrapworkspace)
+// means all package consumers get the same shape without importing
+// implementation packages.
+type ResolvedManifest struct {
+	// ID is the catalog name (TestHarness.Name) — primary key.
+	ID string `json:"id"`
+	// Image is the docker image reference (e.g. "meshtastic/meshtasticd:3.5.0").
+	Image string `json:"image"`
+	// Ports maps a symbolic port label to its container-side port number.
+	// Derived from Exposes.TCP: label is Protocol, value is Port.
+	Ports map[string]int `json:"ports,omitempty"`
+	// Env is optional static environment variables for the container.
+	Env map[string]string `json:"env,omitempty"`
+}
+
+// Resolve derives a ResolvedManifest from a catalog TestHarness. The
+// result is safe to serialize into the sidecar and workspace manifest.
+func (h *TestHarness) Resolve() ResolvedManifest {
+	ports := make(map[string]int, len(h.Exposes.TCP))
+	for _, p := range h.Exposes.TCP {
+		if p.Protocol != "" {
+			ports[p.Protocol] = p.Port
+		}
+	}
+	m := ResolvedManifest{
+		ID:    h.Name,
+		Image: h.Image,
+	}
+	if len(ports) > 0 {
+		m.Ports = ports
+	}
+	return m
+}
+
 // File is the on-disk format of `configs/harnesses.json`.
 type File struct {
 	Harnesses []TestHarness `json:"harnesses"`

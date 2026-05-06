@@ -120,10 +120,31 @@ the test_harness name from there. Same transcription discipline as
 the target field: you crystallise upstream substance, you don't
 re-litigate it.
 
+**Only reference catalog IDs that exist.** The `emit_dev_via_spec_artifact`
+tool resolves every `test_harness` reference through the catalog at emit
+time (ADR-036 Phase 1). An unknown ID aborts the tool call with
+`ToolErrorInvalidArgs` before any files are written — the tool reports
+the specific ID that failed so the operator can fix the catalog entry.
+Do NOT invent IDs from training data or guess at spelling variants.
+
 If the research artifact's `test_harness` field is empty AND
 `runtime.RequiresTestHarness()` for this check, that is a
 chain-coverage gap, not a value for you to fill in. See the next
 section.
+
+## What the builder does with your test_harness reference
+
+The emit tool embeds the resolved catalog manifest (image, ports) into
+`<slug>.checks.json`. The `bootstrap_workspace` tool projects this into
+`.test-harness/manifest.json` in the builder's workspace. The builder
+reads that file and instantiates a Testcontainers `GenericContainer<?>` or
+equivalent using the image and port values directly — without reaching
+back to the catalog (which lives on the backend host, not in the sandbox).
+
+Consequence: if the catalog entry has a wrong image tag or missing port,
+the builder will use those wrong values. Catalog correctness is the
+operator's responsibility; the chain's responsibility is to reference
+IDs that exist and trust the catalog to be accurate.
 
 ## When the chain didn't enumerate enough
 

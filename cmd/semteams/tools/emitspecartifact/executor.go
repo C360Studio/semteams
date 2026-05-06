@@ -48,6 +48,7 @@ import (
 
 	"github.com/c360studio/semteams/cmd/semteams/devviaspec"
 	"github.com/c360studio/semteams/cmd/semteams/testharness"
+	"github.com/c360studio/semteams/cmd/semteams/verification"
 )
 
 // TestHarnessResolver looks up a test-harness catalog entry by name. Returns
@@ -65,7 +66,33 @@ import (
 // dev-via-spec with no test-harness manager wired will see checks
 // without resolution; operators running it WITH the manager will
 // see checks fully grounded.
+//
+// The resolver is ALSO used for sidecar generation (ADR-036 Phase 1):
+// when a check names a test_harness, the resolved manifest is embedded
+// in <slug>.checks.json so bootstrapworkspace can project it into
+// the builder's workspace as .test-harness/manifest.json without
+// requiring in-sandbox catalog access. A resolver error on the sidecar
+// path is fatal (unlike the markdown path) — it returns ToolErrorInvalidArgs
+// with the specific catalog ID so the operator can fix the catalog entry
+// before the builder loop boots.
 type TestHarnessResolver func(ctx context.Context, name string) (*testharness.TestHarness, error)
+
+// SidecarPayload is the on-disk shape of <slug>.checks.json written
+// adjacent to <slug>.md by renderChecksJSON. It embeds the architect's
+// check slice plus the resolved harness manifests for every unique
+// test_harness reference appearing in any check.
+//
+// Harnesses is keyed by catalog ID (TestHarness.Name) — one entry per
+// unique ID even when multiple checks reference the same test_harness.
+// Empty/nil when no checks carry a test_harness reference.
+//
+// This file is read by bootstrapworkspace to seed:
+//   - .evidence/checks.json — the checks slice for the evidence preprocessor (Slice 4).
+//   - .test-harness/manifest.json — the harnesses map for the builder's Testcontainers config (ADR-036 §D2).
+type SidecarPayload struct {
+	Checks    []verification.Check                    `json:"checks"`
+	Harnesses map[string]testharness.ResolvedManifest `json:"harnesses,omitempty"`
+}
 
 // ToolName is the LLM-facing tool name. Listed in agentic-tools
 // allowed_tools per deployment that runs the dev-via-spec flow.
@@ -335,6 +362,22 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 		}, nil
 	}
 
+	// Resolve test-harness catalog entries for sidecar embedding BEFORE any
+	// file writes. A resolver error on the sidecar path is fatal: a builder
+	// that boots without a manifest would fabricate stubs against itself
+	// (exactly what smoke #7 exposed). Resolving upfront and hard-erroring
+	// here prevents that, and leaves the filesystem and triple store clean
+	// so the LLM can retry after the operator fixes the catalog entry.
+	var sidecarHarnesses map[string]testharness.ResolvedManifest
+	if len(artifact.Checks) > 0 {
+		var toolErr *agentic.ToolResult
+		sidecarHarnesses, toolErr = e.buildSidecarHarnesses(ctx, artifact)
+		if toolErr != nil {
+			toolErr.CallID = call.ID
+			return *toolErr, nil
+		}
+	}
+
 	// Render markdown to disk before minting triples. If the disk write
 	// fails, we return early without any side effects so the LLM can
 	// retry after an operator fixes the path or permissions.
@@ -346,6 +389,17 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 			Error:     fmt.Sprintf("render markdown: %v", err),
 			ErrorKind: agentic.ToolErrorInternal,
 		}, nil
+	}
+
+	// Write the sidecar <slug>.checks.json after the markdown (file ordering:
+	// markdown first, sidecar second). Uses already-resolved harnesses so no
+	// second catalog query. Failure aborts before any triples mint — a missing
+	// sidecar means bootstrapworkspace can't seed the workspace.
+	if len(artifact.Checks) > 0 {
+		if toolErr := e.renderChecksJSON(artifact, sidecarHarnesses); toolErr != nil {
+			toolErr.CallID = call.ID
+			return *toolErr, nil
+		}
 	}
 
 	loopEntityID := agentic.LoopExecutionEntityID(e.platform.Org, e.platform.Platform, call.LoopID)
@@ -503,21 +557,16 @@ func deriveSlug(title string, t time.Time) string {
 // (os.MkdirAll). Existing files are overwritten — idempotent on re-run of
 // the same arc (same title → same slug → same path). Returns the relative
 // path written (for the marker triple and tool result).
+//
+// Markdown's harness lookup is independent of buildSidecarHarnesses' result —
+// the markdown template needs *TestHarness (with .Exposes.TCP), the sidecar
+// needs ResolvedManifest. They share the catalog but not the projection.
 func (e *Executor) renderMarkdown(ctx context.Context, a *devviaspec.Artifact) (string, error) {
 	if err := os.MkdirAll(e.outputDir, 0o755); err != nil {
 		return "", fmt.Errorf("create output dir %s: %w", e.outputDir, err)
 	}
 
-	// Resolve any architect-cited test_harness names into catalog entries
-	// up front so the per-call template's lookup funcs read from a
-	// closure-captured map rather than re-querying the KV bucket per
-	// check. A failed lookup is silently dropped from the map —
-	// the rendered SPEC ships the architect's test_harness name without
-	// the resolved Image/TCP, which the builder will surface as a
-	// `needs_clarification` rather than fabricate. Catalog churn
-	// between architect emit-time and builder iteration would
-	// otherwise produce a worse failure mode (silent stale fields).
-	harnessByName := e.resolveTestHarnesses(ctx, a)
+	harnessByName := e.buildMarkdownHarnessMap(ctx, a)
 
 	tmpl, err := template.New("artifact").Funcs(template.FuncMap{
 		"add":  func(i, n int) int { return i + n },
@@ -553,13 +602,91 @@ func (e *Executor) renderMarkdown(ctx context.Context, a *devviaspec.Artifact) (
 	return filepath.Join(e.outputDir, filename), nil
 }
 
-// resolveTestHarnesses returns a name → catalog-entry map for every
-// distinct test_harness named on a's checks. nil resolver returns an
-// empty map; lookup errors are logged at WARN and the entry is dropped
-// from the map (the renderer just omits the resolved fields rather than
-// aborting emission). Distinct names are looked up once even if the
-// artifact carries multiple checks referencing the same test_harness.
-func (e *Executor) resolveTestHarnesses(ctx context.Context, a *devviaspec.Artifact) map[string]*testharness.TestHarness {
+// renderChecksJSON writes <slug>.checks.json adjacent to <slug>.md.
+// The sidecar embeds the checks slice plus the pre-resolved harness
+// manifests map (built by Execute before any file write).
+// Called only when len(a.Checks) > 0.
+//
+// Error contract:
+//   - os.WriteFile failure → returns ToolErrorInternal.
+//
+// The caller (Execute) must check for a non-nil return and short-circuit
+// before minting triples.
+func (e *Executor) renderChecksJSON(a *devviaspec.Artifact, harnesses map[string]testharness.ResolvedManifest) *agentic.ToolResult {
+	sidecar := SidecarPayload{
+		Checks:    a.Checks,
+		Harnesses: harnesses,
+	}
+
+	data, err := json.MarshalIndent(sidecar, "", "  ")
+	if err != nil {
+		return &agentic.ToolResult{
+			Name:      ToolName,
+			Error:     fmt.Sprintf("marshal checks sidecar: %v", err),
+			ErrorKind: agentic.ToolErrorInternal,
+		}
+	}
+
+	fullPath := filepath.Join(e.outputDir, a.Slug+".checks.json")
+	if err := os.WriteFile(fullPath, data, 0o644); err != nil {
+		return &agentic.ToolResult{
+			Name:      ToolName,
+			Error:     fmt.Sprintf("write checks sidecar %s: %v", fullPath, err),
+			ErrorKind: agentic.ToolErrorInternal,
+		}
+	}
+	return nil
+}
+
+// buildSidecarHarnesses resolves every unique test_harness ID appearing
+// across the artifact's checks, returning a map keyed by catalog ID.
+// A resolver error is fatal and returns a ToolErrorInvalidArgs result
+// so the operator can fix the catalog before the builder loop boots.
+// Checks with no test_harness (e.g. in-process-unit) are skipped.
+func (e *Executor) buildSidecarHarnesses(ctx context.Context, a *devviaspec.Artifact) (map[string]testharness.ResolvedManifest, *agentic.ToolResult) {
+	out := map[string]testharness.ResolvedManifest{}
+	if e.testHarnessResolver == nil {
+		return out, nil
+	}
+	for i := range a.Checks {
+		name := a.Checks[i].TestHarness
+		if name == "" {
+			continue
+		}
+		if _, seen := out[name]; seen {
+			continue
+		}
+		h, err := e.testHarnessResolver(ctx, name)
+		if err != nil {
+			return nil, &agentic.ToolResult{
+				Name:      ToolName,
+				Error:     fmt.Sprintf("test_harness %q not found in catalog: %v", name, err),
+				ErrorKind: agentic.ToolErrorInvalidArgs,
+			}
+		}
+		if h == nil {
+			continue
+		}
+		out[name] = h.Resolve()
+	}
+	if len(out) == 0 {
+		return nil, nil
+	}
+	return out, nil
+}
+
+// buildMarkdownHarnessMap builds the name → *TestHarness lookup map used
+// by the SPEC.md template funcs (harnessImage, harnessTCP). One call per
+// unique name, soft-drop on error — the template renders name-only on miss.
+// When there are no checks with a test_harness reference, or the resolver
+// is nil, returns empty.
+//
+// Design note: the markdown path uses *TestHarness (for .Exposes.TCP) while
+// the sidecar path uses ResolvedManifest. They are separate consumers of the
+// same catalog data. A second lookup here is acceptable (sub-ms for KV, and
+// the alternative — threading two different types through a shared map —
+// is worse).
+func (e *Executor) buildMarkdownHarnessMap(ctx context.Context, a *devviaspec.Artifact) map[string]*testharness.TestHarness {
 	out := map[string]*testharness.TestHarness{}
 	if e.testHarnessResolver == nil {
 		return out

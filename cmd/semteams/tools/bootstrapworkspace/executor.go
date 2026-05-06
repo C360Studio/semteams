@@ -11,6 +11,8 @@ import (
 
 	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/processor/agentic-tools/sandbox"
+
+	"github.com/c360studio/semteams/cmd/semteams/testharness"
 )
 
 // ToolName is the LLM-facing tool name. Listed in the
@@ -22,6 +24,27 @@ const ToolName = "bootstrap_workspace"
 // 10-bash-iteration-contract.md instructs the builder to read this path
 // via `bash cat SPEC.md` after the first iteration.
 const SpecFilename = "SPEC.md"
+
+// ChecksFilename is the workspace-relative path where the checks slice
+// from the architect's sidecar is projected. Slice 4's evidence preprocessor
+// reads this path; exporting the constant lets contract tests pin it.
+const ChecksFilename = ".evidence/checks.json"
+
+// TestHarnessManifestFilename is the workspace-relative path where the
+// resolved harness manifests from the architect's sidecar are projected.
+// The builder's Testcontainers code reads this path (see persona fragment
+// 30-test-harness.md); exporting the constant lets contract tests pin it.
+const TestHarnessManifestFilename = ".test-harness/manifest.json"
+
+// sidecarPayload is a minimal local reader for the <slug>.checks.json
+// sidecar written by emitspecartifact. Kept local (not imported from
+// emitspecartifact) so the two packages stay independently testable.
+// json.RawMessage for checks lets us pass the bytes through without
+// depending on the verification package here.
+type sidecarPayload struct {
+	Checks    json.RawMessage                         `json:"checks"`
+	Harnesses map[string]testharness.ResolvedManifest `json:"harnesses,omitempty"`
+}
 
 // envOutputDir mirrors emitspecartifact's env var so both tools agree on
 // where the architect's rendered specs live. Duplication preferred over
@@ -174,6 +197,12 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 		}, nil
 	}
 
+	// Project the sidecar into workspace files. Fail-soft: a missing or
+	// unreadable sidecar is logged and skipped (chain ran without checks;
+	// backward-compat). WriteFile errors are also logged and skipped so
+	// the builder still boots and can surface the gap via needs_clarification.
+	e.projectSidecar(ctx, taskID, resolvedPath)
+
 	resultJSON, err := json.Marshal(map[string]any{
 		"task_id":             taskID,
 		"workspace_path":      wtInfo.Path,
@@ -259,4 +288,71 @@ func (e *Executor) readSpec(specPath string) (string, string, error) {
 		return "", "", fmt.Errorf("read spec file %s: %v", abs, err)
 	}
 	return string(data), abs, nil
+}
+
+// projectSidecar reads <slug>.checks.json adjacent to the resolved spec path
+// and projects its contents into the workspace as:
+//   - ChecksFilename  (.evidence/checks.json) — for the evidence preprocessor (Slice 4)
+//   - TestHarnessManifestFilename (.test-harness/manifest.json) — for the builder's Testcontainers config
+//
+// Fail-soft: missing or unreadable sidecar is logged at Debug/Warn and
+// skipped. WriteFile errors are logged at Error and skipped. Bootstrap
+// continues in all cases so a sidecar absence never blocks the builder.
+func (e *Executor) projectSidecar(ctx context.Context, taskID, resolvedSpecPath string) {
+	sidecarAbsPath := strings.TrimSuffix(resolvedSpecPath, ".md") + ".checks.json"
+
+	data, err := os.ReadFile(sidecarAbsPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			e.logger.Debug("bootstrap_workspace: no sidecar found; skipping checks/harness projection",
+				slog.String("sidecar_path", sidecarAbsPath))
+			return
+		}
+		e.logger.Warn("bootstrap_workspace: sidecar read error; skipping projection",
+			slog.String("sidecar_path", sidecarAbsPath),
+			slog.String("error", err.Error()))
+		return
+	}
+
+	var sidecar sidecarPayload
+	if err := json.Unmarshal(data, &sidecar); err != nil {
+		e.logger.Warn("bootstrap_workspace: sidecar unmarshal failed; skipping projection",
+			slog.String("sidecar_path", sidecarAbsPath),
+			slog.String("error", err.Error()))
+		return
+	}
+
+	// Project checks slice when it is a non-empty JSON array. A missing
+	// field or an empty array (`[]`) both mean "no checks" — skip.
+	checksHasItems := false
+	if len(sidecar.Checks) > 0 {
+		var tmp []json.RawMessage
+		if err := json.Unmarshal(sidecar.Checks, &tmp); err == nil && len(tmp) > 0 {
+			checksHasItems = true
+		}
+	}
+	if checksHasItems {
+		e.writeWorkspaceFile(ctx, taskID, ChecksFilename, string(sidecar.Checks))
+	}
+
+	// Project harnesses map when present.
+	if len(sidecar.Harnesses) > 0 {
+		harnessJSON, err := json.MarshalIndent(sidecar.Harnesses, "", "  ")
+		if err != nil {
+			e.logger.Error("bootstrap_workspace: marshal harnesses failed; skipping .test-harness/manifest.json",
+				slog.String("error", err.Error()))
+		} else {
+			e.writeWorkspaceFile(ctx, taskID, TestHarnessManifestFilename, string(harnessJSON))
+		}
+	}
+}
+
+// writeWorkspaceFile calls sandbox.WriteFile and logs at Error on failure.
+// The caller does not propagate WriteFile errors (fail-soft per design).
+func (e *Executor) writeWorkspaceFile(ctx context.Context, taskID, path, content string) {
+	if err := e.sandbox.WriteFile(ctx, taskID, path, content); err != nil {
+		e.logger.Error("bootstrap_workspace: WriteFile failed; workspace file not written",
+			slog.String("path", path),
+			slog.String("error", err.Error()))
+	}
 }

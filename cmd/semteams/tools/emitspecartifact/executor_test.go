@@ -1037,15 +1037,22 @@ func TestRenderMarkdown_ResolvedTestHarnessFieldsRendered(t *testing.T) {
 		t.Fatalf("Result.Error = %q, want empty", res.Error)
 	}
 
-	// Find the rendered file.
+	// Find the rendered .md file (sidecar .checks.json is also written).
 	entries, err := os.ReadDir(tmpDir)
 	if err != nil {
 		t.Fatalf("read tmpDir: %v", err)
 	}
-	if len(entries) != 1 {
-		t.Fatalf("expected exactly one rendered file, got %d", len(entries))
+	var mdPath string
+	for _, e := range entries {
+		if strings.HasSuffix(e.Name(), ".md") {
+			mdPath = filepath.Join(tmpDir, e.Name())
+			break
+		}
 	}
-	body, err := os.ReadFile(filepath.Join(tmpDir, entries[0].Name()))
+	if mdPath == "" {
+		t.Fatalf("no .md file found among %d entries in tmpDir", len(entries))
+	}
+	body, err := os.ReadFile(mdPath)
 	if err != nil {
 		t.Fatalf("read rendered: %v", err)
 	}
@@ -1062,20 +1069,23 @@ func TestRenderMarkdown_ResolvedTestHarnessFieldsRendered(t *testing.T) {
 	}
 }
 
-// TestRenderMarkdown_ResolverMiss_NameOnly pins the fallback shape:
-// when the resolver returns an error, the rendered SPEC carries the
-// architect's test_harness NAME without the resolved Image / TCP fields.
-// The builder's contract reads this as a chain gap and surfaces
-// needs_clarification rather than fabricating; here we just verify
-// the renderer doesn't blow up and the name still ships.
-func TestRenderMarkdown_ResolverMiss_NameOnly(t *testing.T) {
+// TestRenderMarkdown_NilResolver_NameOnly pins the fallback shape:
+// when no resolver is wired (nil), the rendered SPEC carries the
+// architect's test_harness NAME without resolved Image / TCP fields,
+// and no sidecar is written. The builder's contract reads the name-only
+// form as a chain gap and surfaces needs_clarification rather than
+// fabricating a harness image.
+//
+// Note: when a resolver IS wired and fails, the tool now returns
+// ToolErrorInvalidArgs (ADR-036 Phase 1 fatal contract). The name-only
+// fallback applies only when the resolver is nil (no test-harness
+// manager wired by the operator).
+func TestRenderMarkdown_NilResolver_NameOnly(t *testing.T) {
 	tmpDir := t.TempDir()
 	tp := &fakeTriplePublisher{}
 	pub := &fakePublisher{}
-	resolver := func(_ context.Context, _ string) (*testharness.TestHarness, error) {
-		return nil, errors.New("simulated catalog miss")
-	}
-	exec := NewExecutor(tp, pub, types.PlatformMeta{Org: "c360", Platform: "semteams"}, nil, tmpDir, resolver)
+	// nil resolver — no manager wired; test_harness name ships without projection.
+	exec := NewExecutor(tp, pub, types.PlatformMeta{Org: "c360", Platform: "semteams"}, nil, tmpDir, nil)
 
 	args := defaultArtifactArgs()
 	args["checks"] = []any{
@@ -1098,17 +1108,29 @@ func TestRenderMarkdown_ResolverMiss_NameOnly(t *testing.T) {
 		t.Fatalf("Result.Error = %q, want empty", res.Error)
 	}
 
+	// Sidecar is written with checks but no harnesses (nil resolver → empty
+	// harnesses map → omitted from JSON by omitempty).
 	entries, _ := os.ReadDir(tmpDir)
-	body, _ := os.ReadFile(filepath.Join(tmpDir, entries[0].Name()))
+	var mdPath string
+	for _, e := range entries {
+		if strings.HasSuffix(e.Name(), ".md") {
+			mdPath = filepath.Join(tmpDir, e.Name())
+			break
+		}
+	}
+	if mdPath == "" {
+		t.Fatalf("no .md file found")
+	}
+	body, _ := os.ReadFile(mdPath)
 	got := string(body)
 	if !strings.Contains(got, "**Test harness**: `ghost-harness`") {
-		t.Errorf("expected test_harness name to render even on resolver miss; body:\n%s", got)
+		t.Errorf("expected test_harness name to render on nil resolver; body:\n%s", got)
 	}
 	if strings.Contains(got, "**Image**:") {
-		t.Errorf("expected NO **Image** line on resolver miss; body:\n%s", got)
+		t.Errorf("expected NO **Image** line with nil resolver; body:\n%s", got)
 	}
 	if strings.Contains(got, "**TCP exposes**:") {
-		t.Errorf("expected NO **TCP exposes** line on resolver miss; body:\n%s", got)
+		t.Errorf("expected NO **TCP exposes** line with nil resolver; body:\n%s", got)
 	}
 }
 
@@ -1216,4 +1238,376 @@ func TestExecute_WithoutChecks_MarkdownShowsReviewerHint(t *testing.T) {
 	if !strings.Contains(rendered, "No verification checks emitted") {
 		t.Errorf("markdown should call out missing checks for reviewer attention")
 	}
+}
+
+// ---------------------------------------------------------------------
+// ADR-036 Phase 1 — sidecar (<slug>.checks.json) tests
+// ---------------------------------------------------------------------
+
+// newResolverFor builds a TestHarnessResolver that returns the supplied
+// harness for its name and an error for any other name.
+func newResolverFor(harnesses ...*testharness.TestHarness) TestHarnessResolver {
+	m := make(map[string]*testharness.TestHarness, len(harnesses))
+	for _, h := range harnesses {
+		m[h.Name] = h
+	}
+	return func(_ context.Context, name string) (*testharness.TestHarness, error) {
+		if h, ok := m[name]; ok {
+			return h, nil
+		}
+		return nil, errors.New("not in catalog")
+	}
+}
+
+// fixtureHarness returns a minimal well-formed TestHarness for testing.
+func fixtureHarness(name, image string, port int) *testharness.TestHarness {
+	return &testharness.TestHarness{
+		Name:                name,
+		Image:               image,
+		SmokeContractSchema: name + ".smoke.v1",
+		DomainDescription:   "test fixture for " + name,
+		Exposes: testharness.Exposes{
+			TCP: []testharness.PortExpose{{Port: port, Protocol: "tcp-" + name}},
+		},
+	}
+}
+
+// readSidecar reads and unmarshals the <slug>.checks.json sidecar from dir.
+func readSidecar(t *testing.T, dir, slug string) SidecarPayload {
+	t.Helper()
+	path := filepath.Join(dir, slug+".checks.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read sidecar %s: %v", path, err)
+	}
+	var s SidecarPayload
+	if err := json.Unmarshal(data, &s); err != nil {
+		t.Fatalf("unmarshal sidecar: %v", err)
+	}
+	return s
+}
+
+// getSlugFromResult extracts "slug" from the tool result Content JSON.
+func getSlugFromResult(t *testing.T, res agentic.ToolResult) string {
+	t.Helper()
+	var c struct {
+		Slug string `json:"slug"`
+	}
+	if err := json.Unmarshal([]byte(res.Content), &c); err != nil {
+		t.Fatalf("unmarshal result: %v", err)
+	}
+	return c.Slug
+}
+
+// TestSidecar_EmptyChecks_NoSidecarWritten pins that no .checks.json
+// is written when the artifact carries no checks. Preserves
+// existing test expectations (dir has exactly one .md file).
+func TestSidecar_EmptyChecks_NoSidecarWritten(t *testing.T) {
+	exec, _, _, tmpDir := newExecutorWithDir(t)
+	res, err := exec.Execute(context.Background(), defaultCall(defaultArtifactArgs()))
+	if err != nil {
+		t.Fatalf("Execute err: %v", err)
+	}
+	if res.Error != "" {
+		t.Fatalf("Result.Error = %q", res.Error)
+	}
+	entries, _ := os.ReadDir(tmpDir)
+	for _, e := range entries {
+		if strings.HasSuffix(e.Name(), ".checks.json") {
+			t.Errorf("expected no .checks.json with empty checks; found %s", e.Name())
+		}
+	}
+}
+
+// TestSidecar_WithChecksOneHarnessRef verifies the sidecar is written
+// with checks[] and a harnesses map with the single resolved entry.
+func TestSidecar_WithChecksOneHarnessRef(t *testing.T) {
+	tmpDir := t.TempDir()
+	tp := &fakeTriplePublisher{}
+	pub := &fakePublisher{}
+	h := fixtureHarness("meshtasticd-3.x", "meshtastic/meshtasticd:3.5.0", 4403)
+	resolver := newResolverFor(h)
+	exec := NewExecutor(tp, pub, types.PlatformMeta{Org: "c360", Platform: "semteams"}, nil, tmpDir, resolver)
+
+	args := argsWithOneTestcontainerCheck("meshtasticd-3.x")
+	res, err := exec.Execute(context.Background(), defaultCall(args))
+	if err != nil {
+		t.Fatalf("Execute err: %v", err)
+	}
+	if res.Error != "" {
+		t.Fatalf("Result.Error = %q", res.Error)
+	}
+
+	slug := getSlugFromResult(t, res)
+	sidecar := readSidecar(t, tmpDir, slug)
+
+	if len(sidecar.Checks) != 1 {
+		t.Errorf("sidecar.Checks len = %d, want 1", len(sidecar.Checks))
+	}
+	if len(sidecar.Harnesses) != 1 {
+		t.Errorf("sidecar.Harnesses len = %d, want 1", len(sidecar.Harnesses))
+	}
+	resolved, ok := sidecar.Harnesses["meshtasticd-3.x"]
+	if !ok {
+		t.Fatalf("sidecar.Harnesses missing meshtasticd-3.x; keys=%v", harnesseKeys(sidecar.Harnesses))
+	}
+	if resolved.Image != "meshtastic/meshtasticd:3.5.0" {
+		t.Errorf("resolved.Image = %q, want meshtastic/meshtasticd:3.5.0", resolved.Image)
+	}
+	if resolved.ID != "meshtasticd-3.x" {
+		t.Errorf("resolved.ID = %q, want meshtasticd-3.x", resolved.ID)
+	}
+	if len(resolved.Ports) != 1 {
+		t.Errorf("resolved.Ports len = %d, want 1", len(resolved.Ports))
+	}
+}
+
+// TestSidecar_TwoDistinctHarnessRefs verifies the harnesses map has two
+// entries when two distinct test_harness IDs appear across the checks.
+func TestSidecar_TwoDistinctHarnessRefs(t *testing.T) {
+	tmpDir := t.TempDir()
+	tp := &fakeTriplePublisher{}
+	pub := &fakePublisher{}
+	h1 := fixtureHarness("harness-a", "img-a:1.0", 1234)
+	h2 := fixtureHarness("harness-b", "img-b:2.0", 5678)
+	resolver := newResolverFor(h1, h2)
+	exec := NewExecutor(tp, pub, types.PlatformMeta{Org: "c360", Platform: "semteams"}, nil, tmpDir, resolver)
+
+	args := argsWithTwoTestcontainerChecks("harness-a", "harness-b")
+	res, err := exec.Execute(context.Background(), defaultCall(args))
+	if err != nil {
+		t.Fatalf("Execute err: %v", err)
+	}
+	if res.Error != "" {
+		t.Fatalf("Result.Error = %q", res.Error)
+	}
+
+	slug := getSlugFromResult(t, res)
+	sidecar := readSidecar(t, tmpDir, slug)
+
+	if len(sidecar.Harnesses) != 2 {
+		t.Errorf("sidecar.Harnesses len = %d, want 2", len(sidecar.Harnesses))
+	}
+	if _, ok := sidecar.Harnesses["harness-a"]; !ok {
+		t.Errorf("sidecar.Harnesses missing harness-a")
+	}
+	if _, ok := sidecar.Harnesses["harness-b"]; !ok {
+		t.Errorf("sidecar.Harnesses missing harness-b")
+	}
+}
+
+// TestSidecar_DuplicateHarnessRefs verifies duplicate test_harness refs
+// across checks are deduplicated to a single harnesses map entry.
+func TestSidecar_DuplicateHarnessRefs(t *testing.T) {
+	tmpDir := t.TempDir()
+	tp := &fakeTriplePublisher{}
+	pub := &fakePublisher{}
+	h := fixtureHarness("same-harness", "img:1.0", 9000)
+	resolver := newResolverFor(h)
+	exec := NewExecutor(tp, pub, types.PlatformMeta{Org: "c360", Platform: "semteams"}, nil, tmpDir, resolver)
+
+	// Two checks referencing the same test_harness.
+	args := defaultArtifactArgs()
+	args["checks"] = []any{
+		testcontainerCheck("same-harness", "target A"),
+		testcontainerCheck("same-harness", "target B"),
+	}
+	res, err := exec.Execute(context.Background(), defaultCall(args))
+	if err != nil {
+		t.Fatalf("Execute err: %v", err)
+	}
+	if res.Error != "" {
+		t.Fatalf("Result.Error = %q", res.Error)
+	}
+
+	slug := getSlugFromResult(t, res)
+	sidecar := readSidecar(t, tmpDir, slug)
+
+	if len(sidecar.Checks) != 2 {
+		t.Errorf("sidecar.Checks len = %d, want 2", len(sidecar.Checks))
+	}
+	if len(sidecar.Harnesses) != 1 {
+		t.Errorf("sidecar.Harnesses len = %d, want 1 (deduped)", len(sidecar.Harnesses))
+	}
+}
+
+// TestSidecar_InProcessUnitCheck_NoHarnesEntry verifies that a check with
+// runtime=in-process-unit (no test_harness) produces a sidecar with
+// checks but an empty/nil harnesses map.
+func TestSidecar_InProcessUnitCheck_NoHarnessEntry(t *testing.T) {
+	tmpDir := t.TempDir()
+	tp := &fakeTriplePublisher{}
+	pub := &fakePublisher{}
+	// Resolver present but never called (in-process-unit has no test_harness).
+	resolver := newResolverFor()
+	exec := NewExecutor(tp, pub, types.PlatformMeta{Org: "c360", Platform: "semteams"}, nil, tmpDir, resolver)
+
+	args := defaultArtifactArgs()
+	args["checks"] = []any{
+		map[string]any{
+			"target":  "unit logic correctness",
+			"runtime": "in-process-unit",
+			"ref":     map[string]any{"type": "filepath", "path": "pkg/foo_test.go"},
+		},
+	}
+	res, err := exec.Execute(context.Background(), defaultCall(args))
+	if err != nil {
+		t.Fatalf("Execute err: %v", err)
+	}
+	if res.Error != "" {
+		t.Fatalf("Result.Error = %q", res.Error)
+	}
+
+	slug := getSlugFromResult(t, res)
+	sidecar := readSidecar(t, tmpDir, slug)
+
+	if len(sidecar.Checks) != 1 {
+		t.Errorf("sidecar.Checks len = %d, want 1", len(sidecar.Checks))
+	}
+	if len(sidecar.Harnesses) != 0 {
+		t.Errorf("sidecar.Harnesses = %v, want empty (in-process-unit has no test_harness)", sidecar.Harnesses)
+	}
+}
+
+// TestSidecar_UnknownCatalogID_ToolErrorInvalidArgs verifies that a
+// resolver error (unknown catalog ID) aborts execution before any triples
+// or files are written, returning ToolErrorInvalidArgs with the catalog ID.
+func TestSidecar_UnknownCatalogID_ToolErrorInvalidArgs(t *testing.T) {
+	tmpDir := t.TempDir()
+	tp := &fakeTriplePublisher{}
+	pub := &fakePublisher{}
+	// Resolver that always returns an error.
+	resolver := newResolverFor() // empty — any lookup fails
+	exec := NewExecutor(tp, pub, types.PlatformMeta{Org: "c360", Platform: "semteams"}, nil, tmpDir, resolver)
+
+	args := argsWithOneTestcontainerCheck("unknown-harness-id")
+	res, err := exec.Execute(context.Background(), defaultCall(args))
+	if err != nil {
+		t.Fatalf("Execute err = %v, want nil", err)
+	}
+
+	if res.ErrorKind != agentic.ToolErrorInvalidArgs {
+		t.Errorf("ErrorKind = %v, want ToolErrorInvalidArgs", res.ErrorKind)
+	}
+	if !strings.Contains(res.Error, "unknown-harness-id") {
+		t.Errorf("error should name the failing catalog ID; got %q", res.Error)
+	}
+
+	// No triples published (short-circuited before triple mint).
+	if got := tp.snapshot(); len(got) != 0 {
+		t.Errorf("expected 0 triples on catalog-miss, got %d", len(got))
+	}
+	// No payload published.
+	if pub.calls != 0 {
+		t.Errorf("expected 0 payload publish calls, got %d", pub.calls)
+	}
+
+	// No .checks.json written (sidecar fails before write).
+	entries, _ := os.ReadDir(tmpDir)
+	for _, e := range entries {
+		if strings.HasSuffix(e.Name(), ".checks.json") {
+			t.Errorf("expected no .checks.json on catalog-miss; found %s", e.Name())
+		}
+	}
+}
+
+// TestSidecar_IsHumanDiffable verifies the sidecar is indented JSON
+// (json.MarshalIndent output, not compact).
+func TestSidecar_IsHumanDiffable(t *testing.T) {
+	tmpDir := t.TempDir()
+	tp := &fakeTriplePublisher{}
+	pub := &fakePublisher{}
+	h := fixtureHarness("neat-harness", "img:latest", 8080)
+	resolver := newResolverFor(h)
+	exec := NewExecutor(tp, pub, types.PlatformMeta{Org: "c360", Platform: "semteams"}, nil, tmpDir, resolver)
+
+	args := argsWithOneTestcontainerCheck("neat-harness")
+	res, err := exec.Execute(context.Background(), defaultCall(args))
+	if err != nil {
+		t.Fatalf("Execute err: %v", err)
+	}
+	if res.Error != "" {
+		t.Fatalf("Result.Error = %q", res.Error)
+	}
+
+	slug := getSlugFromResult(t, res)
+	path := filepath.Join(tmpDir, slug+".checks.json")
+	raw, _ := os.ReadFile(path)
+
+	// Indented JSON has newlines; compact JSON does not.
+	if !strings.Contains(string(raw), "\n") {
+		t.Errorf("sidecar should be indented (human-diffable); got compact: %s", raw)
+	}
+}
+
+// TestSidecar_IdempotentOverwrite verifies re-running with the same slug
+// overwrites the sidecar with identical content.
+func TestSidecar_IdempotentOverwrite(t *testing.T) {
+	tmpDir := t.TempDir()
+	tp := &fakeTriplePublisher{}
+	pub := &fakePublisher{}
+	h := fixtureHarness("idem-harness", "img:1.0", 7777)
+	resolver := newResolverFor(h)
+	exec := NewExecutor(tp, pub, types.PlatformMeta{Org: "c360", Platform: "semteams"}, nil, tmpDir, resolver)
+
+	args := argsWithOneTestcontainerCheck("idem-harness")
+
+	for i := range 2 {
+		res, err := exec.Execute(context.Background(), defaultCall(args))
+		if err != nil {
+			t.Fatalf("run %d Execute err: %v", i, err)
+		}
+		if res.Error != "" {
+			t.Fatalf("run %d Result.Error = %q", i, res.Error)
+		}
+	}
+
+	// Confirm only one .checks.json in the dir (no accumulation).
+	entries, _ := os.ReadDir(tmpDir)
+	var sidecarCount int
+	for _, e := range entries {
+		if strings.HasSuffix(e.Name(), ".checks.json") {
+			sidecarCount++
+		}
+	}
+	if sidecarCount != 1 {
+		t.Errorf("expected exactly 1 .checks.json after 2 runs, got %d", sidecarCount)
+	}
+}
+
+// ---------------------------------------------------------------------
+// Sidecar test helpers
+// ---------------------------------------------------------------------
+
+func testcontainerCheck(harnessName, target string) map[string]any {
+	return map[string]any{
+		"target":       target,
+		"runtime":      "process-local-testcontainer",
+		"test_harness": harnessName,
+		"test_runtime": "go-testing-net",
+		"ref":          map[string]any{"type": "filepath", "path": "x_test.go"},
+	}
+}
+
+func argsWithOneTestcontainerCheck(harnessName string) map[string]any {
+	args := defaultArtifactArgs()
+	args["checks"] = []any{testcontainerCheck(harnessName, "integration surface verified")}
+	return args
+}
+
+func argsWithTwoTestcontainerChecks(h1, h2 string) map[string]any {
+	args := defaultArtifactArgs()
+	args["checks"] = []any{
+		testcontainerCheck(h1, "check for "+h1),
+		testcontainerCheck(h2, "check for "+h2),
+	}
+	return args
+}
+
+func harnesseKeys(m map[string]testharness.ResolvedManifest) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
 }

@@ -2,6 +2,7 @@ package bootstrapworkspace
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -17,8 +18,19 @@ import (
 // Fakes
 // ---------------------------------------------------------------------
 
+// writeRecord captures one WriteFile call.
+type writeRecord struct {
+	taskID  string
+	path    string
+	content string
+}
+
 // fakeSandbox records CreateWorktree + WriteFile calls. Test sets
 // createErr / writeErr to drive failure paths.
+//
+// writeCalls, writeTaskID, writePath, writeContent record the LAST write
+// for backward-compat with existing tests. writes records ALL writes for
+// sidecar projection tests.
 type fakeSandbox struct {
 	mu sync.Mutex
 
@@ -33,6 +45,10 @@ type fakeSandbox struct {
 	writeContent string
 	writeCalls   int
 	writeErr     error
+	// writeErrOnN makes the Nth call (1-indexed) return writeErr.
+	// 0 means writeErr applies to every call (original behaviour).
+	writeErrOnN int
+	writes      []writeRecord
 }
 
 func (f *fakeSandbox) CreateWorktree(_ context.Context, taskID string, opts sandbox.CreateWorktreeOptions) (*sandbox.WorktreeInfo, error) {
@@ -64,7 +80,26 @@ func (f *fakeSandbox) WriteFile(_ context.Context, taskID, path, content string)
 	f.writeTaskID = taskID
 	f.writePath = path
 	f.writeContent = content
-	return f.writeErr
+	f.writes = append(f.writes, writeRecord{taskID: taskID, path: path, content: content})
+	if f.writeErr != nil {
+		if f.writeErrOnN == 0 || f.writeCalls == f.writeErrOnN {
+			return f.writeErr
+		}
+	}
+	return nil
+}
+
+// writeFor returns the content of the write call for the given path, or ""
+// if no such call was made.
+func (f *fakeSandbox) writeFor(path string) string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, w := range f.writes {
+		if w.path == path {
+			return w.content
+		}
+	}
+	return ""
 }
 
 // ---------------------------------------------------------------------
@@ -363,4 +398,254 @@ func TestExecute_WriteFileError(t *testing.T) {
 	if fs.createCalls != 1 {
 		t.Errorf("CreateWorktree should have run once before WriteFile failed, got %d", fs.createCalls)
 	}
+}
+
+// ---------------------------------------------------------------------
+// ADR-036 Phase 1 — sidecar projection tests
+// ---------------------------------------------------------------------
+
+// writeSidecar writes a minimal <slug>.checks.json adjacent to specPath.
+func writeSidecar(t *testing.T, specPath string, checks json.RawMessage, harnesses map[string]any) {
+	t.Helper()
+	sidecarPath := strings.TrimSuffix(specPath, ".md") + ".checks.json"
+	payload := map[string]any{"checks": json.RawMessage(checks)}
+	if harnesses != nil {
+		payload["harnesses"] = harnesses
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal sidecar: %v", err)
+	}
+	if err := os.WriteFile(sidecarPath, data, 0o644); err != nil {
+		t.Fatalf("write sidecar: %v", err)
+	}
+}
+
+// fixtureHarnesses returns a minimal harnesses map for test sidecars.
+func fixtureHarnesses(ids ...string) map[string]any {
+	m := make(map[string]any, len(ids))
+	for _, id := range ids {
+		m[id] = map[string]any{
+			"id":    id,
+			"image": "img-" + id + ":1.0",
+			"ports": map[string]any{"tcp-" + id: 1234},
+		}
+	}
+	return m
+}
+
+// rawChecks returns a minimal JSON array of check objects for sidecar fixtures.
+func rawChecks(n int) json.RawMessage {
+	items := make([]map[string]any, n)
+	for i := range items {
+		items[i] = map[string]any{"target": "check " + string(rune('A'+i)), "runtime": "in-process-unit"}
+	}
+	data, _ := json.Marshal(items)
+	return data
+}
+
+// TestSidecarProjection_ChecksAndHarnesses verifies that when a sidecar is
+// present with both checks and harnesses, both workspace files are written.
+func TestSidecarProjection_ChecksAndHarnesses(t *testing.T) {
+	exec, fs, specPath := newExecutorWithSpec(t, "2026-05-06-test-spec", "# spec")
+	writeSidecar(t, specPath, rawChecks(2), fixtureHarnesses("meshtasticd-3.x"))
+
+	res, err := exec.Execute(context.Background(), defaultCall(map[string]any{"spec_path": specPath}))
+	if err != nil {
+		t.Fatalf("Execute err: %v", err)
+	}
+	if res.Error != "" {
+		t.Fatalf("tool error: %s", res.Error)
+	}
+
+	// SPEC.md + .evidence/checks.json + .test-harness/manifest.json = 3 writes.
+	if fs.writeCalls != 3 {
+		t.Errorf("WriteFile calls = %d, want 3 (SPEC.md + checks + harness manifest)", fs.writeCalls)
+	}
+
+	checksContent := fs.writeFor(ChecksFilename)
+	if checksContent == "" {
+		t.Fatalf("no write for %s", ChecksFilename)
+	}
+	var checksArr []any
+	if err := json.Unmarshal([]byte(checksContent), &checksArr); err != nil {
+		t.Fatalf("unmarshal checks: %v\ncontent=%s", err, checksContent)
+	}
+	if len(checksArr) != 2 {
+		t.Errorf("checks count = %d, want 2", len(checksArr))
+	}
+
+	harnessContent := fs.writeFor(TestHarnessManifestFilename)
+	if harnessContent == "" {
+		t.Fatalf("no write for %s", TestHarnessManifestFilename)
+	}
+	var harnessMap map[string]any
+	if err := json.Unmarshal([]byte(harnessContent), &harnessMap); err != nil {
+		t.Fatalf("unmarshal harness manifest: %v\ncontent=%s", err, harnessContent)
+	}
+	if _, ok := harnessMap["meshtasticd-3.x"]; !ok {
+		t.Errorf("harness manifest missing meshtasticd-3.x; keys=%v", harnessMapKeys(harnessMap))
+	}
+}
+
+// TestSidecarProjection_ChecksOnly verifies that when harnesses is absent/empty,
+// only .evidence/checks.json is written (not .test-harness/manifest.json).
+func TestSidecarProjection_ChecksOnly(t *testing.T) {
+	exec, fs, specPath := newExecutorWithSpec(t, "slug", "# spec")
+	writeSidecar(t, specPath, rawChecks(1), nil)
+
+	res, err := exec.Execute(context.Background(), defaultCall(map[string]any{"spec_path": specPath}))
+	if err != nil {
+		t.Fatalf("Execute err: %v", err)
+	}
+	if res.Error != "" {
+		t.Fatalf("tool error: %s", res.Error)
+	}
+
+	if fs.writeCalls != 2 {
+		t.Errorf("WriteFile calls = %d, want 2 (SPEC.md + checks)", fs.writeCalls)
+	}
+	if got := fs.writeFor(ChecksFilename); got == "" {
+		t.Errorf("expected write to %s; none found", ChecksFilename)
+	}
+	if got := fs.writeFor(TestHarnessManifestFilename); got != "" {
+		t.Errorf("expected NO write to %s; found content: %s", TestHarnessManifestFilename, got)
+	}
+}
+
+// TestSidecarProjection_HarnessesOnly verifies that when checks is absent/empty
+// but harnesses is present, only .test-harness/manifest.json is written.
+func TestSidecarProjection_HarnessesOnly(t *testing.T) {
+	exec, fs, specPath := newExecutorWithSpec(t, "slug", "# spec")
+	// Write sidecar with empty checks array and a harness entry.
+	writeSidecar(t, specPath, json.RawMessage(`[]`), fixtureHarnesses("nats-jetstream"))
+
+	res, err := exec.Execute(context.Background(), defaultCall(map[string]any{"spec_path": specPath}))
+	if err != nil {
+		t.Fatalf("Execute err: %v", err)
+	}
+	if res.Error != "" {
+		t.Fatalf("tool error: %s", res.Error)
+	}
+
+	// SPEC.md + .test-harness/manifest.json = 2 writes (.evidence/checks.json skipped).
+	if fs.writeCalls != 2 {
+		t.Errorf("WriteFile calls = %d, want 2 (SPEC.md + harness manifest)", fs.writeCalls)
+	}
+	if got := fs.writeFor(ChecksFilename); got != "" {
+		t.Errorf("expected NO write to %s with empty checks; found: %s", ChecksFilename, got)
+	}
+	if got := fs.writeFor(TestHarnessManifestFilename); got == "" {
+		t.Errorf("expected write to %s; none found", TestHarnessManifestFilename)
+	}
+}
+
+// TestSidecarProjection_MissingSidecar verifies that a missing sidecar logs
+// at Debug and skips projection; bootstrap succeeds with only SPEC.md written.
+func TestSidecarProjection_MissingSidecar(t *testing.T) {
+	exec, fs, specPath := newExecutorWithSpec(t, "slug", "# spec body")
+	// No sidecar written — specPath has no adjacent .checks.json.
+
+	res, err := exec.Execute(context.Background(), defaultCall(map[string]any{"spec_path": specPath}))
+	if err != nil {
+		t.Fatalf("Execute err: %v", err)
+	}
+	if res.Error != "" {
+		t.Fatalf("tool error: %s", res.Error)
+	}
+
+	if fs.writeCalls != 1 {
+		t.Errorf("WriteFile calls = %d, want 1 (SPEC.md only; no sidecar)", fs.writeCalls)
+	}
+	if got := fs.writeFor(ChecksFilename); got != "" {
+		t.Errorf("expected NO write to %s on missing sidecar; found: %s", ChecksFilename, got)
+	}
+}
+
+// TestSidecarProjection_SidecarReadError verifies that a sidecar read error
+// (chmod 000) is logged at Warn and skipped; bootstrap succeeds.
+func TestSidecarProjection_SidecarReadError(t *testing.T) {
+	exec, fs, specPath := newExecutorWithSpec(t, "slug", "# spec")
+	sidecarPath := strings.TrimSuffix(specPath, ".md") + ".checks.json"
+	// Write a sidecar then make it unreadable.
+	if err := os.WriteFile(sidecarPath, []byte(`{"checks":[]}`), 0o000); err != nil {
+		t.Fatalf("write sidecar: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(sidecarPath, 0o644) })
+
+	res, err := exec.Execute(context.Background(), defaultCall(map[string]any{"spec_path": specPath}))
+	if err != nil {
+		t.Fatalf("Execute err: %v", err)
+	}
+	if res.Error != "" {
+		t.Fatalf("bootstrap should succeed even when sidecar is unreadable; got: %s", res.Error)
+	}
+	// Only SPEC.md written.
+	if fs.writeCalls != 1 {
+		t.Errorf("WriteFile calls = %d, want 1 (sidecar read failed, projection skipped)", fs.writeCalls)
+	}
+}
+
+// TestSidecarProjection_WriteFileFails verifies that a sandbox.WriteFile
+// error on workspace projection is logged and skipped; bootstrap succeeds.
+func TestSidecarProjection_WriteFileFails(t *testing.T) {
+	exec, fs, specPath := newExecutorWithSpec(t, "slug", "# spec")
+	writeSidecar(t, specPath, rawChecks(1), fixtureHarnesses("h1"))
+
+	// The SECOND WriteFile call (checks file) fails; third call (harness manifest)
+	// should still be attempted.
+	fs.writeErr = errors.New("sandbox: volume full")
+	fs.writeErrOnN = 2
+
+	res, err := exec.Execute(context.Background(), defaultCall(map[string]any{"spec_path": specPath}))
+	if err != nil {
+		t.Fatalf("Execute err: %v", err)
+	}
+	if res.Error != "" {
+		t.Fatalf("bootstrap should succeed even when workspace write fails; got: %s", res.Error)
+	}
+	// SPEC.md write (call 1) succeeds; checks write (call 2) fails; harness write (call 3) proceeds.
+	if fs.writeCalls < 2 {
+		t.Errorf("WriteFile calls = %d, want >= 2", fs.writeCalls)
+	}
+}
+
+// TestSidecarProjection_IdempotentRerun verifies that re-running bootstrap
+// with the same sidecar overwrites workspace files with identical content.
+func TestSidecarProjection_IdempotentRerun(t *testing.T) {
+	exec, fs, specPath := newExecutorWithSpec(t, "slug", "# spec")
+	writeSidecar(t, specPath, rawChecks(1), fixtureHarnesses("idem-h"))
+
+	for i := range 2 {
+		res, err := exec.Execute(context.Background(), defaultCall(map[string]any{"spec_path": specPath}))
+		if err != nil {
+			t.Fatalf("run %d Execute err: %v", i, err)
+		}
+		if res.Error != "" {
+			t.Fatalf("run %d tool error: %s", i, res.Error)
+		}
+	}
+	// 2 runs × 3 writes each = 6 total.
+	if fs.writeCalls != 6 {
+		t.Errorf("WriteFile calls = %d, want 6 (2 runs × 3 writes)", fs.writeCalls)
+	}
+}
+
+// TestSidecarProjection_ExportedConstantPaths pins the exported constant paths
+// used by contract tests and downstream slices.
+func TestSidecarProjection_ExportedConstantPaths(t *testing.T) {
+	if ChecksFilename != ".evidence/checks.json" {
+		t.Errorf("ChecksFilename = %q, want .evidence/checks.json", ChecksFilename)
+	}
+	if TestHarnessManifestFilename != ".test-harness/manifest.json" {
+		t.Errorf("TestHarnessManifestFilename = %q, want .test-harness/manifest.json", TestHarnessManifestFilename)
+	}
+}
+
+func harnessMapKeys(m map[string]any) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
 }
