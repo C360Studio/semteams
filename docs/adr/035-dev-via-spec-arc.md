@@ -218,6 +218,16 @@ When R3.5 lands:
 R3.5 ships as configs + rule additions; no framework changes. The
 coordinator role already exists.
 
+**ADR-037 note (2026-05-06):** R3.5 coordinator-as-meta-reviewer is
+ALSO the v2 home for `chain_failure_authority: coordinator`. ADR-037
+§D3 reserves the coordinator authority value; v2 lifts the restriction
+when the v1 operator-only path has been exercised on real smokes for
+≥4 weeks. The `decide(action="needs_clarification", ...)` terminal
+from R3.5 and the `chain_failure_authority: coordinator` path from
+ADR-037 §D3 are two sides of the same primitive — explicit role-emitted
+ambiguity (R3.5) vs implicit infrastructure failure (ADR-037). The v2
+implementation unifies them. See [ADR-037](037-chain-failure-handling.md).
+
 ## Migration posture
 
 - **When upstream ships `write_artifact`** (ADR-028 follow-up):

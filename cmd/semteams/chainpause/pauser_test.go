@@ -1,0 +1,355 @@
+package chainpause
+
+import (
+	"context"
+	"errors"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/c360studio/semstreams/agentic"
+	"github.com/c360studio/semstreams/message"
+	"github.com/c360studio/semstreams/types"
+)
+
+// recordingPublisher records AddTriple calls for assertion.
+type recordingPublisher struct {
+	mu      sync.Mutex
+	triples []message.Triple
+	err     error // if non-nil, returned on every call
+}
+
+func (r *recordingPublisher) AddTriple(_ context.Context, t message.Triple) error {
+	if r.err != nil {
+		return r.err
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.triples = append(r.triples, t)
+	return nil
+}
+
+func (r *recordingPublisher) byPredicate(pred string) (message.Triple, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, t := range r.triples {
+		if t.Predicate == pred {
+			return t, true
+		}
+	}
+	return message.Triple{}, false
+}
+
+func testPlatform() types.PlatformMeta {
+	return types.PlatformMeta{Org: "c360", Platform: "test"}
+}
+
+func TestPauser_HandleFailed_ManagedRoleWritesTriplesD5(t *testing.T) {
+	pub := &recordingPublisher{}
+	p := NewPauser(pub, testPlatform())
+
+	ev := &agentic.LoopFailedEvent{
+		LoopID:  "abc123",
+		TaskID:  "task-1",
+		Outcome: agentic.OutcomeFailed,
+		Role:    "dev-via-spec-reviewer",
+		Error:   "Anthropic API: overloaded",
+	}
+
+	result, err := p.HandleFailed(context.Background(), ev)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.FailedLoopID != "abc123" {
+		t.Errorf("FailedLoopID: got %q, want %q", result.FailedLoopID, "abc123")
+	}
+	if result.Cause != "api_overloaded" {
+		t.Errorf("Cause: got %q, want api_overloaded", result.Cause)
+	}
+	if result.Classification != "anthropic_overloaded_529" {
+		t.Errorf("Classification: got %q, want anthropic_overloaded_529", result.Classification)
+	}
+
+	// Verify each §D5 predicate is written.
+	predicates := []string{
+		"chain.paused.cause",
+		"chain.paused.classification",
+		"chain.paused.role",
+		"chain.paused.original_model",
+		"chain.paused.error_shape",
+		"chain.paused.prior_attempts",
+		"chain.paused.failed_loop_id",
+		"chain.paused.spawn_loop_id",
+		"chain.paused.observed_at",
+	}
+	for _, pred := range predicates {
+		if _, ok := pub.byPredicate(pred); !ok {
+			t.Errorf("expected triple with predicate %q to be written", pred)
+		}
+	}
+
+	// Source must be chainpause (identifies the writer for audit trail).
+	if t2, ok := pub.byPredicate("chain.paused.cause"); ok {
+		if t2.Source != "chainpause" {
+			t.Errorf("Source: got %q, want chainpause", t2.Source)
+		}
+	}
+}
+
+func TestPauser_HandleFailed_UnmanagedRoleSkipped(t *testing.T) {
+	pub := &recordingPublisher{}
+	p := NewPauser(pub, testPlatform())
+
+	ev := &agentic.LoopFailedEvent{
+		LoopID:  "xyz",
+		TaskID:  "task-2",
+		Outcome: agentic.OutcomeFailed,
+		Role:    "general", // not a managed arc role
+		Error:   "some error",
+	}
+
+	result, err := p.HandleFailed(context.Background(), ev)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.FailedLoopID != "" {
+		t.Errorf("expected empty result for unmanaged role, got %+v", result)
+	}
+	if len(pub.triples) != 0 {
+		t.Errorf("expected no triples for unmanaged role, got %d", len(pub.triples))
+	}
+}
+
+var classifyTests = []struct {
+	name         string
+	errStr       string
+	wantCause    string
+	wantClassify string
+}{
+	{
+		name:         "anthropic overloaded",
+		errStr:       "Anthropic API returned 529 Overloaded",
+		wantCause:    "api_overloaded",
+		wantClassify: "anthropic_overloaded_529",
+	},
+	{
+		name:         "timeout",
+		errStr:       "context deadline exceeded",
+		wantCause:    "api_timeout",
+		wantClassify: "llm_call_timeout",
+	},
+	{
+		name:         "timeout variant",
+		errStr:       "request timeout after 180s",
+		wantCause:    "api_timeout",
+		wantClassify: "llm_call_timeout",
+	},
+	{
+		name:         "persona load failure",
+		errStr:       "persona load failed: bucket not found",
+		wantCause:    "config_load_failure",
+		wantClassify: "persona_load_error",
+	},
+	{
+		name:         "config load failure",
+		errStr:       "invalid config: missing required field",
+		wantCause:    "config_load_failure",
+		wantClassify: "config_load_error",
+	},
+	{
+		name:         "executor panic",
+		errStr:       "executor panic: nil pointer dereference",
+		wantCause:    "tool_executor_panic",
+		wantClassify: "tool_executor_panic",
+	},
+	{
+		name:         "max iterations",
+		errStr:       "maximum iterations reached",
+		wantCause:    "max_iterations",
+		wantClassify: "max_iterations_exhausted",
+	},
+	{
+		name:         "unknown error",
+		errStr:       "something unexpected happened",
+		wantCause:    "unknown",
+		wantClassify: "unknown",
+	},
+	{
+		name:         "empty error",
+		errStr:       "",
+		wantCause:    "unknown",
+		wantClassify: "unknown",
+	},
+}
+
+func TestClassifyError(t *testing.T) {
+	for _, tc := range classifyTests {
+		t.Run(tc.name, func(t *testing.T) {
+			cause, classification := classifyError(tc.errStr)
+			if cause != tc.wantCause {
+				t.Errorf("cause: got %q, want %q", cause, tc.wantCause)
+			}
+			if classification != tc.wantClassify {
+				t.Errorf("classification: got %q, want %q", classification, tc.wantClassify)
+			}
+		})
+	}
+}
+
+func TestSanitiseErrorShape_LengthBound(t *testing.T) {
+	long := make([]byte, 512)
+	for i := range long {
+		long[i] = 'a'
+	}
+	result := sanitiseErrorShape(string(long))
+	// 256 chars + ellipsis
+	if len(result) > 260 {
+		t.Errorf("sanitised error shape too long: %d bytes", len(result))
+	}
+}
+
+func TestSanitiseErrorShape_ControlCharsStripped(t *testing.T) {
+	input := "error\x00with\x01control\x7fchars"
+	result := sanitiseErrorShape(input)
+	// No NUL or SOH bytes — sanitiseErrorShape must strip classic control chars.
+	for i := 0; i < len(result); i++ {
+		if result[i] == 0x00 || result[i] == 0x01 {
+			t.Errorf("control char found at offset %d in sanitised string: %q", i, result)
+		}
+	}
+}
+
+func TestPauser_HandleFailed_PartialWriteReturnsFirstErr(t *testing.T) {
+	pub := &recordingPublisher{err: errors.New("NATS publish failed")}
+	p := NewPauser(pub, testPlatform())
+
+	ev := &agentic.LoopFailedEvent{
+		LoopID:  "loop-err",
+		TaskID:  "task-3",
+		Outcome: agentic.OutcomeFailed,
+		Role:    "researcher",
+		Error:   "some error",
+	}
+
+	result, err := p.HandleFailed(context.Background(), ev)
+	if err == nil {
+		t.Fatal("expected error from publisher, got nil")
+	}
+	// Result should still be populated — we attempted the write.
+	if result.FailedLoopID != "loop-err" {
+		t.Errorf("FailedLoopID: got %q, want loop-err", result.FailedLoopID)
+	}
+}
+
+func TestPauser_HandleFailed_ObservedAtIsRFC3339(t *testing.T) {
+	pub := &recordingPublisher{}
+	p := NewPauser(pub, testPlatform())
+
+	ev := &agentic.LoopFailedEvent{
+		LoopID:  "loop-ts",
+		TaskID:  "task-4",
+		Outcome: agentic.OutcomeFailed,
+		Role:    "dev-via-spec-planner",
+		Error:   "timeout",
+	}
+
+	_, err := p.HandleFailed(context.Background(), ev)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	t2, ok := pub.byPredicate("chain.paused.observed_at")
+	if !ok {
+		t.Fatal("chain.paused.observed_at triple missing")
+	}
+	ts, ok := t2.Object.(string)
+	if !ok {
+		t.Fatalf("observed_at Object not string: %T", t2.Object)
+	}
+	if _, parseErr := time.Parse(time.RFC3339, ts); parseErr != nil {
+		t.Errorf("observed_at is not valid RFC3339: %q (%v)", ts, parseErr)
+	}
+}
+
+// TestPauser_HandleFailed_CapturesOriginalModel verifies that chain.paused.original_model
+// is written from LoopFailedEvent.Model so the retry path can re-spawn with the
+// correct model without a live graph query (ADR-037 §D7).
+func TestPauser_HandleFailed_CapturesOriginalModel(t *testing.T) {
+	pub := &recordingPublisher{}
+	p := NewPauser(pub, testPlatform())
+
+	ev := &agentic.LoopFailedEvent{
+		LoopID:  "loop-model",
+		TaskID:  "task-model-1",
+		Outcome: agentic.OutcomeFailed,
+		Role:    "dev-via-spec-planner",
+		Model:   "claude-opus-4-5",
+		Error:   "overloaded",
+	}
+
+	if _, err := p.HandleFailed(context.Background(), ev); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	t2, ok := pub.byPredicate("chain.paused.original_model")
+	if !ok {
+		t.Fatal("chain.paused.original_model triple missing")
+	}
+	obj, ok := t2.Object.(string)
+	if !ok {
+		t.Fatalf("chain.paused.original_model Object not string: %T", t2.Object)
+	}
+	if obj != "claude-opus-4-5" {
+		t.Errorf("chain.paused.original_model = %q, want claude-opus-4-5", obj)
+	}
+}
+
+func TestIsManagedRole(t *testing.T) {
+	managed := []string{
+		"dev-via-spec-planner",
+		"dev-via-spec-reviewer",
+		"dev-via-spec-challenger",
+		"dev-via-spec-architect",
+		"dev-via-spec-builder",
+		"dev-via-spec-qa-reviewer",
+		"researcher",
+		"researcher-with-source-acquisition",
+		"research-reviewer",
+		"dispatch",
+	}
+	for _, role := range managed {
+		if !isManagedRole(role) {
+			t.Errorf("expected %q to be managed, but isManagedRole returned false", role)
+		}
+	}
+
+	unmanaged := []string{"general", "ops-analyst", "coordinator", "planner", ""}
+	for _, role := range unmanaged {
+		if isManagedRole(role) {
+			t.Errorf("expected %q to be unmanaged, but isManagedRole returned true", role)
+		}
+	}
+}
+
+// Ensure each managed role in isManagedRole matches the rule's "in" condition list.
+// A mismatch between the two would cause the rule to fire but the subscriber to skip.
+func TestManagedRoleListMirrorRule(t *testing.T) {
+	ruleRoles := []string{
+		"dev-via-spec-planner",
+		"dev-via-spec-reviewer",
+		"dev-via-spec-challenger",
+		"dev-via-spec-architect",
+		"dev-via-spec-builder",
+		"dev-via-spec-qa-reviewer",
+		"researcher",
+		"researcher-with-source-acquisition",
+		"research-reviewer",
+		"dispatch",
+	}
+	for _, role := range ruleRoles {
+		if !isManagedRole(role) {
+			t.Errorf("rule role %q not in isManagedRole — rule fires but subscriber skips; update isManagedRole", role)
+		}
+	}
+}

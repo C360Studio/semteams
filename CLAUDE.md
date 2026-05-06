@@ -158,6 +158,12 @@ wirings:
 When a journey breaks because a tool executor isn't firing or persona
 fragments aren't grounding, suspect drift here first.
 
+Product-local subscribers (not tools, not rules) also live here:
+`evidence.NATSSubscriber` (agent.complete.> → evidence triples) and
+`chainpause.Subscriber` (agent.failed.> → §D5 chain.paused triples).
+Both follow the same start-after-tools boot order enforced by
+`setupToolsAndPreprocessor`.
+
 ### Component Instance vs Factory
 
 Configs use instance names `teams-dispatch` and `teams-loop` (so HTTP
