@@ -1,13 +1,28 @@
-# ADR-033: Harness-Anchored Verification and Coordinator-as-Decision-Authority
+# ADR-033: Coordinator-as-Decision-Authority and Multi-Arc Dependency
 
 ## Status
 
 **Proposed — 2026-05-03.** Drafted following the R3.6.2.g real-LLM
-smoke #6 quality assessment, which surfaced two coupled findings:
-the dev-via-spec chain has no structural way to anchor "real" against
-real systems, and the coordinator role is being undersold as an
-intent classifier when it is actually the platform's decision
-authority. This ADR addresses both as one architectural shape.
+smoke #6 quality assessment.
+
+**Slimmed 2026-05-06.** Test-harness machinery (§1 "Harnesses are a
+curated platform asset", §2 "Smoke contracts are runtime-executed",
+plus R3.7.1 and R3.7.2 phasing sections, the "Anti-Goodhart guards
+on the smoke contract" section, and the 2026-05-04 addenda about
+catalog primitive + schema relaxation) moved to
+[ADR-036](036-test-harness-lifecycle.md). ADR-033 retains the
+coordinator-as-decision-authority decision (§3), the
+`harness-via-spec` chain variant (§4), multi-arc dependency
+management (§5), and intent-stability + inter-arc escalation (§6).
+Title narrowed accordingly.
+
+Sections below still reference §1/§2 in places; the prose-cleanup
+pass to remove dangling cross-refs is a follow-up — the substance
+of every kept section stands on its own.
+
+The strategic pivot driving the split is recorded in memory at
+`project_strategic_pivot_2026_05_06.md` and ADR-036 names the
+test-harness lifecycle decision the post-builder slice depends on.
 
 ## Context
 
