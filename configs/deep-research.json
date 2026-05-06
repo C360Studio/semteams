@@ -223,6 +223,9 @@
         },
         "enable_graph_integration": true,
         "graph_event_subject_prefix": "sensor.processed",
+        "rules_files": [
+          "/app/configs/rules/chain/00-loop-failed-pause.json"
+        ],
         "inline_rules": [
           {
             "id": "temperature-anomaly-agent",

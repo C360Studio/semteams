@@ -32,6 +32,7 @@ import (
 	rulepkg "github.com/c360studio/semstreams/processor/rule"
 	"github.com/c360studio/semstreams/service"
 	"github.com/c360studio/semstreams/types"
+	"github.com/c360studio/semteams/cmd/semteams/chainpause"
 	"github.com/c360studio/semteams/cmd/semteams/evidence"
 	"github.com/c360studio/semteams/cmd/semteams/testharness"
 )
@@ -153,11 +154,11 @@ func run() error {
 	// testHarnessMgr feeds the /harnesses HTTP middleware (R3.7.1.f).
 	personaMgr, testHarnessMgr := loadPlatformAssets(ctx, natsClient, cliCfg, slog.Default())
 
-	// 9c–9e. Build + register tool executors and start the evidence
-	// preprocessor (ADR-036 §Phase 2). Extracted to keep run() under
-	// revive's function-length threshold while keeping the ordering
-	// invariant: tools before svcDeps, preprocessor after tools.
-	toolRegistry, err := setupToolsAndPreprocessor(ctx, cfg, natsClient, platform, configManager, componentRegistry, personaMgr, testHarnessMgr, cliCfg.WorkspaceRoot, slog.Default())
+	// 9c–9f. Build + register tool executors, start the evidence preprocessor
+	// (ADR-036 §Phase 2), and start the chain-pause subscriber (ADR-037 v1).
+	// Extracted to keep run() under revive's function-length threshold while
+	// keeping the ordering invariant: tools before svcDeps, preprocessors after.
+	toolRegistry, chainPauseHTTP, err := setupToolsAndPreprocessor(ctx, cfg, natsClient, platform, configManager, componentRegistry, personaMgr, testHarnessMgr, cliCfg.WorkspaceRoot, slog.Default())
 	if err != nil {
 		return err
 	}
@@ -185,17 +186,20 @@ func run() error {
 	// runWithSignalHandling works. Moving it after StartAll silently
 	// drops the chain — the framework logs a warning, but the binary
 	// boots green and X-User-Id is ignored.
-	manager.UseHTTPMiddleware(productMiddleware(testHarnessMgr, slog.Default())...)
+	manager.UseHTTPMiddleware(productMiddleware(testHarnessMgr, chainPauseHTTP, slog.Default())...)
 
 	// 13. Run application with signal handling
 	return runWithSignalHandling(ctx, manager, cliCfg.ShutdownTimeout)
 }
 
 // setupToolsAndPreprocessor groups the ordered tool-registry + evidence-
-// preprocessor wiring so run()'s statement count stays under revive's
-// function-length limit. Ordering within this function is load-bearing:
-// tools must be registered before svcDeps is built; the preprocessor
-// subscribes after tools so its triple-publisher is live.
+// preprocessor + chain-pause subscriber wiring so run()'s statement count
+// stays under revive's function-length limit. Ordering within this function is
+// load-bearing: tools must be registered before svcDeps is built; the
+// preprocessors subscribe after tools so their triple-publishers are live.
+//
+// Returns the tool registry and the chain-pause HTTP handler. The HTTP handler
+// is wired into productMiddleware by run() so it is registered before StartAll.
 func setupToolsAndPreprocessor(
 	ctx context.Context,
 	cfg *config.Config,
@@ -207,7 +211,7 @@ func setupToolsAndPreprocessor(
 	testHarnessMgr *testharness.Manager,
 	workspaceRoot string,
 	logger *slog.Logger,
-) (*agentictools.ExecutorRegistry, error) {
+) (*agentictools.ExecutorRegistry, *chainpause.HTTPHandler, error) {
 	// 9c. First-party tool executors. Pattern-B tools (create_rule, etc.)
 	// each need their matching manager; nil manager → registerX skips.
 	toolRegistry := agentictools.NewExecutorRegistry()
@@ -222,7 +226,7 @@ func setupToolsAndPreprocessor(
 		ComponentRegistry:   componentRegistry,
 		LoopsBucket:         extractLoopsBucket(cfg),
 	}); err != nil {
-		return nil, fmt.Errorf("register builtin tools: %w", err)
+		return nil, nil, fmt.Errorf("register builtin tools: %w", err)
 	}
 
 	// 9d. Product-shell-local tool executors (add_source_repo,
@@ -230,7 +234,7 @@ func setupToolsAndPreprocessor(
 	// bootstrap_workspace). Each tool's registration comment lives in
 	// registerProductTools; see ADR-029 + tools/README.md for discipline.
 	if err := registerProductTools(toolRegistry, natsClient, platform, testHarnessMgr, logger); err != nil {
-		return nil, fmt.Errorf("register product tools: %w", err)
+		return nil, nil, fmt.Errorf("register product tools: %w", err)
 	}
 
 	// 9e. Evidence preprocessor (ADR-036 §Phase 2, R3.7.2.k′-bis).
@@ -238,9 +242,45 @@ func setupToolsAndPreprocessor(
 	// evidence.summary_ready on dev-via-spec-builder loop entities.
 	// Disabled when workspaceRoot is empty — non-sandbox deployments.
 	if err := startEvidencePreprocessor(ctx, natsClient, platform, workspaceRoot, logger); err != nil {
-		return nil, fmt.Errorf("start evidence preprocessor: %w", err)
+		return nil, nil, fmt.Errorf("start evidence preprocessor: %w", err)
 	}
-	return toolRegistry, nil
+
+	// 9f. Chain-pause subscriber + HTTP handler (ADR-037 v1).
+	// Subscribes to agent.failed.> and stamps §D5 audit triples when a
+	// managed-arc loop fails. Returns the HTTP handler for POST
+	// /teams-loop/chain-pause/decide — mounted in productMiddleware.
+	chainPauseHTTP, err := startChainPauseSubscriber(ctx, natsClient, platform, logger)
+	if err != nil {
+		return nil, nil, fmt.Errorf("start chain-pause subscriber: %w", err)
+	}
+
+	return toolRegistry, chainPauseHTTP, nil
+}
+
+// startChainPauseSubscriber builds the chain-pause pauser + decision handler,
+// starts the NATS subscriber on agent.failed.>, and returns the HTTP handler
+// for POST /teams-loop/chain-pause/decide. ADR-037 v1 — operator authority only.
+//
+// TODO(adr-037-d3): When chain_failure_authority config field lands, validate
+// at config-load that only "operator" is accepted in v1. "coordinator" / "auto"
+// must reject with explicit migration message.
+func startChainPauseSubscriber(ctx context.Context, natsClient *natsclient.Client, platform types.PlatformMeta, logger *slog.Logger) (*chainpause.HTTPHandler, error) {
+	triplePublisher := agentictools.NewNATSTriplePublisher(natsClient)
+	taskPublisher := chainpause.NewNATSTaskPublisher(natsClient)
+	pauseDataReader := chainpause.NewNATSPauseDataReader(natsClient)
+
+	pauser := chainpause.NewPauser(triplePublisher, platform)
+	sub := chainpause.NewSubscriber(pauser, logger)
+	if err := sub.Start(ctx, natsClient); err != nil {
+		return nil, fmt.Errorf("subscribe to agent.failed events: %w", err)
+	}
+	logger.Info("chain-pause subscriber started",
+		slog.String("org", platform.Org),
+		slog.String("platform", platform.Platform))
+
+	decisionHandler := chainpause.NewDecisionHandler(triplePublisher, taskPublisher, pauseDataReader, platform, logger)
+	httpHandler := chainpause.NewHTTPHandler(decisionHandler, logger)
+	return httpHandler, nil
 }
 
 // startEvidencePreprocessor builds the evidence registry with builtins,

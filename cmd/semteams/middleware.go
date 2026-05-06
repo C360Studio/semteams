@@ -7,6 +7,7 @@ import (
 
 	agenticdispatch "github.com/c360studio/semstreams/processor/agentic-dispatch"
 	"github.com/c360studio/semstreams/service"
+	"github.com/c360studio/semteams/cmd/semteams/chainpause"
 	"github.com/c360studio/semteams/cmd/semteams/testharness"
 )
 
@@ -82,6 +83,11 @@ func sanitiseIdentity(raw string) string {
 //     the operator/UI catalog read API. Pass-through for all other
 //     paths. Nil-safe: a deployment without a test_harness manager (boot-
 //     time KV failure) skips the intercept transparently.
+//  3. chain-pause HTTP middleware — intercepts POST /teams-loop/chain-pause/decide
+//     and dispatches to the operator decision handler (ADR-037 v1). Nil-safe:
+//     passes through on nil handler. Must run after xUserIDIdentityMiddleware
+//     so the X-User-Id header is already sanitised by the time handleDecide
+//     reads it.
 //
 // When extending:
 //
@@ -94,9 +100,10 @@ func sanitiseIdentity(raw string) string {
 //     and have it overwrite the X-User-Id header (or call
 //     agenticdispatch.WithIdentity directly). xUserIDIdentityMiddleware
 //     trusts whatever header reaches it.
-func productMiddleware(testHarnessMgr *testharness.Manager, logger *slog.Logger) []service.HTTPMiddleware {
+func productMiddleware(testHarnessMgr *testharness.Manager, chainPauseHTTP *chainpause.HTTPHandler, logger *slog.Logger) []service.HTTPMiddleware {
 	return []service.HTTPMiddleware{
 		xUserIDIdentityMiddleware,
 		testharness.HTTPMiddleware(testHarnessMgr, logger),
+		chainpause.HTTPMiddleware(chainPauseHTTP, logger),
 	}
 }
