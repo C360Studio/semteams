@@ -36,6 +36,9 @@
       "properties": {
         "prior_loop_id": "$entity.instance"
       },
+      "related_loops": {
+        "researcher": "$entity.triple.lineage.researcher"
+      },
       "prompt": "The dev-via-spec-builder has terminated with builder_decide. Builder loop id: $entity.instance. Verdict: $entity.triple.coordinator.next_action. Reason: $entity.triple.coordinator.decision_reason.\n\nIteration 1 — call read_loop_result on $entity.instance to inspect the builder's structured terminal (action, tests_run, tests_passed, tests_failed, artifact_summary OR failure_summary + retry_hint).\n\nEvidence summary (gate-rendered from architect's checks[]):\n\n```\n$entity.triple.evidence.summary\n```\n\nIteration 2 — emit decide(action=accept|reject|needs_clarification, reason=<concrete>, blocking_question=<if needs_clarification>) per your 10-evaluation-contract.md three-rule grading."
     }
   ],

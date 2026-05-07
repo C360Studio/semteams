@@ -30,6 +30,9 @@
       "properties": {
         "prior_loop_id": "$entity.instance"
       },
+      "related_loops": {
+        "researcher": "$entity.triple.lineage.researcher"
+      },
       "prompt": "The dev-via-spec planner emitted a plan via decide(action=planned). Planner loop id: $entity.instance (passed as prior_loop_id in your task properties). Call read_loop_result with that loop id to read the plan content (the decide reason field). Apply your completeness checklist per `20-completeness-checklist.md`. If every item is present and well-formed, call decide(action=approved). Otherwise call decide(action=insufficient, reason=\"<bullet list of gaps>\")."
     }
   ],

@@ -33,6 +33,9 @@
         "prior_loop_id": "$entity.instance",
         "retry": true
       },
+      "related_loops": {
+        "researcher": "$entity.triple.lineage.researcher"
+      },
       "prompt": "The dev-via-spec reviewer rejected the prior plan. Reviewer loop id: $entity.instance. Call read_loop_result with that loop id to read the gap list (the reviewer's decide reason field), then revise the plan per your `20-revision-rules.md`. Keep goal and context unchanged unless the reviewer specifically flagged them. Re-emit decide(action=planned, reason=\"<revised plan>\")."
     }
   ],

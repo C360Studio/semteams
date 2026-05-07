@@ -10,12 +10,23 @@ ID (`prior_loop_id` in your task properties). The challenger's
 actor citations, integration references, the epic decomposition,
 and the chain consensus that supports it.
 
-You may also call `read_loop_result` on the research artifact's
-loop (the chain root) if you need a particular actor or
-integration_point's exact wording for grounding fidelity. The
-prior planner / reviewer loops are reachable via the chain too,
-but the challenger's accept reason is your primary source — it is
-the most-curated form of what the chain agreed on.
+**Research artifact loop ID is in your prompt body.** Your spawn
+rule substitutes the chain's `lineage.researcher` reference into
+your prompt as a literal loop_id (the same UUID is also threaded
+through `task.Metadata["agent.related_loops"]["researcher"]`, but
+the prompt body is your reliable read path). Call
+`read_loop_result` on that loop_id to read the research
+artifact — its `harness` field names the catalog `test_harness`
+reference you must cite in any check whose runtime is
+`process-local-testcontainer`. Without the research artifact in
+hand, you have no basis for selecting a harness; emit
+`decide(needs_clarification, reason="research artifact loop_id
+missing from prompt")` rather than inventing one.
+
+The prior planner / reviewer / challenger loops are also reachable
+via `read_loop_result`, but the challenger's accept reason
+(your prior_loop_id) is your primary source — it is the
+most-curated form of what the chain agreed on.
 
 ## Step 2 — call `emit_dev_via_spec_artifact`
 
