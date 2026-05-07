@@ -16,10 +16,12 @@
 //   - Stamper: subscribes to agent.complete.dispatch and mints
 //     chain.dispatched_at on the chain entity at chain start. Idempotent
 //     re-writes are safe (chain_id is stable per chain).
+//     TODO(adr-038-phase-1b): not shipped yet.
 //
 //   - Per-arc milestone subscribers (research, …) — TBD per ADR-038
 //     phasing; each milestone picks up its predicate cluster and writes
 //     them onto the chain entity via the Resolver.
+//     TODO(adr-038-phase-2-and-later).
 //
 // All chain-triple writes go through this package's helpers rather than
 // rule-action add_triple steps. Rationale: chain milestones are

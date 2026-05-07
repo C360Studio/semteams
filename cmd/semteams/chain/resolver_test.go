@@ -3,7 +3,9 @@ package chain
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/c360studio/semstreams/agentic"
@@ -12,14 +14,16 @@ import (
 
 // fakeParentReader maps loop_id → parent entity ID for deterministic
 // ancestry tests. An empty parent (or absent key) means chain root.
+//
+// calls is atomic so tests using t.Parallel() in the future stay race-clean.
 type fakeParentReader struct {
 	parents map[string]string // loop_id -> parent entity id ("" if root)
 	err     error             // if non-nil, returned on every call
-	calls   int               // observed read count for assertion
+	calls   atomic.Int64      // observed read count for assertion
 }
 
 func (f *fakeParentReader) ReadParent(_ context.Context, loopID string) (string, error) {
-	f.calls++
+	f.calls.Add(1)
 	if f.err != nil {
 		return "", f.err
 	}
@@ -67,8 +71,8 @@ func TestResolver_ChainID_OneHop(t *testing.T) {
 	if chainID != "dispatch_abc" {
 		t.Errorf("ChainID: got %q, want %q", chainID, "dispatch_abc")
 	}
-	if reader.calls != 2 {
-		t.Errorf("expected 2 reads (one per hop), got %d", reader.calls)
+	if got := reader.calls.Load(); got != 2 {
+		t.Errorf("expected 2 reads (one per hop), got %d", got)
 	}
 }
 
@@ -132,9 +136,9 @@ func TestResolver_ChainID_RejectsMalformedParentEntity(t *testing.T) {
 	}
 }
 
-// TestResolver_ChainID_HopBudget: a cycle (or runaway chain) is bounded.
-// Don't loop forever on a malformed graph.
-func TestResolver_ChainID_HopBudget(t *testing.T) {
+// TestResolver_ChainID_HopBudget_CycleDetected: a cycle (or runaway chain)
+// is bounded. Don't loop forever on a malformed graph.
+func TestResolver_ChainID_HopBudget_CycleDetected(t *testing.T) {
 	// Build a cycle: A → B → A.
 	parents := map[string]string{
 		"loop_a": loopEntityID(t, "loop_b"),
@@ -147,6 +151,60 @@ func TestResolver_ChainID_HopBudget(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "exceeded") {
 		t.Errorf("error should mention hop ceiling exceeded; got %v", err)
+	}
+}
+
+// TestResolver_ChainID_LongLegalChainPasses: a chain just under the hop
+// ceiling resolves successfully. Pins the constant explicitly: 50 hops
+// (well above the 5-15 we see in real arcs, well below the 64 ceiling).
+func TestResolver_ChainID_LongLegalChainPasses(t *testing.T) {
+	const depth = 50
+	parents := map[string]string{}
+	for i := 1; i <= depth; i++ {
+		parents[fmt.Sprintf("loop_%d", i)] = loopEntityID(t, fmt.Sprintf("loop_%d", i-1))
+	}
+	// loop_0 has no parent → chain root.
+	r := NewResolver(&fakeParentReader{parents: parents}, testPlatform())
+
+	chainID, err := r.ChainID(context.Background(), fmt.Sprintf("loop_%d", depth))
+	if err != nil {
+		t.Fatalf("expected legal %d-hop chain to resolve; got error: %v", depth, err)
+	}
+	if chainID != "loop_0" {
+		t.Errorf("ChainID at depth %d: got %q, want loop_0", depth, chainID)
+	}
+}
+
+// TestResolver_ChainID_OverBudgetFails: a legal chain exactly past the
+// ceiling fails with the budget-exceeded error. Distinguishes "budget
+// hit by long-but-legal chain" from "budget hit by cycle" — same error
+// shape today, but a future change to widen the ceiling can rely on this
+// test to verify the new constant.
+func TestResolver_ChainID_OverBudgetFails(t *testing.T) {
+	const depth = maxAncestryHops + 1
+	parents := map[string]string{}
+	for i := 1; i <= depth; i++ {
+		parents[fmt.Sprintf("loop_%d", i)] = loopEntityID(t, fmt.Sprintf("loop_%d", i-1))
+	}
+	r := NewResolver(&fakeParentReader{parents: parents}, testPlatform())
+
+	_, err := r.ChainID(context.Background(), fmt.Sprintf("loop_%d", depth))
+	if err == nil {
+		t.Fatalf("expected error for chain of depth %d (ceiling %d), got nil", depth, maxAncestryHops)
+	}
+	if !strings.Contains(err.Error(), "exceeded") {
+		t.Errorf("error should mention hop ceiling exceeded; got %v", err)
+	}
+}
+
+// TestResolver_ChainID_RejectsDottedLoopID: a loop_id with a dot in it
+// would panic the upstream agentic.LoopExecutionEntityID constructor.
+// validateLoopID rejects it at the entry seam so subscriber goroutines
+// see a clean error instead of a panic.
+func TestResolver_ChainID_RejectsDottedLoopID(t *testing.T) {
+	r := NewResolver(&fakeParentReader{}, testPlatform())
+	if _, err := r.ChainID(context.Background(), "loop.with.dots"); err == nil {
+		t.Fatal("expected error on dotted loopID, got nil")
 	}
 }
 

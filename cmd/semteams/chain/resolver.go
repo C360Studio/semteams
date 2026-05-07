@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/c360studio/semstreams/agentic"
@@ -38,16 +39,25 @@ type ParentReader interface {
 // Resolver derives chain identity for a given loop by walking
 // agent.loop.parent triples back to the chain root.
 //
-// agent.loop.parent is stamped by upstream graph_writer at every loop's
-// completion (processor/agentic-loop/graph_writer.go buildLoopCompletionTriples
-// — predicate agent.loop.parent, object = parent's 6-part entity ID).
-// In rule-fanned chains every parent has completed before its child is
-// spawned (rules fire on outcome events), so by the time a child loop
-// completes the ancestry chain is fully stamped and one-hop-walkable.
+// agent.loop.parent is stamped by upstream graph_writer ONLY in the
+// success path, via buildLoopCompletionTriples (processor/agentic-loop/
+// graph_writer.go:419-422 — predicate agent.loop.parent, object =
+// parent's 6-part entity ID). In rule-fanned chains every parent has
+// completed before its child is spawned (rules fire on outcome events),
+// so by the time a child completes the ancestry chain is fully stamped
+// and one-hop-walkable.
 //
-// For loops that fail (LoopFailedEvent path), graph_writer's
-// buildLoopFailureTriples ALSO stamps agent.loop.parent (semstreams
-// beta.54), so chainpause-side resolves work the same way.
+// Failed-loop ancestry gap (semstreams beta.54): buildLoopFailureTriples
+// does not stamp agent.loop.parent, and LoopFailedEvent has no
+// ParentLoopID field. Callers walking ancestry from a failed loop
+// will see "no parent triple" at the failed loop and report
+// chain_id == failed_loop_id — which is wrong when the failed loop is
+// not the chain root. Phase 2 chainpause re-point depends on this gap
+// being closed upstream (see ADR-038 PR B follow-up upstream ask).
+// Until that ships, callers in failure paths must source the parent
+// loop ID from somewhere other than agent.loop.parent — e.g., the
+// running-loop bucket on agentic-loop's KV, or by carrying the parent
+// on the LoopFailedEvent payload via metadata.
 type Resolver struct {
 	parents  ParentReader
 	platform types.PlatformMeta
@@ -61,13 +71,15 @@ func NewResolver(parents ParentReader, platform types.PlatformMeta) *Resolver {
 // ChainID walks agent.loop.parent triples back to the chain root and
 // returns the root loop's loop_id (= chain_id by ADR-038 D1). For a
 // loop with no parent triple, returns the loop's own ID — that loop is
-// the chain root.
+// the chain root. Example: ChainID(ctx, "<dispatch_uuid>") returns
+// "<dispatch_uuid>" when the dispatch loop is the chain root (the
+// most common chain-start case).
 //
 // Bounded by maxAncestryHops; longer walks return an error so a malformed
 // graph cannot wedge a caller.
 func (r *Resolver) ChainID(ctx context.Context, loopID string) (string, error) {
-	if loopID == "" {
-		return "", fmt.Errorf("chain.Resolver.ChainID: loopID required")
+	if err := validateLoopID(loopID); err != nil {
+		return "", fmt.Errorf("chain.Resolver.ChainID: %w", err)
 	}
 	cur := loopID
 	for hops := 0; hops < maxAncestryHops; hops++ {
@@ -83,9 +95,31 @@ func (r *Resolver) ChainID(ctx context.Context, loopID string) (string, error) {
 		if !ok {
 			return "", fmt.Errorf("chain.Resolver.ChainID: parent of %q is malformed entity id %q", cur, parentEntityID)
 		}
+		// Defensive: LoopIDFromExecutionEntityID enforces the entity
+		// ID shape upstream, but we still validate the recovered loop_id
+		// before passing it back into upstream constructors that panic
+		// on dots/empties. A schema drift or graph corruption shouldn't
+		// take down a subscriber goroutine.
+		if err := validateLoopID(parentLoopID); err != nil {
+			return "", fmt.Errorf("chain.Resolver.ChainID: parent of %q yields invalid loop_id %q: %w", cur, parentLoopID, err)
+		}
 		cur = parentLoopID
 	}
 	return "", fmt.Errorf("chain.Resolver.ChainID: ancestry walk from %q exceeded %d hops (cycle?)", loopID, maxAncestryHops)
+}
+
+// validateLoopID rejects shapes that would panic the upstream
+// agentic.LoopExecutionEntityID / ChainExecutionEntityID constructors
+// (empty, contains dot). Callers convert the returned error to the
+// public "chain.Resolver.X" prefix.
+func validateLoopID(loopID string) error {
+	if loopID == "" {
+		return fmt.Errorf("loopID required")
+	}
+	if strings.ContainsRune(loopID, '.') {
+		return fmt.Errorf("loopID %q must not contain dots (entity ID separator)", loopID)
+	}
+	return nil
 }
 
 // ChainEntityID returns the canonical 6-part chain entity ID for the
@@ -118,6 +152,9 @@ func NewNATSParentReader(client *natsclient.Client, platform types.PlatformMeta)
 
 // ReadParent implements ParentReader against a live graph component.
 func (r *NATSParentReader) ReadParent(ctx context.Context, loopID string) (string, error) {
+	if err := validateLoopID(loopID); err != nil {
+		return "", fmt.Errorf("chain.NATSParentReader.ReadParent: %w", err)
+	}
 	entityID := agentic.LoopExecutionEntityID(r.platform.Org, r.platform.Platform, loopID)
 
 	req := map[string]string{"id": entityID}
