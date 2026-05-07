@@ -121,6 +121,32 @@
                   "type": "string",
                   "description": "reason"
                 },
+                "related_loops": {
+                  "type": "object",
+                  "description": "related_loops"
+                },
+                "response_format": {
+                  "type": "object",
+                  "description": "response_format",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "description": "name"
+                    },
+                    "schema": {
+                      "type": "object",
+                      "description": "schema"
+                    },
+                    "strict": {
+                      "type": "boolean",
+                      "description": "strict"
+                    },
+                    "type": {
+                      "type": "string",
+                      "description": "type"
+                    }
+                  }
+                },
                 "role": {
                   "type": "string",
                   "description": "role"
@@ -343,6 +369,32 @@
                   "type": "string",
                   "description": "reason"
                 },
+                "related_loops": {
+                  "type": "object",
+                  "description": "related_loops"
+                },
+                "response_format": {
+                  "type": "object",
+                  "description": "response_format",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "description": "name"
+                    },
+                    "schema": {
+                      "type": "object",
+                      "description": "schema"
+                    },
+                    "strict": {
+                      "type": "boolean",
+                      "description": "strict"
+                    },
+                    "type": {
+                      "type": "string",
+                      "description": "type"
+                    }
+                  }
+                },
                 "role": {
                   "type": "string",
                   "description": "role"
@@ -483,6 +535,32 @@
                   "type": "string",
                   "description": "reason"
                 },
+                "related_loops": {
+                  "type": "object",
+                  "description": "related_loops"
+                },
+                "response_format": {
+                  "type": "object",
+                  "description": "response_format",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "description": "name"
+                    },
+                    "schema": {
+                      "type": "object",
+                      "description": "schema"
+                    },
+                    "strict": {
+                      "type": "boolean",
+                      "description": "strict"
+                    },
+                    "type": {
+                      "type": "string",
+                      "description": "type"
+                    }
+                  }
+                },
                 "role": {
                   "type": "string",
                   "description": "role"
@@ -622,6 +700,32 @@
                 "reason": {
                   "type": "string",
                   "description": "reason"
+                },
+                "related_loops": {
+                  "type": "object",
+                  "description": "related_loops"
+                },
+                "response_format": {
+                  "type": "object",
+                  "description": "response_format",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "description": "name"
+                    },
+                    "schema": {
+                      "type": "object",
+                      "description": "schema"
+                    },
+                    "strict": {
+                      "type": "boolean",
+                      "description": "strict"
+                    },
+                    "type": {
+                      "type": "string",
+                      "description": "type"
+                    }
+                  }
                 },
                 "role": {
                   "type": "string",
@@ -781,6 +885,32 @@
                 "reason": {
                   "type": "string",
                   "description": "reason"
+                },
+                "related_loops": {
+                  "type": "object",
+                  "description": "related_loops"
+                },
+                "response_format": {
+                  "type": "object",
+                  "description": "response_format",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "description": "name"
+                    },
+                    "schema": {
+                      "type": "object",
+                      "description": "schema"
+                    },
+                    "strict": {
+                      "type": "boolean",
+                      "description": "strict"
+                    },
+                    "type": {
+                      "type": "string",
+                      "description": "type"
+                    }
+                  }
                 },
                 "role": {
                   "type": "string",
