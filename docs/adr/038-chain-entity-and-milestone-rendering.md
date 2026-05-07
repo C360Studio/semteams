@@ -62,9 +62,9 @@ mechanism:
 The right primitive is a stable cross-arc data structure that
 downstream queries by name. **The chain entity.**
 
-## The two corrections (non-negotiable framing)
+## Framing
 
-### Correction 1: 6-part entity IDs are canon
+### 6-part entity IDs are canon
 
 Loop entities are addressed at `c360.<platform>.agent.agentic-loop.execution.<loop_id>`
 per `agentic.LoopExecutionEntityID` in semstreams beta.51. Trajectory
@@ -83,21 +83,14 @@ Treat `chain` as a sibling component to `agentic-loop` within the
 `query_entity(id=<6-part>)` and `query_entities(predicate=<stable>)`
 exactly like every other entity in the graph.
 
-### Correction 2: Markdown is a side effect, NOT the canonical store
+### Markdown is a side effect, not the canonical store
 
-The graph is first-class memory. Personas QUERY THE GRAPH; humans
-READ THE MARKDOWN. The markdown gets emitted at critical chain
-milestones for two reasons: human consumption (review, audit,
-scanning) and git use (diffs, blame, navigation across the file
-tree). Both produced together at milestones — never one without
-the other when the data warrants both.
-
-We are NOT BMAD. We are NOT OpenSpec. Markdown-everywhere is a
-different product's design. The graph is the addressable substrate
-for machine reads; markdown rides alongside as a rendered view for
-human/git reads. When a downstream persona needs upstream data, it
-queries the chain entity. When a human needs to review what the
-chain produced, they read the markdown.
+The graph is first-class memory. Personas query the graph; humans
+read the markdown. The markdown gets emitted at critical chain
+milestones for human consumption (review, audit, scanning) and git
+use (diffs, blame, navigation). Both produced together at
+milestones — never one without the other when the data warrants
+both.
 
 The existing `emit_dev_via_spec_artifact` already embodies the
 pattern: it writes `docs/specs/<slug>.md` (markdown side-effect),
@@ -380,55 +373,29 @@ publish. When upstream's `write_artifact` ships:
    (they encode SemTeams-specific arc shape that the upstream
    primitive shouldn't carry).
 
-The commission-not-omission posture: we ship the chain-entity-aware
-domain-specific tools because the generic ones aren't ready, and we
-contract to migrate when they are. Mirror ADR-031 §addendum
-2026-04-30's working template; document the survey + alternatives in
-this ADR's references section.
+We ship the chain-entity-aware domain-specific tools because the
+generic ones aren't ready, and contract to migrate when they are.
+Mirror ADR-031 §addendum 2026-04-30's working template; document
+the survey + alternatives in this ADR's references section.
 
-### D7. Substance-over-process composition with the audit findings
+### D7. Pairs with prompt cleanup
 
 The 2026-05-07 prompt-coaching audit (`/tmp/prompt-coaching-audit.md`)
-found 28% aggregate P+F (process-coaching + format-demand) across
-rule prompts and persona fragments. Worst offenders cluster at
-50-58% P+F in the recently-edited dev-via-spec rule prompts that
-encode iteration choreography around lineage substitution.
-
-ADR-038's chain entity removes one of the *reasons* personas needed
-coaching — they were being told how to thread loop_ids through
-prose. With chain entity queries, the rule prompt collapses to:
+found 28% aggregate P+F across rule prompts; rule_05/06 at 50-58%.
+A chunk of that coaching exists *because* personas were being told
+how to thread loop_ids through prose. With chain entity queries the
+rule prompt collapses to substance:
 
 ```
 The chain has reached <state>. Your job: <terminal contract>.
-
-Inputs:
-- Prior loop: $entity.instance
-- Chain context: query the chain entity for the predicates you need
-  (chain.research_artifact.harness, chain.consensus_loop, etc.)
-
-Terminal contract: <emit-tool> + <decide>. Persona owns mechanics.
+Inputs: $entity.instance + chain entity (query for the predicates
+you need). Terminal contract: <emit-tool> + <decide>.
 ```
 
-The persona stops embedding `lineage.researcher` as a literal in
-prose. The persona's contract names "query the chain entity for
-the predicates you need" once, in a single fragment, and every
-subsequent fragment trusts that contract.
-
-**The composition:** chain entity (data layer) + substance-over-
-process prompts (persona layer) = the cross-arc reach problem
-solved cleanly. Each alone is incomplete:
-
-- **Chain entity without prompt cleanup**: data is reachable but
-  rule prompts still over-coach iteration mechanics that no longer
-  apply. P+F% stays high; LLM still optimises for choreography.
-- **Prompt cleanup without chain entity**: rule prompts get terse
-  but persona has no mechanism to reach cross-arc data. Falls back
-  to the architect's smoke #8 wedge — "I don't have the harness
-  reference."
-
-PR D in the phasing pairs the two changes in one slice for exactly
-this reason: cleaning prompts without the data-layer fix re-creates
-the wedge. The audit findings and ADR-038 are co-load-bearing.
+PR D pairs the prompt rewrite with the data-layer fix because
+shipping either alone fails: clean prompts without queryable chain
+data recreate the architect wedge; chain data without prompt
+cleanup leaves the audit P+F% in place.
 
 ## Migration path from slice 4c
 
@@ -453,16 +420,13 @@ markdown rendering. PR D cleans the persona/prompt surface.
 
 ## What this ADR explicitly does NOT decide
 
-These are deferred with explicit gates per ADR-037 / ADR-036
-discipline.
-
-1. **Chain entity retention policy beyond active lifecycle.** The
-   chain entity persists for the chain's duration. Long-term
-   retention (90 days, indefinite, ops-agent retention bucket) is
-   an ops decision earned later.
-   **Earns its slot when:** ops-agent (ADR-027) starts cross-chain
-   pattern queries OR the graph KV starts approaching ENV-configured
-   retention thresholds in production deployments.
+1. **Implementation-time mechanics.** Long-term retention beyond
+   active chain lifecycle, exact `deriveSlug` reuse-vs-fork per
+   arc, and whether `agentic.ChainExecutionEntityID` lands upstream
+   or in `cmd/semteams/chain/` initially are PR B/C decisions.
+   Default posture: reuse existing helpers, ship the constructor
+   wherever timing works, file an upstream PR if the surface is
+   right.
 
 2. **Cross-chain queries.** "Show me all chains where the architect
    selected `meshtasticd-3.x`" is ops-agent / polars territory.
@@ -472,13 +436,7 @@ discipline.
    primitive (per upstream ADR-027 + ADR-037 §Open question 4) AND
    at least one operator surfaces a concrete cross-chain question.
 
-3. **Exact slug-derivation algorithm per arc.** Mechanical impl
-   detail. Reuse `deriveSlug` from `emitspecartifact`; PR C's tools
-   tune as needed.
-   **Earns its slot when:** PR C's emit-tools land; if reuse falls
-   short, factor a shared `cmd/semteams/slug/` package.
-
-4. **Tool-vs-rule split for chain entity write authority per
+3. **Tool-vs-rule split for chain entity write authority per
    predicate.** D2 named the heuristic ("rule action if inputs
    sufficient; emit-tool if milestone is itself a tool call") but
    the per-predicate split is mechanical. PR B's rule action
@@ -486,7 +444,7 @@ discipline.
    **Earns its slot when:** PR B implementation surfaces ambiguity
    on a specific predicate.
 
-5. **Parallel-arc chain shape.** ADR-037 §Open question 5 named the
+4. **Parallel-arc chain shape.** ADR-037 §Open question 5 named the
    parallel-arc shape (two roles fail simultaneously, two arcs in
    flight) as deferred. ADR-038's flat predicate namespace assumes
    serial arcs. If parallel arcs land, predicates may need
@@ -494,14 +452,6 @@ discipline.
    **Earns its slot when:** ADR-033's multi-arc dependency block
    formalises a parallel arc shape AND smoke evidence shows it's
    real, not theoretical.
-
-6. **Chain entity wire surface in upstream framework.** Whether
-   `agentic.ChainExecutionEntityID` lands in semstreams or stays in
-   product code initially.
-   **Earns its slot when:** PR B implementation needs the
-   constructor; if a 5-line upstream PR is on the cards, file it;
-   if not, ship in `cmd/semteams/chain/entity_ids.go` and migrate
-   later.
 
 ## Relationship to prior ADRs
 
@@ -673,16 +623,10 @@ introduced here:
 - **Markdown is exactly what it should be.** Rendered view at
   milestones for humans + git, not the canonical store. The
   product stays graph-first.
-- **Audit findings reach full expression.** The 28% P+F aggregate
-  drops materially when rule prompts can collapse to substance and
-  personas query a stable surface instead of walking literals.
 - **ADR-037 schema preserved.** Chain-pause / chain-decision triples
   re-point onto the canonical chain entity with no schema change.
   Operator surface and audit-trail consumers see the same data on
   a more durable subject.
-- **Slice 4c retirement is bounded.** PR D removes ~7 rules' worth
-  of property blocks, one literal substitution per spawn, and one
-  contract test. Mechanical, traceable, reviewable.
 
 ### Negative
 
