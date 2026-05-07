@@ -33,6 +33,9 @@
         "prior_loop_id": "$entity.instance",
         "retry": true
       },
+      "related_loops": {
+        "researcher": "$entity.triple.lineage.researcher"
+      },
       "prompt": "The dev-via-spec challenger raised concerns about the prior plan. Challenger loop id: $entity.instance. Call read_loop_result with that loop id to read the concerns list (the challenger's decide reason field), then revise the plan per your `20-revision-rules.md`. Treat each concern as a falsifiable claim — split coarse epics, prune creep items, add coverage for missing failure modes. Re-emit decide(action=planned, reason=\"<revised plan>\")."
     }
   ],
