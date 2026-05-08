@@ -43,7 +43,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"text/template"
 	"time"
@@ -54,6 +53,7 @@ import (
 	"github.com/c360studio/semstreams/types"
 
 	"github.com/c360studio/semteams/cmd/semteams/research"
+	"github.com/c360studio/semteams/cmd/semteams/slug"
 )
 
 // ToolName is the LLM-facing tool name. Listed in agentic-tools
@@ -277,7 +277,7 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 	// entity gets either both or neither. Render failures abort
 	// emission; triples without an on-disk markdown view would be
 	// half-state.
-	artifact.Slug = deriveSlug(artifact.Title, call.LoopID, now)
+	artifact.Slug = slug.DeriveDated(artifact.Title, call.LoopID, "research", now)
 	relPath, renderErr := e.renderMarkdown(artifact)
 	if renderErr != nil {
 		return agentic.ToolResult{
@@ -458,42 +458,6 @@ func buildTriples(loopEntityID string, a *research.Artifact, now time.Time) []me
 		triples = append(triples, base(predicateTestHarness, a.TestHarness))
 	}
 	return triples
-}
-
-// nonAlnum matches runs of non-[a-z0-9] characters for slug normalisation.
-// Mirrors emitspecartifact's regex; kept duplicated until a third consumer
-// earns the slot for a shared cmd/semteams/slug/ package per ADR-038
-// "What this ADR explicitly does NOT decide" #1 (implementation-time
-// mechanics, decide as we go).
-var nonAlnum = regexp.MustCompile(`[^a-z0-9]+`)
-
-// deriveSlug produces a YYYY-MM-DD-lower-kebab-case slug for the rendered
-// markdown filename. Title is the LLM-supplied human-readable summary;
-// when empty, fall back to the loop_id's first 8 chars so the slug is
-// still unique-per-chain even without an LLM-supplied title (the
-// researcher persona will eventually always supply one — PR D persona
-// cleanup — but Phase C1 lands the rendering without that contract
-// change).
-//
-// Same shape as emitspecartifact.deriveSlug; pure duplication for now.
-func deriveSlug(title, loopID string, t time.Time) string {
-	source := strings.ToLower(strings.TrimSpace(title))
-	if source == "" {
-		short := loopID
-		if len(short) > 8 {
-			short = short[:8]
-		}
-		source = "research-" + short
-	}
-	slug := nonAlnum.ReplaceAllString(source, "-")
-	slug = strings.Trim(slug, "-")
-	if slug == "" {
-		// Title was non-empty but reduced to empty after normalisation
-		// (e.g., all-emoji or all-symbol input). Fall back so the file
-		// always has a writeable name.
-		slug = "research"
-	}
-	return t.Format("2006-01-02") + "-" + slug
 }
 
 // renderMarkdown writes the artifact as a markdown file to e.outputDir.

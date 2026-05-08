@@ -854,38 +854,12 @@ func TestExecute_PayloadPublishFails_ReportsNetworkError(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------
-// deriveSlug unit tests
-// ---------------------------------------------------------------------
-
-func TestDeriveSlug(t *testing.T) {
-	t.Parallel()
-	ref := time.Date(2026, 4, 30, 12, 0, 0, 0, time.UTC)
-	cases := []struct {
-		title string
-		want  string
-	}{
-		{"OSH Meshtastic Driver", "2026-04-30-osh-meshtastic-driver"},
-		{"  Spaces  Around  ", "2026-04-30-spaces-around"},
-		{"Special!@#$Characters", "2026-04-30-special-characters"},
-		{"Multi   Spaces", "2026-04-30-multi-spaces"},
-		{"Already-Kebab", "2026-04-30-already-kebab"},
-		// Non-ASCII title: all chars collapse to a single "-" leaving an empty
-		// title segment. Execute rejects this via the HasSuffix("-") check.
-		// This row documents the current shape so a Unicode-normalise fix
-		// surfaces in the diff.
-		{"日本語", "2026-04-30-"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.title, func(t *testing.T) {
-			t.Parallel()
-			got := deriveSlug(tc.title, ref)
-			if got != tc.want {
-				t.Errorf("deriveSlug(%q) = %q, want %q", tc.title, got, tc.want)
-			}
-		})
-	}
-}
+// Slug derivation is exercised at the helper level in
+// cmd/semteams/slug/slug_test.go (the prior local TestDeriveSlug
+// tests retired here when the helper was extracted in the PR C
+// cleanup). The integration tests below — TestExecute_DegenerateTitle_Rejected
+// and the various happy-path tests — keep covering the
+// emitspecartifact-specific HasSuffix("-") rejection contract.
 
 // ---------------------------------------------------------------------
 // R3.7.2.b — checks wiring

@@ -36,7 +36,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"text/template"
 	"time"
@@ -47,6 +46,7 @@ import (
 	"github.com/c360studio/semstreams/types"
 
 	"github.com/c360studio/semteams/cmd/semteams/devviaspec"
+	"github.com/c360studio/semteams/cmd/semteams/slug"
 	"github.com/c360studio/semteams/cmd/semteams/testharness"
 	"github.com/c360studio/semteams/cmd/semteams/verification"
 )
@@ -377,8 +377,11 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 	}
 
 	// Reject titles whose ASCII-alphanumeric content is empty (e.g. "!!!" or
-	// "日本語タイトル") — deriveSlug would produce a slug ending in "-" that
-	// silently maps two distinct non-ASCII calls to the same file on the same day.
+	// "日本語タイトル") — slug.DeriveDated with no fallback (the
+	// emitspecartifact contract path) produces a slug ending in "-"
+	// that silently maps two distinct non-ASCII calls to the same file
+	// on the same day. The HasSuffix("-") check converts that into a
+	// 400 to the LLM so the persona retries with valid input.
 	if strings.HasSuffix(artifact.Slug, "-") {
 		return agentic.ToolResult{
 			CallID:    call.ID,
@@ -580,21 +583,13 @@ func parseArgsIntoArtifact(raw map[string]any, loopID string, now time.Time) (*d
 	}
 
 	// Derive slug after unmarshal so we can read the normalised Title.
-	artifact.Slug = deriveSlug(artifact.Title, now)
+	// emitspecartifact's persona contract requires a non-empty title
+	// with ASCII content. Pass empty fallback args so a degenerate
+	// title (all-non-ASCII or empty) yields a slug ending in "-",
+	// which the HasSuffix("-") check above rejects with a 400 to the
+	// LLM. See cmd/semteams/slug for the full behavior matrix.
+	artifact.Slug = slug.DeriveDated(artifact.Title, "", "", now)
 	return &artifact, nil
-}
-
-// deriveSlug produces a YYYY-MM-DD-lower-kebab-case slug from the artifact
-// title. Non-alphanumeric characters are collapsed to single hyphens; leading
-// and trailing hyphens are trimmed. The date prefix ensures lexicographic sort
-// order across artifacts and avoids slug collisions across different days.
-var nonAlnum = regexp.MustCompile(`[^a-z0-9]+`)
-
-func deriveSlug(title string, t time.Time) string {
-	lower := strings.ToLower(title)
-	slug := nonAlnum.ReplaceAllString(lower, "-")
-	slug = strings.Trim(slug, "-")
-	return t.Format("2006-01-02") + "-" + slug
 }
 
 // renderMarkdown writes the artifact as a markdown file to e.outputDir.

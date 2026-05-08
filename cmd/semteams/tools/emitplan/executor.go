@@ -27,7 +27,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"text/template"
 	"time"
@@ -38,6 +37,7 @@ import (
 	"github.com/c360studio/semstreams/types"
 
 	"github.com/c360studio/semteams/cmd/semteams/devviaspec"
+	"github.com/c360studio/semteams/cmd/semteams/slug"
 )
 
 // ToolName is the LLM-facing tool name.
@@ -186,7 +186,7 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 	// Render markdown BEFORE triples so a partial-state retry never
 	// stamps a path that doesn't exist on disk. Slug is deterministic
 	// per (title, date), so re-renders idempotently overwrite.
-	plan.Slug = deriveSlug(plan.Title, call.LoopID, now)
+	plan.Slug = slug.DeriveDated(plan.Title, call.LoopID, "plan", now)
 	relPath, renderErr := e.renderMarkdown(plan)
 	if renderErr != nil {
 		return agentic.ToolResult{
@@ -301,34 +301,6 @@ func buildTriples(loopEntityID string, p *devviaspec.Plan, relPath string, now t
 		base(predicateGeneratedAt, now.UTC().Format(time.RFC3339Nano)),
 		base(predicatePath, relPath),
 	}
-}
-
-// nonAlnum matches runs of non-[a-z0-9] for slug normalisation.
-// Pure duplication of emitartifact / emitspecartifact's regex; ADR-038
-// "What this ADR explicitly does NOT decide" #1 defers the shared
-// helper. With Phase C2 landing the third consumer, factoring earns
-// its slot — flagged in this PR's body for a follow-on cleanup.
-var nonAlnum = regexp.MustCompile(`[^a-z0-9]+`)
-
-// deriveSlug produces a YYYY-MM-DD-lower-kebab-case slug for the
-// rendered markdown filename. Same shape as the emitartifact /
-// emitspecartifact helpers; falls back to a loop-id-suffixed slug
-// when title is empty (Phase C2 mirrors Phase C1's defer-on-persona).
-func deriveSlug(title, loopID string, t time.Time) string {
-	source := strings.ToLower(strings.TrimSpace(title))
-	if source == "" {
-		short := loopID
-		if len(short) > 8 {
-			short = short[:8]
-		}
-		source = "plan-" + short
-	}
-	slug := nonAlnum.ReplaceAllString(source, "-")
-	slug = strings.Trim(slug, "-")
-	if slug == "" {
-		slug = "plan"
-	}
-	return t.Format("2006-01-02") + "-" + slug
 }
 
 // renderMarkdown writes the plan to outputDir/<Slug>.md. Same overwrite
