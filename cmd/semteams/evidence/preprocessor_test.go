@@ -462,3 +462,119 @@ func TestPreprocessor_PublisherError(t *testing.T) {
 		t.Errorf("HandleLoopCompleted must be fail-soft even on publisher error; got: %v", err)
 	}
 }
+
+// ---------------------------------------------------------------------
+// Chain entity triple emission (ADR-038 PR B Phase 5)
+// ---------------------------------------------------------------------
+
+// fakeChainResolver implements evidence.ChainResolver for tests.
+type fakeChainResolver struct {
+	entityID string
+	err      error
+	calls    int
+}
+
+func (f *fakeChainResolver) ChainEntityID(_ context.Context, _ string) (string, error) {
+	f.calls++
+	if f.err != nil {
+		return "", f.err
+	}
+	return f.entityID, nil
+}
+
+// TestPreprocessor_NoChainResolver_LoopEntityOnly: backward-compat
+// guarantee for callers that don't opt in to chain entity writes.
+func TestPreprocessor_NoChainResolver_LoopEntityOnly(t *testing.T) {
+	wsRoot := t.TempDir()
+	loopID := "loop-no-chain"
+	pub := &fakePublisher{}
+	p := newPreprocessor(t, wsRoot, pub)
+	writeChecksFile(t, wsRoot, loopID, []verification.Check{})
+
+	if err := p.HandleLoopCompleted(context.Background(), buildEvent(loopID)); err != nil {
+		t.Fatalf("HandleLoopCompleted: %v", err)
+	}
+	for _, tr := range pub.recorded() {
+		if tr.Predicate == "chain.evidence.summary" || tr.Predicate == "chain.evidence.summary_ready" {
+			t.Errorf("chain triple %q must not be written without chainResolver", tr.Predicate)
+		}
+	}
+}
+
+// TestPreprocessor_ChainResolver_HappyPath: with the resolver wired,
+// chain.evidence.* triples land on the chain entity AND loop-entity
+// triples still land (drift-safe phasing).
+func TestPreprocessor_ChainResolver_HappyPath(t *testing.T) {
+	wsRoot := t.TempDir()
+	loopID := "loop-chain-ok"
+	pub := &fakePublisher{}
+	p := newPreprocessor(t, wsRoot, pub)
+
+	const wantChainEntityID = "c360.test.agent.chain.execution.dispatch_root"
+	resolver := &fakeChainResolver{entityID: wantChainEntityID}
+	p.SetChainResolver(resolver)
+
+	writeChecksFile(t, wsRoot, loopID, []verification.Check{})
+	if err := p.HandleLoopCompleted(context.Background(), buildEvent(loopID)); err != nil {
+		t.Fatalf("HandleLoopCompleted: %v", err)
+	}
+
+	if resolver.calls != 1 {
+		t.Errorf("ChainEntityID calls = %d, want 1", resolver.calls)
+	}
+
+	// Both subjects must be present (drift-safe).
+	wantLoopEntityID := "c360.test.agent.agentic-loop.execution." + loopID
+	var sawLoopSummary, sawLoopReady, sawChainSummary, sawChainReady bool
+	for _, tr := range pub.recorded() {
+		switch {
+		case tr.Subject == wantLoopEntityID && tr.Predicate == "evidence.summary":
+			sawLoopSummary = true
+		case tr.Subject == wantLoopEntityID && tr.Predicate == "evidence.summary_ready":
+			sawLoopReady = true
+		case tr.Subject == wantChainEntityID && tr.Predicate == "chain.evidence.summary":
+			sawChainSummary = true
+		case tr.Subject == wantChainEntityID && tr.Predicate == "chain.evidence.summary_ready":
+			sawChainReady = true
+		}
+	}
+	if !sawLoopSummary {
+		t.Error("evidence.summary must still land on loop entity (drift-safe)")
+	}
+	if !sawLoopReady {
+		t.Error("evidence.summary_ready must still land on loop entity (drift-safe)")
+	}
+	if !sawChainSummary {
+		t.Error("chain.evidence.summary must land on chain entity")
+	}
+	if !sawChainReady {
+		t.Error("chain.evidence.summary_ready must land on chain entity")
+	}
+}
+
+// TestPreprocessor_ChainResolver_Error_LoopEntityStillLands: chain
+// resolution error must be fail-soft. Loop-entity triples land, rule_07
+// keeps firing, no caller-visible error.
+func TestPreprocessor_ChainResolver_Error_LoopEntityStillLands(t *testing.T) {
+	wsRoot := t.TempDir()
+	loopID := "loop-chain-err"
+	pub := &fakePublisher{}
+	p := newPreprocessor(t, wsRoot, pub)
+	p.SetChainResolver(&fakeChainResolver{err: errors.New("graph KV unavailable")})
+
+	writeChecksFile(t, wsRoot, loopID, []verification.Check{})
+	if err := p.HandleLoopCompleted(context.Background(), buildEvent(loopID)); err != nil {
+		t.Errorf("chain failure must be fail-soft; got: %v", err)
+	}
+
+	// Loop-entity triples must still land.
+	if _, ok := pub.findByPredicate("evidence.summary_ready"); !ok {
+		t.Error("evidence.summary_ready must still land when chain resolver fails")
+	}
+	// Chain triples must not land.
+	for _, tr := range pub.recorded() {
+		if tr.Predicate == "chain.evidence.summary" || tr.Predicate == "chain.evidence.summary_ready" {
+			t.Errorf("chain triple %q must not be written when resolver errors", tr.Predicate)
+		}
+	}
+}

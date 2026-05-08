@@ -27,6 +27,23 @@ type TriplePublisher interface {
 	AddTriple(ctx context.Context, triple message.Triple) error
 }
 
+// ChainResolver is the narrow surface the preprocessor uses to derive
+// the canonical 6-part chain entity ID for the chain that contains the
+// builder loop. cmd/semteams/chain.Resolver satisfies it structurally.
+//
+// Optional — leave unset to skip chain entity triple writes. ADR-038
+// PR B drift-safe phasing: existing evidence.summary +
+// evidence.summary_ready triples on the loop entity continue to land
+// regardless; chain entity triples land on top when the resolver is
+// wired. Rule_07's two-AND condition continues to match on the loop
+// entity for now (rules can't trivially cross-reference a different
+// entity); migrating the rule itself to chain entity matching is a
+// separate follow-on once the rule engine's chain-entity surface is
+// scoped — see ADR-038 D5 migration table.
+type ChainResolver interface {
+	ChainEntityID(ctx context.Context, loopID string) (string, error)
+}
+
 // Preprocessor subscribes to builder-loop completion events and stamps
 // evidence.summary + evidence.summary_ready triples on the loop entity
 // so rule_07's two-AND condition can fire exactly once, in either
@@ -43,6 +60,7 @@ type Preprocessor struct {
 	workspaceRoot string // absolute path to sandbox workspace mount; "" disables
 	platform      types.PlatformMeta
 	logger        *slog.Logger
+	chainResolver ChainResolver // nil → skip chain entity triples (drift-safe)
 }
 
 // New constructs a Preprocessor. workspaceRoot="" disables the
@@ -60,6 +78,17 @@ func New(reg *Registry, pub TriplePublisher, workspaceRoot string, platform type
 		platform:      platform,
 		logger:        logger,
 	}
+}
+
+// SetChainResolver enables ADR-038 PR B Phase 5 chain entity triple
+// writes alongside the existing loop-entity writes. Optional opt-in:
+// leaving this unset keeps the preprocessor backward-compatible (loop-
+// entity triples only; rule_07 unaffected).
+//
+// Wired in cmd/semteams/main.go after evidence.New when the chain
+// package's Resolver is built.
+func (p *Preprocessor) SetChainResolver(r ChainResolver) {
+	p.chainResolver = r
 }
 
 // HandleLoopCompleted is the subscription entry point. It filters for
@@ -162,7 +191,11 @@ func (p *Preprocessor) buildSummary(ctx context.Context, loopID string) (string,
 	return Summarize(summaries), nil
 }
 
-// stampTriples writes the two triples onto the builder's loop entity.
+// stampTriples writes the two triples onto the builder's loop entity
+// (rule_07 fires on these). When SetChainResolver is wired (ADR-038 PR
+// B Phase 5), additionally mirrors the same data onto the canonical
+// chain entity for cross-arc consumers (ops agent, future analytics).
+//
 // Errors are logged but do not propagate — best-effort stamping is
 // correct here; a partial stamp on the qa-reviewer read is worse than
 // a full stamp that came slightly late, but a missed write still lets
@@ -199,6 +232,89 @@ func (p *Preprocessor) stampTriples(ctx context.Context, entityID, summary, loop
 		p.logger.Error("evidence preprocessor: failed to stamp evidence.summary_ready triple",
 			slog.String("loop_id", loopID),
 			slog.String("entity_id", entityID),
+			slog.String("error", err.Error()))
+	}
+
+	// ADR-038 PR B Phase 5: mirror evidence triples onto the chain entity
+	// for cross-arc visibility. Drift-safe — loop-entity triples above
+	// continue to land regardless. Rule_07 keeps matching on the loop
+	// entity for now; the rule-engine work to migrate that condition is
+	// a separate follow-on (the engine's condition layer scopes to the
+	// triggering entity, so chain-entity-rule firing needs more thought).
+	p.stampChainTriples(ctx, summary, loopID, now)
+}
+
+// stampChainTriples writes chain.evidence.summary + chain.evidence.summary_ready
+// on the canonical 6-part chain entity. Fail-soft: a missing resolver,
+// resolution error, or per-triple write error logs Warn and continues —
+// the loop-entity triples have already landed, so rule_07's downstream
+// path is unaffected.
+//
+// Known race (ADR-038 PR B follow-on, tracked upstream): upstream
+// agentic-loop publishes agent.complete.<loop_id> to JetStream BEFORE
+// calling graphWriter.WriteLoopCompletion synchronously (see
+// processor/agentic-loop/component.go publishResults → WriteLoopCompletion
+// ordering). The completion writes include agent.loop.parent on the
+// just-completed loop. So at the moment this preprocessor runs, the
+// builder's own agent.loop.parent triple may not yet be visible in
+// graph KV. Resolver.ChainID would short-circuit at the builder, return
+// chain_id == builder_loop_id, and chain.evidence.* would land on a
+// phantom chain entity (c360.<platform>.agent.chain.execution.<builder_loop_id>)
+// instead of the real dispatch-rooted chain entity.
+//
+// Behavioural impact today: ZERO. rule_07 reads loop-entity triples
+// regardless (ADR-038 D5 keeps the loop-entity duplicates during PR B
+// drift-safe phasing). chain.evidence.* is observability-only for ops
+// agent / cross-arc rules that don't ship in PR B.
+//
+// Real fix is upstream: reorder publishResults so WriteLoopCompletion
+// runs first. Same upstream surface as the failed-loop ancestry gap
+// (LoopFailedEvent has no ParentLoopID, buildLoopFailureTriples doesn't
+// stamp agent.loop.parent — both close together). Filed alongside.
+//
+// Other anchor sites (DispatchedStamper, ResearchMilestoneStamper,
+// emitspecartifact) are race-free because they walk from a prior-completed
+// ancestor, not from the just-completed loop carrying the event.
+func (p *Preprocessor) stampChainTriples(ctx context.Context, summary, loopID string, now time.Time) {
+	if p.chainResolver == nil {
+		return
+	}
+	chainEntityID, err := p.chainResolver.ChainEntityID(ctx, loopID)
+	if err != nil {
+		p.logger.Warn("evidence preprocessor: chain ancestry walk failed; skipping chain triples",
+			slog.String("loop_id", loopID),
+			slog.String("error", err.Error()))
+		return
+	}
+
+	chainSummary := message.Triple{
+		Subject:    chainEntityID,
+		Predicate:  "chain.evidence.summary",
+		Object:     summary,
+		Source:     "chain.evidence",
+		Timestamp:  now,
+		Confidence: 1.0,
+	}
+	if err := p.publisher.AddTriple(ctx, chainSummary); err != nil {
+		p.logger.Warn("evidence preprocessor: failed to stamp chain.evidence.summary",
+			slog.String("loop_id", loopID),
+			slog.String("chain_entity", chainEntityID),
+			slog.String("error", err.Error()))
+		// Continue: ready triple is independent.
+	}
+
+	chainReady := message.Triple{
+		Subject:    chainEntityID,
+		Predicate:  "chain.evidence.summary_ready",
+		Object:     "true",
+		Source:     "chain.evidence",
+		Timestamp:  now,
+		Confidence: 1.0,
+	}
+	if err := p.publisher.AddTriple(ctx, chainReady); err != nil {
+		p.logger.Warn("evidence preprocessor: failed to stamp chain.evidence.summary_ready",
+			slog.String("loop_id", loopID),
+			slog.String("chain_entity", chainEntityID),
 			slog.String("error", err.Error()))
 	}
 }

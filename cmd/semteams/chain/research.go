@@ -1,0 +1,227 @@
+package chain
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"time"
+
+	"github.com/c360studio/semstreams/agentic"
+	"github.com/c360studio/semstreams/message"
+	"github.com/c360studio/semstreams/types"
+)
+
+// Predicate names for the research-milestone cluster on the chain
+// entity. Schema-stable — chain.research_artifact_loop is the
+// canonical anchor; .harness, .actor_count, .task_count are projections
+// from research.artifact.* on the researcher's loop entity. The .path
+// predicate (rendered docs/research/<slug>.md) lands in PR C alongside
+// markdown emission.
+const (
+	chainPredicateResearchArtifactLoop       = "chain.research_artifact_loop"
+	chainPredicateResearchArtifactHarness    = "chain.research_artifact.harness"
+	chainPredicateResearchArtifactActorCount = "chain.research_artifact.actor_count"
+	chainPredicateResearchArtifactTaskCount  = "chain.research_artifact.task_count"
+
+	// chainResearchSource tags chain entity triples this stamper writes
+	// so a graph query can scope to the emitter (parallel to
+	// "chain.dispatched" and "chain.spec_artifact").
+	chainResearchSource = "chain.research"
+
+	// researchReviewerRole is the role we milestone on. Lifted to a
+	// constant so the contract test can match the same value.
+	researchReviewerRole = "research-reviewer"
+
+	// researchApprovedAction is the coordinator.next_action value the
+	// reviewer's persona stamps via decide(action="approved"). Sourced
+	// from configs/personas/fragments/research-reviewer (decide
+	// action_allowlist in rule_03's spawn).
+	researchApprovedAction = "approved"
+)
+
+// Predicate names on the researcher's loop entity (read side).
+const (
+	researcherTestHarnessPredicate = "research.artifact.test_harness"
+	researcherActorsCountPredicate = "research.artifact.actors_count"
+	researcherTasksCountPredicate  = "research.artifact.tasks_count"
+
+	reviewerNextActionPredicate        = "coordinator.next_action"
+	reviewerLineageResearcherPredicate = "lineage.researcher"
+)
+
+// ResearchMilestoneStamper writes the chain.research_artifact.* triple
+// cluster on the chain entity when a research-reviewer loop completes
+// with coordinator.next_action="approved".
+//
+// Read pattern (graph reads on a completed loop):
+//  1. Reviewer's loop entity → coordinator.next_action (= "approved"
+//     gates this milestone) and lineage.researcher (= the researcher's
+//     loop_id whose artifact was approved).
+//  2. Researcher's loop entity → research.artifact.test_harness,
+//     research.artifact.actors_count, research.artifact.tasks_count.
+//  3. Resolver walks ancestry from the researcher's loop_id (a
+//     completed loop with full agent.loop.parent stamped) to find
+//     chain_id → chain entity ID.
+//
+// Write pattern: 4 triples on the chain entity, all under the
+// chain.research_artifact[_loop|.harness|.actor_count|.task_count]
+// namespace. ADR-038 D2 lists chain.research_artifact.path in the same
+// cluster — that lands in PR C when emit_research_artifact gains
+// markdown rendering.
+//
+// Fail-soft: every step that can fail logs Warn and returns. The
+// loop-entity research.artifact.* triples are unaffected; rule_03 is
+// unaffected. Phase 6's contract test surfaces drift where chain
+// triples should have landed but didn't.
+type ResearchMilestoneStamper struct {
+	publisher TriplePublisher
+	resolver  *Resolver
+	entities  EntityTripleReader
+	platform  types.PlatformMeta
+	logger    *slog.Logger
+}
+
+// NewResearchMilestoneStamper constructs a stamper.
+func NewResearchMilestoneStamper(
+	pub TriplePublisher,
+	resolver *Resolver,
+	entities EntityTripleReader,
+	platform types.PlatformMeta,
+	logger *slog.Logger,
+) *ResearchMilestoneStamper {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	return &ResearchMilestoneStamper{
+		publisher: pub,
+		resolver:  resolver,
+		entities:  entities,
+		platform:  platform,
+		logger:    logger,
+	}
+}
+
+// HandleLoopCompleted is the subscription entry point. Filters to
+// research-reviewer success and the approved coordinator action; for
+// non-matching events returns nil (other handlers may fire).
+func (s *ResearchMilestoneStamper) HandleLoopCompleted(ctx context.Context, ev *agentic.LoopCompletedEvent) error {
+	if ev == nil {
+		return nil
+	}
+	if ev.Role != researchReviewerRole || ev.Outcome != agentic.OutcomeSuccess {
+		return nil
+	}
+	if err := validateLoopID(ev.LoopID); err != nil {
+		return fmt.Errorf("chain.ResearchMilestoneStamper: %w", err)
+	}
+
+	reviewerEntityID := agentic.LoopExecutionEntityID(s.platform.Org, s.platform.Platform, ev.LoopID)
+	reviewerTriples, err := s.entities.ReadEntity(ctx, reviewerEntityID)
+	if err != nil {
+		s.logger.Warn("research milestone: read reviewer entity failed",
+			slog.String("reviewer_loop_id", ev.LoopID),
+			slog.String("error", err.Error()))
+		return nil
+	}
+
+	if action, _ := reviewerTriples[reviewerNextActionPredicate].(string); action != researchApprovedAction {
+		// insufficient or other terminal action — not a milestone.
+		return nil
+	}
+
+	researcherLoopID, _ := reviewerTriples[reviewerLineageResearcherPredicate].(string)
+	if researcherLoopID == "" {
+		// Slice 4c lineage threading should populate this; if it's
+		// missing the chain ancestry can't be tied to the artifact.
+		// Drop the milestone rather than guess.
+		s.logger.Warn("research milestone: reviewer entity missing lineage.researcher; skipping chain triples",
+			slog.String("reviewer_loop_id", ev.LoopID))
+		return nil
+	}
+	if err := validateLoopID(researcherLoopID); err != nil {
+		s.logger.Warn("research milestone: lineage.researcher value malformed; skipping chain triples",
+			slog.String("reviewer_loop_id", ev.LoopID),
+			slog.String("researcher_loop_id", researcherLoopID),
+			slog.String("error", err.Error()))
+		return nil
+	}
+
+	researcherEntityID := agentic.LoopExecutionEntityID(s.platform.Org, s.platform.Platform, researcherLoopID)
+	researcherTriples, err := s.entities.ReadEntity(ctx, researcherEntityID)
+	if err != nil {
+		s.logger.Warn("research milestone: read researcher entity failed",
+			slog.String("researcher_loop_id", researcherLoopID),
+			slog.String("error", err.Error()))
+		return nil
+	}
+
+	chainEntityID, err := s.resolver.ChainEntityID(ctx, researcherLoopID)
+	if err != nil {
+		s.logger.Warn("research milestone: chain ancestry walk failed; skipping chain triples",
+			slog.String("researcher_loop_id", researcherLoopID),
+			slog.String("error", err.Error()))
+		return nil
+	}
+
+	now := time.Now().UTC()
+	base := func(pred string, obj any) message.Triple {
+		return message.Triple{
+			Subject:    chainEntityID,
+			Predicate:  pred,
+			Object:     obj,
+			Source:     chainResearchSource,
+			Timestamp:  now,
+			Confidence: 1.0,
+		}
+	}
+
+	triples := []message.Triple{
+		base(chainPredicateResearchArtifactLoop, researcherLoopID),
+	}
+	// .harness is optional — researcher may have left it empty (no
+	// catalog match; persona writes a needs_test_harness gap to
+	// open_gaps instead). Stamp only when present so a graph query
+	// can distinguish "harness not selected" from "harness empty
+	// string" cleanly.
+	if harness, _ := researcherTriples[researcherTestHarnessPredicate].(string); harness != "" {
+		triples = append(triples, base(chainPredicateResearchArtifactHarness, harness))
+	}
+	if actorCount := tripleAsInt(researcherTriples[researcherActorsCountPredicate]); actorCount >= 0 {
+		triples = append(triples, base(chainPredicateResearchArtifactActorCount, actorCount))
+	}
+	if taskCount := tripleAsInt(researcherTriples[researcherTasksCountPredicate]); taskCount >= 0 {
+		triples = append(triples, base(chainPredicateResearchArtifactTaskCount, taskCount))
+	}
+
+	for _, t := range triples {
+		if err := s.publisher.AddTriple(ctx, t); err != nil {
+			s.logger.Warn("research milestone: chain triple write failed",
+				slog.String("predicate", t.Predicate),
+				slog.String("chain_entity", chainEntityID),
+				slog.String("error", err.Error()))
+		}
+	}
+
+	s.logger.Debug("research milestone: chain triples stamped",
+		slog.String("reviewer_loop_id", ev.LoopID),
+		slog.String("researcher_loop_id", researcherLoopID),
+		slog.String("chain_entity", chainEntityID),
+		slog.Int("triples_attempted", len(triples)))
+	return nil
+}
+
+// tripleAsInt extracts an int from a graph-triple Object that the JSON
+// decoder may have unmarshalled as float64 (numeric literals) or
+// string. Returns -1 on type miss so callers can skip absent counts.
+func tripleAsInt(v any) int {
+	switch n := v.(type) {
+	case int:
+		return n
+	case int64:
+		return int(n)
+	case float64:
+		return int(n)
+	default:
+		return -1
+	}
+}

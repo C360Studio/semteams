@@ -1611,3 +1611,144 @@ func harnesseKeys(m map[string]testharness.ResolvedManifest) []string {
 	}
 	return keys
 }
+
+// ---------------------------------------------------------------------
+// Chain entity triple emission (ADR-038 PR B Phase 4)
+// ---------------------------------------------------------------------
+
+// fakeChainResolver implements ChainResolver for tests. Returns the
+// configured entity ID (or err if non-nil) for any loopID.
+type fakeChainResolver struct {
+	entityID string
+	err      error
+	calls    int
+	lastArg  string
+}
+
+func (f *fakeChainResolver) ChainEntityID(_ context.Context, loopID string) (string, error) {
+	f.calls++
+	f.lastArg = loopID
+	if f.err != nil {
+		return "", f.err
+	}
+	return f.entityID, nil
+}
+
+// chainTriplesBySubject filters a triple slice to those subject-matching
+// the given chain entity ID, returning a predicate→object map for
+// assertion brevity.
+func chainTriplesBySubject(triples []message.Triple, chainEntityID string) map[string]any {
+	out := map[string]any{}
+	for _, t := range triples {
+		if t.Subject == chainEntityID {
+			out[t.Predicate] = t.Object
+		}
+	}
+	return out
+}
+
+func TestExecute_ChainTriples_NoResolver_LoopEntityOnly(t *testing.T) {
+	// Default executor leaves chainResolver unset → chain triples are
+	// skipped, loop-entity triples land as before. Backward-compat
+	// guarantee for any caller that doesn't opt in.
+	exec, tp, _, _ := newExecutorWithDir(t)
+	_, err := exec.Execute(context.Background(), defaultCall(defaultArtifactArgs()))
+	if err != nil {
+		t.Fatalf("Execute err: %v", err)
+	}
+	for _, tr := range tp.snapshot() {
+		if tr.Predicate == chainPredicateSpecArtifactLoop ||
+			tr.Predicate == chainPredicateSpecArtifactPath ||
+			tr.Predicate == chainPredicateSpecArtifactCheckCount {
+			t.Errorf("chain triple %q must not be written without chainResolver", tr.Predicate)
+		}
+	}
+}
+
+func TestExecute_ChainTriples_HappyPath(t *testing.T) {
+	exec, tp, _, _ := newExecutorWithDir(t)
+	const wantChainEntityID = "c360.semteams.agent.chain.execution.dispatch_xyz"
+	resolver := &fakeChainResolver{entityID: wantChainEntityID}
+	exec.SetChainResolver(resolver)
+
+	args := argsWithOneTestcontainerCheck("meshtasticd-3.x")
+	_, err := exec.Execute(context.Background(), defaultCall(args))
+	if err != nil {
+		t.Fatalf("Execute err: %v", err)
+	}
+
+	if resolver.calls != 1 {
+		t.Errorf("ChainEntityID calls = %d, want 1", resolver.calls)
+	}
+	if resolver.lastArg != "loop-research-001" {
+		t.Errorf("ChainEntityID called with %q, want loop-research-001 (provenance.research_artifact_loop)", resolver.lastArg)
+	}
+
+	chainTriples := chainTriplesBySubject(tp.snapshot(), wantChainEntityID)
+	if got := chainTriples[chainPredicateSpecArtifactLoop]; got != "loop-architect-abc" {
+		t.Errorf("%s = %v, want loop-architect-abc (architect's loop_id)", chainPredicateSpecArtifactLoop, got)
+	}
+	if path, ok := chainTriples[chainPredicateSpecArtifactPath].(string); !ok || path == "" {
+		t.Errorf("%s missing or empty: %v", chainPredicateSpecArtifactPath, chainTriples[chainPredicateSpecArtifactPath])
+	}
+	if got := chainTriples[chainPredicateSpecArtifactCheckCount]; got != 1 {
+		t.Errorf("%s = %v, want 1 (one testcontainer check)", chainPredicateSpecArtifactCheckCount, got)
+	}
+
+	// Loop-entity triples must still land on the architect's loop entity —
+	// drift-safe phasing per ADR-038 D5; PR D removes them later.
+	wantLoopEntityID := "c360.semteams.agent.agentic-loop.execution.loop-architect-abc"
+	loopTriples := chainTriplesBySubject(tp.snapshot(), wantLoopEntityID)
+	if loopTriples[predicatePath] == nil {
+		t.Errorf("loop-entity triple %s missing — drift-safe phasing requires both subject sets to land", predicatePath)
+	}
+}
+
+func TestExecute_ChainTriples_ResolverError_LoopEntityStillLands(t *testing.T) {
+	exec, tp, _, _ := newExecutorWithDir(t)
+	resolver := &fakeChainResolver{err: errors.New("graph KV unavailable")}
+	exec.SetChainResolver(resolver)
+
+	res, err := exec.Execute(context.Background(), defaultCall(defaultArtifactArgs()))
+	if err != nil {
+		t.Fatalf("Execute err: %v", err)
+	}
+	if res.Error != "" {
+		t.Errorf("Tool result error = %q; chain failure must be fail-soft, not surface to LLM", res.Error)
+	}
+
+	for _, tr := range tp.snapshot() {
+		if tr.Predicate == chainPredicateSpecArtifactLoop {
+			t.Errorf("chain triple %q must not be written when resolver errors", tr.Predicate)
+		}
+	}
+	wantLoopEntityID := "c360.semteams.agent.agentic-loop.execution.loop-architect-abc"
+	loopTriples := chainTriplesBySubject(tp.snapshot(), wantLoopEntityID)
+	if loopTriples[predicatePath] == nil {
+		t.Errorf("loop-entity triple %s must still land when chain resolver fails", predicatePath)
+	}
+}
+
+func TestExecute_ChainTriples_EmptyResearchRootLoop_Skipped(t *testing.T) {
+	exec, _, _, _ := newExecutorWithDir(t)
+	resolver := &fakeChainResolver{entityID: "c360.semteams.agent.chain.execution.x"}
+	exec.SetChainResolver(resolver)
+
+	// Emit an artifact with provenance.research_artifact_loop empty.
+	// The architect persona is supposed to populate this, but a contract
+	// violation should be fail-soft on the chain side. Loop-entity
+	// triples still land (the existing dev_via_spec.artifact.research_root_loop
+	// triple will be empty, which downstream review picks up).
+	args := defaultArtifactArgs()
+	args["provenance"] = map[string]any{
+		"research_artifact_loop": "",
+		"planner_loop":           "loop-planner-001",
+	}
+	_, err := exec.Execute(context.Background(), defaultCall(args))
+	if err != nil {
+		t.Fatalf("Execute err: %v", err)
+	}
+	if resolver.calls != 0 {
+		t.Errorf("resolver should not be called when research_artifact_loop is empty; got %d calls", resolver.calls)
+	}
+}

@@ -12,6 +12,7 @@ import (
 	"github.com/c360studio/semstreams/processor/agentic-tools/sandbox"
 	"github.com/c360studio/semstreams/types"
 
+	"github.com/c360studio/semteams/cmd/semteams/chain"
 	"github.com/c360studio/semteams/cmd/semteams/devviaspec"
 	"github.com/c360studio/semteams/cmd/semteams/research"
 	"github.com/c360studio/semteams/cmd/semteams/testharness"
@@ -193,6 +194,17 @@ func registerEmitSpecArtifact(reg *agentictools.ExecutorRegistry, natsClient *na
 	// Pass empty outputDir so the constructor reads SEMTEAMS_DEVVIASPEC_ARTIFACT_DIR
 	// or falls back to the package default ("docs/specs").
 	executor := emitspecartifact.NewExecutor(triplePublisher, natsClient, platform, logger, "", resolver)
+	// ADR-038 PR B Phase 4: chain entity triple writes. Walks ancestry
+	// from artifact.Provenance.ResearchArtifactLoop (a completed
+	// researcher loop) — the architect's own loop has not stamped
+	// agent.loop.parent yet (only stamped at completion), so we walk
+	// from a completed ancestor that has full lineage stamped. Wired
+	// optional via SetChainResolver to keep the executor's constructor
+	// signature stable and to keep test contexts opt-in.
+	parentReader := chain.NewNATSParentReader(natsClient, platform)
+	chainResolver := chain.NewResolver(parentReader, platform)
+	executor.SetChainResolver(chainResolver)
+
 	if err := reg.RegisterTool(emitspecartifact.ToolName, executor); err != nil {
 		return fmt.Errorf("register %s: %w", emitspecartifact.ToolName, err)
 	}

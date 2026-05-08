@@ -32,6 +32,7 @@ import (
 	rulepkg "github.com/c360studio/semstreams/processor/rule"
 	"github.com/c360studio/semstreams/service"
 	"github.com/c360studio/semstreams/types"
+	"github.com/c360studio/semteams/cmd/semteams/chain"
 	"github.com/c360studio/semteams/cmd/semteams/chainpause"
 	"github.com/c360studio/semteams/cmd/semteams/evidence"
 	"github.com/c360studio/semteams/cmd/semteams/testharness"
@@ -254,7 +255,47 @@ func setupToolsAndPreprocessor(
 		return nil, nil, fmt.Errorf("start chain-pause subscriber: %w", err)
 	}
 
+	// 9g. Chain milestone subscribers (ADR-038 PR B).
+	// One CompletionSubscriber on agent.complete.> demuxes to every
+	// registered chain.CompletionHandler. Each handler decides whether
+	// to fire on the event and writes its predicate cluster onto the
+	// canonical 6-part chain entity (c360.<platform>.agent.chain.execution.<chain_id>).
+	if err := startChainMilestoneSubscribers(ctx, natsClient, platform, logger); err != nil {
+		return nil, nil, fmt.Errorf("start chain milestone subscribers: %w", err)
+	}
+
 	return toolRegistry, chainPauseHTTP, nil
+}
+
+// startChainMilestoneSubscribers wires every ADR-038 chain-milestone
+// CompletionHandler into a single agent.complete.> subscription.
+// Each handler picks events matching its milestone and writes its
+// predicate cluster onto the canonical chain entity. Adding a new
+// milestone is one line in the handler slice.
+//
+// Phase 1b: chain.dispatched_at on chain root.
+// Phase 2:  chain.research_artifact.* on research-reviewer approval.
+// Phases 3+ (chainpause re-point, evidence summary milestone, spec
+// artifact milestone) plug in via the same slice.
+func startChainMilestoneSubscribers(ctx context.Context, natsClient *natsclient.Client, platform types.PlatformMeta, logger *slog.Logger) error {
+	triplePublisher := agentictools.NewNATSTriplePublisher(natsClient)
+	entityReader := chain.NewNATSEntityReader(natsClient)
+	resolver := chain.NewResolver(chain.NewNATSParentReader(natsClient, platform), platform)
+
+	dispatched := chain.NewDispatchedStamper(triplePublisher, platform, logger)
+	research := chain.NewResearchMilestoneStamper(triplePublisher, resolver, entityReader, platform, logger)
+
+	subscriber := chain.NewCompletionSubscriber([]chain.CompletionHandler{
+		dispatched,
+		research,
+	}, logger)
+	if err := subscriber.Start(ctx, natsClient); err != nil {
+		return fmt.Errorf("subscribe to loop completed for chain milestones: %w", err)
+	}
+	logger.Info("chain milestone subscribers started",
+		slog.String("org", platform.Org),
+		slog.String("platform", platform.Platform))
+	return nil
 }
 
 // startChainPauseSubscriber builds the chain-pause pauser + decision handler,
@@ -298,6 +339,11 @@ func startEvidencePreprocessor(ctx context.Context, natsClient *natsclient.Clien
 	}
 	triplePublisher := agentictools.NewNATSTriplePublisher(natsClient)
 	preprocessor := evidence.New(reg, triplePublisher, workspaceRoot, platform, logger)
+	// ADR-038 PR B Phase 5: opt the preprocessor in to chain entity
+	// triple writes so chain.evidence.summary + chain.evidence.summary_ready
+	// land alongside the existing loop-entity triples. Drift-safe —
+	// rule_07 still matches on the loop entity.
+	preprocessor.SetChainResolver(chain.NewResolver(chain.NewNATSParentReader(natsClient, platform), platform))
 	sub := evidence.NewNATSSubscriber(preprocessor, logger)
 	if err := sub.Start(ctx, natsClient); err != nil {
 		return fmt.Errorf("subscribe to loop completed events: %w", err)
