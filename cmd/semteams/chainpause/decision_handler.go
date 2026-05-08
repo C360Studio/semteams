@@ -65,7 +65,8 @@ type TaskPublisher interface {
 }
 
 // PauseDataReader reads the role and original model from the §D5 triple set
-// stamped on the failed loop entity at pause time (ADR-037 §D7).
+// stamped on the chain entity at pause time (ADR-037 §D7, ADR-038 PR B
+// Phase 3 — pre-Phase-3 the triples lived on the failed loop's entity).
 //
 // The production implementation makes a graph.query.entity NATS request and
 // reads chain.paused.role + chain.paused.original_model from the returned
@@ -313,10 +314,11 @@ func (p *NATSTaskPublisher) PublishTask(ctx context.Context, subject string, tas
 	return p.client.PublishToStream(ctx, subject, data)
 }
 
-// NATSPauseDataReader reads role + model from the §D5 triple set on the failed
-// loop entity via a graph.query.entity NATS request (ADR-037 §D7). The
-// triples chain.paused.role and chain.paused.original_model are written at
-// pause time by the Pauser.
+// NATSPauseDataReader reads role + model from the §D5 triple set on the chain
+// entity via a graph.query.entity NATS request (ADR-037 §D7, ADR-038 PR B
+// Phase 3). The triples chain.paused.role and chain.paused.original_model are
+// written at pause time by the Pauser; the DecisionHandler resolves the chain
+// entity ID for retry-time reads via the same chain.Resolver path.
 //
 // Returns ("", "", nil) when the entity is not found in the graph; callers fall
 // back to safe defaults. Network errors are returned so callers can log and fall
