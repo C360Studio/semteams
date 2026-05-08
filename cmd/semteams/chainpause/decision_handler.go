@@ -11,7 +11,6 @@ import (
 	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/natsclient"
-	"github.com/c360studio/semstreams/types"
 )
 
 // DecisionVerb is the operator's resolution of a chain pause.
@@ -81,16 +80,25 @@ type PauseDataReader interface {
 // DecisionHandler handles operator decisions arriving at
 // POST /teams-loop/chain-pause/decide. Only "operator" authority is wired in v1;
 // the validator rejects coordinator and auto values at the HTTP boundary per ADR-037 §D3.
+//
+// ADR-038 PR B Phase 3: chain.decision.* / chain.resumed / chain.killed /
+// chain.deferred all land on the canonical chain entity (resolved from
+// the failed loop's ancestry). PauseDataReader reads chain.paused.role
+// and chain.paused.original_model from the same chain entity at retry
+// time, so the role+model used for the retry spawn match what the
+// Pauser stamped at pause time.
 type DecisionHandler struct {
 	publisher TriplePublisher
 	tasks     TaskPublisher
 	pauseData PauseDataReader
-	platform  types.PlatformMeta
+	resolver  ChainEntityResolver
 	logger    *slog.Logger
 }
 
-// NewDecisionHandler constructs a DecisionHandler.
-func NewDecisionHandler(pub TriplePublisher, tasks TaskPublisher, pauseData PauseDataReader, platform types.PlatformMeta, logger *slog.Logger) *DecisionHandler {
+// NewDecisionHandler constructs a DecisionHandler. The resolver computes
+// the chain entity ID for §D5 audit writes and PauseDataReader queries;
+// cmd/semteams/chain.Resolver is the production wiring.
+func NewDecisionHandler(pub TriplePublisher, tasks TaskPublisher, pauseData PauseDataReader, resolver ChainEntityResolver, logger *slog.Logger) *DecisionHandler {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -98,7 +106,7 @@ func NewDecisionHandler(pub TriplePublisher, tasks TaskPublisher, pauseData Paus
 		publisher: pub,
 		tasks:     tasks,
 		pauseData: pauseData,
-		platform:  platform,
+		resolver:  resolver,
 		logger:    logger,
 	}
 }
@@ -119,7 +127,10 @@ func (h *DecisionHandler) HandleDecision(ctx context.Context, req DecisionReques
 	}
 
 	reason := sanitiseReason(req.Reason)
-	entityID := agentic.LoopExecutionEntityID(h.platform.Org, h.platform.Platform, req.FailedLoopID)
+	entityID, err := h.resolver.ChainEntityID(ctx, req.FailedLoopID)
+	if err != nil {
+		return fmt.Errorf("chainpause.DecisionHandler: resolve chain entity for failed loop %q: %w", req.FailedLoopID, err)
+	}
 	now := time.Now().UTC()
 
 	// Write the decision audit trail (§D5 chain.decision.*).

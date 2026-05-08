@@ -310,7 +310,14 @@ func startChainPauseSubscriber(ctx context.Context, natsClient *natsclient.Clien
 	taskPublisher := chainpause.NewNATSTaskPublisher(natsClient)
 	pauseDataReader := chainpause.NewNATSPauseDataReader(natsClient)
 
-	pauser := chainpause.NewPauser(triplePublisher, platform)
+	// ADR-038 PR B Phase 3: chainpause writes §D5 audit triples on the
+	// canonical chain entity (post-semstreams beta.57 the publish-vs-write
+	// race is closed, so the resolver's ancestry walk is reliable on
+	// failed loops too). Same chain.Resolver shape used by every other
+	// chain-triple consumer in the product shell.
+	chainResolver := chain.NewResolver(chain.NewNATSParentReader(natsClient, platform), platform)
+
+	pauser := chainpause.NewPauser(triplePublisher, chainResolver)
 	sub := chainpause.NewSubscriber(pauser, logger)
 	if err := sub.Start(ctx, natsClient); err != nil {
 		return nil, fmt.Errorf("subscribe to agent.failed events: %w", err)
@@ -319,7 +326,7 @@ func startChainPauseSubscriber(ctx context.Context, natsClient *natsclient.Clien
 		slog.String("org", platform.Org),
 		slog.String("platform", platform.Platform))
 
-	decisionHandler := chainpause.NewDecisionHandler(triplePublisher, taskPublisher, pauseDataReader, platform, logger)
+	decisionHandler := chainpause.NewDecisionHandler(triplePublisher, taskPublisher, pauseDataReader, chainResolver, logger)
 	httpHandler := chainpause.NewHTTPHandler(decisionHandler, logger)
 	return httpHandler, nil
 }
