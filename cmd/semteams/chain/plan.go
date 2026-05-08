@@ -67,10 +67,13 @@ const (
 //     entity ID).
 //  2. Planner's loop entity → dev_via_spec.plan.path (set by emit_plan
 //     when markdown rendering succeeds; absent on legacy plans).
-//  3. Resolver walks ancestry from the planner's loop_id (a completed
-//     loop — research-reviewer-approved fires before planner is
-//     spawned, so the parent triple is stamped reliably) to find
-//     chain_id → chain entity ID.
+//  3. Resolver walks ancestry from the planner's loop_id. The
+//     planner's agent.loop.parent is stamped at completion regardless
+//     of which rule spawned it (initial: research-mode-transition
+//     rule_03; retries: dev-via-spec rule_02 reviewer-rejected or
+//     rule_04 challenger-concerns). graph_writer stamps the triple on
+//     any loop with a non-empty ParentLoopID, so the walk is reliable
+//     for every planner pass.
 //
 // Write pattern: chain.plan_loop always (when reviewer approves);
 // chain.plan.path only when the planner stamped dev_via_spec.plan.path
