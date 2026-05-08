@@ -69,6 +69,14 @@ func TestNATSEntityReader_LiveSubject(t *testing.T) {
 	require.NoError(t, err, "stub subscribe to %s failed", graphQueryEntitySubject)
 	t.Cleanup(func() { _ = sub.Unsubscribe() })
 
+	// Settle: SubscribeForRequests is async wire-protocol register;
+	// natsclient has no exported Flush. Mirrors upstream's own
+	// natsclient/request_integration_test.go pattern. Without this the
+	// reader's first Request can race the server's subject-table
+	// propagation, surface as "no responders," and read like a real
+	// bug under CI testcontainer cold-start load.
+	time.Sleep(50 * time.Millisecond)
+
 	reader := NewNATSEntityReader(tc.Client)
 	got, err := reader.ReadEntity(ctx, stubEntityID)
 
@@ -113,6 +121,9 @@ func TestNATSParentReader_LiveSubject(t *testing.T) {
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = sub.Unsubscribe() })
+
+	// Settle (see TestNATSEntityReader_LiveSubject for rationale).
+	time.Sleep(50 * time.Millisecond)
 
 	parentReader := NewNATSParentReader(tc.Client, testPlatform())
 	gotParent, err := parentReader.ReadParent(ctx, childLoopID)

@@ -327,6 +327,14 @@ type NATSPauseDataReader struct {
 	client *natsclient.Client
 }
 
+// graphQueryEntitySubject is the upstream graph-query processor's
+// entity-read request/reply subject. Pulled to a constant so the
+// production literal and the integration test reference the same
+// source — preventing a refactor that flips one but not the other
+// (the smoke #8 root-cause class: a literal-string drift the in-
+// memory unit tests can't catch). Mirrors chain.graphQueryEntitySubject.
+const graphQueryEntitySubject = "graph.query.entity"
+
 // NewNATSPauseDataReader constructs a PauseDataReader backed by the given
 // NATS client.
 func NewNATSPauseDataReader(client *natsclient.Client) *NATSPauseDataReader {
@@ -346,7 +354,7 @@ func (r *NATSPauseDataReader) ReadPauseData(ctx context.Context, entityID string
 	queryCtx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
-	respData, err := r.client.Request(queryCtx, "graph.query.entity", reqData, queryTimeout)
+	respData, err := r.client.Request(queryCtx, graphQueryEntitySubject, reqData, queryTimeout)
 	if err != nil {
 		return "", "", fmt.Errorf("graph entity query: %w", err)
 	}

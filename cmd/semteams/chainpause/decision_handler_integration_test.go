@@ -41,9 +41,11 @@ func TestNATSPauseDataReader_LiveSubject(t *testing.T) {
 	var lastRequest map[string]string
 	sub, err := tc.Client.SubscribeForRequests(
 		ctx,
-		// Mirror the production subject used by the reader; if this
-		// drifts from decision_handler.go's literal the test fails.
-		"graph.query.entity",
+		// Reference the production constant: a refactor that flips
+		// graphQueryEntitySubject in decision_handler.go must also
+		// flip this stub or the test fails — exactly the property
+		// the smoke #8 root-cause class teaches us to enforce.
+		graphQueryEntitySubject,
 		func(_ context.Context, data []byte) ([]byte, error) {
 			if uErr := json.Unmarshal(data, &lastRequest); uErr != nil {
 				return nil, uErr
@@ -51,8 +53,13 @@ func TestNATSPauseDataReader_LiveSubject(t *testing.T) {
 			return stubResponse, nil
 		},
 	)
-	require.NoError(t, err, "stub subscribe to graph.query.entity failed")
+	require.NoError(t, err, "stub subscribe to %s failed", graphQueryEntitySubject)
 	t.Cleanup(func() { _ = sub.Unsubscribe() })
+
+	// Settle: SubscribeForRequests is async wire-protocol register;
+	// natsclient has no exported Flush. Mirrors upstream's own
+	// natsclient/request_integration_test.go pattern.
+	time.Sleep(50 * time.Millisecond)
 
 	reader := NewNATSPauseDataReader(tc.Client)
 	role, model, err := reader.ReadPauseData(ctx, failedLoopEntityID)
