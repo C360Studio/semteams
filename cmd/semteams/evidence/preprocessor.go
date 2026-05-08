@@ -113,6 +113,14 @@ func New(reg *Registry, pub TriplePublisher, workspaceRoot, outputDir string, pl
 	}
 }
 
+// OutputDir returns the resolved markdown output directory after env
+// var + default fallback. Used by the boot-time logger so operators
+// can correlate a missing docs/evidence/<slug>.md file with the
+// SEMTEAMS_EVIDENCE_DIR override.
+func (p *Preprocessor) OutputDir() string {
+	return p.outputDir
+}
+
 // SetChainResolver enables ADR-038 PR B Phase 5 chain entity triple
 // writes alongside the existing loop-entity writes. Optional opt-in:
 // leaving this unset keeps the preprocessor backward-compatible (loop-
@@ -291,14 +299,8 @@ func (p *Preprocessor) stampTriples(ctx context.Context, entityID, summary, loop
 // markdown view. ADR-038 §D2 prescribes the path-only chain shape;
 // §D3 names markdown the rendered view, not the canonical store.
 //
-// Race-free as of semstreams beta.57: persistHandlerResult now runs
-// WriteLoopCompletion under a 2s budget BEFORE publishResults, so the
-// builder's own agent.loop.parent is in graph KV by the time this
-// preprocessor consumes the published agent.complete event. (Pre-fix
-// behaviour was a documented race that left chain.evidence.* on a
-// phantom chain entity when graph-write hadn't landed before publish;
-// behaviourally inert because rule_07 reads loop-entity triples
-// regardless, but cleaned up here now that the upstream fix is in.)
+// Race-free as of semstreams beta.57 (resolver's ancestry walk reads
+// agent.loop.parent which is now persisted before publishResults).
 func (p *Preprocessor) stampChainTriples(ctx context.Context, summary, loopID string, now time.Time) {
 	if p.chainResolver == nil {
 		return

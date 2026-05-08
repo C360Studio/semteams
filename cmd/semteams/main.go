@@ -368,6 +368,7 @@ func startEvidencePreprocessor(ctx context.Context, natsClient *natsclient.Clien
 	if workspaceRoot != "" {
 		logger.Info("evidence preprocessor started",
 			slog.String("workspace_root", workspaceRoot),
+			slog.String("output_dir", preprocessor.OutputDir()),
 			slog.String("org", platform.Org),
 			slog.String("platform", platform.Platform))
 	} else {
