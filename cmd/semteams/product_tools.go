@@ -20,6 +20,7 @@ import (
 	"github.com/c360studio/semteams/cmd/semteams/tools/bootstrapworkspace"
 	"github.com/c360studio/semteams/cmd/semteams/tools/builderdecide"
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitartifact"
+	"github.com/c360studio/semteams/cmd/semteams/tools/emitconsensus"
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitplan"
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitspecartifact"
 	"github.com/c360studio/semteams/cmd/semteams/verification"
@@ -104,6 +105,9 @@ func registerProductTools(reg *agentictools.ExecutorRegistry, natsClient *natscl
 		return err
 	}
 	if err := registerEmitPlan(reg, natsClient, platform, logger); err != nil {
+		return err
+	}
+	if err := registerEmitConsensus(reg, natsClient, platform, logger); err != nil {
 		return err
 	}
 	if err := registerEmitSpecArtifact(reg, natsClient, platform, testHarnessMgr, logger); err != nil {
@@ -199,6 +203,34 @@ func registerEmitPlan(reg *agentictools.ExecutorRegistry, natsClient *natsclient
 	}
 	logger.Info("Registered product tool",
 		slog.String("name", emitplan.ToolName),
+		slog.String("org", platform.Org),
+		slog.String("platform", platform.Platform))
+	return nil
+}
+
+// registerEmitConsensus wires the ADR-038 PR C Phase C3 emit_consensus
+// executor. Always registered when natsClient is non-nil — same
+// "always on" policy as registerEmitPlan / registerEmitArtifact.
+// Output directory defaults to "docs/consensus" but is overrideable
+// via SEMTEAMS_CONSENSUS_DIR.
+//
+// Note (PR C Phase C3 vs C5 split): the challenger persona contract
+// change to actually CALL emit_consensus is deferred to Phase C5.
+// Until C5 lands, the tool is registered but the challenger persona
+// keeps its existing decide(action="accept", reason="<consensus
+// content>") terminal. Matches the C1/C2 split shape.
+func registerEmitConsensus(reg *agentictools.ExecutorRegistry, natsClient *natsclient.Client, platform types.PlatformMeta, logger *slog.Logger) error {
+	if natsClient == nil {
+		logger.Warn("nats client unavailable; emit_consensus registration skipped")
+		return nil
+	}
+	triplePublisher := agentictools.NewNATSTriplePublisher(natsClient)
+	executor := emitconsensus.NewExecutor(triplePublisher, natsClient, platform, logger, "")
+	if err := reg.RegisterTool(emitconsensus.ToolName, executor); err != nil {
+		return fmt.Errorf("register %s: %w", emitconsensus.ToolName, err)
+	}
+	logger.Info("Registered product tool",
+		slog.String("name", emitconsensus.ToolName),
 		slog.String("org", platform.Org),
 		slog.String("platform", platform.Platform))
 	return nil
