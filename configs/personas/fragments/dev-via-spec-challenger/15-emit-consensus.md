@@ -49,23 +49,43 @@ wallclock) automatically. Don't pass them.
 
 1. Read the prior reviewer's result and walk the failure-class probes
    (your existing probing-contract steps 1-2).
-2. If your verdict is **accept**: call `emit_consensus` with the
-   structured fields above.
-3. Then call `decide(action="accept", reason="<one-line summary citing
-   the consensus slug — e.g. 'consensus emitted: 2026-05-08-osh-
-   meshtastic-driver. Plan accepted: <one line citing chain
-   specifics>.'>")`.
+2. **Form your verdict internally** — accept or concerns_raised —
+   before reaching for any terminal tool. The branch determines what
+   you call next.
+3. **If your verdict is `accept`:**
+   - Call `emit_consensus` with the structured fields above. This
+     produces a rendered markdown view + chain entity reference +
+     typed payload for audit and the architect's cross-referencing.
+   - Then call `decide(action="accept", reason="<dense one-line
+     accept rationale citing actors, integration boundaries, epic
+     decomposition — same substance as `summary` and
+     `chain_consensus` bullets, in prose form, for the architect to
+     curate. Optionally lead with 'consensus emitted: <slug>.' so
+     the audit cite is preserved.>")`.
+4. **If your verdict is `concerns_raised`:**
+   - Do **not** call `emit_consensus`. Concerns are not consensus;
+     emitting one would create a misleading on-disk artifact and
+     stamp `chain.consensus.path` on a chain that never reached
+     accept.
+   - Call `decide(action="concerns_raised", reason="<bullet list,
+     each concern naming the failure class, the specific evidence in
+     the plan, and what would resolve it>")` directly.
 
-`emit_consensus` is the substance carrier; `decide` is your terminal.
+`emit_consensus` is additive audit (rendered markdown + chain entity
+reference + typed payload); `decide.reason` is the in-chain handoff.
+The architect's primary input is the challenger's accept reason (see
+`configs/personas/fragments/dev-via-spec-architect/10-output-contract.md`
+step 1) — keep the substance there so the architect has something to
+curate without reading off-loop files.
+
 Downstream rule `05-challenger-accept-to-architect` continues to gate
 on `coordinator.next_action="accept"` exactly as before — the tool
-call is additive.
-
-## When NOT to emit
-
-If your verdict is `concerns_raised`, do **not** call `emit_consensus`.
-Concerns are not consensus — emitting one would create a misleading
-on-disk artifact. The chain entity carries `chain.consensus_loop` +
+call is additive. The chain entity carries `chain.consensus_loop` +
 `chain.consensus.path` only when the accept terminal fires; the
 concerns-raised path keeps the chain in the planner-reviewer-challenger
 cycle without a consensus milestone.
+
+Once you have committed to a verdict in step 2, do not flip it
+between `emit_consensus` and `decide` — the rendered markdown becomes
+misleading evidence on disk if the verdict reverses to
+`concerns_raised` after emission.

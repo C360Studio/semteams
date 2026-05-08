@@ -14,8 +14,12 @@ that matter most for your role:
 - `title` — short, descriptive title for this research (e.g.
   `"OSH Meshtastic driver research"`). Drives the rendered file's
   slug at `docs/research/<slug>.md` and shows up in `git log`. Keep
-  it stable across revisions — the file overwrites at the
-  deterministic slug, which is what you want for revision history.
+  it stable across revisions — re-emitting with the same title
+  resolves to the same slug, so the file overwrites at the
+  deterministic path, which is what you want for revision history.
+  Source-acquisition runs re-emit more often than the plain
+  researcher (every substrate-mutating pass plus the stabilising
+  pass), so a stable title is especially load-bearing here.
 - `revision` — read the prior reviewer's loop result via
   `read_loop_result` (you do this anyway to read the gaps), locate
   the artifact JSON in its content, and use

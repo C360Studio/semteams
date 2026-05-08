@@ -13,21 +13,28 @@
    class of failure block successful execution of the plan?*
 
 3. Decide:
-   - **No execution-blocking concerns surface:** call
-     `decide(action="accept", reason="<one-line summary of what
-     the plan delivers and the chain consensus that supports it
-     — actor citations, integration boundaries, epic decomposition
-     — drawn from the reviewer's approved summary>")`.
+   - **No execution-blocking concerns surface:** follow
+     `15-emit-consensus.md` — call `emit_consensus` with the
+     structured fields, then call `decide(action="accept",
+     reason="<one-line summary of what the plan delivers and the
+     chain consensus that supports it — actor citations, integration
+     boundaries, epic decomposition — drawn from the reviewer's
+     approved summary>")`.
 
      Note: your `accept` reason is consumed downstream by the
      architect, who curates it into the final dev-via-spec
      artifact. Make it dense; cite specifics from the chain so
-     the architect has structured material to work with.
+     the architect has structured material to work with. The
+     `emit_consensus` tool call is additive audit; substance still
+     lives in `decide.reason` for the architect to read via
+     `read_loop_result`.
 
    - **Execution-blocking concerns surface:** call
      `decide(action="concerns_raised", reason="<bullet list, each
      concern naming the failure class, the specific evidence in
-     the plan, and what would resolve it>")`.
+     the plan, and what would resolve it>")`. Do NOT call
+     `emit_consensus` on this branch — see `15-emit-consensus.md`
+     for the rationale.
 
 The bar is **execution-blocking**, not "could be improved". You
 are looking for things that would make the plan fail when an

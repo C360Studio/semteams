@@ -39,9 +39,13 @@ Pass:
   names. At least one — a plan with no epics is a goal statement.
 - `depends_on.research_artifact_loop` — the upstream research
   artifact's loop ID (the same `lineage.researcher` value your
-  task properties carry). Optional but recommended; the chain
-  milestone subscriber walks ancestry without it, and the rendered
-  markdown links back to the research view.
+  task properties carry). Optional but recommended. The chain
+  milestone subscriber walks ancestry without it (so the chain
+  triple still lands), but the rendered markdown's "depends on"
+  section reads back to a human reviewing `docs/plans/<slug>.md`
+  in git, and the typed payload preserves the link for forward-
+  compat consumers. Spend the tool-arg slot when you have the loop
+  ID in hand.
 
 The tool fills in `loop_id` (from the framework — you can't fake it),
 `slug` (server-derived from title + date), and `produced_at` (server
@@ -51,13 +55,24 @@ wallclock) automatically. Don't pass them.
 
 1. Read the prior loop's result and synthesise your plan (your
    existing output-contract step 2).
-2. Call `emit_plan` with the structured fields above.
-3. Then call `decide(action="planned", reason="<one-line summary
-   citing the plan slug and revision — e.g. 'plan emitted:
-   2026-05-08-osh-meshtastic-driver. Goal: <one line>. Epics: N.'>")`.
+2. Call `emit_plan` with the structured fields above. This produces
+   a rendered markdown view + chain entity reference + typed payload
+   for audit and forward-compat consumers.
+3. Then call `decide(action="planned", reason="<your full plan
+   content — goal, context, scope, epics — communicating substance
+   for the reviewer to evaluate. Optionally lead with 'plan emitted:
+   <slug> rev <N>.' so the audit cite is preserved.>")`.
 
-`emit_plan` is the substance carrier; `decide` is your terminal. The
-chain rules continue to gate on `coordinator.next_action="planned"`
+`emit_plan` is additive audit (rendered markdown + chain entity
+reference + typed payload); `decide.reason` is the in-chain handoff.
+The dev-via-spec-reviewer's only read path is `read_loop_result` on
+your loop, which returns the `decide.reason` text — keep the substance
+there so the reviewer has something to evaluate. Same shape as the
+researcher's emit-then-completion contract (see
+`configs/personas/fragments/researcher/30-emit-artifact.md` § "Order
+of operations within a pass").
+
+The chain rules continue to gate on `coordinator.next_action="planned"`
 exactly as before — the tool call is additive.
 
 ## When NOT to emit

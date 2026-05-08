@@ -33,7 +33,7 @@
       "related_loops": {
         "researcher": "$entity.triple.lineage.researcher"
       },
-      "prompt": "Research has stabilised. The reviewer at loop $entity.instance approved the latest research artifact (reviewer-as-enumerator checklist passed AND zero new substrate mutations on the latest revision — see ADR-031 §addendum 2026-04-30 'Stabilisation as converged change-log' for the stabilisation predicate). Call read_loop_result with the reviewer loop id to load the artifact, then proceed per your persona's output contract: synthesise the plan, call emit_plan with the structured fields, then terminate with decide(action=\"planned\")."
+      "prompt": "Research has stabilised. The reviewer at loop $entity.instance approved the latest research artifact (reviewer-as-enumerator checklist passed AND zero new substrate mutations on the latest revision — see ADR-031 §addendum 2026-04-30 'Stabilisation as converged change-log' for the stabilisation predicate). Call read_loop_result with the reviewer loop id to load the artifact, then proceed per your persona's output contract."
     }
   ],
   "on_exit": [],
