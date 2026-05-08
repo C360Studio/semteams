@@ -189,6 +189,22 @@
         "enable_hierarchy": true
       }
     },
+    "graph-query": {
+      "type": "processor",
+      "name": "graph-query",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [
+            {"name": "query_requests", "subject": "graph.query.>", "type": "nats-request"}
+          ],
+          "outputs": []
+        },
+        "request_timeout": "30s",
+        "max_traversal_depth": 5,
+        "max_traversal_nodes": 100
+      }
+    },
     "rule": {
       "type": "processor",
       "name": "rule-processor",
