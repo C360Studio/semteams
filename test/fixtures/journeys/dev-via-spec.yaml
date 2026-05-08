@@ -63,37 +63,46 @@ description: |
 
     Loop G — dev-via-spec-planner (R3.3 first pass, real persona)
      19. tool_call: read_loop_result (placeholder; tool errors)
-     20. tool_call: decide(planned, reason=<plan content>)
+     20. tool_call: emit_plan (PR C C5: renders docs/plans/<slug>.md +
+         publishes dev_via_spec.plan.{loop_id} payload + stamps marker
+         triples; chain milestone subscriber later writes
+         chain.plan_loop + chain.plan.path on reviewer-approval)
+     21. tool_call: decide(planned, reason=<plan content>)
          → coordinator.next_action=planned → dev-via-spec rule_01 fires
          (planner → reviewer handoff).
 
     Loop H — dev-via-spec-reviewer (first pass, approves on golden path)
-     21. tool_call: read_loop_result (placeholder; tool errors)
-     22. tool_call: decide(approved, reason=<all checklist items met>)
+     22. tool_call: read_loop_result (placeholder; tool errors)
+     23. tool_call: decide(approved, reason=<all checklist items met>)
          → coordinator.next_action=approved → dev-via-spec rule_03 fires
          (reviewer → challenger handoff).
 
     Loop I — dev-via-spec-challenger (first pass, accepts on golden path)
-     23. tool_call: read_loop_result (placeholder; tool errors)
-     24. tool_call: decide(accept, reason=<no concerns>)
+     24. tool_call: read_loop_result (placeholder; tool errors)
+     25. tool_call: emit_consensus (PR C C5: accept-branch only;
+         renders docs/consensus/<slug>.md + publishes
+         dev_via_spec.consensus.{loop_id} payload + stamps marker
+         triples; chain milestone subscriber writes chain.consensus_loop
+         + chain.consensus.path on accept)
+     26. tool_call: decide(accept, reason=<no concerns>)
          → coordinator.next_action=accept → dev-via-spec rule_05 fires
          (challenger → architect handoff).
 
     Loop J — dev-via-spec-architect (R3.4b, emits typed artifact)
-     25. tool_call: read_loop_result (placeholder; tool errors —
+     27. tool_call: read_loop_result (placeholder; tool errors —
          architect's three reads are placeholders that all error,
          consumed by the next canned turn)
-     26. tool_call: read_loop_result (placeholder; tool errors)
-     27. tool_call: read_loop_result (placeholder; tool errors)
-     28. tool_call: emit_dev_via_spec_artifact (renders markdown to
+     28. tool_call: read_loop_result (placeholder; tool errors)
+     29. tool_call: read_loop_result (placeholder; tool errors)
+     30. tool_call: emit_dev_via_spec_artifact (renders markdown to
          docs/specs/<slug>.md AND mints dev_via_spec.artifact.{path,
          slug,...} marker triples on this loop entity)
-     29. tool_call: decide(tasks_emitted, reason=<final task list>)
+     31. tool_call: decide(tasks_emitted, reason=<final task list>)
          → coordinator.next_action=tasks_emitted →
          dev-via-spec rule_06 fires (R3.6.2.d: architect→builder).
 
     Loop K — dev-via-spec-builder (R3.6.2.e terminal)
-     30. tool_call: bootstrap_workspace (iteration 1; the
+     32. tool_call: bootstrap_workspace (iteration 1; the
          hardcoded spec_path will not match the architect's
          dynamically-dated emit on most days, so the tool surfaces
          a "spec file not found" error — same placeholder-doesn't-
@@ -101,12 +110,12 @@ description: |
          the next canned turn handles it. On the slug-matching day
          the call succeeds harmlessly and the sequence-based
          mock-llm still drives builder_decide as the 4th call.).
-     31. tool_call: bash ls SPEC.md (workspace either doesn't
+     33. tool_call: bash ls SPEC.md (workspace either doesn't
          exist or contains the seeded SPEC.md — either way the
          next canned turn handles whatever bash returns).
-     32. tool_call: bash echo "iteration budget audit" (echoes
+     34. tool_call: bash echo "iteration budget audit" (echoes
          and returns; the next canned turn handles it).
-     33. tool_call: builder_decide(needs_clarification,
+     35. tool_call: builder_decide(needs_clarification,
          reason=<...>, blocking_question=<...>)
          → terminal. coordinator.next_action=needs_clarification
          fires no rule today; the builder's terminal closes the
@@ -156,6 +165,7 @@ responses:
       arguments_json: |
         {
           "revision": 1,
+          "title": "OSH Meshtastic driver research",
           "actors": [],
           "integration_points": [],
           "tasks": [],
@@ -236,6 +246,7 @@ responses:
       arguments_json: |
         {
           "revision": 2,
+          "title": "OSH Meshtastic driver research",
           "actors": [
             {"name": "OSH driver framework", "role": "Hosts the IDriver interface drivers must implement to expose sensor observations"},
             {"name": "OGC CS endpoints", "role": "Standard endpoints for observations, system descriptions, and control streams that the driver exposes"},
@@ -341,6 +352,7 @@ responses:
       arguments_json: |
         {
           "revision": 3,
+          "title": "OSH Meshtastic driver research",
           "actors": [
             {"name": "OSH driver framework", "role": "Hosts the IDriver interface drivers must implement to expose sensor observations"},
             {"name": "OGC CS endpoints", "role": "Standard endpoints for observations, system descriptions, and control streams that the driver exposes"},
@@ -434,6 +446,41 @@ responses:
           "loop_id": "reviewer-loop-F"
         }
 
+  # PR C Phase C5: planner calls emit_plan before terminating with
+  # decide(planned). The tool renders docs/plans/<slug>.md, stamps
+  # marker triples on the loop entity, and lets the chain milestone
+  # subscriber propagate chain.plan.path on reviewer-approval. The
+  # decide.reason still carries the plan substance — the in-chain
+  # reviewer reads it via read_loop_result (ADR-038 PR C C5 reviewer
+  # finding C1: emit-tool is additive audit, not the substance carrier).
+  - tool_call:
+      name: emit_plan
+      arguments_json: |
+        {
+          "revision": 1,
+          "title": "OSH Meshtastic driver plan",
+          "goal": "Implement the OSH IDriver interface backed by Meshtastic radio packets, exposing OGC CS observation endpoints.",
+          "context": "The research arc enumerated three actors — OSH driver framework (hosts IDriver), OGC CS endpoints (observation surface), and Meshtastic radio (telemetry source). The boundary spans a read-side (Meshtastic packets → driver) and a write-side (driver → OGC CS observations).",
+          "scope_in": [
+            "pkg/driver/meshtastic_driver.go — IDriver implementation",
+            "pkg/driver/ogc_publisher.go — OGC CS write-side publisher",
+            "pkg/driver/meshtastic_decoder.go — Meshtastic packet decoder",
+            "test/driver/integration_test.go — read+write integration coverage"
+          ],
+          "scope_out": [
+            "Meshtastic firmware changes — out of repo scope, upstream-owned",
+            "OGC CS specification work — standards body owns; we conform, not extend"
+          ],
+          "epics": [
+            "E1 — Meshtastic packet ingestion: implement the read-side decoder, normalising radio packets into the driver's internal observation envelope",
+            "E2 — OGC CS observation publishing: implement the write-side publisher exposing the IDriver interface, mapping internal observations to OGC CS observation messages and system descriptions",
+            "E3 — Lifecycle and recovery: implement IDriver lifecycle hooks (start/stop) plus the radio-disconnect failure mode handler"
+          ],
+          "depends_on": {
+            "research_artifact_loop": "researcher-with-source-loop-E"
+          }
+        }
+
   - tool_call:
       name: decide
       arguments_json: |
@@ -466,6 +513,30 @@ responses:
       arguments_json: |
         {
           "loop_id": "reviewer-loop-H"
+        }
+
+  # PR C Phase C5: challenger calls emit_consensus on the accept branch
+  # only. The tool renders docs/consensus/<slug>.md, stamps marker
+  # triples on the loop entity, and lets the chain milestone subscriber
+  # propagate chain.consensus.path on accept. The decide.reason still
+  # carries the consensus substance — the architect reads it via
+  # read_loop_result (per ADR-038 PR C C5 reviewer finding C1).
+  - tool_call:
+      name: emit_consensus
+      arguments_json: |
+        {
+          "title": "OSH Meshtastic driver consensus",
+          "summary": "Plan accepted: read-side Meshtastic decoder + write-side OGC CS publisher + lifecycle/recovery handler decompose the IDriver implementation cleanly across the two integration points named in the research artifact.",
+          "chain_consensus": [
+            "Meshtastic radio → OSH driver framework: read-side decoder normalises packetised telemetry into the driver's internal observation envelope (E1)",
+            "OSH driver framework → OGC CS endpoints: write-side publisher maps internal observations to OGC CS observation messages and system descriptions (E2)",
+            "Lifecycle + radio-disconnect failure mode owned by E3 — covers asynchronous Meshtastic→driver hazards"
+          ],
+          "considered_concerns": [],
+          "depends_on": {
+            "plan_loop": "planner-loop-G",
+            "reviewer_loop": "reviewer-loop-H"
+          }
         }
 
   - tool_call:

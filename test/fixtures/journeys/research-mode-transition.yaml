@@ -106,6 +106,7 @@ responses:
       arguments_json: |
         {
           "revision": 1,
+          "title": "OSH Meshtastic driver research",
           "actors": [],
           "integration_points": [],
           "tasks": [],
@@ -186,6 +187,7 @@ responses:
       arguments_json: |
         {
           "revision": 2,
+          "title": "OSH Meshtastic driver research",
           "actors": [
             {"name": "OSH driver framework", "role": "Hosts the IDriver interface drivers must implement to expose sensor observations"},
             {"name": "OGC CS endpoints", "role": "Standard endpoints for observations, system descriptions, and control streams that the driver exposes"},
@@ -291,6 +293,7 @@ responses:
       arguments_json: |
         {
           "revision": 3,
+          "title": "OSH Meshtastic driver research",
           "actors": [
             {"name": "OSH driver framework", "role": "Hosts the IDriver interface drivers must implement to expose sensor observations"},
             {"name": "OGC CS endpoints", "role": "Standard endpoints for observations, system descriptions, and control streams that the driver exposes"},

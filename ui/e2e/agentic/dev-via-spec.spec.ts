@@ -448,6 +448,30 @@ test.describe("Dev-via-Spec (R3.3 + R3.4b + R3.6.2)", () => {
       specArtifactSubjects.length,
       `expected at least 1 dev_via_spec.artifact.<loop_id> publish from the architect, got ${specArtifactSubjects.length}: ${JSON.stringify(specArtifactSubjects)}`,
     ).toBeGreaterThanOrEqual(1);
+
+    // -----------------------------------------------------------------
+    // Step 15 — verify the ADR-038 PR C Phase C5 emit-tool payloads
+    // landed: dev_via_spec.plan.<loop_id> from the planner's emit_plan
+    // call (Loop G), dev_via_spec.consensus.<loop_id> from the
+    // challenger's emit_consensus call (Loop I, accept branch only).
+    // Catches wire-format drift between persona prose, tool schema,
+    // and payload shape without spending real LLM tokens.
+    // -----------------------------------------------------------------
+    const planSubjects = entries
+      .map((e) => e.subject)
+      .filter((s) => s.startsWith("dev_via_spec.plan."));
+    expect(
+      planSubjects.length,
+      `expected at least 1 dev_via_spec.plan.<loop_id> publish from the planner's emit_plan, got ${planSubjects.length}: ${JSON.stringify(planSubjects)}`,
+    ).toBeGreaterThanOrEqual(1);
+
+    const consensusSubjects = entries
+      .map((e) => e.subject)
+      .filter((s) => s.startsWith("dev_via_spec.consensus."));
+    expect(
+      consensusSubjects.length,
+      `expected at least 1 dev_via_spec.consensus.<loop_id> publish from the challenger's emit_consensus, got ${consensusSubjects.length}: ${JSON.stringify(consensusSubjects)}`,
+    ).toBeGreaterThanOrEqual(1);
   });
 });
 
