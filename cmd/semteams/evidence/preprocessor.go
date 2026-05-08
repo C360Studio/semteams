@@ -249,6 +249,32 @@ func (p *Preprocessor) stampTriples(ctx context.Context, entityID, summary, loop
 // resolution error, or per-triple write error logs Warn and continues —
 // the loop-entity triples have already landed, so rule_07's downstream
 // path is unaffected.
+//
+// Known race (ADR-038 PR B follow-on, tracked upstream): upstream
+// agentic-loop publishes agent.complete.<loop_id> to JetStream BEFORE
+// calling graphWriter.WriteLoopCompletion synchronously (see
+// processor/agentic-loop/component.go publishResults → WriteLoopCompletion
+// ordering). The completion writes include agent.loop.parent on the
+// just-completed loop. So at the moment this preprocessor runs, the
+// builder's own agent.loop.parent triple may not yet be visible in
+// graph KV. Resolver.ChainID would short-circuit at the builder, return
+// chain_id == builder_loop_id, and chain.evidence.* would land on a
+// phantom chain entity (c360.<platform>.agent.chain.execution.<builder_loop_id>)
+// instead of the real dispatch-rooted chain entity.
+//
+// Behavioural impact today: ZERO. rule_07 reads loop-entity triples
+// regardless (ADR-038 D5 keeps the loop-entity duplicates during PR B
+// drift-safe phasing). chain.evidence.* is observability-only for ops
+// agent / cross-arc rules that don't ship in PR B.
+//
+// Real fix is upstream: reorder publishResults so WriteLoopCompletion
+// runs first. Same upstream surface as the failed-loop ancestry gap
+// (LoopFailedEvent has no ParentLoopID, buildLoopFailureTriples doesn't
+// stamp agent.loop.parent — both close together). Filed alongside.
+//
+// Other anchor sites (DispatchedStamper, ResearchMilestoneStamper,
+// emitspecartifact) are race-free because they walk from a prior-completed
+// ancestor, not from the just-completed loop carrying the event.
 func (p *Preprocessor) stampChainTriples(ctx context.Context, summary, loopID string, now time.Time) {
 	if p.chainResolver == nil {
 		return

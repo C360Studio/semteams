@@ -3,6 +3,7 @@ package chain
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 
 	"github.com/c360studio/semstreams/agentic"
@@ -140,10 +141,15 @@ func (s *CompletionSubscriber) handleMsg(ctx context.Context, data []byte) {
 // Recovered panics are logged with handler index, loop_id, role, and
 // recover value; the loop continues to siblings.
 func (s *CompletionSubscriber) invokeHandler(ctx context.Context, idx int, h CompletionHandler, ev *agentic.LoopCompletedEvent) {
+	// handler_type carries the concrete Go type name for forensic
+	// debugging — index alone won't identify which stamper if the
+	// handler slice is later refactored or reordered.
+	handlerType := fmt.Sprintf("%T", h)
 	defer func() {
 		if r := recover(); r != nil {
 			s.logger.Error("chain completion subscriber: handler panicked (contract violation)",
 				slog.Int("handler_index", idx),
+				slog.String("handler_type", handlerType),
 				slog.String("loop_id", ev.LoopID),
 				slog.String("role", ev.Role),
 				slog.Any("recovered", r))
@@ -152,6 +158,7 @@ func (s *CompletionSubscriber) invokeHandler(ctx context.Context, idx int, h Com
 	if err := h.HandleLoopCompleted(ctx, ev); err != nil {
 		s.logger.Error("chain completion subscriber: handler returned error",
 			slog.Int("handler_index", idx),
+			slog.String("handler_type", handlerType),
 			slog.String("loop_id", ev.LoopID),
 			slog.String("role", ev.Role),
 			slog.String("error", err.Error()))
