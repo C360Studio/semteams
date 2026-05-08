@@ -27,6 +27,13 @@ const loopCompletedSubject = "agent.complete.>"
 // non-empty ParentLoopID). Returning an error is for write failures
 // the caller should log; it does not abort other handlers in the
 // dispatch chain.
+//
+// Implementations may assume sequential per-event invocation; the
+// subscriber does not parallelize handlers. Implementations MUST NOT
+// rely on panicking to surface errors — the subscriber recovers
+// panics defensively (so one buggy handler can't kill the milestone
+// subscription for every chain in the system) but treats them as a
+// contract violation and logs accordingly.
 type CompletionHandler interface {
 	HandleLoopCompleted(ctx context.Context, ev *agentic.LoopCompletedEvent) error
 }
@@ -122,12 +129,31 @@ func (s *CompletionSubscriber) handleMsg(ctx context.Context, data []byte) {
 	}
 
 	for i, h := range s.handlers {
-		if err := h.HandleLoopCompleted(ctx, &ev); err != nil {
-			s.logger.Error("chain completion subscriber: handler returned error",
-				slog.Int("handler_index", i),
+		s.invokeHandler(ctx, i, h, &ev)
+	}
+}
+
+// invokeHandler runs one handler with a panic-recover guard. A handler
+// that panics — programmer error, contract violation — must not kill
+// the subscriber's NATS callback goroutine, since that would silently
+// halt every milestone write for every chain across the deployment.
+// Recovered panics are logged with handler index, loop_id, role, and
+// recover value; the loop continues to siblings.
+func (s *CompletionSubscriber) invokeHandler(ctx context.Context, idx int, h CompletionHandler, ev *agentic.LoopCompletedEvent) {
+	defer func() {
+		if r := recover(); r != nil {
+			s.logger.Error("chain completion subscriber: handler panicked (contract violation)",
+				slog.Int("handler_index", idx),
 				slog.String("loop_id", ev.LoopID),
 				slog.String("role", ev.Role),
-				slog.String("error", err.Error()))
+				slog.Any("recovered", r))
 		}
+	}()
+	if err := h.HandleLoopCompleted(ctx, ev); err != nil {
+		s.logger.Error("chain completion subscriber: handler returned error",
+			slog.Int("handler_index", idx),
+			slog.String("loop_id", ev.LoopID),
+			slog.String("role", ev.Role),
+			slog.String("error", err.Error()))
 	}
 }

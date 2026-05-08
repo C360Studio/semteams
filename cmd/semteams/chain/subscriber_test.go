@@ -8,21 +8,25 @@ import (
 	"testing"
 
 	"github.com/c360studio/semstreams/agentic"
-	"github.com/c360studio/semstreams/message"
 )
 
 // recordingHandler captures HandleLoopCompleted calls for assertion.
 // errOn is keyed by loop_id; if a key matches, the configured error is
-// returned for that call.
+// returned for that call. panicOn forces a panic for the matching key
+// (covers the contract-violation defensive path in invokeHandler).
 type recordingHandler struct {
-	calls atomic.Int64
-	seen  []*agentic.LoopCompletedEvent
-	errOn map[string]error
+	calls   atomic.Int64
+	seen    []*agentic.LoopCompletedEvent
+	errOn   map[string]error
+	panicOn map[string]bool
 }
 
 func (r *recordingHandler) HandleLoopCompleted(_ context.Context, ev *agentic.LoopCompletedEvent) error {
 	r.calls.Add(1)
 	r.seen = append(r.seen, ev)
+	if r.panicOn != nil && r.panicOn[ev.LoopID] {
+		panic("contract violation: handler panicked on " + ev.LoopID)
+	}
 	if err, ok := r.errOn[ev.LoopID]; ok {
 		return err
 	}
@@ -128,6 +132,25 @@ func TestCompletionSubscriber_NilHandlersFiltered(t *testing.T) {
 	// No way to assert "did not panic on nil" except the test reaching here.
 }
 
-// _ keeps message imported for future test additions (e.g., real
-// BaseMessage envelopes once we have a closer wire fixture).
-var _ = message.Triple{}
+// TestCompletionSubscriber_PanickingHandlerDoesNotKillSubscription
+// pins the contract that a panic in one handler is recovered, logged,
+// and does not abort siblings. Without this, a single buggy handler
+// would silently halt every chain milestone write across the
+// deployment by killing the NATS callback goroutine.
+func TestCompletionSubscriber_PanickingHandlerDoesNotKillSubscription(t *testing.T) {
+	h1 := &recordingHandler{panicOn: map[string]bool{"loop_a": true}}
+	h2 := &recordingHandler{}
+	s := NewCompletionSubscriber([]CompletionHandler{h1, h2}, nil)
+
+	ev := &agentic.LoopCompletedEvent{LoopID: "loop_a", Role: "dispatch"}
+	// handleMsg must not propagate the panic; if it does, the test fails
+	// here with "test panicked".
+	s.handleMsg(context.Background(), encodeCompletion(t, ev))
+
+	if got := h1.calls.Load(); got != 1 {
+		t.Errorf("h1: got %d calls, want 1 (panic still increments before defer fires)", got)
+	}
+	if got := h2.calls.Load(); got != 1 {
+		t.Errorf("h2 should run after h1 panic; got %d calls, want 1", got)
+	}
+}

@@ -67,11 +67,15 @@ func TestDispatchedStamper_RootStampsTriple(t *testing.T) {
 	if got.Subject != wantSubject {
 		t.Errorf("Subject: got %q, want %q", got.Subject, wantSubject)
 	}
-	if got.Object != "2026-05-07T14:30:00Z" {
-		t.Errorf("Object: got %q, want RFC3339 of CompletedAt", got.Object)
+	objStr, ok := got.Object.(string)
+	if !ok {
+		t.Fatalf("Object should be string, got %T", got.Object)
 	}
-	if got.Source != "chain.dispatched_stamper" {
-		t.Errorf("Source: got %q, want chain.dispatched_stamper", got.Source)
+	if objStr != "2026-05-07T14:30:00Z" {
+		t.Errorf("Object: got %q, want RFC3339 of CompletedAt", objStr)
+	}
+	if got.Source != "chain.dispatched" {
+		t.Errorf("Source: got %q, want chain.dispatched", got.Source)
 	}
 	if got.Confidence != 1.0 {
 		t.Errorf("Confidence: got %v, want 1.0", got.Confidence)
@@ -158,9 +162,13 @@ func TestDispatchedStamper_PropagatesPublishError(t *testing.T) {
 
 // TestDispatchedStamper_FallsBackOnZeroCompletedAt: a zero CompletedAt
 // would render the triple useless. Stamper falls back to observation
-// time so the milestone marker still exists. Smoke-grade defense; we
-// don't expect framework to send zero timestamps but a malformed event
-// should not silently produce a bad triple.
+// time so the milestone marker still exists, AND stamps a companion
+// chain.dispatched_at.observed_fallback="true" triple so a graph-only
+// downstream consumer (ops agent, future analytics) can distinguish
+// "real wire timestamp" from "subscriber-observed fallback" without
+// parsing logs. Smoke-grade defense; we don't expect framework to send
+// zero timestamps but a malformed event should not silently produce a
+// bad triple AND no breadcrumb.
 func TestDispatchedStamper_FallsBackOnZeroCompletedAt(t *testing.T) {
 	pub := &recordingPublisher{}
 	s := NewDispatchedStamper(pub, testPlatform(), nil)
@@ -179,16 +187,54 @@ func TestDispatchedStamper_FallsBackOnZeroCompletedAt(t *testing.T) {
 	if !ok {
 		t.Fatal("chain.dispatched_at not written")
 	}
-	if got.Object == "0001-01-01T00:00:00Z" {
-		t.Errorf("Object should not be zero-time RFC3339; got %q", got.Object)
+	objStr, ok := got.Object.(string)
+	if !ok {
+		t.Fatalf("chain.dispatched_at Object should be string, got %T", got.Object)
 	}
-	// Object is a valid RFC3339 string near "now"; just assert it parses
-	// and is recent (within last minute).
-	parsed, err := time.Parse(time.RFC3339, got.Object.(string))
+	if objStr == "0001-01-01T00:00:00Z" {
+		t.Errorf("Object should not be zero-time RFC3339; got %q", objStr)
+	}
+	parsed, err := time.Parse(time.RFC3339, objStr)
 	if err != nil {
-		t.Fatalf("Object should be valid RFC3339, got %q: %v", got.Object, err)
+		t.Fatalf("Object should be valid RFC3339, got %q: %v", objStr, err)
 	}
 	if time.Since(parsed) > time.Minute {
 		t.Errorf("fallback timestamp should be recent, got %v", parsed)
+	}
+
+	// The companion fallback marker must be written so downstream graph
+	// consumers can detect the framework bug without parsing logs.
+	marker, ok := pub.byPredicate("chain.dispatched_at.observed_fallback")
+	if !ok {
+		t.Fatal("chain.dispatched_at.observed_fallback companion triple missing")
+	}
+	if marker.Object != "true" {
+		t.Errorf("observed_fallback Object: got %v, want \"true\"", marker.Object)
+	}
+	if marker.Subject != got.Subject {
+		t.Errorf("observed_fallback Subject must match dispatched_at Subject; got %q vs %q", marker.Subject, got.Subject)
+	}
+}
+
+// TestDispatchedStamper_NoFallbackMarkerOnHappyPath confirms the
+// observed_fallback companion triple is NOT written when CompletedAt
+// is non-zero (the normal case). Avoids polluting graph queries with
+// fallback markers on healthy chains.
+func TestDispatchedStamper_NoFallbackMarkerOnHappyPath(t *testing.T) {
+	pub := &recordingPublisher{}
+	s := NewDispatchedStamper(pub, testPlatform(), nil)
+
+	ev := &agentic.LoopCompletedEvent{
+		LoopID:       "dispatch_ok",
+		Role:         "dispatch",
+		ParentLoopID: "",
+		CompletedAt:  time.Now().UTC(),
+	}
+
+	if err := s.HandleLoopCompleted(context.Background(), ev); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, ok := pub.byPredicate("chain.dispatched_at.observed_fallback"); ok {
+		t.Error("observed_fallback marker must not be written on happy path")
 	}
 }

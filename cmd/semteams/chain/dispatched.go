@@ -14,6 +14,12 @@ import (
 // TriplePublisher is the narrow write surface chain stampers need.
 // agentictools.NATSTriplePublisher (the upstream production type)
 // satisfies it structurally; tests inject an in-memory recorder.
+//
+// Per-package narrow interface (accept-interfaces / return-structs).
+// agentictools, chainpause, and evidence each declare the same shape;
+// the production NATSTriplePublisher satisfies all three. Importing one
+// of the sibling-package interfaces would couple chain to a processor
+// it has no other relationship with.
 type TriplePublisher interface {
 	AddTriple(ctx context.Context, triple message.Triple) error
 }
@@ -82,30 +88,60 @@ func (s *DispatchedStamper) HandleLoopCompleted(ctx context.Context, ev *agentic
 	chainEntityID := agentic.ChainExecutionEntityID(s.platform.Org, s.platform.Platform, ev.LoopID)
 	now := time.Now().UTC()
 	dispatchedAt := ev.CompletedAt
+	usedFallback := false
 	if dispatchedAt.IsZero() {
 		// Defensive fallback: framework should always set CompletedAt, but
 		// a zero timestamp on the wire would render the triple useless. Use
-		// the observation time so the milestone marker still exists.
+		// the observation time so the milestone marker still exists, AND
+		// stamp a companion observed_fallback marker so the framework bug
+		// is visible to downstream graph consumers — a graph-only ops
+		// query can tell "real wire timestamp" from "subscriber-observed
+		// fallback" without parsing logs.
 		dispatchedAt = now
+		usedFallback = true
 	}
 
-	t := message.Triple{
+	dispatchedAtTriple := message.Triple{
 		Subject:    chainEntityID,
 		Predicate:  "chain.dispatched_at",
 		Object:     dispatchedAt.Format(time.RFC3339),
-		Source:     "chain.dispatched_stamper",
+		Source:     "chain.dispatched",
 		Timestamp:  now,
 		Confidence: 1.0,
 	}
-	if err := s.publisher.AddTriple(ctx, t); err != nil {
+	if err := s.publisher.AddTriple(ctx, dispatchedAtTriple); err != nil {
 		return fmt.Errorf("write chain.dispatched_at on %q: %w", chainEntityID, err)
 	}
 
-	s.logger.Info("chain.dispatched_at stamped",
+	if usedFallback {
+		fallbackTriple := message.Triple{
+			Subject:    chainEntityID,
+			Predicate:  "chain.dispatched_at.observed_fallback",
+			Object:     "true",
+			Source:     "chain.dispatched",
+			Timestamp:  now,
+			Confidence: 1.0,
+		}
+		if err := s.publisher.AddTriple(ctx, fallbackTriple); err != nil {
+			// Log + continue: the primary triple is already on disk; the
+			// marker is best-effort observability.
+			s.logger.Warn("chain.dispatched_at.observed_fallback write failed",
+				slog.String("chain_entity", chainEntityID),
+				slog.String("error", err.Error()))
+		}
+	}
+
+	// Debug, not Info: chain starts are high-frequency on prod and
+	// JetStream redelivery (consumer ack timeout, restart, lagging fetch)
+	// will multiply this line. Triple is observable in the graph; the log
+	// line is forensic. Keep the boot-time "subscription active" Info to
+	// prove wiring is live.
+	s.logger.Debug("chain.dispatched_at stamped",
 		slog.String("chain_id", ev.LoopID),
 		slog.String("chain_entity", chainEntityID),
 		slog.String("dispatched_at", dispatchedAt.Format(time.RFC3339)),
-		slog.String("dispatch_role", ev.Role))
+		slog.String("dispatch_role", ev.Role),
+		slog.Bool("observed_fallback", usedFallback))
 
 	return nil
 }
