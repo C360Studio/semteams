@@ -1,260 +1,143 @@
-# SemStreams
+# SemTeams
 
-> A composable stream processing framework designed to run anywhere.
+> Reference/demo product for agentic teams, built on the
+> [semstreams](https://github.com/c360studio/semstreams) framework.
 
-SemStreams is a flow based framework that turns streaming data into a semantic knowledge graph, runs reactive rules, executes workflows, and orchestrates LLM-powered agents. One binary. NATS as the only dependency. Works offline, syncs when connected.
+SemTeams is the product shell — UI, configs, personas, rules, and a
+small set of product-shell tools — that demonstrates how to build a
+multi-agent system on top of semstreams. It has **no custom Go
+components**: every processor (graph, rule, agentic-dispatch,
+agentic-loop, agentic-model, agentic-tools, …) is imported from the
+upstream framework.
+
+If you are looking for the framework itself (component model,
+knowledge graph, NATS streams, GraphQL gateway), see
+[semstreams](https://github.com/c360studio/semstreams). This README
+covers what SemTeams adds on top.
 
 ```
-Sensors/Events → Knowledge Graph → Rules, Workflows, Agents → Action
+┌─────────────────────────────────────────────────────────────┐
+│                       SemTeams                              │
+│  Svelte UI · configs · personas · rules · product tools     │
+├─────────────────────────────────────────────────────────────┤
+│              semstreams (Go module dependency)              │
+│  components · graph · rule engine · agentic loop · NATS     │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-**Built for the edge:**
+## What SemTeams adds
 
-- **Simple deployment** — single binary, ships as a Docker image
-- **Progressive AI** — start with rules, add LLMs when you're ready. Or run both: deterministic where it matters, intelligent where it helps
-- **Offline-first** — works disconnected, syncs when connectivity allows
-- **Edge to cluster** — runs on a Raspberry Pi, scales when needed
+| Surface | Path | What it is |
+|---|---|---|
+| Web UI | `ui/` | Svelte 5 + SvelteKit 2 chat / graph explorer / runtime monitor |
+| Flow library | `configs/*.json` | Loadable flow templates — agentic, deep-research, dev-via-spec, ops-observer, … |
+| Personas | `configs/personas/fragments/<role>/*.md` | Role-specific prompt fragments (researcher, coordinator, builder, qa-reviewer, ops, …) |
+| Rules | `configs/rules/<flow>/*.json` | Coordinator/router/approval/observe rules that trigger agent dispatch |
+| Product tools | `cmd/semteams/tools/` | Tool executors that don't belong upstream (source ingest, artifact emission, builder terminal, sandbox bootstrap) |
+| Product shell | `cmd/semteams/main.go` | ~600 LoC binary that wires the framework primitives per [ADR-029](docs/adr/029-product-shell-wiring.md) |
 
-## Prerequisites
+Everything else — the `agentic-*` processors, the rule engine, the
+graph, the NATS stream wiring — lives upstream in semstreams.
 
-Before starting, verify your environment:
+## Run it
+
+### Prereqs
 
 ```bash
-# Check Go version (1.25+ required)
-go version
-
-# Check Docker is running
-docker info
-
-# Install Task runner (if not installed)
-go install github.com/go-task/task/v3/cmd/task@latest
+go version          # 1.25+
+docker info         # daemon running
+task --version      # go install github.com/go-task/task/v3/cmd/task@latest
 ```
 
-Or run `task dev:check:prerequisites` to verify everything at once.
-
-### Install NATS Server
-
-For local development, we run NATS in Docker:
+Copy `.env.example` to `.env` and set at least one LLM key
+(`ANTHROPIC_API_KEY` recommended — most configs default to
+`claude-haiku`):
 
 ```bash
-# Start NATS with JetStream (managed by task commands)
-task dev:nats:start
-
-# Or manually with Docker
-docker run -d --name semstreams-nats -p 4222:4222 nats:2.12-alpine -js
+cp .env.example .env
+# edit .env, uncomment ANTHROPIC_API_KEY=sk-ant-...
 ```
 
-See [Prerequisites Guide](docs/basics/00-prerequisites.md) for detailed setup instructions.
-
-## Your First 5 Minutes
-
-Get SemStreams running and see data flow through the knowledge graph:
-
-### 1. Build
+### One command to a working chat UI
 
 ```bash
-task build
+task dev:research
 ```
 
-### 2. Start Everything
+That boots NATS, builds and starts `bin/semteams` against
+`configs/deep-research.json`, then starts the UI proxy. Open
+<http://localhost:3001> and type a research question.
+
+`task dev:stop` tears it down.
+
+### Other useful starting points
+
+| You want | Run | Notes |
+|---|---|---|
+| Full agentic chat (general-purpose) | `./bin/semteams --config configs/agentic.json` | Needs NATS up (`task dev:nats:start`) |
+| Deep research with web search | `task dev:research` | Needs `ANTHROPIC_API_KEY` + `BRAVE_SEARCH_API_KEY` |
+| Onboarding interview demo | `./bin/semteams --config configs/onboarding.json` | Intent classification + `/onboard` |
+| Ops observer over deep research | `./bin/semteams --config configs/e2e-ops-observer.json` | ADR-027 read-only diagnostic agent |
+| Dev-via-spec / OSH demo | `./bin/semteams --config configs/osh-demo.json` | Architect → builder → qa chain (sandbox required) |
+
+`task --list` shows everything.
+
+## Find your way around
+
+- **You are running a journey and want to debug it** →
+  [`docs/getting-started.md`](docs/getting-started.md). What the
+  ports are, how to tail logs, how to inspect KV, how to abort a
+  wedged loop.
+- **You want to know why something is built the way it is** →
+  [`docs/adr/`](docs/adr/). Every product-shell decision lands as an
+  ADR.
+- **You want to extend the product shell with a new tool, rule,
+  persona, or KV bucket** → read
+  [`cmd/semteams/tools/README.md`](cmd/semteams/tools/README.md)
+  first. There is a mandatory framework-alignment review before
+  adding to the shell — the semspec accretion lesson.
+- **You want a flow other than the stock ones** → copy a config
+  from `configs/`, swap personas / rules, point the binary at it.
+- **You want framework concepts (graph, rules, NATS streams,
+  Graphable, payload registry)** → upstream
+  [semstreams docs](https://github.com/c360studio/semstreams/tree/main/docs).
+  This repo doesn't re-document them.
+
+## Develop
 
 ```bash
-task dev:start
+task build              # Build bin/semteams
+task check              # Go lint + test (fast, no Node)
+task check:all          # + UI lint + type-check + test + build
+
+task ui:dev             # Vite dev server (UI only)
+task ui:test:e2e        # Playwright E2E (auto-manages Docker stack)
+
+task schema:generate    # Regenerate schemas/ + specs/openapi.v3.yaml
 ```
 
-This starts NATS and SemStreams with the hello-world config.
+CI runs `ci.yml` (Go lint/test/build/schema) and `ui.yml` (UI
+lint/check/test/build, path-filtered). Both must pass.
 
-### 3. Send Test Data
-
-In another terminal, send a sensor reading via UDP:
+Before pushing:
 
 ```bash
-echo '{"device_id":"sensor-001","type":"temperature","reading":23.5,"unit":"celsius","location":"warehouse-7"}' | nc -u localhost 14550
+task lint
+go test -race ./...
+task schema:generate && git diff schemas/ specs/   # must be clean
+go test ./test/contract/...
 ```
 
-Or use the task command:
-```bash
-task dev:send
-```
-
-### 4. Query the Graph
-
-```bash
-curl -s http://localhost:8084/graphql \
-  -H "Content-Type: application/json" \
-  -d '{"query":"{ entitiesByPrefix(prefix: \"demo\", limit: 10) { entityIds } }"}' | jq
-```
-
-You should see your sensor entity ID in the response.
-
-### 5. Debug (If Data Doesn't Appear)
-
-```bash
-# View recent messages flowing through the system
-task dev:messages
-
-# Trace a message through all components
-task dev:trace
-
-# View message statistics and stream counts
-task dev:stats
-```
-
-See [Debugging Data Flow](docs/operations/debugging-data-flow.md) for detailed troubleshooting.
-
-### 6. Stop
-
-```bash
-task dev:stop
-```
-
-That's it! You've ingested data, transformed it into a semantic graph, and queried it via GraphQL.
-
-## Quick Start (For Experienced Users)
-
-```bash
-task build                                      # Build binary
-task dev:start                                  # Start NATS + SemStreams
-./bin/semstreams --config configs/structural.json  # Or run with a specific config
-```
-
-Run `task --list` to see all available commands.
-
-## How It Works: Continuous Intelligence
-
-SemStreams implements the **OODA loop** — a decision-making cycle from military strategy (Boyd, 1986) that also appears in robotics as Sense-Think-Act:
-
-| OODA | Sense-Think-Act | SemStreams |
-|------|-----------------|------------|
-| Observe | Sense | **Ingest** — events via UDP, WebSocket, file, API |
-| Orient | Think | **Graph** — entities with typed relationships |
-| Decide | Act | **React** — rules evaluate conditions |
-| Act | Act | **Act** — rules fire, workflows orchestrate, agents reason |
-
-The graph builds situational awareness; rules and agents close the loop.
-
-Two core patterns power this:
-- **Graphable** — Your types become graph entities ([docs](docs/basics/03-graphable-interface.md))
-- **Payload Registry** — Messages serialize with type discrimination ([docs](docs/concepts/15-payload-registry.md))
-
-## Progressive Capabilities
-
-Start simple, add capabilities as your needs grow:
-
-| Tier | What You Get | What You Need |
-|------|--------------|---------------|
-| **Structural** | Rules engine, explicit relationships, graph indexing | NATS only |
-| **Statistical** | + BM25 search, community detection | + Search index |
-| **Semantic** | + Neural embeddings, LLM-powered agents | + Embedding service, LLM |
-
-Most deployments start with Structural. Add capabilities when the problem demands it.
-
-Tiers aren't just about resources. Use rules when you need deterministic, auditable outcomes. Use agents when you need judgment and reasoning. Run both in the same flow — each handles what it does best.
-
-## Architecture
-
-Components connect via NATS subjects in flow-based configurations:
-
-```
-Input → Processor → Storage → Graph → Gateway
-  │         │          │        │        │
- UDP    iot_sensor  ObjectStore KV+   GraphQL
- File   document    (raw docs)  Indexes  MCP
-```
-
-| Component Type | Examples | Role |
-|----------------|----------|------|
-| Input | UDP, WebSocket, File | Ingest external data |
-| Processor | Graph, JSONMap, Rule | Transform and enrich |
-| Output | File, HTTPPost, WebSocket | Export data |
-| Storage | ObjectStore | Persist to NATS JetStream |
-| Gateway | HTTP, GraphQL, MCP | Expose query APIs |
-
-All state lives in NATS JetStream KV buckets—portable, syncable, queryable.
-
-## Agentic AI
-
-When you're ready for LLM-powered automation, SemStreams includes an optional agentic subsystem:
-
-```
-                    ┌─────────────────────────────────────────┐
-                    │           Agentic Components            │
-                    ├─────────────────────────────────────────┤
-User Message ───────► agentic-dispatch ─────► agentic-loop   │
-                    │       │                      │          │
-                    │       │              ┌───────┴───────┐  │
-                    │       │              ▼               ▼  │
-                    │       │        agentic-model   agentic-tools
-                    │       │              │               │  │
-                    │       │              ▼               │  │
-                    │       │           LLM API    ◄───────┘  │
-                    │       │                                 │
-                    │       ◄─────── agent.complete.* ────────│
-                    └─────────────────────────────────────────┘
-```
-
-- **Modular** — 6 components that scale independently
-- **OpenAI-compatible** — works with any OpenAI-compatible endpoint
-- **Observable** — full trajectory capture for debugging
-
-```bash
-# Run agentic e2e tests
-task e2e:agentic
-
-# Or start the full agentic stack
-./bin/semstreams --config configs/agentic.json
-```
-
-See [Agentic Quickstart](docs/basics/07-agentic-quickstart.md) to get started.
-
-## Examples
-
-- [Example Processors](examples/processors/) — IoT sensor and document processor implementations
-- [Deployment Configs](configs/) — From hello-world to production-ready configurations
-- [Tutorial: First Processor](docs/basics/05-first-processor.md) — Step-by-step guide to building your own processor
-
-## Documentation
-
-| Folder | Purpose |
-|--------|---------|
-| [docs/basics/](docs/basics/) | Getting started, core interfaces, quickstart guides |
-| [docs/concepts/](docs/concepts/) | Background knowledge, algorithms, orchestration layers |
-| [docs/advanced/](docs/advanced/) | Agentic components, clustering, performance tuning |
-| [docs/operations/](docs/operations/) | Monitoring, troubleshooting, deployment |
-| [docs/contributing/](docs/contributing/) | Development, testing, CI |
-
-## Development
-
-```bash
-# Testing
-task test               # Unit tests
-task test:integration   # Integration tests (uses testcontainers)
-task test:race          # Tests with race detector
-task check              # Lint + test
-
-# E2E Tests (requires Docker)
-task e2e:core           # Health + dataflow (~10s)
-task e2e:structural     # Rules + structural inference (~30s)
-task e2e:statistical    # BM25 + community detection (~60s)
-task e2e:semantic       # Neural embeddings + LLM (~90s)
-task e2e:agentic        # Agent loop + tools (~30s)
-task e2e:all            # All tiers sequentially
-```
-
-## Requirements
-
-- **Go 1.25+** — [Download](https://go.dev/dl/)
-- **Docker** — [Download](https://docker.com) (for NATS, deployment, and E2E tests)
-- **Task** — `go install github.com/go-task/task/v3/cmd/task@latest`
-- (Optional) Embedding service for Statistical/Semantic tiers
-- (Optional) LLM service for Semantic tier and agentic system
-
-See [Prerequisites Guide](docs/basics/00-prerequisites.md) for detailed installation instructions.
+See [CLAUDE.md](CLAUDE.md) for the deeper project context — config
+layering, product-shell wiring map, mandatory protocols
+(reviewer-pass, framework-alignment, E2E active monitoring).
 
 ## Status
 
-This project is under active development. Expect breaking changes.
+Active development. Breaking changes expected. The active product
+arc is ADR-031 (research flow + dev-via-spec internal mode); see
+the ADR for current phase.
 
 ## License
 
-See [LICENSE](LICENSE) for details.
+[LICENSE](LICENSE).

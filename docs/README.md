@@ -1,95 +1,96 @@
-# SemStreams Documentation
+# SemTeams Documentation
 
-## Start Here
+SemTeams is a reference/demo product on top of the
+[semstreams](https://github.com/c360studio/semstreams) framework.
+Anything *framework-shaped* (components, graph, rule engine, NATS
+streams, payload registry) is documented upstream. Anything
+*product-shaped* (UI, configs, personas, rules, product-shell
+tools, journeys) is documented here.
 
-**New to SemStreams?** Start with the basics:
+## If you are…
 
-**Setting up your environment?** Start with [Prerequisites](basics/00-prerequisites.md) for Go, Docker, and NATS setup.
+- **new to SemTeams** → [`getting-started.md`](getting-started.md)
+- **extending the product shell** →
+  [`adr/029-product-shell-wiring.md`](adr/029-product-shell-wiring.md)
+  + [`../cmd/semteams/tools/README.md`](../cmd/semteams/tools/README.md)
+- **writing a flow / persona / rule** →
+  [`../configs/README.md`](../configs/README.md)
+  (note: that README is still upstream-shaped — see "Imports" below)
+- **writing a Playwright journey** →
+  [`journeys/README.md`](journeys/README.md)
+- **looking for framework concepts** → upstream
+  [semstreams docs](https://github.com/c360studio/semstreams/tree/main/docs)
 
-1. [What is SemStreams?](basics/01-what-is-semstreams.md) - Overview and capabilities
-2. [Architecture](basics/02-architecture.md) - System components and data flow
-3. [Graphable Interface](basics/03-graphable-interface.md) - Core interface for graph entities
+## What lives in this folder
 
-## Documentation Structure
+### SemTeams-native
 
-| Folder | Purpose | Audience |
-|--------|---------|----------|
-| [basics/](basics/) | Getting started, core interfaces, first processor | New users |
-| [concepts/](concepts/) | Background knowledge, algorithms, theory | Learning fundamentals |
-| [advanced/](advanced/) | Clustering, LLM, performance, GraphQL, rules engine | Production tuning |
-| [operations/](operations/) | Local monitoring, deployment, observability | Operators |
-| [contributing/](contributing/) | Development, testing, CI | Contributors |
+These are written for this product and contain decisions and shapes
+that don't exist upstream.
 
-## Learning Paths
+| Path | Purpose |
+|---|---|
+| [`getting-started.md`](getting-started.md) | New-dev quickstart + debugging recipes |
+| [`adr/`](adr/) | Architectural Decision Records — every load-bearing product-shell decision |
+| [`proposals/`](proposals/) | Larger design docs that precede / accompany an ADR (agentic-superpowers, ui-redesign, research-flow-open-questions) |
+| [`specs/`](specs/) | Domain specs the dev-via-spec chain consumes (e.g. OSH-Meshtastic bridge) |
+| [`objectives/`](objectives/) | Per-flow objective specs the ops agent grounds against (ADR-027) |
+| [`journeys/`](journeys/) | Pointer doc — the journey *specs* are the Playwright tests under `ui/e2e/agentic/` |
+| [`smoke7-osh-meshtastic.md`](smoke7-osh-meshtastic.md) | Smoke run findings — preserved for the integration plumbing they expose |
+| [`ui-integration-notes.md`](ui-integration-notes.md) | UI ↔ backend integration notes |
 
-**Go/streaming developers** (familiar with NATS, event-driven):
-1. [Basics](basics/) - Core interfaces and processors
-2. [KV Twofer](concepts/02-kv-twofer.md) - State store and event bus in one
-3. [Streams vs KV Watches](concepts/03-streams-vs-kv-watches.md) - Choosing the right primitive
-4. [Embeddings](concepts/05-embeddings.md) - Vectors and semantic similarity
-5. [GraphRAG Pattern](concepts/09-graphrag-pattern.md) - Community-based retrieval
+### ADR index (read these first)
 
-**ML/LLM developers** (familiar with models and vectors):
-1. [Event-Driven Basics](concepts/01-event-driven-basics.md) - Pub/sub, streams
-2. [Knowledge Graphs](concepts/04-knowledge-graphs.md) - Triples, SPO model
-3. [KV Twofer](concepts/02-kv-twofer.md) - How state and events unify
-4. [Graphable Interface](basics/03-graphable-interface.md) - Implementing entity types
-5. [First Processor](basics/05-first-processor.md) - Complete working example
+The ADRs are the most useful single read for understanding this
+product. They're listed roughly in build order:
 
-**Production operators**:
-1. [Local Monitoring](operations/01-local-monitoring.md) - Prometheus + Grafana setup
-2. [Configuration](basics/06-configuration.md) - Capability tiers
-3. [Clustering](advanced/01-clustering.md) - LPA tuning
-4. [Performance](advanced/03-performance.md) - Optimization strategies
+| ADR | What it decides |
+|---|---|
+| [023](adr/023-provider-adapters-and-tool-choice.md) | LLM provider adapters and tool-choice handling |
+| [029](adr/029-product-shell-wiring.md) | How `cmd/semteams/main.go` wires framework primitives (the load-bearing reference for any new wiring) |
+| [030](adr/030-approval-flow-ui-and-identity.md) | Approval-flow UI + the `X-User-Id` identity seam |
+| [031](adr/031-research-flow-and-semspec-handoff.md) | Research-flow ownership, dev-via-spec internal mode (active product arc) |
+| [032](adr/032-r36-sandbox-design.md) | R3.6 builder sandbox design |
+| [033](adr/033-harness-anchored-verification-and-coordinator-authority.md) | Harness-anchored verification + coordinator-as-decision-authority |
+| [034](adr/034-qa-runner-pattern-adoption.md) | QA-runner pattern (verification-runner pivot) |
 
-## Quick Reference
+### Imports from upstream — keep, replace, or skip?
 
-- [Index Reference](advanced/05-index-reference.md) - The seven indexes
-- [Rules Engine](advanced/06-rules-engine.md) - Condition-based actions
-- [Community Detection](concepts/07-community-detection.md) - LPA algorithm
-- [Query Access](concepts/11-query-access.md) - GraphQL and MCP gateway
+The following directories were carried over verbatim from
+semstreams when SemTeams was forked into a product shell. They
+explain the **framework**, not the product. Treat them as a
+fallback while you're learning, but the canonical version lives
+upstream and may have moved on:
 
-## Vocabulary & Standards
+- [`basics/`](basics/) — framework getting-started, Graphable
+  interface, configuration tiers.
+- [`concepts/`](concepts/) — knowledge graphs, embeddings, payload
+  registry, agentic-systems, orchestration layers.
+- [`advanced/`](advanced/) — agentic components, workflow
+  configuration, JetStream tuning.
+- [`operations/`](operations/) — local monitoring, troubleshooting,
+  distributed tracing.
+- [`contributing/`](contributing/) — testing, schema generation,
+  contract testing, CI integration.
+- [`ROADMAP.md`](ROADMAP.md) — *upstream* roadmap; the SemTeams
+  active arc lives in ADR-031.
+- [`../configs/README.md`](../configs/README.md) — describes the
+  framework's structural / statistical / semantic tiers (graph
+  components), not the product's flow library.
 
-- [Vocabulary Guide](basics/04-vocabulary.md) - Predicate design, registration, alias resolution
-- [RDF Export](../vocabulary/export/doc.go) - Serialize triples to Turtle, N-Triples, JSON-LD
-- [Vocabulary Package](../vocabulary/README.md) - Full API reference, IRI mappings, ontology subpackages
+When upstream content drifts or gets in the way, prefer the
+upstream source of truth at
+<https://github.com/c360studio/semstreams/tree/main/docs> over
+patching here. A targeted cleanup of these imports is on the
+backlog (`project_docs_audit_needed`).
 
-## Agentic Systems
+## Conventions
 
-Build LLM-powered autonomous agents with tool use:
-
-- [Agentic Quickstart](basics/07-agentic-quickstart.md) - Get started with agents
-- [Agentic Systems](concepts/13-agentic-systems.md) - Concepts: loops, state machine, tools, trajectories
-- [Agentic Components](advanced/08-agentic-components.md) - Reference: loop, model, and tools processors
-- [Payload Registry](concepts/15-payload-registry.md) - Polymorphic JSON serialization pattern
-- [JetStream Tuning](advanced/11-jetstream-tuning.md) - AckWait, backpressure, and heartbeats for agentic consumers
-
-## Workflow Orchestration
-
-Multi-step processes with loops, timeouts, and retries:
-
-- [Workflow Quickstart](basics/08-workflow-quickstart.md) - Get started with workflows
-- [Workflow Configuration](advanced/09-workflow-configuration.md) - Complete schema reference
-- [Orchestration Layers](concepts/14-orchestration-layers.md) - When to use rules vs. workflows
-
-## Operations
-
-- [Local Monitoring](operations/01-local-monitoring.md) - Prometheus + Grafana setup
-- [Troubleshooting](operations/02-troubleshooting.md) - Common issues and solutions
-
-## Federation
-
-Ingesting graph entities from external sources (semsource, other sem* services):
-
-- [Federation](concepts/16-federation.md) - Ingestion patterns, entity namespacing, flow configuration
-
-## External Integrations
-
-Optional bridges for connecting SemStreams to external systems:
-
-| Integration | Purpose | Documentation |
-|-------------|---------|---------------|
-| **AGNTCY** | Agent discovery, A2A protocol, OTEL export | [Concepts Guide](concepts/20-agntcy-integration.md) |
-
-These integrations are optional components that can be enabled based on deployment needs. See individual guides for configuration and deployment patterns.
+- Single `#` H1 per file; no skipping heading levels.
+- Lines under 120 characters where practical.
+- Fenced code blocks specify a language.
+- Comments and docs explain the *why*, not the *what*.
+- ADRs follow the standard format (Status / Context / Decision /
+  Consequences / Alternatives / Related). Addenda land in-place
+  with a dated heading rather than a new ADR when they refine
+  scope without overturning the decision.
