@@ -95,11 +95,13 @@ func TestChainEntityCoverage_PR_B_Pipeline(t *testing.T) {
 	// Build a chain ancestry that mirrors the OSH-Meshtastic happy path:
 	//   dispatch_root → researcher_a → research_reviewer_b
 	//                 → planner_c → dev_via_spec_reviewer_d
+	//                             → challenger_e
 	dispatchEntityID := agentic.LoopExecutionEntityID("c360", "test", "dispatch_root")
 	researcherEntityID := agentic.LoopExecutionEntityID("c360", "test", "researcher_a")
 	researchReviewerEntityID := agentic.LoopExecutionEntityID("c360", "test", "research_reviewer_b")
 	plannerEntityID := agentic.LoopExecutionEntityID("c360", "test", "planner_c")
 	devReviewerEntityID := agentic.LoopExecutionEntityID("c360", "test", "dev_via_spec_reviewer_d")
+	challengerEntityID := agentic.LoopExecutionEntityID("c360", "test", "challenger_e")
 	er := &staticEntityReader{
 		entities: map[string]map[string]any{
 			dispatchEntityID: {
@@ -126,6 +128,11 @@ func TestChainEntityCoverage_PR_B_Pipeline(t *testing.T) {
 				"agent.loop.parent":       plannerEntityID,
 				"coordinator.next_action": "approved",
 			},
+			challengerEntityID: {
+				"agent.loop.parent":           devReviewerEntityID,
+				"coordinator.next_action":     "accept",
+				"dev_via_spec.consensus.path": "docs/consensus/2026-05-08-osh-meshtastic-consensus.md",
+			},
 		},
 	}
 
@@ -134,6 +141,7 @@ func TestChainEntityCoverage_PR_B_Pipeline(t *testing.T) {
 	dispatched := chain.NewDispatchedStamper(pub, platform, nil)
 	research := chain.NewResearchMilestoneStamper(pub, resolver, er, platform, nil)
 	planMilestone := chain.NewPlanMilestoneStamper(pub, resolver, er, platform, nil)
+	consensusMilestone := chain.NewConsensusMilestoneStamper(pub, resolver, er, platform, nil)
 
 	// We invoke handlers directly. CompletionSubscriber's NATS plumbing
 	// is covered by chain/subscriber_test.go; this contract test focuses
@@ -179,6 +187,13 @@ func TestChainEntityCoverage_PR_B_Pipeline(t *testing.T) {
 			ParentLoopID: "planner_c",
 			CompletedAt:  now.Add(4 * time.Second),
 		},
+		{
+			LoopID:       "challenger_e",
+			Role:         "dev-via-spec-challenger",
+			Outcome:      agentic.OutcomeSuccess,
+			ParentLoopID: "dev_via_spec_reviewer_d",
+			CompletedAt:  now.Add(5 * time.Second),
+		},
 	}
 	for _, ev := range events {
 		if err := dispatched.HandleLoopCompleted(context.Background(), ev); err != nil {
@@ -189,6 +204,9 @@ func TestChainEntityCoverage_PR_B_Pipeline(t *testing.T) {
 		}
 		if err := planMilestone.HandleLoopCompleted(context.Background(), ev); err != nil {
 			t.Fatalf("PlanMilestoneStamper.HandleLoopCompleted(%s) error: %v", ev.LoopID, err)
+		}
+		if err := consensusMilestone.HandleLoopCompleted(context.Background(), ev); err != nil {
+			t.Fatalf("ConsensusMilestoneStamper.HandleLoopCompleted(%s) error: %v", ev.LoopID, err)
 		}
 	}
 
@@ -204,9 +222,11 @@ func TestChainEntityCoverage_PR_B_Pipeline(t *testing.T) {
 		"chain.research_artifact.harness":     "meshtasticd-3.x",
 		"chain.research_artifact.actor_count": 3,
 		"chain.research_artifact.task_count":  5,
-		"chain.research_artifact.path":        "docs/research/2026-05-08-osh-meshtastic-driver.md", // PR C Phase C1
-		"chain.plan_loop":                     "planner_c",                                         // PR C Phase C2
-		"chain.plan.path":                     "docs/plans/2026-05-08-osh-meshtastic-plan.md",      // PR C Phase C2
+		"chain.research_artifact.path":        "docs/research/2026-05-08-osh-meshtastic-driver.md",     // PR C Phase C1
+		"chain.plan_loop":                     "planner_c",                                             // PR C Phase C2
+		"chain.plan.path":                     "docs/plans/2026-05-08-osh-meshtastic-plan.md",          // PR C Phase C2
+		"chain.consensus_loop":                "challenger_e",                                          // PR C Phase C3
+		"chain.consensus.path":                "docs/consensus/2026-05-08-osh-meshtastic-consensus.md", // PR C Phase C3
 	}
 	for pred, wantObj := range want {
 		gotObj, ok := got[pred]
