@@ -89,8 +89,13 @@ test.describe("Tool Approval Gate", () => {
     // SSE delivers the loop's state transition + pending_approval
     // snapshot via the activity stream.
     // -----------------------------------------------------------------
+    // For top-level loops with their own awaiting_approval state, the
+    // primary loop's state cascades to the needs_you column. Asserting
+    // on data-column instead of the StateBadge data-state keeps the
+    // selector consistent with chain journeys where the awaiting_approval
+    // is on a child loop and only the column attribute reflects it.
     await expect(
-      page.locator("[data-testid='task-card'] [data-state='awaiting_approval']"),
+      page.locator("[data-testid='task-card'][data-column='needs_you']"),
     ).toBeVisible({ timeout: 30000 });
 
     // -----------------------------------------------------------------

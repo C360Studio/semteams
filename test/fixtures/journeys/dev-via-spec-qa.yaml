@@ -80,57 +80,66 @@ description: |
 
     Loop G — dev-via-spec-planner (R3.3 first pass, real persona)
      19. tool_call: read_loop_result (placeholder; tool errors)
-     20. tool_call: decide(planned, reason=<plan content>)
+     20. tool_call: emit_plan (PR C C5: renders docs/plans/<slug>.md +
+         publishes dev_via_spec.plan.{loop_id} payload + stamps marker
+         triples; chain milestone subscriber writes chain.plan_loop +
+         chain.plan.path on reviewer-approval)
+     21. tool_call: decide(planned, reason=<plan content>)
          → coordinator.next_action=planned → dev-via-spec rule_01 fires
          (planner → reviewer handoff).
 
     Loop H — dev-via-spec-reviewer (first pass, approves on golden path)
-     21. tool_call: read_loop_result (placeholder; tool errors)
-     22. tool_call: decide(approved, reason=<all checklist items met>)
+     22. tool_call: read_loop_result (placeholder; tool errors)
+     23. tool_call: decide(approved, reason=<all checklist items met>)
          → coordinator.next_action=approved → dev-via-spec rule_03 fires
          (reviewer → challenger handoff).
 
     Loop I — dev-via-spec-challenger (first pass, accepts on golden path)
-     23. tool_call: read_loop_result (placeholder; tool errors)
-     24. tool_call: decide(accept, reason=<no concerns>)
+     24. tool_call: read_loop_result (placeholder; tool errors)
+     25. tool_call: emit_consensus (PR C C5: accept-branch only;
+         renders docs/consensus/<slug>.md + publishes
+         dev_via_spec.consensus.{loop_id} payload + stamps marker
+         triples; chain milestone subscriber writes chain.consensus_loop
+         + chain.consensus.path on accept)
+     26. tool_call: decide(accept, reason=<no concerns>)
          → coordinator.next_action=accept → dev-via-spec rule_05 fires
          (challenger → architect handoff).
 
     Loop J — dev-via-spec-architect (R3.4b, emits typed artifact)
-     25. tool_call: read_loop_result (placeholder; tool errors —
+     27. tool_call: read_loop_result (placeholder; tool errors —
          architect's three reads are placeholders that all error,
          consumed by the next canned turn)
-     26. tool_call: read_loop_result (placeholder; tool errors)
-     27. tool_call: read_loop_result (placeholder; tool errors)
-     28. tool_call: emit_dev_via_spec_artifact (renders markdown to
+     28. tool_call: read_loop_result (placeholder; tool errors)
+     29. tool_call: read_loop_result (placeholder; tool errors)
+     30. tool_call: emit_dev_via_spec_artifact (renders markdown to
          docs/specs/<slug>.md AND mints dev_via_spec.artifact.{path,
          slug,...} marker triples on this loop entity)
-     29. tool_call: decide(tasks_emitted, reason=<final task list>)
+     31. tool_call: decide(tasks_emitted, reason=<final task list>)
          → coordinator.next_action=tasks_emitted →
          dev-via-spec rule_06 fires (R3.6.2.d: architect→builder).
 
     Loop K — dev-via-spec-builder (R3.6.2.e + R3.7.2.k′)
-     30. tool_call: bootstrap_workspace (iteration 1; the
+     32. tool_call: bootstrap_workspace (iteration 1; the
          hardcoded spec_path will not match the architect's
          dynamically-dated emit on most days, so the tool surfaces
          a "spec file not found" error — same placeholder-doesn't-
          resolve convention as the read_loop_result calls earlier;
          the next canned turn handles it).
-     31. tool_call: bash ls SPEC.md (placeholder; the next canned
+     33. tool_call: bash ls SPEC.md (placeholder; the next canned
          turn handles whatever bash returns).
-     32. tool_call: bash echo "mvn test passing" (placeholder; the
+     34. tool_call: bash echo "mvn test passing" (placeholder; the
          next canned turn handles the result).
-     33. tool_call: builder_decide(tests_passing, tests_run=3,
+     35. tool_call: builder_decide(tests_passing, tests_run=3,
          tests_passed=3, tests_failed=0, artifact_summary=<canned>)
          → coordinator.next_action=tests_passing →
          dev-via-spec rule_07 fires (R3.7.2.k′:
          builder→qa-reviewer).
 
     Loop L — dev-via-spec-qa-reviewer (R3.7.2.k′-bis terminal)
-     34. tool_call: read_loop_result (placeholder against the
+     36. tool_call: read_loop_result (placeholder against the
          builder loop_id; tool errors — same convention as the
          placeholder reads in Loops B/C/D/E/F/G/H/I/J above).
-     35. tool_call: decide(needs_clarification,
+     37. tool_call: decide(needs_clarification,
          reason="evidence summary is (no checks) — architect emitted
          no checks in this mock-LLM journey; the qa-reviewer cannot
          accept without evidence rules per 10-evaluation-contract.md
@@ -197,6 +206,7 @@ responses:
       arguments_json: |
         {
           "revision": 1,
+          "title": "OSH Meshtastic driver research",
           "actors": [],
           "integration_points": [],
           "tasks": [],
@@ -277,6 +287,7 @@ responses:
       arguments_json: |
         {
           "revision": 2,
+          "title": "OSH Meshtastic driver research",
           "actors": [
             {"name": "OSH driver framework", "role": "Hosts the IDriver interface drivers must implement to expose sensor observations"},
             {"name": "OGC CS endpoints", "role": "Standard endpoints for observations, system descriptions, and control streams that the driver exposes"},
@@ -382,6 +393,7 @@ responses:
       arguments_json: |
         {
           "revision": 3,
+          "title": "OSH Meshtastic driver research",
           "actors": [
             {"name": "OSH driver framework", "role": "Hosts the IDriver interface drivers must implement to expose sensor observations"},
             {"name": "OGC CS endpoints", "role": "Standard endpoints for observations, system descriptions, and control streams that the driver exposes"},
@@ -475,12 +487,46 @@ responses:
           "loop_id": "reviewer-loop-F"
         }
 
+  # PR C Phase C5: planner calls emit_plan before terminating with
+  # decide(planned). Tool renders docs/plans/<slug>.md, mints marker
+  # triples on the loop entity, and lets the chain milestone subscriber
+  # propagate chain.plan.path on reviewer-approval. decide.reason still
+  # carries the substance for the in-chain reviewer to read via
+  # read_loop_result.
+  - tool_call:
+      name: emit_plan
+      arguments_json: |
+        {
+          "revision": 1,
+          "title": "OSH Meshtastic driver plan",
+          "goal": "Implement the OSH IDriver interface backed by Meshtastic radio packets, exposing OGC CS observation endpoints.",
+          "context": "The research arc enumerated three actors — OSH driver framework (hosts IDriver), OGC CS endpoints (observation surface), and Meshtastic radio (telemetry source). The boundary spans a read-side (Meshtastic packets → driver) and a write-side (driver → OGC CS observations).",
+          "scope_in": [
+            "pkg/driver/meshtastic_driver.go — IDriver implementation",
+            "pkg/driver/ogc_publisher.go — OGC CS write-side publisher",
+            "pkg/driver/meshtastic_decoder.go — Meshtastic packet decoder",
+            "test/driver/integration_test.go — read+write integration coverage"
+          ],
+          "scope_out": [
+            "Meshtastic firmware changes — out of repo scope, upstream-owned",
+            "OGC CS specification work — standards body owns; we conform, not extend"
+          ],
+          "epics": [
+            "E1 — Meshtastic packet ingestion: implement the read-side decoder, normalising radio packets into the driver's internal observation envelope",
+            "E2 — OGC CS observation publishing: implement the write-side publisher exposing the IDriver interface, mapping internal observations to OGC CS observation messages and system descriptions",
+            "E3 — Lifecycle and recovery: implement IDriver lifecycle hooks (start/stop) plus the radio-disconnect failure mode handler"
+          ],
+          "depends_on": {
+            "research_artifact_loop": "researcher-with-source-loop-E"
+          }
+        }
+
   - tool_call:
       name: decide
       arguments_json: |
         {
           "action": "planned",
-          "reason": "Goal: Implement the OSH IDriver interface backed by Meshtastic radio packets, exposing OGC CS observation endpoints. Context: The research arc enumerated three actors — OSH driver framework (hosts IDriver), OGC CS endpoints (observation surface), and Meshtastic radio (telemetry source). The boundary spans a read-side (Meshtastic packets → driver) and a write-side (driver → OGC CS observations). Scope: include = [pkg/driver/meshtastic_driver.go, pkg/driver/ogc_publisher.go, pkg/driver/meshtastic_decoder.go, test/driver/integration_test.go]; exclude = [Meshtastic firmware changes, OGC CS specification work]; do_not_touch = [README.md, LICENSE]. Epics: E1 — Meshtastic packet ingestion: implement the read-side decoder, normalising radio packets into the driver's internal observation envelope; E2 — OGC CS observation publishing: implement the write-side publisher exposing the IDriver interface, mapping internal observations to OGC CS observation messages and system descriptions; E3 — Lifecycle and recovery: implement IDriver lifecycle hooks (start/stop) plus the radio-disconnect failure mode handler. Three epics decompose the single seed requirement at interface granularity per the dev-via-spec planner contract."
+          "reason": "Goal: Implement the OSH IDriver interface backed by Meshtastic radio packets, exposing OGC CS observation endpoints. Context: The research arc enumerated three actors — OSH driver framework (hosts IDriver), OGC CS endpoints (observation surface), and Meshtastic radio (telemetry source). The boundary spans a read-side (Meshtastic packets → driver) and a write-side (driver → OGC CS observations). Scope: include = [pkg/driver/meshtastic_driver.go, pkg/driver/ogc_publisher.go, pkg/driver/meshtastic_decoder.go, test/driver/integration_test.go]; exclude = [Meshtastic firmware changes, OGC CS specification work]; do_not_touch = [README.md, LICENSE]. Epics: E1 — Meshtastic packet ingestion: implement the read-side decoder, normalising radio packets into the driver's internal observation envelope; E2 — OGC CS observation publishing: implement the write-side publisher exposing the IDriver interface, mapping internal observations to OGC CS observation messages and system descriptions; E3 — Lifecycle and recovery: implement IDriver lifecycle hooks (start/stop) plus the radio-disconnect failure mode handler. Three epics decompose the single seed requirement at interface granularity per the dev-via-spec planner contract.\n\n## Verifiable Outcomes\n\n- E1 — When meshtasticd publishes a protobuf POSITION_APP packet on TCP/4403 from node 0xABCD, the MeshtasticSensorModule emits within 500ms a CS API observation with non-null SensorML schema and matching node_id.\n- E2 — When the driver's internal observation envelope contains a populated payload, the OGC CS publisher issues a POST /observations with body matching the OGC CS observation JSON schema and a 2xx response is recorded.\n- E3 — When the Meshtastic TCP connection drops mid-stream, the driver transitions to a degraded state within 1s, emits a status observation describing the disconnect, and resumes ingestion within 5s of the radio reconnecting (no observations dropped after reconnect)."
         }
 
   # ---------- Loop H: dev-via-spec-reviewer (first pass — approves) ----------
@@ -507,6 +553,27 @@ responses:
       arguments_json: |
         {
           "loop_id": "reviewer-loop-H"
+        }
+
+  # PR C Phase C5: challenger calls emit_consensus on the accept branch
+  # only. Tool renders docs/consensus/<slug>.md, mints marker triples,
+  # chain milestone subscriber writes chain.consensus.path on accept.
+  - tool_call:
+      name: emit_consensus
+      arguments_json: |
+        {
+          "title": "OSH Meshtastic driver consensus",
+          "summary": "Plan accepted: read-side Meshtastic decoder + write-side OGC CS publisher + lifecycle/recovery handler decompose the IDriver implementation cleanly across the two integration points named in the research artifact.",
+          "chain_consensus": [
+            "Meshtastic radio → OSH driver framework: read-side decoder normalises packetised telemetry into the driver's internal observation envelope (E1)",
+            "OSH driver framework → OGC CS endpoints: write-side publisher maps internal observations to OGC CS observation messages and system descriptions (E2)",
+            "Lifecycle + radio-disconnect failure mode owned by E3 — covers asynchronous Meshtastic→driver hazards"
+          ],
+          "considered_concerns": [],
+          "depends_on": {
+            "plan_loop": "planner-loop-G",
+            "reviewer_loop": "reviewer-loop-H"
+          }
         }
 
   - tool_call:

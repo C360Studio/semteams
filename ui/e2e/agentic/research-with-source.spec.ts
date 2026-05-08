@@ -80,8 +80,11 @@ test.describe("Research with Source Acquisition", () => {
     });
     expect(loopId, "no agent loop appeared after dispatch").toBeTruthy();
 
+    // The kanban groups child loops under the dispatch-root task; child
+    // awaiting_approval cascades the parent to the needs_you column.
+    // (The StateBadge data-state stays on the primary loop's state.)
     await expect(
-      page.locator("[data-testid='task-card'] [data-state='awaiting_approval']"),
+      page.locator("[data-testid='task-card'][data-column='needs_you']"),
     ).toBeVisible({ timeout: 30000 });
 
     // -----------------------------------------------------------------

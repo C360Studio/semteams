@@ -124,38 +124,46 @@ test.describe("Dev-via-Spec QA-reviewer (R3.7.2.k′)", () => {
 
     expect(loopCId, "expected Loop C to surface pending_approval").toBeTruthy();
 
-    await expect(
-      page.locator("[data-testid='task-card'] [data-state='awaiting_approval']"),
-    ).toBeVisible({ timeout: 30000 });
+    // Kanban awaiting-approval surface skipped intentionally — the
+    // kanban only walks ONE level of children (deriveTaskInfo in
+    // ui/src/lib/types/task.ts). Loop C's awaiting_approval is on a
+    // grandchild, so the root task's effectiveColumn never cascades to
+    // needs_you. The detail-panel navigation below uses Loop C's
+    // loop_id directly. The API poll in Step 4 is the load-bearing
+    // "chain reached awaiting_approval" signal.
 
     // -----------------------------------------------------------------
-    // Step 5 — open Loop C's detail panel via URL state.
-    // -----------------------------------------------------------------
-    await page.goto(`/?task=${loopCId}`);
-    await expect(page.getByTestId("connection-status")).toHaveAttribute(
-      "data-summary",
-      "healthy",
-      { timeout: 10000 },
+    // Step 5+6 — approve via API (POST /teams-dispatch/loops/{id}/approval).
+    //
+    // The UI-driven approval flow does not work for chain journeys —
+    // the detail panel only surfaces PendingApprovalSection when the
+    // selected task's primaryLoop has pending_approval, but the
+    // dispatch-root task is the primary while the awaiting_approval
+    // loop is a child / grandchild (TaskDetailPanel.svelte:218).
+    // Same fix as ui/e2e/agentic/dev-via-spec.spec.ts. Surfacing
+    // child-loop approval through the parent's detail panel is a
+    // separate UI effort.
+    //
+    // The API path is what agentApi.submitApproval calls under the
+    // hood (ADR-030 X-User-Id middleware contract), so this still
+    // exercises the approval-gate plumbing end-to-end. Chain after
+    // approval is autonomous: research arc completes (Loops C through
+    // F), stabilisation rule spawns the dev-via-spec-planner (Loop
+    // G), the dev-via-spec rules drive the four-role chain through
+    // architect (Loop J) and builder (Loop K), then rule 07
+    // (R3.7.2.k′) spawns the qa-reviewer (Loop L) on the builder's
+    // tests_passing terminal.
+    const approvalResp = await request.post(
+      `/teams-dispatch/loops/${loopCId}/approval`,
+      {
+        data: { decision: "approve", user_id: "e2e-test-user" },
+        headers: { "X-User-Id": "e2e-test-user" },
+      },
     );
-    await expect(page.getByTestId("task-detail-panel")).toBeVisible();
-
-    await expect(page.getByTestId("pending-approval-section")).toBeVisible();
-    await expect(page.getByTestId("approval-tool-name")).toHaveText(
-      "add_source_repo",
-    );
-    await expect(page.getByTestId("approval-args-display")).toContainText(
-      "sensorhub-tools/osh-core",
-    );
-
-    // -----------------------------------------------------------------
-    // Step 6 — approve. Chain after the first approval is autonomous:
-    // research arc completes (Loops C through F), stabilisation rule
-    // spawns the dev-via-spec-planner (Loop G), the dev-via-spec rules
-    // drive the four-role chain through architect (Loop J) and builder
-    // (Loop K), then rule 07 (R3.7.2.k′) spawns the qa-reviewer
-    // (Loop L) on the builder's tests_passing terminal.
-    // -----------------------------------------------------------------
-    await page.getByTestId("approval-approve").click();
+    expect(
+      approvalResp.ok(),
+      `expected /loops/${loopCId}/approval to accept; got ${approvalResp.status()}`,
+    ).toBe(true);
 
     // -----------------------------------------------------------------
     // Step 7 — intermediate checkpoint: wait for FIVE loops (A, B,
@@ -346,7 +354,28 @@ test.describe("Dev-via-Spec QA-reviewer (R3.7.2.k′)", () => {
       .filter((s) => s.startsWith("dev_via_spec.artifact."));
     expect(
       specArtifactSubjects.length,
-      `expected at least 1 dev_via_spec.artifact.<loop_id> publish from the architect, got ${specArtifactSubjects.length}`,
+      `expected at least 1 dev_via_spec.artifact.<loop_id> publish from the architect, got ${specArtifactSubjects.length}: ${JSON.stringify(specArtifactSubjects)}`,
+    ).toBeGreaterThanOrEqual(1);
+
+    // ADR-038 PR C Phase C5: planner emits dev_via_spec.plan.<loop_id>
+    // (Loop G); challenger emits dev_via_spec.consensus.<loop_id>
+    // (Loop I, accept branch only). Catches wire-format drift between
+    // persona prose, tool schema, and payload shape under mock-llm —
+    // smoke #8 is the substance gate, this is the cheap insurance.
+    const planSubjects = entries
+      .map((e) => e.subject)
+      .filter((s) => s.startsWith("dev_via_spec.plan."));
+    expect(
+      planSubjects.length,
+      `expected at least 1 dev_via_spec.plan.<loop_id> publish from the planner's emit_plan, got ${planSubjects.length}: ${JSON.stringify(planSubjects)}`,
+    ).toBeGreaterThanOrEqual(1);
+
+    const consensusSubjects = entries
+      .map((e) => e.subject)
+      .filter((s) => s.startsWith("dev_via_spec.consensus."));
+    expect(
+      consensusSubjects.length,
+      `expected at least 1 dev_via_spec.consensus.<loop_id> publish from the challenger's emit_consensus, got ${consensusSubjects.length}: ${JSON.stringify(consensusSubjects)}`,
     ).toBeGreaterThanOrEqual(1);
 
     // -----------------------------------------------------------------

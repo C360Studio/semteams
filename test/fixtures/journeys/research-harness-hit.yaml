@@ -50,6 +50,7 @@ responses:
       arguments_json: |
         {
           "revision": 1,
+          "title": "OSH Meshtastic driver research (harness-hit smoke)",
           "actors": [
             {"name": "OSH driver framework", "role": "Implements the IDriver interface; pluggable component that adapts a sensor protocol to OSH's data model"},
             {"name": "OGC Connected Systems endpoints", "role": "REST/SSE endpoints exposing observations, system descriptions, and control streams"},

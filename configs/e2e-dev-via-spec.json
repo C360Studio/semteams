@@ -102,7 +102,9 @@
           "graph.mutation.>",
           "graph.ingest.>",
           "research.artifact.>",
-          "dev_via_spec.artifact.>"
+          "dev_via_spec.artifact.>",
+          "dev_via_spec.plan.>",
+          "dev_via_spec.consensus.>"
         ],
         "enable_kv_query": true,
         "log_level": "INFO"
