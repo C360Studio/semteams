@@ -32,6 +32,7 @@ import (
 	rulepkg "github.com/c360studio/semstreams/processor/rule"
 	"github.com/c360studio/semstreams/service"
 	"github.com/c360studio/semstreams/types"
+	"github.com/c360studio/semteams/cmd/semteams/chain"
 	"github.com/c360studio/semteams/cmd/semteams/chainpause"
 	"github.com/c360studio/semteams/cmd/semteams/evidence"
 	"github.com/c360studio/semteams/cmd/semteams/testharness"
@@ -254,7 +255,37 @@ func setupToolsAndPreprocessor(
 		return nil, nil, fmt.Errorf("start chain-pause subscriber: %w", err)
 	}
 
+	// 9g. Chain milestone subscribers (ADR-038 PR B).
+	// One CompletionSubscriber on agent.complete.> demuxes to every
+	// registered chain.CompletionHandler. Each handler decides whether
+	// to fire on the event and writes its predicate cluster onto the
+	// canonical 6-part chain entity (c360.<platform>.agent.chain.execution.<chain_id>).
+	if err := startChainMilestoneSubscribers(ctx, natsClient, platform, logger); err != nil {
+		return nil, nil, fmt.Errorf("start chain milestone subscribers: %w", err)
+	}
+
 	return toolRegistry, chainPauseHTTP, nil
+}
+
+// startChainMilestoneSubscribers wires every ADR-038 chain-milestone
+// CompletionHandler into a single agent.complete.> subscription.
+// Phase 1b ships the chain.dispatched_at handler (chain root → mints
+// the chain entity at chain start). Phases 2+ append more handlers
+// (research milestone, evidence summary milestone, spec artifact
+// milestone) by appending to the slice — no new subscriptions needed.
+func startChainMilestoneSubscribers(ctx context.Context, natsClient *natsclient.Client, platform types.PlatformMeta, logger *slog.Logger) error {
+	triplePublisher := agentictools.NewNATSTriplePublisher(natsClient)
+
+	dispatched := chain.NewDispatchedStamper(triplePublisher, platform, logger)
+
+	subscriber := chain.NewCompletionSubscriber([]chain.CompletionHandler{dispatched}, logger)
+	if err := subscriber.Start(ctx, natsClient); err != nil {
+		return fmt.Errorf("subscribe to loop completed for chain milestones: %w", err)
+	}
+	logger.Info("chain milestone subscribers started",
+		slog.String("org", platform.Org),
+		slog.String("platform", platform.Platform))
+	return nil
 }
 
 // startChainPauseSubscriber builds the chain-pause pauser + decision handler,
