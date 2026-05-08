@@ -136,6 +136,18 @@ const (
 	// claimed no verification surface"). R3.7.2.h's evidence gate fires
 	// per-check, so the count is its branching predicate.
 	predicateCheckCount = "dev_via_spec.artifact.check_count"
+
+	// ADR-038 D2 spec_artifact milestone — predicates land on the chain
+	// entity (cross-arc subject), not the loop entity. Cluster shape
+	// matches the per-arc convention chain.<milestone>.<field>.
+	chainPredicateSpecArtifactLoop       = "chain.spec_artifact_loop"
+	chainPredicateSpecArtifactPath       = "chain.spec_artifact.path"
+	chainPredicateSpecArtifactCheckCount = "chain.spec_artifact.check_count"
+
+	// chainTripleSource tags chain entity triples this tool writes so a
+	// graph query can scope to the emitter (parallel to chainpause's
+	// "chainpause" and DispatchedStamper's "chain.dispatched").
+	chainTripleSource = "chain.spec_artifact"
 )
 
 // PayloadPublisher is the narrow surface the executor uses to publish the
@@ -145,6 +157,18 @@ const (
 // touching this code. Named for parity with agentictools.TriplePublisher.
 type PayloadPublisher interface {
 	Publish(ctx context.Context, subject string, data []byte) error
+}
+
+// ChainResolver is the narrow surface the executor uses to derive the
+// canonical 6-part chain entity ID for the running chain. cmd/semteams/chain
+// .Resolver satisfies it structurally; tests inject a stub.
+//
+// Optional — leave unset to skip chain entity triple writes. ADR-038 PR B
+// drift-safe phasing: existing dev_via_spec.artifact.* triples on the
+// loop entity continue regardless; chain entity triples land on top
+// when the resolver is wired.
+type ChainResolver interface {
+	ChainEntityID(ctx context.Context, loopID string) (string, error)
 }
 
 // Executor implements agentic.ToolExecutor for emit_dev_via_spec_artifact.
@@ -158,6 +182,7 @@ type Executor struct {
 	logger              *slog.Logger
 	outputDir           string
 	testHarnessResolver TestHarnessResolver
+	chainResolver       ChainResolver // nil → skip chain entity triples
 }
 
 // NewExecutor constructs an Executor. outputDir is the directory where
@@ -189,6 +214,16 @@ func NewExecutor(publisher agentictools.TriplePublisher, natsPublish PayloadPubl
 		outputDir:           outputDir,
 		testHarnessResolver: resolver,
 	}
+}
+
+// SetChainResolver enables ADR-038 chain entity triple writes alongside
+// the existing loop-entity triples. Optional opt-in: leaving this unset
+// keeps the executor backward-compatible (loop-entity triples only).
+//
+// Wired in cmd/semteams/product_tools.go after NewExecutor when the
+// chain package's Resolver is built.
+func (e *Executor) SetChainResolver(r ChainResolver) {
+	e.chainResolver = r
 }
 
 // ListTools returns the LLM-facing schema. The args mirror the Artifact
@@ -419,6 +454,16 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 			}, nil
 		}
 	}
+
+	// ADR-038 PR B Phase 4: in addition to the per-loop dev_via_spec.artifact.*
+	// triples, mint the cross-arc chain.spec_artifact.* cluster on the
+	// canonical 6-part chain entity. Drift-safe — the loop-entity triples
+	// above continue to land regardless. PR D removes them once the chain
+	// entity is the sole subject. Fail-soft on resolver/publish errors:
+	// the architect's tool call already succeeded against the loop entity;
+	// a transient graph blip on the chain side should not return an LLM
+	// error and re-trigger the architect.
+	e.writeChainTriples(ctx, artifact, relPath, call.LoopID, now)
 
 	subject := payloadSubjectPrefix + "." + call.LoopID
 	payloadBytes, err := json.Marshal(artifact)
@@ -712,6 +757,73 @@ func (e *Executor) buildMarkdownHarnessMap(ctx context.Context, a *devviaspec.Ar
 		out[name] = h
 	}
 	return out
+}
+
+// writeChainTriples mints the ADR-038 spec_artifact milestone cluster on
+// the canonical 6-part chain entity. The chain entity ID is derived by
+// walking ancestry from artifact.Provenance.ResearchArtifactLoop — a
+// completed researcher loop with full agent.loop.parent ancestry stamped
+// (the architect's own loop has not completed yet, so its parent triple
+// is absent at write time; walking from a completed ancestor closes that
+// gap).
+//
+// Fail-soft: every step that can fail logs a Warn and returns. The
+// loop-entity triples written above are unaffected; PR D's contract test
+// surfaces drift where chain triples should have landed but didn't.
+func (e *Executor) writeChainTriples(ctx context.Context, a *devviaspec.Artifact, relPath, architectLoopID string, now time.Time) {
+	if e.chainResolver == nil {
+		// Chain resolution not wired (test contexts, deployments without the
+		// chain package available). Drift-safe: loop-entity triples already
+		// landed.
+		return
+	}
+	anchorLoopID := a.Provenance.ResearchArtifactLoop
+	if anchorLoopID == "" {
+		// Architect violated the persona contract by submitting an artifact
+		// without a research_root_loop. Loop-entity triple
+		// dev_via_spec.artifact.research_root_loop is also empty in this
+		// case; downstream review will catch it. Skip chain emission rather
+		// than fabricate an anchor.
+		e.logger.Warn("emit_dev_via_spec_artifact: skipping chain triples — empty research_root_loop in provenance",
+			slog.String("architect_loop_id", architectLoopID),
+			slog.String("slug", a.Slug))
+		return
+	}
+
+	chainEntityID, err := e.chainResolver.ChainEntityID(ctx, anchorLoopID)
+	if err != nil {
+		e.logger.Warn("emit_dev_via_spec_artifact: chain ancestry walk failed; skipping chain triples",
+			slog.String("architect_loop_id", architectLoopID),
+			slog.String("research_anchor", anchorLoopID),
+			slog.String("error", err.Error()))
+		return
+	}
+
+	chainBase := func(pred string, obj any) message.Triple {
+		return message.Triple{
+			Subject:    chainEntityID,
+			Predicate:  pred,
+			Object:     obj,
+			Source:     chainTripleSource,
+			Timestamp:  now,
+			Confidence: 1.0,
+		}
+	}
+	chainTriples := []message.Triple{
+		chainBase(chainPredicateSpecArtifactLoop, architectLoopID),
+		chainBase(chainPredicateSpecArtifactPath, relPath),
+		chainBase(chainPredicateSpecArtifactCheckCount, len(a.Checks)),
+	}
+	for _, t := range chainTriples {
+		if err := e.publisher.AddTriple(ctx, t); err != nil {
+			// Log + continue across siblings: a partial chain cluster is
+			// queryable for debugging, a half-fired silence is not.
+			e.logger.Warn("emit_dev_via_spec_artifact: chain triple write failed",
+				slog.String("predicate", t.Predicate),
+				slog.String("chain_entity", chainEntityID),
+				slog.String("error", err.Error()))
+		}
+	}
 }
 
 // buildTriples assembles the deterministic triple set in publish order.
