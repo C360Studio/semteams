@@ -346,7 +346,7 @@ test.describe("Dev-via-Spec QA-reviewer (R3.7.2.k′)", () => {
       .filter((s) => s.startsWith("dev_via_spec.artifact."));
     expect(
       specArtifactSubjects.length,
-      `expected at least 1 dev_via_spec.artifact.<loop_id> publish from the architect, got ${specArtifactSubjects.length}`,
+      `expected at least 1 dev_via_spec.artifact.<loop_id> publish from the architect, got ${specArtifactSubjects.length}: ${JSON.stringify(specArtifactSubjects)}`,
     ).toBeGreaterThanOrEqual(1);
 
     // ADR-038 PR C Phase C5: planner emits dev_via_spec.plan.<loop_id>
@@ -359,7 +359,7 @@ test.describe("Dev-via-Spec QA-reviewer (R3.7.2.k′)", () => {
       .filter((s) => s.startsWith("dev_via_spec.plan."));
     expect(
       planSubjects.length,
-      `expected at least 1 dev_via_spec.plan.<loop_id> publish from the planner's emit_plan, got ${planSubjects.length}`,
+      `expected at least 1 dev_via_spec.plan.<loop_id> publish from the planner's emit_plan, got ${planSubjects.length}: ${JSON.stringify(planSubjects)}`,
     ).toBeGreaterThanOrEqual(1);
 
     const consensusSubjects = entries
@@ -367,7 +367,7 @@ test.describe("Dev-via-Spec QA-reviewer (R3.7.2.k′)", () => {
       .filter((s) => s.startsWith("dev_via_spec.consensus."));
     expect(
       consensusSubjects.length,
-      `expected at least 1 dev_via_spec.consensus.<loop_id> publish from the challenger's emit_consensus, got ${consensusSubjects.length}`,
+      `expected at least 1 dev_via_spec.consensus.<loop_id> publish from the challenger's emit_consensus, got ${consensusSubjects.length}: ${JSON.stringify(consensusSubjects)}`,
     ).toBeGreaterThanOrEqual(1);
 
     // -----------------------------------------------------------------
