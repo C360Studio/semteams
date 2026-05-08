@@ -39,7 +39,7 @@ func (nopNATSPublisher) Publish(context.Context, string, []byte) error { return 
 func TestEmitResearchArtifactToolDefinitionShape(t *testing.T) {
 	t.Parallel()
 
-	exec := emitartifact.NewExecutor(nopTriplePublisher{}, nopNATSPublisher{}, types.PlatformMeta{Org: "c360", Platform: "semteams"}, nil)
+	exec := emitartifact.NewExecutor(nopTriplePublisher{}, nopNATSPublisher{}, types.PlatformMeta{Org: "c360", Platform: "semteams"}, nil, t.TempDir())
 	defs := exec.ListTools()
 
 	if len(defs) != 1 {

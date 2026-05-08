@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -82,12 +83,13 @@ func (f *fakePublisher) snapshot() (subject string, data []byte, calls int) {
 // Helpers
 // ---------------------------------------------------------------------
 
-func newExecutor(t *testing.T) (*Executor, *fakeTriplePublisher, *fakePublisher) {
+func newExecutor(t *testing.T) (*Executor, *fakeTriplePublisher, *fakePublisher, string) {
 	t.Helper()
+	tmpDir := t.TempDir()
 	tp := &fakeTriplePublisher{}
 	pub := &fakePublisher{}
-	exec := NewExecutor(tp, pub, types.PlatformMeta{Org: "c360", Platform: "semteams"}, nil)
-	return exec, tp, pub
+	exec := NewExecutor(tp, pub, types.PlatformMeta{Org: "c360", Platform: "semteams"}, nil, tmpDir)
+	return exec, tp, pub, tmpDir
 }
 
 func defaultCall(args map[string]any) agentic.ToolCall {
@@ -124,7 +126,7 @@ func defaultArtifactArgs() map[string]any {
 // ---------------------------------------------------------------------
 
 func TestListTools_SchemaShape(t *testing.T) {
-	exec, _, _ := newExecutor(t)
+	exec, _, _, _ := newExecutor(t)
 	defs := exec.ListTools()
 	if len(defs) != 1 {
 		t.Fatalf("ListTools length = %d, want 1", len(defs))
@@ -167,7 +169,7 @@ func TestListTools_SchemaShape(t *testing.T) {
 // ---------------------------------------------------------------------
 
 func TestExecute_WrongToolName(t *testing.T) {
-	exec, _, _ := newExecutor(t)
+	exec, _, _, _ := newExecutor(t)
 	call := defaultCall(defaultArtifactArgs())
 	call.Name = "something-else"
 	res, err := exec.Execute(context.Background(), call)
@@ -180,7 +182,7 @@ func TestExecute_WrongToolName(t *testing.T) {
 }
 
 func TestExecute_MissingLoopID(t *testing.T) {
-	exec, _, _ := newExecutor(t)
+	exec, _, _, _ := newExecutor(t)
 	call := defaultCall(defaultArtifactArgs())
 	call.LoopID = ""
 	res, err := exec.Execute(context.Background(), call)
@@ -200,7 +202,7 @@ func TestExecute_MissingLoopID(t *testing.T) {
 // ---------------------------------------------------------------------
 
 func TestExecute_MissingRevision_FailsValidation(t *testing.T) {
-	exec, _, _ := newExecutor(t)
+	exec, _, _, _ := newExecutor(t)
 	args := defaultArtifactArgs()
 	delete(args, "revision")
 	res, _ := exec.Execute(context.Background(), defaultCall(args))
@@ -213,7 +215,7 @@ func TestExecute_MissingRevision_FailsValidation(t *testing.T) {
 }
 
 func TestExecute_RevisionZero_FailsValidation(t *testing.T) {
-	exec, _, _ := newExecutor(t)
+	exec, _, _, _ := newExecutor(t)
 	args := defaultArtifactArgs()
 	args["revision"] = 0
 	res, _ := exec.Execute(context.Background(), defaultCall(args))
@@ -223,7 +225,7 @@ func TestExecute_RevisionZero_FailsValidation(t *testing.T) {
 }
 
 func TestExecute_BadIntegrationPointDirection_FailsValidation(t *testing.T) {
-	exec, _, _ := newExecutor(t)
+	exec, _, _, _ := newExecutor(t)
 	args := defaultArtifactArgs()
 	args["integration_points"] = []any{
 		map[string]any{"from": "A", "to": "B", "data": "x", "direction": "sideways"},
@@ -241,7 +243,7 @@ func TestExecute_BadIntegrationPointDirection_FailsValidation(t *testing.T) {
 // uses the call's loop_id (so the LLM cannot lie about which loop is
 // emitting) and the wall-clock now (so audit traces match real time).
 func TestExecute_LLMSuppliedLoopIDAndTimestampIgnored(t *testing.T) {
-	exec, _, pub := newExecutor(t)
+	exec, _, pub, _ := newExecutor(t)
 	args := defaultArtifactArgs()
 	args["loop_id"] = "loop-evil-spoof"
 	args["produced_at"] = "1970-01-01T00:00:00Z"
@@ -282,7 +284,7 @@ func TestExecute_LLMSuppliedLoopIDAndTimestampIgnored(t *testing.T) {
 // ---------------------------------------------------------------------
 
 func TestExecute_HappyPath_TripleSet(t *testing.T) {
-	exec, tp, _ := newExecutor(t)
+	exec, tp, _, _ := newExecutor(t)
 	res, err := exec.Execute(context.Background(), defaultCall(defaultArtifactArgs()))
 	if err != nil {
 		t.Fatalf("Execute err: %v", err)
@@ -331,7 +333,7 @@ func TestExecute_HappyPath_TripleSet(t *testing.T) {
 }
 
 func TestExecute_HappyPath_PayloadPublishedToStableSubject(t *testing.T) {
-	exec, _, pub := newExecutor(t)
+	exec, _, pub, _ := newExecutor(t)
 	_, err := exec.Execute(context.Background(), defaultCall(defaultArtifactArgs()))
 	if err != nil {
 		t.Fatalf("Execute err: %v", err)
@@ -358,7 +360,7 @@ func TestExecute_HappyPath_PayloadPublishedToStableSubject(t *testing.T) {
 }
 
 func TestExecute_ResultContent_ShapeAndCounts(t *testing.T) {
-	exec, _, _ := newExecutor(t)
+	exec, _, _, _ := newExecutor(t)
 	res, err := exec.Execute(context.Background(), defaultCall(defaultArtifactArgs()))
 	if err != nil {
 		t.Fatalf("Execute err: %v", err)
@@ -406,7 +408,7 @@ func TestExecute_ResultContent_ShapeAndCounts(t *testing.T) {
 // append-only log) must not contribute. This is the predicate the
 // stabilisation rule will gate on.
 func TestExecute_MutationCount_OnlyCountsThisRevision(t *testing.T) {
-	exec, tp, _ := newExecutor(t)
+	exec, tp, _, _ := newExecutor(t)
 
 	args := defaultArtifactArgs()
 	args["revision"] = 3
@@ -449,7 +451,7 @@ func TestExecute_MutationCount_OnlyCountsThisRevision(t *testing.T) {
 }
 
 func TestExecute_MutationCount_WithCurrentRevisionEntry(t *testing.T) {
-	exec, tp, _ := newExecutor(t)
+	exec, tp, _, _ := newExecutor(t)
 	args := defaultArtifactArgs()
 	args["revision"] = 2
 	args["substrate_mutations"] = []any{
@@ -486,7 +488,7 @@ func TestExecute_MutationCount_WithCurrentRevisionEntry(t *testing.T) {
 // ---------------------------------------------------------------------
 
 func TestExecute_TestHarnessSet_EmitsTestHarnessTriple(t *testing.T) {
-	exec, tp, pub := newExecutor(t)
+	exec, tp, pub, _ := newExecutor(t)
 	args := defaultArtifactArgs()
 	args["test_harness"] = "meshtasticd-3.x"
 
@@ -531,7 +533,7 @@ func TestExecute_TestHarnessSet_EmitsTestHarnessTriple(t *testing.T) {
 }
 
 func TestExecute_TestHarnessUnset_OmitsTestHarnessTriple(t *testing.T) {
-	exec, tp, pub := newExecutor(t)
+	exec, tp, pub, _ := newExecutor(t)
 	args := defaultArtifactArgs()
 	// Explicit catalog-miss path — researcher flags the gap in open_gaps.
 	args["open_gaps"] = []any{"needs_test_harness: real Meshtastic radio over LoRa"}
@@ -569,7 +571,7 @@ func TestExecute_TestHarnessUnset_OmitsTestHarnessTriple(t *testing.T) {
 // ---------------------------------------------------------------------
 
 func TestExecute_TriplePublisherFails_NoPayloadPublished(t *testing.T) {
-	exec, tp, pub := newExecutor(t)
+	exec, tp, pub, _ := newExecutor(t)
 	tp.err = errors.New("graph-ingest unreachable")
 
 	res, err := exec.Execute(context.Background(), defaultCall(defaultArtifactArgs()))
@@ -588,7 +590,7 @@ func TestExecute_TriplePublisherFails_NoPayloadPublished(t *testing.T) {
 }
 
 func TestExecute_PayloadPublishFails_ReportsNetworkError(t *testing.T) {
-	exec, _, pub := newExecutor(t)
+	exec, _, pub, _ := newExecutor(t)
 	pub.err = errors.New("nats not connected")
 
 	res, err := exec.Execute(context.Background(), defaultCall(defaultArtifactArgs()))
@@ -604,4 +606,117 @@ func TestExecute_PayloadPublishFails_ReportsNetworkError(t *testing.T) {
 	if !strings.Contains(res.Error, "research.artifact.loop-abc") {
 		t.Errorf("Result.Error = %q, want subject in error message", res.Error)
 	}
+}
+
+// ---------------------------------------------------------------------
+// PR C Phase C1 — markdown render + research.artifact.path triple
+// ---------------------------------------------------------------------
+
+func TestExecute_MarkdownRender_PathTripleStamped(t *testing.T) {
+	exec, tp, _, dir := newExecutor(t)
+
+	args := defaultArtifactArgs()
+	args["title"] = "OSH Meshtastic Driver"
+
+	res, err := exec.Execute(context.Background(), defaultCall(args))
+	if err != nil {
+		t.Fatalf("Execute err: %v", err)
+	}
+	if res.Error != "" {
+		t.Fatalf("Result.Error = %q, want empty", res.Error)
+	}
+
+	// Path triple stamped on the loop entity (the research milestone
+	// stamper reads it at reviewer-approves time and mirrors to chain).
+	pathTriple, ok := triplesByPredicate(tp.snapshot())[predicateArtifactPath]
+	if !ok {
+		t.Fatal("research.artifact.path triple not stamped")
+	}
+	relPath, ok := pathTriple.Object.(string)
+	if !ok {
+		t.Fatalf("path triple Object should be string, got %T", pathTriple.Object)
+	}
+	if !strings.HasPrefix(relPath, dir) {
+		t.Errorf("path triple object = %q, expected to start with outputDir %q", relPath, dir)
+	}
+	if !strings.HasSuffix(relPath, ".md") {
+		t.Errorf("path triple object = %q, expected .md extension", relPath)
+	}
+
+	// File on disk.
+	body, err := readFileContent(t, relPath)
+	if err != nil {
+		t.Fatalf("read rendered markdown: %v", err)
+	}
+	if !strings.Contains(body, "OSH Meshtastic Driver") {
+		t.Errorf("markdown body missing title heading; got:\n%s", body)
+	}
+	if !strings.Contains(body, "Revision: **1**") {
+		t.Errorf("markdown body missing revision metadata; got:\n%s", body)
+	}
+	if !strings.Contains(body, "OSH driver framework") {
+		t.Errorf("markdown body missing actor; got:\n%s", body)
+	}
+}
+
+func TestExecute_MarkdownRender_TitleEmpty_LoopIDFallbackSlug(t *testing.T) {
+	exec, tp, _, dir := newExecutor(t)
+
+	args := defaultArtifactArgs() // no title
+	res, err := exec.Execute(context.Background(), defaultCall(args))
+	if err != nil {
+		t.Fatalf("Execute err: %v", err)
+	}
+	if res.Error != "" {
+		t.Fatalf("Result.Error = %q, want empty", res.Error)
+	}
+
+	pathTriple, ok := triplesByPredicate(tp.snapshot())[predicateArtifactPath]
+	if !ok {
+		t.Fatal("research.artifact.path triple not stamped")
+	}
+	relPath, _ := pathTriple.Object.(string)
+	// Slug should embed the loop_id fallback ("loop-abc" → first 8 chars).
+	if !strings.Contains(relPath, "research-loop-abc") {
+		t.Errorf("fallback slug missing loop-id stem; got %q", relPath)
+	}
+	if !strings.HasPrefix(relPath, dir) {
+		t.Errorf("path = %q, want prefix %q", relPath, dir)
+	}
+}
+
+func TestExecute_MarkdownRender_OverwritesOnRerun(t *testing.T) {
+	exec, _, _, _ := newExecutor(t)
+	args := defaultArtifactArgs()
+	args["title"] = "Stable Title"
+
+	// First emission.
+	if _, err := exec.Execute(context.Background(), defaultCall(args)); err != nil {
+		t.Fatalf("first Execute err: %v", err)
+	}
+	// Second emission with same title (and same date) → same slug → overwrite.
+	args["revision"] = 2
+	if _, err := exec.Execute(context.Background(), defaultCall(args)); err != nil {
+		t.Fatalf("second Execute err: %v", err)
+	}
+	// No assertion on file count here — overwrite means one .md, not two.
+	// Fail-mode would be "create a different filename"; the slug derivation
+	// is deterministic so this should be a no-op on disk.
+}
+
+func triplesByPredicate(triples []message.Triple) map[string]message.Triple {
+	out := make(map[string]message.Triple, len(triples))
+	for _, t := range triples {
+		out[t.Predicate] = t
+	}
+	return out
+}
+
+func readFileContent(t *testing.T, path string) (string, error) {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
 }

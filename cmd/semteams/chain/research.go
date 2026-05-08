@@ -13,15 +13,17 @@ import (
 
 // Predicate names for the research-milestone cluster on the chain
 // entity. Schema-stable — chain.research_artifact_loop is the
-// canonical anchor; .harness, .actor_count, .task_count are projections
-// from research.artifact.* on the researcher's loop entity. The .path
-// predicate (rendered docs/research/<slug>.md) lands in PR C alongside
-// markdown emission.
+// canonical anchor; .harness, .actor_count, .task_count, .path are
+// projections from research.artifact.* on the researcher's loop entity.
+// The .path predicate is propagated only when emit_research_artifact's
+// markdown rendering succeeded (PR C Phase C1); absent on legacy
+// research artifacts emitted before the markdown landing.
 const (
 	chainPredicateResearchArtifactLoop       = "chain.research_artifact_loop"
 	chainPredicateResearchArtifactHarness    = "chain.research_artifact.harness"
 	chainPredicateResearchArtifactActorCount = "chain.research_artifact.actor_count"
 	chainPredicateResearchArtifactTaskCount  = "chain.research_artifact.task_count"
+	chainPredicateResearchArtifactPath       = "chain.research_artifact.path"
 
 	// chainResearchSource tags chain entity triples this stamper writes
 	// so a graph query can scope to the emitter (parallel to
@@ -44,6 +46,7 @@ const (
 	researcherTestHarnessPredicate = "research.artifact.test_harness"
 	researcherActorsCountPredicate = "research.artifact.actors_count"
 	researcherTasksCountPredicate  = "research.artifact.tasks_count"
+	researcherPathPredicate        = "research.artifact.path"
 
 	reviewerNextActionPredicate        = "coordinator.next_action"
 	reviewerLineageResearcherPredicate = "lineage.researcher"
@@ -191,6 +194,13 @@ func (s *ResearchMilestoneStamper) HandleLoopCompleted(ctx context.Context, ev *
 	}
 	if taskCount := tripleAsInt(researcherTriples[researcherTasksCountPredicate]); taskCount >= 0 {
 		triples = append(triples, base(chainPredicateResearchArtifactTaskCount, taskCount))
+	}
+	// .path absence is the legacy-artifact signal (researchers that ran
+	// before ADR-038 PR C Phase C1 don't stamp it). Stamp only when
+	// present so a graph query can distinguish "no markdown rendered"
+	// from "markdown at empty path."
+	if path, _ := researcherTriples[researcherPathPredicate].(string); path != "" {
+		triples = append(triples, base(chainPredicateResearchArtifactPath, path))
 	}
 
 	for _, t := range triples {

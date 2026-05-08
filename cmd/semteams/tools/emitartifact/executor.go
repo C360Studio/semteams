@@ -36,10 +36,16 @@
 package emitartifact
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
+	"text/template"
 	"time"
 
 	"github.com/c360studio/semstreams/agentic"
@@ -88,7 +94,25 @@ const (
 	// harness name (a stable catalog key, not free-text content) —
 	// discipline rule preserved.
 	predicateTestHarness = "research.artifact.test_harness"
+	// predicateArtifactPath is stamped only when markdown rendering
+	// succeeds. ADR-038 PR C Phase C1: the research milestone stamper
+	// reads this off the researcher's loop entity at reviewer-approves
+	// time and propagates it to chain.research_artifact.path on the
+	// chain entity.
+	predicateArtifactPath = "research.artifact.path"
 )
+
+// defaultOutputDir is the markdown render target when
+// SEMTEAMS_RESEARCH_ARTIFACT_DIR is unset. Relative to the process
+// working directory (the repo root in normal operation). Mirrors
+// emitspecartifact's defaultOutputDir convention.
+const defaultOutputDir = "docs/research"
+
+// envOutputDir is the operator override for the markdown output
+// directory. Kept as env var (not framework config) so it does not
+// drift the upstream config schema — same precedent as
+// SEMTEAMS_DEVVIASPEC_ARTIFACT_DIR.
+const envOutputDir = "SEMTEAMS_RESEARCH_ARTIFACT_DIR"
 
 // PayloadPublisher is the narrow surface the executor uses to publish
 // the typed Artifact payload onto a stable NATS subject.
@@ -105,25 +129,39 @@ type PayloadPublisher interface {
 // Executor implements agentic.ToolExecutor for emit_research_artifact.
 // It writes a deterministic set of marker triples on the calling loop's
 // entity (so rule conditions can match revision / mutation-count without
-// parsing JSON) and publishes the typed payload on a stable subject for
-// audit / forward-compat consumers.
+// parsing JSON), renders a markdown view of the artifact to
+// outputDir/<slug>.md (ADR-038 PR C Phase C1), and publishes the typed
+// payload on a stable subject for audit / forward-compat consumers.
 type Executor struct {
 	publisher   agentictools.TriplePublisher
 	natsPublish PayloadPublisher
 	platform    types.PlatformMeta
 	logger      *slog.Logger
+	outputDir   string
 }
 
-// NewExecutor constructs an Executor.
-func NewExecutor(publisher agentictools.TriplePublisher, natsPublish PayloadPublisher, platform types.PlatformMeta, logger *slog.Logger) *Executor {
+// NewExecutor constructs an Executor. outputDir is the directory
+// where rendered markdown research artifacts are written; if empty
+// the env var SEMTEAMS_RESEARCH_ARTIFACT_DIR is checked, then the
+// default "docs/research". Injecting outputDir directly lets tests
+// write to a temp directory without environment-variable side effects.
+func NewExecutor(publisher agentictools.TriplePublisher, natsPublish PayloadPublisher, platform types.PlatformMeta, logger *slog.Logger, outputDir string) *Executor {
 	if logger == nil {
 		logger = slog.Default()
+	}
+	if outputDir == "" {
+		if envDir := strings.TrimSpace(os.Getenv(envOutputDir)); envDir != "" {
+			outputDir = envDir
+		} else {
+			outputDir = defaultOutputDir
+		}
 	}
 	return &Executor{
 		publisher:   publisher,
 		natsPublish: natsPublish,
 		platform:    platform,
 		logger:      logger,
+		outputDir:   outputDir,
 	}
 }
 
@@ -179,6 +217,7 @@ func (e *Executor) ListTools() []agentic.ToolDefinition {
 				"open_gaps":           map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Reviewer-flagged gaps still outstanding after this pass. If no test harness in the catalog matches this work, include a 'needs_test_harness: <one-line description of the integration target>' entry here so the reviewer can route the gap; the chain treats `needs_test_harness` as a structured marker, not free text."},
 				"substrate_mutations": map[string]any{"type": "array", "items": mutationSchema, "description": "Append-only log of substrate-modifying tool calls across all revisions of this artifact (e.g. add_source_repo). Include prior revisions' entries verbatim plus any new ones from this pass."},
 				"test_harness":        map[string]any{"type": "string", "description": "Name of the test harness from configs/harnesses.json that will verify the integration this research describes. Omit (or leave empty) if no catalog entry matches; in that case ALSO add a `needs_test_harness: ...` line to open_gaps so the reviewer sees the gap explicitly. The reviewer enforces the either/or."},
+				"title":               map[string]any{"type": "string", "description": "Optional one-line title for this research (e.g. \"OSH Meshtastic driver research\"). Used to derive a stable, human-readable slug for the rendered docs/research/<slug>.md file. Empty falls back to a loop-id-suffixed slug; supplying a title is preferred for readable git history."},
 			},
 			"required": []string{"revision", "actors", "integration_points", "tasks"},
 		},
@@ -232,7 +271,32 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 	loopEntityID := agentic.LoopExecutionEntityID(e.platform.Org, e.platform.Platform, call.LoopID)
 	now := artifact.ProducedAt
 
+	// Derive slug + render markdown BEFORE the marker triples so the
+	// research.artifact.path triple lands in the same publish batch as
+	// revision/counts/etc. — a downstream consumer reading the loop
+	// entity gets either both or neither. Render failures abort
+	// emission; triples without an on-disk markdown view would be
+	// half-state.
+	artifact.Slug = deriveSlug(artifact.Title, call.LoopID, now)
+	relPath, renderErr := e.renderMarkdown(artifact)
+	if renderErr != nil {
+		return agentic.ToolResult{
+			CallID:    call.ID,
+			Name:      call.Name,
+			Error:     fmt.Sprintf("render research markdown: %v", renderErr),
+			ErrorKind: agentic.ToolErrorInternal,
+		}, nil
+	}
+
 	triples := buildTriples(loopEntityID, artifact, now)
+	triples = append(triples, message.Triple{
+		Subject:    loopEntityID,
+		Predicate:  predicateArtifactPath,
+		Object:     relPath,
+		Source:     toolSource,
+		Timestamp:  now,
+		Confidence: 1.0,
+	})
 	// Short-circuit on the first triple failure: marker triples drive the
 	// downstream rule, so without the full set the rule won't fire; the
 	// payload would be an orphan. Partial state self-heals on retry —
@@ -395,3 +459,121 @@ func buildTriples(loopEntityID string, a *research.Artifact, now time.Time) []me
 	}
 	return triples
 }
+
+// nonAlnum matches runs of non-[a-z0-9] characters for slug normalisation.
+// Mirrors emitspecartifact's regex; kept duplicated until a third consumer
+// earns the slot for a shared cmd/semteams/slug/ package per ADR-038
+// "What this ADR explicitly does NOT decide" #1 (implementation-time
+// mechanics, decide as we go).
+var nonAlnum = regexp.MustCompile(`[^a-z0-9]+`)
+
+// deriveSlug produces a YYYY-MM-DD-lower-kebab-case slug for the rendered
+// markdown filename. Title is the LLM-supplied human-readable summary;
+// when empty, fall back to the loop_id's last 8 chars so the slug is
+// still unique-per-chain even without an LLM-supplied title (the
+// researcher persona will eventually always supply one — PR D persona
+// cleanup — but Phase C1 lands the rendering without that contract
+// change).
+//
+// Same shape as emitspecartifact.deriveSlug; pure duplication for now.
+func deriveSlug(title, loopID string, t time.Time) string {
+	source := strings.ToLower(strings.TrimSpace(title))
+	if source == "" {
+		short := loopID
+		if len(short) > 8 {
+			short = short[:8]
+		}
+		source = "research-" + short
+	}
+	slug := nonAlnum.ReplaceAllString(source, "-")
+	slug = strings.Trim(slug, "-")
+	if slug == "" {
+		// Title was non-empty but reduced to empty after normalisation
+		// (e.g., all-emoji or all-symbol input). Fall back so the file
+		// always has a writeable name.
+		slug = "research"
+	}
+	return t.Format("2006-01-02") + "-" + slug
+}
+
+// renderMarkdown writes the artifact as a markdown file to e.outputDir.
+// The file is named <Slug>.md (Slug must be set by the caller before this
+// runs — Execute derives it via deriveSlug). The directory is created if
+// missing. Existing files are overwritten — same slug → same path, so
+// re-emissions on revision bumps idempotently overwrite the prior view
+// (matches emitspecartifact's overwrite policy).
+//
+// Returns the path relative to the process working directory so the
+// research.artifact.path triple object lines up with what a human reads
+// from `git diff` or a docs/research/<slug>.md link.
+func (e *Executor) renderMarkdown(a *research.Artifact) (string, error) {
+	if err := os.MkdirAll(e.outputDir, 0o755); err != nil {
+		return "", fmt.Errorf("create output dir %s: %w", e.outputDir, err)
+	}
+
+	tmpl, err := template.New("research-artifact").Funcs(template.FuncMap{
+		"add": func(i, n int) int { return i + n },
+	}).Parse(researchTemplateText)
+	if err != nil {
+		return "", fmt.Errorf("parse research markdown template: %w", err)
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, a); err != nil {
+		return "", fmt.Errorf("execute research markdown template: %w", err)
+	}
+
+	filename := a.Slug + ".md"
+	fullPath := filepath.Join(e.outputDir, filename)
+	if err := os.WriteFile(fullPath, buf.Bytes(), 0o644); err != nil {
+		return "", fmt.Errorf("write research file %s: %w", fullPath, err)
+	}
+
+	return filepath.Join(e.outputDir, filename), nil
+}
+
+// researchTemplateText is the markdown body for the rendered research
+// artifact. ADR-038 D3: tool template renders headings; persona supplies
+// content via structured fields. NO free-text dumping — every section
+// projects a typed slice/string from research.Artifact.
+//
+// Sections track the artifact's logical layout: title (or fallback
+// heading), revision metadata, actors, integration points, tasks,
+// addressed/open gaps, test_harness reference, substrate mutation log.
+// Order is stable so git diffs across revisions are readable.
+const researchTemplateText = `# {{ if .Title }}{{ .Title }}{{ else }}Research Artifact{{ end }}
+
+> Loop: ` + "`{{ .LoopID }}`" + `  ·  Revision: **{{ .Revision }}**  ·  Produced: {{ .ProducedAt.UTC.Format "2006-01-02 15:04 UTC" }}
+{{ if .TestHarness }}> Test harness: ` + "`{{ .TestHarness }}`" + `
+{{ end }}
+## Actors
+{{ if .Actors }}{{ range $i, $a := .Actors }}
+- **{{ $a.Name }}** — {{ $a.Role }}{{ end }}
+{{ else }}
+_(none)_
+{{ end }}
+## Integration points
+{{ if .IntegrationPoints }}{{ range $i, $ip := .IntegrationPoints }}
+- {{ $ip.From }} → {{ $ip.To }}{{ if $ip.Direction }} ({{ $ip.Direction }}){{ end }}{{ if $ip.Data }}: {{ $ip.Data }}{{ end }}{{ end }}
+{{ else }}
+_(none)_
+{{ end }}
+## Tasks
+{{ if .Tasks }}{{ range $i, $t := .Tasks }}
+{{ add $i 1 }}. {{ $t }}{{ end }}
+{{ else }}
+_(none)_
+{{ end }}
+{{ if .AddressedGaps }}## Addressed gaps
+{{ range $i, $g := .AddressedGaps }}
+- {{ $g }}{{ end }}
+{{ end }}
+{{ if .OpenGaps }}## Open gaps
+{{ range $i, $g := .OpenGaps }}
+- {{ $g }}{{ end }}
+{{ end }}
+{{ if .SubstrateMutations }}## Substrate mutations
+{{ range $i, $m := .SubstrateMutations }}
+- rev {{ $m.Revision }} · ` + "`{{ $m.Tool }}`" + ` · {{ $m.Status }}{{ if $m.Result }} — {{ $m.Result }}{{ end }}{{ end }}
+{{ end }}
+`
