@@ -250,8 +250,8 @@ func TestChainEntityCoverage_PR_B_Pipeline(t *testing.T) {
 		"chain.spec_artifact_loop",              // Phase 4 (writes from emit_dev_via_spec, not the chain package)
 		"chain.spec_artifact.path",              // Phase 4
 		"chain.spec_artifact.check_count",       // Phase 4
-		"chain.evidence.summary",                // Phase 5 (writes from evidence preprocessor, not the chain package)
-		"chain.evidence.summary_ready",          // Phase 5
+		"chain.evidence.summary_ready",          // Phase 5 (writes from evidence preprocessor, not the chain package)
+		"chain.evidence.summary.path",           // PR C Phase C4 (writes from evidence preprocessor, not the chain package)
 		"chain.dispatched_at.observed_fallback", // Phase 1b — only on zero-CompletedAt path; happy path must not emit
 	}
 	for _, pred := range notYet {

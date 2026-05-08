@@ -1,19 +1,35 @@
 package evidence
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
+	"text/template"
 	"time"
 
 	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/types"
+	"github.com/c360studio/semteams/cmd/semteams/slug"
 	"github.com/c360studio/semteams/cmd/semteams/verification"
 )
+
+// defaultOutputDir is the markdown render target when
+// SEMTEAMS_EVIDENCE_DIR is unset. Relative to the process working
+// directory (the repo root in normal operation). Mirrors the sibling
+// emit-tools (research / plan / consensus / spec).
+const defaultOutputDir = "docs/evidence"
+
+// envOutputDir is the operator override for the markdown output
+// directory. Env-var rather than framework config so it does not drift
+// the upstream config schema — same precedent as
+// SEMTEAMS_RESEARCH_ARTIFACT_DIR / SEMTEAMS_PLAN_DIR / SEMTEAMS_CONSENSUS_DIR.
+const envOutputDir = "SEMTEAMS_EVIDENCE_DIR"
 
 // TriplePublisher is the narrow surface the preprocessor uses to write
 // evidence triples onto the builder loop entity. Production wires the
@@ -58,6 +74,7 @@ type Preprocessor struct {
 	registry      *Registry
 	publisher     TriplePublisher
 	workspaceRoot string // absolute path to sandbox workspace mount; "" disables
+	outputDir     string // markdown render target for chain-entity evidence summary; resolved against env var + default at construction time
 	platform      types.PlatformMeta
 	logger        *slog.Logger
 	chainResolver ChainResolver // nil → skip chain entity triples (drift-safe)
@@ -67,17 +84,41 @@ type Preprocessor struct {
 // preprocessor: HandleLoopCompleted returns immediately on every event.
 // registry must already have its Checkers registered (call
 // RegisterBuiltins before New if the standard set is wanted).
-func New(reg *Registry, pub TriplePublisher, workspaceRoot string, platform types.PlatformMeta, logger *slog.Logger) *Preprocessor {
+//
+// outputDir is the directory where rendered markdown evidence summaries
+// land (one per builder loop, named by slug.DeriveDated). Empty falls
+// back to SEMTEAMS_EVIDENCE_DIR, then "docs/evidence". Markdown
+// rendering only fires when SetChainResolver has been wired — the
+// rendered file is the human-readable view of the chain.evidence.*
+// triples, not a per-loop side-effect (loop-entity evidence.summary
+// stays inline for rule_07 to read).
+func New(reg *Registry, pub TriplePublisher, workspaceRoot, outputDir string, platform types.PlatformMeta, logger *slog.Logger) *Preprocessor {
 	if logger == nil {
 		logger = slog.Default()
+	}
+	if outputDir == "" {
+		if envDir := strings.TrimSpace(os.Getenv(envOutputDir)); envDir != "" {
+			outputDir = envDir
+		} else {
+			outputDir = defaultOutputDir
+		}
 	}
 	return &Preprocessor{
 		registry:      reg,
 		publisher:     pub,
 		workspaceRoot: workspaceRoot,
+		outputDir:     outputDir,
 		platform:      platform,
 		logger:        logger,
 	}
+}
+
+// OutputDir returns the resolved markdown output directory after env
+// var + default fallback. Used by the boot-time logger so operators
+// can correlate a missing docs/evidence/<slug>.md file with the
+// SEMTEAMS_EVIDENCE_DIR override.
+func (p *Preprocessor) OutputDir() string {
+	return p.outputDir
 }
 
 // SetChainResolver enables ADR-038 PR B Phase 5 chain entity triple
@@ -244,20 +285,22 @@ func (p *Preprocessor) stampTriples(ctx context.Context, entityID, summary, loop
 	p.stampChainTriples(ctx, summary, loopID, now)
 }
 
-// stampChainTriples writes chain.evidence.summary + chain.evidence.summary_ready
-// on the canonical 6-part chain entity. Fail-soft: a missing resolver,
-// resolution error, or per-triple write error logs Warn and continues —
-// the loop-entity triples have already landed, so rule_07's downstream
-// path is unaffected.
+// stampChainTriples writes chain.evidence.summary_ready and (when
+// markdown rendering succeeds) chain.evidence.summary.path on the
+// canonical 6-part chain entity. Fail-soft: a missing resolver,
+// resolution error, render error, or per-triple write error logs Warn
+// and continues — the loop-entity triples have already landed, so
+// rule_07's downstream path is unaffected.
 //
-// Race-free as of semstreams beta.57: persistHandlerResult now runs
-// WriteLoopCompletion under a 2s budget BEFORE publishResults, so the
-// builder's own agent.loop.parent is in graph KV by the time this
-// preprocessor consumes the published agent.complete event. (Pre-fix
-// behaviour was a documented race that left chain.evidence.* on a
-// phantom chain entity when graph-write hadn't landed before publish;
-// behaviourally inert because rule_07 reads loop-entity triples
-// regardless, but cleaned up here now that the upstream fix is in.)
+// ADR-038 PR C Phase C4: chain.evidence.summary (the inline text dump)
+// is retired. The chain entity carries a reference (path) to the
+// rendered markdown view; the canonical store is the loop entity
+// (evidence.summary, which rule_07 reads inline) plus the on-disk
+// markdown view. ADR-038 §D2 prescribes the path-only chain shape;
+// §D3 names markdown the rendered view, not the canonical store.
+//
+// Race-free as of semstreams beta.57 (resolver's ancestry walk reads
+// agent.loop.parent which is now persisted before publishResults).
 func (p *Preprocessor) stampChainTriples(ctx context.Context, summary, loopID string, now time.Time) {
 	if p.chainResolver == nil {
 		return
@@ -270,20 +313,20 @@ func (p *Preprocessor) stampChainTriples(ctx context.Context, summary, loopID st
 		return
 	}
 
-	chainSummary := message.Triple{
-		Subject:    chainEntityID,
-		Predicate:  "chain.evidence.summary",
-		Object:     summary,
-		Source:     "chain.evidence",
-		Timestamp:  now,
-		Confidence: 1.0,
-	}
-	if err := p.publisher.AddTriple(ctx, chainSummary); err != nil {
-		p.logger.Warn("evidence preprocessor: failed to stamp chain.evidence.summary",
+	// Render markdown BEFORE stamping triples so the path predicate is
+	// only written when an on-disk file actually exists. Render failure
+	// is non-fatal: chain.evidence.summary_ready still lands so
+	// downstream consumers can route on readiness; the absence of
+	// chain.evidence.summary.path is the "no markdown rendered" signal
+	// (parallel to chain.research_artifact.path absence on legacy
+	// research artifacts).
+	relPath, renderErr := p.renderMarkdown(loopID, summary, now)
+	if renderErr != nil {
+		p.logger.Warn("evidence preprocessor: markdown render failed; chain.evidence.summary.path omitted",
 			slog.String("loop_id", loopID),
 			slog.String("chain_entity", chainEntityID),
-			slog.String("error", err.Error()))
-		// Continue: ready triple is independent.
+			slog.String("error", renderErr.Error()))
+		relPath = ""
 	}
 
 	chainReady := message.Triple{
@@ -299,5 +342,80 @@ func (p *Preprocessor) stampChainTriples(ctx context.Context, summary, loopID st
 			slog.String("loop_id", loopID),
 			slog.String("chain_entity", chainEntityID),
 			slog.String("error", err.Error()))
+		// Continue: path triple is independent.
+	}
+
+	if relPath == "" {
+		return
+	}
+	chainPath := message.Triple{
+		Subject:    chainEntityID,
+		Predicate:  "chain.evidence.summary.path",
+		Object:     relPath,
+		Source:     "chain.evidence",
+		Timestamp:  now,
+		Confidence: 1.0,
+	}
+	if err := p.publisher.AddTriple(ctx, chainPath); err != nil {
+		p.logger.Warn("evidence preprocessor: failed to stamp chain.evidence.summary.path",
+			slog.String("loop_id", loopID),
+			slog.String("chain_entity", chainEntityID),
+			slog.String("path", relPath),
+			slog.String("error", err.Error()))
 	}
 }
+
+// renderMarkdown writes the rendered evidence summary to
+// outputDir/<slug>.md. Slug is derived via slug.DeriveDated with the
+// "evidence" fallback prefix — the architect doesn't supply a title
+// (the preprocessor runs at builder-loop completion, which has no
+// LLM-author input here), so the slug always lands as
+// "<YYYY-MM-DD>-evidence-<loopID[:8]>". Same input → same path → safe
+// to overwrite on retry.
+//
+// Returns the path written, joined under outputDir. When outputDir is
+// relative (the default "docs/evidence" or a relative env override),
+// the returned path is repo-relative and reads cleanly in `git diff` /
+// markdown links. When outputDir is absolute (operator override or
+// t.TempDir() in tests), the returned path is absolute. Downstream
+// consumers reading chain.evidence.summary.path must tolerate both
+// shapes (parallel to chain.research_artifact.path).
+func (p *Preprocessor) renderMarkdown(loopID, summary string, now time.Time) (string, error) {
+	if err := os.MkdirAll(p.outputDir, 0o755); err != nil {
+		return "", fmt.Errorf("create output dir %s: %w", p.outputDir, err)
+	}
+
+	tmpl, err := template.New("evidence-summary").Parse(evidenceTemplateText)
+	if err != nil {
+		return "", fmt.Errorf("parse evidence markdown template: %w", err)
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, map[string]any{
+		"LoopID":     loopID,
+		"ProducedAt": now.UTC().Format("2006-01-02 15:04 UTC"),
+		"Summary":    summary,
+	}); err != nil {
+		return "", fmt.Errorf("execute evidence markdown template: %w", err)
+	}
+
+	filename := slug.DeriveDated("", loopID, "evidence", now) + ".md"
+	fullPath := filepath.Join(p.outputDir, filename)
+	if err := os.WriteFile(fullPath, buf.Bytes(), 0o644); err != nil {
+		return "", fmt.Errorf("write evidence file %s: %w", fullPath, err)
+	}
+
+	return filepath.Join(p.outputDir, filename), nil
+}
+
+// evidenceTemplateText renders the chain-entity evidence summary as a
+// readable markdown view. ADR-038 D3: tool template renders headings;
+// the body is the existing Summarize() output (per-check aggregates +
+// per-rule status lines). No persona-supplied content — this preprocessor
+// runs at builder-loop completion with no LLM author. The header
+// metadata (loop, produced) lets operators correlate the file back to a
+// specific run; the body is the same prose rule_07 / qa-reviewer read
+// inline from the loop entity.
+const evidenceTemplateText = "# Evidence summary\n\n" +
+	"> Loop: `{{ .LoopID }}`  ·  Produced: {{ .ProducedAt }}\n\n" +
+	"{{ .Summary }}"

@@ -86,7 +86,8 @@ func writeChecksFile(t *testing.T, wsRoot, loopID string, checks []verification.
 
 // newPreprocessor is a test helper that builds a Preprocessor with the
 // given workspace root and a freshly-built Registry with builtins
-// registered.
+// registered. outputDir is an internal temp dir per call so markdown
+// renders cannot collide across tests run in parallel.
 func newPreprocessor(t *testing.T, wsRoot string, pub *fakePublisher) *evidence.Preprocessor {
 	t.Helper()
 	reg, err := evidence.NewWithBuiltins()
@@ -94,7 +95,7 @@ func newPreprocessor(t *testing.T, wsRoot string, pub *fakePublisher) *evidence.
 		t.Fatalf("NewWithBuiltins: %v", err)
 	}
 	platform := types.PlatformMeta{Org: "c360", Platform: "test"}
-	return evidence.New(reg, pub, wsRoot, platform, nil)
+	return evidence.New(reg, pub, wsRoot, t.TempDir(), platform, nil)
 }
 
 // TestPreprocessor_HappyPath_TwoChecks verifies that a builder loop
@@ -324,7 +325,7 @@ func TestPreprocessor_WorkspaceRootEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewWithBuiltins: %v", err)
 	}
-	p := evidence.New(reg, pub, "", types.PlatformMeta{Org: "c360", Platform: "test"}, nil)
+	p := evidence.New(reg, pub, "", t.TempDir(), types.PlatformMeta{Org: "c360", Platform: "test"}, nil)
 
 	ev := buildEvent("loop-disabled")
 	if err := p.HandleLoopCompleted(context.Background(), ev); err != nil {
@@ -414,7 +415,7 @@ func TestPreprocessor_TripleSummaryShape(t *testing.T) {
 		t.Fatalf("NewWithBuiltins: %v", err)
 	}
 	platform := types.PlatformMeta{Org: "myorg", Platform: "mypf"}
-	p := evidence.New(reg, pub, wsRoot, platform, nil)
+	p := evidence.New(reg, pub, wsRoot, t.TempDir(), platform, nil)
 
 	writeChecksFile(t, wsRoot, loopID, []verification.Check{})
 
@@ -495,20 +496,32 @@ func TestPreprocessor_NoChainResolver_LoopEntityOnly(t *testing.T) {
 		t.Fatalf("HandleLoopCompleted: %v", err)
 	}
 	for _, tr := range pub.recorded() {
-		if tr.Predicate == "chain.evidence.summary" || tr.Predicate == "chain.evidence.summary_ready" {
+		switch tr.Predicate {
+		case "chain.evidence.summary_ready", "chain.evidence.summary.path":
 			t.Errorf("chain triple %q must not be written without chainResolver", tr.Predicate)
 		}
 	}
 }
 
 // TestPreprocessor_ChainResolver_HappyPath: with the resolver wired,
-// chain.evidence.* triples land on the chain entity AND loop-entity
-// triples still land (drift-safe phasing).
+// chain.evidence.summary_ready and chain.evidence.summary.path land on
+// the chain entity AND loop-entity triples still land (drift-safe
+// phasing). The path's referent file lands on disk under outputDir,
+// matching the chain-entity reference. ADR-038 PR C Phase C4 retired
+// the chain.evidence.summary text dump — the chain entity now carries
+// only a reference (path).
 func TestPreprocessor_ChainResolver_HappyPath(t *testing.T) {
 	wsRoot := t.TempDir()
+	outputDir := t.TempDir()
 	loopID := "loop-chain-ok"
 	pub := &fakePublisher{}
-	p := newPreprocessor(t, wsRoot, pub)
+
+	reg, err := evidence.NewWithBuiltins()
+	if err != nil {
+		t.Fatalf("NewWithBuiltins: %v", err)
+	}
+	platform := types.PlatformMeta{Org: "c360", Platform: "test"}
+	p := evidence.New(reg, pub, wsRoot, outputDir, platform, nil)
 
 	const wantChainEntityID = "c360.test.agent.chain.execution.dispatch_root"
 	resolver := &fakeChainResolver{entityID: wantChainEntityID}
@@ -523,19 +536,23 @@ func TestPreprocessor_ChainResolver_HappyPath(t *testing.T) {
 		t.Errorf("ChainEntityID calls = %d, want 1", resolver.calls)
 	}
 
-	// Both subjects must be present (drift-safe).
+	// Loop-entity triples (rule_07 contract) AND chain-entity reference
+	// triples must both land.
 	wantLoopEntityID := "c360.test.agent.agentic-loop.execution." + loopID
-	var sawLoopSummary, sawLoopReady, sawChainSummary, sawChainReady bool
+	var sawLoopSummary, sawLoopReady, sawChainReady bool
+	var chainPath string
 	for _, tr := range pub.recorded() {
 		switch {
 		case tr.Subject == wantLoopEntityID && tr.Predicate == "evidence.summary":
 			sawLoopSummary = true
 		case tr.Subject == wantLoopEntityID && tr.Predicate == "evidence.summary_ready":
 			sawLoopReady = true
-		case tr.Subject == wantChainEntityID && tr.Predicate == "chain.evidence.summary":
-			sawChainSummary = true
 		case tr.Subject == wantChainEntityID && tr.Predicate == "chain.evidence.summary_ready":
 			sawChainReady = true
+		case tr.Subject == wantChainEntityID && tr.Predicate == "chain.evidence.summary.path":
+			chainPath, _ = tr.Object.(string)
+		case tr.Subject == wantChainEntityID && tr.Predicate == "chain.evidence.summary":
+			t.Errorf("chain.evidence.summary text dump must not land — Phase C4 retired it in favor of the path reference")
 		}
 	}
 	if !sawLoopSummary {
@@ -544,11 +561,27 @@ func TestPreprocessor_ChainResolver_HappyPath(t *testing.T) {
 	if !sawLoopReady {
 		t.Error("evidence.summary_ready must still land on loop entity (drift-safe)")
 	}
-	if !sawChainSummary {
-		t.Error("chain.evidence.summary must land on chain entity")
-	}
 	if !sawChainReady {
 		t.Error("chain.evidence.summary_ready must land on chain entity")
+	}
+	if chainPath == "" {
+		t.Fatal("chain.evidence.summary.path must land on chain entity")
+	}
+
+	// The path's referent file must exist on disk and contain the
+	// rendered summary header. Path is joined under outputDir; absolute
+	// when outputDir is absolute (t.TempDir() returns absolute).
+	if !strings.HasPrefix(chainPath, outputDir) {
+		t.Errorf("chain.evidence.summary.path %q is not under outputDir %q", chainPath, outputDir)
+	}
+	rendered, readErr := os.ReadFile(chainPath)
+	if readErr != nil {
+		t.Fatalf("read rendered evidence file %s: %v", chainPath, readErr)
+	}
+	for _, want := range []string{"# Evidence summary", loopID, "(no checks)"} {
+		if !strings.Contains(string(rendered), want) {
+			t.Errorf("rendered evidence missing %q; got:\n%s", want, string(rendered))
+		}
 	}
 }
 
@@ -573,8 +606,69 @@ func TestPreprocessor_ChainResolver_Error_LoopEntityStillLands(t *testing.T) {
 	}
 	// Chain triples must not land.
 	for _, tr := range pub.recorded() {
-		if tr.Predicate == "chain.evidence.summary" || tr.Predicate == "chain.evidence.summary_ready" {
+		switch tr.Predicate {
+		case "chain.evidence.summary_ready", "chain.evidence.summary.path":
 			t.Errorf("chain triple %q must not be written when resolver errors", tr.Predicate)
 		}
+	}
+}
+
+// TestPreprocessor_ChainResolver_RenderError_ReadyStillLands: when
+// markdown render fails (e.g. outputDir is unwritable), the ready
+// triple still lands so downstream consumers can route on readiness;
+// the path triple is omitted (absence is the "no markdown rendered"
+// signal). Loop-entity triples are unaffected.
+func TestPreprocessor_ChainResolver_RenderError_ReadyStillLands(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("running as root: chmod 0500 won't block writes")
+	}
+	wsRoot := t.TempDir()
+	// Create a read-only outputDir so MkdirAll succeeds (path exists)
+	// but WriteFile fails. Restore mode via t.Cleanup so t.TempDir's
+	// own cleanup can still rm -rf.
+	outputDir := filepath.Join(t.TempDir(), "ro")
+	if err := os.Mkdir(outputDir, 0o500); err != nil {
+		t.Fatalf("mkdir read-only: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(outputDir, 0o700) })
+
+	loopID := "loop-render-err"
+	pub := &fakePublisher{}
+	reg, err := evidence.NewWithBuiltins()
+	if err != nil {
+		t.Fatalf("NewWithBuiltins: %v", err)
+	}
+	platform := types.PlatformMeta{Org: "c360", Platform: "test"}
+	p := evidence.New(reg, pub, wsRoot, outputDir, platform, nil)
+	const wantChainEntityID = "c360.test.agent.chain.execution.dispatch_root"
+	p.SetChainResolver(&fakeChainResolver{entityID: wantChainEntityID})
+
+	writeChecksFile(t, wsRoot, loopID, []verification.Check{})
+	if err := p.HandleLoopCompleted(context.Background(), buildEvent(loopID)); err != nil {
+		t.Errorf("render failure must be fail-soft; got: %v", err)
+	}
+
+	// chain.evidence.summary_ready must still land.
+	var sawChainReady, sawChainPath bool
+	for _, tr := range pub.recorded() {
+		if tr.Subject != wantChainEntityID {
+			continue
+		}
+		switch tr.Predicate {
+		case "chain.evidence.summary_ready":
+			sawChainReady = true
+		case "chain.evidence.summary.path":
+			sawChainPath = true
+		}
+	}
+	if !sawChainReady {
+		t.Error("chain.evidence.summary_ready must still land on render error")
+	}
+	if sawChainPath {
+		t.Error("chain.evidence.summary.path must not land when render failed")
+	}
+	// Loop-entity triples are independent of the chain path.
+	if _, ok := pub.findByPredicate("evidence.summary_ready"); !ok {
+		t.Error("evidence.summary_ready must still land on render error")
 	}
 }

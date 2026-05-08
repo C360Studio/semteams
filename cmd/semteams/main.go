@@ -350,11 +350,16 @@ func startEvidencePreprocessor(ctx context.Context, natsClient *natsclient.Clien
 		return fmt.Errorf("build evidence registry: %w", err)
 	}
 	triplePublisher := agentictools.NewNATSTriplePublisher(natsClient)
-	preprocessor := evidence.New(reg, triplePublisher, workspaceRoot, platform, logger)
-	// ADR-038 PR B Phase 5: opt the preprocessor in to chain entity
-	// triple writes so chain.evidence.summary + chain.evidence.summary_ready
-	// land alongside the existing loop-entity triples. Drift-safe —
-	// rule_07 still matches on the loop entity.
+	// outputDir empty → preprocessor reads SEMTEAMS_EVIDENCE_DIR or falls
+	// back to "docs/evidence". ADR-038 PR C Phase C4: rendered markdown
+	// view at the chain.evidence.summary.path reference.
+	preprocessor := evidence.New(reg, triplePublisher, workspaceRoot, "", platform, logger)
+	// ADR-038 PR B Phase 5 + PR C Phase C4: opt the preprocessor in to
+	// chain entity triple writes so chain.evidence.summary_ready and
+	// chain.evidence.summary.path land alongside the existing
+	// loop-entity triples. Drift-safe — rule_07 still matches on the
+	// loop entity. Markdown render fires from the same chain-opt-in
+	// path.
 	preprocessor.SetChainResolver(chain.NewResolver(chain.NewNATSParentReader(natsClient, platform), platform))
 	sub := evidence.NewNATSSubscriber(preprocessor, logger)
 	if err := sub.Start(ctx, natsClient); err != nil {
@@ -363,6 +368,7 @@ func startEvidencePreprocessor(ctx context.Context, natsClient *natsclient.Clien
 	if workspaceRoot != "" {
 		logger.Info("evidence preprocessor started",
 			slog.String("workspace_root", workspaceRoot),
+			slog.String("output_dir", preprocessor.OutputDir()),
 			slog.String("org", platform.Org),
 			slog.String("platform", platform.Platform))
 	} else {
