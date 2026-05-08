@@ -114,8 +114,24 @@ type Artifact struct {
 	// invariant; reviewer-as-enumerator does (consistent with other
 	// artifact fields whose presence rules are persona-side, not
 	// Validate-side).
-	TestHarness string    `json:"test_harness,omitempty"`
-	ProducedAt  time.Time `json:"produced_at"`
+	TestHarness string `json:"test_harness,omitempty"`
+
+	// Title is an optional one-line summary of the research target.
+	// Used by the emit_research_artifact tool to derive a stable slug
+	// for the rendered docs/research/<slug>.md file (ADR-038 D3).
+	// Empty falls back to a loop-id-suffixed slug. Additive widening;
+	// existing v1 consumers see omitempty.
+	Title string `json:"title,omitempty"`
+
+	// Slug is server-derived (NOT LLM-supplied) by emit_research_artifact
+	// at emission time: lower-kebab-case from Title (or a loop-id
+	// fallback) prefixed with the YYYY-MM-DD producedAt date. Stable
+	// per (title, date) pair so re-emissions overwrite the same path.
+	// Empty when the artifact predates ADR-038 PR C; consumers must
+	// tolerate absence and not derive their own.
+	Slug string `json:"slug,omitempty"`
+
+	ProducedAt time.Time `json:"produced_at"`
 }
 
 // Schema implements message.Payload.

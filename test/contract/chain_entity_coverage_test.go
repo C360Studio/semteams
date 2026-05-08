@@ -108,6 +108,7 @@ func TestChainEntityCoverage_PR_B_Pipeline(t *testing.T) {
 				"research.artifact.test_harness": "meshtasticd-3.x",
 				"research.artifact.actors_count": float64(3),
 				"research.artifact.tasks_count":  float64(5),
+				"research.artifact.path":         "docs/research/2026-05-08-osh-meshtastic-driver.md",
 			},
 			reviewerEntityID: {
 				"agent.loop.parent":       researcherEntityID,
@@ -174,6 +175,7 @@ func TestChainEntityCoverage_PR_B_Pipeline(t *testing.T) {
 		"chain.research_artifact.harness":     "meshtasticd-3.x",
 		"chain.research_artifact.actor_count": 3,
 		"chain.research_artifact.task_count":  5,
+		"chain.research_artifact.path":        "docs/research/2026-05-08-osh-meshtastic-driver.md", // PR C Phase C1
 	}
 	for pred, wantObj := range want {
 		gotObj, ok := got[pred]
@@ -199,7 +201,6 @@ func TestChainEntityCoverage_PR_B_Pipeline(t *testing.T) {
 		"chain.spec_artifact.check_count",       // Phase 4
 		"chain.evidence.summary",                // Phase 5 (writes from evidence preprocessor, not the chain package)
 		"chain.evidence.summary_ready",          // Phase 5
-		"chain.research_artifact.path",          // PR C (markdown rendering)
 		"chain.dispatched_at.observed_fallback", // Phase 1b — only on zero-CompletedAt path; happy path must not emit
 	}
 	for _, pred := range notYet {

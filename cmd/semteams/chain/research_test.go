@@ -124,6 +124,7 @@ func TestResearchMilestone_ApprovedHappyPath(t *testing.T) {
 				researcherTestHarnessPredicate: "meshtasticd-3.x",
 				researcherActorsCountPredicate: float64(3), // JSON unmarshal shape
 				researcherTasksCountPredicate:  float64(5),
+				researcherPathPredicate:        "docs/research/2026-05-08-osh-meshtastic-driver.md",
 			},
 		},
 	}
@@ -144,6 +145,7 @@ func TestResearchMilestone_ApprovedHappyPath(t *testing.T) {
 		chainPredicateResearchArtifactHarness:    "meshtasticd-3.x",
 		chainPredicateResearchArtifactActorCount: 3,
 		chainPredicateResearchArtifactTaskCount:  5,
+		chainPredicateResearchArtifactPath:       "docs/research/2026-05-08-osh-meshtastic-driver.md",
 	}
 	for pred, want := range wantPredicates {
 		got, ok := pub.byPredicate(pred)
@@ -197,6 +199,12 @@ func TestResearchMilestone_HarnessOmittedWhenEmpty(t *testing.T) {
 	}
 	if _, ok := pub.byPredicate(chainPredicateResearchArtifactLoop); !ok {
 		t.Error("loop predicate must still land regardless of harness state")
+	}
+	// Path predicate absence is the legacy-artifact signal; with no
+	// research.artifact.path on the researcher's entity, the chain
+	// triple must not be fabricated.
+	if _, ok := pub.byPredicate(chainPredicateResearchArtifactPath); ok {
+		t.Error("path predicate should be omitted when research.artifact.path is absent on researcher loop")
 	}
 }
 

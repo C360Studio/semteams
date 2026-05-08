@@ -155,7 +155,10 @@ func registerEmitArtifact(reg *agentictools.ExecutorRegistry, natsClient *natscl
 		return nil
 	}
 	triplePublisher := agentictools.NewNATSTriplePublisher(natsClient)
-	executor := emitartifact.NewExecutor(triplePublisher, natsClient, platform, logger)
+	// outputDir empty → reads SEMTEAMS_RESEARCH_ARTIFACT_DIR or falls back
+	// to the package default ("docs/research"). ADR-038 PR C Phase C1
+	// markdown render target.
+	executor := emitartifact.NewExecutor(triplePublisher, natsClient, platform, logger, "")
 	if err := reg.RegisterTool(emitartifact.ToolName, executor); err != nil {
 		return fmt.Errorf("register %s: %w", emitartifact.ToolName, err)
 	}
