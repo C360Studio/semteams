@@ -24,7 +24,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"text/template"
 	"time"
@@ -35,6 +34,7 @@ import (
 	"github.com/c360studio/semstreams/types"
 
 	"github.com/c360studio/semteams/cmd/semteams/devviaspec"
+	"github.com/c360studio/semteams/cmd/semteams/slug"
 )
 
 // ToolName is the LLM-facing tool name.
@@ -175,7 +175,7 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 	loopEntityID := agentic.LoopExecutionEntityID(e.platform.Org, e.platform.Platform, call.LoopID)
 	now := consensus.ProducedAt
 
-	consensus.Slug = deriveSlug(consensus.Title, call.LoopID, now)
+	consensus.Slug = slug.DeriveDated(consensus.Title, call.LoopID, "consensus", now)
 	relPath, renderErr := e.renderMarkdown(consensus)
 	if renderErr != nil {
 		return agentic.ToolResult{
@@ -287,34 +287,6 @@ func buildTriples(loopEntityID string, c *devviaspec.Consensus, relPath string, 
 		base(predicateGeneratedAt, now.UTC().Format(time.RFC3339Nano)),
 		base(predicatePath, relPath),
 	}
-}
-
-// nonAlnum matches runs of non-[a-z0-9] for slug normalisation.
-// Pure duplication of emitartifact / emitplan / emitspecartifact's
-// regex. Reviewer feedback (PR C Phase C2): hold one more cycle on
-// factoring; with 4 call sites now, a shared cmd/semteams/slug/
-// package earns its slot — flagged for follow-on cleanup PR.
-var nonAlnum = regexp.MustCompile(`[^a-z0-9]+`)
-
-// deriveSlug produces a YYYY-MM-DD-lower-kebab-case slug for the
-// rendered markdown filename. Falls back to a loop-id-suffixed slug
-// when title is empty (matches emitartifact / emitplan; emitspecartifact
-// requires title via validation).
-func deriveSlug(title, loopID string, t time.Time) string {
-	source := strings.ToLower(strings.TrimSpace(title))
-	if source == "" {
-		short := loopID
-		if len(short) > 8 {
-			short = short[:8]
-		}
-		source = "consensus-" + short
-	}
-	slug := nonAlnum.ReplaceAllString(source, "-")
-	slug = strings.Trim(slug, "-")
-	if slug == "" {
-		slug = "consensus"
-	}
-	return t.Format("2006-01-02") + "-" + slug
 }
 
 // renderMarkdown writes the consensus to outputDir/<Slug>.md. Same
