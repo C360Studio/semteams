@@ -206,7 +206,8 @@
           "query_entities",
           "decide",
           "add_source_repo",
-          "emit_research_artifact"
+          "emit_research_artifact",
+          "emit_plan"
         ],
         "approval_required": ["add_source_repo"],
         "ports": {

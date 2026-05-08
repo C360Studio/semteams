@@ -208,6 +208,8 @@
           "decide",
           "add_source_repo",
           "emit_research_artifact",
+          "emit_plan",
+          "emit_consensus",
           "emit_dev_via_spec_artifact",
           "bootstrap_workspace",
           "bash",

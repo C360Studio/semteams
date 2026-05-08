@@ -31,8 +31,12 @@ Process on retry:
      failure path.
    - For "integration point unaccounted for": cross-check the
      research artifact's `integration_points` and add scope.
-4. Re-emit `decide(action="planned", reason="<revised plan>")`
-   — the reviewer / challenger will re-evaluate.
+4. Re-call `emit_plan` per `15-emit-plan.md` (bumped revision; same
+   stable title so the rendered file overwrites at the deterministic
+   slug). Then re-emit `decide(action="planned", reason="<revised
+   plan>")` — the reviewer / challenger will re-evaluate from your
+   `decide.reason`. The emit-tool is additive audit; substance lives
+   in `decide.reason` regardless of revision.
 
 Do not argue with findings. Do not produce a "this is fine" plan
 under retry. The retry exists because a finding warranted one;

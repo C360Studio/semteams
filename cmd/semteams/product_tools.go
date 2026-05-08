@@ -183,14 +183,14 @@ func registerEmitArtifact(reg *agentictools.ExecutorRegistry, natsClient *natscl
 // needs it. Output directory defaults to "docs/plans" but is overrideable
 // via SEMTEAMS_PLAN_DIR.
 //
-// Note (PR C Phase C2 vs C5 split): the planner persona contract change
-// to actually CALL emit_plan is deferred to Phase C5 alongside the other
-// persona updates. Until C5 lands, the tool is registered (so the chain
-// milestone subscriber and any operator-driven invocation work) but the
-// planner persona keeps its existing decide(action="planned", reason=
-// "<plan content>") terminal. This matches the Phase C1 split shape
-// (research markdown shipped in C1; researcher persona contract for
-// title supply deferred to C5).
+// Persona contract (Phase C5, landed): the dev-via-spec-planner persona
+// fragment 15-emit-plan.md instructs the planner to call emit_plan
+// before terminating with decide(action="planned"). The planner spawn
+// rules (rules/research-mode-transition/03-stabilise-and-transition.json
+// and rules/dev-via-spec/02 + 04 retry rules) include emit_plan in their
+// tool list and prompt body. Configs that route through the dev-via-spec
+// chain (osh-demo.json, e2e-dev-via-spec.json) include emit_plan in
+// agentic-tools.allowed_tools.
 func registerEmitPlan(reg *agentictools.ExecutorRegistry, natsClient *natsclient.Client, platform types.PlatformMeta, logger *slog.Logger) error {
 	if natsClient == nil {
 		logger.Warn("nats client unavailable; emit_plan registration skipped")
@@ -214,11 +214,15 @@ func registerEmitPlan(reg *agentictools.ExecutorRegistry, natsClient *natsclient
 // Output directory defaults to "docs/consensus" but is overrideable
 // via SEMTEAMS_CONSENSUS_DIR.
 //
-// Note (PR C Phase C3 vs C5 split): the challenger persona contract
-// change to actually CALL emit_consensus is deferred to Phase C5.
-// Until C5 lands, the tool is registered but the challenger persona
-// keeps its existing decide(action="accept", reason="<consensus
-// content>") terminal. Matches the C1/C2 split shape.
+// Persona contract (Phase C5, landed): the dev-via-spec-challenger
+// persona fragment 15-emit-consensus.md instructs the challenger to
+// call emit_consensus before terminating with decide(action="accept")
+// and to NOT call when terminating with concerns_raised. The spawn
+// rule (rules/dev-via-spec/03-reviewer-approved-to-challenger.json)
+// includes emit_consensus in its tool list and prompt body. Configs
+// that route through the dev-via-spec chain (osh-demo.json,
+// e2e-dev-via-spec.json) include emit_consensus in
+// agentic-tools.allowed_tools.
 func registerEmitConsensus(reg *agentictools.ExecutorRegistry, natsClient *natsclient.Client, platform types.PlatformMeta, logger *slog.Logger) error {
 	if natsClient == nil {
 		logger.Warn("nats client unavailable; emit_consensus registration skipped")

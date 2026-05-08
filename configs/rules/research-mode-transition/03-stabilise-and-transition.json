@@ -25,7 +25,7 @@
       "subject": "agent.task.dev-via-spec-plan",
       "role": "dev-via-spec-planner",
       "model": "planning",
-      "tools": ["read_loop_result", "decide"],
+      "tools": ["read_loop_result", "emit_plan", "decide"],
       "action_allowlist": ["planned"],
       "properties": {
         "research_reviewer_loop_id": "$entity.instance"

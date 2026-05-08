@@ -18,6 +18,13 @@ contract — no nesting under a wrapping object. Pass:
     properties contain `revision`, use that; otherwise read
     the prior reviewer's loop result and increment from the
     artifact you find there.
+- `title` — short, descriptive title for this research (e.g.
+  `"OSH Meshtastic driver research"`). Drives the rendered file's
+  slug at `docs/research/<slug>.md` and shows up in `git log`.
+  Empty falls back to a loop-id-suffixed slug; supplying a
+  title is preferred for readable history. Keep it stable
+  across revisions — re-emitting with the same title overwrites
+  the file at the deterministic slug, which is what you want.
 - `actors`, `integration_points`, `tasks` — the
   enumerated content; same shape your completion message
   carries.
