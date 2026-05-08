@@ -18,6 +18,12 @@ import (
 // The .path predicate is propagated only when emit_research_artifact's
 // markdown rendering succeeded (PR C Phase C1); absent on legacy
 // research artifacts emitted before the markdown landing.
+//
+// Path shape: relative to the process working directory under the
+// default outputDir ("docs/research"); absolute when operators set
+// SEMTEAMS_RESEARCH_ARTIFACT_DIR to an absolute path (or in tests via
+// t.TempDir()). Consumers of chain.research_artifact.path must tolerate
+// both — emit_research_artifact's renderMarkdown does NOT normalise.
 const (
 	chainPredicateResearchArtifactLoop       = "chain.research_artifact_loop"
 	chainPredicateResearchArtifactHarness    = "chain.research_artifact.harness"

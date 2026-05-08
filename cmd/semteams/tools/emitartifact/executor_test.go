@@ -139,7 +139,7 @@ func TestListTools_SchemaShape(t *testing.T) {
 	if !ok {
 		t.Fatalf("schema missing properties: %#v", def.Parameters)
 	}
-	for _, key := range []string{"revision", "actors", "integration_points", "tasks", "addressed_gaps", "open_gaps", "substrate_mutations", "test_harness"} {
+	for _, key := range []string{"revision", "actors", "integration_points", "tasks", "addressed_gaps", "open_gaps", "substrate_mutations", "test_harness", "title"} {
 		if _, ok := props[key]; !ok {
 			t.Errorf("missing property %q in tool schema", key)
 		}
@@ -686,7 +686,7 @@ func TestExecute_MarkdownRender_TitleEmpty_LoopIDFallbackSlug(t *testing.T) {
 }
 
 func TestExecute_MarkdownRender_OverwritesOnRerun(t *testing.T) {
-	exec, _, _, _ := newExecutor(t)
+	exec, _, _, dir := newExecutor(t)
 	args := defaultArtifactArgs()
 	args["title"] = "Stable Title"
 
@@ -699,9 +699,37 @@ func TestExecute_MarkdownRender_OverwritesOnRerun(t *testing.T) {
 	if _, err := exec.Execute(context.Background(), defaultCall(args)); err != nil {
 		t.Fatalf("second Execute err: %v", err)
 	}
-	// No assertion on file count here — overwrite means one .md, not two.
-	// Fail-mode would be "create a different filename"; the slug derivation
-	// is deterministic so this should be a no-op on disk.
+
+	// Pin the overwrite invariant: same slug → same file → exactly one
+	// .md on disk after two emissions. A regression that started
+	// appending to a different filename (or skipping the second write)
+	// would fail loudly here.
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("read tmpDir: %v", err)
+	}
+	mdCount := 0
+	var mdName string
+	for _, e := range entries {
+		if strings.HasSuffix(e.Name(), ".md") {
+			mdCount++
+			mdName = e.Name()
+		}
+	}
+	if mdCount != 1 {
+		t.Errorf("expected exactly 1 .md after two emissions (overwrite), got %d", mdCount)
+	}
+
+	// And the second emission's revision number must be visible — proves
+	// the second write actually replaced the file body, not just reused
+	// the inode of the first.
+	body, err := os.ReadFile(dir + "/" + mdName)
+	if err != nil {
+		t.Fatalf("read overwritten file: %v", err)
+	}
+	if !strings.Contains(string(body), "Revision: **2**") {
+		t.Errorf("overwritten file should reflect revision=2; body:\n%s", string(body))
+	}
 }
 
 func triplesByPredicate(triples []message.Triple) map[string]message.Triple {

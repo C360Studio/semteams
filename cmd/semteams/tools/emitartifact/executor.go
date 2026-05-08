@@ -469,7 +469,7 @@ var nonAlnum = regexp.MustCompile(`[^a-z0-9]+`)
 
 // deriveSlug produces a YYYY-MM-DD-lower-kebab-case slug for the rendered
 // markdown filename. Title is the LLM-supplied human-readable summary;
-// when empty, fall back to the loop_id's last 8 chars so the slug is
+// when empty, fall back to the loop_id's first 8 chars so the slug is
 // still unique-per-chain even without an LLM-supplied title (the
 // researcher persona will eventually always supply one — PR D persona
 // cleanup — but Phase C1 lands the rendering without that contract
@@ -503,9 +503,14 @@ func deriveSlug(title, loopID string, t time.Time) string {
 // re-emissions on revision bumps idempotently overwrite the prior view
 // (matches emitspecartifact's overwrite policy).
 //
-// Returns the path relative to the process working directory so the
-// research.artifact.path triple object lines up with what a human reads
-// from `git diff` or a docs/research/<slug>.md link.
+// Returns the path written, joined under outputDir. When outputDir is
+// relative (the default "docs/research" or a relative env override),
+// the returned path is repo-relative and reads cleanly in `git diff` /
+// markdown links. When outputDir is absolute (e.g. SEMTEAMS_RESEARCH_ARTIFACT_DIR
+// pointing into a deployment-specific volume, or t.TempDir() in tests),
+// the returned path is absolute. Downstream consumers reading
+// research.artifact.path (and the chain.research_artifact.path
+// projected from it) must tolerate both shapes.
 func (e *Executor) renderMarkdown(a *research.Artifact) (string, error) {
 	if err := os.MkdirAll(e.outputDir, 0o755); err != nil {
 		return "", fmt.Errorf("create output dir %s: %w", e.outputDir, err)
