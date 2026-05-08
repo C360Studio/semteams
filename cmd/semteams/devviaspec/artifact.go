@@ -196,11 +196,14 @@ func (a *Artifact) UnmarshalJSON(data []byte) error {
 // research.RegisterPayloads so the full SemTeams-local type set layers
 // on top of the framework's first-party payloads.
 func RegisterPayloads(reg *payloadregistry.Registry) error {
-	return reg.Register(&payloadregistry.Registration{
+	if err := reg.Register(&payloadregistry.Registration{
 		Factory:     func() any { return &Artifact{} },
 		Domain:      Domain,
 		Category:    CategoryArtifact,
 		Version:     SchemaVersion,
 		Description: "SemTeams dev-via-spec artifact — terminal structured output of the architect role at the close of a research→planner→reviewer→challenger→architect chain. ADR-031 §R3.3.",
-	})
+	}); err != nil {
+		return err
+	}
+	return registerPlanPayload(reg)
 }

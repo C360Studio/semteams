@@ -275,8 +275,8 @@ func setupToolsAndPreprocessor(
 //
 // Phase 1b: chain.dispatched_at on chain root.
 // Phase 2:  chain.research_artifact.* on research-reviewer approval.
-// Phases 3+ (chainpause re-point, evidence summary milestone, spec
-// artifact milestone) plug in via the same slice.
+// Phase C2: chain.plan.* on dev-via-spec-reviewer approval.
+// Phase C4 (evidence summary milestone) plugs in via the same slice.
 func startChainMilestoneSubscribers(ctx context.Context, natsClient *natsclient.Client, platform types.PlatformMeta, logger *slog.Logger) error {
 	triplePublisher := agentictools.NewNATSTriplePublisher(natsClient)
 	entityReader := chain.NewNATSEntityReader(natsClient)
@@ -284,10 +284,12 @@ func startChainMilestoneSubscribers(ctx context.Context, natsClient *natsclient.
 
 	dispatched := chain.NewDispatchedStamper(triplePublisher, platform, logger)
 	research := chain.NewResearchMilestoneStamper(triplePublisher, resolver, entityReader, platform, logger)
+	plan := chain.NewPlanMilestoneStamper(triplePublisher, resolver, entityReader, platform, logger)
 
 	subscriber := chain.NewCompletionSubscriber([]chain.CompletionHandler{
 		dispatched,
 		research,
+		plan,
 	}, logger)
 	if err := subscriber.Start(ctx, natsClient); err != nil {
 		return fmt.Errorf("subscribe to loop completed for chain milestones: %w", err)

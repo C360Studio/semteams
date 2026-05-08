@@ -20,6 +20,7 @@ import (
 	"github.com/c360studio/semteams/cmd/semteams/tools/bootstrapworkspace"
 	"github.com/c360studio/semteams/cmd/semteams/tools/builderdecide"
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitartifact"
+	"github.com/c360studio/semteams/cmd/semteams/tools/emitplan"
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitspecartifact"
 	"github.com/c360studio/semteams/cmd/semteams/verification"
 )
@@ -102,6 +103,9 @@ func registerProductTools(reg *agentictools.ExecutorRegistry, natsClient *natscl
 	if err := registerEmitArtifact(reg, natsClient, platform, logger); err != nil {
 		return err
 	}
+	if err := registerEmitPlan(reg, natsClient, platform, logger); err != nil {
+		return err
+	}
 	if err := registerEmitSpecArtifact(reg, natsClient, platform, testHarnessMgr, logger); err != nil {
 		return err
 	}
@@ -164,6 +168,37 @@ func registerEmitArtifact(reg *agentictools.ExecutorRegistry, natsClient *natscl
 	}
 	logger.Info("Registered product tool",
 		slog.String("name", emitartifact.ToolName),
+		slog.String("org", platform.Org),
+		slog.String("platform", platform.Platform))
+	return nil
+}
+
+// registerEmitPlan wires the ADR-038 PR C Phase C2 emit_plan executor.
+// Always registered when natsClient is non-nil — same "always on" policy
+// as registerEmitArtifact: any deployment running the dev-via-spec flow
+// needs it. Output directory defaults to "docs/plans" but is overrideable
+// via SEMTEAMS_PLAN_DIR.
+//
+// Note (PR C Phase C2 vs C5 split): the planner persona contract change
+// to actually CALL emit_plan is deferred to Phase C5 alongside the other
+// persona updates. Until C5 lands, the tool is registered (so the chain
+// milestone subscriber and any operator-driven invocation work) but the
+// planner persona keeps its existing decide(action="planned", reason=
+// "<plan content>") terminal. This matches the Phase C1 split shape
+// (research markdown shipped in C1; researcher persona contract for
+// title supply deferred to C5).
+func registerEmitPlan(reg *agentictools.ExecutorRegistry, natsClient *natsclient.Client, platform types.PlatformMeta, logger *slog.Logger) error {
+	if natsClient == nil {
+		logger.Warn("nats client unavailable; emit_plan registration skipped")
+		return nil
+	}
+	triplePublisher := agentictools.NewNATSTriplePublisher(natsClient)
+	executor := emitplan.NewExecutor(triplePublisher, natsClient, platform, logger, "")
+	if err := reg.RegisterTool(emitplan.ToolName, executor); err != nil {
+		return fmt.Errorf("register %s: %w", emitplan.ToolName, err)
+	}
+	logger.Info("Registered product tool",
+		slog.String("name", emitplan.ToolName),
 		slog.String("org", platform.Org),
 		slog.String("platform", platform.Platform))
 	return nil

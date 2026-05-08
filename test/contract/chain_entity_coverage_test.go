@@ -94,9 +94,12 @@ func TestChainEntityCoverage_PR_B_Pipeline(t *testing.T) {
 
 	// Build a chain ancestry that mirrors the OSH-Meshtastic happy path:
 	//   dispatch_root → researcher_a → research_reviewer_b
+	//                 → planner_c → dev_via_spec_reviewer_d
 	dispatchEntityID := agentic.LoopExecutionEntityID("c360", "test", "dispatch_root")
 	researcherEntityID := agentic.LoopExecutionEntityID("c360", "test", "researcher_a")
-	reviewerEntityID := agentic.LoopExecutionEntityID("c360", "test", "research_reviewer_b")
+	researchReviewerEntityID := agentic.LoopExecutionEntityID("c360", "test", "research_reviewer_b")
+	plannerEntityID := agentic.LoopExecutionEntityID("c360", "test", "planner_c")
+	devReviewerEntityID := agentic.LoopExecutionEntityID("c360", "test", "dev_via_spec_reviewer_d")
 	er := &staticEntityReader{
 		entities: map[string]map[string]any{
 			dispatchEntityID: {
@@ -110,10 +113,18 @@ func TestChainEntityCoverage_PR_B_Pipeline(t *testing.T) {
 				"research.artifact.tasks_count":  float64(5),
 				"research.artifact.path":         "docs/research/2026-05-08-osh-meshtastic-driver.md",
 			},
-			reviewerEntityID: {
+			researchReviewerEntityID: {
 				"agent.loop.parent":       researcherEntityID,
 				"coordinator.next_action": "approved",
 				"lineage.researcher":      "researcher_a",
+			},
+			plannerEntityID: {
+				"agent.loop.parent":      researchReviewerEntityID,
+				"dev_via_spec.plan.path": "docs/plans/2026-05-08-osh-meshtastic-plan.md",
+			},
+			devReviewerEntityID: {
+				"agent.loop.parent":       plannerEntityID,
+				"coordinator.next_action": "approved",
 			},
 		},
 	}
@@ -122,13 +133,14 @@ func TestChainEntityCoverage_PR_B_Pipeline(t *testing.T) {
 
 	dispatched := chain.NewDispatchedStamper(pub, platform, nil)
 	research := chain.NewResearchMilestoneStamper(pub, resolver, er, platform, nil)
+	planMilestone := chain.NewPlanMilestoneStamper(pub, resolver, er, platform, nil)
 
 	// We invoke handlers directly. CompletionSubscriber's NATS plumbing
 	// is covered by chain/subscriber_test.go; this contract test focuses
 	// on the per-handler chain-entity output across the pipeline.
 	now := time.Now().UTC()
 
-	// Drive three events in chain order. We invoke the handlers directly
+	// Drive five events in chain order. We invoke the handlers directly
 	// rather than going through NATS — the subscriber's NATS plumbing is
 	// covered by chain/subscriber_test.go.
 	events := []*agentic.LoopCompletedEvent{
@@ -153,6 +165,20 @@ func TestChainEntityCoverage_PR_B_Pipeline(t *testing.T) {
 			ParentLoopID: "researcher_a",
 			CompletedAt:  now.Add(2 * time.Second),
 		},
+		{
+			LoopID:       "planner_c",
+			Role:         "dev-via-spec-planner",
+			Outcome:      agentic.OutcomeSuccess,
+			ParentLoopID: "research_reviewer_b",
+			CompletedAt:  now.Add(3 * time.Second),
+		},
+		{
+			LoopID:       "dev_via_spec_reviewer_d",
+			Role:         "dev-via-spec-reviewer",
+			Outcome:      agentic.OutcomeSuccess,
+			ParentLoopID: "planner_c",
+			CompletedAt:  now.Add(4 * time.Second),
+		},
 	}
 	for _, ev := range events {
 		if err := dispatched.HandleLoopCompleted(context.Background(), ev); err != nil {
@@ -160,6 +186,9 @@ func TestChainEntityCoverage_PR_B_Pipeline(t *testing.T) {
 		}
 		if err := research.HandleLoopCompleted(context.Background(), ev); err != nil {
 			t.Fatalf("ResearchMilestoneStamper.HandleLoopCompleted(%s) error: %v", ev.LoopID, err)
+		}
+		if err := planMilestone.HandleLoopCompleted(context.Background(), ev); err != nil {
+			t.Fatalf("PlanMilestoneStamper.HandleLoopCompleted(%s) error: %v", ev.LoopID, err)
 		}
 	}
 
@@ -176,6 +205,8 @@ func TestChainEntityCoverage_PR_B_Pipeline(t *testing.T) {
 		"chain.research_artifact.actor_count": 3,
 		"chain.research_artifact.task_count":  5,
 		"chain.research_artifact.path":        "docs/research/2026-05-08-osh-meshtastic-driver.md", // PR C Phase C1
+		"chain.plan_loop":                     "planner_c",                                         // PR C Phase C2
+		"chain.plan.path":                     "docs/plans/2026-05-08-osh-meshtastic-plan.md",      // PR C Phase C2
 	}
 	for pred, wantObj := range want {
 		gotObj, ok := got[pred]
