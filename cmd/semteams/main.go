@@ -329,6 +329,11 @@ func startEvidencePreprocessor(ctx context.Context, natsClient *natsclient.Clien
 	}
 	triplePublisher := agentictools.NewNATSTriplePublisher(natsClient)
 	preprocessor := evidence.New(reg, triplePublisher, workspaceRoot, platform, logger)
+	// ADR-038 PR B Phase 5: opt the preprocessor in to chain entity
+	// triple writes so chain.evidence.summary + chain.evidence.summary_ready
+	// land alongside the existing loop-entity triples. Drift-safe —
+	// rule_07 still matches on the loop entity.
+	preprocessor.SetChainResolver(chain.NewResolver(chain.NewNATSParentReader(natsClient, platform), platform))
 	sub := evidence.NewNATSSubscriber(preprocessor, logger)
 	if err := sub.Start(ctx, natsClient); err != nil {
 		return fmt.Errorf("subscribe to loop completed events: %w", err)
