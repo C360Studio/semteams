@@ -11,7 +11,6 @@ import (
 	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/natsclient"
-	"github.com/c360studio/semstreams/types"
 )
 
 // DecisionVerb is the operator's resolution of a chain pause.
@@ -66,7 +65,8 @@ type TaskPublisher interface {
 }
 
 // PauseDataReader reads the role and original model from the §D5 triple set
-// stamped on the failed loop entity at pause time (ADR-037 §D7).
+// stamped on the chain entity at pause time (ADR-037 §D7, ADR-038 PR B
+// Phase 3 — pre-Phase-3 the triples lived on the failed loop's entity).
 //
 // The production implementation makes a graph.query.entity NATS request and
 // reads chain.paused.role + chain.paused.original_model from the returned
@@ -81,16 +81,25 @@ type PauseDataReader interface {
 // DecisionHandler handles operator decisions arriving at
 // POST /teams-loop/chain-pause/decide. Only "operator" authority is wired in v1;
 // the validator rejects coordinator and auto values at the HTTP boundary per ADR-037 §D3.
+//
+// ADR-038 PR B Phase 3: chain.decision.* / chain.resumed / chain.killed /
+// chain.deferred all land on the canonical chain entity (resolved from
+// the failed loop's ancestry). PauseDataReader reads chain.paused.role
+// and chain.paused.original_model from the same chain entity at retry
+// time, so the role+model used for the retry spawn match what the
+// Pauser stamped at pause time.
 type DecisionHandler struct {
 	publisher TriplePublisher
 	tasks     TaskPublisher
 	pauseData PauseDataReader
-	platform  types.PlatformMeta
+	resolver  ChainEntityResolver
 	logger    *slog.Logger
 }
 
-// NewDecisionHandler constructs a DecisionHandler.
-func NewDecisionHandler(pub TriplePublisher, tasks TaskPublisher, pauseData PauseDataReader, platform types.PlatformMeta, logger *slog.Logger) *DecisionHandler {
+// NewDecisionHandler constructs a DecisionHandler. The resolver computes
+// the chain entity ID for §D5 audit writes and PauseDataReader queries;
+// cmd/semteams/chain.Resolver is the production wiring.
+func NewDecisionHandler(pub TriplePublisher, tasks TaskPublisher, pauseData PauseDataReader, resolver ChainEntityResolver, logger *slog.Logger) *DecisionHandler {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -98,7 +107,7 @@ func NewDecisionHandler(pub TriplePublisher, tasks TaskPublisher, pauseData Paus
 		publisher: pub,
 		tasks:     tasks,
 		pauseData: pauseData,
-		platform:  platform,
+		resolver:  resolver,
 		logger:    logger,
 	}
 }
@@ -119,7 +128,10 @@ func (h *DecisionHandler) HandleDecision(ctx context.Context, req DecisionReques
 	}
 
 	reason := sanitiseReason(req.Reason)
-	entityID := agentic.LoopExecutionEntityID(h.platform.Org, h.platform.Platform, req.FailedLoopID)
+	entityID, err := h.resolver.ChainEntityID(ctx, req.FailedLoopID)
+	if err != nil {
+		return fmt.Errorf("chainpause.DecisionHandler: resolve chain entity for failed loop %q: %w", req.FailedLoopID, err)
+	}
 	now := time.Now().UTC()
 
 	// Write the decision audit trail (§D5 chain.decision.*).
@@ -302,10 +314,11 @@ func (p *NATSTaskPublisher) PublishTask(ctx context.Context, subject string, tas
 	return p.client.PublishToStream(ctx, subject, data)
 }
 
-// NATSPauseDataReader reads role + model from the §D5 triple set on the failed
-// loop entity via a graph.query.entity NATS request (ADR-037 §D7). The
-// triples chain.paused.role and chain.paused.original_model are written at
-// pause time by the Pauser.
+// NATSPauseDataReader reads role + model from the §D5 triple set on the chain
+// entity via a graph.query.entity NATS request (ADR-037 §D7, ADR-038 PR B
+// Phase 3). The triples chain.paused.role and chain.paused.original_model are
+// written at pause time by the Pauser; the DecisionHandler resolves the chain
+// entity ID for retry-time reads via the same chain.Resolver path.
 //
 // Returns ("", "", nil) when the entity is not found in the graph; callers fall
 // back to safe defaults. Network errors are returned so callers can log and fall

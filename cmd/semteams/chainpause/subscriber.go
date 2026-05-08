@@ -84,7 +84,11 @@ func (s *Subscriber) handleMsg(ctx context.Context, data []byte) {
 
 	result, err := s.pauser.HandleFailed(ctx, &ev)
 	if err != nil {
-		s.logger.Error("chain-pause subscriber: HandleFailed write error (partial §D5 set)",
+		// Two error classes share this branch: resolver failure (zero
+		// triples written, error wraps the resolve step) and per-triple
+		// AddTriple failure (partial §D5 cluster). The wrapped error
+		// string disambiguates; the message intentionally stays generic.
+		s.logger.Error("chain-pause subscriber: HandleFailed error",
 			slog.String("failed_loop_id", ev.LoopID),
 			slog.String("role", ev.Role),
 			slog.String("error", err.Error()))

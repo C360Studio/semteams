@@ -75,10 +75,14 @@ func (s *staticEntityReader) ReadParent(_ context.Context, loopID string) (strin
 // cross-arc rules) read.
 //
 // Phases NOT yet covered:
-//   - Phase 3 (chainpause re-point): blocked on upstream failed-loop
-//     ancestry stamping; chain.paused.* still lands on the failed loop
-//     entity. When the upstream fix lands and Phase 3 re-points the
-//     chainpause writer, add chain.paused.* assertions here.
+//   - Phase 3 (chainpause re-point): SHIPPED post-semstreams beta.56/.57.
+//     chain.paused.* and chain.decision.* now land on the canonical
+//     chain entity (resolved from the failed loop's ancestry).
+//     chainpause uses a SEPARATE subscriber on agent.failed.* — its
+//     own package tests assert the chain entity Subject directly, so
+//     this contract test still excludes chain.paused.* from the
+//     positive assertion (the CompletionSubscriber here only fires
+//     on agent.complete.*, never agent.failed.*).
 //   - Phase 4 / Phase 5 milestones (chain.spec_artifact.*,
 //     chain.evidence.*) — those are tested per-package with the same
 //     fail-soft behaviour; this test focuses on the CompletionSubscriber
@@ -188,7 +192,8 @@ func TestChainEntityCoverage_PR_B_Pipeline(t *testing.T) {
 	// Negative assertion: predicates from milestones not yet in PR B
 	// scope should NOT appear (catches accidental cross-handler bleed).
 	notYet := []string{
-		"chain.paused.cause",                    // Phase 3 (upstream blocked)
+		"chain.paused.cause",                    // Phase 3 SHIPPED — but writes from chainpause's agent.failed.* subscriber, not the agent.complete.* path this test drives
+		"chain.decision.verb",                   // Phase 3 SHIPPED — same reason; written by DecisionHandler, not a CompletionHandler
 		"chain.spec_artifact_loop",              // Phase 4 (writes from emit_dev_via_spec, not the chain package)
 		"chain.spec_artifact.path",              // Phase 4
 		"chain.spec_artifact.check_count",       // Phase 4

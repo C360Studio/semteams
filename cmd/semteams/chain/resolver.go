@@ -39,25 +39,19 @@ type ParentReader interface {
 // Resolver derives chain identity for a given loop by walking
 // agent.loop.parent triples back to the chain root.
 //
-// agent.loop.parent is stamped by upstream graph_writer ONLY in the
-// success path, via buildLoopCompletionTriples (processor/agentic-loop/
-// graph_writer.go:419-422 — predicate agent.loop.parent, object =
-// parent's 6-part entity ID). In rule-fanned chains every parent has
-// completed before its child is spawned (rules fire on outcome events),
-// so by the time a child completes the ancestry chain is fully stamped
-// and one-hop-walkable.
+// agent.loop.parent is stamped by upstream graph_writer at every loop's
+// terminal write — buildLoopCompletionTriples on success and
+// buildLoopFailureTriples on failure (semstreams beta.56/.57). In
+// rule-fanned chains every parent has completed before its child is
+// spawned (rules fire on outcome events), so by the time a child loop
+// completes OR fails, the ancestry chain is fully stamped and
+// one-hop-walkable.
 //
-// Failed-loop ancestry gap (semstreams beta.54): buildLoopFailureTriples
-// does not stamp agent.loop.parent, and LoopFailedEvent has no
-// ParentLoopID field. Callers walking ancestry from a failed loop
-// will see "no parent triple" at the failed loop and report
-// chain_id == failed_loop_id — which is wrong when the failed loop is
-// not the chain root. Phase 2 chainpause re-point depends on this gap
-// being closed upstream (see ADR-038 PR B follow-up upstream ask).
-// Until that ships, callers in failure paths must source the parent
-// loop ID from somewhere other than agent.loop.parent — e.g., the
-// running-loop bucket on agentic-loop's KV, or by carrying the parent
-// on the LoopFailedEvent payload via metadata.
+// The publish-vs-write race that previously affected just-completed-
+// loop walks closed in beta.57: persistHandlerResult now runs
+// WriteLoopCompletion / WriteLoopFailure under a 2s budget BEFORE
+// publishResults, so any subscriber consuming agent.complete.* or
+// agent.failed.* sees the full triple set the moment the event lands.
 type Resolver struct {
 	parents  ParentReader
 	platform types.PlatformMeta

@@ -2,6 +2,7 @@ package chainpause
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"strings"
 	"time"
@@ -9,13 +10,28 @@ import (
 
 	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/message"
-	"github.com/c360studio/semstreams/types"
 )
 
 // TriplePublisher is the narrow write surface the pauser needs.
 // agentictools.NATSTriplePublisher satisfies it structurally.
 type TriplePublisher interface {
 	AddTriple(ctx context.Context, triple message.Triple) error
+}
+
+// ChainEntityResolver is the narrow surface the Pauser uses to compute
+// the canonical 6-part chain entity ID for a given failed loop.
+// cmd/semteams/chain.Resolver satisfies it structurally.
+//
+// ADR-038 PR B Phase 3: §D5 chain.paused.* triples land on the chain
+// entity (cross-arc subject), not the failed loop's entity. The walk
+// from a failed loop is reliable post-semstreams beta.56/.57:
+// LoopFailedEvent.ParentLoopID is populated, buildLoopFailureTriples
+// stamps agent.loop.parent at completion, and persistHandlerResult now
+// runs WriteLoopFailure BEFORE publishResults so subscribers consuming
+// agent.failed.* see fully-stamped loop entities the moment the event
+// lands.
+type ChainEntityResolver interface {
+	ChainEntityID(ctx context.Context, loopID string) (string, error)
 }
 
 // PauseResult holds the classification output of a pause-write.
@@ -30,28 +46,41 @@ type PauseResult struct {
 }
 
 // Pauser subscribes to agent.failed.* events and writes the ADR-037 §D5
-// audit triple set onto the failed loop's entity.
+// audit triple set onto the canonical 6-part chain entity (ADR-038 PR B
+// Phase 3 re-point — pre-Phase-3 the writes targeted the failed loop's
+// entity).
 //
 // Fail-soft: any individual triple write error is logged (by callers via the
 // returned error) but does not abort the remaining writes. Triple write errors
 // on the pause path are worse than partial writes — a partial §D5 record is
-// queryable; a zero-triple record is invisible.
+// queryable; a zero-triple record is invisible. Resolver failures (graph
+// blip mid-pause) are an exception: without a chain entity ID we can't
+// write any §D5 triple, so we surface the error to the caller and skip
+// the writes entirely. The agent.failed.* event is on the wire regardless,
+// so operators see the failure even when chain.paused.* doesn't land.
 type Pauser struct {
 	publisher TriplePublisher
-	platform  types.PlatformMeta
+	resolver  ChainEntityResolver
 }
 
-// NewPauser constructs a Pauser backed by the given publisher.
-func NewPauser(pub TriplePublisher, platform types.PlatformMeta) *Pauser {
-	return &Pauser{publisher: pub, platform: platform}
+// NewPauser constructs a Pauser backed by the given publisher + resolver.
+// The resolver computes the chain entity ID by walking ancestry from the
+// failed loop_id; cmd/semteams/chain.Resolver is the production wiring
+// (it carries platform identity, so the Pauser no longer needs it
+// directly).
+func NewPauser(pub TriplePublisher, resolver ChainEntityResolver) *Pauser {
+	return &Pauser{publisher: pub, resolver: resolver}
 }
 
 // HandleFailed is the subscription entry point for agent.failed.* events.
 // It filters for roles in the configured arc prefix list, classifies the
-// error string into a cause token, and writes the §D5 triple set.
+// error string into a cause token, and writes the §D5 triple set onto
+// the canonical chain entity.
 //
-// Returns the PauseResult for caller logging; never errors on partial triple
-// writes (best-effort write, individual errors surfaced by calling code).
+// Returns the PauseResult for caller logging. Resolver errors return a
+// wrapped error and skip writes (no chain entity ID → no Subject for
+// the §D5 cluster). Per-triple errors surface as a non-nil first error
+// while the remaining writes proceed.
 //
 // Roles not in the managed arc list are silently skipped.
 func (p *Pauser) HandleFailed(ctx context.Context, ev *agentic.LoopFailedEvent) (PauseResult, error) {
@@ -59,7 +88,10 @@ func (p *Pauser) HandleFailed(ctx context.Context, ev *agentic.LoopFailedEvent) 
 		return PauseResult{}, nil
 	}
 
-	entityID := agentic.LoopExecutionEntityID(p.platform.Org, p.platform.Platform, ev.LoopID)
+	entityID, err := p.resolver.ChainEntityID(ctx, ev.LoopID)
+	if err != nil {
+		return PauseResult{}, fmt.Errorf("chainpause.Pauser.HandleFailed: resolve chain entity for failed loop %q: %w", ev.LoopID, err)
+	}
 	now := time.Now().UTC()
 	cause, classification := classifyError(ev.Error)
 

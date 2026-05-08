@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/c360studio/semstreams/agentic"
-	"github.com/c360studio/semstreams/types"
 )
 
 // recordingTaskPublisher records PublishTask calls.
@@ -44,7 +43,7 @@ func testDecisionHandlerWithPauseData(t *testing.T, pauseData PauseDataReader) (
 	t.Helper()
 	pub := &recordingPublisher{}
 	tasks := &recordingTaskPublisher{}
-	h := NewDecisionHandler(pub, tasks, pauseData, types.PlatformMeta{Org: "c360", Platform: "test"}, nil)
+	h := NewDecisionHandler(pub, tasks, pauseData, &fakeChainResolver{}, nil)
 	return h, pub, tasks
 }
 
@@ -218,6 +217,69 @@ func TestDecisionHandler_DecisionTriples_WrittenForAllVerbs(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestDecisionHandler_AuditTriplesSubjectIsChainEntity pins the
+// ADR-038 PR B Phase 3 re-point on the decision side. Every
+// chain.decision.* / chain.resumed / chain.killed / chain.deferred
+// triple must target the canonical chain entity, not the failed
+// loop's entity. A regression here would silently fragment audit
+// state from chainpause's pause-time writes; the operator HTTP flow
+// would still succeed but cross-arc consumers reading the chain
+// entity would see no decision history.
+func TestDecisionHandler_AuditTriplesSubjectIsChainEntity(t *testing.T) {
+	for _, verb := range []string{"retry", "kill", "defer"} {
+		t.Run(verb, func(t *testing.T) {
+			pub := &recordingPublisher{}
+			tasks := &recordingTaskPublisher{}
+			pauseData := &staticPauseDataReader{role: "dev-via-spec-reviewer", model: "claude-haiku"}
+			resolver := &fakeChainResolver{chainRoot: "dispatch_root"}
+			h := NewDecisionHandler(pub, tasks, pauseData, resolver, nil)
+
+			req := DecisionRequest{FailedLoopID: "researcher_with_source_8", Verb: verb}
+			if err := h.HandleDecision(context.Background(), req, "op"); err != nil {
+				t.Fatalf("HandleDecision: %v", err)
+			}
+
+			if resolver.calls == 0 {
+				t.Fatal("resolver was not consulted")
+			}
+			if resolver.lastArg != "researcher_with_source_8" {
+				t.Errorf("resolver called with %q, want failed loop id", resolver.lastArg)
+			}
+
+			wantSubject := testChainEntityID("dispatch_root")
+			pub.mu.Lock()
+			defer pub.mu.Unlock()
+			for _, tr := range pub.triples {
+				if tr.Subject != wantSubject {
+					t.Errorf("decision audit triple %q wrote to %q, want %q (chain entity)", tr.Predicate, tr.Subject, wantSubject)
+				}
+			}
+		})
+	}
+}
+
+// TestDecisionHandler_ResolverError_ReturnsError verifies that a
+// resolver failure surfaces to the HTTP boundary so the operator gets
+// a real error back instead of a silently-incomplete decision.
+func TestDecisionHandler_ResolverError_ReturnsError(t *testing.T) {
+	pub := &recordingPublisher{}
+	tasks := &recordingTaskPublisher{}
+	pauseData := &staticPauseDataReader{}
+	resolver := &fakeChainResolver{err: errors.New("graph KV unavailable")}
+	h := NewDecisionHandler(pub, tasks, pauseData, resolver, nil)
+
+	req := DecisionRequest{FailedLoopID: "loop-x", Verb: "retry"}
+	if err := h.HandleDecision(context.Background(), req, "op"); err == nil {
+		t.Fatal("expected resolver error to surface; got nil")
+	}
+	if len(pub.triples) != 0 {
+		t.Errorf("no triples should be written when resolver fails; got %d", len(pub.triples))
+	}
+	if len(tasks.calls) != 0 {
+		t.Errorf("no retry task should be published when resolver fails; got %d", len(tasks.calls))
 	}
 }
 

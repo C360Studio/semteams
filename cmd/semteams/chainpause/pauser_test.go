@@ -44,9 +44,42 @@ func testPlatform() types.PlatformMeta {
 	return types.PlatformMeta{Org: "c360", Platform: "test"}
 }
 
+// fakeChainResolver is a deterministic ChainEntityResolver for tests.
+// It returns a chain entity ID derived from a configurable chain root,
+// or an error when err is set. Both the Pauser tests and the
+// DecisionHandler tests share this fake.
+type fakeChainResolver struct {
+	chainRoot string // loop_id used as chain_id in the returned 6-part ID
+	err       error
+	calls     int
+	lastArg   string
+}
+
+func (f *fakeChainResolver) ChainEntityID(_ context.Context, loopID string) (string, error) {
+	f.calls++
+	f.lastArg = loopID
+	if f.err != nil {
+		return "", f.err
+	}
+	root := f.chainRoot
+	if root == "" {
+		// Default: treat the failed loop as its own chain root so tests
+		// that don't care about ancestry get a deterministic subject.
+		root = loopID
+	}
+	return agentic.ChainExecutionEntityID(testPlatform().Org, testPlatform().Platform, root), nil
+}
+
+// testChainEntityID returns the canonical 6-part chain entity ID a test
+// fixture expects under testPlatform(). Saves the boilerplate at every
+// assertion site.
+func testChainEntityID(chainRoot string) string {
+	return agentic.ChainExecutionEntityID(testPlatform().Org, testPlatform().Platform, chainRoot)
+}
+
 func TestPauser_HandleFailed_ManagedRoleWritesTriplesD5(t *testing.T) {
 	pub := &recordingPublisher{}
-	p := NewPauser(pub, testPlatform())
+	p := NewPauser(pub, &fakeChainResolver{})
 
 	ev := &agentic.LoopFailedEvent{
 		LoopID:  "abc123",
@@ -99,7 +132,7 @@ func TestPauser_HandleFailed_ManagedRoleWritesTriplesD5(t *testing.T) {
 
 func TestPauser_HandleFailed_UnmanagedRoleSkipped(t *testing.T) {
 	pub := &recordingPublisher{}
-	p := NewPauser(pub, testPlatform())
+	p := NewPauser(pub, &fakeChainResolver{})
 
 	ev := &agentic.LoopFailedEvent{
 		LoopID:  "xyz",
@@ -222,7 +255,7 @@ func TestSanitiseErrorShape_ControlCharsStripped(t *testing.T) {
 
 func TestPauser_HandleFailed_PartialWriteReturnsFirstErr(t *testing.T) {
 	pub := &recordingPublisher{err: errors.New("NATS publish failed")}
-	p := NewPauser(pub, testPlatform())
+	p := NewPauser(pub, &fakeChainResolver{})
 
 	ev := &agentic.LoopFailedEvent{
 		LoopID:  "loop-err",
@@ -244,7 +277,7 @@ func TestPauser_HandleFailed_PartialWriteReturnsFirstErr(t *testing.T) {
 
 func TestPauser_HandleFailed_ObservedAtIsRFC3339(t *testing.T) {
 	pub := &recordingPublisher{}
-	p := NewPauser(pub, testPlatform())
+	p := NewPauser(pub, &fakeChainResolver{})
 
 	ev := &agentic.LoopFailedEvent{
 		LoopID:  "loop-ts",
@@ -277,7 +310,7 @@ func TestPauser_HandleFailed_ObservedAtIsRFC3339(t *testing.T) {
 // correct model without a live graph query (ADR-037 §D7).
 func TestPauser_HandleFailed_CapturesOriginalModel(t *testing.T) {
 	pub := &recordingPublisher{}
-	p := NewPauser(pub, testPlatform())
+	p := NewPauser(pub, &fakeChainResolver{})
 
 	ev := &agentic.LoopFailedEvent{
 		LoopID:  "loop-model",
@@ -302,6 +335,73 @@ func TestPauser_HandleFailed_CapturesOriginalModel(t *testing.T) {
 	}
 	if obj != "claude-opus-4-5" {
 		t.Errorf("chain.paused.original_model = %q, want claude-opus-4-5", obj)
+	}
+}
+
+// TestPauser_HandleFailed_SubjectIsChainEntity pins the ADR-038 PR B
+// Phase 3 re-point: every §D5 triple targets the canonical chain
+// entity (resolved from the failed loop's ancestry), not the failed
+// loop's own entity. A regression here would silently fragment
+// chain-paused state across loop entities and break the operator
+// retry flow when DecisionHandler reads from the chain entity.
+func TestPauser_HandleFailed_SubjectIsChainEntity(t *testing.T) {
+	pub := &recordingPublisher{}
+	resolver := &fakeChainResolver{chainRoot: "dispatch_root"}
+	p := NewPauser(pub, resolver)
+
+	ev := &agentic.LoopFailedEvent{
+		LoopID:       "researcher_with_source_8",
+		TaskID:       "task-rws-8",
+		Outcome:      agentic.OutcomeFailed,
+		Role:         "researcher-with-source-acquisition",
+		ParentLoopID: "researcher_7",
+		Error:        "max iterations reached",
+	}
+
+	if _, err := p.HandleFailed(context.Background(), ev); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if resolver.calls != 1 {
+		t.Errorf("ChainEntityID calls = %d, want 1", resolver.calls)
+	}
+	if resolver.lastArg != ev.LoopID {
+		t.Errorf("resolver called with %q, want %q (the failed loop_id)", resolver.lastArg, ev.LoopID)
+	}
+
+	wantSubject := testChainEntityID("dispatch_root")
+	for _, tr := range pub.triples {
+		if tr.Subject != wantSubject {
+			t.Errorf("§D5 triple %q wrote to subject %q, want %q (chain entity)", tr.Predicate, tr.Subject, wantSubject)
+		}
+	}
+}
+
+// TestPauser_HandleFailed_ResolverErrorSurfaces verifies that a graph
+// blip mid-pause returns a wrapped error to the caller so the
+// subscriber logs the failure cleanly. Without a chain entity ID
+// the §D5 cluster has no Subject, so writing partial triples to the
+// failed loop entity would silently fragment audit data — surfacing
+// the error and skipping is the correct fail-soft policy.
+func TestPauser_HandleFailed_ResolverErrorSurfaces(t *testing.T) {
+	pub := &recordingPublisher{}
+	resolver := &fakeChainResolver{err: errors.New("graph KV unavailable")}
+	p := NewPauser(pub, resolver)
+
+	ev := &agentic.LoopFailedEvent{
+		LoopID:  "loop-resolver-err",
+		TaskID:  "task-x",
+		Outcome: agentic.OutcomeFailed,
+		Role:    "dev-via-spec-builder",
+		Error:   "executor panic",
+	}
+
+	_, err := p.HandleFailed(context.Background(), ev)
+	if err == nil {
+		t.Fatal("expected resolver error to surface; got nil")
+	}
+	if len(pub.triples) != 0 {
+		t.Errorf("no §D5 triples should be written on resolver failure; got %d", len(pub.triples))
 	}
 }
 
