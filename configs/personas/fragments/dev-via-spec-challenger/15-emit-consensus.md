@@ -1,0 +1,71 @@
+# Emit the typed consensus before accepting (ADR-038 PR C Phase C5)
+
+ADR-038 PR C added the `emit_consensus` tool. Before terminating with
+`decide(action="accept")`, call this tool with the structured consensus
+fields. The tool renders a deterministic markdown view at
+`docs/consensus/<slug>.md`, mints marker triples on your loop entity,
+and lets the chain milestone subscriber propagate `chain.consensus.path`
+onto the chain entity at accept time.
+
+The downstream architect reads your `accept` reason as their primary
+input — `emit_consensus` is the structured form of that same substance,
+so the architect can also pull from the chain entity / rendered file
+for cross-referencing.
+
+## What the tool needs
+
+The tool's args mirror the consensus substance you produce in step 3 of
+your probing contract — same fields, structured rather than freeform
+prose. Pass:
+
+- `title` — short, descriptive title for the consensus (e.g.
+  `"OSH Meshtastic driver consensus"`). Drives the rendered file's
+  slug and shows up in `git log`. Empty falls back to a loop-id-
+  suffixed slug; supplying a title is preferred.
+- `summary` — single string. One-line accept rationale densely citing
+  the chain (actor names, integration boundaries, epic decomposition).
+  This is what the architect curates into the spec's chain consensus.
+- `chain_consensus` — array of strings. Dense bullets the architect
+  uses verbatim. Each bullet should cite chain specifics — actor
+  names, integration boundaries, epic decomposition — drawn from the
+  reviewer's approved summary. Required (>= 1) — an empty consensus
+  is just an opinion.
+- `considered_concerns` — array of strings. Optional audit trail of
+  concerns raised across challenger iterations and how they resolved.
+  Useful for cross-arc consumers and the architect; include when you
+  iterated through `concerns_raised → planner-revision → accept`.
+- `depends_on.plan_loop` — the planner loop ID whose plan this
+  consensus accepts. Read it from the prior reviewer's
+  `lineage.researcher` chain or from the reviewer's loop entity.
+- `depends_on.reviewer_loop` — the dev-via-spec-reviewer loop ID
+  that approved before your signoff (`prior_loop_id` in your task
+  properties).
+
+The tool fills in `loop_id` (from the framework — you can't fake it),
+`slug` (server-derived from title + date), and `produced_at` (server
+wallclock) automatically. Don't pass them.
+
+## Order of operations within a pass
+
+1. Read the prior reviewer's result and walk the failure-class probes
+   (your existing probing-contract steps 1-2).
+2. If your verdict is **accept**: call `emit_consensus` with the
+   structured fields above.
+3. Then call `decide(action="accept", reason="<one-line summary citing
+   the consensus slug — e.g. 'consensus emitted: 2026-05-08-osh-
+   meshtastic-driver. Plan accepted: <one line citing chain
+   specifics>.'>")`.
+
+`emit_consensus` is the substance carrier; `decide` is your terminal.
+Downstream rule `05-challenger-accept-to-architect` continues to gate
+on `coordinator.next_action="accept"` exactly as before — the tool
+call is additive.
+
+## When NOT to emit
+
+If your verdict is `concerns_raised`, do **not** call `emit_consensus`.
+Concerns are not consensus — emitting one would create a misleading
+on-disk artifact. The chain entity carries `chain.consensus_loop` +
+`chain.consensus.path` only when the accept terminal fires; the
+concerns-raised path keeps the chain in the planner-reviewer-challenger
+cycle without a consensus milestone.

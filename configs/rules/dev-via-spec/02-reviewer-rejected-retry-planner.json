@@ -26,7 +26,7 @@
       "subject": "agent.task.dev-via-spec-plan-retry",
       "role": "dev-via-spec-planner",
       "model": "planning",
-      "tools": ["read_loop_result", "decide"],
+      "tools": ["read_loop_result", "emit_plan", "decide"],
       "action_allowlist": ["planned"],
       "max_iterations": 3,
       "properties": {
@@ -36,7 +36,7 @@
       "related_loops": {
         "researcher": "$entity.triple.lineage.researcher"
       },
-      "prompt": "The dev-via-spec reviewer rejected the prior plan. Reviewer loop id: $entity.instance. Call read_loop_result with that loop id to read the gap list (the reviewer's decide reason field), then revise the plan per your `20-revision-rules.md`. Keep goal and context unchanged unless the reviewer specifically flagged them. Re-emit decide(action=planned, reason=\"<revised plan>\")."
+      "prompt": "The dev-via-spec reviewer rejected the prior plan. Reviewer loop id: $entity.instance. Call read_loop_result with that loop id to read the gap list (the reviewer's decide reason field), then revise the plan per your `20-revision-rules.md`. Keep goal and context unchanged unless the reviewer specifically flagged them. Call emit_plan with the revised structured fields (bump revision), then terminate with decide(action=\"planned\")."
     }
   ],
   "on_exit": [],

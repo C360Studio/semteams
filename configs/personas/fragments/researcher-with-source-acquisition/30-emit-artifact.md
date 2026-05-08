@@ -11,6 +11,11 @@ reviewer's stabilisation gate.
 Pass the artifact JSON as args (no wrapping object). The fields
 that matter most for your role:
 
+- `title` — short, descriptive title for this research (e.g.
+  `"OSH Meshtastic driver research"`). Drives the rendered file's
+  slug at `docs/research/<slug>.md` and shows up in `git log`. Keep
+  it stable across revisions — the file overwrites at the
+  deterministic slug, which is what you want for revision history.
 - `revision` — read the prior reviewer's loop result via
   `read_loop_result` (you do this anyway to read the gaps), locate
   the artifact JSON in its content, and use

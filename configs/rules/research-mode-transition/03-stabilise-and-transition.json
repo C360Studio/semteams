@@ -25,7 +25,7 @@
       "subject": "agent.task.dev-via-spec-plan",
       "role": "dev-via-spec-planner",
       "model": "planning",
-      "tools": ["read_loop_result", "decide"],
+      "tools": ["read_loop_result", "emit_plan", "decide"],
       "action_allowlist": ["planned"],
       "properties": {
         "research_reviewer_loop_id": "$entity.instance"
@@ -33,7 +33,7 @@
       "related_loops": {
         "researcher": "$entity.triple.lineage.researcher"
       },
-      "prompt": "Research has stabilised. The reviewer at loop $entity.instance approved the latest research artifact (reviewer-as-enumerator checklist passed AND zero new substrate mutations on the latest revision — see ADR-031 §addendum 2026-04-30 'Stabilisation as converged change-log' for the stabilisation predicate). Call read_loop_result with the reviewer loop id to load the artifact, then proceed per your persona's output contract."
+      "prompt": "Research has stabilised. The reviewer at loop $entity.instance approved the latest research artifact (reviewer-as-enumerator checklist passed AND zero new substrate mutations on the latest revision — see ADR-031 §addendum 2026-04-30 'Stabilisation as converged change-log' for the stabilisation predicate). Call read_loop_result with the reviewer loop id to load the artifact, then proceed per your persona's output contract: synthesise the plan, call emit_plan with the structured fields, then terminate with decide(action=\"planned\")."
     }
   ],
   "on_exit": [],

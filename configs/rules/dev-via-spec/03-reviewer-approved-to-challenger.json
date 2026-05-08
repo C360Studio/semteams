@@ -25,7 +25,7 @@
       "subject": "agent.task.dev-via-spec-challenge",
       "role": "dev-via-spec-challenger",
       "model": "reviewing",
-      "tools": ["read_loop_result", "decide"],
+      "tools": ["read_loop_result", "emit_consensus", "decide"],
       "action_allowlist": ["accept", "concerns_raised"],
       "properties": {
         "prior_loop_id": "$entity.instance"
@@ -33,7 +33,7 @@
       "related_loops": {
         "researcher": "$entity.triple.lineage.researcher"
       },
-      "prompt": "The dev-via-spec reviewer approved a plan for completeness. Reviewer loop id: $entity.instance (passed as prior_loop_id in your task properties). Call read_loop_result with that loop id to read the reviewer's verdict; the verdict's reason field summarises the plan that was approved. Probe for falsifiable concerns per your `20-failure-classes.md`. If no actionable concerns surface, call decide(action=accept). Otherwise call decide(action=concerns_raised, reason=\"<bullet list of concerns with evidence pointers>\")."
+      "prompt": "The dev-via-spec reviewer approved a plan for completeness. Reviewer loop id: $entity.instance (passed as prior_loop_id in your task properties). Call read_loop_result with that loop id to read the reviewer's verdict; the verdict's reason field summarises the plan that was approved. Probe for falsifiable concerns per your `20-failure-classes.md`. If no actionable concerns surface, call emit_consensus with the structured fields (summary, chain_consensus bullets, depends_on), then terminate with decide(action=\"accept\"). Otherwise call decide(action=\"concerns_raised\", reason=\"<bullet list of concerns with evidence pointers>\") — do NOT call emit_consensus when raising concerns."
     }
   ],
   "on_exit": [],
