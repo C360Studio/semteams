@@ -133,34 +133,38 @@ func (r *Resolver) ChainEntityID(ctx context.Context, loopID string) (string, er
 	return agentic.ChainExecutionEntityID(r.platform.Org, r.platform.Platform, chainID), nil
 }
 
-// NATSParentReader reads agent.loop.parent via the graph component's
-// graph.query.entity request/reply NATS surface.
+// EntityTripleReader returns a flat predicate→object map for a single
+// graph entity. The shape is a thin convenience over the
+// graph.query.entity request/reply: callers that want one or two
+// predicates avoid bespoke JSON decoding at every site.
 //
-// Returns ("", nil) when the entity has no agent.loop.parent triple —
-// that's the chain-root signal, not an error. Network/decode failures
-// propagate as errors.
-type NATSParentReader struct {
-	client   *natsclient.Client
-	platform types.PlatformMeta
+// Returns an empty map (not error) when the entity has no triples;
+// callers can distinguish "absent predicate" from "graph error" by
+// checking the map vs the error.
+type EntityTripleReader interface {
+	ReadEntity(ctx context.Context, entityID string) (map[string]any, error)
 }
 
-// NewNATSParentReader constructs a NATSParentReader bound to the given
-// NATS client + platform identity.
-func NewNATSParentReader(client *natsclient.Client, platform types.PlatformMeta) *NATSParentReader {
-	return &NATSParentReader{client: client, platform: platform}
+// NATSEntityReader reads any entity's triples via the graph component's
+// graph.query.entity request/reply NATS surface. Mirrors the response
+// shape used by chainpause/decision_handler.go NATSPauseDataReader.
+type NATSEntityReader struct {
+	client *natsclient.Client
 }
 
-// ReadParent implements ParentReader against a live graph component.
-func (r *NATSParentReader) ReadParent(ctx context.Context, loopID string) (string, error) {
-	if err := validateLoopID(loopID); err != nil {
-		return "", fmt.Errorf("chain.NATSParentReader.ReadParent: %w", err)
-	}
-	entityID := agentic.LoopExecutionEntityID(r.platform.Org, r.platform.Platform, loopID)
+// NewNATSEntityReader constructs an EntityTripleReader backed by the
+// given NATS client.
+func NewNATSEntityReader(client *natsclient.Client) *NATSEntityReader {
+	return &NATSEntityReader{client: client}
+}
 
+// ReadEntity implements EntityTripleReader against a live graph
+// component.
+func (r *NATSEntityReader) ReadEntity(ctx context.Context, entityID string) (map[string]any, error) {
 	req := map[string]string{"id": entityID}
 	reqData, err := json.Marshal(req)
 	if err != nil {
-		return "", fmt.Errorf("marshal entity query: %w", err)
+		return nil, fmt.Errorf("marshal entity query: %w", err)
 	}
 
 	queryCtx, cancel := context.WithTimeout(ctx, graphQueryTimeout)
@@ -168,12 +172,9 @@ func (r *NATSParentReader) ReadParent(ctx context.Context, loopID string) (strin
 
 	respData, err := r.client.Request(queryCtx, graphQueryEntitySubject, reqData, graphQueryTimeout)
 	if err != nil {
-		return "", fmt.Errorf("graph entity query for %q: %w", entityID, err)
+		return nil, fmt.Errorf("graph entity query for %q: %w", entityID, err)
 	}
 
-	// Mirror chainpause/decision_handler.go NATSPauseDataReader's response
-	// shape: a JSON object with id + triples[]. Only agent.loop.parent
-	// matters for ancestry walking.
 	var entity struct {
 		ID      string `json:"id"`
 		Triples []struct {
@@ -182,17 +183,49 @@ func (r *NATSParentReader) ReadParent(ctx context.Context, loopID string) (strin
 		} `json:"triples"`
 	}
 	if err := json.Unmarshal(respData, &entity); err != nil {
-		return "", fmt.Errorf("decode entity response for %q: %w", entityID, err)
+		return nil, fmt.Errorf("decode entity response for %q: %w", entityID, err)
 	}
 
+	out := make(map[string]any, len(entity.Triples))
 	for _, t := range entity.Triples {
-		if t.Predicate != "agent.loop.parent" {
-			continue
-		}
-		// agent.loop.parent's object is a 6-part entity ID string.
-		if s, ok := t.Object.(string); ok {
-			return s, nil
-		}
+		// Last-wins semantics: if a predicate appears twice the most
+		// recent one wins, matching graph-ingest's stamping policy.
+		out[t.Predicate] = t.Object
+	}
+	return out, nil
+}
+
+// NATSParentReader reads agent.loop.parent via the graph component's
+// graph.query.entity request/reply NATS surface — a thin wrapper over
+// NATSEntityReader that selects the parent predicate.
+//
+// Returns ("", nil) when the entity has no agent.loop.parent triple —
+// that's the chain-root signal, not an error. Network/decode failures
+// propagate as errors.
+type NATSParentReader struct {
+	entities *NATSEntityReader
+	platform types.PlatformMeta
+}
+
+// NewNATSParentReader constructs a NATSParentReader bound to the given
+// NATS client + platform identity.
+func NewNATSParentReader(client *natsclient.Client, platform types.PlatformMeta) *NATSParentReader {
+	return &NATSParentReader{entities: NewNATSEntityReader(client), platform: platform}
+}
+
+// ReadParent implements ParentReader against a live graph component.
+func (r *NATSParentReader) ReadParent(ctx context.Context, loopID string) (string, error) {
+	if err := validateLoopID(loopID); err != nil {
+		return "", fmt.Errorf("chain.NATSParentReader.ReadParent: %w", err)
+	}
+	entityID := agentic.LoopExecutionEntityID(r.platform.Org, r.platform.Platform, loopID)
+	triples, err := r.entities.ReadEntity(ctx, entityID)
+	if err != nil {
+		return "", err
+	}
+	// agent.loop.parent's object is a 6-part entity ID string.
+	if s, ok := triples["agent.loop.parent"].(string); ok {
+		return s, nil
 	}
 	// No parent triple — caller treats this as chain root.
 	return "", nil

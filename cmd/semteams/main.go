@@ -269,16 +269,26 @@ func setupToolsAndPreprocessor(
 
 // startChainMilestoneSubscribers wires every ADR-038 chain-milestone
 // CompletionHandler into a single agent.complete.> subscription.
-// Phase 1b ships the chain.dispatched_at handler (chain root → mints
-// the chain entity at chain start). Phases 2+ append more handlers
-// (research milestone, evidence summary milestone, spec artifact
-// milestone) by appending to the slice — no new subscriptions needed.
+// Each handler picks events matching its milestone and writes its
+// predicate cluster onto the canonical chain entity. Adding a new
+// milestone is one line in the handler slice.
+//
+// Phase 1b: chain.dispatched_at on chain root.
+// Phase 2:  chain.research_artifact.* on research-reviewer approval.
+// Phases 3+ (chainpause re-point, evidence summary milestone, spec
+// artifact milestone) plug in via the same slice.
 func startChainMilestoneSubscribers(ctx context.Context, natsClient *natsclient.Client, platform types.PlatformMeta, logger *slog.Logger) error {
 	triplePublisher := agentictools.NewNATSTriplePublisher(natsClient)
+	entityReader := chain.NewNATSEntityReader(natsClient)
+	resolver := chain.NewResolver(chain.NewNATSParentReader(natsClient, platform), platform)
 
 	dispatched := chain.NewDispatchedStamper(triplePublisher, platform, logger)
+	research := chain.NewResearchMilestoneStamper(triplePublisher, resolver, entityReader, platform, logger)
 
-	subscriber := chain.NewCompletionSubscriber([]chain.CompletionHandler{dispatched}, logger)
+	subscriber := chain.NewCompletionSubscriber([]chain.CompletionHandler{
+		dispatched,
+		research,
+	}, logger)
 	if err := subscriber.Start(ctx, natsClient); err != nil {
 		return fmt.Errorf("subscribe to loop completed for chain milestones: %w", err)
 	}
