@@ -396,6 +396,7 @@ func startEvidencePreprocessor(ctx context.Context, cfg *config.Config, natsClie
 		logger.Info("evidence preprocessor started",
 			slog.String("workspace_root", workspaceRoot),
 			slog.String("output_dir", preprocessor.OutputDir()),
+			slog.String("loop_completed_subject", loopCompletedSubject),
 			slog.String("org", platform.Org),
 			slog.String("platform", platform.Platform))
 	} else {

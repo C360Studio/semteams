@@ -32,13 +32,20 @@ const graphQueryTimeout = 3 * time.Second
 // `inputs[name="query_requests"].subject` field; that override flows
 // through portresolver into NATSEntityReader's constructor argument.
 //
-// NOTE: graph-query's port subject in config is the wildcard
-// `graph.query.>`; graph-query subscribes to specific subjects within
-// that namespace internally. The caller still needs the EXACT subject
-// for the entity-read RPC (`graph.query.entity`). When portresolver
-// returns the wildcard, the caller MUST narrow it appropriately —
-// today every consumer that asks for "the entity-read subject" gets
-// the exact literal back from this constant.
+// NOTE: in the SemTeams configs, graph-query's port subject is
+// declared as the wildcard `graph.query.>` (a namespace metadata
+// declaration). The REAL reason port-layer resolution is fiction
+// here: upstream graph-query's setupQueryHandlers
+// (processor/graph-query/query.go:19) hardcodes the literal
+// `graph.query.entity` as the subscription subject regardless of
+// what the operator declares in the port config — it ignores the
+// port-config subject for subscription registration entirely (the
+// subject in the port block is consulted only by StaticRouter for
+// upstream-internal routing). An operator who wanted to rewire the
+// entity-read RPC would need to patch graph-query's Go code, not
+// just the port config. Constructor still accepts the param so
+// tests + future config-overrides work the moment that upstream
+// surface gets parameterized.
 const DefaultGraphQueryEntitySubject = "graph.query.entity"
 
 // ParentReader reads the agent.loop.parent triple's object for a given

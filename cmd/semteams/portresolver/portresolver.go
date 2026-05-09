@@ -39,8 +39,8 @@ import (
 
 // Subject extracts the NATS subject for a named port on a named
 // component instance. Walks the Inputs, Outputs, and KVWrite slices of
-// the component's port config in that order. Returns the empty string
-// when:
+// the component's port config (within that single component, in that
+// order). Returns the empty string when:
 //
 //   - the component instance is not present in the config map, OR
 //   - the component is disabled (Enabled=false), OR
@@ -51,10 +51,31 @@ import (
 // the context to decide whether absence is fatal or whether to fall
 // back to a default subject. SubjectOrDefault wraps the common pattern.
 //
-// Port names are unique within a component by convention; if the same
-// name appears in two directions the first match (Inputs > Outputs >
-// KVWrite) wins. That ordering matches how component definitions are
-// usually read (request flows are inputs first).
+// IMPORTANT: This walks ONLY the operator's port overrides as declared
+// in JSON config. It does NOT consult the component's Go-level default
+// port set (e.g. agentic-loop's DefaultConfig() which declares
+// agent.failed and agent.complete with their canonical subjects).
+// Upstream's component lifecycle merges defaults into the live port
+// set at runtime via component.MergePortConfigs, but those defaults
+// live in Go code, not in the JSON Subject sees. To override an
+// upstream default, an operator MUST add an explicit port entry to
+// the component's config block. Otherwise the SubjectOrDefault caller
+// gets the package fallback constant — which is correct under today's
+// configs (no agentic config declares agent.failed) but means
+// portresolver-resolved subjects are operator-overrides only, not
+// "the live runtime port set." A future enhancement could fall back
+// to upstream defaults via a componentregistry.DefaultPorts(name)
+// lookup; tracked as a Phase 2 follow-up in fix-plan.md.
+//
+// Port names are unique within a single component by convention; if
+// the same name appears in two directions the first match (Inputs >
+// Outputs > KVWrite) wins. That ordering matches how component
+// definitions are usually read (request flows are inputs first).
+//
+// KVWrite ports carry a NATS bucket identifier in the Subject field,
+// not a wire subject. Callers resolving a KVWrite port should treat
+// the returned string as a bucket name. (No current caller in
+// cmd/semteams/ resolves a KVWrite port via this helper.)
 func Subject(cfg *config.Config, componentInstance, portName string) string {
 	if cfg == nil {
 		return ""

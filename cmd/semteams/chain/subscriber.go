@@ -12,16 +12,25 @@ import (
 )
 
 // DefaultLoopCompletedSubject is the upstream agentic-loop processor's
-// output port for loop-complete events as of v1.0.0-beta.57. Used as
-// the fallback when cmd/semteams/main.go cannot resolve the subject
-// from the running agentic-loop component's port config — see
-// portresolver.SubjectOrDefault wiring.
+// output port for loop-complete events. Used as the fallback when
+// cmd/semteams/main.go cannot resolve the subject from the running
+// agentic-loop component's port config — see portresolver.SubjectOrDefault
+// wiring.
 //
 // Exported because main.go and tests both reference it. Operators can
 // override per deployment by editing the agentic-loop component's
 // `outputs[name="agent.complete"].subject` field; that override flows
 // through portresolver and into NewCompletionSubscriber's subject
 // argument.
+//
+// Wildcard scope note: the constant is `agent.complete.>` (multi-token
+// wildcard); SemTeams configs declare the port as `agent.complete.*`
+// (single-token wildcard). Today both match the publish shape
+// `agent.complete.<loop_id>`. If a future publisher deepens to
+// `agent.complete.<loop_id>.<chunk>`, the resolved-from-config
+// subject misses; the constant catches it. Keeping the constant
+// broader is a defensive default; operators who narrow via config
+// take responsibility for that scope.
 const DefaultLoopCompletedSubject = "agent.complete.>"
 
 // CompletionHandler is the narrow surface a chain-milestone stamper

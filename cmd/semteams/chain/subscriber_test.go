@@ -58,6 +58,25 @@ func encodeCompletion(t *testing.T, ev *agentic.LoopCompletedEvent) []byte {
 	return out
 }
 
+// TestCompletionSubscriber_SubjectFallsBackOnEmpty pins the constructor's
+// fallback contract: empty subject param → DefaultLoopCompletedSubject.
+// Custom subject param → exact passthrough. Without this guard a future
+// refactor that drops the fallback (or flips it to error) would silently
+// regress every test that passes "" — and main.go's resolved-from-config
+// path stays bound to the same contract.
+func TestCompletionSubscriber_SubjectFallsBackOnEmpty(t *testing.T) {
+	defaultSub := NewCompletionSubscriber([]CompletionHandler{&recordingHandler{}}, "", nil)
+	if got := defaultSub.subject; got != DefaultLoopCompletedSubject {
+		t.Errorf("empty subject: got %q, want fallback %q", got, DefaultLoopCompletedSubject)
+	}
+
+	const custom = "custom.complete.>"
+	customSub := NewCompletionSubscriber([]CompletionHandler{&recordingHandler{}}, custom, nil)
+	if got := customSub.subject; got != custom {
+		t.Errorf("custom subject: got %q, want %q (constructor must not narrow or rewrite)", got, custom)
+	}
+}
+
 func TestCompletionSubscriber_DispatchesToAllHandlers(t *testing.T) {
 	h1 := &recordingHandler{}
 	h2 := &recordingHandler{}
