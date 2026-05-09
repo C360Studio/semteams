@@ -1,9 +1,10 @@
 {
   "$comment": "Operator-curated harness catalog (ADR-033 §1, schema revised by ADR-034 §'What R3.7.2 work is preserved' to make compose_profile optional). Entries: meshtasticd-3.x (R3.7.2.e′, ADR-034 process-local-testcontainer Approach via sandbox DooD).",
+  "$catalog_note": "The meshtasticd-3.x entry's `name` is aspirational (anticipates a future 3.x release); the actual upstream Meshtastic project ships 2.7.x as of 2026-05. Smoke #8 run-10 surfaced the gap — builder correctly emitted needs_clarification when the previous `meshtastic/meshtasticd:3.5.0` tag returned 404 from Docker Hub. Image pinned to a real upstream tag (2.7.23-alpine — small, version-pinned, exists in registry). Future cleanup: rename `meshtasticd-3.x` → `meshtasticd-2.x` once we have time to update downstream persona/fixture references; for now the name stays so existing references don't break.",
   "harnesses": [
     {
       "name": "meshtasticd-3.x",
-      "image": "meshtastic/meshtasticd:3.5.0",
+      "image": "meshtastic/meshtasticd:2.7.23-alpine",
       "exposes": {
         "tcp": [
           {
@@ -17,7 +18,7 @@
         {
           "groupId": "com.geeksville.mesh",
           "artifactId": "meshtastic-protobufs",
-          "version_range": "[3.0,4.0)"
+          "version_range": "[2.7,3.0)"
         }
       ],
       "domain_description": "Real Meshtastic protocol over TCP, exposed by the upstream meshtasticd daemon (no hardware in the loop). Lifecycle managed in-process by Testcontainers under sandbox DooD (ADR-034 process-local-testcontainer Approach). Use this harness when work transcribes to behaviour at the meshtastic-protobuf wire boundary — POSITION_APP, NODEINFO_APP, TEXT_MESSAGE_APP, etc. Do NOT use this harness for RF-physics or LoRa-radio behaviour; meshtasticd is a daemon, not a radio simulator."
