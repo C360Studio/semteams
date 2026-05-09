@@ -217,7 +217,13 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 	// consistent across emit_plan / emit_consensus / emit_dev_via_spec_artifact.
 	// Fail-soft: read errors fall back to LLM-supplied values + the
 	// title-derived slug. Smoke #8 run-5 D1 + D2 fix.
-	chainTriples := e.readChainTriples(ctx, call.LoopID)
+	//
+	// Anchor on a completed ancestor's loop_id (from task properties)
+	// rather than the running loop's own LoopID — agent.loop.parent
+	// is stamped at completion, so walking from a still-running loop
+	// fails the ancestry walk. Smoke #8 run-6 hotfix.
+	anchorLoopID := chain.AnchorFromMetadata(call.Metadata, call.LoopID)
+	chainTriples := e.readChainTriples(ctx, anchorLoopID)
 	if researchLoop, _ := chainTriples[chain.PredicateResearchArtifactLoop].(string); researchLoop != "" {
 		plan.DependsOn.ResearchArtifactLoop = researchLoop
 	}
