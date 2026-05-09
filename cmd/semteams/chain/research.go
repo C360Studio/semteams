@@ -9,6 +9,8 @@ import (
 	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/types"
+
+	"github.com/c360studio/semteams/cmd/semteams/slug"
 )
 
 // Predicate names for the research-milestone cluster on the chain
@@ -30,6 +32,17 @@ const (
 	chainPredicateResearchArtifactActorCount = "chain.research_artifact.actor_count"
 	chainPredicateResearchArtifactTaskCount  = "chain.research_artifact.task_count"
 	chainPredicateResearchArtifactPath       = "chain.research_artifact.path"
+
+	// chainPredicateSlugStem is the chain-stable slug stem derived from
+	// the researcher's rendered markdown path at first-emit time. Stamped
+	// alongside chain.research_artifact.path so downstream emit-tools
+	// (emit_plan, emit_consensus, emit_dev_via_spec_artifact) can compose
+	// "<stem>-plan", "<stem>-consensus", "<stem>-implementation" without
+	// re-deriving the stem from a persona-supplied title (which drifts —
+	// smoke #8 run-5 D2: "driver" → "idriver" mid-chain). Absent on
+	// legacy chains whose researcher didn't render markdown; downstream
+	// tools fall back to title-derived slug in that case.
+	chainPredicateSlugStem = "chain.slug.stem"
 
 	// chainResearchSource tags chain entity triples this stamper writes
 	// so a graph query can scope to the emitter (parallel to
@@ -205,8 +218,15 @@ func (s *ResearchMilestoneStamper) HandleLoopCompleted(ctx context.Context, ev *
 	// before ADR-038 PR C Phase C1 don't stamp it). Stamp only when
 	// present so a graph query can distinguish "no markdown rendered"
 	// from "markdown at empty path."
+	//
+	// chain.slug.stem rides the same condition: it can only be derived
+	// when the researcher rendered a markdown path. Same emit-time
+	// invariant — present together or absent together.
 	if path, _ := researcherTriples[researcherPathPredicate].(string); path != "" {
 		triples = append(triples, base(chainPredicateResearchArtifactPath, path))
+		if stem := slug.StemFromPath(path, "research"); stem != "" {
+			triples = append(triples, base(chainPredicateSlugStem, stem))
+		}
 	}
 
 	for _, t := range triples {

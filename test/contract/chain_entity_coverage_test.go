@@ -113,7 +113,12 @@ func TestChainEntityCoverage_PR_B_Pipeline(t *testing.T) {
 				"research.artifact.test_harness": "meshtasticd-3.x",
 				"research.artifact.actors_count": float64(3),
 				"research.artifact.tasks_count":  float64(5),
-				"research.artifact.path":         "docs/research/2026-05-08-osh-meshtastic-driver.md",
+				// emit_research_artifact's renderMarkdown writes to
+				// docs/research/<slug>.md where <slug> is title-derived
+				// and ends with "-research". The chain milestone strips
+				// the trailing "-research" + ".md" to derive the
+				// chain.slug.stem (smoke #8 run-5 D2 fix).
+				"research.artifact.path": "docs/research/2026-05-08-osh-meshtastic-driver-research.md",
 			},
 			researchReviewerEntityID: {
 				"agent.loop.parent":       researcherEntityID,
@@ -222,11 +227,13 @@ func TestChainEntityCoverage_PR_B_Pipeline(t *testing.T) {
 		"chain.research_artifact.harness":     "meshtasticd-3.x",
 		"chain.research_artifact.actor_count": 3,
 		"chain.research_artifact.task_count":  5,
-		"chain.research_artifact.path":        "docs/research/2026-05-08-osh-meshtastic-driver.md",     // PR C Phase C1
-		"chain.plan_loop":                     "planner_c",                                             // PR C Phase C2
-		"chain.plan.path":                     "docs/plans/2026-05-08-osh-meshtastic-plan.md",          // PR C Phase C2
-		"chain.consensus_loop":                "challenger_e",                                          // PR C Phase C3
-		"chain.consensus.path":                "docs/consensus/2026-05-08-osh-meshtastic-consensus.md", // PR C Phase C3
+		"chain.research_artifact.path":        "docs/research/2026-05-08-osh-meshtastic-driver-research.md", // PR C Phase C1
+		"chain.slug.stem":                     "2026-05-08-osh-meshtastic-driver",                           // smoke #8 run-5 D2 fix — stem derived from research path; downstream tools compose <stem>-{plan,consensus,implementation}
+		"chain.plan_loop":                     "planner_c",                                                  // PR C Phase C2
+		"chain.plan_reviewer_loop":            "dev_via_spec_reviewer_d",                                    // smoke #8 run-5 D1 fix — reviewer loop ID for emit_consensus depends_on.reviewer_loop
+		"chain.plan.path":                     "docs/plans/2026-05-08-osh-meshtastic-plan.md",               // PR C Phase C2
+		"chain.consensus_loop":                "challenger_e",                                               // PR C Phase C3
+		"chain.consensus.path":                "docs/consensus/2026-05-08-osh-meshtastic-consensus.md",      // PR C Phase C3
 	}
 	for pred, wantObj := range want {
 		gotObj, ok := got[pred]

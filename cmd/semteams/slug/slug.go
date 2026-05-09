@@ -30,6 +30,38 @@ import (
 // non-ASCII-alphanumeric characters to a single "-".
 var nonAlnum = regexp.MustCompile(`[^a-z0-9]+`)
 
+// StemFromPath extracts the chain-stable slug stem from a rendered
+// artifact path. Strips the directory, the .md extension, and the
+// trailing "-<kindSuffix>" if present; returns empty when the input
+// is empty or when stripping yields nothing.
+//
+// Example:
+//
+//	StemFromPath("docs/research/2026-05-09-osh-meshtastic-driver-research.md", "research")
+//	  → "2026-05-09-osh-meshtastic-driver"
+//
+// Used by ResearchMilestoneStamper to derive the chain.slug.stem
+// predicate at first-emit time so downstream emit-tools can compose
+// "<stem>-plan", "<stem>-consensus", "<stem>-implementation" without
+// re-deriving the stem from a persona-supplied title (which drifts —
+// smoke #8 run-5 D2). Inputs MAY arrive as relative or absolute paths
+// per the SEMTEAMS_*_DIR contract; both are handled by basename
+// extraction.
+func StemFromPath(path, kindSuffix string) string {
+	if path == "" {
+		return ""
+	}
+	base := path
+	if i := strings.LastIndexAny(base, "/\\"); i >= 0 {
+		base = base[i+1:]
+	}
+	base = strings.TrimSuffix(base, ".md")
+	if kindSuffix != "" {
+		base = strings.TrimSuffix(base, "-"+kindSuffix)
+	}
+	return base
+}
+
 // DeriveDated returns a date-prefixed lower-kebab-case slug suitable
 // for naming a markdown artifact under docs/<arc>/<slug>.md. The
 // returned shape is "<YYYY-MM-DD>-<slug>" where the date is t in UTC

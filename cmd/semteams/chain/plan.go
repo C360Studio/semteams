@@ -28,6 +28,17 @@ const (
 	chainPredicatePlanLoop = "chain.plan_loop"
 	chainPredicatePlanPath = "chain.plan.path"
 
+	// chainPredicatePlanReviewerLoop names the reviewer loop that
+	// approved the plan. Stamped from ev.LoopID at milestone time
+	// (the reviewer is the loop that just completed with
+	// coordinator.next_action="approved"). Downstream emit_consensus
+	// reads it to populate depends_on.reviewer_loop without trusting
+	// the LLM's local guess (smoke #8 run-5 D1: challenger filled
+	// reviewer_loop with planner_loop's ID). Naming parallels
+	// chain.plan_loop — flat field, not dotted, because it is a loop-id
+	// reference rather than a metric/path predicate.
+	chainPredicatePlanReviewerLoop = "chain.plan_reviewer_loop"
+
 	chainPlanSource = "chain.plan"
 )
 
@@ -192,6 +203,7 @@ func (s *PlanMilestoneStamper) HandleLoopCompleted(ctx context.Context, ev *agen
 	}
 	triples := []message.Triple{
 		base(chainPredicatePlanLoop, plannerLoopID),
+		base(chainPredicatePlanReviewerLoop, ev.LoopID),
 	}
 	if path, _ := plannerTriples[plannerArtifactPathPredicate].(string); path != "" {
 		triples = append(triples, base(chainPredicatePlanPath, path))
