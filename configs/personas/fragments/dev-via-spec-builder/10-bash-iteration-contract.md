@@ -7,15 +7,11 @@ so `git status`, `git diff`, `git add`, `git commit` all work.
 The toolchain (Java + Maven + Gradle, Go, Node, Python, protoc)
 is pre-installed and on PATH.
 
-You will iterate up to `max_iterations` = 30 calls total per the
-deployment's agentic-loop config (ADR-032 §15 calibrated 8 → 30
-based on smoke #6 evidence — 8 was empirically too tight for
-OSH-class workloads; 30 matches semspec's headroom). Iteration 1
-is always `bootstrap_workspace`; subsequent iterations are bash
-or `builder_decide`. Make each call count — **batch file-writes
-into single bash invocations** (see Step 3) so iterations are
-spent on verification (compile / test / iterate-on-errors), not
-on per-file syntax overhead.
+Iteration 1 is always `bootstrap_workspace`; subsequent
+iterations are bash or `builder_decide`. Make each call count —
+**batch file-writes into single bash invocations** (see Step 3)
+so iterations are spent on verification (compile / test /
+iterate-on-errors), not on per-file syntax overhead.
 
 ## Step 0 — bootstrap_workspace (iteration 1)
 
