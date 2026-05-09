@@ -123,6 +123,12 @@ func TestPlanMilestone_ApprovedHappyPath(t *testing.T) {
 	wantPredicates := map[string]any{
 		chainPredicatePlanLoop: "planner_c",
 		chainPredicatePlanPath: "docs/plans/2026-05-08-osh-meshtastic-plan.md",
+		// chain.plan_reviewer_loop is the reviewer loop that approved the
+		// plan — taken straight from ev.LoopID at milestone time.
+		// Downstream emit_consensus reads it to populate
+		// depends_on.reviewer_loop without trusting an LLM guess
+		// (smoke #8 run-5 D1 fix).
+		chainPredicatePlanReviewerLoop: "reviewer_d",
 	}
 	for pred, want := range wantPredicates {
 		got, ok := pub.byPredicate(pred)
@@ -175,6 +181,12 @@ func TestPlanMilestone_PathOmittedWhenAbsent(t *testing.T) {
 	}
 	if _, ok := pub.byPredicate(chainPredicatePlanLoop); !ok {
 		t.Error("plan_loop predicate must still land regardless of path state")
+	}
+	// chain.plan_reviewer_loop is independent of plan path: it identifies
+	// the reviewer loop that just approved, not the renderer state. Lands
+	// for every approved milestone.
+	if _, ok := pub.byPredicate(chainPredicatePlanReviewerLoop); !ok {
+		t.Error("plan_reviewer_loop predicate must still land when reviewer approves regardless of path state")
 	}
 }
 

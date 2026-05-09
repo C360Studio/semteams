@@ -20,9 +20,13 @@ Pass:
     contain `revision`, use that; otherwise read the prior planner
     loop result and increment from the artifact you find there.
 - `title` — short, descriptive title for the plan (e.g.
-  `"OSH Meshtastic driver plan"`). Drives the rendered file's slug
-  and shows up in `git log` for the markdown view. Empty falls back
-  to a loop-id-suffixed slug; supplying a title is preferred.
+  `"OSH Meshtastic driver plan"`). Used as the markdown H1 heading.
+  The file slug is server-derived from the chain entity's
+  `chain.slug.stem` (set when research first emitted), so your title
+  text drives the heading you see in the rendered markdown but does
+  not change which file the plan writes to — the chain stays
+  consistent across emit_plan / emit_consensus /
+  emit_dev_via_spec_artifact even if you re-phrase the title.
 - `goal` — single string. The same concrete, testable target your
   output contract names (named interface, endpoint, component, or
   capability — not "build a driver").
@@ -37,19 +41,16 @@ Pass:
 - `epics` — array of strings. Interface-level decomposition; each
   epic grounds against an actor or integration boundary the context
   names. At least one — a plan with no epics is a goal statement.
-- `depends_on.research_artifact_loop` — the upstream research
-  artifact's loop ID (the same `lineage.researcher` value your
-  task properties carry). Optional but recommended. The chain
-  milestone subscriber walks ancestry without it (so the chain
-  triple still lands), but the rendered markdown's "depends on"
-  section reads back to a human reviewing `docs/plans/<slug>.md`
-  in git, and the typed payload preserves the link for forward-
-  compat consumers. Spend the tool-arg slot when you have the loop
-  ID in hand.
+
+Do NOT pass `depends_on` — the server reads
+`chain.research_artifact_loop` from the chain entity and populates
+the rendered "depends on" section automatically. (Smoke #8 run-5
+showed personas guessing the wrong upstream loop ID; the chain
+entity has the canonical reference and the server uses it.)
 
 The tool fills in `loop_id` (from the framework — you can't fake it),
-`slug` (server-derived from title + date), and `produced_at` (server
-wallclock) automatically. Don't pass them.
+`slug` (server-derived from `chain.slug.stem`), and `produced_at`
+(server wallclock) automatically. Don't pass them.
 
 ## Order of operations within a pass
 

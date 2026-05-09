@@ -9,6 +9,8 @@ import (
 	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/types"
+
+	"github.com/c360studio/semteams/cmd/semteams/slug"
 )
 
 // Predicate names for the research-milestone cluster on the chain
@@ -25,11 +27,15 @@ import (
 // t.TempDir()). Consumers of chain.research_artifact.path must tolerate
 // both — emit_research_artifact's renderMarkdown does NOT normalise.
 const (
-	chainPredicateResearchArtifactLoop       = "chain.research_artifact_loop"
+	// Read-side wire format lives in predicates.go (Predicate*) so
+	// downstream consumers reference the same constant. Local aliases
+	// kept short for stamper-side readability.
+	chainPredicateResearchArtifactLoop       = PredicateResearchArtifactLoop
 	chainPredicateResearchArtifactHarness    = "chain.research_artifact.harness"
 	chainPredicateResearchArtifactActorCount = "chain.research_artifact.actor_count"
 	chainPredicateResearchArtifactTaskCount  = "chain.research_artifact.task_count"
 	chainPredicateResearchArtifactPath       = "chain.research_artifact.path"
+	chainPredicateSlugStem                   = PredicateSlugStem
 
 	// chainResearchSource tags chain entity triples this stamper writes
 	// so a graph query can scope to the emitter (parallel to
@@ -205,8 +211,15 @@ func (s *ResearchMilestoneStamper) HandleLoopCompleted(ctx context.Context, ev *
 	// before ADR-038 PR C Phase C1 don't stamp it). Stamp only when
 	// present so a graph query can distinguish "no markdown rendered"
 	// from "markdown at empty path."
+	//
+	// chain.slug.stem rides the same condition: it can only be derived
+	// when the researcher rendered a markdown path. Same emit-time
+	// invariant — present together or absent together.
 	if path, _ := researcherTriples[researcherPathPredicate].(string); path != "" {
 		triples = append(triples, base(chainPredicateResearchArtifactPath, path))
+		if stem := slug.StemFromPath(path, "research"); stem != "" {
+			triples = append(triples, base(chainPredicateSlugStem, stem))
+		}
 	}
 
 	for _, t := range triples {

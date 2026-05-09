@@ -15,6 +15,7 @@ import (
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/types"
 
+	"github.com/c360studio/semteams/cmd/semteams/chain"
 	"github.com/c360studio/semteams/cmd/semteams/testharness"
 )
 
@@ -1724,5 +1725,219 @@ func TestExecute_ChainTriples_EmptyResearchRootLoop_Skipped(t *testing.T) {
 	}
 	if resolver.calls != 0 {
 		t.Errorf("resolver should not be called when research_artifact_loop is empty; got %d calls", resolver.calls)
+	}
+}
+
+// ---------------------------------------------------------------------
+// Chain-canonical lineage + slug overrides (smoke #8 run-5 D1 + D2 fix)
+// ---------------------------------------------------------------------
+
+// stubChainReader implements ChainReader for tests. Returns the
+// configured (entityID, triples) pair to every ReadChainFor call;
+// errors land via err. Mirrors the same shape as emitplan / emitconsensus.
+type stubChainReader struct {
+	entityID string
+	triples  map[string]any
+	err      error
+	calls    int
+	mu       sync.Mutex
+}
+
+func (s *stubChainReader) ReadChainFor(_ context.Context, _ string) (string, map[string]any, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.calls++
+	if s.err != nil {
+		return s.entityID, nil, s.err
+	}
+	return s.entityID, s.triples, nil
+}
+
+// findTripleOnLoopEntity returns the object value for the named
+// predicate stamped on the architect's loop entity (the
+// dev_via_spec.artifact.* cluster). Used to read back the actual
+// rendered slug since the renderer writes it to disk + the predicateSlug
+// triple.
+func findTripleOnLoopEntity(triples []message.Triple, loopEntityID, predicate string) (any, bool) {
+	for _, t := range triples {
+		if t.Subject == loopEntityID && t.Predicate == predicate {
+			return t.Object, true
+		}
+	}
+	return nil, false
+}
+
+// TestExecute_ChainSlugStemOverridesTitleSlug pins the smoke #8 run-5
+// D2 fix: when chain.slug.stem is present, the rendered file uses
+// "<stem>-implementation" instead of the title-derived slug. Closes
+// the cross-arc slug drift the architect inherited from the
+// challenger.
+func TestExecute_ChainSlugStemOverridesTitleSlug(t *testing.T) {
+	exec, tp, _, dir := newExecutorWithDir(t)
+	exec.SetChainReader(&stubChainReader{
+		entityID: "c360.semteams.agent.chain.execution.dispatch_root",
+		triples: map[string]any{
+			chain.PredicateSlugStem: "2026-05-09-osh-meshtastic-driver",
+		},
+	})
+
+	args := defaultArtifactArgs()
+	// Architect picked up the challenger's drifted title.
+	args["title"] = "OSH Meshtastic IDriver Implementation"
+
+	res, err := exec.Execute(context.Background(), defaultCall(args))
+	if err != nil {
+		t.Fatalf("Execute err: %v", err)
+	}
+	if res.Error != "" {
+		t.Fatalf("Result.Error = %q, want empty", res.Error)
+	}
+
+	// Look for the rendered file directly on disk — its name carries
+	// the slug.
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("ReadDir: %v", err)
+	}
+	var foundMD string
+	for _, e := range entries {
+		if filepath.Ext(e.Name()) == ".md" {
+			foundMD = e.Name()
+			break
+		}
+	}
+	const wantName = "2026-05-09-osh-meshtastic-driver-implementation.md"
+	if foundMD != wantName {
+		t.Errorf("rendered .md filename = %q, want %q (chain.slug.stem must override drifting title)", foundMD, wantName)
+	}
+
+	// Also confirm the slug triple on the loop entity reflects the
+	// chain-derived value (downstream consumers — bootstrapworkspace,
+	// evidence preprocessor — read this too).
+	loopEntityID := agentic.LoopExecutionEntityID("c360", "semteams", "loop-architect-abc")
+	gotSlug, ok := findTripleOnLoopEntity(tp.snapshot(), loopEntityID, predicateSlug)
+	if !ok {
+		t.Fatal("predicateSlug triple missing on loop entity")
+	}
+	if gotSlug != "2026-05-09-osh-meshtastic-driver-implementation" {
+		t.Errorf("predicateSlug triple = %v, want chain-derived stem-implementation", gotSlug)
+	}
+}
+
+// TestExecute_ChainProvenanceOverridesLLMValues pins the smoke #8 run-5
+// D1 fix: chain.{research_artifact_loop, plan_loop, plan_reviewer_loop,
+// consensus_loop} must override LLM-supplied provenance.* loop_ids.
+// Smoke #8 run-5 evidence: architect cited the challenger as the
+// "approved planner loop"; chain entity has the right four loop IDs
+// distinct, and the override propagates them into the rendered spec.
+func TestExecute_ChainProvenanceOverridesLLMValues(t *testing.T) {
+	exec, tp, _, dir := newExecutorWithDir(t)
+	exec.SetChainReader(&stubChainReader{
+		entityID: "c360.semteams.agent.chain.execution.dispatch_root",
+		triples: map[string]any{
+			chain.PredicateResearchArtifactLoop: "researcher_canonical",
+			chain.PredicatePlanLoop:             "planner_canonical",
+			chain.PredicatePlanReviewerLoop:     "reviewer_canonical",
+			chain.PredicateConsensusLoop:        "challenger_canonical",
+		},
+	})
+
+	args := defaultArtifactArgs()
+	// Architect's local guess — typically wrong (smoke #8 run-5 had
+	// the challenger ID in the planner slot etc.).
+	args["provenance"] = map[string]any{
+		"research_artifact_loop": "wrong_research",
+		"planner_loop":           "wrong_planner",
+		"reviewer_loop":          "wrong_reviewer",
+		"challenger_loop":        "wrong_challenger",
+	}
+
+	res, err := exec.Execute(context.Background(), defaultCall(args))
+	if err != nil {
+		t.Fatalf("Execute err: %v", err)
+	}
+	if res.Error != "" {
+		t.Fatalf("Result.Error = %q, want empty", res.Error)
+	}
+
+	// Find the rendered .md and read its body.
+	entries, _ := os.ReadDir(dir)
+	var fullPath string
+	for _, e := range entries {
+		if filepath.Ext(e.Name()) == ".md" {
+			fullPath = filepath.Join(dir, e.Name())
+			break
+		}
+	}
+	body, err := os.ReadFile(fullPath)
+	if err != nil {
+		t.Fatalf("read rendered markdown: %v", err)
+	}
+	for _, want := range []string{"researcher_canonical", "planner_canonical", "reviewer_canonical", "challenger_canonical"} {
+		if !strings.Contains(string(body), want) {
+			t.Errorf("rendered body missing chain-canonical %q; got body:\n%s", want, body)
+		}
+	}
+	for _, wrong := range []string{"wrong_research", "wrong_planner", "wrong_reviewer", "wrong_challenger"} {
+		if strings.Contains(string(body), wrong) {
+			t.Errorf("rendered body still contains LLM-supplied %q (chain override should have replaced it); got body:\n%s", wrong, body)
+		}
+	}
+
+	// research_root_loop triple on loop entity also reflects the
+	// chain-canonical value (drives chain.spec_artifact.* triples
+	// downstream).
+	loopEntityID := agentic.LoopExecutionEntityID("c360", "semteams", "loop-architect-abc")
+	gotResearchRoot, ok := findTripleOnLoopEntity(tp.snapshot(), loopEntityID, predicateResearchRootLoop)
+	if !ok {
+		t.Fatal("predicateResearchRootLoop triple missing on loop entity")
+	}
+	if gotResearchRoot != "researcher_canonical" {
+		t.Errorf("predicateResearchRootLoop triple = %v, want chain-canonical researcher_canonical", gotResearchRoot)
+	}
+}
+
+// TestExecute_ChainReadFailureFallsBackToLLMValues pins fail-soft:
+// chain read errors fall back to LLM-supplied provenance + the
+// title-derived slug, logged at Warn. Same shape as emitplan /
+// emitconsensus equivalents.
+func TestExecute_ChainReadFailureFallsBackToLLMValues(t *testing.T) {
+	exec, tp, _, dir := newExecutorWithDir(t)
+	stub := &stubChainReader{
+		entityID: "c360.semteams.agent.chain.execution.dispatch_root",
+		err:      errors.New("graph timeout"),
+	}
+	exec.SetChainReader(stub)
+
+	res, err := exec.Execute(context.Background(), defaultCall(defaultArtifactArgs()))
+	if err != nil {
+		t.Fatalf("Execute err: %v", err)
+	}
+	if res.Error != "" {
+		t.Fatalf("Result.Error = %q (chain read failure must not surface to caller)", res.Error)
+	}
+	if stub.calls != 1 {
+		t.Errorf("stub ReadChainFor calls = %d, want 1", stub.calls)
+	}
+
+	entries, _ := os.ReadDir(dir)
+	var foundMD string
+	for _, e := range entries {
+		if filepath.Ext(e.Name()) == ".md" {
+			foundMD = e.Name()
+			break
+		}
+	}
+	if !strings.HasPrefix(foundMD, time.Now().UTC().Format("2006-01-02")+"-osh-meshtastic-driver") {
+		t.Errorf("rendered file = %q, want title-derived slug fallback", foundMD)
+	}
+
+	loopEntityID := agentic.LoopExecutionEntityID("c360", "semteams", "loop-architect-abc")
+	gotResearchRoot, ok := findTripleOnLoopEntity(tp.snapshot(), loopEntityID, predicateResearchRootLoop)
+	if !ok {
+		t.Fatal("predicateResearchRootLoop triple missing on loop entity")
+	}
+	if gotResearchRoot != "loop-research-001" {
+		t.Errorf("predicateResearchRootLoop = %v, want LLM-supplied loop-research-001 (chain-read failed)", gotResearchRoot)
 	}
 }

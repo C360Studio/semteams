@@ -113,6 +113,59 @@ func TestDeriveDated_DateInUTC(t *testing.T) {
 	}
 }
 
+func TestStemFromPath_TrailingKindStripped(t *testing.T) {
+	got := StemFromPath("docs/research/2026-05-09-osh-meshtastic-driver-research.md", "research")
+	want := "2026-05-09-osh-meshtastic-driver"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestStemFromPath_AbsolutePath(t *testing.T) {
+	got := StemFromPath("/var/build/docs/research/2026-05-09-osh-meshtastic-driver-research.md", "research")
+	want := "2026-05-09-osh-meshtastic-driver"
+	if got != want {
+		t.Errorf("got %q, want %q (absolute path basename is stripped)", got, want)
+	}
+}
+
+func TestStemFromPath_BasenameOnly(t *testing.T) {
+	got := StemFromPath("2026-05-09-osh-meshtastic-driver-research.md", "research")
+	want := "2026-05-09-osh-meshtastic-driver"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestStemFromPath_EmptyKindSuffix(t *testing.T) {
+	// kindSuffix=="" disables suffix-trim; useful when the caller stores
+	// the full slug (no kind word) and just wants basename + extension
+	// stripped.
+	got := StemFromPath("docs/research/2026-05-09-osh-driver.md", "")
+	want := "2026-05-09-osh-driver"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestStemFromPath_KindSuffixAbsentInBasename(t *testing.T) {
+	// Researcher path doesn't end with the expected kind word: return
+	// basename minus extension. Stem will not be slug-clean but is
+	// preferable to returning empty (no chain.slug.stem stamping is
+	// strictly worse than a slightly-off stem).
+	got := StemFromPath("docs/research/2026-05-09-osh-driver.md", "research")
+	want := "2026-05-09-osh-driver"
+	if got != want {
+		t.Errorf("got %q, want %q (no -research suffix to strip; basename returned)", got, want)
+	}
+}
+
+func TestStemFromPath_EmptyPath(t *testing.T) {
+	if got := StemFromPath("", "research"); got != "" {
+		t.Errorf("got %q, want empty for empty path", got)
+	}
+}
+
 // TestDeriveDated_DeterministicOnRetry pins the idempotency
 // invariant emit-tools rely on: same (title, t.Date) → same slug,
 // so a re-emission overwrites the prior file rather than creating

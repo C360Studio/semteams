@@ -19,9 +19,13 @@ your probing contract — same fields, structured rather than freeform
 prose. Pass:
 
 - `title` — short, descriptive title for the consensus (e.g.
-  `"OSH Meshtastic driver consensus"`). Drives the rendered file's
-  slug and shows up in `git log`. Empty falls back to a loop-id-
-  suffixed slug; supplying a title is preferred.
+  `"OSH Meshtastic driver consensus"`). Used as the markdown H1
+  heading. The file slug is server-derived from the chain entity's
+  `chain.slug.stem` (set when research first emitted), so your title
+  text drives the heading you see in the rendered markdown but does
+  not change which file the consensus writes to — the chain stays
+  consistent across emit_plan / emit_consensus /
+  emit_dev_via_spec_artifact even if you re-phrase the title.
 - `summary` — single string. One-line accept rationale densely citing
   the chain (actor names, integration boundaries, epic decomposition).
   This is what the architect curates into the spec's chain consensus.
@@ -34,16 +38,17 @@ prose. Pass:
   concerns raised across challenger iterations and how they resolved.
   Useful for cross-arc consumers and the architect; include when you
   iterated through `concerns_raised → planner-revision → accept`.
-- `depends_on.plan_loop` — the planner loop ID whose plan this
-  consensus accepts. Read it from the prior reviewer's
-  `lineage.researcher` chain or from the reviewer's loop entity.
-- `depends_on.reviewer_loop` — the dev-via-spec-reviewer loop ID
-  that approved before your signoff (`prior_loop_id` in your task
-  properties).
+
+Do NOT pass `depends_on` — the server reads `chain.plan_loop` and
+`chain.plan_reviewer_loop` from the chain entity and populates the
+rendered "depends on" section automatically. (Smoke #8 run-5 showed
+the challenger filling both `plan_loop` and `reviewer_loop` slots
+with the same reviewer ID; the chain entity has the canonical pair
+distinct and the server uses it.)
 
 The tool fills in `loop_id` (from the framework — you can't fake it),
-`slug` (server-derived from title + date), and `produced_at` (server
-wallclock) automatically. Don't pass them.
+`slug` (server-derived from `chain.slug.stem`), and `produced_at`
+(server wallclock) automatically. Don't pass them.
 
 ## Order of operations within a pass
 

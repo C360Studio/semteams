@@ -25,8 +25,14 @@ import (
 // outputDir ("docs/plans"); absolute when operators set
 // SEMTEAMS_PLAN_DIR to an absolute path. Consumers must tolerate both.
 const (
-	chainPredicatePlanLoop = "chain.plan_loop"
-	chainPredicatePlanPath = "chain.plan.path"
+	// Read-side wire format lives in predicates.go (Predicate*) so the
+	// stamper and downstream consumers reference the same constant — a
+	// rename becomes a compiler error at every site. chainPredicatePlanPath
+	// stays as a string literal until the path-predicate set is exported
+	// in the focused vocab-completion follow-up PR.
+	chainPredicatePlanLoop         = PredicatePlanLoop
+	chainPredicatePlanReviewerLoop = PredicatePlanReviewerLoop
+	chainPredicatePlanPath         = "chain.plan.path"
 
 	chainPlanSource = "chain.plan"
 )
@@ -192,6 +198,7 @@ func (s *PlanMilestoneStamper) HandleLoopCompleted(ctx context.Context, ev *agen
 	}
 	triples := []message.Triple{
 		base(chainPredicatePlanLoop, plannerLoopID),
+		base(chainPredicatePlanReviewerLoop, ev.LoopID),
 	}
 	if path, _ := plannerTriples[plannerArtifactPathPredicate].(string); path != "" {
 		triples = append(triples, base(chainPredicatePlanPath, path))

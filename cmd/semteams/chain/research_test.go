@@ -124,7 +124,7 @@ func TestResearchMilestone_ApprovedHappyPath(t *testing.T) {
 				researcherTestHarnessPredicate: "meshtasticd-3.x",
 				researcherActorsCountPredicate: float64(3), // JSON unmarshal shape
 				researcherTasksCountPredicate:  float64(5),
-				researcherPathPredicate:        "docs/research/2026-05-08-osh-meshtastic-driver.md",
+				researcherPathPredicate:        "docs/research/2026-05-08-osh-meshtastic-driver-research.md",
 			},
 		},
 	}
@@ -145,7 +145,12 @@ func TestResearchMilestone_ApprovedHappyPath(t *testing.T) {
 		chainPredicateResearchArtifactHarness:    "meshtasticd-3.x",
 		chainPredicateResearchArtifactActorCount: 3,
 		chainPredicateResearchArtifactTaskCount:  5,
-		chainPredicateResearchArtifactPath:       "docs/research/2026-05-08-osh-meshtastic-driver.md",
+		chainPredicateResearchArtifactPath:       "docs/research/2026-05-08-osh-meshtastic-driver-research.md",
+		// chain.slug.stem rides path: basename minus -research minus .md.
+		// Downstream emit-tools compose "<stem>-plan" / "<stem>-consensus"
+		// / "<stem>-implementation" so the slug stays stable across the
+		// chain (smoke #8 run-5 D2 fix).
+		chainPredicateSlugStem: "2026-05-08-osh-meshtastic-driver",
 	}
 	for pred, want := range wantPredicates {
 		got, ok := pub.byPredicate(pred)
@@ -205,6 +210,11 @@ func TestResearchMilestone_HarnessOmittedWhenEmpty(t *testing.T) {
 	// triple must not be fabricated.
 	if _, ok := pub.byPredicate(chainPredicateResearchArtifactPath); ok {
 		t.Error("path predicate should be omitted when research.artifact.path is absent on researcher loop")
+	}
+	// chain.slug.stem rides chain.research_artifact.path; absent path
+	// → absent stem.
+	if _, ok := pub.byPredicate(chainPredicateSlugStem); ok {
+		t.Error("slug.stem predicate should be omitted when research.artifact.path is absent")
 	}
 }
 

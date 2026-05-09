@@ -45,6 +45,7 @@ import (
 	agentictools "github.com/c360studio/semstreams/processor/agentic-tools"
 	"github.com/c360studio/semstreams/types"
 
+	"github.com/c360studio/semteams/cmd/semteams/chain"
 	"github.com/c360studio/semteams/cmd/semteams/devviaspec"
 	"github.com/c360studio/semteams/cmd/semteams/slug"
 	"github.com/c360studio/semteams/cmd/semteams/testharness"
@@ -171,6 +172,20 @@ type ChainResolver interface {
 	ChainEntityID(ctx context.Context, loopID string) (string, error)
 }
 
+// ChainReader resolves the chain entity ID for the calling architect
+// loop and reads its triple set in one call. Used by Execute to
+// override LLM-supplied lineage IDs (provenance.{research_artifact_loop,
+// planner_loop, reviewer_loop, challenger_loop}) and the slug with
+// chain-canonical values (smoke #8 run-5 D1 + D2 fix).
+//
+// Optional — leave unset to keep the executor backward-compatible
+// (LLM-supplied provenance + title-derived slug only). Same shape as
+// emitplan.ChainReader / emitconsensus.ChainReader; production wiring
+// uses the same adapter.
+type ChainReader interface {
+	ReadChainFor(ctx context.Context, fromLoopID string) (chainEntityID string, triples map[string]any, err error)
+}
+
 // Executor implements agentic.ToolExecutor for emit_dev_via_spec_artifact.
 // It renders the Artifact as markdown to disk, writes a deterministic set
 // of marker triples on the calling loop entity, and publishes the typed
@@ -183,6 +198,7 @@ type Executor struct {
 	outputDir           string
 	testHarnessResolver TestHarnessResolver
 	chainResolver       ChainResolver // nil → skip chain entity triples
+	chainReader         ChainReader   // nil → fall back to LLM-supplied provenance + title-derived slug
 }
 
 // NewExecutor constructs an Executor. outputDir is the directory where
@@ -224,6 +240,13 @@ func NewExecutor(publisher agentictools.TriplePublisher, natsPublish PayloadPubl
 // chain package's Resolver is built.
 func (e *Executor) SetChainResolver(r ChainResolver) {
 	e.chainResolver = r
+}
+
+// SetChainReader enables chain-entity-driven provenance and slug
+// derivation. Mirrors the SetChainReader pattern used by emitplan and
+// emitconsensus; same wiring contract. Smoke #8 run-5 D1 + D2 fix.
+func (e *Executor) SetChainReader(r ChainReader) {
+	e.chainReader = r
 }
 
 // ListTools returns the LLM-facing schema. The args mirror the Artifact
@@ -376,12 +399,26 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 		}, nil
 	}
 
+	// Read chain-canonical lineage + slug stem so the architect persona
+	// stops guessing upstream loop IDs and the chain's slug stays
+	// consistent across emit_plan / emit_consensus /
+	// emit_dev_via_spec_artifact. Smoke #8 run-5 D1 + D2 fix.
+	chainTriples := e.readChainTriples(ctx, call.LoopID)
+	overrideProvenanceFromChain(&artifact.Provenance, chainTriples)
+	if stem, _ := chainTriples[chain.PredicateSlugStem].(string); stem != "" {
+		// Chain stem present → override the title-derived slug. "<stem>-implementation"
+		// is non-empty by construction so the trailing-dash rejection
+		// below safely passes.
+		artifact.Slug = stem + "-implementation"
+	}
+
 	// Reject titles whose ASCII-alphanumeric content is empty (e.g. "!!!" or
 	// "日本語タイトル") — slug.DeriveDated with no fallback (the
 	// emitspecartifact contract path) produces a slug ending in "-"
 	// that silently maps two distinct non-ASCII calls to the same file
 	// on the same day. The HasSuffix("-") check converts that into a
-	// 400 to the LLM so the persona retries with valid input.
+	// 400 to the LLM so the persona retries with valid input. Skipped
+	// when the chain stem overrode the title-derived slug above.
 	if strings.HasSuffix(artifact.Slug, "-") {
 		return agentic.ToolResult{
 			CallID:    call.ID,
@@ -533,6 +570,58 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 			"check_count":    len(artifact.Checks),
 		},
 	}, nil
+}
+
+// readChainTriples resolves the chain entity for the calling architect
+// loop and returns its predicate map. Fail-soft: any error (resolver
+// failure, graph timeout, decode mismatch) yields nil plus a Warn log;
+// the caller's map-index reads on nil return the zero value, so the
+// override branches naturally fall through to LLM-supplied values +
+// title-derived slug.
+//
+// chainReader=nil (test contexts, deployments without chain wiring)
+// returns nil without logging — the documented backward-compatible
+// mode. Mirrors emitplan / emitconsensus.
+func (e *Executor) readChainTriples(ctx context.Context, loopID string) map[string]any {
+	if e.chainReader == nil {
+		return nil
+	}
+	chainEntityID, triples, err := e.chainReader.ReadChainFor(ctx, loopID)
+	if err != nil {
+		e.logger.Warn("emit_dev_via_spec_artifact: chain read failed; falling back to LLM-supplied values",
+			slog.String("loop_id", loopID),
+			slog.String("chain_entity", chainEntityID),
+			slog.String("error", err.Error()))
+		return nil
+	}
+	return triples
+}
+
+// overrideProvenanceFromChain replaces LLM-supplied lineage IDs with
+// chain-canonical values. Smoke #8 run-5 D1 evidence: architect filled
+// provenance.planner_loop with the challenger's loop ID and other
+// similar drift. Each predicate is a single hop on the chain entity
+// stamped earlier in the chain's lifecycle (research, plan, consensus
+// milestones). Absent predicates leave the LLM-supplied value
+// untouched (legacy / chain-not-wired fallback).
+//
+// Mutates p in place; the caller continues with the corrected value.
+// Field by field (rather than reflection) so a future addition of a
+// new provenance slot doesn't silently land without an explicit chain
+// predicate to back it.
+func overrideProvenanceFromChain(p *devviaspec.Provenance, chainTriples map[string]any) {
+	if researchLoop, _ := chainTriples[chain.PredicateResearchArtifactLoop].(string); researchLoop != "" {
+		p.ResearchArtifactLoop = researchLoop
+	}
+	if plannerLoop, _ := chainTriples[chain.PredicatePlanLoop].(string); plannerLoop != "" {
+		p.PlannerLoop = plannerLoop
+	}
+	if reviewerLoop, _ := chainTriples[chain.PredicatePlanReviewerLoop].(string); reviewerLoop != "" {
+		p.ReviewerLoop = reviewerLoop
+	}
+	if challengerLoop, _ := chainTriples[chain.PredicateConsensusLoop].(string); challengerLoop != "" {
+		p.ChallengerLoop = challengerLoop
+	}
 }
 
 // parseArgsIntoArtifact builds a devviaspec.Artifact from the LLM-supplied
