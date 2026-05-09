@@ -291,7 +291,9 @@
           "emit_dev_via_spec_artifact",
           "bootstrap_workspace",
           "bash",
-          "builder_decide"
+          "builder_decide",
+          "emit_diagnosis",
+          "submit_work"
         ],
         "approval_required": ["add_source_repo"],
         "ports": {
@@ -324,7 +326,8 @@
           "/app/configs/rules/dev-via-spec/04-challenger-concerns-retry-planner.json",
           "/app/configs/rules/dev-via-spec/05-challenger-accept-to-architect.json",
           "/app/configs/rules/dev-via-spec/06-architect-emit-to-builder.json",
-          "/app/configs/rules/dev-via-spec/07-builder-decide-to-qa-reviewer.json"
+          "/app/configs/rules/dev-via-spec/07-builder-decide-to-qa-reviewer.json",
+          "/app/configs/rules/ops/chain-terminal-observe.json"
         ],
         "enable_graph_integration": true,
         "entity_watch_buckets": {
