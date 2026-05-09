@@ -351,6 +351,69 @@ func (s *stubChainReader) ReadChainFor(_ context.Context, _ string) (string, map
 	return s.entityID, s.triples, nil
 }
 
+// spyChainReader records the loop ID it was invoked with — used to
+// pin the smoke #8 run-6 hotfix that the chain ancestry walk anchors
+// on a completed-ancestor metadata key, not the running call.LoopID.
+type spyChainReader struct {
+	entityID   string
+	triples    map[string]any
+	lastLoopID string
+	mu         sync.Mutex
+}
+
+func (s *spyChainReader) ReadChainFor(_ context.Context, loopID string) (string, map[string]any, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.lastLoopID = loopID
+	return s.entityID, s.triples, nil
+}
+
+// TestExecute_ChainAnchorsOnPriorLoopMetadata pins the smoke #8
+// run-6 hotfix at the consensus seam: emit-tools MUST anchor the
+// chain walk on a completed ancestor's loop_id from task-property
+// metadata, not the running loop's own LoopID. The challenger spawn
+// rule (rules/dev-via-spec/03-reviewer-approved-to-challenger.json)
+// always sets prior_loop_id to the upstream completed reviewer.
+func TestExecute_ChainAnchorsOnPriorLoopMetadata(t *testing.T) {
+	exec, _, _, _ := newExecutor(t)
+	stub := &spyChainReader{
+		entityID: "c360.test.agent.chain.execution.dispatch_root",
+		triples:  map[string]any{},
+	}
+	exec.SetChainReader(stub)
+
+	call := defaultCall(defaultConsensusArgs())
+	call.Metadata = map[string]any{
+		"prior_loop_id": "reviewer-completed",
+	}
+	if _, err := exec.Execute(context.Background(), call); err != nil {
+		t.Fatalf("Execute err: %v", err)
+	}
+	if stub.lastLoopID != "reviewer-completed" {
+		t.Errorf("ReadChainFor lastLoopID = %q, want metadata anchor 'reviewer-completed' (running LoopID %q must NOT be used when metadata is set)", stub.lastLoopID, call.LoopID)
+	}
+}
+
+// TestExecute_ChainAnchorFallsBackToCallLoopID pins fallback when no
+// metadata anchor is set — preserves pre-hotfix behaviour for tests
+// and deployments without the spawn convention.
+func TestExecute_ChainAnchorFallsBackToCallLoopID(t *testing.T) {
+	exec, _, _, _ := newExecutor(t)
+	stub := &spyChainReader{
+		entityID: "c360.test.agent.chain.execution.dispatch_root",
+		triples:  map[string]any{},
+	}
+	exec.SetChainReader(stub)
+
+	call := defaultCall(defaultConsensusArgs())
+	if _, err := exec.Execute(context.Background(), call); err != nil {
+		t.Fatalf("Execute err: %v", err)
+	}
+	if stub.lastLoopID != call.LoopID {
+		t.Errorf("ReadChainFor lastLoopID = %q, want call.LoopID %q (fallback)", stub.lastLoopID, call.LoopID)
+	}
+}
+
 // TestExecute_ChainSlugStemOverridesTitleSlug pins the smoke #8 run-5
 // D2 fix at the consensus seam. Chain stem keeps the slug stable as
 // "<stem>-consensus" even when the challenger's title drifts (e.g.

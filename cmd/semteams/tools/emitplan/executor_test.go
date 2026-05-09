@@ -372,6 +372,104 @@ func (s *stubChainReader) ReadChainFor(_ context.Context, _ string) (string, map
 	return s.entityID, s.triples, nil
 }
 
+// spyChainReader records the loop ID it was invoked with — separate
+// from stubChainReader so the "what was passed" tests stay obviously
+// distinct from the override-path coverage.
+type spyChainReader struct {
+	entityID   string
+	triples    map[string]any
+	lastLoopID string
+	mu         sync.Mutex
+}
+
+func (s *spyChainReader) ReadChainFor(_ context.Context, loopID string) (string, map[string]any, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.lastLoopID = loopID
+	return s.entityID, s.triples, nil
+}
+
+// TestExecute_ChainAnchorsOnPriorLoopMetadata pins the smoke #8 run-6
+// hotfix: emit-tools MUST anchor the chain ancestry walk on a
+// completed ancestor (from task-property metadata), not the running
+// loop's own LoopID. Smoke #8 run-6 evidence: walking from the
+// running loop fails because agent.loop.parent isn't yet stamped,
+// resolver returns the running loop's own ID as chain root, and the
+// subsequent entity read decodes garbage. With the metadata anchor,
+// the chainReader sees the completed ancestor's loop_id and can walk.
+func TestExecute_ChainAnchorsOnPriorLoopMetadata(t *testing.T) {
+	exec, _, _, _ := newExecutor(t)
+	stub := &spyChainReader{
+		entityID: "c360.test.agent.chain.execution.dispatch_root",
+		triples:  map[string]any{},
+	}
+	exec.SetChainReader(stub)
+
+	// research_reviewer_loop_id is the planner spawn rule's metadata
+	// key (rules/research-mode-transition/03-stabilise-and-transition.json).
+	// Hotfix lookup tries this key (planner-only) before prior_loop_id.
+	call := defaultCall(defaultPlanArgs())
+	call.Metadata = map[string]any{
+		"research_reviewer_loop_id": "research-reviewer-completed",
+	}
+	if _, err := exec.Execute(context.Background(), call); err != nil {
+		t.Fatalf("Execute err: %v", err)
+	}
+	if stub.lastLoopID != "research-reviewer-completed" {
+		t.Errorf("ReadChainFor lastLoopID = %q, want metadata anchor 'research-reviewer-completed' (running LoopID %q must NOT be used when metadata is set)", stub.lastLoopID, call.LoopID)
+	}
+}
+
+// TestExecute_ChainAnchorPriorLoopIDWinsOverFallback pins the
+// preference order: prior_loop_id (universal across dev-via-spec
+// spawn rules) wins over research_reviewer_loop_id (planner-only)
+// when both are present. Defensive — planner spawn doesn't actually
+// set prior_loop_id, but the helper is shared across all 3 emit-tools
+// and keeps consistent precedence.
+func TestExecute_ChainAnchorPriorLoopIDWinsOverFallback(t *testing.T) {
+	exec, _, _, _ := newExecutor(t)
+	stub := &spyChainReader{
+		entityID: "c360.test.agent.chain.execution.dispatch_root",
+		triples:  map[string]any{},
+	}
+	exec.SetChainReader(stub)
+
+	call := defaultCall(defaultPlanArgs())
+	call.Metadata = map[string]any{
+		"prior_loop_id":             "prior-completed",
+		"research_reviewer_loop_id": "should-be-ignored",
+	}
+	if _, err := exec.Execute(context.Background(), call); err != nil {
+		t.Fatalf("Execute err: %v", err)
+	}
+	if stub.lastLoopID != "prior-completed" {
+		t.Errorf("ReadChainFor lastLoopID = %q, want 'prior-completed' (prior_loop_id is the preferred metadata key)", stub.lastLoopID)
+	}
+}
+
+// TestExecute_ChainAnchorFallsBackToCallLoopID pins the safety-net:
+// when no metadata anchor is set (test contexts, deployments without
+// the spawn convention), the helper falls back to call.LoopID — same
+// as pre-hotfix behaviour. This branch is what the unit-test cases
+// have always exercised.
+func TestExecute_ChainAnchorFallsBackToCallLoopID(t *testing.T) {
+	exec, _, _, _ := newExecutor(t)
+	stub := &spyChainReader{
+		entityID: "c360.test.agent.chain.execution.dispatch_root",
+		triples:  map[string]any{},
+	}
+	exec.SetChainReader(stub)
+
+	// No metadata set — fallback path.
+	call := defaultCall(defaultPlanArgs())
+	if _, err := exec.Execute(context.Background(), call); err != nil {
+		t.Fatalf("Execute err: %v", err)
+	}
+	if stub.lastLoopID != call.LoopID {
+		t.Errorf("ReadChainFor lastLoopID = %q, want call.LoopID %q (fallback)", stub.lastLoopID, call.LoopID)
+	}
+}
+
 // TestExecute_ChainSlugStemOverridesTitleSlug pins the smoke #8 run-5
 // D2 fix: when the chain entity carries chain.slug.stem, the rendered
 // markdown uses "<stem>-plan" instead of the title-derived slug. This

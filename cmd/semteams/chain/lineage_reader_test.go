@@ -77,3 +77,63 @@ func TestLineageReader_EntityReadError(t *testing.T) {
 		t.Errorf("triples = %v, want nil when entity read fails", triples)
 	}
 }
+
+func TestAnchorFromMetadata_PriorLoopIDPreferred(t *testing.T) {
+	got := AnchorFromMetadata(map[string]any{
+		"prior_loop_id":             "completed-parent-1",
+		"research_reviewer_loop_id": "should-be-ignored",
+	}, "running-loop-fallback")
+	if got != "completed-parent-1" {
+		t.Errorf("got %q, want completed-parent-1 (prior_loop_id wins)", got)
+	}
+}
+
+func TestAnchorFromMetadata_FallsBackToResearchReviewerKey(t *testing.T) {
+	// Planner spawn (research-mode-transition rule_03) uses the
+	// research_reviewer_loop_id key — not prior_loop_id.
+	got := AnchorFromMetadata(map[string]any{
+		"research_reviewer_loop_id": "research-reviewer-abc",
+	}, "running-loop-fallback")
+	if got != "research-reviewer-abc" {
+		t.Errorf("got %q, want research-reviewer-abc (planner-spawn metadata key)", got)
+	}
+}
+
+func TestAnchorFromMetadata_FallsBackWhenAllAbsent(t *testing.T) {
+	got := AnchorFromMetadata(map[string]any{
+		"unrelated_key": "ignored",
+	}, "running-loop-fallback")
+	if got != "running-loop-fallback" {
+		t.Errorf("got %q, want fallback (no anchor key present)", got)
+	}
+}
+
+func TestAnchorFromMetadata_FallsBackOnEmptyValue(t *testing.T) {
+	// Empty string in metadata shouldn't be treated as a valid anchor —
+	// fall through to the next key, then the fallback. Empty fallback
+	// surfaces as empty (caller decides what to do).
+	got := AnchorFromMetadata(map[string]any{
+		"prior_loop_id": "",
+	}, "running-loop-fallback")
+	if got != "running-loop-fallback" {
+		t.Errorf("got %q, want fallback (empty-string value treated as absent)", got)
+	}
+}
+
+func TestAnchorFromMetadata_FallsBackOnNonStringValue(t *testing.T) {
+	// Defensive: if metadata key was set to a non-string (rare, but the
+	// type-assert with comma-ok handles it gracefully).
+	got := AnchorFromMetadata(map[string]any{
+		"prior_loop_id": 42,
+	}, "running-loop-fallback")
+	if got != "running-loop-fallback" {
+		t.Errorf("got %q, want fallback (non-string value treated as absent)", got)
+	}
+}
+
+func TestAnchorFromMetadata_NilMetadata(t *testing.T) {
+	got := AnchorFromMetadata(nil, "running-loop-fallback")
+	if got != "running-loop-fallback" {
+		t.Errorf("got %q, want fallback (nil metadata treated as no keys present)", got)
+	}
+}

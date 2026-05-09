@@ -52,6 +52,17 @@ func NewLineageReader(resolver *Resolver, entities EntityTripleReader) *LineageR
 // (chainEntityID, triples, nil) on success; (chainEntityID, nil, err)
 // when the entity read failed AFTER the resolver succeeded; and
 // ("", nil, err) when the resolver itself failed.
+//
+// IMPORTANT: fromLoopID MUST be a loop whose `agent.loop.parent`
+// triple has been stamped by graph_writer — i.e. a COMPLETED ancestor
+// in the chain. Walking from a still-running loop's ID returns that
+// loop's own ID as the chain root (because the missing parent triple
+// is read as "no parent → I am root"), then attempts to read a
+// chain entity at that wrong ID and fails decode. Smoke #8 run-6
+// surfaced this when emit-tools called with their own (running)
+// loop IDs; the fix is to call from a known-completed ancestor —
+// see AnchorFromMetadata for the canonical lookup against
+// task-property metadata.
 func (lr *LineageReader) ReadChainFor(ctx context.Context, fromLoopID string) (string, map[string]any, error) {
 	chainEntityID, err := lr.resolver.ChainEntityID(ctx, fromLoopID)
 	if err != nil {
@@ -62,4 +73,46 @@ func (lr *LineageReader) ReadChainFor(ctx context.Context, fromLoopID string) (s
 		return chainEntityID, nil, fmt.Errorf("chain.LineageReader.ReadChainFor: read chain entity %q: %w", chainEntityID, err)
 	}
 	return chainEntityID, triples, nil
+}
+
+// AnchorMetadataKeys names the task-property metadata keys product
+// rules use to pass a completed ancestor's loop_id to the spawned
+// loop. AnchorFromMetadata tries them in declaration order.
+//
+// Source: every dev-via-spec spawn rule (rules/dev-via-spec/*.json)
+// sets `prior_loop_id` in spawn properties; research-mode-transition's
+// planner spawn (rules/research-mode-transition/03-*.json) historically
+// uses `research_reviewer_loop_id` instead. Both keys are completed
+// ancestor loop_ids. Adding a new key here means a new spawn rule's
+// metadata convention is now resolvable to a chain anchor without
+// touching any tool code.
+var AnchorMetadataKeys = []string{
+	"prior_loop_id",
+	"research_reviewer_loop_id",
+}
+
+// AnchorFromMetadata picks a chain-walkable loop_id from a tool
+// call's task-property metadata, falling back to fallbackLoopID when
+// no AnchorMetadataKeys entry is present. Designed for emit-tools
+// calling LineageReader.ReadChainFor — they MUST anchor on a
+// completed loop, never the running one.
+//
+// Returns the first non-empty string-typed value found across
+// AnchorMetadataKeys (in order); falls back to fallbackLoopID if none
+// match. fallbackLoopID is typically call.LoopID — preserves
+// pre-fix behaviour as a last-resort safety net (works when the
+// caller's own parent triple happens to be stamped, fails the same
+// way it did pre-fix when not). The "preferred path → safety net"
+// shape mirrors portresolver.SubjectOrDefault.
+//
+// Metadata is map[string]any to match agentic.ToolCall.Metadata; this
+// helper handles the type-assert and empty-string check so callers
+// stay one-line.
+func AnchorFromMetadata(metadata map[string]any, fallbackLoopID string) string {
+	for _, key := range AnchorMetadataKeys {
+		if v, ok := metadata[key].(string); ok && v != "" {
+			return v
+		}
+	}
+	return fallbackLoopID
 }
