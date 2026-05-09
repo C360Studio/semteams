@@ -198,6 +198,12 @@ func registerEmitPlan(reg *agentictools.ExecutorRegistry, natsClient *natsclient
 	}
 	triplePublisher := agentictools.NewNATSTriplePublisher(natsClient)
 	executor := emitplan.NewExecutor(triplePublisher, natsClient, platform, logger, "")
+	// Smoke #8 run-5 D1 + D2 fix: chain.LineageReader gives the executor
+	// canonical lineage IDs + slug stem from the chain entity so the
+	// planner persona stops guessing upstream loop IDs and the chain's
+	// slug stays consistent. Optional opt-in: if the chain wiring fails
+	// to construct (rare), the executor falls back to LLM-supplied values.
+	executor.SetChainReader(buildChainLineageReader(natsClient, platform))
 	if err := reg.RegisterTool(emitplan.ToolName, executor); err != nil {
 		return fmt.Errorf("register %s: %w", emitplan.ToolName, err)
 	}
@@ -206,6 +212,20 @@ func registerEmitPlan(reg *agentictools.ExecutorRegistry, natsClient *natsclient
 		slog.String("org", platform.Org),
 		slog.String("platform", platform.Platform))
 	return nil
+}
+
+// buildChainLineageReader composes the chain Resolver +
+// NATSEntityReader into a single ChainReader-satisfying adapter the
+// emit-tools take via SetChainReader. Centralised here so all three
+// emit-tools share identical wiring (subject, platform, ancestry walk
+// budget). Subject is the upstream graph-query literal — see
+// chain.DefaultGraphQueryEntitySubject doc-comment for why this is a
+// constant rather than a config-resolved port at the request side.
+func buildChainLineageReader(natsClient *natsclient.Client, platform types.PlatformMeta) *chain.LineageReader {
+	parentReader := chain.NewNATSParentReader(natsClient, platform, chain.DefaultGraphQueryEntitySubject)
+	resolver := chain.NewResolver(parentReader, platform)
+	entityReader := chain.NewNATSEntityReader(natsClient, chain.DefaultGraphQueryEntitySubject)
+	return chain.NewLineageReader(resolver, entityReader)
 }
 
 // registerEmitConsensus wires the ADR-038 PR C Phase C3 emit_consensus
@@ -230,6 +250,11 @@ func registerEmitConsensus(reg *agentictools.ExecutorRegistry, natsClient *natsc
 	}
 	triplePublisher := agentictools.NewNATSTriplePublisher(natsClient)
 	executor := emitconsensus.NewExecutor(triplePublisher, natsClient, platform, logger, "")
+	// Smoke #8 run-5 D1 + D2 fix: chain.LineageReader gives the
+	// challenger canonical plan_loop, plan_reviewer_loop, and slug
+	// stem so depends_on and the rendered slug stop drifting from
+	// the planner's pass. See registerEmitPlan for the same wiring.
+	executor.SetChainReader(buildChainLineageReader(natsClient, platform))
 	if err := reg.RegisterTool(emitconsensus.ToolName, executor); err != nil {
 		return fmt.Errorf("register %s: %w", emitconsensus.ToolName, err)
 	}
@@ -281,6 +306,13 @@ func registerEmitSpecArtifact(reg *agentictools.ExecutorRegistry, natsClient *na
 	parentReader := chain.NewNATSParentReader(natsClient, platform, chain.DefaultGraphQueryEntitySubject)
 	chainResolver := chain.NewResolver(parentReader, platform)
 	executor.SetChainResolver(chainResolver)
+	// Smoke #8 run-5 D1 + D2 fix: SetChainReader gives the architect
+	// canonical lineage IDs (research_artifact_loop, plan_loop,
+	// plan_reviewer_loop, consensus_loop) + slug stem so provenance
+	// and the rendered slug stop drifting. ChainResolver above (used
+	// for chain.spec_artifact.* triple writes) is independent — same
+	// underlying NATS plumbing, different read shape.
+	executor.SetChainReader(buildChainLineageReader(natsClient, platform))
 
 	if err := reg.RegisterTool(emitspecartifact.ToolName, executor); err != nil {
 		return fmt.Errorf("register %s: %w", emitspecartifact.ToolName, err)
