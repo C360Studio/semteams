@@ -141,25 +141,56 @@ func TestArtifact_Validate(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "happy path — minimal",
+			// Smoke #8 run-9: Validate now requires either TestHarness OR
+			// a needs_test_harness gap entry. Minimal happy path uses the
+			// gap-flag escape hatch since the artifact has no integration
+			// points worth picking a harness for.
+			name: "happy path — minimal (test_harness gap flagged)",
 			a: Artifact{
 				LoopID:     "loop_abc",
 				Revision:   1,
 				ProducedAt: now,
+				OpenGaps:   []string{"needs_test_harness: not applicable — no external integration in this work"},
+			},
+			wantErr: false,
+		},
+		{
+			name: "happy path — with test_harness selected",
+			a: Artifact{
+				LoopID:      "loop_abc",
+				Revision:    1,
+				ProducedAt:  now,
+				TestHarness: "meshtasticd-3.x",
 			},
 			wantErr: false,
 		},
 		{
 			name: "happy path — with mutation",
 			a: Artifact{
-				LoopID:     "loop_abc",
-				Revision:   2,
-				ProducedAt: now,
+				LoopID:      "loop_abc",
+				Revision:    2,
+				ProducedAt:  now,
+				TestHarness: "meshtasticd-3.x",
 				SubstrateMutations: []Mutation{
 					{Tool: "add_source_repo", LoopID: "loop_abc_retry", Revision: 2, Status: MutationStatusExecuted, Timestamp: now},
 				},
 			},
 			wantErr: false,
+		},
+		{
+			// Smoke #8 run-9 negative case: researcher emits artifact
+			// with neither test_harness nor a needs_test_harness gap.
+			// Validate now rejects at the structural layer so the
+			// architect doesn't have to discover the gap mid-chain
+			// and wedge with needs_clarification (no recovery rule).
+			name: "missing test_harness AND no needs_test_harness gap is rejected",
+			a: Artifact{
+				LoopID:     "loop_abc",
+				Revision:   1,
+				ProducedAt: now,
+				// neither TestHarness nor OpenGaps has the marker
+			},
+			wantErr: true,
 		},
 		{
 			name:    "missing loop_id",
@@ -227,14 +258,67 @@ func TestArtifact_Validate(t *testing.T) {
 		{
 			name: "integration point with empty direction is allowed in-flight",
 			a: Artifact{
-				LoopID:     "loop_abc",
-				Revision:   1,
-				ProducedAt: now,
+				LoopID:      "loop_abc",
+				Revision:    1,
+				ProducedAt:  now,
+				TestHarness: "meshtasticd-3.x",
 				IntegrationPoints: []IntegrationPoint{
 					{From: "a", To: "b", Direction: ""},
 				},
 			},
 			wantErr: false,
+		},
+		{
+			// hasNeedsTestHarnessGap matches the marker even with
+			// leading whitespace; persona-emitted lists may indent.
+			name: "needs_test_harness with leading whitespace is recognised",
+			a: Artifact{
+				LoopID:     "loop_abc",
+				Revision:   1,
+				ProducedAt: now,
+				OpenGaps:   []string{"  needs_test_harness: catalog miss for OGC SensorThings"},
+			},
+			wantErr: false,
+		},
+		{
+			// Marker is case-sensitive; "Needs_Test_Harness" doesn't match
+			// (LLMs canonicalise their structured outputs to the persona's
+			// example, which uses lowercase).
+			name: "case-insensitive needs_test_harness is NOT recognised",
+			a: Artifact{
+				LoopID:     "loop_abc",
+				Revision:   1,
+				ProducedAt: now,
+				OpenGaps:   []string{"NEEDS_TEST_HARNESS: should be lowercase per contract"},
+			},
+			wantErr: true,
+		},
+		{
+			// Marker matched as substring of a non-marker line is NOT recognised —
+			// HasPrefix discrimination, not Contains. A future "let's be more
+			// lenient with substring match" refactor would fail this test loud.
+			name: "needs_test_harness as substring (not prefix) is NOT recognised",
+			a: Artifact{
+				LoopID:     "loop_abc",
+				Revision:   1,
+				ProducedAt: now,
+				OpenGaps:   []string{"reviewer note: needs_test_harness: addressed in next pass"},
+			},
+			wantErr: true,
+		},
+		{
+			// Trailing whitespace before the colon ("needs_test_harness :") is
+			// NOT the canonical marker — HasPrefix matches the literal string
+			// `needs_test_harness:` (no space). Future grep tooling depends on
+			// this exact shape.
+			name: "needs_test_harness with space before colon is NOT recognised",
+			a: Artifact{
+				LoopID:     "loop_abc",
+				Revision:   1,
+				ProducedAt: now,
+				OpenGaps:   []string{"needs_test_harness : space before colon"},
+			},
+			wantErr: true,
 		},
 	}
 

@@ -206,6 +206,7 @@ responses:
       arguments_json: |
         {
           "revision": 1,
+          "test_harness": "meshtasticd-3.x",
           "title": "OSH Meshtastic driver research",
           "actors": [],
           "integration_points": [],
@@ -287,6 +288,7 @@ responses:
       arguments_json: |
         {
           "revision": 2,
+          "test_harness": "meshtasticd-3.x",
           "title": "OSH Meshtastic driver research",
           "actors": [
             {"name": "OSH driver framework", "role": "Hosts the IDriver interface drivers must implement to expose sensor observations"},
@@ -393,6 +395,7 @@ responses:
       arguments_json: |
         {
           "revision": 3,
+          "test_harness": "meshtasticd-3.x",
           "title": "OSH Meshtastic driver research",
           "actors": [
             {"name": "OSH driver framework", "role": "Hosts the IDriver interface drivers must implement to expose sensor observations"},

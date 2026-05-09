@@ -13,7 +13,10 @@ func TestRenderResearcherFragment_Empty(t *testing.T) {
 		"No test harnesses are currently registered for this deployment",
 		"`configs/harnesses.json`) is empty",
 		"needs_test_harness:",
-		"DO NOT add a `needs_test_harness:` gap",
+		// Smoke #8 run-9: empty-catalog branch now points pure work
+		// at the "not applicable" escape hatch (was: "DO NOT add a
+		// needs_test_harness: gap" — the now-rejected shape).
+		"needs_test_harness: not applicable",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("rendered fragment missing %q\n--- got ---\n%s", want, out)

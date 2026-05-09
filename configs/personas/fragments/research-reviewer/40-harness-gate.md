@@ -1,32 +1,45 @@
 # Test harness selection gate
 
-In addition to the checklist items, every artifact whose
-integration_points include external actors must declare its
-verification stance. Two acceptable shapes:
+Every artifact must declare its verification stance — `emit_research_artifact`
+now rejects artifacts that don't (smoke #8 run-9 fix). The tool layer
+catches the missing-stance case before it reaches you, so by the time
+an artifact is in your hands it has SOME shape under one of these
+three paths. Your job is judging the *quality* of the path the
+researcher chose.
 
 1. **Catalog hit:** `test_harness` is set to a name that appears
    in the deployment's test harness catalog. Rendered list is the
    "**Available test harnesses**" fragment in the researcher's
    prompt — verify the chosen name actually appears there. A
    reference to a test harness that doesn't exist in this
-   deployment is the same gap as no test harness at all.
+   deployment is a reviewer finding (`test_harness="<name>" does
+   not match any registered test harness`).
 
-2. **Honest gap:** `test_harness` is unset AND `open_gaps`
-   contains a single line of the form
+2. **Honest integration gap:** `test_harness` is unset AND
+   `open_gaps` contains a line of the form
    `needs_test_harness: <description>`. The description must be
    concrete (names a protocol, a system, or a message shape). A
    vague gap ("needs_test_harness: some kind of integration test")
    is an insufficient gap — list it as a reviewer finding.
 
-## When this gate does NOT apply
+3. **Pure-work escape hatch:** `test_harness` is unset AND
+   `open_gaps` contains `needs_test_harness: not applicable — <reason>`.
+   Use case: the work is genuinely unit-testable logic with no
+   external system to talk to (rare in SemTeams flows; common
+   for pure-algorithm research). The reason after the dash MUST
+   be substantive ("in-process protobuf parser, no external
+   integration"; "pure rule-engine logic, no I/O"). A blank reason
+   ("needs_test_harness: not applicable" with nothing after)
+   passes Validate but is a reviewer finding — flag as
+   insufficient and ask for the reason.
 
-If every integration_point uses ONLY internal actors (process-
-local, no external system on the wire), the work is pure-unit-
-testable and neither `test_harness` nor `needs_test_harness:` is
-required. Pure work is rare in research artifacts that survive
-the actor + integration-point checklist; if you find yourself
-approving on this exception more than occasionally, raise it as
-an open question.
+## When path 3 is suspicious
+
+The "not applicable" escape is honest about pure-work cases but
+becomes a get-out-of-jail card if overused. If the artifact's
+integration_points list external actors AND the researcher took
+path 3, the paths contradict and you should reject — the work
+talks to something outside the JVM, so "not applicable" is wrong.
 
 ## How to phrase the rejection
 
