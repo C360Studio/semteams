@@ -211,15 +211,19 @@ func (c *Check) Schema() message.Type {
 	return message.Type{Domain: Domain, Category: CategoryCheck, Version: SchemaVersion}
 }
 
-// Validate enforces structural well-formedness only — closed-enum
-// membership, required-field presence per Runtime, Ref shape.
-// Catalog-bound checks (does TestHarness exist? does TestRuntime
-// support this family?) are the schema gate's job (R3.7.2.e), not
-// Validate's, because Validate runs without access to the catalog.
+// Validate enforces structural well-formedness AND lifecycle-position
+// markers (evidence-rule presence per smoke #8 run-8) — closed-enum
+// membership, required-field presence per Runtime, Ref shape, ≥1
+// evidence rule per check. Catalog-bound checks (does TestHarness
+// exist? does TestRuntime support this family?) are the schema
+// gate's job (R3.7.2.e), not Validate's, because Validate runs
+// without access to the catalog.
 //
 // The split mirrors research.Artifact.Validate / dev_via_spec
-// .Artifact.Validate: structural always; semantic at the
-// reviewer/gate boundary.
+// .Artifact.Validate: structural well-formedness + small set of
+// lifecycle-position markers (test_harness either/or, evidence
+// rules); semantic content checks (gap-text concreteness, target
+// adequacy) at the reviewer/gate boundary.
 func (c *Check) Validate() error {
 	if c.Target == "" {
 		return fmt.Errorf("target required")

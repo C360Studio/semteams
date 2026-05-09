@@ -22,6 +22,7 @@ package research
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/c360studio/semstreams/message"
@@ -106,14 +107,19 @@ type Artifact struct {
 	// TestHarness names a `configs/harnesses.json` entry the
 	// researcher has selected as the verification target for the
 	// work this artifact describes. Empty when the researcher could
-	// not find a matching catalog entry; the researcher then flags
-	// the gap with a `needs_test_harness: <description>` line in
-	// OpenGaps. The reviewer (research-reviewer persona) gates on
-	// either TestHarness != "" or the needs_test_harness gap being
-	// explicitly stated — this struct does NOT enforce that semantic
-	// invariant; reviewer-as-enumerator does (consistent with other
-	// artifact fields whose presence rules are persona-side, not
-	// Validate-side).
+	// not find a matching catalog entry; the researcher then MUST
+	// flag the gap with a `needs_test_harness: <description>` line
+	// in OpenGaps so downstream tooling (architect, qa-reviewer)
+	// can route the gap explicitly instead of discovering it
+	// mid-chain.
+	//
+	// Validate enforces the either/or structurally: TestHarness
+	// non-empty OR OpenGaps contains a line starting with
+	// `needs_test_harness:`. Smoke #8 run-9 evidence: persona-prose
+	// enforcement was unreliable (researcher dropped the choice
+	// 1-in-4 runs, architect downstream wedged at needs_clarification
+	// because it observed the gap with no recovery path). Tool-layer
+	// validation makes the either/or deterministic.
 	TestHarness string `json:"test_harness,omitempty"`
 
 	// Title is an optional one-line summary of the research target.
@@ -140,11 +146,15 @@ func (a *Artifact) Schema() message.Type {
 }
 
 // Validate implements message.Payload. Validates structural
-// well-formedness only; reviewer-as-enumerator semantic checks
-// (required actors named, integration-point directions present,
-// task granularity) live in the reviewer persona, not here. An
-// in-flight artifact may legitimately have empty actors or empty
-// directions while the run is still iterating.
+// well-formedness AND lifecycle-position markers (the test_harness
+// either/or per smoke #8 run-9). Semantic content checks (actor
+// name correctness, gap-text concreteness, task granularity)
+// remain reviewer-side per the reviewer-as-enumerator pattern;
+// an in-flight artifact may legitimately have empty actors or
+// empty directions while the run is still iterating, but it must
+// take a position on test_harness because downstream tooling
+// (architect) cannot route a missing-stance artifact and the
+// chain has no recovery rule for that wedge.
 func (a *Artifact) Validate() error {
 	if a.LoopID == "" {
 		return fmt.Errorf("loop_id required")
@@ -182,7 +192,30 @@ func (a *Artifact) Validate() error {
 			return fmt.Errorf("integration_points[%d].direction must be one of read/write (got %q)", i, ip.Direction)
 		}
 	}
+	// Test-harness either/or — enforced structurally per smoke #8 run-9
+	// (architect wedged at needs_clarification because researcher
+	// produced an artifact lacking both test_harness AND a
+	// needs_test_harness gap entry; persona-prose enforcement of the
+	// rule was 1-in-4 unreliable). Either TestHarness names a catalog
+	// entry, OR OpenGaps explicitly flags the gap so downstream
+	// tooling can route it.
+	if a.TestHarness == "" && !hasNeedsTestHarnessGap(a.OpenGaps) {
+		return fmt.Errorf("either test_harness must name a configs/harnesses.json entry, OR open_gaps must include a line starting with `needs_test_harness:` (use `needs_test_harness: not applicable — <reason>` if the work has no external integration target)")
+	}
 	return nil
+}
+
+// hasNeedsTestHarnessGap reports whether any OpenGaps entry starts
+// with the structural marker `needs_test_harness:`. Case-sensitive
+// per the marker's documented contract; whitespace tolerated at the
+// line start.
+func hasNeedsTestHarnessGap(openGaps []string) bool {
+	for _, gap := range openGaps {
+		if strings.HasPrefix(strings.TrimLeft(gap, " \t"), "needs_test_harness:") {
+			return true
+		}
+	}
+	return false
 }
 
 // MarshalJSON implements json.Marshaler.

@@ -34,7 +34,7 @@ func RenderResearcherFragment(catalog []*TestHarness) string {
 		b.WriteString("- `needs_test_harness: real Meshtastic radio over LoRa for protobuf POSITION_APP packets`\n")
 		b.WriteString("- `needs_test_harness: a Kafka cluster with the upstream's exact topic schema`\n")
 		b.WriteString("- `needs_test_harness: an OPC-UA server exposing the vendor's address space`\n\n")
-		b.WriteString("If the work does NOT need external integration verification (pure unit-testable logic, in-process algorithms), omit the `test_harness` field and DO NOT add a `needs_test_harness:` gap — that path is reserved for genuine integration gaps.\n")
+		b.WriteString("If the work does NOT need external integration verification (pure unit-testable logic, in-process algorithms), use the explicit escape hatch — leave `test_harness` unset and add a `needs_test_harness: not applicable — <one-line reason>` line to `open_gaps`. The artifact's tool layer requires either `test_harness` OR a `needs_test_harness:`-prefixed line; the \"not applicable\" pattern is honest about why the gap is empty and keeps the structural marker present so downstream tooling can distinguish \"researcher chose to skip\" from \"researcher forgot.\"\n")
 		return b.String()
 	}
 

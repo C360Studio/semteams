@@ -118,6 +118,11 @@ func defaultArtifactArgs() map[string]any {
 		},
 		"addressed_gaps": []any{},
 		"open_gaps":      []any{},
+		// Smoke #8 run-9: research.Artifact.Validate now requires
+		// either test_harness OR a needs_test_harness gap. Default
+		// fixture picks a harness so happy paths exercise that
+		// branch; tests that want the gap-flagged path override.
+		"test_harness": "meshtasticd-3.x",
 	}
 }
 
@@ -536,6 +541,9 @@ func TestExecute_TestHarnessUnset_OmitsTestHarnessTriple(t *testing.T) {
 	exec, tp, pub, _ := newExecutor(t)
 	args := defaultArtifactArgs()
 	// Explicit catalog-miss path — researcher flags the gap in open_gaps.
+	// Override default fixture's test_harness with empty + add the marker
+	// to satisfy Validate's either/or requirement (smoke #8 run-9).
+	delete(args, "test_harness")
 	args["open_gaps"] = []any{"needs_test_harness: real Meshtastic radio over LoRa"}
 
 	res, err := exec.Execute(context.Background(), defaultCall(args))
