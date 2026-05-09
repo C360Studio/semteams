@@ -228,6 +228,20 @@ func buildChainLineageReader(natsClient *natsclient.Client, platform types.Platf
 	return chain.NewLineageReader(resolver, entityReader)
 }
 
+// Compile-time guards that chain.LineageReader satisfies the
+// (structurally-identical) ChainReader interfaces declared by the
+// three emit-tool packages. If any one of those interfaces ever
+// widens (a new method added) and chain.LineageReader is not extended
+// to match, this fails to build — surfacing the drift here rather
+// than at SetChainReader call time. The interfaces stay duplicated
+// per package (each package owns its narrow contract); these vars
+// keep the implementer in lock-step with all three.
+var (
+	_ emitplan.ChainReader         = (*chain.LineageReader)(nil)
+	_ emitconsensus.ChainReader    = (*chain.LineageReader)(nil)
+	_ emitspecartifact.ChainReader = (*chain.LineageReader)(nil)
+)
+
 // registerEmitConsensus wires the ADR-038 PR C Phase C3 emit_consensus
 // executor. Always registered when natsClient is non-nil — same
 // "always on" policy as registerEmitPlan / registerEmitArtifact.

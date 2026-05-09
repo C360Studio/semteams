@@ -298,13 +298,12 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 
 // readChainTriples resolves the chain entity for the calling planner
 // loop and returns its predicate map. Fail-soft: any error (resolver
-// failure, graph timeout, decode mismatch) yields an empty map plus a
-// Warn log; the caller treats absence as "no chain override available"
-// and falls through to LLM-supplied values.
+// failure, graph timeout, decode mismatch) yields nil plus a Warn
+// log; the caller's map-index reads on nil return the zero value, so
+// the override branches naturally fall through to LLM-supplied values.
 //
 // chainReader=nil (test contexts, deployments without chain wiring)
-// returns an empty map without logging — that's the documented
-// backward-compatible mode.
+// returns nil without logging — the documented backward-compatible mode.
 func (e *Executor) readChainTriples(ctx context.Context, loopID string) map[string]any {
 	if e.chainReader == nil {
 		return nil

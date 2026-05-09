@@ -24,7 +24,12 @@ import (
 // outputDir ("docs/consensus"); absolute when operators set
 // SEMTEAMS_CONSENSUS_DIR to an absolute path.
 const (
-	chainPredicateConsensusLoop = "chain.consensus_loop"
+	// Read-side wire format lives in predicates.go (Predicate*) so the
+	// stamper and downstream consumers reference the same constant — a
+	// rename becomes a compiler error at every site. chainPredicateConsensusPath
+	// stays as a string literal until the path-predicate set is exported
+	// in the focused vocab-completion follow-up PR.
+	chainPredicateConsensusLoop = PredicateConsensusLoop
 	chainPredicateConsensusPath = "chain.consensus.path"
 
 	chainConsensusSource = "chain.consensus"
