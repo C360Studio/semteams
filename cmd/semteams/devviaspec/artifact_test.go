@@ -318,6 +318,11 @@ func TestArtifact_Checks_RoundTrip(t *testing.T) {
 				Type: verification.RefFilepath,
 				Path: "cmd/semteams/tools/x/executor_test.go",
 			},
+			// Evidence required per smoke #8 run-8 fix — fixture would
+			// fail Validate() without it.
+			Evidence: []verification.EvidenceRule{
+				{Kind: "test_file_exists", Args: map[string]any{"path": "cmd/semteams/tools/x/executor_test.go"}},
+			},
 		},
 	}
 	data, err := json.Marshal(orig)
@@ -375,12 +380,20 @@ func TestArtifact_Validate_CascadesIntoChecks(t *testing.T) {
 		validCheck(),
 		{
 			// Invalid: testcontainer runtime without a test_harness.
+			// Evidence is populated so the test isolates the
+			// test_harness violation; without it, the test would
+			// fire on whichever Validate check happens to come first
+			// (which would survive a Validate-ordering change but
+			// silently shift the test's contract).
 			Target:      "x",
 			Runtime:     verification.RuntimeProcessLocalTestcontainer,
 			TestRuntime: "go-testing-net",
 			Ref: verification.Ref{
 				Type: verification.RefFilepath,
 				Path: "x_test.go",
+			},
+			Evidence: []verification.EvidenceRule{
+				{Kind: "test_file_exists", Args: map[string]any{"path": "x_test.go"}},
 			},
 		},
 	}

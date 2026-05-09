@@ -335,9 +335,9 @@ func (e *Executor) ListTools() []agentic.ToolDefinition {
 			"test_harness": map[string]any{"type": "string", "description": "Name of a catalog entry from configs/harnesses.json. Required for testcontainer/sidecar/browser-flow runtimes; must be omitted otherwise."},
 			"test_runtime": map[string]any{"type": "string", "description": "Test runtime name (e.g. \"java-junit-testcontainers\", \"go-testing-net\", \"playwright-typescript\"). Required when test_harness is named."},
 			"ref":          refSchema,
-			"evidence":     map[string]any{"type": "array", "items": evidenceRuleSchema, "description": "Structurally-checkable assertions the evidence gate runs post-build. Empty is permitted; the reviewer may flag checks without evidence as under-specified."},
+			"evidence":     map[string]any{"type": "array", "items": evidenceRuleSchema, "minItems": 1, "description": "Structurally-checkable assertions the evidence gate runs post-build. REQUIRED — at least one rule per check, because the dvs-qa-reviewer (R3.7.2.j′) cannot render a verdict without rules to evaluate. Registered kinds: test_file_exists, test_uses_build_tag, surefire_passing_count."},
 		},
-		"required": []string{"target", "runtime", "ref"},
+		"required": []string{"target", "runtime", "ref", "evidence"},
 	}
 
 	return []agentic.ToolDefinition{{
@@ -961,6 +961,12 @@ func buildTriples(loopEntityID string, a *devviaspec.Artifact, relPath string, n
 // produces the same slug on the same day (unlikely in practice), the second
 // arc overwrites the first. Operators who need to preserve all versions should
 // use git history or the payload audit trail on dev_via_spec.artifact.{loop_id}.
+//
+// Note: the {{else}} branch on `+ "`"+`{{if $c.Evidence}}`+"`"+` (rendering
+// "_none — reviewer may flag as under-specified_") is unreachable in v1
+// because verification.Check.Validate rejects checks with empty Evidence
+// (smoke #8 run-8 fix). Kept in case a future relaxation re-engages it
+// (e.g. operator-bypass mode for greenfield bring-up).
 const artifactTemplateText = `# {{.Title}}
 
 > **Generated**: {{.GeneratedAt}}

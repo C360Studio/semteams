@@ -179,6 +179,73 @@ same shape as `20-commitment-transcription.md`'s guidance for
 missing outcomes — the contract just makes explicit that
 test_harness-coverage gaps fall under the same terminal.
 
+## Evidence rules — what the qa-reviewer needs
+
+This requirement applies **per check**, not per artifact. The
+artifact-level `checks[]` slice can still be empty during the v1
+transition (no external integration_points means no checks are
+required at all); but if you emit a check, that check must carry
+evidence rules.
+
+Every check you emit MUST carry at least one `evidence` rule. This
+is a structural requirement (`emit_dev_via_spec_artifact` rejects
+checks with empty `evidence` at the tool layer with
+`ToolErrorInvalidArgs`), and it exists because the post-build
+qa-reviewer (R3.7.2.j′) cannot verify the builder's `tests_passing`
+claim mechanically without rules to evaluate. A check with a
+target description but no rules describes a verification surface
+the gate cannot reach — the qa-reviewer will rightly terminate
+with `needs_clarification` and the chain wedges. (Smoke #8 run-8
+surfaced this gap: builder reported 22/22, architect emitted three
+rule-less checks, qa-reviewer correctly declined to verify.)
+
+Three evidence kinds ship with the registry today
+(cmd/semteams/evidence/kinds_*.go):
+
+- **`test_file_exists`** — assert a test source file exists.
+  Args: `{"path": "<workspace-relative path>"}`.
+  Cheapest, broadest. Use for any check whose `ref.type=filepath`
+  to assert the test file the architect cited still exists after
+  the builder runs.
+
+- **`test_uses_build_tag`** — assert a Go test file gates on a
+  named build tag. Args: `{"path": "<test_file.go>", "tag": "<tag>"}`.
+  Use for Go integration tests that should only run under
+  `-tags integration` (or similar) so unit `go test ./...` stays
+  fast.
+
+- **`surefire_passing_count`** — assert a Maven Surefire suite
+  passes ≥N tests. Args: `{"min": <N>}` or
+  `{"min": <N>, "class_suffix": "<class-name suffix>"}`.
+  `min` required (positive int); `class_suffix` optional (filters
+  TEST-*.xml suites whose `<testsuite name>` ends with the suffix —
+  match the SUFFIX, not the FQN). Use for Java testcontainer /
+  sidecar checks where you want the gate to corroborate a
+  tests_passed count.
+
+Match the evidence kind to the runtime, not by formula but by
+what would convince the qa-reviewer the check was satisfied:
+
+- `in-process-unit` → `test_file_exists` (the file is the
+  contract; if it exists and `go test` passed, the check held)
+- `process-local-testcontainer` (Java) →
+  `surefire_passing_count` with a `min` matching the planner's
+  outcome count, plus `test_file_exists` if you want the gate to
+  catch a renamed/deleted suite
+- `process-local-testcontainer` (Go) → `test_uses_build_tag`
+  asserting the integration tag, plus `test_file_exists`
+- `external-sidecar` / `browser-flow` → same shape as the
+  testcontainer cases; the gate runs the same registry kinds
+- `static-analysis` → `test_file_exists` against the linter rule
+  file, when one exists
+
+If the registry doesn't yet have a kind for what you need to
+assert (smoke evidence; HTTP probe; specific log-line presence),
+that is a registry-extension request, not a reason to ship an
+empty `evidence` slice. Use the closest existing kind, terminate
+with `decide(needs_clarification)` if no kind is even close, and
+flag the gap so the operator can extend the registry.
+
 ## Self-check before calling the tool
 
 Coverage is **per-outcome, not per-artifact** — the chain's
@@ -195,6 +262,10 @@ transitivity is load-bearing. Walk every external boundary in
    artifact's `test_harness` is empty: `decide(needs_clarification)`.)
 4. Is `ref.type` set correctly for the project (filepath if
    existing tests fit; template_id if greenfield/no fit)?
+5. Does every check carry at least one `evidence` rule whose
+   `kind` is registered? (If no registered kind fits the outcome:
+   `decide(needs_clarification)` — better to surface the gap than
+   ship a gate-untestable spec.)
 
 An artifact with 3 external boundaries and 1 check satisfies the
 wire-level shape but fails per-outcome coverage. The reviewer in

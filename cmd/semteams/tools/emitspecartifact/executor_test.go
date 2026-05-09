@@ -182,6 +182,34 @@ func TestListTools_SchemaShape(t *testing.T) {
 			t.Errorf("required field missing: %q (have %v)", k, required)
 		}
 	}
+
+	// Per-check schema: evidence MUST be in the check's `required`
+	// list. Smoke #8 run-8 fix — the check-level schema and
+	// Validate must agree, otherwise the LLM sees the schema
+	// say "optional" and the tool reject "required" (contradictory
+	// signals trigger Goodhart-y retry loops).
+	checksProp, ok := props["checks"].(map[string]any)
+	if !ok {
+		t.Fatalf("schema missing checks property")
+	}
+	checkItem, ok := checksProp["items"].(map[string]any)
+	if !ok {
+		t.Fatalf("checks.items missing or wrong type")
+	}
+	checkRequired, _ := checkItem["required"].([]string)
+	checkRequiredSet := map[string]bool{}
+	for _, r := range checkRequired {
+		checkRequiredSet[r] = true
+	}
+	if !checkRequiredSet["evidence"] {
+		t.Errorf("check.evidence must be in per-check `required` (have %v)", checkRequired)
+	}
+	// Same per-check assertion for the rest of the always-required fields.
+	for _, want := range []string{"target", "runtime", "ref"} {
+		if !checkRequiredSet[want] {
+			t.Errorf("check.%s must be in per-check `required` (have %v)", want, checkRequired)
+		}
+	}
 }
 
 // ---------------------------------------------------------------------
@@ -892,6 +920,9 @@ func argsWithChecks() map[string]any {
 				"type": "filepath",
 				"path": "cmd/semteams/tools/x/executor_test.go",
 			},
+			"evidence": []any{
+				map[string]any{"kind": "test_file_exists", "args": map[string]any{"path": "cmd/semteams/tools/x/executor_test.go"}},
+			},
 		},
 	}
 	return args
@@ -1001,6 +1032,9 @@ func TestRenderMarkdown_ResolvedTestHarnessFieldsRendered(t *testing.T) {
 				"type": "filepath",
 				"path": "src/test/java/com/example/FooIT.java",
 			},
+			"evidence": []any{
+				map[string]any{"kind": "test_file_exists", "args": map[string]any{"path": "src/test/java/com/example/FooIT.java"}},
+			},
 		},
 	}
 
@@ -1072,6 +1106,9 @@ func TestRenderMarkdown_NilResolver_NameOnly(t *testing.T) {
 			"ref": map[string]any{
 				"type": "filepath",
 				"path": "x_test.go",
+			},
+			"evidence": []any{
+				map[string]any{"kind": "test_file_exists", "args": map[string]any{"path": "x_test.go"}},
 			},
 		},
 	}
@@ -1177,7 +1214,10 @@ func TestExecute_WithChecks_MarkdownContainsSection(t *testing.T) {
 		"`test_uses_build_tag`",
 		"C2 — executor returns ToolErrorInvalidArgs",
 		"`in-process-unit`",
-		"_none — reviewer may flag as under-specified_",
+		// Per smoke #8 run-8, every check now carries ≥1 evidence
+		// rule (Validate enforces). C2's evidence kind appears in
+		// the rendered markdown for the same reason C1's does.
+		"`test_file_exists`",
 	} {
 		if !strings.Contains(rendered, want) {
 			t.Errorf("markdown missing %q\n--- got ---\n%s", want, rendered)
@@ -1423,6 +1463,9 @@ func TestSidecar_InProcessUnitCheck_NoHarnessEntry(t *testing.T) {
 			"target":  "unit logic correctness",
 			"runtime": "in-process-unit",
 			"ref":     map[string]any{"type": "filepath", "path": "pkg/foo_test.go"},
+			"evidence": []any{
+				map[string]any{"kind": "test_file_exists", "args": map[string]any{"path": "pkg/foo_test.go"}},
+			},
 		},
 	}
 	res, err := exec.Execute(context.Background(), defaultCall(args))
@@ -1561,6 +1604,13 @@ func testcontainerCheck(harnessName, target string) map[string]any {
 		"test_harness": harnessName,
 		"test_runtime": "go-testing-net",
 		"ref":          map[string]any{"type": "filepath", "path": "x_test.go"},
+		// Evidence is required per the smoke #8 run-8 fix —
+		// verification.Check.Validate rejects checks with no rules
+		// because qa-reviewer (R3.7.2.j′) cannot render a verdict
+		// without one.
+		"evidence": []any{
+			map[string]any{"kind": "test_uses_build_tag", "args": map[string]any{"tag": "integration"}},
+		},
 	}
 }
 
