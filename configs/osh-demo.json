@@ -209,12 +209,12 @@
       "name": "agentic-loop",
       "enabled": true,
       "config": {
-        "max_iterations": 30,
+        "max_iterations": 100,
         "timeout": "1200s",
         "stream_name": "AGENT",
         "loops_bucket": "AGENT_LOOPS",
         "consumer": {
-          "ack_wait": "1200s",
+          "ack_wait": "1230s",
           "heartbeat_interval": "30s",
           "max_deliver": 2
         },
@@ -247,7 +247,11 @@
       "enabled": true,
       "config": {
         "stream_name": "AGENT",
-        "timeout": "120s",
+        "timeout": "310s",
+        "consumer": {
+          "ack_wait": "330s",
+          "heartbeat_interval": "30s"
+        },
         "retry": {
           "max_attempts": 3,
           "backoff": "exponential"
