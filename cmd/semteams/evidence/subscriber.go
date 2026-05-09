@@ -10,15 +10,17 @@ import (
 	"github.com/nats-io/nats.go"
 )
 
-// loopCompletedSubject is the NATS wildcard that matches every
-// agent.complete.* message the agentic-loop processor publishes on
-// loop completion. The subject shape comes from the loop processor's
-// default output port config ("agent.complete.*"), confirmed in
-// processor/agentic-loop/config.go at v1.0.0-beta.45.
-const loopCompletedSubject = "agent.complete.>"
+// DefaultLoopCompletedSubject is the upstream agentic-loop processor's
+// output port for loop-complete events as of v1.0.0-beta.57. Used as
+// the fallback when cmd/semteams/main.go cannot resolve the subject
+// from the running agentic-loop component's port config — see
+// portresolver.SubjectOrDefault wiring. Mirrors
+// chain.DefaultLoopCompletedSubject (the chain milestone subscriber
+// uses the same upstream port).
+const DefaultLoopCompletedSubject = "agent.complete.>"
 
 // NATSSubscriber wraps a Preprocessor and drives it from a NATS
-// subscription on loopCompletedSubject. Lifecycle is tied to the
+// subscription on the configured subject. Lifecycle is tied to the
 // context passed to Start; cancellation drains and closes the
 // subscription.
 //
@@ -29,17 +31,24 @@ const loopCompletedSubject = "agent.complete.>"
 // duplicate triple writes.
 type NATSSubscriber struct {
 	preprocessor *Preprocessor
+	subject      string
 	logger       *slog.Logger
 }
 
 // NewNATSSubscriber constructs a subscriber that drives p from NATS.
-// The subscriber does not own p's lifecycle; callers retain the
-// Preprocessor reference.
-func NewNATSSubscriber(p *Preprocessor, logger *slog.Logger) *NATSSubscriber {
+// subject is the NATS wildcard the subscription binds to; empty falls
+// back to DefaultLoopCompletedSubject. main.go resolves the live
+// subject from agentic-loop's port config via
+// portresolver.SubjectOrDefault. The subscriber does not own p's
+// lifecycle; callers retain the Preprocessor reference.
+func NewNATSSubscriber(p *Preprocessor, subject string, logger *slog.Logger) *NATSSubscriber {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &NATSSubscriber{preprocessor: p, logger: logger}
+	if subject == "" {
+		subject = DefaultLoopCompletedSubject
+	}
+	return &NATSSubscriber{preprocessor: p, subject: subject, logger: logger}
 }
 
 // Start registers the NATS subscription and returns when the
@@ -48,7 +57,7 @@ func NewNATSSubscriber(p *Preprocessor, logger *slog.Logger) *NATSSubscriber {
 // registered (e.g. NATS not connected); runtime message errors are
 // logged but do not propagate.
 func (s *NATSSubscriber) Start(ctx context.Context, client *natsclient.Client) error {
-	sub, err := client.Subscribe(ctx, loopCompletedSubject, func(msgCtx context.Context, msg *nats.Msg) {
+	sub, err := client.Subscribe(ctx, s.subject, func(msgCtx context.Context, msg *nats.Msg) {
 		s.handleMsg(msgCtx, msg.Data)
 	})
 	if err != nil {
@@ -67,7 +76,7 @@ func (s *NATSSubscriber) Start(ctx context.Context, client *natsclient.Client) e
 	}()
 
 	s.logger.Info("evidence preprocessor: NATS subscription active",
-		slog.String("subject", loopCompletedSubject))
+		slog.String("subject", s.subject))
 	return nil
 }
 

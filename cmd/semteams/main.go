@@ -35,6 +35,7 @@ import (
 	"github.com/c360studio/semteams/cmd/semteams/chain"
 	"github.com/c360studio/semteams/cmd/semteams/chainpause"
 	"github.com/c360studio/semteams/cmd/semteams/evidence"
+	"github.com/c360studio/semteams/cmd/semteams/portresolver"
 	"github.com/c360studio/semteams/cmd/semteams/testharness"
 )
 
@@ -242,7 +243,7 @@ func setupToolsAndPreprocessor(
 	// Subscribes to agent.complete.> and stamps evidence.summary +
 	// evidence.summary_ready on dev-via-spec-builder loop entities.
 	// Disabled when workspaceRoot is empty — non-sandbox deployments.
-	if err := startEvidencePreprocessor(ctx, natsClient, platform, workspaceRoot, logger); err != nil {
+	if err := startEvidencePreprocessor(ctx, cfg, natsClient, platform, workspaceRoot, logger); err != nil {
 		return nil, nil, fmt.Errorf("start evidence preprocessor: %w", err)
 	}
 
@@ -250,7 +251,7 @@ func setupToolsAndPreprocessor(
 	// Subscribes to agent.failed.> and stamps §D5 audit triples when a
 	// managed-arc loop fails. Returns the HTTP handler for POST
 	// /teams-loop/chain-pause/decide — mounted in productMiddleware.
-	chainPauseHTTP, err := startChainPauseSubscriber(ctx, natsClient, platform, logger)
+	chainPauseHTTP, err := startChainPauseSubscriber(ctx, cfg, natsClient, platform, logger)
 	if err != nil {
 		return nil, nil, fmt.Errorf("start chain-pause subscriber: %w", err)
 	}
@@ -260,7 +261,7 @@ func setupToolsAndPreprocessor(
 	// registered chain.CompletionHandler. Each handler decides whether
 	// to fire on the event and writes its predicate cluster onto the
 	// canonical 6-part chain entity (c360.<platform>.agent.chain.execution.<chain_id>).
-	if err := startChainMilestoneSubscribers(ctx, natsClient, platform, logger); err != nil {
+	if err := startChainMilestoneSubscribers(ctx, cfg, natsClient, platform, logger); err != nil {
 		return nil, nil, fmt.Errorf("start chain milestone subscribers: %w", err)
 	}
 
@@ -278,10 +279,25 @@ func setupToolsAndPreprocessor(
 // Phase C2: chain.plan.* on dev-via-spec-reviewer approval.
 // Phase C3: chain.consensus.* on dev-via-spec-challenger accept.
 // Phase C4 (evidence summary milestone) plugs in via the same slice.
-func startChainMilestoneSubscribers(ctx context.Context, natsClient *natsclient.Client, platform types.PlatformMeta, logger *slog.Logger) error {
+func startChainMilestoneSubscribers(ctx context.Context, cfg *config.Config, natsClient *natsclient.Client, platform types.PlatformMeta, logger *slog.Logger) error {
 	triplePublisher := agentictools.NewNATSTriplePublisher(natsClient)
-	entityReader := chain.NewNATSEntityReader(natsClient)
-	resolver := chain.NewResolver(chain.NewNATSParentReader(natsClient, platform), platform)
+
+	// SUBSCRIBE-side subjects (wildcards) come from running config so an
+	// operator port-rewire follows automatically. See ADR-039 / fix-plan
+	// Phase 2: hardcoded subjects across cmd/semteams/ are the smoke #8
+	// root-cause class.
+	loopCompletedSubject := portresolver.SubjectOrDefault(cfg, "teams-loop", "agent.complete", chain.DefaultLoopCompletedSubject)
+
+	// REQUEST/REPLY subject is the constant — graph-query subscribes to
+	// the specific literal "graph.query.entity" inside its
+	// setupQueryHandlers; the port config declares the wildcard
+	// `graph.query.>` only as namespace metadata. An operator who wants
+	// to rewire the entity-read RPC has to patch upstream graph-query's
+	// handler, not just the port config. Constructor still accepts the
+	// param so tests + future config-overrides work the moment that
+	// upstream surface gets parameterized.
+	entityReader := chain.NewNATSEntityReader(natsClient, chain.DefaultGraphQueryEntitySubject)
+	resolver := chain.NewResolver(chain.NewNATSParentReader(natsClient, platform, chain.DefaultGraphQueryEntitySubject), platform)
 
 	dispatched := chain.NewDispatchedStamper(triplePublisher, platform, logger)
 	research := chain.NewResearchMilestoneStamper(triplePublisher, resolver, entityReader, platform, logger)
@@ -293,13 +309,14 @@ func startChainMilestoneSubscribers(ctx context.Context, natsClient *natsclient.
 		research,
 		plan,
 		consensus,
-	}, logger)
+	}, loopCompletedSubject, logger)
 	if err := subscriber.Start(ctx, natsClient); err != nil {
 		return fmt.Errorf("subscribe to loop completed for chain milestones: %w", err)
 	}
 	logger.Info("chain milestone subscribers started",
 		slog.String("org", platform.Org),
-		slog.String("platform", platform.Platform))
+		slog.String("platform", platform.Platform),
+		slog.String("loop_completed_subject", loopCompletedSubject))
 	return nil
 }
 
@@ -310,26 +327,32 @@ func startChainMilestoneSubscribers(ctx context.Context, natsClient *natsclient.
 // TODO(adr-037-d3): When chain_failure_authority config field lands, validate
 // at config-load that only "operator" is accepted in v1. "coordinator" / "auto"
 // must reject with explicit migration message.
-func startChainPauseSubscriber(ctx context.Context, natsClient *natsclient.Client, platform types.PlatformMeta, logger *slog.Logger) (*chainpause.HTTPHandler, error) {
+func startChainPauseSubscriber(ctx context.Context, cfg *config.Config, natsClient *natsclient.Client, platform types.PlatformMeta, logger *slog.Logger) (*chainpause.HTTPHandler, error) {
 	triplePublisher := agentictools.NewNATSTriplePublisher(natsClient)
 	taskPublisher := chainpause.NewNATSTaskPublisher(natsClient)
-	pauseDataReader := chainpause.NewNATSPauseDataReader(natsClient)
+
+	// SUBSCRIBE-side (agent.failed wildcard): config-derived. REQUEST-
+	// side (graph.query.entity literal): constant — see startChainMilestoneSubscribers
+	// for the same rationale.
+	loopFailedSubject := portresolver.SubjectOrDefault(cfg, "teams-loop", "agent.failed", chainpause.DefaultLoopFailedSubject)
+	pauseDataReader := chainpause.NewNATSPauseDataReader(natsClient, chainpause.DefaultGraphQueryEntitySubject)
 
 	// ADR-038 PR B Phase 3: chainpause writes §D5 audit triples on the
 	// canonical chain entity (post-semstreams beta.57 the publish-vs-write
 	// race is closed, so the resolver's ancestry walk is reliable on
 	// failed loops too). Same chain.Resolver shape used by every other
 	// chain-triple consumer in the product shell.
-	chainResolver := chain.NewResolver(chain.NewNATSParentReader(natsClient, platform), platform)
+	chainResolver := chain.NewResolver(chain.NewNATSParentReader(natsClient, platform, chain.DefaultGraphQueryEntitySubject), platform)
 
 	pauser := chainpause.NewPauser(triplePublisher, chainResolver)
-	sub := chainpause.NewSubscriber(pauser, logger)
+	sub := chainpause.NewSubscriber(pauser, loopFailedSubject, logger)
 	if err := sub.Start(ctx, natsClient); err != nil {
 		return nil, fmt.Errorf("subscribe to agent.failed events: %w", err)
 	}
 	logger.Info("chain-pause subscriber started",
 		slog.String("org", platform.Org),
-		slog.String("platform", platform.Platform))
+		slog.String("platform", platform.Platform),
+		slog.String("loop_failed_subject", loopFailedSubject))
 
 	decisionHandler := chainpause.NewDecisionHandler(triplePublisher, taskPublisher, pauseDataReader, chainResolver, logger)
 	httpHandler := chainpause.NewHTTPHandler(decisionHandler, logger)
@@ -344,7 +367,7 @@ func startChainPauseSubscriber(ctx context.Context, natsClient *natsclient.Clien
 // workspaceRoot="" disables the preprocessor; the Preprocessor's
 // HandleLoopCompleted returns immediately for every event. This keeps
 // non-sandbox deployments booting without error.
-func startEvidencePreprocessor(ctx context.Context, natsClient *natsclient.Client, platform types.PlatformMeta, workspaceRoot string, logger *slog.Logger) error {
+func startEvidencePreprocessor(ctx context.Context, cfg *config.Config, natsClient *natsclient.Client, platform types.PlatformMeta, workspaceRoot string, logger *slog.Logger) error {
 	reg, err := evidence.NewWithBuiltins()
 	if err != nil {
 		return fmt.Errorf("build evidence registry: %w", err)
@@ -360,8 +383,12 @@ func startEvidencePreprocessor(ctx context.Context, natsClient *natsclient.Clien
 	// loop-entity triples. Drift-safe — rule_07 still matches on the
 	// loop entity. Markdown render fires from the same chain-opt-in
 	// path.
-	preprocessor.SetChainResolver(chain.NewResolver(chain.NewNATSParentReader(natsClient, platform), platform))
-	sub := evidence.NewNATSSubscriber(preprocessor, logger)
+	preprocessor.SetChainResolver(chain.NewResolver(chain.NewNATSParentReader(natsClient, platform, chain.DefaultGraphQueryEntitySubject), platform))
+
+	// SUBSCRIBE-side: config-derived. Same agentic-loop port the chain
+	// milestone subscriber binds to.
+	loopCompletedSubject := portresolver.SubjectOrDefault(cfg, "teams-loop", "agent.complete", evidence.DefaultLoopCompletedSubject)
+	sub := evidence.NewNATSSubscriber(preprocessor, loopCompletedSubject, logger)
 	if err := sub.Start(ctx, natsClient); err != nil {
 		return fmt.Errorf("subscribe to loop completed events: %w", err)
 	}

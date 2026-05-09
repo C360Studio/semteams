@@ -58,7 +58,7 @@ func TestNATSEntityReader_LiveSubject(t *testing.T) {
 	var lastRequest map[string]string
 	sub, err := tc.Client.SubscribeForRequests(
 		ctx,
-		graphQueryEntitySubject,
+		DefaultGraphQueryEntitySubject,
 		func(_ context.Context, data []byte) ([]byte, error) {
 			if uErr := json.Unmarshal(data, &lastRequest); uErr != nil {
 				return nil, uErr
@@ -66,7 +66,7 @@ func TestNATSEntityReader_LiveSubject(t *testing.T) {
 			return stubResponse, nil
 		},
 	)
-	require.NoError(t, err, "stub subscribe to %s failed", graphQueryEntitySubject)
+	require.NoError(t, err, "stub subscribe to %s failed", DefaultGraphQueryEntitySubject)
 	t.Cleanup(func() { _ = sub.Unsubscribe() })
 
 	// Settle: SubscribeForRequests is async wire-protocol register;
@@ -77,12 +77,15 @@ func TestNATSEntityReader_LiveSubject(t *testing.T) {
 	// bug under CI testcontainer cold-start load.
 	time.Sleep(50 * time.Millisecond)
 
-	reader := NewNATSEntityReader(tc.Client)
+	// Empty subject → constructor falls back to DefaultGraphQueryEntitySubject;
+	// matches what main.go passes for the production wiring (see
+	// startChainMilestoneSubscribers — entity-read uses the constant).
+	reader := NewNATSEntityReader(tc.Client, "")
 	got, err := reader.ReadEntity(ctx, stubEntityID)
 
 	// Wire-format contract: reader must send `{"id": "<entityID>"}` to
 	// the subject the upstream graph-query processor subscribes to.
-	require.NoError(t, err, "ReadEntity against live NATS+stub responder failed — likely subject mismatch (resolver.go uses %q)", graphQueryEntitySubject)
+	require.NoError(t, err, "ReadEntity against live NATS+stub responder failed — likely subject mismatch (resolver.go uses %q)", DefaultGraphQueryEntitySubject)
 	require.NotNil(t, lastRequest, "stub never received the request — subject mismatch in chain.NATSEntityReader")
 	assert.Equal(t, stubEntityID, lastRequest["id"], "request payload's id field doesn't match what the reader was asked for")
 
@@ -114,7 +117,7 @@ func TestNATSParentReader_LiveSubject(t *testing.T) {
 
 	sub, err := tc.Client.SubscribeForRequests(
 		ctx,
-		graphQueryEntitySubject,
+		DefaultGraphQueryEntitySubject,
 		func(_ context.Context, _ []byte) ([]byte, error) {
 			return stubResponse, nil
 		},
@@ -125,7 +128,7 @@ func TestNATSParentReader_LiveSubject(t *testing.T) {
 	// Settle (see TestNATSEntityReader_LiveSubject for rationale).
 	time.Sleep(50 * time.Millisecond)
 
-	parentReader := NewNATSParentReader(tc.Client, testPlatform())
+	parentReader := NewNATSParentReader(tc.Client, testPlatform(), "")
 	gotParent, err := parentReader.ReadParent(ctx, childLoopID)
 
 	require.NoError(t, err, "ReadParent against live NATS+stub responder failed — subject mismatch?")

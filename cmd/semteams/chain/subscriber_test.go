@@ -61,7 +61,7 @@ func encodeCompletion(t *testing.T, ev *agentic.LoopCompletedEvent) []byte {
 func TestCompletionSubscriber_DispatchesToAllHandlers(t *testing.T) {
 	h1 := &recordingHandler{}
 	h2 := &recordingHandler{}
-	s := NewCompletionSubscriber([]CompletionHandler{h1, h2}, nil)
+	s := NewCompletionSubscriber([]CompletionHandler{h1, h2}, "", nil)
 
 	ev := &agentic.LoopCompletedEvent{LoopID: "loop_a", Role: "dispatch"}
 	s.handleMsg(context.Background(), encodeCompletion(t, ev))
@@ -77,7 +77,7 @@ func TestCompletionSubscriber_DispatchesToAllHandlers(t *testing.T) {
 func TestCompletionSubscriber_HandlerErrorDoesNotAbortSiblings(t *testing.T) {
 	h1 := &recordingHandler{errOn: map[string]error{"loop_a": errors.New("write failed")}}
 	h2 := &recordingHandler{}
-	s := NewCompletionSubscriber([]CompletionHandler{h1, h2}, nil)
+	s := NewCompletionSubscriber([]CompletionHandler{h1, h2}, "", nil)
 
 	ev := &agentic.LoopCompletedEvent{LoopID: "loop_a", Role: "dispatch"}
 	s.handleMsg(context.Background(), encodeCompletion(t, ev))
@@ -93,7 +93,7 @@ func TestCompletionSubscriber_HandlerErrorDoesNotAbortSiblings(t *testing.T) {
 
 func TestCompletionSubscriber_SkipsNonCompletedCategory(t *testing.T) {
 	h := &recordingHandler{}
-	s := NewCompletionSubscriber([]CompletionHandler{h}, nil)
+	s := NewCompletionSubscriber([]CompletionHandler{h}, "", nil)
 
 	// Synthesize a tool-result-shaped envelope on the same subject.
 	env := testEnvelope{Payload: []byte("{}")}
@@ -108,7 +108,7 @@ func TestCompletionSubscriber_SkipsNonCompletedCategory(t *testing.T) {
 
 func TestCompletionSubscriber_SkipsMalformedEnvelope(t *testing.T) {
 	h := &recordingHandler{}
-	s := NewCompletionSubscriber([]CompletionHandler{h}, nil)
+	s := NewCompletionSubscriber([]CompletionHandler{h}, "", nil)
 
 	// Garbage bytes — must not panic, must not call handler.
 	s.handleMsg(context.Background(), []byte("not json"))
@@ -121,7 +121,7 @@ func TestCompletionSubscriber_NilHandlersFiltered(t *testing.T) {
 	h := &recordingHandler{}
 	// Pass nil mixed with a real handler — nil should be filtered, real
 	// one should still receive events.
-	s := NewCompletionSubscriber([]CompletionHandler{nil, h, nil}, nil)
+	s := NewCompletionSubscriber([]CompletionHandler{nil, h, nil}, "", nil)
 
 	ev := &agentic.LoopCompletedEvent{LoopID: "loop_a"}
 	s.handleMsg(context.Background(), encodeCompletion(t, ev))
@@ -140,7 +140,7 @@ func TestCompletionSubscriber_NilHandlersFiltered(t *testing.T) {
 func TestCompletionSubscriber_PanickingHandlerDoesNotKillSubscription(t *testing.T) {
 	h1 := &recordingHandler{panicOn: map[string]bool{"loop_a": true}}
 	h2 := &recordingHandler{}
-	s := NewCompletionSubscriber([]CompletionHandler{h1, h2}, nil)
+	s := NewCompletionSubscriber([]CompletionHandler{h1, h2}, "", nil)
 
 	ev := &agentic.LoopCompletedEvent{LoopID: "loop_a", Role: "dispatch"}
 	// handleMsg must not propagate the panic; if it does, the test fails
