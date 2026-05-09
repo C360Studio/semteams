@@ -12,6 +12,8 @@ import (
 	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/types"
+
+	"github.com/c360studio/semteams/cmd/semteams/chain"
 )
 
 type fakeTriplePublisher struct {
@@ -326,4 +328,153 @@ func triplesByPredicate(triples []message.Triple) map[string]any {
 		out[tr.Predicate] = tr.Object
 	}
 	return out
+}
+
+// stubChainReader returns a fixed (chainEntityID, triples) pair to
+// every ReadChainFor call. Mirrors emitplan's stub. Errors land via
+// err.
+type stubChainReader struct {
+	entityID string
+	triples  map[string]any
+	err      error
+	calls    int
+	mu       sync.Mutex
+}
+
+func (s *stubChainReader) ReadChainFor(_ context.Context, _ string) (string, map[string]any, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.calls++
+	if s.err != nil {
+		return s.entityID, nil, s.err
+	}
+	return s.entityID, s.triples, nil
+}
+
+// TestExecute_ChainSlugStemOverridesTitleSlug pins the smoke #8 run-5
+// D2 fix at the consensus seam. Chain stem keeps the slug stable as
+// "<stem>-consensus" even when the challenger's title drifts (e.g.
+// "OSH Meshtastic IDriver consensus" — extra "i" — would otherwise
+// produce a divergent slug from the planner's
+// "OSH Meshtastic Driver plan").
+func TestExecute_ChainSlugStemOverridesTitleSlug(t *testing.T) {
+	exec, tp, _, dir := newExecutor(t)
+	exec.SetChainReader(&stubChainReader{
+		entityID: "c360.test.agent.chain.execution.dispatch_root",
+		triples: map[string]any{
+			chain.PredicateSlugStem: "2026-05-09-osh-meshtastic-driver",
+		},
+	})
+
+	args := defaultConsensusArgs()
+	args["title"] = "OSH Meshtastic IDriver consensus"
+
+	res, err := exec.Execute(context.Background(), defaultCall(args))
+	if err != nil {
+		t.Fatalf("Execute err: %v", err)
+	}
+	if res.Error != "" {
+		t.Fatalf("Result.Error = %q, want empty", res.Error)
+	}
+
+	got := triplesByPredicate(tp.snapshot())
+	pathStr, _ := got[predicatePath].(string)
+	const wantSuffix = "/2026-05-09-osh-meshtastic-driver-consensus.md"
+	if !strings.HasSuffix(pathStr, wantSuffix) {
+		t.Errorf("rendered path = %q, want suffix %q (chain.slug.stem must override drifting title)", pathStr, wantSuffix)
+	}
+	if !strings.HasPrefix(pathStr, dir) {
+		t.Errorf("path = %q, want prefix %q", pathStr, dir)
+	}
+}
+
+// TestExecute_ChainPlanLoopsOverrideDependsOn pins the smoke #8 run-5
+// D1 fix at the consensus seam. Chain entity carries chain.plan_loop
+// (planner) and chain.plan_reviewer_loop (reviewer); both must
+// override the LLM-supplied depends_on.{plan_loop,reviewer_loop}.
+// Smoke #8 run-5 evidence: challenger filled BOTH slots with the
+// reviewer's loop ID — chain entity's distinct values fix that.
+func TestExecute_ChainPlanLoopsOverrideDependsOn(t *testing.T) {
+	exec, tp, _, _ := newExecutor(t)
+	exec.SetChainReader(&stubChainReader{
+		entityID: "c360.test.agent.chain.execution.dispatch_root",
+		triples: map[string]any{
+			chain.PredicatePlanLoop:         "planner_canonical",
+			chain.PredicatePlanReviewerLoop: "reviewer_canonical",
+		},
+	})
+
+	args := defaultConsensusArgs()
+	args["depends_on"] = map[string]any{
+		// Challenger's local guess — both slots got the reviewer's ID
+		// in smoke #8 run-5. Chain entity's distinct values must
+		// replace these.
+		"plan_loop":     "reviewer_wrong",
+		"reviewer_loop": "reviewer_wrong",
+	}
+
+	res, err := exec.Execute(context.Background(), defaultCall(args))
+	if err != nil {
+		t.Fatalf("Execute err: %v", err)
+	}
+	if res.Error != "" {
+		t.Fatalf("Result.Error = %q, want empty", res.Error)
+	}
+
+	got := triplesByPredicate(tp.snapshot())
+	pathStr, _ := got[predicatePath].(string)
+	body, err := os.ReadFile(pathStr)
+	if err != nil {
+		t.Fatalf("read rendered markdown: %v", err)
+	}
+	if !strings.Contains(string(body), "planner_canonical") {
+		t.Errorf("markdown depends_on must use chain-canonical plan_loop; got body:\n%s", body)
+	}
+	if !strings.Contains(string(body), "reviewer_canonical") {
+		t.Errorf("markdown depends_on must use chain-canonical reviewer_loop; got body:\n%s", body)
+	}
+	if strings.Contains(string(body), "reviewer_wrong") {
+		t.Errorf("LLM-supplied depends_on must NOT appear when chain entity has the canonical values; got body:\n%s", body)
+	}
+}
+
+// TestExecute_ChainReadFailureFallsBackToLLMValues pins the fail-soft
+// contract: chain read errors fall back to LLM-supplied values + the
+// title-derived slug, logged at Warn. Same shape as emitplan's
+// equivalent test.
+func TestExecute_ChainReadFailureFallsBackToLLMValues(t *testing.T) {
+	exec, tp, _, _ := newExecutor(t)
+	stub := &stubChainReader{
+		entityID: "c360.test.agent.chain.execution.dispatch_root",
+		err:      errors.New("graph timeout"),
+	}
+	exec.SetChainReader(stub)
+
+	args := defaultConsensusArgs()
+	args["title"] = "OSH Meshtastic consensus"
+	args["depends_on"] = map[string]any{
+		"plan_loop":     "loop-planner-001",
+		"reviewer_loop": "loop-reviewer-001",
+	}
+
+	res, err := exec.Execute(context.Background(), defaultCall(args))
+	if err != nil {
+		t.Fatalf("Execute err: %v", err)
+	}
+	if res.Error != "" {
+		t.Fatalf("Result.Error = %q, want empty (chain read failure must not surface to caller)", res.Error)
+	}
+	if stub.calls != 1 {
+		t.Errorf("stub ReadChainFor calls = %d, want 1", stub.calls)
+	}
+
+	got := triplesByPredicate(tp.snapshot())
+	pathStr, _ := got[predicatePath].(string)
+	if !strings.HasSuffix(pathStr, "-osh-meshtastic-consensus.md") {
+		t.Errorf("path = %q, want title-derived slug fallback", pathStr)
+	}
+	body, _ := os.ReadFile(pathStr)
+	if !strings.Contains(string(body), "loop-planner-001") || !strings.Contains(string(body), "loop-reviewer-001") {
+		t.Errorf("markdown should fall back to LLM-supplied depends_on when chain read fails; got body:\n%s", body)
+	}
 }
