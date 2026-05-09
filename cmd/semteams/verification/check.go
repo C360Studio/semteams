@@ -186,11 +186,23 @@ type Check struct {
 	Ref Ref `json:"ref"`
 
 	// Evidence is the structurally-checkable assertions the
-	// evidence gate runs post-build. May be empty in v1 if the
-	// check relies entirely on the framework's per-runtime
-	// template (which is itself structurally constrained), but
-	// then the reviewer will likely flag the check as
-	// under-specified for non-template runtimes.
+	// evidence gate runs post-build. Required (≥1 rule) per check —
+	// without it, the gate cannot mechanically corroborate the
+	// builder's claims and the dvs-qa-reviewer (R3.7.2.j′) will
+	// terminate with needs_clarification, regardless of how many
+	// tests the builder reports passing. Smoke #8 run-8 surfaced
+	// this gap: three checks emitted with no rules, builder
+	// reported 22/22, qa-reviewer correctly declined to verify.
+	//
+	// Registered kinds (cmd/semteams/evidence/kinds_*.go):
+	//   - test_file_exists       — assert a test source file exists
+	//   - test_uses_build_tag    — assert a Go test gates on a build tag
+	//   - surefire_passing_count — assert a Maven surefire suite passes ≥N tests
+	//
+	// JSON tag stays `omitempty` so a serialised Check round-trips
+	// without a noisy null when callers explicitly construct the
+	// zero value (rare, mostly tests). Validate is the authoritative
+	// gate — serialisation does not enforce.
 	Evidence []EvidenceRule `json:"evidence,omitempty"`
 }
 
@@ -226,6 +238,15 @@ func (c *Check) Validate() error {
 	}
 	if err := c.Ref.Validate(); err != nil {
 		return fmt.Errorf("ref: %w", err)
+	}
+	// Smoke #8 run-8: qa-reviewer (R3.7.2.j′) requires ≥1 evidence
+	// rule per check to render a verdict — without it there is no
+	// mechanical basis to corroborate the builder's claims, and the
+	// chain wedges at needs_clarification regardless of test count.
+	// Reject empty Evidence at the structural layer so the architect
+	// cannot ship a check that the gate cannot verify.
+	if len(c.Evidence) == 0 {
+		return fmt.Errorf("evidence required (≥1 rule); registered kinds: test_file_exists, test_uses_build_tag, surefire_passing_count")
 	}
 	for i, e := range c.Evidence {
 		if e.Kind == "" {

@@ -122,6 +122,7 @@ func TestCheck_Validate(t *testing.T) {
 				TestHarness: "nats-jetstream",
 				TestRuntime: "go-testing-net",
 				Ref:         validRef,
+				Evidence:    []EvidenceRule{{Kind: "test_file_exists", Args: map[string]any{"path": "x_test.go"}}},
 			},
 		},
 		{
@@ -132,6 +133,7 @@ func TestCheck_Validate(t *testing.T) {
 				TestHarness: "meshtasticd-3.x",
 				TestRuntime: "java-junit-testcontainers",
 				Ref:         Ref{Type: RefTemplateID, ID: "tcp.binary-protobuf.java-junit-testcontainers.v1"},
+				Evidence:    []EvidenceRule{{Kind: "surefire_passing_count", Args: map[string]any{"min": float64(1)}}},
 			},
 		},
 		{
@@ -142,14 +144,16 @@ func TestCheck_Validate(t *testing.T) {
 				TestHarness: "agentic-e2e-stack",
 				TestRuntime: "playwright-typescript",
 				Ref:         Ref{Type: RefFilepath, Path: "ui/e2e/agentic/flow-creation.spec.ts"},
+				Evidence:    []EvidenceRule{{Kind: "test_file_exists", Args: map[string]any{"path": "ui/e2e/agentic/flow-creation.spec.ts"}}},
 			},
 		},
 		{
 			name: "happy path — static-analysis (no test_harness, no test_runtime)",
 			c: Check{
-				Target:  "no exported function returns naked errors.New",
-				Runtime: RuntimeStaticAnalysis,
-				Ref:     validRef,
+				Target:   "no exported function returns naked errors.New",
+				Runtime:  RuntimeStaticAnalysis,
+				Ref:      validRef,
+				Evidence: []EvidenceRule{{Kind: "test_file_exists", Args: map[string]any{"path": "x_test.go"}}},
 			},
 		},
 		{
@@ -159,6 +163,7 @@ func TestCheck_Validate(t *testing.T) {
 				Runtime:     RuntimeInProcessUnit,
 				TestRuntime: "go-testing",
 				Ref:         validRef,
+				Evidence:    []EvidenceRule{{Kind: "test_file_exists", Args: map[string]any{"path": "x_test.go"}}},
 			},
 		},
 		{
@@ -168,7 +173,25 @@ func TestCheck_Validate(t *testing.T) {
 				Runtime:     RuntimeStaticAnalysis,
 				TestRuntime: "go-vet",
 				Ref:         validRef,
+				Evidence:    []EvidenceRule{{Kind: "test_file_exists", Args: map[string]any{"path": "x_test.go"}}},
 			},
+		},
+		{
+			// Smoke #8 run-8 negative case: architect emits a check
+			// without any evidence rules. qa-reviewer (R3.7.2.j′)
+			// terminates with needs_clarification because no
+			// mechanical basis exists to verify the builder's tests_passing
+			// claim. Validate now rejects this at the structural layer
+			// so the architect retries with rules instead of shipping a
+			// gate-untestable spec.
+			name: "missing evidence rejected — empty Evidence slice",
+			c: Check{
+				Target:  "tests pass on the merged branch",
+				Runtime: RuntimeInProcessUnit,
+				Ref:     validRef,
+				// Evidence: empty
+			},
+			wantErr: "evidence required",
 		},
 		{
 			name: "evidence kind PascalCase is rejected",
