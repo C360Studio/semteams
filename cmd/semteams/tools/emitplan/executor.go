@@ -36,6 +36,7 @@ import (
 	agentictools "github.com/c360studio/semstreams/processor/agentic-tools"
 	"github.com/c360studio/semstreams/types"
 
+	"github.com/c360studio/semteams/cmd/semteams/chain"
 	"github.com/c360studio/semteams/cmd/semteams/devviaspec"
 	"github.com/c360studio/semteams/cmd/semteams/slug"
 )
@@ -81,6 +82,22 @@ type PayloadPublisher interface {
 	Publish(ctx context.Context, subject string, data []byte) error
 }
 
+// ChainReader resolves the canonical 6-part chain entity ID for the
+// calling planner loop and reads its triple set in one call. Used by
+// Execute to override LLM-supplied lineage IDs and slug derivation
+// with chain-canonical values (smoke #8 run-5 D1 + D2 fix).
+//
+// Optional dependency: when nil, Execute falls back to LLM-supplied
+// values (test contexts, deployments without graph-query wired).
+//
+// Production wiring (cmd/semteams/product_tools.go) supplies a small
+// adapter that composes chain.Resolver.ChainEntityID +
+// chain.NATSEntityReader.ReadEntity. Tests typically pass a fake
+// returning a fixed predicate map.
+type ChainReader interface {
+	ReadChainFor(ctx context.Context, fromLoopID string) (chainEntityID string, triples map[string]any, err error)
+}
+
 // Executor implements agentic.ToolExecutor for emit_plan.
 type Executor struct {
 	publisher   agentictools.TriplePublisher
@@ -88,6 +105,7 @@ type Executor struct {
 	platform    types.PlatformMeta
 	logger      *slog.Logger
 	outputDir   string
+	chainReader ChainReader // nil → fall back to LLM-supplied lineage + title-derived slug
 }
 
 // NewExecutor constructs an Executor. outputDir is the directory
@@ -111,6 +129,17 @@ func NewExecutor(publisher agentictools.TriplePublisher, natsPublish PayloadPubl
 		logger:      logger,
 		outputDir:   outputDir,
 	}
+}
+
+// SetChainReader enables chain-entity-driven lineage and slug
+// derivation. Optional opt-in: leaving this unset keeps the executor
+// backward-compatible (LLM-supplied depends_on + title-derived slug
+// only). Mirrors emitspecartifact.SetChainResolver's pattern.
+//
+// Wired in cmd/semteams/product_tools.go after NewExecutor when the
+// chain package's Resolver + NATSEntityReader are built.
+func (e *Executor) SetChainReader(r ChainReader) {
+	e.chainReader = r
 }
 
 // ListTools returns the LLM-facing schema. Args mirror the Plan
@@ -183,10 +212,20 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 	loopEntityID := agentic.LoopExecutionEntityID(e.platform.Org, e.platform.Platform, call.LoopID)
 	now := plan.ProducedAt
 
+	// Read chain-canonical lineage + slug stem so the planner persona
+	// stops guessing upstream loop IDs and the chain's slug stays
+	// consistent across emit_plan / emit_consensus / emit_dev_via_spec_artifact.
+	// Fail-soft: read errors fall back to LLM-supplied values + the
+	// title-derived slug. Smoke #8 run-5 D1 + D2 fix.
+	chainTriples := e.readChainTriples(ctx, call.LoopID)
+	if researchLoop, _ := chainTriples[chain.PredicateResearchArtifactLoop].(string); researchLoop != "" {
+		plan.DependsOn.ResearchArtifactLoop = researchLoop
+	}
+
 	// Render markdown BEFORE triples so a partial-state retry never
 	// stamps a path that doesn't exist on disk. Slug is deterministic
 	// per (title, date), so re-renders idempotently overwrite.
-	plan.Slug = slug.DeriveDated(plan.Title, call.LoopID, "plan", now)
+	plan.Slug = e.deriveSlug(plan.Title, call.LoopID, chainTriples, now)
 	relPath, renderErr := e.renderMarkdown(plan)
 	if renderErr != nil {
 		return agentic.ToolResult{
@@ -255,6 +294,45 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 			"path":           relPath,
 		},
 	}, nil
+}
+
+// readChainTriples resolves the chain entity for the calling planner
+// loop and returns its predicate map. Fail-soft: any error (resolver
+// failure, graph timeout, decode mismatch) yields an empty map plus a
+// Warn log; the caller treats absence as "no chain override available"
+// and falls through to LLM-supplied values.
+//
+// chainReader=nil (test contexts, deployments without chain wiring)
+// returns an empty map without logging — that's the documented
+// backward-compatible mode.
+func (e *Executor) readChainTriples(ctx context.Context, loopID string) map[string]any {
+	if e.chainReader == nil {
+		return nil
+	}
+	chainEntityID, triples, err := e.chainReader.ReadChainFor(ctx, loopID)
+	if err != nil {
+		e.logger.Warn("emit_plan: chain read failed; falling back to LLM-supplied values",
+			slog.String("loop_id", loopID),
+			slog.String("chain_entity", chainEntityID),
+			slog.String("error", err.Error()))
+		return nil
+	}
+	return triples
+}
+
+// deriveSlug picks the file slug. Preference order:
+//
+//  1. chain.slug.stem from the chain entity → "<stem>-plan". Stable
+//     across emit_plan / emit_consensus / emit_dev_via_spec_artifact;
+//     this is the smoke #8 run-5 D2 fix.
+//  2. Title-derived slug via slug.DeriveDated (the pre-D2 path). Used
+//     when chain.slug.stem is absent (legacy chains, chainReader unset,
+//     or the researcher's path predicate didn't render).
+func (e *Executor) deriveSlug(title, loopID string, chainTriples map[string]any, now time.Time) string {
+	if stem, _ := chainTriples[chain.PredicateSlugStem].(string); stem != "" {
+		return stem + "-plan"
+	}
+	return slug.DeriveDated(title, loopID, "plan", now)
 }
 
 // parseArgsIntoPlan builds a devviaspec.Plan from LLM args. loop_id
