@@ -42,10 +42,10 @@ func TestNATSPauseDataReader_LiveSubject(t *testing.T) {
 	sub, err := tc.Client.SubscribeForRequests(
 		ctx,
 		// Reference the production constant: a refactor that flips
-		// graphQueryEntitySubject in decision_handler.go must also
+		// DefaultGraphQueryEntitySubject in decision_handler.go must also
 		// flip this stub or the test fails — exactly the property
 		// the smoke #8 root-cause class teaches us to enforce.
-		graphQueryEntitySubject,
+		DefaultGraphQueryEntitySubject,
 		func(_ context.Context, data []byte) ([]byte, error) {
 			if uErr := json.Unmarshal(data, &lastRequest); uErr != nil {
 				return nil, uErr
@@ -53,7 +53,7 @@ func TestNATSPauseDataReader_LiveSubject(t *testing.T) {
 			return stubResponse, nil
 		},
 	)
-	require.NoError(t, err, "stub subscribe to %s failed", graphQueryEntitySubject)
+	require.NoError(t, err, "stub subscribe to %s failed", DefaultGraphQueryEntitySubject)
 	t.Cleanup(func() { _ = sub.Unsubscribe() })
 
 	// Settle: SubscribeForRequests is async wire-protocol register;
@@ -61,7 +61,9 @@ func TestNATSPauseDataReader_LiveSubject(t *testing.T) {
 	// natsclient/request_integration_test.go pattern.
 	time.Sleep(50 * time.Millisecond)
 
-	reader := NewNATSPauseDataReader(tc.Client)
+	// Empty subject → constructor falls back to DefaultGraphQueryEntitySubject;
+	// matches what main.go passes for production wiring.
+	reader := NewNATSPauseDataReader(tc.Client, "")
 	role, model, err := reader.ReadPauseData(ctx, failedLoopEntityID)
 
 	require.NoError(t, err, "ReadPauseData against live NATS+stub responder failed — likely subject mismatch in chainpause/decision_handler.go")

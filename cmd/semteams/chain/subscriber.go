@@ -11,13 +11,27 @@ import (
 	"github.com/nats-io/nats.go"
 )
 
-// loopCompletedSubject is the NATS wildcard that matches every
-// agent.complete.* message the agentic-loop processor publishes on
-// loop completion. Mirrors evidence/subscriber.go's same constant —
-// kept duplicated so the chain package has no cross-package coupling.
-// Source: processor/agentic-loop/config.go output port "agent.complete"
-// confirmed at v1.0.0-beta.54.
-const loopCompletedSubject = "agent.complete.>"
+// DefaultLoopCompletedSubject is the upstream agentic-loop processor's
+// output port for loop-complete events. Used as the fallback when
+// cmd/semteams/main.go cannot resolve the subject from the running
+// agentic-loop component's port config — see portresolver.SubjectOrDefault
+// wiring.
+//
+// Exported because main.go and tests both reference it. Operators can
+// override per deployment by editing the agentic-loop component's
+// `outputs[name="agent.complete"].subject` field; that override flows
+// through portresolver and into NewCompletionSubscriber's subject
+// argument.
+//
+// Wildcard scope note: the constant is `agent.complete.>` (multi-token
+// wildcard); SemTeams configs declare the port as `agent.complete.*`
+// (single-token wildcard). Today both match the publish shape
+// `agent.complete.<loop_id>`. If a future publisher deepens to
+// `agent.complete.<loop_id>.<chunk>`, the resolved-from-config
+// subject misses; the constant catches it. Keeping the constant
+// broader is a defensive default; operators who narrow via config
+// take responsibility for that scope.
+const DefaultLoopCompletedSubject = "agent.complete.>"
 
 // CompletionHandler is the narrow surface a chain-milestone stamper
 // implements to receive agent.complete events. New milestones add
@@ -51,16 +65,27 @@ type CompletionHandler interface {
 // subscriptions.
 type CompletionSubscriber struct {
 	handlers []CompletionHandler
+	subject  string
 	logger   *slog.Logger
 }
 
 // NewCompletionSubscriber constructs a subscriber with the given
-// handlers. Order is preserved — handlers run sequentially per event.
-// nil entries are skipped so callers can pass slice indices that may
-// be conditionally empty.
-func NewCompletionSubscriber(handlers []CompletionHandler, logger *slog.Logger) *CompletionSubscriber {
+// handlers and NATS subject. Order is preserved — handlers run
+// sequentially per event. nil entries are skipped so callers can pass
+// slice indices that may be conditionally empty.
+//
+// subject is the NATS wildcard the subscription binds to. Empty falls
+// back to DefaultLoopCompletedSubject — main.go is expected to resolve
+// the live subject from agentic-loop's port config via
+// portresolver.SubjectOrDefault and pass the result here. Empty +
+// fallback exists for the test path and for configs that omit the
+// port declaration entirely.
+func NewCompletionSubscriber(handlers []CompletionHandler, subject string, logger *slog.Logger) *CompletionSubscriber {
 	if logger == nil {
 		logger = slog.Default()
+	}
+	if subject == "" {
+		subject = DefaultLoopCompletedSubject
 	}
 	out := make([]CompletionHandler, 0, len(handlers))
 	for _, h := range handlers {
@@ -69,7 +94,7 @@ func NewCompletionSubscriber(handlers []CompletionHandler, logger *slog.Logger) 
 		}
 		out = append(out, h)
 	}
-	return &CompletionSubscriber{handlers: out, logger: logger}
+	return &CompletionSubscriber{handlers: out, subject: subject, logger: logger}
 }
 
 // Start registers the NATS subscription and returns when active.
@@ -80,7 +105,7 @@ func (s *CompletionSubscriber) Start(ctx context.Context, client *natsclient.Cli
 		return nil
 	}
 
-	sub, err := client.Subscribe(ctx, loopCompletedSubject, func(msgCtx context.Context, msg *nats.Msg) {
+	sub, err := client.Subscribe(ctx, s.subject, func(msgCtx context.Context, msg *nats.Msg) {
 		s.handleMsg(msgCtx, msg.Data)
 	})
 	if err != nil {
@@ -96,7 +121,7 @@ func (s *CompletionSubscriber) Start(ctx context.Context, client *natsclient.Cli
 	}()
 
 	s.logger.Info("chain completion subscriber: NATS subscription active",
-		slog.String("subject", loopCompletedSubject),
+		slog.String("subject", s.subject),
 		slog.Int("handlers", len(s.handlers)))
 	return nil
 }

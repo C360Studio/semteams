@@ -21,10 +21,32 @@ const maxAncestryHops = 64
 // chainpause.NATSPauseDataReader's 3s budget.
 const graphQueryTimeout = 3 * time.Second
 
-// graphQueryEntitySubject is the request/reply NATS subject the graph
-// component answers entity reads on. Source: graph processor's query
-// surface, mirrored by chainpause/decision_handler.go's NATSPauseDataReader.
-const graphQueryEntitySubject = "graph.query.entity"
+// DefaultGraphQueryEntitySubject is the upstream graph-query
+// processor's entity-read request/reply subject. Used as the fallback
+// when cmd/semteams/main.go cannot resolve the subject from the
+// running graph-query (or graph-ingest) component's port config — see
+// portresolver.SubjectOrDefault wiring.
+//
+// Mirrored by chainpause.DefaultGraphQueryEntitySubject. Operators can
+// override per deployment by editing the graph-query component's
+// `inputs[name="query_requests"].subject` field; that override flows
+// through portresolver into NATSEntityReader's constructor argument.
+//
+// NOTE: in the SemTeams configs, graph-query's port subject is
+// declared as the wildcard `graph.query.>` (a namespace metadata
+// declaration). The REAL reason port-layer resolution is fiction
+// here: upstream graph-query's setupQueryHandlers
+// (processor/graph-query/query.go:19) hardcodes the literal
+// `graph.query.entity` as the subscription subject regardless of
+// what the operator declares in the port config — it ignores the
+// port-config subject for subscription registration entirely (the
+// subject in the port block is consulted only by StaticRouter for
+// upstream-internal routing). An operator who wanted to rewire the
+// entity-read RPC would need to patch graph-query's Go code, not
+// just the port config. Constructor still accepts the param so
+// tests + future config-overrides work the moment that upstream
+// surface gets parameterized.
+const DefaultGraphQueryEntitySubject = "graph.query.entity"
 
 // ParentReader reads the agent.loop.parent triple's object for a given
 // loop ID. Returns the parent loop's full 6-part entity ID when present,
@@ -143,13 +165,20 @@ type EntityTripleReader interface {
 // graph.query.entity request/reply NATS surface. Mirrors the response
 // shape used by chainpause/decision_handler.go NATSPauseDataReader.
 type NATSEntityReader struct {
-	client *natsclient.Client
+	client  *natsclient.Client
+	subject string
 }
 
 // NewNATSEntityReader constructs an EntityTripleReader backed by the
-// given NATS client.
-func NewNATSEntityReader(client *natsclient.Client) *NATSEntityReader {
-	return &NATSEntityReader{client: client}
+// given NATS client. subject is the entity-read RPC subject; empty
+// falls back to DefaultGraphQueryEntitySubject. main.go is expected
+// to resolve the live subject from the running graph-query (or
+// graph-ingest) component's port config via portresolver.
+func NewNATSEntityReader(client *natsclient.Client, subject string) *NATSEntityReader {
+	if subject == "" {
+		subject = DefaultGraphQueryEntitySubject
+	}
+	return &NATSEntityReader{client: client, subject: subject}
 }
 
 // ReadEntity implements EntityTripleReader against a live graph
@@ -164,7 +193,7 @@ func (r *NATSEntityReader) ReadEntity(ctx context.Context, entityID string) (map
 	queryCtx, cancel := context.WithTimeout(ctx, graphQueryTimeout)
 	defer cancel()
 
-	respData, err := r.client.Request(queryCtx, graphQueryEntitySubject, reqData, graphQueryTimeout)
+	respData, err := r.client.Request(queryCtx, r.subject, reqData, graphQueryTimeout)
 	if err != nil {
 		return nil, fmt.Errorf("graph entity query for %q: %w", entityID, err)
 	}
@@ -202,9 +231,11 @@ type NATSParentReader struct {
 }
 
 // NewNATSParentReader constructs a NATSParentReader bound to the given
-// NATS client + platform identity.
-func NewNATSParentReader(client *natsclient.Client, platform types.PlatformMeta) *NATSParentReader {
-	return &NATSParentReader{entities: NewNATSEntityReader(client), platform: platform}
+// NATS client + platform identity. subject is the entity-read RPC
+// subject; empty falls back to DefaultGraphQueryEntitySubject. Same
+// resolution flow as NewNATSEntityReader.
+func NewNATSParentReader(client *natsclient.Client, platform types.PlatformMeta, subject string) *NATSParentReader {
+	return &NATSParentReader{entities: NewNATSEntityReader(client, subject), platform: platform}
 }
 
 // ReadParent implements ParentReader against a live graph component.

@@ -10,31 +10,44 @@ import (
 	"github.com/nats-io/nats.go"
 )
 
-// loopFailedSubject is the NATS wildcard that matches every agent.failed.*
-// message the agentic-loop processor publishes on loop failure.
-// Source: processor/agentic-loop/config.go "agent.failed" output port at beta.45.
-const loopFailedSubject = "agent.failed.>"
+// DefaultLoopFailedSubject is the upstream agentic-loop processor's
+// output port for loop-failure events as of v1.0.0-beta.57. Used as
+// the fallback when cmd/semteams/main.go cannot resolve the subject
+// from the running agentic-loop component's port config — see
+// portresolver.SubjectOrDefault wiring.
+//
+// Operators can override per deployment by editing the agentic-loop
+// component's `outputs[name="agent.failed"].subject` field.
+const DefaultLoopFailedSubject = "agent.failed.>"
 
 // Subscriber wraps a Pauser and drives it from a NATS subscription on
-// loopFailedSubject. Lifecycle is tied to the context passed to Start.
+// the configured subject. Lifecycle is tied to the context passed to
+// Start.
 type Subscriber struct {
-	pauser *Pauser
-	logger *slog.Logger
+	pauser  *Pauser
+	subject string
+	logger  *slog.Logger
 }
 
-// NewSubscriber constructs a Subscriber. Does not start the subscription;
-// call Start to activate.
-func NewSubscriber(p *Pauser, logger *slog.Logger) *Subscriber {
+// NewSubscriber constructs a Subscriber. subject is the NATS wildcard
+// the subscription binds to; empty falls back to DefaultLoopFailedSubject.
+// main.go is expected to resolve the live subject from agentic-loop's
+// port config via portresolver.SubjectOrDefault and pass the result
+// here. Does not start the subscription; call Start to activate.
+func NewSubscriber(p *Pauser, subject string, logger *slog.Logger) *Subscriber {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Subscriber{pauser: p, logger: logger}
+	if subject == "" {
+		subject = DefaultLoopFailedSubject
+	}
+	return &Subscriber{pauser: p, subject: subject, logger: logger}
 }
 
 // Start registers the NATS subscription and returns when it is active.
 // Cancelling ctx drains and unsubscribes cleanly.
 func (s *Subscriber) Start(ctx context.Context, client *natsclient.Client) error {
-	sub, err := client.Subscribe(ctx, loopFailedSubject, func(msgCtx context.Context, msg *nats.Msg) {
+	sub, err := client.Subscribe(ctx, s.subject, func(msgCtx context.Context, msg *nats.Msg) {
 		s.handleMsg(msgCtx, msg.Data)
 	})
 	if err != nil {
@@ -50,7 +63,7 @@ func (s *Subscriber) Start(ctx context.Context, client *natsclient.Client) error
 	}()
 
 	s.logger.Info("chain-pause subscriber: NATS subscription active",
-		slog.String("subject", loopFailedSubject))
+		slog.String("subject", s.subject))
 	return nil
 }
 

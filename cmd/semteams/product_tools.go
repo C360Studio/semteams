@@ -275,7 +275,10 @@ func registerEmitSpecArtifact(reg *agentictools.ExecutorRegistry, natsClient *na
 	// from a completed ancestor that has full lineage stamped. Wired
 	// optional via SetChainResolver to keep the executor's constructor
 	// signature stable and to keep test contexts opt-in.
-	parentReader := chain.NewNATSParentReader(natsClient, platform)
+	// Subject is the upstream graph-query literal — see
+	// chain.DefaultGraphQueryEntitySubject doc-comment for why this is a
+	// constant rather than a config-resolved port.
+	parentReader := chain.NewNATSParentReader(natsClient, platform, chain.DefaultGraphQueryEntitySubject)
 	chainResolver := chain.NewResolver(parentReader, platform)
 	executor.SetChainResolver(chainResolver)
 
