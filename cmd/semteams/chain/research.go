@@ -27,22 +27,15 @@ import (
 // t.TempDir()). Consumers of chain.research_artifact.path must tolerate
 // both — emit_research_artifact's renderMarkdown does NOT normalise.
 const (
-	chainPredicateResearchArtifactLoop       = "chain.research_artifact_loop"
+	// Read-side wire format lives in predicates.go (Predicate*) so
+	// downstream consumers reference the same constant. Local aliases
+	// kept short for stamper-side readability.
+	chainPredicateResearchArtifactLoop       = PredicateResearchArtifactLoop
 	chainPredicateResearchArtifactHarness    = "chain.research_artifact.harness"
 	chainPredicateResearchArtifactActorCount = "chain.research_artifact.actor_count"
 	chainPredicateResearchArtifactTaskCount  = "chain.research_artifact.task_count"
 	chainPredicateResearchArtifactPath       = "chain.research_artifact.path"
-
-	// chainPredicateSlugStem is the chain-stable slug stem derived from
-	// the researcher's rendered markdown path at first-emit time. Stamped
-	// alongside chain.research_artifact.path so downstream emit-tools
-	// (emit_plan, emit_consensus, emit_dev_via_spec_artifact) can compose
-	// "<stem>-plan", "<stem>-consensus", "<stem>-implementation" without
-	// re-deriving the stem from a persona-supplied title (which drifts —
-	// smoke #8 run-5 D2: "driver" → "idriver" mid-chain). Absent on
-	// legacy chains whose researcher didn't render markdown; downstream
-	// tools fall back to title-derived slug in that case.
-	chainPredicateSlugStem = "chain.slug.stem"
+	chainPredicateSlugStem                   = PredicateSlugStem
 
 	// chainResearchSource tags chain entity triples this stamper writes
 	// so a graph query can scope to the emitter (parallel to
