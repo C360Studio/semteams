@@ -22,7 +22,7 @@
   "on_enter": [
     {
       "type": "publish_agent",
-      "subject": "agent.task.ops.chain_terminal_observe",
+      "subject": "agent.task.ops-chain-observer",
       "role": "ops-chain-observer",
       "model": "general",
       "tools": ["query_entity", "query_entities", "query_relationships", "read_loop_result", "emit_diagnosis", "submit_work"],
@@ -42,6 +42,7 @@
     "trigger": "dev-via-spec-qa-reviewer loop completion (outcome=success; the decide action — accept/reject/needs_clarification — is the verdict, separate from loop outcome)",
     "complement_to": "ops_observe_complete_loops (per-flow sampling, deep-research)",
     "related_loops_consumers": "ops-chain-observer reads both qa_reviewer (the trigger loop) and researcher (chain anchor) from agent.related_loops in its task properties. The researcher key is also the canonical chain.AnchorRoleKeys anchor for emit-tools; qa_reviewer is observer-specific and ignored by other consumers.",
+    "subject_shape_note": "Subject MUST be exactly two segments after `agent.task.` (i.e. `agent.task.<role-or-id>`) — agentic-dispatch subscribes on `agent.task.*` (NATS single-token wildcard). Subjects with more segments (e.g. `agent.task.ops.chain_terminal_observe`) silently drop into the void: rule fires, action publishes, but no consumer subscribes. Smoke #8 run-11 surfaced this when the rule succeeded but ops-chain-observer never spawned. The companion rule `observe-complete-loops.json` (`agent.task.ops.analyze`) has the same dead shape and should be cleaned up when next touched.",
     "tier": 1
   }
 }
