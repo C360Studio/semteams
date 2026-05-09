@@ -389,44 +389,17 @@ func (s *spyChainReader) ReadChainFor(_ context.Context, loopID string) (string,
 	return s.entityID, s.triples, nil
 }
 
-// TestExecute_ChainAnchorsOnPriorLoopMetadata pins the smoke #8 run-6
-// hotfix: emit-tools MUST anchor the chain ancestry walk on a
-// completed ancestor (from task-property metadata), not the running
-// loop's own LoopID. Smoke #8 run-6 evidence: walking from the
-// running loop fails because agent.loop.parent isn't yet stamped,
-// resolver returns the running loop's own ID as chain root, and the
-// subsequent entity read decodes garbage. With the metadata anchor,
-// the chainReader sees the completed ancestor's loop_id and can walk.
-func TestExecute_ChainAnchorsOnPriorLoopMetadata(t *testing.T) {
-	exec, _, _, _ := newExecutor(t)
-	stub := &spyChainReader{
-		entityID: "c360.test.agent.chain.execution.dispatch_root",
-		triples:  map[string]any{},
-	}
-	exec.SetChainReader(stub)
-
-	// research_reviewer_loop_id is the planner spawn rule's metadata
-	// key (rules/research-mode-transition/03-stabilise-and-transition.json).
-	// Hotfix lookup tries this key (planner-only) before prior_loop_id.
-	call := defaultCall(defaultPlanArgs())
-	call.Metadata = map[string]any{
-		"research_reviewer_loop_id": "research-reviewer-completed",
-	}
-	if _, err := exec.Execute(context.Background(), call); err != nil {
-		t.Fatalf("Execute err: %v", err)
-	}
-	if stub.lastLoopID != "research-reviewer-completed" {
-		t.Errorf("ReadChainFor lastLoopID = %q, want metadata anchor 'research-reviewer-completed' (running LoopID %q must NOT be used when metadata is set)", stub.lastLoopID, call.LoopID)
-	}
-}
-
-// TestExecute_ChainAnchorPriorLoopIDWinsOverFallback pins the
-// preference order: prior_loop_id (universal across dev-via-spec
-// spawn rules) wins over research_reviewer_loop_id (planner-only)
-// when both are present. Defensive — planner spawn doesn't actually
-// set prior_loop_id, but the helper is shared across all 3 emit-tools
-// and keeps consistent precedence.
-func TestExecute_ChainAnchorPriorLoopIDWinsOverFallback(t *testing.T) {
+// TestExecute_ChainAnchorsOnRelatedLoopsResearcher pins the smoke
+// #8 run-7 fix: emit-tools MUST anchor the chain ancestry walk on a
+// completed ancestor's loop_id taken from
+// agent.related_loops.researcher (the framework-supported lineage
+// channel set by every dev-via-spec spawn rule), not the running
+// loop's own LoopID. Smoke #8 run-7 evidence: PR #111's hotfix used
+// bare task properties (which don't propagate); resolver returned
+// the running planner's own ID as chain root and the entity read
+// decoded garbage. agent.related_loops IS purpose-built for cross-arc
+// loop-ID lineage and propagates automatically through ToolCall.Metadata.
+func TestExecute_ChainAnchorsOnRelatedLoopsResearcher(t *testing.T) {
 	exec, _, _, _ := newExecutor(t)
 	stub := &spyChainReader{
 		entityID: "c360.test.agent.chain.execution.dispatch_root",
@@ -436,14 +409,15 @@ func TestExecute_ChainAnchorPriorLoopIDWinsOverFallback(t *testing.T) {
 
 	call := defaultCall(defaultPlanArgs())
 	call.Metadata = map[string]any{
-		"prior_loop_id":             "prior-completed",
-		"research_reviewer_loop_id": "should-be-ignored",
+		agentic.MetadataKeyRelatedLoops: map[string]any{
+			"researcher": "researcher-completed",
+		},
 	}
 	if _, err := exec.Execute(context.Background(), call); err != nil {
 		t.Fatalf("Execute err: %v", err)
 	}
-	if stub.lastLoopID != "prior-completed" {
-		t.Errorf("ReadChainFor lastLoopID = %q, want 'prior-completed' (prior_loop_id is the preferred metadata key)", stub.lastLoopID)
+	if stub.lastLoopID != "researcher-completed" {
+		t.Errorf("ReadChainFor lastLoopID = %q, want metadata anchor 'researcher-completed' (running LoopID %q must NOT be used when related_loops.researcher is set)", stub.lastLoopID, call.LoopID)
 	}
 }
 

@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"testing"
+
+	"github.com/c360studio/semstreams/agentic"
 )
 
 // TestLineageReader_HappyPath drives the success case end-to-end:
@@ -78,62 +80,88 @@ func TestLineageReader_EntityReadError(t *testing.T) {
 	}
 }
 
-func TestAnchorFromMetadata_PriorLoopIDPreferred(t *testing.T) {
-	got := AnchorFromMetadata(map[string]any{
-		"prior_loop_id":             "completed-parent-1",
-		"research_reviewer_loop_id": "should-be-ignored",
-	}, "running-loop-fallback")
-	if got != "completed-parent-1" {
-		t.Errorf("got %q, want completed-parent-1 (prior_loop_id wins)", got)
+// withRelatedLoops wraps a related-loops map in the outer
+// MetadataKeyRelatedLoops envelope agentic-loop produces at runtime.
+// Mirrors the JSON-decoded shape: outer is map[string]any, inner is
+// map[string]any (string values), keyed by role label.
+func withRelatedLoops(roles map[string]string) map[string]any {
+	inner := make(map[string]any, len(roles))
+	for k, v := range roles {
+		inner[k] = v
+	}
+	return map[string]any{agentic.MetadataKeyRelatedLoops: inner}
+}
+
+func TestAnchorFromMetadata_RelatedLoopsResearcherWins(t *testing.T) {
+	got := AnchorFromMetadata(
+		withRelatedLoops(map[string]string{"researcher": "researcher-completed"}),
+		"running-loop-fallback",
+	)
+	if got != "researcher-completed" {
+		t.Errorf("got %q, want researcher-completed (related_loops.researcher anchors the chain walk)", got)
 	}
 }
 
-func TestAnchorFromMetadata_FallsBackToResearchReviewerKey(t *testing.T) {
-	// Planner spawn (research-mode-transition rule_03) uses the
-	// research_reviewer_loop_id key — not prior_loop_id.
+func TestAnchorFromMetadata_FallsBackWhenRelatedLoopsAbsent(t *testing.T) {
+	// Metadata exists but no agent.related_loops envelope — pre-spawn-rule
+	// or test deployments without lineage threading.
 	got := AnchorFromMetadata(map[string]any{
-		"research_reviewer_loop_id": "research-reviewer-abc",
-	}, "running-loop-fallback")
-	if got != "research-reviewer-abc" {
-		t.Errorf("got %q, want research-reviewer-abc (planner-spawn metadata key)", got)
-	}
-}
-
-func TestAnchorFromMetadata_FallsBackWhenAllAbsent(t *testing.T) {
-	got := AnchorFromMetadata(map[string]any{
-		"unrelated_key": "ignored",
+		"loop_id": "running-loop-id",
 	}, "running-loop-fallback")
 	if got != "running-loop-fallback" {
-		t.Errorf("got %q, want fallback (no anchor key present)", got)
+		t.Errorf("got %q, want fallback (no related_loops envelope)", got)
 	}
 }
 
-func TestAnchorFromMetadata_FallsBackOnEmptyValue(t *testing.T) {
-	// Empty string in metadata shouldn't be treated as a valid anchor —
-	// fall through to the next key, then the fallback. Empty fallback
-	// surfaces as empty (caller decides what to do).
-	got := AnchorFromMetadata(map[string]any{
-		"prior_loop_id": "",
-	}, "running-loop-fallback")
+func TestAnchorFromMetadata_FallsBackWhenRoleNotInRelatedLoops(t *testing.T) {
+	// related_loops envelope is present but only carries unrecognised role
+	// labels — operator added a label this helper doesn't yet know about.
+	got := AnchorFromMetadata(
+		withRelatedLoops(map[string]string{"some-future-role": "ignored"}),
+		"running-loop-fallback",
+	)
+	if got != "running-loop-fallback" {
+		t.Errorf("got %q, want fallback (no AnchorRoleKeys match)", got)
+	}
+}
+
+func TestAnchorFromMetadata_FallsBackOnEmptyRoleValue(t *testing.T) {
+	// Empty string in related_loops isn't a viable anchor — fall through.
+	got := AnchorFromMetadata(
+		withRelatedLoops(map[string]string{"researcher": ""}),
+		"running-loop-fallback",
+	)
 	if got != "running-loop-fallback" {
 		t.Errorf("got %q, want fallback (empty-string value treated as absent)", got)
 	}
 }
 
-func TestAnchorFromMetadata_FallsBackOnNonStringValue(t *testing.T) {
-	// Defensive: if metadata key was set to a non-string (rare, but the
-	// type-assert with comma-ok handles it gracefully).
+func TestAnchorFromMetadata_FallsBackOnNonStringRoleValue(t *testing.T) {
+	// Defensive: if related_loops value was set to a non-string (rare, but
+	// the type-assert handles it gracefully). Mock direct rather than via
+	// withRelatedLoops to bypass its string-typed signature.
 	got := AnchorFromMetadata(map[string]any{
-		"prior_loop_id": 42,
+		agentic.MetadataKeyRelatedLoops: map[string]any{"researcher": 42},
 	}, "running-loop-fallback")
 	if got != "running-loop-fallback" {
 		t.Errorf("got %q, want fallback (non-string value treated as absent)", got)
 	}
 }
 
+func TestAnchorFromMetadata_FallsBackOnRelatedLoopsNotMap(t *testing.T) {
+	// Defensive: outer envelope value isn't a map (corruption / wire-format
+	// drift). Don't panic; fall through to fallback.
+	got := AnchorFromMetadata(map[string]any{
+		agentic.MetadataKeyRelatedLoops: "not a map",
+	}, "running-loop-fallback")
+	if got != "running-loop-fallback" {
+		t.Errorf("got %q, want fallback (related_loops envelope wrong type)", got)
+	}
+}
+
 func TestAnchorFromMetadata_NilMetadata(t *testing.T) {
 	got := AnchorFromMetadata(nil, "running-loop-fallback")
 	if got != "running-loop-fallback" {
-		t.Errorf("got %q, want fallback (nil metadata treated as no keys present)", got)
+		t.Errorf("got %q, want fallback (nil metadata)", got)
 	}
 }

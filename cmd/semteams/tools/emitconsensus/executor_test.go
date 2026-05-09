@@ -373,8 +373,10 @@ func (s *spyChainReader) ReadChainFor(_ context.Context, loopID string) (string,
 // chain walk on a completed ancestor's loop_id from task-property
 // metadata, not the running loop's own LoopID. The challenger spawn
 // rule (rules/dev-via-spec/03-reviewer-approved-to-challenger.json)
-// always sets prior_loop_id to the upstream completed reviewer.
-func TestExecute_ChainAnchorsOnPriorLoopMetadata(t *testing.T) {
+// already sets `related_loops: { "researcher": ... }` — the
+// researcher loop is a completed-ancestor with stamped
+// agent.loop.parent triples, so chain.Resolver can walk from it.
+func TestExecute_ChainAnchorsOnRelatedLoopsResearcher(t *testing.T) {
 	exec, _, _, _ := newExecutor(t)
 	stub := &spyChainReader{
 		entityID: "c360.test.agent.chain.execution.dispatch_root",
@@ -384,13 +386,15 @@ func TestExecute_ChainAnchorsOnPriorLoopMetadata(t *testing.T) {
 
 	call := defaultCall(defaultConsensusArgs())
 	call.Metadata = map[string]any{
-		"prior_loop_id": "reviewer-completed",
+		agentic.MetadataKeyRelatedLoops: map[string]any{
+			"researcher": "researcher-completed",
+		},
 	}
 	if _, err := exec.Execute(context.Background(), call); err != nil {
 		t.Fatalf("Execute err: %v", err)
 	}
-	if stub.lastLoopID != "reviewer-completed" {
-		t.Errorf("ReadChainFor lastLoopID = %q, want metadata anchor 'reviewer-completed' (running LoopID %q must NOT be used when metadata is set)", stub.lastLoopID, call.LoopID)
+	if stub.lastLoopID != "researcher-completed" {
+		t.Errorf("ReadChainFor lastLoopID = %q, want metadata anchor 'researcher-completed' (running LoopID %q must NOT be used when related_loops.researcher is set)", stub.lastLoopID, call.LoopID)
 	}
 }
 
