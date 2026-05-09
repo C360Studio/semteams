@@ -1789,8 +1789,10 @@ func (s *spyChainReader) ReadChainFor(_ context.Context, loopID string) (string,
 // chain walk on a completed ancestor's loop_id from task-property
 // metadata, not the running loop's own LoopID. The architect spawn
 // rule (rules/dev-via-spec/05-challenger-accept-to-architect.json)
-// always sets prior_loop_id to the upstream completed challenger.
-func TestExecute_ChainAnchorsOnPriorLoopMetadata(t *testing.T) {
+// already sets `related_loops: { "researcher": ... }` — the
+// researcher loop is a completed-ancestor with stamped
+// agent.loop.parent triples.
+func TestExecute_ChainAnchorsOnRelatedLoopsResearcher(t *testing.T) {
 	exec, _, _, _ := newExecutorWithDir(t)
 	stub := &spyChainReader{
 		entityID: "c360.semteams.agent.chain.execution.dispatch_root",
@@ -1800,13 +1802,15 @@ func TestExecute_ChainAnchorsOnPriorLoopMetadata(t *testing.T) {
 
 	call := defaultCall(defaultArtifactArgs())
 	call.Metadata = map[string]any{
-		"prior_loop_id": "challenger-completed",
+		agentic.MetadataKeyRelatedLoops: map[string]any{
+			"researcher": "researcher-completed",
+		},
 	}
 	if _, err := exec.Execute(context.Background(), call); err != nil {
 		t.Fatalf("Execute err: %v", err)
 	}
-	if stub.lastLoopID != "challenger-completed" {
-		t.Errorf("ReadChainFor lastLoopID = %q, want metadata anchor 'challenger-completed' (running LoopID %q must NOT be used when metadata is set)", stub.lastLoopID, call.LoopID)
+	if stub.lastLoopID != "researcher-completed" {
+		t.Errorf("ReadChainFor lastLoopID = %q, want metadata anchor 'researcher-completed' (running LoopID %q must NOT be used when related_loops.researcher is set)", stub.lastLoopID, call.LoopID)
 	}
 }
 

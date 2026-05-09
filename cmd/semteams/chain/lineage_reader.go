@@ -3,6 +3,8 @@ package chain
 import (
 	"context"
 	"fmt"
+
+	"github.com/c360studio/semstreams/agentic"
 )
 
 // LineageReader composes ChainEntityID resolution + entity-triple
@@ -75,42 +77,66 @@ func (lr *LineageReader) ReadChainFor(ctx context.Context, fromLoopID string) (s
 	return chainEntityID, triples, nil
 }
 
-// AnchorMetadataKeys names the task-property metadata keys product
-// rules use to pass a completed ancestor's loop_id to the spawned
-// loop. AnchorFromMetadata tries them in declaration order.
+// AnchorRoleKeys names the role labels in TaskMessage.Metadata's
+// related_loops map (keyed by agentic.MetadataKeyRelatedLoops at the
+// outer level) that AnchorFromMetadata tries in declaration order.
+// Each named role IS a completed ancestor loop in the chain at the
+// time the spawned loop fires its emit-tool.
 //
-// Source: every dev-via-spec spawn rule (rules/dev-via-spec/*.json)
-// sets `prior_loop_id` in spawn properties; research-mode-transition's
-// planner spawn (rules/research-mode-transition/03-*.json) historically
-// uses `research_reviewer_loop_id` instead. Both keys are completed
-// ancestor loop_ids. Adding a new key here means a new spawn rule's
-// metadata convention is now resolvable to a chain anchor without
-// touching any tool code.
-var AnchorMetadataKeys = []string{
-	"prior_loop_id",
-	"research_reviewer_loop_id",
+// Why related_loops and not bare task properties: spawn rules
+// expose two channels for cross-loop data —
+//
+//   - `properties` map: visible to the persona via task properties
+//     (the LLM reads them in the spawn prompt) but NOT propagated
+//     to ToolCall.Metadata (smoke #8 run-7 evidence: hotfix on
+//     PR #111 assumed properties propagate; they don't).
+//   - `related_loops` map: framework-supported loop-ID lineage
+//     channel. Stamped onto TaskMessage.Metadata under
+//     agentic.MetadataKeyRelatedLoops at spawn time; agentic-loop
+//     propagates that map onto every ToolCall.Metadata
+//     (processor/agentic-loop/handlers.go:898).
+//
+// Every dev-via-spec spawn rule (rules/dev-via-spec/*.json) and
+// the research→dev-via-spec transition rule already set
+// `related_loops: { "researcher": "$entity.triple.lineage.researcher" }`
+// — that researcher loop is a completed-ancestor with stamped
+// `agent.loop.parent` triple, so chain.Resolver can walk from it.
+//
+// Adding a new role label here means any spawn rule that sets
+// related_loops with the new key automatically becomes a viable
+// chain anchor without touching tool code.
+var AnchorRoleKeys = []string{
+	"researcher",
 }
 
 // AnchorFromMetadata picks a chain-walkable loop_id from a tool
 // call's task-property metadata, falling back to fallbackLoopID when
-// no AnchorMetadataKeys entry is present. Designed for emit-tools
-// calling LineageReader.ReadChainFor — they MUST anchor on a
-// completed loop, never the running one.
+// no AnchorRoleKeys entry is present in the related_loops sub-map.
+// Designed for emit-tools calling LineageReader.ReadChainFor — they
+// MUST anchor on a completed loop, never the running one.
 //
-// Returns the first non-empty string-typed value found across
-// AnchorMetadataKeys (in order); falls back to fallbackLoopID if none
-// match. fallbackLoopID is typically call.LoopID — preserves
-// pre-fix behaviour as a last-resort safety net (works when the
-// caller's own parent triple happens to be stamped, fails the same
-// way it did pre-fix when not). The "preferred path → safety net"
-// shape mirrors portresolver.SubjectOrDefault.
+// The lookup walks two levels:
+//
+//  1. metadata[agentic.MetadataKeyRelatedLoops] — the framework's
+//     cross-arc loop-ID lineage channel (set by spawn rules'
+//     `related_loops` map; propagated automatically into
+//     ToolCall.Metadata by agentic-loop). Decoded as map[string]any
+//     after JSON round-trip.
+//  2. Inside that sub-map, AnchorRoleKeys names the roles to try in
+//     order. First non-empty string match wins.
+//
+// Falls back to fallbackLoopID (typically call.LoopID) when the
+// related_loops sub-map is absent OR when no AnchorRoleKeys match.
+// fallbackLoopID preserves backward-compat behaviour for tests +
+// deployments that don't yet set related_loops with a known role.
 //
 // Metadata is map[string]any to match agentic.ToolCall.Metadata; this
-// helper handles the type-assert and empty-string check so callers
+// helper handles every type-assert and empty-string check so callers
 // stay one-line.
 func AnchorFromMetadata(metadata map[string]any, fallbackLoopID string) string {
-	for _, key := range AnchorMetadataKeys {
-		if v, ok := metadata[key].(string); ok && v != "" {
+	related, _ := metadata[agentic.MetadataKeyRelatedLoops].(map[string]any)
+	for _, role := range AnchorRoleKeys {
+		if v, ok := related[role].(string); ok && v != "" {
 			return v
 		}
 	}
