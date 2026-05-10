@@ -235,11 +235,17 @@ directories owned by the SemSource service — not directly readable
 from the sandbox where agents (researcher, builder, curator) run.
 Most substrate interrogation should go through graph queries (the
 typed entity/relationship surface SemSource indexes), but **not
-everything decomposes into graph triples**. Canonical example:
-`pom.xml` is a legitimate read target for a researcher reasoning
-about a Java codebase's build configuration, dependency versions,
-or plugin wiring — the graph captures the symbol-level shape, not
-the build-tool config that governs how the symbols compile.
+everything decomposes into graph triples**. Canonical examples are
+build-tool configs: `pom.xml` for Maven, `build.gradle` /
+`settings.gradle` / `gradle.properties` for Gradle, `package.json`
+for Node, `pyproject.toml` for Python, `Cargo.toml` for Rust. A
+researcher reasoning about how a codebase compiles, what plugin
+versions are in play, or how multi-module wiring works needs to
+read the file directly — the graph captures the symbol-level
+shape, not the build-tool config that governs how the symbols
+compile. (OSH itself is gradle, not maven; the principle is
+build-tool-agnostic and that variety is the reason bash-cat
+fallback exists at all.)
 
 **semspec's solution.** Mount the SemSource source directories
 into the sandbox container as a **read-only shared volume**. Now
@@ -284,7 +290,7 @@ mutate it.
          {
            "namespace": "osh-core",
            "mount_path": "/sources/osh-core",
-           "covers": "OSH IDriver interface, IPersistentDriver, BaseSensorModule"
+           "covers": "OSH IDriver interface, IPersistentDriver, BaseSensorModule, build.gradle / settings.gradle for module wiring"
          }
        ]
      }
@@ -307,6 +313,62 @@ mutate it.
    improvement targets for SemSource. Not Phase 1; tracked as
    future cleanup.
 
+6. **Operational guardrails — mount placement + export hygiene.**
+   Source repos can be GBs. Once they're a bind mount inside the
+   container, any code path that walks the workspace tree will
+   slurp them by default. Two existing surfaces are at risk:
+
+   - **`handleZipWorkspace`** (`cmd/semteams/sandbox/server.go`)
+     calls `zipDir(workspaceRoot/<taskID>)`, and `zipDir`
+     (`workspace.go`) skips symlinks but **does not detect bind
+     mounts** — a bind mount looks like a real directory to
+     `filepath.WalkDir`. If the shared source mount lives
+     anywhere under `workspaceRoot/<taskID>/`, evidence-export
+     downloads balloon from KBs of generated artifacts to GBs of
+     third-party source.
+   - **Git status** in any agent-owned scratch dir would
+     similarly stage entire mounted repos for commit if a mount
+     ever overlapped a tracked path — the diff explosion would be
+     the obvious symptom but the underlying disclosure risk
+     (license-encumbered substrate landing in a public PR) is
+     the worse outcome.
+
+   **Required guardrails** (semspec-side at the mount, semteams-
+   side at the consumer):
+
+   - **Mount OUTSIDE the workspace tree.** The shared mount must
+     live at a path the sandbox's per-task workspace cannot
+     reach by `filepath.Walk` — e.g. container-absolute
+     `/sources/<namespace>` while workspaces live under
+     `/workspace/<task_id>`. Symlinking from inside the
+     workspace defeats the point and reintroduces the zip-export
+     hazard. (`zipDir` skips symlinks today, but that is a fragile
+     load-bearing detail rather than a contract.)
+   - **Defensive `.gitignore` entry** in any sandbox skeleton
+     that ships with a workspace template, listing the mount
+     prefix. Belt-and-suspenders against an operator who
+     reconfigures mount placement without re-reading this ADR.
+   - **`zipDir` learns to skip bind mounts** (or any path under a
+     configured exclusion list). Detection: `os.Lstat` to read
+     `Sys().(*syscall.Stat_t).Dev` and compare against the
+     workspace root's device ID — bind mounts surface a
+     different device. Belongs in PR 2 or PR 3 as
+     defense-in-depth alongside the curator persona work; cheap
+     and obviously correct.
+   - **No `source_dirs` mount paths in archived evidence.** The
+     `emit_curator_artifact` payload references mount paths as
+     metadata — that's fine, paths are small. But the *contents*
+     at those paths must never be archived as part of an
+     evidence bundle, work-product zip, or ops-chain-observer
+     artifact. Any future evidence-summary code that quotes file
+     contents must read-and-snippet, never bulk-include.
+
+   None of these are new product-shell *tools* — they're contract
+   tightenings on existing surfaces. The framework-alignment
+   review for ADR-040 (CLAUDE.md "Product-Shell-Tool
+   Discipline") still applies: no new tool, no new bucket, no
+   new stream.
+
 **Implementation handoff with semspec.** semspec owns the volume
 mount at the sandbox compose / Dockerfile layer — same shared
 infrastructure both products consume. SemTeams owns:
@@ -316,10 +378,19 @@ infrastructure both products consume. SemTeams owns:
   mount" fallback rule (added in PR 3 alongside the rule rewrites).
 - The curator persona's "verify mount as part of indexing-wait"
   step (added in PR 2 alongside the persona).
+- The `zipDir` bind-mount-skip guardrail and any
+  workspace-skeleton `.gitignore` entries (item 6 above; PR 2
+  or PR 3 as defense-in-depth).
+
+Coordination point with semspec: agree the canonical mount
+prefix (e.g. `/sources/`) before either side ships consumer code,
+so the `zipDir` exclusion list and the persona instructions
+reference the same path. Mismatch here is a silent foot-gun.
 
 No upstream framework change. No new product-shell tool. The
 addendum reframes the curator's payload + the researcher's
-fallback rule; the rest of ADR-040's design holds.
+fallback rule + tightens existing export contracts; the rest of
+ADR-040's design holds.
 
 ## What this ADR does NOT decide
 
