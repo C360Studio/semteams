@@ -5,8 +5,11 @@
 **Proposed (2026-05-10).** Establishes that `needs_clarification` is
 a recoverable terminal — not a wedge — and codifies the routing
 model that gets a chain past it. Defines a three-tier recovery
-hierarchy (rules → coordinator → human) with a structural
+hierarchy (rules → coordinator → review-pause) with a structural
 discriminator and explicit foreclosure on agent post-hoc mutation.
+Consumers of the review-pause cluster are deployment-configured
+(coordinator agent, operator dashboard, metric-emit job) — the
+predicate name doesn't presume which.
 
 ## Why this exists
 
@@ -107,28 +110,36 @@ for the producer × reason pair, recovery routing requires
 judgment: which role to re-spawn? Re-spawn at all? Escalate?
 A coordinator agent reads the terminal, applies judgment, and
 either spawns a recovery loop with custom context, proposes a
-config change for human approval (per ADR-026's deploy surface),
-or marks the chain `needs_human_attention` via Tier 3.
+config change for operator approval (per ADR-026's deploy surface),
+or marks the chain `needs_review` via Tier 3.
 
 For smoke tests and read-only deployments, coordinator is the
 default Tier 2 handler — keeps the loop self-contained and
-demonstrable. Production deployments may default Tier 2 to human
-escalation per operational policy.
+demonstrable. Production deployments may bypass Tier 2 (route
+straight to Tier 3 for operator review) per operational policy.
 
-### Tier 3 — Human escalation
+### Tier 3 — Pause for review
 
-When coordinator declines (out of scope, requires real-world
-action) or is not configured, the chain stamps a new
-`chain.needs_human.*` predicate cluster on the chain entity:
+When Tier 1 has no rule for the producer × reason pair AND
+coordinator either is not configured OR declines (out of scope,
+requires real-world action), the chain stamps a new
+`chain.needs_review.*` predicate cluster on the chain entity:
 
-- `chain.needs_human.classification` — open-valued tag (e.g.
+- `chain.needs_review.classification` — open-valued tag (e.g.
   `unrouted_needs_clarification`, `coordinator_declined`,
   `catalog_gap`)
-- `chain.needs_human.producer_loop_id` — the loop that emitted
+- `chain.needs_review.producer_loop_id` — the loop that emitted
   the original needs_clarification
-- `chain.needs_human.producer_role` — the role
-- `chain.needs_human.reason` — the original `coordinator.decision_reason`
-- `chain.needs_human.observed_at` — RFC3339 timestamp
+- `chain.needs_review.producer_role` — the role
+- `chain.needs_review.reason` — the original `coordinator.decision_reason`
+- `chain.needs_review.observed_at` — RFC3339 timestamp
+
+The cluster represents "awaiting a recovery decision" — the
+decision-maker is **whoever the deployment configures**: a
+coordinator agent that wakes on the cluster write, an operator
+reading observability surfaces, or a metric-emit job flagging it
+for later triage. The predicate name doesn't presume the
+consumer; the deployment policy does.
 
 This is **deliberately distinct from `chain.paused.*`** (ADR-037).
 chain.paused is for FAILED loops with closed-enum classifications
@@ -138,8 +149,9 @@ not a failure; conflating the two predicate clusters would
 confuse downstream consumers (chainpause's existing handlers,
 ops-chain-observer's diagnosis logic).
 
-ops-chain-observer (PR #114) and any human-facing observability
-surface read `chain.needs_human.*` triples and route to operator.
+ops-chain-observer (PR #114) and any operator-facing observability
+surface read `chain.needs_review.*` triples and route per
+deployment policy.
 
 ### The structural discriminator
 
@@ -155,7 +167,7 @@ if rule matches (producer_role, retry_hint or reason pattern):
 elif coordinator configured:
     Tier 2 — coordinator reads, decides
 else:
-    Tier 3 — chain.needs_human.* with classification=unrouted_needs_clarification
+    Tier 3 — chain.needs_review.* with classification=unrouted_needs_clarification
 ```
 
 The producer doesn't choose the tier. Consumer-side configuration
@@ -222,10 +234,10 @@ Initial rules (in order of empirical priority from runs 9–12):
    needs_clarification carries `coordinator.blocking_question` by
    shape — that signals "operator-actionable" (run-10's catalog
    gap is the canonical case). The rule writes
-   `chain.needs_human.classification = catalog_gap` (or whatever
+   `chain.needs_review.classification = catalog_gap` (or whatever
    the reason pattern matches) directly to the chain entity. If
    coordinator is configured (Phase 2), an additional rule on the
-   `chain.needs_human.*` write spawns coordinator for triage; if
+   `chain.needs_review.*` write spawns coordinator for triage; if
    not, the operator sees the triples directly.
 
    This rule is self-contained at Phase 1 even when Phase 2 doesn't
@@ -237,9 +249,9 @@ Initial rules (in order of empirical priority from runs 9–12):
 ### Phase 2 — Coordinator agent (Shape B) for reasoning-required cases
 
 Coordinator persona reads the needs_clarification terminal (or
-the `chain.needs_human.*` triples Phase 1 rule #3 wrote), decides:
+the `chain.needs_review.*` triples Phase 1 rule #3 wrote), decides:
 re-spawn upstream with custom context, propose a config change
-(catalog edit) for human approval, or mark `needs_human_attention`
+(catalog edit) for operator approval, or mark `needs_review`
 via Tier 3.
 
 Configurable per deployment: smoke tests default to coordinator
@@ -251,7 +263,7 @@ contract are deferred to a separate ADR or persona-fragment design
 slice. Phase 2 here is the architectural commitment that the tier
 exists; the contents are open.
 
-### Phase 3 — Human escalation via chain.needs_human.*
+### Phase 3 — Pause-for-review surface (chain.needs_review.*)
 
 Already covered structurally in Phase 1 rule #3 and the Tier 3
 spec above. No additional engineering for the predicate cluster
@@ -304,7 +316,7 @@ This phase is independent of Phases 1–3; can land in any order.
   the policy boundary; the persona prose is implementation.
 
 - **Per-deployment configuration mechanics.** "Coordinator default
-  for smoke; human default for production" is the policy; the
+  for smoke; operator-review default for production" is the policy; the
   config knob (rule-set selection, coordinator presence flag,
   per-tier escalation rules) is implementation detail.
 
@@ -328,7 +340,8 @@ together they discipline the producer's incentive over time.
 ### Coordinator as quality gate, not just router
 
 When Tier 2 fires, coordinator can route in three directions
-(re-spawn upstream, escalate to human, propose config change) —
+(re-spawn upstream, mark `chain.needs_review.*` for Tier 3, propose
+config change) —
 AND a fourth: **re-spawn the SAME producer with "your prior
 needs_clarification was insufficient — commit or be more
 specific."** This makes coordinator a quality gate that pushes
@@ -368,7 +381,7 @@ If coordinator handles the long tail with judgment (substantive vs
 give-up; route or send back), Tier 1 stays bounded and producers
 get disciplined incrementally. If coordinator can't make those
 distinctions, the system either wedges (lazy needs_clarification
-goes nowhere useful) or gets noisy (everything escalates to human).
+goes nowhere useful) or gets noisy (everything escalates to operator review).
 Either way the symptom looks like "needs_clarification doesn't
 work"; the root cause is coordinator capability. Phase 2's coordinator
 persona shape is therefore the single highest-leverage decision
@@ -392,11 +405,13 @@ more than the predicate clusters. Treat it as such.
 - The ADR explicitly forecloses Shape C, so future agents/humans
   reading the codebase don't reach for "easier" mutation
   workarounds without re-litigating the discipline.
-- Tier 3 introduces `chain.needs_human.*` as a distinct predicate
+- Tier 3 introduces `chain.needs_review.*` as a distinct predicate
   cluster from chain.paused.* — keeps failure semantics
   (chain.paused, ADR-037 closed-enum classifications) distinct
-  from recoverable-pending semantics (chain.needs_human, open-valued
-  classifications).
+  from recoverable-pending semantics (chain.needs_review, open-valued
+  classifications). The cluster's name doesn't presume the
+  consumer — coordinator agent, operator dashboard, and metric-emit
+  job are all valid Tier 3 sinks per deployment policy.
 
 **Negative:**
 
@@ -410,7 +425,7 @@ more than the predicate clusters. Treat it as such.
 - Stamper supersession is a real change to the milestone-stamping
   contract; a future PR has to land it carefully (existing one-shot
   consumers depend on the current behavior).
-- A new predicate cluster (`chain.needs_human.*`) means
+- A new predicate cluster (`chain.needs_review.*`) means
   ops-chain-observer's persona fragment needs to know about it
   alongside `chain.paused.*` — a small persona update when Phase 1
   ships.
@@ -420,7 +435,7 @@ more than the predicate clusters. Treat it as such.
   make smart routing decisions across the long tail of novel
   shapes, the whole tier structure degrades: lazy emissions go
   nowhere useful (silent wedge from a different cause) or
-  everything escalates to human (noisy). This is the
+  everything escalates to operator review (noisy). This is the
   load-bearing investment for ADR-039 to deliver value — see
   §"Guarding against lazy needs_clarification" for the discipline
   story. Phase 2's coordinator persona is therefore the highest-
@@ -457,7 +472,7 @@ more than the predicate clusters. Treat it as such.
   unrelated concern.)
 - **ADR-037 (chain-pause primitive)** — chain.paused.* triples are
   reserved for FAILED loops with closed-enum classifications.
-  ADR-039 deliberately introduces a new chain.needs_human.* cluster
+  ADR-039 deliberately introduces a new chain.needs_review.* cluster
   rather than extending chain.paused, to keep failure semantics
   separate from recoverable-pending semantics.
 - **ADR-038 (chain entity)** — chain entity reference updates on
