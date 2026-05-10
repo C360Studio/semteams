@@ -28,7 +28,7 @@
       "model": "architecture",
       "tools": ["read_loop_result", "query_entity", "query_entities", "add_source_repo", "emit_research_artifact"],
       "action_allowlist": ["approved", "insufficient"],
-      "max_iterations": 5,
+      "max_iterations": 3,
       "properties": {
         "prior_architect_loop_id": "$entity.instance",
         "prior_researcher_loop_id": "$entity.triple.lineage.researcher",
@@ -45,7 +45,7 @@
     "shape": "A",
     "supersession_target": "chain.research_artifact_loop",
     "phase_4_dependency": "Stamper supersession (chain entity's `chain.research_artifact_loop` reference) is Phase 4 of ADR-039 — until it lands, the chain entity's milestone references won't update on the new researcher's artifact. The supersession is real in the graph (new loop entity, new artifact triples) but the chain.* pointer stays stale. Loop ancestry walks (agent.loop.parent) and lineage.researcher forward-stamping work correctly even without Phase 4; only the chain-level fusion view is degraded.",
-    "max_iterations_note": "Per-entity rule_state caveat — the architect-loop-id this rule fires on is unique per chain, so max_iterations=3 is a per-architect-loop ceiling, not a chain-wide one. If the same architect loop is somehow re-triggered three times the rule stops firing; in practice each architect needs_clarification is a fresh entity, so the cap is informational. Tune from empirical evidence in smoke #8 run-13.",
+    "max_iterations_note": "Same per-entity rule-state caveat as rule 02-reviewer-rejected-retry-with-source. Each architect loop is a new entity, so the outer-rule max_iterations=3 is informational under the current rule engine — coordinator.next_action is a single-state terminal, the same architect entity won't re-emit it. The spawned researcher's max_iterations=3 mirrors rule 02's analogue spawn shape (read_loop_result + query + add_source_repo + emit) — same role, same tools, same iteration budget.",
     "model_choice": "architecture model (claude-sonnet typically) — recovery research is harder than first-pass research because the gap was already non-obvious to the prior researcher. Same model the rule_05-architect uses for its own role.",
     "smoke_evidence": [
       "/tmp/smoke8-run9/trajectory-b85dfdec-*.json — researcher dropped test_harness; architect emitted needs_clarification with retry_hint naming the field",
