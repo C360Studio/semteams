@@ -29,63 +29,63 @@ import { test, expect } from "@playwright/test";
  * them under e2e is a follow-up if smoke #6 (R3.6.2.f) reveals
  * real-LLM retry behaviour worth pinning.
  *
- * Sequence (matches dev-via-spec.yaml — eleven loops, thirty-three
- * LLM round-trips):
+ * Sequence (matches dev-via-spec.yaml — ten loops, thirty-one
+ * LLM round-trips, ADR-040 reshape):
  *
  *   Loop A — researcher (default_role, revision=1) → query_entity →
  *            emit_research_artifact (revision=1, empty) → completion
  *            → outcome=success → rule_01a fires → spawn reviewer
  *
  *   Loop B — research-reviewer (pass 1) → read_loop_result →
- *            decide(insufficient, recommends add_source_repo) →
- *            rule_02 fires → spawn researcher-with-source-acquisition
+ *            decide(insufficient, names missing repo) →
+ *            rule_02 fires (spawn-curator) → spawn source-curator
  *
- *   Loop C — researcher-with-source-acquisition (revision=2) →
+ *   Loop C — source-curator (substrate-mutating, ADR-040) →
  *            read_loop_result → add_source_repo (approval-gated) →
- *            [test approves] → query_entity →
- *            emit_research_artifact (revision=2, full + 1 mutation)
- *            → completion → outcome=success → rule_01b fires
+ *            [test approves] → query_entity (verifies indexed) →
+ *            emit_curator_artifact (added_sources +
+ *            verified_entity_ids) → decide(action="indexed")
+ *            → coordinator.next_action=indexed → rule_02b fires
+ *            (spawn researcher with curator_loop_id)
  *
- *   Loop D — research-reviewer (pass 2 — stabilisation gate) →
- *            read_loop_result → decide(insufficient, "awaiting
- *            stabilisation") → rule_02 fires → spawn another
- *            researcher-with-source-acquisition
+ *   Loop D — researcher (recovery=curator_indexed, re-query) →
+ *            read_loop_result (curator artifact) → query_entity
+ *            (augmented corpus) → emit_research_artifact
+ *            (revision=2, substrate_mutations=[] — researcher does
+ *            NOT mutate under ADR-040) → completion
+ *            → outcome=success → rule_01a fires → spawn reviewer
  *
- *   Loop E — researcher-with-source-acquisition (revision=3,
- *            settling — no new mutations) → read_loop_result →
- *            query_entity → emit_research_artifact (revision=3,
- *            substrate_mutations carried forward) → completion
- *            → outcome=success → rule_01b fires
+ *   Loop E — research-reviewer (pass 2) → read_loop_result →
+ *            decide(approved) — no stabilisation gate needed since
+ *            the researcher made no substrate mutations →
+ *            rule_03 fires (research-mode-transition) → spawn
+ *            dev-via-spec-planner
  *
- *   Loop F — research-reviewer (pass 3) → read_loop_result →
- *            decide(approved) → rule_03 fires (research-mode-
- *            transition) → spawn dev-via-spec-planner
- *
- *   Loop G — dev-via-spec-planner (R3.3 first pass, real persona) →
- *            read_loop_result → decide(planned, reason=<plan>)
+ *   Loop F — dev-via-spec-planner (R3.3 first pass, real persona) →
+ *            read_loop_result → emit_plan → decide(planned)
  *            → coordinator.next_action=planned → dev-via-spec
  *            rule_01 fires → spawn dev-via-spec-reviewer
  *
- *   Loop H — dev-via-spec-reviewer (first pass, golden path) →
+ *   Loop G — dev-via-spec-reviewer (first pass, golden path) →
  *            read_loop_result → decide(approved)
  *            → coordinator.next_action=approved → dev-via-spec
  *            rule_03 fires → spawn dev-via-spec-challenger
  *
- *   Loop I — dev-via-spec-challenger (first pass, golden path) →
- *            read_loop_result → decide(accept)
+ *   Loop H — dev-via-spec-challenger (first pass, golden path) →
+ *            read_loop_result → emit_consensus → decide(accept)
  *            → coordinator.next_action=accept → dev-via-spec
  *            rule_05 fires → spawn dev-via-spec-architect
  *
- *   Loop J — dev-via-spec-architect (R3.4b emits artifact) →
+ *   Loop I — dev-via-spec-architect (R3.4b emits artifact) →
  *            read_loop_result × 3 (challenger / planner /
  *            research-reviewer) →
  *            emit_dev_via_spec_artifact (renders markdown +
  *            mints dev_via_spec.artifact.{path,slug,...} triples) →
- *            decide(seed_requirements_emitted) →
- *            coordinator.next_action=seed_requirements_emitted →
+ *            decide(tasks_emitted) →
+ *            coordinator.next_action=tasks_emitted →
  *            dev-via-spec rule_06 fires (R3.6.2.d) → spawn builder.
  *
- *   Loop K — dev-via-spec-builder (R3.6.2.e terminal) →
+ *   Loop J — dev-via-spec-builder (R3.6.2.e terminal) →
  *            bootstrap_workspace (iteration 1) → bash × 2 →
  *            builder_decide(needs_clarification) — the fixture
  *            cannot pre-know the architect's dynamically-dated
@@ -96,17 +96,20 @@ import { test, expect } from "@playwright/test";
  *            Step 0).
  *
  * Validates:
- *   - All eleven loops appear with the expected role distribution
- *     (1 researcher + 2 researcher-with-source-acquisition + 3
- *     research-reviewer + 1 dev-via-spec-planner + 1 dev-via-spec-
- *     reviewer + 1 dev-via-spec-challenger + 1 dev-via-spec-
- *     architect + 1 dev-via-spec-builder) — proves rules 01a,
- *     02 (×2), 01b (×2), 03, dev-via-spec rules 01, 03, 05, 06
- *     all fired in order.
- *   - approval_required gate fires for add_source_repo on Loop C.
+ *   - All ten loops appear with the expected role distribution
+ *     (2 researcher + 1 source-curator + 2 research-reviewer + 1
+ *     dev-via-spec-planner + 1 dev-via-spec-reviewer + 1
+ *     dev-via-spec-challenger + 1 dev-via-spec-architect + 1
+ *     dev-via-spec-builder) — proves rules 01a (×2), 02
+ *     (spawn-curator), 02b (curator-indexed → researcher), 03,
+ *     dev-via-spec rules 01, 03, 05, 06 all fired in order.
+ *     ADR-040 collapses the OLD 2× researcher-with-source-acquisition
+ *     into 1× source-curator + 1× re-query researcher.
+ *   - approval_required gate fires for add_source_repo on Loop C
+ *     (the curator's substrate-mutating call).
  *   - The dev-via-spec chain runs autonomously after the research
  *     arc settles (no second approval gate during dev-via-spec).
- *   - Final state: all eleven loops complete; no twelfth loop
+ *   - Final state: all ten loops complete; no eleventh loop
  *     appears (builder terminal does not re-trigger any rule).
  *
  * Required fixture: test/fixtures/journeys/dev-via-spec.yaml
@@ -121,21 +124,15 @@ test.describe("Dev-via-Spec (R3.3 + R3.4b + R3.6.2)", () => {
     expect(health.ok()).toBe(true);
   });
 
-  // Eleven loops + approval round-trip + SemSource AddRequest +
-  // settling pass + four-role dev-via-spec chain + builder. Allow
-  // 6 minutes (60 + 60 + 60 + 210 + 30 headroom) — the builder
-  // loop runs four real tool calls (bootstrap_workspace + bash ×
-  // 2 + builder_decide) plus rule-engine roundtrips before
-  // terminal. Headroom protects against cold-sandbox HTTP latency
-  // on slow CI per the R3.6.2.e reviewer pass.
+  // Ten loops + approval round-trip + SemSource AddRequest +
+  // four-role dev-via-spec chain + builder. Allow 6 minutes (kept
+  // the same as the pre-ADR-040 budget — fewer loops, but the
+  // builder loop still runs four real tool calls and the
+  // headroom protects against cold-sandbox HTTP latency on slow
+  // CI per the R3.6.2.e reviewer pass).
   test.setTimeout(360_000);
 
-  // ADR-040 PR 3 hard-replaced researcher-with-source-acquisition with the
-  // source-curator role. The fixture below's research phase (Loops C+E)
-  // still expects the OLD flow shape; under the new wiring rule 02 spawns
-  // source-curator and the chain shape changes. PR 4 rewrites the fixture
-  // for the new curator flow and re-enables this test.fixme.
-  test.fixme("[ADR-040 PR 4 pending] research → stabilisation → dev-via-spec planner / reviewer / challenger / architect / builder", async ({
+  test("research → curator → re-query researcher → approve → dev-via-spec planner / reviewer / challenger / architect / builder", async ({
     page,
     request,
   }) => {
@@ -155,8 +152,9 @@ test.describe("Dev-via-Spec (R3.3 + R3.4b + R3.6.2)", () => {
 
     // -----------------------------------------------------------------
     // Step 2 — type the bounded prompt. Identical to R3.2.2's prompt;
-    // the same six-loop research arc executes ahead of the dev-via-spec
-    // handoff.
+    // the same five-loop ADR-040 research arc (researcher + reviewer +
+    // source-curator + re-query researcher + reviewer-approve) executes
+    // ahead of the dev-via-spec handoff.
     // -----------------------------------------------------------------
     const chatInput = page.getByTestId("chat-input");
     await chatInput.fill(
@@ -166,7 +164,8 @@ test.describe("Dev-via-Spec (R3.3 + R3.4b + R3.6.2)", () => {
 
     // -----------------------------------------------------------------
     // Step 3 — wait for THREE loops (researcher A, reviewer B,
-    // researcher-with-source C). Loop C will pause for approval.
+    // source-curator C). Loop C will pause for approval on the
+    // curator's add_source_repo call.
     // -----------------------------------------------------------------
     const threeLoops = await pollUntil(async () => {
       const resp = await request.get("/teams-dispatch/loops");
@@ -181,7 +180,7 @@ test.describe("Dev-via-Spec (R3.3 + R3.4b + R3.6.2)", () => {
 
     expect(
       threeLoops,
-      "expected 3 loops before first approval (researcher + reviewer + researcher-with-source)",
+      "expected 3 loops before first approval (researcher + reviewer + source-curator)",
     ).toBeTruthy();
 
     // -----------------------------------------------------------------
@@ -232,9 +231,10 @@ test.describe("Dev-via-Spec (R3.3 + R3.4b + R3.6.2)", () => {
     // hood (agentApi.submitApproval) — same X-User-Id middleware
     // contract per ADR-030 — so this still exercises the
     // approval-gate plumbing end-to-end. The chain after approval is
-    // autonomous: research arc completes (Loops C through F), the
-    // stabilisation rule spawns the dev-via-spec-planner (Loop G),
-    // and the dev-via-spec rules drive the four-role chain through
+    // autonomous: curator finishes (verify + emit_curator_artifact +
+    // decide indexed) → re-query researcher (Loop D) → reviewer
+    // approve (Loop E) → planner (Loop F), and the dev-via-spec
+    // rules drive the four-role chain through
     // architect terminal (Loop J).
     const approvalResp = await request.post(
       `/teams-dispatch/loops/${loopCId}/approval`,
@@ -249,11 +249,12 @@ test.describe("Dev-via-Spec (R3.3 + R3.4b + R3.6.2)", () => {
     ).toBe(true);
 
     // -----------------------------------------------------------------
-    // Step 7 — intermediate checkpoint: wait for FIVE loops (A, B,
-    // C-complete, D-complete, E-spawned). Mirrors R3.2.2's spec
-    // Step 7 — gives us a fast-fail signal if the approval click
-    // didn't unblock the chain, before we wait the full 150s for
-    // all-terminal.
+    // Step 7 — intermediate checkpoint: wait for FIVE loops total
+    // post-approval (A researcher, B reviewer, C curator-complete,
+    // D re-query researcher, E reviewer-approve). Fast-fail signal
+    // if the approval click didn't unblock the curator's remaining
+    // sequence (verify + emit + decide), before we wait the full
+    // 210s for all-terminal across the dev-via-spec chain.
     // -----------------------------------------------------------------
     const fiveLoops = await pollUntil(async () => {
       const resp = await request.get("/teams-dispatch/loops");
@@ -268,11 +269,11 @@ test.describe("Dev-via-Spec (R3.3 + R3.4b + R3.6.2)", () => {
 
     expect(
       fiveLoops,
-      "expected 5 loops after first approval (A, B, C, D, E spawned by stabilisation rejection — same intermediate state as R3.2.2)",
+      "expected 5 loops after first approval (A researcher + B reviewer + C source-curator + D re-query researcher + E reviewer-approve — ADR-040 research arc completes)",
     ).toBeTruthy();
 
     // -----------------------------------------------------------------
-    // Step 8 — wait for ALL ELEVEN loops to reach terminal complete
+    // Step 8 — wait for ALL TEN loops to reach terminal complete
     // state. Critical assertions: dev-via-spec rules 01/03/05/06 must
     // fire in order, ending with builder terminal.
     // -----------------------------------------------------------------
@@ -280,13 +281,13 @@ test.describe("Dev-via-Spec (R3.3 + R3.4b + R3.6.2)", () => {
       const resp = await request.get("/teams-dispatch/loops");
       if (!resp.ok()) return null;
       const list = (await resp.json()) as Array<{ state: string }>;
-      if (list.length !== 11) return null;
+      if (list.length !== 10) return null;
       return list.every((l) => l.state === "complete") ? list : null;
     }, { timeoutMs: 210000 });
 
     expect(
       allTerminal,
-      "expected all 11 loops to reach terminal complete state (research arc + stabilisation + dev-via-spec planner / reviewer / challenger / architect / builder)",
+      "expected all 10 loops to reach terminal complete state (research arc + curator + dev-via-spec planner / reviewer / challenger / architect / builder)",
     ).toBeTruthy();
 
     // -----------------------------------------------------------------
@@ -297,15 +298,15 @@ test.describe("Dev-via-Spec (R3.3 + R3.4b + R3.6.2)", () => {
     // onto the LoopInfo wire JSON; rule-spawned loops do. So Loop A's
     // role field is empty; we resolve it via the dispatch default.
     //
-    // Expected roles (after default_role resolution):
-    //   1 × researcher                          (Loop A — dispatch)
-    //   2 × researcher-with-source-acquisition  (Loops C, E — research rule 02 ×2)
-    //   3 × research-reviewer                   (Loops B, D, F — research rules 01a/01b)
-    //   1 × dev-via-spec-planner                (Loop G — research rule 03)
-    //   1 × dev-via-spec-reviewer               (Loop H — dev-via-spec rule 01)
-    //   1 × dev-via-spec-challenger             (Loop I — dev-via-spec rule 03)
-    //   1 × dev-via-spec-architect              (Loop J — dev-via-spec rule 05)
-    //   1 × dev-via-spec-builder                (Loop K — dev-via-spec rule 06)
+    // Expected roles (after default_role resolution, ADR-040 reshape):
+    //   2 × researcher                          (Loop A — dispatch; Loop D — rule_02b post-curator re-query)
+    //   1 × source-curator                      (Loop C — research rule_02 spawn-curator)
+    //   2 × research-reviewer                   (Loops B, E — research rule_01a ×2)
+    //   1 × dev-via-spec-planner                (Loop F — research rule_03)
+    //   1 × dev-via-spec-reviewer               (Loop G — dev-via-spec rule 01)
+    //   1 × dev-via-spec-challenger             (Loop H — dev-via-spec rule 03)
+    //   1 × dev-via-spec-architect              (Loop I — dev-via-spec rule 05)
+    //   1 × dev-via-spec-builder                (Loop J — dev-via-spec rule 06)
     // -----------------------------------------------------------------
     const finalLoops = await request
       .get("/teams-dispatch/loops")
@@ -325,8 +326,8 @@ test.describe("Dev-via-Spec (R3.3 + R3.4b + R3.6.2)", () => {
     const roles = finalLoops.map((l) => l.role || expectedDefaultRole);
 
     const researcherCount = roles.filter((r) => r === "researcher").length;
-    const sourceAcqCount = roles.filter(
-      (r) => r === "researcher-with-source-acquisition",
+    const curatorCount = roles.filter(
+      (r) => r === "source-curator",
     ).length;
     const reviewerCount = roles.filter((r) => r === "research-reviewer").length;
     const plannerCount = roles.filter((r) => r === "dev-via-spec-planner").length;
@@ -345,16 +346,16 @@ test.describe("Dev-via-Spec (R3.3 + R3.4b + R3.6.2)", () => {
 
     expect(
       researcherCount,
-      `expected 1 researcher loop, got roles=${JSON.stringify(roles)}`,
-    ).toBe(1);
-    expect(
-      sourceAcqCount,
-      `expected 2 researcher-with-source-acquisition loops, got roles=${JSON.stringify(roles)}`,
+      `expected 2 researcher loops (Loop A initial + Loop D re-query post-curator), got roles=${JSON.stringify(roles)}`,
     ).toBe(2);
     expect(
+      curatorCount,
+      `expected 1 source-curator loop (Loop C — rule_02 spawn-curator). Missing → rule_02 did not fire or fired to the wrong role. roles=${JSON.stringify(roles)}`,
+    ).toBe(1);
+    expect(
       reviewerCount,
-      `expected 3 research-reviewer loops, got roles=${JSON.stringify(roles)}`,
-    ).toBe(3);
+      `expected 2 research-reviewer loops, got roles=${JSON.stringify(roles)}`,
+    ).toBe(2);
     expect(
       plannerCount,
       `expected 1 dev-via-spec-planner loop (research-mode-transition rule_03 → planner). Missing → R3.2.2 stabilisation rule did not fire. roles=${JSON.stringify(roles)}`,
@@ -389,15 +390,15 @@ test.describe("Dev-via-Spec (R3.3 + R3.4b + R3.6.2)", () => {
     ).toBeUndefined();
 
     // -----------------------------------------------------------------
-    // Step 11 — settle assertion: no twelfth loop appears. If the
+    // Step 11 — settle assertion: no eleventh loop appears. If the
     // builder's decide(needs_clarification) somehow re-fires a
     // dev-via-spec rule (regression where any rule matches the
-    // builder role), a twelfth loop would appear.
+    // builder role), an eleventh loop would appear.
     //
     // ADR-039 Phase 1 Slice B (NeedsReviewStamper) DOES fire on this
     // builder terminal, but it writes triples to the chain entity —
     // it does NOT spawn a new loop. The triple-cluster assertion in
-    // Step 11b verifies that wiring; the loop count stays at 11.
+    // Step 11b verifies that wiring; the loop count stays at 10.
     // -----------------------------------------------------------------
     await new Promise((r) => setTimeout(r, 2000));
     const settledList = await request
@@ -405,8 +406,8 @@ test.describe("Dev-via-Spec (R3.3 + R3.4b + R3.6.2)", () => {
       .then((r) => r.json()) as unknown[];
     expect(
       settledList.length,
-      "builder terminal must not spawn a twelfth loop",
-    ).toBe(11);
+      "builder terminal must not spawn an eleventh loop",
+    ).toBe(10);
 
     // -----------------------------------------------------------------
     // Step 11b — ADR-039 Phase 1 Slice B validation:
@@ -493,8 +494,8 @@ test.describe("Dev-via-Spec (R3.3 + R3.4b + R3.6.2)", () => {
       .filter((s) => s.startsWith("research.artifact."));
     expect(
       artifactSubjects.length,
-      `expected at least 3 research.artifact.<loop_id> publishes (one per researcher pass), got ${artifactSubjects.length}: ${JSON.stringify(artifactSubjects)}`,
-    ).toBeGreaterThanOrEqual(3);
+      `expected at least 2 research.artifact.<loop_id> publishes (one per researcher pass — Loop A initial + Loop D re-query post-curator under ADR-040), got ${artifactSubjects.length}: ${JSON.stringify(artifactSubjects)}`,
+    ).toBeGreaterThanOrEqual(2);
 
     // -----------------------------------------------------------------
     // Step 13 — Loop J's and Loop K's terminal states must be
