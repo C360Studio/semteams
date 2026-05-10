@@ -17,8 +17,8 @@ manifest for that harness:
 
 ```json
 {
-  "meshtasticd-3.x": {
-    "id": "meshtasticd-3.x",
+  "meshtasticd-2.x": {
+    "id": "meshtasticd-2.x",
     "image": "meshtastic/meshtasticd:2.7.23-alpine",
     "ports": {"meshtastic-protobuf": 4403},
     "tooling_pins": [
@@ -54,7 +54,7 @@ specific version; if a pin's note names a known incompatibility (e.g.
 "earlier versions hardcode API X but the daemon is at API Y"), trust the
 operator's research.
 
-Example pom snippet for the meshtasticd-3.x manifest above:
+Example pom snippet for the meshtasticd-2.x manifest above:
 
 ```xml
 <dependencies>
@@ -89,8 +89,8 @@ class MeshtasticdIntegrationIT {
 
     @Container
     static GenericContainer<?> meshtasticd =
-        new GenericContainer<>("meshtastic/meshtasticd:3.5.0")  // from manifest.image
-            .withExposedPorts(4403)                             // from manifest.ports value
+        new GenericContainer<>("meshtastic/meshtasticd:2.7.23-alpine")  // from manifest.image
+            .withExposedPorts(4403)                                     // from manifest.ports value
             .waitingFor(Wait.forListeningPort());
 
     @Test

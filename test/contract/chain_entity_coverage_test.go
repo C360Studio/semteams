@@ -110,7 +110,7 @@ func TestChainEntityCoverage_PR_B_Pipeline(t *testing.T) {
 			},
 			researcherEntityID: {
 				"agent.loop.parent":              dispatchEntityID,
-				"research.artifact.test_harness": "meshtasticd-3.x",
+				"research.artifact.test_harness": "meshtasticd-2.x",
 				"research.artifact.actors_count": float64(3),
 				"research.artifact.tasks_count":  float64(5),
 				// emit_research_artifact's renderMarkdown writes to
@@ -228,7 +228,7 @@ func TestChainEntityCoverage_PR_B_Pipeline(t *testing.T) {
 	want := map[string]any{
 		"chain.dispatched_at":                 nil,            // Phase 1b — RFC3339 string; presence-only check
 		"chain.research_artifact_loop":        "researcher_a", // Phase 2
-		"chain.research_artifact.harness":     "meshtasticd-3.x",
+		"chain.research_artifact.harness":     "meshtasticd-2.x",
 		"chain.research_artifact.actor_count": 3,
 		"chain.research_artifact.task_count":  5,
 		"chain.research_artifact.path":        "docs/research/2026-05-08-osh-meshtastic-driver-research.md", // PR C Phase C1

@@ -121,7 +121,7 @@ func TestResearchMilestone_ApprovedHappyPath(t *testing.T) {
 				reviewerLineageResearcherPredicate: "researcher_a",
 			},
 			researcherEntityID: {
-				researcherTestHarnessPredicate: "meshtasticd-3.x",
+				researcherTestHarnessPredicate: "meshtasticd-2.x",
 				researcherActorsCountPredicate: float64(3), // JSON unmarshal shape
 				researcherTasksCountPredicate:  float64(5),
 				researcherPathPredicate:        "docs/research/2026-05-08-osh-meshtastic-driver-research.md",
@@ -142,7 +142,7 @@ func TestResearchMilestone_ApprovedHappyPath(t *testing.T) {
 	wantChainEntityID := "c360.test.agent.chain.execution.dispatch_root"
 	wantPredicates := map[string]any{
 		chainPredicateResearchArtifactLoop:       "researcher_a",
-		chainPredicateResearchArtifactHarness:    "meshtasticd-3.x",
+		chainPredicateResearchArtifactHarness:    "meshtasticd-2.x",
 		chainPredicateResearchArtifactActorCount: 3,
 		chainPredicateResearchArtifactTaskCount:  5,
 		chainPredicateResearchArtifactPath:       "docs/research/2026-05-08-osh-meshtastic-driver-research.md",

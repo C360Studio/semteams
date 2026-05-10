@@ -448,7 +448,7 @@ func rawChecks(n int) json.RawMessage {
 // present with both checks and harnesses, both workspace files are written.
 func TestSidecarProjection_ChecksAndHarnesses(t *testing.T) {
 	exec, fs, specPath := newExecutorWithSpec(t, "2026-05-06-test-spec", "# spec")
-	writeSidecar(t, specPath, rawChecks(2), fixtureHarnesses("meshtasticd-3.x"))
+	writeSidecar(t, specPath, rawChecks(2), fixtureHarnesses("meshtasticd-2.x"))
 
 	res, err := exec.Execute(context.Background(), defaultCall(map[string]any{"spec_path": specPath}))
 	if err != nil {
@@ -483,8 +483,8 @@ func TestSidecarProjection_ChecksAndHarnesses(t *testing.T) {
 	if err := json.Unmarshal([]byte(harnessContent), &harnessMap); err != nil {
 		t.Fatalf("unmarshal harness manifest: %v\ncontent=%s", err, harnessContent)
 	}
-	if _, ok := harnessMap["meshtasticd-3.x"]; !ok {
-		t.Errorf("harness manifest missing meshtasticd-3.x; keys=%v", harnessMapKeys(harnessMap))
+	if _, ok := harnessMap["meshtasticd-2.x"]; !ok {
+		t.Errorf("harness manifest missing meshtasticd-2.x; keys=%v", harnessMapKeys(harnessMap))
 	}
 }
 

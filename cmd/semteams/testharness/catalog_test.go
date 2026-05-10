@@ -14,9 +14,9 @@ func TestTestHarnessValidate(t *testing.T) {
 		{
 			name: "complete valid test harness",
 			h: TestHarness{
-				Name:                "meshtasticd-3.x",
+				Name:                "meshtasticd-2.x",
 				ComposeProfile:      "harness-meshtasticd",
-				Image:               "meshtastic/meshtasticd:3.5.0",
+				Image:               "meshtastic/meshtasticd:2.7.23-alpine",
 				SmokeContractSchema: "meshtastic.smoke_contract.v1",
 				DomainDescription:   "Real Meshtastic protocol over TCP.",
 				Exposes: Exposes{
@@ -66,8 +66,8 @@ func TestTestHarnessValidate(t *testing.T) {
 			// local-testcontainer runtime) ships with no profile.
 			name: "no compose_profile is valid",
 			h: TestHarness{
-				Name:                "meshtasticd-3.x",
-				Image:               "meshtastic/meshtasticd:3.5.0",
+				Name:                "meshtasticd-2.x",
+				Image:               "meshtastic/meshtasticd:2.7.23-alpine",
 				SmokeContractSchema: "meshtasticd.smoke_contract.v1",
 				DomainDescription:   "Real Meshtastic protocol over TCP via Testcontainers.",
 				Exposes:             Exposes{TCP: []PortExpose{{Port: 4403, Protocol: "meshtastic-protobuf"}}},
@@ -261,9 +261,9 @@ func TestParseFile(t *testing.T) {
 
 	t.Run("valid full entry", func(t *testing.T) {
 		body := `{"harnesses":[{
-			"name":"meshtasticd-3.x",
+			"name":"meshtasticd-2.x",
 			"compose_profile":"harness-meshtasticd",
-			"image":"meshtastic/meshtasticd:3.5.0",
+			"image":"meshtastic/meshtasticd:2.7.23-alpine",
 			"exposes":{"tcp":[{"port":4403,"protocol":"meshtastic-protobuf"}]},
 			"smoke_contract_schema":"meshtastic.smoke_contract.v1",
 			"real_dependencies":[{"groupId":"com.geeksville.mesh","artifactId":"meshtastic-protobufs","version_range":"[2.x,3.x)"}],
@@ -277,7 +277,7 @@ func TestParseFile(t *testing.T) {
 			t.Fatalf("expected 1 entry, got %d", len(entries))
 		}
 		got := entries[0]
-		if got.Name != "meshtasticd-3.x" {
+		if got.Name != "meshtasticd-2.x" {
 			t.Errorf("name: got %q", got.Name)
 		}
 		if len(got.Exposes.TCP) != 1 || got.Exposes.TCP[0].Port != 4403 {

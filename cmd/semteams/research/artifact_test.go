@@ -84,7 +84,7 @@ func TestArtifact_TestHarness_RoundTrip(t *testing.T) {
 		orig := &Artifact{
 			LoopID:      "loop_abc",
 			Revision:    1,
-			TestHarness: "meshtasticd-3.x",
+			TestHarness: "meshtasticd-2.x",
 			ProducedAt:  now,
 		}
 		data, err := json.Marshal(orig)
@@ -160,7 +160,7 @@ func TestArtifact_Validate(t *testing.T) {
 				LoopID:      "loop_abc",
 				Revision:    1,
 				ProducedAt:  now,
-				TestHarness: "meshtasticd-3.x",
+				TestHarness: "meshtasticd-2.x",
 			},
 			wantErr: false,
 		},
@@ -170,7 +170,7 @@ func TestArtifact_Validate(t *testing.T) {
 				LoopID:      "loop_abc",
 				Revision:    2,
 				ProducedAt:  now,
-				TestHarness: "meshtasticd-3.x",
+				TestHarness: "meshtasticd-2.x",
 				SubstrateMutations: []Mutation{
 					{Tool: "add_source_repo", LoopID: "loop_abc_retry", Revision: 2, Status: MutationStatusExecuted, Timestamp: now},
 				},
@@ -261,7 +261,7 @@ func TestArtifact_Validate(t *testing.T) {
 				LoopID:      "loop_abc",
 				Revision:    1,
 				ProducedAt:  now,
-				TestHarness: "meshtasticd-3.x",
+				TestHarness: "meshtasticd-2.x",
 				IntegrationPoints: []IntegrationPoint{
 					{From: "a", To: "b", Direction: ""},
 				},

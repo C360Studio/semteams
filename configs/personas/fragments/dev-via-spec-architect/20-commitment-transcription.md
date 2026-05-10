@@ -35,7 +35,7 @@ substance:
              TCP/4403; observation has non-null SensorML schema and
              matching node_id",
     runtime: "external-sidecar",
-    test_harness: "meshtasticd-3.x",
+    test_harness: "meshtasticd-2.x",
     test_runtime: "java-junit-testcontainers",
     ref: { type: "template_id",
            id: "tcp.binary-protobuf.java-junit-testcontainers.v1" },

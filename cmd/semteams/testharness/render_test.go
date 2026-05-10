@@ -34,9 +34,9 @@ func TestRenderResearcherFragment_Empty(t *testing.T) {
 func TestRenderResearcherFragment_WithEntries(t *testing.T) {
 	catalog := []*TestHarness{
 		{
-			Name:                "meshtasticd-3.x",
+			Name:                "meshtasticd-2.x",
 			ComposeProfile:      "harness-meshtasticd",
-			Image:               "meshtastic/meshtasticd:3.5.0",
+			Image:               "meshtastic/meshtasticd:2.7.23-alpine",
 			SmokeContractSchema: "meshtastic.smoke_contract.v1",
 			DomainDescription:   "Real Meshtastic protocol over TCP for protobuf POSITION_APP packets.",
 			Exposes: Exposes{
@@ -58,9 +58,9 @@ func TestRenderResearcherFragment_WithEntries(t *testing.T) {
 
 	for _, want := range []string{
 		"2 test harness(es) registered",
-		"1. `meshtasticd-3.x`",
+		"1. `meshtasticd-2.x`",
 		"2. `kafka-stub`",
-		"meshtastic/meshtasticd:3.5.0",
+		"meshtastic/meshtasticd:2.7.23-alpine",
 		"meshtastic.smoke_contract.v1",
 		"port 4403 (meshtastic-protobuf)",
 		"com.geeksville.mesh:meshtastic-protobufs [2.x,3.x)",

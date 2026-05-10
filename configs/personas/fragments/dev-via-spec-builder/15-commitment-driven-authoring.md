@@ -21,8 +21,8 @@ writing code. The shape is:
 ### C1 — <target — the verifiable claim>
 
 - **Runtime**: `process-local-testcontainer`
-- **Test harness**: `meshtasticd-3.x`
-- **Image**: `meshtastic/meshtasticd:3.5.0`
+- **Test harness**: `meshtasticd-2.x`
+- **Image**: `meshtastic/meshtasticd:2.7.23-alpine`
 - **TCP exposes**: port 4403 (`meshtastic-protobuf`)
 - **Test runtime**: `java-junit-testcontainers`
 - **Ref**: filepath `src/test/java/.../FooIT.java`
@@ -152,7 +152,7 @@ class MeshtasticdIntegrationIT {
 
     @Container
     static GenericContainer<?> meshtasticd =
-        new GenericContainer<>("meshtastic/meshtasticd:3.5.0")
+        new GenericContainer<>("meshtastic/meshtasticd:2.7.23-alpine")
             .withExposedPorts(4403)
             .waitingFor(Wait.forListeningPort());
 
@@ -201,8 +201,8 @@ what to write before the iteration loop starts.
   already runs (the first-user WTF ADR-034 §"Brownfield support"
   explicitly structures against).
 - **Pick a different test_harness image than the catalog says.**
-  Operators curate the catalog. If `meshtasticd-3.x` points at
-  `meshtastic/meshtasticd:3.5.0`, you do not silently swap to
+  Operators curate the catalog. If `meshtasticd-2.x` points at
+  `meshtastic/meshtasticd:2.7.23-alpine`, you do not silently swap to
   `:3.6.0` because one looks fresher. Different image = different
   smoke-contract surface = different verification semantics.
 - **Skip the test_harness on testcontainer checks to "save iteration

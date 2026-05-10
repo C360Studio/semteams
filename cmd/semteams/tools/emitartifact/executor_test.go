@@ -122,7 +122,7 @@ func defaultArtifactArgs() map[string]any {
 		// either test_harness OR a needs_test_harness gap. Default
 		// fixture picks a harness so happy paths exercise that
 		// branch; tests that want the gap-flagged path override.
-		"test_harness": "meshtasticd-3.x",
+		"test_harness": "meshtasticd-2.x",
 	}
 }
 
@@ -495,7 +495,7 @@ func TestExecute_MutationCount_WithCurrentRevisionEntry(t *testing.T) {
 func TestExecute_TestHarnessSet_EmitsTestHarnessTriple(t *testing.T) {
 	exec, tp, pub, _ := newExecutor(t)
 	args := defaultArtifactArgs()
-	args["test_harness"] = "meshtasticd-3.x"
+	args["test_harness"] = "meshtasticd-2.x"
 
 	res, err := exec.Execute(context.Background(), defaultCall(args))
 	if err != nil {
@@ -513,8 +513,8 @@ func TestExecute_TestHarnessSet_EmitsTestHarnessTriple(t *testing.T) {
 	if !ok {
 		t.Fatalf("test_harness triple not emitted; predicates: %v", gotPredicates)
 	}
-	if got != "meshtasticd-3.x" {
-		t.Errorf("test_harness object = %v, want meshtasticd-3.x", got)
+	if got != "meshtasticd-2.x" {
+		t.Errorf("test_harness object = %v, want meshtasticd-2.x", got)
 	}
 
 	// Payload also carries the field round-trip.
@@ -523,8 +523,8 @@ func TestExecute_TestHarnessSet_EmitsTestHarnessTriple(t *testing.T) {
 	if err := json.Unmarshal(data, &roundTrip); err != nil {
 		t.Fatalf("decode payload: %v", err)
 	}
-	if roundTrip["test_harness"] != "meshtasticd-3.x" {
-		t.Errorf("payload.test_harness = %v, want meshtasticd-3.x", roundTrip["test_harness"])
+	if roundTrip["test_harness"] != "meshtasticd-2.x" {
+		t.Errorf("payload.test_harness = %v, want meshtasticd-2.x", roundTrip["test_harness"])
 	}
 
 	// Result content (next-turn LLM-visible) carries the test_harness key.
@@ -532,8 +532,8 @@ func TestExecute_TestHarnessSet_EmitsTestHarnessTriple(t *testing.T) {
 	if err := json.Unmarshal([]byte(res.Content), &resultMap); err != nil {
 		t.Fatalf("decode result content: %v", err)
 	}
-	if resultMap["test_harness"] != "meshtasticd-3.x" {
-		t.Errorf("result.test_harness = %v, want meshtasticd-3.x", resultMap["test_harness"])
+	if resultMap["test_harness"] != "meshtasticd-2.x" {
+		t.Errorf("result.test_harness = %v, want meshtasticd-2.x", resultMap["test_harness"])
 	}
 }
 

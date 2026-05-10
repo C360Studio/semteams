@@ -161,7 +161,7 @@ func (h *TestHarness) Validate() error {
 type ResolvedManifest struct {
 	// ID is the catalog name (TestHarness.Name) — primary key.
 	ID string `json:"id"`
-	// Image is the docker image reference (e.g. "meshtastic/meshtasticd:3.5.0").
+	// Image is the docker image reference (e.g. "meshtastic/meshtasticd:2.7.23-alpine").
 	Image string `json:"image"`
 	// Ports maps a symbolic port label to its container-side port number.
 	// Derived from Exposes.TCP: label is Protocol, value is Port.
