@@ -31,11 +31,12 @@ contract — no nesting under a wrapping object. Pass:
 - `addressed_gaps`, `open_gaps` — same as the completion
   contract.
 - `substrate_mutations` — append-only across all revisions of
-  this artifact. On the initial pass this is empty. On a retry,
-  carry forward all prior-revision entries verbatim plus any
-  new ones from this pass. (You are not the source-acquisition
-  role here, so your `substrate_mutations` should always carry
-  forward but typically does not grow.)
+  this artifact. Under ADR-040 the source-curator owns substrate
+  mutation; you do not call `add_source_repo`, so this array
+  never grows during your passes. Carry forward prior-revision
+  entries verbatim on retries (the curator's adds, when present,
+  surface here as a record). On a first-pass artifact this is
+  always empty.
 
 The tool fills in `loop_id` (from the framework — you can't fake
 it) and `produced_at` (server wallclock) automatically. Don't
