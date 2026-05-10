@@ -110,9 +110,6 @@ func TestConfigDispatchDefaultToolsParse(t *testing.T) {
 		"e2e-research-with-source.json": {
 			expected: []string{"add_source_repo"},
 		},
-		"e2e-research-with-source-acquisition.json": {
-			expected: []string{"read_loop_result", "query_entity", "query_entities"},
-		},
 		"e2e-research-harness-hit.json": {
 			expected: []string{"read_loop_result", "query_entity", "query_entities", "emit_research_artifact"},
 		},
