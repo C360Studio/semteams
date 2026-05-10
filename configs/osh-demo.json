@@ -24,9 +24,7 @@
         "graph.ingest.batch",
         "graph.ingest.manifest",
         "graph.ingest.status",
-        "graph.ingest.predicates",
-        "graph.ingest.add.>",
-        "research.artifact.>"
+        "graph.ingest.predicates"
       ],
       "storage": "file",
       "max_age": "24h"
