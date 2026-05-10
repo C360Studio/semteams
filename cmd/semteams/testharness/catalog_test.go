@@ -108,6 +108,40 @@ func TestTestHarnessValidate(t *testing.T) {
 			},
 			wantErr: "artifactId required",
 		},
+		{
+			name: "tooling pin missing groupId",
+			h: TestHarness{
+				Name: "n", Image: "i", SmokeContractSchema: "s", DomainDescription: "d",
+				ToolingPins: []ToolingPin{{ArtifactID: "testcontainers", Version: "2.0.5"}},
+			},
+			wantErr: "tooling_pins[0].groupId required",
+		},
+		{
+			name: "tooling pin missing artifactId",
+			h: TestHarness{
+				Name: "n", Image: "i", SmokeContractSchema: "s", DomainDescription: "d",
+				ToolingPins: []ToolingPin{{GroupID: "org.testcontainers", Version: "2.0.5"}},
+			},
+			wantErr: "tooling_pins[0].artifactId required",
+		},
+		{
+			name: "tooling pin missing version (range expression NOT accepted — pins exist to prevent LLM drift)",
+			h: TestHarness{
+				Name: "n", Image: "i", SmokeContractSchema: "s", DomainDescription: "d",
+				ToolingPins: []ToolingPin{{GroupID: "org.testcontainers", ArtifactID: "testcontainers"}},
+			},
+			wantErr: "tooling_pins[0].version required",
+		},
+		{
+			name: "tooling pin happy path (full triple + note)",
+			h: TestHarness{
+				Name: "n", Image: "i", SmokeContractSchema: "s", DomainDescription: "d",
+				ToolingPins: []ToolingPin{{
+					GroupID: "org.testcontainers", ArtifactID: "testcontainers", Version: "2.0.5",
+					Note: "ships docker-java with Engine 29 support",
+				}},
+			},
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -125,6 +159,46 @@ func TestTestHarnessValidate(t *testing.T) {
 				t.Fatalf("expected error containing %q, got %v", tc.wantErr, err)
 			}
 		})
+	}
+}
+
+func TestResolve_PropagatesToolingPins(t *testing.T) {
+	h := TestHarness{
+		Name:                "h",
+		Image:               "img",
+		SmokeContractSchema: "s",
+		DomainDescription:   "d",
+		Exposes:             Exposes{TCP: []PortExpose{{Port: 4403, Protocol: "p"}}},
+		ToolingPins: []ToolingPin{
+			{GroupID: "org.testcontainers", ArtifactID: "testcontainers", Version: "2.0.5", Note: "engine29"},
+			{GroupID: "org.junit.jupiter", ArtifactID: "junit-jupiter", Version: "5.11.4"},
+		},
+	}
+	m := h.Resolve()
+	if got := len(m.ToolingPins); got != 2 {
+		t.Fatalf("expected 2 tooling pins propagated to manifest, got %d", got)
+	}
+	if m.ToolingPins[0].Version != "2.0.5" {
+		t.Errorf("first pin version = %q, want 2.0.5", m.ToolingPins[0].Version)
+	}
+	if m.ToolingPins[0].Note != "engine29" {
+		t.Errorf("first pin note dropped: %q", m.ToolingPins[0].Note)
+	}
+	if m.ToolingPins[1].ArtifactID != "junit-jupiter" {
+		t.Errorf("second pin artifactId = %q, want junit-jupiter", m.ToolingPins[1].ArtifactID)
+	}
+}
+
+func TestResolve_NoToolingPins_FieldOmitted(t *testing.T) {
+	h := TestHarness{
+		Name:                "h",
+		Image:               "img",
+		SmokeContractSchema: "s",
+		DomainDescription:   "d",
+	}
+	m := h.Resolve()
+	if m.ToolingPins != nil {
+		t.Errorf("expected nil ToolingPins when source has none, got %v", m.ToolingPins)
 	}
 }
 

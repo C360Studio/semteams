@@ -1,6 +1,7 @@
 {
-  "$comment": "Operator-curated harness catalog (ADR-033 §1, schema revised by ADR-034 §'What R3.7.2 work is preserved' to make compose_profile optional). Entries: meshtasticd-3.x (R3.7.2.e′, ADR-034 process-local-testcontainer Approach via sandbox DooD).",
+  "$comment": "Operator-curated harness catalog (ADR-033 §1, schema revised by ADR-034 §'What R3.7.2 work is preserved' to make compose_profile optional; revised again 2026-05-10 to add tooling_pins after smoke #8 run-13 wedged on a stale Testcontainers version the LLM picked from training-cutoff memory). Entries: meshtasticd-3.x (R3.7.2.e′, ADR-034 process-local-testcontainer Approach via sandbox DooD).",
   "$catalog_note": "The meshtasticd-3.x entry's `name` is aspirational (anticipates a future 3.x release); the actual upstream Meshtastic project ships 2.7.x as of 2026-05. Smoke #8 run-10 surfaced the gap — builder correctly emitted needs_clarification when the previous `meshtastic/meshtasticd:3.5.0` tag returned 404 from Docker Hub. Image pinned to a real upstream tag (2.7.23-alpine — small, version-pinned, exists in registry). Future cleanup: rename `meshtasticd-3.x` → `meshtasticd-2.x` once we have time to update downstream persona/fixture references; for now the name stays so existing references don't break.",
+  "$tooling_pins_note": "Smoke #8 run-13 wedged when the LLM picked Testcontainers 1.19.7 from memory; that version hardcodes docker-java API 1.32, but the sandbox's docker daemon is at API 1.54 (Docker Engine 29). Builder spent 70+ iterations decompiling Testcontainers internals trying socat/netcat/python proxies before timeout. Fix: tooling_pins names exact versions operators have validated against the sandbox image AND a recent Docker Engine. Web-research before pinning — training-cutoff knowledge for fast-moving libraries is stale by the time it ships. Validation: Testcontainers 2.0.5 (ships docker-java with Engine 29 support per https://github.com/testcontainers/testcontainers-java/releases — earlier 1.x line incompatible with Engine 29 per upstream issue #11212).",
   "harnesses": [
     {
       "name": "meshtasticd-3.x",
@@ -19,6 +20,20 @@
           "groupId": "com.geeksville.mesh",
           "artifactId": "meshtastic-protobufs",
           "version_range": "[2.7,3.0)"
+        }
+      ],
+      "tooling_pins": [
+        {
+          "groupId": "org.testcontainers",
+          "artifactId": "testcontainers",
+          "version": "2.0.5",
+          "note": "2.0.5 ships docker-java with Docker Engine 29 (API 1.54) support. Earlier 1.x versions hardcode docker-java API 1.32 and cannot connect to the sandbox's docker daemon — verified-failing in smoke #8 run-13 (2026-05-10). Bumping past 2.0 also adopts the new package layout; the LLM-authored pom MUST use this exact version, not whatever it remembers."
+        },
+        {
+          "groupId": "org.junit.jupiter",
+          "artifactId": "junit-jupiter",
+          "version": "5.11.4",
+          "note": "Stable JUnit 5 line as of 2026-05; 5.11.x is the LTS branch and pairs cleanly with Maven Surefire 3.5.x in the sandbox image. Avoid drifting to 5.12+ until Surefire bumps in lockstep."
         }
       ],
       "domain_description": "Real Meshtastic protocol over TCP, exposed by the upstream meshtasticd daemon (no hardware in the loop). Lifecycle managed in-process by Testcontainers under sandbox DooD (ADR-034 process-local-testcontainer Approach). Use this harness when work transcribes to behaviour at the meshtastic-protobuf wire boundary — POSITION_APP, NODEINFO_APP, TEXT_MESSAGE_APP, etc. Do NOT use this harness for RF-physics or LoRa-radio behaviour; meshtasticd is a daemon, not a radio simulator."
