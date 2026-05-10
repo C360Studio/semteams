@@ -45,7 +45,7 @@ description: |
   profile also brings up the workspace volume that the evidence
   preprocessor reads via its :ro bind mount.
 
-  Sequence (fourteen loops, ~44 LLM round-trips, ADR-040 reshape):
+  Sequence (fourteen loops, forty-five LLM round-trips, ADR-040 reshape):
 
     Loop A — researcher (initial pass, revision=1, default_role)
       1. tool_call: query_entity (corpus probe, returns nothing)
@@ -235,7 +235,7 @@ responses:
       name: query_entity
       arguments_json: |
         {
-          "id": "osh.driver.framework"
+          "entity_id": "osh.driver.framework"
         }
 
   - tool_call:
@@ -320,6 +320,11 @@ responses:
           "entity_id": "osh.core.api.module.IModule"
         }
 
+  # source_dirs OMITTED — no SemSource shared mount in this deployment.
+  # Per ADR-040 §"Field rules" "omit when unsure" rule, the curator
+  # only includes source_dirs when it can verify the mount path is
+  # accessible. The curator.artifact.source_dirs_count triple lands
+  # as "0" (verified end-to-end in mock-LLM).
   - tool_call:
       name: emit_curator_artifact
       arguments_json: |
@@ -800,7 +805,7 @@ responses:
   # qa-reviewer. This time the recovery spec's checks DID reach the
   # workspace, so the evidence summary is non-empty. The qa-reviewer
   # accepts — clean terminal, NO further rule fires (rule 09 only fires
-  # on needs_clarification, not accept). Chain settles at 15 loops.
+  # on needs_clarification, not accept). Chain settles at 14 loops.
 
   - tool_call:
       name: read_loop_result

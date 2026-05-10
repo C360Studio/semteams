@@ -22,7 +22,7 @@ description: |
   loop calls bootstrap_workspace + bash; both route through the
   sandbox container per ADR-032 §R3.6.2.a wiring).
 
-  Sequence (ten loops, thirty-one LLM round-trips):
+  Sequence (ten loops, thirty-three LLM round-trips, ADR-040 reshape):
 
     Loop A — researcher (initial pass, revision=1, default_role)
       1. tool_call: query_entity (corpus probe, returns nothing)
@@ -158,7 +158,7 @@ responses:
       name: query_entity
       arguments_json: |
         {
-          "id": "osh.driver.framework"
+          "entity_id": "osh.driver.framework"
         }
 
   - tool_call:
@@ -243,6 +243,11 @@ responses:
           "entity_id": "osh.core.api.module.IModule"
         }
 
+  # source_dirs OMITTED — no SemSource shared mount in this deployment.
+  # Per ADR-040 §"Field rules" "omit when unsure" rule, the curator
+  # only includes source_dirs when it can verify the mount path is
+  # accessible. The curator.artifact.source_dirs_count triple lands
+  # as "0" (verified end-to-end in mock-LLM).
   - tool_call:
       name: emit_curator_artifact
       arguments_json: |
@@ -419,7 +424,7 @@ responses:
       name: read_loop_result
       arguments_json: |
         {
-          "loop_id": "planner-loop-G"
+          "loop_id": "planner-loop-F"
         }
 
   - tool_call:
@@ -436,7 +441,7 @@ responses:
       name: read_loop_result
       arguments_json: |
         {
-          "loop_id": "reviewer-loop-H"
+          "loop_id": "reviewer-loop-G"
         }
 
   # PR C Phase C5: challenger calls emit_consensus on the accept branch
@@ -458,8 +463,8 @@ responses:
           ],
           "considered_concerns": [],
           "depends_on": {
-            "plan_loop": "planner-loop-G",
-            "reviewer_loop": "reviewer-loop-H"
+            "plan_loop": "planner-loop-F",
+            "reviewer_loop": "reviewer-loop-G"
           }
         }
 
@@ -477,14 +482,14 @@ responses:
       name: read_loop_result
       arguments_json: |
         {
-          "loop_id": "challenger-loop-I"
+          "loop_id": "challenger-loop-H"
         }
 
   - tool_call:
       name: read_loop_result
       arguments_json: |
         {
-          "loop_id": "planner-loop-G"
+          "loop_id": "planner-loop-F"
         }
 
   - tool_call:
@@ -531,9 +536,9 @@ responses:
           ],
           "provenance": {
             "research_artifact_loop": "researcher-loop-D",
-            "planner_loop": "planner-loop-G",
-            "reviewer_loop": "reviewer-loop-H",
-            "challenger_loop": "challenger-loop-I"
+            "planner_loop": "planner-loop-F",
+            "reviewer_loop": "reviewer-loop-G",
+            "challenger_loop": "challenger-loop-H"
           }
         }
 
