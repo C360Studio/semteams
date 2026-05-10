@@ -150,7 +150,7 @@ var managedRoles = []string{
 	"dev-via-spec-builder",
 	"dev-via-spec-qa-reviewer",
 	"researcher",
-	"researcher-with-source-acquisition",
+	"source-curator",
 	"research-reviewer",
 	"dispatch",
 }
