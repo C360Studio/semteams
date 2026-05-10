@@ -242,20 +242,19 @@ test.describe("Dev-via-Spec QA-reviewer (R3.7.2.k′)", () => {
     // onto the LoopInfo wire JSON; rule-spawned loops do. So Loop A's
     // role field is empty; we resolve it via the dispatch default.
     //
-    // Expected roles (after default_role resolution):
-    //   1 × researcher                          (Loop A — dispatch)
-    //   1 × source-curator                      (Loop C — rule_02 spawn-curator)
+    // Expected roles (after default_role resolution, ADR-040 reshape):
     //   2 × researcher                          (Loop A initial + Loop D re-query post-curator via rule_02b)
-    //   3 × research-reviewer                   (Loops B, D, F — research rules 01a/01b)
-    //   1 × dev-via-spec-planner                (Loop G — research rule 03)
-    //   1 × dev-via-spec-reviewer               (Loop H — dev-via-spec rule 01)
-    //   1 × dev-via-spec-challenger             (Loop I — dev-via-spec rule 03)
-    //   2 × dev-via-spec-architect              (Loop J — dev-via-spec rule 05;
-    //                                            Loop M — ADR-039 rule 09 recovery)
-    //   2 × dev-via-spec-builder                (Loop K — dev-via-spec rule 06;
-    //                                            Loop N — recovery via re-fire of rule 06)
-    //   2 × dev-via-spec-qa-reviewer            (Loop L — dev-via-spec rule 07;
-    //                                            Loop O — recovery via re-fire of rule 07)
+    //   1 × source-curator                      (Loop C — rule_02 spawn-curator)
+    //   2 × research-reviewer                   (Loops B, E — research rule 01a)
+    //   1 × dev-via-spec-planner                (Loop F — research rule 03)
+    //   1 × dev-via-spec-reviewer               (Loop G — dev-via-spec rule 01)
+    //   1 × dev-via-spec-challenger             (Loop H — dev-via-spec rule 03)
+    //   2 × dev-via-spec-architect              (Loop I — dev-via-spec rule 05;
+    //                                            Loop L — ADR-039 rule 09 recovery)
+    //   2 × dev-via-spec-builder                (Loop J — dev-via-spec rule 06;
+    //                                            Loop M — recovery via re-fire of rule 06)
+    //   2 × dev-via-spec-qa-reviewer            (Loop K — dev-via-spec rule 07;
+    //                                            Loop N — recovery via re-fire of rule 07)
     // -----------------------------------------------------------------
     const finalLoops = await request
       .get("/teams-dispatch/loops")
@@ -394,8 +393,8 @@ test.describe("Dev-via-Spec QA-reviewer (R3.7.2.k′)", () => {
     ).toBeGreaterThanOrEqual(2);
 
     // ADR-038 PR C Phase C5: planner emits dev_via_spec.plan.<loop_id>
-    // (Loop G); challenger emits dev_via_spec.consensus.<loop_id>
-    // (Loop I, accept branch only). Catches wire-format drift between
+    // (Loop F); challenger emits dev_via_spec.consensus.<loop_id>
+    // (Loop H, accept branch only). Catches wire-format drift between
     // persona prose, tool schema, and payload shape under mock-llm —
     // smoke #8 is the substance gate, this is the cheap insurance.
     const planSubjects = entries

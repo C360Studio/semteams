@@ -29,6 +29,13 @@ import (
 // component (carrying rules_files). For each rule loaded by that
 // config, parse the rule's publish_agent on_enter actions and assert
 // every tool name appears in allowed_tools.
+//
+// Known coverage gap (PR #132 reviewer rec): only walks `rules_files`
+// (rules referenced by path). Configs that embed rules inline via an
+// `inline_rules` field (e.g. agentic.json) are not currently swept —
+// inline publish_agent actions with tools could regress the same way.
+// File a tracking issue if inline-rule usage spreads; for now the
+// motivating regression class is rule-file-based.
 func TestRuleToolsSubsetOfAllowedTools(t *testing.T) {
 	configs, err := filepath.Glob("../../configs/*.json")
 	if err != nil {

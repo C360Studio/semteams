@@ -104,7 +104,7 @@ responses:
       name: query_entity
       arguments_json: |
         {
-          "id": "osh.driver.framework"
+          "entity_id": "osh.driver.framework"
         }
 
   - tool_call:
@@ -186,9 +186,14 @@ responses:
       name: query_entity
       arguments_json: |
         {
-          "id": "osh.core.api.module.IModule"
+          "entity_id": "osh.core.api.module.IModule"
         }
 
+  # source_dirs OMITTED — no SemSource shared mount in this deployment.
+  # Per ADR-040 §"Field rules" "omit when unsure" rule, the curator
+  # only includes source_dirs when it can verify the mount path is
+  # accessible. The curator.artifact.source_dirs_count triple lands
+  # as "0" (verified end-to-end in mock-LLM).
   - tool_call:
       name: emit_curator_artifact
       arguments_json: |
@@ -229,7 +234,7 @@ responses:
       name: query_entity
       arguments_json: |
         {
-          "id": "osh.core.api.module.IModule"
+          "entity_id": "osh.core.api.module.IModule"
         }
 
   - tool_call:

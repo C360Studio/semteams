@@ -477,7 +477,7 @@ test.describe("Dev-via-Spec (R3.3 + R3.4b + R3.6.2)", () => {
     // services/message-logger/handleGetEntries) — the filter is
     // applied AFTER limit-truncation, so a smaller limit risks
     // evicting early-loop publishes (research.artifact from Loop A)
-    // before the assertion sees them. The 11-loop chain produces
+    // before the assertion sees them. The 10-loop chain produces
     // 1000+ entries, so the previous limit=1000 was racy.
     const messageLoggerResp = await request.get(
       "/message-logger/entries?limit=10000",
@@ -534,8 +534,8 @@ test.describe("Dev-via-Spec (R3.3 + R3.4b + R3.6.2)", () => {
     // -----------------------------------------------------------------
     // Step 15 — verify the ADR-038 PR C Phase C5 emit-tool payloads
     // landed: dev_via_spec.plan.<loop_id> from the planner's emit_plan
-    // call (Loop G), dev_via_spec.consensus.<loop_id> from the
-    // challenger's emit_consensus call (Loop I, accept branch only).
+    // call (Loop F), dev_via_spec.consensus.<loop_id> from the
+    // challenger's emit_consensus call (Loop H, accept branch only).
     // Catches wire-format drift between persona prose, tool schema,
     // and payload shape without spending real LLM tokens.
     // -----------------------------------------------------------------
