@@ -263,6 +263,22 @@ contract are deferred to a separate ADR or persona-fragment design
 slice. Phase 2 here is the architectural commitment that the tier
 exists; the contents are open.
 
+**Model routing (load-bearing):** when the coordinator persona ships,
+its publish_agent rule MUST set `model: "architecture"` (or a new
+dedicated `coordinating` capability). Per `osh-demo.json`'s capability
+map, `architecture` resolves to gemini-pro preferred, claude-sonnet
+fallback — the high-reasoning route. §"Guarding against lazy
+needs_clarification" calls coordinator quality the load-bearing
+investment in this ADR's value delivery; pinning the model at the
+spawn-rule level is the deployment guard that keeps coordinator
+quality from quietly degrading via capability-map drift. Phase 1
+rules 08 + 09 already follow this discipline (both use
+`model: "architecture"`). The existing `coordinator` role in
+`configs/rules/coordinator/01-delegate-research.json` uses
+`model: "general"` — also gemini-pro today, but Phase 2 should
+prefer the more semantically-precise `architecture` (or
+`coordinating`) capability so the routing intent is legible.
+
 ### Phase 3 — Pause-for-review surface (chain.needs_review.*)
 
 Already covered structurally in Phase 1 rule #3 and the Tier 3
