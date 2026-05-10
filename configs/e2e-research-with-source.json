@@ -54,7 +54,7 @@
         "swagger_ui": true,
         "server_info": {
           "title": "SemTeams Research-with-Source E2E",
-          "description": "R2 slice 2 of ADR-031: source-curator role calls add_source_repo, approval gate fires, human approves via the UI, SemSource registers the source, loop completes. Requires the `semsource` docker-compose profile. agentic-tools.timeout=30s (vs 10-15s elsewhere) covers add_source_repo's worst-case RequestWithRetry budget against a cold-start SemSource.",
+          "description": "R2 slice 2 of ADR-031: source-registrar role calls add_source_repo, approval gate fires, human approves via the UI, SemSource registers the source, loop completes. Requires the `semsource` docker-compose profile. agentic-tools.timeout=30s (vs 10-15s elsewhere) covers add_source_repo's worst-case RequestWithRetry budget against a cold-start SemSource.",
           "version": "1.0.0"
         }
       }
@@ -82,7 +82,7 @@
       "name": "agentic-dispatch",
       "enabled": true,
       "config": {
-        "default_role": "source-curator",
+        "default_role": "source-registrar",
         "default_tools": ["add_source_repo"],
         "auto_continue": false,
         "stream_name": "USER",

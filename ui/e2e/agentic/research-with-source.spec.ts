@@ -34,7 +34,7 @@ test.describe("Research with Source Acquisition", () => {
     expect(health.ok()).toBe(true);
   });
 
-  test("source-curator proposes add_source_repo, human approves, SemSource registers", async ({
+  test("source-registrar proposes add_source_repo, human approves, SemSource registers", async ({
     page,
     request,
   }) => {
@@ -54,8 +54,8 @@ test.describe("Research with Source Acquisition", () => {
     await expect(page.getByTestId("kanban-board")).toBeVisible();
 
     // -----------------------------------------------------------------
-    // Step 2 — chat: ask the source-curator to register the OSH core
-    // repo. The dispatch's default_role is `source-curator`; the
+    // Step 2 — chat: ask the source-registrar to register the OSH core
+    // repo. The dispatch's default_role is `source-registrar`; the
     // mock-llm fixture's first response is the add_source_repo
     // tool_call (approval-gated).
     // -----------------------------------------------------------------
