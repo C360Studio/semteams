@@ -1,0 +1,51 @@
+{
+  "id": "reviewer_rejected_spawn_curator",
+  "type": "expression",
+  "name": "Research Reviewer Rejected — Spawn Source-Curator",
+  "description": "When the research-reviewer terminates with decide(action=insufficient), spawn the source-curator role to evaluate whether the gap is a corpus problem (add sources, wait for indexing, emit curator artifact, decide indexed) OR a research-side issue (decide needs_clarification with retry hint). Replaces the prior researcher-with-source-acquisition retry path under ADR-040 — the curator owns substrate-curation, the researcher stays pure (read curator artifact when present, query, emit). The cognitive-load split was the empirical motivator (smoke #8 run-13 trajectories, ADR-040 §'Why this exists').",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "agent.loop.role",
+      "operator": "eq",
+      "value": "research-reviewer",
+      "required": true
+    },
+    {
+      "field": "coordinator.next_action",
+      "operator": "eq",
+      "value": "insufficient",
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "max_iterations": 3,
+  "on_enter": [
+    {
+      "type": "publish_agent",
+      "subject": "agent.task.source-curator",
+      "role": "source-curator",
+      "model": "architecture",
+      "tools": ["read_loop_result", "query_entity", "query_entities", "add_source_repo", "emit_curator_artifact", "decide"],
+      "action_allowlist": ["indexed", "needs_clarification"],
+      "max_iterations": 3,
+      "properties": {
+        "reviewer_loop_id": "$entity.instance",
+        "retry": true
+      },
+      "related_loops": {
+        "researcher": "$entity.triple.lineage.researcher"
+      },
+      "prompt": "The research-reviewer at loop $entity.instance terminated with decide(action=insufficient). Read the reviewer's reason via read_loop_result on $entity.instance and classify the gap.\n\nIf the reviewer's reason names a corpus gap (a topic, package, file path, symbol, or concept the existing corpus does not cover): call add_source_repo for each named source, wait for indexing (poll via query_entity until expected entity IDs resolve), then call emit_curator_artifact with the verified entity IDs (and source_dirs if the deployment uses the SemSource shared mount) and terminate with decide(action=\"indexed\", reason=\"<one-sentence summary of coverage added>\"). The next researcher loop will re-attempt the original research with the augmented corpus.\n\nIf the reviewer's reason is a research-side issue (the researcher dropped a field, didn't query something obvious, or asked for something the existing corpus already covers): do NOT add sources and do NOT call emit_curator_artifact. Terminate with decide(action=\"needs_clarification\", reason=\"<why the corpus isn't the issue>\", retry_hint=\"<concrete instruction for the next researcher>\"). The framework spawns a fresh researcher with your hint via rule 02c.\n\nWhen ambiguous: prefer needs_clarification. Adding sources speculatively burns approval-gate cost; the researcher can re-query the existing corpus at zero substrate cost."
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "phase": "ADR-040 Phase 1",
+    "adr": "docs/adr/040-source-curator-role.md",
+    "stop_condition": "Q2 — MaxIter (=3) + reviewer + opt-in human gate",
+    "max_iterations_note": "Aligned to 3 across rules 02/02b/02c for ADR-040 consistency. Each reviewer loop is a new entity so the outer cap is informational under the current rule engine (coordinator.next_action is a single-state terminal); the curator's inner max_iterations=3 is the actionable bound on a single curator pass.",
+    "supersedes": "configs/rules/research-mode-transition/02-reviewer-rejected-retry-with-source.json (ADR-031 R3.2.2 — researcher-with-source-acquisition path, hard-replaced by ADR-040)",
+    "lineage_forwarding": "related_loops.researcher is forwarded from the reviewer's lineage so the curator can read_loop_result on the prior researcher's artifact when classifying. The curator then decides indexed (rule 02b spawns a fresh researcher) or needs_clarification (rule 02c spawns a fresh researcher); both downstream rules drop the lineage.researcher forward per the supersession invariant (the new researcher is the new artifact author)."
+  }
+}

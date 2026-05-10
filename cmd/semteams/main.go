@@ -520,7 +520,10 @@ func loadPlatformAssets(ctx context.Context, natsClient *natsclient.Client, cliC
 // PERSONAS KV bucket. Skipped when either manager is nil (tests,
 // or boot-time KV failure that already logged its own warning).
 // Uses multi-role on the Persona so a single record applies to
-// both `researcher` and `researcher-with-source-acquisition`.
+// both `researcher` and `research-reviewer` (ADR-040 dropped
+// `researcher-with-source-acquisition`; the source-curator does not
+// need the test_harness catalog — harness selection is a dev-via-spec
+// architect concern, not a corpus-curation concern).
 //
 // Fragment ID `test-harness-catalog.rendered` is intentionally NOT in
 // the project's `\d+-` prefix style operators use for hand-
@@ -558,7 +561,7 @@ func injectRenderedTestHarnessFragment(ctx context.Context, personaMgr *persona.
 		// research-reviewer needs the same view of the catalog so it can
 		// verify the researcher's `test_harness` field references a real
 		// registered entry (membership check, R3.7.1.d gate).
-		Roles:       []string{"researcher", "researcher-with-source-acquisition", "research-reviewer"},
+		Roles:       []string{"researcher", "research-reviewer"},
 		Description: "Auto-generated from configs/harnesses.json at boot (ADR-033 R3.7.1).",
 	}
 	if err := personaMgr.Upsert(ctx, p); err != nil {

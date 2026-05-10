@@ -317,8 +317,9 @@
         "rules_files": [
           "/app/configs/rules/chain/00-loop-failed-pause.json",
           "/app/configs/rules/research-mode-transition/01a-research-to-reviewer-after-researcher.json",
-          "/app/configs/rules/research-mode-transition/01b-research-to-reviewer-after-source-acquisition.json",
-          "/app/configs/rules/research-mode-transition/02-reviewer-rejected-retry-with-source.json",
+          "/app/configs/rules/research-mode-transition/02-reviewer-rejected-spawn-curator.json",
+          "/app/configs/rules/research-mode-transition/02b-curator-indexed-to-researcher.json",
+          "/app/configs/rules/research-mode-transition/02c-curator-needs-clarification-to-researcher.json",
           "/app/configs/rules/research-mode-transition/03-stabilise-and-transition.json",
           "/app/configs/rules/dev-via-spec/01-planner-to-reviewer.json",
           "/app/configs/rules/dev-via-spec/02-reviewer-rejected-retry-planner.json",

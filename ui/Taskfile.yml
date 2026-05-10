@@ -210,9 +210,9 @@ tasks:
       - task: test:e2e:agentic:admin-flows-inventory
       - task: test:e2e:agentic:research-iterative
       - task: test:e2e:agentic:research-with-source
-      - task: test:e2e:agentic:research-with-source-acquisition
-      - task: test:e2e:agentic:research-mode-transition
-      - task: test:e2e:agentic:dev-via-spec
+      # research-with-source-acquisition removed under ADR-040 (role hard-deleted)
+      # research-mode-transition + dev-via-spec specs are .fixme'd pending PR 4
+      # mock-llm fixture rewrites for the new source-curator flow.
 
   test:e2e:agentic:research-with-source:
     desc: Run the R2 source-acquisition journey (add_source_repo + approval gate + SemSource)
@@ -395,33 +395,9 @@ tasks:
           COMPOSE_PROFILES: "{{.COMPOSE_PROFILES}}"
       - npx playwright test e2e/agentic/dev-via-spec-qa.spec.ts
 
-  test:e2e:agentic:research-with-source-acquisition:
-    desc: Run the chained research + source-acquisition journey (R2.5 of ADR-031)
-    summary: |
-      End-to-end exercise of the ADR-031 invariant: research can modify
-      the substrate it is reasoning over. Joins R1's iterative-research
-      rules with R2's add_source_repo + approval gate. The first
-      researcher pass flags a corpus gap; the reviewer rejects with
-      "recommend add_source_repo"; the retry pass spawns the
-      researcher-with-source-acquisition role, which calls
-      add_source_repo (approval-gated). After human approval, the same
-      loop iterates against the augmented corpus and submits a
-      complete artifact; the second reviewer approves; terminal.
-
-      Requires the SemSource image at ghcr.io/c360studio/semsource:latest;
-      override with SEMSOURCE_IMAGE if testing an unreleased build.
-    vars:
-      FIXTURE: research-with-source-acquisition.yaml
-      AGENTIC_CONFIG: e2e-research-with-source-acquisition.json
-      COMPOSE_PROFILES: semsource
-    cmds:
-      - defer: { task: test:e2e:agentic:cleanup }
-      - task: test:e2e:agentic:stack:up
-        vars:
-          FIXTURE: "{{.FIXTURE}}"
-          AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
-          COMPOSE_PROFILES: "{{.COMPOSE_PROFILES}}"
-      - npx playwright test e2e/agentic/research-with-source-acquisition.spec.ts
+  # test:e2e:agentic:research-with-source-acquisition removed under ADR-040
+  # (role + journey + spec + e2e config hard-deleted — see PR 3 commit
+  # b2100ec for the removal manifest).
 
   test:e2e:agentic:real-time-activity-stream:
     desc: Run the real-time-activity-stream journey with its paired fixture
@@ -606,15 +582,9 @@ tasks:
           COMPOSE_PROFILES: semsource
           SCENARIO: research-with-source
 
-  test:e2e:agentic:dev:research-with-source-acquisition:
-    desc: Boot stack for the R2.5 chained research + source-acquisition scenario (semsource + iterative researcher rules). No playwright.
-    cmds:
-      - task: test:e2e:agentic:dev:_boot
-        vars:
-          FIXTURE: research-with-source-acquisition.yaml
-          AGENTIC_CONFIG: e2e-research-with-source-acquisition.json
-          COMPOSE_PROFILES: semsource
-          SCENARIO: research-with-source-acquisition
+  # test:e2e:agentic:dev:research-with-source-acquisition removed under ADR-040
+  # (role hard-deleted; see test:e2e:agentic:research-with-source-acquisition
+  # comment above).
 
   test:e2e:agentic:dev:research-mode-transition:
     desc: Boot stack for the R3.2.2 research → dev-via-spec mode-transition scenario (semsource + emit_research_artifact + stabilisation + persona-swap). No playwright.
@@ -665,11 +635,15 @@ tasks:
       send via `task test:e2e:agentic:probe:send -- '<prompt>'` after the
       stack is up, then watch the chain via `task probe:loops`.
 
-      Expected chain shape (R3.7.2.l′ smoke #7): twelve loops total — six
-      from the research-mode-transition arc (researcher + reviewer + 2×
-      researcher-with-source-acquisition + reviewer + reviewer-approve),
-      then the four-role dev-via-spec chain (planner / reviewer /
-      challenger / architect), then the builder, then the qa-reviewer.
+      Expected chain shape (R3.7.2.l′ smoke #7, pre-ADR-040): twelve loops
+      total — six from the research-mode-transition arc (researcher +
+      reviewer + 2× researcher-with-source-acquisition + reviewer +
+      reviewer-approve), then the four-role dev-via-spec chain (planner /
+      reviewer / challenger / architect), then the builder, then the
+      qa-reviewer. ADR-040 reshapes the research arc: the 2×
+      source-acquisition loops become 1× source-curator + 1× re-query
+      researcher (one fewer loop). PR 4 will revalidate the chain shape
+      end-to-end on real LLM.
       See docs/smoke7-osh-meshtastic.md for what to verify at each phase
       and how to capture findings — particularly around the qa-reviewer's
       verdict given the spawn-rule's stubbed evidence_summary (the

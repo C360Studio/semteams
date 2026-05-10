@@ -350,11 +350,11 @@ func TestPauser_HandleFailed_SubjectIsChainEntity(t *testing.T) {
 	p := NewPauser(pub, resolver)
 
 	ev := &agentic.LoopFailedEvent{
-		LoopID:       "researcher_with_source_8",
-		TaskID:       "task-rws-8",
+		LoopID:       "source_curator_8",
+		TaskID:       "task-curator-8",
 		Outcome:      agentic.OutcomeFailed,
-		Role:         "researcher-with-source-acquisition",
-		ParentLoopID: "researcher_7",
+		Role:         "source-curator",
+		ParentLoopID: "research_reviewer_7",
 		Error:        "max iterations reached",
 	}
 
@@ -414,7 +414,7 @@ func TestIsManagedRole(t *testing.T) {
 		"dev-via-spec-builder",
 		"dev-via-spec-qa-reviewer",
 		"researcher",
-		"researcher-with-source-acquisition",
+		"source-curator",
 		"research-reviewer",
 		"dispatch",
 	}
@@ -443,7 +443,7 @@ func TestManagedRoleListMirrorRule(t *testing.T) {
 		"dev-via-spec-builder",
 		"dev-via-spec-qa-reviewer",
 		"researcher",
-		"researcher-with-source-acquisition",
+		"source-curator",
 		"research-reviewer",
 		"dispatch",
 	}
