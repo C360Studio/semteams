@@ -16,6 +16,7 @@ import (
 	"github.com/c360studio/semteams/cmd/semteams/curator"
 	"github.com/c360studio/semteams/cmd/semteams/devviaspec"
 	"github.com/c360studio/semteams/cmd/semteams/research"
+	"github.com/c360studio/semteams/cmd/semteams/semsource"
 	"github.com/c360studio/semteams/cmd/semteams/testharness"
 	"github.com/c360studio/semteams/cmd/semteams/tools/addsource"
 	"github.com/c360studio/semteams/cmd/semteams/tools/bootstrapworkspace"
@@ -83,6 +84,17 @@ func registerProductPayloads(reg *payloadregistry.Registry) error {
 	}
 	if err := curator.RegisterPayloads(reg); err != nil {
 		return fmt.Errorf("curator payloads: %w", err)
+	}
+	// Headless-semsource compatibility: semsource publishes
+	// semsource.entity.v1 / .status.v1 / .manifest.v1 / .predicates.v1
+	// payloads on the shared NATS bus. graph-ingest unmarshals them via
+	// the registry — without this registration, every entity message is
+	// dropped with "unregistered payload type: semsource.entity.v1".
+	// Mirrors semspec's headless-host pattern (semspec/semsource/
+	// payload.go) — host app owns the registration when running
+	// semsource headless.
+	if err := semsource.RegisterPayloads(reg); err != nil {
+		return fmt.Errorf("semsource payloads: %w", err)
 	}
 	return nil
 }
