@@ -76,20 +76,14 @@ test.describe("Dev-via-Spec QA-reviewer (R3.7.2.k′)", () => {
     expect(health.ok()).toBe(true);
   });
 
-  // Fifteen loops: twelve baseline + three recovery (architect, builder,
-  // qa-reviewer accept). Allow 8 minutes — dev-via-spec.spec.ts's 360s
-  // baseline plus ~30s for the original qa-reviewer plus ~90s for the
-  // three-loop recovery cycle (recovery architect ~10 round-trips,
-  // recovery builder ~4, recovery qa-reviewer ~2; mock-LLM is fast but
-  // each loop adds rule-engine + graph-write hops).
+  // Fourteen loops (ADR-040 reshape): eleven baseline + three recovery
+  // (architect, builder, qa-reviewer accept). Was fifteen pre-ADR-040;
+  // research arc collapsed by 1 loop (2× source-acq → 1× curator + 1×
+  // re-query researcher). Allow 8 minutes — dev-via-spec-qa.spec.ts's
+  // 480s budget kept the same to absorb mock-LLM scheduling jitter.
   test.setTimeout(480_000);
 
-  // ADR-040 PR 3 hard-replaced researcher-with-source-acquisition with the
-  // source-curator role. The fixture below's research phase (Loops C+E)
-  // still expects the OLD flow shape; under the new wiring rule 02 spawns
-  // source-curator and the chain shape changes. PR 4 rewrites the fixture
-  // for the new curator flow and re-enables this test.fixme.
-  test.fixme("[ADR-040 PR 4 pending] research → stabilisation → dev-via-spec planner / reviewer / challenger / architect / builder / qa-reviewer", async ({
+  test("research → curator → re-query researcher → approve → dev-via-spec planner / reviewer / challenger / architect / builder / qa-reviewer + ADR-039 Phase 1 recovery cycle", async ({
     page,
     request,
   }) => {
@@ -120,7 +114,8 @@ test.describe("Dev-via-Spec QA-reviewer (R3.7.2.k′)", () => {
 
     // -----------------------------------------------------------------
     // Step 3 — wait for THREE loops (researcher A, reviewer B,
-    // researcher-with-source C). Loop C will pause for approval.
+    // source-curator C). Loop C will pause for approval on the
+    // curator's add_source_repo call.
     // -----------------------------------------------------------------
     const threeLoops = await pollUntil(async () => {
       const resp = await request.get("/teams-dispatch/loops");
@@ -135,7 +130,7 @@ test.describe("Dev-via-Spec QA-reviewer (R3.7.2.k′)", () => {
 
     expect(
       threeLoops,
-      "expected 3 loops before first approval (researcher + reviewer + researcher-with-source)",
+      "expected 3 loops before first approval (researcher + reviewer + source-curator)",
     ).toBeTruthy();
 
     // -----------------------------------------------------------------
@@ -215,7 +210,7 @@ test.describe("Dev-via-Spec QA-reviewer (R3.7.2.k′)", () => {
 
     expect(
       fiveLoops,
-      "expected 5 loops after first approval (A, B, C, D, E spawned by stabilisation rejection — same intermediate state as dev-via-spec.spec.ts)",
+      "expected 5 loops after first approval (A researcher + B reviewer + C source-curator + D re-query researcher + E reviewer-approve — ADR-040 research arc completes)",
     ).toBeTruthy();
 
     // -----------------------------------------------------------------
@@ -230,13 +225,13 @@ test.describe("Dev-via-Spec QA-reviewer (R3.7.2.k′)", () => {
       const resp = await request.get("/teams-dispatch/loops");
       if (!resp.ok()) return null;
       const list = (await resp.json()) as Array<{ state: string }>;
-      if (list.length !== 15) return null;
+      if (list.length !== 14) return null;
       return list.every((l) => l.state === "complete") ? list : null;
     }, { timeoutMs: 360000 });
 
     expect(
       allTerminal,
-      "expected all 15 loops to reach terminal complete state (12 baseline + 3-loop ADR-039 Phase 1 recovery cycle)",
+      "expected all 14 loops to reach terminal complete state (11 baseline + 3-loop ADR-039 Phase 1 recovery cycle)",
     ).toBeTruthy();
 
     // -----------------------------------------------------------------
@@ -249,7 +244,8 @@ test.describe("Dev-via-Spec QA-reviewer (R3.7.2.k′)", () => {
     //
     // Expected roles (after default_role resolution):
     //   1 × researcher                          (Loop A — dispatch)
-    //   2 × researcher-with-source-acquisition  (Loops C, E — research rule 02 ×2)
+    //   1 × source-curator                      (Loop C — rule_02 spawn-curator)
+    //   2 × researcher                          (Loop A initial + Loop D re-query post-curator via rule_02b)
     //   3 × research-reviewer                   (Loops B, D, F — research rules 01a/01b)
     //   1 × dev-via-spec-planner                (Loop G — research rule 03)
     //   1 × dev-via-spec-reviewer               (Loop H — dev-via-spec rule 01)
@@ -279,8 +275,8 @@ test.describe("Dev-via-Spec QA-reviewer (R3.7.2.k′)", () => {
     const roles = finalLoops.map((l) => l.role || expectedDefaultRole);
 
     const researcherCount = roles.filter((r) => r === "researcher").length;
-    const sourceAcqCount = roles.filter(
-      (r) => r === "researcher-with-source-acquisition",
+    const curatorCount = roles.filter(
+      (r) => r === "source-curator",
     ).length;
     const reviewerCount = roles.filter((r) => r === "research-reviewer").length;
     const plannerCount = roles.filter((r) => r === "dev-via-spec-planner").length;
@@ -302,16 +298,16 @@ test.describe("Dev-via-Spec QA-reviewer (R3.7.2.k′)", () => {
 
     expect(
       researcherCount,
-      `expected 1 researcher loop, got roles=${JSON.stringify(roles)}`,
-    ).toBe(1);
-    expect(
-      sourceAcqCount,
-      `expected 2 researcher-with-source-acquisition loops, got roles=${JSON.stringify(roles)}`,
+      `expected 2 researcher loops (Loop A initial + Loop D re-query post-curator), got roles=${JSON.stringify(roles)}`,
     ).toBe(2);
     expect(
+      curatorCount,
+      `expected 1 source-curator loop (Loop C — rule_02 spawn-curator). Missing → rule_02 did not fire or fired to the wrong role. roles=${JSON.stringify(roles)}`,
+    ).toBe(1);
+    expect(
       reviewerCount,
-      `expected 3 research-reviewer loops, got roles=${JSON.stringify(roles)}`,
-    ).toBe(3);
+      `expected 2 research-reviewer loops, got roles=${JSON.stringify(roles)}`,
+    ).toBe(2);
     expect(
       plannerCount,
       `expected 1 dev-via-spec-planner loop. Missing → R3.2.2 stabilisation rule did not fire. roles=${JSON.stringify(roles)}`,
@@ -364,7 +360,7 @@ test.describe("Dev-via-Spec QA-reviewer (R3.7.2.k′)", () => {
     expect(
       settledList.length,
       "recovery qa-reviewer's accept terminal must not spawn a sixteenth loop",
-    ).toBe(15);
+    ).toBe(14);
 
     // -----------------------------------------------------------------
     // Step 12 — verify research.artifact.v1 publishes (Loops A/C/E)
@@ -385,16 +381,16 @@ test.describe("Dev-via-Spec QA-reviewer (R3.7.2.k′)", () => {
       .filter((s) => s.startsWith("research.artifact."));
     expect(
       artifactSubjects.length,
-      `expected at least 3 research.artifact.<loop_id> publishes (one per researcher pass), got ${artifactSubjects.length}: ${JSON.stringify(artifactSubjects)}`,
-    ).toBeGreaterThanOrEqual(3);
+      `expected at least 2 research.artifact.<loop_id> publishes (one per researcher pass — Loop A initial + Loop D re-query post-curator under ADR-040), got ${artifactSubjects.length}: ${JSON.stringify(artifactSubjects)}`,
+    ).toBeGreaterThanOrEqual(2);
 
     const specArtifactSubjects = entries
       .map((e) => e.subject)
       .filter((s) => s.startsWith("dev_via_spec.artifact."));
-    // Two architect emits (Loop J first-pass + Loop M recovery v2 with checks).
+    // Two architect emits (Loop I first-pass + Loop L recovery v2 with checks).
     expect(
       specArtifactSubjects.length,
-      `expected ≥2 dev_via_spec.artifact.<loop_id> publishes (Loop J first pass + Loop M ADR-039 recovery), got ${specArtifactSubjects.length}: ${JSON.stringify(specArtifactSubjects)}`,
+      `expected ≥2 dev_via_spec.artifact.<loop_id> publishes (Loop I first pass + Loop L ADR-039 recovery), got ${specArtifactSubjects.length}: ${JSON.stringify(specArtifactSubjects)}`,
     ).toBeGreaterThanOrEqual(2);
 
     // ADR-038 PR C Phase C5: planner emits dev_via_spec.plan.<loop_id>

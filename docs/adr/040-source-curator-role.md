@@ -202,17 +202,27 @@ copy of the rule set deletes entirely once this lands):
    `coordinator.next_action = indexed`. Spawns researcher with
    `curator_loop_id` in task properties so the researcher reads
    the curator's `emit_curator_artifact` output and re-queries
-   the augmented corpus. Forwards `lineage.researcher` from the
-   curator's lineage (which the curator inherited from rule 02).
+   the augmented corpus. **Does NOT forward `lineage.researcher`**
+   — the spawned researcher IS the new research-artifact author
+   (supersession-via-new-spawn, same shape as ADR-039 rule 08).
+   Forwarding the curator's inherited lineage would point at the
+   superseded original researcher and break architect-reachability
+   downstream. The next 01a firing on the new researcher's
+   completion re-stamps `lineage.researcher = $entity.instance`
+   to the recovery researcher's loop_id; downstream architect /
+   reviewer / etc. see the new artifact pointer.
 
 3. **`02c-curator-needs_clarification-to-researcher`** (NEW Tier 1
    recovery rule, complements ADR-039 rule 08) — fires on
    `agent.loop.role = source-curator` AND
    `coordinator.next_action = needs_clarification`. Spawns
    researcher with the curator's `coordinator.decision_reason`
-   as retry context. The classifier ("research-side issue, not
-   corpus gap") lives in the curator's persona; the rule trusts
-   the curator's verdict.
+   and `coordinator.retry_hint` as retry context. The classifier
+   ("research-side issue, not corpus gap") lives in the curator's
+   persona; the rule trusts the curator's verdict. **Does NOT
+   forward `lineage.researcher`** — same supersession invariant
+   as 02b. The spawned researcher is the new artifact author;
+   01a re-stamps lineage on its completion.
 
 ### Hard replace
 
