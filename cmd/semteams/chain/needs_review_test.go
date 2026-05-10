@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/c360studio/semstreams/agentic"
+	"github.com/c360studio/semstreams/message"
 	agvocab "github.com/c360studio/semstreams/vocabulary/agentic"
 )
 
@@ -200,6 +201,73 @@ func TestNeedsReviewMilestone_ResolverError_Skipped(t *testing.T) {
 	}
 	if len(pub.triples) != 0 {
 		t.Errorf("resolver error should drop the milestone, got %d triples", len(pub.triples))
+	}
+}
+
+// flakyPublisher fails AddTriple on a configured predicate; succeeds for
+// the rest. Lets a test assert that NeedsReviewStamper's per-triple loop
+// keeps writing siblings after one fails (the "partial cluster is
+// queryable; a zero-triple record is invisible" contract documented on
+// the type).
+type flakyPublisher struct {
+	failOn  string
+	written []string
+}
+
+func (f *flakyPublisher) AddTriple(_ context.Context, t message.Triple) error {
+	if t.Predicate == f.failOn {
+		return errors.New("simulated publisher failure")
+	}
+	f.written = append(f.written, t.Predicate)
+	return nil
+}
+
+func TestNeedsReviewMilestone_PartialClusterFailure_OtherWritesProceed(t *testing.T) {
+	pub := &flakyPublisher{failOn: PredicateNeedsReviewProducerLoopID}
+	resolver := resolverWithChain(map[string]string{
+		"builder_x": loopEntityID(t, "dispatch_root"),
+	})
+	builderEntityID := loopEntityID(t, "builder_x")
+	er := &fakeEntityReader{
+		entities: map[string]map[string]any{
+			builderEntityID: {
+				agvocab.CoordinatorNextAction:     needsClarificationAction,
+				agvocab.CoordinatorDecisionReason: "harness selection ambiguous",
+			},
+		},
+	}
+	s := NewNeedsReviewStamper(pub, resolver, er, testPlatform(), nil)
+
+	ev := &agentic.LoopCompletedEvent{
+		LoopID:  "builder_x",
+		Role:    builderRole,
+		Outcome: agentic.OutcomeSuccess,
+	}
+	if err := s.HandleLoopCompleted(context.Background(), ev); err != nil {
+		t.Fatalf("partial-cluster failure should be fail-soft, got error: %v", err)
+	}
+
+	// 5 predicates total; one fails; remaining four must still land. The
+	// predicate ordering in needs_review.go is classification, producer_loop_id,
+	// producer_role, reason, observed_at — so failing on producer_loop_id
+	// leaves classification + producer_role + reason + observed_at.
+	wantWritten := []string{
+		PredicateNeedsReviewClassification,
+		PredicateNeedsReviewProducerRole,
+		PredicateNeedsReviewReason,
+		PredicateNeedsReviewObservedAt,
+	}
+	if len(pub.written) != len(wantWritten) {
+		t.Fatalf("expected %d siblings to land after one failure, got %d (%v)", len(wantWritten), len(pub.written), pub.written)
+	}
+	wantSet := map[string]struct{}{}
+	for _, p := range wantWritten {
+		wantSet[p] = struct{}{}
+	}
+	for _, p := range pub.written {
+		if _, ok := wantSet[p]; !ok {
+			t.Errorf("unexpected predicate written: %q", p)
+		}
 	}
 }
 

@@ -62,20 +62,23 @@ const (
 	// "provenance.challenger_loop".
 	PredicateConsensusLoop = "chain.consensus_loop"
 
-	// chain.needs_review.* — ADR-039 Phase 1 Tier 3 cluster. Stamped by
-	// NeedsReviewStamper when a needs_clarification terminal lands with
-	// no Tier 1 rule match and no Tier 2 coordinator configured. The
-	// cluster represents "awaiting a recovery decision" — consumer is
+	// PredicateNeedsReviewClassification is the first predicate of the
+	// chain.needs_review.* cluster (ADR-039 Phase 1 Tier 3). The full
+	// cluster is stamped by NeedsReviewStamper when a
+	// needs_clarification terminal lands with no Tier 1 rule match and
+	// no Tier 2 coordinator configured — the cluster represents
+	// "awaiting a recovery decision" and the consumer is
 	// deployment-configured (coordinator agent, operator dashboard,
 	// metric-emit job). Distinct from chain.paused.* (ADR-037, FAILED
 	// loops with closed-enum classifications). Phase 1 only stamps for
 	// dev-via-spec-builder; broader producer coverage is a follow-up.
-
-	// PredicateNeedsReviewClassification is an open-valued tag
-	// describing why this needs_clarification reached Tier 3. Phase 1
-	// writes "unrouted_needs_clarification" (catch-all). Future Tier 2
-	// coordinator integration may write "coordinator_declined" or finer
-	// reason-pattern tags (e.g. "catalog_gap", "external_dependency").
+	//
+	// This predicate itself is an open-valued tag describing why this
+	// needs_clarification reached Tier 3. Phase 1 writes
+	// "unrouted_needs_clarification" (catch-all). Future Tier 2
+	// coordinator integration may write "coordinator_declined" or
+	// finer reason-pattern tags (e.g. "catalog_gap",
+	// "external_dependency").
 	PredicateNeedsReviewClassification = "chain.needs_review.classification"
 
 	// PredicateNeedsReviewProducerLoopID is the loop_id of the producer
