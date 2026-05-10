@@ -13,6 +13,7 @@ import (
 	"github.com/c360studio/semstreams/types"
 
 	"github.com/c360studio/semteams/cmd/semteams/chain"
+	"github.com/c360studio/semteams/cmd/semteams/curator"
 	"github.com/c360studio/semteams/cmd/semteams/devviaspec"
 	"github.com/c360studio/semteams/cmd/semteams/research"
 	"github.com/c360studio/semteams/cmd/semteams/testharness"
@@ -21,6 +22,7 @@ import (
 	"github.com/c360studio/semteams/cmd/semteams/tools/builderdecide"
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitartifact"
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitconsensus"
+	"github.com/c360studio/semteams/cmd/semteams/tools/emitcuratorartifact"
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitplan"
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitspecartifact"
 	"github.com/c360studio/semteams/cmd/semteams/verification"
@@ -64,6 +66,9 @@ const (
 // architect's structured check against a verification surface (target /
 // runtime / test_harness / test_runtime / ref / evidence). Wired into
 // dev_via_spec.artifact.v2 in R3.7.2.b.
+// ADR-040: curator.Artifact — source-curator's typed handoff to the next
+// researcher loop. Lists newly-indexed sources, verified entity IDs, and
+// optional shared mount paths.
 // Add new product-local payload registrations here; keep the ADR reference
 // in the comment so future readers know which slice introduced each type.
 func registerProductPayloads(reg *payloadregistry.Registry) error {
@@ -75,6 +80,9 @@ func registerProductPayloads(reg *payloadregistry.Registry) error {
 	}
 	if err := verification.RegisterPayloads(reg); err != nil {
 		return fmt.Errorf("verification payloads: %w", err)
+	}
+	if err := curator.RegisterPayloads(reg); err != nil {
+		return fmt.Errorf("curator payloads: %w", err)
 	}
 	return nil
 }
@@ -108,6 +116,9 @@ func registerProductTools(reg *agentictools.ExecutorRegistry, natsClient *natscl
 		return err
 	}
 	if err := registerEmitConsensus(reg, natsClient, platform, logger); err != nil {
+		return err
+	}
+	if err := registerEmitCuratorArtifact(reg, natsClient, platform, logger); err != nil {
 		return err
 	}
 	if err := registerEmitSpecArtifact(reg, natsClient, platform, testHarnessMgr, logger); err != nil {
@@ -274,6 +285,37 @@ func registerEmitConsensus(reg *agentictools.ExecutorRegistry, natsClient *natsc
 	}
 	logger.Info("Registered product tool",
 		slog.String("name", emitconsensus.ToolName),
+		slog.String("org", platform.Org),
+		slog.String("platform", platform.Platform))
+	return nil
+}
+
+// registerEmitCuratorArtifact wires the ADR-040 emit_curator_artifact executor.
+// Always registered when natsClient is non-nil — same "always on" policy as
+// registerEmitArtifact: any deployment running the research arc with
+// source-curation enabled needs it.
+//
+// Unlike the emit_plan / emit_consensus / emit_dev_via_spec_artifact siblings,
+// this executor has no SetChainReader call — the curator artifact is a flat
+// substrate-mutation record with no cross-arc lineage refs. No markdown render
+// either: the payload is runtime data consumed by the next researcher loop via
+// read_loop_result, not a human document.
+//
+// Framework-alignment carve-out: curator concept is SemTeams-specific;
+// semstreams has no notion of a curator role. Stays product-local.
+// Per ADR-040 §"`emit_curator_artifact` typed payload".
+func registerEmitCuratorArtifact(reg *agentictools.ExecutorRegistry, natsClient *natsclient.Client, platform types.PlatformMeta, logger *slog.Logger) error {
+	if natsClient == nil {
+		logger.Warn("nats client unavailable; emit_curator_artifact registration skipped")
+		return nil
+	}
+	triplePublisher := agentictools.NewNATSTriplePublisher(natsClient)
+	executor := emitcuratorartifact.NewExecutor(triplePublisher, natsClient, platform, logger)
+	if err := reg.RegisterTool(emitcuratorartifact.ToolName, executor); err != nil {
+		return fmt.Errorf("register %s: %w", emitcuratorartifact.ToolName, err)
+	}
+	logger.Info("Registered product tool",
+		slog.String("name", emitcuratorartifact.ToolName),
 		slog.String("org", platform.Org),
 		slog.String("platform", platform.Platform))
 	return nil
