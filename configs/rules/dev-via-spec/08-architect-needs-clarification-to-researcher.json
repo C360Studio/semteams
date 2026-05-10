@@ -1,0 +1,55 @@
+{
+  "id": "dev_via_spec_architect_needs_clarification_to_researcher",
+  "type": "expression",
+  "name": "Dev-via-spec Architect needs_clarification → Researcher (recovery)",
+  "description": "ADR-039 Phase 1 Tier 1 rule. When the dev-via-spec-architect terminates with decide(action=needs_clarification), the gap is structurally a research-coverage problem (canonical case: researcher dropped test_harness selection — smoke #8 run-9; multi-boundary harness coverage gap — smoke #8 run-12). Spawn a fresh researcher with pointers to the prior architect's terminal AND the prior researcher's artifact. The new researcher reads both via read_loop_result and re-emits a research artifact addressing the gap; rule 01a-research-to-reviewer-after-researcher fires on its completion and the chain re-runs from research-review forward (per ADR-035 per-role rigour — the planner's plan is also bound by the new artifact). Recovery is supersession-via-new-spawn (Shape A) per ADR-039; the prior researcher and architect loop entities remain in the graph, immutable historical record. The chain's `chain.research_artifact_loop` reference will update once Phase 4 stamper-supersession lands.",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "agent.loop.role",
+      "operator": "eq",
+      "value": "dev-via-spec-architect",
+      "required": true
+    },
+    {
+      "field": "coordinator.next_action",
+      "operator": "eq",
+      "value": "needs_clarification",
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "max_iterations": 3,
+  "on_enter": [
+    {
+      "type": "publish_agent",
+      "subject": "agent.task.researcher",
+      "role": "researcher",
+      "model": "architecture",
+      "tools": ["read_loop_result", "query_entity", "query_entities", "add_source_repo", "emit_research_artifact"],
+      "action_allowlist": ["approved", "insufficient"],
+      "max_iterations": 5,
+      "properties": {
+        "prior_architect_loop_id": "$entity.instance",
+        "prior_researcher_loop_id": "$entity.triple.lineage.researcher",
+        "recovery": "architect_needs_clarification"
+      },
+      "prompt": "Recovery research pass — the dev-via-spec-architect at loop $entity.instance terminated with decide(action=needs_clarification) because the prior research artifact left a gap the architect cannot fill from inside its commitment contract.\n\nArchitect's terminal reason: $entity.triple.coordinator.decision_reason\n\nIteration 1 — call read_loop_result on the architect's loop ($entity.instance) to read the full structured terminal (decision_reason + retry_hint + any blocking_question). The retry_hint typically names a specific field the artifact must take a position on (e.g. test_harness selection; multi-boundary coverage). Then call read_loop_result on the prior researcher's loop ($entity.triple.lineage.researcher) to read the original research artifact verbatim — your job is to SUPERSEDE that artifact, not start from scratch.\n\nIteration 2+ — re-emit the research artifact with the gap addressed. Carry forward everything from the prior artifact that's still correct (actors, integration_points, prior tasks); change only what the architect's gap demands. If the gap names a corpus you don't have indexed, call add_source_repo first per the source-acquisition fragment. Populate `addressed_gaps` with the architect's gap reason verbatim and any others you closed; populate `open_gaps` with anything you still cannot resolve.\n\nTerminal: emit_research_artifact + decide(action=approved) — your completion will trigger rule 01a-research-to-reviewer-after-researcher and the chain re-runs from research-review forward through planner → reviewer → challenger → architect under ADR-035 per-role rigour. Both research-reviewer and planner re-evaluate against the new artifact, since the prior plan was bound by the prior artifact.\n\nADR-039 Phase 1 Tier 1; ADR-035 per-role rigour."
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "phase": "ADR-039 Phase 1",
+    "adr": "docs/adr/039-needs-clarification-recovery.md",
+    "tier": 1,
+    "shape": "A",
+    "supersession_target": "chain.research_artifact_loop",
+    "phase_4_dependency": "Stamper supersession (chain entity's `chain.research_artifact_loop` reference) is Phase 4 of ADR-039 — until it lands, the chain entity's milestone references won't update on the new researcher's artifact. The supersession is real in the graph (new loop entity, new artifact triples) but the chain.* pointer stays stale. Loop ancestry walks (agent.loop.parent) and lineage.researcher forward-stamping work correctly even without Phase 4; only the chain-level fusion view is degraded.",
+    "max_iterations_note": "Per-entity rule_state caveat — the architect-loop-id this rule fires on is unique per chain, so max_iterations=3 is a per-architect-loop ceiling, not a chain-wide one. If the same architect loop is somehow re-triggered three times the rule stops firing; in practice each architect needs_clarification is a fresh entity, so the cap is informational. Tune from empirical evidence in smoke #8 run-13.",
+    "model_choice": "architecture model (claude-sonnet typically) — recovery research is harder than first-pass research because the gap was already non-obvious to the prior researcher. Same model the rule_05-architect uses for its own role.",
+    "smoke_evidence": [
+      "/tmp/smoke8-run9/trajectory-b85dfdec-*.json — researcher dropped test_harness; architect emitted needs_clarification with retry_hint naming the field",
+      "/tmp/smoke8-run12/trajectory-69f75f74-*.json — multi-boundary coverage gap; same recovery shape"
+    ]
+  }
+}

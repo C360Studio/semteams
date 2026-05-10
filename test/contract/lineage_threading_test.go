@@ -86,6 +86,11 @@ func TestLineageThreading_RuleCoverage(t *testing.T) {
 			want:  "$entity.triple.lineage.researcher",
 			notes: "builder decide -> qa-reviewer: forward lineage.researcher",
 		},
+		{
+			path:  "../../configs/rules/dev-via-spec/09-qa-reviewer-needs-clarification-to-architect.json",
+			want:  "$entity.triple.lineage.researcher",
+			notes: "ADR-039 Phase 1 recovery: qa-reviewer needs_clarification -> architect respawn — forward lineage.researcher so the new architect can re-read the research artifact when re-emitting the spec",
+		},
 	}
 
 	for _, tt := range tests {
@@ -129,7 +134,8 @@ func TestLineageThreading_DiscoveryWalk(t *testing.T) {
 	// Allowlist: rules where lineage threading is intentionally skipped.
 	// Each entry MUST have a one-line rationale.
 	allowlist := map[string]string{
-		"02-reviewer-rejected-retry-with-source.json": "spawns a fresh researcher-with-source-acquisition; the next 01b firing re-stamps lineage.researcher = $entity.instance of the new researcher, so the architect-reachability invariant is preserved without forwarding here",
+		"02-reviewer-rejected-retry-with-source.json":         "spawns a fresh researcher-with-source-acquisition; the next 01b firing re-stamps lineage.researcher = $entity.instance of the new researcher, so the architect-reachability invariant is preserved without forwarding here",
+		"08-architect-needs-clarification-to-researcher.json": "ADR-039 Phase 1 recovery rule. Spawns a fresh researcher (the new research-artifact author) — forwarding the prior researcher's loop_id would stamp lineage.researcher to a SUPERSEDED loop, violating the invariant. The next 01a firing re-stamps lineage.researcher = $entity.instance of the recovery researcher; downstream architect/reviewer/etc. see the new artifact pointer.",
 	}
 
 	dirs := []string{
