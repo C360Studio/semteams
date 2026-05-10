@@ -4,7 +4,7 @@
   "sources": [
     {
       "type": "docs",
-      "paths": ["/etc/semsource/seed.md"],
+      "paths": ["/etc/semsource/seed"],
       "watch": false
     }
   ],

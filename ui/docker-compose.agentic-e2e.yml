@@ -295,7 +295,14 @@ services:
       - SEMSOURCE_LOG_LEVEL=info
     volumes:
       - ${BACKEND_CONTEXT:-..}/test/fixtures/semsource/semsource-e2e.json:/etc/semsource/semsource.json:ro
-      - ${BACKEND_CONTEXT:-..}/test/fixtures/semsource/seed.md:/etc/semsource/seed.md:ro
+      # doc-source processor expects a directory of docs, not a file
+      # (semsource processor/doc-source/config.go: "Filesystem
+      # directories to scan for documents"). Mount the seed/ dir; the
+      # paths field in semsource-e2e.json points at the dir not the
+      # file. Pre-fix smoke #14 ran with a file mount and the
+      # doc-source-seed-md component crashed at boot ("path is not a
+      # directory"), leaving semsource with zero working sources.
+      - ${BACKEND_CONTEXT:-..}/test/fixtures/semsource/seed:/etc/semsource/seed:ro
     networks:
       - agentic-net
     healthcheck:

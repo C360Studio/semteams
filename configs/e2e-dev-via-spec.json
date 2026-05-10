@@ -276,7 +276,8 @@
         "enable_hierarchy": true,
         "ports": {
           "inputs": [
-            {"name": "graph_mutations", "subject": "graph.mutation.>", "type": "nats"}
+            {"name": "graph_mutations", "subject": "graph.mutation.>", "type": "nats"},
+            {"name": "entities_in", "subject": "graph.ingest.entity", "type": "jetstream", "stream_name": "GRAPH"}
           ],
           "outputs": [
             {"name": "entity_states", "subject": "ENTITY_STATES", "type": "kv-write"}
