@@ -55,7 +55,14 @@ emits the structured signal; nothing reads it.
 ## Decision
 
 Commit to a **three-tier recovery hierarchy** with a structural
-discriminator at the consumer end:
+discriminator at the consumer end.
+
+**Tier 1 covers KNOWN cheap shapes; Tier 2 (coordinator) absorbs
+the long tail.** Adding a new Tier 1 rule for every novel shape is
+an anti-pattern — novel shapes go to Tier 2 by default. The rule
+set stays bounded; coordinator quality is what scales. If
+coordinator can't handle a case, that's a coordinator-persona
+improvement signal, not a new-rule signal.
 
 ### What rules fire on (the wire-format basis)
 
@@ -304,6 +311,70 @@ This phase is independent of Phases 1–3; can land in any order.
 - **Stamper supersession direction (always-emit vs walk-to-emitter).**
   Both are viable. Phase 4 picks one in a follow-up.
 
+## Guarding against lazy needs_clarification
+
+The risk: `needs_clarification` is a structurally valid terminal,
+and a recovery primitive makes it a *cheap* terminal — an LLM under
+pressure could reach for it whenever a task gets moderately hard,
+turning the recoverable verdict into the easiest path to "I'm
+done." Producer-side persona-prose enforcement ("only emit when
+truly blocked") is exactly the discipline pattern that didn't
+survive Goodhart pressure in earlier slices, so the same frame
+won't survive here.
+
+Three guards address the abuse vector. None are silver bullets;
+together they discipline the producer's incentive over time.
+
+### Coordinator as quality gate, not just router
+
+When Tier 2 fires, coordinator can route in three directions
+(re-spawn upstream, escalate to human, propose config change) —
+AND a fourth: **re-spawn the SAME producer with "your prior
+needs_clarification was insufficient — commit or be more
+specific."** This makes coordinator a quality gate that pushes
+back on lazy emissions instead of accepting them. Costs an extra
+LLM hop per case but disciplines the producer's emission rate over
+time. The decision is the coordinator's: "is this a substantive
+gap or a give-up?" If the producer's reason doesn't name a
+specific role to retry, doesn't name a specific field that's
+missing, or doesn't justify why the gap blocks progress,
+coordinator sends it back.
+
+### Telemetry via ops-chain-observer
+
+Per-role `needs_clarification` rate is a tracked metric. If a
+producer hits >X% of terminals as `needs_clarification` (threshold
+TBD with empirical evidence), ops-chain-observer emits an
+`ops.diagnosis.persona_drift_suspected` finding for human review.
+Catches abuse patterns across runs without blocking individual
+chains. Same shape as the smoke #8 stabilization-pass observation
+in run-10 — ops sees patterns that single-chain producers can't.
+
+### Producer-side specificity validation (cautious; consider Phase 5+)
+
+Tool-layer Validate could enforce minimum-specificity heuristics
+for `coordinator.decision_reason` when `coordinator.next_action =
+needs_clarification` (must reference a role, must reference a
+field, length floor). This is the structural-over-LLM pattern
+PR #113 + PR #115 leaned on. **Caution:** false positives make the
+producer loop on validation errors instead of doing the work,
+which is its own Goodhart trap. Likely better as a coordinator-side
+heuristic than a hard tool gate; mark as Phase 5+ pending evidence
+that Phase 1+2 isn't enough.
+
+### Why coordinator quality is the load-bearing investment
+
+If coordinator handles the long tail with judgment (substantive vs
+give-up; route or send back), Tier 1 stays bounded and producers
+get disciplined incrementally. If coordinator can't make those
+distinctions, the system either wedges (lazy needs_clarification
+goes nowhere useful) or gets noisy (everything escalates to human).
+Either way the symptom looks like "needs_clarification doesn't
+work"; the root cause is coordinator capability. Phase 2's coordinator
+persona shape is therefore the single highest-leverage decision
+in this ADR's implementation arc — more than the rule shapes,
+more than the predicate clusters. Treat it as such.
+
 ## Consequences
 
 **Positive:**
@@ -343,6 +414,17 @@ This phase is independent of Phases 1–3; can land in any order.
   ops-chain-observer's persona fragment needs to know about it
   alongside `chain.paused.*` — a small persona update when Phase 1
   ships.
+- **The system's quality on needs_clarification recovery is bounded
+  by coordinator quality.** If coordinator can't distinguish
+  substantive needs_clarification from lazy emissions, OR can't
+  make smart routing decisions across the long tail of novel
+  shapes, the whole tier structure degrades: lazy emissions go
+  nowhere useful (silent wedge from a different cause) or
+  everything escalates to human (noisy). This is the
+  load-bearing investment for ADR-039 to deliver value — see
+  §"Guarding against lazy needs_clarification" for the discipline
+  story. Phase 2's coordinator persona is therefore the highest-
+  leverage single decision in the implementation arc.
 
 **Neutral:**
 
