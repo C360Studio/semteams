@@ -61,6 +61,42 @@ const (
 	// plan. Read by emit_dev_via_spec_artifact to populate
 	// "provenance.challenger_loop".
 	PredicateConsensusLoop = "chain.consensus_loop"
+
+	// chain.needs_review.* — ADR-039 Phase 1 Tier 3 cluster. Stamped by
+	// NeedsReviewStamper when a needs_clarification terminal lands with
+	// no Tier 1 rule match and no Tier 2 coordinator configured. The
+	// cluster represents "awaiting a recovery decision" — consumer is
+	// deployment-configured (coordinator agent, operator dashboard,
+	// metric-emit job). Distinct from chain.paused.* (ADR-037, FAILED
+	// loops with closed-enum classifications). Phase 1 only stamps for
+	// dev-via-spec-builder; broader producer coverage is a follow-up.
+
+	// PredicateNeedsReviewClassification is an open-valued tag
+	// describing why this needs_clarification reached Tier 3. Phase 1
+	// writes "unrouted_needs_clarification" (catch-all). Future Tier 2
+	// coordinator integration may write "coordinator_declined" or finer
+	// reason-pattern tags (e.g. "catalog_gap", "external_dependency").
+	PredicateNeedsReviewClassification = "chain.needs_review.classification"
+
+	// PredicateNeedsReviewProducerLoopID is the loop_id of the producer
+	// that emitted the original needs_clarification terminal.
+	PredicateNeedsReviewProducerLoopID = "chain.needs_review.producer_loop_id"
+
+	// PredicateNeedsReviewProducerRole is the role name of the producer
+	// loop (dev-via-spec-builder for Phase 1; broader when Slice C lands).
+	PredicateNeedsReviewProducerRole = "chain.needs_review.producer_role"
+
+	// PredicateNeedsReviewReason is the producer's
+	// coordinator.decision_reason verbatim — short natural-language
+	// justification the producer supplied. Length-bounded by the
+	// upstream agentic.CoordinatorDecisionReason contract; not
+	// re-truncated here.
+	PredicateNeedsReviewReason = "chain.needs_review.reason"
+
+	// PredicateNeedsReviewObservedAt is the RFC3339 timestamp of when
+	// the stamper wrote the cluster. Distinct from the producer loop's
+	// CompletedAt; observability surfaces use this to age the cluster.
+	PredicateNeedsReviewObservedAt = "chain.needs_review.observed_at"
 )
 
 // init registers the chain vocabulary with the upstream vocabulary
@@ -102,6 +138,27 @@ func init() {
 
 	vocabulary.Register(PredicateConsensusLoop,
 		vocabulary.WithDescription("Loop_id of the dev-via-spec-challenger that accepted the plan. The chain entity's canonical reference to the consensus terminal."),
+		vocabulary.WithDataType("string"),
+	)
+
+	vocabulary.Register(PredicateNeedsReviewClassification,
+		vocabulary.WithDescription("ADR-039 Phase 1 Tier 3 cluster: open-valued tag describing why a needs_clarification terminal reached Tier 3 (no Tier 1 rule match, no Tier 2 coordinator configured). Phase 1 default: \"unrouted_needs_clarification\"."),
+		vocabulary.WithDataType("string"),
+	)
+	vocabulary.Register(PredicateNeedsReviewProducerLoopID,
+		vocabulary.WithDescription("ADR-039 Phase 1 Tier 3 cluster: loop_id of the producer that emitted the original needs_clarification terminal."),
+		vocabulary.WithDataType("string"),
+	)
+	vocabulary.Register(PredicateNeedsReviewProducerRole,
+		vocabulary.WithDescription("ADR-039 Phase 1 Tier 3 cluster: role name of the producer loop (dev-via-spec-builder for Phase 1; broader producer coverage in follow-up slices)."),
+		vocabulary.WithDataType("string"),
+	)
+	vocabulary.Register(PredicateNeedsReviewReason,
+		vocabulary.WithDescription("ADR-039 Phase 1 Tier 3 cluster: producer's coordinator.decision_reason verbatim — short natural-language justification the producer supplied alongside its decide(action=needs_clarification) call."),
+		vocabulary.WithDataType("string"),
+	)
+	vocabulary.Register(PredicateNeedsReviewObservedAt,
+		vocabulary.WithDescription("ADR-039 Phase 1 Tier 3 cluster: RFC3339 timestamp of when NeedsReviewStamper wrote the cluster. Distinct from the producer loop's CompletedAt — observability surfaces use this to age the cluster."),
 		vocabulary.WithDataType("string"),
 	)
 }
