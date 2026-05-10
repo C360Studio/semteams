@@ -1,11 +1,12 @@
 import { test, expect } from "@playwright/test";
 
 /**
- * Journey: Dev-via-Spec QA-reviewer (R3.7.2.k′ of ADR-034)
+ * Journey: Dev-via-Spec QA-reviewer + ADR-039 Phase 1 recovery cycle
  *
- * Extends dev-via-spec.spec.ts with the post-build review hop. The
- * first eleven loops are identical to dev-via-spec.spec.ts. The
- * difference at the tail:
+ * Extends dev-via-spec.spec.ts with the post-build review hop AND the
+ * full ADR-039 Phase 1 Shape A supersession recovery cycle when the
+ * qa-reviewer rejects with needs_clarification. The first eleven loops
+ * are identical to dev-via-spec.spec.ts. The difference at the tail:
  *
  *   - Loop K (dev-via-spec-builder) terminates with
  *     builder_decide(tests_passing) instead of needs_clarification.
@@ -14,21 +15,45 @@ import { test, expect } from "@playwright/test";
  *     unconditionally given the args, which triggers rule 07
  *     (R3.7.2.k′: builder→qa-reviewer).
  *
- *   - Loop L (dev-via-spec-qa-reviewer, NEW) reads the builder's
- *     terminal via read_loop_result and emits
- *     decide(needs_clarification). Per j′ 10-evaluation-contract.md
- *     Rule 3 this is the persona-correct verdict for the R3.7.2.k′
- *     stub state where the spawn-rule prompt embeds a hardcoded
- *     "(stub)" evidence block.
+ *   - Loop L (dev-via-spec-qa-reviewer) reads the builder's terminal
+ *     via read_loop_result and emits decide(needs_clarification).
+ *     Per j′ 10-evaluation-contract.md Rule 3 this is the
+ *     persona-correct verdict for the stub state where the spawn-rule
+ *     prompt embeds a hardcoded "(stub)" evidence block.
+ *
+ *   - Loop M (dev-via-spec-architect, recovery) — ADR-039 Phase 1
+ *     rule 09 fires on the qa-reviewer's needs_clarification and
+ *     spawns a fresh architect. Per the rule's prompt, the recovery
+ *     architect reads the qa-reviewer's terminal AND the prior
+ *     research artifact, then re-emits the spec WITH evidence rules
+ *     in checks (the gap qa-reviewer flagged). decide(tasks_emitted)
+ *     re-fires rule 06 → recovery builder.
+ *
+ *   - Loop N (dev-via-spec-builder, recovery) — rule 06 re-spawn.
+ *     bootstrap_workspace + bash + builder_decide(tests_passing).
+ *     Rule 07 re-fires on tests_passing → recovery qa-reviewer.
+ *
+ *   - Loop O (dev-via-spec-qa-reviewer, recovery) — clean terminal.
+ *     decide(action="accept") on the recovery spec's checks. No
+ *     further rule fires (rule 09 only fires on needs_clarification).
+ *     Chain settles at fifteen loops; ADR-039 Phase 1 Shape A
+ *     supersession cycle complete end-to-end.
  *
  * What this proves:
  *   - Rule 07 (configs/rules/dev-via-spec/07-builder-decide-to-
  *     qa-reviewer.json) fires on coordinator.next_action=tests_passing
  *     and spawns the qa-reviewer role.
- *   - The qa-reviewer's persona (R3.7.2.j′) loads at boot and the
- *     loop reaches terminal complete state.
- *   - Total chain: twelve loops, eleven up to and including builder
- *     (identical to dev-via-spec.spec.ts) + one qa-reviewer.
+ *   - The qa-reviewer's persona (R3.7.2.j′) loads at boot.
+ *   - ADR-039 Phase 1 rule 09 fires on qa-reviewer's needs_clarification
+ *     and spawns the recovery architect with lineage.researcher forwarded.
+ *   - Recovery architect's tasks_emitted re-fires rule 06 (verifies the
+ *     "supersession via new spawn" mechanism — ADR-039 Shape A — works
+ *     end-to-end without mutating prior loop entities).
+ *   - Recovery builder's tests_passing re-fires rule 07.
+ *   - Recovery qa-reviewer's accept terminates cleanly (rule 09 does
+ *     NOT fire on accept).
+ *   - Total chain: fifteen loops (eleven baseline + qa-reviewer +
+ *     three-loop recovery cycle).
  *
  * What this does NOT prove:
  *   - Substantive evidence grading. The evidence summary in the
@@ -51,12 +76,13 @@ test.describe("Dev-via-Spec QA-reviewer (R3.7.2.k′)", () => {
     expect(health.ok()).toBe(true);
   });
 
-  // Twelve loops + approval round-trip + SemSource AddRequest +
-  // settling pass + four-role dev-via-spec chain + builder +
-  // qa-reviewer. Allow 6.5 minutes — 30s headroom over
-  // dev-via-spec.spec.ts's 360s for the extra qa-reviewer round-trip
-  // (read_loop_result placeholder + decide; ~3-5s on mock-LLM).
-  test.setTimeout(390_000);
+  // Fifteen loops: twelve baseline + three recovery (architect, builder,
+  // qa-reviewer accept). Allow 8 minutes — dev-via-spec.spec.ts's 360s
+  // baseline plus ~30s for the original qa-reviewer plus ~90s for the
+  // three-loop recovery cycle (recovery architect ~10 round-trips,
+  // recovery builder ~4, recovery qa-reviewer ~2; mock-LLM is fast but
+  // each loop adds rule-engine + graph-write hops).
+  test.setTimeout(480_000);
 
   test("research → stabilisation → dev-via-spec planner / reviewer / challenger / architect / builder / qa-reviewer", async ({
     page,
@@ -188,21 +214,24 @@ test.describe("Dev-via-Spec QA-reviewer (R3.7.2.k′)", () => {
     ).toBeTruthy();
 
     // -----------------------------------------------------------------
-    // Step 8 — wait for ALL TWELVE loops to reach terminal complete
+    // Step 8 — wait for ALL FIFTEEN loops to reach terminal complete
     // state. Critical assertions: dev-via-spec rules 01/03/05/06/07
-    // must fire in order, ending with qa-reviewer terminal.
+    // fire in order, ending with qa-reviewer terminal at needs_clarification.
+    // ADR-039 Phase 1 rule 09 then fires + spawns the recovery architect;
+    // rules 06/07 re-fire as the recovery builder/qa-reviewer roll
+    // through to the recovery accept terminal.
     // -----------------------------------------------------------------
     const allTerminal = await pollUntil(async () => {
       const resp = await request.get("/teams-dispatch/loops");
       if (!resp.ok()) return null;
       const list = (await resp.json()) as Array<{ state: string }>;
-      if (list.length !== 12) return null;
+      if (list.length !== 15) return null;
       return list.every((l) => l.state === "complete") ? list : null;
-    }, { timeoutMs: 270000 });
+    }, { timeoutMs: 360000 });
 
     expect(
       allTerminal,
-      "expected all 12 loops to reach terminal complete state (research arc + stabilisation + dev-via-spec planner / reviewer / challenger / architect / builder / qa-reviewer)",
+      "expected all 15 loops to reach terminal complete state (12 baseline + 3-loop ADR-039 Phase 1 recovery cycle)",
     ).toBeTruthy();
 
     // -----------------------------------------------------------------
@@ -220,9 +249,12 @@ test.describe("Dev-via-Spec QA-reviewer (R3.7.2.k′)", () => {
     //   1 × dev-via-spec-planner                (Loop G — research rule 03)
     //   1 × dev-via-spec-reviewer               (Loop H — dev-via-spec rule 01)
     //   1 × dev-via-spec-challenger             (Loop I — dev-via-spec rule 03)
-    //   1 × dev-via-spec-architect              (Loop J — dev-via-spec rule 05)
-    //   1 × dev-via-spec-builder                (Loop K — dev-via-spec rule 06)
-    //   1 × dev-via-spec-qa-reviewer            (Loop L — dev-via-spec rule 07)
+    //   2 × dev-via-spec-architect              (Loop J — dev-via-spec rule 05;
+    //                                            Loop M — ADR-039 rule 09 recovery)
+    //   2 × dev-via-spec-builder                (Loop K — dev-via-spec rule 06;
+    //                                            Loop N — recovery via re-fire of rule 06)
+    //   2 × dev-via-spec-qa-reviewer            (Loop L — dev-via-spec rule 07;
+    //                                            Loop O — recovery via re-fire of rule 07)
     // -----------------------------------------------------------------
     const finalLoops = await request
       .get("/teams-dispatch/loops")
@@ -289,16 +321,16 @@ test.describe("Dev-via-Spec QA-reviewer (R3.7.2.k′)", () => {
     ).toBe(1);
     expect(
       architectCount,
-      `expected 1 dev-via-spec-architect loop. Missing → challenger's decide(accept) did not propagate. roles=${JSON.stringify(roles)}`,
-    ).toBe(1);
+      `expected 2 dev-via-spec-architect loops (Loop J via rule 05 + Loop M via ADR-039 rule 09 recovery). Missing → challenger's decide(accept) didn't propagate, OR rule 09 didn't fire on qa-reviewer's needs_clarification. roles=${JSON.stringify(roles)}`,
+    ).toBe(2);
     expect(
       builderCount,
-      `expected 1 dev-via-spec-builder loop. Missing → architect's decide(seed_requirements_emitted) did not propagate. roles=${JSON.stringify(roles)}`,
-    ).toBe(1);
+      `expected 2 dev-via-spec-builder loops (Loop K via rule 06 + Loop N via rule 06 re-fire on recovery architect's tasks_emitted). Missing → original or recovery architect's decide(tasks_emitted) didn't propagate. roles=${JSON.stringify(roles)}`,
+    ).toBe(2);
     expect(
       qaReviewerCount,
-      `expected 1 dev-via-spec-qa-reviewer loop (rule 07: builder→qa-reviewer fires on tests_passing). Missing → builder did not emit coordinator.next_action=tests_passing OR rule 07 did not load. roles=${JSON.stringify(roles)}`,
-    ).toBe(1);
+      `expected 2 dev-via-spec-qa-reviewer loops (Loop L via rule 07 + Loop O via rule 07 re-fire on recovery builder's tests_passing). Missing → original or recovery builder didn't emit tests_passing OR rule 07 didn't load. roles=${JSON.stringify(roles)}`,
+    ).toBe(2);
 
     // -----------------------------------------------------------------
     // Step 10 — only Loop C should ever have required approval. The
@@ -313,10 +345,12 @@ test.describe("Dev-via-Spec QA-reviewer (R3.7.2.k′)", () => {
     ).toBeUndefined();
 
     // -----------------------------------------------------------------
-    // Step 11 — settle assertion: no thirteenth loop appears. If the
-    // qa-reviewer's decide(needs_clarification) somehow re-fires a
-    // dev-via-spec rule (regression where rule 07 or another rule
-    // matches the qa-reviewer role), a thirteenth loop would appear.
+    // Step 11 — settle assertion: no sixteenth loop appears. The
+    // recovery qa-reviewer's decide(accept) terminal MUST NOT re-fire
+    // any rule. Specifically: rule 09 only fires on needs_clarification
+    // (not accept). A sixteenth loop would indicate either rule 09
+    // mis-fired on accept (regression) or some other rule unexpectedly
+    // matches the qa-reviewer role.
     // -----------------------------------------------------------------
     await new Promise((r) => setTimeout(r, 2000));
     const settledList = await request
@@ -324,8 +358,8 @@ test.describe("Dev-via-Spec QA-reviewer (R3.7.2.k′)", () => {
       .then((r) => r.json()) as unknown[];
     expect(
       settledList.length,
-      "qa-reviewer terminal must not spawn a thirteenth loop",
-    ).toBe(12);
+      "recovery qa-reviewer's accept terminal must not spawn a sixteenth loop",
+    ).toBe(15);
 
     // -----------------------------------------------------------------
     // Step 12 — verify research.artifact.v1 publishes (Loops A/C/E)
@@ -352,10 +386,11 @@ test.describe("Dev-via-Spec QA-reviewer (R3.7.2.k′)", () => {
     const specArtifactSubjects = entries
       .map((e) => e.subject)
       .filter((s) => s.startsWith("dev_via_spec.artifact."));
+    // Two architect emits (Loop J first-pass + Loop M recovery v2 with checks).
     expect(
       specArtifactSubjects.length,
-      `expected at least 1 dev_via_spec.artifact.<loop_id> publish from the architect, got ${specArtifactSubjects.length}: ${JSON.stringify(specArtifactSubjects)}`,
-    ).toBeGreaterThanOrEqual(1);
+      `expected ≥2 dev_via_spec.artifact.<loop_id> publishes (Loop J first pass + Loop M ADR-039 recovery), got ${specArtifactSubjects.length}: ${JSON.stringify(specArtifactSubjects)}`,
+    ).toBeGreaterThanOrEqual(2);
 
     // ADR-038 PR C Phase C5: planner emits dev_via_spec.plan.<loop_id>
     // (Loop G); challenger emits dev_via_spec.consensus.<loop_id>
@@ -379,25 +414,41 @@ test.describe("Dev-via-Spec QA-reviewer (R3.7.2.k′)", () => {
     ).toBeGreaterThanOrEqual(1);
 
     // -----------------------------------------------------------------
-    // Step 13 — terminal-state checks for the new tail. Builder must
-    // be complete (rule 07 fired only because builder reached
-    // terminal) and qa-reviewer must be complete (rule 07 spawned it
-    // and it terminated cleanly).
+    // Step 13 — terminal-state checks. All architect / builder /
+    // qa-reviewer loops (both first-pass AND recovery) must be complete.
     // -----------------------------------------------------------------
-    const builderLoop = finalLoops.find(
+    const architectLoops = finalLoops.filter(
+      (l) => l.role === "dev-via-spec-architect",
+    );
+    expect(
+      architectLoops.length,
+      "expected 2 architect loops (first pass + recovery)",
+    ).toBe(2);
+    for (const a of architectLoops) {
+      expect(a.state).toBe("complete");
+    }
+
+    const builderLoops = finalLoops.filter(
       (l) => l.role === "dev-via-spec-builder",
     );
-    expect(builderLoop, "dev-via-spec-builder loop should exist").toBeTruthy();
-    expect(builderLoop?.state).toBe("complete");
+    expect(
+      builderLoops.length,
+      "expected 2 builder loops (first pass + recovery)",
+    ).toBe(2);
+    for (const b of builderLoops) {
+      expect(b.state).toBe("complete");
+    }
 
-    const qaReviewerLoop = finalLoops.find(
+    const qaReviewerLoops = finalLoops.filter(
       (l) => l.role === "dev-via-spec-qa-reviewer",
     );
     expect(
-      qaReviewerLoop,
-      "dev-via-spec-qa-reviewer loop should exist (rule 07 fired on builder tests_passing)",
-    ).toBeTruthy();
-    expect(qaReviewerLoop?.state).toBe("complete");
+      qaReviewerLoops.length,
+      "expected 2 qa-reviewer loops (first pass needs_clarification + recovery accept)",
+    ).toBe(2);
+    for (const q of qaReviewerLoops) {
+      expect(q.state).toBe("complete");
+    }
   });
 });
 
