@@ -1,8 +1,11 @@
 name: dev-via-spec-qa
 description: |
-  Journey: R3.7.2.k′-bis of ADR-036 — full architect → builder →
-  qa-reviewer chain on mock-LLM. Extends dev-via-spec.yaml (R3.3 +
-  R3.4b + R3.6.2 of ADR-031/ADR-032) with two changes at the tail:
+  Journey: R3.7.2.k′-bis of ADR-036 + ADR-039 Phase 1 rule 09 (qa-reviewer
+  needs_clarification → architect recovery, Shape A supersession). Full
+  architect → builder → qa-reviewer chain on mock-LLM, then a complete
+  recovery cycle: recovery architect → recovery builder → recovery
+  qa-reviewer accept. Extends dev-via-spec.yaml (R3.3 + R3.4b + R3.6.2
+  of ADR-031/ADR-032) with two changes at the tail:
 
     1. Loop K (builder) terminates with builder_decide(tests_passing)
        instead of needs_clarification. The mock-LLM is sequence-based
@@ -27,9 +30,12 @@ description: |
 
   This fixture proves the chain SHAPE end-to-end on mock-LLM:
   rule 07's two-AND condition fires (tests_passing + evidence.summary_ready),
-  qa-reviewer spawns + reads + emits a terminal decide, the chain
-  settles at twelve loops. Substantive evidence grading (smoke #8
-  on real LLM with Testcontainers) is slice 5.
+  qa-reviewer spawns + reads + emits decide(needs_clarification),
+  ADR-039 Phase 1 rule 09 fires + spawns a recovery architect, the
+  recovery cycle (architect → builder → qa-reviewer) completes
+  cleanly with the recovery qa-reviewer's decide(accept), and the
+  chain settles at fifteen loops. Substantive evidence grading (smoke
+  #8 on real LLM with Testcontainers) is slice 5.
 
   Paired spec: ui/e2e/agentic/dev-via-spec-qa.spec.ts.
   Required compose profiles: semsource (substrate-modifying retry
@@ -39,7 +45,7 @@ description: |
   profile also brings up the workspace volume that the evidence
   preprocessor reads via its :ro bind mount.
 
-  Sequence (twelve loops, thirty-five LLM round-trips):
+  Sequence (fifteen loops, ~46 LLM round-trips):
 
     Loop A — researcher (initial pass, revision=1, default_role)
       1. tool_call: query_entity (corpus probe, returns nothing)
@@ -145,8 +151,38 @@ description: |
          accept without evidence rules per 10-evaluation-contract.md
          Rule 3",
          blocking_question=<architect must re-emit with evidence rules>)
-         → terminal. coordinator.next_action=needs_clarification
-         fires no rule today (R3.5 routing not yet wired).
+         → coordinator.next_action=needs_clarification → ADR-039
+         Phase 1 rule 09 fires (qa-reviewer needs_clarification →
+         architect recovery, Shape A supersession).
+
+    Loop M — dev-via-spec-architect RECOVERY (rule 09 spawn)
+     38. tool_call: read_loop_result on qa-reviewer-loop-L
+         (placeholder; tool errors)
+     39. tool_call: read_loop_result on researcher-with-source-loop-E
+         (placeholder; tool errors)
+     40. tool_call: emit_dev_via_spec_artifact (recovery v2 — same
+         actors/integration_points/tasks as v1 PLUS checks[] with
+         one evidence rule, the gap qa-reviewer flagged)
+     41. tool_call: decide(tasks_emitted, reason=<recovery summary>)
+         → coordinator.next_action=tasks_emitted →
+         dev-via-spec rule_06 fires (recovery builder spawn).
+
+    Loop N — dev-via-spec-builder RECOVERY (rule 06 spawn)
+     42. tool_call: bootstrap_workspace
+     43. tool_call: bash ls SPEC.md (placeholder; next turn handles)
+     44. tool_call: bash echo (placeholder; next turn handles)
+     45. tool_call: builder_decide(tests_passing, ...)
+         → coordinator.next_action=tests_passing →
+         dev-via-spec rule_07 fires (recovery qa-reviewer spawn).
+
+    Loop O — dev-via-spec-qa-reviewer RECOVERY (clean terminal)
+     46. tool_call: read_loop_result on recovery-builder-loop-N
+         (placeholder; tool errors)
+     47. tool_call: decide(accept, reason=<recovery cycle complete>)
+         → terminal. coordinator.next_action=accept fires no rule
+         (rule 09 only fires on needs_clarification). Chain settles
+         at fifteen loops; ADR-039 Phase 1 Shape A supersession
+         cycle complete end-to-end.
 
   Mock-llm is sequence-based and role-blind. The fixture aligns to
   the exact order of LLM round-trips across all twelve loops. Same
@@ -712,4 +748,150 @@ responses:
           "action": "needs_clarification",
           "reason": "evidence summary is (no checks) — the architect emitted no checks in this mock-LLM journey (bootstrap_workspace placeholder path didn't resolve a real sidecar). Per 10-evaluation-contract.md Rule 3, empty evidence across all checks routes to needs_clarification because this is a chain-coverage gap, not a builder failure — the architect needs to re-emit with evidence rules.",
           "blocking_question": "Architect must re-emit the spec artifact with at least one check containing evidence rules. The dev-via-spec-builder ran against a workspace without .evidence/checks.json because this is a mock-LLM journey; smoke #8 (slice 5) will exercise real evidence grading with Testcontainers."
+        }
+
+  # ---------- Loop M: dev-via-spec-architect RECOVERY (ADR-039 Phase 1 rule 09) ----------
+  # qa-reviewer's needs_clarification triggers rule 09 → spawn fresh
+  # architect. Per the rule's prompt, the recovery architect reads the
+  # qa-reviewer's terminal AND the prior research artifact, then re-emits
+  # the spec WITH evidence rules in checks (the gap the qa-reviewer
+  # flagged). decide(tasks_emitted) re-fires rule 06 → recovery builder.
+
+  - tool_call:
+      name: read_loop_result
+      arguments_json: |
+        {
+          "loop_id": "qa-reviewer-loop-L"
+        }
+
+  - tool_call:
+      name: read_loop_result
+      arguments_json: |
+        {
+          "loop_id": "researcher-with-source-loop-E"
+        }
+
+  - tool_call:
+      name: emit_dev_via_spec_artifact
+      arguments_json: |
+        {
+          "title": "OSH Meshtastic Driver (recovery v2)",
+          "goal": "Implement the OSH IDriver interface backed by Meshtastic radio packets, exposing OGC CS observation endpoints.",
+          "context": "Recovery pass after qa-reviewer rejected v1 for missing evidence rules. v2 adds checks[] with evidence rules per 10-evaluation-contract.md Rule 3. Goal/context/actors/integration_points carried forward verbatim from v1; only checks[] is new.",
+          "actors": [
+            {"name": "OSH driver framework", "role": "Hosts the IDriver interface drivers must implement to expose sensor observations"},
+            {"name": "OGC CS endpoints", "role": "Standard endpoints for observations, system descriptions, and control streams that the driver exposes"},
+            {"name": "Meshtastic radio", "role": "LoRa mesh radio interface that emits packetised telemetry the driver consumes"}
+          ],
+          "integration_points": [
+            {"from": "Meshtastic radio", "to": "OSH driver framework", "direction": "read", "data": "packetised radio telemetry"},
+            {"from": "OSH driver framework", "to": "OGC CS endpoints", "direction": "write", "data": "observation messages and system descriptions"}
+          ],
+          "tasks": [
+            {
+              "title": "Meshtastic packet decoder",
+              "scope": "backend",
+              "grounds_actors": ["Meshtastic radio", "OSH driver framework"],
+              "grounds_integration_points": ["Meshtastic radio→OSH driver framework"]
+            },
+            {
+              "title": "OGC CS observation publisher",
+              "scope": "backend",
+              "grounds_actors": ["OSH driver framework", "OGC CS endpoints"],
+              "grounds_integration_points": ["OSH driver framework→OGC CS endpoints"]
+            },
+            {
+              "title": "IDriver lifecycle and failure-mode handler",
+              "scope": "backend",
+              "grounds_actors": ["OSH driver framework", "Meshtastic radio"]
+            }
+          ],
+          "checks": [
+            {
+              "target": "Meshtastic packet decoder produces structured POSITION_APP message from raw protobuf",
+              "runtime": "in-process-unit",
+              "ref": {"type": "filepath", "path": "src/test/java/com/example/decoder/PacketDecoderTest.java"},
+              "evidence": [
+                {"kind": "test_file_exists", "args": {"path": "src/test/java/com/example/decoder/PacketDecoderTest.java"}}
+              ]
+            }
+          ],
+          "provenance": {
+            "research_artifact_loop": "researcher-with-source-loop-E",
+            "planner_loop": "planner-loop-G",
+            "reviewer_loop": "reviewer-loop-H",
+            "challenger_loop": "challenger-loop-I"
+          }
+        }
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "tasks_emitted",
+          "reason": "Recovery spec emitted: <slug>-recovery. Carried forward all v1 actors / integration_points / tasks; added checks[] with evidence rules per qa-reviewer's blocking_question (10-evaluation-contract.md Rule 3 rejection on (no checks)). One in-process-unit check on the packet decoder is the minimum to clear the gate; smoke #8 will demonstrate multi-check coverage on real LLM. Rule 06 fires on tasks_emitted to spawn the recovery builder."
+        }
+
+  # ---------- Loop N: dev-via-spec-builder RECOVERY ----------
+  # rule 06 fires on the recovery architect's tasks_emitted → spawn
+  # builder. Same shape as Loop K's first-pass turns; this time
+  # builder_decide(tests_passing) lands on a workspace that has the
+  # recovery spec's checks (mock-LLM doesn't actually run tests; the
+  # builder_decide tool stamps coordinator.next_action=tests_passing
+  # unconditionally given the args, which is what triggers rule 07
+  # → recovery qa-reviewer).
+
+  - tool_call:
+      name: bootstrap_workspace
+      arguments_json: |
+        {
+          "spec_path": "docs/specs/2026-05-03-osh-meshtastic-driver-recovery-v2.md"
+        }
+
+  - tool_call:
+      name: bash
+      arguments_json: |
+        {
+          "command": "ls SPEC.md"
+        }
+
+  - tool_call:
+      name: bash
+      arguments_json: |
+        {
+          "command": "echo 'mvn test passing on recovery spec'"
+        }
+
+  - tool_call:
+      name: builder_decide
+      arguments_json: |
+        {
+          "action": "tests_passing",
+          "reason": "Recovery builder ran against the recovery spec's check (PacketDecoderTest in-process-unit). Canned tests_passing — mock-LLM does not actually run tests; the builder_decide tool stamps coordinator.next_action=tests_passing unconditionally given the args. Rule 07 fires → recovery qa-reviewer.",
+          "tests_run": 1,
+          "tests_passed": 1,
+          "tests_failed": 0,
+          "artifact_summary": "Canned recovery summary — one notional unit test passing on the recovery spec's PacketDecoderTest check. Real artifact_summary lands in smoke #8."
+        }
+
+  # ---------- Loop O: dev-via-spec-qa-reviewer RECOVERY (clean terminal) ----------
+  # rule 07 fires on the recovery builder's tests_passing → spawn
+  # qa-reviewer. This time the recovery spec's checks DID reach the
+  # workspace, so the evidence summary is non-empty. The qa-reviewer
+  # accepts — clean terminal, NO further rule fires (rule 09 only fires
+  # on needs_clarification, not accept). Chain settles at 15 loops.
+
+  - tool_call:
+      name: read_loop_result
+      arguments_json: |
+        {
+          "loop_id": "recovery-builder-loop-N"
+        }
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "accept",
+          "reason": "Recovery spec's checks[] now contains an evidence rule (test_file_exists on PacketDecoderTest.java). The recovery builder's tests_passing terminal aligns with the evidence rule per 10-evaluation-contract.md Rule 1 (evidence rule satisfied → check passes). Chain reaches clean terminal; no further routing needed. ADR-039 Phase 1 Shape A supersession cycle complete: prior architect + qa-reviewer loops remain immutable; this recovery loop's verdict is the chain's effective terminal."
         }
