@@ -219,7 +219,7 @@ tasks:
     summary: |
       Spawns the SemSource container alongside the regular agentic stack
       (compose profile `semsource`). The journey exercises add_source_repo
-      end-to-end: source-curator agent proposes the add → approval gate
+      end-to-end: source-registrar agent proposes the add → approval gate
       fires → human approves → tool publishes AddRequest on
       graph.ingest.add.research → SemSource replies → loop completes.
 

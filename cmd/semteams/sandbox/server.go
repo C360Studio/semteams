@@ -306,7 +306,7 @@ func (s *Server) handleZipWorkspace(w http.ResponseWriter, r *http.Request) {
 	dir := filepath.Join(s.workspaceRoot, taskID)
 	w.Header().Set("Content-Type", "application/zip")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename=%q`, taskID+".zip"))
-	if err := zipDir(w, dir); err != nil {
+	if err := zipDir(w, dir, s.logger); err != nil {
 		s.logger.Error("zip workspace failed", "task_id", taskID, "error", err)
 	}
 }

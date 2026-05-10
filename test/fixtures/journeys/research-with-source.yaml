@@ -1,6 +1,6 @@
 name: research-with-source
 description: |
-  Journey: R2 slice 2 of ADR-031. User asks the source-curator agent to
+  Journey: R2 slice 2 of ADR-031. User asks the source-registrar agent to
   register the OSH core repo as a SemSource source. The agent calls
   add_source_repo, which is approval-gated; the loop pauses awaiting
   approval. The user approves via PendingApprovalSection (the same

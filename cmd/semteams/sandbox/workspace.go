@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -288,13 +289,41 @@ func chmodTreeReadOnly(abs string) error {
 	})
 }
 
+// sameDeviceFunc is the indirection point for sameDevice in tests.
+// Production code uses the platform-appropriate sameDevice function
+// (workspace_devid_unix.go / workspace_devid_other.go). Tests inject
+// a fake via this variable to simulate bind-mount detection without
+// requiring elevated privileges.
+//
+// ADR-040 addendum 2026-05-10 §item 6.
+var sameDeviceFunc = sameDevice
+
 // zipDir streams a deflate-compressed zip archive of dir's contents to
-// w. Symlinks are skipped defensively. Read-only files (frozen via
-// chmod 444) are still readable here — read access is intentional for
-// forensics.
-func zipDir(w io.Writer, dir string) error {
+// w. Symlinks are skipped defensively. Bind mounts (directories on a
+// different device than the workspace root) are also skipped — a bind
+// mount looks like a real directory to filepath.WalkDir, but its device
+// ID differs from the root's; we skip the entire subtree to prevent
+// evidence-export downloads from including GBs of third-party source
+// indexed by SemSource. Read-only files (frozen via chmod 444) are still
+// readable here — read access is intentional for forensics.
+//
+// ADR-040 addendum 2026-05-10 §item 6 — bind-mount skip guardrail.
+//
+// logger is optional (nil → slog.Default). Bind-mount skips are logged
+// at Info so operators see "where did my data go?" answered when they
+// investigate a smaller-than-expected evidence-export download.
+func zipDir(w io.Writer, dir string, logger *slog.Logger) error {
+	if logger == nil {
+		logger = slog.Default()
+	}
 	zw := zip.NewWriter(w)
 	defer zw.Close()
+
+	// Stat the root once to get its device ID for bind-mount detection.
+	rootInfo, err := os.Stat(dir)
+	if err != nil {
+		return fmt.Errorf("stat workspace root for device-id check: %w", err)
+	}
 
 	return filepath.WalkDir(dir, func(path string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
@@ -309,6 +338,16 @@ func zipDir(w io.Writer, dir string) error {
 		}
 		if info.Mode()&os.ModeSymlink != 0 {
 			return nil
+		}
+		// Skip any directory subtree that lives on a different device than
+		// the workspace root. This is the bind-mount detection heuristic:
+		// a bind mount surfaces as a distinct device, while everything
+		// created inside the workspace shares the root's device.
+		if d.IsDir() && !sameDeviceFunc(rootInfo, info) {
+			logger.Info("zipDir: skipping bind-mount subtree",
+				slog.String("path", path),
+				slog.String("workspace_root", dir))
+			return filepath.SkipDir
 		}
 		rel, err := filepath.Rel(dir, path)
 		if err != nil {
