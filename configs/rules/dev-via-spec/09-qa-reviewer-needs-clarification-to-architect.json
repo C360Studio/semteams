@@ -1,0 +1,54 @@
+{
+  "id": "dev_via_spec_qa_reviewer_needs_clarification_to_architect",
+  "type": "expression",
+  "name": "Dev-via-spec QA-Reviewer needs_clarification → Architect (recovery)",
+  "description": "ADR-039 Phase 1 Tier 1 rule. When the dev-via-spec-qa-reviewer terminates with decide(action=needs_clarification) — typically because the spec's checks are ambiguous, the evidence summary doesn't align with what the build actually proved, or the qa-reviewer lacks information to grade with confidence — spawn a fresh dev-via-spec-architect to re-emit the spec addressing the qa-reviewer's gap. Recovery is supersession-via-new-spawn (Shape A) per ADR-039: the prior architect loop and its emitted spec remain immutable in the graph; the new architect produces a new spec at a new loop_id and the chain's `chain.spec_loop` reference will update once Phase 4 stamper-supersession lands. The re-emitted spec triggers rule 06-architect-emit-to-builder and the chain re-runs from builder forward, picking up the qa-reviewer's clarification in the new evidence summary.",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "agent.loop.role",
+      "operator": "eq",
+      "value": "dev-via-spec-qa-reviewer",
+      "required": true
+    },
+    {
+      "field": "coordinator.next_action",
+      "operator": "eq",
+      "value": "needs_clarification",
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "max_iterations": 3,
+  "on_enter": [
+    {
+      "type": "publish_agent",
+      "subject": "agent.task.dev-via-spec-architect",
+      "role": "dev-via-spec-architect",
+      "model": "architecture",
+      "tools": ["read_loop_result", "emit_dev_via_spec_artifact", "decide"],
+      "action_allowlist": ["tasks_emitted", "needs_clarification"],
+      "properties": {
+        "prior_qa_reviewer_loop_id": "$entity.instance",
+        "recovery": "qa_reviewer_needs_clarification"
+      },
+      "related_loops": {
+        "researcher": "$entity.triple.lineage.researcher"
+      },
+      "prompt": "Recovery spec pass — the dev-via-spec-qa-reviewer at loop $entity.instance terminated with decide(action=needs_clarification) because the prior spec left an ambiguity the reviewer cannot grade against.\n\nQA-reviewer's terminal reason: $entity.triple.coordinator.decision_reason\n\nIteration 1 — call read_loop_result on the qa-reviewer's loop ($entity.instance) to read the full structured terminal (decision_reason + blocking_question if present). The blocking_question typically names a specific check whose intent is ambiguous, or a verification stance the prior spec didn't take. Then call read_loop_result on the prior research artifact loop ($entity.triple.lineage.researcher) to re-read the source material — your job is to SUPERSEDE the prior spec, not start from scratch.\n\nIteration 2+ — re-emit the spec addressing the qa-reviewer's gap. Carry forward everything from the prior spec that's still correct (goal, context, actors, integration_points); change only what the qa-reviewer's gap demands. Specifically: tighten the check whose grading was ambiguous, add evidence rules that bind the check to observable outcomes (per emit_dev_via_spec_artifact's structural validation, every check requires ≥1 evidence rule), or take the verification stance the prior spec elided.\n\nTerminal: emit_dev_via_spec_artifact + decide(action=tasks_emitted, reason=\"recovery spec emitted: <slug>. <one-line summary of what changed from prior version>\"). Rule 06-architect-emit-to-builder fires on tasks_emitted; the chain re-runs from builder forward.\n\nADR-039 Phase 1 Tier 1; ADR-035 per-role rigour."
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "phase": "ADR-039 Phase 1",
+    "adr": "docs/adr/039-needs-clarification-recovery.md",
+    "tier": 1,
+    "shape": "A",
+    "supersession_target": "chain.spec_loop",
+    "phase_4_dependency": "Stamper supersession (chain entity's `chain.spec_loop` / `chain.architect_loop` reference) is Phase 4 of ADR-039 — until it lands, the chain entity's milestone references won't update on the new architect's emit. The supersession is real in the graph (new architect loop entity, new dev_via_spec.artifact.* triples, new docs/specs/<slug>.md file) but the chain.* pointer stays stale. Builder spawn via rule 06 still works correctly because rule 06 reads dev_via_spec.artifact.path from the architect loop entity, not from the chain entity.",
+    "max_iterations_note": "Same per-entity rule-state caveat as rule 02-reviewer-rejected-retry-with-source — the outer max_iterations=3 is informational under the current rule engine because coordinator.next_action is a single-state terminal. Each new qa-reviewer (after the chain re-runs through builder) is a new entity so the chain-wide recursion is bounded by LLM cost discipline + the Phase 2 coordinator-as-quality-gate pattern (when shipped), not this cap.",
+    "recursion_open_question": "ADR-039 §'Guarding against lazy needs_clarification' identifies a possible failure mode: the recovery architect re-emits decide(action=needs_clarification), which re-fires rule 08, which spawns a new researcher → new architect → potentially new needs_clarification. Phase 2's coordinator-as-quality-gate is the load-bearing safeguard. Phase 1 ships without it; if recursion-on-cost-budget surfaces in smoke evidence before Phase 2 lands, add a chain-level recursion-depth guard via a chain entity triple (e.g., chain.needs_clarification_count) that subsequent rule firings consult. Open until smoke #8 run-13+ produces evidence either way.",
+    "lineage_forwarding": "related_loops.researcher is forwarded from the qa-reviewer's lineage.researcher (which was forwarded through every dev-via-spec hop per rule 05's cross_grounding_resolved note). The new architect inherits the same research-artifact pointer as the original architect so its emit_dev_via_spec_artifact call has the same harness reference available.",
+    "model_choice": "architecture model — same as rule 05's first-pass architect spawn. Recovery spec emission demands the same reasoning capacity."
+  }
+}
