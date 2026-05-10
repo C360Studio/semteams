@@ -89,7 +89,7 @@ test.describe("Dev-via-Spec QA-reviewer (R3.7.2.k′)", () => {
   // still expects the OLD flow shape; under the new wiring rule 02 spawns
   // source-curator and the chain shape changes. PR 4 rewrites the fixture
   // for the new curator flow and re-enables this test.fixme.
-  test.fixme("research → stabilisation → dev-via-spec planner / reviewer / challenger / architect / builder / qa-reviewer", async ({
+  test.fixme("[ADR-040 PR 4 pending] research → stabilisation → dev-via-spec planner / reviewer / challenger / architect / builder / qa-reviewer", async ({
     page,
     request,
   }) => {

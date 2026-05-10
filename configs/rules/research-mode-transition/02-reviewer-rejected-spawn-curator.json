@@ -19,7 +19,7 @@
     }
   ],
   "logic": "and",
-  "max_iterations": 5,
+  "max_iterations": 3,
   "on_enter": [
     {
       "type": "publish_agent",
@@ -43,8 +43,8 @@
   "metadata": {
     "phase": "ADR-040 Phase 1",
     "adr": "docs/adr/040-source-curator-role.md",
-    "stop_condition": "Q2 — MaxIter (=5) + reviewer + opt-in human gate",
-    "max_iterations_note": "Same per-entity rule-state caveat as the prior 02-reviewer-rejected-retry-with-source.json rule. Each reviewer loop is a new entity, so the budget is informational; the curator's max_iterations=3 is the actionable bound on a single curator pass.",
+    "stop_condition": "Q2 — MaxIter (=3) + reviewer + opt-in human gate",
+    "max_iterations_note": "Aligned to 3 across rules 02/02b/02c for ADR-040 consistency. Each reviewer loop is a new entity so the outer cap is informational under the current rule engine (coordinator.next_action is a single-state terminal); the curator's inner max_iterations=3 is the actionable bound on a single curator pass.",
     "supersedes": "configs/rules/research-mode-transition/02-reviewer-rejected-retry-with-source.json (ADR-031 R3.2.2 — researcher-with-source-acquisition path, hard-replaced by ADR-040)",
     "lineage_forwarding": "related_loops.researcher is forwarded from the reviewer's lineage so the curator can read_loop_result on the prior researcher's artifact when classifying. The curator then decides indexed (rule 02b spawns a fresh researcher) or needs_clarification (rule 02c spawns a fresh researcher); both downstream rules drop the lineage.researcher forward per the supersession invariant (the new researcher is the new artifact author)."
   }

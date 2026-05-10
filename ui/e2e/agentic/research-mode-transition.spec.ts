@@ -88,7 +88,7 @@ test.describe("Research Mode Transition (R3.2.2)", () => {
   // the new wiring rule 02 spawns source-curator and the chain shape changes.
   // PR 4 rewrites the fixture for the new curator flow and re-enables this
   // test.fixme.
-  test.fixme("research → corpus-gap reject → source-mod → stabilisation reject → settling pass → approve → dev-via-spec mode transition", async ({
+  test.fixme("[ADR-040 PR 4 pending] research → corpus-gap reject → source-mod → stabilisation reject → settling pass → approve → dev-via-spec mode transition", async ({
     page,
     request,
   }) => {
