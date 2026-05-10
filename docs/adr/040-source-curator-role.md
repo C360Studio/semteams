@@ -225,6 +225,102 @@ No deprecation window. The role had one trigger (rule 02) and one
 consumer arc (research-mode-transition). Greenfield codebase — the
 clean break is cheaper than an alias.
 
+## Addendum 2026-05-10 — SemSource shared source-dir mount (cross-project lesson)
+
+The semspec team independently surfaced a related gap and is shipping
+a fix that ADR-040 needs to compose with. The lesson:
+
+**Problem.** SemSource indexes source repos but stores them in
+directories owned by the SemSource service — not directly readable
+from the sandbox where agents (researcher, builder, curator) run.
+Most substrate interrogation should go through graph queries (the
+typed entity/relationship surface SemSource indexes), but **not
+everything decomposes into graph triples**. Canonical example:
+`pom.xml` is a legitimate read target for a researcher reasoning
+about a Java codebase's build configuration, dependency versions,
+or plugin wiring — the graph captures the symbol-level shape, not
+the build-tool config that governs how the symbols compile.
+
+**semspec's solution.** Mount the SemSource source directories
+into the sandbox container as a **read-only shared volume**. Now
+agents can `bash cat <path>` to read source files directly when
+graph queries don't cover the case. Read-only enforces the same
+discipline graph queries do — agents observe substrate, never
+mutate it.
+
+**Implications for ADR-040 design.**
+
+1. **Curator scope unchanged at the role boundary.** Source-curator
+   still owns "is the corpus sufficient?" + `add_source_repo` +
+   indexing-wait + entity-ID verification. The shared source mount
+   is **infrastructure**, not a curator responsibility — the mount
+   exists at sandbox-startup time, indexing-by-SemSource fills the
+   directories, the curator's job is verifying graph-query coverage
+   not file-system coverage.
+
+2. **Researcher persona contract gets a new fallback.** When graph
+   entity queries don't cover the case, the researcher can
+   `bash cat <path-in-shared-mount>` against files SemSource has
+   indexed. Today's failure mode (loop `4be28afa`: *"I will
+   assume a hypothetical prior artifact for the purpose of
+   constructing the next one"* — fabrication when entity-ID
+   guessing fails) gets a real escape hatch instead of fabrication.
+   This shrinks the curator's blast radius too: if a researcher
+   can bash-cat the file, the gap isn't necessarily a corpus gap
+   the curator needs to address.
+
+3. **`emit_curator_artifact` payload gains a `source_dirs` field.**
+   Mirrors `verified_entity_ids`: the curator's commitment to the
+   researcher that "these directories are mounted in your sandbox
+   at these paths; bash-cat works." Updated v1 shape:
+
+   ```json
+   {
+     "tool": "emit_curator_artifact",
+     "args": {
+       "added_sources": [...],
+       "verified_entity_ids": [...],
+       "source_dirs": [
+         {
+           "namespace": "osh-core",
+           "mount_path": "/sources/osh-core",
+           "covers": "OSH IDriver interface, IPersistentDriver, BaseSensorModule"
+         }
+       ]
+     }
+   }
+   ```
+
+4. **Curator should verify mount as part of indexing-wait.** The
+   curator's "wait for indexing" phase now includes "wait for the
+   shared mount to expose the new source dirs." Both signals are
+   needed before the curator can promise `verified_entity_ids` AND
+   `source_dirs` to the researcher. Same poll-via-`bash ls
+   <mount>/<namespace>` pattern as graph entity verification.
+
+5. **Telemetry: track direct file reads.** When researchers (or
+   builders) bash-cat from the shared mount, that's data about
+   what the graph isn't covering. Worth a triple-write in a
+   future slice — `agent.read_file.path = <relative>` on the
+   reading loop's entity — so ops-chain-observer can identify
+   "graph indexing gaps that agents are working around" as
+   improvement targets for SemSource. Not Phase 1; tracked as
+   future cleanup.
+
+**Implementation handoff with semspec.** semspec owns the volume
+mount at the sandbox compose / Dockerfile layer — same shared
+infrastructure both products consume. SemTeams owns:
+- The `source_dirs` field in `emit_curator_artifact` payload
+  (added in PR 2).
+- The researcher persona's "you can bash-cat from the shared
+  mount" fallback rule (added in PR 3 alongside the rule rewrites).
+- The curator persona's "verify mount as part of indexing-wait"
+  step (added in PR 2 alongside the persona).
+
+No upstream framework change. No new product-shell tool. The
+addendum reframes the curator's payload + the researcher's
+fallback rule; the rest of ADR-040's design holds.
+
 ## What this ADR does NOT decide
 
 - **Coordinator-as-meta-curator (ADR-039 Phase 2 + ADR-040 future).**
