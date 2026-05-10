@@ -279,6 +279,8 @@ func setupToolsAndPreprocessor(
 // Phase C2: chain.plan.* on dev-via-spec-reviewer approval.
 // Phase C3: chain.consensus.* on dev-via-spec-challenger accept.
 // Phase C4 (evidence summary milestone) plugs in via the same slice.
+// ADR-039 Phase 1 Slice B: chain.needs_review.* on builder
+// needs_clarification (Tier 3 fallback).
 func startChainMilestoneSubscribers(ctx context.Context, cfg *config.Config, natsClient *natsclient.Client, platform types.PlatformMeta, logger *slog.Logger) error {
 	triplePublisher := agentictools.NewNATSTriplePublisher(natsClient)
 
@@ -303,12 +305,14 @@ func startChainMilestoneSubscribers(ctx context.Context, cfg *config.Config, nat
 	research := chain.NewResearchMilestoneStamper(triplePublisher, resolver, entityReader, platform, logger)
 	plan := chain.NewPlanMilestoneStamper(triplePublisher, resolver, entityReader, platform, logger)
 	consensus := chain.NewConsensusMilestoneStamper(triplePublisher, resolver, entityReader, platform, logger)
+	needsReview := chain.NewNeedsReviewStamper(triplePublisher, resolver, entityReader, platform, logger)
 
 	subscriber := chain.NewCompletionSubscriber([]chain.CompletionHandler{
 		dispatched,
 		research,
 		plan,
 		consensus,
+		needsReview,
 	}, loopCompletedSubject, logger)
 	if err := subscriber.Start(ctx, natsClient); err != nil {
 		return fmt.Errorf("subscribe to loop completed for chain milestones: %w", err)

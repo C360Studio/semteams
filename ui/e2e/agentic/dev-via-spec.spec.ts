@@ -388,6 +388,11 @@ test.describe("Dev-via-Spec (R3.3 + R3.4b + R3.6.2)", () => {
     // builder's decide(needs_clarification) somehow re-fires a
     // dev-via-spec rule (regression where any rule matches the
     // builder role), a twelfth loop would appear.
+    //
+    // ADR-039 Phase 1 Slice B (NeedsReviewStamper) DOES fire on this
+    // builder terminal, but it writes triples to the chain entity —
+    // it does NOT spawn a new loop. The triple-cluster assertion in
+    // Step 11b verifies that wiring; the loop count stays at 11.
     // -----------------------------------------------------------------
     await new Promise((r) => setTimeout(r, 2000));
     const settledList = await request
@@ -397,6 +402,62 @@ test.describe("Dev-via-Spec (R3.3 + R3.4b + R3.6.2)", () => {
       settledList.length,
       "builder terminal must not spawn a twelfth loop",
     ).toBe(11);
+
+    // -----------------------------------------------------------------
+    // Step 11b — ADR-039 Phase 1 Slice B validation:
+    // chain.needs_review.* triples land on the chain entity when the
+    // builder terminates with coordinator.next_action=needs_clarification.
+    // The cluster signals "awaiting a recovery decision"; consumer is
+    // deployment-configured (coordinator agent on Phase 2, operator
+    // dashboard, or metric-emit job for triage). Cluster is distinct
+    // from chain.paused.* (ADR-037, FAILED loops with closed-enum
+    // classifications) — the builder loop completed successfully here;
+    // its verdict is recoverable, not a failure.
+    //
+    // We assert all five predicates appear on a chain entity. Each
+    // chain entity ID follows the c360.<platform>.agent.chain.execution.<chain_id>
+    // shape (agentic.ChainExecutionEntityID), so we filter by predicate
+    // and let the framework's exact-match query do the lookup.
+    // -----------------------------------------------------------------
+    const needsReviewClassification = await fetchTriples(request, {
+      predicate: "chain.needs_review.classification",
+      limit: 5,
+    });
+    expect(
+      needsReviewClassification.length,
+      `expected ≥1 chain.needs_review.classification triple after builder needs_clarification (NeedsReviewStamper plumbing); got ${JSON.stringify(needsReviewClassification)}`,
+    ).toBeGreaterThanOrEqual(1);
+    expect(
+      needsReviewClassification[0].object,
+      "Phase 1 single-bucket classification: 'unrouted_needs_clarification'",
+    ).toBe("unrouted_needs_clarification");
+    expect(
+      needsReviewClassification[0].subject.includes(".agent.chain.execution."),
+      `chain.needs_review.* must land on a chain entity (got subject ${needsReviewClassification[0].subject})`,
+    ).toBe(true);
+
+    const wantPredicates = [
+      "chain.needs_review.producer_loop_id",
+      "chain.needs_review.producer_role",
+      "chain.needs_review.reason",
+      "chain.needs_review.observed_at",
+    ];
+    for (const pred of wantPredicates) {
+      const triples = await fetchTriples(request, { predicate: pred, limit: 5 });
+      expect(
+        triples.length,
+        `expected ≥1 ${pred} triple after builder needs_clarification (NeedsReviewStamper plumbing)`,
+      ).toBeGreaterThanOrEqual(1);
+    }
+
+    const producerRole = await fetchTriples(request, {
+      predicate: "chain.needs_review.producer_role",
+      limit: 5,
+    });
+    expect(
+      producerRole[0].object,
+      "Phase 1 only stamps for dev-via-spec-builder",
+    ).toBe("dev-via-spec-builder");
 
     // -----------------------------------------------------------------
     // Step 12 — verify the typed research.artifact.v1 payload was
@@ -505,4 +566,35 @@ async function pollUntil<T>(
     await new Promise((r) => setTimeout(r, interval));
   }
   return null;
+}
+
+interface Triple {
+  subject: string;
+  predicate: string;
+  object: string;
+  source?: string;
+  timestamp?: string;
+}
+
+// fetchTriples queries the framework's GET /graph/triples endpoint
+// (semstreams beta.9 added on the service-manager mux). Mirrors the
+// helper in ops-agent-baseline.spec.ts; consider promoting both to a
+// shared helper module if a third spec needs it.
+async function fetchTriples(
+  request: import("@playwright/test").APIRequestContext,
+  params: { subject?: string; predicate?: string; object?: string; limit?: number },
+): Promise<Triple[]> {
+  const query = new URLSearchParams();
+  if (params.subject) query.set("subject", params.subject);
+  if (params.predicate) query.set("predicate", params.predicate);
+  if (params.object) query.set("object", params.object);
+  if (params.limit) query.set("limit", String(params.limit));
+
+  const resp = await request.get(`/graph/triples?${query.toString()}`);
+  if (!resp.ok()) {
+    throw new Error(
+      `GET /graph/triples?${query.toString()} returned ${resp.status()}: ${await resp.text()}`,
+    );
+  }
+  return (await resp.json()) as Triple[];
 }

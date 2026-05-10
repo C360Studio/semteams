@@ -147,6 +147,7 @@ func TestChainEntityCoverage_PR_B_Pipeline(t *testing.T) {
 	research := chain.NewResearchMilestoneStamper(pub, resolver, er, platform, nil)
 	planMilestone := chain.NewPlanMilestoneStamper(pub, resolver, er, platform, nil)
 	consensusMilestone := chain.NewConsensusMilestoneStamper(pub, resolver, er, platform, nil)
+	needsReview := chain.NewNeedsReviewStamper(pub, resolver, er, platform, nil)
 
 	// We invoke handlers directly. CompletionSubscriber's NATS plumbing
 	// is covered by chain/subscriber_test.go; this contract test focuses
@@ -213,6 +214,9 @@ func TestChainEntityCoverage_PR_B_Pipeline(t *testing.T) {
 		if err := consensusMilestone.HandleLoopCompleted(context.Background(), ev); err != nil {
 			t.Fatalf("ConsensusMilestoneStamper.HandleLoopCompleted(%s) error: %v", ev.LoopID, err)
 		}
+		if err := needsReview.HandleLoopCompleted(context.Background(), ev); err != nil {
+			t.Fatalf("NeedsReviewStamper.HandleLoopCompleted(%s) error: %v", ev.LoopID, err)
+		}
 	}
 
 	chainEntityID := agentic.ChainExecutionEntityID("c360", "test", "dispatch_root")
@@ -260,6 +264,11 @@ func TestChainEntityCoverage_PR_B_Pipeline(t *testing.T) {
 		"chain.evidence.summary_ready",          // Phase 5 (writes from evidence preprocessor, not the chain package)
 		"chain.evidence.summary.path",           // PR C Phase C4 (writes from evidence preprocessor, not the chain package)
 		"chain.dispatched_at.observed_fallback", // Phase 1b — only on zero-CompletedAt path; happy path must not emit
+		"chain.needs_review.classification",     // ADR-039 Phase 1 Slice B — only on builder needs_clarification; happy path's tests_passing builder must not emit
+		"chain.needs_review.producer_loop_id",   // same
+		"chain.needs_review.producer_role",      // same
+		"chain.needs_review.reason",             // same
+		"chain.needs_review.observed_at",        // same
 	}
 	for _, pred := range notYet {
 		if _, ok := got[pred]; ok {
