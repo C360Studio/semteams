@@ -11,6 +11,39 @@ Consumers of the review-pause cluster are deployment-configured
 (coordinator agent, operator dashboard, metric-emit job) — the
 predicate name doesn't presume which.
 
+### Validation status (2026-05-10)
+
+**Mock-LLM:** ✅ green end-to-end.
+- Slice A (rules 08 + 09: architect/qa-reviewer needs_clarification
+  → upstream recovery) — PR #122 extended `dev-via-spec-qa.yaml`
+  with the full Shape A recovery cycle (recovery architect →
+  builder → qa-reviewer accept). 15-loop chain settles cleanly;
+  rule 09 verified to fire on the wire and re-fire rule 06.
+- Slice B (NeedsReviewStamper: builder needs_clarification →
+  `chain.needs_review.*` writes) — PR #121 added a triple-cluster
+  assertion to `dev-via-spec.spec.ts`. All five predicates land
+  on the chain entity with Phase 1 single-bucket
+  `classification: unrouted_needs_clarification`.
+
+**Real-LLM:** ⚠️ untested. Smoke #8 run-13 (2026-05-10) timed out
+at the 30-min hard cap with the builder loop still executing —
+the chain never reached architect / qa-reviewer needs_clarification
+or builder needs_clarification, so neither Tier 1 rules nor the
+Tier 3 stamper got exercised on real traffic. The wedge was an
+unrelated sandbox-infrastructure issue (Testcontainers ↔ Docker
+Engine 29 API mismatch) closed by PR #124's `tooling_pins` work.
+
+**This ADR's Phase 1 implementation stays in this state — mock-
+validated, real-LLM-pending — until a real-LLM smoke run naturally
+hits a needs_clarification terminal and exercises the recovery
+path.** Per the operator's 2026-05-10 directive ("Path C"): we do
+not manufacture a force-wedge smoke specifically to test the
+recovery rules. The rules are loaded into every dev-via-spec
+flow's rule set, so the next real-LLM run that wedges on
+needs_clarification will exercise them by default; that becomes
+the substance gate. Track via the `chain.needs_review.*` predicate
+queries in operator dashboards.
+
 ## Why this exists
 
 Smoke #8 runs 9–12 wedged in four distinct ways. Three of the four
