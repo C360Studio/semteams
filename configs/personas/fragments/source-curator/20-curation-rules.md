@@ -46,20 +46,21 @@ For each named source the reviewer's reason implies:
    subtree. If the query returns empty, wait and retry — typical
    indexing time is 10-30 seconds for small repos, 1-3 minutes
    for large ones.
-4. **Verify mount exposure** when the deployment uses the
-   SemSource shared source-dir mount (operators wire this at the
-   sandbox compose layer per ADR-040 addendum). After indexing
-   succeeds, the source's directory should appear under the
-   shared mount path (e.g. `/sources/<namespace>`). The next
-   researcher loop can `bash cat <path>` against any indexed
-   file when graph queries don't cover the case (build configs:
+4. **Commit mount paths to the artifact** when the deployment
+   uses the SemSource shared source-dir mount. You don't have
+   `bash`, so you can't directly verify the mount yourself. The
+   signal that the mount exists for this deployment comes from
+   your inputs (the operator's deployment doc, an env var, or
+   the rule that spawned you may name a mount prefix). When you
+   know the mount exists for the namespace you just added, list
+   `<mount_prefix>/<namespace>` in `source_dirs`. The next
+   researcher loop can then `bash cat <path>` against indexed
+   files when graph queries don't cover the case (build configs:
    `pom.xml`, `build.gradle`, `package.json`, `pyproject.toml`,
-   `Cargo.toml`, etc.). You don't have `bash` yourself, but you
-   commit the mount paths to the artifact so the researcher
-   knows which paths are reachable. If you don't know whether
-   the mount is configured for this deployment, omit the
-   `source_dirs` field — the researcher will fall back to
-   graph-only.
+   `Cargo.toml`, etc.). When you don't know whether the mount is
+   configured for this deployment, omit the `source_dirs` field
+   entirely — the researcher will fall back to graph-only and
+   that's a fine outcome.
 5. Once at least one entity per added source resolves and (if
    applicable) the mount path is verified, call
    `emit_curator_artifact` (see fragment 30). Then `decide`

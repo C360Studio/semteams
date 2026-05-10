@@ -124,6 +124,20 @@ func TestValidate_Cases(t *testing.T) {
 			mutate:  func(a *Artifact) { a.ProducedAt = time.Time{} },
 			wantErr: "produced_at required",
 		},
+		{
+			name: "added_source namespace contains comma",
+			mutate: func(a *Artifact) {
+				a.AddedSources[0].Namespace = "osh,evil"
+			},
+			wantErr: "added_sources[0].namespace must not contain ','",
+		},
+		{
+			name: "source_dirs namespace contains comma",
+			mutate: func(a *Artifact) {
+				a.SourceDirs = []SourceDir{{Namespace: "osh,evil", MountPath: "/sources/osh-core", Covers: "stuff"}}
+			},
+			wantErr: "source_dirs[0].namespace must not contain ','",
+		},
 	}
 
 	for _, tc := range tests {

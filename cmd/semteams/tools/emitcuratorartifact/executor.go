@@ -172,8 +172,22 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 	now := artifact.ProducedAt
 	loopEntityID := agentic.LoopExecutionEntityID(e.platform.Org, e.platform.Platform, call.LoopID)
 
-	// Publish payload first — it's the substantive handoff. Triple-stamp
-	// comes after so a publish failure surfaces before any triple writes.
+	// Publish payload first, triples after. This is the inverse of
+	// emit_consensus / emit_plan and is intentional. Two failure modes:
+	//   (a) Publish fails → no triples written, no payload on the wire.
+	//       Loop returns ToolErrorNetwork; LLM retries. Clean.
+	//   (b) Publish succeeds but a triple write fails → "orphan publish":
+	//       NATS subscribers see the artifact, but the curator's loop
+	//       entity has no marker triples. The next researcher loop is
+	//       UNAFFECTED — it reads the artifact JSON via read_loop_result
+	//       (Content roundtrip, not triples). The only loss is
+	//       observability (ops-chain-observer can't index this loop's
+	//       counts/namespaces). This trade favours substantive handoff
+	//       over indexability — the curator artifact is the load-bearing
+	//       data; the triples are derived metadata.
+	// If a downstream chain stamper or subscriber is added that requires
+	// the triples to land atomically with the payload, revisit this
+	// ordering or add a transactional outbox.
 	payloadBytes, err := json.Marshal(artifact)
 	if err != nil {
 		return agentic.ToolResult{

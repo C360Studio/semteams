@@ -16,6 +16,7 @@ package curator
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/c360studio/semstreams/message"
@@ -125,6 +126,9 @@ func (a *Artifact) Validate() error {
 		if src.Namespace == "" {
 			return fmt.Errorf("added_sources[%d].namespace required", i)
 		}
+		if strings.ContainsRune(src.Namespace, ',') {
+			return fmt.Errorf("added_sources[%d].namespace must not contain ',' — namespaces are joined comma-separated in the curator.artifact.namespaces triple, and embedded commas would corrupt downstream parsers", i)
+		}
 		if src.Covers == "" {
 			return fmt.Errorf("added_sources[%d].covers required", i)
 		}
@@ -135,6 +139,9 @@ func (a *Artifact) Validate() error {
 	for i, dir := range a.SourceDirs {
 		if dir.Namespace == "" {
 			return fmt.Errorf("source_dirs[%d].namespace required", i)
+		}
+		if strings.ContainsRune(dir.Namespace, ',') {
+			return fmt.Errorf("source_dirs[%d].namespace must not contain ',' — see added_sources rationale", i)
 		}
 		if dir.MountPath == "" {
 			return fmt.Errorf("source_dirs[%d].mount_path required", i)

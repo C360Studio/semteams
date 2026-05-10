@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -307,7 +308,14 @@ var sameDeviceFunc = sameDevice
 // readable here — read access is intentional for forensics.
 //
 // ADR-040 addendum 2026-05-10 §item 6 — bind-mount skip guardrail.
-func zipDir(w io.Writer, dir string) error {
+//
+// logger is optional (nil → slog.Default). Bind-mount skips are logged
+// at Info so operators see "where did my data go?" answered when they
+// investigate a smaller-than-expected evidence-export download.
+func zipDir(w io.Writer, dir string, logger *slog.Logger) error {
+	if logger == nil {
+		logger = slog.Default()
+	}
 	zw := zip.NewWriter(w)
 	defer zw.Close()
 
@@ -336,6 +344,9 @@ func zipDir(w io.Writer, dir string) error {
 		// a bind mount surfaces as a distinct device, while everything
 		// created inside the workspace shares the root's device.
 		if d.IsDir() && !sameDeviceFunc(rootInfo, info) {
+			logger.Info("zipDir: skipping bind-mount subtree",
+				slog.String("path", path),
+				slog.String("workspace_root", dir))
 			return filepath.SkipDir
 		}
 		rel, err := filepath.Rel(dir, path)

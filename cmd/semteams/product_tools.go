@@ -295,11 +295,15 @@ func registerEmitConsensus(reg *agentictools.ExecutorRegistry, natsClient *natsc
 // registerEmitArtifact: any deployment running the research arc with
 // source-curation enabled needs it.
 //
-// Unlike the emit_plan / emit_consensus / emit_dev_via_spec_artifact siblings,
-// this executor has no SetChainReader call — the curator artifact is a flat
-// substrate-mutation record with no cross-arc lineage refs. No markdown render
-// either: the payload is runtime data consumed by the next researcher loop via
-// read_loop_result, not a human document.
+// Why the simpler signature (no chain reader, no test harness, no slug dir):
+// the curator artifact is a flat substrate-mutation record with no cross-arc
+// lineage refs (no plan_loop / research_artifact_loop / etc.) and no markdown
+// render target — the payload is runtime data the next researcher loop reads
+// via read_loop_result, not a human document. If you're scanning this file
+// looking for "why is this one different?" — it's intentional, not an
+// oversight. Reviewers asked us to echo this here so the contrast with
+// registerEmitConsensus / registerEmitPlan / registerEmitSpecArtifact above
+// reads as deliberate.
 //
 // Framework-alignment carve-out: curator concept is SemTeams-specific;
 // semstreams has no notion of a curator role. Stays product-local.

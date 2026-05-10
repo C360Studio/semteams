@@ -29,7 +29,7 @@ func TestZipDir_HappyPath(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	if err := zipDir(&buf, dir); err != nil {
+	if err := zipDir(&buf, dir, nil); err != nil {
 		t.Fatalf("zipDir: %v", err)
 	}
 
@@ -75,7 +75,7 @@ func TestZipDir_SkipsFakeBindMount(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	if err := zipDir(&buf, dir); err != nil {
+	if err := zipDir(&buf, dir, nil); err != nil {
 		t.Fatalf("zipDir: %v", err)
 	}
 
@@ -109,7 +109,7 @@ func TestZipDir_SkipsSymlinks(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	if err := zipDir(&buf, dir); err != nil {
+	if err := zipDir(&buf, dir, nil); err != nil {
 		t.Fatalf("zipDir: %v", err)
 	}
 
