@@ -130,7 +130,7 @@ func TestCheck_Validate(t *testing.T) {
 			c: Check{
 				Target:      "driver emits CS observation from real Meshtastic packet",
 				Runtime:     RuntimeExternalSidecar,
-				TestHarness: "meshtasticd-3.x",
+				TestHarness: "meshtasticd-2.x",
 				TestRuntime: "java-junit-testcontainers",
 				Ref:         Ref{Type: RefTemplateID, ID: "tcp.binary-protobuf.java-junit-testcontainers.v1"},
 				Evidence:    []EvidenceRule{{Kind: "surefire_passing_count", Args: map[string]any{"min": float64(1)}}},

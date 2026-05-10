@@ -14,9 +14,9 @@ func TestTestHarnessValidate(t *testing.T) {
 		{
 			name: "complete valid test harness",
 			h: TestHarness{
-				Name:                "meshtasticd-3.x",
+				Name:                "meshtasticd-2.x",
 				ComposeProfile:      "harness-meshtasticd",
-				Image:               "meshtastic/meshtasticd:3.5.0",
+				Image:               "meshtastic/meshtasticd:2.7.23-alpine",
 				SmokeContractSchema: "meshtastic.smoke_contract.v1",
 				DomainDescription:   "Real Meshtastic protocol over TCP.",
 				Exposes: Exposes{
@@ -66,8 +66,8 @@ func TestTestHarnessValidate(t *testing.T) {
 			// local-testcontainer runtime) ships with no profile.
 			name: "no compose_profile is valid",
 			h: TestHarness{
-				Name:                "meshtasticd-3.x",
-				Image:               "meshtastic/meshtasticd:3.5.0",
+				Name:                "meshtasticd-2.x",
+				Image:               "meshtastic/meshtasticd:2.7.23-alpine",
 				SmokeContractSchema: "meshtasticd.smoke_contract.v1",
 				DomainDescription:   "Real Meshtastic protocol over TCP via Testcontainers.",
 				Exposes:             Exposes{TCP: []PortExpose{{Port: 4403, Protocol: "meshtastic-protobuf"}}},
@@ -108,6 +108,40 @@ func TestTestHarnessValidate(t *testing.T) {
 			},
 			wantErr: "artifactId required",
 		},
+		{
+			name: "tooling pin missing groupId",
+			h: TestHarness{
+				Name: "n", Image: "i", SmokeContractSchema: "s", DomainDescription: "d",
+				ToolingPins: []ToolingPin{{ArtifactID: "testcontainers", Version: "2.0.5"}},
+			},
+			wantErr: "tooling_pins[0].groupId required",
+		},
+		{
+			name: "tooling pin missing artifactId",
+			h: TestHarness{
+				Name: "n", Image: "i", SmokeContractSchema: "s", DomainDescription: "d",
+				ToolingPins: []ToolingPin{{GroupID: "org.testcontainers", Version: "2.0.5"}},
+			},
+			wantErr: "tooling_pins[0].artifactId required",
+		},
+		{
+			name: "tooling pin missing version (range expression NOT accepted — pins exist to prevent LLM drift)",
+			h: TestHarness{
+				Name: "n", Image: "i", SmokeContractSchema: "s", DomainDescription: "d",
+				ToolingPins: []ToolingPin{{GroupID: "org.testcontainers", ArtifactID: "testcontainers"}},
+			},
+			wantErr: "tooling_pins[0].version required",
+		},
+		{
+			name: "tooling pin happy path (full triple + note)",
+			h: TestHarness{
+				Name: "n", Image: "i", SmokeContractSchema: "s", DomainDescription: "d",
+				ToolingPins: []ToolingPin{{
+					GroupID: "org.testcontainers", ArtifactID: "testcontainers", Version: "2.0.5",
+					Note: "ships docker-java with Engine 29 support",
+				}},
+			},
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -125,6 +159,46 @@ func TestTestHarnessValidate(t *testing.T) {
 				t.Fatalf("expected error containing %q, got %v", tc.wantErr, err)
 			}
 		})
+	}
+}
+
+func TestResolve_PropagatesToolingPins(t *testing.T) {
+	h := TestHarness{
+		Name:                "h",
+		Image:               "img",
+		SmokeContractSchema: "s",
+		DomainDescription:   "d",
+		Exposes:             Exposes{TCP: []PortExpose{{Port: 4403, Protocol: "p"}}},
+		ToolingPins: []ToolingPin{
+			{GroupID: "org.testcontainers", ArtifactID: "testcontainers", Version: "2.0.5", Note: "engine29"},
+			{GroupID: "org.junit.jupiter", ArtifactID: "junit-jupiter", Version: "5.11.4"},
+		},
+	}
+	m := h.Resolve()
+	if got := len(m.ToolingPins); got != 2 {
+		t.Fatalf("expected 2 tooling pins propagated to manifest, got %d", got)
+	}
+	if m.ToolingPins[0].Version != "2.0.5" {
+		t.Errorf("first pin version = %q, want 2.0.5", m.ToolingPins[0].Version)
+	}
+	if m.ToolingPins[0].Note != "engine29" {
+		t.Errorf("first pin note dropped: %q", m.ToolingPins[0].Note)
+	}
+	if m.ToolingPins[1].ArtifactID != "junit-jupiter" {
+		t.Errorf("second pin artifactId = %q, want junit-jupiter", m.ToolingPins[1].ArtifactID)
+	}
+}
+
+func TestResolve_NoToolingPins_FieldOmitted(t *testing.T) {
+	h := TestHarness{
+		Name:                "h",
+		Image:               "img",
+		SmokeContractSchema: "s",
+		DomainDescription:   "d",
+	}
+	m := h.Resolve()
+	if m.ToolingPins != nil {
+		t.Errorf("expected nil ToolingPins when source has none, got %v", m.ToolingPins)
 	}
 }
 
@@ -187,9 +261,9 @@ func TestParseFile(t *testing.T) {
 
 	t.Run("valid full entry", func(t *testing.T) {
 		body := `{"harnesses":[{
-			"name":"meshtasticd-3.x",
+			"name":"meshtasticd-2.x",
 			"compose_profile":"harness-meshtasticd",
-			"image":"meshtastic/meshtasticd:3.5.0",
+			"image":"meshtastic/meshtasticd:2.7.23-alpine",
 			"exposes":{"tcp":[{"port":4403,"protocol":"meshtastic-protobuf"}]},
 			"smoke_contract_schema":"meshtastic.smoke_contract.v1",
 			"real_dependencies":[{"groupId":"com.geeksville.mesh","artifactId":"meshtastic-protobufs","version_range":"[2.x,3.x)"}],
@@ -203,7 +277,7 @@ func TestParseFile(t *testing.T) {
 			t.Fatalf("expected 1 entry, got %d", len(entries))
 		}
 		got := entries[0]
-		if got.Name != "meshtasticd-3.x" {
+		if got.Name != "meshtasticd-2.x" {
 			t.Errorf("name: got %q", got.Name)
 		}
 		if len(got.Exposes.TCP) != 1 || got.Exposes.TCP[0].Port != 4403 {

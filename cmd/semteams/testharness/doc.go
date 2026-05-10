@@ -26,8 +26,8 @@
 //	{
 //	  "harnesses": [
 //	    {
-//	      "name": "meshtasticd-3.x",
-//	      "image": "meshtastic/meshtasticd:3.5.0",
+//	      "name": "meshtasticd-2.x",
+//	      "image": "meshtastic/meshtasticd:2.7.23-alpine",
 //	      "exposes": {
 //	        "tcp": [{"port": 4403, "protocol": "meshtastic-protobuf"}]
 //	      },
@@ -48,6 +48,6 @@
 // don't reference a profile. External-sidecar runtime (operator
 // pre-provisioned) still uses it.
 //
-// The first entry (`meshtasticd-3.x`) ships with R3.7.2.e′; smoke-
+// The first entry (`meshtasticd-2.x`) ships with R3.7.2.e′; smoke-
 // contract execution arrives with R3.7.2.h′ + smoke #7.
 package testharness

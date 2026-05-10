@@ -17,15 +17,15 @@ func TestSidecarJSONShape(t *testing.T) {
     {
       "target": "connection established",
       "runtime": "process-local-testcontainer",
-      "test_harness": "meshtasticd-3.x",
+      "test_harness": "meshtasticd-2.x",
       "test_runtime": "java-junit-testcontainers",
       "ref": {"type": "filepath", "path": "src/test/java/FooIT.java"},
       "evidence": [{"kind": "surefire_passing_count", "args": {"min": 1}}]
     }
   ],
   "harnesses": {
-    "meshtasticd-3.x": {
-      "id": "meshtasticd-3.x",
+    "meshtasticd-2.x": {
+      "id": "meshtasticd-2.x",
       "image": "meshtastic/meshtasticd:3.5.0",
       "ports": {"meshtastic-protobuf": 4403}
     }
@@ -44,12 +44,12 @@ func TestSidecarJSONShape(t *testing.T) {
 		t.Errorf("Harnesses len = %d, want 1", len(payload.Harnesses))
 	}
 
-	h, ok := payload.Harnesses["meshtasticd-3.x"]
+	h, ok := payload.Harnesses["meshtasticd-2.x"]
 	if !ok {
-		t.Fatalf("harnesses missing meshtasticd-3.x")
+		t.Fatalf("harnesses missing meshtasticd-2.x")
 	}
-	if h.ID != "meshtasticd-3.x" {
-		t.Errorf("harness.ID = %q, want meshtasticd-3.x", h.ID)
+	if h.ID != "meshtasticd-2.x" {
+		t.Errorf("harness.ID = %q, want meshtasticd-2.x", h.ID)
 	}
 	if h.Image != "meshtastic/meshtasticd:3.5.0" {
 		t.Errorf("harness.Image = %q, want meshtastic/meshtasticd:3.5.0", h.Image)

@@ -28,9 +28,32 @@ type Dependency struct {
 	VersionRange string `json:"version_range"`
 }
 
+// ToolingPin pins a single build-tooling dependency to a known-good
+// version. Operator-curated; see ToolingPins for the rationale and
+// the smoke-#8-run-13 incident that motivated the field.
+type ToolingPin struct {
+	GroupID    string `json:"groupId"`
+	ArtifactID string `json:"artifactId"`
+	// Version is the EXACT version operators have validated against
+	// the harness's image + the deployment's docker daemon. Range
+	// expressions (e.g. "[2.0,3.0)") are NOT accepted here — pins
+	// exist precisely because LLM-authored builds drift to whatever
+	// the LLM remembers, and "remembered ≈ stale" is the failure
+	// shape this field exists to prevent.
+	Version string `json:"version"`
+	// Note is a free-form one-line operator comment explaining WHY
+	// this version (e.g. "2.0.5 fixes Docker Engine 29 compat — earlier
+	// versions hardcode docker-java API 1.32 and time out on the
+	// daemon's 1.54 API"). Surfaces in the rendered manifest so the
+	// builder LLM has the rationale, not just the version.
+	Note string `json:"note,omitempty"`
+}
+
 // TestHarness is one entry in the catalog. Schema mirrors ADR-033 §1
 // (revised by ADR-034 to make ComposeProfile optional — see
-// Validate).
+// Validate; revised again 2026-05-10 to add ToolingPins after smoke
+// #8 run-13 wedged on a stale Testcontainers version the LLM picked
+// from training-cutoff knowledge).
 type TestHarness struct {
 	Name string `json:"name"`
 	// ComposeProfile names a docker-compose profile that the operator
@@ -49,6 +72,25 @@ type TestHarness struct {
 	SmokeContractSchema string       `json:"smoke_contract_schema"`
 	RealDependencies    []Dependency `json:"real_dependencies,omitempty"`
 	DomainDescription   string       `json:"domain_description"`
+	// ToolingPins names exact build-tooling versions the operator has
+	// validated against this harness's image AND the deployment's
+	// docker daemon. The LLM-authored pom.xml / build.gradle MUST
+	// resolve these from the rendered .test-harness/manifest.json
+	// instead of guessing from training-cutoff memory.
+	//
+	// Smoke #8 run-13 (2026-05-10) wedged when the LLM picked
+	// Testcontainers 1.19.7 from memory; that version hardcodes
+	// docker-java API 1.32, but the sandbox's docker daemon is at
+	// API 1.54. The builder spent 70+ iterations decompiling
+	// Testcontainers internals trying to work around the mismatch
+	// before timeout. Pinning Testcontainers 2.0.5+ in the catalog
+	// (and projecting it into the manifest) prevents the same drift.
+	//
+	// Optional: a harness whose builds don't need build-tooling
+	// guidance can omit this field. When present, the builder
+	// persona's contract requires the pom/build to use these exact
+	// versions for the named groupId+artifactId pairs.
+	ToolingPins []ToolingPin `json:"tooling_pins,omitempty"`
 }
 
 // Validate checks structural well-formedness. Substantive checks
@@ -92,6 +134,17 @@ func (h *TestHarness) Validate() error {
 			return fmt.Errorf("real_dependencies[%d].artifactId required", i)
 		}
 	}
+	for i, p := range h.ToolingPins {
+		if p.GroupID == "" {
+			return fmt.Errorf("tooling_pins[%d].groupId required", i)
+		}
+		if p.ArtifactID == "" {
+			return fmt.Errorf("tooling_pins[%d].artifactId required", i)
+		}
+		if p.Version == "" {
+			return fmt.Errorf("tooling_pins[%d].version required (operator-curated exact version, not a range — see ToolingPin doc for the smoke-#8-run-13 incident)", i)
+		}
+	}
 	return nil
 }
 
@@ -108,13 +161,19 @@ func (h *TestHarness) Validate() error {
 type ResolvedManifest struct {
 	// ID is the catalog name (TestHarness.Name) — primary key.
 	ID string `json:"id"`
-	// Image is the docker image reference (e.g. "meshtastic/meshtasticd:3.5.0").
+	// Image is the docker image reference (e.g. "meshtastic/meshtasticd:2.7.23-alpine").
 	Image string `json:"image"`
 	// Ports maps a symbolic port label to its container-side port number.
 	// Derived from Exposes.TCP: label is Protocol, value is Port.
 	Ports map[string]int `json:"ports,omitempty"`
 	// Env is optional static environment variables for the container.
 	Env map[string]string `json:"env,omitempty"`
+	// ToolingPins are operator-curated exact versions for build
+	// dependencies the LLM-authored pom/build MUST use verbatim.
+	// Projected from TestHarness.ToolingPins so the builder reads
+	// from a single source (the manifest in its workspace) instead
+	// of guessing from training-cutoff memory.
+	ToolingPins []ToolingPin `json:"tooling_pins,omitempty"`
 }
 
 // Resolve derives a ResolvedManifest from a catalog TestHarness. The
@@ -132,6 +191,9 @@ func (h *TestHarness) Resolve() ResolvedManifest {
 	}
 	if len(ports) > 0 {
 		m.Ports = ports
+	}
+	if len(h.ToolingPins) > 0 {
+		m.ToolingPins = append(m.ToolingPins, h.ToolingPins...)
 	}
 	return m
 }

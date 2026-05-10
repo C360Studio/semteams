@@ -20,7 +20,7 @@ import (
 // "no test harnesses" fragment instead of failing fast.
 //
 // Every file matching the glob is parsed; named-entry assertions
-// keep the meshtasticd-3.x catalog (R3.7.2.e′) honest as fields
+// keep the meshtasticd-2.x catalog (R3.7.2.e′) honest as fields
 // evolve. Add per-test-harness assertions here when new entries land,
 // not at the catalog.go schema layer (which stays structural-only).
 func TestOperatorTestHarnessCatalogParses(t *testing.T) {
@@ -42,7 +42,7 @@ func TestOperatorTestHarnessCatalogParses(t *testing.T) {
 }
 
 // TestMeshtasticdEntryShape pins the canonical fields of the
-// meshtasticd-3.x catalog entry so a careless edit (typo in
+// meshtasticd-2.x catalog entry so a careless edit (typo in
 // smoke_contract_schema, regression to compose_profile usage) gets
 // caught at test time. ADR-034 made compose_profile optional for
 // process-local-testcontainer flows; this entry should stay free of
@@ -56,15 +56,15 @@ func TestMeshtasticdEntryShape(t *testing.T) {
 
 	var got *testharness.TestHarness
 	for i := range entries {
-		if entries[i].Name == "meshtasticd-3.x" {
+		if entries[i].Name == "meshtasticd-2.x" {
 			got = &entries[i]
 			break
 		}
 	}
-	require.NotNil(t, got, "meshtasticd-3.x entry missing from configs/harnesses.json")
+	require.NotNil(t, got, "meshtasticd-2.x entry missing from configs/harnesses.json")
 
 	assert.Empty(t, got.ComposeProfile,
-		"meshtasticd-3.x must NOT set compose_profile — process-local-testcontainer runtime manages lifecycle in-process via Testcontainers under sandbox DooD (ADR-034)")
+		"meshtasticd-2.x must NOT set compose_profile — process-local-testcontainer runtime manages lifecycle in-process via Testcontainers under sandbox DooD (ADR-034)")
 	// Image tag is loosened on purpose: the upstream image will rev
 	// (3.5.0 → 3.6.0 → ...) faster than this contract test's review
 	// cadence. Pin the repository so a typo regression

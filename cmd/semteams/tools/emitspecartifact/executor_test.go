@@ -1006,9 +1006,9 @@ func TestRenderMarkdown_ResolvedTestHarnessFieldsRendered(t *testing.T) {
 	tp := &fakeTriplePublisher{}
 	pub := &fakePublisher{}
 	resolver := func(_ context.Context, name string) (*testharness.TestHarness, error) {
-		if name == "meshtasticd-3.x" {
+		if name == "meshtasticd-2.x" {
 			return &testharness.TestHarness{
-				Name:                "meshtasticd-3.x",
+				Name:                "meshtasticd-2.x",
 				Image:               "meshtastic/meshtasticd:3.5.0",
 				SmokeContractSchema: "meshtasticd.smoke_contract.v1",
 				DomainDescription:   "test fixture",
@@ -1026,7 +1026,7 @@ func TestRenderMarkdown_ResolvedTestHarnessFieldsRendered(t *testing.T) {
 		map[string]any{
 			"target":       "driver emits CS API observation when meshtasticd publishes POSITION_APP",
 			"runtime":      "process-local-testcontainer",
-			"test_harness": "meshtasticd-3.x",
+			"test_harness": "meshtasticd-2.x",
 			"test_runtime": "java-junit-testcontainers",
 			"ref": map[string]any{
 				"type": "filepath",
@@ -1068,7 +1068,7 @@ func TestRenderMarkdown_ResolvedTestHarnessFieldsRendered(t *testing.T) {
 	got := string(body)
 
 	for _, want := range []string{
-		"**Test harness**: `meshtasticd-3.x`",
+		"**Test harness**: `meshtasticd-2.x`",
 		"**Image**: `meshtastic/meshtasticd:3.5.0`",
 		"**TCP exposes**: port 4403 (`meshtastic-protobuf`)",
 	} {
@@ -1340,11 +1340,11 @@ func TestSidecar_WithChecksOneHarnessRef(t *testing.T) {
 	tmpDir := t.TempDir()
 	tp := &fakeTriplePublisher{}
 	pub := &fakePublisher{}
-	h := fixtureHarness("meshtasticd-3.x", "meshtastic/meshtasticd:3.5.0", 4403)
+	h := fixtureHarness("meshtasticd-2.x", "meshtastic/meshtasticd:3.5.0", 4403)
 	resolver := newResolverFor(h)
 	exec := NewExecutor(tp, pub, types.PlatformMeta{Org: "c360", Platform: "semteams"}, nil, tmpDir, resolver)
 
-	args := argsWithOneTestcontainerCheck("meshtasticd-3.x")
+	args := argsWithOneTestcontainerCheck("meshtasticd-2.x")
 	res, err := exec.Execute(context.Background(), defaultCall(args))
 	if err != nil {
 		t.Fatalf("Execute err: %v", err)
@@ -1362,15 +1362,15 @@ func TestSidecar_WithChecksOneHarnessRef(t *testing.T) {
 	if len(sidecar.Harnesses) != 1 {
 		t.Errorf("sidecar.Harnesses len = %d, want 1", len(sidecar.Harnesses))
 	}
-	resolved, ok := sidecar.Harnesses["meshtasticd-3.x"]
+	resolved, ok := sidecar.Harnesses["meshtasticd-2.x"]
 	if !ok {
-		t.Fatalf("sidecar.Harnesses missing meshtasticd-3.x; keys=%v", harnesseKeys(sidecar.Harnesses))
+		t.Fatalf("sidecar.Harnesses missing meshtasticd-2.x; keys=%v", harnesseKeys(sidecar.Harnesses))
 	}
 	if resolved.Image != "meshtastic/meshtasticd:3.5.0" {
 		t.Errorf("resolved.Image = %q, want meshtastic/meshtasticd:3.5.0", resolved.Image)
 	}
-	if resolved.ID != "meshtasticd-3.x" {
-		t.Errorf("resolved.ID = %q, want meshtasticd-3.x", resolved.ID)
+	if resolved.ID != "meshtasticd-2.x" {
+		t.Errorf("resolved.ID = %q, want meshtasticd-2.x", resolved.ID)
 	}
 	if len(resolved.Ports) != 1 {
 		t.Errorf("resolved.Ports len = %d, want 1", len(resolved.Ports))
@@ -1696,7 +1696,7 @@ func TestExecute_ChainTriples_HappyPath(t *testing.T) {
 	resolver := &fakeChainResolver{entityID: wantChainEntityID}
 	exec.SetChainResolver(resolver)
 
-	args := argsWithOneTestcontainerCheck("meshtasticd-3.x")
+	args := argsWithOneTestcontainerCheck("meshtasticd-2.x")
 	_, err := exec.Execute(context.Background(), defaultCall(args))
 	if err != nil {
 		t.Fatalf("Execute err: %v", err)

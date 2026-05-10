@@ -1,5 +1,5 @@
 {
-  "$comment": "Stub harness catalog. Plumbed in via SEMTEAMS_HARNESS_CATALOG_PATH so journeys can swap from the empty default to a non-empty catalog without rebuilding the image. The 'stub' entry is intentionally minimal — its only role is to verify the boot-time render path produces a non-empty researcher fragment. Real catalog entries ship in R3.7.2 (meshtasticd-3.x) and beyond.",
+  "$comment": "Stub harness catalog. Plumbed in via SEMTEAMS_HARNESS_CATALOG_PATH so journeys can swap from the empty default to a non-empty catalog without rebuilding the image. The 'stub' entry is intentionally minimal — its only role is to verify the boot-time render path produces a non-empty researcher fragment. Real catalog entries ship in R3.7.2 (meshtasticd-2.x) and beyond.",
   "harnesses": [
     {
       "name": "stub",
