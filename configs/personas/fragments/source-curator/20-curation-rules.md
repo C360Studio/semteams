@@ -63,8 +63,22 @@ For each named source the reviewer's reason implies:
    that's a fine outcome.
 5. Once at least one entity per added source resolves and (if
    applicable) the mount path is verified, call
-   `emit_curator_artifact` (see fragment 30). Then `decide`
-   with `action="indexed"`.
+   `emit_curator_artifact`, then in your final assistant
+   message include the artifact JSON verbatim as prose
+   alongside `decide(action="indexed", reason="...")`. The
+   prose content of the final message is what
+   `read_loop_result(curator_loop_id)` returns to the next
+   researcher — without it, the researcher reads only the
+   decide action and can't query your verified_entity_ids.
+   See fragment 30 "Order of operations" for the exact shape.
+
+   If `query_entity` polling exhausted your patience without
+   resolving any IDs, the right action is **NOT** to fabricate
+   verified_entity_ids and proceed to indexed. The right action
+   is `decide(action="needs_clarification", reason="indexing
+   in progress; query_entity has not yet resolved post-
+   indexing")`. The next researcher gets a useful hint; the
+   chain stays honest.
 
 ## 3. If not a corpus gap: route back
 

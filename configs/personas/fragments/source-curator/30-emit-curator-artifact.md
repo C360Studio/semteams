@@ -56,12 +56,26 @@ One entry per `add_source_repo` call you made in this loop.
 
 ### `verified_entity_ids` (required, ≥1 entry)
 
-Entity IDs you successfully resolved via `query_entity` after
-indexing finished. **Do not include IDs you didn't actually
-verify.** The point of this field is the curator's
-"I checked these resolve" commitment — fabricated entries break
-the contract and cause the next researcher to query things that
-don't exist.
+Entity IDs you successfully resolved via `query_entity` **in this
+loop**. The contract is hard:
+
+- Each ID listed here MUST come from a `query_entity` call that
+  returned a successful result during this curator loop.
+- No exceptions. No rationalization. No "indexing is slow, let me
+  proceed with the IDs I expected." That's fabrication, full stop.
+- If `query_entity` hasn't returned a successful result for ANY
+  ID yet, you don't have an `indexed` artifact to emit. Use
+  `decide(action="needs_clarification", reason="indexing in
+  progress; <N> add_source_repo calls succeeded but query_entity
+  has not yet resolved post-indexing")` instead. The next
+  researcher gets a useful hint; the chain stays honest.
+
+The point of this field is the curator's "I checked these
+resolve" commitment to the next researcher. Fabricated entries
+silently break the chain — the researcher queries IDs that don't
+exist, gets empty results, emits a thin artifact, the reviewer
+rejects, the cycle repeats. Worse than `needs_clarification`
+because the failure mode is harder to diagnose.
 
 Pick representative entities, not exhaustive ones. 3-10 IDs per
 added source is typical: the entity the reviewer cited, plus a
@@ -87,23 +101,79 @@ back to graph-only.
 The mount is read-only; the researcher can `bash cat` files
 under this path but cannot modify them.
 
-## Order matters
+## Order of operations
 
-The framework consumes `emit_curator_artifact`'s tool result
-content via `read_loop_result` in the next researcher loop. The
-artifact MUST land before your terminal `decide` — otherwise the
-next loop has nothing to read and falls back to re-discovering
-what you just verified. If you hit an error in
-`emit_curator_artifact` (validation failure, transient publish
-error), do NOT proceed to `decide` — fix the args and retry the
-emit, then `decide`.
+The next loop (researcher / reviewer) reads YOUR loop's terminal
+content via `read_loop_result`, which returns the `content` text
+of your final assistant message — NOT the args of any tool call.
+For decide-terminated curator loops, that means the artifact has
+to ride in your final message's prose alongside the decide tool
+call.
+
+Two steps in order:
+
+1. **Call `emit_curator_artifact`** with the structured args
+   above. This publishes the typed payload + mints marker triples
+   on your loop entity (audit trail, ops-observer surface).
+
+2. **In your final assistant message, include the artifact JSON
+   verbatim AS PROSE alongside the `decide(action="indexed", ...)`
+   tool call.** The text content of this message becomes the
+   loop's `Result` field that `read_loop_result(curator_loop_id)`
+   returns. Without the prose, the next researcher's read returns
+   empty/just-the-decide-action — not the `verified_entity_ids` it
+   needs to query.
+
+   Concretely, your final message should look like:
+   ```
+   <prose>
+   Curator artifact for next researcher:
+   ```json
+   { "added_sources": [...],
+     "verified_entity_ids": [...],
+     "source_dirs": [...] }
+   ```
+   </prose>
+   <tool_call>decide(action="indexed", reason="...")</tool_call>
+   ```
+
+   Anthropic / OpenAI chat formats both allow a content block AND
+   a tool_call in the same assistant message. The content becomes
+   the loop's Result; the tool call sets coordinator.next_action
+   for rule_02b to fire.
+
+If `emit_curator_artifact` errors (validation failure, transient
+publish error), do NOT proceed to step 2 — fix the args and
+retry the emit first.
 
 ## Common mistakes
 
+- **Calling decide without the artifact JSON in the message
+  prose.** `read_loop_result` returns the loop's Result field,
+  which is your final assistant message's `content` text — NOT
+  the decide tool call's args. If your final message is just
+  `<tool_call>decide(...)</tool_call>` with no prose, the next
+  researcher's read returns nothing useful and they can't
+  query your verified_entity_ids. The reviewer correctly
+  diagnoses this as "the curator returned a bare status
+  message instead of an emit_curator_artifact payload" and
+  rejects the downstream researcher's artifact. Recovery loop
+  with no substance — pure waste. Always emit the artifact
+  JSON as prose in the same message as decide.
+- **Fabricating `verified_entity_ids` to keep the chain moving.**
+  Observed pattern: query_entity polling fails, indexing seems
+  slow, LLM reasons "let me list the IDs I expected and proceed
+  to indexed." This is fabrication and downstream queries will
+  fail. The contract is hard — only IDs from successful
+  query_entity calls in this loop. If you can't get any to
+  resolve, the right action is
+  `decide(action="needs_clarification", reason="indexing in
+  progress; query_entity has not yet resolved post-indexing")`.
+  The next researcher then knows to either retry the curator
+  with a longer wait OR query the existing corpus.
 - **Empty `verified_entity_ids` array.** If you couldn't verify
-  any IDs, you're not in the `indexed` state. Either keep waiting
-  for indexing, or terminate with `needs_clarification` if the
-  source isn't producing what the reviewer expected.
+  any IDs, you're not in the `indexed` state. Use
+  `needs_clarification` per above.
 - **Listing sources you didn't add.** This artifact is a record
   of *your* work, not a corpus inventory. Only sources you called
   `add_source_repo` against in this loop belong here.
