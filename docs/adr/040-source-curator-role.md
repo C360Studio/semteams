@@ -402,6 +402,76 @@ addendum reframes the curator's payload + the researcher's
 fallback rule + tightens existing export contracts; the rest of
 ADR-040's design holds.
 
+## Addendum 2026-05-11 — Curator optionality
+
+**Sources are nice-to-haves, not load-bearing.** The chain must
+not block on curator outcomes. Smoke #8 run-18 surfaced a real
+wedge mode: the curator misclassified a corpus gap as a
+research-side issue, the chain entered a recovery loop spawning
+fresh researchers + curators that couldn't converge, and ~$0.40
+of real-LLM tokens burned producing nothing useful. PR #137
+(curator reads researcher's open_gaps too) addresses the
+classification bug, but the operator still needs an escape
+valve when curator turns out to be a wedge in their deployment.
+
+**Decision.** Curator routing is operator-toggleable via the
+existing rule `enabled` field. To disable the curator path
+entirely:
+
+```diff
+ // configs/rules/research-mode-transition/02-reviewer-rejected-spawn-curator.json
+ {
+   "id": "reviewer_rejected_spawn_curator",
+   ...
++  "enabled": false,
+   ...
+ }
+```
+
+With curator off:
+- Reviewer-rejection ends the chain at the reviewer (no further
+  role spawns from rule 02).
+- Rules 02b (curator-indexed → researcher) and 02c
+  (curator-needs_clarification → researcher) become inert (their
+  `agent.loop.role = source-curator` conditions never match).
+- The user sees: "researcher → reviewer → END. Reviewer said
+  insufficient. Operator decides what's next."
+
+**Why curator-off is a valid deployment shape.** The pre-ADR-040
+design (R3.2.2) had the researcher do source-acquisition inline
+via the `researcher-with-source-acquisition` role. ADR-040 split
+that into two roles for cognitive-load reasons, but the SUBSTANCE
+of the chain (research → reviewer → maybe-add-source → research
+again) is unchanged. A deployment with curator off can:
+1. Manually pre-load sources operators expect via SemSource
+   sidecars (semspec's e2e-epic.yml pattern).
+2. Author a sibling fallback rule that spawns researcher with
+   `add_source_repo` in its tool surface (a re-creation of the
+   OLD researcher-with-source-acquisition role; semteams ships
+   only the curator-on default).
+3. Just accept that reviewer-rejection ends the chain and rely
+   on operator intervention for substrate decisions.
+
+**What semteams ships.** Default: curator on (rule 02 enabled).
+No fallback rule. Operators wanting non-curator behavior write
+their own rules. Curator stays a *narrow opt-out*, not a
+*broad opt-in*.
+
+**Telemetry the operator should watch when deciding to flip.**
+- `curator.artifact.added_sources_count` triples — how often
+  curator successfully indexes anything.
+- Recovery loops: count of consecutive reviewer-rejection
+  events per chain entity (see ADR-040 §addendum 2026-05-11
+  "Chain-level recovery cap" once that lands).
+- Cost per chain — a curator wedge surfaces as outsized token
+  spend without artifact convergence.
+
+**No persona fragments removed.** All `source-curator`
+fragments stay in the deployment regardless of the toggle —
+they're inert when no `source-curator` role spawns. Cleanup
+is a no-op. To re-enable curator, flip `enabled` back to true
+and restart.
+
 ## What this ADR does NOT decide
 
 - **Coordinator-as-meta-curator (ADR-039 Phase 2 + ADR-040 future).**
