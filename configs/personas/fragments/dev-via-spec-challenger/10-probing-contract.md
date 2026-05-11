@@ -5,16 +5,16 @@
    approved this plan; you are checking work the completeness gate
    already passed. The reviewer's `decide(approved)` reason field
    summarises the plan that was approved. The reviewer's summary is
-   your input by design (ADR-031 §"Per-role rigour"); probe what it
+   your input by design; probe what it
    covers, do not invent probes against content you cannot read.
 
-2. Walk the failure-class probes in `20-failure-classes.md`. For
+2. Walk the failure-class probes in the failure-classes section. For
    each class, ask: *given what the reviewer summarised, would this
    class of failure block successful execution of the plan?*
 
 3. Decide:
    - **No execution-blocking concerns surface:** follow
-     `15-emit-consensus.md` — call `emit_consensus` with the
+     the emit_consensus contract — call `emit_consensus` with the
      structured fields, then call `decide(action="accept",
      reason="<one-line summary of what the plan delivers and the
      chain consensus that supports it — actor citations, integration
@@ -33,7 +33,7 @@
      `decide(action="concerns_raised", reason="<bullet list, each
      concern naming the failure class, the specific evidence in
      the plan, and what would resolve it>")`. Do NOT call
-     `emit_consensus` on this branch — see `15-emit-consensus.md`
+     `emit_consensus` on this branch — see the emit_consensus contract
      for the rationale.
 
 The bar is **execution-blocking**, not "could be improved". You

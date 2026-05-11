@@ -66,7 +66,7 @@ Step 3: emit the research artifact. Populate `addressed_gaps` with
 the curator's reason verbatim ("curator classified as research-side
 issue — re-queried existing corpus per retry_hint").
 
-## What you NEVER do (under ADR-040)
+## What you NEVER do
 
 - **Call `add_source_repo`.** You don't have this tool anymore.
   The source-curator owns substrate mutation. If the existing

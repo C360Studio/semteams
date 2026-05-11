@@ -51,7 +51,7 @@ Don't hardcode platform values; read them.
 query_entity(id="<chain_entity_id_from_step_1>")
 ```
 
-This is your fused starting point. Per ADR-038 §D2 the chain
+This is your fused starting point. Per the chain
 entity carries:
 
 - `chain.dispatched_at` — when the chain started

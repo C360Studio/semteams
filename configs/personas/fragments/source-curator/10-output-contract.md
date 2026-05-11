@@ -41,7 +41,7 @@ Required `decide` fields:
   existing osh-core entities for deployment_topology before
   asking for new sources"`.
 
-The framework's recovery routing (ADR-039 rules 08+09 pattern)
+The framework's recovery routing
 spawns a fresh researcher with your `retry_hint` in its
 inputs.
 

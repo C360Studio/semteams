@@ -44,7 +44,7 @@ builder_decide(
   reason: "bootstrap_workspace failed: <one-line cause from the
            tool's Result.Error>",
   blocking_question: "confirm the dev-via-spec-builder spawn
-                      rule (R3.6.2.d) supplied a valid spec_path,
+                      rule supplied a valid spec_path,
                       that the spec file exists at that path on
                       the backend host, and that SANDBOX_URL
                       points at a reachable sandbox"
@@ -219,5 +219,4 @@ sandbox has Java 21), do not try to install a different JDK. Do
 not reach for the network beyond what Maven/npm/go-mod fetch
 through their own settings. **Terminate with
 `needs_clarification`** and name the constraint that blocks you.
-That feedback is what closes the loop with the architect (or, in
-R3.5, the coordinator).
+That feedback is what closes the loop with the architect or the coordinator.

@@ -1,10 +1,5 @@
 # Revision rules (retry path)
 
-> Port lineage: SemSpec planner's revision-after-rejection branch
-> (`prompt/domain/software.go:380-407`). Adapted: SemSpec splits the
-> retry path into a separate revision-prompt template; we fold it
-> into the same persona, gated on the `retry: true` task property.
-
 When you are spawned with `retry: true` in your task properties, the
 prior dev-via-spec-reviewer or dev-via-spec-challenger rejected the
 plan. The retry budget is bounded (max 5 retries per gate; see rule
@@ -31,7 +26,7 @@ Process on retry:
      failure path.
    - For "integration point unaccounted for": cross-check the
      research artifact's `integration_points` and add scope.
-4. Re-call `emit_plan` per `15-emit-plan.md` (bumped revision; same
+4. Re-call `emit_plan` per the emit_plan contract (bumped revision; same
    stable title so the rendered file overwrites at the deterministic
    slug). Then re-emit `decide(action="planned", reason="<revised
    plan>")` — the reviewer / challenger will re-evaluate from your

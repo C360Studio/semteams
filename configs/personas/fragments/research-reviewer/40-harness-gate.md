@@ -1,7 +1,7 @@
 # Test harness selection gate
 
 Every artifact must declare its verification stance — `emit_research_artifact`
-now rejects artifacts that don't (smoke #8 run-9 fix). The tool layer
+now rejects artifacts that don't. The tool layer
 catches the missing-stance case before it reaches you, so by the time
 an artifact is in your hands it has SOME shape under one of these
 three paths. Your job is judging the *quality* of the path the
@@ -69,7 +69,7 @@ If a `needs_test_harness:` line is too vague:
 ```
 - needs_test_harness gap is too abstract. Name the protocol, the
   upstream system version, or the message shape — coordinator
-  routing in R3.7.3 keys off the substance, not the presence,
+  routing in keys off the substance, not the presence,
   of this line.
 ```
 
@@ -78,5 +78,5 @@ yourself for catalog-hit cases — the researcher's `test_harness`
 field is taken at face value if it matches a name in the rendered
 catalog you can see in the researcher's prompt context. Cross-
 catalog verification of the test harness's *fitness* for the work
-is the architect's job in R3.7.2; you only verify that the
+is the architect's job in; you only verify that the
 researcher took a stance and named a real catalog entry.

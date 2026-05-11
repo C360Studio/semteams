@@ -1,11 +1,5 @@
 # Failure classes (probe taxonomy)
 
-> Port lineage: SemSpec's `configs/error_categories.json`. Light
-> port — categories adapted to dev-via-spec planning failures
-> rather than SemSpec's pipeline-specific failures. ADR-031
-> §addendum 2026-05-02 captures the substance-over-format pivot:
-> these are *probe questions*, not rigid format checks.
-
 For each class, ask: *given the reviewer's summary of the approved
 plan, would this class of failure block successful execution?*
 Polish concerns and minor improvements do **not** count — the bar
