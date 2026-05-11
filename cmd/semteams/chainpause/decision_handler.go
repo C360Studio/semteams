@@ -219,7 +219,7 @@ func (h *DecisionHandler) retry(ctx context.Context, entityID, failedLoopID stri
 	// Write chain.resumed triple with the new task ID as the value.
 	return h.publisher.AddTriple(ctx, message.Triple{
 		Subject:    entityID,
-		Predicate:  "chain.resumed",
+		Predicate:  "chain.decision.resumed_task_id",
 		Object:     task.TaskID,
 		Source:     "chainpause",
 		Timestamp:  now,
@@ -232,7 +232,7 @@ func (h *DecisionHandler) retry(ctx context.Context, entityID, failedLoopID stri
 func (h *DecisionHandler) kill(ctx context.Context, entityID string, now time.Time) error {
 	return h.publisher.AddTriple(ctx, message.Triple{
 		Subject:    entityID,
-		Predicate:  "chain.killed",
+		Predicate:  "chain.decision.killed_at",
 		Object:     now.Format(time.RFC3339),
 		Source:     "chainpause",
 		Timestamp:  now,
@@ -245,7 +245,7 @@ func (h *DecisionHandler) kill(ctx context.Context, entityID string, now time.Ti
 func (h *DecisionHandler) deferChain(ctx context.Context, entityID string, now time.Time) error {
 	return h.publisher.AddTriple(ctx, message.Triple{
 		Subject:    entityID,
-		Predicate:  "chain.deferred",
+		Predicate:  "chain.decision.deferred_at",
 		Object:     now.Format(time.RFC3339),
 		Source:     "chainpause",
 		Timestamp:  now,

@@ -16,6 +16,12 @@
       "operator": "eq",
       "value": "insufficient",
       "required": true
+    },
+    {
+      "field": "chain.recovery.proceed",
+      "operator": "eq",
+      "value": "true",
+      "required": true
     }
   ],
   "logic": "and",
@@ -45,6 +51,7 @@
     "adr": "docs/adr/040-source-curator-role.md",
     "stop_condition": "Q2 — MaxIter (=3) + reviewer + opt-in human gate",
     "max_iterations_note": "Aligned to 3 across rules 02/02b/02c for ADR-040 consistency. Each reviewer loop is a new entity so the outer cap is informational under the current rule engine (coordinator.next_action is a single-state terminal); the curator's inner max_iterations=3 is the actionable bound on a single curator pass.",
+    "chain_recovery_cap": "ADR-040 §addendum 2026-05-11. The third condition (chain.recovery.proceed eq \"true\") gates curator spawns at the chain level via cmd/semteams/recoverycounter. The Counter consumes the same agent.complete event the rule does, walks chain ancestry to the chain entity, increments chain.recovery.count, and writes chain.recovery.proceed=true to the triggering reviewer's loop entity ONLY when the new count is within budget (default threshold 3). The KV update from the Counter's write triggers a re-evaluation of this rule on the same reviewer entity; the rule then fires. When the budget is exhausted, the Counter writes chain.recovery.exhausted=true to the chain entity (operator-visible cap-hit marker) and does NOT write proceed — the rule never fires and the chain stalls fail-safe. This split keeps chain-aware logic in the Counter (which has the chain context) and spawn-shape logic in the rule action (which has the persona/tools/prompt template). Counter failure (graph blip mid chain-walk) leaves no proceed → chain stalls without runaway, matching the ADR-040 stance that curator routing is nice-to-have.",
     "supersedes": "configs/rules/research-mode-transition/02-reviewer-rejected-retry-with-source.json (ADR-031 R3.2.2 — researcher-with-source-acquisition path, hard-replaced by ADR-040)",
     "lineage_forwarding": "related_loops.researcher is forwarded from the reviewer's lineage so the curator can read_loop_result on the prior researcher's artifact when classifying. The curator then decides indexed (rule 02b spawns a fresh researcher) or needs_clarification (rule 02c spawns a fresh researcher); both downstream rules drop the lineage.researcher forward per the supersession invariant (the new researcher is the new artifact author)."
   }

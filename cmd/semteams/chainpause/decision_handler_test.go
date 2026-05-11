@@ -150,7 +150,7 @@ func TestDecisionHandler_Retry_WritesChainResumedTriple(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if _, ok := pub.byPredicate("chain.resumed"); !ok {
+	if _, ok := pub.byPredicate("chain.decision.resumed_task_id"); !ok {
 		t.Error("expected chain.resumed triple to be written after retry")
 	}
 }
@@ -163,7 +163,7 @@ func TestDecisionHandler_Kill_WritesChainKilledTriple(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if _, ok := pub.byPredicate("chain.killed"); !ok {
+	if _, ok := pub.byPredicate("chain.decision.killed_at"); !ok {
 		t.Error("expected chain.killed triple to be written after kill")
 	}
 	if len(tasks.calls) != 0 {
@@ -179,7 +179,7 @@ func TestDecisionHandler_Defer_WritesChainDeferredTriple(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if _, ok := pub.byPredicate("chain.deferred"); !ok {
+	if _, ok := pub.byPredicate("chain.decision.deferred_at"); !ok {
 		t.Error("expected chain.deferred triple to be written after defer")
 	}
 	if len(tasks.calls) != 0 {

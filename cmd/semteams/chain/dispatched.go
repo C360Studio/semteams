@@ -24,7 +24,7 @@ type TriplePublisher interface {
 	AddTriple(ctx context.Context, triple message.Triple) error
 }
 
-// DispatchedStamper writes the chain.dispatched_at triple on the chain
+// DispatchedStamper writes the chain.dispatched.at triple on the chain
 // entity when a chain-root loop (one with no parent) completes — i.e.,
 // the dispatch loop closing the chain-start milestone of ADR-038 D2.
 //
@@ -103,20 +103,20 @@ func (s *DispatchedStamper) HandleLoopCompleted(ctx context.Context, ev *agentic
 
 	dispatchedAtTriple := message.Triple{
 		Subject:    chainEntityID,
-		Predicate:  "chain.dispatched_at",
+		Predicate:  "chain.dispatched.at",
 		Object:     dispatchedAt.Format(time.RFC3339),
 		Source:     "chain.dispatched",
 		Timestamp:  now,
 		Confidence: 1.0,
 	}
 	if err := s.publisher.AddTriple(ctx, dispatchedAtTriple); err != nil {
-		return fmt.Errorf("write chain.dispatched_at on %q: %w", chainEntityID, err)
+		return fmt.Errorf("write chain.dispatched.at on %q: %w", chainEntityID, err)
 	}
 
 	if usedFallback {
 		fallbackTriple := message.Triple{
 			Subject:    chainEntityID,
-			Predicate:  "chain.dispatched_at.observed_fallback",
+			Predicate:  "chain.dispatched.observed_fallback",
 			Object:     "true",
 			Source:     "chain.dispatched",
 			Timestamp:  now,
@@ -125,7 +125,7 @@ func (s *DispatchedStamper) HandleLoopCompleted(ctx context.Context, ev *agentic
 		if err := s.publisher.AddTriple(ctx, fallbackTriple); err != nil {
 			// Log + continue: the primary triple is already on disk; the
 			// marker is best-effort observability.
-			s.logger.Warn("chain.dispatched_at.observed_fallback write failed",
+			s.logger.Warn("chain.dispatched.observed_fallback write failed",
 				slog.String("chain_entity", chainEntityID),
 				slog.String("error", err.Error()))
 		}
@@ -136,7 +136,7 @@ func (s *DispatchedStamper) HandleLoopCompleted(ctx context.Context, ev *agentic
 	// will multiply this line. Triple is observable in the graph; the log
 	// line is forensic. Keep the boot-time "subscription active" Info to
 	// prove wiring is live.
-	s.logger.Debug("chain.dispatched_at stamped",
+	s.logger.Debug("chain.dispatched.at stamped",
 		slog.String("chain_id", ev.LoopID),
 		slog.String("chain_entity", chainEntityID),
 		slog.String("dispatched_at", dispatchedAt.Format(time.RFC3339)),

@@ -21,7 +21,7 @@ func TestLineageReader_HappyPath(t *testing.T) {
 	er := &fakeEntityReader{
 		entities: map[string]map[string]any{
 			"c360.test.agent.chain.execution.parent_loop": {
-				"chain.research_artifact_loop": "researcher_xyz",
+				"chain.research_artifact.loop": "researcher_xyz",
 				"chain.slug.stem":              "2026-05-09-osh-driver",
 			},
 		},
@@ -35,7 +35,7 @@ func TestLineageReader_HappyPath(t *testing.T) {
 	if chainEntityID != "c360.test.agent.chain.execution.parent_loop" {
 		t.Errorf("chainEntityID = %q, want resolver-derived value", chainEntityID)
 	}
-	if got := triples["chain.research_artifact_loop"]; got != "researcher_xyz" {
+	if got := triples["chain.research_artifact.loop"]; got != "researcher_xyz" {
 		t.Errorf("triples missing or wrong predicate: %v", triples)
 	}
 }

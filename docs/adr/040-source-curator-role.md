@@ -525,3 +525,157 @@ ADR-040's design holds.
   rules (Phase 1 PR 3).
 - DELETED in PR 3: `configs/personas/fragments/researcher-with-source-acquisition/`
   + `configs/rules/research-with-source-acquisition/` directory.
+
+## Addendum 2026-05-11 — Chain-level recovery cap
+
+Pairs with the curator-optionality addendum (Item 1). Where Item 1
+gives operators a switch to disable curator routing entirely, this
+addendum gives operators a budget cap that bounds curator cost per
+chain when curator routing is enabled.
+
+### Why a chain-level cap exists
+
+Per-rule `max_iterations` is a per-entity counter under the current
+rule engine — each reviewer loop is a fresh entity, so rule_02's
+own `max_iterations: 3` only bounds a single curator pass, not the
+recovery cycle as a whole. Without a chain-level cap, an arc where
+every researcher → reviewer → curator round genuinely produces a
+new "insufficient" verdict loops indefinitely (or until budget
+exhaustion). Smoke #8 run-13 surfaced 8 source-acquisition loops in
+a single chain — well beyond the per-rule cap, because each cycle
+spawned a fresh entity and the rule's own counter reset.
+
+The chain-level cap is the chain-aware bound the rule engine
+cannot natively express.
+
+### Mechanism — Counter-owned gating
+
+Three predicates with three distinct semantic roles:
+
+- `chain.recovery.count` (on chain entity) — per-cycle audit.
+  String-formatted integer. Operator-observable; rule does NOT
+  read it.
+- `chain.recovery.proceed` (on reviewer loop entity) — positive
+  gate sentinel. Rule_02's third condition fires only when this
+  lands. Stamped "true" only when newCount ≤ threshold (within
+  budget). Absence blocks the rule fire.
+- `chain.recovery.exhausted` (on chain entity) — cap-hit marker.
+  Stamped when newCount > threshold. Operator escalation surface;
+  rule does NOT gate on it.
+
+All three predicates use the canonical 3-part name shape
+(`domain.category.property`) per the vocabulary system. 2-part
+names parseDomainCategory() with empty category and break RDF
+export + hierarchy queries.
+
+The flow per insufficient verdict:
+
+1. Reviewer terminal triples land in KV (graph-ingest writes
+   coordinator.next_action=insufficient + other completion
+   triples).
+2. Rule_02's entity_watcher fires; first evaluation fails the
+   third condition (no proceed yet); rule does not fire.
+3. `cmd/semteams/recoverycounter` wakes on the same
+   `agent.complete` event:
+   - Walks chain ancestry via `chain.Resolver`.
+   - Reads `chain.recovery.count` from the chain entity (0 if
+     absent — first rejection).
+   - Increments.
+   - Writes the new count to the chain entity (audit).
+   - When newCount ≤ threshold: writes
+     `chain.recovery.proceed="true"` to the reviewer loop
+     entity.
+   - When newCount > threshold: writes
+     `chain.recovery.exhausted="true"` to the chain entity. Does
+     NOT write proceed.
+4. The Counter's proceed write triggers another KV update →
+   entity_watcher re-evaluates rule_02 → third condition passes
+   → rule fires → curator spawns.
+
+The split is the architectural seam: Counter has the chain
+context the rule engine doesn't; rule action has the spawn
+shape (persona, tools, prompt template) the Counter doesn't.
+Each owns the work it's best at. The same pattern as chainpause
+(subscriber writes chain-level triples; rule action separate)
+and ops-chain-observer.
+
+### Why this is not a workaround
+
+The rule engine is intentionally entity-local: conditions read
+`$entity.triple.X`, rule state is keyed `<rule_id>.<entity_id>`,
+each new spawned loop is a fresh entity. This is correct for the
+rule engine's sweet spot (entity-local state transitions in
+single-entity arcs). Cross-entity / chain-aware decisions belong
+in subscribers — that's how chainpause, ops-chain-observer, the
+needs-review stamper, and the milestone stampers all work.
+
+Counter-owned gating extends the existing pattern; it does not
+work around a missing primitive. The alternative — adding chain-
+ancestry reads to the rule engine — would push product-domain
+knowledge (the concept of a "chain") upstream into the framework.
+The Counter / rule split keeps chain semantics where they
+belong: product code.
+
+### Operator knobs
+
+SemTeams ships curator routing as nice-to-have substrate
+curation (per Item 1's addendum). The cap is a cost ceiling
+backed by hard structural gating; it pairs with Item 1's
+disable toggle for the runaway-recovery escape hatch:
+
+1. **Increase the threshold** — wire a non-zero value into
+   `recoverycounter.NewCounter(...)` in `main.go`. The default
+   (3) is the rule_02 `max_iterations` value for shape-symmetry;
+   3 is not load-bearing.
+2. **Disable curator routing entirely** — flip
+   `02-reviewer-rejected-spawn-curator.json`'s `enabled` field to
+   `false` per Item 1's addendum. The chain ends at the first
+   reviewer rejection rather than recovering up to 3 times before
+   ending.
+3. **Reset a chain's budget** — manually delete the
+   `chain.recovery.count` and (if present)
+   `chain.recovery.exhausted` triples from a specific chain
+   entity. The Counter starts counting from 0 again on the next
+   reviewer rejection in that chain.
+
+All knobs are operator-side; SemTeams ships the defaults that
+match the empirical baseline (run-13: 8 source-acq loops in a
+single chain motivated the cap; 3 is the conservative bound).
+
+### Telemetry to watch
+
+Once an operator deploys with curator routing enabled, the
+following predicates surface cap activity:
+
+- `chain.recovery.count` on chain entities — distribution of cap
+  consumption per chain. Most chains should have 0 (no recovery
+  cycles); ones with 1-2 are normal; ones at the threshold are
+  cap-fire candidates.
+- `chain.recovery.exhausted` on chain entities — direct
+  cap-fire indicator. Count over a time window estimates how
+  often the cap saves the budget.
+- `chain.recovery.proceed` on reviewer loop entities — per-cycle
+  gate sentinel. Absence indicates either "Counter failed
+  silently" (cross-reference Counter logs) or "chain ran out of
+  budget" (chain entity carries the exhausted marker).
+
+If `chain.recovery.exhausted` lands on >10% of chains over a
+representative window, the threshold is too low for the
+deployment's source-corpus completeness, OR curator routing is
+the wrong tool for that workload (consider Item 1's disable
+toggle).
+
+### Code surfaces
+
+- `cmd/semteams/chain/predicates.go` — `PredicateRecoveryCount`,
+  `PredicateRecoveryExhausted`, `PredicateRecoveryProceed`
+  constants + vocabulary registration.
+- `cmd/semteams/recoverycounter/` — package implementing
+  `chain.CompletionHandler`. Single Counter type wired into
+  `startChainMilestoneSubscribers` in `cmd/semteams/main.go`.
+- `configs/rules/research-mode-transition/02-reviewer-rejected-spawn-curator.json`
+  — third condition `chain.recovery.proceed eq "true"`.
+- `test/contract/recovery_cap_rule_test.go` — pins the
+  field/operator/value triple the recovery counter and rule_02
+  agree on. Renames on either side break this test before a
+  silently-decoupled cap reaches a real-LLM smoke.
