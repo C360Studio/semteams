@@ -293,7 +293,8 @@
           "builder_decide",
           "emit_diagnosis",
           "submit_work",
-          "write_todos"
+          "write_todos",
+          "scratchpad"
         ],
         "approval_required": ["add_source_repo"],
         "ports": {

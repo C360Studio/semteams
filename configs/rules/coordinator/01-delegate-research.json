@@ -25,7 +25,7 @@
       "subject": "agent.task.research",
       "role": "researcher",
       "model": "general",
-      "tools": ["web_search", "read_loop_result", "submit_work"],
+      "tools": ["web_search", "read_loop_result", "submit_work", "scratchpad"],
       "properties": {
         "parent_loop_id": "$entity.instance"
       },

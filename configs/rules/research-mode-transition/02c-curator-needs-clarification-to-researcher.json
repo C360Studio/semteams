@@ -26,7 +26,7 @@
       "subject": "agent.task.researcher",
       "role": "researcher",
       "model": "research",
-      "tools": ["read_loop_result", "query_entity", "query_entities", "emit_research_artifact"],
+      "tools": ["read_loop_result", "query_entity", "query_entities", "emit_research_artifact", "scratchpad"],
       "max_iterations": 3,
       "properties": {
         "curator_loop_id": "$entity.instance",

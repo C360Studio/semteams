@@ -26,7 +26,7 @@
       "subject": "agent.task.researcher",
       "role": "researcher",
       "model": "architecture",
-      "tools": ["read_loop_result", "query_entity", "query_entities", "add_source_repo", "emit_research_artifact"],
+      "tools": ["read_loop_result", "query_entity", "query_entities", "add_source_repo", "emit_research_artifact", "scratchpad"],
       "action_allowlist": ["approved", "insufficient"],
       "max_iterations": 3,
       "properties": {

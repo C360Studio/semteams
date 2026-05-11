@@ -185,7 +185,7 @@
       "config": {
         "stream_name": "TOOL",
         "timeout": "10s",
-        "allowed_tools": ["read_loop_result", "query_entity", "query_entities", "decide"],
+        "allowed_tools": ["read_loop_result", "query_entity", "query_entities", "decide", "scratchpad"],
         "ports": {
           "inputs": [
             {"name": "tool.execute", "type": "jetstream", "subject": "tool.execute.>", "stream_name": "TOOL", "required": true}

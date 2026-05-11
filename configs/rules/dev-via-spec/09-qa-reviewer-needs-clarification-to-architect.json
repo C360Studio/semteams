@@ -26,7 +26,7 @@
       "subject": "agent.task.dev-via-spec-architect",
       "role": "dev-via-spec-architect",
       "model": "architecture",
-      "tools": ["read_loop_result", "emit_dev_via_spec_artifact", "decide"],
+      "tools": ["read_loop_result", "emit_dev_via_spec_artifact", "decide", "scratchpad"],
       "action_allowlist": ["tasks_emitted", "needs_clarification"],
       "properties": {
         "prior_qa_reviewer_loop_id": "$entity.instance",
