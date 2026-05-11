@@ -2,31 +2,61 @@
 
 Three steps in order. Don't skip any.
 
-## 1. Read the reviewer's reason
+## 1. Read TWO surfaces, then classify
 
-Your loop's inputs include the upstream research-reviewer loop's
-ID. Call `read_loop_result` against that ID and extract the
-`coordinator.decision_reason` field. That's what flagged the
-researcher as `insufficient`.
+Your loop's inputs include two loop_ids you must read:
 
-Classify the reason:
+- The upstream **research-reviewer**'s loop_id (typically
+  surfaced in your prompt as "$entity.instance" — the loop that
+  triggered your spawn). Call `read_loop_result` and extract the
+  `coordinator.decision_reason` field. That's what flagged the
+  researcher as `insufficient`.
+- The upstream **researcher**'s loop_id (typically surfaced in
+  your prompt as "$entity.triple.lineage.researcher" — the
+  researcher whose artifact the reviewer rejected). Call
+  `read_loop_result` and look at the `open_gaps` field of the
+  artifact JSON. The researcher knows when their queries
+  returned empty; their open_gaps often cite corpus shortcomings
+  the reviewer doesn't repeat verbatim.
 
-- **Corpus gap.** Reviewer cited a topic, package, file path,
-  symbol, or concept that the existing corpus doesn't cover.
-  Phrases to look for: "no entities matching", "the corpus
-  doesn't index", "needs source X", "no sources for", "queries
-  returned empty for". Go to step 2.
+**Read BOTH surfaces** before classifying. The researcher's
+signal is just as load-bearing as the reviewer's — when a
+researcher writes "lack of documentation for X" in open_gaps,
+they're telling you the corpus failed them, and the reviewer
+may have moved on to listing what the artifact lacks structurally
+without re-naming the corpus root cause.
+
+Classify by combining both surfaces:
+
+- **Corpus gap.** EITHER:
+  - Reviewer cites a topic, package, file path, symbol, or
+    concept that the existing corpus doesn't cover. Phrases:
+    "no entities matching", "the corpus doesn't index", "needs
+    source X", "no sources for", "queries returned empty for".
+  - OR the researcher's `open_gaps` cites documentation /
+    query-empty / corpus-coverage shortcomings. Phrases:
+    "lack of documentation for X", "no documentation for X",
+    "couldn't find documentation", "corpus doesn't have", "no
+    indexed entities for", "queries returned empty".
+
+  Either signal is sufficient — go to step 2. Don't require both.
+
 - **Research-side issue.** Reviewer cited a field the researcher
   failed to populate, a question the researcher didn't actually
-  query, or noise in the artifact. Phrases to look for: "the
-  researcher dropped", "the researcher didn't query", "the
-  artifact omits", "the answer is in the existing corpus".
-  Skip to "If not a corpus gap" below.
+  query, or noise in the artifact, AND the researcher's
+  open_gaps don't cite corpus shortcomings. Phrases (from
+  reviewer): "the researcher dropped", "the researcher didn't
+  query", "the artifact omits", "the answer is in the existing
+  corpus". Skip to "If not a corpus gap" below.
 
-When the reason is ambiguous (could go either way), prefer the
-`needs_clarification` path. Adding sources speculatively burns
-human-approval cost for no benefit; the researcher can re-query
-the existing corpus at zero substrate cost.
+When ambiguous after reading BOTH surfaces:
+
+- If researcher's open_gaps name corpus shortcomings: lean
+  toward corpus gap (researcher knew their queries failed; the
+  reviewer's prose didn't surface that root cause).
+- If researcher's open_gaps don't name corpus issues but
+  reviewer's reason is also unclear: lean toward
+  needs_clarification (avoid speculative source-adds).
 
 ## 2. If corpus gap: add and verify
 
