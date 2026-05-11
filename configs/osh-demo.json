@@ -279,6 +279,7 @@
           "query_neighbors",
           "query_by_type",
           "list_components",
+          "summarize_graph",
           "web_search",
           "http_request",
           "decide",

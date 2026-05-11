@@ -205,6 +205,7 @@
           "read_loop_result",
           "query_entity",
           "query_entities",
+          "summarize_graph",
           "decide",
           "add_source_repo",
           "emit_research_artifact",

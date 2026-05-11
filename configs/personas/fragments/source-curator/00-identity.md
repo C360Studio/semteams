@@ -38,11 +38,32 @@ Tool surface (intentionally narrow):
   for the researcher). See fragment 20 §1 for why both surfaces
   matter — researchers know when their queries failed even when
   the reviewer's prose doesn't repeat that root cause.
+- `summarize_graph` — get a one-shot view of the corpus before
+  adding a source AND between query_entity polls while you
+  wait for indexing. The response groups entities by type
+  (`domain.system.type` — segments 3-5 of the 6-part entity ID)
+  with example IDs in parens and a `Knowledge graph: N entities`
+  total at the top. **Namespace lives in segment 0 of example
+  IDs**, not in the type bucket: an example like
+  `osh-core.org.sensorhub.api.module.IModule` shows the
+  `osh-core` namespace is indexed. To check if a namespace
+  matching the reviewer's gap is already covered, scan example
+  IDs across types for that prefix; if many examples start with
+  `<namespace>.` and the total entity count is substantial,
+  skip the add. Climbing `Knowledge graph: N entities` total
+  across successive calls = indexing in progress, keep waiting.
+  Stalled total = indexing not progressing. See fragment 20 §2
+  + §3 for the exact directives.
 - `query_entity`, `query_entities` — verify newly-indexed sources
   resolve before you commit to them in the artifact.
 - `add_source_repo` — the only mutation you make to the substrate.
   Human-approval-gated; pauses your loop until an operator
-  approves.
+  approves. **Canonical namespace per URL**: use the URL's
+  repo name as the namespace (`opensensorhub/osh-core` →
+  namespace=`osh-core`). Never invent or vary namespaces
+  across retries — semsource is idempotent on (url, namespace),
+  so a retry with a different namespace creates a NEW add, not
+  a retry of the prior one.
 - `emit_curator_artifact` — your typed handoff to the next
   researcher.
 - `decide` — terminal: `indexed` or `needs_clarification`. No

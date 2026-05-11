@@ -1,6 +1,6 @@
 # Curation rules
 
-Three steps in order. Don't skip any.
+Four steps in order. Don't skip any.
 
 ## 1. Read TWO surfaces, then classify
 
@@ -39,7 +39,8 @@ Classify by combining both surfaces:
     "couldn't find documentation", "corpus doesn't have", "no
     indexed entities for", "queries returned empty".
 
-  Either signal is sufficient — go to step 2. Don't require both.
+  Either signal is sufficient — continue with step 2 (summarize)
+  then step 3 (add). Don't require both.
 
 - **Research-side issue.** Reviewer cited a field the researcher
   failed to populate, a question the researcher didn't actually
@@ -58,12 +59,53 @@ When ambiguous after reading BOTH surfaces:
   reviewer's reason is also unclear: lean toward
   needs_clarification (avoid speculative source-adds).
 
-## 2. If corpus gap: add and verify
+## 2. Before adding: summarize the graph
+
+Before calling `add_source_repo`, call `summarize_graph` once.
+The response is human-readable text that opens with
+`Knowledge graph: N entities` and then a "By type" section
+grouping entities by their `domain.system.type` triple, with
+one or two example IDs per type in parens. The example IDs are
+the load-bearing signal: each example is a full entity ID, and
+the **namespace is segment 0** (the first dotted segment).
+
+To check if a namespace whose content matches the reviewer's
+gap is already covered:
+
+1. Scan the example IDs across all types for ones starting with
+   `<namespace>.` (e.g. `osh-core.` for the osh-core namespace).
+2. Count how many types have at least one example with that
+   prefix. Cross-check against the type counts column.
+3. If multiple types show that prefix and the underlying counts
+   are substantial (tens of entities total), the namespace is
+   already indexed — **skip the add**.
+4. If only one or two examples carry the prefix or the counts
+   are tiny, query a few of the specific symbols the reviewer
+   named via `query_entity` before deciding — small counts can
+   mean "small repo fully indexed" or "indexing only started";
+   the examples themselves tell you which.
+
+When you skip the add because the namespace is already
+indexed, route the next loop with
+`decide(action="needs_clarification", retry_hint="researcher
+should query <ns>.<symbol> in the existing corpus")` and cite
+the existing example IDs in the reason.
+
+This step exists because semsource is idempotent on (url,
+namespace), but re-adding an already-indexed source still costs
+an approval prompt and an indexing wait that never finds new
+content. The summary's example IDs are the direct way to see
+"is this content already here?" without speculating.
+
+## 3. If corpus gap: add and verify
 
 For each named source the reviewer's reason implies:
 
 1. Call `add_source_repo` with the URL, branch (default `main`),
-   and namespace. Surface the rationale in your tool call so the
+   and namespace **= the URL's repo name** (e.g.
+   `https://github.com/opensensorhub/osh-core` →
+   namespace=`osh-core`). Never invent or vary namespaces across
+   retries. Surface the rationale in your tool call so the
    approver knows what to expect.
 2. Your loop pauses on `awaiting_approval`. When the operator
    approves, the tool re-dispatches and SemSource starts
@@ -76,6 +118,21 @@ For each named source the reviewer's reason implies:
    subtree. If the query returns empty, wait and retry — typical
    indexing time is 10-30 seconds for small repos, 1-3 minutes
    for large ones.
+
+   **Use `summarize_graph` for indexing-progress signal.** Between
+   `query_entity` polls, call `summarize_graph` and look at two
+   things: (a) the `Knowledge graph: N entities` total at the top
+   of the response, and (b) whether example IDs starting with
+   the namespace you just added are appearing across types.
+   Climbing total or new examples appearing under your namespace =
+   indexing in progress, keep waiting. Stalled total across two
+   consecutive summarize calls with no new examples under your
+   namespace = indexing not making progress; terminate with
+   `decide(action="needs_clarification", reason="indexing in
+   progress; query_entity has not yet resolved post-indexing")`
+   (same reason string fragment 30 uses for the polling-exhausted
+   case — one canonical wording so the next researcher reads the
+   same hint regardless of which path triggered the terminal).
 4. **Commit mount paths to the artifact** when the deployment
    uses the SemSource shared source-dir mount. You don't have
    `bash`, so you can't directly verify the mount yourself. The
@@ -110,7 +167,7 @@ For each named source the reviewer's reason implies:
    indexing")`. The next researcher gets a useful hint; the
    chain stays honest.
 
-## 3. If not a corpus gap: route back
+## 4. If not a corpus gap: route back
 
 You add no sources, emit no artifact. Compose a `decide` call
 with:
