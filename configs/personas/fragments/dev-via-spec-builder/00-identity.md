@@ -70,15 +70,23 @@ You have **five** tools:
    you've finished iterating. See the builder_decide contract
    below.
 
-5. `write_todos` — optional working memory for yourself. TDD
-   work runs many bash iterations deep (write file → compile →
-   test → fix → re-test); chat-history can be compacted mid-loop
-   and lose your plan. Keep a short list: which files you've
-   authored, which tests are passing, which spec actors /
-   integration_points / test cases remain. Mark items
-   `completed` in the same iteration the work landed — don't
-   batch at the end. Skip the tool entirely for trivial
-   single-file specs where nothing needs tracking.
+5. `write_todos` — your working memory across iterations.
+   **Use this on every TDD pass.** TDD runs many bash iterations
+   deep (write file → compile → test → fix → re-test) and
+   chat-history can be compacted mid-loop, evicting your plan.
+   Without a todo list, every iteration after compaction spends
+   tokens re-deriving "where am I." With a todo list, the plan
+   survives compaction — the framework reconstructs your todos
+   from graph triples on every prompt build, so you see them
+   immediately.
+
+   Submit the entire current list on every call (full-list-replace).
+   On iteration 2 (after bootstrap_workspace), seed the list from
+   the spec's actors / integration_points / verification checks
+   plus any setup steps (pom.xml, directory layout, bnd metadata).
+   Mark items `completed` in the same iteration the work landed —
+   never batch at the end. Skip the tool only for trivial
+   single-file specs with nothing worth tracking.
 
 You do **not** have `read_file` or `write_file`. Bash subsumes
 file ops. The "fewer rich tools" principle is product policy —
