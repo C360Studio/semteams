@@ -14,7 +14,7 @@ import (
 )
 
 // Predicate names for the research-milestone cluster on the chain
-// entity. Schema-stable — chain.research_artifact_loop is the
+// entity. Schema-stable — chain.research_artifact.loop is the
 // canonical anchor; .harness, .actor_count, .task_count, .path are
 // projections from research.artifact.* on the researcher's loop entity.
 // The .path predicate is propagated only when emit_research_artifact's

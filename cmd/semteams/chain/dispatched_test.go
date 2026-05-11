@@ -42,7 +42,7 @@ func (r *recordingPublisher) byPredicate(pred string) (message.Triple, bool) {
 }
 
 // TestDispatchedStamper_RootStampsTriple: a chain-root completion event
-// (ParentLoopID empty) writes chain.dispatched_at on the chain entity.
+// (ParentLoopID empty) writes chain.dispatched.at on the chain entity.
 func TestDispatchedStamper_RootStampsTriple(t *testing.T) {
 	pub := &recordingPublisher{}
 	s := NewDispatchedStamper(pub, testPlatform(), nil)
@@ -59,9 +59,9 @@ func TestDispatchedStamper_RootStampsTriple(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	got, ok := pub.byPredicate("chain.dispatched_at")
+	got, ok := pub.byPredicate("chain.dispatched.at")
 	if !ok {
-		t.Fatal("chain.dispatched_at not written")
+		t.Fatal("chain.dispatched.at not written")
 	}
 	wantSubject := "c360.test.agent.chain.execution.dispatch_abc"
 	if got.Subject != wantSubject {
@@ -163,7 +163,7 @@ func TestDispatchedStamper_PropagatesPublishError(t *testing.T) {
 // TestDispatchedStamper_FallsBackOnZeroCompletedAt: a zero CompletedAt
 // would render the triple useless. Stamper falls back to observation
 // time so the milestone marker still exists, AND stamps a companion
-// chain.dispatched_at.observed_fallback="true" triple so a graph-only
+// chain.dispatched.observed_fallback="true" triple so a graph-only
 // downstream consumer (ops agent, future analytics) can distinguish
 // "real wire timestamp" from "subscriber-observed fallback" without
 // parsing logs. Smoke-grade defense; we don't expect framework to send
@@ -183,13 +183,13 @@ func TestDispatchedStamper_FallsBackOnZeroCompletedAt(t *testing.T) {
 	if err := s.HandleLoopCompleted(context.Background(), ev); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	got, ok := pub.byPredicate("chain.dispatched_at")
+	got, ok := pub.byPredicate("chain.dispatched.at")
 	if !ok {
-		t.Fatal("chain.dispatched_at not written")
+		t.Fatal("chain.dispatched.at not written")
 	}
 	objStr, ok := got.Object.(string)
 	if !ok {
-		t.Fatalf("chain.dispatched_at Object should be string, got %T", got.Object)
+		t.Fatalf("chain.dispatched.at Object should be string, got %T", got.Object)
 	}
 	if objStr == "0001-01-01T00:00:00Z" {
 		t.Errorf("Object should not be zero-time RFC3339; got %q", objStr)
@@ -204,9 +204,9 @@ func TestDispatchedStamper_FallsBackOnZeroCompletedAt(t *testing.T) {
 
 	// The companion fallback marker must be written so downstream graph
 	// consumers can detect the framework bug without parsing logs.
-	marker, ok := pub.byPredicate("chain.dispatched_at.observed_fallback")
+	marker, ok := pub.byPredicate("chain.dispatched.observed_fallback")
 	if !ok {
-		t.Fatal("chain.dispatched_at.observed_fallback companion triple missing")
+		t.Fatal("chain.dispatched.observed_fallback companion triple missing")
 	}
 	if marker.Object != "true" {
 		t.Errorf("observed_fallback Object: got %v, want \"true\"", marker.Object)
@@ -234,7 +234,7 @@ func TestDispatchedStamper_NoFallbackMarkerOnHappyPath(t *testing.T) {
 	if err := s.HandleLoopCompleted(context.Background(), ev); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if _, ok := pub.byPredicate("chain.dispatched_at.observed_fallback"); ok {
+	if _, ok := pub.byPredicate("chain.dispatched.observed_fallback"); ok {
 		t.Error("observed_fallback marker must not be written on happy path")
 	}
 }

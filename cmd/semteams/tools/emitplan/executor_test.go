@@ -485,7 +485,7 @@ func TestExecute_ChainSlugStemOverridesTitleSlug(t *testing.T) {
 
 // TestExecute_ChainResearchLoopOverridesDependsOn pins the smoke #8
 // run-5 D1 fix: when the chain entity carries
-// chain.research_artifact_loop, the rendered "Depends on" section
+// chain.research_artifact.loop, the rendered "Depends on" section
 // reflects the chain's canonical researcher loop ID — even if the
 // persona supplied a different (typically wrong: research-reviewer
 // instead of researcher) value.

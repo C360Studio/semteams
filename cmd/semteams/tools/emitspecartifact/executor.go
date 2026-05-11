@@ -141,7 +141,7 @@ const (
 	// ADR-038 D2 spec_artifact milestone — predicates land on the chain
 	// entity (cross-arc subject), not the loop entity. Cluster shape
 	// matches the per-arc convention chain.<milestone>.<field>.
-	chainPredicateSpecArtifactLoop       = "chain.spec_artifact_loop"
+	chainPredicateSpecArtifactLoop       = "chain.spec_artifact.loop"
 	chainPredicateSpecArtifactPath       = "chain.spec_artifact.path"
 	chainPredicateSpecArtifactCheckCount = "chain.spec_artifact.check_count"
 

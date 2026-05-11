@@ -67,7 +67,7 @@ description: |
      18. tool_call: emit_plan (PR C C5: renders docs/plans/<slug>.md +
          publishes dev_via_spec.plan.{loop_id} payload + stamps marker
          triples; chain milestone subscriber later writes
-         chain.plan_loop + chain.plan.path on reviewer-approval)
+         chain.plan.loop + chain.plan.path on reviewer-approval)
      19. tool_call: decide(planned, reason=<plan content>)
          → coordinator.next_action=planned → dev-via-spec rule_01 fires
          (planner → reviewer handoff).
@@ -83,7 +83,7 @@ description: |
      23. tool_call: emit_consensus (PR C C5: accept-branch only;
          renders docs/consensus/<slug>.md + publishes
          dev_via_spec.consensus.{loop_id} payload + stamps marker
-         triples; chain milestone subscriber writes chain.consensus_loop
+         triples; chain milestone subscriber writes chain.consensus.loop
          + chain.consensus.path on accept)
      24. tool_call: decide(accept, reason=<no concerns>)
          → coordinator.next_action=accept → dev-via-spec rule_05 fires

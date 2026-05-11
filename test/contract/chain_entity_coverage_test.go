@@ -226,17 +226,17 @@ func TestChainEntityCoverage_PR_B_Pipeline(t *testing.T) {
 	// Comments name which phase each comes from so the next reviewer can
 	// trace.
 	want := map[string]any{
-		"chain.dispatched_at":                 nil,            // Phase 1b — RFC3339 string; presence-only check
-		"chain.research_artifact_loop":        "researcher_a", // Phase 2
+		"chain.dispatched.at":                 nil,            // Phase 1b — RFC3339 string; presence-only check
+		"chain.research_artifact.loop":        "researcher_a", // Phase 2 (3-part rename 2026-05-11)
 		"chain.research_artifact.harness":     "meshtasticd-2.x",
 		"chain.research_artifact.actor_count": 3,
 		"chain.research_artifact.task_count":  5,
 		"chain.research_artifact.path":        "docs/research/2026-05-08-osh-meshtastic-driver-research.md", // PR C Phase C1
 		"chain.slug.stem":                     "2026-05-08-osh-meshtastic-driver",                           // smoke #8 run-5 D2 fix — stem derived from research path; downstream tools compose <stem>-{plan,consensus,implementation}
-		"chain.plan_loop":                     "planner_c",                                                  // PR C Phase C2
-		"chain.plan_reviewer_loop":            "dev_via_spec_reviewer_d",                                    // smoke #8 run-5 D1 fix — reviewer loop ID for emit_consensus depends_on.reviewer_loop
+		"chain.plan.loop":                     "planner_c",                                                  // PR C Phase C2 (3-part rename 2026-05-11)
+		"chain.plan.reviewer_loop":            "dev_via_spec_reviewer_d",                                    // smoke #8 run-5 D1 fix — reviewer loop ID for emit_consensus depends_on.reviewer_loop (3-part rename 2026-05-11)
 		"chain.plan.path":                     "docs/plans/2026-05-08-osh-meshtastic-plan.md",               // PR C Phase C2
-		"chain.consensus_loop":                "challenger_e",                                               // PR C Phase C3
+		"chain.consensus.loop":                "challenger_e",                                               // PR C Phase C3 (3-part rename 2026-05-11)
 		"chain.consensus.path":                "docs/consensus/2026-05-08-osh-meshtastic-consensus.md",      // PR C Phase C3
 	}
 	for pred, wantObj := range want {
@@ -256,19 +256,19 @@ func TestChainEntityCoverage_PR_B_Pipeline(t *testing.T) {
 	// Negative assertion: predicates from milestones not yet in PR B
 	// scope should NOT appear (catches accidental cross-handler bleed).
 	notYet := []string{
-		"chain.paused.cause",                    // Phase 3 SHIPPED — but writes from chainpause's agent.failed.* subscriber, not the agent.complete.* path this test drives
-		"chain.decision.verb",                   // Phase 3 SHIPPED — same reason; written by DecisionHandler, not a CompletionHandler
-		"chain.spec_artifact_loop",              // Phase 4 (writes from emit_dev_via_spec, not the chain package)
-		"chain.spec_artifact.path",              // Phase 4
-		"chain.spec_artifact.check_count",       // Phase 4
-		"chain.evidence.summary_ready",          // Phase 5 (writes from evidence preprocessor, not the chain package)
-		"chain.evidence.summary.path",           // PR C Phase C4 (writes from evidence preprocessor, not the chain package)
-		"chain.dispatched_at.observed_fallback", // Phase 1b — only on zero-CompletedAt path; happy path must not emit
-		"chain.needs_review.classification",     // ADR-039 Phase 1 Slice B — only on builder needs_clarification; happy path's tests_passing builder must not emit
-		"chain.needs_review.producer_loop_id",   // same
-		"chain.needs_review.producer_role",      // same
-		"chain.needs_review.reason",             // same
-		"chain.needs_review.observed_at",        // same
+		"chain.paused.cause",                  // Phase 3 SHIPPED — but writes from chainpause's agent.failed.* subscriber, not the agent.complete.* path this test drives
+		"chain.decision.verb",                 // Phase 3 SHIPPED — same reason; written by DecisionHandler, not a CompletionHandler
+		"chain.spec_artifact.loop",            // Phase 4 (writes from emit_dev_via_spec, not the chain package)
+		"chain.spec_artifact.path",            // Phase 4
+		"chain.spec_artifact.check_count",     // Phase 4
+		"chain.evidence.summary_ready",        // Phase 5 (writes from evidence preprocessor, not the chain package)
+		"chain.evidence.summary.path",         // PR C Phase C4 (writes from evidence preprocessor, not the chain package)
+		"chain.dispatched.observed_fallback",  // Phase 1b — only on zero-CompletedAt path; happy path must not emit
+		"chain.needs_review.classification",   // ADR-039 Phase 1 Slice B — only on builder needs_clarification; happy path's tests_passing builder must not emit
+		"chain.needs_review.producer_loop_id", // same
+		"chain.needs_review.producer_role",    // same
+		"chain.needs_review.reason",           // same
+		"chain.needs_review.observed_at",      // same
 	}
 	for _, pred := range notYet {
 		if _, ok := got[pred]; ok {

@@ -40,8 +40,8 @@
     "phase": "ADR-040 Phase 1",
     "adr": "docs/adr/040-source-curator-role.md",
     "shape": "A",
-    "supersession_target": "chain.research_artifact_loop",
-    "phase_4_dependency": "Stamper supersession (chain entity's chain.research_artifact_loop reference) is Phase 4 of ADR-039 — until it lands, the chain entity's milestone references won't update on the new researcher's artifact. The supersession is real in the graph (new researcher loop entity, new artifact triples) but the chain.* pointer stays stale.",
+    "supersession_target": "chain.research_artifact.loop",
+    "phase_4_dependency": "Stamper supersession (chain entity's chain.research_artifact.loop reference) is Phase 4 of ADR-039 — until it lands, the chain entity's milestone references won't update on the new researcher's artifact. The supersession is real in the graph (new researcher loop entity, new artifact triples) but the chain.* pointer stays stale.",
     "max_iterations_note": "Mirrors ADR-039 rule 08 — outer max_iterations=3 is informational under the current rule engine since coordinator.next_action is single-state. The spawned researcher's inner max_iterations=3 is the actionable bound on a single re-query pass.",
     "lineage_forwarding": "related_loops.researcher is intentionally NOT forwarded — the new researcher IS the research-artifact author for this chain (supersession-via-new-spawn). Forwarding from the curator's lineage would point at the SUPERSEDED original researcher, violating the architect-reachability invariant. The next 01a firing on the new researcher's completion re-stamps lineage.researcher = $entity.instance of the recovery researcher; downstream architect/reviewer/etc. see the new artifact pointer. Same supersession pattern as ADR-039 rule 08 (architect needs_clarification → researcher).",
     "model_choice": "research model — re-query of the augmented corpus is the same task shape as initial research. The curator already absorbed the substrate-decision cost (architecture model)."

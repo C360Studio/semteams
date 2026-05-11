@@ -36,6 +36,7 @@ import (
 	"github.com/c360studio/semteams/cmd/semteams/chainpause"
 	"github.com/c360studio/semteams/cmd/semteams/evidence"
 	"github.com/c360studio/semteams/cmd/semteams/portresolver"
+	"github.com/c360studio/semteams/cmd/semteams/recoverycounter"
 	"github.com/c360studio/semteams/cmd/semteams/testharness"
 )
 
@@ -281,6 +282,12 @@ func setupToolsAndPreprocessor(
 // Phase C4 (evidence summary milestone) plugs in via the same slice.
 // ADR-039 Phase 1 Slice B: chain.needs_review.* on builder
 // needs_clarification (Tier 3 fallback).
+// ADR-040 §addendum 2026-05-11: chain.recovery.count (audit) + per-cycle
+// chain.recovery.proceed (gate sentinel on reviewer entity) +
+// chain.recovery.exhausted (cap-hit marker) on research-reviewer
+// "insufficient" terminals. Counter-owned gating; rule_02's third
+// condition (`chain.recovery.proceed eq "true"`) fires only when the
+// Counter has approved the cycle.
 func startChainMilestoneSubscribers(ctx context.Context, cfg *config.Config, natsClient *natsclient.Client, platform types.PlatformMeta, logger *slog.Logger) error {
 	triplePublisher := agentictools.NewNATSTriplePublisher(natsClient)
 
@@ -306,6 +313,12 @@ func startChainMilestoneSubscribers(ctx context.Context, cfg *config.Config, nat
 	plan := chain.NewPlanMilestoneStamper(triplePublisher, resolver, entityReader, platform, logger)
 	consensus := chain.NewConsensusMilestoneStamper(triplePublisher, resolver, entityReader, platform, logger)
 	needsReview := chain.NewNeedsReviewStamper(triplePublisher, resolver, entityReader, platform, logger)
+	// Threshold=0 → recoverycounter falls back to DefaultThreshold (3).
+	// TODO: plumb from cfg.RecoveryCap.Threshold (or per-flow config) when
+	// the config field exists. Per ADR-040 §addendum 2026-05-11 "Operator
+	// knobs" §1, operators currently bump recoverycounter.DefaultThreshold
+	// or pass a non-zero literal here.
+	recoveryCap := recoverycounter.NewCounter(triplePublisher, resolver, entityReader, platform, 0, logger)
 
 	subscriber := chain.NewCompletionSubscriber([]chain.CompletionHandler{
 		dispatched,
@@ -313,6 +326,7 @@ func startChainMilestoneSubscribers(ctx context.Context, cfg *config.Config, nat
 		plan,
 		consensus,
 		needsReview,
+		recoveryCap,
 	}, loopCompletedSubject, logger)
 	if err := subscriber.Start(ctx, natsClient); err != nil {
 		return fmt.Errorf("subscribe to loop completed for chain milestones: %w", err)

@@ -41,9 +41,9 @@
     "adr": "docs/adr/040-source-curator-role.md",
     "tier": 1,
     "shape": "A",
-    "supersession_target": "chain.research_artifact_loop",
+    "supersession_target": "chain.research_artifact.loop",
     "complements_adr_039_rule_08": "Same Tier 1 supersession pattern as ADR-039 rule 08 (architect needs_clarification → researcher). The curator's classification ('research-side issue, not corpus gap') is the analog of the architect's classification ('research artifact left a gap I cannot fill'); both route to a fresh researcher with concrete guidance.",
-    "phase_4_dependency": "Stamper supersession is Phase 4 of ADR-039 — until it lands, the chain entity's chain.research_artifact_loop pointer stays stale on the recovery researcher's emit. Loop ancestry walks (agent.loop.parent) and lineage.researcher forward-stamping work correctly without Phase 4.",
+    "phase_4_dependency": "Stamper supersession is Phase 4 of ADR-039 — until it lands, the chain entity's chain.research_artifact.loop pointer stays stale on the recovery researcher's emit. Loop ancestry walks (agent.loop.parent) and lineage.researcher forward-stamping work correctly without Phase 4.",
     "max_iterations_note": "Mirrors ADR-039 rule 08 — outer max_iterations=3 is informational. The spawned researcher's inner max_iterations=3 bounds a single recovery pass.",
     "lineage_forwarding": "related_loops.researcher is intentionally NOT forwarded — same supersession invariant as rule 02b. The new researcher IS the new research-artifact author. The next 01a firing re-stamps lineage.researcher = $entity.instance of the recovery researcher.",
     "model_choice": "research model — recovery research is querying the existing corpus per the curator's hint, not substrate-curation. Same task shape as initial research."

@@ -456,8 +456,8 @@ func TestExecute_ChainSlugStemOverridesTitleSlug(t *testing.T) {
 }
 
 // TestExecute_ChainPlanLoopsOverrideDependsOn pins the smoke #8 run-5
-// D1 fix at the consensus seam. Chain entity carries chain.plan_loop
-// (planner) and chain.plan_reviewer_loop (reviewer); both must
+// D1 fix at the consensus seam. Chain entity carries chain.plan.loop
+// (planner) and chain.plan.reviewer_loop (reviewer); both must
 // override the LLM-supplied depends_on.{plan_loop,reviewer_loop}.
 // Smoke #8 run-5 evidence: challenger filled BOTH slots with the
 // reviewer's loop ID — chain entity's distinct values fix that.
