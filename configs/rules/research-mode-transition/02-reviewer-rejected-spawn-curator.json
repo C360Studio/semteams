@@ -32,7 +32,7 @@
       "subject": "agent.task.source-curator",
       "role": "source-curator",
       "model": "architecture",
-      "tools": ["read_loop_result", "query_entity", "query_entities", "add_source_repo", "emit_curator_artifact", "decide", "write_todos"],
+      "tools": ["read_loop_result", "query_entity", "query_entities", "summarize_graph", "add_source_repo", "emit_curator_artifact", "decide", "write_todos"],
       "action_allowlist": ["indexed", "needs_clarification"],
       "max_iterations": 3,
       "properties": {

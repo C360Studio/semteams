@@ -58,12 +58,33 @@ When ambiguous after reading BOTH surfaces:
   reviewer's reason is also unclear: lean toward
   needs_clarification (avoid speculative source-adds).
 
+## 1.5. Before adding: summarize the graph
+
+Before calling `add_source_repo`, call `summarize_graph` once.
+The response includes entity counts per namespace. If a
+namespace whose content matches the reviewer's gap already has
+substantial entity count (≥10 typically), the source is already
+indexed — **skip the add**. Query the specific symbols the
+reviewer named via `query_entity` against the existing corpus
+instead, then route the next loop via
+`decide(action="needs_clarification", retry_hint="researcher
+should query <ns>.<symbol> in the existing corpus")`.
+
+This step exists because semsource is idempotent on (url,
+namespace), but re-adding an already-indexed source still costs
+an approval prompt and an indexing wait that never finds new
+content. The entity-count signal is the direct way to see "is
+this content already here?" without speculating.
+
 ## 2. If corpus gap: add and verify
 
 For each named source the reviewer's reason implies:
 
 1. Call `add_source_repo` with the URL, branch (default `main`),
-   and namespace. Surface the rationale in your tool call so the
+   and namespace **= the URL's repo name** (e.g.
+   `https://github.com/opensensorhub/osh-core` →
+   namespace=`osh-core`). Never invent or vary namespaces across
+   retries. Surface the rationale in your tool call so the
    approver knows what to expect.
 2. Your loop pauses on `awaiting_approval`. When the operator
    approves, the tool re-dispatches and SemSource starts
@@ -76,6 +97,18 @@ For each named source the reviewer's reason implies:
    subtree. If the query returns empty, wait and retry — typical
    indexing time is 10-30 seconds for small repos, 1-3 minutes
    for large ones.
+
+   **Use `summarize_graph` for indexing-progress signal.** Between
+   `query_entity` polls, call `summarize_graph` and look at the
+   namespace you just added. Climbing entity count = indexing in
+   progress, keep waiting. Stalled count across two consecutive
+   summarize calls = indexing not making progress, terminate
+   `decide(action="needs_clarification", reason="indexing stalled
+   at <N> entities post-add")` rather than continuing to poll
+   indefinitely. The entity-count delta is a stronger signal than
+   speculative query_entity retries — query_entity tells you about
+   one ID at a time; summarize_graph tells you about the whole
+   namespace.
 4. **Commit mount paths to the artifact** when the deployment
    uses the SemSource shared source-dir mount. You don't have
    `bash`, so you can't directly verify the mount yourself. The

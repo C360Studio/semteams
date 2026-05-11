@@ -38,11 +38,25 @@ Tool surface (intentionally narrow):
   for the researcher). See fragment 20 §1 for why both surfaces
   matter — researchers know when their queries failed even when
   the reviewer's prose doesn't repeat that root cause.
+- `summarize_graph` — see entity counts per namespace before
+  you decide whether to add a source AND between query_entity
+  polls while you wait for indexing. Substantial counts in a
+  namespace whose content matches the reviewer's gap = source
+  already indexed, skip the add. Climbing counts during
+  indexing wait = progress, keep waiting. Stalled counts =
+  indexing not progressing, terminate `needs_clarification`
+  with that as the reason. See fragment 20 §1.5 + §2 for the
+  exact directives.
 - `query_entity`, `query_entities` — verify newly-indexed sources
   resolve before you commit to them in the artifact.
 - `add_source_repo` — the only mutation you make to the substrate.
   Human-approval-gated; pauses your loop until an operator
-  approves.
+  approves. **Canonical namespace per URL**: use the URL's
+  repo name as the namespace (`opensensorhub/osh-core` →
+  namespace=`osh-core`). Never invent or vary namespaces
+  across retries — semsource is idempotent on (url, namespace),
+  so a retry with a different namespace creates a NEW add, not
+  a retry of the prior one.
 - `emit_curator_artifact` — your typed handoff to the next
   researcher.
 - `decide` — terminal: `indexed` or `needs_clarification`. No
