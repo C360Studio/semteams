@@ -749,3 +749,306 @@ toggle).
   field/operator/value triple the recovery counter and rule_02
   agree on. Renames on either side break this test before a
   silently-decoupled cap reaches a real-LLM smoke.
+
+## Addendum 2026-05-11 — Curator failure modes (smoke #19 run-1)
+
+First real-LLM smoke after rule_02 + recovery cap + write_todos + prompt-cleanup
+shipped. 11 loops, ~11 min, ~$0.50–$1. The recovery cap engaged
+perfectly at cycle 4 — fully validating PR #139's
+counter-owned-spawn design (count 1→4, exhausted=true on chain
+entity, no curator #5 spawn). The cap, however, also surfaced a
+class of curator failures the ADR-040 design didn't anticipate.
+
+### Per-curator trajectory facts
+
+All 3 curators terminated `decide(action="needs_clarification")`
+with effectively identical reasons. None terminated `indexed`.
+No curator added a third source (the OSH sensor-driver examples
+repo, which would have been the natural third high-value source
+for the OSH-Meshtastic prompt). No curator queried the chain
+entity for prior cycles' work.
+
+| Cycle | Curator     | add_source_repo calls | Unique repos                          | query_entity results | Terminal reason          |
+|-------|-------------|-----------------------|---------------------------------------|----------------------|--------------------------|
+| 1     | d433a1d4    | 6                     | osh-core, meshtastic/protobufs        | 9 fails (0 success)  | "indexing in progress"   |
+| 2     | 5b0b83a2    | 6                     | osh-core, meshtastic/meshtastic-device| 9 fails (0 success)  | "indexing in progress"   |
+| 3     | e7f35fbe    | 8                     | osh-core, meshtastic/meshtastic-device| 12 fails (0 success) | "indexing in progress"   |
+
+**Total**: 20 add_source_repo calls across the chain for what should
+have been at most 3 unique repos added once. 30 query_entity
+attempts, all failed.
+
+### Failure modes enumerated
+
+**F1 — Curator is blind to the chain's prior work.** Each curator
+starts cold. Iteration 1 is `read_loop_result(reviewer)`, iteration 2
+is `read_loop_result(researcher)`, iteration 3 is `add_source_repo`.
+None query the chain entity. Cycle 2's curator has no idea cycle 1
+already added osh-core; it re-reads the reviewer reason from scratch
+and re-issues the same add_source_repo calls. The chain entity
+**could** carry prior-curator state but no stamper writes it and no
+persona directive points curators at it.
+
+**F2 — Namespace hedging on add_source_repo.** Each curator adds the
+same URL multiple times with different namespace values, hedging
+that one of them will "stick." Curator 1 added osh-core twice with
+`namespace=osh-core`, then twice more with `namespace=research`.
+Curator 3 added osh-core without a namespace at all, then with
+`namespace=osh-core`, then with `namespace=meshtastic-device`. The
+persona doesn't pin the namespace convention; the tool description
+doesn't mention namespace conflicts; the model treats every retry as
+a new attempt with different args.
+
+**F3 — Namespace/entity-id mismatch in query_entity.** Curators
+query `research.org.sensorhub.api.module.IModule` (namespace=research)
+but the entity, when eventually indexed, lives in the namespace
+they actually added (`osh-core` for some calls, `research` for
+others, `meshtastic-device` for others). Query failures are read as
+"indexing not done yet" when at least some are "wrong namespace."
+
+**F4 — Indexing-race wins every cycle.** semsource indexing of
+osh-core takes ~1–3 min real wall-clock. The curator's iteration
+budget can issue 9–12 query_entity polls in that time, but
+exhausts those polls before the first index completes. The persona
+says "wait for indexing (poll via query_entity)" but the loop's
+budget caps the wait; the model gives up and routes back via
+`needs_clarification`. The next cycle re-adds the same sources and
+the race resets.
+
+**F5 — Researcher inherits no indexing-coordination signal.**
+rule_02c spawns a fresh researcher on `needs_clarification`. The
+researcher runs immediately. The corpus state at researcher-spawn
+time is identical to the prior cycle (indexing still pending), so
+the researcher's queries return the same empty results and the
+artifact comes out structurally identical to the prior one. The
+reviewer rejects for the same reason. The cycle reproduces.
+
+**F6 — Curator can't escalate "wait longer."** The persona's only
+terminals are `indexed` and `needs_clarification`. There's no
+`indexed_pending` terminal that says "I did the work, indexing is
+genuinely in progress, give me more wall-clock not more iterations."
+Every "indexing in progress" verdict gets the same routing
+(spawn fresh researcher) regardless of whether the curator could
+have succeeded with more time.
+
+### What this looks like to the chain
+
+Three full curator-then-researcher cycles burning real LLM cost,
+producing zero net corpus progress. The recovery cap (PR #139)
+halted at cycle 4, saving the next curator-researcher pair of loops
+worth ~$0.10–$0.30 each. Without the cap this chain would have run
+indefinitely on the same race.
+
+The cap is the right safety net — it bounded a runaway chain that
+otherwise had no termination condition. But the cap is treating a
+symptom, not the root cause: **curator is asked to wait for an
+event it doesn't have a primitive to wait on.**
+
+### Fix options (orthogonal)
+
+> **Plan revised 2026-05-11**: semstreams is shipping a
+> `summarize_graph` upstream tool. That primitive subsumes most of
+> Fix A (per-chain stamper) and lightens Fix B (namespace pinning).
+> The original A+B plan is preserved below for context, but the
+> recommended path is now **Fix A′ + B′** at the end of this
+> section — wait for `summarize_graph`, then ship a small persona +
+> allowlist update.
+
+**Fix A — Curator reads chain state on entry.** New stamper writes
+`chain.curator.added.<n>.url` (or similar predicate cluster) per
+successful add_source_repo. Curator persona iteration-1 directive:
+"Before adding any source, query the chain entity for prior
+add_source_repo work; skip URLs already added." rule_02 forwards
+chain_entity_id as a task property so the curator doesn't need to
+walk ancestry. Cost: ~50 LoC stamper + persona + rule properties
+field. Addresses F1 directly. Removes most of F2 + F3 (no
+duplicate adds to disagree on namespace). Doesn't fix F4 / F5 / F6.
+
+**Fix B — Pin namespace + URL → namespace mapping in the persona.**
+Persona enumerates a small set of known high-value repos with their
+canonical namespace, and the substrate-add discipline becomes
+"choose from this list; never invent a namespace." Cost: ~30 LoC
+persona. Addresses F2 + F3 directly. Doesn't fix F1 / F4 / F5 / F6.
+
+**Fix C — Indexing-completion event + curator-resume rule.**
+semsource publishes a `source.indexed.<namespace>` event when
+indexing finishes. New rule fires curator-resume (or researcher-
+spawn) on the event, scoped to chains that have a pending
+add_source_repo. Cost: framework-level work in semsource +
+new rule + new persona variant. Addresses F4 + F5 + F6 directly.
+
+**Fix D — Curator stops re-spawning when corpus state hasn't
+changed.** Rule_02's condition adds "AND chain has no
+chain.curator.added since the last reviewer rejection." Curators
+that legitimately need to add NEW sources still spawn; curators
+that would just re-add the same sources don't. Cost: ~10 LoC rule
+condition + chain state. Addresses the symptom (over-spawning) by
+not over-spawning in the first place.
+
+**Fix E — `indexed_pending` terminal action.** Add a third
+`decide.action` value the curator can choose: "I added sources,
+indexing didn't complete in my budget, route to a
+'wait-and-retry' rule rather than spawning a fresh researcher
+immediately." rule_02d spawns the same curator after a configurable
+delay (or on indexing-completion event from Fix C). Cost: ~30 LoC
+action enum extension + rule + persona update. Addresses F6
+directly, dovetails with C.
+
+### Fix A′ + B′ (revised, leverages upstream `summarize_graph`)
+
+> **Vocabulary clarification 2026-05-11** (per semstreams team).
+> `summarize_graph` returns: (a) **entity-type aggregation** and
+> entity counts per namespace, (b) **Triple.Source distribution** —
+> who *wrote* triples (agent-web-search, agent-decide, ingest
+> pipelines), and (c) example entity IDs. It does NOT return a
+> federated-source list (semspec's `graph.SourceRegistry` shape —
+> "which upstream graphs feed this one"). semstreams treats one
+> graph with many writers; semspec layers federation on top.
+>
+> For the curator's "is there enough indexed content to answer the
+> reviewer's question?" — entity-count-per-namespace is the
+> **direct signal channel**. The curator infers "namespace
+> `osh-core` has 81 entities → osh-core source was added and
+> indexed previously" without needing a separate "registered
+> sources" list. Indirect via inference, but actually more
+> useful: it answers indexing-SUFFICIENCY, not just
+> registration-PRESENCE.
+
+**Fix A′ — Curator calls `summarize_graph` first AND between
+substantive decisions.** When the upstream tool lands, add it to
+the curator's `allowed_tools` and the rule_02 spawn `tools` array.
+Persona iteration-1 directive: "Before adding any source, call
+`summarize_graph` to see entity counts per namespace. If a
+namespace whose content matches the reviewer's reason already has
+substantial entity count, SKIP the add — the source is already
+indexed. Query specific symbols the reviewer named via
+query_entity instead."
+
+Iteration-N directive (during indexing wait): "Re-call
+`summarize_graph` between query_entity polls. Climbing entity
+counts = indexing in progress, keep waiting. Stalled counts =
+indexing not making progress, terminate `needs_clarification`
+with that as the reason."
+
+Cost: ~15 LoC across two persona fragments + 2 allowlist entries.
+Addresses F1 directly (curator now sees graph state). Addresses
+F4 indirectly but powerfully (curator has SIGNAL on indexing
+progress — entity-count delta — rather than guessing via
+speculative query_entity polls).
+
+**Fix B′ — Persona-pinned canonical namespace per URL.** Drop
+the namespace-hedging pattern by making the persona say: "Always
+add with the URL's repo name as the namespace (`opensensorhub/osh-core`
+→ namespace=`osh-core`). Never invent or vary namespaces across
+retries — semsource is idempotent on (url, namespace), so a retry
+with a different namespace is a NEW add, not a retry." Cost: ~5
+lines of persona text. Pairs with A′: curator sees from
+`summarize_graph` what namespaces already exist, picks the
+canonical one for any new add.
+
+A′ + B′ together: ~20 LoC across two persona files + two
+allowlist entries. Addresses F1 + F2 + F3 directly. F4 gets a
+real signal channel (entity-count delta) which is more useful
+than the "indexing-completion event" we were planning under Fix
+C — the curator already has the information without needing a
+new event surface.
+
+**What A′ + B′ do NOT solve:**
+
+- F5 (researcher inherits no indexing signal) — orthogonal,
+  researcher would need similar `summarize_graph` directive.
+- F6 (no `indexed_pending` terminal) — the curator now has
+  better signal but still no graceful "wait longer" terminal.
+- Direct "what URLs has semsource registered" — entity-count
+  inference covers the curator's functional question, but if
+  ops dashboards or chain-history analyses need it explicitly,
+  that's a separate semsource-side primitive.
+
+### Recommendation (revised)
+
+**Wait for `summarize_graph` upstream**, then ship A′ + B′ as a
+single small PR.
+
+- Drops implementation cost from ~150 LoC (A + B with stamper) to
+  ~20 LoC (A′ + B′).
+- Subsumes A's value (curator becomes chain-aware) via entity-count
+  inference per namespace, which is a STRONGER signal than the
+  per-chain prior-curator log we were going to build (counts
+  reflect indexing reality, not just "I called add_source_repo").
+- B′ replaces B's enumerated namespace table with a one-line
+  convention rule — the canonical namespace for any URL is its
+  repo name. Avoids ADR-040 owning a table that goes stale.
+- Cap stays as the safety net.
+- C/D/E remain as orthogonal options if A′ + B′ don't close the
+  recovery-cycle loop in a follow-up smoke.
+
+**Do not ship the original A + B plan** — building a per-chain
+stamper for prior-curator state when an upstream summarize tool is
+landing would be premature work that A′ + B′ make redundant. The
+correct waiting move is: hold the implementation, run no further
+real-LLM smokes against the unfixed curator (cap saves the budget
+when needed), and revisit the moment `summarize_graph` ships.
+
+**Caveat: not a complete fix for the semsource-indexing-race.**
+Entity-count inference tells the curator "how full is this
+namespace right now" — that's most of what's needed. But it
+doesn't directly answer "is semsource finished indexing the URL I
+just added." If a follow-up smoke shows curators still
+prematurely terminating `needs_clarification` despite having
+A′ + B′, the next layer is Fix C (indexing-completion event from
+semsource — a framework PR) or Fix E (`indexed_pending`
+terminal). Don't pre-commit; let evidence drive.
+
+### Code surfaces (when A′ + B′ ship)
+
+- `configs/osh-demo.json`, `configs/e2e-research-mode-transition.json`
+  — `summarize_graph` added to `agentic-tools.allowed_tools`.
+- `configs/rules/research-mode-transition/02-reviewer-rejected-spawn-curator.json`
+  — `summarize_graph` added to the spawn `tools` array.
+- `configs/personas/fragments/source-curator/00-identity.md` +
+  `20-curation-rules.md` — iteration-1 `summarize_graph` directive +
+  iteration-N "re-call between query_entity polls" directive +
+  canonical-namespace convention rule.
+
+(No stamper, no new predicates, no rule property substitution, no
+contract test — the upstream tool carries all of it.)
+
+### Upstream `summarize_graph` shape (per semstreams team, 2026-05-11)
+
+The tool surface lands in three layers (semstreams team):
+
+- **Layer 1 — Gateway primitive** (`processor/graph-query/`):
+  `graphSummary` GraphQL resolver composing existing predicates +
+  entity-type aggregation + `Triple.Source` distribution + example
+  IDs. Server-side; one HTTP round-trip from any caller.
+- **Layer 2 — Agent-tool wrapper**
+  (`processor/agentic-tools/executors/summarize_graph`): ~30-50
+  LoC, formats the Layer-1 response for prompt injection. The
+  curator + researcher + reviewer all consume this surface.
+- **Layer 3 — MCP** (later): exposes Layer 1 to external agents
+  (Claude Code, etc.) without re-implementing.
+
+semstreams's `Triple.Source` is "who wrote the triple"
+(`agent-decide`, `agent-web-search`, ingest pipelines), NOT
+"which federated graph" — the latter is semspec-specific
+(`graph.SourceRegistry`) and stays semspec-side. For the curator
+this means the Source distribution facet shows triple authorship
+(useful for audit; not load-bearing for the source-curation
+decision). Entity-count-per-namespace is the load-bearing facet
+for curator decisions.
+
+A companion `search_graph` resolver is also planned —
+server-side fallback from `globalSearch` (GraphRAG) to
+`semanticSearch` when communities aren't populated. Not directly
+in scope for the curator's recovery-cycle problem but worth
+knowing about: it gives the researcher a stronger primitive than
+`query_entity` for "find me entities matching this concept" even
+when entity IDs aren't predictable.
+
+### Evidence
+
+- `memory/project_smoke19_run1.md` — full smoke writeup.
+- `/tmp/smoke19-run1/trajectory-*.json` — per-curator full
+  trajectories.
+- `/tmp/smoke19-run1/triples.json` — chain entity state showing
+  zero `chain.curator.*` writes.
