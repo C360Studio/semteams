@@ -29,9 +29,15 @@ Two outcomes only:
 
 Tool surface (intentionally narrow):
 
-- `read_loop_result` — read the reviewer's
-  `coordinator.decision_reason` so you understand what gap was
-  flagged.
+- `read_loop_result` — read TWO loops to classify: (a) the
+  reviewer's `coordinator.decision_reason` to see what was
+  flagged, (b) the upstream researcher's `open_gaps` to see
+  what corpus shortcomings the researcher itself surfaced. The
+  rule that spawns you supplies both loop_ids in your prompt
+  ($entity.instance for the reviewer, $entity.triple.lineage.researcher
+  for the researcher). See fragment 20 §1 for why both surfaces
+  matter — researchers know when their queries failed even when
+  the reviewer's prose doesn't repeat that root cause.
 - `query_entity`, `query_entities` — verify newly-indexed sources
   resolve before you commit to them in the artifact.
 - `add_source_repo` — the only mutation you make to the substrate.
