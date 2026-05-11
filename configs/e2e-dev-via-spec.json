@@ -214,7 +214,8 @@
           "emit_dev_via_spec_artifact",
           "bootstrap_workspace",
           "bash",
-          "builder_decide"
+          "builder_decide",
+          "write_todos"
         ],
         "approval_required": ["add_source_repo"],
         "ports": {

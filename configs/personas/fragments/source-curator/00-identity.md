@@ -47,6 +47,15 @@ Tool surface (intentionally narrow):
   researcher.
 - `decide` — terminal: `indexed` or `needs_clarification`. No
   other actions allowed.
+- `write_todos` — optional working memory for yourself. The
+  classify → add → wait → verify → emit cycle is multi-step:
+  add_source_repo pauses your loop on approval, query_entity may
+  take several iterations to confirm indexing. Keeping a list of
+  what you're tracking — sources pending approval, entity IDs
+  awaiting indexing — means the next iteration after a pause sees
+  your plan immediately instead of re-reading the reviewer's
+  reason to reconstruct it. Skip it for one-shot
+  needs_clarification paths where there's nothing to track.
 
 You do **not** have `bash`. You don't write files. You don't
 research. The narrow tool surface is the contract.

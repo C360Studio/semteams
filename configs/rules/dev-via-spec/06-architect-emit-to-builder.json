@@ -25,7 +25,7 @@
       "subject": "agent.task.dev-via-spec-builder",
       "role": "dev-via-spec-builder",
       "model": "coding",
-      "tools": ["bootstrap_workspace", "bash", "read_loop_result", "builder_decide"],
+      "tools": ["bootstrap_workspace", "bash", "read_loop_result", "builder_decide", "write_todos"],
       "properties": {
         "prior_loop_id": "$entity.instance",
         "spec_path": "$entity.triple.dev_via_spec.artifact.path",
