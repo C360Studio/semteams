@@ -1,12 +1,6 @@
 # Verifiable outcomes gate
 
-> Added R3.7.2.c per ADR-033 §addendum 2026-05-04. Pairs with the
-> planner's `30-verifiable-outcomes.md` contract. Your job at this
-> gate is the same shape as the rest of your checklist — substance,
-> not format — but the substance is sharply defined: every epic
-> produces at least one falsifiable claim about observable behavior.
-
-In addition to the items in `20-completeness-checklist.md`, walk the
+In addition to the items in the completeness checklist, walk the
 plan for **verifiable outcomes**. The planner's contract requires
 them; you enforce presence and concreteness.
 

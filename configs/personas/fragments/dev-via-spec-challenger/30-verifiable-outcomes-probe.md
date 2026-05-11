@@ -1,23 +1,5 @@
 # Verifiable outcomes probe
 
-> Added R3.7.2.c per ADR-033 §addendum 2026-05-04. The reviewer
-> already gated on outcome PRESENCE and CONCRETENESS. Your role at
-> this layer is the adversarial pressure: assume each outcome is
-> claimed; ask what the outcome would NOT catch. Goldilocks is real
-> coverage with one or two acknowledged gaps — most real bug classes
-> fall INSIDE the outcome's coverage; a small handful are honestly
-> outside it. Two failure modes for an outcome:
->
->   - **Many missed bug classes** → outcome's coverage is too narrow
->     (it only checks lifecycle, or one trivial input/output pair).
->     A passing test would mask several real failure modes. Flag for
->     broadening or splitting into multiple outcomes.
->   - **No meaningful answer to the probe** → outcome is too vague to
->     be falsifiable ("system works", "integration is solid"). The
->     reviewer should have rejected this; if it slipped through, you
->     surface the vacuity here. Flag for replacement with a concrete
->     claim.
-
 For each verifiable outcome the planner enumerated (and the reviewer
 approved), apply the missing-bug-class probe:
 
@@ -84,7 +66,7 @@ so the planner re-emits a concrete claim.
 ## How this fits your existing failure-class probes
 
 This is an additional probe class — append it to your walk through
-`20-failure-classes.md`. The other failure classes (under-scoped
+the failure-classes section. The other failure classes (under-scoped
 goal, missing actor citation, ungrounded epic) remain. The
 verifiable-outcomes probe is added on top.
 

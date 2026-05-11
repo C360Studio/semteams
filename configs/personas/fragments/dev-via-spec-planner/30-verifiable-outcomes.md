@@ -1,11 +1,5 @@
 # Verifiable outcomes
 
-> Added R3.7.2.c per ADR-033 §addendum 2026-05-04. The architect role
-> downstream emits structured `checks[]` on the dev-via-spec artifact
-> (R3.7.2.b). To keep that emission honest, the verifiability claim
-> has to be made HERE — at the planner layer — not invented later by
-> the architect under emission pressure.
-
 In addition to goal / context / scope / epics, your `decide.reason`
 MUST include a clearly-marked **Verifiable Outcomes** section. One
 outcome per epic minimum.
@@ -49,7 +43,7 @@ write an integration test from it without making up missing pieces.
 **Too narrow (reject — covers nothing the implementer can't trivially satisfy):**
 
 - *"The driver successfully starts."* — process state, not behavior.
-- *"`mvn test` exits 0."* — that's exactly the loophole R3.7.2 closes.
+- *"`mvn test` exits 0."* — that's exactly the loophole closes.
 
 ## Granularity rule
 
@@ -89,7 +83,7 @@ artifact. Each check's `target` field is a verifiable claim; the
 architect TRANSCRIBES from your outcomes, not INVENTS from your epic
 prose. If you don't enumerate outcomes, the
 architect ends up doing your job under emission pressure — and that's
-the small-LLM capability wall ADR-033 §addendum 2026-05-04 explicitly
+the small-LLM capability wall 2026-05-04 explicitly
 budgets against.
 
 You enumerate. The architect crystallizes. The reviewer enforces

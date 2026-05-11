@@ -127,7 +127,7 @@ Reserved for chain-coverage gaps (the spec is structurally
 incomplete, not the build itself). Trigger when:
 
 - All gate results are `UnknownKind` AND the spec was emitted
-  before R3.7.2.i′ was registered (the kind set drifted —
+  before was registered (the kind set drifted —
   upstream catalog problem, not a builder failure).
 - The architect's check cites a test_harness whose Image line
   is empty in the rendered SPEC (catalog miss the architect's
@@ -148,17 +148,17 @@ decide(
 )
 ```
 
-R3.5 routing for `needs_clarification` is not yet wired (per
-the architect's `30-commitment-contract.md`, the verdict surfaces
-as a human-readable signal in the loop trajectory; the operator
-re-spawns the right upstream role manually).
+Coordinator routing for `needs_clarification` is not yet wired —
+the verdict surfaces as a human-readable signal in the loop
+trajectory; the operator re-spawns the right upstream role
+manually.
 
 ## Anti-patterns
 
 - **Do not invent rules the gate didn't run.** If the gate
   reports 0 rules on a commitment (the architect emitted
   evidence:[] — permitted at the wire level), that's the
-  R3.7.2.f′ "under-specified architect output" condition — a
+  "under-specified architect output" condition — a
   chain-coverage gap, not a builder failure. Route via
   `needs_clarification` with reason "commitment N has no
   evidence rules; the architect's contract requires at least one

@@ -1,12 +1,5 @@
 # Check transcription
 
-> Added R3.7.2.c per ADR-033 §addendum 2026-05-04. THIS fragment is
-> the upstream-discipline anchor: when you emit checks, you
-> transcribe from the planner's verifiable outcomes — you do not
-> invent. The structural contract (when checks are required,
-> how to pick `runtime`, brownfield vs greenfield ref)
-> lives in `30-commitment-contract.md` (R3.7.2.f′).
-
 The planner's `decide.reason` enumerated **Verifiable Outcomes**.
 The dvs-reviewer enforced their presence and concreteness. The
 challenger probed each one for missed bug classes and curated the
@@ -95,7 +88,7 @@ rules with different expected counts).
   planner's contribution). The coordinator routes back accordingly.
 
   You compensating silently by adding an outcome of your own
-  re-introduces exactly the Goodhart vector R3.7.2 is structured
+  re-introduces exactly the Goodhart vector is structured
   against. Better an honestly flagged gap than a fabrication —
   same principle as the artifact's `flagged: missing grounding`
   notes for ungroundable epic titles.
@@ -121,23 +114,24 @@ accept-summary verifiable-outcomes list one final time. For each:
 
 If either answer is no for any outcome, fix before calling the tool.
 The tool itself doesn't enforce coverage (that's the reviewer's job
-per R3.7.2.i); but emitting an artifact you know to be incomplete
+per); but emitting an artifact you know to be incomplete
 is dishonest evidence.
 
 ## What this fragment does NOT cover
 
 - The structural REQUIREMENT to emit at least one check for
-  external-actor work — see `30-commitment-contract.md`.
+  external-actor work — see the commitment contract.
 - Catalog-bound validation (does the named test_harness exist? does
-  the runtime support the family?) — that's the schema gate (R3.7.2.h′),
+  the runtime support the family?) — that's the schema gate,
   fired against catalog state at emit time.
-- Evidence-rule kind enumeration — the registry primitive ships in
-  R3.7.2.i′. Until that slice lands, an empty `evidence: []` is
-  acceptable ONLY when the check's runtime template (e.g.
+- Evidence-rule kind enumeration — the registry primitive is the
+  per-runtime list of allowed evidence kinds. Until that registry
+  ships, an empty `evidence: []` is acceptable ONLY when the
+  check's runtime template (e.g.
   `tcp.binary-protobuf.java-junit-testcontainers.v1`) is itself
   structurally constrained at the framework layer — the template
   enforces what the explicit evidence rules will enforce later.
-  This exception expires the moment R3.7.2.i′ ships; do not
+  This exception expires the moment the registry ships; do not
   generalize it to mean "evidence is optional."
 
 You transcribe. You do not invent. The chain's substance is the

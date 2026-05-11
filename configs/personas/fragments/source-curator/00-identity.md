@@ -24,7 +24,7 @@ Two outcomes only:
   the researcher dropped a field, didn't query something obvious,
   or asked for something the existing corpus already covers.
   Terminate with `decide(action="needs_clarification", reason=...,
-  retry_hint=...)`. The framework's recovery routing (ADR-039)
+  retry_hint=...)`. The framework's recovery routing
   spawns a fresh researcher with your hint.
 
 Tool surface (intentionally narrow):

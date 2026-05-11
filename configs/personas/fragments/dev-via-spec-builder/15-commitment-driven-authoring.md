@@ -1,13 +1,5 @@
 # Check-driven authoring
 
-> Added R3.7.2.h′ per ADR-034 §"What R3.7.2 work is preserved".
-> The architect emits `checks[]` (R3.7.2.f′); this fragment is YOUR
-> contract for translating each check into running tests. The
-> bash-iteration mechanics in `10-bash-iteration-contract.md` still
-> apply — this fragment adds the test-shape selection rule that lives
-> ON TOP of those mechanics, before §Step 3 in the bash-iteration
-> flow.
-
 The architect's spec carries a `## Verification Checks` section with
 one C per row. Each C is an architect promise about WHAT is verified
 and WITH WHAT MECHANISM. Your job: turn that promise into running
@@ -55,14 +47,13 @@ project's test root.
 
 ## Runtime drives test shape
 
-The `Runtime` field is a closed enum (ADR-034 verification class ×
-execution mapping). Each value names a structurally distinct test
+The `Runtime` field is a closed enum. Each value names a structurally distinct test
 shape:
 
 - **`process-local-testcontainer`** — write a test that uses the
   test_runtime's Testcontainers library to spawn the named
   test_harness container in-process, asserts the claim against it,
-  and tears down on exit. The sandbox runs in DooD mode (R3.7.2.d′),
+  and tears down on exit. The sandbox runs in DooD mode,
   so Testcontainers' usual host-Docker-socket access works: `docker
   run` from inside the sandbox spawns sibling containers on the
   host's daemon. No special invocation; the library handles it. Use
@@ -75,7 +66,7 @@ shape:
   the test side.
 - **`in-process-unit`** — write a test against in-language fakes or
   mocks. No real bytes, no test_harness. The simplest shape; the
-  evidence-rule registry (R3.7.2.i′) is what keeps these from being
+  evidence-rule registry is what keeps these from being
   Goodhart-tautological.
 - **`browser-flow`** — Playwright-style human-flow test against a
   browser fixture. Detail lands in a follow-on slice; until then,
@@ -92,7 +83,7 @@ shape:
 ## Ref drives WHERE and HOW you write the test
 
 The architect picked `ref.type` based on a brownfield discovery walk
-(their `40-brownfield-discovery.md`). You inherit that choice —
+(their the brownfield-discovery walk). You inherit that choice —
 don't second-guess it.
 
 - **`filepath`** (brownfield) — the cited path teaches the project's
@@ -198,7 +189,7 @@ what to write before the iteration loop starts.
 - **Author parallel test infrastructure.** If the project has a
   test runner (`mvn`, `go test`, `pytest`), use it. Don't write a
   `.github/workflows/qa.yml` that re-runs what the project's CI
-  already runs (the first-user WTF ADR-034 §"Brownfield support"
+  already runs (the first-user WTF support"
   explicitly structures against).
 - **Pick a different test_harness image than the catalog says.**
   Operators curate the catalog. If `meshtasticd-2.x` points at

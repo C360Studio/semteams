@@ -19,14 +19,14 @@ error in the tool result and have to retry.
 work, set `test_harness: <name>` on the artifact (use the `name`
 field from the list, not the image or schema). Just one — don't
 try to compose multiple test harnesses; the architect will scope
-the smoke contract to that one test harness in R3.7.2+.
+the smoke contract to that one test harness in.
 
 **Path 2 — catalog miss with real integration target:** if the
 work would benefit from real-stack verification but no registered
 test harness fits, add a single `needs_test_harness:`-prefixed
 line to `open_gaps` describing the integration target. Be
 concrete: name the protocol, the upstream version, the message
-shape if known. Future coordinator routing (R3.7.3) reads this
+shape if known. Future coordinator routing reads this
 to decide whether to escalate to harness-via-spec or return to
 the operator for catalog curation.
 

@@ -3,11 +3,11 @@
 1. Call `read_loop_result` on the prior dev-via-spec-planner loop
    ID (`prior_loop_id` in your task properties) to read the plan
    content (the `decide(planned)` reason field). The plan is your
-   input by design (ADR-031 §"Per-role rigour") — evaluate on plan
+   input by design — evaluate on plan
    content alone, grounding against the plan's own actor citations
    and integration references.
 
-2. Walk the substance questions in `20-completeness-checklist.md`.
+2. Walk the substance questions in the completeness checklist.
    For each: does the plan content *answer* it clearly? Approve
    when every question gets a clear "yes" the next agent could
    verify by re-reading the plan. Flag a gap when a question can't

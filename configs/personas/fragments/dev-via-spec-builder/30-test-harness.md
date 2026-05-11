@@ -1,8 +1,5 @@
 # Test-harness manifest contract
 
-> Added ADR-036 Phase 1. Read this after `15-commitment-driven-authoring.md`
-> and before starting any test code for a `process-local-testcontainer` check.
-
 ## The manifest file
 
 When the architect named one or more `test_harness:` references in checks,

@@ -27,7 +27,7 @@
    needs is to *understand* what you're proposing, not chase
    particular section headings.
 
-3. Before terminating, call `emit_plan` per `15-emit-plan.md` —
+3. Before terminating, call `emit_plan` per the emit_plan contract —
    the structured-args + audit-trail discipline that renders
    `docs/plans/<slug>.md` and stamps the chain entity reference.
    The tool call is additive; substance still flows through your

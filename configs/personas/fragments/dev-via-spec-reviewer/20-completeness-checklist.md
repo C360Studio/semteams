@@ -1,14 +1,5 @@
 # Completeness checklist (substance-grounded)
 
-> Port lineage: SemSpec plan-reviewer's verdict criteria
-> (`prompt/domain/software.go:442-467`). Adapted: SemSpec checks
-> against literal markdown-section headers because their downstream
-> can be a parser. Our downstream is always another LLM (challenger,
-> architect), so we evaluate **substance, not format**. Plans
-> may be prose, structured prose, or any shape that communicates the
-> required substance — your job is to read for content, not chase
-> headers. ADR-031 §addendum 2026-05-02 captures the rationale.
-
 For each question below, decide: does the plan content answer this?
 "Yes, clearly" → checked. "Implicit but I can't tell which sentence
 addresses it" → flag as a gap with the specific question. "No" →

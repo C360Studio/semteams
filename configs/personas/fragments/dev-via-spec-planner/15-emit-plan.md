@@ -1,6 +1,6 @@
-# Emit the typed plan before completion (ADR-038 PR C Phase C5)
+# Emit the typed plan before completion
 
-ADR-038 PR C added the `emit_plan` tool. Before terminating with
+Before terminating with
 `decide(action="planned")`, call this tool with the structured plan
 fields you would otherwise embed only in the `decide` reason. The tool
 renders a deterministic markdown view at `docs/plans/<slug>.md`, mints
@@ -69,9 +69,7 @@ reference + typed payload); `decide.reason` is the in-chain handoff.
 The dev-via-spec-reviewer's only read path is `read_loop_result` on
 your loop, which returns the `decide.reason` text — keep the substance
 there so the reviewer has something to evaluate. Same shape as the
-researcher's emit-then-completion contract (see
-`configs/personas/fragments/researcher/30-emit-artifact.md` § "Order
-of operations within a pass").
+researcher's emit-then-completion contract.
 
 The chain rules continue to gate on `coordinator.next_action="planned"`
 exactly as before — the tool call is additive.

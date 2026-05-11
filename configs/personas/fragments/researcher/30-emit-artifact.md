@@ -1,8 +1,7 @@
-# Emit the typed artifact before completion (R3.2.2)
+# Emit the typed artifact before completion
 
-R3.2.2 of ADR-031 added the `emit_research_artifact` tool. Before
-terminating with the completion message, call this tool with the
-full structured artifact JSON. The tool writes marker triples on
+Before terminating with the completion message, call
+`emit_research_artifact` with the full structured artifact JSON. The tool writes marker triples on
 your loop entity (so downstream rules can route deterministically)
 and publishes the typed `research.artifact.v1` payload on a stable
 subject for audit and forward-compat consumers.
@@ -31,7 +30,7 @@ contract — no nesting under a wrapping object. Pass:
 - `addressed_gaps`, `open_gaps` — same as the completion
   contract.
 - `substrate_mutations` — append-only across all revisions of
-  this artifact. Under ADR-040 the source-curator owns substrate
+  this artifact. Under the source-curator owns substrate
   mutation; you do not call `add_source_repo`, so this array
   never grows during your passes. Carry forward prior-revision
   entries verbatim on retries (the curator's adds, when present,
@@ -58,8 +57,7 @@ reviewer reads.
 ## Why both (commission, not omission)
 
 The marker triples drive the downstream stabilisation rule
-deterministically (per ADR-028 §Layer 2). The typed payload is
-audit + forward-compat (per ADR-031 §addendum 2026-04-30
-"Framework-alignment review for R3.2 emission shape"). The
+deterministically. The typed payload is
+audit + forward-compat. The
 completion content is what the reviewer reads. All three serve
 distinct consumers; we ship all three.

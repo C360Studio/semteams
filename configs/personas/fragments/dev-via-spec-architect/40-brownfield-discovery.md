@@ -1,20 +1,12 @@
 # Brownfield discovery walk
 
-> Added R3.7.2.g′ per ADR-034 §"Brownfield support" / §"Discovery
-> is the architect's job (persona discipline)". This fragment owns
-> the bash recipe `30-commitment-contract.md` defers to ("walk the
-> project's existing test conventions before choosing
-> `ref.type`"). Lean: persona discipline, not a new tool —
-> ADR-034 explicitly punts a `discover_test_setup` tool until real
-> adoption shows the bash-walk is the bottleneck.
-
 You are about to emit `checks[]` with
 `ref.type ∈ {filepath, template_id}`. The choice is
 load-bearing: filepath says "the project already has tests this
 commitment patterns after"; template_id says "no project pattern
 fits, render from a framework template." Pick wrong and the
 builder writes a parallel test framework instead of extending the
-project's CI — the first-user WTF ADR-034 explicitly structures
+project's CI — the first-user WTF explicitly structures
 against ("the chain wrote a `.github/workflows/qa.yml` that runs
 the same tests my existing CI runs, but reports to a different
 dashboard").
@@ -182,10 +174,8 @@ existing language-runtime conventions.
 ## Workspace availability — known gap
 
 The bash-walk above assumes the architect's sandbox workspace
-contains the project source. As of R3.7.2.g′, the architect's
-workspace bootstrap path is not yet wired (R3.7.2.h′ owns the
-builder's workspace, and ADR-034 §181 didn't address the architect-
-side plumbing). Until that resolves, the practical cases:
+contains the project source. As of, the architect's
+workspace bootstrap path is not yet wired. Until that resolves, the practical cases:
 
 - **Workspace populated upstream** (e.g., a prior research /
   source-acquisition step seeded it): bash-walk runs as documented.
@@ -195,6 +185,6 @@ side plumbing). Until that resolves, the practical cases:
   signals don't pin a project idiom; flag the workspace-shape gap
   with `needs_clarification` if convention choice is the bottleneck.
 
-This gap surfaces in the smoke #7 path; the resolution is a
+This gap surfaces in the resolution is a
 separate slice (architect-side workspace bootstrap). Don't
 manufacture filepath citations against a workspace you don't have.

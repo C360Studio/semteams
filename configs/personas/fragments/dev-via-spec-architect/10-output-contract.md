@@ -88,12 +88,12 @@ emit_dev_via_spec_artifact(
 )
 ```
 
-`checks` is OPTIONAL at the wire (R3.7.2.b) but
-`30-commitment-contract.md` defines when it MUST be populated:
+`checks` is OPTIONAL at the wire but
+the commitment contract defines when it MUST be populated:
 any artifact whose `integration_points[]` names an external
 actor requires at least one check. Populate it with the
-shape above; see `20-commitment-transcription.md` for the
-outcome-to-target translation and `30-commitment-contract.md`
+shape above; see the commitment-transcription section for the
+outcome-to-target translation and the commitment contract
 for the runtime selection.
 
 The tool validates the args, renders a markdown spec via a Go

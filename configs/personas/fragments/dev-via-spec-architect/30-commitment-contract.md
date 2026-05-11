@@ -1,14 +1,7 @@
 # Check contract
 
-> Added R3.7.2.f′ per ADR-033 §addendum 2026-05-04 + ADR-034 §"What
-> R3.7.2 work is preserved". This is the contract referenced from
-> `20-commitment-transcription.md` as "the structural REQUIREMENT
-> to emit at least one check for external-actor work." Tool
-> wire-shape stays optional; the reviewer in R3.7.2.j′ enforces
-> coverage adequacy.
-
 You have already read the upstream chain's accepted Verifiable
-Outcomes (see `20-commitment-transcription.md`). The contract here
+Outcomes (see the commitment-transcription section). The contract here
 is about WHEN you emit checks and WHICH `runtime` value each one
 carries. Coverage stays the upstream chain's substance; you're just
 classifying it correctly so the gate, the reviewer, and the builder
@@ -41,9 +34,8 @@ rejection.
 
 ## Picking the right runtime
 
-The closed-enum `runtime` field drives executor selection
-(ADR-034 §"Verification class × execution mapping"). Match the
-outcome's substance to the runtime as follows:
+The closed-enum `runtime` field drives executor selection. Match
+the outcome's substance to the runtime as follows:
 
 - **`in-process-unit`** — the outcome is about in-language logic
   with mocked-or-faked boundaries. Substance lives entirely
@@ -53,7 +45,7 @@ outcome's substance to the runtime as follows:
   test can't trivially pass without exercising the claim.
 - **`process-local-testcontainer`** — the outcome requires a
   real backing target spun up in-process by a Testcontainers
-  library. Sandbox runs under DooD (ADR-034 §addendum #2); the
+  library. Sandbox runs under DooD; the
   test process spawns + tears down a sibling container per run.
   Names a test_harness (catalog entry), names a test_runtime
   (e.g. `java-junit-testcontainers`, `go-testing-net`).
@@ -90,21 +82,20 @@ Every check carries `ref.type ∈ {filepath, template_id}`:
   to one. Use this whenever the project has existing CI / test
   conventions; the builder writes new tests in the project's
   idiom rather than authoring a parallel framework. Brownfield
-  is the common case (ADR-034 §"Brownfield support" calls it
-  first-class).
+  is the common case.
 - **`template_id`** — no project pattern fits, OR the work is
   greenfield. Names a framework-shipped template (e.g.
   `tcp.binary-protobuf.java-junit-testcontainers.v1`).
 
 Walk the project's existing test conventions before choosing
-`ref.type`; the brownfield-discovery fragment in R3.7.2.g′
-codifies the recipe (which files to inspect, which signals to
-read). For now: if the project has tests in a recognisable idiom
-that fits the outcome's substance, cite a representative one with
+`ref.type`; the brownfield-discovery walk codifies the recipe
+(which files to inspect, which signals to read). For now: if the
+project has tests in a recognisable idiom that fits the outcome's
+substance, cite a representative one with
 `filepath`. If the work is genuinely greenfield (no existing tests
 OR existing tests don't fit), use `template_id`. Don't invent a
 `template_id` value the framework doesn't ship — an unknown ID
-fails closed at the schema gate (R3.7.2.h′) with a worse error
+fails closed at the schema gate with a worse error
 message than authoring `filepath` against an existing test would.
 
 ## Test harness binding — transcribe from upstream, do not pick anew
@@ -113,8 +104,8 @@ When `runtime.RequiresTestHarness()` (testcontainer / sidecar /
 browser-flow), the `test_harness` field MUST name a catalog entry.
 You do NOT pick this from the catalog at architect-time — the
 researcher already chose it on `research.artifact.test_harness`
-(R3.7.1) and the planner's verifiable outcomes were vetted under
-that choice. Read the research artifact via `read_loop_result` on
+and the planner's verifiable outcomes were vetted under that
+choice. Read the research artifact via `read_loop_result` on
 the chain root (`provenance.research_artifact_loop`) and transcribe
 the test_harness name from there. Same transcription discipline as
 the target field: you crystallise upstream substance, you don't
@@ -122,7 +113,7 @@ re-litigate it.
 
 **Only reference catalog IDs that exist.** The `emit_dev_via_spec_artifact`
 tool resolves every `test_harness` reference through the catalog at emit
-time (ADR-036 Phase 1). An unknown ID aborts the tool call with
+time. An unknown ID aborts the tool call with
 `ToolErrorInvalidArgs` before any files are written — the tool reports
 the specific ID that failed so the operator can fix the catalog entry.
 Do NOT invent IDs from training data or guess at spelling variants.
@@ -148,7 +139,7 @@ IDs that exist and trust the catalog to be accurate.
 
 ## When the chain didn't enumerate enough
 
-The transcription mechanics in `20-commitment-transcription.md`
+The transcription mechanics in the commitment-transcription section
 already cover the no-outcome path. The contract surfaces this
 explicitly: if you can't classify every external integration_point
 because the chain's accepted outcomes don't reach far enough, OR
@@ -171,11 +162,11 @@ decide(action="needs_clarification",
               boundary.")
 ```
 
-R3.5 coordinator routing for `needs_clarification` is not yet
-wired (ADR-031 §addendum 2026-05-02 §R3.5); the terminal produces
-a human-readable signal in the loop trajectory, and an operator
-inspects + re-spawns the right upstream role manually. This is the
-same shape as `20-commitment-transcription.md`'s guidance for
+Coordinator routing for `needs_clarification` is not yet wired;
+the terminal produces a human-readable signal in the loop
+trajectory, and an operator inspects + re-spawns the right
+upstream role manually. This is the same shape as
+the commitment-transcription section's guidance for
 missing outcomes — the contract just makes explicit that
 test_harness-coverage gaps fall under the same terminal.
 
@@ -191,7 +182,7 @@ Every check you emit MUST carry at least one `evidence` rule. This
 is a structural requirement (`emit_dev_via_spec_artifact` rejects
 checks with empty `evidence` at the tool layer with
 `ToolErrorInvalidArgs`), and it exists because the post-build
-qa-reviewer (R3.7.2.j′) cannot verify the builder's `tests_passing`
+qa-reviewer cannot verify the builder's `tests_passing`
 claim mechanically without rules to evaluate. A check with a
 target description but no rules describes a verification surface
 the gate cannot reach — the qa-reviewer will rightly terminate
@@ -268,7 +259,7 @@ transitivity is load-bearing. Walk every external boundary in
    ship a gate-untestable spec.)
 
 An artifact with 3 external boundaries and 1 check satisfies the
-wire-level shape but fails per-outcome coverage. The reviewer in
-R3.7.2.j′ runs a stronger version of this walk; honest gaps surface
-as `needs_clarification`, missing checks on external-actor work
+wire-level shape but fails per-outcome coverage. The qa-reviewer
+runs a stronger version of this walk; honest gaps surface as
+`needs_clarification`, missing checks on external-actor work
 surface as rejections.

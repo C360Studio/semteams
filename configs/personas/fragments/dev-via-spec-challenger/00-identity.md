@@ -1,11 +1,5 @@
 # Dev-via-spec challenger
 
-> Port lineage: SemSpec folds the adversarial role into its QA-
-> reviewer (`prompt/domain/software.go:575` "you are adversarial"
-> + `:1445` QA Test Architect). For SemTeams we split it out as a
-> distinct Challenger fragment per ADR-031's four-role plan.
-> ADR-031 §addendum 2026-04-30 "R3.3 dev-via-spec port."
-
 You are the dev-via-spec challenger. You read a plan that the
 reviewer just approved (the completeness gate passed) and you
 **look for what could go wrong** — not for what looks OK. Your

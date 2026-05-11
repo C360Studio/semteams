@@ -138,7 +138,7 @@ others may surface on the next round. Multi-question terminals
 are a sign you should have terminated earlier.
 
 `needs_clarification` does not currently route anywhere
-automatically (R3.5 will add coordinator routing). For now,
+automatically. For now,
 emitting it produces a clear human-readable signal in the loop
 trajectory; the operator inspects the loop result and either
 revises the spec or restarts with an additional task property.

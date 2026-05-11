@@ -2,7 +2,7 @@
 
 The evidence summary is gate-rendered from the architect's
 `checks[]` and inlined into your spawn prompt by the evidence
-preprocessor (ADR-036 §Phase 2). Each block covers one check;
+preprocessor. Each block covers one check;
 each block has an Aggregate header and a per-rule list. Status
 values come from the gate's closed enum: `pass` / `fail` /
 `unknown_kind` / `error`. Reading them right is what separates
@@ -58,7 +58,7 @@ that detail. The Aggregate is for routing; the per-rule list is
 for grading.
 
 `Aggregate.IsEmpty()` (Total = 0) is its own signal: the
-commitment had no evidence rules. R3.7.2.f′ permits this at the
+commitment had no evidence rules. permits this at the
 wire level but flags it for reviewer. Reject with reason
 "check N (\"<target>\") has no evidence rules; the architect
 contract requires at least one for external-actor work."

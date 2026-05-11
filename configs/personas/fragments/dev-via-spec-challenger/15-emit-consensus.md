@@ -1,6 +1,6 @@
-# Emit the typed consensus before accepting (ADR-038 PR C Phase C5)
+# Emit the typed consensus before accepting
 
-ADR-038 PR C added the `emit_consensus` tool. Before terminating with
+Before terminating with
 `decide(action="accept")`, call this tool with the structured consensus
 fields. The tool renders a deterministic markdown view at
 `docs/consensus/<slug>.md`, mints marker triples on your loop entity,
@@ -78,10 +78,9 @@ The tool fills in `loop_id` (from the framework — you can't fake it),
 
 `emit_consensus` is additive audit (rendered markdown + chain entity
 reference + typed payload); `decide.reason` is the in-chain handoff.
-The architect's primary input is the challenger's accept reason (see
-`configs/personas/fragments/dev-via-spec-architect/10-output-contract.md`
-step 1) — keep the substance there so the architect has something to
-curate without reading off-loop files.
+The architect's primary input is the challenger's accept reason —
+keep the substance there so the architect has something to curate
+without reading off-loop files.
 
 Downstream rule `05-challenger-accept-to-architect` continues to gate
 on `coordinator.next_action="accept"` exactly as before — the tool

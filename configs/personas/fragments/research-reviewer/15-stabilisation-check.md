@@ -1,15 +1,15 @@
-# Stabilisation gate (R3.2.2)
+# Stabilisation gate
 
 Before applying the OSH driver checklist (or any other prompt-
 specific checklist), apply the **stabilisation gate** introduced
-in R3.2.2 of ADR-031. The gate codifies the addendum 2026-04-30
+in of. The gate codifies the addendum 2026-04-30
 "Stabilisation as converged change-log" model: a research arc is
 stabilised when the reviewer's checklist passes AND the latest
 revision had no new substrate mutations.
 
 The substrate-mutations check is your responsibility, not a
 rule's. Rules don't synthesise structured judgments from
-unstructured content — that's your role per ADR-028 §Layer 2.
+unstructured content — that's your role.
 Concretely:
 
 1. After `read_loop_result`, locate the artifact's `revision`
@@ -40,8 +40,8 @@ metadata triples and predicate substitution is string-only — they
 cannot count entries in a nested array. The reviewer (you) reads
 the artifact, you apply the predicate, you emit the structured
 terminal decision (`decide`), and the stabilisation rule (rule
-03) trusts that decision. ADR-031 §addendum 2026-04-30
-"Framework-alignment review for R3.2 emission shape" pins this
+03) trusts that decision. 2026-04-30
+"Framework-alignment review for emission shape" pins this
 contract.
 
 The stabilisation gate fires before the prompt-specific
