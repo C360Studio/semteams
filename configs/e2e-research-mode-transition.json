@@ -206,7 +206,8 @@
           "add_source_repo",
           "emit_research_artifact",
           "emit_curator_artifact",
-          "emit_plan"
+          "emit_plan",
+          "write_todos"
         ],
         "approval_required": ["add_source_repo"],
         "ports": {

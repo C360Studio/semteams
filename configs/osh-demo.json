@@ -292,7 +292,8 @@
           "bash",
           "builder_decide",
           "emit_diagnosis",
-          "submit_work"
+          "submit_work",
+          "write_todos"
         ],
         "approval_required": ["add_source_repo"],
         "ports": {
