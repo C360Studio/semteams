@@ -190,7 +190,7 @@
       "config": {
         "stream_name": "TOOL",
         "timeout": "10s",
-        "allowed_tools": ["web_search", "decide", "read_loop_result", "submit_work"],
+        "allowed_tools": ["web_search", "decide", "read_loop_result", "submit_work", "scratchpad"],
         "ports": {
           "inputs": [
             {"name": "tool.execute", "type": "jetstream", "subject": "tool.execute.>", "stream_name": "TOOL", "required": true}

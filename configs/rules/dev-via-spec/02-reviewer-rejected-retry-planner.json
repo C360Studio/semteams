@@ -26,7 +26,7 @@
       "subject": "agent.task.dev-via-spec-plan-retry",
       "role": "dev-via-spec-planner",
       "model": "planning",
-      "tools": ["read_loop_result", "emit_plan", "decide"],
+      "tools": ["read_loop_result", "emit_plan", "decide", "scratchpad"],
       "action_allowlist": ["planned"],
       "max_iterations": 3,
       "properties": {

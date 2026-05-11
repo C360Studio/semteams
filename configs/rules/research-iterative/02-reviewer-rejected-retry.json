@@ -26,7 +26,7 @@
       "subject": "agent.task.research-retry",
       "role": "researcher",
       "model": "general",
-      "tools": ["read_loop_result", "query_entity", "query_entities"],
+      "tools": ["read_loop_result", "query_entity", "query_entities", "scratchpad"],
       "properties": {
         "reviewer_loop_id": "$entity.id",
         "retry": true
