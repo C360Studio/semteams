@@ -73,9 +73,12 @@ loop**. The contract is hard:
 The point of this field is the curator's "I checked these
 resolve" commitment to the next researcher. Fabricated entries
 silently break the chain — the researcher queries IDs that don't
-exist, gets empty results, emits a thin artifact, the reviewer
-rejects, the cycle repeats. Worse than `needs_clarification`
-because the failure mode is harder to diagnose.
+exist, gets empty results, emits an artifact that passes
+structural validation but the reviewer rejects on substance
+(generic actors, no concrete interfaces named, wide open_gaps),
+the cycle repeats. Worse than `needs_clarification` because the
+failure mode is harder to diagnose — everyone "succeeded"
+mechanically; only the substance is wrong.
 
 Pick representative entities, not exhaustive ones. 3-10 IDs per
 added source is typical: the entity the reviewer cited, plus a
