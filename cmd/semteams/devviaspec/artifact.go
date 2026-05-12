@@ -1,7 +1,8 @@
 // Package devviaspec holds SemTeams-local payload types for the
 // dev-via-spec arc. The Artifact type is the structured terminal output
-// produced by the architect role at the close of a dev-via-spec chain:
-// research → mode-transition → planner → reviewer → challenger → architect.
+// produced by the researcher-architect phase at the close of the MVP arc:
+// plan → gather → synthesize → architect → reviewer (spec) → builder →
+// reviewer (qa).
 //
 // See docs/adr/031-research-flow-and-semspec-handoff.md (§R3.3) for the
 // design rationale and the chain-provenance model that motivates the
@@ -197,7 +198,7 @@ func RegisterPayloads(reg *payloadregistry.Registry) error {
 		Domain:      Domain,
 		Category:    CategoryArtifact,
 		Version:     SchemaVersion,
-		Description: "SemTeams dev-via-spec artifact — terminal structured output of the architect role at the close of a research→planner→reviewer→challenger→architect chain. ADR-031 §R3.3.",
+		Description: "SemTeams dev-via-spec artifact — terminal structured output of the researcher-architect phase at the close of an MVP chain (plan→gather→synthesize→architect→reviewer→builder→reviewer). ADR-031 §R3.3, revised by ADR-041.",
 	}); err != nil {
 		return err
 	}
