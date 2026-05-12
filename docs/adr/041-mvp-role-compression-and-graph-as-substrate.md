@@ -697,6 +697,96 @@ challenger, not a blocker for the MVP compression itself.
   ADR-038 (chain entity + milestones), ADR-039 (needs-clarification
   cap).
 
+## Addendum 2026-05-12 — reviewer-research collapse-vs-keep decision
+
+Phase 2 Slice C resolves an ambiguity left open by §"What dies
+entirely" + §"ADR-031 §dev-via-spec re-scope" + the rule-collapse
+table.
+
+**Ambiguity.** §141-143 says "reviewer (expanded contract)
+absorbs `research-reviewer`, `dev-via-spec-reviewer`,
+`dev-via-spec-qa-reviewer`" — implying one role with three modes.
+§"ADR-031 §dev-via-spec re-scope" diagram (lines 357-364) names
+only two reviewer spawn points: `reviewer(spec)` after
+researcher-architect-emit and `reviewer(qa)` after builder. The
+phase-graph (line 207) shows `architect → emit → reviewer` with
+no `reviewer(research)` label. But the rule table (lines 172-176)
+keeps a `research-mode-transition/02-reviewer-rejected-retry-research.json`
+that spawns researcher off a reviewer's `insufficient` verdict —
+which implies a reviewer ran somewhere in a research-only chain.
+
+**Decision: keep reviewer-research as a third mode.**
+
+Three reviewer modes, fragment-selected by the spawning rule
+based on the spawning loop's `agent.loop.input.phase`:
+
+| Mode | Persona dir | Evaluates | Spawned by |
+|---|---|---|---|
+| research | `reviewer-research/` | research artifact (typed `emit_research_artifact` payload: actors[]/integration_points[]/seed_requirements[]/addressed_gaps[]/open_gaps[]/test_harness/substrate_mutations[]) | researcher emits from `synthesize` phase (pure research arc) |
+| spec | `reviewer-spec/` | spec artifact (typed `emit_dev_via_spec_artifact` payload: actors[]/integration_points[]/tasks[]/checks[]) | researcher emits from `architect` phase (dev-via-spec arc) |
+| qa | `reviewer-qa/` | builder output (build green, tests passing, evidence rules pass) | builder emits `decide(action="tests_passing")` |
+
+**Why keep, not collapse.**
+
+The three modes have distinct output contracts:
+
+- Research artifact has fields (`open_gaps`, `addressed_gaps`,
+  `seed_requirements`, `substrate_mutations`) that spec artifact
+  does not.
+- Spec artifact has fields (`tasks[]`, `checks[]`) that research
+  artifact does not.
+- QA mode evaluates a builder commit (not a structured artifact)
+  — `decide.action="tests_passing"` carries `tests_run` + structural
+  evidence pre-checks that the rule pre-filter enforces before the
+  LLM call.
+
+Collapsing into one reviewer prompt forces the LLM to
+disambiguate which contract applies, on every spawn. That's
+ungrounded persona work — a persona-fragment selection driven by
+the spawning rule's known input is the cheaper and more reliable
+mechanism.
+
+**Mode-selection mechanism (deferred to Slice D rule wiring).**
+
+The ADR's rule table currently shows a single `01-researcher-to-reviewer.json`
+rule. Under three modes, the rule layer needs to route to the
+right persona dir per spawn. Two implementable options:
+
+1. **One rule, two conditions.** The single rule fires on
+   `agent.loop.role = researcher` AND `decide.action = emit` and
+   sets `agent.task.persona_dir` based on `agent.loop.input.phase`
+   (synthesize → reviewer-research; architect → reviewer-spec).
+   Cleanest if the rule engine can write a conditional spawn arg.
+2. **Two rules, one each.**
+   `01a-researcher-synthesize-to-reviewer-research.json` (input.phase=synthesize)
+   and `01b-researcher-architect-to-reviewer-spec.json`
+   (input.phase=architect). Same condition matching as option 1
+   but spreads across two files.
+
+Slice D picks the option that matches the rule engine's actual
+expressiveness. Either works; the persona-dir-per-mode discipline
+is the load-bearing thing.
+
+**Implementation status as of Slice C.**
+
+- `reviewer-research/` (5 files) — research-artifact-shape
+  evaluation contract verified. Read-channel paragraph in
+  `00-identity.md` updated to the two-channel pattern
+  (parallel to Slice 2A B1 fix for reviewer-spec) +
+  techsplain ADR refs stripped.
+- `reviewer-spec/` (4 files) — spec-artifact-shape evaluation
+  (Slice 2A).
+- `reviewer-qa/` (3 files) — content from old
+  dev-via-spec-qa-reviewer; vocabulary review deferred to
+  Slice D alongside the rule-wiring contract test (Phase 2
+  todo item 4 from Phase 1 reviewer-pass).
+
+**Contract test added.** `TestADR041_ReviewerResearchArtifactShape`
+parallel to `TestADR041_ReviewerSpecArtifactShape`. Catches
+drift-back regressions where someone re-edits reviewer-research
+fragments toward spec-artifact vocabulary (the wrong artifact
+shape).
+
 ## References
 
 - Smoke #8 run-5 GREEN baseline (multi-role chain, 8m 11s):

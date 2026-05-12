@@ -446,3 +446,81 @@ func TestADR041_ReviewerSpecArtifactShape(t *testing.T) {
 		}
 	}
 }
+
+// TestADR041_ReviewerResearchArtifactShape asserts that the
+// reviewer-research fragments evaluate the RESEARCH ARTIFACT shape
+// (actors[]/integration_points[]/seed_requirements[]/addressed_gaps[]/
+// open_gaps[]/test_harness/substrate_mutations[]) emitted by
+// researcher-synthesize via emit_research_artifact, NOT the spec
+// artifact shape (tasks[]/checks[]) that reviewer-spec grades.
+//
+// Per ADR-041 §addendum 2026-05-12 "reviewer-research collapse-vs-keep
+// decision" the reviewer role has three modes (research/spec/qa).
+// Each mode evaluates a different artifact shape; mixing the
+// vocabularies forces the LLM to disambiguate which contract applies
+// and grades the wrong fields.
+//
+// Catches regression where someone re-edits reviewer-research toward
+// spec-artifact vocabulary (tasks[]/checks[]) — that's reviewer-spec's
+// surface, not this one.
+func TestADR041_ReviewerResearchArtifactShape(t *testing.T) {
+	root := "../../configs/personas/fragments/reviewer-research"
+	// Required: research artifact's structured fields. Combined corpus
+	// must reference each (some may legitimately appear in only one
+	// fragment — e.g. test_harness in the harness-gate, substrate_mutations
+	// in the stabilisation-check).
+	requiredFieldRefs := []string{
+		"actors",
+		"integration_points",
+		"seed_requirement",
+		"open_gaps",
+		"addressed_gaps",
+		"test_harness",
+		"substrate_mutations",
+	}
+	// Forbidden: spec-artifact prescriptions. reviewer-research grades
+	// the research artifact (open_gaps/addressed_gaps/seed_requirements
+	// shape), not the spec artifact (tasks[]/checks[] shape). Mentions
+	// in passing prose are fine; using these as the prescription is
+	// cross-mode drift.
+	forbiddenPrescriptions := []string{
+		"tasks[]",
+		"checks[]",
+		// Spec-artifact's commitment contract concept. Doesn't apply
+		// to research artifacts.
+		"emit_dev_via_spec_artifact",
+	}
+
+	files, err := os.ReadDir(root)
+	if err != nil {
+		t.Fatalf("read reviewer-research dir: %v", err)
+	}
+
+	combined := make([]byte, 0, 8192)
+	for _, f := range files {
+		if f.IsDir() || !strings.HasSuffix(f.Name(), ".md") {
+			continue
+		}
+		path := filepath.Join(root, f.Name())
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Errorf("read %s: %v", path, err)
+			continue
+		}
+		body := string(data)
+		for _, forbidden := range forbiddenPrescriptions {
+			if strings.Contains(body, forbidden) {
+				t.Errorf("%s: contains spec-artifact prescription %q (reviewer-research evaluates the research artifact under ADR-041; tasks[]/checks[] are reviewer-spec's surface)", path, forbidden)
+			}
+		}
+		combined = append(combined, data...)
+		combined = append(combined, '\n')
+	}
+
+	combinedStr := string(combined)
+	for _, field := range requiredFieldRefs {
+		if !strings.Contains(combinedStr, field) {
+			t.Errorf("reviewer-research fragments do not reference research-artifact field %q anywhere (ADR-041 reviewer-research grades against the research artifact's structured shape — actors[]/integration_points[]/seed_requirements[]/addressed_gaps[]/open_gaps[]/test_harness/substrate_mutations[])", field)
+		}
+	}
+}
