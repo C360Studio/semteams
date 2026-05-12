@@ -10,9 +10,12 @@ presence, coverage, and substance.
 
 The wire schema marks `checks[]` optional so v1 consumers see no
 schema drift. The architect's commitment contract makes it
-required when `integration_points[]` names any external actor
-(an actor outside the workspace being built — e.g. an external
-service, framework, or runtime).
+required when `integration_points[]` names any **external actor**:
+an actor outside this codebase's process — another service, a
+real protocol daemon, a database, a browser session, an upstream
+LLM, a hardware device. Internal-only actors (libraries that run
+in-process, framework hooks that are exercised by unit tests
+alone) do not by themselves require `checks[]`.
 
 Walk the artifact:
 
@@ -21,10 +24,14 @@ Walk the artifact:
       describes external integration is a gap. The builder needs
       to know what evidence proves the integration works.
 - [ ] **Does every external-actor `integration_points[]` entry
-      get covered by at least one check?** Walk
-      `integration_points[]`; for each entry whose `from` or `to`
-      names an external actor, find a check whose `target`
-      describes the same flow. Missing coverage is a gap.
+      get covered by at least one check whose `target`
+      substantively describes that specific flow?** Walk every
+      external-actor entry one at a time. For each, find a check
+      whose `target` names that flow's data shape and direction
+      — not just any check on the list. A 3-external-boundary
+      artifact with 1 check has 2 uncovered boundaries; that's
+      `insufficient` with the specific boundaries named in the
+      reason.
 
 If no `integration_points[]` entry names an external actor, the
 artifact may legitimately have empty `checks[]`. That is not a
@@ -103,13 +110,12 @@ integration_points.
   substance is what `target` claims; format is grammar.
 - *"`checks[]` doesn't enumerate every edge case."* — coarse
   targets that name the happy-path observable behavior are
-  sufficient at this gate. (Under MVP there is no challenger
-  pass; if edge-case coverage degrades over time, the qa-mode
-  reviewer's structural pre-checks against builder evidence
-  catches the regression.)
-- *"`evidence[]` rule kinds aren't all populated."* — `evidence[]`
-  registry-validated; substance of the rules themselves is the
-  evidence gate's concern, not yours.
+  sufficient at this gate. The qa-mode reviewer's structural
+  pre-checks against builder evidence catches edge-case
+  regressions later.
+- *"`evidence[]` rule semantics look wrong."* — whether each
+  evidence rule passes at build time is the qa-mode reviewer's
+  concern, not yours. You grade target substance + coverage.
 
 ## When to send back upstream
 

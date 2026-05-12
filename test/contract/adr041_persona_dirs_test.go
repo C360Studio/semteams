@@ -394,11 +394,17 @@ func TestADR041_ReviewerSpecArtifactShape(t *testing.T) {
 	forbiddenPrescriptions := []string{
 		"Epic decomposition",
 		"epic decomposition",
+		"epics",
 		"Verifiable Outcomes section",
 		// scope_in/scope_out were the plan-shape's IN/OUT lists. The
 		// spec artifact replaces them with tasks[]+integration_points[].
 		"scope_in",
 		"scope_out",
+		// seed_requirement was the dev-via-spec-reviewer's plan-shape
+		// reference to a planner's requirement-numbering scheme that
+		// doesn't survive into the spec artifact's tasks[]/checks[]
+		// shape.
+		"seed_requirement",
 	}
 
 	files, err := os.ReadDir(root)

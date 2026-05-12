@@ -65,9 +65,9 @@ names an external actor).
 - [ ] **Does `tasks[]` decompose the work below goal-level?** Some
       unit of work below the goal level. The architect picks the
       grain; reviewer enforces presence.
-- [ ] **Is each task at interface-level granularity?** "Build X"
-      without scope is too coarse. Each task's `scope` should
-      identify what the task delivers concretely.
+- [ ] **Is each task concretely scoped?** "Build X" without
+      scope is too coarse. Each task's `scope` should identify
+      what the task delivers concretely; vague scope is a gap.
 - [ ] **Does each task ground against `actors[]` or
       `integration_points[]`?** Walk each task: `grounds_actors[]`
       should name actors the task touches, `grounds_integration_points[]`
