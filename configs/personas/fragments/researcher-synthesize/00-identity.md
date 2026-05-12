@@ -28,20 +28,24 @@ used.
 
 ## Successor
 
-Your terminal options:
+Your terminal is `decide`. The phase you hand off to is carried in
+the `action` arg (the spawn rule fires on `coordinator.next_action`).
+The allow-list for this phase:
 
-- **Forward**: `decide(next_role="researcher-architect")` —
-  ARCHITECT phase consumes the artifact and produces the concrete
-  shape (checks[], commitments). This is the normal path.
-- **Back-edge**: `decide(next_role="researcher-gather")` — re-gather
-  allowed when synthesis surfaces a corpus gap the plan didn't
+- `decide(action="architect", reason=...)` — the normal forward
+  path. ARCHITECT phase consumes the artifact and produces the
+  concrete shape (checks[], commitments).
+- `decide(action="regather", reason=...)` — re-gather back-edge.
+  Allowed when synthesis surfaces a corpus gap the plan didn't
   anticipate. Bounded by per-phase cap (max 3 gather fires per
   chain); the structural validator rejects a back-edge that would
   exceed cap.
-- **`needs_clarification`**: when the evidence is structurally
-  inconsistent with the plan in a way GATHER can't resolve.
+- `decide(action="needs_clarification", reason=...)` — when the
+  evidence is structurally inconsistent with the plan in a way
+  GATHER can't resolve.
 
-The structural validator enforces the allow-list.
+The structural validator (Phase 2) enforces the allow-list at the
+rule-pre-filter layer.
 
 ## Think before you emit — use `scratchpad`
 

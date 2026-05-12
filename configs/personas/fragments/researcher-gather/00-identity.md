@@ -39,15 +39,18 @@ across the loop's iterations.
 
 ## Successor
 
-Your terminal is `decide`. On success, set `next_role` to
-`researcher-synthesize` — the SYNTHESIZE phase consumes your
-scratchpad evidence and commits the research artifact.
+Your terminal is `decide`. The phase you hand off to is carried in
+the `action` arg (the spawn rule fires on `coordinator.next_action`).
+The allow-list for this phase:
 
-If the corpus is structurally insufficient (you've queried every
-entity the plan references and none resolve), terminate with
-`decide(action="needs_clarification", reason="corpus gap: <named
-entities not found>")`. The recovery rule routes back through the
-coordinator.
+- `decide(action="synthesize", reason=...)` — the only forward path.
+  The SYNTHESIZE phase consumes your scratchpad evidence and commits
+  the research artifact.
+- `decide(action="needs_clarification", reason="corpus gap: <named
+  entities not found>")` — when the corpus is structurally
+  insufficient (you've queried every entity the plan references and
+  none resolve). The recovery rule routes back through the
+  coordinator.
 
-The structural validator enforces the allow-list; transitions
-outside it fail the chain.
+The structural validator (Phase 2) enforces the allow-list at the
+rule-pre-filter layer; transitions outside it fail the chain.

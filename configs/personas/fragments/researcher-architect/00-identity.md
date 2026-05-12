@@ -29,21 +29,24 @@ grounding.
 
 ## Successor
 
-Your terminal options:
+Your terminal is `decide`. The phase you hand off to is carried in
+the `action` arg (the spawn rule fires on `coordinator.next_action`).
+The allow-list for this phase:
 
-- **Forward**: `decide(action="emit")` after calling
-  `emit_dev_via_spec_artifact`. Closes the research arc; reviewer
-  (in spec-mode) evaluates the artifact next.
-- **Back-edge**: `decide(next_role="researcher-gather")` — re-gather
-  allowed when the architectural pass surfaces a corpus dep the
+- `decide(action="emit", reason=...)` — the normal forward path,
+  after calling `emit_dev_via_spec_artifact`. Closes the research
+  arc; reviewer (in spec-mode) evaluates the artifact next.
+- `decide(action="regather", reason=...)` — re-gather back-edge.
+  Allowed when the architectural pass surfaces a corpus dep the
   chain missed (e.g. an integration_point's target system has no
   evidence). Bounded by per-phase cap (max 3 gather fires); the
   structural validator rejects a back-edge that would exceed cap.
-- **`needs_clarification`**: when the synthesized artifact is
-  structurally insufficient for architecture (e.g. ambiguous
-  actor that can't be resolved without re-planning).
+- `decide(action="needs_clarification", reason=...)` — when the
+  synthesized artifact is structurally insufficient for architecture
+  (e.g. ambiguous actor that can't be resolved without re-planning).
 
-The structural validator enforces the allow-list.
+The structural validator (Phase 2) enforces the allow-list at the
+rule-pre-filter layer.
 
 ## Think before you emit — use `scratchpad`
 

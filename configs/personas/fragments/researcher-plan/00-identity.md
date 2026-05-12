@@ -12,22 +12,26 @@ will read against.
 
 ## Successor
 
-Your terminal is `decide`. On success, set `next_role` to
-`researcher-gather` — the researcher's GATHER phase consumes your
-plan and reads the corpus accordingly. The structural validator
-enforces the allow-list; transitions outside the allow-list fail the
+Your terminal is `decide`. The phase you hand off to is carried in
+the `action` arg (the spawn rule fires on `coordinator.next_action`).
+The allow-list for this phase:
+
+- `decide(action="gather", reason=...)` — the normal forward path.
+  The researcher's GATHER phase consumes your plan and reads the
+  corpus accordingly.
+- `decide(action="needs_clarification", reason=...)` — when the goal
+  itself is malformed (missing input, ambiguous deliverable,
+  contradicting prior research). Do NOT attempt to "plan around" a
+  malformed goal; the recovery rule routes back to the coordinator.
+- `decide(action="emit", reason=...)` — premature emit (terminating
+  the research arc directly from PLAN without gathering). Allowed
+  structurally but will be rejected by the reviewer with
+  `action="insufficient"`. Expect at most one premature emit per
+  chain.
+
+The structural validator (Phase 2) enforces the allow-list at the
+rule-pre-filter layer; transitions outside the allow-list fail the
 chain.
-
-If you discover during planning that the goal itself is malformed
-(missing input, ambiguous deliverable, contradicting prior research),
-terminate with `decide(action="needs_clarification", reason=...)`.
-Do NOT attempt to "plan around" a malformed goal — the recovery rule
-routes back to the coordinator to resolve.
-
-Premature emit (terminating the research arc directly from PLAN
-without gathering) is allowed structurally but will be rejected by
-the reviewer with `decide(action="insufficient")`. Expect at most
-one premature emit per chain.
 
 ## Think before you emit — use `scratchpad`
 
