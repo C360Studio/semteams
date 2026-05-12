@@ -2,96 +2,119 @@
 
 For each question below, decide: does the artifact content answer
 this? "Yes, clearly" → checked. "Implicit but I can't tell which
-sentence addresses it" → flag as a gap with the specific question.
-"No" → gap. **Approve when every substance question is answered
-in a way the next phase (builder) could verify by re-reading the
-artifact.**
+field or sentence addresses it" → flag as a gap with the specific
+question. "No" → gap. **Approve when every substance question is
+answered in a way the next phase (builder) could verify by
+re-reading the artifact.**
+
+The spec artifact you evaluate is the architect's
+`emit_dev_via_spec_artifact` output. Its structured shape:
+
+```
+title, goal, context, actors[], integration_points[], tasks[],
+checks[], provenance
+```
+
+Required fields (validated at the wire): `title`, `goal`, `context`,
+`actors`, `tasks`, `provenance`. Conditionally required by the
+architect's commitment contract: `integration_points[]` (when actors
+relate across boundaries), `checks[]` (when `integration_points[]`
+names an external actor).
 
 ## 1. Goal
 
-- [ ] **Is a target capability named concretely?** Look for a single
+- [ ] **Is `goal` a concretely named target capability?** A single
       identifiable outcome — a named interface, endpoint, component,
       or capability. "Build a driver" alone is not concrete; "Implement
-      X interface backed by Y, exposing Z" is. The plan can phrase
-      this however it wants — header, lead sentence, opening
-      paragraph — as long as the answer is unambiguous.
-- [ ] **Is the goal testable in principle?** A downstream agent
+      X interface backed by Y, exposing Z" is.
+- [ ] **Is the goal testable in principle?** A downstream builder
       should be able to tell whether a working implementation has
       achieved it.
 
 ## 2. Context
 
-- [ ] **Does the plan motivate the work?** The plan should say *why*
-      the work matters — system motivation, downstream consumer need,
-      etc. Doesn't have to be a section called Context.
-- [ ] **Is at least one actor named explicitly?** The plan's
-      narrative should reference the upstream research artifact's
-      actors. "The driver" alone isn't an actor; "the OSH driver
-      framework's `IDriver` interface" is. The actor citation can
-      be inline anywhere in the plan content.
-- [ ] **Is the integration boundary the work sits at named?** Some
-      data flows somewhere; that flow direction (read-side vs
-      write-side) should be evident from the plan.
+- [ ] **Does `context` motivate the work?** The artifact should say
+      *why* the work matters — system motivation, downstream consumer
+      need, etc. Doesn't have to be a section called Context; the
+      `context` field is the content channel.
+- [ ] **Does `context` reference at least one actor from `actors[]`?**
+      The narrative should name an actor explicitly — "the OSH driver
+      framework's `IDriver` interface" — not just "the driver."
 
-## 3. Scope
+## 3. Actors and integration_points
 
-- [ ] **Is what's IN-scope identifiable?** The plan should communicate
-      what the work delivers. Bullet lists are fine. Prose is fine.
-      A pipeline description with each stage named is fine. What
-      matters is that you can list the items.
-- [ ] **Is what's OUT-of-scope identifiable?** The plan should make
-      clear what isn't being built — explicit exclusion is preferred,
-      but a tightly-scoped IN list with no fuzzy edges is also fine.
-- [ ] **Does each artifact integration point map to scope?** Walk the
-      research artifact's `integration_points` (you can see them via
-      the plan's references). Each one is either covered by an
-      in-scope item OR explicitly excluded with a one-line rationale.
-      Missing integration points without rationale is a gap.
+- [ ] **Is every entry in `actors[]` named concretely?** Each actor
+      has a `name` (a system, framework, or service) and a one-line
+      `role`. Empty `role` is a gap; vague names like "the system"
+      are a gap.
+- [ ] **Does every `integration_points[]` entry name both sides?**
+      Each entry has `from` and `to` as actor names appearing in
+      `actors[]`, plus a `direction` (read/write) and `data`
+      description. A `from`/`to` that doesn't appear in `actors[]`
+      is a gap.
+- [ ] **Are integration_points present when the goal crosses a
+      system boundary?** If `goal` + `context` describe work that
+      flows data between actors and `integration_points[]` is empty,
+      that's a gap — the architect needs to enumerate the flows.
+- [ ] **Does `data` on each integration_point name what flows
+      concretely?** "Data" alone is not concrete; "MeshPacket
+      protobuf messages" or "POSITION_APP packets" is.
 
-## 4. Epic decomposition
+## 4. Tasks decomposition
 
-- [ ] **Does the plan decompose into epics?** Some unit of work
-      below the goal level. Could be called epics, milestones, work
-      packages — the noun doesn't matter; the decomposition does.
-- [ ] **Is each epic at interface-level granularity?** "Build an X"
-      without scope is too coarse. "Implement X interface backed by
-      Y, exposing Z" is at the right grain. Apply this question to
-      each unit of work in the plan.
-- [ ] **Does each epic ground against an actor or integration
-      boundary the plan cites?** No epic should be aspirational —
-      every epic should connect to something the context names.
-- [ ] **Are epics non-overlapping (or with explicit boundaries)?**
-      Two epics covering the same scope is malformed unless the
-      plan explicitly draws the boundary between them.
+- [ ] **Does `tasks[]` decompose the work below goal-level?** Some
+      unit of work below the goal level. The architect picks the
+      grain; reviewer enforces presence.
+- [ ] **Is each task at interface-level granularity?** "Build X"
+      without scope is too coarse. Each task's `scope` should
+      identify what the task delivers concretely.
+- [ ] **Does each task ground against `actors[]` or
+      `integration_points[]`?** Walk each task: `grounds_actors[]`
+      should name actors the task touches, `grounds_integration_points[]`
+      should name flows the task implements. Empty `grounds_actors[]`
+      AND empty `grounds_integration_points[]` is a gap — every task
+      should connect to something `context` cites.
+- [ ] **Are tasks non-overlapping (or with explicit boundaries)?**
+      Two tasks covering the same actor + integration_point scope
+      is malformed unless the artifact draws the boundary between
+      them in the `scope` text.
+- [ ] **Does each `integration_points[]` entry map to at least one
+      task?** Walk `integration_points[]`; for each, find a task
+      whose `grounds_integration_points[]` names it. An
+      integration_point with no implementing task is a gap.
 
 ## 5. Revision-respect (only on retry)
 
 - [ ] **Does the revised artifact address each prior finding?** If
-      the upstream phase was respawned, the prior reviewer reason
-      field carries the gaps. Each prior gap is either resolved with
-      visible scope/epic change OR explicitly disambiguated in the
-      revised plan.
-- [ ] **No silent rebuttal.** If the planner's revision merely
-      re-asserts a prior position without scope change, that's a
+      the architect was respawned, the prior reviewer reason field
+      carries the gaps. Each prior gap is either resolved with a
+      visible field change (actors added, tasks split,
+      integration_points enumerated) OR explicitly disambiguated in
+      the revised artifact.
+- [ ] **No silent rebuttal.** If the architect's revision merely
+      re-asserts a prior position without field change, that's a
       gap.
 
 ## Verdict
 
-If every question above has a clear "yes" answer in the plan content:
-**approved**.
+If every question above has a clear "yes" answer in the artifact
+fields: **approved**.
 
-If one or more substance questions can't be answered from the plan:
-**insufficient**, with bullet list naming each unanswered question
-and what specifically is missing.
+If one or more substance questions can't be answered from the
+artifact: **insufficient**, with bullet list naming each unanswered
+question and what specifically is missing.
 
-**Do not** reject for format. The plan does not need a `### Goal`
-section; it needs a clear goal. The plan does not need an
-`include / exclude / do_not_touch` triple bullet list; it needs a
-clear in/out delineation. If you find yourself rejecting because
-"the plan doesn't have section X" but the plan's content
-*answers* the substance question that section would have answered,
-**approve**.
+**Do not** reject for format. The artifact's prose rendering can
+phrase things however the template chooses — what matters is the
+structured field content. Do not reject because the markdown
+template chose one section order over another. Do not reject
+because the `role` field on an actor uses "framework" instead of
+"system."
 
-You evaluate. You do not plan. If a gap requires a structural
-decision (which epic boundary is right?), say so explicitly and let
-the planner choose — do not author the choice for them.
+If you find yourself rejecting because "the artifact's prose
+doesn't have section X" but the structured field that section
+would have rendered *is* populated, **approve**.
+
+You evaluate. You do not author. If a gap requires a structural
+decision (which task boundary is right?), say so explicitly and
+let the architect choose — do not author the choice for them.

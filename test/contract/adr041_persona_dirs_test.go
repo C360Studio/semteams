@@ -358,3 +358,85 @@ func firstLine(s string) string {
 	}
 	return s
 }
+
+// TestADR041_ReviewerSpecArtifactShape asserts that the reviewer-spec
+// fragments evaluate the SPEC ARTIFACT shape
+// (actors[]/integration_points[]/tasks[]/checks[]) emitted by
+// researcher-architect via emit_dev_via_spec_artifact, NOT the old
+// plan-shape vocabulary (goal/context/scope/epics) inherited from the
+// dev-via-spec-reviewer fragments that the Phase 1 port re-homed.
+//
+// reviewer-spec is operationally no-op as of Phase 1 (no rule spawns
+// it yet); the rewrite must land BEFORE Phase 2 rule wiring or every
+// architect-emit artifact will draw a false-insufficient verdict
+// because the reviewer is grading against plan-shape vocabulary the
+// architect's structured artifact does not produce.
+//
+// Catches regression where someone re-introduces plan-shape "epic"
+// decomposition prescription, "scope_in/scope_out" reasoning, or
+// "Verifiable Outcomes section" framing into reviewer-spec evaluation
+// fragments.
+func TestADR041_ReviewerSpecArtifactShape(t *testing.T) {
+	root := "../../configs/personas/fragments/reviewer-spec"
+	// Required: each of these artifact-field references must appear in
+	// at least one reviewer-spec fragment. If reviewer-spec doesn't
+	// reference the structured fields, it isn't grading the artifact.
+	requiredFieldRefs := []string{
+		"actors[]",
+		"integration_points[]",
+		"tasks[]",
+		"checks[]",
+	}
+	// Forbidden: prescriptive plan-shape vocabulary that the rewrite
+	// retired. Mentioning them in a "not valid grounds for insufficient"
+	// counterexample is fine; using them as the prescription is the
+	// regression.
+	forbiddenPrescriptions := []string{
+		"Epic decomposition",
+		"epic decomposition",
+		"Verifiable Outcomes section",
+		// scope_in/scope_out were the plan-shape's IN/OUT lists. The
+		// spec artifact replaces them with tasks[]+integration_points[].
+		"scope_in",
+		"scope_out",
+	}
+
+	files, err := os.ReadDir(root)
+	if err != nil {
+		t.Fatalf("read reviewer-spec dir: %v", err)
+	}
+
+	combined := make([]byte, 0, 8192)
+	for _, f := range files {
+		if f.IsDir() || !strings.HasSuffix(f.Name(), ".md") {
+			continue
+		}
+		path := filepath.Join(root, f.Name())
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Errorf("read %s: %v", path, err)
+			continue
+		}
+		body := string(data)
+		// Forbidden-prescription check is per-file so the error message
+		// names the file.
+		for _, forbidden := range forbiddenPrescriptions {
+			if strings.Contains(body, forbidden) {
+				t.Errorf("%s: contains stale plan-shape prescription %q (reviewer-spec evaluates the spec artifact's structured fields under ADR-041; rewrite the section to artifact-shape)", path, forbidden)
+			}
+		}
+		combined = append(combined, data...)
+		combined = append(combined, '\n')
+	}
+
+	// Required-field-reference check is across all files combined: at
+	// least one fragment must mention each artifact field. The
+	// completeness checklist (20) carries most; 30 carries checks[]
+	// substance; 10 covers the overall shape.
+	combinedStr := string(combined)
+	for _, field := range requiredFieldRefs {
+		if !strings.Contains(combinedStr, field) {
+			t.Errorf("reviewer-spec fragments do not reference artifact field %q anywhere (ADR-041 reviewer-spec grades against the spec artifact's structured shape — actors[]/integration_points[]/tasks[]/checks[])", field)
+		}
+	}
+}
