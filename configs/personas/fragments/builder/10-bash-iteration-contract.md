@@ -43,7 +43,7 @@ builder_decide(
   action: "needs_clarification",
   reason: "bootstrap_workspace failed: <one-line cause from the
            tool's Result.Error>",
-  blocking_question: "confirm the dev-via-spec-builder spawn
+  blocking_question: "confirm the builder spawn
                       rule supplied a valid spec_path,
                       that the spec file exists at that path on
                       the backend host, and that SANDBOX_URL

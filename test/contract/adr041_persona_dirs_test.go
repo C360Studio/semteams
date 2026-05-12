@@ -219,6 +219,91 @@ func sortedKeys(m map[string]bool) []string {
 	return keys
 }
 
+// TestADR041_EmitToolPhaseOwnership asserts that each phase-scoped
+// emit-tool call appears only in its owning phase's persona dir.
+// Same drift class as TestADR041_InterFragmentDecideActionConsistency
+// but for the emit-tool surface — would have caught the Slice 1c-1
+// emit-contradiction in researcher-gather (where 3 fragments
+// demanded emit_research_artifact while the identity forbade it).
+//
+// The owning-phase mapping comes from ADR-041's phase contract:
+// each emit tool belongs to exactly one phase. A reference outside
+// that phase (or in any other role's dir) signals drift.
+func TestADR041_EmitToolPhaseOwnership(t *testing.T) {
+	root := "../../configs/personas/fragments"
+	emitTools := map[string]string{
+		"emit_plan":                  "researcher-plan",
+		"emit_research_artifact":     "researcher-synthesize",
+		"emit_dev_via_spec_artifact": "researcher-architect",
+	}
+	dirs, err := os.ReadDir(root)
+	if err != nil {
+		t.Fatalf("readdir %s: %v", root, err)
+	}
+	for tool, owner := range emitTools {
+		needle := tool + "("
+		for _, d := range dirs {
+			if !d.IsDir() {
+				continue
+			}
+			roleName := d.Name()
+			if roleName == owner {
+				continue
+			}
+			roleDir := filepath.Join(root, roleName)
+			entries, err := os.ReadDir(roleDir)
+			if err != nil {
+				t.Errorf("readdir %s: %v", roleDir, err)
+				continue
+			}
+			for _, entry := range entries {
+				if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
+					continue
+				}
+				path := filepath.Join(roleDir, entry.Name())
+				data, err := os.ReadFile(path)
+				if err != nil {
+					t.Errorf("read %s: %v", path, err)
+					continue
+				}
+				// Skip the legacy persona dirs that ADR-041 will delete in
+				// Phase 3 — they keep their original content for as long as
+				// configs reference them. The new dirs are the ones under
+				// scrutiny.
+				if isLegacyDir(roleName) {
+					continue
+				}
+				if strings.Contains(string(data), needle) {
+					t.Errorf("%s: references %s%s but that emit tool belongs to phase %q",
+						path, tool, "(", owner)
+				}
+			}
+		}
+	}
+}
+
+// isLegacyDir returns true for the pre-ADR-041 persona dirs that
+// stay loaded during Phase 1+2 because configs still reference them.
+// They are exempt from the ADR-041 ownership invariants because their
+// purpose is to keep the legacy chain working until Phase 3.
+func isLegacyDir(name string) bool {
+	switch name {
+	case
+		"dev-via-spec-architect",
+		"dev-via-spec-builder",
+		"dev-via-spec-challenger",
+		"dev-via-spec-planner",
+		"dev-via-spec-qa-reviewer",
+		"dev-via-spec-reviewer",
+		"research-reviewer",
+		"researcher",
+		"source-curator",
+		"source-registrar":
+		return true
+	}
+	return false
+}
+
 // TestADR041_ResearcherPhaseIdentitiesRejectStaleTokens asserts that
 // the researcher phase identities do NOT carry vocabulary inherited
 // from the old dev-via-spec chain. The chain that ADR-041 replaces
