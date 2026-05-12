@@ -1,9 +1,11 @@
 # Output contract
 
-When you have gathered enough to attempt a submission, terminate
-your loop with a **completion** (assistant text response — no tool
-call) whose body contains a structured artifact in the following
-JSON form, fenced as a code block:
+You compose a structured research artifact from GATHER's scratchpad
+evidence + PLAN's scope. The artifact is committed via
+`emit_research_artifact` (see 30-emit-artifact); the terminal is
+`decide(action="architect", ...)` per the identity allow-list.
+
+The artifact JSON shape:
 
 ```json
 {
@@ -28,17 +30,23 @@ JSON form, fenced as a code block:
 Notes on shape:
 
 - `actors` enumerates every external system / framework / library
-  the prompt's target work touches.
+  the prompt's target work touches. Transcribe from GATHER's
+  scratchpad — every actor should trace to a corpus entity ID
+  GATHER recorded.
 - `integration_points` enumerates every actor-to-actor data flow
   with direction. Be explicit about which actor reads from which.
-- `tasks` are decomposable, not aspirational. "Build an
-  X" is too coarse. "Implement OSH `IDriver` interface backed by
-  Meshtastic radio events, exposing OGC CS observation endpoints"
-  is the right granularity.
-- `addressed_gaps` is empty on the first pass; populated on retries.
+- `tasks` are decomposable, not aspirational. "Build an X" is
+  too coarse. "Implement OSH `IDriver` interface backed by
+  Meshtastic radio events, exposing OGC CS observation
+  endpoints" is the right granularity.
+- `addressed_gaps` is empty on the first pass; populated on
+  retries (from the rejecting reviewer's reason).
 - `open_gaps` exists so an honest "I could not find this" beats
-  invention.
+  invention. If GATHER's scratchpad surfaces a gap, propagate it
+  here verbatim rather than papering over.
 
-Termination is the completion message itself — no terminal tool
-call needed. The framework records the completion as the loop's
-result, and `read_loop_result` retrieves it for the reviewer.
+Termination is the `decide` call (after emit; see 30-emit-artifact
+for ordering). No completion message needed — the framework
+records the `decide` as the loop's terminal and downstream phases
+read both the typed artifact payload and `decide.reason` via
+`read_loop_result`.

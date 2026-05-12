@@ -76,16 +76,17 @@ epic decomposition. You don't have to use that exact prefix — what
 matters is that the outcome is unambiguously associated with the
 epic(s) it covers.
 
-## Why this is YOUR job, not the architect's
+## Why this is YOUR job, not the ARCHITECT phase's
 
-The architect downstream has to emit `checks[]` on the structured
-artifact. Each check's `target` field is a verifiable claim; the
-architect TRANSCRIBES from your outcomes, not INVENTS from your epic
-prose. If you don't enumerate outcomes, the
-architect ends up doing your job under emission pressure — and that's
-the small-LLM capability wall 2026-05-04 explicitly
-budgets against.
+The ARCHITECT phase downstream has to emit `checks[]` on the
+structured artifact. Each check's `target` field is a verifiable
+claim; ARCHITECT TRANSCRIBES from your outcomes, not INVENTS from
+your epic prose. If you don't enumerate outcomes, ARCHITECT ends
+up doing your job under emission pressure — and that's the
+small-LLM capability wall the per-phase contracts explicitly
+budget against.
 
-You enumerate. The architect crystallizes. The reviewer enforces
-presence. The challenger probes for what each outcome WOULDN'T catch.
-Each role contributes once.
+PLAN enumerates outcomes. GATHER collects evidence against them.
+SYNTHESIZE composes the structured research artifact. ARCHITECT
+crystallizes the outcomes into `checks[]`. Reviewer (spec-mode)
+enforces presence. Each phase contributes once.

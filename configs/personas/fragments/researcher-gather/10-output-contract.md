@@ -1,44 +1,56 @@
-# Output contract
+# Output contract — evidence in scratchpad, terminal in decide
 
-When you have gathered enough to attempt a submission, terminate
-your loop with a **completion** (assistant text response — no tool
-call) whose body contains a structured artifact in the following
-JSON form, fenced as a code block:
+You do NOT emit a research artifact. The artifact shape (actors,
+integration_points, tasks, addressed_gaps, open_gaps) is the
+SYNTHESIZE phase's commit. Your job is to accumulate the *raw
+material* for that commit in `scratchpad`, then terminate with
+`decide(action="synthesize", reason=...)` so the next phase picks
+up.
 
-```json
-{
-  "actors": [
-    {"name": "ActorName", "role": "one-line description"}
-  ],
-  "integration_points": [
-    {"from": "ActorA", "to": "ActorB", "data": "what flows", "direction": "read | write"}
-  ],
-  "tasks": [
-    "Implement X interface backed by Y so that Z"
-  ],
-  "addressed_gaps": [
-    "If you are a retry: list the reviewer gaps you addressed in this pass"
-  ],
-  "open_gaps": [
-    "If you could not find something the reviewer requested, name it explicitly with what you searched"
-  ]
-}
-```
+## What goes in scratchpad
 
-Notes on shape:
+Treat `scratchpad` as your free-form working memory across this
+loop's iterations. Append findings as you go. The form is yours,
+but downstream synthesis will be straightforward when each
+scratchpad entry covers one of:
 
-- `actors` enumerates every external system / framework / library
-  the prompt's target work touches.
-- `integration_points` enumerates every actor-to-actor data flow
-  with direction. Be explicit about which actor reads from which.
-- `tasks` are decomposable, not aspirational. "Build an
-  X" is too coarse. "Implement OSH `IDriver` interface backed by
-  Meshtastic radio events, exposing OGC CS observation endpoints"
-  is the right granularity.
-- `addressed_gaps` is empty on the first pass; populated on retries.
-- `open_gaps` exists so an honest "I could not find this" beats
-  invention.
+- **An actor you found**: who they are (system / framework /
+  library), the entity ID(s) you queried to confirm them, what
+  surface they expose.
+- **An integration point**: what flows between two actors, the
+  direction, the entity IDs grounding the claim.
+- **A task you decomposed**: concrete deliverable language (not
+  "build an X"; rather "implement OSH IDriver backed by
+  Meshtastic radio events, exposing OGC CS observation
+  endpoints").
+- **A gap**: a thing the plan anticipated but the corpus didn't
+  surface, with the queries you tried.
 
-Termination is the completion message itself — no terminal tool
-call needed. The framework records the completion as the loop's
-result, and `read_loop_result` retrieves it for the reviewer.
+You are NOT producing structured JSON here. The strict-schema
+commit happens in SYNTHESIZE; you produce evidence the next
+phase transcribes.
+
+## Honest gaps
+
+If the corpus doesn't support a claim the plan anticipates, write
+that into `scratchpad` explicitly with the queries you ran. Do
+not guess; do not paper over. Honest "I could not find this"
+beats invention. SYNTHESIZE will surface it as `open_gaps` in
+the structured artifact.
+
+## Terminal
+
+Per the identity allow-list:
+
+- `decide(action="synthesize", reason="<one-line summary of what
+  you gathered + any open gaps>")` — the normal forward path.
+- `decide(action="needs_clarification", reason="corpus gap: <named
+  entities not found>")` — when the corpus is structurally
+  insufficient. The recovery rule routes back through the
+  coordinator.
+
+Your `decide.reason` does NOT need to recapitulate the scratchpad
+contents — SYNTHESIZE reads scratchpad directly via the
+framework's loop-result plumbing. A short pointer ("3 actors, 4
+integration_points gathered; 1 open gap on deployment topology")
+is enough.

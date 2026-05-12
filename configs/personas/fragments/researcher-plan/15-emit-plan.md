@@ -1,7 +1,7 @@
 # Emit the typed plan before completion
 
 Before terminating with
-`decide(action="planned")`, call this tool with the structured plan
+`decide(action="gather")`, call this tool with the structured plan
 fields you would otherwise embed only in the `decide` reason. The tool
 renders a deterministic markdown view at `docs/plans/<slug>.md`, mints
 marker triples on your loop entity, and lets the chain milestone
@@ -30,9 +30,11 @@ Pass:
 - `goal` — single string. The same concrete, testable target your
   output contract names (named interface, endpoint, component, or
   capability — not "build a driver").
-- `context` — single string. Why the work matters; cite at least one
-  actor from the upstream research artifact and identify the
-  integration boundary the work sits at.
+- `context` — single string. Why the work matters; identify the
+  integration boundary the work sits at. (You're in PLAN; the
+  GATHER and SYNTHESIZE phases produce the corpus-grounded
+  research artifact downstream — your context only needs to be
+  specific enough to scope the gather.)
 - `scope_in` — array of strings. The decomposable in-scope items.
   Granularity is yours; one item per decomposable thing.
 - `scope_out` — array of strings. Each excluded item carries a
@@ -59,31 +61,32 @@ The tool fills in `loop_id` (from the framework — you can't fake it),
 2. Call `emit_plan` with the structured fields above. This produces
    a rendered markdown view + chain entity reference + typed payload
    for audit and forward-compat consumers.
-3. Then call `decide(action="planned", reason="<your full plan
+3. Then call `decide(action="gather", reason="<your full plan
    content — goal, context, scope, epics — communicating substance
-   for the reviewer to evaluate. Optionally lead with 'plan emitted:
-   <slug> rev <N>.' so the audit cite is preserved.>")`.
+   for the next phase to consume. Optionally lead with 'plan
+   emitted: <slug> rev <N>.' so the audit cite is preserved.>")`.
 
 `emit_plan` is additive audit (rendered markdown + chain entity
-reference + typed payload); `decide.reason` is the in-chain handoff.
-The dev-via-spec-reviewer's only read path is `read_loop_result` on
-your loop, which returns the `decide.reason` text — keep the substance
-there so the reviewer has something to evaluate. Same shape as the
-researcher's emit-then-completion contract.
+reference + typed payload); `decide.reason` is the in-chain
+handoff. The GATHER phase's only read path is `read_loop_result`
+on your loop, which returns the `decide.reason` text — keep the
+substance there so the next phase has something to act on.
 
-The chain rules continue to gate on `coordinator.next_action="planned"`
-exactly as before — the tool call is additive.
+The chain rules gate on `coordinator.next_action="gather"` to
+spawn the GATHER phase — the tool call is additive.
 
 ## When NOT to emit
 
 If the prior reviewer rejected with `insufficient` and you are
-producing a revision, still call `emit_plan` (with the bumped
-revision). Each revision earns its own markdown view; the file
-overwrites at the deterministic slug, so retries do not litter
+producing a revision (the chain re-spawned PLAN to address a
+substance gap), still call `emit_plan` with the bumped revision.
+Each revision earns its own markdown view; the file overwrites
+at the deterministic slug, so retries do not litter
 `docs/plans/`.
 
-If you would otherwise terminate without `planned` (no other
-terminal exists for this role), do not call `emit_plan`. The chain
-entity carries `chain.plan.path` only when the reviewer-approval
-milestone fires — emitting a plan you don't terminate on creates a
+If you would otherwise terminate without `gather` — i.e., your
+allow-list permits `emit` (premature) or `needs_clarification` —
+do not call `emit_plan`. The chain entity carries
+`chain.plan.path` only when the reviewer-approval milestone
+fires; emitting a plan you don't terminate forward on creates a
 misleading on-disk artifact.

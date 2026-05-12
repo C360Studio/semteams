@@ -1,14 +1,14 @@
 # Check transcription
 
-The planner's `decide.reason` enumerated **Verifiable Outcomes**.
-The dvs-reviewer enforced their presence and concreteness. The
-challenger probed each one for missed bug classes and curated the
-final list into its `decide(accept).reason`.
+The PLAN phase's `decide.reason` enumerated **Verifiable
+Outcomes**. The SYNTHESIZE phase composed the structured
+research artifact (actors, integration_points, tasks) against
+those outcomes.
 
-By the time you read the challenger's accept summary, you have a
-**vetted list of falsifiable claims**. Your job in populating
-`checks[]` on the artifact is to TRANSCRIBE them into the
-structured form, not to invent new ones.
+By the time you read the SYNTHESIZE artifact + the PLAN's
+verifiable outcomes, you have a **list of falsifiable claims**.
+Your job in populating `checks[]` on the artifact is to
+TRANSCRIBE them into the structured form, not to invent new ones.
 
 ## What transcription means
 
@@ -52,8 +52,8 @@ substance, emit one check per layer:
   end-to-end claim ("real meshtasticd → real observation").
 
 Both targets paraphrase the same outcome at different abstraction
-levels. The reviewer's coverage check is satisfied by either layer
-having at least one check.
+levels. Reviewer (spec-mode)'s coverage check is satisfied by
+either layer having at least one check.
 
 ## When one check → multiple outcomes
 
@@ -67,44 +67,43 @@ rules with different expected counts).
 ## What you must NOT do
 
 - **Do not invent outcomes the chain didn't enumerate.** If the
-  planner's outcomes don't cover an integration_point and the
-  challenger didn't flag it, that's a chain failure. Do NOT call
+  PLAN phase's outcomes don't cover an integration_point that
+  SYNTHESIZE included, that's a chain inconsistency. Do NOT call
   `emit_dev_via_spec_artifact`. Instead terminate with
   `decide(action="needs_clarification", reason="...")` so the
-  coordinator can re-spawn upstream. The reason field names the
-  specific gap concretely:
+  rule layer can route back to the appropriate upstream phase.
+  The reason field names the specific gap concretely:
 
   ```
   decide(action="needs_clarification",
          reason="Verifiable-outcomes coverage incomplete:
                  integration_point Meshtastic-radio→OSH-driver-framework
-                 has no outcome in the chain's accepted list. The
-                 planner needs to enumerate what observable behavior
-                 would prove this integration is working.")
+                 has no outcome in PLAN's enumerated list. PLAN
+                 needs to enumerate what observable behavior would
+                 prove this integration is working.")
   ```
 
   Be specific about which outcome is missing and which upstream
-  role can fill it (planner, almost always — outcomes are the
-  planner's contribution). The coordinator routes back accordingly.
+  phase can fill it (PLAN, almost always — outcomes are PLAN's
+  contribution). The rule layer routes back accordingly.
 
-  You compensating silently by adding an outcome of your own
-  re-introduces exactly the Goodhart vector is structured
-  against. Better an honestly flagged gap than a fabrication —
-  same principle as the artifact's `flagged: missing grounding`
-  notes for ungroundable epic titles.
+  Compensating silently by adding an outcome of your own
+  re-introduces exactly the Goodhart vector the per-phase
+  contracts structure against. Better an honestly flagged gap
+  than a fabrication.
 
 - **Do not weaken outcomes when transcribing.** If the planner's
   outcome named a 500ms timing threshold, your check's target
   preserves it. You may rephrase for clarity; you may not relax.
 
-- **Do not skip outcomes.** Every outcome in the challenger's
-  curated list gets at least one check. Reviewer rejects on
+- **Do not skip outcomes.** Every outcome in PLAN's enumerated
+  list gets at least one check. Reviewer (spec-mode) rejects on
   missing coverage.
 
 ## Cross-reference for self-check
 
-Before calling `emit_dev_via_spec_artifact`, walk the challenger's
-accept-summary verifiable-outcomes list one final time. For each:
+Before calling `emit_dev_via_spec_artifact`, walk PLAN's
+verifiable-outcomes list one final time. For each:
 
 - Did I emit at least one check whose target captures this
   outcome's substance?

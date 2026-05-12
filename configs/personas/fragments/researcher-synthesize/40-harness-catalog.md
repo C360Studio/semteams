@@ -49,20 +49,21 @@ distinguish "researcher chose to skip" from "researcher forgot."
 
 Smoke #8 run-9 surfaced the failure mode: when the choice was
 left to persona-prose enforcement, the researcher dropped it
-1-in-4 runs. The architect downstream observed the gap and
-correctly terminated with `needs_clarification` — but no
-recovery rule exists today, so the chain wedged. The tool-layer
+1-in-4 runs. The ARCHITECT phase downstream observed the gap and
+correctly terminated with `needs_clarification`. The tool-layer
 validation makes the choice deterministic: you can't ship an
-artifact that the architect would later reject for this reason.
+artifact that ARCHITECT would later reject for this reason.
 
 ## Order of operations
 
-1. Finish gathering actors, integration_points, tasks.
+1. Compose the artifact from GATHER's scratchpad — actors,
+   integration_points, tasks, addressed_gaps, open_gaps.
 2. Look at the **Available test harnesses** list. Match
    `domain_description` and `smoke_contract_schema` against the
    integration target your artifact is scoping.
 3. Pick one of the three paths above. There is no fourth option;
    silence on test_harness now fails at the tool layer.
 4. Call `emit_research_artifact` with the full args.
-5. Submit work as you normally would; the reviewer reads both
-   the artifact and the gap shape to decide approval.
+5. Terminate with `decide(action="architect", reason=...)` per
+   the identity allow-list. ARCHITECT reads both the typed
+   artifact payload and your `decide.reason` to ground its work.

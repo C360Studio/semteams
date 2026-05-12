@@ -3,6 +3,8 @@ package contract
 import (
 	"os"
 	"path/filepath"
+	"regexp"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -144,6 +146,77 @@ func TestADR041_ResearcherPhaseIdentitiesDeclareDecideActions(t *testing.T) {
 			}
 		}
 	}
+}
+
+// TestADR041_InterFragmentDecideActionConsistency walks every *.md
+// under each researcher-* phase dir and asserts that any `action="X"`
+// token in the file appears in the identity's declared allow-list.
+// This is the structural test the prior reviewer pass asked for:
+// would have mechanically caught the Slice 1c-2-deferred drifts
+// (e.g. researcher-plan/10-output-contract.md still terminating with
+// action="planned" when the identity only allows gather/emit/
+// needs_clarification).
+//
+// Scope is limited to researcher-* dirs because their allow-lists are
+// declared in the ADR-041 phase graph. Reviewer-* dirs have their own
+// allow-lists declared in the identities but the inherited fragments
+// reference actions that may legitimately route through the chain
+// (e.g. builder's tests_passing references), so the same shape of
+// test doesn't apply cleanly there yet — handled by the role-specific
+// terminal contract instead.
+func TestADR041_InterFragmentDecideActionConsistency(t *testing.T) {
+	root := "../../configs/personas/fragments"
+	// Per ADR-041 phase graph: each phase's full allow-list. Same source
+	// of truth as TestADR041_ResearcherPhaseIdentitiesDeclareDecideActions.
+	allowLists := map[string]map[string]bool{
+		"researcher-plan":       {"gather": true, "needs_clarification": true, "emit": true},
+		"researcher-gather":     {"synthesize": true, "needs_clarification": true},
+		"researcher-synthesize": {"architect": true, "gather": true, "needs_clarification": true},
+		"researcher-architect":  {"emit": true, "gather": true, "needs_clarification": true},
+	}
+	// Regex for `decide(action="X"` tokens. Anchors on the `decide(`
+	// prefix because that's the persona's own terminal call shape.
+	// Bare `action="X"` references in prose are typically describing
+	// other roles' actions ("the reviewer rejects with action='insufficient'")
+	// and aren't drift — only the persona's own decide-call vocabulary
+	// must match its allow-list.
+	actionRE := regexp.MustCompile(`decide\(action="([a-z_]+)"`)
+	for phase, allowed := range allowLists {
+		phaseDir := filepath.Join(root, phase)
+		entries, err := os.ReadDir(phaseDir)
+		if err != nil {
+			t.Errorf("readdir %s: %v", phaseDir, err)
+			continue
+		}
+		for _, entry := range entries {
+			if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
+				continue
+			}
+			path := filepath.Join(phaseDir, entry.Name())
+			data, err := os.ReadFile(path)
+			if err != nil {
+				t.Errorf("read %s: %v", path, err)
+				continue
+			}
+			for _, match := range actionRE.FindAllStringSubmatch(string(data), -1) {
+				action := match[1]
+				if !allowed[action] {
+					t.Errorf("%s: references action=%q which is not in %s's allow-list %v",
+						path, action, phase, sortedKeys(allowed))
+				}
+			}
+		}
+	}
+}
+
+// sortedKeys returns map keys in deterministic order for error messages.
+func sortedKeys(m map[string]bool) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 // TestADR041_ResearcherPhaseIdentitiesRejectStaleTokens asserts that

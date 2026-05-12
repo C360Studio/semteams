@@ -243,9 +243,9 @@ Coverage is **per-outcome, not per-artifact** — the chain's
 transitivity is load-bearing. Walk every external boundary in
 `integration_points[]`:
 
-1. Did the planner enumerate at least one outcome covering this
-   boundary? (Should — the reviewer/challenger gated on it. If
-   not: `decide(needs_clarification)`.)
+1. Did PLAN enumerate at least one outcome covering this
+   boundary? (Should — reviewer-spec or reviewer-research gated
+   on it. If not: `decide(action="needs_clarification", ...)`.)
 2. Did I emit at least one check whose `target` captures that
    outcome's substance, with the right `runtime`?
 3. If `runtime.RequiresTestHarness()`: did I transcribe the
