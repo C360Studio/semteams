@@ -66,8 +66,9 @@ modes from one outcome; either split the outcome or split the epics.
   later.
 - *"Outcomes don't enumerate every edge case."* — coarse outcomes
   that name the happy-path observable behavior are sufficient at
-  this gate. Edge-case enumeration is the challenger's job
-  (probing what each outcome WOULDN'T catch).
+  this gate. (Under MVP there is no challenger pass; if edge-case
+  coverage degrades over time, the qa-mode reviewer's structural
+  pre-checks against builder evidence catches the regression.)
 
 ## When to send back upstream
 
@@ -84,6 +85,6 @@ You evaluate. You do not author outcomes for the planner. If a gap
 requires a specific outcome to be named, name the boundary that
 needs covering and let the planner choose the wording.
 
-The planner enumerates. You enforce presence and concreteness. The
-challenger probes for what each outcome WOULDN'T catch. The
-architect transcribes. Each role contributes once.
+PLAN enumerates outcomes. You enforce presence and concreteness.
+ARCHITECT transcribes outcomes into structured `checks[]`. Each
+phase contributes once.

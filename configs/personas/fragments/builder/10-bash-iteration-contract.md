@@ -81,9 +81,9 @@ source.
 
 Inside the prose part of your message (not in bash), think about
 what files you need to produce and in what order. **Do not** turn
-this into a multi-paragraph design exercise — the dev-via-spec
-chain already designed. State your build plan in 3–6 bullets,
-then start writing.
+this into a multi-paragraph design exercise — the research chain
+already designed. State your build plan in 3–6 bullets, then
+start writing.
 
 Typical OSH-Java-Maven order:
 

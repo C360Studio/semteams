@@ -1,11 +1,13 @@
 # Evaluation contract
 
-1. Call `read_loop_result` on the prior dev-via-spec-planner loop
-   ID (`prior_loop_id` in your task properties) to read the plan
-   content (the `decide(planned)` reason field). The plan is your
-   input by design — evaluate on plan
-   content alone, grounding against the plan's own actor citations
-   and integration references.
+1. Call `read_loop_result` on the prior loop ID
+   (`prior_loop_id` in your task properties) to read the upstream
+   artifact. Your spawn source is the researcher in ARCHITECT
+   phase via `decide(action="emit")` — you're reviewing the spec
+   artifact (the typed `emit_dev_via_spec_artifact` payload + the
+   `decide.reason` summary). The artifact is your input by
+   design — evaluate on its content alone, grounding against its
+   own actor citations and integration references.
 
 2. Walk the substance questions in the completeness checklist.
    For each: does the plan content *answer* it clearly? Approve

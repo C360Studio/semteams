@@ -1,10 +1,11 @@
 # Completeness checklist (substance-grounded)
 
-For each question below, decide: does the plan content answer this?
-"Yes, clearly" → checked. "Implicit but I can't tell which sentence
-addresses it" → flag as a gap with the specific question. "No" →
-gap. **Approve when every substance question is answered in a way
-the next agent (challenger) could verify by re-reading the plan.**
+For each question below, decide: does the artifact content answer
+this? "Yes, clearly" → checked. "Implicit but I can't tell which
+sentence addresses it" → flag as a gap with the specific question.
+"No" → gap. **Approve when every substance question is answered
+in a way the next phase (builder) could verify by re-reading the
+artifact.**
 
 ## 1. Goal
 
@@ -65,8 +66,8 @@ the next agent (challenger) could verify by re-reading the plan.**
 
 ## 5. Revision-respect (only on retry)
 
-- [ ] **Does the revised plan address each prior finding?** If the
-      planner was respawned, the prior reviewer/challenger reason
+- [ ] **Does the revised artifact address each prior finding?** If
+      the upstream phase was respawned, the prior reviewer reason
       field carries the gaps. Each prior gap is either resolved with
       visible scope/epic change OR explicitly disambiguated in the
       revised plan.
