@@ -85,7 +85,8 @@ emit_dev_via_spec_artifact(
     reviewer_loop: "<may be empty>",
     // challenger_loop is required by the emit-tool schema but no
     // challenger role exists in MVP. Pass empty string; Phase 2
-    // will drop the field from schema + persona together.
+    // will drop the field from emitspecartifact/executor.go:292-300
+    // schema + this persona block together (tracked as Phase 2 item).
     challenger_loop: ""
   }
 )

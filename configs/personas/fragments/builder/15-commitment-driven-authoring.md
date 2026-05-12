@@ -128,8 +128,8 @@ Most external-actor checks will arrive with
    readiness. The rendered TCP port is your readiness target — wait
    until that port accepts a connection, not for arbitrary sleeps.
 4. Express the verifiable claim as a test method body: drive the
-   test_harness with the input the planner enumerated, assert the
-   output the planner enumerated.
+   test_harness with the input the spec artifact's check enumerated,
+   assert the output the check enumerated.
 5. Run the project-native test command (`mvn verify`, `go test
    ./...`, `npm test`) to invoke the test. The container lifecycle
    is managed by the runtime library; your test process spawns and
@@ -149,8 +149,8 @@ class MeshtasticdIntegrationIT {
 
     @Test
     void positionAppPacketProducesObservation() {
-        // Drive test_harness with the planner's input;
-        // assert the planner's output claim.
+        // Drive test_harness with the check's named input;
+        // assert the check's named output claim.
     }
 }
 ```
