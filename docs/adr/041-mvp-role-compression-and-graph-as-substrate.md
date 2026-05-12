@@ -710,10 +710,17 @@ absorbs `research-reviewer`, `dev-via-spec-reviewer`,
 only two reviewer spawn points: `reviewer(spec)` after
 researcher-architect-emit and `reviewer(qa)` after builder. The
 phase-graph (line 207) shows `architect → emit → reviewer` with
-no `reviewer(research)` label. But the rule table (lines 172-176)
-keeps a `research-mode-transition/02-reviewer-rejected-retry-research.json`
-that spawns researcher off a reviewer's `insufficient` verdict —
-which implies a reviewer ran somewhere in a research-only chain.
+no `reviewer(research)` label.
+
+The structural question: a pure-research arc (e.g. `deep-research.json`
+or any non-dev-via-spec deployment that runs only
+`researcher-plan → gather → synthesize → emit`) terminates with a
+reviewer. That reviewer reads a research artifact (not a spec
+artifact). If reviewer is one role with one prompt, it has to
+disambiguate at the LLM layer which artifact shape applies on
+every spawn. Three persona-fragment dirs avoid that ungrounded
+persona work and align with §141-143's "absorbs three ancestor
+roles" framing.
 
 **Decision: keep reviewer-research as a third mode.**
 
@@ -722,23 +729,32 @@ based on the spawning loop's `agent.loop.input.phase`:
 
 | Mode | Persona dir | Evaluates | Spawned by |
 |---|---|---|---|
-| research | `reviewer-research/` | research artifact (typed `emit_research_artifact` payload: actors[]/integration_points[]/seed_requirements[]/addressed_gaps[]/open_gaps[]/test_harness/substrate_mutations[]) | researcher emits from `synthesize` phase (pure research arc) |
-| spec | `reviewer-spec/` | spec artifact (typed `emit_dev_via_spec_artifact` payload: actors[]/integration_points[]/tasks[]/checks[]) | researcher emits from `architect` phase (dev-via-spec arc) |
+| research | `reviewer-research/` | research artifact (typed `emit_research_artifact` payload: actors[]/integration_points[]/tasks[]/addressed_gaps[]/open_gaps[]/test_harness/substrate_mutations[]/revision) | researcher emits from `synthesize` phase (pure research arc) |
+| spec | `reviewer-spec/` | spec artifact (typed `emit_dev_via_spec_artifact` payload: goal/context/actors[]/integration_points[]/tasks[]/checks[]/provenance) | researcher emits from `architect` phase (dev-via-spec arc) |
 | qa | `reviewer-qa/` | builder output (build green, tests passing, evidence rules pass) | builder emits `decide(action="tests_passing")` |
 
 **Why keep, not collapse.**
 
-The three modes have distinct output contracts:
+The three modes have distinct output contracts. Both research and
+spec artifacts carry `actors[]`, `integration_points[]`, and
+`tasks[]` — but those shared fields have different shapes
+(research `tasks` is `[]string`; spec `tasks[]` is `[]Task` with
+`grounds_actors[]` + `grounds_integration_points[]`) and the
+artifacts diverge in their non-shared fields:
 
-- Research artifact has fields (`open_gaps`, `addressed_gaps`,
-  `seed_requirements`, `substrate_mutations`) that spec artifact
-  does not.
-- Spec artifact has fields (`tasks[]`, `checks[]`) that research
-  artifact does not.
-- QA mode evaluates a builder commit (not a structured artifact)
-  — `decide.action="tests_passing"` carries `tests_run` + structural
-  evidence pre-checks that the rule pre-filter enforces before the
-  LLM call.
+- **Research-only fields**: `open_gaps`, `addressed_gaps`,
+  `substrate_mutations`, `revision`, `test_harness`. These exist
+  because the research artifact is a snapshot of an iterating
+  research arc: gaps known and addressed, substrate changes
+  recorded, revision counter monotonic.
+- **Spec-only fields**: `goal`, `context`, `checks[]`, `provenance`.
+  These exist because the spec artifact is a one-shot terminal
+  output of the dev-via-spec arc: builder needs explicit goal
+  + context + verification commitments + audit lineage.
+- **QA mode** evaluates a builder commit (not a structured
+  artifact) — `decide.action="tests_passing"` carries `tests_run`
+  + structural evidence pre-checks that the rule pre-filter
+  enforces before the LLM call.
 
 Collapsing into one reviewer prompt forces the LLM to
 disambiguate which contract applies, on every spawn. That's
@@ -764,8 +780,12 @@ right persona dir per spawn. Two implementable options:
    but spreads across two files.
 
 Slice D picks the option that matches the rule engine's actual
-expressiveness. Either works; the persona-dir-per-mode discipline
-is the load-bearing thing.
+expressiveness. Option 1 depends on the rule engine supporting
+conditional substitution in `agent.task.persona_dir` based on the
+spawning loop's input phase; if that capability is absent, option
+2 is forced — equivalent semantics, two files instead of one.
+Either works; the persona-dir-per-mode discipline is the
+load-bearing thing.
 
 **Implementation status as of Slice C.**
 

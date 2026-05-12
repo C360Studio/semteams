@@ -449,10 +449,11 @@ func TestADR041_ReviewerSpecArtifactShape(t *testing.T) {
 
 // TestADR041_ReviewerResearchArtifactShape asserts that the
 // reviewer-research fragments evaluate the RESEARCH ARTIFACT shape
-// (actors[]/integration_points[]/seed_requirements[]/addressed_gaps[]/
-// open_gaps[]/test_harness/substrate_mutations[]) emitted by
-// researcher-synthesize via emit_research_artifact, NOT the spec
-// artifact shape (tasks[]/checks[]) that reviewer-spec grades.
+// (actors[]/integration_points[]/tasks[]/addressed_gaps[]/
+// open_gaps[]/test_harness/substrate_mutations[]/revision) emitted
+// by researcher-synthesize via emit_research_artifact, NOT the spec
+// artifact shape (goal/context/checks[]/provenance + Task-with-grounds)
+// that reviewer-spec grades.
 //
 // Per ADR-041 §addendum 2026-05-12 "reviewer-research collapse-vs-keep
 // decision" the reviewer role has three modes (research/spec/qa).
@@ -460,34 +461,47 @@ func TestADR041_ReviewerSpecArtifactShape(t *testing.T) {
 // vocabularies forces the LLM to disambiguate which contract applies
 // and grades the wrong fields.
 //
+// Note: `actors[]`, `integration_points[]`, and `tasks[]` appear on
+// both artifacts (with different sub-shapes) — they're SHARED fields,
+// not distinguishing ones. The forbidden-prescription set is the
+// spec-EXCLUSIVE field surface (goal/context/checks[]/provenance/
+// grounds_actors/grounds_integration_points/emit_dev_via_spec_artifact).
+//
 // Catches regression where someone re-edits reviewer-research toward
-// spec-artifact vocabulary (tasks[]/checks[]) — that's reviewer-spec's
-// surface, not this one.
+// spec-artifact vocabulary — that's reviewer-spec's surface, not
+// this one.
 func TestADR041_ReviewerResearchArtifactShape(t *testing.T) {
 	root := "../../configs/personas/fragments/reviewer-research"
-	// Required: research artifact's structured fields. Combined corpus
-	// must reference each (some may legitimately appear in only one
-	// fragment — e.g. test_harness in the harness-gate, substrate_mutations
-	// in the stabilisation-check).
+	// Required: research artifact's structured fields per
+	// cmd/semteams/research/artifact.go:98-141. Combined corpus must
+	// reference each (some may legitimately appear in only one
+	// fragment — e.g. test_harness in the harness-gate,
+	// substrate_mutations + revision in the stabilisation-check).
 	requiredFieldRefs := []string{
 		"actors",
 		"integration_points",
-		"seed_requirement",
+		"tasks",
 		"open_gaps",
 		"addressed_gaps",
 		"test_harness",
 		"substrate_mutations",
+		"revision",
 	}
-	// Forbidden: spec-artifact prescriptions. reviewer-research grades
-	// the research artifact (open_gaps/addressed_gaps/seed_requirements
-	// shape), not the spec artifact (tasks[]/checks[] shape). Mentions
-	// in passing prose are fine; using these as the prescription is
-	// cross-mode drift.
+	// Forbidden: spec-EXCLUSIVE field surface. reviewer-research grades
+	// the research artifact, not the spec artifact. Substring matches
+	// are anchored where the bare token would false-positive on common
+	// English ("goal" → "`goal`" + "## Goal" patterns; "context" →
+	// "`context`" + "## Context" patterns) — prose like "the artifact's
+	// goal is to..." stays legitimate.
 	forbiddenPrescriptions := []string{
-		"tasks[]",
 		"checks[]",
-		// Spec-artifact's commitment contract concept. Doesn't apply
-		// to research artifacts.
+		"`goal`",
+		"## Goal",
+		"`context`",
+		"## Context",
+		"`provenance`",
+		"grounds_actors",
+		"grounds_integration_points",
 		"emit_dev_via_spec_artifact",
 	}
 
@@ -510,7 +524,7 @@ func TestADR041_ReviewerResearchArtifactShape(t *testing.T) {
 		body := string(data)
 		for _, forbidden := range forbiddenPrescriptions {
 			if strings.Contains(body, forbidden) {
-				t.Errorf("%s: contains spec-artifact prescription %q (reviewer-research evaluates the research artifact under ADR-041; tasks[]/checks[] are reviewer-spec's surface)", path, forbidden)
+				t.Errorf("%s: contains spec-exclusive prescription %q (reviewer-research evaluates the research artifact under ADR-041; spec-only field surfaces — goal/context/checks[]/provenance + Task-with-grounds — belong to reviewer-spec)", path, forbidden)
 			}
 		}
 		combined = append(combined, data...)
@@ -520,7 +534,7 @@ func TestADR041_ReviewerResearchArtifactShape(t *testing.T) {
 	combinedStr := string(combined)
 	for _, field := range requiredFieldRefs {
 		if !strings.Contains(combinedStr, field) {
-			t.Errorf("reviewer-research fragments do not reference research-artifact field %q anywhere (ADR-041 reviewer-research grades against the research artifact's structured shape — actors[]/integration_points[]/seed_requirements[]/addressed_gaps[]/open_gaps[]/test_harness/substrate_mutations[])", field)
+			t.Errorf("reviewer-research fragments do not reference research-artifact field %q anywhere (ADR-041 reviewer-research grades against the research artifact's structured shape — actors[]/integration_points[]/tasks[]/addressed_gaps[]/open_gaps[]/test_harness/substrate_mutations[]/revision)", field)
 		}
 	}
 }

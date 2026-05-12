@@ -17,12 +17,15 @@ read channels:
    marker triples on its loop entity. Call `query_entity` on the
    prior loop entity to read `research.artifact.path` (the rendered
    markdown research artifact on disk) plus the count predicates
-   (`research.artifact.actor_count`, `integration_point_count`,
-   `addressed_gaps_count`, `open_gaps_count`) for sanity-check.
-   Then `bash cat <path>` to read the markdown — that file carries
-   every structured field (actors, integration_points,
-   seed_requirements, addressed_gaps, open_gaps, test_harness,
-   substrate_mutations, revision).
+   (`research.artifact.actors_count`,
+   `research.artifact.integration_points_count`,
+   `research.artifact.tasks_count`,
+   `research.artifact.addressed_gaps_count`,
+   `research.artifact.open_gaps_count`) for sanity-check. Then
+   `bash cat <path>` to read the markdown — that file carries
+   every structured field (actors, integration_points, tasks,
+   addressed_gaps, open_gaps, test_harness, substrate_mutations,
+   revision).
 
 The markdown is the substance you grade against. Narrative is the
 index; markdown is the truth.
@@ -45,5 +48,5 @@ allow-list for this phase:
 Substance over format. Don't reject for missing markdown headers
 or wrong section ordering when the artifact's structured fields
 carry the substance. Reject when actors are unnamed,
-integration_points lack a target, seed_requirements aren't
-decomposable, or open_gaps fabricates findings.
+integration_points lack a target, tasks aren't decomposable, or
+open_gaps fabricates findings.

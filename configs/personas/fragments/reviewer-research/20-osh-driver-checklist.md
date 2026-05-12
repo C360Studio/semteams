@@ -22,11 +22,11 @@ test SemSource"* — the artifact must include at minimum:
 - At least one actor pair involving Meshtastic radio and the OSH
   driver, with direction.
 
-**Seed requirements (1 required, decomposable granularity):**
+**Tasks (1 required, decomposable granularity):**
 
-- At least one requirement of "implement X interface backed by Y
-  so that Z" shape. Aspirational requirements ("build a driver")
-  are insufficient — must be decomposable.
+- At least one task of "implement X interface backed by Y so that
+  Z" shape. Aspirational tasks ("build a driver") are insufficient
+  — must be decomposable.
 
 If any required item is absent, the artifact is `insufficient`.
 List the specific item(s) missing in your `decide` reason.
