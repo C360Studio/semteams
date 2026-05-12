@@ -38,18 +38,16 @@ func TestLineageThreading_RuleCoverage(t *testing.T) {
 		// remains — the prior 01b (researcher-with-source-acquisition →
 		// RR) was deleted because the role no longer exists; the post-
 		// curator re-query researcher is plain `researcher` and is
-		// handled by 01a's eq match.
+		// handled by 01a's eq match. ADR-041 Slice 2D-1 deleted rules
+		// 02/02b/02c (curator teardown); the replacement
+		// 02-reviewer-rejected-retry-research arrives in Slice 2D-3
+		// and will re-add its coverage entry here.
 		{
 			path:  "../../configs/rules/research-mode-transition/01a-research-to-reviewer-after-researcher.json",
 			want:  "$entity.instance",
 			notes: "researcher -> RR: lineage.researcher = researcher's loop_id",
 		},
 		// Forward-thread rules: read lineage.researcher from triggering entity.
-		{
-			path:  "../../configs/rules/research-mode-transition/02-reviewer-rejected-spawn-curator.json",
-			want:  "$entity.triple.lineage.researcher",
-			notes: "RR insufficient -> curator: forward lineage.researcher so the curator can read_loop_result on the prior researcher's artifact when classifying the gap",
-		},
 		{
 			path:  "../../configs/rules/research-mode-transition/03-stabilise-and-transition.json",
 			want:  "$entity.triple.lineage.researcher",
@@ -138,8 +136,6 @@ func TestLineageThreading_DiscoveryWalk(t *testing.T) {
 	// Allowlist: rules where lineage threading is intentionally skipped.
 	// Each entry MUST have a one-line rationale.
 	allowlist := map[string]string{
-		"02b-curator-indexed-to-researcher.json":              "ADR-040 rule. Spawns a fresh researcher (the new research-artifact author) post-curator-indexing. Forwarding the curator's lineage.researcher would point at the SUPERSEDED original researcher, violating the architect-reachability invariant. The next 01a firing re-stamps lineage.researcher = $entity.instance of the recovery researcher. Same supersession pattern as ADR-039 rule 08.",
-		"02c-curator-needs-clarification-to-researcher.json":  "ADR-040 Tier 1 recovery rule (complements ADR-039 rule 08). Spawns a fresh researcher with the curator's reason + retry_hint as guidance. Same supersession pattern as 02b — new researcher is the new artifact author; 01a re-stamps lineage on its completion.",
 		"08-architect-needs-clarification-to-researcher.json": "ADR-039 Phase 1 recovery rule. Spawns a fresh researcher (the new research-artifact author) — forwarding the prior researcher's loop_id would stamp lineage.researcher to a SUPERSEDED loop, violating the invariant. The next 01a firing re-stamps lineage.researcher = $entity.instance of the recovery researcher; downstream architect/reviewer/etc. see the new artifact pointer.",
 	}
 

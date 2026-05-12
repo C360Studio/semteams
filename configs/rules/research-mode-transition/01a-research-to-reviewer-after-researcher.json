@@ -33,7 +33,7 @@
       "related_loops": {
         "researcher": "$entity.instance"
       },
-      "prompt": "Evaluate the prior researcher loop's submission. Researcher loop id: $entity.instance. Call read_loop_result with that loop id to fetch the artifact, apply the active checklist, then call decide(action=\"approved\") if all required items are present, or decide(action=\"insufficient\", reason=\"<bullet list of gaps>\") otherwise. If the artifact's open_gaps names a corpus that is not indexed, name the missing repo URL explicitly in your insufficient reason — the framework will spawn a source-curator that calls add_source_repo for the URL you name."
+      "prompt": "Evaluate the prior researcher loop's submission. Researcher loop id: $entity.instance. Call read_loop_result with that loop id to fetch the artifact, apply the active checklist, then call decide(action=\"approved\") if all required items are present, or decide(action=\"insufficient\", reason=\"<bullet list of gaps>\") otherwise. Name the specific gaps the next researcher should close; the framework will spawn a retry researcher with your reason as its guidance."
     }
   ],
   "on_exit": [],
