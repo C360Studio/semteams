@@ -36,10 +36,13 @@ The allow-list for this phase:
 - `decide(action="emit", reason=...)` — the normal forward path,
   after calling `emit_dev_via_spec_artifact`. Closes the research
   arc; reviewer (in spec-mode) evaluates the artifact next.
-- `decide(action="regather", reason=...)` — re-gather back-edge.
+- `decide(action="gather", reason=...)` — re-gather back-edge.
   Allowed when the architectural pass surfaces a corpus dep the
   chain missed (e.g. an integration_point's target system has no
-  evidence). Bounded by per-phase cap (max 3 gather fires); the
+  evidence). The rule layer disambiguates forward-gather (from
+  PLAN) vs back-edge-gather (from here) by reading the spawning
+  loop's input phase; you emit the single `gather` token in either
+  case. Bounded by per-phase cap (max 3 gather fires); the
   structural validator rejects a back-edge that would exceed cap.
 - `decide(action="needs_clarification", reason=...)` — when the
   synthesized artifact is structurally insufficient for architecture

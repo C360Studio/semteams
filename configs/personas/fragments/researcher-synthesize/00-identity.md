@@ -35,11 +35,14 @@ The allow-list for this phase:
 - `decide(action="architect", reason=...)` — the normal forward
   path. ARCHITECT phase consumes the artifact and produces the
   concrete shape (checks[], commitments).
-- `decide(action="regather", reason=...)` — re-gather back-edge.
+- `decide(action="gather", reason=...)` — re-gather back-edge.
   Allowed when synthesis surfaces a corpus gap the plan didn't
-  anticipate. Bounded by per-phase cap (max 3 gather fires per
-  chain); the structural validator rejects a back-edge that would
-  exceed cap.
+  anticipate. The rule layer disambiguates forward-gather (from
+  PLAN) vs back-edge-gather (from here) by reading the spawning
+  loop's input phase; you emit the single `gather` token in either
+  case. Bounded by per-phase cap (max 3 gather fires per chain);
+  the structural validator rejects a back-edge that would exceed
+  cap.
 - `decide(action="needs_clarification", reason=...)` — when the
   evidence is structurally inconsistent with the plan in a way
   GATHER can't resolve.

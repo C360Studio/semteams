@@ -126,9 +126,12 @@ coordinator → researcher → builder → reviewer
 - **coordinator** (unchanged) — entry point. Reads the user's request.
   Decomposes if needed. Spawns the first researcher.
 - **researcher** (expanded contract) — absorbs `planner` and
-  `architect` via persona-swap on `decide(next_phase=...)`. One loop,
-  one output contract per call, but the phase the researcher is in
-  can flip mid-chain. Reads the corpus, plans the work, drafts the
+  `architect` via persona-swap. The phase the researcher is in can
+  flip mid-chain: each researcher loop emits `decide(action="<next-phase>",
+  reason=...)` and the rule layer spawns a fresh loop into the
+  named phase's persona dir. The `action` token IS the next-phase
+  name (see §"Wire shape" for why `action` rather than a separate
+  `next_phase` arg). Reads the corpus, plans the work, drafts the
   artifact. `research-reviewer` does **not** collapse here — it
   collapses into `reviewer` (see below); the researcher only spans
   the *production* phases, not the *review* phase.
@@ -260,6 +263,26 @@ against the ADR-039 chain recovery cap and the per-phase `plan` cap
 trigger). Smoke runs should expect zero-to-one premature emits per
 chain; more than that is the failure signal.
 
+#### Wire shape: phase rides on `decide.action`
+
+The upstream `decide` tool (`processor/agentic-tools/decide.go`)
+accepts exactly four args: `action`, `reason`, `subtopics`,
+`retry_hint`. There is no `next_phase` arg, and adding one would
+be a framework change ADR-041 explicitly avoids. The next-phase
+name therefore IS the `action` token — `decide(action="gather", reason=...)`,
+`decide(action="synthesize", reason=...)`, etc. Implementation
+references in this ADR that say "next_phase" mean "the action
+token, which encodes the target phase." The structural validator
++ persona allow-lists both read the action token directly.
+
+Back-edges (synthesize → gather, architect → gather) emit the
+same `action="gather"` token as the forward `plan → gather`
+transition. The rule layer disambiguates by reading the spawning
+loop's input phase, not by introducing a separate vocabulary
+(e.g. `regather`). This keeps the persona vocabulary one-token-
+per-target-phase and aligns with the single
+`chain.researcher.phase_count.gather` counter.
+
 #### Structural validator (Go, framework-side rule pre-filter)
 
 The transition allow-list above is enforced by a Go validator that
@@ -267,7 +290,8 @@ runs as a rule pre-filter (before the rule's LLM call, if any). It
 reads:
 
 - the current researcher loop's input phase (from `agent.loop.input.phase`)
-- the researcher's `decide` output's `next_phase` value
+- the researcher's `decide` output's `action` value (the next-phase
+  name; see §"Wire shape" above)
 - the chain's per-phase counters
 
 and rejects with a structured error that triggers chain-failure
@@ -276,7 +300,7 @@ transitions are deterministic — there's no LLM judgment to defer.
 
 Phase progression is researcher-decided within the allow-list,
 not coordinator-decided. The coordinator spawns researcher(phase=`plan`);
-subsequent phases are `decide(next_phase=...)` self-transitions
+subsequent phases are `decide(action="<target-phase>")` self-transitions
 validated structurally. This keeps the
 rule-engine-as-orchestrator pattern (each phase is a fresh loop with
 its own input contract) while collapsing the rule count.
@@ -513,14 +537,23 @@ by phase:
 
 **Phase 1 — Persona consolidation (no rule changes).**
 
-- Re-home fragments: `researcher/plan/*`, `researcher/gather/*`,
-  `researcher/synthesize/*`, `researcher/architect/*`.
-- Re-home reviewer fragments: `reviewer/spec/*`, `reviewer/qa/*`,
-  `reviewer/research/*`.
-- Add researcher's `decide(next_phase=...)` terminal +
-  persona-fragment selection on input-loop phase.
-- Test: contract test verifies all fragments load; persona
-  manager picks correct fragment set for each phase.
+- Re-home fragments into the phase-as-sub-role dirs:
+  `researcher-plan/*`, `researcher-gather/*`,
+  `researcher-synthesize/*`, `researcher-architect/*`. (Upstream
+  `persona.LoadFromDirectory` is depth-2 only; phase-keyed
+  fragment selection within a single role dir would require an
+  upstream change, so MVP uses dashes-as-sub-roles. Documented
+  fully in §"Implementation notes" addendum below.)
+- Re-home reviewer fragments: `reviewer-spec/*`, `reviewer-qa/*`,
+  `reviewer-research/*`.
+- Declare each researcher phase's `decide.action` allow-list in
+  the phase's identity fragment (the next-phase name IS the
+  action token; see §"Wire shape").
+- Test: contract tests verify (a) all phase dirs load,
+  (b) phase identities reference their phase name,
+  (c) phase identities declare the expected decide-action set per
+  the phase graph, (d) no stale dev-via-spec vocabulary
+  (`action="planned"` etc.) leaks into the new identities.
 
 **Phase 2 — Rule rewrite + structural validator + curator-tool teardown.**
 

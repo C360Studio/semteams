@@ -116,11 +116,15 @@ func TestADR041_ResearcherPhaseIdentitiesDeclareDecideActions(t *testing.T) {
 	root := "../../configs/personas/fragments"
 	// Phase graph from ADR-041 §"Allowed transitions". Each entry is the
 	// minimum set of decide-action tokens the identity must mention.
+	// Back-edges from synthesize and architect emit the same `gather`
+	// token as the forward path; the rule layer disambiguates by
+	// reading the spawning loop's input phase, so the persona vocabulary
+	// stays single-token per target phase (ADR-041 transition table).
 	for phase, expectedActions := range map[string][]string{
 		"researcher-plan":       {`action="gather"`, `action="needs_clarification"`, `action="emit"`},
 		"researcher-gather":     {`action="synthesize"`, `action="needs_clarification"`},
-		"researcher-synthesize": {`action="architect"`, `action="regather"`, `action="needs_clarification"`},
-		"researcher-architect":  {`action="emit"`, `action="regather"`, `action="needs_clarification"`},
+		"researcher-synthesize": {`action="architect"`, `action="gather"`, `action="needs_clarification"`},
+		"researcher-architect":  {`action="emit"`, `action="gather"`, `action="needs_clarification"`},
 	} {
 		path := filepath.Join(root, phase, "00-identity.md")
 		data, err := os.ReadFile(path)
@@ -137,6 +141,54 @@ func TestADR041_ResearcherPhaseIdentitiesDeclareDecideActions(t *testing.T) {
 		for _, action := range expectedActions {
 			if !strings.Contains(body, action) {
 				t.Errorf("%s: identity fragment missing required decide token %q", path, action)
+			}
+		}
+	}
+}
+
+// TestADR041_ResearcherPhaseIdentitiesRejectStaleTokens asserts that
+// the researcher phase identities do NOT carry vocabulary inherited
+// from the old dev-via-spec chain. The chain that ADR-041 replaces
+// terminated researcher / planner / architect with decide actions
+// like "planned" / "approved" (reviewer) / "challenger_accepted" /
+// "dev_complete"; under the compressed roster these tokens are stale
+// and emitting them from a new-phase persona prompt would route
+// nowhere (no rule fires on them).
+//
+// This is an inverse check to TestADR041_ResearcherPhaseIdentitiesDeclareDecideActions
+// — that test verifies presence of the expected token set; this one
+// rejects presence of the dev-via-spec-vocabulary tokens. Catches
+// drift-back regressions during slice-by-slice rewrites of the
+// inherited fragments.
+//
+// Scope is limited to 00-identity.md per phase. The inherited
+// fragments (10/20/30/40-*.md) still carry stale vocabulary as of
+// Slice 1c-1 and are tracked for Slice 1c-2; this test guards the
+// identity surface, which is the prompt's load-bearing top.
+func TestADR041_ResearcherPhaseIdentitiesRejectStaleTokens(t *testing.T) {
+	root := "../../configs/personas/fragments"
+	staleTokens := []string{
+		`action="planned"`,
+		`action="dev_complete"`,
+		`action="challenger_accepted"`,
+		`action="research_completed"`,
+	}
+	for _, phase := range []string{
+		"researcher-plan",
+		"researcher-gather",
+		"researcher-synthesize",
+		"researcher-architect",
+	} {
+		path := filepath.Join(root, phase, "00-identity.md")
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Errorf("read %s: %v", path, err)
+			continue
+		}
+		body := string(data)
+		for _, stale := range staleTokens {
+			if strings.Contains(body, stale) {
+				t.Errorf("%s: identity fragment references stale dev-via-spec token %q (ADR-041 phase vocabulary uses gather/synthesize/architect/emit/needs_clarification)", path, stale)
 			}
 		}
 	}

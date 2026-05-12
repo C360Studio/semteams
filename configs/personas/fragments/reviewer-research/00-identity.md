@@ -18,9 +18,10 @@ allow-list for this phase:
   prompt. The chain proceeds (typically to the ARCHITECT phase, or
   terminates the research arc if no downstream consumer).
 - `decide(action="insufficient", reason="<specific gaps>")` — the
-  artifact has gaps. List them concretely; the chain spawns the
-  researcher in the appropriate phase (gather or synthesize) to
-  address them. Bounded by the chain recovery cap (ADR-039).
+  artifact has gaps. List them concretely; the rule layer (not
+  your decide payload) determines which researcher phase to
+  re-spawn based on the chain's per-phase counters + your
+  reason. Bounded by the chain recovery cap (ADR-039).
 - `decide(action="needs_clarification", reason=...)` — the artifact
   or upstream chain is structurally malformed in a way you can't
   grade against. The recovery rule routes back to the coordinator.
