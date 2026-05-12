@@ -85,7 +85,6 @@ type Provenance struct {
 	ResearchArtifactLoop string `json:"research_artifact_loop"`
 	PlannerLoop          string `json:"planner_loop"`
 	ReviewerLoop         string `json:"reviewer_loop"`
-	ChallengerLoop       string `json:"challenger_loop"`
 	ArchitectLoop        string `json:"architect_loop,omitempty"` // set by executor from ToolCall.LoopID
 }
 
@@ -167,9 +166,6 @@ func (a *Artifact) Validate() error {
 	}
 	if a.Provenance.ReviewerLoop == "" {
 		return fmt.Errorf("provenance.reviewer_loop required")
-	}
-	if a.Provenance.ChallengerLoop == "" {
-		return fmt.Errorf("provenance.challenger_loop required")
 	}
 	for i := range a.Checks {
 		if err := a.Checks[i].Validate(); err != nil {

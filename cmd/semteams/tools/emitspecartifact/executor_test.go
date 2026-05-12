@@ -138,7 +138,6 @@ func defaultArtifactArgs() map[string]any {
 			"research_artifact_loop": "loop-research-001",
 			"planner_loop":           "loop-planner-001",
 			"reviewer_loop":          "loop-reviewer-001",
-			"challenger_loop":        "loop-challenger-001",
 		},
 	}
 }
@@ -326,9 +325,8 @@ func TestExecute_MissingProvenanceResearchLoop_FailsValidation(t *testing.T) {
 	exec, _, _, _ := newExecutorWithDir(t)
 	args := defaultArtifactArgs()
 	args["provenance"] = map[string]any{
-		"planner_loop":    "loop-planner-001",
-		"reviewer_loop":   "loop-reviewer-001",
-		"challenger_loop": "loop-challenger-001",
+		"planner_loop":  "loop-planner-001",
+		"reviewer_loop": "loop-reviewer-001",
 		// research_artifact_loop intentionally omitted
 	}
 	res, _ := exec.Execute(context.Background(), defaultCall(args))
@@ -693,7 +691,6 @@ func TestExecute_HappyPath_MarkdownFileWritten(t *testing.T) {
 		"loop-research-001",
 		"loop-planner-001",
 		"loop-reviewer-001",
-		"loop-challenger-001",
 		"loop-architect-abc",
 	} {
 		if !strings.Contains(md, section) {
@@ -1951,11 +1948,11 @@ func TestExecute_ChainSlugStemOverridesTitleSlug(t *testing.T) {
 }
 
 // TestExecute_ChainProvenanceOverridesLLMValues pins the smoke #8 run-5
-// D1 fix: chain.{research_artifact_loop, plan_loop, plan_reviewer_loop,
-// consensus_loop} must override LLM-supplied provenance.* loop_ids.
-// Smoke #8 run-5 evidence: architect cited the challenger as the
-// "approved planner loop"; chain entity has the right four loop IDs
-// distinct, and the override propagates them into the rendered spec.
+// D1 fix: chain.{research_artifact_loop, plan_loop, plan_reviewer_loop}
+// must override LLM-supplied provenance.* loop_ids. Smoke #8 run-5
+// evidence: architect cited a downstream loop as the "approved planner
+// loop"; chain entity has the right loop IDs distinct, and the override
+// propagates them into the rendered spec.
 func TestExecute_ChainProvenanceOverridesLLMValues(t *testing.T) {
 	exec, tp, _, dir := newExecutorWithDir(t)
 	exec.SetChainReader(&stubChainReader{
@@ -1964,18 +1961,16 @@ func TestExecute_ChainProvenanceOverridesLLMValues(t *testing.T) {
 			chain.PredicateResearchArtifactLoop: "researcher_canonical",
 			chain.PredicatePlanLoop:             "planner_canonical",
 			chain.PredicatePlanReviewerLoop:     "reviewer_canonical",
-			chain.PredicateConsensusLoop:        "challenger_canonical",
 		},
 	})
 
 	args := defaultArtifactArgs()
-	// Architect's local guess — typically wrong (smoke #8 run-5 had
-	// the challenger ID in the planner slot etc.).
+	// Architect's local guess — typically wrong (smoke #8 run-5 had a
+	// downstream loop ID in the planner slot etc.).
 	args["provenance"] = map[string]any{
 		"research_artifact_loop": "wrong_research",
 		"planner_loop":           "wrong_planner",
 		"reviewer_loop":          "wrong_reviewer",
-		"challenger_loop":        "wrong_challenger",
 	}
 
 	res, err := exec.Execute(context.Background(), defaultCall(args))
@@ -1999,12 +1994,12 @@ func TestExecute_ChainProvenanceOverridesLLMValues(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read rendered markdown: %v", err)
 	}
-	for _, want := range []string{"researcher_canonical", "planner_canonical", "reviewer_canonical", "challenger_canonical"} {
+	for _, want := range []string{"researcher_canonical", "planner_canonical", "reviewer_canonical"} {
 		if !strings.Contains(string(body), want) {
 			t.Errorf("rendered body missing chain-canonical %q; got body:\n%s", want, body)
 		}
 	}
-	for _, wrong := range []string{"wrong_research", "wrong_planner", "wrong_reviewer", "wrong_challenger"} {
+	for _, wrong := range []string{"wrong_research", "wrong_planner", "wrong_reviewer"} {
 		if strings.Contains(string(body), wrong) {
 			t.Errorf("rendered body still contains LLM-supplied %q (chain override should have replaced it); got body:\n%s", wrong, body)
 		}

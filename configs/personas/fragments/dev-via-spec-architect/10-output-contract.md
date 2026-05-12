@@ -74,16 +74,14 @@ emit_dev_via_spec_artifact(
   provenance: {
     // OPTIONAL — the server overrides every field below from the chain
     // entity (chain.research_artifact_loop, chain.plan_loop,
-    // chain.plan_reviewer_loop, chain.consensus_loop) before the
-    // markdown renders. Pass an empty object if you don't have the
-    // values handy; the server still fills in the canonical IDs.
-    // Smoke #8 run-5 showed personas guessing wrong (citing the
-    // challenger as the planner_loop, etc.); the chain entity has
-    // them right.
+    // chain.plan_reviewer_loop) before the markdown renders. Pass an
+    // empty object if you don't have the values handy; the server
+    // still fills in the canonical IDs. Smoke #8 run-5 showed
+    // personas guessing wrong (citing a downstream loop as the
+    // planner_loop, etc.); the chain entity has them right.
     research_artifact_loop: "<may be empty>",
     planner_loop: "<may be empty>",
-    reviewer_loop: "<may be empty>",
-    challenger_loop: "<may be empty>"
+    reviewer_loop: "<may be empty>"
   }
 )
 ```

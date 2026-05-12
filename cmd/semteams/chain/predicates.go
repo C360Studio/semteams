@@ -75,8 +75,10 @@ const (
 
 	// PredicateConsensusLoop names the chain-entity predicate that
 	// records the dev-via-spec-challenger loop_id that accepted the
-	// plan. Read by emit_dev_via_spec_artifact to populate
-	// "provenance.challenger_loop".
+	// plan. Written by the consensus milestone stamper; no longer
+	// read by emit_dev_via_spec_artifact (the artifact's provenance
+	// dropped challenger_loop with ADR-041 Phase 2 Slice B). Slice D
+	// tears down the consensus role + stamper.
 	PredicateConsensusLoop = "chain.consensus.loop"
 
 	// PredicateNeedsReviewClassification is the first predicate of the

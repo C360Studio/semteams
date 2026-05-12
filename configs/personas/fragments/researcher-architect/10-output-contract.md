@@ -74,20 +74,15 @@ emit_dev_via_spec_artifact(
   provenance: {
     // The server overrides every field below from the chain entity
     // (chain.research_artifact_loop, chain.plan_loop,
-    // chain.plan_reviewer_loop, chain.consensus_loop) before the
-    // markdown renders. Pass empty strings if you don't have the
-    // values handy; the server still fills in the canonical IDs.
-    // Smoke #8 run-5 showed personas guessing wrong loop IDs; the
-    // chain entity has them right. All four fields are schema-required
-    // — emit them all even if empty.
+    // chain.plan_reviewer_loop) before the markdown renders. Pass
+    // empty strings if you don't have the values handy; the server
+    // still fills in the canonical IDs. Smoke #8 run-5 showed
+    // personas guessing wrong loop IDs; the chain entity has them
+    // right. All three fields are schema-required — emit them all
+    // even if empty.
     research_artifact_loop: "<may be empty>",
     planner_loop: "<may be empty>",
-    reviewer_loop: "<may be empty>",
-    // challenger_loop is required by the emit-tool schema but no
-    // challenger role exists in MVP. Pass empty string; Phase 2
-    // will drop the field from emitspecartifact/executor.go:292-300
-    // schema + this persona block together (tracked as Phase 2 item).
-    challenger_loop: ""
+    reviewer_loop: "<may be empty>"
   }
 )
 ```

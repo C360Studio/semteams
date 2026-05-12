@@ -27,7 +27,6 @@ func minimalValidArtifact() Artifact {
 			ResearchArtifactLoop: "loop-research-001",
 			PlannerLoop:          "loop-planner-001",
 			ReviewerLoop:         "loop-reviewer-001",
-			ChallengerLoop:       "loop-challenger-001",
 		},
 	}
 }
@@ -68,7 +67,6 @@ func TestArtifact_RoundTrip(t *testing.T) {
 			ResearchArtifactLoop: "loop-research-001",
 			PlannerLoop:          "loop-planner-001",
 			ReviewerLoop:         "loop-reviewer-001",
-			ChallengerLoop:       "loop-challenger-001",
 			ArchitectLoop:        "loop-architect-001",
 		},
 		GeneratedAt: "2026-04-30T12:00:00Z",
@@ -215,11 +213,6 @@ func TestArtifact_Validate_Table(t *testing.T) {
 			name:            "missing reviewer_loop",
 			mutate:          func(a *Artifact) { a.Provenance.ReviewerLoop = "" },
 			wantErrContains: "reviewer_loop",
-		},
-		{
-			name:            "missing challenger_loop",
-			mutate:          func(a *Artifact) { a.Provenance.ChallengerLoop = "" },
-			wantErrContains: "challenger_loop",
 		},
 	}
 
