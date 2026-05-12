@@ -180,6 +180,110 @@ const (
 	// hiccup costs at most one missed recovery cycle, never an
 	// unbounded retry storm.
 	PredicateRecoveryProceed = "chain.recovery.proceed"
+
+	// PredicatePhaseCountPlan / Gather / Synthesize / Architect are the
+	// per-phase researcher counters incremented when a phase-transition
+	// validator approves a transition into that phase (ADR-041
+	// §"Per-phase cap"). Stored as string-formatted integers ("0", "1",
+	// …) on the chain entity so the rule engine's expression operators
+	// (eq/lte/gt) compare cleanly. Each is a distinct 4-part predicate
+	// rather than a structured object so rule-condition syntax can read
+	// the value directly without JSON traversal.
+	//
+	// Cap semantics: plan=1, gather=3, synthesize=2, architect=2. When
+	// the validator detects a target phase already at cap, no proceed
+	// sentinel is written and the chain stalls fail-safe (same shape as
+	// PredicateRecoveryProceed absence). The phase counter audit triple
+	// always lands so operators see "this chain hit phase X cap" even
+	// when no consuming rule fires.
+	PredicatePhaseCountPlan       = "chain.researcher.phase_count.plan"
+	PredicatePhaseCountGather     = "chain.researcher.phase_count.gather"
+	PredicatePhaseCountSynthesize = "chain.researcher.phase_count.synthesize"
+	PredicatePhaseCountArchitect  = "chain.researcher.phase_count.architect"
+
+	// PredicatePhaseTransitionProceedGather / Synthesize / Architect are
+	// per-cycle gate sentinels stamped on the completed researcher's
+	// loop entity when the phase validator (cmd/semteams/phasevalidator)
+	// approves a transition into the named target phase. The next-phase
+	// researcher spawn rule (Slice 2D-3) gates on `chain.phase_transition
+	// .proceed.<target> eq "true"`. Absence blocks the rule fire — same
+	// fail-safe shape as PredicateRecoveryProceed.
+	//
+	// No `proceed.emit` sentinel exists because action="emit" terminates
+	// the researcher arc and hands off to the research-reviewer via the
+	// existing rule 01a, which has its own conditions. The phase
+	// validator stamps `chain.phase_transition.target = "emit"` on the
+	// chain entity for audit when a researcher emits but does not write
+	// a proceed sentinel for it.
+	//
+	// Object value is the string "true". Stamped only on the completed
+	// researcher's loop entity (not the chain entity) — the gate is
+	// per-cycle. The chain entity carries phase_count + transition_target
+	// for audit.
+	PredicatePhaseTransitionProceedGather     = "chain.phase_transition.proceed.gather"
+	PredicatePhaseTransitionProceedSynthesize = "chain.phase_transition.proceed.synthesize"
+	PredicatePhaseTransitionProceedArchitect  = "chain.phase_transition.proceed.architect"
+
+	// PredicatePhaseTransitionTarget is the last target-phase token the
+	// phase validator evaluated for this chain. Stamped on the chain
+	// entity for operator visibility regardless of whether the validator
+	// approved or rejected (the rejected case has no proceed sentinel,
+	// so target alone tells operators what the researcher tried to do).
+	// Object value is the bare action token ("gather" / "synthesize" /
+	// "architect" / "emit").
+	PredicatePhaseTransitionTarget = "chain.phase_transition.target"
+
+	// PredicatePhaseTransitionRejected marks the chain entity when the
+	// phase validator structurally rejected a transition (invalid edge
+	// OR target phase at cap). Object value "true". The chain stalls
+	// because no proceed sentinel was written; this triple is the
+	// operator-visible cause, parallel to PredicateRecoveryExhausted.
+	// Distinct from chain.paused.* (ADR-037 — semstreams-level loop
+	// failures) and chain.needs_review.* (ADR-039 Phase 1 —
+	// recoverable-pending semantics).
+	PredicatePhaseTransitionRejected = "chain.phase_transition.rejected"
+
+	// PredicatePhaseTransitionRejectReason carries a short token
+	// classifying the rejection: "invalid_edge" (target phase not
+	// allowed from input phase) or "phase_cap" (target phase already at
+	// cap). Ops-agent groups stalls by this token; persona content
+	// stays narrative ("X happened because…"), this stays vocabulary.
+	PredicatePhaseTransitionRejectReason = "chain.phase_transition.reject_reason"
+
+	// PredicateSpecModeGateProceed is the per-cycle gate sentinel
+	// SpecModeGate writes onto a completing reviewer-spec loop entity
+	// when the chain has a research artifact upstream (ADR-041
+	// §"Risks mitigation" spec-mode pre-check). Absence blocks the
+	// reviewer-spec→builder spawn rule from firing.
+	PredicateSpecModeGateProceed = "chain.spec_mode_gate.proceed"
+
+	// PredicateSpecModeGateRejected marks the chain entity when the
+	// spec-mode gate rejected an approval (no research-artifact
+	// ancestor). Object value "true".
+	PredicateSpecModeGateRejected = "chain.spec_mode_gate.rejected"
+
+	// PredicateSpecModeGateRejectReason classifies a spec-mode gate
+	// rejection. Currently the only token is "missing_research_artifact"
+	// (no chain.research_artifact.loop on the chain entity).
+	PredicateSpecModeGateRejectReason = "chain.spec_mode_gate.reject_reason"
+
+	// PredicateQAModeGateProceed is the per-cycle gate sentinel
+	// QAModeGate writes onto a completing builder loop entity when the
+	// builder's claim of "tests_passing" is structurally consistent
+	// (tests_run > 0 AND tests_failed = 0). Absence blocks the
+	// builder→reviewer-qa spawn rule from firing.
+	PredicateQAModeGateProceed = "chain.qa_mode_gate.proceed"
+
+	// PredicateQAModeGateRejected marks the chain entity when the
+	// qa-mode gate rejected a builder claim (tests_run=0 or
+	// tests_failed>0). Object value "true".
+	PredicateQAModeGateRejected = "chain.qa_mode_gate.rejected"
+
+	// PredicateQAModeGateRejectReason classifies a qa-mode gate
+	// rejection: "zero_tests_run" (action=tests_passing with
+	// tests_run=0) or "tests_failed_nonzero" (action=tests_passing
+	// with tests_failed>0). Ops-agent groups stalls by this token.
+	PredicateQAModeGateRejectReason = "chain.qa_mode_gate.reject_reason"
 )
 
 // init registers the chain vocabulary with the upstream vocabulary
@@ -256,14 +360,107 @@ func init() {
 		vocabulary.WithDataType("string"),
 	)
 
-	// Central registration for chain.* predicates written by other
-	// packages. Constants stay co-located with their writers (chainpause,
-	// evidence, emitspecartifact, etc.); registration is centralised here
-	// so vocab queries (ListByDomain("chain"), RDF export, hierarchy
-	// walks) see the complete catalog. Promoting these to constants in
-	// this file is a deferred follow-up refactor; the strings are stable
-	// (post-2026-05-11 3-part renames) so registration is safe.
-	//
+	// ADR-041 predicates (phase validator + spec/qa gates) live in a
+	// helper to keep init() under revive's function-length limit.
+	registerADR041Predicates()
+}
+
+// registerADR041Predicates registers the chain.phase_transition.*,
+// chain.researcher.phase_count.*, chain.spec_mode_gate.*, and
+// chain.qa_mode_gate.* predicates introduced by ADR-041 (MVP role
+// compression + structural gates). Split out of init() to keep that
+// function under revive's function-length threshold; semantically a
+// continuation of init's central-registration block.
+func registerADR041Predicates() {
+	// Per-phase counters on chain entity. Stored as string-formatted
+	// integers so rule-engine string operators compare cleanly; the
+	// validator (cmd/semteams/phasevalidator) is the sole writer.
+	vocabulary.Register(PredicatePhaseCountPlan,
+		vocabulary.WithDescription("ADR-041 §Per-phase cap: per-chain count of researcher 'plan' phase fires. Cap = 1. Stored as string-formatted integer for rule-engine string comparisons."),
+		vocabulary.WithDataType("int"),
+	)
+	vocabulary.Register(PredicatePhaseCountGather,
+		vocabulary.WithDescription("ADR-041 §Per-phase cap: per-chain count of researcher 'gather' phase fires. Cap = 3 (initial + 2 back-edge re-gathers from synthesize/architect)."),
+		vocabulary.WithDataType("int"),
+	)
+	vocabulary.Register(PredicatePhaseCountSynthesize,
+		vocabulary.WithDescription("ADR-041 §Per-phase cap: per-chain count of researcher 'synthesize' phase fires. Cap = 2 (initial + one revision after back-edge re-gather)."),
+		vocabulary.WithDataType("int"),
+	)
+	vocabulary.Register(PredicatePhaseCountArchitect,
+		vocabulary.WithDescription("ADR-041 §Per-phase cap: per-chain count of researcher 'architect' phase fires. Cap = 2 (initial + one revision after back-edge re-gather)."),
+		vocabulary.WithDataType("int"),
+	)
+	vocabulary.Register(PredicatePhaseTransitionProceedGather,
+		vocabulary.WithDescription("ADR-041 §Wire shape: per-cycle gate sentinel stamped on the completed researcher's loop entity when the phase validator approves transition into 'gather'. Next-phase spawn rule fires only when this is \"true\"."),
+		vocabulary.WithDataType("string"),
+	)
+	vocabulary.Register(PredicatePhaseTransitionProceedSynthesize,
+		vocabulary.WithDescription("ADR-041 §Wire shape: per-cycle gate sentinel for transition into 'synthesize'. See PredicatePhaseTransitionProceedGather."),
+		vocabulary.WithDataType("string"),
+	)
+	vocabulary.Register(PredicatePhaseTransitionProceedArchitect,
+		vocabulary.WithDescription("ADR-041 §Wire shape: per-cycle gate sentinel for transition into 'architect'. See PredicatePhaseTransitionProceedGather."),
+		vocabulary.WithDataType("string"),
+	)
+	vocabulary.Register(PredicatePhaseTransitionTarget,
+		vocabulary.WithDescription("ADR-041: bare action token the phase validator last evaluated for this chain ('gather'/'synthesize'/'architect'/'emit'). Operator-visible regardless of approve-or-reject outcome."),
+		vocabulary.WithDataType("string"),
+	)
+	vocabulary.Register(PredicatePhaseTransitionRejected,
+		vocabulary.WithDescription("ADR-041: chain-entity marker (\"true\") stamped when the phase validator structurally rejected a transition. Parallel to PredicateRecoveryExhausted for cap-shape stalls."),
+		vocabulary.WithDataType("string"),
+	)
+	vocabulary.Register(PredicatePhaseTransitionRejectReason,
+		vocabulary.WithDescription("ADR-041: short classification token for a phase-transition rejection ('invalid_edge' | 'phase_cap'). Ops-agent groups stalls by this token."),
+		vocabulary.WithDataType("string"),
+	)
+
+	// ADR-041 §"Risks mitigation" structural pre-checks at role
+	// boundaries. SpecModeGate gates reviewer-spec→builder; QAModeGate
+	// gates builder→reviewer-qa. Both follow the proceed-sentinel +
+	// chain-entity-marker pattern of recoverycounter + phase_transition.
+	vocabulary.Register(PredicateSpecModeGateProceed,
+		vocabulary.WithDescription("ADR-041 §Risks mitigation: per-cycle gate sentinel stamped on the reviewer-spec loop entity when the chain carries a chain.research_artifact.loop (i.e., the spec is grounded in upstream research). Reviewer-spec→builder spawn rule fires only when this is \"true\"."),
+		vocabulary.WithDataType("string"),
+	)
+	vocabulary.Register(PredicateSpecModeGateRejected,
+		vocabulary.WithDescription("ADR-041 §Risks mitigation: chain-entity marker (\"true\") stamped when SpecModeGate rejects a reviewer-spec approval (no research-artifact ancestor)."),
+		vocabulary.WithDataType("string"),
+	)
+	vocabulary.Register(PredicateSpecModeGateRejectReason,
+		vocabulary.WithDescription("ADR-041 §Risks mitigation: classification token for spec-mode-gate rejections ('missing_research_artifact')."),
+		vocabulary.WithDataType("string"),
+	)
+	vocabulary.Register(PredicateQAModeGateProceed,
+		vocabulary.WithDescription("ADR-041 §Risks mitigation: per-cycle gate sentinel stamped on the builder loop entity when the builder's tests_passing claim is structurally consistent (tests_run>0 AND tests_failed=0). Builder→reviewer-qa spawn rule fires only when this is \"true\"."),
+		vocabulary.WithDataType("string"),
+	)
+	vocabulary.Register(PredicateQAModeGateRejected,
+		vocabulary.WithDescription("ADR-041 §Risks mitigation: chain-entity marker (\"true\") stamped when QAModeGate rejects a builder claim (tests_run=0 or tests_failed>0 with action=tests_passing)."),
+		vocabulary.WithDataType("string"),
+	)
+	vocabulary.Register(PredicateQAModeGateRejectReason,
+		vocabulary.WithDescription("ADR-041 §Risks mitigation: classification token for qa-mode-gate rejections ('zero_tests_run' | 'tests_failed_nonzero')."),
+		vocabulary.WithDataType("string"),
+	)
+
+	registerOtherPackagePredicates()
+}
+
+// registerOtherPackagePredicates registers chain.* predicates whose
+// constants stay co-located with their writers (chainpause, evidence,
+// emitspecartifact, dispatched, paused, decision). Centralising the
+// registrations here keeps vocab queries (ListByDomain("chain"), RDF
+// export, hierarchy walks) seeing the complete catalog without forcing
+// constants to migrate. Promoting these to constants in this file is a
+// deferred follow-up refactor; the strings are stable (post-2026-05-11
+// 3-part renames) so registration is safe.
+//
+// Split out of init() / registerADR041Predicates() to keep both under
+// revive's function-length threshold. Semantically a continuation of
+// init's central-registration block.
+func registerOtherPackagePredicates() {
 	// chain.dispatched.* — DispatchedStamper (chain/dispatched.go).
 	vocabulary.Register("chain.dispatched.at",
 		vocabulary.WithDescription("ADR-038 §D2: RFC3339 timestamp at which the chain dispatched (chain root's LoopCreated event time). Phase 1b."),

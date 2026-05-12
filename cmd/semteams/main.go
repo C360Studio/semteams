@@ -35,6 +35,7 @@ import (
 	"github.com/c360studio/semteams/cmd/semteams/chain"
 	"github.com/c360studio/semteams/cmd/semteams/chainpause"
 	"github.com/c360studio/semteams/cmd/semteams/evidence"
+	"github.com/c360studio/semteams/cmd/semteams/phasevalidator"
 	"github.com/c360studio/semteams/cmd/semteams/portresolver"
 	"github.com/c360studio/semteams/cmd/semteams/recoverycounter"
 	"github.com/c360studio/semteams/cmd/semteams/testharness"
@@ -320,6 +321,18 @@ func startChainMilestoneSubscribers(ctx context.Context, cfg *config.Config, nat
 	// or pass a non-zero literal here.
 	recoveryCap := recoverycounter.NewCounter(triplePublisher, resolver, entityReader, platform, 0, logger)
 
+	// ADR-041 structural gates. Each is an independent
+	// chain.CompletionHandler with its own role filter; they share
+	// infrastructure (resolver, entityReader, triplePublisher) and
+	// follow the recoverycounter idiom of writing a proceed sentinel
+	// on the loop entity when a structural contract holds, rejection
+	// triples on the chain entity when it doesn't, and nothing when
+	// any precondition cannot be checked (fail-safe). See
+	// cmd/semteams/phasevalidator/doc.go for the full design rationale.
+	phaseValidator := phasevalidator.NewPhaseValidator(triplePublisher, resolver, entityReader, platform, logger)
+	specModeGate := phasevalidator.NewSpecModeGate(triplePublisher, resolver, entityReader, platform, logger)
+	qaModeGate := phasevalidator.NewQAModeGate(triplePublisher, resolver, entityReader, platform, logger)
+
 	subscriber := chain.NewCompletionSubscriber([]chain.CompletionHandler{
 		dispatched,
 		research,
@@ -327,6 +340,9 @@ func startChainMilestoneSubscribers(ctx context.Context, cfg *config.Config, nat
 		consensus,
 		needsReview,
 		recoveryCap,
+		phaseValidator,
+		specModeGate,
+		qaModeGate,
 	}, loopCompletedSubject, logger)
 	if err := subscriber.Start(ctx, natsClient); err != nil {
 		return fmt.Errorf("subscribe to loop completed for chain milestones: %w", err)
