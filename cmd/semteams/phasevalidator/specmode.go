@@ -152,17 +152,40 @@ func (g *SpecModeGate) HandleLoopCompleted(ctx context.Context, ev *agentic.Loop
 		return nil
 	}
 
+	// Grounding check: reviewer-spec must be grading an actually-emitted
+	// spec artifact. Under ADR-041 MVP the dev-via-spec arc is
+	// researcher-{plan,gather,synthesize,architect}→reviewer-spec without
+	// an intermediate reviewer-research hop, so `chain.research_artifact.loop`
+	// (stamped by ResearchMilestoneStamper on reviewer-research approval)
+	// is NOT populated for this arc. `chain.spec_artifact.loop` (stamped
+	// by emit_dev_via_spec_artifact at architect emit time) is the MVP
+	// signal — but the architect's own loop entity is mid-finalization
+	// when the tool runs, so the chain-ancestry walk inside that tool
+	// can race the entity flush and skip the stamp (warn logged by
+	// emitspecartifact/executor.go:881). When both signals miss but the
+	// loop-entity check below passes, the gate accepts on the spawn-path
+	// guarantee: rule_01b only fires after researcher-architect's
+	// decide(action="emit"), so a reviewer-spec loop existing AT ALL
+	// proves the architect emitted upstream.
 	researchLoop, _ := chainTriples[chain.PredicateResearchArtifactLoop].(string)
+	specArtifactLoop, _ := chainTriples["chain.spec_artifact.loop"].(string)
+	// Spawn-path guarantee: reviewer-spec entity carries a non-empty
+	// agent.loop.parent. The parent is the spawning loop (researcher-
+	// architect under MVP rule_01b). Stamped by upstream graph_writer at
+	// loop creation; absent only when graph_writer hasn't flushed yet
+	// (which would also mean the chain milestones above haven't either —
+	// nothing to do but stall fail-safe).
+	loopParent, _ := loopTriples["agent.loop.parent"].(string)
 	now := time.Now().UTC()
 	stamp := newStamper(triplesSourceSpecMode, now)
 
-	if researchLoop == "" {
+	if researchLoop == "" && specArtifactLoop == "" && loopParent == "" {
 		writes := []message.Triple{
 			stamp(chainEntityID, chain.PredicateSpecModeGateRejected, "true"),
 			stamp(chainEntityID, chain.PredicateSpecModeGateRejectReason, specModeRejectMissingResearch),
 		}
 		g.publishAll(ctx, writes)
-		g.logger.Info("spec-mode gate: rejected (no research artifact)",
+		g.logger.Info("spec-mode gate: rejected (no research artifact, no spec artifact, no parent loop)",
 			slog.String("loop_id", ev.LoopID),
 			slog.String("chain_entity", chainEntityID))
 		return nil

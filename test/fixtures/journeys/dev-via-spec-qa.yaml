@@ -403,11 +403,35 @@ responses:
         }
 
   - tool_call:
+      name: emit_plan
+      arguments_json: |
+        {
+          "revision": 2,
+          "title": "OSH Meshtastic driver plan",
+          "goal": "Implement the OSH IDriver interface backed by Meshtastic radio packets, exposing OGC CS observation endpoints. Recovery revision: scope unchanged; gather pass adds a verifiable check binding the packet decoder task.",
+          "context": "Recovery plan after reviewer-qa flagged the rev 1 spec for missing checks[]. Goal/scope/epics carried forward verbatim; the GATHER + SYNTHESIZE recovery passes will surface one candidate check (file_exists on packet decoder test) the ARCHITECT phase emits into rev 2's checks[].",
+          "scope_in": [
+            "OSH IDriver interface implementation",
+            "Meshtastic packet decoder",
+            "OGC CS observation publisher"
+          ],
+          "scope_out": [
+            "Meshtastic firmware changes — upstream-owned, out of repo scope",
+            "OGC CS specification work — standards body owns; we conform"
+          ],
+          "epics": [
+            "E1 — Meshtastic packet ingestion: read-side decoder normalising radio packets into the driver's internal observation envelope",
+            "E2 — OGC CS observation publishing: write-side publisher exposing the IDriver interface",
+            "E3 — Lifecycle and recovery: IDriver lifecycle hooks plus the radio-disconnect failure-mode handler"
+          ]
+        }
+
+  - tool_call:
       name: decide
       arguments_json: |
         {
           "action": "gather",
-          "reason": "Recovery plan: reviewer-qa rejected rev 1 with needs_clarification — the architect's spec carried no checks[] so build quality couldn't be graded. Carrying forward goal/scope/epics from rev 1 unchanged; tightening the GATHER pass to identify one candidate check (file_exists on the packet decoder test file) the SYNTHESIZE pass will record and the ARCHITECT phase will emit into checks[]."
+          "reason": "Recovery plan rev 2 emitted: reviewer-qa rejected rev 1 with needs_clarification — the architect's spec carried no checks[] so build quality couldn't be graded. Goal/scope/epics carried forward unchanged; tightening the GATHER pass to identify one candidate check (file_exists on the packet decoder test file) the SYNTHESIZE pass will record and the ARCHITECT phase will emit into checks[]."
         }
 
   # ---------- Loop I: researcher-gather RECOVERY ----------
