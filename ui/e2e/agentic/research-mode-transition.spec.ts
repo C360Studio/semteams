@@ -1,72 +1,70 @@
 import { test, expect } from "@playwright/test";
 
 /**
- * Journey: Research Mode Transition (ADR-040 reshape)
+ * Journey: Research Mode Transition (ADR-041 MVP role compression)
  *
- * Validates the new source-curator flow end-to-end on mock-LLM:
+ * Validates the research-only arc end-to-end on mock-LLM with the
+ * compressed MVP roster (researcher-{plan,gather,synthesize} +
+ * reviewer-research). Reviewer rejects rev 1, recoverycounter writes
+ * chain.recovery.proceed, rule 02 spawns a fresh researcher-plan,
+ * the chain re-runs through gather/synthesize, reviewer approves
+ * rev 2. Terminal at reviewer-research.
  *
- *   Loop A: researcher (default_role, revision=1) → query_entity →
- *           emit_research_artifact (revision=1, empty actors,
- *           open_gaps names corpus gap) → completion
- *           → outcome=success → rule_01a fires → spawn reviewer
+ *   Loop A: researcher-plan (dispatch) → emit_plan → decide(gather)
+ *           → rule 04 → spawn researcher-gather
  *
- *   Loop B: research-reviewer (pass 1) → read_loop_result →
- *           decide(insufficient, reason recommends add_source_repo)
- *           → rule_02 (spawn-curator) fires → spawn source-curator
+ *   Loop B: researcher-gather → read_loop_result → query_entity →
+ *           decide(synthesize) → rule 05 → spawn researcher-synthesize
  *
- *   Loop C: source-curator (substrate-mutating) → read_loop_result →
- *           add_source_repo (approval-gated) → [test approves] →
- *           query_entity (verifies indexed) → emit_curator_artifact
- *           (added_sources + verified_entity_ids) →
- *           decide(action="indexed") → rule_02b fires → spawn researcher
+ *   Loop C: researcher-synthesize → read_loop_result →
+ *           emit_research_artifact (rev 1 empty) → decide(emit)
+ *           → rule 01a → spawn reviewer-research
  *
- *   Loop D: researcher (recovery=curator_indexed) → read_loop_result
- *           (consumes curator artifact) → query_entity (augmented
- *           corpus) → emit_research_artifact (revision=2, full
- *           actors/integration_points/tasks; substrate_mutations=[]
- *           — researcher does NOT mutate under ADR-040) → completion
- *           → outcome=success → rule_01a fires → spawn reviewer
+ *   Loop D: reviewer-research → read_loop_result →
+ *           decide(insufficient) → recoverycounter +
+ *           rule 02 → spawn researcher-plan (recovery)
  *
- *   Loop E: research-reviewer (pass 2) → read_loop_result →
- *           decide(approved) → rule_03 fires → spawn dev-via-spec-
- *           planner (the persona-swap mode-transition)
+ *   Loop E: researcher-plan (recovery) → read_loop_result →
+ *           decide(gather) → rule 04 → spawn researcher-gather
  *
- *   Loop F: dev-via-spec-planner (R3.3 stub) → read_loop_result →
- *           completion (ack message) → terminal. No rule fires.
+ *   Loop F: researcher-gather → read_loop_result → query_entity →
+ *           decide(synthesize) → rule 05 → spawn researcher-synthesize
+ *
+ *   Loop G: researcher-synthesize → read_loop_result →
+ *           emit_research_artifact (rev 2 full) → decide(emit)
+ *           → rule 01a → spawn reviewer-research
+ *
+ *   Loop H: reviewer-research → read_loop_result → decide(approved)
+ *           → terminal. No rule fires.
  *
  * Validates:
- *   - All six loops appear with the expected role distribution
- *     (2 researcher + 1 source-curator + 2 research-reviewer + 1
- *     dev-via-spec-planner) — proves rule_01a (×2), rule_02
- *     (spawn-curator), rule_02b (curator-indexed → researcher), and
- *     rule_03 all fired in order. ADR-040 collapses the OLD 2×
- *     researcher-with-source-acquisition (substrate-mod + settling
- *     pass) into 1× source-curator + 1× re-query researcher.
- *   - approval_required gate fires for add_source_repo on Loop C
- *     (the curator's substrate-mutating call) — only Loop C; Loop D
- *     re-query has no add_source_repo, proving the ADR-040 separation
- *     of substrate-mutation (curator) from query (researcher).
- *   - The mode-transition fires: rule_03 spawns dev-via-spec-planner,
- *     which terminates cleanly.
- *   - Final state: all six loops complete; no seventh loop appears.
+ *   - All eight loops appear with the expected role distribution
+ *     (2 researcher-plan + 2 researcher-gather + 2 researcher-synthesize
+ *     + 2 reviewer-research) — proves rules 04 (×2), 05 (×2), 01a
+ *     (×2), and rule 02 all fired in order. ADR-041 absorbs the
+ *     legacy curator + planner triangle into researcher-plan +
+ *     reviewer-research.
+ *   - The MVP chain runs autonomously: no human approval gate
+ *     (substrate-mutation is out of MVP scope per ADR-041 §1).
+ *   - Final state: all eight loops complete; no ninth loop appears.
  *
  * Required fixture: test/fixtures/journeys/research-mode-transition.yaml
- * Required compose profile: semsource (the SemSource container is
- * required for the curator's substrate-modifying add_source_repo call).
+ * Compose profile: none beyond agentic-e2e baseline (the curator's
+ * semsource dependency was retired with the MVP roster).
  */
 
-test.describe("Research Mode Transition (ADR-040)", () => {
+test.describe("Research Mode Transition (ADR-041 MVP)", () => {
   test.beforeAll(async ({ request }) => {
     const health = await request.get("/health");
     expect(health.ok()).toBe(true);
   });
 
-  // Six loops + approval round-trip + SemSource AddRequest takes
-  // longer than the default. Allow 3 minutes (was 7 loops pre-ADR-040;
-  // budget kept the same to absorb mock-LLM scheduling jitter).
+  // Eight loops, autonomous chain (no approval gate). 3 minutes
+  // covers mock-LLM scheduling jitter; budget kept generous to
+  // absorb cold-start latency on slower CI.
   test.setTimeout(180_000);
 
-  test("research → corpus-gap reject → source-curator → re-query researcher → approve → dev-via-spec mode transition", async ({
+  test("research → corpus-gap reject → recovery → approve (ADR-041 MVP chain)", async ({
     page,
     request,
   }) => {
@@ -85,123 +83,55 @@ test.describe("Research Mode Transition (ADR-040)", () => {
     await expect(page.getByTestId("kanban-board")).toBeVisible();
 
     // -----------------------------------------------------------------
-    // Step 2 — type the bounded prompt. Identical to the pre-ADR-040
-    // shape; the curator (not the researcher) handles the registration
-    // path now.
+    // Step 2 — type the bounded prompt. ADR-041 absorbs the legacy
+    // "register source" step into the model floor; the MVP researcher
+    // chain queries the corpus directly without an explicit curator
+    // role.
     // -----------------------------------------------------------------
     const chatInput = page.getByTestId("chat-input");
     await chatInput.fill(
-      "Identify the actor types in OSH's driver framework. The OSH core repo is at https://github.com/sensorhub-tools/osh-core; if it isn't already indexed in our research SemSource, register it.",
+      "Identify the actor types in OSH's driver framework.",
     );
     await page.getByTestId("send-button").click();
 
     // -----------------------------------------------------------------
-    // Step 3 — wait for THREE loops (researcher A, reviewer B,
-    // source-curator C). Loop C will pause for approval on the
-    // curator's add_source_repo call.
-    // -----------------------------------------------------------------
-    const threeLoops = await pollUntil(async () => {
-      const resp = await request.get("/teams-dispatch/loops");
-      if (!resp.ok()) return null;
-      const list = (await resp.json()) as Array<{
-        loop_id: string;
-        role: string;
-        state: string;
-      }>;
-      return list.length >= 3 ? list : null;
-    }, { timeoutMs: 60000 });
-
-    expect(
-      threeLoops,
-      "expected 3 loops before first approval (researcher + reviewer + source-curator)",
-    ).toBeTruthy();
-
-    // -----------------------------------------------------------------
-    // Step 4 — find the first awaiting-approval loop (Loop C — the
-    // curator's add_source_repo).
-    // -----------------------------------------------------------------
-    const loopCId = await pollUntil(async () => {
-      const resp = await request.get("/teams-dispatch/loops");
-      if (!resp.ok()) return null;
-      const list = (await resp.json()) as Array<{
-        loop_id: string;
-        state: string;
-        pending_approval?: { tool_name?: string } | null;
-      }>;
-      const awaiting = list.find((l) => l.pending_approval != null);
-      return awaiting?.loop_id ?? null;
-    }, { timeoutMs: 60000 });
-
-    expect(loopCId, "expected Loop C (source-curator) to surface pending_approval").toBeTruthy();
-
-    // Kanban awaiting-approval surface skipped intentionally — the
-    // kanban only walks ONE level of children (deriveTaskInfo in
-    // ui/src/lib/types/task.ts). Loop C's awaiting_approval is on a
-    // grandchild, so the root task's effectiveColumn never cascades to
-    // needs_you. The detail-panel navigation below uses Loop C's
-    // loop_id directly. The API poll in Step 4 is the load-bearing
-    // "chain reached awaiting_approval" signal.
-
-    // -----------------------------------------------------------------
-    // Step 5+6 — approve via API (POST /teams-dispatch/loops/{id}/approval).
+    // Step 3 — wait for ALL EIGHT loops to reach terminal complete
+    // state. The MVP chain is autonomous: dispatch researcher-plan,
+    // through gather/synthesize/reviewer-research, recovery via
+    // rule 02, second pass through to reviewer-research approve.
     //
-    // Same UI-driven approval limitation as the pre-ADR-040 spec:
-    // PendingApprovalSection only renders for the selected task's
-    // primaryLoop, but the awaiting_approval loop here is a
-    // grandchild of the dispatch root. We POST directly per the
-    // contract X-User-Id middleware enforces (ADR-030). This still
-    // exercises the approval-gate plumbing end-to-end. After approval,
-    // the curator finishes its sequence (query_entity verifies
-    // indexed → emit_curator_artifact → decide(action="indexed")) →
-    // rule_02b spawns Loop D (re-query researcher).
-    const approvalResp = await request.post(
-      `/teams-dispatch/loops/${loopCId}/approval`,
-      {
-        data: { decision: "approve", user_id: "e2e-test-user" },
-        headers: { "X-User-Id": "e2e-test-user" },
-      },
-    );
-    expect(
-      approvalResp.ok(),
-      `expected /loops/${loopCId}/approval to accept; got ${approvalResp.status()}`,
-    ).toBe(true);
-
-    // -----------------------------------------------------------------
-    // Step 7 — wait for ALL SIX loops to reach terminal complete
-    // state. The chain after the first approval is autonomous: Loop C
-    // finishes the curator sequence → Loop D (re-query researcher) →
-    // Loop E (reviewer approve) → Loop F (dev-via-spec-planner ack).
-    //
-    // Critical assertion: rule_03 must fire on the reviewer's approval
-    // and spawn dev-via-spec-planner — that's Loop F. Without it the
-    // test ends at five loops.
+    // Critical assertions: rule 02 (recovery), rules 04+05 (×2 each
+    // forward edges), rule 01a (×2 terminal hand-off) all fire in
+    // order. Without rule 02, the chain ends at six loops with no
+    // recovery; without rule 01a (×2), the chain ends prematurely
+    // at researcher-synthesize.
     // -----------------------------------------------------------------
     const allTerminal = await pollUntil(async () => {
       const resp = await request.get("/teams-dispatch/loops");
       if (!resp.ok()) return null;
       const list = (await resp.json()) as Array<{ state: string }>;
-      if (list.length !== 6) return null;
+      if (list.length !== 8) return null;
       return list.every((l) => l.state === "complete") ? list : null;
-    }, { timeoutMs: 90000 });
+    }, { timeoutMs: 120000 });
 
     expect(
       allTerminal,
-      "expected all 6 loops to reach terminal complete state (research arc + curator + dev-via-spec mode transition)",
+      "expected all 8 loops to reach terminal complete state (researcher-plan/gather/synthesize ×2 chain + reviewer-research ×2)",
     ).toBeTruthy();
 
     // -----------------------------------------------------------------
-    // Step 8 — role distribution proves every rule fired in order.
+    // Step 4 — role distribution proves every rule fired in order.
     //
-    // Wire-shape note: dispatch-spawned loops ride on dispatch.default_role
-    // and don't get their role stamped back onto the LoopInfo wire JSON;
-    // rule-spawned loops do. So Loop A's role field is empty; we resolve
-    // it via the dispatch default.
+    // Wire-shape note: dispatch-spawned loops ride on
+    // dispatch.default_role and don't get their role stamped back
+    // onto the LoopInfo wire JSON; rule-spawned loops do. So Loop A's
+    // role field is empty; we resolve it via the dispatch default.
     //
-    // Expected roles (after default_role resolution):
-    //   2 × researcher           (Loop A — dispatch; Loop D — rule_02b post-curator re-query)
-    //   2 × research-reviewer    (Loops B, E — rule_01a ×2)
-    //   1 × source-curator       (Loop C — rule_02 spawn-curator)
-    //   1 × dev-via-spec-planner (Loop F — rule_03)
+    // Expected roles (after default_role resolution, ADR-041 MVP):
+    //   2 × researcher-plan       (Loop A — dispatch; Loop E — rule 02 recovery)
+    //   2 × researcher-gather     (Loops B, F — rule 04 ×2)
+    //   2 × researcher-synthesize (Loops C, G — rule 05 ×2)
+    //   2 × reviewer-research     (Loops D, H — rule 01a ×2)
     // -----------------------------------------------------------------
     const finalLoops = await request
       .get("/teams-dispatch/loops")
@@ -217,54 +147,52 @@ test.describe("Research Mode Transition (ADR-040)", () => {
       `expected exactly 1 dispatch-spawned loop with empty role (Loop A); got ${dispatchLoops.length}`,
     ).toBe(1);
 
-    const expectedDefaultRole = "researcher";
+    // Phase 3 wires dispatch.default_role to "researcher-plan"; until
+    // then this spec is gated by that config update (the rules expect
+    // a researcher-* prefixed role to fire phasevalidator).
+    const expectedDefaultRole = "researcher-plan";
     const roles = finalLoops.map((l) => l.role || expectedDefaultRole);
-    const researcherCount = roles.filter((r) => r === "researcher").length;
-    const curatorCount = roles.filter((r) => r === "source-curator").length;
-    const reviewerCount = roles.filter((r) => r === "research-reviewer").length;
-    const plannerCount = roles.filter((r) => r === "dev-via-spec-planner").length;
+    const planCount = roles.filter((r) => r === "researcher-plan").length;
+    const gatherCount = roles.filter((r) => r === "researcher-gather").length;
+    const synthesizeCount = roles.filter((r) => r === "researcher-synthesize").length;
+    const reviewerCount = roles.filter((r) => r === "reviewer-research").length;
 
     expect(
-      researcherCount,
-      `expected 2 researcher loops (Loop A initial + Loop D re-query post-curator), got roles=${JSON.stringify(roles)}`,
+      planCount,
+      `expected 2 researcher-plan loops (Loop A dispatch + Loop E rule 02 recovery), got roles=${JSON.stringify(roles)}`,
     ).toBe(2);
     expect(
-      curatorCount,
-      `expected 1 source-curator loop (Loop C — rule_02 spawn-curator), got roles=${JSON.stringify(roles)}. Missing → rule_02 did not fire or fired to the wrong role.`,
-    ).toBe(1);
+      gatherCount,
+      `expected 2 researcher-gather loops (Loops B + F via rule 04 ×2), got roles=${JSON.stringify(roles)}. Missing → rule 04 (phase-transition-to-gather) did not fire as expected.`,
+    ).toBe(2);
+    expect(
+      synthesizeCount,
+      `expected 2 researcher-synthesize loops (Loops C + G via rule 05 ×2), got roles=${JSON.stringify(roles)}. Missing → rule 05 (phase-transition-to-synthesize) did not fire as expected.`,
+    ).toBe(2);
     expect(
       reviewerCount,
-      `expected 2 research-reviewer loops (corpus-gap reject, approve), got roles=${JSON.stringify(roles)}`,
+      `expected 2 reviewer-research loops (Loops D + H via rule 01a ×2), got roles=${JSON.stringify(roles)}. Missing → rule 01a (researcher-synthesize-to-reviewer-research) did not fire as expected.`,
     ).toBe(2);
-    expect(
-      plannerCount,
-      `expected 1 dev-via-spec-planner loop (ADR-040 mode-transition rule_03), got roles=${JSON.stringify(roles)}. Missing → rule_03 did not fire.`,
-    ).toBe(1);
 
     // -----------------------------------------------------------------
-    // Step 9 — only Loop C should have ever required approval. Loop D
-    // (re-query researcher) must have completed without invoking
-    // add_source_repo, proving the ADR-040 separation of
-    // substrate-mutation (curator) from query (researcher).
-    //
-    // The dispatch /loops endpoint returns current state, not history,
-    // so we verify by confirming no loop is currently pending_approval.
-    // The fixture sequence guarantees Loop D's only tool calls are
-    // read_loop_result + query_entity + emit_research_artifact.
+    // Step 5 — no approval gate on the MVP research chain. The
+    // legacy curator's add_source_repo + approval round-trip was
+    // retired under ADR-041 §1 (substrate-mutation is out of MVP
+    // scope).
     // -----------------------------------------------------------------
     const stillPendingAny = finalLoops.find(
       (l) => l.pending_approval != null,
     );
     expect(
       stillPendingAny,
-      "no loop should remain in pending_approval after the chain settles",
+      "no loop should ever require approval — MVP research chain is autonomous",
     ).toBeUndefined();
 
     // -----------------------------------------------------------------
-    // Step 10 — settle assertion: no seventh loop appears. If
-    // dev-via-spec-planner's completion somehow re-fires a research
-    // rule (regression where rule_01a matches the planner role
-    // instead of researcher), a seventh loop would appear.
+    // Step 6 — settle assertion: no ninth loop appears. If
+    // reviewer-research's decide(approved) somehow re-fires a rule
+    // (regression where rule 02 mis-fires on approved), a ninth loop
+    // would appear.
     // -----------------------------------------------------------------
     await new Promise((r) => setTimeout(r, 2000));
     const settledList = await request
@@ -272,8 +200,8 @@ test.describe("Research Mode Transition (ADR-040)", () => {
       .then((r) => r.json()) as unknown[];
     expect(
       settledList.length,
-      "dev-via-spec-planner completion must not spawn a seventh loop",
-    ).toBe(6);
+      "reviewer-research approved terminal must not spawn a ninth loop",
+    ).toBe(8);
   });
 });
 
