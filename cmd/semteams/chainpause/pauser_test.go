@@ -85,7 +85,7 @@ func TestPauser_HandleFailed_ManagedRoleWritesTriplesD5(t *testing.T) {
 		LoopID:  "abc123",
 		TaskID:  "task-1",
 		Outcome: agentic.OutcomeFailed,
-		Role:    "dev-via-spec-reviewer",
+		Role:    "reviewer-spec",
 		Error:   "Anthropic API: overloaded",
 	}
 
@@ -261,7 +261,7 @@ func TestPauser_HandleFailed_PartialWriteReturnsFirstErr(t *testing.T) {
 		LoopID:  "loop-err",
 		TaskID:  "task-3",
 		Outcome: agentic.OutcomeFailed,
-		Role:    "researcher",
+		Role:    "researcher-plan",
 		Error:   "some error",
 	}
 
@@ -283,7 +283,7 @@ func TestPauser_HandleFailed_ObservedAtIsRFC3339(t *testing.T) {
 		LoopID:  "loop-ts",
 		TaskID:  "task-4",
 		Outcome: agentic.OutcomeFailed,
-		Role:    "dev-via-spec-planner",
+		Role:    "researcher-plan",
 		Error:   "timeout",
 	}
 
@@ -316,7 +316,7 @@ func TestPauser_HandleFailed_CapturesOriginalModel(t *testing.T) {
 		LoopID:  "loop-model",
 		TaskID:  "task-model-1",
 		Outcome: agentic.OutcomeFailed,
-		Role:    "dev-via-spec-planner",
+		Role:    "researcher-plan",
 		Model:   "claude-opus-4-5",
 		Error:   "overloaded",
 	}
@@ -350,11 +350,11 @@ func TestPauser_HandleFailed_SubjectIsChainEntity(t *testing.T) {
 	p := NewPauser(pub, resolver)
 
 	ev := &agentic.LoopFailedEvent{
-		LoopID:       "source_curator_8",
-		TaskID:       "task-curator-8",
+		LoopID:       "researcher_gather_8",
+		TaskID:       "task-gather-8",
 		Outcome:      agentic.OutcomeFailed,
-		Role:         "source-curator",
-		ParentLoopID: "research_reviewer_7",
+		Role:         "researcher-gather",
+		ParentLoopID: "researcher_plan_7",
 		Error:        "max iterations reached",
 	}
 
@@ -392,7 +392,7 @@ func TestPauser_HandleFailed_ResolverErrorSurfaces(t *testing.T) {
 		LoopID:  "loop-resolver-err",
 		TaskID:  "task-x",
 		Outcome: agentic.OutcomeFailed,
-		Role:    "dev-via-spec-builder",
+		Role:    "builder",
 		Error:   "executor panic",
 	}
 
@@ -407,16 +407,18 @@ func TestPauser_HandleFailed_ResolverErrorSurfaces(t *testing.T) {
 
 func TestIsManagedRole(t *testing.T) {
 	managed := []string{
-		"dev-via-spec-planner",
-		"dev-via-spec-reviewer",
-		"dev-via-spec-challenger",
-		"dev-via-spec-architect",
-		"dev-via-spec-builder",
-		"dev-via-spec-qa-reviewer",
-		"researcher",
-		"source-curator",
-		"research-reviewer",
+		"researcher-plan",
+		"researcher-gather",
+		"researcher-synthesize",
+		"researcher-architect",
+		"reviewer-research",
+		"reviewer-spec",
+		"reviewer-qa",
+		"builder",
 		"dispatch",
+		// Legacy roles retained for research-iterative configs.
+		"researcher",
+		"research-reviewer",
 	}
 	for _, role := range managed {
 		if !isManagedRole(role) {
@@ -424,7 +426,7 @@ func TestIsManagedRole(t *testing.T) {
 		}
 	}
 
-	unmanaged := []string{"general", "ops-analyst", "coordinator", "planner", ""}
+	unmanaged := []string{"general", "ops-analyst", "coordinator", "dev-via-spec-builder", "dev-via-spec-planner", ""}
 	for _, role := range unmanaged {
 		if isManagedRole(role) {
 			t.Errorf("expected %q to be unmanaged, but isManagedRole returned true", role)
@@ -436,16 +438,17 @@ func TestIsManagedRole(t *testing.T) {
 // A mismatch between the two would cause the rule to fire but the subscriber to skip.
 func TestManagedRoleListMirrorRule(t *testing.T) {
 	ruleRoles := []string{
-		"dev-via-spec-planner",
-		"dev-via-spec-reviewer",
-		"dev-via-spec-challenger",
-		"dev-via-spec-architect",
-		"dev-via-spec-builder",
-		"dev-via-spec-qa-reviewer",
-		"researcher",
-		"source-curator",
-		"research-reviewer",
+		"researcher-plan",
+		"researcher-gather",
+		"researcher-synthesize",
+		"researcher-architect",
+		"reviewer-research",
+		"reviewer-spec",
+		"reviewer-qa",
+		"builder",
 		"dispatch",
+		"researcher",
+		"research-reviewer",
 	}
 	for _, role := range ruleRoles {
 		if !isManagedRole(role) {

@@ -16,7 +16,7 @@ import (
 )
 
 // ToolName is the LLM-facing tool name. Listed in the
-// dev-via-spec-builder role's allowed_tools.
+// builder role's allowed_tools.
 const ToolName = "bootstrap_workspace"
 
 // SpecFilename is the canonical workspace-relative path the tool seeds
@@ -109,7 +109,7 @@ func NewExecutor(sb SandboxClient, logger *slog.Logger, specDir string) (*Execut
 func (e *Executor) ListTools() []agentic.ToolDefinition {
 	return []agentic.ToolDefinition{{
 		Name:        ToolName,
-		Description: "Bootstrap the dev-via-spec-builder workspace. Call exactly once as iteration 1: creates the sandbox worktree at this loop's task_id and seeds the rendered spec markdown as SPEC.md in the workspace root. From iteration 2 onward, use bash to read SPEC.md and iterate. spec_path is the host-filesystem path to the rendered spec — the spawn rule provides this in your prompt via $entity.triple.dev_via_spec.artifact.path.",
+		Description: "Bootstrap the builder workspace. Call exactly once as iteration 1: creates the sandbox worktree at this loop's task_id and seeds the rendered spec markdown as SPEC.md in the workspace root. From iteration 2 onward, use bash to read SPEC.md and iterate. spec_path is the host-filesystem path to the rendered spec — the spawn rule provides this in your prompt via $entity.triple.dev_via_spec.artifact.path.",
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{

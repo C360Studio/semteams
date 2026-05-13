@@ -41,11 +41,20 @@ const (
 const (
 	plannerArtifactPathPredicate = "dev_via_spec.plan.path"
 
-	// devViaSpecReviewerRole is the role we milestone on. The reviewer
-	// is one hop above the planner in the dev-via-spec arc; on
+	// devViaSpecReviewerRole is the role we milestone on under the legacy
+	// dev-via-spec arc. The reviewer is one hop above the planner; on
 	// outcome=success + coordinator.next_action=approved, the planner
 	// the reviewer just signed off on is the planner whose plan we
-	// promote to chain.plan_loop.
+	// promote to chain.plan.loop.
+	//
+	// ADR-041 supersession: under MVP roster the planner role is gone
+	// (the researcher-plan phase emits the plan as structured loop
+	// output, not a markdown artifact). chain.plan.* therefore has no
+	// MVP analog; the spec milestone (chain.spec_artifact.*, emitted
+	// directly by emit_dev_via_spec_artifact in tools/emitspecartifact)
+	// is the closest MVP equivalent. This stamper stays for legacy-
+	// config audit replay and gets deleted alongside the legacy
+	// dev-via-spec persona dirs in Phase 3.
 	devViaSpecReviewerRole = "dev-via-spec-reviewer"
 
 	// planApprovedAction is the coordinator.next_action value the

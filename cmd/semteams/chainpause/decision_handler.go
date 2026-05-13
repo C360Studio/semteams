@@ -183,11 +183,11 @@ func (h *DecisionHandler) retry(ctx context.Context, entityID, failedLoopID stri
 	}
 
 	// TODO(adr-037-d7, adr-036-bootstrap_workspace): v1 leaves builder retry
-	// without workspace reset. If the failed role is dev-via-spec-builder, the
+	// without workspace reset. If the failed role is builder, the
 	// retried loop will see prior partial work in the worktree. Wire
 	// bootstrap_workspace (ADR-036) before any real builder failure surfaces in
 	// smoke. Earns its slot when the first builder retry smoke run lands.
-	if role == "dev-via-spec-builder" {
+	if role == "builder" {
 		h.logger.Warn("chain-pause: builder retry without workspace reset (ADR-037 §D7 v1 limitation); prior partial work may be visible",
 			slog.String("failed_loop_id", failedLoopID))
 	}

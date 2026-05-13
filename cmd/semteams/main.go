@@ -243,7 +243,7 @@ func setupToolsAndPreprocessor(
 
 	// 9e. Evidence preprocessor (ADR-036 §Phase 2, R3.7.2.k′-bis).
 	// Subscribes to agent.complete.> and stamps evidence.summary +
-	// evidence.summary_ready on dev-via-spec-builder loop entities.
+	// evidence.summary_ready on builder loop entities.
 	// Disabled when workspaceRoot is empty — non-sandbox deployments.
 	if err := startEvidencePreprocessor(ctx, cfg, natsClient, platform, workspaceRoot, logger); err != nil {
 		return nil, nil, fmt.Errorf("start evidence preprocessor: %w", err)
@@ -279,7 +279,6 @@ func setupToolsAndPreprocessor(
 // Phase 1b: chain.dispatched_at on chain root.
 // Phase 2:  chain.research_artifact.* on research-reviewer approval.
 // Phase C2: chain.plan.* on dev-via-spec-reviewer approval.
-// Phase C3: chain.consensus.* on dev-via-spec-challenger accept.
 // Phase C4 (evidence summary milestone) plugs in via the same slice.
 // ADR-039 Phase 1 Slice B: chain.needs_review.* on builder
 // needs_clarification (Tier 3 fallback).
@@ -312,7 +311,6 @@ func startChainMilestoneSubscribers(ctx context.Context, cfg *config.Config, nat
 	dispatched := chain.NewDispatchedStamper(triplePublisher, platform, logger)
 	research := chain.NewResearchMilestoneStamper(triplePublisher, resolver, entityReader, platform, logger)
 	plan := chain.NewPlanMilestoneStamper(triplePublisher, resolver, entityReader, platform, logger)
-	consensus := chain.NewConsensusMilestoneStamper(triplePublisher, resolver, entityReader, platform, logger)
 	needsReview := chain.NewNeedsReviewStamper(triplePublisher, resolver, entityReader, platform, logger)
 	// Threshold=0 → recoverycounter falls back to DefaultThreshold (3).
 	// TODO: plumb from cfg.RecoveryCap.Threshold (or per-flow config) when
@@ -337,7 +335,6 @@ func startChainMilestoneSubscribers(ctx context.Context, cfg *config.Config, nat
 		dispatched,
 		research,
 		plan,
-		consensus,
 		needsReview,
 		recoveryCap,
 		phaseValidator,
@@ -588,10 +585,23 @@ func injectRenderedTestHarnessFragment(ctx context.Context, personaMgr *persona.
 		Category: 0, // CategorySystem — matches project baseline; see doc-comment.
 		Priority: 45,
 		Content:  body,
-		// research-reviewer needs the same view of the catalog so it can
-		// verify the researcher's `test_harness` field references a real
-		// registered entry (membership check, R3.7.1.d gate).
-		Roles:       []string{"researcher", "research-reviewer"},
+		// The catalog is loaded for every role that touches a
+		// research.artifact.test_harness field — researcher phases that
+		// select (plan/gather/synthesize/architect) and reviewer modes
+		// that membership-check (reviewer-research, reviewer-spec).
+		// Legacy `researcher` + `research-reviewer` retained for
+		// research-iterative configs that have not migrated to the
+		// ADR-041 phase-suffixed roster.
+		Roles: []string{
+			"researcher",
+			"research-reviewer",
+			"researcher-plan",
+			"researcher-gather",
+			"researcher-synthesize",
+			"researcher-architect",
+			"reviewer-research",
+			"reviewer-spec",
+		},
 		Description: "Auto-generated from configs/harnesses.json at boot (ADR-033 R3.7.1).",
 	}
 	if err := personaMgr.Upsert(ctx, p); err != nil {

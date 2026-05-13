@@ -11,7 +11,8 @@
 // The Artifact carries:
 //   - Goal + Context: the "why" grounding from the upstream research arc.
 //   - Actors + IntegrationPoints: the structural inventory the architect
-//     condenses from the planner/reviewer/challenger exchange.
+//     condenses from the prior researcher phases (plan + gather +
+//     synthesize) and reviewer-research feedback.
 //   - Tasks: decomposable-grain work items, each grounded in
 //     at least one actor and one integration point so they cannot float
 //     free of the structural model.
@@ -67,7 +68,8 @@ type IntegrationPoint struct {
 }
 
 // Task is a decomposable-grain work item that the architect
-// scoped from the planner/reviewer/challenger exchange. Grounding fields
+// scoped from the prior researcher phases (plan + gather + synthesize)
+// and reviewer-research feedback. Grounding fields
 // trace it back to the structural inventory so future implementors know
 // which actors and data flows a task touches.
 type Task struct {
@@ -82,6 +84,14 @@ type Task struct {
 // the artifact is traceable to the originating research run and every
 // subsequent role exchange. ArchitectLoop is set server-side by the
 // executor from the calling ToolCall; the LLM supplies the rest.
+//
+// ADR-041 wire-format note: under the MVP roster `PlannerLoop` is the
+// researcher-plan phase loop and `ReviewerLoop` is the reviewer-spec
+// (spec-mode) loop. The JSON tags `planner_loop` / `reviewer_loop` are
+// retained for wire-format stability — renaming them ripples through
+// the schema, payload registry, persona templates, and every emit
+// call site. The rename lands in a dedicated wire-format slice
+// (Phase 3 or a focused 2D follow-on) so this slice stays mechanical.
 type Provenance struct {
 	ResearchArtifactLoop string `json:"research_artifact_loop"`
 	PlannerLoop          string `json:"planner_loop"`
@@ -91,7 +101,8 @@ type Provenance struct {
 
 // Artifact is the SemTeams-local payload representing the terminal
 // output of a dev-via-spec arc. It is emitted once per arc by the
-// architect role after the planner/reviewer/challenger chain converges.
+// researcher-architect phase at the close of the researcher's
+// plan→gather→synthesize→architect arc.
 //
 // GeneratedAt and Slug are set server-side by the executor — the LLM
 // neither sees nor sets them (mirrors research.Artifact's server-side

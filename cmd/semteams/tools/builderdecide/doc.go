@@ -1,5 +1,5 @@
 // Package builderdecide implements the SemTeams-local builder_decide tool.
-// This tool is the dev-via-spec-builder role's terminal action: the builder
+// This tool is the builder role's terminal action: the builder
 // iterates bash calls in its sandbox workspace until it can call
 // builder_decide(action="tests_passing"|"tests_failing"|"needs_clarification",
 // ...) with the action-specific evidence fields.

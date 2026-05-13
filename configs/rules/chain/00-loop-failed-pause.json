@@ -2,7 +2,7 @@
   "id": "chain_loop_failed_pause",
   "type": "expression",
   "name": "Chain Pause on Failed Loop",
-  "description": "When any loop in a managed arc (dev-via-spec-*, research-arc roles, dispatch researcher) fails before emitting its coordinator.next_action triple, no downstream rule fires and the chain dies silently. This rule fires on outcome=failed for those roles and stamps a chain.paused.marker triple so the operator decision surface can render the pause and accept a retry/kill/defer decision. The full ADR-037 §D5 audit triple set is written by the chainpause.Pauser NATS subscriber (cmd/semteams/chainpause/pauser.go) which fires on the same agent.failed.* event. The single rule covers all arcs: adding a new arc means extending the role list, not creating a new rule. ADR-037 §D1 and §D6.",
+  "description": "When any loop in a managed arc (researcher-{plan,gather,synthesize,architect}, reviewer-{research,spec,qa}, builder, dispatch — plus legacy `researcher` / `research-reviewer` for research-iterative configs) fails before emitting its coordinator.next_action triple, no downstream rule fires and the chain dies silently. This rule fires on outcome=failed for those roles and stamps a chain.paused.marker triple so the operator decision surface can render the pause and accept a retry/kill/defer decision. The full ADR-037 §D5 audit triple set is written by the chainpause.Pauser NATS subscriber (cmd/semteams/chainpause/pauser.go) which fires on the same agent.failed.* event. The single rule covers all arcs: adding a new arc means extending the role list, not creating a new rule. ADR-037 §D1 and §D6.",
   "enabled": true,
   "conditions": [
     {
@@ -15,16 +15,17 @@
       "field": "agent.loop.role",
       "operator": "in",
       "value": [
-        "dev-via-spec-planner",
-        "dev-via-spec-reviewer",
-        "dev-via-spec-challenger",
-        "dev-via-spec-architect",
-        "dev-via-spec-builder",
-        "dev-via-spec-qa-reviewer",
+        "researcher-plan",
+        "researcher-gather",
+        "researcher-synthesize",
+        "researcher-architect",
+        "reviewer-research",
+        "reviewer-spec",
+        "reviewer-qa",
+        "builder",
+        "dispatch",
         "researcher",
-        "source-curator",
-        "research-reviewer",
-        "dispatch"
+        "research-reviewer"
       ],
       "required": true
     }

@@ -1005,7 +1005,7 @@ func TestExecute_WithoutChecks_PayloadOmitsField(t *testing.T) {
 // With the resolver wired, the rendered markdown carries `**Image**`
 // and `**TCP exposes**` lines next to `**Test harness**` for every C
 // whose test_harness resolves; the builder transcribes them verbatim
-// into test code (configs/personas/fragments/dev-via-spec-builder/
+// into test code (configs/personas/fragments/builder/
 // 15-commitment-driven-authoring.md).
 func TestRenderMarkdown_ResolvedTestHarnessFieldsRendered(t *testing.T) {
 	tmpDir := t.TempDir()

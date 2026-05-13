@@ -143,16 +143,21 @@ func (p *Pauser) HandleFailed(ctx context.Context, ev *agentic.LoopFailedEvent) 
 // TestChainPauseRule_ManagedRoleParity_Bidirectional asserts that both
 // lists stay in sync.
 var managedRoles = []string{
-	"dev-via-spec-planner",
-	"dev-via-spec-reviewer",
-	"dev-via-spec-challenger",
-	"dev-via-spec-architect",
-	"dev-via-spec-builder",
-	"dev-via-spec-qa-reviewer",
-	"researcher",
-	"source-curator",
-	"research-reviewer",
+	"researcher-plan",
+	"researcher-gather",
+	"researcher-synthesize",
+	"researcher-architect",
+	"reviewer-research",
+	"reviewer-spec",
+	"reviewer-qa",
+	"builder",
 	"dispatch",
+	// Legacy roles retained for research-iterative configs
+	// (configs/e2e-research-iterative.json + e2e-research-harness-hit.json)
+	// that still spawn `researcher` / `research-reviewer`. Removed in
+	// Phase 3 alongside the legacy persona dirs.
+	"researcher",
+	"research-reviewer",
 }
 
 // ManagedRoles returns a copy of the closed role-name set this package monitors.

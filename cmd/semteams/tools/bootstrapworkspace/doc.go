@@ -1,5 +1,5 @@
 // Package bootstrapworkspace implements the SemTeams-local
-// bootstrap_workspace tool. The dev-via-spec-builder calls this tool
+// bootstrap_workspace tool. The builder calls this tool
 // exactly once at iteration 1 to create its sandbox worktree and seed
 // the rendered spec markdown as SPEC.md in the workspace root.
 //
@@ -55,7 +55,7 @@
 //     substitution that resolves to publish_agent's generated
 //     task_id within the same on_enter sequence.
 //   - A dispatcher pre-loop hook the product shell can install for
-//     the dev-via-spec-builder role.
+//     the builder role.
 //
 // When either lands, this package can be deleted: the rule does
 // the seed inline and the builder's first iteration becomes its

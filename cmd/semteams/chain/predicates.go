@@ -18,12 +18,12 @@ import "github.com/c360studio/semstreams/vocabulary"
 // registered here (2026-05-11 vocab-completion). Predicates whose
 // canonical constants live in this file (PredicateSlugStem,
 // PredicateResearchArtifactLoop, PredicatePlanLoop,
-// PredicatePlanReviewerLoop, PredicateConsensusLoop, PredicateRecovery*,
+// PredicatePlanReviewerLoop, PredicateRecovery*,
 // PredicateNeedsReview*) Register against the constant. Predicates whose
 // constants stay co-located with their writers (chain.dispatched.*,
 // chain.paused.*, chain.decision.*, chain.evidence.*,
 // chain.research_artifact.{harness,actor_count,task_count,path},
-// chain.plan.path, chain.consensus.path, chain.spec_artifact.*) Register
+// chain.plan.path, chain.spec_artifact.*) Register
 // against string literals — promoting them to constants here is a
 // deferred follow-up refactor. The contract test
 // test/contract/chain_entity_coverage_test.go pins the predicate-name
@@ -36,7 +36,7 @@ import "github.com/c360studio/semstreams/vocabulary"
 // (renames: chain.research_artifact_loop → chain.research_artifact.loop;
 // chain.plan_loop → chain.plan.loop;
 // chain.plan_reviewer_loop → chain.plan.reviewer_loop;
-// chain.consensus_loop → chain.consensus.loop;
+// chain.consensus_loop → chain.consensus.loop (subsequently removed in ADR-041 Slice 2D-4 alongside the consensus stamper teardown);
 // chain.spec_artifact_loop → chain.spec_artifact.loop;
 // chain.dispatched_at → chain.dispatched.at;
 // chain.resumed → chain.decision.resumed_task_id;
@@ -73,14 +73,6 @@ const (
 	// planner's loop ID (smoke #8 run-5 D1 fix).
 	PredicatePlanReviewerLoop = "chain.plan.reviewer_loop"
 
-	// PredicateConsensusLoop names the chain-entity predicate that
-	// records the dev-via-spec-challenger loop_id that accepted the
-	// plan. Written by the consensus milestone stamper; no longer
-	// read by emit_dev_via_spec_artifact (the artifact's provenance
-	// dropped challenger_loop with ADR-041 Phase 2 Slice B). Slice D
-	// tears down the consensus role + stamper.
-	PredicateConsensusLoop = "chain.consensus.loop"
-
 	// PredicateNeedsReviewClassification is the first predicate of the
 	// chain.needs_review.* cluster (ADR-039 Phase 1 Tier 3). The full
 	// cluster is stamped by NeedsReviewStamper when a
@@ -90,7 +82,7 @@ const (
 	// deployment-configured (coordinator agent, operator dashboard,
 	// metric-emit job). Distinct from chain.paused.* (ADR-037, FAILED
 	// loops with closed-enum classifications). Phase 1 only stamps for
-	// dev-via-spec-builder; broader producer coverage is a follow-up.
+	// builder; broader producer coverage is a follow-up.
 	//
 	// This predicate itself is an open-valued tag describing why this
 	// needs_clarification reached Tier 3. Phase 1 writes
@@ -105,7 +97,7 @@ const (
 	PredicateNeedsReviewProducerLoopID = "chain.needs_review.producer_loop_id"
 
 	// PredicateNeedsReviewProducerRole is the role name of the producer
-	// loop (dev-via-spec-builder for Phase 1; broader when Slice C lands).
+	// loop (builder for Phase 1; broader when Slice C lands).
 	PredicateNeedsReviewProducerRole = "chain.needs_review.producer_role"
 
 	// PredicateNeedsReviewReason is the producer's
@@ -308,22 +300,17 @@ func init() {
 	)
 
 	vocabulary.Register(PredicateResearchArtifactLoop,
-		vocabulary.WithDescription("Loop_id of the researcher whose artifact the research-reviewer approved. The chain entity's canonical reference to the upstream research arc."),
+		vocabulary.WithDescription("Loop_id of the researcher whose artifact the reviewer (research mode, or legacy research-reviewer) approved. The chain entity's canonical reference to the upstream research arc."),
 		vocabulary.WithDataType("string"),
 	)
 
 	vocabulary.Register(PredicatePlanLoop,
-		vocabulary.WithDescription("Loop_id of the planner whose plan the dev-via-spec-reviewer approved. The chain entity's canonical reference to the approved planner pass."),
+		vocabulary.WithDescription("Loop_id of the planner whose plan the dev-via-spec-reviewer approved. The chain entity's canonical reference to the approved planner pass. Legacy: under the ADR-041 MVP roster the planner role is gone (researcher-plan emits the plan as structured loop output, not a markdown artifact); this predicate stays for legacy-config audit replay until Phase 3."),
 		vocabulary.WithDataType("string"),
 	)
 
 	vocabulary.Register(PredicatePlanReviewerLoop,
-		vocabulary.WithDescription("Loop_id of the dev-via-spec-reviewer that approved the plan. Distinct from the planner; downstream emit_consensus reads this to populate depends_on.reviewer_loop."),
-		vocabulary.WithDataType("string"),
-	)
-
-	vocabulary.Register(PredicateConsensusLoop,
-		vocabulary.WithDescription("Loop_id of the dev-via-spec-challenger that accepted the plan. The chain entity's canonical reference to the consensus terminal."),
+		vocabulary.WithDescription("Loop_id of the dev-via-spec-reviewer that approved the plan. Distinct from the planner; legacy emit_consensus reads this to populate depends_on.reviewer_loop. Legacy-only under ADR-041 MVP."),
 		vocabulary.WithDataType("string"),
 	)
 
@@ -336,7 +323,7 @@ func init() {
 		vocabulary.WithDataType("string"),
 	)
 	vocabulary.Register(PredicateNeedsReviewProducerRole,
-		vocabulary.WithDescription("ADR-039 Phase 1 Tier 3 cluster: role name of the producer loop (dev-via-spec-builder for Phase 1; broader producer coverage in follow-up slices)."),
+		vocabulary.WithDescription("ADR-039 Phase 1 Tier 3 cluster: role name of the producer loop (builder for Phase 1; broader producer coverage in follow-up slices)."),
 		vocabulary.WithDataType("string"),
 	)
 	vocabulary.Register(PredicateNeedsReviewReason,
@@ -348,7 +335,7 @@ func init() {
 		vocabulary.WithDataType("string"),
 	)
 	vocabulary.Register(PredicateRecoveryCount,
-		vocabulary.WithDescription("ADR-040 §addendum 2026-05-11: per-chain count of research-reviewer rejection cycles that triggered a source-curator recovery attempt. Stored as string-formatted integer for rule-engine string comparisons. Stamped on chain entity (audit trail) and mirrored onto the triggering reviewer loop entity (rule-engine read surface)."),
+		vocabulary.WithDescription("ADR-040 §addendum 2026-05-11: per-chain count of reviewer rejection cycles (legacy `research-reviewer` and ADR-041 MVP `reviewer-research` / `reviewer-spec`) that triggered a retry-research recovery attempt. Stored as string-formatted integer for rule-engine string comparisons. Stamped on chain entity (audit trail) and mirrored onto the triggering reviewer loop entity (rule-engine read surface)."),
 		vocabulary.WithDataType("int"),
 	)
 	vocabulary.Register(PredicateRecoveryExhausted,
@@ -553,7 +540,7 @@ func registerOtherPackagePredicates() {
 
 	// chain.evidence.* — evidence.Preprocessor (evidence/). ADR-036
 	// §Phase 2 R3.7.2.k′-bis evidence-summary milestone on
-	// dev-via-spec-builder loop entities.
+	// builder loop entities.
 	vocabulary.Register("chain.evidence.summary_ready",
 		vocabulary.WithDescription("ADR-036 §Phase 2 evidence summary: \"true\" marker indicating the preprocessor stamped a summary on the builder's loop entity."),
 		vocabulary.WithDataType("string"),
@@ -588,17 +575,10 @@ func registerOtherPackagePredicates() {
 		vocabulary.WithDataType("string"),
 	)
 
-	// chain.consensus.* — ConsensusMilestoneStamper (chain/consensus.go).
-	// PR C Phase C3.
-	vocabulary.Register("chain.consensus.path",
-		vocabulary.WithDescription("PR C Phase C3: path to the rendered consensus artifact markdown."),
-		vocabulary.WithDataType("string"),
-	)
-
 	// chain.spec_artifact.* — emit_dev_via_spec_artifact tool
 	// (cmd/semteams/tools/emitspecartifact). Phase 4 milestone.
 	vocabulary.Register("chain.spec_artifact.loop",
-		vocabulary.WithDescription("Phase 4: loop_id of the dev-via-spec-architect whose spec artifact the chain consumed. 3-part canonical shape (2026-05-11 rename from chain.spec_artifact_loop)."),
+		vocabulary.WithDescription("Phase 4: loop_id of the architect-flavour role (researcher-architect under ADR-041 MVP, dev-via-spec-architect under legacy) whose spec artifact the chain consumed. 3-part canonical shape (2026-05-11 rename from chain.spec_artifact_loop)."),
 		vocabulary.WithDataType("string"),
 	)
 	vocabulary.Register("chain.spec_artifact.path",

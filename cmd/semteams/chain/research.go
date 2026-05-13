@@ -42,16 +42,23 @@ const (
 	// "chain.dispatched" and "chain.spec_artifact").
 	chainResearchSource = "chain.research"
 
-	// researchReviewerRole is the role we milestone on. Lifted to a
-	// constant so the contract test can match the same value.
-	researchReviewerRole = "research-reviewer"
-
 	// researchApprovedAction is the coordinator.next_action value the
 	// reviewer's persona stamps via decide(action="approved"). Sourced
-	// from configs/personas/fragments/research-reviewer (decide
-	// action_allowlist in rule_03's spawn).
+	// from configs/personas/fragments/research-reviewer + reviewer-research
+	// (both use the same approved-token vocabulary).
 	researchApprovedAction = "approved"
 )
+
+// researchReviewerRoles is the role-name set whose approve-action stamps the
+// research-artifact milestone. Includes legacy `research-reviewer`
+// (configs/rules/research-iterative/*) and ADR-041 MVP `reviewer-research`
+// (configs/rules/research-mode-transition/01a-researcher-synthesize-to-reviewer-research.json).
+// Stamper fires on either; downstream chain.research_artifact.* predicates
+// don't care which reviewer flavour produced the approval.
+var researchReviewerRoles = map[string]struct{}{
+	"research-reviewer": {}, // legacy research-iterative
+	"reviewer-research": {}, // ADR-041 MVP reviewer-research mode
+}
 
 // Predicate names on the researcher's loop entity (read side).
 const (
@@ -117,13 +124,13 @@ func NewResearchMilestoneStamper(
 }
 
 // HandleLoopCompleted is the subscription entry point. Filters to
-// research-reviewer success and the approved coordinator action; for
-// non-matching events returns nil (other handlers may fire).
+// research-reviewer / reviewer-research success and the approved coordinator
+// action; for non-matching events returns nil (other handlers may fire).
 func (s *ResearchMilestoneStamper) HandleLoopCompleted(ctx context.Context, ev *agentic.LoopCompletedEvent) error {
 	if ev == nil {
 		return nil
 	}
-	if ev.Role != researchReviewerRole || ev.Outcome != agentic.OutcomeSuccess {
+	if _, ok := researchReviewerRoles[ev.Role]; !ok || ev.Outcome != agentic.OutcomeSuccess {
 		return nil
 	}
 	if err := validateLoopID(ev.LoopID); err != nil {

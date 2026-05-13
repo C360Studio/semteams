@@ -49,7 +49,7 @@ const (
 	// Mirrors upstream BashExecutor's SANDBOX_URL: the bootstrap
 	// tool reuses the same env var so operators don't have to wire
 	// two URLs that should always be the same. Empty disables
-	// bootstrap_workspace registration; the dev-via-spec-builder
+	// bootstrap_workspace registration; the builder
 	// loop is non-functional without it.
 	envSandboxURL = "SANDBOX_URL"
 )
@@ -334,10 +334,12 @@ func registerEmitSpecArtifact(reg *agentictools.ExecutorRegistry, natsClient *na
 	executor.SetChainResolver(chainResolver)
 	// Smoke #8 run-5 D1 + D2 fix: SetChainReader gives the architect
 	// canonical lineage IDs (research_artifact_loop, plan_loop,
-	// plan_reviewer_loop, consensus_loop) + slug stem so provenance
-	// and the rendered slug stop drifting. ChainResolver above (used
-	// for chain.spec_artifact.* triple writes) is independent — same
-	// underlying NATS plumbing, different read shape.
+	// plan_reviewer_loop) + slug stem so provenance and the rendered
+	// slug stop drifting. consensus_loop was dropped in ADR-041 Slice
+	// 2D-4 alongside the chain.consensus.* stamper teardown.
+	// ChainResolver above (used for chain.spec_artifact.* triple
+	// writes) is independent — same underlying NATS plumbing,
+	// different read shape.
 	executor.SetChainReader(buildChainLineageReader(natsClient, platform))
 
 	if err := reg.RegisterTool(emitspecartifact.ToolName, executor); err != nil {
@@ -351,7 +353,7 @@ func registerEmitSpecArtifact(reg *agentictools.ExecutorRegistry, natsClient *na
 }
 
 // registerBuilderDecide wires the R3.6.2.b builder_decide executor — the
-// dev-via-spec-builder role's terminal validator. Always registered when
+// builder role's terminal validator. Always registered when
 // natsClient is non-nil — same "always on" policy as registerEmitArtifact:
 // the tool is product policy, and any deployment running the dev-via-spec
 // builder slice needs it to close the arc with action-specific evidence.
@@ -376,8 +378,8 @@ func registerBuilderDecide(reg *agentictools.ExecutorRegistry, natsClient *natsc
 }
 
 // registerBootstrapWorkspace wires the R3.6.2.d bootstrap_workspace
-// executor — the dev-via-spec-builder role's iteration-1 setup hook.
-// Skipped when SANDBOX_URL is unset: the dev-via-spec-builder loop is
+// executor — the builder role's iteration-1 setup hook.
+// Skipped when SANDBOX_URL is unset: the builder loop is
 // non-functional without a sandbox, and the upstream BashExecutor uses
 // the same env var to route bash to the sandbox, so an unset value
 // disables the entire builder slice consistently. See ADR-032 §addendum

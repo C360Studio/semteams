@@ -19,10 +19,10 @@ const (
 	// Builder's needs_clarification carries coordinator.blocking_question
 	// by shape — that signals "operator-actionable" per ADR-039 §"What
 	// rules fire on" (run-10 catalog gap is the canonical case).
-	builderRole = "dev-via-spec-builder"
+	builderRole = "builder"
 
 	// needsClarificationAction is the coordinator.next_action value the
-	// dev-via-spec-builder's builder_decide stamps when terminating with
+	// builder's builder_decide stamps when terminating with
 	// a recoverable verdict the chain cannot route deterministically.
 	needsClarificationAction = "needs_clarification"
 
@@ -36,7 +36,7 @@ const (
 )
 
 // NeedsReviewStamper writes the chain.needs_review.* triple cluster on
-// the chain entity when a dev-via-spec-builder loop completes with
+// the chain entity when a builder loop completes with
 // coordinator.next_action="needs_clarification" — the Tier 3 fallback
 // per ADR-039 Phase 1 Slice B.
 //
@@ -97,7 +97,7 @@ func NewNeedsReviewStamper(
 }
 
 // HandleLoopCompleted is the CompletionHandler entry point. Filters to
-// dev-via-spec-builder success with coordinator.next_action=needs_clarification;
+// builder success with coordinator.next_action=needs_clarification;
 // for non-matching events returns nil so other handlers in the dispatch
 // chain see the event.
 func (s *NeedsReviewStamper) HandleLoopCompleted(ctx context.Context, ev *agentic.LoopCompletedEvent) error {

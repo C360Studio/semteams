@@ -60,9 +60,10 @@ const defaultOutputDir = "docs/consensus"
 const envOutputDir = "SEMTEAMS_CONSENSUS_DIR"
 
 // Predicate names stamped on the challenger's loop entity. The chain
-// milestone subscriber (cmd/semteams/chain/consensus.go) reads
-// predicatePath at challenger-accept time and propagates to
-// chain.consensus.path on the chain entity.
+// milestone subscriber that previously propagated predicatePath onto the
+// chain entity was torn down in ADR-041 Slice 2D-4 (no MVP consumer);
+// this tool is retained until Slice 2D-5 / Phase 3 drop the legacy
+// challenger arc entirely.
 const (
 	predicateChainConsensusCount = "dev_via_spec.consensus.chain_consensus_count"
 	predicateGeneratedAt         = "dev_via_spec.consensus.generated_at"
@@ -141,7 +142,7 @@ func (e *Executor) ListTools() []agentic.ToolDefinition {
 	}
 	return []agentic.ToolDefinition{{
 		Name:        ToolName,
-		Description: "Emit the dev-via-spec-challenger's accept-terminal consensus. Supplies typed fields (summary, chain_consensus bullets, considered_concerns, depends_on) the tool renders as a deterministic markdown view. Marker triples on the loop entity carry counts and the rendered file path; the chain milestone subscriber propagates the path to the chain entity at accept time. Call once per challenger pass before the terminal decide(action=\"accept\"). Do NOT call when terminating with concerns_raised; that path keeps the chain in the planner-reviewer-challenger cycle.",
+		Description: "LEGACY (dev-via-spec-challenger role, retired in ADR-041 Phase 2). Emit the challenger's accept-terminal consensus. Supplies typed fields (summary, chain_consensus bullets, considered_concerns, depends_on) the tool renders as a deterministic markdown view. Marker triples on the loop entity carry counts and the rendered file path. Call once per challenger pass before the terminal decide(action=\"accept\"). Do NOT call when terminating with concerns_raised. Under the ADR-041 MVP roster there is no challenger role; this tool is retained pending Slice 2D-5 / Phase 3 deletion and should NOT be called from any MVP chain role (researcher-*, reviewer-*, builder).",
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
