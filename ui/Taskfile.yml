@@ -716,10 +716,11 @@ tasks:
       RUN_ID: '{{.RUN_ID | default "smoke7-manual"}}'
       OUT_DIR: '/tmp/{{.RUN_ID}}'
       PORT: '{{.E2E_AGENTIC_UI_PORT | default "3100"}}'
-      # The role the smoke is expected to end on. Smoke #7 expects the
-      # qa-reviewer (R3.7.2.k′ chain shape). Override via env var for
-      # other flows. Empty = skip the chain-shape check.
-      WEDGE_EXPECTED_TERMINAL_ROLE: '{{.WEDGE_EXPECTED_TERMINAL_ROLE | default "dev-via-spec-qa-reviewer"}}'
+      # The role the smoke is expected to end on. Default reviewer-qa
+      # is the ADR-041 MVP chain terminal (renamed from
+      # dev-via-spec-qa-reviewer in Slice 2D-3a). Override via env
+      # var for other flows. Empty = skip the chain-shape check.
+      WEDGE_EXPECTED_TERMINAL_ROLE: '{{.WEDGE_EXPECTED_TERMINAL_ROLE | default "reviewer-qa"}}'
     cmds:
       - mkdir -p {{.OUT_DIR}}
       - |
@@ -818,7 +819,7 @@ tasks:
     vars:
       RUN_ID: '{{.RUN_ID | default "smoke7-manual"}}'
       OUT_DIR: '/tmp/{{.RUN_ID}}'
-      WEDGE_EXPECTED_TERMINAL_ROLE: '{{.WEDGE_EXPECTED_TERMINAL_ROLE | default "dev-via-spec-qa-reviewer"}}'
+      WEDGE_EXPECTED_TERMINAL_ROLE: '{{.WEDGE_EXPECTED_TERMINAL_ROLE | default "reviewer-qa"}}'
     cmds:
       - |
         OUT_DIR="{{.OUT_DIR}}"

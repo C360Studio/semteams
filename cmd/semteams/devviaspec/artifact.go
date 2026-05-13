@@ -173,12 +173,15 @@ func (a *Artifact) Validate() error {
 	if a.Provenance.ResearchArtifactLoop == "" {
 		return fmt.Errorf("provenance.research_artifact_loop required")
 	}
-	if a.Provenance.PlannerLoop == "" {
-		return fmt.Errorf("provenance.planner_loop required")
-	}
-	if a.Provenance.ReviewerLoop == "" {
-		return fmt.Errorf("provenance.reviewer_loop required")
-	}
+	// PlannerLoop + ReviewerLoop are wire-retained slots for the legacy
+	// dev-via-spec arc (planner → reviewer → challenger → architect)
+	// that ADR-041 retired. Under MVP the researcher-architect emits
+	// the artifact directly without intermediate planner/reviewer hops,
+	// so these fields can be empty. The struct keeps the JSON tags for
+	// wire-format stability; tightening Validate would require either a
+	// wire-format break or persona-prose surgery to instruct the
+	// architect to back-fill from lineage triples (deferred to a
+	// focused follow-on slice).
 	for i := range a.Checks {
 		if err := a.Checks[i].Validate(); err != nil {
 			return fmt.Errorf("checks[%d]: %w", i, err)

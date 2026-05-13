@@ -63,10 +63,12 @@ const defaultOutputDir = "docs/plans"
 // so it doesn't drift the upstream config schema.
 const envOutputDir = "SEMTEAMS_PLAN_DIR"
 
-// Predicate names stamped on the planner's loop entity. The chain
-// milestone subscriber (cmd/semteams/chain/plan.go) reads
-// predicatePath at reviewer-approval time and propagates to
-// chain.plan.path on the chain entity.
+// Predicate names stamped on the planner's loop entity. ADR-041
+// Phase 3 retired the chain.plan.* milestone subscriber, so these
+// triples are leaf-state on the researcher-plan loop only — no
+// downstream chain-entity propagation. The researcher-architect
+// phase that consumes the plan reads it via lineage triples
+// (lineage.researcher-plan), not chain.plan.path.
 const (
 	predicateRevision    = "dev_via_spec.plan.revision"
 	predicateEpicCount   = "dev_via_spec.plan.epic_count"

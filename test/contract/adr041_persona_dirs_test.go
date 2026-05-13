@@ -74,17 +74,20 @@ func TestADR041_ResearcherPhaseIdentitiesReferenceTheirPhase(t *testing.T) {
 	}
 }
 
-// TestADR041_OldPersonaDirsStillPresent verifies the ADR-041 phasing
-// guarantee that Phase 1 is purely additive: the old role dirs remain
-// loaded because configs still reference them. Deletion happens in
-// Phase 3 once configs are wired to the new roster.
+// TestADR041_LegacyPersonaDirsDeleted asserts the ADR-041 Phase 3
+// deletion guarantee: the 7 legacy dev-via-spec-* + source-curator
+// persona dirs are gone. Inverts the Phase 1's additive-only guard
+// once configs were re-wired to the MVP roster (Slice 2D-3a swapped
+// rule role names from `dev-via-spec-*` to `researcher-* / builder /
+// reviewer-*`; Slice 2D-1 removed the curator spawn rules; Phase 3
+// deleted the inert persona dirs).
 //
-// If this test starts failing, either:
-//   - Phase 3 has run (in which case update this test alongside the
-//     config wiring), OR
-//   - someone deleted old dirs prematurely (in which case the
-//     existing 13-role configs broke silently).
-func TestADR041_OldPersonaDirsStillPresent(t *testing.T) {
+// The retained-legacy set (researcher, research-reviewer,
+// source-registrar) stays gated by TestADR041_RetainedLegacyPersonaDirs
+// below — their continued presence is the wiring contract for active
+// research-iterative + e2e-research-with-source configs, not Phase 3
+// cleanup target.
+func TestADR041_LegacyPersonaDirsDeleted(t *testing.T) {
 	root := "../../configs/personas/fragments"
 	for _, dir := range []string{
 		"dev-via-spec-planner",
@@ -93,13 +96,38 @@ func TestADR041_OldPersonaDirsStillPresent(t *testing.T) {
 		"dev-via-spec-reviewer",
 		"dev-via-spec-qa-reviewer",
 		"dev-via-spec-challenger",
-		"research-reviewer",
-		"researcher",
 		"source-curator",
+	} {
+		path := filepath.Join(root, dir)
+		if _, err := os.Stat(path); err == nil {
+			t.Errorf("legacy persona dir %s still present (ADR-041 Phase 3 deletion); inverse-guard regression — adding fragments back would silently spawn under retired roles since no rule names them", path)
+		}
+	}
+}
+
+// TestADR041_RetainedLegacyPersonaDirs locks the three legacy roles
+// that ADR-041 Phase 3 intentionally retained — each has an active
+// consumer (per the comment) and removing them needs a separate
+// architectural call.
+//
+//   - `researcher` — spawned by coordinator/01-delegate-research.json
+//     (coordinator front-door pattern) + default_role in 3 e2e configs.
+//   - `research-reviewer` — spawned by research-iterative/01-research-to-reviewer.json.
+//   - `source-registrar` — default_role in e2e-research-with-source.json
+//     (R2 source-acquisition journey).
+//
+// When any of these consumers retire, prune the corresponding entry
+// from this test and the persona dir alongside the wiring.
+func TestADR041_RetainedLegacyPersonaDirs(t *testing.T) {
+	root := "../../configs/personas/fragments"
+	for _, dir := range []string{
+		"researcher",
+		"research-reviewer",
 		"source-registrar",
 	} {
-		if _, err := os.Stat(filepath.Join(root, dir)); err != nil {
-			t.Errorf("old persona dir %s missing (Phase 1 should be additive only): %v", dir, err)
+		path := filepath.Join(root, dir, "00-identity.md")
+		if _, err := os.Stat(path); err != nil {
+			t.Errorf("retained-legacy persona dir %s identity fragment missing: %v (if intentional, also remove %s from this test and prune the consumer wiring)", path, err, dir)
 		}
 	}
 }

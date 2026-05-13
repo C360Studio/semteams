@@ -93,7 +93,7 @@ func (p *Plan) Schema() message.Type {
 
 // Validate implements message.Payload. Structural well-formedness
 // only — content-quality checks (epic granularity, scope coverage)
-// live in the dev-via-spec-reviewer persona, not here.
+// live in the reviewer-spec persona, not here.
 func (p *Plan) Validate() error {
 	if p.LoopID == "" {
 		return fmt.Errorf("loop_id required")

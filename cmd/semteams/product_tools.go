@@ -191,13 +191,12 @@ func registerEmitArtifact(reg *agentictools.ExecutorRegistry, natsClient *natscl
 // needs it. Output directory defaults to "docs/plans" but is overrideable
 // via SEMTEAMS_PLAN_DIR.
 //
-// Persona contract (Phase C5, landed): the dev-via-spec-planner persona
-// fragment 15-emit-plan.md instructs the planner to call emit_plan
-// before terminating with decide(action="planned"). The planner spawn
-// rules (rules/research-mode-transition/03-stabilise-and-transition.json
-// and rules/dev-via-spec/02 + 04 retry rules) include emit_plan in their
-// tool list and prompt body. Configs that route through the dev-via-spec
-// chain (osh-demo.json, e2e-dev-via-spec.json) include emit_plan in
+// Persona contract: the researcher-plan persona fragment
+// 15-emit-plan.md instructs the planner phase to call emit_plan
+// before terminating with decide(action="emit") or
+// decide(action="gather"). Configs that route through the
+// dev-via-spec chain (osh-demo.json, e2e-dev-via-spec.json,
+// e2e-research-mode-transition.json) include emit_plan in
 // agentic-tools.allowed_tools.
 func registerEmitPlan(reg *agentictools.ExecutorRegistry, natsClient *natsclient.Client, platform types.PlatformMeta, logger *slog.Logger) error {
 	if natsClient == nil {

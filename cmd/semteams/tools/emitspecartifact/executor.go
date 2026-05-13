@@ -303,12 +303,12 @@ func (e *Executor) ListTools() []agentic.ToolDefinition {
 	// verified, AGAINST WHAT, and with WHAT EVIDENCE. Each check fills a
 	// verification surface (unit / testcontainer / sidecar / browser-flow /
 	// static-analysis) and names a test_harness from configs/harnesses.json
-	// when applicable. The architect persona contract (R3.7.2.f′,
-	// configs/personas/fragments/dev-via-spec-architect/30-commitment-
-	// contract.md) requires at least one check for any artifact whose
+	// when applicable. The architect persona contract
+	// (configs/personas/fragments/researcher-architect/30-commitment-contract.md)
+	// requires at least one check for any artifact whose
 	// integration_points[] names an external actor. The field stays optional
-	// at the wire level so v1 consumers see no schema drift; the
-	// dvs-reviewer (R3.7.2.j′) enforces coverage adequacy.
+	// at the wire level so v1 consumers see no schema drift; reviewer-spec
+	// enforces coverage adequacy.
 	refSchema := map[string]any{
 		"type": "object",
 		"properties": map[string]any{

@@ -278,7 +278,6 @@ func setupToolsAndPreprocessor(
 //
 // Phase 1b: chain.dispatched_at on chain root.
 // Phase 2:  chain.research_artifact.* on research-reviewer approval.
-// Phase C2: chain.plan.* on dev-via-spec-reviewer approval.
 // Phase C4 (evidence summary milestone) plugs in via the same slice.
 // ADR-039 Phase 1 Slice B: chain.needs_review.* on builder
 // needs_clarification (Tier 3 fallback).
@@ -310,7 +309,6 @@ func startChainMilestoneSubscribers(ctx context.Context, cfg *config.Config, nat
 
 	dispatched := chain.NewDispatchedStamper(triplePublisher, platform, logger)
 	research := chain.NewResearchMilestoneStamper(triplePublisher, resolver, entityReader, platform, logger)
-	plan := chain.NewPlanMilestoneStamper(triplePublisher, resolver, entityReader, platform, logger)
 	needsReview := chain.NewNeedsReviewStamper(triplePublisher, resolver, entityReader, platform, logger)
 	// Threshold=0 → recoverycounter falls back to DefaultThreshold (3).
 	// TODO: plumb from cfg.RecoveryCap.Threshold (or per-flow config) when
@@ -334,7 +332,6 @@ func startChainMilestoneSubscribers(ctx context.Context, cfg *config.Config, nat
 	subscriber := chain.NewCompletionSubscriber([]chain.CompletionHandler{
 		dispatched,
 		research,
-		plan,
 		needsReview,
 		recoveryCap,
 		phaseValidator,
@@ -547,10 +544,14 @@ func loadPlatformAssets(ctx context.Context, natsClient *natsclient.Client, cliC
 // PERSONAS KV bucket. Skipped when either manager is nil (tests,
 // or boot-time KV failure that already logged its own warning).
 // Uses multi-role on the Persona so a single record applies to
-// both `researcher` and `research-reviewer` (ADR-040 dropped
-// `researcher-with-source-acquisition`; the source-curator does not
-// need the test_harness catalog — harness selection is a dev-via-spec
-// architect concern, not a corpus-curation concern).
+// every researcher / reviewer role that touches a test_harness
+// field — researcher phases that select (researcher-plan / gather
+// / synthesize / architect) and reviewer modes that membership-
+// check (reviewer-research, reviewer-spec). Legacy `researcher` +
+// `research-reviewer` are retained in the Roles list for
+// research-iterative configs that have not migrated to the
+// ADR-041 phase-suffixed roster (harness selection is the
+// researcher-architect's concern under MVP).
 //
 // Fragment ID `test-harness-catalog.rendered` is intentionally NOT in
 // the project's `\d+-` prefix style operators use for hand-

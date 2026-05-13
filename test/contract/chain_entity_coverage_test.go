@@ -101,14 +101,14 @@ func TestChainEntityCoverage_PR_B_Pipeline(t *testing.T) {
 	platform := types.PlatformMeta{Org: "c360", Platform: "test"}
 	pub := &recordingTriplePublisher{}
 
-	// Build a chain ancestry that mirrors the OSH-Meshtastic happy path:
+	// Build a chain ancestry that mirrors the surviving happy-path
+	// stamper surface post-ADR-041 Phase 3:
 	//   dispatch_root → researcher_a → research_reviewer_b
-	//                 → planner_c → dev_via_spec_reviewer_d
+	// The legacy planner_c → dev_via_spec_reviewer_d hops were
+	// removed alongside the chain.plan.* stamper teardown.
 	dispatchEntityID := agentic.LoopExecutionEntityID("c360", "test", "dispatch_root")
 	researcherEntityID := agentic.LoopExecutionEntityID("c360", "test", "researcher_a")
 	researchReviewerEntityID := agentic.LoopExecutionEntityID("c360", "test", "research_reviewer_b")
-	plannerEntityID := agentic.LoopExecutionEntityID("c360", "test", "planner_c")
-	devReviewerEntityID := agentic.LoopExecutionEntityID("c360", "test", "dev_via_spec_reviewer_d")
 	er := &staticEntityReader{
 		entities: map[string]map[string]any{
 			dispatchEntityID: {
@@ -132,14 +132,6 @@ func TestChainEntityCoverage_PR_B_Pipeline(t *testing.T) {
 				"coordinator.next_action": "approved",
 				"lineage.researcher":      "researcher_a",
 			},
-			plannerEntityID: {
-				"agent.loop.parent":      researchReviewerEntityID,
-				"dev_via_spec.plan.path": "docs/plans/2026-05-08-osh-meshtastic-plan.md",
-			},
-			devReviewerEntityID: {
-				"agent.loop.parent":       plannerEntityID,
-				"coordinator.next_action": "approved",
-			},
 		},
 	}
 
@@ -147,7 +139,6 @@ func TestChainEntityCoverage_PR_B_Pipeline(t *testing.T) {
 
 	dispatched := chain.NewDispatchedStamper(pub, platform, nil)
 	research := chain.NewResearchMilestoneStamper(pub, resolver, er, platform, nil)
-	planMilestone := chain.NewPlanMilestoneStamper(pub, resolver, er, platform, nil)
 	needsReview := chain.NewNeedsReviewStamper(pub, resolver, er, platform, nil)
 
 	// We invoke handlers directly. CompletionSubscriber's NATS plumbing
@@ -180,20 +171,6 @@ func TestChainEntityCoverage_PR_B_Pipeline(t *testing.T) {
 			ParentLoopID: "researcher_a",
 			CompletedAt:  now.Add(2 * time.Second),
 		},
-		{
-			LoopID:       "planner_c",
-			Role:         "dev-via-spec-planner",
-			Outcome:      agentic.OutcomeSuccess,
-			ParentLoopID: "research_reviewer_b",
-			CompletedAt:  now.Add(3 * time.Second),
-		},
-		{
-			LoopID:       "dev_via_spec_reviewer_d",
-			Role:         "dev-via-spec-reviewer",
-			Outcome:      agentic.OutcomeSuccess,
-			ParentLoopID: "planner_c",
-			CompletedAt:  now.Add(4 * time.Second),
-		},
 	}
 	for _, ev := range events {
 		if err := dispatched.HandleLoopCompleted(context.Background(), ev); err != nil {
@@ -201,9 +178,6 @@ func TestChainEntityCoverage_PR_B_Pipeline(t *testing.T) {
 		}
 		if err := research.HandleLoopCompleted(context.Background(), ev); err != nil {
 			t.Fatalf("ResearchMilestoneStamper.HandleLoopCompleted(%s) error: %v", ev.LoopID, err)
-		}
-		if err := planMilestone.HandleLoopCompleted(context.Background(), ev); err != nil {
-			t.Fatalf("PlanMilestoneStamper.HandleLoopCompleted(%s) error: %v", ev.LoopID, err)
 		}
 		if err := needsReview.HandleLoopCompleted(context.Background(), ev); err != nil {
 			t.Fatalf("NeedsReviewStamper.HandleLoopCompleted(%s) error: %v", ev.LoopID, err)
@@ -223,10 +197,7 @@ func TestChainEntityCoverage_PR_B_Pipeline(t *testing.T) {
 		"chain.research_artifact.actor_count": 3,
 		"chain.research_artifact.task_count":  5,
 		"chain.research_artifact.path":        "docs/research/2026-05-08-osh-meshtastic-driver-research.md", // PR C Phase C1
-		"chain.slug.stem":                     "2026-05-08-osh-meshtastic-driver",                           // smoke #8 run-5 D2 fix — stem derived from research path; downstream tools compose <stem>-{plan,consensus,implementation}
-		"chain.plan.loop":                     "planner_c",                                                  // PR C Phase C2 (3-part rename 2026-05-11)
-		"chain.plan.reviewer_loop":            "dev_via_spec_reviewer_d",                                    // smoke #8 run-5 D1 fix — reviewer loop ID originally consumed by emit_consensus (retired in ADR-041 Slice 2D-5); kept for legacy-config audit replay (3-part rename 2026-05-11)
-		"chain.plan.path":                     "docs/plans/2026-05-08-osh-meshtastic-plan.md",               // PR C Phase C2
+		"chain.slug.stem":                     "2026-05-08-osh-meshtastic-driver",                           // smoke #8 run-5 D2 fix — stem derived from research path; downstream tools compose <stem>-{plan,implementation}
 	}
 	for pred, wantObj := range want {
 		gotObj, ok := got[pred]

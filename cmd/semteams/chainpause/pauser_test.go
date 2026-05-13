@@ -426,7 +426,12 @@ func TestIsManagedRole(t *testing.T) {
 		}
 	}
 
-	unmanaged := []string{"general", "ops-analyst", "coordinator", "dev-via-spec-builder", "dev-via-spec-planner", ""}
+	// "dispatch" + the MVP managed roles are exercised above; this set
+	// is the negative-control surface — names the pauser must NOT
+	// adopt. Mixes retired legacy roles (dev-via-spec-*) with adjacent
+	// system roles (ops-*, coordinator) so the closed set's edges stay
+	// inspectable in the test diff.
+	unmanaged := []string{"general", "ops-analyst", "coordinator", "dev-via-spec-builder", "dev-via-spec-planner", "source-curator", ""}
 	for _, role := range unmanaged {
 		if isManagedRole(role) {
 			t.Errorf("expected %q to be unmanaged, but isManagedRole returned true", role)

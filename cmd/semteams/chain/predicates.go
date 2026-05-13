@@ -17,15 +17,18 @@ import "github.com/c360studio/semstreams/vocabulary"
 // Coverage discipline: every chain.* predicate the codebase writes is
 // registered here (2026-05-11 vocab-completion). Predicates whose
 // canonical constants live in this file (PredicateSlugStem,
-// PredicateResearchArtifactLoop, PredicatePlanLoop,
-// PredicatePlanReviewerLoop, PredicateRecovery*,
+// PredicateResearchArtifactLoop, PredicateRecovery*,
 // PredicateNeedsReview*) Register against the constant. Predicates whose
 // constants stay co-located with their writers (chain.dispatched.*,
 // chain.paused.*, chain.decision.*, chain.evidence.*,
 // chain.research_artifact.{harness,actor_count,task_count,path},
-// chain.plan.path, chain.spec_artifact.*) Register
-// against string literals — promoting them to constants here is a
-// deferred follow-up refactor. The contract test
+// chain.spec_artifact.*) Register against string literals — promoting
+// them to constants here is a deferred follow-up refactor. The
+// PredicatePlanLoop + PredicatePlanReviewerLoop constants stay
+// registered (read-side legacy fallback consumed by
+// emit_dev_via_spec_artifact's overrideProvenanceFromChain), but no
+// MVP writer stamps them — see their doc-comments below for the
+// retention rationale. The contract test
 // test/contract/chain_entity_coverage_test.go pins the predicate-name
 // union both sides must agree on regardless.
 //
@@ -61,21 +64,20 @@ const (
 	// local guess.
 	PredicateResearchArtifactLoop = "chain.research_artifact.loop"
 
-	// PredicatePlanLoop names the chain-entity predicate that records
-	// the planner loop_id whose plan the reviewer approved. Phase 3
-	// deletion candidate: ADR-041 Slice 2D-3a removed the rule
-	// (01-planner-to-reviewer.json) that spawned the dev-via-spec-
-	// reviewer loop the milestone stamper (chain/plan.go) keys off of,
-	// so no live MVP wiring stamps this predicate. The stamper +
-	// predicate stay for legacy-config audit replay until Phase 3
-	// queues them with the other dev-via-spec leftovers; chain.consensus.*
-	// was handled the same way in Slice 2D-4.
+	// PredicatePlanLoop names the chain-entity predicate that recorded
+	// the planner loop_id whose plan the reviewer approved. Stamper +
+	// vocabulary registration retired in ADR-041 Phase 3; the constant
+	// stays only because emit_dev_via_spec_artifact's
+	// overrideProvenanceFromChain reads it as a fallback (returns empty
+	// under MVP — nothing stamps it). Removable once
+	// overrideProvenanceFromChain drops its PlannerLoop branch.
 	PredicatePlanLoop = "chain.plan.loop"
 
 	// PredicatePlanReviewerLoop names the chain-entity predicate that
-	// records the reviewer loop_id that approved the plan. Read at
-	// stamp time only (smoke #8 run-5 D1 fix). Phase 3 deletion
-	// candidate — same rationale as PredicatePlanLoop.
+	// recorded the reviewer loop_id that approved the plan. Same
+	// retirement status as PredicatePlanLoop — constant kept for
+	// emit_dev_via_spec_artifact's overrideProvenanceFromChain
+	// ReviewerLoop branch.
 	PredicatePlanReviewerLoop = "chain.plan.reviewer_loop"
 
 	// PredicateNeedsReviewClassification is the first predicate of the
@@ -117,13 +119,14 @@ const (
 	// CompletedAt; observability surfaces use this to age the cluster.
 	PredicateNeedsReviewObservedAt = "chain.needs_review.observed_at"
 
-	// PredicateRecoveryCount is the per-chain count of research-reviewer
-	// rejection cycles that have triggered a source-curator recovery
-	// attempt (ADR-040 §addendum 2026-05-11 "Chain-level recovery cap").
-	// Stamped on the canonical 6-part chain entity by RecoveryCounter
-	// each time a research-reviewer completes with
-	// coordinator.next_action="insufficient". Also mirrored onto the
-	// triggering reviewer loop entity so rule_02 can gate via
+	// PredicateRecoveryCount is the per-chain count of reviewer
+	// rejection cycles that have triggered a retry-research attempt
+	// (ADR-040 §addendum 2026-05-11 "Chain-level recovery cap"; ADR-041
+	// extended to cover MVP reviewer-research / reviewer-spec alongside
+	// legacy research-reviewer). Stamped on the canonical 6-part chain
+	// entity by RecoveryCounter each time a managed reviewer completes
+	// with coordinator.next_action="insufficient". Also mirrored onto
+	// the triggering reviewer loop entity so rule_02 can gate via
 	// $entity.triple.chain.recovery_count without a chain-ancestry walk
 	// (the rule engine reads triples on the triggering entity only).
 	//
@@ -309,13 +312,19 @@ func init() {
 		vocabulary.WithDataType("string"),
 	)
 
+	// chain.plan.* — stamper retired in ADR-041 Phase 3 (no MVP rule
+	// spawns the dev-via-spec-reviewer loop the stamper keyed on). The
+	// vocabulary entries stay registered because the constants are still
+	// imported by emit_dev_via_spec_artifact's overrideProvenanceFromChain
+	// (read-side fallback); the registry exists for vocab-completeness
+	// audits even though no live producer writes these triples under MVP.
 	vocabulary.Register(PredicatePlanLoop,
-		vocabulary.WithDescription("Loop_id of the planner whose plan the dev-via-spec-reviewer approved. The chain entity's canonical reference to the approved planner pass. Legacy: under the ADR-041 MVP roster the planner role is gone (researcher-plan emits the plan as structured loop output, not a markdown artifact); this predicate stays for legacy-config audit replay until Phase 3."),
+		vocabulary.WithDescription("Loop_id of the planner whose plan the reviewer approved. ADR-041 Phase 3: stamper retired — under MVP roster the planner role is gone (researcher-plan emits structured loop output, not a markdown artifact). Constant retained for emit_dev_via_spec_artifact's read-side fallback only."),
 		vocabulary.WithDataType("string"),
 	)
 
 	vocabulary.Register(PredicatePlanReviewerLoop,
-		vocabulary.WithDescription("Loop_id of the reviewer that approved the plan. Distinct from the planner. Legacy-only under ADR-041 MVP — the emit_consensus tool that originally read this is gone; the predicate stays for legacy-config audit replay until Phase 3."),
+		vocabulary.WithDescription("Loop_id of the reviewer that approved the plan. ADR-041 Phase 3: stamper retired — same status as PredicatePlanLoop."),
 		vocabulary.WithDataType("string"),
 	)
 
@@ -571,12 +580,6 @@ func registerOtherPackagePredicates() {
 	)
 	vocabulary.Register("chain.research_artifact.path",
 		vocabulary.WithDescription("PR C Phase C1: path to the rendered research artifact markdown."),
-		vocabulary.WithDataType("string"),
-	)
-
-	// chain.plan.* — PlanMilestoneStamper (chain/plan.go). PR C Phase C2.
-	vocabulary.Register("chain.plan.path",
-		vocabulary.WithDescription("PR C Phase C2: path to the rendered planner artifact markdown."),
 		vocabulary.WithDataType("string"),
 	)
 

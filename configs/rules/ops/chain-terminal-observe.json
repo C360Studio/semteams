@@ -2,13 +2,13 @@
   "id": "ops_chain_terminal_observe",
   "type": "expression",
   "name": "Ops chain-terminal observation",
-  "description": "Fires once per chain when the dev-via-spec-qa-reviewer's loop completes successfully (any verdict from accept/reject/needs_clarification — these are decide actions, not loop outcomes; the loop itself always completes successfully when the reviewer submits work). Spawns one ops-chain-observer with the chain's anchor refs in agent.related_loops so ops can hydrate the full chain context (chain entity → milestone loops → step triples) and emit a coherent end-to-end diagnosis. Per-chain detail observation pattern, complementing the upstream ops-analyst sampling pattern. ADR-027 Phase 1 (read-only) + ADR-038 chain entity as fusion substrate. Chain.paused observation is NOT covered by this rule — that's a separate failure-path follow-up; chainpause already emits chain.paused.* triples that operators can read directly.",
+  "description": "Fires once per chain when the reviewer-qa loop completes successfully (any verdict from accept/reject/needs_clarification — these are decide actions, not loop outcomes; the loop itself always completes successfully when the reviewer submits work). Spawns one ops-chain-observer with the chain's anchor refs in agent.related_loops so ops can hydrate the full chain context (chain entity → milestone loops → step triples) and emit a coherent end-to-end diagnosis. Per-chain detail observation pattern, complementing the upstream ops-analyst sampling pattern. ADR-027 Phase 1 (read-only) + ADR-038 chain entity as fusion substrate + ADR-041 MVP role-name rename (was dev-via-spec-qa-reviewer). Chain.paused observation is NOT covered by this rule — that's a separate failure-path follow-up; chainpause already emits chain.paused.* triples that operators can read directly.",
   "enabled": true,
   "conditions": [
     {
       "field": "agent.loop.role",
       "operator": "eq",
-      "value": "dev-via-spec-qa-reviewer",
+      "value": "reviewer-qa",
       "required": true
     },
     {
@@ -30,7 +30,7 @@
         "qa_reviewer": "$entity.instance",
         "researcher": "$entity.triple.lineage.researcher"
       },
-      "prompt": "The dev-via-spec qa-reviewer at loop $entity.instance just completed. Walk this chain end-to-end per your `10-chain-walk.md` (start from the researcher loop_id in your task properties, walk agent.loop.parent up to the chain root, then read each milestone's loop_result — including the qa-reviewer's own loop for the verdict and decision_reason; sample step triples only when a specific signal warrants). Emit findings via emit_diagnosis per your `20-diagnosis-rules.md`. When done, call submit_work."
+      "prompt": "The reviewer-qa loop at $entity.instance just completed. Walk this chain end-to-end per your `10-chain-walk.md` (start from the researcher loop_id in your task properties, walk agent.loop.parent up to the chain root, then read each milestone's loop_result — including the reviewer-qa's own loop for the verdict and decision_reason; sample step triples only when a specific signal warrants). Emit findings via emit_diagnosis per your `20-diagnosis-rules.md`. When done, call submit_work."
     }
   ],
   "on_exit": [],
@@ -39,10 +39,10 @@
     "adr": "semstreams/docs/adr/027-ops-agent-meta-harness.md",
     "adr_status": "accepted",
     "observation_pattern": "per-chain-detail",
-    "trigger": "dev-via-spec-qa-reviewer loop completion (outcome=success; the decide action — accept/reject/needs_clarification — is the verdict, separate from loop outcome)",
+    "trigger": "reviewer-qa loop completion (outcome=success; the decide action — accept/reject/needs_clarification — is the verdict, separate from loop outcome)",
     "complement_to": "ops_observe_complete_loops (per-flow sampling, deep-research)",
     "related_loops_consumers": "ops-chain-observer reads both qa_reviewer (the trigger loop) and researcher (chain anchor) from agent.related_loops in its task properties. The researcher key is also the canonical chain.AnchorRoleKeys anchor for emit-tools; qa_reviewer is observer-specific and ignored by other consumers.",
-    "subject_shape_note": "Subject MUST be exactly two segments after `agent.task.` (i.e. `agent.task.<role-or-id>`) — agentic-dispatch subscribes on `agent.task.*` (NATS single-token wildcard). Subjects with more segments (e.g. `agent.task.ops.chain_terminal_observe`) silently drop into the void: rule fires, action publishes, but no consumer subscribes. Smoke #8 run-11 surfaced this when the rule succeeded but ops-chain-observer never spawned. The companion rule `observe-complete-loops.json` (`agent.task.ops.analyze`) has the same dead shape and should be cleaned up when next touched.",
+    "subject_shape_note": "Subject MUST be exactly two segments after `agent.task.` (i.e. `agent.task.<role-or-id>`) — agentic-dispatch subscribes on `agent.task.*` (NATS single-token wildcard). Subjects with more segments (e.g. `agent.task.ops.chain_terminal_observe`) silently drop into the void: rule fires, action publishes, but no consumer subscribes. Smoke #8 run-11 surfaced this when the rule succeeded but ops-chain-observer never spawned.",
     "tier": 1
   }
 }

@@ -72,17 +72,20 @@ emit_dev_via_spec_artifact(
     ...
   ],
   provenance: {
-    // The server overrides every field below from the chain entity
-    // (chain.research_artifact_loop, chain.plan_loop,
-    // chain.plan_reviewer_loop) before the markdown renders. Pass
-    // empty strings if you don't have the values handy; the server
-    // still fills in the canonical IDs. Smoke #8 run-5 showed
-    // personas guessing wrong loop IDs; the chain entity has them
-    // right. All three fields are schema-required — emit them all
-    // even if empty.
-    research_artifact_loop: "<may be empty>",
-    planner_loop: "<may be empty>",
-    reviewer_loop: "<may be empty>"
+    // research_artifact_loop is server-overridden from the chain entity's
+    // chain.research_artifact.loop predicate. Pass empty; the server
+    // fills in the canonical ID. (Smoke #8 run-5 showed personas
+    // guessing wrong loop IDs; the chain entity has them right.)
+    //
+    // planner_loop + reviewer_loop are wire-retained from the legacy
+    // dev-via-spec arc. ADR-041 MVP folded those roles into the
+    // researcher-architect's own phase; under MVP there is no upstream
+    // planner / reviewer loop to cite. Pass empty strings — Validate
+    // accepts empties here. (A focused wire-format follow-on will
+    // either rename these slots to lineage anchors or remove them.)
+    research_artifact_loop: "",
+    planner_loop: "",
+    reviewer_loop: ""
   }
 )
 ```

@@ -29,13 +29,11 @@ contract — no nesting under a wrapping object. Pass:
   carries.
 - `addressed_gaps`, `open_gaps` — same as the completion
   contract.
-- `substrate_mutations` — append-only across all revisions of
-  this artifact. Under the source-curator owns substrate
-  mutation; you do not call `add_source_repo`, so this array
-  never grows during your passes. Carry forward prior-revision
-  entries verbatim on retries (the curator's adds, when present,
-  surface here as a record). On a first-pass artifact this is
-  always empty.
+- `substrate_mutations` — under ADR-041 MVP the researcher does
+  not mutate substrate (no `add_source_repo` call). Always emit
+  as an empty array; the field is retained on the wire for
+  compatibility with research-iterative configs that still spawn
+  this legacy `researcher` role.
 
 The tool fills in `loop_id` (from the framework — you can't fake
 it) and `produced_at` (server wallclock) automatically. Don't

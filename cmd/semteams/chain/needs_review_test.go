@@ -19,7 +19,7 @@ func TestNeedsReviewMilestone_NonBuilderNoOp(t *testing.T) {
 
 	ev := &agentic.LoopCompletedEvent{
 		LoopID:  "loop-x",
-		Role:    "dev-via-spec-architect",
+		Role:    "researcher-architect",
 		Outcome: agentic.OutcomeSuccess,
 	}
 	if err := s.HandleLoopCompleted(context.Background(), ev); err != nil {
