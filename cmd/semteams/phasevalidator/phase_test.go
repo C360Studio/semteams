@@ -148,8 +148,8 @@ func TestAllowedEdgeTable(t *testing.T) {
 		// synthesize
 		{PhaseSynthesize, PhaseGather, true},
 		{PhaseSynthesize, PhaseArchitect, true},
+		{PhaseSynthesize, "emit", true}, // pure-research arc terminal (addendum 2026-05-12)
 		{PhaseSynthesize, PhasePlan, false},
-		{PhaseSynthesize, "emit", false},
 		{PhaseSynthesize, PhaseSynthesize, false},
 		// architect
 		{PhaseArchitect, PhaseGather, true},

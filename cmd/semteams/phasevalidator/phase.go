@@ -56,6 +56,7 @@ var allowedEdges = map[edge]struct{}{
 	{PhaseGather, PhaseSynthesize}:    {},
 	{PhaseSynthesize, PhaseGather}:    {}, // back-edge re-gather
 	{PhaseSynthesize, PhaseArchitect}: {},
+	{PhaseSynthesize, actionEmit}:     {}, // pure-research arc terminal (addendum 2026-05-12)
 	{PhaseArchitect, PhaseGather}:     {}, // back-edge re-gather
 	{PhaseArchitect, actionEmit}:      {},
 }

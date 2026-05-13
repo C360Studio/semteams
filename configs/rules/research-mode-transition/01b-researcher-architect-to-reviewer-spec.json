@@ -1,0 +1,48 @@
+{
+  "id": "researcher_architect_to_reviewer_spec",
+  "type": "expression",
+  "name": "Researcher (ARCHITECT phase) → Reviewer (spec mode)",
+  "description": "ADR-041 Slice 2D-3 dev-via-spec arc terminal handoff. Fires when researcher-architect terminates with decide(action=emit) — the canonical forward terminal that closes the research arc and produces a spec-shaped artifact (emit_dev_via_spec_artifact). Replaces the legacy research-mode-transition/01a-research-to-reviewer-after-researcher.json + dev-via-spec/01-planner-to-reviewer.json + dev-via-spec/06-architect-emit-to-builder.json triangle (none of which fit the compressed researcher-as-architect role). The spawned reviewer loads the reviewer-spec/ persona fragments; chain.spec_mode_gate.proceed (written by phasevalidator.SpecModeGate after the reviewer-spec loop completes) gates the downstream spawn to builder.",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "agent.loop.role",
+      "operator": "eq",
+      "value": "researcher-architect",
+      "required": true
+    },
+    {
+      "field": "coordinator.next_action",
+      "operator": "eq",
+      "value": "emit",
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "publish_agent",
+      "subject": "agent.task.reviewer-spec",
+      "role": "reviewer-spec",
+      "model": "reviewing",
+      "tools": ["read_loop_result", "decide"],
+      "action_allowlist": ["approved", "insufficient", "needs_clarification"],
+      "properties": {
+        "prior_loop_id": "$entity.instance",
+        "spec_path": "$entity.triple.dev_via_spec.artifact.path",
+        "spec_slug": "$entity.triple.dev_via_spec.artifact.slug"
+      },
+      "related_loops": {
+        "researcher": "$entity.instance"
+      },
+      "prompt": "The researcher (ARCHITECT phase) at loop $entity.instance has emitted a spec artifact via emit_dev_via_spec_artifact + decide(action=emit). Spec path: $entity.triple.dev_via_spec.artifact.path. Spec slug: $entity.triple.dev_via_spec.artifact.slug.\n\nIteration 1 — call read_loop_result on $entity.instance to load the architect's narrative terminal (decide.reason + scratchpad). Then cat the rendered markdown via bash if you need the structured spec; the spec_path property points at the on-disk file.\n\nIteration 2 — apply the spec-mode evaluation contract (reviewer-spec/10-evaluation-contract.md + 30-checks-gate.md). Each check[] must bind to an evidence rule; every external-actor integration_point must have at least one check covering it. If all gates pass, call decide(action=\"approved\", reason=\"<one-sentence summary citing the spec slug>\"). If a gate fails, call decide(action=\"insufficient\", reason=\"<bullet list of structural gaps>\"). Use decide(action=\"needs_clarification\", reason=..., retry_hint=...) only when the artifact's intent is genuinely ambiguous — chain.recovery.proceed (ADR-040) gates retries through 02-reviewer-rejected-retry-research.json."
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "phase": "ADR-041 Slice 2D-3",
+    "adr": "docs/adr/041-mvp-role-compression-and-graph-as-substrate.md",
+    "pattern": "dev-via-spec arc terminal: researcher-architect emits spec artifact → reviewer-spec evaluates → on approval, 02-reviewer-approved-to-builder.json fires (gated on chain.spec_mode_gate.proceed from phasevalidator.SpecModeGate)",
+    "ordering_invariant": "emit_dev_via_spec_artifact publishes the dev_via_spec.artifact.{path,slug,...} triples BEFORE decide(action=emit) publishes coordinator.next_action. When this rule fires on coordinator.next_action=emit, the artifact triples are already on the entity and $entity.triple.dev_via_spec.artifact.path resolves. The properties.spec_path passthrough is the redundant channel — task properties are an independent surface that does not depend on triple-substitution timing. Beta.39 has no `exists` operator so the ordering invariant is the load-bearing assumption; persona refactors that reorder emit-and-decide will silently produce an empty path."
+  }
+}

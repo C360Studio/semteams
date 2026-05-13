@@ -1,0 +1,59 @@
+{
+  "id": "needs_clarification_to_researcher",
+  "type": "expression",
+  "name": "Any-Role needs_clarification → Researcher (recovery)",
+  "description": "ADR-041 Slice 2D-3 generic recovery rule. Fires when any chain role terminates with decide(action=needs_clarification) — the canonical signal that the current contract cannot complete from available information. Replaces dev-via-spec/08-architect-needs-clarification-to-researcher.json + dev-via-spec/09-qa-reviewer-needs-clarification-to-architect.json. Spawns researcher-plan with the rejecting role's reason; the new researcher re-enters the chain at the plan phase, addresses the gap, and the chain re-runs through gather/synthesize/architect forward. Recovery shape A per ADR-039 (supersession-via-new-spawn; prior loop entities remain immutable in the graph). max_iterations=3 is informational under the current rule engine (each terminating loop is a distinct entity, so the per-entity rule-state caveat applies).",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "agent.loop.role",
+      "operator": "in",
+      "value": [
+        "researcher-plan",
+        "researcher-gather",
+        "researcher-synthesize",
+        "researcher-architect",
+        "reviewer-research",
+        "reviewer-spec",
+        "reviewer-qa",
+        "builder"
+      ],
+      "required": true
+    },
+    {
+      "field": "coordinator.next_action",
+      "operator": "eq",
+      "value": "needs_clarification",
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "max_iterations": 3,
+  "on_enter": [
+    {
+      "type": "publish_agent",
+      "subject": "agent.task.researcher-plan",
+      "role": "researcher-plan",
+      "model": "research",
+      "tools": ["read_loop_result", "query_entity", "query_entities", "scratchpad", "decide"],
+      "action_allowlist": ["gather", "emit", "needs_clarification"],
+      "properties": {
+        "prior_loop_id": "$entity.instance",
+        "recovery": "needs_clarification",
+        "phase": "plan"
+      },
+      "prompt": "Recovery plan pass. The chain role $entity.triple.agent.loop.role at loop $entity.instance terminated with decide(action=needs_clarification) — the prior arc could not complete from available information.\n\nRejecting role's reason: $entity.triple.coordinator.decision_reason\nBlocking question (if any): $entity.triple.coordinator.blocking_question\nRetry hint (if any): $entity.triple.coordinator.retry_hint\n\nIteration 1 — call read_loop_result on $entity.instance to read the full structured terminal. Then call read_loop_result on the prior researcher's loop ($entity.triple.lineage.researcher) if there is one, to read the prior research artifact verbatim. Your job is to RE-PLAN with the rejecting role's gap addressed, not start from scratch.\n\nIteration 2+ — emit a revised plan per researcher-plan/10-plan-rules.md. Carry forward everything from the prior plan that's still correct (scope, epics); tighten or extend only what the rejecting role's gap demands. Terminal: decide(action=\"gather\") to forward into the gather phase, or decide(action=\"emit\") for premature emit (reviewer will likely reject), or decide(action=\"needs_clarification\") only when re-planning genuinely cannot proceed.\n\nNote: the plan phase has cap=1 per chain (phasevalidator). This recovery spawn does not increment the plan counter directly (the counter is incremented on transitions TO plan, of which there are none — plan is always a fresh chain root). Operators surface unbounded needs_clarification respawns via chain-paused / chain-recovery dashboards."
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "phase": "ADR-041 Slice 2D-3",
+    "adr": "docs/adr/041-mvp-role-compression-and-graph-as-substrate.md",
+    "tier": "ADR-039 Phase 1 Tier 1 (generic shape)",
+    "shape": "A",
+    "supersession_target": "chain.research_artifact.loop (when researcher-plan completes its arc and emits, the new researcher chain becomes the canonical research-artifact pointer; until ADR-039 Phase 4 stamper-supersession lands, the chain.* pointer stays stale).",
+    "max_iterations_note": "Per-entity rule-state caveat applies — each rejecting loop is a distinct entity, so the outer-rule max_iterations=3 is informational under the current rule engine. Real bound: chain-level recovery dashboards + future chain-level needs_clarification cap (open work surfaced by this slice).",
+    "open_cap_gap": "needs_clarification respawns are NOT counted against chain.recovery.count (recoverycounter only fires on reviewer-* insufficient). If a chain repeatedly cycles through needs_clarification → researcher-plan → emit → reviewer → needs_clarification, no cap blocks it. Operator escalation surfaces unbounded cycles via ops-agent diagnoses; structural cap is post-MVP work.",
+    "model_choice": "research model — recovery plan emission is harder than first-pass plan emission because the gap was already non-obvious."
+  }
+}

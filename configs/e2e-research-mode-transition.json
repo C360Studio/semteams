@@ -230,8 +230,10 @@
       "enabled": true,
       "config": {
         "rules_files": [
-          "/app/configs/rules/research-mode-transition/01a-research-to-reviewer-after-researcher.json",
-          "/app/configs/rules/research-mode-transition/03-stabilise-and-transition.json"
+          "/app/configs/rules/research-mode-transition/01a-researcher-synthesize-to-reviewer-research.json",
+          "/app/configs/rules/research-mode-transition/02-reviewer-rejected-retry-research.json",
+          "/app/configs/rules/research-mode-transition/04-phase-transition-to-gather.json",
+          "/app/configs/rules/research-mode-transition/05-phase-transition-to-synthesize.json"
         ],
         "enable_graph_integration": true,
         "entity_watch_buckets": {

@@ -21,77 +21,61 @@ type ruleWithRelatedLoops struct {
 
 // TestLineageThreading_RuleCoverage pins the contract that every spawn
 // rule in the research-mode-transition + dev-via-spec arcs threads the
-// researcher's loop_id forward via related_loops. Smoke #8 run-2 wedge
-// (architect needed research artifact loop_id for harness selection)
-// is the motivating evidence. ADR-035 §D2 ("per-role rigour, not
-// exhaustive backward reach") is the persona-content discipline this
+// research-artifact emitter's loop_id forward via related_loops. Smoke #8
+// run-2 wedge (architect needed research artifact loop_id for harness
+// selection) is the motivating evidence. ADR-035 §D2 ("per-role rigour,
+// not exhaustive backward reach") is the persona-content discipline this
 // supports; semstreams beta.51 LineageTriplePrefix + auto-stamp at
 // loop-creation time is the wire substrate.
+//
+// Under ADR-041 MVP roster (Slice 2D-3), three classes of spawn rule:
+//
+//  1. "Anchor" rules — the spawning loop IS the research-artifact
+//     emitter. related_loops.researcher = "$entity.instance" stamps the
+//     spawned loop's lineage at the emitter directly. Currently 01a
+//     (synthesize emit → reviewer-research) and 01b (architect emit →
+//     reviewer-spec).
+//  2. "Forward" rules — the spawning loop inherits lineage from a prior
+//     emitter and forwards it. related_loops.researcher =
+//     "$entity.triple.lineage.researcher". Currently
+//     02-reviewer-rejected-retry-research,
+//     02-reviewer-approved-to-builder, 04-builder-decide-to-reviewer-qa.
+//  3. "Allowlisted" rules — spawn a fresh researcher arc where prior
+//     lineage would be SUPERSEDED or has not yet been established (phase
+//     transitions within the researcher arc fire before any artifact is
+//     emitted). See the DiscoveryWalk allowlist for rationales.
 func TestLineageThreading_RuleCoverage(t *testing.T) {
 	tests := []struct {
 		path  string
 		want  string
 		notes string
 	}{
-		// Source rules: stamp lineage.researcher from the just-completed
-		// researcher loop's $entity.instance. Under ADR-040 only 01a
-		// remains — the prior 01b (researcher-with-source-acquisition →
-		// RR) was deleted because the role no longer exists; the post-
-		// curator re-query researcher is plain `researcher` and is
-		// handled by 01a's eq match. ADR-041 Slice 2D-1 deleted rules
-		// 02/02b/02c (curator teardown); the replacement
-		// 02-reviewer-rejected-retry-research arrives in Slice 2D-3
-		// and will re-add its coverage entry here.
+		// Anchor rules — emitter loop becomes the lineage anchor.
 		{
-			path:  "../../configs/rules/research-mode-transition/01a-research-to-reviewer-after-researcher.json",
+			path:  "../../configs/rules/research-mode-transition/01a-researcher-synthesize-to-reviewer-research.json",
 			want:  "$entity.instance",
-			notes: "researcher -> RR: lineage.researcher = researcher's loop_id",
-		},
-		// Forward-thread rules: read lineage.researcher from triggering entity.
-		{
-			path:  "../../configs/rules/research-mode-transition/03-stabilise-and-transition.json",
-			want:  "$entity.triple.lineage.researcher",
-			notes: "RR approved -> planner: forward lineage.researcher",
+			notes: "synthesize emit → reviewer-research: lineage.researcher = synthesize's loop_id (pure-research arc emitter)",
 		},
 		{
-			path:  "../../configs/rules/dev-via-spec/01-planner-to-reviewer.json",
+			path:  "../../configs/rules/research-mode-transition/01b-researcher-architect-to-reviewer-spec.json",
+			want:  "$entity.instance",
+			notes: "architect emit → reviewer-spec: lineage.researcher = architect's loop_id (dev-via-spec arc emitter)",
+		},
+		// Forward rules — inherit and forward existing lineage anchor.
+		{
+			path:  "../../configs/rules/research-mode-transition/02-reviewer-rejected-retry-research.json",
 			want:  "$entity.triple.lineage.researcher",
-			notes: "planner -> reviewer: forward lineage.researcher",
+			notes: "reviewer insufficient → researcher-plan retry: forward reviewer's inherited lineage to the recovery researcher",
 		},
 		{
-			path:  "../../configs/rules/dev-via-spec/02-reviewer-rejected-retry-planner.json",
+			path:  "../../configs/rules/dev-via-spec/02-reviewer-approved-to-builder.json",
 			want:  "$entity.triple.lineage.researcher",
-			notes: "reviewer rejected -> planner retry: forward lineage.researcher",
+			notes: "reviewer-spec approved → builder: forward lineage.researcher (builder reads spec produced by architect; ancestry walks resolve to architect's loop)",
 		},
 		{
-			path:  "../../configs/rules/dev-via-spec/03-reviewer-approved-to-challenger.json",
+			path:  "../../configs/rules/dev-via-spec/04-builder-decide-to-reviewer-qa.json",
 			want:  "$entity.triple.lineage.researcher",
-			notes: "reviewer approved -> challenger: forward lineage.researcher",
-		},
-		{
-			path:  "../../configs/rules/dev-via-spec/04-challenger-concerns-retry-planner.json",
-			want:  "$entity.triple.lineage.researcher",
-			notes: "challenger concerns -> planner retry: forward lineage.researcher",
-		},
-		{
-			path:  "../../configs/rules/dev-via-spec/05-challenger-accept-to-architect.json",
-			want:  "$entity.triple.lineage.researcher",
-			notes: "challenger accept -> architect: forward lineage.researcher (architect consumes it for harness selection)",
-		},
-		{
-			path:  "../../configs/rules/dev-via-spec/06-architect-emit-to-builder.json",
-			want:  "$entity.triple.lineage.researcher",
-			notes: "architect emit -> builder: forward lineage.researcher",
-		},
-		{
-			path:  "../../configs/rules/dev-via-spec/07-builder-decide-to-qa-reviewer.json",
-			want:  "$entity.triple.lineage.researcher",
-			notes: "builder decide -> qa-reviewer: forward lineage.researcher",
-		},
-		{
-			path:  "../../configs/rules/dev-via-spec/09-qa-reviewer-needs-clarification-to-architect.json",
-			want:  "$entity.triple.lineage.researcher",
-			notes: "ADR-039 Phase 1 recovery: qa-reviewer needs_clarification -> architect respawn — forward lineage.researcher so the new architect can re-read the research artifact when re-emitting the spec",
+			notes: "builder tests_passing → reviewer-qa: forward lineage.researcher (reviewer-qa grades against architect's checks via lineage)",
 		},
 	}
 
@@ -136,7 +120,10 @@ func TestLineageThreading_DiscoveryWalk(t *testing.T) {
 	// Allowlist: rules where lineage threading is intentionally skipped.
 	// Each entry MUST have a one-line rationale.
 	allowlist := map[string]string{
-		"08-architect-needs-clarification-to-researcher.json": "ADR-039 Phase 1 recovery rule. Spawns a fresh researcher (the new research-artifact author) — forwarding the prior researcher's loop_id would stamp lineage.researcher to a SUPERSEDED loop, violating the invariant. The next 01a firing re-stamps lineage.researcher = $entity.instance of the recovery researcher; downstream architect/reviewer/etc. see the new artifact pointer.",
+		"03-needs-clarification-to-researcher.json": "ADR-041 Slice 2D-3 recovery rule. Spawns a fresh researcher-plan (the new research-artifact author) — forwarding the rejecting role's lineage would stamp lineage.researcher to a SUPERSEDED loop, violating the invariant. The next 01a/01b firing re-stamps lineage.researcher = $entity.instance of the new emitter; downstream loops see the new anchor.",
+		"04-phase-transition-to-gather.json":        "ADR-041 Slice 2D-3 within-researcher phase transition. lineage.researcher is established at the eventual emit boundary (researcher-synthesize emit_research_artifact OR researcher-architect emit_dev_via_spec_artifact). Within the arc, beta.51 auto-stamp threads agent.loop.parent for ancestry; lineage.researcher remains unset until emit. Threading $entity.instance here would create stale anchors.",
+		"05-phase-transition-to-synthesize.json":    "ADR-041 Slice 2D-3 within-researcher phase transition. Same rationale as 04-phase-transition-to-gather: lineage.researcher anchor lives at the emit boundary, not at phase transitions.",
+		"06-phase-transition-to-architect.json":     "ADR-041 Slice 2D-3 within-researcher phase transition. Same rationale as 04-phase-transition-to-gather: lineage.researcher anchor lives at the emit boundary, not at phase transitions.",
 	}
 
 	dirs := []string{
@@ -195,28 +182,30 @@ func TestLineageThreading_DiscoveryWalk(t *testing.T) {
 	}
 }
 
-// TestLineageThreading_ArchitectPromptSubstitution asserts the architect's
-// spawn rule's prompt body actually substitutes lineage.researcher into
-// the prompt text — without this, even a successful related_loops thread
-// doesn't reach the LLM (the LLM doesn't see TaskMessage.Metadata
-// directly; the prompt body is the reliable surface).
-func TestLineageThreading_ArchitectPromptSubstitution(t *testing.T) {
-	data, err := os.ReadFile("../../configs/rules/dev-via-spec/05-challenger-accept-to-architect.json")
+// TestLineageThreading_BuilderPromptSubstitution asserts the
+// reviewer-spec → builder spawn rule's prompt body actually substitutes
+// the spec artifact path into the prompt text. Without this, even a
+// successful related_loops thread doesn't reach the builder's bash
+// substrate (the builder doesn't see TaskMessage.Metadata directly; the
+// prompt body is the reliable surface). Replaces the legacy architect-
+// prompt test under ADR-041's compressed roster.
+func TestLineageThreading_BuilderPromptSubstitution(t *testing.T) {
+	data, err := os.ReadFile("../../configs/rules/dev-via-spec/02-reviewer-approved-to-builder.json")
 	if err != nil {
-		t.Fatalf("read rule 05: %v", err)
+		t.Fatalf("read 02-reviewer-approved-to-builder: %v", err)
 	}
 	var rule ruleWithRelatedLoops
 	if err := json.Unmarshal(data, &rule); err != nil {
-		t.Fatalf("unmarshal rule 05: %v", err)
+		t.Fatalf("unmarshal 02-reviewer-approved-to-builder: %v", err)
 	}
 	if len(rule.OnEnter) == 0 {
-		t.Fatal("rule 05: on_enter is empty")
+		t.Fatal("02-reviewer-approved-to-builder: on_enter is empty")
 	}
 	prompt := rule.OnEnter[0].Prompt
-	if !strings.Contains(prompt, "$entity.triple.lineage.researcher") {
-		t.Errorf("rule 05 prompt must substitute $entity.triple.lineage.researcher into the body so the architect sees the literal loop_id; got prompt:\n%s", prompt)
+	if !strings.Contains(prompt, "$entity.triple.dev_via_spec.artifact.path") {
+		t.Errorf("02-reviewer-approved-to-builder prompt must substitute $entity.triple.dev_via_spec.artifact.path so the builder sees the literal spec path for bootstrap_workspace; got prompt:\n%s", prompt)
 	}
-	if !strings.Contains(strings.ToLower(prompt), "research artifact") {
-		t.Errorf("rule 05 prompt must reference 'research artifact' so the architect knows what the loop_id points at")
+	if !strings.Contains(strings.ToLower(prompt), "bootstrap_workspace") {
+		t.Errorf("02-reviewer-approved-to-builder prompt must reference 'bootstrap_workspace' so the builder knows to seed its sandbox from the spec path")
 	}
 }

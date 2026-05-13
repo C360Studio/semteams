@@ -1,0 +1,47 @@
+{
+  "id": "researcher_synthesize_to_reviewer_research",
+  "type": "expression",
+  "name": "Researcher (SYNTHESIZE phase) → Reviewer (research mode)",
+  "description": "ADR-041 Slice 2D-3 pure-research arc terminal handoff. Fires when researcher-synthesize terminates with decide(action=emit) — the addendum 2026-05-12 path for deployments that do NOT run an architect phase (e.g. e2e-research-mode-transition.json). The spawned reviewer loads reviewer-research/ persona fragments and grades the research artifact (typed emit_research_artifact payload: actors/integration_points/tasks/addressed_gaps/open_gaps/test_harness/substrate_mutations/revision). The phase-validator's allowed-edges table includes synthesize→emit specifically for this arc.",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "agent.loop.role",
+      "operator": "eq",
+      "value": "researcher-synthesize",
+      "required": true
+    },
+    {
+      "field": "coordinator.next_action",
+      "operator": "eq",
+      "value": "emit",
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "publish_agent",
+      "subject": "agent.task.reviewer-research",
+      "role": "reviewer-research",
+      "model": "reviewing",
+      "tools": ["read_loop_result", "decide"],
+      "action_allowlist": ["approved", "insufficient", "needs_clarification"],
+      "properties": {
+        "prior_loop_id": "$entity.instance"
+      },
+      "related_loops": {
+        "researcher": "$entity.instance"
+      },
+      "prompt": "The researcher (SYNTHESIZE phase) at loop $entity.instance has emitted a research artifact via emit_research_artifact + decide(action=emit).\n\nIteration 1 — call read_loop_result on $entity.instance to load the synthesize phase's narrative terminal. The typed payload is on the researcher's loop entity; the structural shape (actors/integration_points/tasks/addressed_gaps/open_gaps/test_harness/substrate_mutations/revision) is the contract you grade against per reviewer-research/10-evaluation-contract.md.\n\nIteration 2 — apply the research-mode checklist. If every required field is present, well-formed, and grounded in the gathered evidence, call decide(action=\"approved\", reason=\"<one-sentence summary citing the revision token>\"). If a required field is missing or evidence is thin, call decide(action=\"insufficient\", reason=\"<bullet list of gaps>\"); chain.recovery.proceed (ADR-040) gates retries through 02-reviewer-rejected-retry-research.json. Use decide(action=\"needs_clarification\", reason=..., retry_hint=...) only when the artifact's intent is genuinely ambiguous."
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "phase": "ADR-041 Slice 2D-3",
+    "adr": "docs/adr/041-mvp-role-compression-and-graph-as-substrate.md",
+    "adr_addendum": "docs/adr/041-mvp-role-compression-and-graph-as-substrate.md#addendum-2026-05-12--reviewer-research-collapse-vs-keep-decision",
+    "pattern": "pure-research arc terminal: researcher-synthesize emits research artifact → reviewer-research evaluates. No further hand-off on approval (research-only deployments treat this as terminal). Rejection routes through 02-reviewer-rejected-retry-research.json which respawns researcher-plan with the reviewer's reason.",
+    "phasevalidator_edge": "Requires synthesize→emit in phasevalidator allowedEdges (added in Slice 2D-3a). Without that edge, the validator rejects the transition and no rule fires."
+  }
+}

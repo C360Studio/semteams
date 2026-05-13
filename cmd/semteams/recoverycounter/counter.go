@@ -16,13 +16,22 @@ import (
 )
 
 const (
-	// reviewerRole is the role this counter monitors. Research-reviewer
-	// is the rule_02 trigger; only its "insufficient" terminals consume
-	// chain recovery budget. Other roles (researcher, curator, planner,
-	// etc.) are intentionally ignored — coupling the counter to roles
-	// other than the actual recovery trigger would mis-attribute budget
-	// to non-recovery cycles.
-	reviewerRole = "research-reviewer"
+	// reviewerRoleResearch is the ADR-041 MVP role this counter monitors
+	// for the pure-research arc. Its "insufficient" terminals consume
+	// chain recovery budget per the new
+	// research-mode-transition/02-reviewer-rejected-retry-research.json
+	// rule. Other roles (researcher-*, builder, etc.) are intentionally
+	// ignored — coupling the counter to roles other than the actual
+	// recovery trigger would mis-attribute budget to non-recovery cycles.
+	reviewerRoleResearch = "reviewer-research"
+
+	// reviewerRoleSpec is the ADR-041 MVP role for the dev-via-spec arc.
+	// Its "insufficient" terminals also consume chain recovery budget —
+	// the same retry-research rule fires for both reviewer modes since
+	// the recovery target is always the researcher chain regardless of
+	// which reviewer mode flagged the gap. The recovery cap is per-chain,
+	// not per-reviewer-mode, so the counter aggregates both sources.
+	reviewerRoleSpec = "reviewer-spec"
 
 	// insufficientAction is the coordinator.next_action value the
 	// research-reviewer's decide tool stamps when terminating with a
@@ -117,15 +126,22 @@ func NewCounter(
 	}
 }
 
+// isReviewerRole reports whether the event's role is one of the MVP
+// reviewer modes (research or spec). Used as the cheap pre-filter
+// before any chain walk.
+func isReviewerRole(role string) bool {
+	return role == reviewerRoleResearch || role == reviewerRoleSpec
+}
+
 // HandleLoopCompleted is the chain.CompletionHandler entry point.
-// Filters to research-reviewer success with
+// Filters to reviewer-{research,spec} success with
 // coordinator.next_action="insufficient"; non-matching events
 // return nil so other handlers see the event.
 func (c *Counter) HandleLoopCompleted(ctx context.Context, ev *agentic.LoopCompletedEvent) error {
 	if ev == nil {
 		return nil
 	}
-	if ev.Role != reviewerRole || ev.Outcome != agentic.OutcomeSuccess {
+	if !isReviewerRole(ev.Role) || ev.Outcome != agentic.OutcomeSuccess {
 		return nil
 	}
 	if ev.LoopID == "" {

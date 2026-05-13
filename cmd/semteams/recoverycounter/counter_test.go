@@ -159,7 +159,7 @@ func TestCounter_FailedReviewerNoOp(t *testing.T) {
 
 	ev := &agentic.LoopCompletedEvent{
 		LoopID:  "reviewer_x",
-		Role:    reviewerRole,
+		Role:    reviewerRoleResearch,
 		Outcome: agentic.OutcomeFailed,
 	}
 	if err := c.HandleLoopCompleted(context.Background(), ev); err != nil {
@@ -184,7 +184,7 @@ func TestCounter_ApprovedTerminalNoOp(t *testing.T) {
 
 	ev := &agentic.LoopCompletedEvent{
 		LoopID:  "reviewer_x",
-		Role:    reviewerRole,
+		Role:    reviewerRoleResearch,
 		Outcome: agentic.OutcomeSuccess,
 	}
 	if err := c.HandleLoopCompleted(context.Background(), ev); err != nil {
@@ -215,7 +215,7 @@ func TestCounter_FirstCycle_StampsCountAndProceed(t *testing.T) {
 
 	ev := &agentic.LoopCompletedEvent{
 		LoopID:  "reviewer_b",
-		Role:    reviewerRole,
+		Role:    reviewerRoleResearch,
 		Outcome: agentic.OutcomeSuccess,
 	}
 	if err := c.HandleLoopCompleted(context.Background(), ev); err != nil {
@@ -275,7 +275,7 @@ func TestCounter_AtThreshold_StampsProceedNotExhausted(t *testing.T) {
 
 	ev := &agentic.LoopCompletedEvent{
 		LoopID:  "reviewer_b",
-		Role:    reviewerRole,
+		Role:    reviewerRoleResearch,
 		Outcome: agentic.OutcomeSuccess,
 	}
 	if err := c.HandleLoopCompleted(context.Background(), ev); err != nil {
@@ -319,7 +319,7 @@ func TestCounter_OverThreshold_StampsExhaustedNotProceed(t *testing.T) {
 
 	ev := &agentic.LoopCompletedEvent{
 		LoopID:  "reviewer_b",
-		Role:    reviewerRole,
+		Role:    reviewerRoleResearch,
 		Outcome: agentic.OutcomeSuccess,
 	}
 	if err := c.HandleLoopCompleted(context.Background(), ev); err != nil {
@@ -369,7 +369,7 @@ func TestCounter_MalformedPriorCount_TreatedAsZero(t *testing.T) {
 
 	ev := &agentic.LoopCompletedEvent{
 		LoopID:  "reviewer_b",
-		Role:    reviewerRole,
+		Role:    reviewerRoleResearch,
 		Outcome: agentic.OutcomeSuccess,
 	}
 	if err := c.HandleLoopCompleted(context.Background(), ev); err != nil {
@@ -401,7 +401,7 @@ func TestCounter_DefaultThresholdAppliedWhenZero(t *testing.T) {
 
 	ev := &agentic.LoopCompletedEvent{
 		LoopID:  "reviewer_b",
-		Role:    reviewerRole,
+		Role:    reviewerRoleResearch,
 		Outcome: agentic.OutcomeSuccess,
 	}
 	if err := c.HandleLoopCompleted(context.Background(), ev); err != nil {
@@ -427,7 +427,7 @@ func TestCounter_ResolverError_Skipped(t *testing.T) {
 
 	ev := &agentic.LoopCompletedEvent{
 		LoopID:  "reviewer_x",
-		Role:    reviewerRole,
+		Role:    reviewerRoleResearch,
 		Outcome: agentic.OutcomeSuccess,
 	}
 	if err := c.HandleLoopCompleted(context.Background(), ev); err != nil {
@@ -459,7 +459,7 @@ func TestCounter_ChainEntityReadError_Skipped(t *testing.T) {
 
 	ev := &agentic.LoopCompletedEvent{
 		LoopID:  "reviewer_x",
-		Role:    reviewerRole,
+		Role:    reviewerRoleResearch,
 		Outcome: agentic.OutcomeSuccess,
 	}
 	if err := c.HandleLoopCompleted(context.Background(), ev); err != nil {
@@ -492,7 +492,7 @@ func TestCounter_ProceedWriteFails_AuditStillLands(t *testing.T) {
 
 	ev := &agentic.LoopCompletedEvent{
 		LoopID:  "reviewer_b",
-		Role:    reviewerRole,
+		Role:    reviewerRoleResearch,
 		Outcome: agentic.OutcomeSuccess,
 	}
 	if err := c.HandleLoopCompleted(context.Background(), ev); err != nil {
@@ -530,7 +530,7 @@ func TestCounter_EmptyLoopID_Errors(t *testing.T) {
 
 	ev := &agentic.LoopCompletedEvent{
 		LoopID:  "",
-		Role:    reviewerRole,
+		Role:    reviewerRoleResearch,
 		Outcome: agentic.OutcomeSuccess,
 	}
 	if err := c.HandleLoopCompleted(context.Background(), ev); err == nil {

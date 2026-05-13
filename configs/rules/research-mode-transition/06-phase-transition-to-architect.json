@@ -1,0 +1,39 @@
+{
+  "id": "researcher_phase_transition_to_architect",
+  "type": "expression",
+  "name": "Researcher Phase Transition → ARCHITECT",
+  "description": "ADR-041 Slice 2D-3 forward spawn rule. Fires when phasevalidator.PhaseValidator has approved a synthesize→architect transition and stamped chain.phase_transition.proceed.architect=\"true\" on the source researcher-synthesize loop entity. The validator has checked the edge AND the per-phase cap (max 2 architect fires per chain). Same two-step fire shape as the other phase-transition rules.",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "chain.phase_transition.proceed.architect",
+      "operator": "eq",
+      "value": "true",
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "publish_agent",
+      "subject": "agent.task.researcher-architect",
+      "role": "researcher-architect",
+      "model": "architecture",
+      "tools": ["read_loop_result", "emit_dev_via_spec_artifact", "scratchpad", "decide"],
+      "action_allowlist": ["emit", "gather", "needs_clarification"],
+      "properties": {
+        "prior_loop_id": "$entity.instance",
+        "phase": "architect"
+      },
+      "prompt": "ARCHITECT phase entry. Source loop $entity.instance (researcher-synthesize) has handed off with decide(action=\"architect\"). Call read_loop_result on that loop to read the synthesized research artifact. Extract concrete typed commitments + verification checks[] that bind the plan's verifiable outcomes to executable evidence per researcher-architect/00-identity.md. Use scratchpad to decompose actors → checks before the strict-schema emit_dev_via_spec_artifact call.\n\nTerminal options (allow-list enforced by phasevalidator): decide(action=\"emit\") forward terminal — closes the research arc, dev-via-spec reviewer evaluates next via 01b; decide(action=\"gather\") back-edge if architecture surfaces an unindexed dep (bounded by gather cap=3); decide(action=\"needs_clarification\") when the synthesized artifact is structurally insufficient for architecture."
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "phase": "ADR-041 Slice 2D-3",
+    "adr": "docs/adr/041-mvp-role-compression-and-graph-as-substrate.md",
+    "validator": "cmd/semteams/phasevalidator/phase.go (PhaseValidator)",
+    "proceed_sentinel": "chain.phase_transition.proceed.architect on source researcher-synthesize loop entity",
+    "phase_cap": "Per-phase cap = 2 (ADR-041 §Per-phase cap)."
+  }
+}
