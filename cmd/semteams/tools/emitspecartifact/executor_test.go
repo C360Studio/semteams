@@ -1790,7 +1790,7 @@ func TestExecute_ChainTriples_EmptyResearchRootLoop_Skipped(t *testing.T) {
 
 // stubChainReader implements ChainReader for tests. Returns the
 // configured (entityID, triples) pair to every ReadChainFor call;
-// errors land via err. Mirrors the same shape as emitplan / emitconsensus.
+// errors land via err. Mirrors the same shape as emitplan.
 type stubChainReader struct {
 	entityID string
 	triples  map[string]any
@@ -2020,8 +2020,8 @@ func TestExecute_ChainProvenanceOverridesLLMValues(t *testing.T) {
 
 // TestExecute_ChainReadFailureFallsBackToLLMValues pins fail-soft:
 // chain read errors fall back to LLM-supplied provenance + the
-// title-derived slug, logged at Warn. Same shape as emitplan /
-// emitconsensus equivalents.
+// title-derived slug, logged at Warn. Same shape as the emitplan
+// equivalent.
 func TestExecute_ChainReadFailureFallsBackToLLMValues(t *testing.T) {
 	exec, tp, _, dir := newExecutorWithDir(t)
 	stub := &stubChainReader{

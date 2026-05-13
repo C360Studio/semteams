@@ -1,20 +1,20 @@
 # Reading the evidence summary
 
-The evidence summary is gate-rendered from the architect's
-`checks[]` and inlined into your spawn prompt by the evidence
-preprocessor. Each block covers one check;
-each block has an Aggregate header and a per-rule list. Status
-values come from the gate's closed enum: `pass` / `fail` /
-`unknown_kind` / `error`. Reading them right is what separates
-a useful verdict from a hand-wave.
+The evidence summary is gate-rendered from the researcher-
+architect's `checks[]` and inlined into your spawn prompt by the
+evidence preprocessor. Each block covers one check; each block has
+an Aggregate header and a per-rule list. Status values come from
+the gate's closed enum: `pass` / `fail` / `unknown_kind` / `error`.
+Reading them right is what separates a useful verdict from a
+hand-wave.
 
 If the summary begins with `(no checks file — chain plumbing
 failure:` or `(no checks)`, the evidence preprocessor encountered
-a problem (missing file, parse error, or architect emitted no
-checks). This is a chain-coverage gap — route to
+a problem (missing file, parse error, or the researcher-architect
+emitted no checks). This is a chain-coverage gap — route to
 `needs_clarification` with the plumbing-failure text as your
 blocking_question. The builder cannot fix this by retrying; the
-architect chain or operator needs to resolve the gap.
+researcher-architect or operator needs to resolve the gap.
 
 ## Per-status grading
 
@@ -24,7 +24,7 @@ architect chain or operator needs to resolve the gap.
   verbatim in your reject reason. Examples:
   - `[fail] test_file_exists: path "src/test/.../FooIT.java"
     does not exist in workspace` → builder didn't write the
-    test the architect committed to.
+    test the researcher-architect committed to.
   - `[fail] surefire_passing_count: expected ≥ 3 passing tests
     across suites matching "MeshtasticdIT" (1 suites:
     [...]), got 1` → the test exists but didn't exercise the
@@ -36,8 +36,8 @@ architect chain or operator needs to resolve the gap.
     build.
 - **unknown_kind**: the rule's Kind is not registered. Two
   causes:
-  - The architect cited a kind that doesn't exist in this
-    deployment's registry. Chain-coverage gap; route via
+  - The researcher-architect cited a kind that doesn't exist in
+    this deployment's registry. Chain-coverage gap; route via
     `needs_clarification`.
   - The deployment is mid-upgrade and the registry hasn't
     caught up. Operator concern; route via `reject` with a
@@ -58,10 +58,10 @@ that detail. The Aggregate is for routing; the per-rule list is
 for grading.
 
 `Aggregate.IsEmpty()` (Total = 0) is its own signal: the
-commitment had no evidence rules. permits this at the
-wire level but flags it for reviewer. Reject with reason
-"check N (\"<target>\") has no evidence rules; the architect
-contract requires at least one for external-actor work."
+check had no evidence rules. The wire permits this but flags it
+for reviewer. Reject with reason `check N ("<target>") has no
+evidence rules; the researcher-architect contract requires at
+least one for external-actor work.`
 
 ## Multi-check grading
 
@@ -75,9 +75,9 @@ the overall verdict is the conjunction:
   specific 2-3 in your reason.
 - All checks empty (Total=0 across the artifact) →
   `needs_clarification` with "no evidence emitted across any
-  check; under-specified architect output." This is a
-  chain-coverage gap, not a builder failure — the architect
-  needs to re-emit with rules.
+  check; under-specified spec output." This is a chain-coverage
+  gap, not a builder failure — the researcher-architect needs
+  to re-emit with rules.
 
 ## Examples (reading practice)
 
@@ -92,8 +92,8 @@ Per-rule:
 - [pass] test_file_exists: src/test/java/com/example/MeshtasticdIT.java
 ```
 
-Reading: every rule satisfied. If this is the only commitment
-and builder tests_passing, accept.
+Reading: every rule satisfied. If this is the only check and
+builder tests_passing, accept.
 
 Block 2:
 ```
@@ -105,11 +105,11 @@ Per-rule:
 - [unknown_kind] surefire_assertion_target: no Checker registered for kind "surefire_assertion_target" (registered: [surefire_passing_count test_file_exists test_uses_build_tag])
 ```
 
-Reading: architect cited a kind not in the registry. The detail
-even tells you which kinds ARE registered. Verdict:
-`needs_clarification` (chain gap) with blocking_question naming
-the missing kind so the architect (or operator wiring the
-registry) can fix.
+Reading: the researcher-architect cited a kind not in the
+registry. The detail even tells you which kinds ARE registered.
+Verdict: `needs_clarification` (chain gap) with blocking_question
+naming the missing kind so the researcher-architect (or operator
+wiring the registry) can fix.
 
 Block 3:
 ```
@@ -124,7 +124,8 @@ Per-rule:
 
 Reading: surefire reports passing tests, but the cited test
 file doesn't exist. That's a contradiction the builder produced
-— passing tests under a different name than the architect's
-committed file path. Reject with reason citing both the passing
-count AND the missing file; the retry_hint should tell the next
-builder spawn to write the file the architect named.
+— passing tests under a different name than the researcher-
+architect's committed file path. Reject with reason citing both
+the passing count AND the missing file; the retry_hint should
+tell the next builder spawn to write the file the researcher-
+architect named.

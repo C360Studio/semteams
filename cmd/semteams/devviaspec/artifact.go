@@ -213,8 +213,5 @@ func RegisterPayloads(reg *payloadregistry.Registry) error {
 	}); err != nil {
 		return err
 	}
-	if err := registerPlanPayload(reg); err != nil {
-		return err
-	}
-	return registerConsensusPayload(reg)
+	return registerPlanPayload(reg)
 }

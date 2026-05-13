@@ -10,9 +10,9 @@ import (
 // LineageReader composes ChainEntityID resolution + entity-triple
 // reading into a single ReadChainFor method. Implements the
 // ChainReader interface declared (structurally) by the emit-tool
-// packages (cmd/semteams/tools/emitplan, .../emitconsensus,
-// .../emitspecartifact) — Go's structural interfaces let a single
-// adapter satisfy all three with no shared interface declaration.
+// packages (cmd/semteams/tools/emitplan, .../emitspecartifact) —
+// Go's structural interfaces let a single adapter satisfy both with
+// no shared interface declaration.
 //
 // Wiring at boot: each emit-tool's product_tools.go registration
 // constructs a LineageReader from the same NATSEntityReader +

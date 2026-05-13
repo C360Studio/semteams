@@ -62,15 +62,20 @@ const (
 	PredicateResearchArtifactLoop = "chain.research_artifact.loop"
 
 	// PredicatePlanLoop names the chain-entity predicate that records
-	// the planner loop_id whose plan the dev-via-spec-reviewer
-	// approved. Read by emit_consensus + emit_dev_via_spec_artifact.
+	// the planner loop_id whose plan the reviewer approved. Phase 3
+	// deletion candidate: ADR-041 Slice 2D-3a removed the rule
+	// (01-planner-to-reviewer.json) that spawned the dev-via-spec-
+	// reviewer loop the milestone stamper (chain/plan.go) keys off of,
+	// so no live MVP wiring stamps this predicate. The stamper +
+	// predicate stay for legacy-config audit replay until Phase 3
+	// queues them with the other dev-via-spec leftovers; chain.consensus.*
+	// was handled the same way in Slice 2D-4.
 	PredicatePlanLoop = "chain.plan.loop"
 
 	// PredicatePlanReviewerLoop names the chain-entity predicate that
-	// records the dev-via-spec-reviewer loop_id that approved the
-	// plan. Read by emit_consensus + emit_dev_via_spec_artifact to
-	// populate the reviewer-loop slot without confusing it with the
-	// planner's loop ID (smoke #8 run-5 D1 fix).
+	// records the reviewer loop_id that approved the plan. Read at
+	// stamp time only (smoke #8 run-5 D1 fix). Phase 3 deletion
+	// candidate — same rationale as PredicatePlanLoop.
 	PredicatePlanReviewerLoop = "chain.plan.reviewer_loop"
 
 	// PredicateNeedsReviewClassification is the first predicate of the
@@ -310,7 +315,7 @@ func init() {
 	)
 
 	vocabulary.Register(PredicatePlanReviewerLoop,
-		vocabulary.WithDescription("Loop_id of the dev-via-spec-reviewer that approved the plan. Distinct from the planner; legacy emit_consensus reads this to populate depends_on.reviewer_loop. Legacy-only under ADR-041 MVP."),
+		vocabulary.WithDescription("Loop_id of the reviewer that approved the plan. Distinct from the planner. Legacy-only under ADR-041 MVP — the emit_consensus tool that originally read this is gone; the predicate stays for legacy-config audit replay until Phase 3."),
 		vocabulary.WithDataType("string"),
 	)
 

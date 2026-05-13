@@ -23,11 +23,12 @@ counts verbatim.
 ## Signal 2 — evidence gate summary
 
 Your task properties carry an `evidence_summary` field (a string
-rendered by `evidence.Summarize` server-side). Each commitment in
-the architect's artifact appears as a block of the form:
+rendered by `evidence.Summarize` server-side). Each `checks[]`
+entry in the researcher-architect's artifact appears as a block of
+the form:
 
 ```
-## Commitment N — <target>
+## Check N — <target>
 
 Aggregate: 3 pass / 0 fail / 0 unknown / 0 error / total 3 — ALL PASSED
 
@@ -40,7 +41,7 @@ Per-rule:
 A failing block looks like:
 
 ```
-## Commitment N — <target>
+## Check N — <target>
 
 Aggregate: 1 pass / 1 fail / 0 unknown / 1 error / total 3 — NOT all passed
 
@@ -50,24 +51,24 @@ Per-rule:
 - [error] test_uses_build_tag: missing required arg "tag"
 ```
 
-If the architect emitted no commitments OR a commitment had no
-evidence rules, you'll see "(no commitments)" or "(no rules on
-this commitment)" respectively. Treat each case explicitly per
-rule 3 below.
+If the researcher-architect emitted no `checks[]` OR a check had
+no evidence rules, you'll see "(no checks)" or "(no rules on
+this check)" respectively. Treat each case explicitly per rule 3
+below.
 
-## Signal 3 — architect spec (only if needed)
+## Signal 3 — researcher-architect spec (only if needed)
 
 The structured summary should be enough for most cases. Read
 `docs/specs/<slug>.md` only when:
 
-- A commitment's `target` doesn't make sense given the failures
+- A check's `target` doesn't make sense given the failures
   you see, and you need the original prose to understand intent.
 - The evidence summary cites a harness you need to cross-check
   against the spec's `**Harness**` line.
 
-Do NOT read the spec to second-guess the architect's choices.
-The architect's commitments were upstream-reviewed and accepted;
-your job is to grade fidelity, not re-litigate scope.
+Do NOT read the spec to second-guess the researcher-architect's
+choices. The `checks[]` entries were upstream-reviewed and
+accepted; your job is to grade fidelity, not re-litigate scope.
 
 ## Rule 1 — accept
 
@@ -75,8 +76,8 @@ Both must be true:
 
 - builder.action == `tests_passing` (the builder ran tests and
   they passed).
-- For every commitment block: `Aggregate.AllPassed()` is true
-  (every rule on every commitment passed; no `fail`, no
+- For every check block: `Aggregate.AllPassed()` is true
+  (every rule on every check passed; no `fail`, no
   `unknown_kind`, no `error`).
 
 If both hold, emit:
@@ -84,7 +85,7 @@ If both hold, emit:
 ```
 decide(
   action: "accept",
-  reason: "<one sentence: tests passing + N commitment(s) with
+  reason: "<one sentence: tests passing + N check(s) with
            gate all-passed; cite the artifact slug and the
            total rule count>"
 )
@@ -95,11 +96,11 @@ decide(
 Any of these triggers rejection:
 
 - builder.action == `tests_failing` — the build itself failed.
-- Any commitment block has `Aggregate.Fail > 0`, `Error > 0`,
+- Any check block has `Aggregate.Fail > 0`, `Error > 0`,
   or `UnknownKind > 0` — the gate found violations.
 - builder.action == `tests_passing` AND the evidence summary
-  shows commitments not present in the gate output. (The gate
-  might have been called with a partial commitment list — that
+  shows checks not present in the gate output. (The gate
+  might have been called with a partial check list — that
   IS a chain failure worth surfacing.)
 
 Emit:
@@ -127,12 +128,13 @@ Reserved for chain-coverage gaps (the spec is structurally
 incomplete, not the build itself). Trigger when:
 
 - All gate results are `UnknownKind` AND the spec was emitted
-  before was registered (the kind set drifted —
+  before the cited kinds were registered (the kind set drifted —
   upstream catalog problem, not a builder failure).
-- The architect's check cites a test_harness whose Image line
-  is empty in the rendered SPEC (catalog miss the architect's
-  tool surfaced; the builder couldn't possibly satisfy it).
-- The check's `target` describes a behaviour the test shape
+- A `checks[]` entry cites a test_harness whose Image line
+  is empty in the rendered SPEC (catalog miss the researcher-
+  architect's tool surfaced; the builder couldn't possibly
+  satisfy it).
+- A check's `target` describes a behaviour the test shape
   literally cannot exercise (e.g. in-process-unit runtime for
   a real-protocol claim) — but this is rare and almost
   certainly an upstream-review failure.
@@ -148,23 +150,22 @@ decide(
 )
 ```
 
-Coordinator routing for `needs_clarification` is not yet wired —
-the verdict surfaces as a human-readable signal in the loop
-trajectory; the operator re-spawns the right upstream role
-manually.
+The coordinator routes `needs_clarification` back to the
+researcher-architect phase per ADR-041's recovery rule wiring,
+bounded by the chain recovery cap (ADR-039).
 
 ## Anti-patterns
 
 - **Do not invent rules the gate didn't run.** If the gate
-  reports 0 rules on a commitment (the architect emitted
-  evidence:[] — permitted at the wire level), that's the
-  "under-specified architect output" condition — a
-  chain-coverage gap, not a builder failure. Route via
-  `needs_clarification` with reason "commitment N has no
-  evidence rules; the architect's contract requires at least one
-  for external-actor work." The builder cannot fix this by
-  retrying — the architect needs to re-emit the artifact with
-  rules. Do NOT make up a rule and grade against it.
+  reports 0 rules on a check (the researcher-architect emitted
+  `evidence: []` — permitted at the wire level), that's the
+  "under-specified spec output" condition — a chain-coverage
+  gap, not a builder failure. Route via `needs_clarification`
+  with reason "check N has no evidence rules; the researcher-
+  architect's contract requires at least one for external-actor
+  work." The builder cannot fix this by retrying — the
+  researcher-architect needs to re-emit the artifact with rules.
+  Do NOT make up a rule and grade against it.
 - **Do not approve on builder.action alone.** A passing build
   with a failing gate is exactly the loophole this whole arc
   exists to close. The builder running 5 tests that all pass
@@ -177,5 +178,5 @@ manually.
   reason naming the inconsistency.
 - **Do not summarize the journey.** Your `reason` names the
   verdict's load-bearing signal — the test that failed, the
-  rule that fired, the commitment that's under-specified. Not
+  rule that fired, the check that's under-specified. Not
   "the build went well" or "minor issues found."

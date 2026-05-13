@@ -21,7 +21,6 @@ import (
 	"github.com/c360studio/semteams/cmd/semteams/tools/bootstrapworkspace"
 	"github.com/c360studio/semteams/cmd/semteams/tools/builderdecide"
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitartifact"
-	"github.com/c360studio/semteams/cmd/semteams/tools/emitconsensus"
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitplan"
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitspecartifact"
 	"github.com/c360studio/semteams/cmd/semteams/verification"
@@ -117,9 +116,6 @@ func registerProductTools(reg *agentictools.ExecutorRegistry, natsClient *natscl
 		return err
 	}
 	if err := registerEmitPlan(reg, natsClient, platform, logger); err != nil {
-		return err
-	}
-	if err := registerEmitConsensus(reg, natsClient, platform, logger); err != nil {
 		return err
 	}
 	if err := registerEmitSpecArtifact(reg, natsClient, platform, testHarnessMgr, logger); err != nil {
@@ -242,54 +238,16 @@ func buildChainLineageReader(natsClient *natsclient.Client, platform types.Platf
 
 // Compile-time guards that chain.LineageReader satisfies the
 // (structurally-identical) ChainReader interfaces declared by the
-// three emit-tool packages. If any one of those interfaces ever
-// widens (a new method added) and chain.LineageReader is not extended
-// to match, this fails to build — surfacing the drift here rather
-// than at SetChainReader call time. The interfaces stay duplicated
-// per package (each package owns its narrow contract); these vars
-// keep the implementer in lock-step with all three.
+// two emit-tool packages. If either interface ever widens (a new
+// method added) and chain.LineageReader is not extended to match,
+// this fails to build — surfacing the drift here rather than at
+// SetChainReader call time. The interfaces stay duplicated per
+// package (each package owns its narrow contract); these vars keep
+// the implementer in lock-step with both.
 var (
 	_ emitplan.ChainReader         = (*chain.LineageReader)(nil)
-	_ emitconsensus.ChainReader    = (*chain.LineageReader)(nil)
 	_ emitspecartifact.ChainReader = (*chain.LineageReader)(nil)
 )
-
-// registerEmitConsensus wires the ADR-038 PR C Phase C3 emit_consensus
-// executor. Always registered when natsClient is non-nil — same
-// "always on" policy as registerEmitPlan / registerEmitArtifact.
-// Output directory defaults to "docs/consensus" but is overrideable
-// via SEMTEAMS_CONSENSUS_DIR.
-//
-// Persona contract (Phase C5, landed): the dev-via-spec-challenger
-// persona fragment 15-emit-consensus.md instructs the challenger to
-// call emit_consensus before terminating with decide(action="accept")
-// and to NOT call when terminating with concerns_raised. The spawn
-// rule (rules/dev-via-spec/03-reviewer-approved-to-challenger.json)
-// includes emit_consensus in its tool list and prompt body. Configs
-// that route through the dev-via-spec chain (osh-demo.json,
-// e2e-dev-via-spec.json) include emit_consensus in
-// agentic-tools.allowed_tools.
-func registerEmitConsensus(reg *agentictools.ExecutorRegistry, natsClient *natsclient.Client, platform types.PlatformMeta, logger *slog.Logger) error {
-	if natsClient == nil {
-		logger.Warn("nats client unavailable; emit_consensus registration skipped")
-		return nil
-	}
-	triplePublisher := agentictools.NewNATSTriplePublisher(natsClient)
-	executor := emitconsensus.NewExecutor(triplePublisher, natsClient, platform, logger, "")
-	// Smoke #8 run-5 D1 + D2 fix: chain.LineageReader gives the
-	// challenger canonical plan_loop, plan_reviewer_loop, and slug
-	// stem so depends_on and the rendered slug stop drifting from
-	// the planner's pass. See registerEmitPlan for the same wiring.
-	executor.SetChainReader(buildChainLineageReader(natsClient, platform))
-	if err := reg.RegisterTool(emitconsensus.ToolName, executor); err != nil {
-		return fmt.Errorf("register %s: %w", emitconsensus.ToolName, err)
-	}
-	logger.Info("Registered product tool",
-		slog.String("name", emitconsensus.ToolName),
-		slog.String("org", platform.Org),
-		slog.String("platform", platform.Platform))
-	return nil
-}
 
 // registerEmitSpecArtifact wires the R3.3 emit_dev_via_spec_artifact executor.
 // Always registered when natsClient is non-nil — same "always on" policy as

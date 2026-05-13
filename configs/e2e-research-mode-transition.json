@@ -69,7 +69,7 @@
         "swagger_ui": true,
         "server_info": {
           "title": "SemTeams Research-Mode-Transition E2E",
-          "description": "R3.2.2 of ADR-031: stabilisation + dev-via-spec mode transition. Builds on R2.5's chained research+source-acquisition arc; adds the emit_research_artifact tool call inside each researcher pass (writes marker triples on the loop entity + publishes the typed research.artifact.v1 payload on research.artifact.{loop_id}) and the persona-swap rule (03-stabilise-and-transition.json) that fires when the reviewer approves and spawns the dev-via-spec-planner stub. Reviewer's stabilisation predicate (zero new substrate mutations on the latest revision) is enforced in the reviewer persona per ADR-031 §addendum 2026-04-30 (rule trusts the structured terminal output per ADR-028 §Layer 2). Compose profile: semsource (the SemSource container is required for the substrate-modifying retry pass, same as R2.5). Stream surface: research.artifact.> bound on the GRAPH stream so the typed payload is retained for spec assertions via message-logger. Tuning: agentic-loop.max_iterations bumped 6→8 (R2.5 baseline was 6) to accommodate emit_research_artifact's extra turn per researcher pass — each researcher pass now has up to 5 iterations (read_loop_result, optional add_source_repo, query_entity, emit_research_artifact, completion); each reviewer pass has up to 3 (read_loop_result, decide, terminal). 8 is the honest budget; tightening would couple the budget to mock-llm fixture specifics rather than real-LLM reasoning headroom.",
+          "description": "ADR-041 MVP pure-research arc: researcher (plan/gather/synthesize phases) terminates at reviewer-research, which grades the typed emit_research_artifact payload. Spawn rules wired: 01a (synthesize→reviewer-research), 02 (reviewer rejected → retry research), 03 (needs_clarification → researcher), 04/05 (phase transitions to gather/synthesize). The architect phase + emit_dev_via_spec_artifact are NOT loaded by this config (see osh-demo.json / e2e-dev-via-spec.json for the full chain). The phase-validator (cmd/semteams/phasevalidator/) gates transitions; the rule layer disambiguates same-token actions (e.g. gather as forward vs back-edge) by reading the spawning loop's input phase. Insufficient verdicts route through the recovery cap (ADR-039). Stream surface: research.artifact.> bound on the GRAPH stream for typed payload retention. Tuning: agentic-loop.max_iterations sized for the longest phase (up to 5 iterations per researcher pass: read_loop_result, query_entity, emit, decide, terminal).",
           "version": "1.0.0"
         }
       }
@@ -204,13 +204,11 @@
           "query_entities",
           "summarize_graph",
           "decide",
-          "add_source_repo",
           "emit_research_artifact",
           "emit_plan",
           "write_todos",
           "scratchpad"
         ],
-        "approval_required": ["add_source_repo"],
         "ports": {
           "inputs": [
             {"name": "tool.execute", "type": "jetstream", "subject": "tool.execute.>", "stream_name": "TOOL", "required": true}

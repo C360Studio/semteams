@@ -225,7 +225,7 @@ func TestChainEntityCoverage_PR_B_Pipeline(t *testing.T) {
 		"chain.research_artifact.path":        "docs/research/2026-05-08-osh-meshtastic-driver-research.md", // PR C Phase C1
 		"chain.slug.stem":                     "2026-05-08-osh-meshtastic-driver",                           // smoke #8 run-5 D2 fix — stem derived from research path; downstream tools compose <stem>-{plan,consensus,implementation}
 		"chain.plan.loop":                     "planner_c",                                                  // PR C Phase C2 (3-part rename 2026-05-11)
-		"chain.plan.reviewer_loop":            "dev_via_spec_reviewer_d",                                    // smoke #8 run-5 D1 fix — reviewer loop ID for emit_consensus depends_on.reviewer_loop (3-part rename 2026-05-11)
+		"chain.plan.reviewer_loop":            "dev_via_spec_reviewer_d",                                    // smoke #8 run-5 D1 fix — reviewer loop ID originally consumed by emit_consensus (retired in ADR-041 Slice 2D-5); kept for legacy-config audit replay (3-part rename 2026-05-11)
 		"chain.plan.path":                     "docs/plans/2026-05-08-osh-meshtastic-plan.md",               // PR C Phase C2
 	}
 	for pred, wantObj := range want {

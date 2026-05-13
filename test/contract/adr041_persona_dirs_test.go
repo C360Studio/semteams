@@ -1,6 +1,7 @@
 package contract
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -535,6 +536,244 @@ func TestADR041_ReviewerResearchArtifactShape(t *testing.T) {
 	for _, field := range requiredFieldRefs {
 		if !strings.Contains(combinedStr, field) {
 			t.Errorf("reviewer-research fragments do not reference research-artifact field %q anywhere (ADR-041 reviewer-research grades against the research artifact's structured shape — actors[]/integration_points[]/tasks[]/addressed_gaps[]/open_gaps[]/test_harness/substrate_mutations[]/revision)", field)
+		}
+	}
+}
+
+// TestADR041_ReviewerQAArtifactShape asserts that the reviewer-qa
+// fragments grade two surfaces consistent with ADR-041 wiring:
+//   - the BUILDER TERMINAL via `read_loop_result` (action token set:
+//     tests_passing / tests_failing) for the build-outcome side
+//   - the EVIDENCE-GATE SUMMARY rendered server-side by
+//     `evidence.Summarize` and injected as the `evidence_summary`
+//     task property, blocks headed `## Check N — <target>` with an
+//     Aggregate header per the gate's closed status enum (pass / fail
+//     / unknown_kind / error)
+//
+// reviewer-qa grades a different surface from reviewer-spec and
+// reviewer-research. spec grades the artifact's checks/actors/
+// integration_points/tasks substance BEFORE the build; QA grades
+// only `checks[]` evidence AFTER the build. research grades the
+// research artifact's addressed_gaps/open_gaps/test_harness shape.
+//
+// The forbidden set catches three drift classes:
+//
+//  1. The pre-ADR-041 vocabulary drift where reviewer-qa prose said
+//     "## Commitment N" while the actual `evidence.Summarize` renderer
+//     emits "## Check N" (cmd/semteams/evidence/summary.go:66). The
+//     wrong block heading wedges the LLM's pattern-match against the
+//     real summary at runtime.
+//  2. Cross-mode pollution from reviewer-spec's evaluation surface
+//     (actors[] / integration_points[]) — reviewer-qa grades evidence,
+//     not spec substance.
+//  3. Cross-mode pollution from reviewer-research's exclusive
+//     fields (addressed_gaps / open_gaps / substrate_mutations) —
+//     those belong to the research artifact, not the spec artifact.
+func TestADR041_ReviewerQAArtifactShape(t *testing.T) {
+	root := "../../configs/personas/fragments/reviewer-qa"
+	// Required: each must appear at least once across the corpus.
+	// These are the surfaces reviewer-qa is *defined* to grade —
+	// drift-back would silently produce a verdict that doesn't match
+	// the wire shape it reads.
+	requiredFieldRefs := []string{
+		// Builder-terminal channel. The builder calls `builder_decide`
+		// (not `decide`), so the action tokens appear in fragments as
+		// backtick-quoted code spans or in `builder.action == ...`
+		// prose form — not as `decide(action="...")`. Substring-only
+		// check is the right grain.
+		"read_loop_result",
+		"tests_passing",
+		"tests_failing",
+		// Evidence-summary channel
+		"evidence_summary",
+		"Aggregate",
+		"checks[]",
+		// Rendered block heading the gate actually emits
+		// (evidence/summary.go:66 fmt.Sprintf("## Check %d — %s")).
+		"## Check",
+		// Closed status enum from the gate (the four values
+		// reviewer-qa branches on).
+		"unknown_kind",
+	}
+	// Forbidden: drift classes per the docstring above. Anchored so
+	// common English doesn't false-positive.
+	forbiddenPrescriptions := []string{
+		// Block-heading drift: gate renders "## Check N", not
+		// "## Commitment N". Pre-ADR-041 reviewer-qa prose used the
+		// stale vocabulary in two surfaces; rewrite per Slice 2D-5a
+		// normalised on the renderer's actual heading.
+		"## Commitment",
+		"Commitment ",
+		"commitments",
+		// Spec-grade surface that reviewer-qa is NOT supposed to
+		// re-litigate (reviewer-spec already accepted upstream).
+		"actors[]",
+		"integration_points[]",
+		// Research-artifact-exclusive fields (reviewer-research's
+		// surface, not reviewer-qa's).
+		"addressed_gaps",
+		"open_gaps",
+		"substrate_mutations",
+		// Wire-format bug guard (carried from
+		// TestADR041_ResearcherPhaseIdentitiesDeclareDecideActions):
+		// next_role is not an accepted decide arg under ADR-041.
+		"next_role",
+	}
+
+	files, err := os.ReadDir(root)
+	if err != nil {
+		t.Fatalf("read reviewer-qa dir: %v", err)
+	}
+
+	combined := make([]byte, 0, 8192)
+	for _, f := range files {
+		if f.IsDir() || !strings.HasSuffix(f.Name(), ".md") {
+			continue
+		}
+		path := filepath.Join(root, f.Name())
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Errorf("read %s: %v", path, err)
+			continue
+		}
+		body := string(data)
+		for _, forbidden := range forbiddenPrescriptions {
+			if strings.Contains(body, forbidden) {
+				t.Errorf("%s: contains forbidden token %q (reviewer-qa grades the builder terminal + the evidence-gate summary under ADR-041; commitment/spec-shape/research-shape vocabulary is not its surface)", path, forbidden)
+			}
+		}
+		combined = append(combined, data...)
+		combined = append(combined, '\n')
+	}
+
+	combinedStr := string(combined)
+	for _, field := range requiredFieldRefs {
+		if !strings.Contains(combinedStr, field) {
+			t.Errorf("reviewer-qa fragments do not reference required surface %q anywhere (ADR-041 reviewer-qa grades the builder terminal via read_loop_result + the evidence_summary task property; the rendered block heading is `## Check N — <target>` and the closed status enum is pass/fail/unknown_kind/error)", field)
+		}
+	}
+}
+
+// TestADR041_RulePublishAgentRoleResolvesToPersonaDir asserts that every
+// `publish_agent` rule action loaded by an active config names a `role`
+// whose persona directory exists under
+// `configs/personas/fragments/<role>/` with at minimum the
+// 00-identity.md fragment. This is the wiring contract that turns the
+// rule-spawn path into a properly-grounded loop.
+//
+// Why it matters: the upstream persona file-loader
+// (persona/file_loader.go:142 — `role := parts[0]`) keys persona
+// fragments by the literal directory name. A rule emitting
+// `role: "reviewer-spec"` but missing `configs/personas/fragments/reviewer-spec/`
+// silently spawns the loop with no persona prompt — the LLM gets the
+// task-shell only and either no-ops or hallucinates a verdict.
+//
+// Phase 1 reviewer's todo #4 named this test as Slice 2D follow-up:
+// it could not be written until the rule-spawn paths existed (Slice
+// 2D-3a, commits 7af8040 + 730280e + 166f39e). Now they do, so this
+// test guards against drift on either side — renaming a persona dir
+// without re-wiring the rule, or adding a rule without authoring the
+// persona dir.
+//
+// Scope: rules referenced by a config's `rules_files` list. The
+// configs/rules/ tree also carries orphan dirs (agentic-workflow/,
+// coordination/, escalation/, routing/, boid/, approval/, memory/)
+// that mirror upstream samples but aren't loaded by any active
+// config — they describe non-MVP roles (editor, general, etc.) that
+// were never product-shelled into semteams. Phase 3 deletion sweep
+// owns those; this test guards the runtime-wired surface.
+func TestADR041_RulePublishAgentRoleResolvesToPersonaDir(t *testing.T) {
+	configsRoot := "../../configs"
+	personaRoot := "../../configs/personas/fragments"
+
+	type publishAgentAction struct {
+		Type string `json:"type"`
+		Role string `json:"role"`
+	}
+	type rule struct {
+		ID      string               `json:"id"`
+		OnEnter []publishAgentAction `json:"on_enter"`
+		OnExit  []publishAgentAction `json:"on_exit"`
+	}
+	type processorConfig struct {
+		Name   string `json:"name"`
+		Config struct {
+			RulesFiles []string `json:"rules_files"`
+		} `json:"config"`
+	}
+	type appConfig struct {
+		Components map[string]processorConfig `json:"components"`
+	}
+
+	// Gather the rules_files referenced across all configs in
+	// configs/*.json. Each path is "/app/configs/rules/..."; translate to
+	// the local checkout root.
+	configFiles, err := filepath.Glob(filepath.Join(configsRoot, "*.json"))
+	if err != nil {
+		t.Fatalf("glob configs: %v", err)
+	}
+	wiredRules := make(map[string]struct{})
+	for _, cf := range configFiles {
+		data, readErr := os.ReadFile(cf)
+		if readErr != nil {
+			t.Errorf("read config %s: %v", cf, readErr)
+			continue
+		}
+		var ac appConfig
+		if err := json.Unmarshal(data, &ac); err != nil {
+			// Some configs may not unmarshal cleanly into this shape
+			// (e.g. shapes with array-valued components). Skip rather
+			// than fail — the rule-wiring contract only cares about
+			// the configs that DO declare rules_files.
+			continue
+		}
+		for _, comp := range ac.Components {
+			for _, rf := range comp.Config.RulesFiles {
+				// "/app/configs/rules/dev-via-spec/02-...json" →
+				// "../../configs/rules/dev-via-spec/02-...json".
+				local := strings.TrimPrefix(rf, "/app/configs/rules/")
+				wiredRules[filepath.Join("../../configs/rules", local)] = struct{}{}
+			}
+		}
+	}
+	if len(wiredRules) == 0 {
+		t.Fatal("no rules_files found across configs/*.json — test is structurally broken (or all configs were renamed)")
+	}
+
+	for rulePath := range wiredRules {
+		data, readErr := os.ReadFile(rulePath)
+		if readErr != nil {
+			t.Errorf("read wired rule %s: %v", rulePath, readErr)
+			continue
+		}
+		var r rule
+		if err := json.Unmarshal(data, &r); err != nil {
+			t.Errorf("parse wired rule %s: %v", rulePath, err)
+			continue
+		}
+		actions := append([]publishAgentAction{}, r.OnEnter...)
+		actions = append(actions, r.OnExit...)
+		for _, action := range actions {
+			if action.Type != "publish_agent" {
+				continue
+			}
+			if action.Role == "" {
+				// Rules that publish to the agentic-dispatch path (no
+				// explicit role; coordinator decides) skip the check —
+				// the dispatch component owns role resolution.
+				continue
+			}
+			identityPath := filepath.Join(personaRoot, action.Role, "00-identity.md")
+			info, statErr := os.Stat(identityPath)
+			if statErr != nil {
+				t.Errorf("%s (rule %q): publish_agent role %q does not resolve to a persona dir (expected %s): %v",
+					rulePath, r.ID, action.Role, identityPath, statErr)
+				continue
+			}
+			if info.Size() == 0 {
+				t.Errorf("%s (rule %q): publish_agent role %q resolves to %s but the identity fragment is empty",
+					rulePath, r.ID, action.Role, identityPath)
+			}
 		}
 	}
 }

@@ -285,10 +285,8 @@
           "web_search",
           "http_request",
           "decide",
-          "add_source_repo",
           "emit_research_artifact",
           "emit_plan",
-          "emit_consensus",
           "emit_dev_via_spec_artifact",
           "bootstrap_workspace",
           "bash",
@@ -298,7 +296,6 @@
           "write_todos",
           "scratchpad"
         ],
-        "approval_required": ["add_source_repo"],
         "ports": {
           "inputs": [
             {"name": "tool.execute", "type": "jetstream", "subject": "tool.execute.>", "stream_name": "TOOL", "required": true}

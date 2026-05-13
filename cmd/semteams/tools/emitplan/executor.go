@@ -10,8 +10,8 @@
 // emitartifact / emitspecartifact pattern exactly. The migration
 // target is upstream's planned generic write_artifact (ADR-028 §What's
 // not built here). When upstream ships, evaluate migration of all
-// emit_*_artifact / emit_plan / emit_consensus / emit_evidence_summary
-// tools to the generic primitive — see ADR-038 D6.
+// emit_*_artifact / emit_plan / emit_evidence_summary tools to the
+// generic primitive — see ADR-038 D6.
 //
 // Persona contract: the planner persona supplies typed fields
 // (title, goal, context, scope_in/out, epics, depends_on); the tool
@@ -214,7 +214,7 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 
 	// Read chain-canonical lineage + slug stem so the planner persona
 	// stops guessing upstream loop IDs and the chain's slug stays
-	// consistent across emit_plan / emit_consensus / emit_dev_via_spec_artifact.
+	// consistent across emit_plan / emit_dev_via_spec_artifact.
 	// Fail-soft: read errors fall back to LLM-supplied values + the
 	// title-derived slug. Smoke #8 run-5 D1 + D2 fix.
 	//
@@ -328,8 +328,8 @@ func (e *Executor) readChainTriples(ctx context.Context, loopID string) map[stri
 // deriveSlug picks the file slug. Preference order:
 //
 //  1. chain.slug.stem from the chain entity → "<stem>-plan". Stable
-//     across emit_plan / emit_consensus / emit_dev_via_spec_artifact;
-//     this is the smoke #8 run-5 D2 fix.
+//     across emit_plan / emit_dev_via_spec_artifact; this is the
+//     smoke #8 run-5 D2 fix.
 //  2. Title-derived slug via slug.DeriveDated (the pre-D2 path). Used
 //     when chain.slug.stem is absent (legacy chains, chainReader unset,
 //     or the researcher's path predicate didn't render).

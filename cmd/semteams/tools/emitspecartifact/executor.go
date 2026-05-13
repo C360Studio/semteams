@@ -181,8 +181,7 @@ type ChainResolver interface {
 //
 // Optional — leave unset to keep the executor backward-compatible
 // (LLM-supplied provenance + title-derived slug only). Same shape as
-// emitplan.ChainReader / emitconsensus.ChainReader; production wiring
-// uses the same adapter.
+// emitplan.ChainReader; production wiring uses the same adapter.
 type ChainReader interface {
 	ReadChainFor(ctx context.Context, fromLoopID string) (chainEntityID string, triples map[string]any, err error)
 }
@@ -244,8 +243,8 @@ func (e *Executor) SetChainResolver(r ChainResolver) {
 }
 
 // SetChainReader enables chain-entity-driven provenance and slug
-// derivation. Mirrors the SetChainReader pattern used by emitplan and
-// emitconsensus; same wiring contract. Smoke #8 run-5 D1 + D2 fix.
+// derivation. Mirrors the SetChainReader pattern used by emitplan;
+// same wiring contract. Smoke #8 run-5 D1 + D2 fix.
 func (e *Executor) SetChainReader(r ChainReader) {
 	e.chainReader = r
 }
@@ -401,8 +400,8 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 
 	// Read chain-canonical lineage + slug stem so the architect persona
 	// stops guessing upstream loop IDs and the chain's slug stays
-	// consistent across emit_plan / emit_consensus /
-	// emit_dev_via_spec_artifact. Smoke #8 run-5 D1 + D2 fix.
+	// consistent across emit_plan / emit_dev_via_spec_artifact. Smoke
+	// #8 run-5 D1 + D2 fix.
 	//
 	// Anchor on a completed ancestor's loop_id (from task properties)
 	// rather than the running loop's own LoopID — agent.loop.parent
@@ -587,7 +586,7 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 //
 // chainReader=nil (test contexts, deployments without chain wiring)
 // returns nil without logging — the documented backward-compatible
-// mode. Mirrors emitplan / emitconsensus.
+// mode. Mirrors emitplan.
 func (e *Executor) readChainTriples(ctx context.Context, loopID string) map[string]any {
 	if e.chainReader == nil {
 		return nil

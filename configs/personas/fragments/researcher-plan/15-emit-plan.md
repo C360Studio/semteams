@@ -25,8 +25,8 @@ Pass:
   `chain.slug.stem` (set when research first emitted), so your title
   text drives the heading you see in the rendered markdown but does
   not change which file the plan writes to — the chain stays
-  consistent across emit_plan / emit_consensus /
-  emit_dev_via_spec_artifact even if you re-phrase the title.
+  consistent across emit_plan / emit_dev_via_spec_artifact even if
+  you re-phrase the title.
 - `goal` — single string. The same concrete, testable target your
   output contract names (named interface, endpoint, component, or
   capability — not "build a driver").
