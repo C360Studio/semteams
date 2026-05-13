@@ -27,11 +27,6 @@
       "model": "reviewing",
       "tools": ["read_loop_result", "decide"],
       "action_allowlist": ["approved", "insufficient", "needs_clarification"],
-      "properties": {
-        "prior_loop_id": "$entity.instance",
-        "spec_path": "$entity.triple.dev_via_spec.artifact.path",
-        "spec_slug": "$entity.triple.dev_via_spec.artifact.slug"
-      },
       "related_loops": {
         "researcher": "$entity.instance"
       },
@@ -43,6 +38,6 @@
     "phase": "ADR-041 Slice 2D-3",
     "adr": "docs/adr/041-mvp-role-compression-and-graph-as-substrate.md",
     "pattern": "dev-via-spec arc terminal: researcher-architect emits spec artifact → reviewer-spec evaluates → on approval, 02-reviewer-approved-to-builder.json fires (gated on chain.spec_mode_gate.proceed from phasevalidator.SpecModeGate)",
-    "ordering_invariant": "emit_dev_via_spec_artifact publishes the dev_via_spec.artifact.{path,slug,...} triples BEFORE decide(action=emit) publishes coordinator.next_action. When this rule fires on coordinator.next_action=emit, the artifact triples are already on the entity and $entity.triple.dev_via_spec.artifact.path resolves. The properties.spec_path passthrough is the redundant channel — task properties are an independent surface that does not depend on triple-substitution timing. Beta.39 has no `exists` operator so the ordering invariant is the load-bearing assumption; persona refactors that reorder emit-and-decide will silently produce an empty path."
+    "spec_artifact_forwarding": "The architect's emit_dev_via_spec_artifact stamps dev_via_spec.artifact.{path,slug} on the architect's loop entity. Rule 02's substitution `$entity.triple.dev_via_spec.artifact.path` resolves against the reviewer-spec entity (the rule's triggering entity), not the architect — so phasevalidator.SpecModeGate forwards these triples one hop from architect to reviewer-spec on the approved path. Without that forward, the builder spawn substitutes the literal token and bootstrap_workspace fails (beta.64 has no `exists` operator to gate defensively)."
   }
 }

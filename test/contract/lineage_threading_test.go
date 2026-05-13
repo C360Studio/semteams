@@ -189,6 +189,23 @@ func TestLineageThreading_DiscoveryWalk(t *testing.T) {
 // substrate (the builder doesn't see TaskMessage.Metadata directly; the
 // prompt body is the reliable surface). Replaces the legacy architect-
 // prompt test under ADR-041's compressed roster.
+//
+// Textual presence is necessary but not sufficient — the substitution
+// resolves against the reviewer-spec triggering entity at fire time, but
+// dev_via_spec.artifact.{path,slug} is stamped by emitspecartifact on
+// the architect researcher entity. phasevalidator.SpecModeGate's
+// forwardSpecArtifactTriples (cmd/semteams/phasevalidator/specmode.go)
+// is the load-bearing hop that lands the triples on the reviewer-spec
+// entity before this rule evaluates. If either side drops (this rule's
+// token, the gate's forwarding), the substitution returns a literal
+// "$entity.triple.dev_via_spec.artifact.path" string at builder spawn —
+// bootstrap_workspace then rejects on path-traversal validation, but
+// the failure happens at runtime after wasting an LLM call.
+//
+// The runtime-resolution invariant is exercised by the SpecModeGate
+// tests (TestSpecModeGate_ForwardsSpecArtifactTriples in the
+// phasevalidator package). This contract test pins the textual side
+// only; the wire-level guarantee is the gate's tests.
 func TestLineageThreading_BuilderPromptSubstitution(t *testing.T) {
 	data, err := os.ReadFile("../../configs/rules/dev-via-spec/02-reviewer-approved-to-builder.json")
 	if err != nil {

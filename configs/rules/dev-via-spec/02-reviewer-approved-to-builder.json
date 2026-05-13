@@ -32,11 +32,6 @@
       "role": "builder",
       "model": "coding",
       "tools": ["bootstrap_workspace", "bash", "read_loop_result", "builder_decide", "write_todos"],
-      "properties": {
-        "prior_loop_id": "$entity.instance",
-        "spec_path": "$entity.triple.dev_via_spec.artifact.path",
-        "spec_slug": "$entity.triple.dev_via_spec.artifact.slug"
-      },
       "related_loops": {
         "researcher": "$entity.triple.lineage.researcher"
       },
@@ -49,7 +44,7 @@
     "adr": "docs/adr/041-mvp-role-compression-and-graph-as-substrate.md",
     "validator": "cmd/semteams/phasevalidator/specmode.go (SpecModeGate)",
     "proceed_sentinel": "chain.spec_mode_gate.proceed on reviewer-spec loop entity. Absence-of-sentinel blocks the rule fire fail-safe per ADR-041 §Risks mitigation spec-mode pre-check.",
-    "ordering_invariant": "dev_via_spec.artifact.{path,slug} triples are stamped on the architect researcher loop, not on the reviewer-spec loop. The substitution `$entity.triple.dev_via_spec.artifact.path` reads from the triggering entity (reviewer-spec); reviewer's spawn rule (01b) carries spec_path through agent.task properties, which the framework's property-to-triple plumbing reflects onto the reviewer entity. The triggering reviewer entity therefore carries the artifact triples by the time this rule evaluates.",
+    "spec_artifact_substitution": "dev_via_spec.artifact.{path,slug} triples are stamped by emit_dev_via_spec_artifact on the architect researcher's loop entity, NOT on the reviewer-spec entity (publish_agent action `properties` is not propagated to triples on the spawned loop; ruled out as a substitution channel under beta.64). phasevalidator.SpecModeGate forwards these triples one hop from architect→reviewer-spec on the approved path BEFORE writing chain.spec_mode_gate.proceed, so by the time this rule's third condition passes and the substitution evaluates, the reviewer-spec entity carries the triples. If the forward fails (missing parent, missing architect triples, graph blip), proceed still lands per the gate's design but the substitution resolves to the literal token and bootstrap_workspace fails visibly. Operator log surfaces 'spec-mode gate: architect missing dev_via_spec.artifact triples'.",
     "spec_handoff_caveat": "bootstrap_workspace reads the spec markdown from $SEMTEAMS_DEVVIASPEC_ARTIFACT_DIR (default docs/specs) on the backend host. Sandbox container reaches the backend filesystem only via the product-shell tool. Migration target: when upstream ships an http_request rule action plus task_id substitution for publish_agent, seed inline and delete bootstrap_workspace."
   }
 }

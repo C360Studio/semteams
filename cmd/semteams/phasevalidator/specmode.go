@@ -34,6 +34,27 @@ const (
 	specModeRejectMissingResearch = "missing_research_artifact"
 
 	triplesSourceSpecMode = "chain.spec_mode_gate"
+
+	// agentLoopParentPredicate is the upstream-stamped triple naming
+	// the spawning loop's parent execution entity. Mirrors the constant
+	// in cmd/semteams/chain/plan.go — local copy to avoid an import
+	// cycle and to make the SpecModeGate self-contained.
+	agentLoopParentPredicate = "agent.loop.parent"
+
+	// predicateDevViaSpecArtifactPath / Slug mirror the constants
+	// produced by cmd/semteams/tools/emitspecartifact/executor.go
+	// (predicatePath / predicateSlug there). When researcher-architect
+	// emits the spec artifact these triples land on the architect's
+	// loop entity. The spec-mode gate copies them onto the reviewer-spec
+	// loop entity so rule 02-reviewer-approved-to-builder.json can
+	// substitute `$entity.triple.dev_via_spec.artifact.{path,slug}` at
+	// the builder spawn site (the substitution engine resolves against
+	// the rule's triggering entity, which is the reviewer-spec loop,
+	// not the architect that originally stamped the triples). Renames
+	// on either side break rule 02's substitution before a real-LLM
+	// smoke catches it.
+	predicateDevViaSpecArtifactPath = "dev_via_spec.artifact.path"
+	predicateDevViaSpecArtifactSlug = "dev_via_spec.artifact.slug"
 )
 
 // SpecModeGate implements chain.CompletionHandler and gates
@@ -147,14 +168,93 @@ func (g *SpecModeGate) HandleLoopCompleted(ctx context.Context, ev *agentic.Loop
 		return nil
 	}
 
-	writes := []message.Triple{
-		stamp(loopEntityID, chain.PredicateSpecModeGateProceed, "true"),
-	}
+	// Forward-propagate dev_via_spec.artifact.{path,slug} from the
+	// architect researcher (the reviewer-spec's parent loop) onto the
+	// reviewer-spec loop entity. Rule 02-reviewer-approved-to-builder.json
+	// substitutes `$entity.triple.dev_via_spec.artifact.path` against the
+	// reviewer-spec entity (the rule's triggering entity); without this
+	// hop the triples remain only on the architect's entity and the
+	// substitution returns the literal token at builder spawn. Per-write
+	// failure is logged but does not block the proceed sentinel — partial
+	// propagation leaves the chain stalled at builder bootstrap, which is
+	// the conservative fail-safe (same posture as PhaseValidator's
+	// partial-cluster behaviour). Failures here are not fatal to the gate
+	// decision itself.
+	writes := g.forwardSpecArtifactTriples(ctx, ev.LoopID, loopEntityID, loopTriples, stamp)
+
+	writes = append(writes, stamp(loopEntityID, chain.PredicateSpecModeGateProceed, "true"))
 	g.publishAll(ctx, writes)
 	g.logger.Info("spec-mode gate: approved",
 		slog.String("loop_id", ev.LoopID),
 		slog.String("research_artifact_loop", researchLoop))
 	return nil
+}
+
+// forwardSpecArtifactTriples walks one hop from the reviewer-spec loop's
+// agent.loop.parent triple to the architect researcher loop entity and
+// returns triple writes copying the architect's
+// dev_via_spec.artifact.{path,slug} onto the reviewer-spec entity. Empty
+// slice returned when the architect entity cannot be located, doesn't
+// carry the artifact triples, or any read fails — caller's proceed
+// sentinel still lands and the chain stalls at builder bootstrap (the
+// substitution will be visible as an unresolved literal in logs).
+//
+// Architectural note: the chain-walk lives in the gate (not in the
+// emitting tool) because the canonical wire shape is "artifact triples
+// on the emitter's entity"; downstream consumers that need different
+// entities to carry the triples take responsibility for replication.
+// Each new consumer is a new walk, which surfaces the design choice
+// rather than burying it inside the emitter.
+func (g *SpecModeGate) forwardSpecArtifactTriples(ctx context.Context, reviewerLoopID, reviewerLoopEntityID string, reviewerTriples map[string]any, stamp func(string, string, any) message.Triple) []message.Triple {
+	parentEntityID, _ := reviewerTriples[agentLoopParentPredicate].(string)
+	if parentEntityID == "" {
+		g.logger.Warn("spec-mode gate: reviewer entity missing agent.loop.parent; skipping spec artifact forwarding",
+			slog.String("reviewer_loop_id", reviewerLoopID))
+		return nil
+	}
+	architectLoopID, ok := agentic.LoopIDFromExecutionEntityID(parentEntityID)
+	if !ok {
+		g.logger.Warn("spec-mode gate: agent.loop.parent malformed; skipping spec artifact forwarding",
+			slog.String("reviewer_loop_id", reviewerLoopID),
+			slog.String("parent_entity_id", parentEntityID))
+		return nil
+	}
+	architectEntityID := agentic.LoopExecutionEntityID(g.platform.Org, g.platform.Platform, architectLoopID)
+	architectTriples, err := g.entities.ReadEntity(ctx, architectEntityID)
+	if err != nil {
+		g.logger.Warn("spec-mode gate: read architect entity failed; skipping spec artifact forwarding",
+			slog.String("reviewer_loop_id", reviewerLoopID),
+			slog.String("architect_loop_id", architectLoopID),
+			slog.String("error", err.Error()))
+		return nil
+	}
+
+	path, _ := architectTriples[predicateDevViaSpecArtifactPath].(string)
+	slug, _ := architectTriples[predicateDevViaSpecArtifactSlug].(string)
+	if path == "" && slug == "" {
+		// Architect didn't emit the spec artifact — the reviewer approved
+		// without one upstream. Goodhart concern, but the existing
+		// chain.research_artifact.loop check already gates against that.
+		// Defensive log; no writes.
+		g.logger.Warn("spec-mode gate: architect missing dev_via_spec.artifact triples; substitution will fail at builder spawn",
+			slog.String("reviewer_loop_id", reviewerLoopID),
+			slog.String("architect_loop_id", architectLoopID))
+		return nil
+	}
+
+	writes := make([]message.Triple, 0, 2)
+	if path != "" {
+		writes = append(writes, stamp(reviewerLoopEntityID, predicateDevViaSpecArtifactPath, path))
+	}
+	if slug != "" {
+		writes = append(writes, stamp(reviewerLoopEntityID, predicateDevViaSpecArtifactSlug, slug))
+	}
+	g.logger.Info("spec-mode gate: forwarded dev_via_spec.artifact triples",
+		slog.String("reviewer_loop_id", reviewerLoopID),
+		slog.String("architect_loop_id", architectLoopID),
+		slog.String("path", path),
+		slog.String("slug", slug))
+	return writes
 }
 
 // publishAll writes every triple in order; per-triple failures are

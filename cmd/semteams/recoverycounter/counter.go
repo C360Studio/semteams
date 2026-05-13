@@ -33,10 +33,11 @@ const (
 	// not per-reviewer-mode, so the counter aggregates both sources.
 	reviewerRoleSpec = "reviewer-spec"
 
-	// insufficientAction is the coordinator.next_action value the
-	// research-reviewer's decide tool stamps when terminating with a
-	// rejection that triggers the source-curator recovery path. Mirrors
-	// rule_02's condition exactly — divergence here would silently
+	// insufficientAction is the coordinator.next_action value a reviewer's
+	// decide tool stamps when terminating with a rejection that triggers
+	// the researcher-retry recovery path. Mirrors
+	// research-mode-transition/02-reviewer-rejected-retry-research.json
+	// rule's condition exactly — divergence here would silently
 	// decouple counter increments from rule evaluation.
 	insufficientAction = "insufficient"
 
@@ -48,10 +49,11 @@ const (
 	triplesSource = "chain.recovery"
 
 	// DefaultThreshold is the per-chain recovery-cycle cap when none is
-	// configured. Three matches the per-rule max_iterations across
-	// rules 02/02b/02c — the rule engine bound and the chain-level
-	// bound stay aligned so operators don't have to reason about two
-	// different ceilings. Configurable via NewCounter.
+	// configured. Three matches the per-rule max_iterations on
+	// research-mode-transition/02-reviewer-rejected-retry-research.json —
+	// the rule engine bound and the chain-level bound stay aligned so
+	// operators don't have to reason about two different ceilings.
+	// Configurable via NewCounter.
 	DefaultThreshold = 3
 )
 

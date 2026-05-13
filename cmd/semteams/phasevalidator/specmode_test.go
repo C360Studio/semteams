@@ -168,3 +168,128 @@ func TestSpecModeGate_EmptyResearchArtifactRejects(t *testing.T) {
 		t.Error("empty research_artifact.loop should reject")
 	}
 }
+
+// TestSpecModeGate_ForwardsSpecArtifactTriples asserts the gate
+// propagates dev_via_spec.artifact.{path,slug} from the architect parent
+// to the reviewer-spec loop entity on the approved path. The forward is
+// required by rule 02-reviewer-approved-to-builder.json's
+// $entity.triple.dev_via_spec.artifact.path substitution (the rule fires
+// on reviewer-spec, not on architect — the substitution engine resolves
+// triples against the triggering entity).
+func TestSpecModeGate_ForwardsSpecArtifactTriples(t *testing.T) {
+	const architectLoopID = "researcher_architect_x"
+	architectEntityID := loopEntityID(architectLoopID)
+	pub := &recordingPublisher{}
+	entities := &fakeEntityReader{
+		entities: map[string]map[string]any{
+			loopEntityID(testLoopID): {
+				agvocab.CoordinatorNextAction: approvedAction,
+				agentLoopParentPredicate:      architectEntityID,
+			},
+			architectEntityID: {
+				predicateDevViaSpecArtifactPath: "docs/specs/abc.md",
+				predicateDevViaSpecArtifactSlug: "abc",
+			},
+			testChainEntityID: {
+				chain.PredicateResearchArtifactLoop: architectLoopID,
+			},
+		},
+	}
+	g := buildSpecModeGate(t, pub, entities)
+	if err := g.HandleLoopCompleted(context.Background(), reviewerSpecEvent()); err != nil {
+		t.Fatalf("HandleLoopCompleted: %v", err)
+	}
+
+	path, ok := pub.byPredicate(predicateDevViaSpecArtifactPath)
+	if !ok {
+		t.Fatal("expected dev_via_spec.artifact.path write on reviewer-spec entity")
+	}
+	if path.Subject != loopEntityID(testLoopID) {
+		t.Errorf("path subject = %q, want reviewer-spec entity %q", path.Subject, loopEntityID(testLoopID))
+	}
+	if s, _ := path.Object.(string); s != "docs/specs/abc.md" {
+		t.Errorf("path object = %v, want \"docs/specs/abc.md\"", path.Object)
+	}
+
+	slug, ok := pub.byPredicate(predicateDevViaSpecArtifactSlug)
+	if !ok {
+		t.Fatal("expected dev_via_spec.artifact.slug write on reviewer-spec entity")
+	}
+	if slug.Subject != loopEntityID(testLoopID) {
+		t.Errorf("slug subject = %q, want reviewer-spec entity", slug.Subject)
+	}
+	if s, _ := slug.Object.(string); s != "abc" {
+		t.Errorf("slug object = %v, want \"abc\"", slug.Object)
+	}
+
+	if !pub.hasPredicate(chain.PredicateSpecModeGateProceed) {
+		t.Error("approved path must still write proceed sentinel alongside forwarded triples")
+	}
+}
+
+// TestSpecModeGate_MissingParentSkipsForward asserts the gate fails-soft
+// on a missing agent.loop.parent: proceed sentinel still lands so the
+// other gate behaviours stay testable independently, but no forwarded
+// triples are written (operator logs surface the warning). Rule 02's
+// substitution will return the literal token at runtime; builder bootstrap
+// then fails visibly rather than the gate silently masking the issue.
+func TestSpecModeGate_MissingParentSkipsForward(t *testing.T) {
+	pub := &recordingPublisher{}
+	entities := &fakeEntityReader{
+		entities: map[string]map[string]any{
+			loopEntityID(testLoopID): {
+				agvocab.CoordinatorNextAction: approvedAction,
+				// no agent.loop.parent
+			},
+			testChainEntityID: {
+				chain.PredicateResearchArtifactLoop: "researcher_xyz",
+			},
+		},
+	}
+	g := buildSpecModeGate(t, pub, entities)
+	if err := g.HandleLoopCompleted(context.Background(), reviewerSpecEvent()); err != nil {
+		t.Fatalf("HandleLoopCompleted: %v", err)
+	}
+	if pub.hasPredicate(predicateDevViaSpecArtifactPath) {
+		t.Error("missing parent should not stamp spec.path on reviewer entity")
+	}
+	if !pub.hasPredicate(chain.PredicateSpecModeGateProceed) {
+		t.Error("proceed sentinel should still land regardless of forward outcome")
+	}
+}
+
+// TestSpecModeGate_MissingArchitectTriplesSkipsForward asserts the
+// defensive log path when the architect parent exists but doesn't carry
+// the artifact triples. Same soft-fail semantics as missing parent.
+func TestSpecModeGate_MissingArchitectTriplesSkipsForward(t *testing.T) {
+	const architectLoopID = "researcher_architect_x"
+	architectEntityID := loopEntityID(architectLoopID)
+	pub := &recordingPublisher{}
+	entities := &fakeEntityReader{
+		entities: map[string]map[string]any{
+			loopEntityID(testLoopID): {
+				agvocab.CoordinatorNextAction: approvedAction,
+				agentLoopParentPredicate:      architectEntityID,
+			},
+			architectEntityID: {
+				// no path/slug — architect didn't emit (or triples haven't landed yet)
+			},
+			testChainEntityID: {
+				chain.PredicateResearchArtifactLoop: architectLoopID,
+			},
+		},
+	}
+	g := buildSpecModeGate(t, pub, entities)
+	if err := g.HandleLoopCompleted(context.Background(), reviewerSpecEvent()); err != nil {
+		t.Fatalf("HandleLoopCompleted: %v", err)
+	}
+	if pub.hasPredicate(predicateDevViaSpecArtifactPath) {
+		t.Error("absent architect triples should not stamp spec.path")
+	}
+	if pub.hasPredicate(predicateDevViaSpecArtifactSlug) {
+		t.Error("absent architect triples should not stamp spec.slug")
+	}
+	if !pub.hasPredicate(chain.PredicateSpecModeGateProceed) {
+		t.Error("proceed sentinel should still land regardless of forward outcome")
+	}
+}
