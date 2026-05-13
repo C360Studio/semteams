@@ -312,7 +312,7 @@ responses:
       name: bootstrap_workspace
       arguments_json: |
         {
-          "spec_path": "docs/specs/2026-05-13-osh-meshtastic-driver.md"
+          "spec_path": "/artifacts/specs/2026-05-13-osh-meshtastic-driver.md"
         }
 
   - tool_call:

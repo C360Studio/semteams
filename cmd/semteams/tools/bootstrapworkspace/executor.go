@@ -53,7 +53,7 @@ const envOutputDir = "SEMTEAMS_DEVVIASPEC_ARTIFACT_DIR"
 
 // defaultOutputDir is the fallback when SEMTEAMS_DEVVIASPEC_ARTIFACT_DIR
 // is unset. Mirrors emitspecartifact's default.
-const defaultOutputDir = "docs/specs"
+const defaultOutputDir = ".artifacts/specs"
 
 // SandboxClient is the narrow surface this executor consumes. Production
 // passes upstream's *sandbox.Client; tests inject an in-memory fake.

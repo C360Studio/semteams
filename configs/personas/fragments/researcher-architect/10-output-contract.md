@@ -100,7 +100,7 @@ for the runtime selection.
 
 The tool validates the args, renders a markdown spec via a Go
 template (the format the early-adopter comparison demands —
-BMAD / OpenSpec smell), writes the file to `docs/specs/`, and
+BMAD / OpenSpec smell), writes the file to `/artifacts/specs/`, and
 mints marker triples on your loop entity (artifact path,
 artifact slug, generated_at) for downstream consumers.
 

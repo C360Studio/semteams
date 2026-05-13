@@ -3,7 +3,7 @@
 Before terminating with
 `decide(action="gather")`, call this tool with the structured plan
 fields you would otherwise embed only in the `decide` reason. The tool
-renders a deterministic markdown view at `docs/plans/<slug>.md`, mints
+renders a deterministic markdown view at `/artifacts/plans/<slug>.md`, mints
 marker triples on your loop entity, and lets the chain milestone
 subscriber propagate `chain.plan.path` onto the chain entity at
 reviewer-approval time.
@@ -82,7 +82,7 @@ producing a revision (the chain re-spawned PLAN to address a
 substance gap), still call `emit_plan` with the bumped revision.
 Each revision earns its own markdown view; the file overwrites
 at the deterministic slug, so retries do not litter
-`docs/plans/`.
+`/artifacts/plans/`.
 
 If you would otherwise terminate without `gather` — i.e., your
 allow-list permits `emit` (premature) or `needs_clarification` —

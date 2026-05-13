@@ -30,7 +30,7 @@
 
 3. Before terminating, call `emit_plan` per the emit_plan
    contract — the structured-args + audit-trail discipline that
-   renders `docs/plans/<slug>.md` and stamps the chain entity
+   renders `/artifacts/plans/<slug>.md` and stamps the chain entity
    reference. The tool call is additive; substance still flows
    through your `decide.reason` for the next phase.
 

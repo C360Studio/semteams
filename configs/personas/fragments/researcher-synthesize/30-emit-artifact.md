@@ -20,7 +20,7 @@ contract — no nesting under a wrapping object. Pass:
     artifact you find there.
 - `title` — short, descriptive title for this research (e.g.
   `"OSH Meshtastic driver research"`). Drives the rendered
-  file's slug at `docs/research/<slug>.md` and shows up in
+  file's slug at `/artifacts/research/<slug>.md` and shows up in
   `git log`. Empty falls back to a loop-id-suffixed slug;
   supplying a title is preferred for readable history. Keep it
   stable across revisions — re-emitting with the same title

@@ -51,7 +51,7 @@ The evidence summary is the substance you grade against; the
 builder terminal supplies the test-runner outcome. Both must
 agree for accept.
 
-The researcher-architect's spec at `docs/specs/<slug>.md` is
+The researcher-architect's spec at `/artifacts/specs/<slug>.md` is
 available if you need to see the `checks[]` entries in their
 original prose form. The slug is on your loop entity via the
 `dev_via_spec.artifact.slug` triple from the researcher-architect

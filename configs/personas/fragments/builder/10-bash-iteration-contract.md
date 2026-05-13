@@ -26,7 +26,7 @@ edge cases.
 Shape (substitute your task property's literal value):
 
 ```
-bootstrap_workspace(spec_path="docs/specs/<slug>.md")
+bootstrap_workspace(spec_path="/artifacts/specs/<slug>.md")
 ```
 
 The tool creates your sandbox worktree at this loop's task_id

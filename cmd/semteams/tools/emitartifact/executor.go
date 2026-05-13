@@ -106,7 +106,7 @@ const (
 // SEMTEAMS_RESEARCH_ARTIFACT_DIR is unset. Relative to the process
 // working directory (the repo root in normal operation). Mirrors
 // emitspecartifact's defaultOutputDir convention.
-const defaultOutputDir = "docs/research"
+const defaultOutputDir = ".artifacts/research"
 
 // envOutputDir is the operator override for the markdown output
 // directory. Kept as env var (not framework config) so it does not

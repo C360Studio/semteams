@@ -114,7 +114,7 @@ const payloadSubjectPrefix = "dev_via_spec.artifact"
 // defaultOutputDir is the output directory when SEMTEAMS_DEVVIASPEC_ARTIFACT_DIR
 // is unset. Relative to the process working directory (the repo root in normal
 // operation).
-const defaultOutputDir = "docs/specs"
+const defaultOutputDir = ".artifacts/specs"
 
 // envOutputDir is the environment variable operators set to override the output
 // directory. Kept as env var (not framework config) so it does not drift the

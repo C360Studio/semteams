@@ -59,7 +59,7 @@ below.
 ## Signal 3 — researcher-architect spec (only if needed)
 
 The structured summary should be enough for most cases. Read
-`docs/specs/<slug>.md` only when:
+`/artifacts/specs/<slug>.md` only when:
 
 - A check's `target` doesn't make sense given the failures
   you see, and you need the original prose to understand intent.

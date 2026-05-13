@@ -312,7 +312,7 @@ responses:
       arguments_json: |
         {
           "action": "emit",
-          "reason": "Spec rev 1 emitted at docs/specs/<slug>.md. Three tasks grounded against three actors and two integration points. Reviewer-spec should grade against the completeness checklist."
+          "reason": "Spec rev 1 emitted at /artifacts/specs/<slug>.md. Three tasks grounded against three actors and two integration points. Reviewer-spec should grade against the completeness checklist."
         }
 
   # ---------- Loop E: reviewer-spec (rule_01b spawn) ----------
@@ -338,7 +338,7 @@ responses:
       name: bootstrap_workspace
       arguments_json: |
         {
-          "spec_path": "docs/specs/2026-05-13-osh-meshtastic-driver.md"
+          "spec_path": "/artifacts/specs/2026-05-13-osh-meshtastic-driver.md"
         }
 
   - tool_call:
@@ -591,7 +591,7 @@ responses:
       name: bootstrap_workspace
       arguments_json: |
         {
-          "spec_path": "docs/specs/2026-05-13-osh-meshtastic-driver-recovery-v2.md"
+          "spec_path": "/artifacts/specs/2026-05-13-osh-meshtastic-driver-recovery-v2.md"
         }
 
   - tool_call:

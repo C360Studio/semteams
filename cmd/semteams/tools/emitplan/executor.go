@@ -55,7 +55,7 @@ const payloadSubjectPrefix = "dev_via_spec.plan"
 // defaultOutputDir is the markdown render target when
 // SEMTEAMS_PLAN_DIR is unset. Relative to process working
 // directory (the repo root in normal operation).
-const defaultOutputDir = "docs/plans"
+const defaultOutputDir = ".artifacts/plans"
 
 // envOutputDir is the operator override for the markdown output
 // directory. Mirrors SEMTEAMS_DEVVIASPEC_ARTIFACT_DIR /

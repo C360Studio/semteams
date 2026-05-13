@@ -58,3 +58,17 @@ ui/test-results/
 # Claude Code project-local memory/state
 .claude/projects/
 .claude/scheduled_tasks.lock
+
+# Agent-emitted artifacts (research/plan/spec markdown rendered by
+# emit_* tools). In Docker e2e/smoke runs these land in the
+# agentic-artifacts named volume; out-of-Docker local-dev runs use
+# CWD-relative .artifacts/ defaults (see cmd/semteams/tools/emit*).
+# Either path keeps the host checkout clean of generated content.
+.artifacts/
+
+# Legacy emit-tool output dirs (pre-ADR-041 default was docs/X).
+# Ignored to prevent further leaks; existing committed files are
+# being deleted alongside the default switch.
+/docs/specs/
+/docs/research/
+/docs/plans/
