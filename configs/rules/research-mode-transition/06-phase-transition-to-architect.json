@@ -19,7 +19,7 @@
       "subject": "agent.task.researcher-architect",
       "role": "researcher-architect",
       "model": "architecture",
-      "tools": ["read_loop_result", "emit_dev_via_spec_artifact", "scratchpad", "decide"],
+      "tools": ["read_loop_result", "query_entity", "bash", "emit_dev_via_spec_artifact", "scratchpad", "decide"],
       "action_allowlist": ["emit", "gather", "needs_clarification"],
       "properties": {
         "prior_loop_id": "$entity.instance",

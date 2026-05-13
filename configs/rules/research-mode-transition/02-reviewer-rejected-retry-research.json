@@ -32,7 +32,7 @@
       "subject": "agent.task.researcher-plan",
       "role": "researcher-plan",
       "model": "research",
-      "tools": ["read_loop_result", "query_entity", "query_entities", "scratchpad", "decide"],
+      "tools": ["read_loop_result", "query_entity", "emit_plan", "scratchpad", "decide"],
       "action_allowlist": ["gather", "emit", "needs_clarification"],
       "properties": {
         "reviewer_loop_id": "$entity.instance",

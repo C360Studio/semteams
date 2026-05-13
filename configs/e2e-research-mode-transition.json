@@ -206,6 +206,7 @@
           "decide",
           "emit_research_artifact",
           "emit_plan",
+          "bash",
           "write_todos",
           "scratchpad"
         ],

@@ -19,7 +19,7 @@
       "subject": "agent.task.researcher-synthesize",
       "role": "researcher-synthesize",
       "model": "research",
-      "tools": ["read_loop_result", "emit_research_artifact", "scratchpad", "decide"],
+      "tools": ["read_loop_result", "query_entity", "emit_research_artifact", "scratchpad", "decide"],
       "action_allowlist": ["architect", "gather", "emit", "needs_clarification"],
       "properties": {
         "prior_loop_id": "$entity.instance",
