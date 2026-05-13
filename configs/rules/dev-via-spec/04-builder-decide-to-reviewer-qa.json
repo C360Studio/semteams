@@ -12,7 +12,7 @@
       "required": true
     },
     {
-      "field": "coordinator.next_action",
+      "field": "coordinator.decision.next_action",
       "operator": "eq",
       "value": "tests_passing",
       "required": true

@@ -96,13 +96,20 @@ func TestConfigDispatchDefaultToolsParse(t *testing.T) {
 		expected []string
 	}{
 		"osh-demo.json": {
-			expected: []string{"read_loop_result", "query_entity", "query_entities", "emit_research_artifact"},
+			expected: []string{"read_loop_result", "query_entity", "query_entities", "emit_plan"},
 		},
+		// ADR-041 MVP: dispatch enters at researcher-plan, so emit_plan
+		// (researcher-plan's owned emit tool per
+		// TestADR041_EmitToolPhaseOwnership) is the seeded default —
+		// pre-rewrite seeded emit_research_artifact which belongs to
+		// the researcher-synthesize phase. Rule_04 spawns gather
+		// downstream and inherits its own tool list from the rule's
+		// `tools` field.
 		"e2e-dev-via-spec.json": {
-			expected: []string{"read_loop_result", "query_entity", "query_entities", "emit_research_artifact"},
+			expected: []string{"read_loop_result", "query_entity", "query_entities", "emit_plan"},
 		},
 		"e2e-research-mode-transition.json": {
-			expected: []string{"read_loop_result", "query_entity", "query_entities", "emit_research_artifact"},
+			expected: []string{"read_loop_result", "query_entity", "query_entities", "emit_plan"},
 		},
 		"e2e-research-iterative.json": {
 			expected: []string{"read_loop_result", "query_entity", "query_entities"},

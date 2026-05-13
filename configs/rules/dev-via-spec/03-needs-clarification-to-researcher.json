@@ -21,7 +21,7 @@
       "required": true
     },
     {
-      "field": "coordinator.next_action",
+      "field": "coordinator.decision.next_action",
       "operator": "eq",
       "value": "needs_clarification",
       "required": true
@@ -42,7 +42,7 @@
         "recovery": "needs_clarification",
         "phase": "plan"
       },
-      "prompt": "Recovery plan pass. The chain role $entity.triple.agent.loop.role at loop $entity.instance terminated with decide(action=needs_clarification) — the prior arc could not complete from available information.\n\nRejecting role's reason: $entity.triple.coordinator.decision_reason\nBlocking question (if any): $entity.triple.coordinator.blocking_question\nRetry hint (if any): $entity.triple.coordinator.retry_hint\n\nIteration 1 — call read_loop_result on $entity.instance to read the full structured terminal. Then call read_loop_result on the prior researcher's loop ($entity.triple.lineage.researcher) if there is one, to read the prior research artifact verbatim. Your job is to RE-PLAN with the rejecting role's gap addressed, not start from scratch.\n\nIteration 2+ — emit a revised plan per researcher-plan/10-plan-rules.md. Carry forward everything from the prior plan that's still correct (scope, epics); tighten or extend only what the rejecting role's gap demands. Terminal: decide(action=\"gather\") to forward into the gather phase, or decide(action=\"emit\") for premature emit (reviewer will likely reject), or decide(action=\"needs_clarification\") only when re-planning genuinely cannot proceed.\n\nNote: the plan phase has cap=1 per chain (phasevalidator). This recovery spawn does not increment the plan counter directly (the counter is incremented on transitions TO plan, of which there are none — plan is always a fresh chain root). Operators surface unbounded needs_clarification respawns via chain-paused / chain-recovery dashboards."
+      "prompt": "Recovery plan pass. The chain role $entity.triple.agent.loop.role at loop $entity.instance terminated with decide(action=needs_clarification) — the prior arc could not complete from available information.\n\nRejecting role's reason: $entity.triple.coordinator.decision.reason\nBlocking question (if any): $entity.triple.coordinator.blocking_question\nRetry hint (if any): $entity.triple.coordinator.retry_hint\n\nIteration 1 — call read_loop_result on $entity.instance to read the full structured terminal. Then call read_loop_result on the prior researcher's loop ($entity.triple.lineage.researcher) if there is one, to read the prior research artifact verbatim. Your job is to RE-PLAN with the rejecting role's gap addressed, not start from scratch.\n\nIteration 2+ — emit a revised plan per researcher-plan/10-plan-rules.md. Carry forward everything from the prior plan that's still correct (scope, epics); tighten or extend only what the rejecting role's gap demands. Terminal: decide(action=\"gather\") to forward into the gather phase, or decide(action=\"emit\") for premature emit (reviewer will likely reject), or decide(action=\"needs_clarification\") only when re-planning genuinely cannot proceed.\n\nNote: the plan phase has cap=1 per chain (phasevalidator). This recovery spawn does not increment the plan counter directly (the counter is incremented on transitions TO plan, of which there are none — plan is always a fresh chain root). Operators surface unbounded needs_clarification respawns via chain-paused / chain-recovery dashboards."
     }
   ],
   "on_exit": [],

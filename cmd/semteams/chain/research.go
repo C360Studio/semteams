@@ -67,7 +67,13 @@ const (
 	researcherTasksCountPredicate  = "research.artifact.tasks_count"
 	researcherPathPredicate        = "research.artifact.path"
 
-	reviewerNextActionPredicate        = "coordinator.next_action"
+	// reviewerNextActionPredicate matches the upstream framework's
+	// canonical name (vocabulary/agentic/predicates.go:616 —
+	// CoordinatorNextAction = "coordinator.decision.next_action").
+	// Renamed from the pre-beta.64 "coordinator.next_action" form in
+	// ADR-041 Phase 3 mock-LLM smoke validation when the decide tool
+	// proved to stamp the new name only.
+	reviewerNextActionPredicate        = "coordinator.decision.next_action"
 	reviewerLineageResearcherPredicate = "lineage.researcher"
 )
 

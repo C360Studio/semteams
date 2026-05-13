@@ -128,9 +128,9 @@ func TestChainEntityCoverage_PR_B_Pipeline(t *testing.T) {
 				"research.artifact.path": "docs/research/2026-05-08-osh-meshtastic-driver-research.md",
 			},
 			researchReviewerEntityID: {
-				"agent.loop.parent":       researcherEntityID,
-				"coordinator.next_action": "approved",
-				"lineage.researcher":      "researcher_a",
+				"agent.loop.parent":                researcherEntityID,
+				"coordinator.decision.next_action": "approved",
+				"lineage.researcher":               "researcher_a",
 			},
 		},
 	}
@@ -255,9 +255,9 @@ func TestChainEntityCoverage_NoBleedOntoLoopEntity(t *testing.T) {
 				"research.artifact.tasks_count":  float64(1),
 			},
 			agentic.LoopExecutionEntityID("c360", "test", "reviewer_b"): {
-				"agent.loop.parent":       agentic.LoopExecutionEntityID("c360", "test", "researcher_a"),
-				"coordinator.next_action": "approved",
-				"lineage.researcher":      "researcher_a",
+				"agent.loop.parent":                agentic.LoopExecutionEntityID("c360", "test", "researcher_a"),
+				"coordinator.decision.next_action": "approved",
+				"lineage.researcher":               "researcher_a",
 			},
 		},
 	}

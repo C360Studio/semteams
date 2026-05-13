@@ -115,8 +115,8 @@
       "name": "agentic-dispatch",
       "enabled": true,
       "config": {
-        "default_role": "researcher",
-        "default_tools": ["read_loop_result", "query_entity", "query_entities", "emit_research_artifact"],
+        "default_role": "researcher-plan",
+        "default_tools": ["read_loop_result", "query_entity", "query_entities", "emit_plan"],
         "auto_continue": false,
         "stream_name": "USER",
         "permissions": {
