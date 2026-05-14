@@ -1,6 +1,6 @@
 module github.com/c360studio/semteams
 
-go 1.25.3
+go 1.26.3
 
 require (
 	github.com/c360studio/semstreams v1.0.0-beta.64
