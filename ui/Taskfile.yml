@@ -705,9 +705,13 @@ tasks:
           CLI_ARGS: '{{.PROMPT}}'
       # Hard cap on the watcher to bound real-LLM spend if the chain
       # wedges (e.g. a loop iterates indefinitely against tool-result
-      # errors). 1800s = 30 min, ~2x the playbook's 25-min upper bound
-      # estimate. Cleanup + capture defers fire either way.
-      - timeout 1800 task test:e2e:agentic:probe:auto-approve-watcher -- {{.RUN_ID}}
+      # errors). 3600s = 60 min — bumped from 1800s after smoke #26
+      # (2026-05-14) and semspec's parallel evidence showed the OSH-
+      # class prompt routinely needs >30 min when the chain runs
+      # recovery cycles (each cycle adds ~7-10 min on real-LLM).
+      # Cleanup + capture defers fire either way; the timeout is an
+      # upper bound, not a target duration.
+      - timeout 3600 task test:e2e:agentic:probe:auto-approve-watcher -- {{.RUN_ID}}
 
   test:e2e:agentic:smoke7:capture:
     desc: Dump per-loop trajectories + message-log + wedge-report for smoke #7 findings synthesis
