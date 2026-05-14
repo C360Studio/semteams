@@ -805,3 +805,102 @@ func TestADR041_RulePublishAgentRoleResolvesToPersonaDir(t *testing.T) {
 		}
 	}
 }
+
+// Smoke #24 (2026-05-14) finding: read_loop_result on the synthesize loop
+// returns only the decide() reason, not the typed emit_research_artifact
+// payload. The architect must `bash cat` the rendered markdown to access
+// the structured artifact (actors/integration_points/tasks). The
+// architect-spawn rule (06-phase-transition-to-architect.json) substitutes
+// $entity.triple.research.artifact.path so the architect can bash a real
+// path that emit_research_artifact stamped — NOT a hardcoded constant.
+//
+// This test pins:
+//  1. The substitution token appears in the rule's prompt body.
+//  2. The token is referenced inside a bash invocation (regression guard:
+//     someone might delete the bash step while keeping the path
+//     description prose).
+//  3. The rule still allows bash + emit_dev_via_spec_artifact in tools.
+//
+// Failure mode if regressed: smoke #24 reproduces — architect terminates
+// with needs_clarification when bash hits a non-existent worktree or
+// when read_loop_result is mistakenly relied on for the artifact body.
+func TestADR041_ArchitectSpawnRuleSubstitutesResearchArtifactPath(t *testing.T) {
+	const rulePath = "../../configs/rules/research-mode-transition/06-phase-transition-to-architect.json"
+	data, err := os.ReadFile(rulePath)
+	if err != nil {
+		t.Fatalf("read %s: %v", rulePath, err)
+	}
+
+	var r struct {
+		OnEnter []struct {
+			Role   string   `json:"role"`
+			Tools  []string `json:"tools"`
+			Prompt string   `json:"prompt"`
+		} `json:"on_enter"`
+	}
+	if err := json.Unmarshal(data, &r); err != nil {
+		t.Fatalf("parse %s: %v", rulePath, err)
+	}
+	if len(r.OnEnter) == 0 {
+		t.Fatalf("%s has no on_enter actions", rulePath)
+	}
+
+	action := r.OnEnter[0]
+	if action.Role != "researcher-architect" {
+		t.Errorf("on_enter[0].role = %q, want %q", action.Role, "researcher-architect")
+	}
+
+	// (1) substitution token present
+	const token = "$entity.triple.research.artifact.path"
+	if !strings.Contains(action.Prompt, token) {
+		t.Errorf("rule 06 prompt missing substitution token %q. Smoke #24 finding: architect cannot reach the rendered research artifact via read_loop_result; bash cat of the substituted path is the read channel. Without the substitution the chain wedges at architect.\n\nPrompt body:\n%s", token, action.Prompt)
+	}
+
+	// (2) substitution appears inside a bash-cat invocation. We pin the
+	// exact string `cat $entity.triple.research.artifact.path` — that's
+	// the literal pattern the LLM must emit. Matching "bash" alone is a
+	// false-positive trap (the word "sandbox" contains it); matching
+	// just the token is too loose (could be in descriptive prose only).
+	const invocation = "cat " + token
+	if !strings.Contains(action.Prompt, invocation) {
+		t.Errorf("rule 06 prompt does not contain the literal bash invocation %q. The architect must be told to `cat` the substituted path explicitly — descriptive mention of the token is not enough; the LLM needs the exact shell command. Prompt body:\n%s",
+			invocation, action.Prompt)
+	}
+
+	// (3) bash is still in the tools allowlist (regression guard for the
+	// tool-list pullback that motivated the earlier 3f07c72 patch).
+	hasBash := false
+	hasEmitSpec := false
+	for _, tool := range action.Tools {
+		if tool == "bash" {
+			hasBash = true
+		}
+		if tool == "emit_dev_via_spec_artifact" {
+			hasEmitSpec = true
+		}
+	}
+	if !hasBash {
+		t.Errorf("rule 06 tools missing `bash`; the substitution prose tells the LLM to bash but the tool isn't enabled: %v", action.Tools)
+	}
+	if !hasEmitSpec {
+		t.Errorf("rule 06 tools missing `emit_dev_via_spec_artifact`; the architect can't emit its terminal artifact: %v", action.Tools)
+	}
+
+	// (4) Persona-rule alignment: the architect persona's output contract
+	// must also reference the same substitution token. Drift here means
+	// the rule prompt names the path channel but the persona is teaching
+	// a different read pattern — the smoke #24 wedge mode in fast-forward.
+	const personaPath = "../../configs/personas/fragments/researcher-architect/10-output-contract.md"
+	personaData, err := os.ReadFile(personaPath)
+	if err != nil {
+		t.Fatalf("read persona %s: %v", personaPath, err)
+	}
+	if !strings.Contains(string(personaData), token) {
+		t.Errorf("persona fragment %s missing substitution token %q. The rule prompt teaches the bash-cat path channel; the persona must reference the same token or the LLM has two competing read patterns. Failure mode is smoke #24 in fast-forward.",
+			personaPath, token)
+	}
+	if !strings.Contains(string(personaData), invocation) {
+		t.Errorf("persona fragment %s missing literal invocation %q. The rule prompt and persona must teach the same exact shell command — partial mention of the token in descriptive prose isn't enough; the LLM needs the exact `cat <token>` shape in both surfaces.",
+			personaPath, invocation)
+	}
+}

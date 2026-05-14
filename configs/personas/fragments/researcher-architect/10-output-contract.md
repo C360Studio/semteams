@@ -4,29 +4,61 @@ You produce one structured artifact via tool call, then terminate.
 
 ## Step 1 — read the upstream phase's artifact
 
-Call `read_loop_result` on the SYNTHESIZE phase's loop ID
-(`prior_loop_id` in your task properties). The synthesizer
-emitted a typed `emit_research_artifact` payload + a
-`decide.reason` summarising the artifact — actors,
-integration_points, tasks, addressed_gaps, open_gaps.
+The synthesize phase upstream emitted a typed
+`emit_research_artifact` payload and rendered it to a markdown
+file. The rendered markdown — not the typed payload — is your
+substrate: it carries actors, integration_points, tasks,
+addressed_gaps, open_gaps, and the harness reference in
+diff-able prose.
 
-**Research artifact loop ID is in your prompt body.** Your spawn
-rule substitutes the chain's `lineage.researcher` reference into
-your prompt as a literal loop_id (the same UUID is also threaded
-through `task.Metadata["agent.related_loops"]["researcher"]`, but
-the prompt body is your reliable read path). The synthesize
-loop IS the research artifact loop under the compressed roster.
-Its `harness` field names the catalog `test_harness` reference
-you must cite in any check whose runtime is
-`process-local-testcontainer`. Without the research artifact in
-hand, you have no basis for selecting a harness; emit
-`decide(action="needs_clarification", reason="research artifact
-loop_id missing from prompt")` rather than inventing one.
+**Read the rendered artifact via bash.** Your spawn rule
+substitutes the artifact path into your prompt body via the
+`$entity.triple.research.artifact.path` token. This token is
+rewritten at rule-fire time to the absolute artifact path
+(production: `/artifacts/research/<slug>.md`; the path itself
+comes from `emit_research_artifact`'s rendering, which honors
+`SEMTEAMS_RESEARCH_ARTIFACT_DIR` — no hardcoded directory).
+Issue one `bash` tool call with the literal command:
+
+```
+cat $entity.triple.research.artifact.path
+```
+
+That's it — emit the substitution token verbatim in the bash
+`command` argument. The rule layer has already substituted the
+real path into your prompt body, but the tool call you emit
+contains the literal token; the rule engine resolves it on the
+wire. (Mechanism: upstream's `$entity.triple.<predicate>`
+template substitution, applied to every string field in the
+publish_agent action's `properties` and `prompt`.)
+
+`read_loop_result` on the synthesize loop returns only the
+loop's `decide()` terminal reason — a one-line summary, not the
+typed artifact body. You need the rendered markdown for the
+actors and integration_points to architect against. Bash the
+file.
+
+**Failure mode.** If the substitution leaves a literal
+`$entity.triple.research.artifact.path` in the resulting `cat`
+command and bash exits non-zero with that token in stderr, the
+upstream `emit_research_artifact` render failed and no path
+triple was stamped on the synthesize loop. Terminate with
+`decide(action="needs_clarification",
+reason="research.artifact.path triple absent on synthesize
+loop")` rather than guessing a path or fabricating actors.
+
+The synthesize loop IS the research artifact loop under the
+compressed roster. Its `harness` field (in the rendered
+markdown's frontmatter / first section) names the catalog
+`test_harness` reference you must cite in any check whose
+runtime is `process-local-testcontainer`. Without the harness
+name in hand, you have no basis for selecting a harness; emit
+needs_clarification rather than inventing one.
 
 The PLAN-phase loop (which set scope + verifiable outcomes) is
-also reachable via `read_loop_result` if you need its decomposition
-prose. The chain-entity lineage triples link both phases; your
-spawn-rule prompt cites them.
+also reachable via `read_loop_result` if you need its
+decomposition prose. The chain-entity lineage triples link both
+phases; your spawn-rule prompt cites them.
 
 ## Step 2 — call `emit_dev_via_spec_artifact`
 
