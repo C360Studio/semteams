@@ -130,7 +130,7 @@ func run() error {
 	}
 
 	// 9a. Build the shared payload registry and register first-party
-	// builtins (agentic, message, dispatch, rule, boid, operating-model,
+	// builtins (agentic, message, dispatch, rule, operating-model,
 	// github-webhook, objectstore). Per beta.18: payload registry is
 	// constructor-injected via component.Dependencies.PayloadRegistry,
 	// so it must exist before services are constructed. Mirrors upstream

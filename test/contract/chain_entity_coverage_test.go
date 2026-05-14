@@ -27,6 +27,15 @@ func (r *recordingTriplePublisher) AddTriple(_ context.Context, t message.Triple
 	return nil
 }
 
+func (r *recordingTriplePublisher) AddTriplesBatch(ctx context.Context, triples []message.Triple) error {
+	for _, t := range triples {
+		if err := r.AddTriple(ctx, t); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (r *recordingTriplePublisher) bySubject(subject string) map[string]any {
 	r.mu.Lock()
 	defer r.mu.Unlock()

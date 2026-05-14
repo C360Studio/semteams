@@ -30,6 +30,15 @@ func (f *fakeTriplePublisher) AddTriple(_ context.Context, t message.Triple) err
 	return nil
 }
 
+func (f *fakeTriplePublisher) AddTriplesBatch(ctx context.Context, triples []message.Triple) error {
+	for _, t := range triples {
+		if err := f.AddTriple(ctx, t); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (f *fakeTriplePublisher) snapshot() []message.Triple {
 	f.mu.Lock()
 	defer f.mu.Unlock()
