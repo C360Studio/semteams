@@ -137,7 +137,7 @@
         "swagger_ui": true,
         "server_info": {
           "title": "SemTeams OSH Demo (R3.4)",
-          "description": "ADR-041 MVP real-LLM end-to-end run of the OSH-class arc: researcher (plan/gather/synthesize/architect phases) → reviewer-spec → builder → reviewer-qa, with ops-chain-observer fired at the reviewer-qa terminal. Eleven rules wired: research-mode-transition (01a/01b/02/04/05/06) + dev-via-spec (02/03/04) + ops (chain-terminal-observe) + chain (00-loop-failed-pause). Hybrid model routing (PR #147): gemini-3.1-pro-preview at reasoning_effort=medium for heavy reasoning (research, planning, architecture, decomposition, qa); claude-sonnet reserved for code-generation in the builder. Internal-graph capabilities (community_summary, anomaly_review, summarization, query_classification, embedding, intent_classification, layer_normalization, answer_synthesis) stay on local seminstruct/semembed/qwen3-8b — async background work shouldn't pay cloud tokens, and graph-persisting capabilities stay local to avoid garbage in the substrate. SemSource, local-models, and sandbox compose profiles required. Requires GEMINI_API_KEY and ANTHROPIC_API_KEY.",
+          "description": "ADR-041 MVP real-LLM end-to-end run of the OSH-class arc: researcher (plan/gather/synthesize/architect phases) → reviewer-spec → builder → reviewer-qa, with ops-chain-observer fired at the reviewer-qa terminal AND an in-flight ops-progress-observer fired every 5 non-terminal completions. Twelve rules wired: research-mode-transition (01a/01b/02/04/05/06) + dev-via-spec (02/03/04) + ops (chain-terminal-observe, observe-chain-progress) + chain (00-loop-failed-pause). Hybrid model routing (PR #147): gemini-3.1-pro-preview at reasoning_effort=medium for heavy reasoning (research, planning, architecture, decomposition, qa); claude-sonnet reserved for code-generation in the builder. Internal-graph capabilities (community_summary, anomaly_review, summarization, query_classification, embedding, intent_classification, layer_normalization, answer_synthesis) stay on local seminstruct/semembed/qwen3-8b — async background work shouldn't pay cloud tokens, and graph-persisting capabilities stay local to avoid garbage in the substrate. SemSource, local-models, and sandbox compose profiles required. Requires GEMINI_API_KEY and ANTHROPIC_API_KEY.",
           "version": "1.0.0"
         }
       }
@@ -325,7 +325,8 @@
           "/app/configs/rules/dev-via-spec/02-reviewer-approved-to-builder.json",
           "/app/configs/rules/dev-via-spec/03-needs-clarification-to-researcher.json",
           "/app/configs/rules/dev-via-spec/04-builder-decide-to-reviewer-qa.json",
-          "/app/configs/rules/ops/chain-terminal-observe.json"
+          "/app/configs/rules/ops/chain-terminal-observe.json",
+          "/app/configs/rules/ops/observe-chain-progress.json"
         ],
         "enable_graph_integration": true,
         "entity_watch_buckets": {

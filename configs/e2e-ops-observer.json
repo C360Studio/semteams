@@ -124,7 +124,7 @@
               {
                 "field": "outcome",
                 "operator": "in",
-                "value": ["success", "failure", "timeout"],
+                "value": ["success", "failed", "cancelled"],
                 "required": true
               }
             ],

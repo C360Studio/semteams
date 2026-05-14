@@ -904,3 +904,162 @@ func TestADR041_ArchitectSpawnRuleSubstitutesResearchArtifactPath(t *testing.T) 
 			personaPath, invocation)
 	}
 }
+
+// In-flight ops observation rule (configs/rules/ops/observe-chain-progress.json)
+// fires every N non-terminal loop completions to wake an
+// ops-progress-observer that assesses chain liveness. Pins:
+//
+//  1. fire_every_n_events is present and > 0 (the trigger that makes
+//     this rule in-flight rather than terminal — a regression to a
+//     pure conditional trigger would silently turn this into a
+//     duplicate of chain-terminal-observe.json).
+//  2. Conditions exclude reviewer-qa (terminal, handled by the
+//     sibling rule) and the three ops-* roles (infinite-recursion
+//     guard — an ops observer completing must not fire another).
+//  3. Spawned role is ops-progress-observer, and the persona dir
+//     exists with a non-empty identity fragment.
+//  4. The persona's identity fragment names "in-flight" so an author
+//     refactoring the role can't accidentally collapse it into the
+//     terminal observer.
+//
+// Motivated by smoke #25c (2026-05-14): a 12-min builder stall
+// surfaced no graph-level signal until the watcher timeout. The
+// in-flight observer is the prospective complement to the
+// retrospective terminal observer.
+type opsInFlightRule struct {
+	FireEveryNEvents int `json:"fire_every_n_events"`
+	Conditions       []struct {
+		Field    string `json:"field"`
+		Operator string `json:"operator"`
+		Value    any    `json:"value"`
+	} `json:"conditions"`
+	OnEnter []struct {
+		Role  string   `json:"role"`
+		Tools []string `json:"tools"`
+	} `json:"on_enter"`
+}
+
+// findListCondition pulls the (operator, []string-value) pair from a
+// rule condition whose field matches and whose value is a JSON array of
+// strings. Fatals if the field isn't found or the value isn't list-shaped.
+func findListCondition(t *testing.T, r opsInFlightRule, field string) (string, []string) {
+	t.Helper()
+	for _, c := range r.Conditions {
+		if c.Field != field {
+			continue
+		}
+		vals, ok := c.Value.([]any)
+		if !ok {
+			t.Fatalf("rule condition for field %q has non-list value %T; cannot extract enum", field, c.Value)
+		}
+		strs := make([]string, 0, len(vals))
+		for _, v := range vals {
+			if s, ok := v.(string); ok {
+				strs = append(strs, s)
+			}
+		}
+		return c.Operator, strs
+	}
+	t.Fatalf("rule has no condition for field %q", field)
+	return "", nil
+}
+
+func TestADR041_OpsInFlightObservationRule(t *testing.T) {
+	const rulePath = "../../configs/rules/ops/observe-chain-progress.json"
+	const personaIdentity = "../../configs/personas/fragments/ops-progress-observer/00-identity.md"
+	data, err := os.ReadFile(rulePath)
+	if err != nil {
+		t.Fatalf("read %s: %v", rulePath, err)
+	}
+	var r opsInFlightRule
+	if err := json.Unmarshal(data, &r); err != nil {
+		t.Fatalf("parse %s: %v", rulePath, err)
+	}
+
+	// (1) fire_every_n_events present + > 0 — the in-flight trigger.
+	// Without this the rule degenerates into chain-terminal-observe.json.
+	if r.FireEveryNEvents <= 0 {
+		t.Errorf("rule fire_every_n_events = %d, want > 0", r.FireEveryNEvents)
+	}
+
+	// (2) Role exclusion: reviewer-qa (terminal — handled by sibling
+	// rule) + the three ops-* roles (infinite-recursion guard).
+	roleOp, roleValues := findListCondition(t, r, "agent.loop.role")
+	if roleOp != "not_in" {
+		t.Errorf("role-condition operator = %q, want %q", roleOp, "not_in")
+	}
+	mustExclude := map[string]bool{
+		"reviewer-qa":           true,
+		"ops-chain-observer":    true,
+		"ops-progress-observer": true,
+		"ops-analyst":           true,
+	}
+	for _, v := range roleValues {
+		delete(mustExclude, v)
+	}
+	if len(mustExclude) > 0 {
+		missing := make([]string, 0, len(mustExclude))
+		for k := range mustExclude {
+			missing = append(missing, k)
+		}
+		t.Errorf("role-condition not_in missing required exclusions %v (reviewer-qa overlap duplicates terminal observer; ops-* self-reference spins into infinite recursion)", missing)
+	}
+
+	// (3) Outcome enum must match framework's actual stamp values.
+	// semstreams beta.72 stamps success/failed/cancelled. "failure"
+	// (the framework uses "failed") and "timeout" (that's a
+	// ToolErrorKind, not a loop outcome) are the common drift tokens.
+	// Smoke #25c — the rule's motivating wedge — is the failed-builder
+	// case; wrong tokens silently skip the wedge.
+	_, outcomeValues := findListCondition(t, r, "agent.loop.outcome")
+	validOutcomes := map[string]bool{"success": true, "failed": true, "cancelled": true}
+	for _, v := range outcomeValues {
+		if !validOutcomes[v] {
+			t.Errorf("agent.loop.outcome value %q is not a framework-stamped outcome (valid: {success,failed,cancelled} per beta.72 agentic/constants.go)", v)
+		}
+	}
+
+	// (4) Spawn action: role + persona dir + read-only tools allowlist.
+	assertInFlightSpawnAction(t, r, personaIdentity)
+}
+
+// assertInFlightSpawnAction checks the rule's on_enter[0] action:
+// role name, persona dir + identity fragment, "in-flight" token in
+// the identity prose (refactor-into-terminal-observer guard), and
+// the Phase 1 read-only tools allowlist (no write-tools — change-
+// proposal tools land in Phase 2 behind an approval filter).
+func assertInFlightSpawnAction(t *testing.T, r opsInFlightRule, personaIdentity string) {
+	t.Helper()
+	if len(r.OnEnter) == 0 {
+		t.Fatalf("rule has no on_enter actions")
+	}
+	action := r.OnEnter[0]
+	if action.Role != "ops-progress-observer" {
+		t.Errorf("on_enter[0].role = %q, want %q", action.Role, "ops-progress-observer")
+	}
+
+	info, err := os.Stat(personaIdentity)
+	if err != nil {
+		t.Errorf("persona identity %s missing: %v", personaIdentity, err)
+	} else if info.Size() == 0 {
+		t.Errorf("persona identity %s is empty", personaIdentity)
+	}
+	if body, err := os.ReadFile(personaIdentity); err == nil {
+		if !strings.Contains(strings.ToLower(string(body)), "in-flight") {
+			t.Errorf("persona identity %s does not mention 'in-flight' (refactor-into-terminal-observer guard)", personaIdentity)
+		}
+	}
+
+	forbiddenTools := map[string]bool{
+		"create_rule":          true,
+		"manage_flow":          true,
+		"update_persona":       true,
+		"manage_persona":       true,
+		"manage_flow_template": true,
+	}
+	for _, tool := range action.Tools {
+		if forbiddenTools[tool] {
+			t.Errorf("tools allowlist contains forbidden Phase 1 write-tool %q (ADR-027 Phase 1 is read-only; tools today: %v)", tool, action.Tools)
+		}
+	}
+}
