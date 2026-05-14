@@ -1137,7 +1137,16 @@ tasks:
       SEMTEAMS_HARNESS_CATALOG_PATH: "{{.SEMTEAMS_HARNESS_CATALOG_PATH}}"
     cmds:
       - echo "Stack config → AGENTIC_CONFIG={{.AGENTIC_CONFIG}} FIXTURE={{.FIXTURE}} PROFILES={{.COMPOSE_PROFILES}}"
-      - docker compose -f docker-compose.agentic-e2e.yml build --no-cache backend
+      # Smoke #25 finding (2026-05-14): rebuilding only `backend` with
+      # --no-cache leaves the sandbox image carrying cached layers from
+      # a prior build — Docker's cache-by-content-hash should pick up
+      # source mutations, but in practice we hit stale binaries on
+      # adjacent slices (Fix A's sandbox/server.go change didn't deploy
+      # despite the source modification, because the cache key on the
+      # Go build layer didn't invalidate as expected). Both images
+      # carry our product code; both need the no-cache treatment to
+      # guarantee a smoke runs the committed source.
+      - docker compose -f docker-compose.agentic-e2e.yml build --no-cache backend sandbox
       - docker compose -f docker-compose.agentic-e2e.yml up -d
       - |
         PORT="{{.E2E_AGENTIC_UI_PORT}}"
