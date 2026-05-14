@@ -325,6 +325,13 @@ responses:
         }
 
   - tool_call:
+      name: bash
+      arguments_json: |
+        {
+          "command": "cat /artifacts/specs/2026-05-13-osh-meshtastic-driver.md"
+        }
+
+  - tool_call:
       name: decide
       arguments_json: |
         {
@@ -378,6 +385,13 @@ responses:
       arguments_json: |
         {
           "loop_id": "builder-loop-F"
+        }
+
+  - tool_call:
+      name: bash
+      arguments_json: |
+        {
+          "command": "ls -la SPEC.md"
         }
 
   - tool_call:
@@ -578,6 +592,13 @@ responses:
         }
 
   - tool_call:
+      name: bash
+      arguments_json: |
+        {
+          "command": "cat /artifacts/specs/2026-05-13-osh-meshtastic-driver-recovery-v2.md"
+        }
+
+  - tool_call:
       name: decide
       arguments_json: |
         {
@@ -627,6 +648,13 @@ responses:
       arguments_json: |
         {
           "loop_id": "recovery-builder-loop-M"
+        }
+
+  - tool_call:
+      name: bash
+      arguments_json: |
+        {
+          "command": "ls -la SPEC.md src/test"
         }
 
   - tool_call:

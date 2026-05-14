@@ -64,12 +64,24 @@ type SandboxClient interface {
 	WriteFile(ctx context.Context, taskID, path, content string) error
 }
 
+// ChainResolver narrows chain.Resolver to the single method this
+// executor uses. ADR-041 Phase 4: the bootstrap targets chain_id (not
+// loop_id) so every role in the chain shares one worktree. Tests inject
+// fakes; production passes *chain.Resolver. nil resolver → no
+// resolution, falls back to loop_id (pre-MVP behaviour for backward
+// compatibility paths that haven't adopted chain-scoping yet).
+type ChainResolver interface {
+	ChainID(ctx context.Context, loopID string) (string, error)
+}
+
 // Executor implements agentic.ToolExecutor for bootstrap_workspace.
-// Stateless except for the injected sandbox client and (optional)
-// allowed-spec-dir override. The injected dir lets tests point at a
-// tmp directory without environment-variable side effects.
+// Stateless except for the injected sandbox client, optional chain
+// resolver, and (optional) allowed-spec-dir override. The injected dir
+// lets tests point at a tmp directory without environment-variable side
+// effects.
 type Executor struct {
 	sandbox    SandboxClient
+	resolver   ChainResolver // optional; nil → fall back to loop_id (pre-MVP)
 	logger     *slog.Logger
 	specDir    string // resolved at construction; tests inject directly, prod resolves from env
 	specDirAbs string // filepath.Abs(specDir) for traversal check
@@ -99,6 +111,19 @@ func NewExecutor(sb SandboxClient, logger *slog.Logger, specDir string) (*Execut
 		specDir:    specDir,
 		specDirAbs: abs,
 	}, nil
+}
+
+// SetChainResolver opts the executor into ADR-041 Phase 4 chain-scoped
+// worktrees. When set, Execute resolves call.LoopID → chain_id and uses
+// chain_id as the sandbox task_id; idempotent re-creates from later
+// roles (architect, reviewers) reuse the same worktree.
+//
+// Optional / nil resolver → loop_id is used unchanged (pre-MVP behaviour
+// for back-compat). Resolver errors at call time fall back to loop_id;
+// the bootstrap still completes so a graph hiccup doesn't break the
+// builder's first iteration.
+func (e *Executor) SetChainResolver(r ChainResolver) {
+	e.resolver = r
 }
 
 // ListTools returns the LLM-facing schema. The single required arg
@@ -176,7 +201,7 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 		}, nil
 	}
 
-	taskID := call.LoopID
+	taskID := e.resolveTaskID(ctx, call.LoopID)
 
 	wtInfo, err := e.sandbox.CreateWorktree(ctx, taskID, sandbox.CreateWorktreeOptions{})
 	if err != nil {
@@ -237,6 +262,29 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 			"spec_workspace_path": SpecFilename,
 		},
 	}, nil
+}
+
+// resolveTaskID picks the sandbox task_id for this call. With a chain
+// resolver wired (production MVP), walks loop_id → chain_id so every
+// role in the chain — architect, builder, reviewer-{spec,qa,research} —
+// targets one worktree. A resolver error or empty/equal chain_id
+// returns loop_id unchanged (fail-soft + skip-redundant). Without a
+// resolver (back-compat path), returns loop_id directly.
+func (e *Executor) resolveTaskID(ctx context.Context, loopID string) string {
+	if e.resolver == nil {
+		return loopID
+	}
+	chainID, err := e.resolver.ChainID(ctx, loopID)
+	if err != nil {
+		e.logger.Warn("bootstrap_workspace: ChainID resolve failed; falling back to loop_id (chain isolation lost; subsequent roles will see an empty worktree)",
+			slog.String("loop_id", loopID),
+			slog.String("error", err.Error()))
+		return loopID
+	}
+	if chainID == "" {
+		return loopID
+	}
+	return chainID
 }
 
 // readSpec validates the LLM-supplied spec_path and reads the content.

@@ -218,6 +218,13 @@ func setupToolsAndPreprocessor(
 ) (*agentictools.ExecutorRegistry, *chainpause.HTTPHandler, error) {
 	// 9c. First-party tool executors. Pattern-B tools (create_rule, etc.)
 	// each need their matching manager; nil manager → registerX skips.
+	//
+	// SkipBuiltins[bash]: ADR-041 Phase 4. The product shell registers
+	// its own chain-scoped wrapper under the canonical "bash" name in
+	// registerProductTools (registerChainBash). The wrapper rewrites
+	// Metadata["task_id"] to chain_id so every role in a chain shares one
+	// sandbox worktree. SkipBuiltins=[bash] omits the framework bash so
+	// the slot is free for the wrapper.
 	toolRegistry := agentictools.NewExecutorRegistry()
 	if err := executors.RegisterBuiltins(ctx, toolRegistry, executors.ToolDependencies{
 		NATSClient:          natsClient,
@@ -229,14 +236,16 @@ func setupToolsAndPreprocessor(
 		FlowTemplateManager: buildFlowTemplateManager(natsClient, logger),
 		ComponentRegistry:   componentRegistry,
 		LoopsBucket:         extractLoopsBucket(cfg),
+		SkipBuiltins:        []string{"bash"},
 	}); err != nil {
 		return nil, nil, fmt.Errorf("register builtin tools: %w", err)
 	}
 
 	// 9d. Product-shell-local tool executors (add_source_repo,
 	// emit_research_artifact, emit_dev_via_spec_artifact, builder_decide,
-	// bootstrap_workspace). Each tool's registration comment lives in
-	// registerProductTools; see ADR-029 + tools/README.md for discipline.
+	// bootstrap_workspace, chain-scoped bash wrapper). Each tool's
+	// registration comment lives in registerProductTools; see ADR-029 +
+	// tools/README.md for discipline.
 	if err := registerProductTools(toolRegistry, natsClient, platform, testHarnessMgr, logger); err != nil {
 		return nil, nil, fmt.Errorf("register product tools: %w", err)
 	}

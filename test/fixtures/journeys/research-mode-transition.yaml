@@ -242,6 +242,13 @@ responses:
         }
 
   - tool_call:
+      name: bash
+      arguments_json: |
+        {
+          "command": "ls /artifacts/research/"
+        }
+
+  - tool_call:
       name: decide
       arguments_json: |
         {
@@ -340,6 +347,13 @@ responses:
       arguments_json: |
         {
           "loop_id": "synthesize-loop-G"
+        }
+
+  - tool_call:
+      name: bash
+      arguments_json: |
+        {
+          "command": "ls /artifacts/research/"
         }
 
   - tool_call:

@@ -80,7 +80,13 @@ description: |
 
     Loop E — reviewer-spec (rule_01b spawn)
      12. tool_call: read_loop_result on Loop D (placeholder; errors)
-     13. tool_call: decide(action="approved", reason=<all checks pass>)
+     13. tool_call: bash `cat /artifacts/specs/<slug>.md` — ADR-041 Phase 4
+         chain-scoped bash. Reviewer reads the architect's emitted
+         markdown directly from the shared /artifacts volume to grade
+         against checks[]+actors[]+integration_points[]. Placeholder
+         spec_path; the tool surfaces the mismatch — next canned turn
+         decides anyway. Same placeholder convention as read_loop_result.
+     14. tool_call: decide(action="approved", reason=<all checks pass>)
          → phasevalidator.SpecModeGate validates
            coordinator.evidence_loop_ids non-empty AND forwards
            dev_via_spec.artifact.{path,slug} triples from the
@@ -89,22 +95,28 @@ description: |
          → rule_02 fires → spawn builder.
 
     Loop F — builder (rule_02 spawn)
-     14. tool_call: bootstrap_workspace (the hardcoded spec_path will
+     15. tool_call: bootstrap_workspace (the hardcoded spec_path will
          not match the architect's dynamically-dated emit on most
          days; the tool surfaces "spec file not found" — same
          placeholder-doesn't-resolve convention as the read_loop_result
          calls earlier. The next canned turn handles it.)
-     15. tool_call: bash ls SPEC.md
-     16. tool_call: bash echo "mvn test passing"
-     17. tool_call: builder_decide(action="tests_passing", tests_run=3,
+     16. tool_call: bash ls SPEC.md
+     17. tool_call: bash echo "mvn test passing"
+     18. tool_call: builder_decide(action="tests_passing", tests_run=3,
          tests_passed=3, tests_failed=0)
          → phasevalidator.QAModeGate validates tests_run > 0 AND
            tests_failed = 0, then writes chain.qa_mode_gate.proceed
          → rule_04 fires → spawn reviewer-qa.
 
     Loop G — reviewer-qa (rule_04 spawn — terminal)
-     18. tool_call: read_loop_result on Loop F (placeholder; errors)
-     19. tool_call: decide(action="accept", reason=<build accepted>)
+     19. tool_call: read_loop_result on Loop F (placeholder; errors)
+     20. tool_call: bash `ls -la SPEC.md` — ADR-041 Phase 4 chain-scoped
+         bash. Reviewer-qa inspects the chain's shared workspace
+         (same task_id as builder, since chain_id == loop_id of the
+         dispatch loop and bash + bootstrap_workspace are both chain-
+         scoped). Builds intuition that the reviewer can see the
+         builder's tree, not just the structured terminal.
+     21. tool_call: decide(action="accept", reason=<build accepted>)
          → terminal. No rule fires on action=accept (rule 03 fires
            only on needs_clarification, which is exercised by the
            sibling dev-via-spec-qa journey).
@@ -299,6 +311,13 @@ responses:
         }
 
   - tool_call:
+      name: bash
+      arguments_json: |
+        {
+          "command": "cat /artifacts/specs/2026-05-13-osh-meshtastic-driver.md"
+        }
+
+  - tool_call:
       name: decide
       arguments_json: |
         {
@@ -348,6 +367,13 @@ responses:
       arguments_json: |
         {
           "loop_id": "builder-loop-F"
+        }
+
+  - tool_call:
+      name: bash
+      arguments_json: |
+        {
+          "command": "ls -la SPEC.md"
         }
 
   - tool_call:

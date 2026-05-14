@@ -649,3 +649,108 @@ func harnessMapKeys(m map[string]any) []string {
 	}
 	return keys
 }
+
+// ---------------------------------------------------------------------
+// ADR-041 Phase 4 — chain-scoped task_id resolution
+// ---------------------------------------------------------------------
+
+// fakeChainResolver lets tests drive the ChainID outcome without NATS.
+// Records every loop_id passed in so we can assert the executor actually
+// invoked it (a regression where SetChainResolver is wired but Execute
+// forgets to call it would otherwise silently pass).
+type fakeChainResolver struct {
+	chainID string
+	err     error
+	calls   []string
+}
+
+func (f *fakeChainResolver) ChainID(_ context.Context, loopID string) (string, error) {
+	f.calls = append(f.calls, loopID)
+	return f.chainID, f.err
+}
+
+// Chain-scoped happy path: resolver returns a different chain_id, the
+// worktree is created under chain_id (not loop_id), and the result
+// reports chain_id back to the LLM.
+func TestExecute_ChainScopedTaskID(t *testing.T) {
+	exec, fs, specPath := newExecutorWithSpec(t, "slug", "# spec body")
+	resolver := &fakeChainResolver{chainID: "chain-root-uuid"}
+	exec.SetChainResolver(resolver)
+
+	res, err := exec.Execute(context.Background(), defaultCall(map[string]any{"spec_path": specPath}))
+	if err != nil {
+		t.Fatalf("Execute err = %v, want nil", err)
+	}
+	if res.Error != "" {
+		t.Fatalf("tool error: %s", res.Error)
+	}
+	if len(resolver.calls) != 1 || resolver.calls[0] != "loop-builder-abc" {
+		t.Errorf("resolver.calls = %v, want [loop-builder-abc]", resolver.calls)
+	}
+	if fs.createTaskID != "chain-root-uuid" {
+		t.Errorf("CreateWorktree task_id = %q, want %q (chain-scoped)", fs.createTaskID, "chain-root-uuid")
+	}
+	if fs.writeTaskID != "chain-root-uuid" {
+		t.Errorf("WriteFile task_id = %q, want %q (chain-scoped)", fs.writeTaskID, "chain-root-uuid")
+	}
+	if !strings.Contains(res.Content, "chain-root-uuid") {
+		t.Errorf("Result.Content missing chain_id: %s", res.Content)
+	}
+}
+
+// Fail-soft: when the resolver errors, the executor must still bootstrap
+// using loop_id. A NATS flap or missing parent triple cannot wedge the
+// builder.
+func TestExecute_ChainResolverError_FallsBackToLoopID(t *testing.T) {
+	exec, fs, specPath := newExecutorWithSpec(t, "slug", "# spec body")
+	resolver := &fakeChainResolver{err: errSentinel("nats timeout")}
+	exec.SetChainResolver(resolver)
+
+	res, err := exec.Execute(context.Background(), defaultCall(map[string]any{"spec_path": specPath}))
+	if err != nil {
+		t.Fatalf("Execute err = %v, want nil", err)
+	}
+	if res.Error != "" {
+		t.Fatalf("tool error: %s", res.Error)
+	}
+	if fs.createTaskID != "loop-builder-abc" {
+		t.Errorf("CreateWorktree task_id = %q, want loop-builder-abc (fallback)", fs.createTaskID)
+	}
+}
+
+// Empty resolver result is treated as "no chain context" — fall back to
+// loop_id. The chain-root case (chain_id == loop_id) is exercised
+// indirectly by every other happy-path test (resolver returns the same
+// loop_id back).
+func TestExecute_ChainResolverEmpty_FallsBackToLoopID(t *testing.T) {
+	exec, fs, specPath := newExecutorWithSpec(t, "slug", "# spec body")
+	resolver := &fakeChainResolver{chainID: ""}
+	exec.SetChainResolver(resolver)
+
+	if _, err := exec.Execute(context.Background(), defaultCall(map[string]any{"spec_path": specPath})); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if fs.createTaskID != "loop-builder-abc" {
+		t.Errorf("CreateWorktree task_id = %q, want loop-builder-abc (empty chain fallback)", fs.createTaskID)
+	}
+}
+
+// Without SetChainResolver (zero-resolver back-compat path), bootstrap
+// uses loop_id unchanged — exactly the pre-MVP behaviour.
+func TestExecute_NoResolver_UsesLoopID(t *testing.T) {
+	exec, fs, specPath := newExecutorWithSpec(t, "slug", "# spec body")
+	// no SetChainResolver call
+
+	if _, err := exec.Execute(context.Background(), defaultCall(map[string]any{"spec_path": specPath})); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if fs.createTaskID != "loop-builder-abc" {
+		t.Errorf("CreateWorktree task_id = %q, want loop-builder-abc", fs.createTaskID)
+	}
+}
+
+// errSentinel keeps the test file free of additional imports (errors
+// package would shadow the existing testing-package convention here).
+type errSentinel string
+
+func (e errSentinel) Error() string { return string(e) }

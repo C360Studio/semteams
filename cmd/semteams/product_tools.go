@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/payloadregistry"
 	agentictools "github.com/c360studio/semstreams/processor/agentic-tools"
+	"github.com/c360studio/semstreams/processor/agentic-tools/executors"
 	"github.com/c360studio/semstreams/processor/agentic-tools/sandbox"
 	"github.com/c360studio/semstreams/types"
 
@@ -20,6 +22,7 @@ import (
 	"github.com/c360studio/semteams/cmd/semteams/tools/addsource"
 	"github.com/c360studio/semteams/cmd/semteams/tools/bootstrapworkspace"
 	"github.com/c360studio/semteams/cmd/semteams/tools/builderdecide"
+	"github.com/c360studio/semteams/cmd/semteams/tools/chainbash"
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitartifact"
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitplan"
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitspecartifact"
@@ -124,7 +127,10 @@ func registerProductTools(reg *agentictools.ExecutorRegistry, natsClient *natscl
 	if err := registerBuilderDecide(reg, natsClient, platform, logger); err != nil {
 		return err
 	}
-	return registerBootstrapWorkspace(reg, logger)
+	if err := registerBootstrapWorkspace(reg, natsClient, platform, logger); err != nil {
+		return err
+	}
+	return registerChainBash(reg, natsClient, platform, logger)
 }
 
 // registerAddSource wires the R2 add_source_repo executor. Stays inert
@@ -244,8 +250,12 @@ func buildChainLineageReader(natsClient *natsclient.Client, platform types.Platf
 // package (each package owns its narrow contract); these vars keep
 // the implementer in lock-step with both.
 var (
-	_ emitplan.ChainReader         = (*chain.LineageReader)(nil)
-	_ emitspecartifact.ChainReader = (*chain.LineageReader)(nil)
+	_ emitplan.ChainReader             = (*chain.LineageReader)(nil)
+	_ emitspecartifact.ChainReader     = (*chain.LineageReader)(nil)
+	_ chainbash.ChainResolver          = (*chain.Resolver)(nil)
+	_ chainbash.ChainResolver          = identityChainResolver{}
+	_ bootstrapworkspace.ChainResolver = (*chain.Resolver)(nil)
+	_ chainbash.Inner                  = (*executors.BashExecutor)(nil)
 )
 
 // registerEmitSpecArtifact wires the R3.3 emit_dev_via_spec_artifact executor.
@@ -334,6 +344,72 @@ func registerBuilderDecide(reg *agentictools.ExecutorRegistry, natsClient *natsc
 	return nil
 }
 
+// registerChainBash wires the ADR-041 Phase 4 chain-scoped bash wrapper
+// under the canonical "bash" name. The framework bash was omitted via
+// SkipBuiltins=[bash] in setupToolsAndPreprocessor, so the slot is free.
+//
+// Wrapper composition:
+//   - Inner: upstream's executors.BashExecutor (constructed from env
+//     so it picks up SANDBOX_URL identically to how the framework's
+//     RegisterBuiltins would have).
+//   - Resolver: chain.Resolver backed by NATSParentReader. Walks
+//     agent.loop.parent triples back to the chain root and returns
+//     loop_id == chain_id (ADR-038 D1).
+//
+// At every Execute, the wrapper resolves call.LoopID → chain_id and
+// rewrites Metadata["task_id"] = chain_id before delegating. Upstream's
+// BashExecutor uses task_id over loop_id when picking the sandbox
+// worktree, so every role in the chain shares one worktree.
+//
+// Fail-soft: resolver errors (no parent yet, NATS timeout) skip the
+// rewrite — upstream falls back to loop_id. Matches the behavior the
+// framework had before this wrapper, so a graph regression cannot make
+// non-chain bash unusable.
+//
+// Always registered: even when natsClient is nil (resolver still works
+// against the chain root case where loop_id == chain_id), the wrapper
+// stays in place under the canonical name so the LLM's tool catalog is
+// consistent across deployments.
+func registerChainBash(reg *agentictools.ExecutorRegistry, natsClient *natsclient.Client, platform types.PlatformMeta, logger *slog.Logger) error {
+	inner := executors.NewBashExecutorFromEnv()
+
+	var resolver chainbash.ChainResolver
+	if natsClient != nil {
+		parentReader := chain.NewNATSParentReader(natsClient, platform, chain.DefaultGraphQueryEntitySubject)
+		resolver = chain.NewResolver(parentReader, platform)
+	} else {
+		// No NATS → no ancestry walk possible. Use an identity resolver
+		// so the wrapper still delegates correctly; every call looks like
+		// a chain root (loop_id == chain_id) and upstream's loop_id
+		// fallback is what determines the sandbox bucket.
+		resolver = identityChainResolver{}
+		logger.Warn("Registered chain-scoped bash with identity resolver (nats client unavailable)",
+			slog.String("name", chainbash.ToolName))
+	}
+
+	wrapper := chainbash.NewExecutor(inner, resolver, logger)
+	if err := reg.RegisterTool(chainbash.ToolName, wrapper); err != nil {
+		return fmt.Errorf("register %s: %w", chainbash.ToolName, err)
+	}
+	mode := "local"
+	if strings.TrimSpace(os.Getenv(envSandboxURL)) != "" {
+		mode = "sandbox"
+	}
+	logger.Info("Registered product tool (chain-scoped bash wrapper)",
+		slog.String("name", chainbash.ToolName),
+		slog.String("mode", mode))
+	return nil
+}
+
+// identityChainResolver is the no-NATS fallback. ChainID returns the
+// input loop_id unchanged — the wrapper interprets that as "loop is the
+// chain root" and skips the metadata rewrite.
+type identityChainResolver struct{}
+
+func (identityChainResolver) ChainID(_ context.Context, loopID string) (string, error) {
+	return loopID, nil
+}
+
 // registerBootstrapWorkspace wires the R3.6.2.d bootstrap_workspace
 // executor — the builder role's iteration-1 setup hook.
 // Skipped when SANDBOX_URL is unset: the builder loop is
@@ -342,7 +418,12 @@ func registerBuilderDecide(reg *agentictools.ExecutorRegistry, natsClient *natsc
 // disables the entire builder slice consistently. See ADR-032 §addendum
 // 2026-05-03 R3.6.2.d for why this lives in product code (chicken-and-
 // egg between rule action timing and publish_agent's task_id generation).
-func registerBootstrapWorkspace(reg *agentictools.ExecutorRegistry, logger *slog.Logger) error {
+//
+// ADR-041 Phase 4: a chain resolver is wired via SetChainResolver when
+// natsClient is non-nil. The bootstrap then keys the sandbox worktree
+// on chain_id, matching the chain-scoped bash wrapper so every role in
+// the chain shares one worktree.
+func registerBootstrapWorkspace(reg *agentictools.ExecutorRegistry, natsClient *natsclient.Client, platform types.PlatformMeta, logger *slog.Logger) error {
 	sandboxURL := strings.TrimSpace(os.Getenv(envSandboxURL))
 	if sandboxURL == "" {
 		logger.Info("Product tool not registered (SANDBOX_URL unset)",
@@ -355,12 +436,23 @@ func registerBootstrapWorkspace(reg *agentictools.ExecutorRegistry, logger *slog
 	if err != nil {
 		return fmt.Errorf("construct %s executor: %w", bootstrapworkspace.ToolName, err)
 	}
+	if natsClient != nil {
+		parentReader := chain.NewNATSParentReader(natsClient, platform, chain.DefaultGraphQueryEntitySubject)
+		executor.SetChainResolver(chain.NewResolver(parentReader, platform))
+	}
 	if err := reg.RegisterTool(bootstrapworkspace.ToolName, executor); err != nil {
 		return fmt.Errorf("register %s: %w", bootstrapworkspace.ToolName, err)
 	}
-	logger.Info("Registered product tool",
-		slog.String("name", bootstrapworkspace.ToolName),
-		slog.String("sandbox_url", sandboxURL))
+	if natsClient == nil {
+		logger.Warn("Registered bootstrap_workspace WITHOUT chain scoping (nats client unavailable); every role will see an empty worktree",
+			slog.String("name", bootstrapworkspace.ToolName),
+			slog.String("sandbox_url", sandboxURL))
+	} else {
+		logger.Info("Registered product tool",
+			slog.String("name", bootstrapworkspace.ToolName),
+			slog.String("sandbox_url", sandboxURL),
+			slog.Bool("chain_scoped", true))
+	}
 	return nil
 }
 
