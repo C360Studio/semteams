@@ -928,7 +928,10 @@ func TestADR041_ArchitectSpawnRuleSubstitutesResearchArtifactPath(t *testing.T) 
 // retrospective terminal observer.
 type opsInFlightRule struct {
 	FireEveryNEvents int `json:"fire_every_n_events"`
-	Conditions       []struct {
+	Entity           struct {
+		Pattern string `json:"pattern"`
+	} `json:"entity"`
+	Conditions []struct {
 		Field    string `json:"field"`
 		Operator string `json:"operator"`
 		Value    any    `json:"value"`
@@ -980,6 +983,21 @@ func TestADR041_OpsInFlightObservationRule(t *testing.T) {
 	// Without this the rule degenerates into chain-terminal-observe.json.
 	if r.FireEveryNEvents <= 0 {
 		t.Errorf("rule fire_every_n_events = %d, want > 0", r.FireEveryNEvents)
+	}
+
+	// (1b) entity.pattern must scope the rule to agent.complete.> events.
+	// Smoke #26 (2026-05-14) finding: without entity.pattern the rule
+	// subscribes to ">" (all subjects), and the entity-state-watch path
+	// evaluates the rule on every triple-write UPDATE during loop-
+	// completion finalization (~20 evaluations per loop instead of one).
+	// fire_every_n_events:5 then samples 1 in 5 evaluations, not 1 in 5
+	// loop completions — yielding 40-50 fires per chain instead of the
+	// intended 1-2. agent.complete.> is the right scope: one event per
+	// loop completion. The persona prose ("every N loop completions")
+	// only matches the implementation when this pattern is set.
+	if r.Entity.Pattern != "agent.complete.>" {
+		t.Errorf("rule entity.pattern = %q, want %q. Without this scope the rule fires on every entity-state UPDATE (per triple write), not per loop completion — fire_every_n_events:5 then yields ~10× the intended fire rate.",
+			r.Entity.Pattern, "agent.complete.>")
 	}
 
 	// (2) Role exclusion: reviewer-qa (terminal — handled by sibling
