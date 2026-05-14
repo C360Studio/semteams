@@ -739,6 +739,34 @@ tasks:
               || echo "warn: failed to relocate ${SRC}" >&2
           fi
         done
+        # Full container logs + docker-state snapshot — must run BEFORE
+        # the loops-reachable gate below, because the most useful time to
+        # have these is exactly when the stack went sideways. Smoke #25c
+        # (2026-05-14) lost this evidence: loops endpoint returned empty
+        # mid-builder, we couldn't tell why because logs were gone with
+        # the post-cleanup container removal. Both backend and sandbox
+        # carry our product code; dump both.
+        for CONTAINER in semteams-ui-agentic-backend semteams-ui-agentic-sandbox; do
+          if docker ps -a --format '{{`{{.Names}}`}}' | grep -q "^${CONTAINER}$"; then
+            SHORT=$(echo "$CONTAINER" | sed 's/^semteams-ui-agentic-//')
+            docker logs "$CONTAINER" > "${OUT_DIR}/${SHORT}.log" 2>&1 \
+              || echo "warn: docker logs failed for ${CONTAINER}" >&2
+            # inspect JSON includes OOMKilled, ExitCode, RestartCount,
+            # State.Status (running/exited/dead) — answers the "did the
+            # container die" question without retained logs.
+            docker inspect "$CONTAINER" > "${OUT_DIR}/${SHORT}.inspect.json" 2>&1 \
+              || echo "warn: docker inspect failed for ${CONTAINER}" >&2
+          else
+            echo "(container ${CONTAINER} absent at capture time)" \
+              > "${OUT_DIR}/$(echo "$CONTAINER" | sed 's/^semteams-ui-agentic-//').log"
+          fi
+        done
+        # Compose-wide container state snapshot — shows which containers
+        # are alive vs exited at capture time. Quick triage signal before
+        # opening any individual inspect JSON.
+        docker compose -f docker-compose.agentic-e2e.yml --project-name semteams-agentic ps -a \
+          > "${OUT_DIR}/compose-ps.txt" 2>&1 \
+          || echo "warn: compose ps failed" >&2
         # Loops snapshot — input for the trajectory loop below.
         if ! curl -sf "http://localhost:${PORT}/teams-dispatch/loops" > "${OUT_DIR}/loops.json"; then
           echo "warn: stack already torn down or unreachable at port ${PORT}; live-state capture skipped" >&2
@@ -1171,9 +1199,27 @@ tasks:
         exit 1
 
   test:e2e:agentic:cleanup:
-    desc: Tear down the agentic E2E Docker stack
+    desc: Tear down the agentic E2E Docker stack (skipped when DEBUG=1 or KEEP_STACK_UP=1)
     cmds:
-      - npm run test:e2e:cleanup
+      - |
+        # DEBUG=1 / KEEP_STACK_UP=1: skip teardown so the operator can
+        # poke at the running stack post-mortem (docker exec into
+        # backend/sandbox, curl the dispatch endpoint, etc.). Smoke #25c
+        # taught us we lose all evidence with -v cleanup; this is the
+        # opt-in escape hatch. Run `task ui:test:e2e:agentic:cleanup`
+        # manually to tear down after inspection.
+        if [ "${DEBUG:-}" = "1" ] || [ "${KEEP_STACK_UP:-}" = "1" ]; then
+          echo "▶︎  Stack teardown SKIPPED (DEBUG=1 / KEEP_STACK_UP=1)."
+          echo "    Stack is still running. To inspect:"
+          echo "      docker ps --format 'table {{`{{.Names}}\t{{.Status}}`}}' | grep agentic"
+          echo "      docker logs semteams-ui-agentic-backend --tail 200"
+          echo "      docker exec -it semteams-ui-agentic-sandbox bash"
+          echo "      curl http://localhost:3100/teams-dispatch/loops | jq"
+          echo "    To tear down when done:"
+          echo "      task ui:test:e2e:agentic:cleanup  # (with DEBUG unset)"
+          exit 0
+        fi
+        npm run test:e2e:cleanup
 
   test:e2e:sandbox:dood:smoke:
     desc: Smoke #d′ — sandbox DooD trust-boundary verification (ADR-034 §addendum #2)
