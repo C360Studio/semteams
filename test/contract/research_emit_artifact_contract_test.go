@@ -17,6 +17,9 @@ import (
 type nopTriplePublisher struct{}
 
 func (nopTriplePublisher) AddTriple(context.Context, message.Triple) error { return nil }
+func (nopTriplePublisher) AddTriplesBatch(context.Context, []message.Triple) error {
+	return nil
+}
 
 // nopNATSPublisher is the minimum emitartifact.Publisher needed to
 // construct an Executor for schema inspection. ListTools never invokes
