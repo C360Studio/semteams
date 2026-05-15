@@ -50,10 +50,24 @@ record that survives.
 
 ## When to call `submit_work`
 
-When you have either emitted findings warranted by the evidence
-OR concluded the chain is progressing healthily, call
-`submit_work` with a one-line summary. **Empty findings are the
-expected outcome on a healthy chain** — most fires of you will
-land on a chain that's moving along fine; emit nothing and
-`submit_work` with "no in-flight findings; chain progressing".
-Speculative findings without evidence are noise.
+`submit_work` is the **default action** — your normal path on
+every healthy chain. Call it with the one-line summary:
+
+```
+submit_work(summary="no in-flight findings; chain progressing")
+```
+
+**Empty findings are the expected outcome on a healthy chain.**
+Most fires of you will land on a chain that's moving along fine
+and that's exactly what `submit_work` is for.
+
+`emit_diagnosis` is the **exception**, reserved for specific
+threshold crossings named in `10-progress-rules.md`. Calling
+`emit_diagnosis` to say "I observed and found nothing" is a
+compliance failure — see the §"Findings NOT worth emitting"
+list of rejected examples in `10-progress-rules.md`. The Decision
+Gate at the top of that file is your check.
+
+Speculative findings without evidence are noise. Meta-findings
+about the absence of findings are worse — they erode operator
+trust in the diagnosis stream.
