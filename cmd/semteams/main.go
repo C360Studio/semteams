@@ -33,6 +33,7 @@ import (
 	"github.com/c360studio/semstreams/service"
 	"github.com/c360studio/semstreams/types"
 	"github.com/c360studio/semteams/cmd/semteams/chain"
+	"github.com/c360studio/semteams/cmd/semteams/chainmode"
 	"github.com/c360studio/semteams/cmd/semteams/chainpause"
 	"github.com/c360studio/semteams/cmd/semteams/evidence"
 	"github.com/c360studio/semteams/cmd/semteams/phasevalidator"
@@ -338,8 +339,19 @@ func startChainMilestoneSubscribers(ctx context.Context, cfg *config.Config, nat
 	specModeGate := phasevalidator.NewSpecModeGate(triplePublisher, resolver, entityReader, platform, logger)
 	qaModeGate := phasevalidator.NewQAModeGate(triplePublisher, resolver, entityReader, platform, logger)
 
+	// Coordinator-redesign Slice 1b: chain.mode stamper. Fires on
+	// coordinator-loop terminals carrying delegate_research /
+	// delegate_dev_chain and stamps chain.mode on the canonical
+	// 6-part chain entity. phasevalidator's synthesize→architect
+	// gate reads chain.mode from chainTriples in the same dispatch
+	// cycle (the coordinator's loop completes BEFORE any researcher
+	// loop in the chain, so chain.mode is on disk when synthesize
+	// later completes).
+	modeStamper := chainmode.NewStamper(triplePublisher, resolver, entityReader, platform, logger)
+
 	subscriber := chain.NewCompletionSubscriber([]chain.CompletionHandler{
 		dispatched,
+		modeStamper,
 		research,
 		needsReview,
 		recoveryCap,

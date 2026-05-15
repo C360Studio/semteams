@@ -284,6 +284,39 @@ const (
 	// tests_run=0) or "tests_failed_nonzero" (action=tests_passing
 	// with tests_failed>0). Ops-agent groups stalls by this token.
 	PredicateQAModeGateRejectReason = "chain.qa_mode_gate.reject_reason"
+
+	// PredicateChainMode is the closed-token classification a chain
+	// carries from coordinator-dispatch onwards. Stamped by
+	// cmd/semteams/chainmode.Stamper on the canonical 6-part chain
+	// entity at coordinator-terminal time. Read by the phase validator
+	// (cmd/semteams/phasevalidator) to gate the synthesize→architect
+	// transition: chain.mode.classification == "research_only" refuses
+	// the proceed sentinel; chain.mode.classification == "dev_via_spec"
+	// allows it.
+	//
+	// Object values:
+	//   - "research_only" — set on coordinator
+	//     decide(action=delegate_research). Synthesize must terminate
+	//     at reviewer-research; no architect / spec / builder phases.
+	//   - "dev_via_spec"  — set on coordinator
+	//     decide(action=delegate_dev_chain). Full plan → gather →
+	//     synthesize → architect → reviewer-spec → builder →
+	//     reviewer-qa arc.
+	//
+	// Slice 1b of the coordinator redesign — the structural authority
+	// the validator gates against. Persona-only fork at synthesize
+	// proved unreliable under real LLM (Slice 1 smoke evidence: 2 of 3
+	// synthesize loops chose decide(action=architect) regardless of
+	// the spawn prompt's framing).
+	//
+	// 3-part canonical shape `chain.mode.classification` parallels
+	// `chain.needs_review.classification` (ADR-039 Phase 1 Tier 3) and
+	// satisfies the vocabulary system's domain.category.property
+	// convention. A 2-part `chain.mode` would parseDomainCategory()
+	// with empty category (see this file's package docstring and the
+	// 2026-05-11 vocab-completion pass that renamed every 2-part
+	// chain.* predicate).
+	PredicateChainMode = "chain.mode.classification"
 )
 
 // init registers the chain vocabulary with the upstream vocabulary
@@ -443,6 +476,15 @@ func registerADR041Predicates() {
 	)
 	vocabulary.Register(PredicateQAModeGateRejectReason,
 		vocabulary.WithDescription("ADR-041 §Risks mitigation: classification token for qa-mode-gate rejections ('zero_tests_run' | 'tests_failed_nonzero')."),
+		vocabulary.WithDataType("string"),
+	)
+
+	// chain.mode — coordinator-redesign Slice 1b. Closed-token
+	// classification stamped by cmd/semteams/chainmode.Stamper at
+	// coordinator-terminal time; read by phase validator to gate
+	// synthesize→architect.
+	vocabulary.Register(PredicateChainMode,
+		vocabulary.WithDescription("Coordinator-redesign Slice 1b: closed-token chain classification (chain.mode.classification) stamped on the canonical 6-part chain entity at coordinator-terminal time. Object values: 'research_only' (coordinator decide(action=delegate_research) — synthesize must terminate at reviewer-research) | 'dev_via_spec' (coordinator decide(action=delegate_dev_chain) — synthesize→architect allowed, full dev arc continues)."),
 		vocabulary.WithDataType("string"),
 	)
 
