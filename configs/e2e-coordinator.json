@@ -46,7 +46,14 @@
     "capabilities": {
       "general": { "preferred": ["general"] },
       "fast": { "preferred": ["fast"] },
-      "summarization": { "preferred": ["fast"] }
+      "summarization": { "preferred": ["fast"] },
+      "coordinator": { "preferred": ["general"] },
+      "research": { "preferred": ["general"] },
+      "reviewing": { "preferred": ["general"] },
+      "planning": { "preferred": ["general"] },
+      "architecture": { "preferred": ["general"] },
+      "qa": { "preferred": ["general"] },
+      "coding": { "preferred": ["general"] }
     }
   },
   "services": {
