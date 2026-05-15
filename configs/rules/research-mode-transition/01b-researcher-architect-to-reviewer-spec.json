@@ -25,7 +25,7 @@
       "subject": "agent.task.reviewer-spec",
       "role": "reviewer-spec",
       "model": "reviewing",
-      "tools": ["read_loop_result", "query_entity", "bash", "decide"],
+      "tools": ["read_loop_result", "bash", "decide"],
       "action_allowlist": ["approved", "insufficient", "needs_clarification"],
       "related_loops": {
         "researcher": "$entity.instance"

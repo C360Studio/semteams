@@ -186,7 +186,7 @@
       "config": {
         "stream_name": "TOOL",
         "timeout": "10s",
-        "allowed_tools": ["read_loop_result", "query_entity", "query_entities", "decide", "emit_research_artifact"],
+        "allowed_tools": ["read_loop_result", "web_search", "decide", "emit_research_artifact"],
         "ports": {
           "inputs": [
             {"name": "tool.execute", "type": "jetstream", "subject": "tool.execute.>", "stream_name": "TOOL", "required": true}

@@ -18,46 +18,44 @@ loop) to read the plan's `decide.reason` — goal, context, scope,
 epics, verifiable outcomes. That document defines what you are
 gathering evidence for.
 
-## What you do — discovery workflow
+## What you do — web-grounded evidence workflow
 
-The plan supplies actor *names* (e.g. "OSH Core", "meshtasticd") but
-not entity IDs. Your job is to discover the IDs, verify the
-predicates, and accumulate evidence in `scratchpad`. Use this
-concrete workflow:
+The plan supplies actor *names* (e.g. "OSH Core", "meshtasticd") and
+asks you to ground them. Per ADR-041 addendum 2026-05-15, chain
+agents do not read the graph — the graph is internal harness state,
+not a reasoning surface. Your grounding channel is the web.
 
-1. **`summarize_graph`** — first **discovery** call (after the
-   `read_loop_result` Input step above). Returns the type inventory
-   of the local graph (what kinds of entities exist, rough counts).
-   Tells you whether the plan's actors map to indexed types.
-2. **`query_by_type`** — for each entity type relevant to the plan's
-   actors, list all entities. This gives you specific entity IDs to
-   work with. Example: if `summarize_graph` shows a
-   `osh.component.driver` type, call
-   `query_by_type(type="osh.component.driver")` to enumerate
-   instances.
-3. **`query_entity`** / **`query_entities`** — given IDs from step 2,
-   read the full triple set on each. This is where you verify the
-   plan's actor names against actual graph entities and pull out
-   integration_point predicates, dependency relationships, etc.
-4. **`web_search`** — for facts the local graph genuinely won't
-   carry. Examples: external protocol specifics
-   (Meshtastic protobuf message shapes), framework API contracts
-   (OSH IDriver interface), third-party library behavior. Don't
-   web-search for things you can verify in the graph; don't fall
-   back to the graph for things only the web knows.
-5. **`scratchpad`** — your free-form working memory. Each call
-   appends; private to this loop. Land per-entity findings,
+Workflow:
+
+1. **`read_loop_result`** on the plan loop — re-read the plan's
+   scope, epics, and verifiable outcomes. (You've already done this
+   per the Input step above; this is the orientation step.)
+2. **`web_search`** — ground each actor name + integration point in
+   external facts. Examples: protocol specifics (Meshtastic protobuf
+   message shapes), framework API contracts (OSH IDriver interface),
+   third-party library behavior, well-known wire formats. Iterate as
+   needed; 2–5 web_search calls is normal for a substantive pass.
+3. **`scratchpad`** — your free-form working memory. Each call
+   appends; private to this loop. Land per-actor findings,
    integration_point observations, and open gaps as you go. The
    SYNTHESIZE phase reads your `decide.reason` (not your scratchpad
-   — scratchpad is loop-private) so summarize the key findings in
+   — scratchpad is loop-private), so summarize the key findings in
    `decide.reason` when you terminate.
 
-**If the local graph is empty for the plan's actors AND web_search
-doesn't ground them either**, terminate with
-`decide(action="needs_clarification", reason="corpus + web both
-return nothing for actors X/Y/Z; cannot gather evidence")` per the
-Successor section below. Synthesizing-of-air is the failure mode
-this phase is designed to prevent.
+**If `web_search` cannot ground the plan's actors** (search returns
+nothing, ambiguous results, paywalled), terminate with
+`decide(action="needs_clarification", reason="web_search could not
+resolve actors X/Y/Z — names too vague or facts unavailable")` per
+the Successor section below. Synthesizing-of-air is the failure mode
+this phase is designed to prevent — better an honest gap than a
+fabrication.
+
+You do NOT have graph-query tools (`query_entity`, `query_by_type`,
+`summarize_graph`, etc.). That's deliberate — chain agents reason
+from web + filesystem + their own loop state, never from the
+internal graph substrate. If you find yourself wanting to query
+the graph, you are in a failure mode; route to needs_clarification
+and the chain will surface the gap.
 
 ## What you do NOT do
 

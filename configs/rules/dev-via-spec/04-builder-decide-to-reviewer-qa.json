@@ -37,7 +37,7 @@
       "subject": "agent.task.reviewer-qa",
       "role": "reviewer-qa",
       "model": "reviewing",
-      "tools": ["read_loop_result", "query_entity", "bash", "decide"],
+      "tools": ["read_loop_result", "bash", "decide"],
       "action_allowlist": ["accept", "reject", "needs_clarification"],
       "properties": {
         "prior_loop_id": "$entity.instance"

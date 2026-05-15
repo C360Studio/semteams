@@ -13,19 +13,25 @@ read channels:
    to read the synthesize loop's `decide.reason` + trailing prose.
    This is your index into what the artifact claims to cover, not
    the artifact itself.
-2. **The structured artifact**: the researcher's emit tool minted
-   marker triples on its loop entity. Call `query_entity` on the
-   prior loop entity to read `research.artifact.path` (the rendered
-   markdown research artifact on disk) plus the count predicates
-   (`research.artifact.actors_count`,
-   `research.artifact.integration_points_count`,
-   `research.artifact.tasks_count`,
-   `research.artifact.addressed_gaps_count`,
-   `research.artifact.open_gaps_count`) for sanity-check. Then
-   `bash cat <path>` to read the markdown — that file carries
-   every structured field (actors, integration_points, tasks,
-   addressed_gaps, open_gaps, test_harness, substrate_mutations,
-   revision).
+2. **The structured artifact**: your spawn rule substitutes the
+   artifact path into your prompt as
+   `$entity.triple.research.artifact.path`. Call
+   `bash cat $entity.triple.research.artifact.path` to read the
+   rendered markdown — that file carries every structured field
+   (actors, integration_points, tasks, addressed_gaps, open_gaps,
+   test_harness, substrate_mutations, revision).
+
+   Per ADR-041 addendum 2026-05-15, chain agents do not query the
+   graph; you do not have `query_entity` or other graph-read
+   tools. The substitution flows through the rule layer at fire
+   time, so the literal `$entity.triple.research.artifact.path`
+   in the bash command resolves to the real on-disk path before
+   it reaches you. If the substitution fails (the literal token
+   appears in the bash error output), the upstream
+   `emit_research_artifact` render did not stamp the path triple
+   — terminate `decide(action="insufficient", reason="research
+   artifact path triple absent on synthesize loop — upstream
+   render likely failed")`.
 
 The markdown is the substance you grade against. Narrative is the
 index; markdown is the truth.

@@ -13,15 +13,23 @@ arrives via two read channels:
    to read the architect's `decide.reason` + trailing prose. This
    is your index into what the artifact claims to cover, not the
    artifact itself.
-2. **The structured artifact**: the architect's emit tool minted
-   marker triples on its loop entity. Call `query_entity` on the
-   prior loop entity to read `dev_via_spec.artifact.path` (the
-   rendered markdown spec on disk) plus the counts
-   (`actor_count`, `integration_point_count`, `task_count`,
-   `check_count`) for sanity-check. Then `bash cat <path>` to
-   read the markdown — that file carries every structured field
-   (actors, integration_points, tasks with grounds, checks with
-   target/runtime/test_harness/test_runtime/ref/evidence).
+2. **The structured artifact**: your spawn rule substitutes the
+   artifact path into your prompt as
+   `$entity.triple.dev_via_spec.artifact.path`. Call
+   `bash cat $entity.triple.dev_via_spec.artifact.path` to read
+   the rendered markdown — that file carries every structured
+   field (actors, integration_points, tasks with grounds, checks
+   with target/runtime/test_harness/test_runtime/ref/evidence).
+
+   Per ADR-041 addendum 2026-05-15, chain agents do not query the
+   graph; you do not have `query_entity` or other graph-read
+   tools. The substitution flows through the rule layer at fire
+   time. If the substitution fails (the literal token appears in
+   the bash error output), the upstream `emit_dev_via_spec_artifact`
+   render did not stamp the path triple — terminate
+   `decide(action="insufficient", reason="dev_via_spec artifact
+   path triple absent on architect loop — upstream render likely
+   failed")`.
 
 The markdown is the substance you grade against. Narrative is
 the index; markdown is the truth.

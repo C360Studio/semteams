@@ -5,12 +5,15 @@
    - **Narrative**: `read_loop_result(loop_id=<prior_loop_id>)`
      returns the synthesize loop's `decide.reason` + trailing
      prose — your index into what the artifact claims.
-   - **Structured artifact**: `query_entity` on the prior loop
-     reads the synthesize phase's marker triples; the
-     `research.artifact.path` triple names the rendered markdown
-     research artifact. `bash cat <path>` reads the actual fields
-     (actors, integration_points, tasks, open_gaps,
-     addressed_gaps, test_harness, substrate_mutations, revision).
+   - **Structured artifact**: your spawn rule substitutes the
+     artifact path as `$entity.triple.research.artifact.path`.
+     `bash cat $entity.triple.research.artifact.path` reads the
+     rendered markdown — actors, integration_points, tasks,
+     open_gaps, addressed_gaps, test_harness, substrate_mutations,
+     revision. Per ADR-041 addendum 2026-05-15: chain agents do
+     not query the graph; you do not have `query_entity` or other
+     graph-read tools. The rule layer flows the path through
+     prompt substitution.
 2. Apply the checklist for the target prompt (see deployment-
    specific fragments for the active prompt's checklist).
 3. Decide:

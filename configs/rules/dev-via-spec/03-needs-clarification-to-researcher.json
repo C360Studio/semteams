@@ -35,7 +35,7 @@
       "subject": "agent.task.researcher-plan",
       "role": "researcher-plan",
       "model": "research",
-      "tools": ["read_loop_result", "query_entity", "emit_plan", "scratchpad", "decide"],
+      "tools": ["read_loop_result", "emit_plan", "scratchpad", "decide"],
       "action_allowlist": ["gather", "emit", "needs_clarification"],
       "properties": {
         "prior_loop_id": "$entity.instance",
