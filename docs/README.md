@@ -9,7 +9,10 @@ tools, journeys) is documented here.
 
 ## If you are…
 
-- **new to SemTeams** → [`getting-started.md`](getting-started.md)
+- **new to SemTeams (what does it DO?)** →
+  [`mvp-chain.md`](mvp-chain.md) — the MVP chain in plain English
+- **new to SemTeams (how do I run it?)** →
+  [`getting-started.md`](getting-started.md)
 - **extending the product shell** →
   [`adr/029-product-shell-wiring.md`](adr/029-product-shell-wiring.md)
   + [`../cmd/semteams/tools/README.md`](../cmd/semteams/tools/README.md)
@@ -30,6 +33,7 @@ that don't exist upstream.
 
 | Path | Purpose |
 |---|---|
+| [`mvp-chain.md`](mvp-chain.md) | What semteams DOES — the 7-role MVP chain in plain English |
 | [`getting-started.md`](getting-started.md) | New-dev quickstart + debugging recipes |
 | [`adr/`](adr/) | Architectural Decision Records — every load-bearing product-shell decision |
 | [`proposals/`](proposals/) | Larger design docs that precede / accompany an ADR (agentic-superpowers, ui-redesign, research-flow-open-questions) |
