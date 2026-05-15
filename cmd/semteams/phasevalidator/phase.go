@@ -14,6 +14,7 @@ import (
 	agvocab "github.com/c360studio/semstreams/vocabulary/agentic"
 
 	"github.com/c360studio/semteams/cmd/semteams/chain"
+	"github.com/c360studio/semteams/cmd/semteams/chainmode"
 )
 
 const (
@@ -37,10 +38,12 @@ const (
 	// sentinel is written, but the target stamp lands for audit.
 	actionEmit = "emit"
 
-	// rejectReasonInvalidEdge / rejectReasonPhaseCap are the closed
-	// classification tokens stamped on chain.phase_transition.reject_reason.
-	rejectReasonInvalidEdge = "invalid_edge"
-	rejectReasonPhaseCap    = "phase_cap"
+	// rejectReasonInvalidEdge / rejectReasonPhaseCap /
+	// rejectReasonModeMismatch are the closed classification tokens
+	// stamped on chain.phase_transition.reject_reason.
+	rejectReasonInvalidEdge  = "invalid_edge"
+	rejectReasonPhaseCap     = "phase_cap"
+	rejectReasonModeMismatch = "mode_mismatch"
 
 	// triplesSourcePhase tags every triple this handler writes.
 	triplesSourcePhase = "chain.phase_transition"
@@ -170,35 +173,8 @@ func (v *PhaseValidator) HandleLoopCompleted(ctx context.Context, ev *agentic.Lo
 		return fmt.Errorf("phasevalidator.PhaseValidator: empty LoopID on agent.complete event")
 	}
 
-	loopEntityID := agentic.LoopExecutionEntityID(v.platform.Org, v.platform.Platform, ev.LoopID)
-	loopTriples, err := v.entities.ReadEntity(ctx, loopEntityID)
-	if err != nil {
-		v.logger.Warn("phase validator: read loop entity failed; skipping",
-			slog.String("loop_id", ev.LoopID),
-			slog.String("error", err.Error()))
-		return nil
-	}
-	action, _ := loopTriples[agvocab.CoordinatorNextAction].(string)
-	if action == "" {
-		// No decide terminal triple → not a structural transition signal.
-		// Either the loop didn't call decide (framework / persona drift)
-		// or the upstream triple flush is mid-flight. Skip — fail-safe.
-		return nil
-	}
-
-	chainEntityID, err := v.resolver.ChainEntityID(ctx, ev.LoopID)
-	if err != nil {
-		v.logger.Warn("phase validator: chain ancestry walk failed; skipping",
-			slog.String("loop_id", ev.LoopID),
-			slog.String("error", err.Error()))
-		return nil
-	}
-	chainTriples, err := v.entities.ReadEntity(ctx, chainEntityID)
-	if err != nil {
-		v.logger.Warn("phase validator: read chain entity failed; skipping",
-			slog.String("loop_id", ev.LoopID),
-			slog.String("chain_entity", chainEntityID),
-			slog.String("error", err.Error()))
+	tctx, ok := v.loadTransitionContext(ctx, ev)
+	if !ok {
 		return nil
 	}
 
@@ -210,20 +186,28 @@ func (v *PhaseValidator) HandleLoopCompleted(ctx context.Context, ev *agentic.Lo
 	// failures inside the write loop don't roll back the assessment;
 	// the per-write log surfaces partial-cluster cases.
 	writes := []message.Triple{
-		stamp(chainEntityID, chain.PredicatePhaseTransitionTarget, action),
+		stamp(tctx.chainEntityID, chain.PredicatePhaseTransitionTarget, tctx.action),
 	}
 
-	if !AllowedEdge(inputPhase, action) {
+	if !AllowedEdge(inputPhase, tctx.action) {
 		writes = append(writes,
-			stamp(chainEntityID, chain.PredicatePhaseTransitionRejected, "true"),
-			stamp(chainEntityID, chain.PredicatePhaseTransitionRejectReason, rejectReasonInvalidEdge),
+			stamp(tctx.chainEntityID, chain.PredicatePhaseTransitionRejected, "true"),
+			stamp(tctx.chainEntityID, chain.PredicatePhaseTransitionRejectReason, rejectReasonInvalidEdge),
 		)
 		v.publishAll(ctx, writes)
 		v.logger.Info("phase validator: rejected (invalid edge)",
 			slog.String("loop_id", ev.LoopID),
-			slog.String("chain_entity", chainEntityID),
+			slog.String("chain_entity", tctx.chainEntityID),
 			slog.String("input_phase", inputPhase),
-			slog.String("target", action))
+			slog.String("target", tctx.action))
+		return nil
+	}
+
+	// chain.mode gate (coordinator-redesign Slice 1b). Refuses the
+	// architect proceed sentinel for research_only chains; passes
+	// every other (input, target) pair through. See modeGateRejects
+	// for the full rationale.
+	if v.modeGateRejects(ctx, ev, inputPhase, tctx, stamp, writes) {
 		return nil
 	}
 
@@ -232,7 +216,7 @@ func (v *PhaseValidator) HandleLoopCompleted(ctx context.Context, ev *agentic.Lo
 	// researcher→reviewer; the reviewer's own gate (chain.recovery.*)
 	// bounds retries downstream. Stamping target=emit is sufficient
 	// audit.
-	if action == actionEmit {
+	if tctx.action == actionEmit {
 		v.publishAll(ctx, writes)
 		v.logger.Info("phase validator: emit approved (terminal)",
 			slog.String("loop_id", ev.LoopID),
@@ -245,20 +229,20 @@ func (v *PhaseValidator) HandleLoopCompleted(ctx context.Context, ev *agentic.Lo
 	// fire would land (semantically: spawning the target with this
 	// transition increments the target's counter, so the cap test asks
 	// "would the new count exceed the cap?").
-	priorCount := readCount(chainTriples[phaseCountPredicate[action]])
+	priorCount := readCount(tctx.chainTriples[phaseCountPredicate[tctx.action]])
 	newCount := priorCount + 1
-	capacity := PhaseCap(action)
+	capacity := PhaseCap(tctx.action)
 	if capacity > 0 && newCount > capacity {
 		writes = append(writes,
-			stamp(chainEntityID, chain.PredicatePhaseTransitionRejected, "true"),
-			stamp(chainEntityID, chain.PredicatePhaseTransitionRejectReason, rejectReasonPhaseCap),
+			stamp(tctx.chainEntityID, chain.PredicatePhaseTransitionRejected, "true"),
+			stamp(tctx.chainEntityID, chain.PredicatePhaseTransitionRejectReason, rejectReasonPhaseCap),
 		)
 		v.publishAll(ctx, writes)
 		v.logger.Info("phase validator: rejected (phase cap)",
 			slog.String("loop_id", ev.LoopID),
-			slog.String("chain_entity", chainEntityID),
+			slog.String("chain_entity", tctx.chainEntityID),
 			slog.String("input_phase", inputPhase),
-			slog.String("target", action),
+			slog.String("target", tctx.action),
 			slog.Int("prior_count", priorCount),
 			slog.Int("cap", capacity))
 		return nil
@@ -270,18 +254,154 @@ func (v *PhaseValidator) HandleLoopCompleted(ctx context.Context, ev *agentic.Lo
 	// see the bump even when the proceed write fails (fail-soft on
 	// loop-entity write blocks the rule fire and stalls fail-safe).
 	writes = append(writes,
-		stamp(chainEntityID, phaseCountPredicate[action], strconv.Itoa(newCount)),
-		stamp(loopEntityID, proceedPredicate[action], "true"),
+		stamp(tctx.chainEntityID, phaseCountPredicate[tctx.action], strconv.Itoa(newCount)),
+		stamp(tctx.loopEntityID, proceedPredicate[tctx.action], "true"),
 	)
 	v.publishAll(ctx, writes)
 	v.logger.Info("phase validator: approved",
 		slog.String("loop_id", ev.LoopID),
-		slog.String("chain_entity", chainEntityID),
+		slog.String("chain_entity", tctx.chainEntityID),
 		slog.String("input_phase", inputPhase),
-		slog.String("target", action),
+		slog.String("target", tctx.action),
 		slog.Int("new_count", newCount),
 		slog.Int("cap", capacity))
 	return nil
+}
+
+// transitionContext groups the entity-graph reads HandleLoopCompleted
+// needs before evaluating a researcher transition. A struct beats a
+// 6-value multi-return at the call site — operators tracing a stall
+// can see all the inputs in one log dump without unpacking returns.
+type transitionContext struct {
+	loopEntityID  string
+	action        string
+	chainEntityID string
+	loopTriples   map[string]any
+	chainTriples  map[string]any
+}
+
+// loadTransitionContext does the entity-graph reads HandleLoopCompleted
+// needs before evaluating the transition: loop entity id, the
+// coordinator.next_action terminal, the loop entity's full triple
+// map (so callers can read sibling predicates like
+// coordinator.decision_reason for log context), the canonical chain
+// entity id, and the chain entity's triple map. Returns ok=false
+// (with no triples published) for every fail-safe case: graph read
+// blip, missing action triple, resolver failure.
+func (v *PhaseValidator) loadTransitionContext(ctx context.Context, ev *agentic.LoopCompletedEvent) (transitionContext, bool) {
+	loopEntityID := agentic.LoopExecutionEntityID(v.platform.Org, v.platform.Platform, ev.LoopID)
+	loopTriples, err := v.entities.ReadEntity(ctx, loopEntityID)
+	if err != nil {
+		v.logger.Warn("phase validator: read loop entity failed; skipping",
+			slog.String("loop_id", ev.LoopID),
+			slog.String("error", err.Error()))
+		return transitionContext{}, false
+	}
+	action, _ := loopTriples[agvocab.CoordinatorNextAction].(string)
+	if action == "" {
+		// No decide terminal triple → not a structural transition signal.
+		// Either the loop didn't call decide (framework / persona drift)
+		// or the upstream triple flush is mid-flight. Skip — fail-safe.
+		return transitionContext{}, false
+	}
+	chainEntityID, err := v.resolver.ChainEntityID(ctx, ev.LoopID)
+	if err != nil {
+		v.logger.Warn("phase validator: chain ancestry walk failed; skipping",
+			slog.String("loop_id", ev.LoopID),
+			slog.String("error", err.Error()))
+		return transitionContext{}, false
+	}
+	chainTriples, err := v.entities.ReadEntity(ctx, chainEntityID)
+	if err != nil {
+		v.logger.Warn("phase validator: read chain entity failed; skipping",
+			slog.String("loop_id", ev.LoopID),
+			slog.String("chain_entity", chainEntityID),
+			slog.String("error", err.Error()))
+		return transitionContext{}, false
+	}
+	return transitionContext{
+		loopEntityID:  loopEntityID,
+		action:        action,
+		chainEntityID: chainEntityID,
+		loopTriples:   loopTriples,
+		chainTriples:  chainTriples,
+	}, true
+}
+
+// modeGateRejects implements the coordinator-redesign Slice 1b
+// structural gate on the synthesize→architect transition. Returns
+// true when the gate refused the transition (caller should return
+// nil immediately — rejection triples have already been published).
+// Returns false in every other case (gate doesn't apply, or chain.mode
+// permits the transition).
+//
+// Why a research_only chain must not architect: a chain dispatched
+// via coordinator decide(action=delegate_research) is classified at
+// the user's intent boundary as "answer the user, no build artifact."
+// The synthesize loop is free to choose decide(action=architect) by
+// persona judgment (Slice 1 smoke evidence: 2 of 3 synthesize loops
+// chose architect regardless of the spawn prompt's framing), but
+// that choice is wrong for a research_only chain — it would route
+// into the dev arc the coordinator already classified as out-of-scope.
+// The validator refuses the proceed sentinel; the synthesize loop's
+// only remaining legal moves are decide(action=emit) (close the
+// research arc; reviewer-research evaluates) or decide(action=gather)
+// (back-edge re-gather, bounded by the gather cap).
+//
+// Read-shape: chain.mode.classification is stamped on the chain
+// entity by cmd/semteams/chainmode.Stamper at coordinator-terminal
+// time. The coordinator's loop completes BEFORE any researcher loop
+// in the chain (the dispatch path is "coordinator decide → rule
+// fires → researcher-plan spawned"), so by the time synthesize
+// completes the triple is on disk and chainTriples already contains
+// it.
+//
+// Absence policy: pre-Slice-1b chains (legacy research-iterative
+// configs, any chain dispatched without a coordinator front-door)
+// carry no chain.mode triple. The gate is a no-op in that case —
+// the synthesize→architect path passes through to the cap check
+// exactly as it did before Slice 1b. This protects backward
+// compatibility for every config that doesn't run a coordinator.
+//
+// priorWrites carries the target-audit triple already appended in
+// the caller; this helper extends it with the rejection cluster
+// before publishing. The synthesizer's coordinator.decision_reason
+// (when present) lands in the log line so operators tracing a stall
+// see what the synthesize loop intended without manually walking to
+// the loop entity.
+//
+// Returns true ⇒ caller MUST return nil; rejection writes have been
+// published. Returns false in every other case (gate doesn't apply,
+// or chain.mode permits the transition).
+func (v *PhaseValidator) modeGateRejects(
+	ctx context.Context,
+	ev *agentic.LoopCompletedEvent,
+	inputPhase string,
+	tctx transitionContext,
+	stamp func(subject, predicate string, object any) message.Triple,
+	priorWrites []message.Triple,
+) bool {
+	if inputPhase != PhaseSynthesize || tctx.action != PhaseArchitect {
+		return false
+	}
+	mode, _ := tctx.chainTriples[chain.PredicateChainMode].(string)
+	if mode != chainmode.ModeResearchOnly {
+		return false
+	}
+	reason, _ := tctx.loopTriples[agvocab.CoordinatorDecisionReason].(string)
+	out := append(priorWrites,
+		stamp(tctx.chainEntityID, chain.PredicatePhaseTransitionRejected, "true"),
+		stamp(tctx.chainEntityID, chain.PredicatePhaseTransitionRejectReason, rejectReasonModeMismatch),
+	)
+	v.publishAll(ctx, out)
+	v.logger.Info("phase validator: rejected (mode mismatch)",
+		slog.String("loop_id", ev.LoopID),
+		slog.String("chain_entity", tctx.chainEntityID),
+		slog.String("input_phase", inputPhase),
+		slog.String("target", tctx.action),
+		slog.String("mode", mode),
+		slog.String("reason", reason))
+	return true
 }
 
 // parseResearcherPhase pulls the phase suffix from a researcher-<phase>
