@@ -1081,3 +1081,99 @@ func assertInFlightSpawnAction(t *testing.T, r opsInFlightRule, personaIdentity 
 		}
 	}
 }
+
+// Smoke #26 (2026-05-14) finding: the ops-progress-observer persona emitted
+// 3 false-positive findings ("chain making normal progress" with confidence
+// 1.0) despite the persona's original prose at §"Findings NOT worth
+// emitting" forbidding it. The follow-up slice restructures the persona
+// with three structural guardrails:
+//
+//  1. A "Decision gate" pre-step at the top of 10-progress-rules.md that
+//     forces the LLM to name a specific threshold AND entity-ID before
+//     emit_diagnosis. Without both, submit_work is mandatory.
+//  2. The NOT-worth-emitting list moved to TOP of the file (was at end),
+//     with VERBATIM quotes of the smoke #26 false-positives as rejected
+//     examples — pattern-match defense.
+//  3. The identity fragment promotes submit_work to "default action"
+//     framing and explicitly names emit_diagnosis as "exception", with
+//     a cross-reference to the Decision Gate.
+//
+// These tokens are the load-bearing surface. A persona-only refactor that
+// removes them re-introduces the false-positive class. The test pins each
+// guardrail's specific anchor string so drift surfaces structurally.
+func TestADR041_OpsProgressObserverPersonaGuardrails(t *testing.T) {
+	const rulesPath = "../../configs/personas/fragments/ops-progress-observer/10-progress-rules.md"
+	const identityPath = "../../configs/personas/fragments/ops-progress-observer/00-identity.md"
+
+	rulesBody, err := os.ReadFile(rulesPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", rulesPath, err)
+	}
+	identityBody, err := os.ReadFile(identityPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", identityPath, err)
+	}
+	rules := string(rulesBody)
+	identity := string(identityBody)
+
+	// (1) Decision Gate pre-step. The exact phrasing "Decision gate" +
+	// "BEFORE any emit_diagnosis call" is what the LLM pattern-matches
+	// against before invoking the tool.
+	for _, phrase := range []string{
+		"Decision gate",
+		"BEFORE any emit_diagnosis call",
+		"specific threshold",
+		"entity-ID",
+	} {
+		if !strings.Contains(rules, phrase) {
+			t.Errorf("10-progress-rules.md missing Decision Gate phrase %q. Smoke #26 finding: without an explicit pre-step gate, the LLM treats having emit_diagnosis as license to emit. The gate forces a threshold+evidence justification.", phrase)
+		}
+	}
+
+	// (2) Verbatim REJECTED examples from smoke #26. These three specific
+	// strings are the exact false-positive findings emitted on real LLM;
+	// pattern-matching against them is what stops the recurrence.
+	//
+	// NOTE: these strings are load-bearing prose, NOT structural markers.
+	// Rewording the persona fails this test BY DESIGN — that is correct.
+	// The LLM's pattern-match hook is the verbatim text; paraphrases lose
+	// the hook. If you're tempted to "fix" the test by relaxing the
+	// substrings, please don't; restructure the persona around the new
+	// quotes instead and update the slice.
+	rejectedExamples := []string{
+		"chain is making normal progress without spinning or stalling",
+		"Completed in-flight checks; chain appears healthy",
+		"appears to be proceeding normally; no thresholds crossed",
+	}
+	for _, ex := range rejectedExamples {
+		if !strings.Contains(rules, ex) {
+			t.Errorf("10-progress-rules.md missing verbatim REJECTED example %q. Smoke #26 finding: quoting the actual false-positives back at the LLM is the load-bearing defense; paraphrases don't pattern-match as reliably.", ex)
+		}
+	}
+
+	// (3) NOT-worth-emitting section ordering. Must appear BEFORE the
+	// "Findings worth emitting" section so the rejected patterns are
+	// the first thing the LLM reads after the Decision Gate.
+	notWorthIdx := strings.Index(rules, "Findings NOT worth emitting")
+	worthIdx := strings.Index(rules, "## Findings worth emitting")
+	switch {
+	case notWorthIdx < 0:
+		t.Errorf("10-progress-rules.md missing header \"Findings NOT worth emitting\" — the rejection-list section is the load-bearing defense; without it the LLM falls back to bias toward emit_diagnosis.")
+	case worthIdx < 0:
+		t.Errorf("10-progress-rules.md missing header \"## Findings worth emitting\" — without positive patterns the observer atrophies into never emitting genuine findings.")
+	case notWorthIdx > worthIdx:
+		t.Errorf("§\"Findings NOT worth emitting\" must precede §\"Findings worth emitting\" so the rejected patterns are read first. Smoke #26 finding: the original order had rejection list at the end where it was overlooked by the LLM.")
+	}
+
+	// (4) Identity fragment promotes submit_work to default action.
+	// "default action" + "exception" framing is the prose hook that
+	// inverts the LLM's bias toward emit_diagnosis.
+	for _, phrase := range []string{
+		"submit_work` is the **default action**",
+		"emit_diagnosis` is the **exception**",
+	} {
+		if !strings.Contains(identity, phrase) {
+			t.Errorf("00-identity.md missing submit_work-as-default phrase %q. The default/exception framing in the identity is the upstream hook for the rules-file Decision Gate.", phrase)
+		}
+	}
+}
