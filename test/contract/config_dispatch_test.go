@@ -95,8 +95,19 @@ func TestConfigDispatchDefaultToolsParse(t *testing.T) {
 		// JSON wire to match the source-of-truth verbatim).
 		expected []string
 	}{
+		// coordinator-redesign Slice 1 (2026-05-15): osh-demo dispatch
+		// flipped from researcher-plan to coordinator entry. The seeded
+		// tools shrink to the coordinator's minimum (decide + read).
+		// submit_work intentionally omitted — the coordinator persona
+		// makes `decide` the single terminal, and offering submit_work
+		// as a fallback contradicts that contract and risks LLM drift
+		// into a terminal that fires no rules. researcher-plan is now
+		// spawned by the coordinator rules
+		// (configs/rules/coordinator/01-02-*) with its own tool list
+		// set on the publish_agent action, so emit_plan no longer
+		// belongs in dispatch defaults.
 		"osh-demo.json": {
-			expected: []string{"read_loop_result", "query_entity", "query_entities", "emit_plan"},
+			expected: []string{"decide", "read_loop_result"},
 		},
 		// ADR-041 MVP: dispatch enters at researcher-plan, so emit_plan
 		// (researcher-plan's owned emit tool per
