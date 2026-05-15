@@ -1177,3 +1177,87 @@ func TestADR041_OpsProgressObserverPersonaGuardrails(t *testing.T) {
 		}
 	}
 }
+
+// Smoke #26 (2026-05-14) finding investigated 2026-05-15
+// ([[project_synthesize_thinness]]): GATHER's original spawn rule
+// allowed_tools = [read_loop_result, query_entity, query_entities,
+// scratchpad, decide] gave the LLM no discovery-by-name primitive. Both
+// query_entity and query_entities require known entity IDs; the plan
+// supplies actor *names* but no IDs. Both gather loops in smoke #26
+// bailed to scratchpad-only with "no specific entity IDs to query" and
+// emitted decide(synthesize) without evidence — synthesize then
+// produced a 794-byte fabricated artifact.
+//
+// This test pins the four discovery primitives the GATHER spawn rule
+// must allow + verifies the persona references each one concretely.
+// Drift surfaces:
+//   - Rule narrows again (someone removes summarize_graph because
+//     [[feedback_fewer_rich_tools]] applied without reading the
+//     gather thinness memo): test fails with the missing tool name.
+//   - Persona lists a tool but rule doesn't allow it (the smoke #26
+//     drift mode itself — persona promised summarize_graph that the
+//     rule didn't include): test fails on the persona side.
+func TestADR041_GatherDiscoveryTools(t *testing.T) {
+	const rulePath = "../../configs/rules/research-mode-transition/04-phase-transition-to-gather.json"
+	const personaPath = "../../configs/personas/fragments/researcher-gather/00-identity.md"
+
+	data, err := os.ReadFile(rulePath)
+	if err != nil {
+		t.Fatalf("read %s: %v", rulePath, err)
+	}
+	var r struct {
+		OnEnter []struct {
+			Role  string   `json:"role"`
+			Tools []string `json:"tools"`
+		} `json:"on_enter"`
+	}
+	if err := json.Unmarshal(data, &r); err != nil {
+		t.Fatalf("parse %s: %v", rulePath, err)
+	}
+	if len(r.OnEnter) == 0 {
+		t.Fatalf("rule has no on_enter actions")
+	}
+	if r.OnEnter[0].Role != "researcher-gather" {
+		t.Errorf("on_enter[0].role = %q, want %q", r.OnEnter[0].Role, "researcher-gather")
+	}
+
+	tools := make(map[string]bool, len(r.OnEnter[0].Tools))
+	for _, t := range r.OnEnter[0].Tools {
+		tools[t] = true
+	}
+
+	// (1) Required discovery primitives on the rule. Removing any of
+	// these re-introduces the smoke #26 thinness failure mode.
+	requiredDiscovery := []string{
+		"summarize_graph",
+		"query_by_type",
+		"query_entity",
+		"query_entities",
+		"web_search",
+	}
+	for _, name := range requiredDiscovery {
+		if !tools[name] {
+			t.Errorf("rule 04 GATHER allowed_tools missing required discovery primitive %q. Without this the LLM cannot bridge from plan-supplied actor names to entity IDs, and gather degenerates into scratchpad-only with synthesize fabricating from the plan alone (smoke #26 failure mode). tools = %v", name, r.OnEnter[0].Tools)
+		}
+	}
+
+	// (2) Persona must reference each discovery primitive concretely.
+	// The persona drift mode is "persona lists summarize_graph that
+	// the rule doesn't allow" (the smoke #26 trap). The inverse —
+	// rule allows but persona doesn't teach use — is equally bad: the
+	// LLM gets the tool but doesn't know how to apply it. Pin both
+	// directions by checking the persona names each primitive.
+	personaBytes, err := os.ReadFile(personaPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", personaPath, err)
+	}
+	persona := string(personaBytes)
+	for _, name := range requiredDiscovery {
+		// Look for backtick-quoted tool name as the load-bearing
+		// reference — bare mention in prose isn't enough; the
+		// persona must call out the tool as a usable primitive.
+		if !strings.Contains(persona, "`"+name+"`") {
+			t.Errorf("persona %s does not reference discovery primitive `%s` (backtick-quoted). The persona must teach the LLM to use each allowed discovery tool concretely; bare mention in prose doesn't pattern-match as a workflow step.", personaPath, name)
+		}
+	}
+}

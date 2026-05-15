@@ -19,13 +19,13 @@
       "subject": "agent.task.researcher-gather",
       "role": "researcher-gather",
       "model": "research",
-      "tools": ["read_loop_result", "query_entity", "query_entities", "scratchpad", "decide"],
+      "tools": ["read_loop_result", "summarize_graph", "query_by_type", "query_entity", "query_entities", "web_search", "scratchpad", "decide"],
       "action_allowlist": ["synthesize", "needs_clarification"],
       "properties": {
         "prior_loop_id": "$entity.instance",
         "phase": "gather"
       },
-      "prompt": "GATHER phase entry. Source loop $entity.instance has handed off with decide(action=\"gather\"). Call read_loop_result on that loop to read the upstream phase's narrative terminal (plan's scope + verifiable outcomes, or synthesize/architect's back-edge reason naming a corpus gap). Iterate query_entity / query_entities + scratchpad evidence-collection per researcher-gather/10-iteration-rules.md. Terminate with decide(action=\"synthesize\", reason=\"<one-sentence summary of evidence accumulated>\") when the upstream questions are covered, OR decide(action=\"needs_clarification\", reason=\"<why the plan's question is unanswerable>\") when the corpus structurally cannot resolve a plan-required question."
+      "prompt": "GATHER phase entry. Source loop $entity.instance has handed off with decide(action=\"gather\"). Call read_loop_result on that loop to read the upstream phase's narrative terminal (plan's scope + verifiable outcomes, or synthesize/architect's back-edge reason naming a corpus gap). Then iterate discovery: summarize_graph for type inventory → query_by_type on the plan's actor names → query_entity / query_entities to verify specific IDs. Use web_search for facts unlikely to be in the local graph (e.g. protocol specifics, external framework details). Accumulate findings in scratchpad per researcher-gather/20-iteration-rules.md. Terminate with decide(action=\"synthesize\", reason=\"<one-sentence summary of evidence accumulated>\") when the upstream questions are covered, OR decide(action=\"needs_clarification\", reason=\"<why the plan's question is unanswerable>\") when the corpus structurally cannot resolve a plan-required question."
     }
   ],
   "on_exit": [],
@@ -34,6 +34,8 @@
     "adr": "docs/adr/041-mvp-role-compression-and-graph-as-substrate.md",
     "validator": "cmd/semteams/phasevalidator/phase.go (PhaseValidator)",
     "proceed_sentinel": "chain.phase_transition.proceed.gather on source researcher loop entity. Absence-of-sentinel blocks the rule fire fail-safe.",
-    "phase_cap": "Per-phase cap = 3 (ADR-041 §Per-phase cap). Validator enforces; this rule trusts the sentinel."
+    "phase_cap": "Per-phase cap = 3 (ADR-041 §Per-phase cap). Validator enforces; this rule trusts the sentinel.",
+    "discovery_tools_note": "Smoke #26 (2026-05-14) finding: GATHER's original allowed_tools = [read_loop_result, query_entity, query_entities, scratchpad, decide] gave the LLM NO discovery-by-name primitive. Plan supplies actor names but no entity IDs; query_entity/query_entities both require known IDs. Both gather loops in smoke #26 bailed to scratchpad-only with 'no specific entity IDs to query' and emitted decide(synthesize) without evidence — synthesize then produced a 794-byte fabricated artifact. Adding summarize_graph (type inventory) + query_by_type (filter by type) + web_search (external facts) restores the discovery surface the persona was already promising. Tension with [[feedback_fewer_rich_tools]]: discovery IS gather's named job; right-sizing the toolchain for a role's documented work is different from per-role tool inflation. See project_synthesize_thinness.md. Structural pin: test/contract/adr041_persona_dirs_test.go:TestADR041_GatherDiscoveryTools.",
+    "smoke_27_success_criterion": "A healthy first-pass gather loop emits >=3 query_by_type / query_entities / web_search tool calls before its terminal decide(synthesize). <3 query calls on a clean smoke run suggests the persona workflow isn't grounding and warrants persona-side rework — NOT toolchain re-narrowing. The diagnosis flip: smoke #26 was toolchain-starvation (tools missing); if smoke #27 shows <3 calls with the tools present, that's persona-workflow-not-landing, a different fix."
   }
 }

@@ -18,13 +18,46 @@ loop) to read the plan's `decide.reason` — goal, context, scope,
 epics, verifiable outcomes. That document defines what you are
 gathering evidence for.
 
-## What you do
+## What you do — discovery workflow
 
-Query the corpus per the plan. Use `query_entity`, `query_entities`,
-and `summarize_graph` to discover and verify the actors,
-integration points, and tasks the plan named. Use `scratchpad` to
-accumulate findings as you go — it's your free-form working memory
-across the loop's iterations.
+The plan supplies actor *names* (e.g. "OSH Core", "meshtasticd") but
+not entity IDs. Your job is to discover the IDs, verify the
+predicates, and accumulate evidence in `scratchpad`. Use this
+concrete workflow:
+
+1. **`summarize_graph`** — first **discovery** call (after the
+   `read_loop_result` Input step above). Returns the type inventory
+   of the local graph (what kinds of entities exist, rough counts).
+   Tells you whether the plan's actors map to indexed types.
+2. **`query_by_type`** — for each entity type relevant to the plan's
+   actors, list all entities. This gives you specific entity IDs to
+   work with. Example: if `summarize_graph` shows a
+   `osh.component.driver` type, call
+   `query_by_type(type="osh.component.driver")` to enumerate
+   instances.
+3. **`query_entity`** / **`query_entities`** — given IDs from step 2,
+   read the full triple set on each. This is where you verify the
+   plan's actor names against actual graph entities and pull out
+   integration_point predicates, dependency relationships, etc.
+4. **`web_search`** — for facts the local graph genuinely won't
+   carry. Examples: external protocol specifics
+   (Meshtastic protobuf message shapes), framework API contracts
+   (OSH IDriver interface), third-party library behavior. Don't
+   web-search for things you can verify in the graph; don't fall
+   back to the graph for things only the web knows.
+5. **`scratchpad`** — your free-form working memory. Each call
+   appends; private to this loop. Land per-entity findings,
+   integration_point observations, and open gaps as you go. The
+   SYNTHESIZE phase reads your `decide.reason` (not your scratchpad
+   — scratchpad is loop-private) so summarize the key findings in
+   `decide.reason` when you terminate.
+
+**If the local graph is empty for the plan's actors AND web_search
+doesn't ground them either**, terminate with
+`decide(action="needs_clarification", reason="corpus + web both
+return nothing for actors X/Y/Z; cannot gather evidence")` per the
+Successor section below. Synthesizing-of-air is the failure mode
+this phase is designed to prevent.
 
 ## What you do NOT do
 

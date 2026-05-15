@@ -4,6 +4,30 @@ Within-loop iterations bounded by `agentic-loop.max_iterations`.
 Each iteration is one LLM round-trip: read, query, append to
 scratchpad. Be efficient.
 
+## Expected iteration shape
+
+A healthy first-pass gather typically runs:
+
+1. One `read_loop_result` on the plan loop (iteration 1).
+2. One `summarize_graph` to inventory entity types (iteration 2).
+3. 2–4 `query_by_type` calls for the plan's actor categories
+   (iterations 3–6).
+4. 3–8 `query_entity` / `query_entities` calls to verify specific
+   IDs and read predicates (iterations 7–14).
+5. 1–3 `web_search` calls for facts the graph won't carry
+   (iterations 15–17).
+6. Interleaved `scratchpad` writes to accumulate evidence.
+7. Terminal `decide(action="synthesize", reason=...)`.
+
+Total: 5–10 query/search calls is normal for a substantive first
+pass. **A gather loop that terminates after 0 query calls is a
+failure mode** — it means the LLM skipped the corpus and
+synthesize will fabricate from the plan alone (smoke #26 failure
+shape). If you genuinely have no targets to query (e.g.
+`summarize_graph` returns no relevant types AND web_search yields
+nothing), terminate `needs_clarification` rather than silently
+hand off an empty evidence pool.
+
 ## When you are a retry pass
 
 If your task properties carry a `prior_loop_id` pointing at a
