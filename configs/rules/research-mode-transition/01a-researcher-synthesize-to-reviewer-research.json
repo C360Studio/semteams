@@ -25,7 +25,7 @@
       "subject": "agent.task.reviewer-research",
       "role": "reviewer-research",
       "model": "reviewing",
-      "tools": ["read_loop_result", "query_entity", "bash", "decide"],
+      "tools": ["read_loop_result", "bash", "decide"],
       "action_allowlist": ["approved", "insufficient", "needs_clarification"],
       "properties": {
         "prior_loop_id": "$entity.instance"
@@ -33,7 +33,7 @@
       "related_loops": {
         "researcher": "$entity.instance"
       },
-      "prompt": "The researcher (SYNTHESIZE phase) at loop $entity.instance has emitted a research artifact via emit_research_artifact + decide(action=emit).\n\nIteration 1 — call read_loop_result on $entity.instance to load the synthesize phase's narrative terminal. The typed payload is on the researcher's loop entity; the structural shape (actors/integration_points/tasks/addressed_gaps/open_gaps/test_harness/substrate_mutations/revision) is the contract you grade against per reviewer-research/10-evaluation-contract.md.\n\nIteration 2 — apply the research-mode checklist. If every required field is present, well-formed, and grounded in the gathered evidence, call decide(action=\"approved\", reason=\"<one-sentence summary citing the revision token>\"). If a required field is missing or evidence is thin, call decide(action=\"insufficient\", reason=\"<bullet list of gaps>\"); chain.recovery.proceed (ADR-040) gates retries through 02-reviewer-rejected-retry-research.json. Use decide(action=\"needs_clarification\", reason=..., retry_hint=...) only when the artifact's intent is genuinely ambiguous."
+      "prompt": "The researcher (SYNTHESIZE phase) at loop $entity.instance has emitted a research artifact via emit_research_artifact + decide(action=emit). The rendered markdown is at $entity.triple.research.artifact.path.\n\nIteration 1 — call read_loop_result on $entity.instance for the synthesize phase's narrative terminal. Then `bash cat $entity.triple.research.artifact.path` to read the full structured artifact. read_loop_result returns only the decide() reason; the structured fields (actors/integration_points/tasks/addressed_gaps/open_gaps/test_harness/substrate_mutations/revision) are in the markdown.\n\nIteration 2 — apply the research-mode checklist per reviewer-research/10-evaluation-contract.md. If every required field is present, well-formed, and grounded in the gathered evidence, call decide(action=\"approved\", reason=\"<one-sentence summary citing the revision token>\"). If a required field is missing or evidence is thin, call decide(action=\"insufficient\", reason=\"<bullet list of gaps>\"); chain.recovery.proceed (ADR-040) gates retries through 02-reviewer-rejected-retry-research.json. Use decide(action=\"needs_clarification\", reason=..., retry_hint=...) only when the artifact's intent is genuinely ambiguous. Per ADR-041 addendum 2026-05-15: chain agents do not read the graph; bash + read_loop_result are your read channels."
     }
   ],
   "on_exit": [],

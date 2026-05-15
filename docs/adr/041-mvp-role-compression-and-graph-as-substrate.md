@@ -826,3 +826,156 @@ shape).
 - Gemini 3.1 Pro + wire backend pivot (PR #147, branch
   `feat/gemini-3-1-wire-backend`):
   see [project_gemini_3_1_wire_pivot.md](../../memory/project_gemini_3_1_wire_pivot.md).
+
+## Addendum 2026-05-15 — Graph is internal harness state ONLY for chain agents
+
+The original ADR-041 §"Graph posture shift" said: "Agent-side
+`summarize_graph` / `search_graph` stay available but leave default
+persona fragments." That phrasing was too permissive — it left the
+tools available for personas to opt back into, which is what
+**PR #152** did when [[project_synthesize_thinness]] surfaced a
+"GATHER produces nothing" failure mode and the diagnostic instinct
+was to add discovery tools.
+
+PR #152 was rolled back in this addendum's sweep. The correct
+policy, made explicit:
+
+> **Chain agents do not read the graph. The graph is internal
+> harness state — audit, lineage, milestone stamping, evidence
+> aggregation. Only ops agents (whose named job IS observing
+> harness state) read it.**
+
+### Why the line is in this exact place
+
+Three classes of "graph read" exist in our system, and only one is
+agent-reasoning surface:
+
+| Read | Purpose | Who reads | Verdict |
+|---|---|---|---|
+| `read_loop_result` (loops KV) | Chain's own progress state | Chain agents | ✅ Internal chain state, legitimate read |
+| `bash` on `/artifacts/<kind>/<slug>.md` | Rendered emit-tool output | Chain agents | ✅ Filesystem, not graph |
+| `web_search` | External-world facts | Chain agents | ✅ External, not graph |
+| `summarize_graph` / `query_by_type` / `query_entity` / `query_entities` / `search_graph` | Substrate + corpus reads | **Forbidden for chain** / Allowed for ops | ❌ for chain |
+
+`read_loop_result` reads from the loops bucket, which IS technically
+graph state, but it's specifically *the chain's own previous-loop
+terminal* — a single legitimate channel that the framework already
+mediates. It's "internal state" in the same way a function reads its
+own local variables.
+
+`bash cat /artifacts/<...>.md` reads files written by emit-tools —
+the file IS the inter-phase channel under ADR-029 §
+shared-agentic-artifacts. Not graph reading.
+
+`web_search` is external; the graph isn't in scope.
+
+All graph-query tools (`summarize_graph`, `query_by_type`,
+`query_entity`, `query_entities`, `search_graph`,
+`query_relationships`, `query_neighbors`) are forbidden for chain
+agents. They remain allowed for ops agents (`ops-chain-observer`,
+`ops-progress-observer`, `ops-analyst`) — observing harness state IS
+the ops role's named job per ADR-027.
+
+### Why corpus reading is also gone (the [[project_synthesize_thinness]] re-frame)
+
+The original instinct that motivated PR #152 was: "researcher needs
+to discover facts about the prompt domain." That was correct. The
+wrong inference was: "discovery should come from the local graph."
+
+Under MVP, the local graph is not a corpus. ADR-040's source-curator
+role (which would have indexed external corpora for researcher
+consumption) was dropped from the MVP roster. The semsource watcher
+indexes only what an operator pre-configures. For arbitrary demo
+prompts (OSH-Meshtastic), the local graph has no relevant entities
+— it carries chain substrate (chain.*, agent.*) and at most a
+placeholder seed.
+
+So:
+
+- **For corpus discovery**, researcher uses `web_search`. External
+  facts (OSH driver framework API, Meshtastic protobuf shapes) live
+  on the web, not in our graph.
+- **For chain-internal context** (what did the previous loop
+  emit?), researcher uses `read_loop_result`.
+- **For grounded artifacts** (the markdown emitted by upstream
+  emit-tools), researcher uses `bash cat`.
+
+No graph queries needed. No graph queries allowed.
+
+### Sweep performed in this addendum's slice
+
+Chain-agent spawn rules updated to drop graph-query tools:
+
+- `configs/rules/research-mode-transition/04-phase-transition-to-gather.json`
+  — drops `summarize_graph`, `query_by_type`, `query_entity`,
+  `query_entities` (the last two PRE-DATED PR #152; pulled in this
+  sweep). Keeps `web_search` (external grounding) +
+  `read_loop_result` + `scratchpad` + `decide`.
+- `configs/rules/research-mode-transition/06-phase-transition-to-architect.json`
+  — drops `query_entity`. Keeps `read_loop_result` + `bash` +
+  `emit_dev_via_spec_artifact` + `scratchpad` + `decide`.
+- `configs/rules/research-mode-transition/01a-researcher-synthesize-to-reviewer-research.json`
+  — drops `query_entity`.
+- `configs/rules/research-mode-transition/01b-researcher-architect-to-reviewer-spec.json`
+  — drops `query_entity`.
+- `configs/rules/dev-via-spec/04-builder-decide-to-reviewer-qa.json`
+  — drops `query_entity`.
+- `configs/rules/research-iterative/02-reviewer-rejected-retry.json`
+  — drops `query_entity`, `query_entities`. The legacy
+  research-iterative arc spawns a chain-role `researcher` on
+  reviewer-rejected retries; same chain-membership rule applies.
+  Caught by reviewer-pass extending the contract test scope from
+  the MVP-roster directories to all rule directories that spawn
+  chain agents.
+
+Chain-agent personas (researcher-gather, researcher-architect,
+reviewer-research, reviewer-spec, reviewer-qa) updated to remove
+references to graph-query tools and restate the chain-agent
+toolchain (`read_loop_result` + `bash` + `web_search` + `scratchpad`
++ `decide` + role-specific emit tool).
+
+Ops rules untouched:
+- `configs/rules/ops/chain-terminal-observe.json` (ops-chain-observer)
+- `configs/rules/ops/observe-chain-progress.json` (ops-progress-observer)
+
+Both keep `query_entity`, `query_entities`, `query_relationships`,
+etc. — observing harness state is the ops role's named job per
+ADR-027.
+
+### Contract test
+
+`TestADR041_ChainAgentsCannotReadGraph` walks every chain-agent
+spawn rule and asserts the rule's allowed tools do NOT include any
+of the graph-query tools. Ops rules are excluded by role name from
+the walk — they're whitelisted as legitimate graph readers.
+
+Drift surfaces structurally: any future PR adding a graph-query
+tool to a chain role's spawn rule fails this test with an explicit
+message naming this addendum.
+
+### What this leaves open
+
+- **Pre-seeding corpus for operators.** If a deployment wants
+  researcher to consume a curated corpus, semsource indexes it at
+  boot and the corpus content shows up via web-search-equivalent
+  external surfaces, NOT via graph queries from chain agents.
+- **Re-introducing curator post-MVP.** ADR-040 captured the design
+  for a source-curator role that COULD legitimately read the graph
+  to assess corpus state before deciding what to add. **Curator
+  would not be a chain agent.** Chain membership is structural: a
+  chain agent is one spawned by a rule in
+  `configs/rules/{research-mode-transition,dev-via-spec,research-iterative,coordinator}/`
+  (rules subscribed to `agent.task.*` for in-chain dispatch).
+  Curator is invoked off-chain — at indexing time, before the
+  chain begins, on operator action. Its graph reads happen outside
+  any chain agent's loop. The structural distinction (rule-spawn
+  membership) is what keeps the policy clean under future role
+  additions; "chain agents do not read the graph" stays true
+  because the chain-vs-not-chain question is decided by
+  rule-membership, not nominal labels.
+- **Smoke #27 framing.** The empirical question is no longer "does
+  GATHER use the discovery tools?" — there are no discovery tools.
+  It's: "does GATHER ground synthesize via `web_search` to a degree
+  that produces a substantive artifact?" If the answer is no, the
+  next investigation is into web_search results / persona prompting
+  for GATHER — NOT a reintroduction of graph reads.

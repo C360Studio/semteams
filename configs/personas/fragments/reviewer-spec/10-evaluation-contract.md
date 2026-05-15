@@ -5,11 +5,14 @@
    - **Narrative**: `read_loop_result(loop_id=<prior_loop_id>)`
      returns the architect's `decide.reason` + trailing prose —
      your index into what the artifact claims.
-   - **Structured artifact**: `query_entity` on the prior loop
-     reads the architect's marker triples; the
-     `dev_via_spec.artifact.path` triple names the rendered
-     markdown spec. `bash cat <path>` reads the actual fields
-     (actors, integration_points, tasks, checks).
+   - **Structured artifact**: your spawn rule substitutes the
+     artifact path as `$entity.triple.dev_via_spec.artifact.path`.
+     `bash cat $entity.triple.dev_via_spec.artifact.path` reads
+     the rendered markdown — actors, integration_points, tasks,
+     checks. Per ADR-041 addendum 2026-05-15: chain agents do not
+     query the graph; you do not have `query_entity` or other
+     graph-read tools. The rule layer flows the path through
+     prompt substitution.
    Your spawn source is the researcher in ARCHITECT phase via
    `decide(action="emit")` — you're reviewing the spec artifact.
    The markdown is your input by design — evaluate on its

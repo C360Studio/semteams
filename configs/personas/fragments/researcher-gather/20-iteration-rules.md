@@ -9,24 +9,23 @@ scratchpad. Be efficient.
 A healthy first-pass gather typically runs:
 
 1. One `read_loop_result` on the plan loop (iteration 1).
-2. One `summarize_graph` to inventory entity types (iteration 2).
-3. 2–4 `query_by_type` calls for the plan's actor categories
-   (iterations 3–6).
-4. 3–8 `query_entity` / `query_entities` calls to verify specific
-   IDs and read predicates (iterations 7–14).
-5. 1–3 `web_search` calls for facts the graph won't carry
-   (iterations 15–17).
-6. Interleaved `scratchpad` writes to accumulate evidence.
-7. Terminal `decide(action="synthesize", reason=...)`.
+2. 2–5 `web_search` calls grounding the plan's actors and
+   integration points in external facts (iterations 2–6).
+3. Interleaved `scratchpad` writes to accumulate evidence.
+4. Terminal `decide(action="synthesize", reason=...)`.
 
-Total: 5–10 query/search calls is normal for a substantive first
-pass. **A gather loop that terminates after 0 query calls is a
-failure mode** — it means the LLM skipped the corpus and
+Total: 2–5 `web_search` calls is normal for a substantive first
+pass. **A gather loop that terminates after 0 `web_search` calls
+is a failure mode** — it means the LLM skipped grounding and
 synthesize will fabricate from the plan alone (smoke #26 failure
-shape). If you genuinely have no targets to query (e.g.
-`summarize_graph` returns no relevant types AND web_search yields
-nothing), terminate `needs_clarification` rather than silently
-hand off an empty evidence pool.
+shape under the original ADR-041 graph-reading frame). If
+`web_search` cannot resolve the plan's actors (vague names,
+unavailable facts), terminate `needs_clarification` rather than
+silently hand off an empty evidence pool.
+
+Chain agents do NOT have graph-query tools — see ADR-041 addendum
+2026-05-15. Don't reach for `query_entity` etc.; they aren't
+allowed.
 
 ## When you are a retry pass
 
