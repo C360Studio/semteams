@@ -1,12 +1,12 @@
-// Package recoverycounter caps the number of source-curator recovery
-// cycles a single chain can spend on research-reviewer rejections
-// (ADR-040 §addendum 2026-05-11 "Chain-level recovery cap").
+// Package recoverycounter caps the number of recovery cycles a single
+// chain can spend on reviewer rejections (ADR-040 §addendum 2026-05-11
+// "Chain-level recovery cap", refit for ADR-041 MVP reviewer modes).
 //
 // The package implements one chain.CompletionHandler — the Counter —
 // registered alongside the other ADR-038 milestone stampers in
 // startChainMilestoneSubscribers. Each agent.complete event from a
-// research-reviewer with coordinator.next_action="insufficient"
-// triggers:
+// reviewer-research or reviewer-spec loop with
+// coordinator.next_action="insufficient" triggers:
 //
 //  1. Walk ancestry from the reviewer loop to the canonical chain
 //     entity via chain.Resolver.

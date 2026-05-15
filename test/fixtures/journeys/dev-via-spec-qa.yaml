@@ -1,463 +1,166 @@
 name: dev-via-spec-qa
 description: |
-  Journey: R3.7.2.k′-bis of ADR-036 + ADR-039 Phase 1 rule 09 (qa-reviewer
-  needs_clarification → architect recovery, Shape A supersession). Full
-  architect → builder → qa-reviewer chain on mock-LLM, then a complete
-  recovery cycle: recovery architect → recovery builder → recovery
-  qa-reviewer accept. Extends dev-via-spec.yaml (R3.3 + R3.4b + R3.6.2
-  of ADR-031/ADR-032) with two changes at the tail:
+  Journey: ADR-041 §"Phasing Phase 3" rewrite of the dev-via-spec
+  needs_clarification recovery arc for the MVP role compression.
+  Extends dev-via-spec.yaml with a complete ADR-039 Phase 1 Shape A
+  supersession cycle: the reviewer-qa terminates with
+  decide(needs_clarification), rule 03 spawns a fresh researcher-plan,
+  and the full plan → gather → synthesize → architect → reviewer-spec
+  → builder → reviewer-qa chain re-runs with the qa-reviewer's gap
+  addressed. Recovery reviewer-qa accepts; chain settles at 14 loops.
 
-    1. Loop J (builder) terminates with builder_decide(tests_passing)
-       instead of needs_clarification. The mock-LLM is sequence-based
-       and role-blind; the builder_decide tool emits the
-       coordinator.next_action=tests_passing triple unconditionally
-       given the args, so the rule chain fires regardless of whether
-       the preceding bash calls actually ran tests. The artifact_summary
-       field is canned text; the qa-reviewer mock-LLM does not read
-       prompt content (sequence-based).
+  Chain (ADR-041 §"Allowed transitions" + ADR-039 Phase 1 Shape A):
 
-    2. Loop K (NEW) is the dev-via-spec-qa-reviewer (R3.7.2.j′ persona),
-       spawned by configs/rules/dev-via-spec/07-builder-decide-to-
-       qa-reviewer.json once the evidence preprocessor has stamped
-       evidence.summary_ready=true (ADR-036 §Phase 2). It reads the
-       builder's terminal via read_loop_result and emits
-       decide(needs_clarification) — the correct verdict when the
-       evidence summary contains "(no checks)" (empty checks.json,
-       because mock-LLM bootstrap_workspace doesn't seed a real sidecar).
-       The mock-LLM is sequence-based and does NOT read prompt content,
-       so the verdict is canned regardless of what the preprocessor
-       stamped.
+    Baseline (Loops A–G): plan → gather → synthesize → architect →
+    reviewer-spec → builder → reviewer-qa
+      Same shape as dev-via-spec.yaml, except Loop G's reviewer-qa
+      terminates with decide(needs_clarification) instead of accept.
+      → rule 03-needs-clarification-to-researcher fires → spawn
+        researcher-plan (recovery).
 
-  This fixture proves the chain SHAPE end-to-end on mock-LLM:
-  rule 07's two-AND condition fires (tests_passing + evidence.summary_ready),
-  qa-reviewer spawns + reads + emits decide(needs_clarification),
-  ADR-039 Phase 1 rule 09 fires + spawns a recovery architect, the
-  recovery cycle (architect → builder → qa-reviewer) completes
-  cleanly with the recovery qa-reviewer's decide(accept), and the
-  chain settles at fourteen loops. Substantive evidence grading (smoke
-  #8 on real LLM with Testcontainers) is slice 5.
+    Recovery (Loops H–N): plan → gather → synthesize → architect →
+    reviewer-spec → builder → reviewer-qa
+      Same six-role MVP chain re-runs against the qa-reviewer's
+      flagged gap. The recovery architect emits the spec with the
+      additional checks[] the original missed. Recovery reviewer-qa
+      decides(accept) → terminal.
+
+  Fourteen loops total — one fewer than the pre-ADR-041 fifteen-loop
+  count (which had a separate source-curator + dev-via-spec-planner
+  pair ahead of the architect). The compressed roster + an extra
+  back-edge to plan trades the curator + planner triangle for a
+  symmetric plan→architect chain that recovers in seven loops, not
+  three. The longer recovery is the cost of admission for the
+  cognitively-cheap MVP roster.
 
   Paired spec: ui/e2e/agentic/dev-via-spec-qa.spec.ts.
-  Required compose profiles: semsource (substrate-modifying retry
-  pass, same as R2.5/R3.2.2) **and** sandbox (the dev-via-spec-builder
-  loop calls bootstrap_workspace + bash; both route through the
-  sandbox container per ADR-032 §R3.6.2.a wiring). The sandbox
-  profile also brings up the workspace volume that the evidence
-  preprocessor reads via its :ro bind mount.
+  Required compose profile: sandbox (the builder loop calls
+  bootstrap_workspace + bash; both route through the sandbox container
+  per ADR-032 §R3.6.2.a wiring).
 
-  Sequence (fourteen loops, forty-five LLM round-trips, ADR-040 reshape):
+  Sequence (fourteen loops, thirty-eight LLM round-trips):
 
-    Loop A — researcher (initial pass, revision=1, default_role)
-      1. tool_call: query_entity (corpus probe, returns nothing)
-      2. tool_call: emit_research_artifact (revision=1, empty)
-      3. completion: artifact JSON with corpus-gap message.
-         → outcome=success → rule_01a fires.
+    Loops A–F — identical to dev-via-spec.yaml (steps 1–17):
+      A researcher-plan (emit_plan + decide(gather))
+      B researcher-gather (query_entity + decide(synthesize))
+      C researcher-synthesize (emit_research_artifact rev 1 +
+        decide(architect))
+      D researcher-architect (emit_dev_via_spec_artifact +
+        decide(emit))
+      E reviewer-spec (decide(approved) → spec_mode_gate proceed)
+      F builder (bootstrap_workspace + bash + builder_decide
+        (tests_passing) → qa_mode_gate proceed)
 
-    Loop B — research-reviewer (pass 1, decides corpus gap)
-      4. tool_call: read_loop_result (placeholder; tool errors)
-      5. tool_call: decide(insufficient, names missing repo)
-         → coordinator.next_action=insufficient → rule_02 fires
-         (spawn-curator).
-
-    Loop C — source-curator (substrate-mutating pass, ADR-040)
-      6. tool_call: read_loop_result (placeholder; tool errors)
-      7. tool_call: add_source_repo (approval-gated; test approves)
-      8. tool_call: query_entity (verifies indexing finished)
-      9. tool_call: emit_curator_artifact (added_sources +
-         verified_entity_ids; source_dirs OMITTED — no SemSource
-         shared mount in this deployment)
-     10. tool_call: decide(action="indexed")
-         → coordinator.next_action=indexed → rule_02b fires
-         (spawn researcher with curator_loop_id).
-
-    Loop D — researcher (recovery=curator_indexed, re-query pass)
-     11. tool_call: read_loop_result (placeholder; tool errors)
-     12. tool_call: query_entity (against augmented corpus)
-     13. tool_call: emit_research_artifact (revision=2, full;
-         substrate_mutations=[] — researcher does NOT mutate
-         under ADR-040)
-     14. completion: artifact JSON.
-         → outcome=success → rule_01a fires.
-
-    Loop E — research-reviewer (pass 2, approves on re-queried artifact)
-     15. tool_call: read_loop_result (placeholder; tool errors)
-     16. tool_call: decide(approved)
-         → coordinator.next_action=approved → rule_03 fires
-         (research-mode-transition rule, spawns dev-via-spec-planner).
-
-    Loop F — dev-via-spec-planner (R3.3 first pass, real persona)
-     17. tool_call: read_loop_result (placeholder; tool errors)
-     18. tool_call: emit_plan (PR C C5: renders docs/plans/<slug>.md +
-         publishes dev_via_spec.plan.{loop_id} payload + stamps marker
-         triples; chain milestone subscriber writes chain.plan.loop +
-         chain.plan.path on reviewer-approval)
-     19. tool_call: decide(planned, reason=<plan content>)
-         → coordinator.next_action=planned → dev-via-spec rule_01 fires
-         (planner → reviewer handoff).
-
-    Loop G — dev-via-spec-reviewer (first pass, approves on golden path)
-     20. tool_call: read_loop_result (placeholder; tool errors)
-     21. tool_call: decide(approved, reason=<all checklist items met>)
-         → coordinator.next_action=approved → dev-via-spec rule_03 fires
-         (reviewer → challenger handoff).
-
-    Loop H — dev-via-spec-challenger (first pass, accepts on golden path)
-     22. tool_call: read_loop_result (placeholder; tool errors)
-     23. tool_call: emit_consensus (PR C C5: accept-branch only;
-         renders docs/consensus/<slug>.md + publishes
-         dev_via_spec.consensus.{loop_id} payload + stamps marker
-         triples; chain milestone subscriber writes chain.consensus.loop
-         + chain.consensus.path on accept)
-     24. tool_call: decide(accept, reason=<no concerns>)
-         → coordinator.next_action=accept → dev-via-spec rule_05 fires
-         (challenger → architect handoff).
-
-    Loop I — dev-via-spec-architect (R3.4b, emits typed artifact)
-     25. tool_call: read_loop_result (placeholder; tool errors —
-         architect's three reads are placeholders that all error,
-         consumed by the next canned turn)
-     26. tool_call: read_loop_result (placeholder; tool errors)
-     27. tool_call: read_loop_result (placeholder; tool errors)
-     28. tool_call: emit_dev_via_spec_artifact (renders markdown to
-         docs/specs/<slug>.md AND mints dev_via_spec.artifact.{path,
-         slug,...} marker triples on this loop entity)
-     29. tool_call: decide(tasks_emitted, reason=<final task list>)
-         → coordinator.next_action=tasks_emitted →
-         dev-via-spec rule_06 fires (R3.6.2.d: architect→builder).
-
-    Loop J — dev-via-spec-builder (R3.6.2.e + R3.7.2.k′)
-     30. tool_call: bootstrap_workspace (iteration 1; the
-         hardcoded spec_path will not match the architect's
-         dynamically-dated emit on most days, so the tool surfaces
-         a "spec file not found" error — same placeholder-doesn't-
-         resolve convention as the read_loop_result calls earlier;
-         the next canned turn handles it).
-     31. tool_call: bash ls SPEC.md (placeholder; the next canned
-         turn handles whatever bash returns).
-     32. tool_call: bash echo "mvn test passing" (placeholder; the
-         next canned turn handles the result).
-     33. tool_call: builder_decide(tests_passing, tests_run=3,
-         tests_passed=3, tests_failed=0, artifact_summary=<canned>)
-         → coordinator.next_action=tests_passing →
-         dev-via-spec rule_07 fires (R3.7.2.k′:
-         builder→qa-reviewer).
-
-    Loop K — dev-via-spec-qa-reviewer (R3.7.2.k′-bis terminal)
-     34. tool_call: read_loop_result (placeholder against the
-         builder loop_id; tool errors — same convention as the
-         placeholder reads in Loops B/D/E/F/G/H/I above).
-     35. tool_call: decide(needs_clarification,
+    Loop G — reviewer-qa (rule 04 spawn, needs_clarification verdict)
+     18. tool_call: read_loop_result on Loop F (placeholder; errors)
+     19. tool_call: decide(action="needs_clarification",
          reason="evidence summary is (no checks) — architect emitted
-         no checks in this mock-LLM journey; the qa-reviewer cannot
-         accept without evidence rules per 10-evaluation-contract.md
-         Rule 3",
-         blocking_question=<architect must re-emit with evidence rules>)
-         → coordinator.next_action=needs_clarification → ADR-039
-         Phase 1 rule 09 fires (qa-reviewer needs_clarification →
-         architect recovery, Shape A supersession).
+         no checks[] in rev 1 spec; cannot grade build quality
+         without evidence rules",
+         retry_hint="architect should re-emit with at least one check")
+         → rule 03-needs-clarification-to-researcher fires → spawn
+           researcher-plan (recovery).
 
-    Loop L — dev-via-spec-architect RECOVERY (rule 09 spawn)
-     36. tool_call: read_loop_result on qa-reviewer-loop-K
-         (placeholder; tool errors)
-     37. tool_call: read_loop_result on researcher-loop-D
-         (placeholder; tool errors)
-     38. tool_call: emit_dev_via_spec_artifact (recovery v2 — same
-         actors/integration_points/tasks as v1 PLUS checks[] with
-         one evidence rule, the gap qa-reviewer flagged)
-     39. tool_call: decide(tasks_emitted, reason=<recovery summary>)
-         → coordinator.next_action=tasks_emitted →
-         dev-via-spec rule_06 fires (recovery builder spawn).
+    Loop H — researcher-plan (rule 03 spawn, recovery)
+     20. tool_call: read_loop_result on Loop G (placeholder; errors)
+     21. tool_call: decide(action="gather", reason=<recovery plan;
+         carry-forward scope + flag evidence-rule gap for architect>)
+         → phasevalidator: plan→gather allowed, gather count 1→2
+         → rule_04 fires → spawn researcher-gather.
 
-    Loop M — dev-via-spec-builder RECOVERY (rule 06 spawn)
-     40. tool_call: bootstrap_workspace
-     41. tool_call: bash ls SPEC.md (placeholder; next turn handles)
-     42. tool_call: bash echo (placeholder; next turn handles)
-     43. tool_call: builder_decide(tests_passing, ...)
-         → coordinator.next_action=tests_passing →
-         dev-via-spec rule_07 fires (recovery qa-reviewer spawn).
+    Loop I — researcher-gather (recovery)
+     22. tool_call: read_loop_result on Loop H (placeholder; errors)
+     23. tool_call: query_entity (same OSH entities; corpus stable)
+     24. tool_call: decide(action="synthesize", reason=<evidence
+         carried forward + check candidate identified>)
+         → phasevalidator: gather→synthesize allowed, synthesize count
+           1→2 (at cap)
+         → rule_05 fires → spawn researcher-synthesize.
 
-    Loop N — dev-via-spec-qa-reviewer RECOVERY (clean terminal)
-     44. tool_call: read_loop_result on recovery-builder-loop-M
-         (placeholder; tool errors)
-     45. tool_call: decide(accept, reason=<recovery cycle complete>)
-         → terminal. coordinator.next_action=accept fires no rule
-         (rule 09 only fires on needs_clarification). Chain settles
-         at fourteen loops; ADR-039 Phase 1 Shape A supersession
-         cycle complete end-to-end.
+    Loop J — researcher-synthesize (recovery)
+     25. tool_call: read_loop_result on Loop I (placeholder; errors)
+     26. tool_call: emit_research_artifact (rev 2, addresses qa-
+         reviewer's flagged check requirement)
+     27. tool_call: decide(action="architect", reason=<artifact rev 2
+         ready for architect; check candidate scoped>)
+         → phasevalidator: synthesize→architect allowed, architect
+           count 1→2 (at cap)
+         → rule_06 fires → spawn researcher-architect.
+
+    Loop K — researcher-architect (recovery)
+     28. tool_call: read_loop_result on Loop J (placeholder; errors)
+     29. tool_call: emit_dev_via_spec_artifact (rev 2, with checks[]
+         containing one evidence rule on the packet decoder)
+     30. tool_call: decide(action="emit", reason=<recovery spec
+         emitted with checks per qa-reviewer's blocking_question>)
+         → phasevalidator: architect→emit allowed (no count
+           increment)
+         → rule_01b fires → spawn reviewer-spec.
+
+    Loop L — reviewer-spec (recovery)
+     31. tool_call: read_loop_result on Loop K (placeholder; errors)
+     32. tool_call: decide(action="approved", reason=<recovery spec
+         passes checklist + external-actor coverage; check binds to
+         packet decoder>)
+         → phasevalidator.SpecModeGate forwards
+           dev_via_spec.artifact.{path,slug} from architect Loop K
+           onto reviewer-spec Loop L, writes
+           chain.spec_mode_gate.proceed
+         → rule_02 fires → spawn builder.
+
+    Loop M — builder (recovery)
+     33. tool_call: bootstrap_workspace (recovery spec_path)
+     34. tool_call: bash ls SPEC.md
+     35. tool_call: bash echo "mvn test passing on recovery spec"
+     36. tool_call: builder_decide(action="tests_passing",
+         tests_run=1, tests_passed=1, tests_failed=0)
+         → phasevalidator.QAModeGate writes
+           chain.qa_mode_gate.proceed
+         → rule_04 fires → spawn reviewer-qa.
+
+    Loop N — reviewer-qa (recovery — terminal)
+     37. tool_call: read_loop_result on Loop M (placeholder; errors)
+     38. tool_call: decide(action="accept", reason=<recovery build
+         accepted; check binds packet decoder; tests_passing aligns
+         with evidence rule>)
+         → terminal. No rule fires on action=accept; the ADR-039
+           Phase 1 Shape A supersession cycle is complete (prior
+           loops remain immutable; this loop's verdict is the chain's
+           effective terminal).
 
   Mock-llm is sequence-based and role-blind. The fixture aligns to
   the exact order of LLM round-trips across all fourteen loops. Same
-  read_loop_result / bootstrap_workspace / bash placeholder caveat
-  as R1/R2.5/R3.2.2: arguments_json passes verbatim, the tool
-  returns an error, the next canned turn handles it. The structural
-  assertion (rule chain firing in order + role distribution + final
-  state) is unaffected.
+  read_loop_result / bootstrap_workspace / bash placeholder caveat:
+  arguments_json passes verbatim, tools return errors, the next canned
+  turn handles them. The structural assertion (full chain + recovery
+  cycle + gate sentinels + final state) is unaffected.
 
-  Builder-loop terminal choice: tests_passing is canned. The
-  builder_decide tool emits coordinator.next_action=tests_passing
-  unconditionally given the args; mock-LLM does not actually run
-  tests in the workspace. The artifact_summary string is decorative
-  — qa-reviewer mock-LLM does not read prompt content. This is a
-  shape proof, not a substance proof; smoke #8 (slice 5) is where
-  actual mvn test runs. The needs_clarification variant of this
-  fixture is preserved at dev-via-spec.yaml.
+  QA-reviewer-loop terminal choice (Loop G needs_clarification):
+  matches ADR-041's reviewer-qa contract — the gate has already
+  validated tests_run > 0 AND tests_failed = 0, so the LLM's job is
+  to grade BUILD QUALITY. Empty checks[] in the rev 1 spec means
+  there's nothing to grade against; needs_clarification routes the
+  chain back to plan so the architect can re-emit with evidence
+  rules. The mock-LLM does not actually read the prompt's evidence
+  summary (sequence-based); the canned verdict aligns with the
+  expected persona behaviour.
 
-  Evidence preprocessor (ADR-036 §Phase 2): the preprocessor
-  subscribes to agent.complete.> and stamps evidence.summary +
-  evidence.summary_ready on the builder entity when the loop
-  completes. In this mock-LLM journey, bootstrap_workspace uses a
-  hardcoded spec_path that won't match a real artifact, so the sidecar
-  projection (and therefore .evidence/checks.json) may be absent.
-  The preprocessor stamps a plumbing-failure summary in that case
-  and still stamps evidence.summary_ready=true so rule_07's two-AND
-  condition fires. The qa-reviewer sees "(no checks file …)" or
-  "(no checks)" in its prompt and routes needs_clarification per Rule 3.
-
-  QA-reviewer-loop terminal choice: needs_clarification is correct
-  for a journey where no architect checks reached the workspace
-  (mock-LLM doesn't seed a real sidecar). The j′ persona's
-  10-evaluation-contract.md Rule 3 handles both "(no checks)" and
-  chain-plumbing-failure summaries by routing needs_clarification.
-  The mock-LLM does not read the summary (sequence-based); the canned
-  decide aligns with the expected persona behaviour.
-
-  This spec covers only the golden path. The retry paths (reviewer
-  rejection → planner retry via rule 02, challenger concerns → planner
-  retry via rule 04, builder iteration-budget exhaustion → tests_failing)
-  are exercised by the rules' max_iterations metadata and persona-content
-  discipline; a follow-up retry-path fixture can exercise them under
-  e2e if smoke #8 reveals real-LLM retry behaviour worth pinning.
+  Per-phase cap budget (ADR-041 §"Per-phase cap"):
+  plan=1 (counter doesn't increment on dispatch or rule_03 entry —
+  plan is fresh chain root or recovery), gather=3 (this fixture
+  consumes 2 of 3), synthesize=2 (consumes 2 of 2 — at cap on the
+  recovery pass), architect=2 (consumes 2 of 2 — at cap on the
+  recovery pass). Any additional needs_clarification → researcher-
+  plan loop after this fixture would land at the synthesize/
+  architect cap and the chain would stall fail-safe.
 
 responses:
-  # ---------- Loop A: researcher (initial pass, revision=1) ----------
+  # ===================================================================
+  # Loops A–F: identical to dev-via-spec.yaml baseline (Loops A–F)
+  # ===================================================================
 
-  - tool_call:
-      name: query_entity
-      arguments_json: |
-        {
-          "entity_id": "osh.driver.framework"
-        }
+  # ---------- Loop A: researcher-plan (initial pass, dispatch) ----------
 
-  - tool_call:
-      name: emit_research_artifact
-      arguments_json: |
-        {
-          "revision": 1,
-          "test_harness": "meshtasticd-2.x",
-          "title": "OSH Meshtastic driver research",
-          "actors": [],
-          "integration_points": [],
-          "tasks": [],
-          "addressed_gaps": [],
-          "open_gaps": [
-            "OSH driver framework documentation not indexed — query_entity for osh.driver.framework returned nothing. Recommend add_source_repo for the osh-core repository."
-          ],
-          "substrate_mutations": []
-        }
-
-  - completion:
-      content: |
-        Initial research pass on OSH driver framework actors. The
-        corpus does not appear to contain OSH driver framework
-        documentation — `query_entity` found no match for
-        `osh.driver.framework`. Submitting an empty artifact with
-        the corpus gap explicitly named so the reviewer can decide
-        whether to extend the corpus.
-
-        ```json
-        {
-          "revision": 1,
-          "actors": [],
-          "integration_points": [],
-          "tasks": [],
-          "addressed_gaps": [],
-          "open_gaps": [
-            "OSH driver framework documentation not indexed — query_entity for osh.driver.framework returned nothing. Recommend add_source_repo for the osh-core repository."
-          ],
-          "substrate_mutations": []
-        }
-        ```
-
-  # ---------- Loop B: research-reviewer (pass 1) ----------
-
-  - tool_call:
-      name: read_loop_result
-      arguments_json: |
-        {
-          "loop_id": "researcher-loop-A"
-        }
-
-  - tool_call:
-      name: decide
-      arguments_json: |
-        {
-          "action": "insufficient",
-          "reason": "Corpus gap: OSH driver framework documentation is not indexed. Recommend add_source_repo for https://github.com/sensorhub-tools/osh-core in namespace research. The retry researcher should register this source before re-querying."
-        }
-
-  # ---------- Loop C: source-curator (substrate-mutating pass, ADR-040) ----------
-
-  - tool_call:
-      name: read_loop_result
-      arguments_json: |
-        {
-          "loop_id": "reviewer-loop-B"
-        }
-
-  - tool_call:
-      name: add_source_repo
-      arguments_json: |
-        {
-          "url": "https://github.com/sensorhub-tools/osh-core",
-          "namespace": "research",
-          "branch": "main"
-        }
-
-  - tool_call:
-      name: query_entity
-      arguments_json: |
-        {
-          "entity_id": "osh.core.api.module.IModule"
-        }
-
-  # source_dirs OMITTED — no SemSource shared mount in this deployment.
-  # Per ADR-040 §"Field rules" "omit when unsure" rule, the curator
-  # only includes source_dirs when it can verify the mount path is
-  # accessible. The curator.artifact.source_dirs_count triple lands
-  # as "0" (verified end-to-end in mock-LLM).
-  - tool_call:
-      name: emit_curator_artifact
-      arguments_json: |
-        {
-          "added_sources": [
-            {
-              "url": "https://github.com/sensorhub-tools/osh-core",
-              "namespace": "research",
-              "covers": "OSH IDriver / IModule / IPersistentDriver interfaces, BaseSensorModule, OGC CS endpoint helpers"
-            }
-          ],
-          "verified_entity_ids": [
-            "osh.core.api.module.IModule",
-            "osh.core.api.module.IModuleProvider",
-            "osh.core.api.sensor.IDriver",
-            "osh.core.impl.module.BaseSensorModule"
-          ]
-        }
-
-  - tool_call:
-      name: decide
-      arguments_json: |
-        {
-          "action": "indexed",
-          "reason": "Added osh-core for OSH driver/module entities; 4 IDs verified to resolve via query_entity post-indexing. The next researcher loop can build on these without re-validating."
-        }
-
-  # ---------- Loop D: researcher (recovery=curator_indexed, re-query) ----------
-
-  - tool_call:
-      name: read_loop_result
-      arguments_json: |
-        {
-          "loop_id": "curator-loop-C"
-        }
-
-  - tool_call:
-      name: query_entity
-      arguments_json: |
-        {
-          "entity_id": "osh.core.api.module.IModule"
-        }
-
-  - tool_call:
-      name: emit_research_artifact
-      arguments_json: |
-        {
-          "revision": 2,
-          "test_harness": "meshtasticd-2.x",
-          "title": "OSH Meshtastic driver research",
-          "actors": [
-            {"name": "OSH driver framework", "role": "Hosts the IDriver interface drivers must implement to expose sensor observations"},
-            {"name": "OGC CS endpoints", "role": "Standard endpoints for observations, system descriptions, and control streams that the driver exposes"},
-            {"name": "Meshtastic radio", "role": "LoRa mesh radio interface that emits packetised telemetry the driver consumes"}
-          ],
-          "integration_points": [
-            {"from": "OSH driver", "to": "OGC CS endpoints", "data": "observation messages and system descriptions", "direction": "write"},
-            {"from": "Meshtastic radio", "to": "OSH driver", "data": "packetised radio telemetry", "direction": "read"}
-          ],
-          "tasks": [
-            "Implement OSH `IDriver` interface backed by Meshtastic radio events, exposing OGC CS observation endpoints"
-          ],
-          "addressed_gaps": [
-            "Corpus gap closed by curator's add_source_repo for https://github.com/sensorhub-tools/osh-core; queried curator's verified_entity_ids (IModule, IDriver, BaseSensorModule) and enumerated actors from the resolved entities."
-          ],
-          "open_gaps": [],
-          "substrate_mutations": []
-        }
-
-  - completion:
-      content: |
-        Re-queried the curator-augmented corpus and enumerated three
-        actors (OSH driver framework, OGC CS endpoints, Meshtastic
-        radio) and two integration points. Built directly on the
-        curator's verified_entity_ids — no re-validation needed.
-        Substrate untouched this pass; the curator owns mutation
-        under ADR-040.
-
-        ```json
-        {
-          "revision": 2,
-          "actors": [
-            {"name": "OSH driver framework", "role": "Hosts the IDriver interface drivers must implement to expose sensor observations"},
-            {"name": "OGC CS endpoints", "role": "Standard endpoints for observations, system descriptions, and control streams that the driver exposes"},
-            {"name": "Meshtastic radio", "role": "LoRa mesh radio interface that emits packetised telemetry the driver consumes"}
-          ],
-          "integration_points": [
-            {"from": "OSH driver", "to": "OGC CS endpoints", "data": "observation messages and system descriptions", "direction": "write"},
-            {"from": "Meshtastic radio", "to": "OSH driver", "data": "packetised radio telemetry", "direction": "read"}
-          ],
-          "tasks": [
-            "Implement OSH `IDriver` interface backed by Meshtastic radio events, exposing OGC CS observation endpoints"
-          ],
-          "addressed_gaps": [
-            "Corpus gap closed by curator's add_source_repo for https://github.com/sensorhub-tools/osh-core; queried curator's verified_entity_ids (IModule, IDriver, BaseSensorModule) and enumerated actors from the resolved entities."
-          ],
-          "open_gaps": [],
-          "substrate_mutations": []
-        }
-        ```
-
-  # ---------- Loop E: research-reviewer (pass 2 — approves on re-queried artifact) ----------
-
-  - tool_call:
-      name: read_loop_result
-      arguments_json: |
-        {
-          "loop_id": "researcher-loop-D"
-        }
-
-  - tool_call:
-      name: decide
-      arguments_json: |
-        {
-          "action": "approved",
-          "reason": "Checklist satisfied: three actors with role text, two integration points with direction, one decomposable seed requirement. Substrate untouched this revision (researcher does not mutate under ADR-040; the curator's add was executed in Loop C). No stabilisation gate to apply — the post-curator researcher pass is a pure re-query."
-        }
-
-  # ---------- Loop F: dev-via-spec-planner (R3.3 first pass) ----------
-
-  - tool_call:
-      name: read_loop_result
-      arguments_json: |
-        {
-          "loop_id": "reviewer-loop-E"
-        }
-
-  # PR C Phase C5: planner calls emit_plan before terminating with
-  # decide(planned). Tool renders docs/plans/<slug>.md, mints marker
-  # triples on the loop entity, and lets the chain milestone subscriber
-  # propagate chain.plan.path on reviewer-approval. decide.reason still
-  # carries the substance for the in-chain reviewer to read via
-  # read_loop_result.
   - tool_call:
       name: emit_plan
       arguments_json: |
@@ -465,111 +168,103 @@ responses:
           "revision": 1,
           "title": "OSH Meshtastic driver plan",
           "goal": "Implement the OSH IDriver interface backed by Meshtastic radio packets, exposing OGC CS observation endpoints.",
-          "context": "The research arc enumerated three actors — OSH driver framework (hosts IDriver), OGC CS endpoints (observation surface), and Meshtastic radio (telemetry source). The boundary spans a read-side (Meshtastic packets → driver) and a write-side (driver → OGC CS observations).",
+          "context": "Initial planning pass — the research arc has not yet enumerated the corpus actors. The driver sits at the boundary between Meshtastic packet ingestion (read) and OGC CS observation publishing (write).",
           "scope_in": [
-            "pkg/driver/meshtastic_driver.go — IDriver implementation",
-            "pkg/driver/ogc_publisher.go — OGC CS write-side publisher",
-            "pkg/driver/meshtastic_decoder.go — Meshtastic packet decoder",
-            "test/driver/integration_test.go — read+write integration coverage"
+            "OSH IDriver interface implementation",
+            "Meshtastic packet decoder",
+            "OGC CS observation publisher"
           ],
           "scope_out": [
-            "Meshtastic firmware changes — out of repo scope, upstream-owned",
-            "OGC CS specification work — standards body owns; we conform, not extend"
+            "Meshtastic firmware changes — upstream-owned",
+            "OGC CS specification work — standards body owns; we conform"
           ],
           "epics": [
-            "E1 — Meshtastic packet ingestion: implement the read-side decoder, normalising radio packets into the driver's internal observation envelope",
-            "E2 — OGC CS observation publishing: implement the write-side publisher exposing the IDriver interface, mapping internal observations to OGC CS observation messages and system descriptions",
-            "E3 — Lifecycle and recovery: implement IDriver lifecycle hooks (start/stop) plus the radio-disconnect failure mode handler"
+            "E1 — Meshtastic packet ingestion: read-side decoder normalising radio packets into the driver's internal observation envelope",
+            "E2 — OGC CS observation publishing: write-side publisher exposing the IDriver interface",
+            "E3 — Lifecycle and recovery: IDriver lifecycle hooks plus the radio-disconnect failure-mode handler"
+          ]
+        }
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "gather",
+          "reason": "Plan emitted: OSH Meshtastic driver plan rev 1. Goal: Implement the OSH IDriver interface backed by Meshtastic radio packets, exposing OGC CS observation endpoints. Three epics (Meshtastic packet ingestion / OGC CS observation publishing / lifecycle and recovery) decompose the work at interface granularity. The GATHER phase should enumerate the corpus actors — OSH driver framework, OGC CS endpoints, Meshtastic radio — and identify the integration boundaries."
+        }
+
+  # ---------- Loop B: researcher-gather (rule_04 spawn) ----------
+
+  - tool_call:
+      name: read_loop_result
+      arguments_json: |
+        {
+          "loop_id": "plan-loop-A"
+        }
+
+  - tool_call:
+      name: query_entity
+      arguments_json: |
+        {
+          "entity_id": "osh.core.api.module.IModule"
+        }
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "synthesize",
+          "reason": "GATHER enumerated three OSH driver entities: osh.core.api.module.IModule, osh.core.api.sensor.IDriver, osh.core.impl.module.BaseSensorModule. Three integration points emerge: Meshtastic radio → OSH driver, OSH driver → OGC CS endpoints, lifecycle/disconnect-recovery boundary."
+        }
+
+  # ---------- Loop C: researcher-synthesize (rule_05 spawn) ----------
+
+  - tool_call:
+      name: read_loop_result
+      arguments_json: |
+        {
+          "loop_id": "gather-loop-B"
+        }
+
+  - tool_call:
+      name: emit_research_artifact
+      arguments_json: |
+        {
+          "revision": 1,
+          "test_harness": "meshtasticd-2.x",
+          "title": "OSH Meshtastic driver research",
+          "actors": [
+            {"name": "OSH driver framework", "role": "Hosts the IDriver interface drivers must implement to expose sensor observations"},
+            {"name": "OGC CS endpoints", "role": "Standard endpoints for observations, system descriptions, and control streams that the driver exposes"},
+            {"name": "Meshtastic radio", "role": "LoRa mesh radio interface that emits packetised telemetry the driver consumes"}
           ],
-          "depends_on": {
-            "research_artifact_loop": "researcher-loop-D"
-          }
-        }
-
-  - tool_call:
-      name: decide
-      arguments_json: |
-        {
-          "action": "planned",
-          "reason": "Goal: Implement the OSH IDriver interface backed by Meshtastic radio packets, exposing OGC CS observation endpoints. Context: The research arc enumerated three actors — OSH driver framework (hosts IDriver), OGC CS endpoints (observation surface), and Meshtastic radio (telemetry source). The boundary spans a read-side (Meshtastic packets → driver) and a write-side (driver → OGC CS observations). Scope: include = [pkg/driver/meshtastic_driver.go, pkg/driver/ogc_publisher.go, pkg/driver/meshtastic_decoder.go, test/driver/integration_test.go]; exclude = [Meshtastic firmware changes, OGC CS specification work]; do_not_touch = [README.md, LICENSE]. Epics: E1 — Meshtastic packet ingestion: implement the read-side decoder, normalising radio packets into the driver's internal observation envelope; E2 — OGC CS observation publishing: implement the write-side publisher exposing the IDriver interface, mapping internal observations to OGC CS observation messages and system descriptions; E3 — Lifecycle and recovery: implement IDriver lifecycle hooks (start/stop) plus the radio-disconnect failure mode handler. Three epics decompose the single seed requirement at interface granularity per the dev-via-spec planner contract.\n\n## Verifiable Outcomes\n\n- E1 — When meshtasticd publishes a protobuf POSITION_APP packet on TCP/4403 from node 0xABCD, the MeshtasticSensorModule emits within 500ms a CS API observation with non-null SensorML schema and matching node_id.\n- E2 — When the driver's internal observation envelope contains a populated payload, the OGC CS publisher issues a POST /observations with body matching the OGC CS observation JSON schema and a 2xx response is recorded.\n- E3 — When the Meshtastic TCP connection drops mid-stream, the driver transitions to a degraded state within 1s, emits a status observation describing the disconnect, and resumes ingestion within 5s of the radio reconnecting (no observations dropped after reconnect)."
-        }
-
-  # ---------- Loop G: dev-via-spec-reviewer (first pass — approves) ----------
-
-  - tool_call:
-      name: read_loop_result
-      arguments_json: |
-        {
-          "loop_id": "planner-loop-F"
-        }
-
-  - tool_call:
-      name: decide
-      arguments_json: |
-        {
-          "action": "approved",
-          "reason": "All completeness checklist items met. Goal is one concrete sentence naming the IDriver interface and the OGC CS endpoint target. Context cites two of three artifact actors (OSH driver framework + Meshtastic radio) and references the read/write integration boundary. Scope.include grounds against artifact integration_points (Meshtastic packet ingestion file + OGC CS publisher file); scope.exclude rationalises Meshtastic firmware changes; scope.do_not_touch is concrete. All three artifact integration_points are covered by epic scope. Epic decomposition E1/E2/E3 splits cleanly on the read-side / write-side / lifecycle boundary at interface granularity. No revision-respect concerns — first pass."
-        }
-
-  # ---------- Loop H: dev-via-spec-challenger (first pass — accepts) ----------
-
-  - tool_call:
-      name: read_loop_result
-      arguments_json: |
-        {
-          "loop_id": "reviewer-loop-G"
-        }
-
-  # PR C Phase C5: challenger calls emit_consensus on the accept branch
-  # only. Tool renders docs/consensus/<slug>.md, mints marker triples,
-  # chain milestone subscriber writes chain.consensus.path on accept.
-  - tool_call:
-      name: emit_consensus
-      arguments_json: |
-        {
-          "title": "OSH Meshtastic driver consensus",
-          "summary": "Plan accepted: read-side Meshtastic decoder + write-side OGC CS publisher + lifecycle/recovery handler decompose the IDriver implementation cleanly across the two integration points named in the research artifact.",
-          "chain_consensus": [
-            "Meshtastic radio → OSH driver framework: read-side decoder normalises packetised telemetry into the driver's internal observation envelope (E1)",
-            "OSH driver framework → OGC CS endpoints: write-side publisher maps internal observations to OGC CS observation messages and system descriptions (E2)",
-            "Lifecycle + radio-disconnect failure mode owned by E3 — covers asynchronous Meshtastic→driver hazards"
+          "integration_points": [
+            {"from": "OSH driver", "to": "OGC CS endpoints", "data": "observation messages and system descriptions", "direction": "write"},
+            {"from": "Meshtastic radio", "to": "OSH driver", "data": "packetised radio telemetry", "direction": "read"}
           ],
-          "considered_concerns": [],
-          "depends_on": {
-            "plan_loop": "planner-loop-F",
-            "reviewer_loop": "reviewer-loop-G"
-          }
+          "tasks": [
+            "Implement OSH `IDriver` interface backed by Meshtastic radio events, exposing OGC CS observation endpoints"
+          ],
+          "addressed_gaps": [],
+          "open_gaps": [],
+          "substrate_mutations": []
         }
 
   - tool_call:
       name: decide
       arguments_json: |
         {
-          "action": "accept",
-          "reason": "Probed for six failure classes; no actionable concerns raised. (1) Decomposition coarseness: E1/E2/E3 each touch a single integration boundary (Meshtastic-read / OGC-write / lifecycle); no epic spans both directions. (2) Scope creep: every scope.include item maps to an artifact actor + integration point; no unmotivated additions. (3) Missing failure mode: E3 explicitly owns the radio-disconnect case for the asynchronous Meshtastic→driver flow. (4) Unaccounted integration: both artifact integration_points are owned by an epic. (5) Goal/scope coherence: scope items deliver the goal; goal motivates context's actor citations. (6) Revision-respect: not applicable — first pass. The plan is well-formed and ready for the architect to ratify."
+          "action": "architect",
+          "reason": "Artifact rev 1 emitted. Forwarding to ARCHITECT so the typed spec can be composed against the planner's E1/E2/E3 epics — read-side decoder, write-side publisher, lifecycle handler."
         }
 
-  # ---------- Loop I: dev-via-spec-architect (R3.4b, emits typed artifact) ----------
+  # ---------- Loop D: researcher-architect (rule_06 spawn) ----------
 
   - tool_call:
       name: read_loop_result
       arguments_json: |
         {
-          "loop_id": "challenger-loop-H"
-        }
-
-  - tool_call:
-      name: read_loop_result
-      arguments_json: |
-        {
-          "loop_id": "planner-loop-F"
-        }
-
-  - tool_call:
-      name: read_loop_result
-      arguments_json: |
-        {
-          "loop_id": "reviewer-loop-E"
+          "loop_id": "synthesize-loop-C"
         }
 
   - tool_call:
@@ -578,7 +273,7 @@ responses:
         {
           "title": "OSH Meshtastic Driver",
           "goal": "Implement the OSH IDriver interface backed by Meshtastic radio packets, exposing OGC CS observation endpoints.",
-          "context": "The research arc enumerated the OSH driver framework (hosts the IDriver interface), OGC CS endpoints (observation surface), and Meshtastic radio (telemetry source). The driver sits at the boundary between Meshtastic packet ingestion (read) and OGC CS observation publishing (write).",
+          "context": "The research arc enumerated the OSH driver framework, OGC CS endpoints, and Meshtastic radio. The driver sits at the boundary between Meshtastic packet ingestion (read) and OGC CS observation publishing (write).",
           "actors": [
             {"name": "OSH driver framework", "role": "Hosts the IDriver interface drivers must implement to expose sensor observations"},
             {"name": "OGC CS endpoints", "role": "Standard endpoints for observations, system descriptions, and control streams that the driver exposes"},
@@ -608,10 +303,7 @@ responses:
             }
           ],
           "provenance": {
-            "research_artifact_loop": "researcher-loop-D",
-            "planner_loop": "planner-loop-F",
-            "reviewer_loop": "reviewer-loop-G",
-            "challenger_loop": "challenger-loop-H"
+            "research_artifact_loop": "synthesize-loop-C"
           }
         }
 
@@ -619,17 +311,41 @@ responses:
       name: decide
       arguments_json: |
         {
-          "action": "tasks_emitted",
-          "reason": "Spec artifact emitted at docs/specs/<slug>.md. Three seed requirements grounded against three actors and two integration points: SR1 (Meshtastic decoder, read-side), SR2 (OGC CS publisher, write-side), SR3 (IDriver lifecycle + failure-mode handler). Planner epics E1/E2/E3 map cleanly to SR1/SR2/SR3. The dev-via-spec arc closes here; rule 06 spawns the builder."
+          "action": "emit",
+          "reason": "Spec rev 1 emitted at /artifacts/specs/<slug>.md. Three tasks grounded against three actors and two integration points. Reviewer-spec should grade against the completeness checklist."
         }
 
-  # ---------- Loop J: dev-via-spec-builder (R3.6.2.e + R3.7.2.k′) ----------
+  # ---------- Loop E: reviewer-spec (rule_01b spawn) ----------
+
+  - tool_call:
+      name: read_loop_result
+      arguments_json: |
+        {
+          "loop_id": "architect-loop-D"
+        }
+
+  - tool_call:
+      name: bash
+      arguments_json: |
+        {
+          "command": "cat /artifacts/specs/2026-05-13-osh-meshtastic-driver.md"
+        }
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "approved",
+          "reason": "Spec checklist satisfied: three actors with role text, two integration points with direction + data shape, three tasks grounded against actors + integration_points, all external actors covered. Approving so the builder can bootstrap a workspace."
+        }
+
+  # ---------- Loop F: builder (rule_02 spawn) ----------
 
   - tool_call:
       name: bootstrap_workspace
       arguments_json: |
         {
-          "spec_path": "docs/specs/2026-05-03-osh-meshtastic-driver.md"
+          "spec_path": "/artifacts/specs/2026-05-13-osh-meshtastic-driver.md"
         }
 
   - tool_call:
@@ -651,20 +367,31 @@ responses:
       arguments_json: |
         {
           "action": "tests_passing",
-          "reason": "Canned tests_passing terminal for R3.7.2.k′ chain-shape proof. Mock-LLM did not actually run tests in the workspace; the builder_decide tool emits the coordinator.next_action=tests_passing triple unconditionally given the args, which is what triggers rule 07 (R3.7.2.k′: builder→qa-reviewer). Substance lives in smoke #7 (R3.7.2.l′ on real LLM).",
+          "reason": "Canned tests_passing for the recovery-cycle proof. Mock-LLM did not actually run tests; the builder_decide tool emits coordinator.next_action=tests_passing unconditionally given the args, which triggers rule_04 once phasevalidator.QAModeGate validates tests_run > 0 AND tests_failed = 0.",
           "tests_run": 3,
           "tests_passed": 3,
           "tests_failed": 0,
-          "artifact_summary": "Canned summary — three notional unit tests passing for the R3.7.2.k′ stub. Real artifact_summary content arrives in smoke #7."
+          "artifact_summary": "Canned summary — three notional unit tests passing for the rev 1 spec."
         }
 
-  # ---------- Loop K: dev-via-spec-qa-reviewer (R3.7.2.k′ terminal) ----------
+  # ===================================================================
+  # Loop G: reviewer-qa rejects rev 1 → ADR-039 Phase 1 recovery cycle
+  # ===================================================================
+
+  # ---------- Loop G: reviewer-qa (rule_04 spawn — needs_clarification) ----------
 
   - tool_call:
       name: read_loop_result
       arguments_json: |
         {
-          "loop_id": "builder-loop-J"
+          "loop_id": "builder-loop-F"
+        }
+
+  - tool_call:
+      name: bash
+      arguments_json: |
+        {
+          "command": "ls -la SPEC.md"
         }
 
   - tool_call:
@@ -672,29 +399,129 @@ responses:
       arguments_json: |
         {
           "action": "needs_clarification",
-          "reason": "evidence summary is (no checks) — the architect emitted no checks in this mock-LLM journey (bootstrap_workspace placeholder path didn't resolve a real sidecar). Per 10-evaluation-contract.md Rule 3, empty evidence across all checks routes to needs_clarification because this is a chain-coverage gap, not a builder failure — the architect needs to re-emit with evidence rules.",
-          "blocking_question": "Architect must re-emit the spec artifact with at least one check containing evidence rules. The dev-via-spec-builder ran against a workspace without .evidence/checks.json because this is a mock-LLM journey; smoke #8 (slice 5) will exercise real evidence grading with Testcontainers."
+          "reason": "Evidence summary is (no checks) — the architect emitted no checks[] in the rev 1 spec. Per the reviewer-qa evaluation contract, build quality cannot be graded without evidence rules to bind. This is a chain-coverage gap, not a builder failure; routing needs_clarification so the chain re-runs through architect with at least one check binding the packet decoder.",
+          "retry_hint": "Architect must re-emit the spec with at least one check containing evidence rules. The mock-LLM journey: smoke #21 (Phase 4) on real LLM will exercise substantive evidence grading."
         }
 
-  # ---------- Loop L: dev-via-spec-architect RECOVERY (ADR-039 Phase 1 rule 09) ----------
-  # qa-reviewer's needs_clarification triggers rule 09 → spawn fresh
-  # architect. Per the rule's prompt, the recovery architect reads the
-  # qa-reviewer's terminal AND the prior research artifact, then re-emits
-  # the spec WITH evidence rules in checks (the gap the qa-reviewer
-  # flagged). decide(tasks_emitted) re-fires rule 06 → recovery builder.
+  # ===================================================================
+  # Recovery cycle: rule 03 spawn → researcher-plan → ... → reviewer-qa accept
+  # ===================================================================
+
+  # ---------- Loop H: researcher-plan RECOVERY (rule_03 spawn) ----------
 
   - tool_call:
       name: read_loop_result
       arguments_json: |
         {
-          "loop_id": "qa-reviewer-loop-K"
+          "loop_id": "qa-reviewer-loop-G"
         }
+
+  - tool_call:
+      name: emit_plan
+      arguments_json: |
+        {
+          "revision": 2,
+          "title": "OSH Meshtastic driver plan",
+          "goal": "Implement the OSH IDriver interface backed by Meshtastic radio packets, exposing OGC CS observation endpoints. Recovery revision: scope unchanged; gather pass adds a verifiable check binding the packet decoder task.",
+          "context": "Recovery plan after reviewer-qa flagged the rev 1 spec for missing checks[]. Goal/scope/epics carried forward verbatim; the GATHER + SYNTHESIZE recovery passes will surface one candidate check (file_exists on packet decoder test) the ARCHITECT phase emits into rev 2's checks[].",
+          "scope_in": [
+            "OSH IDriver interface implementation",
+            "Meshtastic packet decoder",
+            "OGC CS observation publisher"
+          ],
+          "scope_out": [
+            "Meshtastic firmware changes — upstream-owned, out of repo scope",
+            "OGC CS specification work — standards body owns; we conform"
+          ],
+          "epics": [
+            "E1 — Meshtastic packet ingestion: read-side decoder normalising radio packets into the driver's internal observation envelope",
+            "E2 — OGC CS observation publishing: write-side publisher exposing the IDriver interface",
+            "E3 — Lifecycle and recovery: IDriver lifecycle hooks plus the radio-disconnect failure-mode handler"
+          ]
+        }
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "gather",
+          "reason": "Recovery plan rev 2 emitted: reviewer-qa rejected rev 1 with needs_clarification — the architect's spec carried no checks[] so build quality couldn't be graded. Goal/scope/epics carried forward unchanged; tightening the GATHER pass to identify one candidate check (file_exists on the packet decoder test file) the SYNTHESIZE pass will record and the ARCHITECT phase will emit into checks[]."
+        }
+
+  # ---------- Loop I: researcher-gather RECOVERY ----------
 
   - tool_call:
       name: read_loop_result
       arguments_json: |
         {
-          "loop_id": "researcher-loop-D"
+          "loop_id": "plan-loop-H"
+        }
+
+  - tool_call:
+      name: query_entity
+      arguments_json: |
+        {
+          "entity_id": "osh.core.api.module.IModule"
+        }
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "synthesize",
+          "reason": "GATHER recovery pass: corpus actors stable (same OSH driver entities resolved as rev 1); the new evidence is a check candidate — file_exists on src/test/java/com/example/decoder/PacketDecoderTest.java binds the packet decoder task to a verifiable post-build artifact. SYNTHESIZE can compose rev 2 with that check carried as an addressed_gap."
+        }
+
+  # ---------- Loop J: researcher-synthesize RECOVERY ----------
+
+  - tool_call:
+      name: read_loop_result
+      arguments_json: |
+        {
+          "loop_id": "gather-loop-I"
+        }
+
+  - tool_call:
+      name: emit_research_artifact
+      arguments_json: |
+        {
+          "revision": 2,
+          "test_harness": "meshtasticd-2.x",
+          "title": "OSH Meshtastic driver research",
+          "actors": [
+            {"name": "OSH driver framework", "role": "Hosts the IDriver interface drivers must implement to expose sensor observations"},
+            {"name": "OGC CS endpoints", "role": "Standard endpoints for observations, system descriptions, and control streams that the driver exposes"},
+            {"name": "Meshtastic radio", "role": "LoRa mesh radio interface that emits packetised telemetry the driver consumes"}
+          ],
+          "integration_points": [
+            {"from": "OSH driver", "to": "OGC CS endpoints", "data": "observation messages and system descriptions", "direction": "write"},
+            {"from": "Meshtastic radio", "to": "OSH driver", "data": "packetised radio telemetry", "direction": "read"}
+          ],
+          "tasks": [
+            "Implement OSH `IDriver` interface backed by Meshtastic radio events, exposing OGC CS observation endpoints"
+          ],
+          "addressed_gaps": [
+            "QA-reviewer rev 1 needs_clarification verdict (no checks[]) closed by carrying a check candidate forward to ARCHITECT: file_exists on src/test/java/com/example/decoder/PacketDecoderTest.java binds the packet decoder task to a verifiable post-build artifact."
+          ],
+          "open_gaps": [],
+          "substrate_mutations": []
+        }
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "architect",
+          "reason": "Artifact rev 2 emitted. Same actors + integration_points as rev 1; addressed_gaps records the check candidate the ARCHITECT must include in checks[]. Forwarding so the recovery spec carries an evidence rule."
+        }
+
+  # ---------- Loop K: researcher-architect RECOVERY ----------
+
+  - tool_call:
+      name: read_loop_result
+      arguments_json: |
+        {
+          "loop_id": "synthesize-loop-J"
         }
 
   - tool_call:
@@ -703,7 +530,7 @@ responses:
         {
           "title": "OSH Meshtastic Driver (recovery v2)",
           "goal": "Implement the OSH IDriver interface backed by Meshtastic radio packets, exposing OGC CS observation endpoints.",
-          "context": "Recovery pass after qa-reviewer rejected v1 for missing evidence rules. v2 adds checks[] with evidence rules per 10-evaluation-contract.md Rule 3. Goal/context/actors/integration_points carried forward verbatim from v1; only checks[] is new.",
+          "context": "Recovery pass after qa-reviewer rejected rev 1 for missing evidence rules. v2 adds checks[] with one evidence rule binding the packet decoder task. Goal/context/actors/integration_points carried forward verbatim from rev 1.",
           "actors": [
             {"name": "OSH driver framework", "role": "Hosts the IDriver interface drivers must implement to expose sensor observations"},
             {"name": "OGC CS endpoints", "role": "Standard endpoints for observations, system descriptions, and control streams that the driver exposes"},
@@ -743,10 +570,7 @@ responses:
             }
           ],
           "provenance": {
-            "research_artifact_loop": "researcher-loop-D",
-            "planner_loop": "planner-loop-F",
-            "reviewer_loop": "reviewer-loop-G",
-            "challenger_loop": "challenger-loop-H"
+            "research_artifact_loop": "synthesize-loop-J"
           }
         }
 
@@ -754,24 +578,41 @@ responses:
       name: decide
       arguments_json: |
         {
-          "action": "tasks_emitted",
-          "reason": "Recovery spec emitted: <slug>-recovery. Carried forward all v1 actors / integration_points / tasks; added checks[] with evidence rules per qa-reviewer's blocking_question (10-evaluation-contract.md Rule 3 rejection on (no checks)). One in-process-unit check on the packet decoder is the minimum to clear the gate; smoke #8 will demonstrate multi-check coverage on real LLM. Rule 06 fires on tasks_emitted to spawn the recovery builder."
+          "action": "emit",
+          "reason": "Recovery spec rev 2 emitted with one in-process-unit check binding the packet decoder. Goal/context/actors/integration_points/tasks identical to rev 1; only checks[] is new — addresses the qa-reviewer's blocking_question directly. Reviewer-spec should approve; the build can then run and the qa-reviewer's evidence summary will reflect the check this time."
         }
 
-  # ---------- Loop M: dev-via-spec-builder RECOVERY ----------
-  # rule 06 fires on the recovery architect's tasks_emitted → spawn
-  # builder. Same shape as Loop K's first-pass turns; this time
-  # builder_decide(tests_passing) lands on a workspace that has the
-  # recovery spec's checks (mock-LLM doesn't actually run tests; the
-  # builder_decide tool stamps coordinator.next_action=tests_passing
-  # unconditionally given the args, which is what triggers rule 07
-  # → recovery qa-reviewer).
+  # ---------- Loop L: reviewer-spec RECOVERY ----------
+
+  - tool_call:
+      name: read_loop_result
+      arguments_json: |
+        {
+          "loop_id": "architect-loop-K"
+        }
+
+  - tool_call:
+      name: bash
+      arguments_json: |
+        {
+          "command": "cat /artifacts/specs/2026-05-13-osh-meshtastic-driver-recovery-v2.md"
+        }
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "approved",
+          "reason": "Recovery spec passes the checklist + external-actor coverage gate; the new check binds the Meshtastic packet decoder task to a verifiable post-build artifact. Approving so the recovery builder can run against the spec."
+        }
+
+  # ---------- Loop M: builder RECOVERY ----------
 
   - tool_call:
       name: bootstrap_workspace
       arguments_json: |
         {
-          "spec_path": "docs/specs/2026-05-03-osh-meshtastic-driver-recovery-v2.md"
+          "spec_path": "/artifacts/specs/2026-05-13-osh-meshtastic-driver-recovery-v2.md"
         }
 
   - tool_call:
@@ -793,19 +634,14 @@ responses:
       arguments_json: |
         {
           "action": "tests_passing",
-          "reason": "Recovery builder ran against the recovery spec's check (PacketDecoderTest in-process-unit). Canned tests_passing — mock-LLM does not actually run tests; the builder_decide tool stamps coordinator.next_action=tests_passing unconditionally given the args. Rule 07 fires → recovery qa-reviewer.",
+          "reason": "Recovery builder ran against rev 2 spec's PacketDecoderTest check. Canned tests_passing — mock-LLM does not actually run tests; the builder_decide tool stamps coordinator.next_action=tests_passing unconditionally given the args. Rule_04 fires → recovery reviewer-qa.",
           "tests_run": 1,
           "tests_passed": 1,
           "tests_failed": 0,
-          "artifact_summary": "Canned recovery summary — one notional unit test passing on the recovery spec's PacketDecoderTest check. Real artifact_summary lands in smoke #8."
+          "artifact_summary": "Canned recovery summary — one notional unit test passing on the PacketDecoderTest check."
         }
 
-  # ---------- Loop N: dev-via-spec-qa-reviewer RECOVERY (clean terminal) ----------
-  # rule 07 fires on the recovery builder's tests_passing → spawn
-  # qa-reviewer. This time the recovery spec's checks DID reach the
-  # workspace, so the evidence summary is non-empty. The qa-reviewer
-  # accepts — clean terminal, NO further rule fires (rule 09 only fires
-  # on needs_clarification, not accept). Chain settles at 14 loops.
+  # ---------- Loop N: reviewer-qa RECOVERY (terminal — accept) ----------
 
   - tool_call:
       name: read_loop_result
@@ -815,9 +651,16 @@ responses:
         }
 
   - tool_call:
+      name: bash
+      arguments_json: |
+        {
+          "command": "ls -la SPEC.md src/test"
+        }
+
+  - tool_call:
       name: decide
       arguments_json: |
         {
           "action": "accept",
-          "reason": "Recovery spec's checks[] now contains an evidence rule (test_file_exists on PacketDecoderTest.java). The recovery builder's tests_passing terminal aligns with the evidence rule per 10-evaluation-contract.md Rule 1 (evidence rule satisfied → check passes). Chain reaches clean terminal; no further routing needed. ADR-039 Phase 1 Shape A supersession cycle complete: prior architect + qa-reviewer loops remain immutable; this recovery loop's verdict is the chain's effective terminal."
+          "reason": "Recovery spec rev 2 carries one in-process-unit check (test_file_exists on PacketDecoderTest.java). Recovery builder reports tests_run=1, tests_passed=1, tests_failed=0 — aligns with the evidence rule. Build quality acceptable; the qa_mode_gate has already validated structural presence (tests_run > 0 AND tests_failed = 0). ADR-039 Phase 1 Shape A supersession cycle complete: rev 1 loops remain immutable; this recovery loop's verdict is the chain's effective terminal."
         }

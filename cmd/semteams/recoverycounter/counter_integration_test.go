@@ -144,7 +144,7 @@ func (s *stubParentReader) ReadParent(_ context.Context, loopID string) (string,
 //     breaks at "stub never received the request" rather than silently
 //     no-opping in production.
 //  2. Cap-engagement branch — no Playwright spec drives 4+ insufficient
-//     verdicts on research-reviewer; the existing
+//     verdicts on reviewer-research; the existing
 //     research-mode-transition.spec.ts only walks one recovery cycle
 //     (count 0→1, well under threshold).
 //  3. Wire-format symmetry — the Counter both reads and writes
@@ -218,7 +218,7 @@ func TestCounter_LiveSubjects_FullCapEngagement(t *testing.T) {
 	for i := 0; i < numCycles; i++ {
 		ev := &agentic.LoopCompletedEvent{
 			LoopID:  reviewerLoopIDs[i],
-			Role:    "research-reviewer",
+			Role:    "reviewer-research",
 			Outcome: agentic.OutcomeSuccess,
 		}
 		err := c.HandleLoopCompleted(ctx, ev)

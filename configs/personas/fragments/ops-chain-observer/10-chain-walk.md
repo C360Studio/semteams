@@ -58,8 +58,7 @@ entity carries:
 - `chain.research_artifact_loop` — the researcher loop_id
 - `chain.research_artifact.{harness, actor_count, task_count, path}` — research milestone metadata
 - `chain.slug.stem` — chain-stable slug for all artifact filenames
-- `chain.plan_loop`, `chain.plan_reviewer_loop`, `chain.plan.path` — plan milestone
-- `chain.consensus_loop`, `chain.consensus.path` — consensus milestone
+- `chain.plan_loop`, `chain.plan_reviewer_loop`, `chain.plan.path` — plan milestone (legacy; ADR-041 MVP drops the planner/reviewer split — see ADR-041)
 - `chain.spec_artifact_loop`, `chain.spec_artifact.{path, check_count}` — spec milestone
 - `chain.evidence.summary{_ready, .path}` — evidence preprocessor's verdict (if it ran)
 - `chain.paused.*` — if the chain paused (failed-loop ancestry)
@@ -79,10 +78,9 @@ This gives you the qa-reviewer's verdict: `coordinator.next_action`
 Then read each milestone loop's result:
 
 - `read_loop_result(loop_id=<chain.research_artifact_loop>)` — researcher's terminal
-- `read_loop_result(loop_id=<chain.plan_loop>)` — planner's terminal
-- `read_loop_result(loop_id=<chain.plan_reviewer_loop>)` — reviewer's terminal
-- `read_loop_result(loop_id=<chain.consensus_loop>)` — challenger's terminal
-- `read_loop_result(loop_id=<chain.spec_artifact_loop>)` — architect's terminal
+- `read_loop_result(loop_id=<chain.plan_loop>)` — planner's terminal (legacy; ADR-041 MVP collapses planner into researcher-plan)
+- `read_loop_result(loop_id=<chain.plan_reviewer_loop>)` — reviewer's terminal (legacy; same reason)
+- `read_loop_result(loop_id=<chain.spec_artifact_loop>)` — researcher-architect's terminal
 
 You now have:
 

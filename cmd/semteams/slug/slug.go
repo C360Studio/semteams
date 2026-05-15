@@ -3,14 +3,16 @@
 // name its rendered markdown artifact under docs/<arc>/<slug>.md.
 //
 // Background: ADR-038 PR C iteratively shipped emit_research_artifact
-// (PR C Phase C1), emit_plan (C2), emit_consensus (C3), and the
-// pre-existing emit_dev_via_spec_artifact already had its own variant.
-// Three of those four converged on the identical 3-arg shape with a
-// loopID-based fallback when the persona omits a title; the fourth
-// (spec_artifact) requires a non-empty title via persona contract and
-// detects degenerate input via a trailing-dash check on the slug.
+// (PR C Phase C1) and emit_plan (C2); the pre-existing
+// emit_dev_via_spec_artifact already had its own variant. (PR C Phase
+// C3's emit_consensus was retired in ADR-041 Slice 2D-5 alongside the
+// challenger role.) Two of the surviving three converged on the
+// identical 3-arg shape with a loopID-based fallback when the persona
+// omits a title; spec_artifact requires a non-empty title via persona
+// contract and detects degenerate input via a trailing-dash check on
+// the slug.
 //
-// This package replaces those four duplicates with a single
+// This package replaces those duplicates with a single
 // DeriveDated function that supports both modes via the
 // fallbackPrefix parameter — empty means "no fallback, signal
 // degenerate via trailing dash" (spec_artifact's contract); non-empty

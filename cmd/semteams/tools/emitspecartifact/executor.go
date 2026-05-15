@@ -1,10 +1,11 @@
 // Package emitspecartifact implements the SemTeams-local
-// emit_dev_via_spec_artifact tool. This tool is the architect role's
-// terminal action in the dev-via-spec arc (research → mode-transition →
-// planner → reviewer → challenger → architect): it writes the structured
-// Artifact to disk as a human-readable markdown spec, mints marker triples
-// on the calling loop entity for downstream rule matching, and publishes the
-// typed dev_via_spec.artifact.v1 payload on a stable NATS subject for audit.
+// emit_dev_via_spec_artifact tool. This tool is the researcher-architect
+// phase's terminal action in the MVP arc (plan → gather → synthesize →
+// architect → reviewer (spec) → builder → reviewer (qa)): it writes the
+// structured Artifact to disk as a human-readable markdown spec, mints
+// marker triples on the calling loop entity for downstream rule matching,
+// and publishes the typed dev_via_spec.artifact.v1 payload on a stable
+// NATS subject for audit.
 //
 // See cmd/semteams/devviaspec/artifact.go for the payload type and the
 // ADR-031 §R3.3 addendum for the design rationale.
@@ -113,7 +114,7 @@ const payloadSubjectPrefix = "dev_via_spec.artifact"
 // defaultOutputDir is the output directory when SEMTEAMS_DEVVIASPEC_ARTIFACT_DIR
 // is unset. Relative to the process working directory (the repo root in normal
 // operation).
-const defaultOutputDir = "docs/specs"
+const defaultOutputDir = ".artifacts/specs"
 
 // envOutputDir is the environment variable operators set to override the output
 // directory. Kept as env var (not framework config) so it does not drift the
@@ -175,13 +176,12 @@ type ChainResolver interface {
 // ChainReader resolves the chain entity ID for the calling architect
 // loop and reads its triple set in one call. Used by Execute to
 // override LLM-supplied lineage IDs (provenance.{research_artifact_loop,
-// planner_loop, reviewer_loop, challenger_loop}) and the slug with
-// chain-canonical values (smoke #8 run-5 D1 + D2 fix).
+// planner_loop, reviewer_loop}) and the slug with chain-canonical
+// values (smoke #8 run-5 D1 + D2 fix).
 //
 // Optional — leave unset to keep the executor backward-compatible
 // (LLM-supplied provenance + title-derived slug only). Same shape as
-// emitplan.ChainReader / emitconsensus.ChainReader; production wiring
-// uses the same adapter.
+// emitplan.ChainReader; production wiring uses the same adapter.
 type ChainReader interface {
 	ReadChainFor(ctx context.Context, fromLoopID string) (chainEntityID string, triples map[string]any, err error)
 }
@@ -243,8 +243,8 @@ func (e *Executor) SetChainResolver(r ChainResolver) {
 }
 
 // SetChainReader enables chain-entity-driven provenance and slug
-// derivation. Mirrors the SetChainReader pattern used by emitplan and
-// emitconsensus; same wiring contract. Smoke #8 run-5 D1 + D2 fix.
+// derivation. Mirrors the SetChainReader pattern used by emitplan;
+// same wiring contract. Smoke #8 run-5 D1 + D2 fix.
 func (e *Executor) SetChainReader(r ChainReader) {
 	e.chainReader = r
 }
@@ -293,23 +293,22 @@ func (e *Executor) ListTools() []agentic.ToolDefinition {
 		"type": "object",
 		"properties": map[string]any{
 			"research_artifact_loop": map[string]any{"type": "string", "description": "Loop ID of the research arc that produced the upstream artifact."},
-			"planner_loop":           map[string]any{"type": "string", "description": "Loop ID of the approved planner pass."},
+			"planner_loop":           map[string]any{"type": "string", "description": "Loop ID of the approved plan-phase pass."},
 			"reviewer_loop":          map[string]any{"type": "string", "description": "Loop ID of the approving reviewer pass."},
-			"challenger_loop":        map[string]any{"type": "string", "description": "Loop ID of the accepting challenger pass."},
 		},
-		"required": []string{"research_artifact_loop", "planner_loop", "reviewer_loop", "challenger_loop"},
+		"required": []string{"research_artifact_loop", "planner_loop", "reviewer_loop"},
 	}
 
 	// R3.7.2.b: checks[] is the architect's structured statement of WHAT is
 	// verified, AGAINST WHAT, and with WHAT EVIDENCE. Each check fills a
 	// verification surface (unit / testcontainer / sidecar / browser-flow /
 	// static-analysis) and names a test_harness from configs/harnesses.json
-	// when applicable. The architect persona contract (R3.7.2.f′,
-	// configs/personas/fragments/dev-via-spec-architect/30-commitment-
-	// contract.md) requires at least one check for any artifact whose
+	// when applicable. The architect persona contract
+	// (configs/personas/fragments/researcher-architect/30-commitment-contract.md)
+	// requires at least one check for any artifact whose
 	// integration_points[] names an external actor. The field stays optional
-	// at the wire level so v1 consumers see no schema drift; the
-	// dvs-reviewer (R3.7.2.j′) enforces coverage adequacy.
+	// at the wire level so v1 consumers see no schema drift; reviewer-spec
+	// enforces coverage adequacy.
 	refSchema := map[string]any{
 		"type": "object",
 		"properties": map[string]any{
@@ -342,7 +341,7 @@ func (e *Executor) ListTools() []agentic.ToolDefinition {
 
 	return []agentic.ToolDefinition{{
 		Name:        ToolName,
-		Description: "Emit the dev-via-spec artifact as the architect's terminal action. Writes a human-readable markdown spec to disk, mints marker triples on this loop entity for downstream rule matching, and publishes the typed dev_via_spec.artifact.v1 payload for audit. Call once after the planner/reviewer/challenger chain converges, before submit_work.",
+		Description: "Emit the dev-via-spec artifact as the researcher-architect phase's terminal action. Writes a human-readable markdown spec to disk, mints marker triples on this loop entity for downstream rule matching, and publishes the typed dev_via_spec.artifact.v1 payload for audit. Call once after the plan → gather → synthesize phases have produced their artifacts, before decide(action=\"emit\").",
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -401,8 +400,8 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 
 	// Read chain-canonical lineage + slug stem so the architect persona
 	// stops guessing upstream loop IDs and the chain's slug stays
-	// consistent across emit_plan / emit_consensus /
-	// emit_dev_via_spec_artifact. Smoke #8 run-5 D1 + D2 fix.
+	// consistent across emit_plan / emit_dev_via_spec_artifact. Smoke
+	// #8 run-5 D1 + D2 fix.
 	//
 	// Anchor on a completed ancestor's loop_id (from task properties)
 	// rather than the running loop's own LoopID — agent.loop.parent
@@ -587,7 +586,7 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 //
 // chainReader=nil (test contexts, deployments without chain wiring)
 // returns nil without logging — the documented backward-compatible
-// mode. Mirrors emitplan / emitconsensus.
+// mode. Mirrors emitplan.
 func (e *Executor) readChainTriples(ctx context.Context, loopID string) map[string]any {
 	if e.chainReader == nil {
 		return nil
@@ -624,9 +623,6 @@ func overrideProvenanceFromChain(p *devviaspec.Provenance, chainTriples map[stri
 	}
 	if reviewerLoop, _ := chainTriples[chain.PredicatePlanReviewerLoop].(string); reviewerLoop != "" {
 		p.ReviewerLoop = reviewerLoop
-	}
-	if challengerLoop, _ := chainTriples[chain.PredicateConsensusLoop].(string); challengerLoop != "" {
-		p.ChallengerLoop = challengerLoop
 	}
 }
 
@@ -1017,12 +1013,11 @@ const artifactTemplateText = `# {{.Title}}
 {{end}}## Provenance
 
 - Research artifact loop: ` + "`" + `{{.Provenance.ResearchArtifactLoop}}` + "`" + `
-- Approved planner loop: ` + "`" + `{{.Provenance.PlannerLoop}}` + "`" + `
+- Approved plan-phase loop: ` + "`" + `{{.Provenance.PlannerLoop}}` + "`" + `
 - Approving reviewer loop: ` + "`" + `{{.Provenance.ReviewerLoop}}` + "`" + `
-- Accepting challenger loop: ` + "`" + `{{.Provenance.ChallengerLoop}}` + "`" + `
 - Architect terminal loop: ` + "`" + `{{.Provenance.ArchitectLoop}}` + "`" + `
 
 ---
 
-*Generated by semteams dev-via-spec arc. This document is the structured terminal output of an LLM-mediated chain (research → mode-transition → planner → reviewer → challenger → architect). Hand-edits to this file will be overwritten if the chain re-runs.*
+*Generated by semteams dev-via-spec arc. This document is the structured terminal output of an LLM-mediated chain (plan → gather → synthesize → architect → reviewer (spec) → builder → reviewer (qa)). Hand-edits to this file will be overwritten if the chain re-runs.*
 `

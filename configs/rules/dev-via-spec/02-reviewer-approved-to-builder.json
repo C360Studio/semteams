@@ -1,0 +1,50 @@
+{
+  "id": "reviewer_approved_to_builder",
+  "type": "expression",
+  "name": "Reviewer (spec mode) Approved → Builder",
+  "description": "ADR-041 Slice 2D-3. Fires when reviewer-spec terminates with decide(action=approved) AND phasevalidator.SpecModeGate has stamped chain.spec_mode_gate.proceed=\"true\" on the reviewer-spec loop entity. The gate's load-bearing pre-check is coordinator.evidence_loop_ids non-empty referencing ≥1 researcher loop in the chain — reviewer cannot approve a spec without evidence of prior research (ADR-041 §Risks mitigation spec-mode pre-check). Replaces dev-via-spec/06-architect-emit-to-builder.json. Builder reads the spec markdown emitted by researcher-architect (path stamped on the researcher loop entity, forwarded through reviewer's `prior_loop_id` chain).",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "agent.loop.role",
+      "operator": "eq",
+      "value": "reviewer-spec",
+      "required": true
+    },
+    {
+      "field": "coordinator.decision.next_action",
+      "operator": "eq",
+      "value": "approved",
+      "required": true
+    },
+    {
+      "field": "chain.spec_mode_gate.proceed",
+      "operator": "eq",
+      "value": "true",
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "publish_agent",
+      "subject": "agent.task.builder",
+      "role": "builder",
+      "model": "coding",
+      "tools": ["bootstrap_workspace", "bash", "read_loop_result", "builder_decide", "write_todos"],
+      "related_loops": {
+        "researcher": "$entity.triple.lineage.researcher"
+      },
+      "prompt": "Spec approved by reviewer (spec mode) at loop $entity.instance. Spec path on host filesystem: $entity.triple.dev_via_spec.artifact.path. Spec slug: $entity.triple.dev_via_spec.artifact.slug.\n\nIteration 1 — call bootstrap_workspace exactly once with the spec_path above:\n\n  bootstrap_workspace(spec_path=\"$entity.triple.dev_via_spec.artifact.path\")\n\nThis creates your sandbox worktree at this loop's task_id and seeds the spec markdown as SPEC.md in the workspace root.\n\nIteration 2 onward — read the spec via `bash cat SPEC.md`, then iterate bash calls per builder/10-bash-iteration-contract.md. Terminate with builder_decide per builder/20-builder-decide-contract.md when tests pass, when the iteration budget is exhausted, or when you genuinely cannot proceed without clarification."
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "phase": "ADR-041 Slice 2D-3",
+    "adr": "docs/adr/041-mvp-role-compression-and-graph-as-substrate.md",
+    "validator": "cmd/semteams/phasevalidator/specmode.go (SpecModeGate)",
+    "proceed_sentinel": "chain.spec_mode_gate.proceed on reviewer-spec loop entity. Absence-of-sentinel blocks the rule fire fail-safe per ADR-041 §Risks mitigation spec-mode pre-check.",
+    "spec_artifact_substitution": "dev_via_spec.artifact.{path,slug} triples are stamped by emit_dev_via_spec_artifact on the architect researcher's loop entity, NOT on the reviewer-spec entity (publish_agent action `properties` is not propagated to triples on the spawned loop; ruled out as a substitution channel under beta.64). phasevalidator.SpecModeGate forwards these triples one hop from architect→reviewer-spec on the approved path BEFORE writing chain.spec_mode_gate.proceed, so by the time this rule's third condition passes and the substitution evaluates, the reviewer-spec entity carries the triples. If the forward fails (missing parent, missing architect triples, graph blip), proceed still lands per the gate's design but the substitution resolves to the literal token and bootstrap_workspace fails visibly. Operator log surfaces 'spec-mode gate: architect missing dev_via_spec.artifact triples'.",
+    "spec_handoff_caveat": "bootstrap_workspace reads the spec markdown from $SEMTEAMS_DEVVIASPEC_ARTIFACT_DIR (Docker: /artifacts/specs via the shared agentic-artifacts volume; local-dev fallback: .artifacts/specs in CWD). The backend container writes there; the sandbox container mounts the same volume read-only at /artifacts so non-builder agents can `bash cat /artifacts/specs/<slug>.md` directly. Migration target: when upstream ships an http_request rule action plus task_id substitution for publish_agent, seed inline and delete bootstrap_workspace."
+  }
+}

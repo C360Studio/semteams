@@ -1,89 +1,75 @@
 import { test, expect } from "@playwright/test";
 
 /**
- * Journey: Dev-via-Spec QA-reviewer + ADR-039 Phase 1 recovery cycle
+ * Journey: Dev-via-Spec needs_clarification recovery (ADR-041 MVP)
  *
- * Extends dev-via-spec.spec.ts with the post-build review hop AND the
- * full ADR-039 Phase 1 Shape A supersession recovery cycle when the
- * qa-reviewer rejects with needs_clarification. The first eleven loops
- * are identical to dev-via-spec.spec.ts. The difference at the tail:
+ * Extends dev-via-spec.spec.ts with a complete ADR-039 Phase 1 Shape A
+ * supersession cycle. The baseline Loops A–G mirror dev-via-spec.spec.ts
+ * (golden path through to reviewer-qa) except Loop G's reviewer-qa
+ * terminates with decide(needs_clarification) instead of accept.
+ * Rule 03 fires → spawn researcher-plan; the full MVP chain re-runs
+ * (Loops H–N) and the recovery reviewer-qa accepts. Chain settles at
+ * fourteen loops.
  *
- *   - Loop K (dev-via-spec-builder) terminates with
- *     builder_decide(tests_passing) instead of needs_clarification.
- *     The mock-LLM does not actually run tests; the builder_decide
- *     tool emits coordinator.next_action=tests_passing
- *     unconditionally given the args, which triggers rule 07
- *     (R3.7.2.k′: builder→qa-reviewer).
+ * Sequence (fourteen loops):
  *
- *   - Loop L (dev-via-spec-qa-reviewer) reads the builder's terminal
- *     via read_loop_result and emits decide(needs_clarification).
- *     Per j′ 10-evaluation-contract.md Rule 3 this is the
- *     persona-correct verdict for the stub state where the spawn-rule
- *     prompt embeds a hardcoded "(stub)" evidence block.
+ *   Loops A–F: identical to dev-via-spec.spec.ts (researcher-plan →
+ *              researcher-gather → researcher-synthesize →
+ *              researcher-architect → reviewer-spec → builder).
  *
- *   - Loop M (dev-via-spec-architect, recovery) — ADR-039 Phase 1
- *     rule 09 fires on the qa-reviewer's needs_clarification and
- *     spawns a fresh architect. Per the rule's prompt, the recovery
- *     architect reads the qa-reviewer's terminal AND the prior
- *     research artifact, then re-emits the spec WITH evidence rules
- *     in checks (the gap qa-reviewer flagged). decide(tasks_emitted)
- *     re-fires rule 06 → recovery builder.
+ *   Loop G: reviewer-qa (rule 04 dev-via-spec spawn) →
+ *           read_loop_result → decide(needs_clarification,
+ *           reason="evidence summary is (no checks)")
+ *           → rule 03 → spawn researcher-plan (recovery)
  *
- *   - Loop N (dev-via-spec-builder, recovery) — rule 06 re-spawn.
- *     bootstrap_workspace + bash + builder_decide(tests_passing).
- *     Rule 07 re-fires on tests_passing → recovery qa-reviewer.
- *
- *   - Loop O (dev-via-spec-qa-reviewer, recovery) — clean terminal.
- *     decide(action="accept") on the recovery spec's checks. No
- *     further rule fires (rule 09 only fires on needs_clarification).
- *     Chain settles at fifteen loops; ADR-039 Phase 1 Shape A
- *     supersession cycle complete end-to-end.
+ *   Loops H–N: full MVP chain re-runs with the architect's spec
+ *              now carrying checks[] (one evidence rule binding the
+ *              packet decoder). reviewer-spec approves the recovery
+ *              spec, builder runs tests_passing, reviewer-qa accepts.
+ *              No further rule fires.
  *
  * What this proves:
- *   - Rule 07 (configs/rules/dev-via-spec/07-builder-decide-to-
- *     qa-reviewer.json) fires on coordinator.next_action=tests_passing
- *     and spawns the qa-reviewer role.
- *   - The qa-reviewer's persona (R3.7.2.j′) loads at boot.
- *   - ADR-039 Phase 1 rule 09 fires on qa-reviewer's needs_clarification
- *     and spawns the recovery architect with lineage.researcher forwarded.
- *   - Recovery architect's tasks_emitted re-fires rule 06 (verifies the
- *     "supersession via new spawn" mechanism — ADR-039 Shape A — works
- *     end-to-end without mutating prior loop entities).
- *   - Recovery builder's tests_passing re-fires rule 07.
- *   - Recovery qa-reviewer's accept terminates cleanly (rule 09 does
+ *   - Rule 03 (configs/rules/dev-via-spec/03-needs-clarification-to-
+ *     researcher.json) fires on coordinator.next_action=
+ *     needs_clarification and spawns researcher-plan with
+ *     properties.recovery="needs_clarification".
+ *   - phasevalidator allows the recovery cycle: plan→gather (counter
+ *     bumps 1→2), gather→synthesize (counter 1→2 at cap),
+ *     synthesize→architect (counter 1→2 at cap).
+ *   - phasevalidator.SpecModeGate forwards
+ *     dev_via_spec.artifact.{path,slug} on BOTH the original and
+ *     recovery reviewer-spec entities.
+ *   - phasevalidator.QAModeGate stamps proceed on BOTH the original
+ *     and recovery builder entities.
+ *   - Recovery reviewer-qa's accept terminates cleanly (rule 03 does
  *     NOT fire on accept).
- *   - Total chain: fifteen loops (eleven baseline + qa-reviewer +
- *     three-loop recovery cycle).
+ *   - Total chain: fourteen loops.
  *
  * What this does NOT prove:
  *   - Substantive evidence grading. The evidence summary in the
- *     spawn rule is a literal stub. Real evidence-rendering plumbing
- *     (rule action / tool / preprocessor) is deferred to a
- *     follow-on slice; project_smoke7_open_plumbing.md §2 records
- *     the lean choice.
- *   - Real builder running mvn test. Smoke #7 (R3.7.2.l′) is where
- *     real-LLM exercise lands.
+ *     reviewer-qa prompt is a stub under mock-LLM. Real evidence-
+ *     rendering plumbing lands in smoke #21 (Phase 4).
+ *   - Real builder running mvn test. Smoke #21 exercises this on
+ *     real LLM.
  *
  * Required fixture: test/fixtures/journeys/dev-via-spec-qa.yaml
- * Required compose profiles: semsource (substrate-modifying retry
- * pass) and sandbox (R3.6.2 builder loop calls bootstrap_workspace
- * + bash via the sandbox container).
+ * Required compose profile: sandbox (builder bootstrap_workspace +
+ * bash routing).
  */
 
-test.describe("Dev-via-Spec QA-reviewer (R3.7.2.k′)", () => {
+test.describe("Dev-via-Spec QA recovery (ADR-041 MVP)", () => {
   test.beforeAll(async ({ request }) => {
     const health = await request.get("/health");
     expect(health.ok()).toBe(true);
   });
 
-  // Fourteen loops (ADR-040 reshape): eleven baseline + three recovery
-  // (architect, builder, qa-reviewer accept). Was fifteen pre-ADR-040;
-  // research arc collapsed by 1 loop (2× source-acq → 1× curator + 1×
-  // re-query researcher). Allow 8 minutes — dev-via-spec-qa.spec.ts's
-  // 480s budget kept the same to absorb mock-LLM scheduling jitter.
+  // Fourteen loops + recovery cycle, autonomous chain. 8 minutes
+  // covers mock-LLM scheduling jitter + sandbox cold-start latency
+  // on slower CI. Two bootstrap_workspace calls (rev 1 spec + rev 2
+  // recovery spec) absorb additional latency.
   test.setTimeout(480_000);
 
-  test("research → curator → re-query researcher → approve → dev-via-spec planner / reviewer / challenger / architect / builder / qa-reviewer + ADR-039 Phase 1 recovery cycle", async ({
+  test("baseline chain → reviewer-qa needs_clarification → ADR-039 Phase 1 recovery cycle (ADR-041 MVP)", async ({
     page,
     request,
   }) => {
@@ -102,124 +88,29 @@ test.describe("Dev-via-Spec QA-reviewer (R3.7.2.k′)", () => {
     await expect(page.getByTestId("kanban-board")).toBeVisible();
 
     // -----------------------------------------------------------------
-    // Step 2 — type the bounded prompt. Identical to dev-via-spec's
-    // prompt; the same six-loop research arc + dev-via-spec chain
-    // executes ahead of the qa-reviewer hop.
+    // Step 2 — type the bounded prompt. Same shape as
+    // dev-via-spec.spec.ts; the recovery cycle is internal to the
+    // chain, triggered by reviewer-qa's needs_clarification verdict
+    // on the rev 1 spec's empty checks[].
     // -----------------------------------------------------------------
     const chatInput = page.getByTestId("chat-input");
     await chatInput.fill(
-      "Identify the actor types in OSH's driver framework. The OSH core repo is at https://github.com/sensorhub-tools/osh-core; if it isn't already indexed in our research SemSource, register it.",
+      "Build the OSH Meshtastic driver — IDriver interface backed by Meshtastic radio packets, exposing OGC CS observation endpoints.",
     );
     await page.getByTestId("send-button").click();
 
     // -----------------------------------------------------------------
-    // Step 3 — wait for THREE loops (researcher A, reviewer B,
-    // source-curator C). Loop C will pause for approval on the
-    // curator's add_source_repo call.
-    // -----------------------------------------------------------------
-    const threeLoops = await pollUntil(async () => {
-      const resp = await request.get("/teams-dispatch/loops");
-      if (!resp.ok()) return null;
-      const list = (await resp.json()) as Array<{
-        loop_id: string;
-        role: string;
-        state: string;
-      }>;
-      return list.length >= 3 ? list : null;
-    }, { timeoutMs: 60000 });
-
-    expect(
-      threeLoops,
-      "expected 3 loops before first approval (researcher + reviewer + source-curator)",
-    ).toBeTruthy();
-
-    // -----------------------------------------------------------------
-    // Step 4 — find the first awaiting-approval loop (Loop C).
-    // -----------------------------------------------------------------
-    const loopCId = await pollUntil(async () => {
-      const resp = await request.get("/teams-dispatch/loops");
-      if (!resp.ok()) return null;
-      const list = (await resp.json()) as Array<{
-        loop_id: string;
-        state: string;
-        pending_approval?: { tool_name?: string } | null;
-      }>;
-      const awaiting = list.find((l) => l.pending_approval != null);
-      return awaiting?.loop_id ?? null;
-    }, { timeoutMs: 60000 });
-
-    expect(loopCId, "expected Loop C to surface pending_approval").toBeTruthy();
-
-    // Kanban awaiting-approval surface skipped intentionally — the
-    // kanban only walks ONE level of children (deriveTaskInfo in
-    // ui/src/lib/types/task.ts). Loop C's awaiting_approval is on a
-    // grandchild, so the root task's effectiveColumn never cascades to
-    // needs_you. The detail-panel navigation below uses Loop C's
-    // loop_id directly. The API poll in Step 4 is the load-bearing
-    // "chain reached awaiting_approval" signal.
-
-    // -----------------------------------------------------------------
-    // Step 5+6 — approve via API (POST /teams-dispatch/loops/{id}/approval).
+    // Step 3 — wait for ALL FOURTEEN loops to reach terminal complete
+    // state. The MVP chain is autonomous: baseline through reviewer-qa
+    // needs_clarification (Loops A–G), then ADR-039 Phase 1 Shape A
+    // recovery cycle (Loops H–N).
     //
-    // The UI-driven approval flow does not work for chain journeys —
-    // the detail panel only surfaces PendingApprovalSection when the
-    // selected task's primaryLoop has pending_approval, but the
-    // dispatch-root task is the primary while the awaiting_approval
-    // loop is a child / grandchild (TaskDetailPanel.svelte:218).
-    // Same fix as ui/e2e/agentic/dev-via-spec.spec.ts. Surfacing
-    // child-loop approval through the parent's detail panel is a
-    // separate UI effort.
-    //
-    // The API path is what agentApi.submitApproval calls under the
-    // hood (ADR-030 X-User-Id middleware contract), so this still
-    // exercises the approval-gate plumbing end-to-end. Chain after
-    // approval is autonomous: research arc completes (Loops C through
-    // F), stabilisation rule spawns the dev-via-spec-planner (Loop
-    // G), the dev-via-spec rules drive the four-role chain through
-    // architect (Loop J) and builder (Loop K), then rule 07
-    // (R3.7.2.k′) spawns the qa-reviewer (Loop L) on the builder's
-    // tests_passing terminal.
-    const approvalResp = await request.post(
-      `/teams-dispatch/loops/${loopCId}/approval`,
-      {
-        data: { decision: "approve", user_id: "e2e-test-user" },
-        headers: { "X-User-Id": "e2e-test-user" },
-      },
-    );
-    expect(
-      approvalResp.ok(),
-      `expected /loops/${loopCId}/approval to accept; got ${approvalResp.status()}`,
-    ).toBe(true);
-
-    // -----------------------------------------------------------------
-    // Step 7 — intermediate checkpoint: wait for FIVE loops (A, B,
-    // C-complete, D-complete, E-spawned). Mirrors dev-via-spec.spec.ts
-    // Step 7 — gives a fast-fail signal if the approval click didn't
-    // unblock the chain, before we wait the full 240s for all-terminal.
-    // -----------------------------------------------------------------
-    const fiveLoops = await pollUntil(async () => {
-      const resp = await request.get("/teams-dispatch/loops");
-      if (!resp.ok()) return null;
-      const list = (await resp.json()) as Array<{
-        loop_id: string;
-        role: string;
-        state: string;
-      }>;
-      return list.length >= 5 ? list : null;
-    }, { timeoutMs: 60000 });
-
-    expect(
-      fiveLoops,
-      "expected 5 loops after first approval (A researcher + B reviewer + C source-curator + D re-query researcher + E reviewer-approve — ADR-040 research arc completes)",
-    ).toBeTruthy();
-
-    // -----------------------------------------------------------------
-    // Step 8 — wait for ALL FIFTEEN loops to reach terminal complete
-    // state. Critical assertions: dev-via-spec rules 01/03/05/06/07
-    // fire in order, ending with qa-reviewer terminal at needs_clarification.
-    // ADR-039 Phase 1 rule 09 then fires + spawns the recovery architect;
-    // rules 06/07 re-fire as the recovery builder/qa-reviewer roll
-    // through to the recovery accept terminal.
+    // Critical assertions: rule 03 (needs_clarification →
+    // researcher-plan) fires on Loop G's verdict; phasevalidator
+    // honours the per-phase caps (gather=3 allows 2 fires;
+    // synthesize=2 + architect=2 at cap on the recovery pass); rule
+    // 04 dev-via-spec re-fires for the recovery reviewer-qa accept;
+    // terminal accepts without re-firing rule 03.
     // -----------------------------------------------------------------
     const allTerminal = await pollUntil(async () => {
       const resp = await request.get("/teams-dispatch/loops");
@@ -227,34 +118,28 @@ test.describe("Dev-via-Spec QA-reviewer (R3.7.2.k′)", () => {
       const list = (await resp.json()) as Array<{ state: string }>;
       if (list.length !== 14) return null;
       return list.every((l) => l.state === "complete") ? list : null;
-    }, { timeoutMs: 360000 });
+    }, { timeoutMs: 420000 });
 
     expect(
       allTerminal,
-      "expected all 14 loops to reach terminal complete state (11 baseline + 3-loop ADR-039 Phase 1 recovery cycle)",
+      "expected all 14 loops to reach terminal complete state (7 baseline + 7-loop ADR-039 Phase 1 recovery cycle)",
     ).toBeTruthy();
 
     // -----------------------------------------------------------------
-    // Step 9 — role distribution proves every rule fired in order.
+    // Step 4 — role distribution proves every rule fired in order.
     //
     // Wire-shape note: dispatch-spawned loops ride on
-    // dispatch.default_role and don't get their role stamped back
-    // onto the LoopInfo wire JSON; rule-spawned loops do. So Loop A's
-    // role field is empty; we resolve it via the dispatch default.
+    // dispatch.default_role; rule-spawned loops carry their role on
+    // the LoopInfo wire JSON.
     //
-    // Expected roles (after default_role resolution, ADR-040 reshape):
-    //   2 × researcher                          (Loop A initial + Loop D re-query post-curator via rule_02b)
-    //   1 × source-curator                      (Loop C — rule_02 spawn-curator)
-    //   2 × research-reviewer                   (Loops B, E — research rule 01a)
-    //   1 × dev-via-spec-planner                (Loop F — research rule 03)
-    //   1 × dev-via-spec-reviewer               (Loop G — dev-via-spec rule 01)
-    //   1 × dev-via-spec-challenger             (Loop H — dev-via-spec rule 03)
-    //   2 × dev-via-spec-architect              (Loop I — dev-via-spec rule 05;
-    //                                            Loop L — ADR-039 rule 09 recovery)
-    //   2 × dev-via-spec-builder                (Loop J — dev-via-spec rule 06;
-    //                                            Loop M — recovery via re-fire of rule 06)
-    //   2 × dev-via-spec-qa-reviewer            (Loop K — dev-via-spec rule 07;
-    //                                            Loop N — recovery via re-fire of rule 07)
+    // Expected roles (after default_role resolution, ADR-041 MVP):
+    //   2 × researcher-plan       (Loop A dispatch + Loop H rule 03 recovery)
+    //   2 × researcher-gather     (Loops B, I via rule 04 ×2)
+    //   2 × researcher-synthesize (Loops C, J via rule 05 ×2)
+    //   2 × researcher-architect  (Loops D, K via rule 06 ×2)
+    //   2 × reviewer-spec         (Loops E, L via rule 01b ×2)
+    //   2 × builder               (Loops F, M via rule 02 + spec_mode_gate ×2)
+    //   2 × reviewer-qa           (Loops G, N via rule 04 dev-via-spec + qa_mode_gate ×2)
     // -----------------------------------------------------------------
     const finalLoops = await request
       .get("/teams-dispatch/loops")
@@ -270,87 +155,67 @@ test.describe("Dev-via-Spec QA-reviewer (R3.7.2.k′)", () => {
       `expected exactly 1 dispatch-spawned loop with empty role (Loop A); got ${dispatchLoops.length}`,
     ).toBe(1);
 
-    const expectedDefaultRole = "researcher";
+    // Phase 3 wires dispatch.default_role to "researcher-plan"; until
+    // then this spec is gated by that config update.
+    const expectedDefaultRole = "researcher-plan";
     const roles = finalLoops.map((l) => l.role || expectedDefaultRole);
 
-    const researcherCount = roles.filter((r) => r === "researcher").length;
-    const curatorCount = roles.filter(
-      (r) => r === "source-curator",
-    ).length;
-    const reviewerCount = roles.filter((r) => r === "research-reviewer").length;
-    const plannerCount = roles.filter((r) => r === "dev-via-spec-planner").length;
-    const devReviewerCount = roles.filter(
-      (r) => r === "dev-via-spec-reviewer",
-    ).length;
-    const challengerCount = roles.filter(
-      (r) => r === "dev-via-spec-challenger",
-    ).length;
-    const architectCount = roles.filter(
-      (r) => r === "dev-via-spec-architect",
-    ).length;
-    const builderCount = roles.filter(
-      (r) => r === "dev-via-spec-builder",
-    ).length;
-    const qaReviewerCount = roles.filter(
-      (r) => r === "dev-via-spec-qa-reviewer",
-    ).length;
+    const planCount = roles.filter((r) => r === "researcher-plan").length;
+    const gatherCount = roles.filter((r) => r === "researcher-gather").length;
+    const synthesizeCount = roles.filter((r) => r === "researcher-synthesize").length;
+    const architectCount = roles.filter((r) => r === "researcher-architect").length;
+    const reviewerSpecCount = roles.filter((r) => r === "reviewer-spec").length;
+    const builderCount = roles.filter((r) => r === "builder").length;
+    const reviewerQaCount = roles.filter((r) => r === "reviewer-qa").length;
 
     expect(
-      researcherCount,
-      `expected 2 researcher loops (Loop A initial + Loop D re-query post-curator), got roles=${JSON.stringify(roles)}`,
+      planCount,
+      `expected 2 researcher-plan loops (Loop A dispatch + Loop H rule 03 recovery), got roles=${JSON.stringify(roles)}`,
     ).toBe(2);
     expect(
-      curatorCount,
-      `expected 1 source-curator loop (Loop C — rule_02 spawn-curator). Missing → rule_02 did not fire or fired to the wrong role. roles=${JSON.stringify(roles)}`,
-    ).toBe(1);
-    expect(
-      reviewerCount,
-      `expected 2 research-reviewer loops, got roles=${JSON.stringify(roles)}`,
+      gatherCount,
+      `expected 2 researcher-gather loops (Loops B + I via rule 04 ×2), got roles=${JSON.stringify(roles)}. Missing → rule 04 (phase-transition-to-gather) did not fire as expected.`,
     ).toBe(2);
     expect(
-      plannerCount,
-      `expected 1 dev-via-spec-planner loop. Missing → R3.2.2 stabilisation rule did not fire. roles=${JSON.stringify(roles)}`,
-    ).toBe(1);
-    expect(
-      devReviewerCount,
-      `expected 1 dev-via-spec-reviewer loop. Missing → planner's decide(planned) did not propagate. roles=${JSON.stringify(roles)}`,
-    ).toBe(1);
-    expect(
-      challengerCount,
-      `expected 1 dev-via-spec-challenger loop. Missing → reviewer's decide(approved) did not propagate. roles=${JSON.stringify(roles)}`,
-    ).toBe(1);
+      synthesizeCount,
+      `expected 2 researcher-synthesize loops (Loops C + J via rule 05 ×2). Cap is exactly 2 on the recovery pass. roles=${JSON.stringify(roles)}`,
+    ).toBe(2);
     expect(
       architectCount,
-      `expected 2 dev-via-spec-architect loops (Loop J via rule 05 + Loop M via ADR-039 rule 09 recovery). Missing → challenger's decide(accept) didn't propagate, OR rule 09 didn't fire on qa-reviewer's needs_clarification. roles=${JSON.stringify(roles)}`,
+      `expected 2 researcher-architect loops (Loops D + K via rule 06 ×2). Cap is exactly 2 on the recovery pass. roles=${JSON.stringify(roles)}`,
+    ).toBe(2);
+    expect(
+      reviewerSpecCount,
+      `expected 2 reviewer-spec loops (Loops E + L via rule 01b ×2). Missing → rule 01b did not fire on the recovery architect's emit. roles=${JSON.stringify(roles)}`,
     ).toBe(2);
     expect(
       builderCount,
-      `expected 2 dev-via-spec-builder loops (Loop K via rule 06 + Loop N via rule 06 re-fire on recovery architect's tasks_emitted). Missing → original or recovery architect's decide(tasks_emitted) didn't propagate. roles=${JSON.stringify(roles)}`,
+      `expected 2 builder loops (Loops F + M via rule 02 + spec_mode_gate ×2). Missing → SpecModeGate did not stamp proceed on the recovery reviewer-spec OR rule 02 did not fire. roles=${JSON.stringify(roles)}`,
     ).toBe(2);
     expect(
-      qaReviewerCount,
-      `expected 2 dev-via-spec-qa-reviewer loops (Loop L via rule 07 + Loop O via rule 07 re-fire on recovery builder's tests_passing). Missing → original or recovery builder didn't emit tests_passing OR rule 07 didn't load. roles=${JSON.stringify(roles)}`,
+      reviewerQaCount,
+      `expected 2 reviewer-qa loops (Loops G + N via rule 04 dev-via-spec + qa_mode_gate ×2). Missing → QAModeGate did not stamp proceed on the recovery builder OR rule 04 dev-via-spec did not fire. roles=${JSON.stringify(roles)}`,
     ).toBe(2);
 
     // -----------------------------------------------------------------
-    // Step 10 — only Loop C should ever have required approval. The
-    // dev-via-spec chain has no approval-gated tools.
+    // Step 5 — no approval gate on the MVP chain. Substrate-mutation
+    // is out of MVP scope per ADR-041 §1.
     // -----------------------------------------------------------------
     const stillPendingAny = finalLoops.find(
       (l) => l.pending_approval != null,
     );
     expect(
       stillPendingAny,
-      "no loop should remain in pending_approval after the chain settles",
+      "no loop should ever require approval — MVP dev-via-spec chain is autonomous",
     ).toBeUndefined();
 
     // -----------------------------------------------------------------
-    // Step 11 — settle assertion: no sixteenth loop appears. The
-    // recovery qa-reviewer's decide(accept) terminal MUST NOT re-fire
-    // any rule. Specifically: rule 09 only fires on needs_clarification
-    // (not accept). A sixteenth loop would indicate either rule 09
-    // mis-fired on accept (regression) or some other rule unexpectedly
-    // matches the qa-reviewer role.
+    // Step 6 — settle assertion: no fifteenth loop appears. The
+    // recovery reviewer-qa's decide(accept) terminal MUST NOT re-fire
+    // any rule. Specifically: rule 03 only fires on
+    // needs_clarification, NOT accept. A fifteenth loop would indicate
+    // either rule 03 mis-fired on accept (regression) or some other
+    // rule unexpectedly matches the reviewer-qa role.
     // -----------------------------------------------------------------
     await new Promise((r) => setTimeout(r, 2000));
     const settledList = await request
@@ -358,12 +223,16 @@ test.describe("Dev-via-Spec QA-reviewer (R3.7.2.k′)", () => {
       .then((r) => r.json()) as unknown[];
     expect(
       settledList.length,
-      "recovery qa-reviewer's accept terminal must not spawn a sixteenth loop",
+      "recovery reviewer-qa accept terminal must not spawn a fifteenth loop",
     ).toBe(14);
 
     // -----------------------------------------------------------------
-    // Step 12 — verify research.artifact.v1 publishes (Loops A/C/E)
-    // and dev_via_spec.artifact.v1 publish (Loop J architect emit).
+    // Step 7 — verify the typed payload publishes:
+    //   research.artifact ×2  (Loops C + J researcher-synthesize)
+    //   dev_via_spec.artifact ×2 (Loops D + K researcher-architect)
+    //   dev_via_spec.plan ×2 (Loops A + H researcher-plan emit_plan)
+    // Catches wire-format drift between persona prose, tool schema,
+    // and payload shape under mock-llm.
     // -----------------------------------------------------------------
     const messageLoggerResp = await request.get(
       "/message-logger/entries?limit=10000",
@@ -375,78 +244,66 @@ test.describe("Dev-via-Spec QA-reviewer (R3.7.2.k′)", () => {
     const entries = (await messageLoggerResp.json()) as Array<{
       subject: string;
     }>;
-    const artifactSubjects = entries
+
+    const researchArtifactSubjects = entries
       .map((e) => e.subject)
       .filter((s) => s.startsWith("research.artifact."));
     expect(
-      artifactSubjects.length,
-      `expected at least 2 research.artifact.<loop_id> publishes (one per researcher pass — Loop A initial + Loop D re-query post-curator under ADR-040), got ${artifactSubjects.length}: ${JSON.stringify(artifactSubjects)}`,
+      researchArtifactSubjects.length,
+      `expected ≥2 research.artifact.<loop_id> publishes (Loop C + Loop J), got ${researchArtifactSubjects.length}: ${JSON.stringify(researchArtifactSubjects)}`,
     ).toBeGreaterThanOrEqual(2);
 
     const specArtifactSubjects = entries
       .map((e) => e.subject)
       .filter((s) => s.startsWith("dev_via_spec.artifact."));
-    // Two architect emits (Loop I first-pass + Loop L recovery v2 with checks).
     expect(
       specArtifactSubjects.length,
-      `expected ≥2 dev_via_spec.artifact.<loop_id> publishes (Loop I first pass + Loop L ADR-039 recovery), got ${specArtifactSubjects.length}: ${JSON.stringify(specArtifactSubjects)}`,
+      `expected ≥2 dev_via_spec.artifact.<loop_id> publishes (Loop D rev 1 + Loop K recovery v2), got ${specArtifactSubjects.length}: ${JSON.stringify(specArtifactSubjects)}`,
     ).toBeGreaterThanOrEqual(2);
 
-    // ADR-038 PR C Phase C5: planner emits dev_via_spec.plan.<loop_id>
-    // (Loop F); challenger emits dev_via_spec.consensus.<loop_id>
-    // (Loop H, accept branch only). Catches wire-format drift between
-    // persona prose, tool schema, and payload shape under mock-llm —
-    // smoke #8 is the substance gate, this is the cheap insurance.
     const planSubjects = entries
       .map((e) => e.subject)
       .filter((s) => s.startsWith("dev_via_spec.plan."));
     expect(
       planSubjects.length,
-      `expected at least 1 dev_via_spec.plan.<loop_id> publish from the planner's emit_plan, got ${planSubjects.length}: ${JSON.stringify(planSubjects)}`,
-    ).toBeGreaterThanOrEqual(1);
-
-    const consensusSubjects = entries
-      .map((e) => e.subject)
-      .filter((s) => s.startsWith("dev_via_spec.consensus."));
-    expect(
-      consensusSubjects.length,
-      `expected at least 1 dev_via_spec.consensus.<loop_id> publish from the challenger's emit_consensus, got ${consensusSubjects.length}: ${JSON.stringify(consensusSubjects)}`,
-    ).toBeGreaterThanOrEqual(1);
+      `expected ≥2 dev_via_spec.plan.<loop_id> publishes (Loop A dispatch + Loop H rule 03 recovery), got ${planSubjects.length}: ${JSON.stringify(planSubjects)}`,
+    ).toBeGreaterThanOrEqual(2);
 
     // -----------------------------------------------------------------
-    // Step 13 — terminal-state checks. All architect / builder /
-    // qa-reviewer loops (both first-pass AND recovery) must be complete.
+    // Step 8 — verify the phasevalidator gates stamped their proceed
+    // sentinels on BOTH the original and recovery passes.
     // -----------------------------------------------------------------
-    const architectLoops = finalLoops.filter(
-      (l) => l.role === "dev-via-spec-architect",
-    );
+    const specGateProceed = await fetchTriples(request, {
+      predicate: "chain.spec_mode_gate.proceed",
+      limit: 5,
+    });
     expect(
-      architectLoops.length,
-      "expected 2 architect loops (first pass + recovery)",
-    ).toBe(2);
-    for (const a of architectLoops) {
-      expect(a.state).toBe("complete");
-    }
+      specGateProceed.length,
+      `expected ≥2 chain.spec_mode_gate.proceed triples (original Loop E + recovery Loop L)`,
+    ).toBeGreaterThanOrEqual(2);
 
-    const builderLoops = finalLoops.filter(
-      (l) => l.role === "dev-via-spec-builder",
-    );
+    const qaGateProceed = await fetchTriples(request, {
+      predicate: "chain.qa_mode_gate.proceed",
+      limit: 5,
+    });
     expect(
-      builderLoops.length,
-      "expected 2 builder loops (first pass + recovery)",
-    ).toBe(2);
-    for (const b of builderLoops) {
-      expect(b.state).toBe("complete");
-    }
+      qaGateProceed.length,
+      `expected ≥2 chain.qa_mode_gate.proceed triples (original Loop F + recovery Loop M)`,
+    ).toBeGreaterThanOrEqual(2);
 
-    const qaReviewerLoops = finalLoops.filter(
-      (l) => l.role === "dev-via-spec-qa-reviewer",
+    // -----------------------------------------------------------------
+    // Step 9 — terminal-state checks. All loops in each MVP role
+    // (researcher-{plan,gather,synthesize,architect}, reviewer-{spec,qa},
+    // builder) must be complete.
+    // -----------------------------------------------------------------
+    const reviewerQaLoops = finalLoops.filter(
+      (l) => l.role === "reviewer-qa",
     );
     expect(
-      qaReviewerLoops.length,
-      "expected 2 qa-reviewer loops (first pass needs_clarification + recovery accept)",
+      reviewerQaLoops.length,
+      "expected 2 reviewer-qa loops (first pass needs_clarification + recovery accept)",
     ).toBe(2);
-    for (const q of qaReviewerLoops) {
+    for (const q of reviewerQaLoops) {
       expect(q.state).toBe("complete");
     }
   });
@@ -467,4 +324,31 @@ async function pollUntil<T>(
     await new Promise((r) => setTimeout(r, interval));
   }
   return null;
+}
+
+interface Triple {
+  subject: string;
+  predicate: string;
+  object: string;
+  source?: string;
+  timestamp?: string;
+}
+
+async function fetchTriples(
+  request: import("@playwright/test").APIRequestContext,
+  params: { subject?: string; predicate?: string; object?: string; limit?: number },
+): Promise<Triple[]> {
+  const query = new URLSearchParams();
+  if (params.subject) query.set("subject", params.subject);
+  if (params.predicate) query.set("predicate", params.predicate);
+  if (params.object) query.set("object", params.object);
+  if (params.limit) query.set("limit", String(params.limit));
+
+  const resp = await request.get(`/graph/triples?${query.toString()}`);
+  if (!resp.ok()) {
+    throw new Error(
+      `GET /graph/triples?${query.toString()} returned ${resp.status()}: ${await resp.text()}`,
+    );
+  }
+  return (await resp.json()) as Triple[];
 }

@@ -54,13 +54,13 @@ func (f *fakePublisher) findByPredicate(predicate string) (message.Triple, bool)
 	return message.Triple{}, false
 }
 
-// buildEvent returns a minimal LoopCompletedEvent for a dev-via-spec-builder
+// buildEvent returns a minimal LoopCompletedEvent for a builder
 // loop with the given loopID. Callers may override fields before passing.
 func buildEvent(loopID string) *agentic.LoopCompletedEvent {
 	return &agentic.LoopCompletedEvent{
 		LoopID:  loopID,
 		TaskID:  "task-" + loopID,
-		Role:    "dev-via-spec-builder",
+		Role:    "builder",
 		Outcome: agentic.OutcomeSuccess,
 		Model:   "mock-llm",
 	}
@@ -267,16 +267,17 @@ func TestPreprocessor_MalformedChecksJSON(t *testing.T) {
 }
 
 // TestPreprocessor_NonBuilderRole verifies that events for roles other
-// than dev-via-spec-builder are silently skipped with no triple stamps.
+// than builder are silently skipped with no triple stamps.
 func TestPreprocessor_NonBuilderRole(t *testing.T) {
 	wsRoot := t.TempDir()
 	pub := &fakePublisher{}
 	p := newPreprocessor(t, wsRoot, pub)
 
 	for _, role := range []string{
-		"dev-via-spec-challenger",
-		"dev-via-spec-reviewer",
-		"researcher",
+		"researcher-plan",
+		"researcher-architect",
+		"reviewer-spec",
+		"reviewer-qa",
 		"coordinator",
 	} {
 		t.Run(role, func(t *testing.T) {

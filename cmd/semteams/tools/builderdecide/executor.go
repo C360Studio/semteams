@@ -14,7 +14,7 @@ import (
 	agvocab "github.com/c360studio/semstreams/vocabulary/agentic"
 )
 
-// ToolName is the LLM-facing tool name. Listed in the dev-via-spec-builder
+// ToolName is the LLM-facing tool name. Listed in the builder
 // role's allowed_tools instead of upstream `decide` — see package doc for
 // why a sibling tool, not a wrapping replacement.
 const ToolName = "builder_decide"
@@ -22,7 +22,7 @@ const ToolName = "builder_decide"
 // toolSource is the Source field on triples this tool publishes. Lets
 // operators distinguish builder-terminal triples from coordinator-decide
 // or rule-driven triple mutations at a glance in graph queries.
-const toolSource = "dev-via-spec-builder-decide"
+const toolSource = "builder-decide"
 
 // Action enum values per ADR-032 §15. Closed set: anything else is rejected
 // at the executor boundary so invalid actions never reach downstream rules.
@@ -77,7 +77,7 @@ func NewExecutor(publisher agentictools.TriplePublisher, platform types.Platform
 func (e *Executor) ListTools() []agentic.ToolDefinition {
 	return []agentic.ToolDefinition{{
 		Name:        ToolName,
-		Description: "Terminal decision tool for the dev-via-spec-builder role. Call exactly once after iterating bash calls in your sandbox workspace. action must be one of tests_passing | tests_failing | needs_clarification. Per-action evidence fields: tests_passing requires tests_run (>0), tests_passed, tests_failed, artifact_summary; tests_failing requires tests_run, tests_failed, failure_summary, retry_hint; needs_clarification requires blocking_question (and reason carries the clarification context).",
+		Description: "Terminal decision tool for the builder role. Call exactly once after iterating bash calls in your sandbox workspace. action must be one of tests_passing | tests_failing | needs_clarification. Per-action evidence fields: tests_passing requires tests_run (>0), tests_passed, tests_failed, artifact_summary; tests_failing requires tests_run, tests_failed, failure_summary, retry_hint; needs_clarification requires blocking_question (and reason carries the clarification context).",
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{

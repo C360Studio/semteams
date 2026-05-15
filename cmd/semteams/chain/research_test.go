@@ -65,7 +65,7 @@ func TestResearchMilestone_FailedReviewerNoOp(t *testing.T) {
 
 	ev := &agentic.LoopCompletedEvent{
 		LoopID:  "loop_x",
-		Role:    researchReviewerRole,
+		Role:    "reviewer-research",
 		Outcome: agentic.OutcomeFailed,
 	}
 	if err := s.HandleLoopCompleted(context.Background(), ev); err != nil {
@@ -93,7 +93,7 @@ func TestResearchMilestone_InsufficientNoOp(t *testing.T) {
 
 	ev := &agentic.LoopCompletedEvent{
 		LoopID:  "reviewer_1",
-		Role:    researchReviewerRole,
+		Role:    "reviewer-research",
 		Outcome: agentic.OutcomeSuccess,
 	}
 	if err := s.HandleLoopCompleted(context.Background(), ev); err != nil {
@@ -132,7 +132,7 @@ func TestResearchMilestone_ApprovedHappyPath(t *testing.T) {
 
 	ev := &agentic.LoopCompletedEvent{
 		LoopID:  "reviewer_1",
-		Role:    researchReviewerRole,
+		Role:    "reviewer-research",
 		Outcome: agentic.OutcomeSuccess,
 	}
 	if err := s.HandleLoopCompleted(context.Background(), ev); err != nil {
@@ -192,7 +192,7 @@ func TestResearchMilestone_HarnessOmittedWhenEmpty(t *testing.T) {
 
 	ev := &agentic.LoopCompletedEvent{
 		LoopID:  "reviewer_1",
-		Role:    researchReviewerRole,
+		Role:    "reviewer-research",
 		Outcome: agentic.OutcomeSuccess,
 	}
 	if err := s.HandleLoopCompleted(context.Background(), ev); err != nil {
@@ -234,7 +234,7 @@ func TestResearchMilestone_MissingLineageReseacher_Skipped(t *testing.T) {
 
 	ev := &agentic.LoopCompletedEvent{
 		LoopID:  "reviewer_1",
-		Role:    researchReviewerRole,
+		Role:    "reviewer-research",
 		Outcome: agentic.OutcomeSuccess,
 	}
 	if err := s.HandleLoopCompleted(context.Background(), ev); err != nil {
@@ -265,7 +265,7 @@ func TestResearchMilestone_ResolverError_Skipped(t *testing.T) {
 
 	ev := &agentic.LoopCompletedEvent{
 		LoopID:  "reviewer_1",
-		Role:    researchReviewerRole,
+		Role:    "reviewer-research",
 		Outcome: agentic.OutcomeSuccess,
 	}
 	if err := s.HandleLoopCompleted(context.Background(), ev); err != nil {

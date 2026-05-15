@@ -17,12 +17,13 @@ import (
 // rejects with `tool "X" is not allowed` if X is missing from the
 // component config's allowed_tools.
 //
-// Motivating regression: ADR-040 PR 4 first run wedged the curator at
-// emit_curator_artifact with `not allowed` because three configs that
-// load the new spawn-curator rule (osh-demo, e2e-dev-via-spec,
-// e2e-research-mode-transition) didn't whitelist emit_curator_artifact.
-// This test prevents the regression class for all future rule-tool
-// additions.
+// Motivating regression: ADR-040 PR 4 first run wedged a curator loop
+// at runtime with `not allowed` because three configs loaded a rule that
+// spawned the loop with a tool the agentic-tools component's
+// allowed_tools didn't whitelist. The specific tool (emit_curator_artifact)
+// and the curator role were removed in ADR-041's MVP compression, but the
+// regression class — rule-spawned tools missing from agentic-tools'
+// allowlist — is permanent. This test prevents it for all future rules.
 //
 // Iteration shape: walk configs/*.json, find any with both an
 // agentic-tools component (carrying allowed_tools) AND a rule-processor

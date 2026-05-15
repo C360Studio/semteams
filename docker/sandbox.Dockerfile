@@ -4,8 +4,8 @@
 # protobuf plugin. The image is the *environment*; the LLM produces
 # every artifact (pom.xml, OSGi metadata, sources, tests). No
 # scaffolding is shipped per ADR-032 Decision #17 (bare seed).
-ARG GO_VERSION=1.25
-ARG GO_FULL_VERSION=1.25.3
+ARG GO_VERSION=1.26
+ARG GO_FULL_VERSION=1.26.3
 
 # ============================================================================
 # Builder stage — compiles the Go sandbox binary + the protoc-gen-go plugin.

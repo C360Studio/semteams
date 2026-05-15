@@ -35,6 +35,7 @@ import (
 	"github.com/c360studio/semteams/cmd/semteams/chain"
 	"github.com/c360studio/semteams/cmd/semteams/chainpause"
 	"github.com/c360studio/semteams/cmd/semteams/evidence"
+	"github.com/c360studio/semteams/cmd/semteams/phasevalidator"
 	"github.com/c360studio/semteams/cmd/semteams/portresolver"
 	"github.com/c360studio/semteams/cmd/semteams/recoverycounter"
 	"github.com/c360studio/semteams/cmd/semteams/testharness"
@@ -217,6 +218,13 @@ func setupToolsAndPreprocessor(
 ) (*agentictools.ExecutorRegistry, *chainpause.HTTPHandler, error) {
 	// 9c. First-party tool executors. Pattern-B tools (create_rule, etc.)
 	// each need their matching manager; nil manager → registerX skips.
+	//
+	// SkipBuiltins[bash]: ADR-041 Phase 4. The product shell registers
+	// its own chain-scoped wrapper under the canonical "bash" name in
+	// registerProductTools (registerChainBash). The wrapper rewrites
+	// Metadata["task_id"] to chain_id so every role in a chain shares one
+	// sandbox worktree. SkipBuiltins=[bash] omits the framework bash so
+	// the slot is free for the wrapper.
 	toolRegistry := agentictools.NewExecutorRegistry()
 	if err := executors.RegisterBuiltins(ctx, toolRegistry, executors.ToolDependencies{
 		NATSClient:          natsClient,
@@ -228,21 +236,23 @@ func setupToolsAndPreprocessor(
 		FlowTemplateManager: buildFlowTemplateManager(natsClient, logger),
 		ComponentRegistry:   componentRegistry,
 		LoopsBucket:         extractLoopsBucket(cfg),
+		SkipBuiltins:        []string{"bash"},
 	}); err != nil {
 		return nil, nil, fmt.Errorf("register builtin tools: %w", err)
 	}
 
 	// 9d. Product-shell-local tool executors (add_source_repo,
 	// emit_research_artifact, emit_dev_via_spec_artifact, builder_decide,
-	// bootstrap_workspace). Each tool's registration comment lives in
-	// registerProductTools; see ADR-029 + tools/README.md for discipline.
+	// bootstrap_workspace, chain-scoped bash wrapper). Each tool's
+	// registration comment lives in registerProductTools; see ADR-029 +
+	// tools/README.md for discipline.
 	if err := registerProductTools(toolRegistry, natsClient, platform, testHarnessMgr, logger); err != nil {
 		return nil, nil, fmt.Errorf("register product tools: %w", err)
 	}
 
 	// 9e. Evidence preprocessor (ADR-036 §Phase 2, R3.7.2.k′-bis).
 	// Subscribes to agent.complete.> and stamps evidence.summary +
-	// evidence.summary_ready on dev-via-spec-builder loop entities.
+	// evidence.summary_ready on builder loop entities.
 	// Disabled when workspaceRoot is empty — non-sandbox deployments.
 	if err := startEvidencePreprocessor(ctx, cfg, natsClient, platform, workspaceRoot, logger); err != nil {
 		return nil, nil, fmt.Errorf("start evidence preprocessor: %w", err)
@@ -277,8 +287,6 @@ func setupToolsAndPreprocessor(
 //
 // Phase 1b: chain.dispatched_at on chain root.
 // Phase 2:  chain.research_artifact.* on research-reviewer approval.
-// Phase C2: chain.plan.* on dev-via-spec-reviewer approval.
-// Phase C3: chain.consensus.* on dev-via-spec-challenger accept.
 // Phase C4 (evidence summary milestone) plugs in via the same slice.
 // ADR-039 Phase 1 Slice B: chain.needs_review.* on builder
 // needs_clarification (Tier 3 fallback).
@@ -310,8 +318,6 @@ func startChainMilestoneSubscribers(ctx context.Context, cfg *config.Config, nat
 
 	dispatched := chain.NewDispatchedStamper(triplePublisher, platform, logger)
 	research := chain.NewResearchMilestoneStamper(triplePublisher, resolver, entityReader, platform, logger)
-	plan := chain.NewPlanMilestoneStamper(triplePublisher, resolver, entityReader, platform, logger)
-	consensus := chain.NewConsensusMilestoneStamper(triplePublisher, resolver, entityReader, platform, logger)
 	needsReview := chain.NewNeedsReviewStamper(triplePublisher, resolver, entityReader, platform, logger)
 	// Threshold=0 → recoverycounter falls back to DefaultThreshold (3).
 	// TODO: plumb from cfg.RecoveryCap.Threshold (or per-flow config) when
@@ -320,13 +326,26 @@ func startChainMilestoneSubscribers(ctx context.Context, cfg *config.Config, nat
 	// or pass a non-zero literal here.
 	recoveryCap := recoverycounter.NewCounter(triplePublisher, resolver, entityReader, platform, 0, logger)
 
+	// ADR-041 structural gates. Each is an independent
+	// chain.CompletionHandler with its own role filter; they share
+	// infrastructure (resolver, entityReader, triplePublisher) and
+	// follow the recoverycounter idiom of writing a proceed sentinel
+	// on the loop entity when a structural contract holds, rejection
+	// triples on the chain entity when it doesn't, and nothing when
+	// any precondition cannot be checked (fail-safe). See
+	// cmd/semteams/phasevalidator/doc.go for the full design rationale.
+	phaseValidator := phasevalidator.NewPhaseValidator(triplePublisher, resolver, entityReader, platform, logger)
+	specModeGate := phasevalidator.NewSpecModeGate(triplePublisher, resolver, entityReader, platform, logger)
+	qaModeGate := phasevalidator.NewQAModeGate(triplePublisher, resolver, entityReader, platform, logger)
+
 	subscriber := chain.NewCompletionSubscriber([]chain.CompletionHandler{
 		dispatched,
 		research,
-		plan,
-		consensus,
 		needsReview,
 		recoveryCap,
+		phaseValidator,
+		specModeGate,
+		qaModeGate,
 	}, loopCompletedSubject, logger)
 	if err := subscriber.Start(ctx, natsClient); err != nil {
 		return fmt.Errorf("subscribe to loop completed for chain milestones: %w", err)
@@ -534,10 +553,14 @@ func loadPlatformAssets(ctx context.Context, natsClient *natsclient.Client, cliC
 // PERSONAS KV bucket. Skipped when either manager is nil (tests,
 // or boot-time KV failure that already logged its own warning).
 // Uses multi-role on the Persona so a single record applies to
-// both `researcher` and `research-reviewer` (ADR-040 dropped
-// `researcher-with-source-acquisition`; the source-curator does not
-// need the test_harness catalog — harness selection is a dev-via-spec
-// architect concern, not a corpus-curation concern).
+// every researcher / reviewer role that touches a test_harness
+// field — researcher phases that select (researcher-plan / gather
+// / synthesize / architect) and reviewer modes that membership-
+// check (reviewer-research, reviewer-spec). Legacy `researcher` +
+// `research-reviewer` are retained in the Roles list for
+// research-iterative configs that have not migrated to the
+// ADR-041 phase-suffixed roster (harness selection is the
+// researcher-architect's concern under MVP).
 //
 // Fragment ID `test-harness-catalog.rendered` is intentionally NOT in
 // the project's `\d+-` prefix style operators use for hand-
@@ -572,10 +595,23 @@ func injectRenderedTestHarnessFragment(ctx context.Context, personaMgr *persona.
 		Category: 0, // CategorySystem — matches project baseline; see doc-comment.
 		Priority: 45,
 		Content:  body,
-		// research-reviewer needs the same view of the catalog so it can
-		// verify the researcher's `test_harness` field references a real
-		// registered entry (membership check, R3.7.1.d gate).
-		Roles:       []string{"researcher", "research-reviewer"},
+		// The catalog is loaded for every role that touches a
+		// research.artifact.test_harness field — researcher phases that
+		// select (plan/gather/synthesize/architect) and reviewer modes
+		// that membership-check (reviewer-research, reviewer-spec).
+		// Legacy `researcher` + `research-reviewer` retained for
+		// research-iterative configs that have not migrated to the
+		// ADR-041 phase-suffixed roster.
+		Roles: []string{
+			"researcher",
+			"research-reviewer",
+			"researcher-plan",
+			"researcher-gather",
+			"researcher-synthesize",
+			"researcher-architect",
+			"reviewer-research",
+			"reviewer-spec",
+		},
 		Description: "Auto-generated from configs/harnesses.json at boot (ADR-033 R3.7.1).",
 	}
 	if err := personaMgr.Upsert(ctx, p); err != nil {

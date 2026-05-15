@@ -49,7 +49,7 @@ func TestNATSEntityReader_LiveSubject(t *testing.T) {
 		"id": "` + stubEntityID + `",
 		"triples": [
 			{"predicate": "agent.loop.role", "object": "research-reviewer"},
-			{"predicate": "coordinator.next_action", "object": "approved"},
+			{"predicate": "coordinator.decision.next_action", "object": "approved"},
 			{"predicate": "lineage.researcher", "object": "researcher-loop-id"},
 			{"predicate": "agent.loop.iterations", "object": 3}
 		]
@@ -92,7 +92,7 @@ func TestNATSEntityReader_LiveSubject(t *testing.T) {
 	// Response-decoding contract: reader must surface every triple the
 	// upstream component returns, with predicate→object mapping intact.
 	assert.Equal(t, "research-reviewer", got["agent.loop.role"])
-	assert.Equal(t, "approved", got["coordinator.next_action"])
+	assert.Equal(t, "approved", got["coordinator.decision.next_action"])
 	assert.Equal(t, "researcher-loop-id", got["lineage.researcher"])
 	assert.EqualValues(t, 3, got["agent.loop.iterations"])
 }

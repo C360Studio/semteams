@@ -1,104 +1,187 @@
 name: research-mode-transition
 description: |
-  Journey: ADR-040 reshape of R3.2.2 (formerly R2.5+R3.2.2 chained
-  research+source-acquisition). Validates the new source-curator role
-  end-to-end on mock-LLM:
+  Journey: ADR-041 §"Phasing Phase 3" rewrite of the research-only arc
+  for the MVP role compression. Replaces the legacy source-curator +
+  dev-via-spec-planner chain with the four-phase researcher roster
+  (researcher-plan → researcher-gather → researcher-synthesize) and a
+  reviewer-research terminal. Demonstrates the rule chain on mock-LLM:
 
-    research → reviewer rejects (corpus gap)
-            → source-curator (add+wait+verify+emit_curator_artifact+decide indexed)
-            → researcher re-queries augmented corpus (recovery=curator_indexed)
-            → reviewer approves (no stabilisation gate needed — researcher
-              never mutated substrate, the curator did)
-            → dev-via-spec-planner stub (mode-transition rule 03 fires)
+    researcher-plan (dispatch) → decide(gather)
+      → rule 04-phase-transition-to-gather → researcher-gather
+    researcher-gather → decide(synthesize)
+      → rule 05-phase-transition-to-synthesize → researcher-synthesize
+    researcher-synthesize → emit_research_artifact (rev 1, empty)
+                          + decide(emit)
+      → rule 01a-researcher-synthesize-to-reviewer-research
+        → reviewer-research
+    reviewer-research → decide(insufficient)
+      → recoverycounter writes chain.recovery.proceed=true
+      → rule 02-reviewer-rejected-retry-research → researcher-plan
+    researcher-plan (recovery) → decide(gather)
+      → rule 04 → researcher-gather
+    researcher-gather → decide(synthesize)
+      → rule 05 → researcher-synthesize
+    researcher-synthesize → emit_research_artifact (rev 2, full)
+                          + decide(emit)
+      → rule 01a → reviewer-research
+    reviewer-research → decide(approved) → terminal
 
-  Six loops total — one fewer than the pre-ADR-040 count (which had
-  2× researcher-with-source-acquisition for substrate-mod + settling
-  passes). The curator owns substrate-mutation as a single dedicated
-  loop; the post-curator researcher is a pure re-query pass that does
-  not mutate, so the reviewer's stabilisation gate doesn't fire.
+  Eight loops total — two fewer than the pre-ADR-041 ten-loop count
+  (which had a separate source-curator + dev-via-spec-planner pair).
+  Substrate-mutation (add_source_repo / curator artifacts) is out of
+  scope for the MVP roster: ADR-041 absorbs the curator role and
+  Phase 3 wires substrate plumbing to a different surface if needed.
 
   Paired spec: ui/e2e/agentic/research-mode-transition.spec.ts.
-  Required compose profile: semsource (the SemSource container is
-  required for the curator's substrate-modifying add_source_repo call).
+  Compose profile: none beyond the agentic-e2e baseline — the curator's
+  semsource dependency was the only profile addition in the legacy
+  fixture, and the curator is gone.
 
-  Sequence (matches the fixture, six loops, eighteen LLM round-trips):
+  Sequence (eight loops, twenty LLM round-trips):
 
-    Loop A — researcher (initial pass, revision=1, default_role)
-      1. tool_call: query_entity (corpus probe, returns nothing useful)
-      2. tool_call: emit_research_artifact (revision=1, empty actors/
-         integration_points, open_gaps names the corpus gap)
-      3. completion: same artifact JSON for the reviewer to read.
-         → outcome=success → rule_01a fires → spawn reviewer.
+    Loop A — researcher-plan (initial pass, dispatch)
+      1. tool_call: emit_plan (revision=1, scoped to the OSH
+         Meshtastic driver work)
+      2. tool_call: decide(action="gather", reason=<plan substance>)
+         → phasevalidator: plan→gather allowed, gather count 0→1,
+           writes chain.phase_transition.proceed.gather="true"
+         → rule_04 fires → spawn researcher-gather.
 
-    Loop B — research-reviewer (pass 1, decides corpus gap)
-      4. tool_call: read_loop_result (placeholder; tool errors,
-         consumed by next canned turn)
-      5. tool_call: decide(insufficient, reason includes "recommend
-         add_source_repo for osh-core")
-         → coordinator.next_action=insufficient → rule_02 fires →
-         spawn source-curator.
+    Loop B — researcher-gather (initial pass)
+      3. tool_call: read_loop_result (placeholder against Loop A;
+         tool errors, consumed by the next canned turn)
+      4. tool_call: query_entity (corpus probe — returns nothing
+         useful, but the placeholder shape matters here, not the
+         data)
+      5. tool_call: decide(action="synthesize", reason=<evidence gap
+         noted>)
+         → phasevalidator: gather→synthesize allowed, synthesize count
+           0→1, writes chain.phase_transition.proceed.synthesize="true"
+         → rule_05 fires → spawn researcher-synthesize.
 
-    Loop C — source-curator (substrate-mutating pass)
-      6. tool_call: read_loop_result (placeholder; consumes reviewer
-         reason classification)
-      7. tool_call: add_source_repo(url=osh-core, namespace=research)
-         → agentic-tools approval filter: approval_required.
-         Test approves via /teams-dispatch/loops/{id}/approval. Loop
-         re-dispatches with ApprovedBy; SemSource handles AddRequest,
-         replies success.
-      8. tool_call: query_entity (verifies indexing finished by
-         resolving an entity SemSource just exposed)
-      9. tool_call: emit_curator_artifact (added_sources + verified_
-         entity_ids; source_dirs OMITTED per ADR-040 §"Field rules" —
-         this deployment doesn't wire the SemSource shared mount)
-     10. tool_call: decide(action="indexed", reason="...")
-         → coordinator.next_action=indexed → rule_02b fires → spawn
-         researcher (with curator_loop_id in properties).
+    Loop C — researcher-synthesize (initial pass)
+      6. tool_call: read_loop_result (placeholder; tool errors)
+      7. tool_call: emit_research_artifact (revision=1, empty
+         actors/integration_points/tasks, open_gaps names the corpus
+         gap so the reviewer can decide whether to extend the corpus)
+      8. tool_call: decide(action="emit", reason=<artifact emitted
+         for reviewer>)
+         → phasevalidator: synthesize→emit allowed (terminal forward
+           edge, no count increment), writes
+           chain.phase_transition.target="emit"
+         → rule_01a fires → spawn reviewer-research.
 
-    Loop D — researcher (recovery=curator_indexed, re-query pass)
-     11. tool_call: read_loop_result (placeholder; consumes curator
-         artifact)
-     12. tool_call: query_entity (against the augmented corpus; finds
-         OSH driver framework + Meshtastic radio actors via the
-         curator's verified_entity_ids)
-     13. tool_call: emit_research_artifact (revision=2, full actors/
-         integration_points/tasks; addressed_gaps cites the curator's
-         add; substrate_mutations stays empty — researcher does NOT
-         mutate substrate under ADR-040)
-     14. completion: artifact JSON for the reviewer.
-         → outcome=success → rule_01a fires → spawn reviewer.
+    Loop D — reviewer-research (pass 1, decides corpus gap)
+      9. tool_call: read_loop_result (placeholder; tool errors,
+         consumed by the next canned turn)
+     10. tool_call: decide(action="insufficient", reason=<gaps —
+         driver framework + OGC CS endpoints not represented>)
+         → recoverycounter wakes on agent.complete, increments
+           chain.recovery.count 0→1 (within default cap=3), writes
+           chain.recovery.proceed="true" on the reviewer entity
+         → rule_02 fires → spawn researcher-plan (recovery).
 
-    Loop E — research-reviewer (pass 2, approves on the re-queried
-              artifact — no stabilisation gate needed since the
-              researcher made no substrate mutations)
-     15. tool_call: read_loop_result (placeholder; tool errors)
-     16. tool_call: decide(approved)
-         → coordinator.next_action=approved → rule_03 fires → spawn
-         dev-via-spec-planner.
+    Loop E — researcher-plan (recovery pass, rule_02 spawn)
+     11. tool_call: read_loop_result on the reviewer (placeholder;
+         tool errors)
+     12. tool_call: decide(action="gather", reason=<re-planned with
+         reviewer's gap addressed; carry-forward scope + tighter
+         epics>)
+         → phasevalidator: plan→gather allowed, gather count 1→2,
+           writes chain.phase_transition.proceed.gather="true"
+         → rule_04 fires → spawn researcher-gather (recovery).
 
-    Loop F — dev-via-spec-planner (R3.3 stub)
-     17. tool_call: read_loop_result (placeholder; tool errors)
-     18. completion: ack message confirming the artifact handoff.
-         → terminal. No rule fires.
+    Loop F — researcher-gather (recovery pass, rule_04 spawn)
+     13. tool_call: read_loop_result on Loop E (placeholder; tool
+         errors)
+     14. tool_call: query_entity (more corpus probes — finds OSH
+         driver framework + Meshtastic radio entities)
+     15. tool_call: decide(action="synthesize", reason=<evidence
+         accumulated; ready to compose artifact>)
+         → phasevalidator: gather→synthesize allowed, synthesize
+           count 1→2, writes
+           chain.phase_transition.proceed.synthesize="true"
+         → rule_05 fires → spawn researcher-synthesize.
+
+    Loop G — researcher-synthesize (recovery pass, rule_05 spawn)
+     16. tool_call: read_loop_result on Loop F (placeholder; tool
+         errors)
+     17. tool_call: emit_research_artifact (revision=2, full
+         actors/integration_points/tasks; addressed_gaps cites the
+         reviewer's prior reason)
+     18. tool_call: decide(action="emit", reason=<artifact ready
+         for review>)
+         → phasevalidator: synthesize→emit allowed
+         → rule_01a fires → spawn reviewer-research.
+
+    Loop H — reviewer-research (pass 2, approves)
+     19. tool_call: read_loop_result on Loop G (placeholder; tool
+         errors)
+     20. tool_call: decide(action="approved", reason=<all checklist
+         items met>)
+         → terminal. No rule fires (research-only arc; the
+           dev-via-spec architect/builder/qa hand-offs live in the
+           sibling dev-via-spec / dev-via-spec-qa journeys).
 
   Mock-llm is sequence-based and role-blind. The fixture aligns to
-  the exact order of LLM round-trips across all six loops. Same
-  read_loop_result placeholder caveat as before: arguments_json passes
-  verbatim, the placeholder loop_id will not resolve, the tool
-  returns an error, the next canned turn handles it. The structural
-  assertion (rule chain + approval round-trip + persona-swap) is
-  unaffected.
+  the exact order of LLM round-trips across all eight loops. Same
+  read_loop_result placeholder caveat as the legacy fixture:
+  arguments_json passes verbatim, the placeholder loop_id will not
+  resolve, the tool returns an error, the next canned turn handles
+  it. The structural assertion (rule chain + recovery counter + phase
+  caps) is unaffected.
 
-  Why six loops and not seven (the pre-ADR-040 count): under ADR-040
-  the curator owns substrate-mutation as a dedicated role, so the
-  researcher never mutates substrate during its passes. The
-  reviewer's stabilisation gate ("if substrate mutated this revision,
-  awaiting stabilisation") therefore doesn't fire on the post-curator
-  researcher's artifact, eliminating the settling-pass loop the OLD
-  flow needed.
+  Per-phase cap budget (ADR-041 §"Per-phase cap"):
+  plan=1 (counter doesn't increment on dispatch or rule_02/03 entry —
+  plan is fresh chain root or recovery), gather=3 (this fixture
+  consumes 2 of 3), synthesize=2 (this fixture consumes 2 of 2 —
+  at cap on the recovery pass), architect=2 (untouched). Any
+  additional retry beyond this fixture would land at the synthesize
+  cap and the chain would stall fail-safe.
 
 responses:
-  # ---------- Loop A: researcher (initial pass, revision=1) ----------
+  # ---------- Loop A: researcher-plan (initial pass) ----------
+
+  - tool_call:
+      name: emit_plan
+      arguments_json: |
+        {
+          "revision": 1,
+          "title": "OSH Meshtastic driver plan",
+          "goal": "Implement the OSH IDriver interface backed by Meshtastic radio packets, exposing OGC CS observation endpoints.",
+          "context": "Initial planning pass — the research arc has not yet enumerated the corpus actors. The driver sits at the boundary between Meshtastic packet ingestion (read) and OGC CS observation publishing (write); the GATHER and SYNTHESIZE phases will produce the corpus-grounded artifact.",
+          "scope_in": [
+            "OSH IDriver interface implementation",
+            "Meshtastic packet decoder",
+            "OGC CS observation publisher"
+          ],
+          "scope_out": [
+            "Meshtastic firmware changes — upstream-owned, out of repo scope",
+            "OGC CS specification work — standards body owns; we conform"
+          ],
+          "epics": [
+            "E1 — Meshtastic packet ingestion: read-side decoder normalising radio packets into the driver's internal observation envelope",
+            "E2 — OGC CS observation publishing: write-side publisher exposing the IDriver interface",
+            "E3 — Lifecycle and recovery: IDriver lifecycle hooks plus the radio-disconnect failure-mode handler"
+          ]
+        }
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "gather",
+          "reason": "Plan emitted: OSH Meshtastic driver plan rev 1. Goal: Implement the OSH IDriver interface backed by Meshtastic radio packets, exposing OGC CS observation endpoints. Three epics (Meshtastic packet ingestion / OGC CS observation publishing / lifecycle and recovery) decompose the work at interface granularity. The GATHER phase should enumerate the corpus actors that ground these epics — OSH driver framework (hosts IDriver), OGC CS endpoints (observation surface), Meshtastic radio (telemetry source) — and identify the integration boundaries the synthesize pass will compose into the artifact."
+        }
+
+  # ---------- Loop B: researcher-gather (initial pass, rule_04 spawn) ----------
+
+  - tool_call:
+      name: read_loop_result
+      arguments_json: |
+        {
+          "loop_id": "plan-loop-A"
+        }
 
   - tool_call:
       name: query_entity
@@ -108,6 +191,23 @@ responses:
         }
 
   - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "synthesize",
+          "reason": "Corpus probe for `osh.driver.framework` returned nothing — the OSH driver framework documentation is not indexed in the research corpus. Forwarding to SYNTHESIZE so the empty artifact can surface the gap to the reviewer with the corpus deficit explicitly named; the reviewer's insufficient verdict will route this back through PLAN with the gap addressed."
+        }
+
+  # ---------- Loop C: researcher-synthesize (initial pass, rule_05 spawn) ----------
+
+  - tool_call:
+      name: read_loop_result
+      arguments_json: |
+        {
+          "loop_id": "gather-loop-B"
+        }
+
+  - tool_call:
       name: emit_research_artifact
       arguments_json: |
         {
@@ -119,41 +219,33 @@ responses:
           "tasks": [],
           "addressed_gaps": [],
           "open_gaps": [
-            "OSH driver framework documentation not indexed — query_entity for osh.driver.framework returned nothing. Recommend add_source_repo for the osh-core repository."
+            "OSH driver framework documentation not indexed — query_entity for osh.driver.framework returned nothing during GATHER. The corpus needs to be extended before the synthesize pass can enumerate concrete actors."
           ],
           "substrate_mutations": []
         }
 
-  - completion:
-      content: |
-        Initial research pass on OSH driver framework actors. The
-        corpus does not appear to contain OSH driver framework
-        documentation — `query_entity` found no match for
-        `osh.driver.framework`. Submitting an empty artifact with
-        the corpus gap explicitly named so the reviewer can decide
-        whether to extend the corpus.
-
-        ```json
+  - tool_call:
+      name: decide
+      arguments_json: |
         {
-          "revision": 1,
-          "actors": [],
-          "integration_points": [],
-          "tasks": [],
-          "addressed_gaps": [],
-          "open_gaps": [
-            "OSH driver framework documentation not indexed — query_entity for osh.driver.framework returned nothing. Recommend add_source_repo for the osh-core repository."
-          ],
-          "substrate_mutations": []
+          "action": "emit",
+          "reason": "Artifact rev 1 emitted with the corpus gap explicitly named in open_gaps. Empty actors/integration_points/tasks intentional — the GATHER phase could not resolve the OSH driver framework entity. Reviewer should route insufficient with a corpus-extension recommendation so the retry pass can synthesize against a populated corpus."
         }
-        ```
 
-  # ---------- Loop B: research-reviewer (pass 1) ----------
+  # ---------- Loop D: reviewer-research (pass 1, insufficient) ----------
 
   - tool_call:
       name: read_loop_result
       arguments_json: |
         {
-          "loop_id": "researcher-loop-A"
+          "loop_id": "synthesize-loop-C"
+        }
+
+  - tool_call:
+      name: bash
+      arguments_json: |
+        {
+          "command": "ls /artifacts/research/"
         }
 
   - tool_call:
@@ -161,73 +253,33 @@ responses:
       arguments_json: |
         {
           "action": "insufficient",
-          "reason": "Corpus gap: OSH driver framework documentation is not indexed. Recommend add_source_repo for https://github.com/sensorhub-tools/osh-core in namespace research. The source-curator should register this source before the next researcher pass."
+          "reason": "Artifact rev 1 has zero actors and zero integration_points — the open_gaps line confirms the corpus did not resolve `osh.driver.framework`. Per the reviewer-research evaluation contract, an empty artifact cannot pass approval. Routing insufficient so the retry researcher-plan addresses the gap (corpus-extension or alternative probe entities) and the synthesize pass can compose a substantive artifact."
         }
 
-  # ---------- Loop C: source-curator (substrate-mutating pass) ----------
+  # ---------- Loop E: researcher-plan (recovery pass, rule_02 spawn) ----------
 
   - tool_call:
       name: read_loop_result
       arguments_json: |
         {
-          "loop_id": "reviewer-loop-B"
-        }
-
-  - tool_call:
-      name: add_source_repo
-      arguments_json: |
-        {
-          "url": "https://github.com/sensorhub-tools/osh-core",
-          "namespace": "research",
-          "branch": "main"
-        }
-
-  - tool_call:
-      name: query_entity
-      arguments_json: |
-        {
-          "entity_id": "osh.core.api.module.IModule"
-        }
-
-  # source_dirs OMITTED — no SemSource shared mount in this deployment.
-  # Per ADR-040 §"Field rules" "omit when unsure" rule, the curator
-  # only includes source_dirs when it can verify the mount path is
-  # accessible. The curator.artifact.source_dirs_count triple lands
-  # as "0" (verified end-to-end in mock-LLM).
-  - tool_call:
-      name: emit_curator_artifact
-      arguments_json: |
-        {
-          "added_sources": [
-            {
-              "url": "https://github.com/sensorhub-tools/osh-core",
-              "namespace": "research",
-              "covers": "OSH IDriver / IModule / IPersistentDriver interfaces, BaseSensorModule, OGC CS endpoint helpers"
-            }
-          ],
-          "verified_entity_ids": [
-            "osh.core.api.module.IModule",
-            "osh.core.api.module.IModuleProvider",
-            "osh.core.api.sensor.IDriver",
-            "osh.core.impl.module.BaseSensorModule"
-          ]
+          "loop_id": "reviewer-loop-D"
         }
 
   - tool_call:
       name: decide
       arguments_json: |
         {
-          "action": "indexed",
-          "reason": "Added osh-core for OSH driver/module entities; 4 IDs verified to resolve via query_entity post-indexing. The next researcher loop can build on these without re-validating."
+          "action": "gather",
+          "reason": "Recovery plan: reviewer flagged empty actors/integration_points in rev 1 (corpus did not resolve osh.driver.framework). Carrying forward the goal + scope + epics from rev 1 unchanged; tightening the GATHER probe set to enumerate via alternative entity IDs (osh.core.api.module.IModule, osh.core.api.sensor.IDriver, osh.core.impl.module.BaseSensorModule) which the corpus does index. SYNTHESIZE pass will compose actors/integration_points from the resolved IDs."
         }
 
-  # ---------- Loop D: researcher (recovery=curator_indexed, re-query) ----------
+  # ---------- Loop F: researcher-gather (recovery pass, rule_04 spawn) ----------
 
   - tool_call:
       name: read_loop_result
       arguments_json: |
         {
-          "loop_id": "curator-loop-C"
+          "loop_id": "plan-loop-E"
         }
 
   - tool_call:
@@ -235,6 +287,23 @@ responses:
       arguments_json: |
         {
           "entity_id": "osh.core.api.module.IModule"
+        }
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "synthesize",
+          "reason": "GATHER recovery pass enumerated three OSH driver entities: osh.core.api.module.IModule (the IDriver-adjacent module interface), osh.core.api.sensor.IDriver (the driver contract itself), osh.core.impl.module.BaseSensorModule (the base implementation). Three concrete integration points emerge: Meshtastic radio → OSH driver (telemetry read-side), OSH driver → OGC CS endpoints (observation write-side), and the lifecycle/disconnect-recovery boundary. SYNTHESIZE can now compose a substantive artifact."
+        }
+
+  # ---------- Loop G: researcher-synthesize (recovery pass, rule_05 spawn) ----------
+
+  - tool_call:
+      name: read_loop_result
+      arguments_json: |
+        {
+          "loop_id": "gather-loop-F"
         }
 
   - tool_call:
@@ -257,51 +326,34 @@ responses:
             "Implement OSH `IDriver` interface backed by Meshtastic radio events, exposing OGC CS observation endpoints"
           ],
           "addressed_gaps": [
-            "Corpus gap closed by curator's add_source_repo for https://github.com/sensorhub-tools/osh-core; queried curator's verified_entity_ids (IModule, IDriver, BaseSensorModule) and enumerated actors from the resolved entities."
+            "Reviewer rev 1 insufficient verdict closed by enumerating via alternative entity IDs (IModule, IDriver, BaseSensorModule) which the corpus indexes; actors and integration_points composed from the resolved IDs per the planner's epic decomposition."
           ],
           "open_gaps": [],
           "substrate_mutations": []
         }
 
-  - completion:
-      content: |
-        Re-queried the curator-augmented corpus and enumerated three
-        actors (OSH driver framework, OGC CS endpoints, Meshtastic
-        radio) and two integration points. Built directly on the
-        curator's verified_entity_ids — no re-validation needed.
-        Substrate untouched this pass; the curator owns mutation
-        under ADR-040.
-
-        ```json
+  - tool_call:
+      name: decide
+      arguments_json: |
         {
-          "revision": 2,
-          "actors": [
-            {"name": "OSH driver framework", "role": "Hosts the IDriver interface drivers must implement to expose sensor observations"},
-            {"name": "OGC CS endpoints", "role": "Standard endpoints for observations, system descriptions, and control streams that the driver exposes"},
-            {"name": "Meshtastic radio", "role": "LoRa mesh radio interface that emits packetised telemetry the driver consumes"}
-          ],
-          "integration_points": [
-            {"from": "OSH driver", "to": "OGC CS endpoints", "data": "observation messages and system descriptions", "direction": "write"},
-            {"from": "Meshtastic radio", "to": "OSH driver", "data": "packetised radio telemetry", "direction": "read"}
-          ],
-          "tasks": [
-            "Implement OSH `IDriver` interface backed by Meshtastic radio events, exposing OGC CS observation endpoints"
-          ],
-          "addressed_gaps": [
-            "Corpus gap closed by curator's add_source_repo for https://github.com/sensorhub-tools/osh-core; queried curator's verified_entity_ids (IModule, IDriver, BaseSensorModule) and enumerated actors from the resolved entities."
-          ],
-          "open_gaps": [],
-          "substrate_mutations": []
+          "action": "emit",
+          "reason": "Artifact rev 2 emitted. Three actors (OSH driver framework, OGC CS endpoints, Meshtastic radio); two integration points (read-side Meshtastic→driver and write-side driver→OGC CS); one decomposable task aligning to the planner's E1+E2 boundary. Reviewer should approve."
         }
-        ```
 
-  # ---------- Loop E: research-reviewer (pass 2 — approves on re-queried artifact) ----------
+  # ---------- Loop H: reviewer-research (pass 2, approves — terminal) ----------
 
   - tool_call:
       name: read_loop_result
       arguments_json: |
         {
-          "loop_id": "researcher-loop-D"
+          "loop_id": "synthesize-loop-G"
+        }
+
+  - tool_call:
+      name: bash
+      arguments_json: |
+        {
+          "command": "ls /artifacts/research/"
         }
 
   - tool_call:
@@ -309,20 +361,5 @@ responses:
       arguments_json: |
         {
           "action": "approved",
-          "reason": "Checklist satisfied: three actors with role text, two integration points with direction, one decomposable seed requirement. Substrate untouched this revision (researcher does not mutate under ADR-040; the curator's add was logged at revision 1's reviewer terminal as a recommendation, executed in Loop C). No stabilisation gate to apply — the post-curator researcher pass is a pure re-query."
+          "reason": "Checklist satisfied: three actors with role text, two integration points with direction, one decomposable seed requirement, all artifact fields well-formed. addressed_gaps cites the recovery pass's alternative entity probe set. open_gaps empty. Substrate untouched this revision. Research arc terminates here — the dev-via-spec arc (researcher-architect → reviewer-spec → builder → reviewer-qa) is exercised by the sibling dev-via-spec.yaml / dev-via-spec-qa.yaml journeys."
         }
-
-  # ---------- Loop F: dev-via-spec-planner (R3.3 stub) ----------
-
-  - tool_call:
-      name: read_loop_result
-      arguments_json: |
-        {
-          "loop_id": "reviewer-loop-E"
-        }
-
-  - completion:
-      content: |
-        Stabilised research artifact received from reviewer loop
-        reviewer-loop-E. ADR-040 mode-transition smoke check
-        complete. Full dev-via-spec planning contract lands in R3.3.

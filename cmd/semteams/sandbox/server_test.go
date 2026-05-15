@@ -691,12 +691,57 @@ func TestExecOutputTruncation(t *testing.T) {
 	}
 }
 
-func TestExecMissingWorktree(t *testing.T) {
-	ts, _ := newTestServer(t)
-	resp := postExec(t, ts, "test.task.no.worktree", "echo x", 0)
+// ADR-041 Phase 4 smoke #24 finding: /exec must lazy-create the
+// worktree when it doesn't yet exist. Non-builder roles (architect,
+// reviewer-spec/qa/research) reach /exec before any role has called
+// bootstrap_workspace, because only the builder calls bootstrap under
+// MVP. Returning 404 wedged the chain. This test pins the new behavior:
+// an /exec against an unknown task_id succeeds, the worktree is created
+// as a git-init'd empty dir, and the second /exec call against the same
+// task_id reuses it.
+func TestExecLazyAutocreatesWorktree(t *testing.T) {
+	ts, workspaceRoot := newTestServer(t)
+	taskID := "test.task.exec.lazy"
+
+	// First /exec — worktree does NOT exist. Server should autocreate
+	// and return 200 with the command's output.
+	resp := postExec(t, ts, taskID, "pwd", 0)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("expected 404, got %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 200 (lazy autocreate), got %d: %s", resp.StatusCode, body)
+	}
+	var got execResponse
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.ExitCode != 0 {
+		t.Fatalf("exit_code = %d, want 0; stderr=%q", got.ExitCode, got.Stderr)
+	}
+	if !strings.Contains(got.Stdout, taskID) {
+		t.Fatalf("pwd stdout = %q, expected to contain task_id %q", got.Stdout, taskID)
+	}
+
+	// The directory now exists on disk with a .git dir (initGitRepo ran).
+	dir := filepath.Join(workspaceRoot, taskID)
+	if _, err := os.Stat(filepath.Join(dir, ".git")); err != nil {
+		t.Fatalf("expected lazy-created worktree to have .git: %v", err)
+	}
+
+	// Second /exec — worktree exists. createWorkspace is idempotent so
+	// the second call should succeed without re-init (we don't probe
+	// the log here; the success-path assertion is sufficient).
+	resp2 := postExec(t, ts, taskID, "echo reused", 0)
+	defer resp2.Body.Close()
+	if resp2.StatusCode != http.StatusOK {
+		t.Fatalf("second /exec status = %d, want 200", resp2.StatusCode)
+	}
+	var got2 execResponse
+	if err := json.NewDecoder(resp2.Body).Decode(&got2); err != nil {
+		t.Fatalf("decode second: %v", err)
+	}
+	if strings.TrimSpace(got2.Stdout) != "reused" {
+		t.Fatalf("second stdout = %q, want %q", got2.Stdout, "reused")
 	}
 }
 

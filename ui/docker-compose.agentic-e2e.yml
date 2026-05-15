@@ -139,6 +139,16 @@ services:
       # separation from ADR-033): the backend reads evidence outputs written
       # by the sandbox; it must never write into the workspace directly.
       - SEMTEAMS_WORKSPACE_ROOT=/workspace
+      # emit-tool output dirs land in the shared agentic-artifacts volume
+      # (rw here, ro in sandbox at the same /artifacts mountpoint) so
+      # every bash-equipped agent can `cat /artifacts/<kind>/<slug>.md`
+      # without crossing the ADR-033 D2 workspace boundary. Backend
+      # writes; sandbox reads. Host never sees them (named volume, no
+      # bind mount). This is a SEPARATE volume from the workspace one
+      # — D2 still holds: backend never touches /workspace.
+      - SEMTEAMS_RESEARCH_ARTIFACT_DIR=/artifacts/research
+      - SEMTEAMS_PLAN_DIR=/artifacts/plans
+      - SEMTEAMS_DEVVIASPEC_ARTIFACT_DIR=/artifacts/specs
     volumes:
       - ${BACKEND_CONTEXT:-..}/configs/${AGENTIC_CONFIG:-e2e-agentic.json}:/etc/semstreams/config.json:ro
       - ${BACKEND_CONTEXT:-..}/testdata:/data/testdata:ro
@@ -152,6 +162,13 @@ services:
       # qa-reviewer to needs_clarification — correct behaviour for
       # mock-LLM journeys that never spawn a real builder.
       - sandbox-agentic-workspaces:/workspace:ro
+      # Shared artifacts volume — backend writes emit_*_artifact markdown
+      # here; sandbox mounts the SAME volume at /artifacts ro so bash-
+      # equipped agents (reviewer-spec / reviewer-qa / researcher-architect)
+      # can read the rendered artifacts. Distinct from the workspace
+      # volume: this is for chain-state artifacts, not measured build
+      # outputs, so D2 doesn't apply.
+      - agentic-artifacts:/artifacts
     networks:
       - agentic-net
     healthcheck:
@@ -218,6 +235,10 @@ services:
       - "${SANDBOX_DOCKER_SOCK_GID:-0}"
     volumes:
       - sandbox-agentic-workspaces:/workspace
+      # Shared artifacts volume — ro view of the rw mount on the backend
+      # container. Bash-equipped non-builder agents read rendered emit_*
+      # artifacts here without crossing the ADR-033 D2 workspace boundary.
+      - agentic-artifacts:/artifacts:ro
       - sandbox-agentic-caches-m2:/home/sandbox/.m2
       - sandbox-agentic-caches-go:/go/pkg/mod
       - sandbox-agentic-caches-npm:/home/sandbox/.npm
@@ -453,6 +474,12 @@ volumes:
   ui-agentic-node-modules:
     driver: local
   sandbox-agentic-workspaces:
+    driver: local
+  # Shared rendered-artifact volume. rw on backend (emit_*_artifact tools
+  # write here), ro on sandbox (bash-equipped agents read here). Distinct
+  # from sandbox-agentic-workspaces so ADR-033 D2 (measurer/measured
+  # separation: backend never writes the workspace) is unaffected.
+  agentic-artifacts:
     driver: local
   sandbox-agentic-caches-m2:
     driver: local

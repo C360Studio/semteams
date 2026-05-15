@@ -32,7 +32,7 @@ func TestNATSPauseDataReader_LiveSubject(t *testing.T) {
 	stubResponse := []byte(`{
 		"id": "` + failedLoopEntityID + `",
 		"triples": [
-			{"predicate": "chain.paused.role", "object": "dev-via-spec-builder"},
+			{"predicate": "chain.paused.role", "object": "builder"},
 			{"predicate": "chain.paused.original_model", "object": "claude-sonnet"},
 			{"predicate": "chain.paused.cause", "object": "max_iterations"}
 		]
@@ -71,6 +71,6 @@ func TestNATSPauseDataReader_LiveSubject(t *testing.T) {
 	assert.Equal(t, failedLoopEntityID, lastRequest["id"], "request payload's id field doesn't match what the reader was asked for")
 
 	// Reader extracts role + model from the chain.paused.* triples.
-	assert.Equal(t, "dev-via-spec-builder", role)
+	assert.Equal(t, "builder", role)
 	assert.Equal(t, "claude-sonnet", model)
 }

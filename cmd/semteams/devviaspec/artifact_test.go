@@ -27,7 +27,6 @@ func minimalValidArtifact() Artifact {
 			ResearchArtifactLoop: "loop-research-001",
 			PlannerLoop:          "loop-planner-001",
 			ReviewerLoop:         "loop-reviewer-001",
-			ChallengerLoop:       "loop-challenger-001",
 		},
 	}
 }
@@ -68,7 +67,6 @@ func TestArtifact_RoundTrip(t *testing.T) {
 			ResearchArtifactLoop: "loop-research-001",
 			PlannerLoop:          "loop-planner-001",
 			ReviewerLoop:         "loop-reviewer-001",
-			ChallengerLoop:       "loop-challenger-001",
 			ArchitectLoop:        "loop-architect-001",
 		},
 		GeneratedAt: "2026-04-30T12:00:00Z",
@@ -206,21 +204,12 @@ func TestArtifact_Validate_Table(t *testing.T) {
 			mutate:          func(a *Artifact) { a.Provenance.ResearchArtifactLoop = "" },
 			wantErrContains: "research_artifact_loop",
 		},
-		{
-			name:            "missing planner_loop",
-			mutate:          func(a *Artifact) { a.Provenance.PlannerLoop = "" },
-			wantErrContains: "planner_loop",
-		},
-		{
-			name:            "missing reviewer_loop",
-			mutate:          func(a *Artifact) { a.Provenance.ReviewerLoop = "" },
-			wantErrContains: "reviewer_loop",
-		},
-		{
-			name:            "missing challenger_loop",
-			mutate:          func(a *Artifact) { a.Provenance.ChallengerLoop = "" },
-			wantErrContains: "challenger_loop",
-		},
+		// PlannerLoop + ReviewerLoop empty is permitted under ADR-041
+		// MVP — the legacy planner/reviewer hops were folded into
+		// researcher-architect, so there is no upstream loop to cite.
+		// Validate() must accept empties on those slots; the
+		// happy-path test (TestArtifact_Validate_Happy below) covers
+		// the non-empty case.
 	}
 
 	for _, tc := range cases {
@@ -246,6 +235,24 @@ func TestArtifact_Validate_Table(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestArtifact_Validate_AcceptsEmptyPlannerAndReviewerLoops pins the
+// ADR-041 Phase 3 rule: PlannerLoop + ReviewerLoop are wire-retained
+// slots from the legacy dev-via-spec arc (planner → reviewer →
+// challenger → architect) that MVP folded into researcher-architect.
+// Validate() must accept empty strings on both so the architect's
+// emit doesn't fail under MVP (no upstream planner/reviewer loop
+// exists to cite). research_artifact_loop stays required — the
+// researcher-synthesize phase output is still a real upstream loop.
+func TestArtifact_Validate_AcceptsEmptyPlannerAndReviewerLoops(t *testing.T) {
+	t.Parallel()
+	a := minimalValidArtifact()
+	a.Provenance.PlannerLoop = ""
+	a.Provenance.ReviewerLoop = ""
+	if err := a.Validate(); err != nil {
+		t.Fatalf("Validate() with empty PlannerLoop+ReviewerLoop: got error %v, want nil (ADR-041 MVP must accept)", err)
 	}
 }
 

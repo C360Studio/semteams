@@ -83,6 +83,17 @@ RUN mkdir -p /etc/semstreams && \
 RUN mkdir -p /data && \
     chown semstreams:semstreams /data
 
+# Create the agent-emit artifacts directory tree owned by the runtime
+# user. Docker semantics: when a named volume is mounted onto an empty
+# directory in the image, Docker copies the directory's content + perms
+# into the volume on first use — so this chown propagates to the
+# `agentic-artifacts` named volume even though the chown happens at
+# build time. emit-tools (research/plan/spec) write here at runtime;
+# without this seeding the volume defaults to root:root and writes
+# fail with EACCES.
+RUN mkdir -p /artifacts/research /artifacts/plans /artifacts/specs && \
+    chown -R semstreams:semstreams /artifacts
+
 # Switch to non-root user
 USER semstreams
 

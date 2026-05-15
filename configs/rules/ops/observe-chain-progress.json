@@ -1,0 +1,56 @@
+{
+  "id": "ops_observe_chain_progress",
+  "type": "expression",
+  "name": "Ops in-flight chain-progress observation",
+  "description": "Fires every fire_every_n_events=5 completed non-terminal loops (researcher-* / reviewer-spec / builder) to wake an ops-progress-observer that assesses whether an in-flight chain is making forward progress or spinning. Complements configs/rules/ops/chain-terminal-observe.json (which fires only at reviewer-qa terminal — purely retrospective). Smoke #25c (2026-05-14) motivated this: a 12-minute builder stall surfaced no graph-level signal until the run hit the watcher timeout; an in-flight observer would have had three opportunities to flag the pattern before the operator did manually. Phase 1 read-only contract per ADR-027 — emits findings via emit_diagnosis only.",
+  "enabled": true,
+  "entity": {
+    "pattern": "agent.complete.>"
+  },
+  "conditions": [
+    {
+      "field": "agent.loop.role",
+      "operator": "not_in",
+      "value": ["reviewer-qa", "ops-chain-observer", "ops-progress-observer", "ops-analyst"],
+      "required": true
+    },
+    {
+      "field": "agent.loop.outcome",
+      "operator": "in",
+      "value": ["success", "failed", "cancelled"],
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "fire_every_n_events": 5,
+  "on_enter": [
+    {
+      "type": "publish_agent",
+      "subject": "agent.task.ops-progress-observer",
+      "role": "ops-progress-observer",
+      "model": "general",
+      "tools": [
+        "query_entity",
+        "query_entities",
+        "query_relationships",
+        "read_loop_result",
+        "emit_diagnosis",
+        "submit_work"
+      ],
+      "related_loops": {
+        "trigger_loop": "$entity.instance"
+      },
+      "prompt": "An in-flight observation pulse fired after a non-terminal chain loop completed at $entity.instance. Walk the active chain (start from the trigger loop in your task properties, walk agent.loop.parent up to the chain root, inventory all loops belonging to this chain). Apply your `10-progress-rules.md` checks: spinning patterns, stalled patterns, cost-acceleration patterns. Emit findings via emit_diagnosis ONLY when a pattern crosses a threshold — empty findings is the expected outcome on a healthy chain. When done, call submit_work with a one-line status."
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "phase": "ADR-027 Phase 1 — read-only diagnostic",
+    "adr": "docs/adr/041-mvp-role-compression-and-graph-as-substrate.md",
+    "complements": "configs/rules/ops/chain-terminal-observe.json (terminal/retrospective). This rule is in-flight/prospective.",
+    "motivated_by": "Smoke #25c (2026-05-14) — builder stalled for 12 min, no graph-level signal surfaced the pattern until watcher timeout. project_smoke25_findings.md.",
+    "scope_exclusion_note": "Conditions exclude reviewer-qa (terminal — handled by chain-terminal-observe.json) and the three ops-* roles themselves (avoids infinite recursion: an ops observer completing would otherwise fire another ops observer).",
+    "fire_cadence": "Every 5 completed non-terminal loops. The MVP chain has at most 6 non-terminal completions (plan, gather, synthesize, architect, reviewer-spec, builder), so on a clean chain this rule fires roughly once mid-flight. Adjust fire_every_n_events lower if real-LLM smokes show needed earlier surfacing.",
+    "entity_pattern_note": "Smoke #26 (2026-05-14) finding: without entity.pattern the rule defaults to subscribing on \">\" (all subjects), and the entity-state-watch path then evaluates the rule on every triple-write UPDATE during loop-completion finalization. Each loop's completion flush triggers ~20 evaluations; fire_every_n_events:5 then fires every 5 evaluations, yielding ~48 fires per chain instead of the intended ~1-2. Scoping to agent.complete.> matches per loop-completion event (one match per loop) so fire_every_n_events:5 means 'every 5 loop completions' as the persona prose implies."
+  }
+}

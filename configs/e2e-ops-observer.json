@@ -109,7 +109,7 @@
             "id": "ops_observe_complete_loops",
             "type": "expression",
             "name": "Ops Observer - Trigger on Completed Researcher Loops",
-            "description": "Fires once per fire_every_n_events=20 completed researcher loops (semstreams beta.9). Mirrors configs/rules/ops/observe-complete-loops.json — kept inline here so the e2e config is self-contained.",
+            "description": "Fires once per fire_every_n_events=20 completed researcher loops (semstreams beta.9). Inline rule — the standalone configs/rules/ops/observe-complete-loops.json that previously mirrored this shape was retired in ADR-041 Phase 3 because no config loaded it.",
             "enabled": true,
             "entity": {
               "pattern": "agent.complete.>"
@@ -124,7 +124,7 @@
               {
                 "field": "outcome",
                 "operator": "in",
-                "value": ["success", "failure", "timeout"],
+                "value": ["success", "failed", "cancelled"],
                 "required": true
               }
             ],

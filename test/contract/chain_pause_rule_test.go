@@ -119,16 +119,19 @@ func assertRoleCondition(t *testing.T, operator string, value any, required bool
 	}
 	roles := toStringSlice(value)
 	wantRoles := []string{
-		"dev-via-spec-planner",
-		"dev-via-spec-reviewer",
-		"dev-via-spec-challenger",
-		"dev-via-spec-architect",
-		"dev-via-spec-builder",
-		"dev-via-spec-qa-reviewer",
-		"researcher",
-		"source-curator",
-		"research-reviewer",
+		"researcher-plan",
+		"researcher-gather",
+		"researcher-synthesize",
+		"researcher-architect",
+		"reviewer-research",
+		"reviewer-spec",
+		"reviewer-qa",
+		"builder",
 		"dispatch",
+		// Legacy roles retained for research-iterative configs;
+		// dropped in Phase 3 alongside the legacy persona dirs.
+		"researcher",
+		"research-reviewer",
 	}
 	roleSet := make(map[string]bool, len(roles))
 	for _, r := range roles {

@@ -133,7 +133,7 @@ func (p *Preprocessor) SetChainResolver(r ChainResolver) {
 }
 
 // HandleLoopCompleted is the subscription entry point. It filters for
-// dev-via-spec-builder loops that ended with tests_passing or
+// builder loops that ended with tests_passing or
 // tests_failing, reads .evidence/checks.json from the builder's
 // workspace, runs Registry.Run per check, renders evidence.Summarize,
 // and stamps:
@@ -155,7 +155,7 @@ func (p *Preprocessor) HandleLoopCompleted(ctx context.Context, ev *agentic.Loop
 	if p.workspaceRoot == "" {
 		return nil // preprocessor disabled; non-sandbox deployments skip silently
 	}
-	if ev.Role != "dev-via-spec-builder" {
+	if ev.Role != "builder" {
 		return nil // only builder loops carry architect checks
 	}
 	// We stamp on every successful builder loop completion regardless of

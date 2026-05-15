@@ -17,15 +17,18 @@ import "github.com/c360studio/semstreams/vocabulary"
 // Coverage discipline: every chain.* predicate the codebase writes is
 // registered here (2026-05-11 vocab-completion). Predicates whose
 // canonical constants live in this file (PredicateSlugStem,
-// PredicateResearchArtifactLoop, PredicatePlanLoop,
-// PredicatePlanReviewerLoop, PredicateConsensusLoop, PredicateRecovery*,
+// PredicateResearchArtifactLoop, PredicateRecovery*,
 // PredicateNeedsReview*) Register against the constant. Predicates whose
 // constants stay co-located with their writers (chain.dispatched.*,
 // chain.paused.*, chain.decision.*, chain.evidence.*,
 // chain.research_artifact.{harness,actor_count,task_count,path},
-// chain.plan.path, chain.consensus.path, chain.spec_artifact.*) Register
-// against string literals — promoting them to constants here is a
-// deferred follow-up refactor. The contract test
+// chain.spec_artifact.*) Register against string literals — promoting
+// them to constants here is a deferred follow-up refactor. The
+// PredicatePlanLoop + PredicatePlanReviewerLoop constants stay
+// registered (read-side legacy fallback consumed by
+// emit_dev_via_spec_artifact's overrideProvenanceFromChain), but no
+// MVP writer stamps them — see their doc-comments below for the
+// retention rationale. The contract test
 // test/contract/chain_entity_coverage_test.go pins the predicate-name
 // union both sides must agree on regardless.
 //
@@ -36,7 +39,7 @@ import "github.com/c360studio/semstreams/vocabulary"
 // (renames: chain.research_artifact_loop → chain.research_artifact.loop;
 // chain.plan_loop → chain.plan.loop;
 // chain.plan_reviewer_loop → chain.plan.reviewer_loop;
-// chain.consensus_loop → chain.consensus.loop;
+// chain.consensus_loop → chain.consensus.loop (subsequently removed in ADR-041 Slice 2D-4 alongside the consensus stamper teardown);
 // chain.spec_artifact_loop → chain.spec_artifact.loop;
 // chain.dispatched_at → chain.dispatched.at;
 // chain.resumed → chain.decision.resumed_task_id;
@@ -61,23 +64,21 @@ const (
 	// local guess.
 	PredicateResearchArtifactLoop = "chain.research_artifact.loop"
 
-	// PredicatePlanLoop names the chain-entity predicate that records
-	// the planner loop_id whose plan the dev-via-spec-reviewer
-	// approved. Read by emit_consensus + emit_dev_via_spec_artifact.
+	// PredicatePlanLoop names the chain-entity predicate that recorded
+	// the planner loop_id whose plan the reviewer approved. Stamper +
+	// vocabulary registration retired in ADR-041 Phase 3; the constant
+	// stays only because emit_dev_via_spec_artifact's
+	// overrideProvenanceFromChain reads it as a fallback (returns empty
+	// under MVP — nothing stamps it). Removable once
+	// overrideProvenanceFromChain drops its PlannerLoop branch.
 	PredicatePlanLoop = "chain.plan.loop"
 
 	// PredicatePlanReviewerLoop names the chain-entity predicate that
-	// records the dev-via-spec-reviewer loop_id that approved the
-	// plan. Read by emit_consensus + emit_dev_via_spec_artifact to
-	// populate the reviewer-loop slot without confusing it with the
-	// planner's loop ID (smoke #8 run-5 D1 fix).
+	// recorded the reviewer loop_id that approved the plan. Same
+	// retirement status as PredicatePlanLoop — constant kept for
+	// emit_dev_via_spec_artifact's overrideProvenanceFromChain
+	// ReviewerLoop branch.
 	PredicatePlanReviewerLoop = "chain.plan.reviewer_loop"
-
-	// PredicateConsensusLoop names the chain-entity predicate that
-	// records the dev-via-spec-challenger loop_id that accepted the
-	// plan. Read by emit_dev_via_spec_artifact to populate
-	// "provenance.challenger_loop".
-	PredicateConsensusLoop = "chain.consensus.loop"
 
 	// PredicateNeedsReviewClassification is the first predicate of the
 	// chain.needs_review.* cluster (ADR-039 Phase 1 Tier 3). The full
@@ -88,7 +89,7 @@ const (
 	// deployment-configured (coordinator agent, operator dashboard,
 	// metric-emit job). Distinct from chain.paused.* (ADR-037, FAILED
 	// loops with closed-enum classifications). Phase 1 only stamps for
-	// dev-via-spec-builder; broader producer coverage is a follow-up.
+	// builder; broader producer coverage is a follow-up.
 	//
 	// This predicate itself is an open-valued tag describing why this
 	// needs_clarification reached Tier 3. Phase 1 writes
@@ -103,7 +104,7 @@ const (
 	PredicateNeedsReviewProducerLoopID = "chain.needs_review.producer_loop_id"
 
 	// PredicateNeedsReviewProducerRole is the role name of the producer
-	// loop (dev-via-spec-builder for Phase 1; broader when Slice C lands).
+	// loop (builder for Phase 1; broader when Slice C lands).
 	PredicateNeedsReviewProducerRole = "chain.needs_review.producer_role"
 
 	// PredicateNeedsReviewReason is the producer's
@@ -118,13 +119,14 @@ const (
 	// CompletedAt; observability surfaces use this to age the cluster.
 	PredicateNeedsReviewObservedAt = "chain.needs_review.observed_at"
 
-	// PredicateRecoveryCount is the per-chain count of research-reviewer
-	// rejection cycles that have triggered a source-curator recovery
-	// attempt (ADR-040 §addendum 2026-05-11 "Chain-level recovery cap").
-	// Stamped on the canonical 6-part chain entity by RecoveryCounter
-	// each time a research-reviewer completes with
-	// coordinator.next_action="insufficient". Also mirrored onto the
-	// triggering reviewer loop entity so rule_02 can gate via
+	// PredicateRecoveryCount is the per-chain count of reviewer
+	// rejection cycles that have triggered a retry-research attempt
+	// (ADR-040 §addendum 2026-05-11 "Chain-level recovery cap"; ADR-041
+	// extended to cover MVP reviewer-research / reviewer-spec alongside
+	// legacy research-reviewer). Stamped on the canonical 6-part chain
+	// entity by RecoveryCounter each time a managed reviewer completes
+	// with coordinator.next_action="insufficient". Also mirrored onto
+	// the triggering reviewer loop entity so rule_02 can gate via
 	// $entity.triple.chain.recovery_count without a chain-ancestry walk
 	// (the rule engine reads triples on the triggering entity only).
 	//
@@ -178,6 +180,110 @@ const (
 	// hiccup costs at most one missed recovery cycle, never an
 	// unbounded retry storm.
 	PredicateRecoveryProceed = "chain.recovery.proceed"
+
+	// PredicatePhaseCountPlan / Gather / Synthesize / Architect are the
+	// per-phase researcher counters incremented when a phase-transition
+	// validator approves a transition into that phase (ADR-041
+	// §"Per-phase cap"). Stored as string-formatted integers ("0", "1",
+	// …) on the chain entity so the rule engine's expression operators
+	// (eq/lte/gt) compare cleanly. Each is a distinct 4-part predicate
+	// rather than a structured object so rule-condition syntax can read
+	// the value directly without JSON traversal.
+	//
+	// Cap semantics: plan=1, gather=3, synthesize=2, architect=2. When
+	// the validator detects a target phase already at cap, no proceed
+	// sentinel is written and the chain stalls fail-safe (same shape as
+	// PredicateRecoveryProceed absence). The phase counter audit triple
+	// always lands so operators see "this chain hit phase X cap" even
+	// when no consuming rule fires.
+	PredicatePhaseCountPlan       = "chain.researcher.phase_count.plan"
+	PredicatePhaseCountGather     = "chain.researcher.phase_count.gather"
+	PredicatePhaseCountSynthesize = "chain.researcher.phase_count.synthesize"
+	PredicatePhaseCountArchitect  = "chain.researcher.phase_count.architect"
+
+	// PredicatePhaseTransitionProceedGather / Synthesize / Architect are
+	// per-cycle gate sentinels stamped on the completed researcher's
+	// loop entity when the phase validator (cmd/semteams/phasevalidator)
+	// approves a transition into the named target phase. The next-phase
+	// researcher spawn rule (Slice 2D-3) gates on `chain.phase_transition
+	// .proceed.<target> eq "true"`. Absence blocks the rule fire — same
+	// fail-safe shape as PredicateRecoveryProceed.
+	//
+	// No `proceed.emit` sentinel exists because action="emit" terminates
+	// the researcher arc and hands off to the research-reviewer via the
+	// existing rule 01a, which has its own conditions. The phase
+	// validator stamps `chain.phase_transition.target = "emit"` on the
+	// chain entity for audit when a researcher emits but does not write
+	// a proceed sentinel for it.
+	//
+	// Object value is the string "true". Stamped only on the completed
+	// researcher's loop entity (not the chain entity) — the gate is
+	// per-cycle. The chain entity carries phase_count + transition_target
+	// for audit.
+	PredicatePhaseTransitionProceedGather     = "chain.phase_transition.proceed.gather"
+	PredicatePhaseTransitionProceedSynthesize = "chain.phase_transition.proceed.synthesize"
+	PredicatePhaseTransitionProceedArchitect  = "chain.phase_transition.proceed.architect"
+
+	// PredicatePhaseTransitionTarget is the last target-phase token the
+	// phase validator evaluated for this chain. Stamped on the chain
+	// entity for operator visibility regardless of whether the validator
+	// approved or rejected (the rejected case has no proceed sentinel,
+	// so target alone tells operators what the researcher tried to do).
+	// Object value is the bare action token ("gather" / "synthesize" /
+	// "architect" / "emit").
+	PredicatePhaseTransitionTarget = "chain.phase_transition.target"
+
+	// PredicatePhaseTransitionRejected marks the chain entity when the
+	// phase validator structurally rejected a transition (invalid edge
+	// OR target phase at cap). Object value "true". The chain stalls
+	// because no proceed sentinel was written; this triple is the
+	// operator-visible cause, parallel to PredicateRecoveryExhausted.
+	// Distinct from chain.paused.* (ADR-037 — semstreams-level loop
+	// failures) and chain.needs_review.* (ADR-039 Phase 1 —
+	// recoverable-pending semantics).
+	PredicatePhaseTransitionRejected = "chain.phase_transition.rejected"
+
+	// PredicatePhaseTransitionRejectReason carries a short token
+	// classifying the rejection: "invalid_edge" (target phase not
+	// allowed from input phase) or "phase_cap" (target phase already at
+	// cap). Ops-agent groups stalls by this token; persona content
+	// stays narrative ("X happened because…"), this stays vocabulary.
+	PredicatePhaseTransitionRejectReason = "chain.phase_transition.reject_reason"
+
+	// PredicateSpecModeGateProceed is the per-cycle gate sentinel
+	// SpecModeGate writes onto a completing reviewer-spec loop entity
+	// when the chain has a research artifact upstream (ADR-041
+	// §"Risks mitigation" spec-mode pre-check). Absence blocks the
+	// reviewer-spec→builder spawn rule from firing.
+	PredicateSpecModeGateProceed = "chain.spec_mode_gate.proceed"
+
+	// PredicateSpecModeGateRejected marks the chain entity when the
+	// spec-mode gate rejected an approval (no research-artifact
+	// ancestor). Object value "true".
+	PredicateSpecModeGateRejected = "chain.spec_mode_gate.rejected"
+
+	// PredicateSpecModeGateRejectReason classifies a spec-mode gate
+	// rejection. Currently the only token is "missing_research_artifact"
+	// (no chain.research_artifact.loop on the chain entity).
+	PredicateSpecModeGateRejectReason = "chain.spec_mode_gate.reject_reason"
+
+	// PredicateQAModeGateProceed is the per-cycle gate sentinel
+	// QAModeGate writes onto a completing builder loop entity when the
+	// builder's claim of "tests_passing" is structurally consistent
+	// (tests_run > 0 AND tests_failed = 0). Absence blocks the
+	// builder→reviewer-qa spawn rule from firing.
+	PredicateQAModeGateProceed = "chain.qa_mode_gate.proceed"
+
+	// PredicateQAModeGateRejected marks the chain entity when the
+	// qa-mode gate rejected a builder claim (tests_run=0 or
+	// tests_failed>0). Object value "true".
+	PredicateQAModeGateRejected = "chain.qa_mode_gate.rejected"
+
+	// PredicateQAModeGateRejectReason classifies a qa-mode gate
+	// rejection: "zero_tests_run" (action=tests_passing with
+	// tests_run=0) or "tests_failed_nonzero" (action=tests_passing
+	// with tests_failed>0). Ops-agent groups stalls by this token.
+	PredicateQAModeGateRejectReason = "chain.qa_mode_gate.reject_reason"
 )
 
 // init registers the chain vocabulary with the upstream vocabulary
@@ -202,22 +308,23 @@ func init() {
 	)
 
 	vocabulary.Register(PredicateResearchArtifactLoop,
-		vocabulary.WithDescription("Loop_id of the researcher whose artifact the research-reviewer approved. The chain entity's canonical reference to the upstream research arc."),
+		vocabulary.WithDescription("Loop_id of the researcher whose artifact the reviewer (research mode, or legacy research-reviewer) approved. The chain entity's canonical reference to the upstream research arc."),
 		vocabulary.WithDataType("string"),
 	)
 
+	// chain.plan.* — stamper retired in ADR-041 Phase 3 (no MVP rule
+	// spawns the dev-via-spec-reviewer loop the stamper keyed on). The
+	// vocabulary entries stay registered because the constants are still
+	// imported by emit_dev_via_spec_artifact's overrideProvenanceFromChain
+	// (read-side fallback); the registry exists for vocab-completeness
+	// audits even though no live producer writes these triples under MVP.
 	vocabulary.Register(PredicatePlanLoop,
-		vocabulary.WithDescription("Loop_id of the planner whose plan the dev-via-spec-reviewer approved. The chain entity's canonical reference to the approved planner pass."),
+		vocabulary.WithDescription("Loop_id of the planner whose plan the reviewer approved. ADR-041 Phase 3: stamper retired — under MVP roster the planner role is gone (researcher-plan emits structured loop output, not a markdown artifact). Constant retained for emit_dev_via_spec_artifact's read-side fallback only."),
 		vocabulary.WithDataType("string"),
 	)
 
 	vocabulary.Register(PredicatePlanReviewerLoop,
-		vocabulary.WithDescription("Loop_id of the dev-via-spec-reviewer that approved the plan. Distinct from the planner; downstream emit_consensus reads this to populate depends_on.reviewer_loop."),
-		vocabulary.WithDataType("string"),
-	)
-
-	vocabulary.Register(PredicateConsensusLoop,
-		vocabulary.WithDescription("Loop_id of the dev-via-spec-challenger that accepted the plan. The chain entity's canonical reference to the consensus terminal."),
+		vocabulary.WithDescription("Loop_id of the reviewer that approved the plan. ADR-041 Phase 3: stamper retired — same status as PredicatePlanLoop."),
 		vocabulary.WithDataType("string"),
 	)
 
@@ -230,7 +337,7 @@ func init() {
 		vocabulary.WithDataType("string"),
 	)
 	vocabulary.Register(PredicateNeedsReviewProducerRole,
-		vocabulary.WithDescription("ADR-039 Phase 1 Tier 3 cluster: role name of the producer loop (dev-via-spec-builder for Phase 1; broader producer coverage in follow-up slices)."),
+		vocabulary.WithDescription("ADR-039 Phase 1 Tier 3 cluster: role name of the producer loop (builder for Phase 1; broader producer coverage in follow-up slices)."),
 		vocabulary.WithDataType("string"),
 	)
 	vocabulary.Register(PredicateNeedsReviewReason,
@@ -242,7 +349,7 @@ func init() {
 		vocabulary.WithDataType("string"),
 	)
 	vocabulary.Register(PredicateRecoveryCount,
-		vocabulary.WithDescription("ADR-040 §addendum 2026-05-11: per-chain count of research-reviewer rejection cycles that triggered a source-curator recovery attempt. Stored as string-formatted integer for rule-engine string comparisons. Stamped on chain entity (audit trail) and mirrored onto the triggering reviewer loop entity (rule-engine read surface)."),
+		vocabulary.WithDescription("ADR-040 §addendum 2026-05-11: per-chain count of reviewer rejection cycles (legacy `research-reviewer` and ADR-041 MVP `reviewer-research` / `reviewer-spec`) that triggered a retry-research recovery attempt. Stored as string-formatted integer for rule-engine string comparisons. Stamped on chain entity (audit trail) and mirrored onto the triggering reviewer loop entity (rule-engine read surface)."),
 		vocabulary.WithDataType("int"),
 	)
 	vocabulary.Register(PredicateRecoveryExhausted,
@@ -254,14 +361,107 @@ func init() {
 		vocabulary.WithDataType("string"),
 	)
 
-	// Central registration for chain.* predicates written by other
-	// packages. Constants stay co-located with their writers (chainpause,
-	// evidence, emitspecartifact, etc.); registration is centralised here
-	// so vocab queries (ListByDomain("chain"), RDF export, hierarchy
-	// walks) see the complete catalog. Promoting these to constants in
-	// this file is a deferred follow-up refactor; the strings are stable
-	// (post-2026-05-11 3-part renames) so registration is safe.
-	//
+	// ADR-041 predicates (phase validator + spec/qa gates) live in a
+	// helper to keep init() under revive's function-length limit.
+	registerADR041Predicates()
+}
+
+// registerADR041Predicates registers the chain.phase_transition.*,
+// chain.researcher.phase_count.*, chain.spec_mode_gate.*, and
+// chain.qa_mode_gate.* predicates introduced by ADR-041 (MVP role
+// compression + structural gates). Split out of init() to keep that
+// function under revive's function-length threshold; semantically a
+// continuation of init's central-registration block.
+func registerADR041Predicates() {
+	// Per-phase counters on chain entity. Stored as string-formatted
+	// integers so rule-engine string operators compare cleanly; the
+	// validator (cmd/semteams/phasevalidator) is the sole writer.
+	vocabulary.Register(PredicatePhaseCountPlan,
+		vocabulary.WithDescription("ADR-041 §Per-phase cap: per-chain count of researcher 'plan' phase fires. Cap = 1. Stored as string-formatted integer for rule-engine string comparisons."),
+		vocabulary.WithDataType("int"),
+	)
+	vocabulary.Register(PredicatePhaseCountGather,
+		vocabulary.WithDescription("ADR-041 §Per-phase cap: per-chain count of researcher 'gather' phase fires. Cap = 3 (initial + 2 back-edge re-gathers from synthesize/architect)."),
+		vocabulary.WithDataType("int"),
+	)
+	vocabulary.Register(PredicatePhaseCountSynthesize,
+		vocabulary.WithDescription("ADR-041 §Per-phase cap: per-chain count of researcher 'synthesize' phase fires. Cap = 2 (initial + one revision after back-edge re-gather)."),
+		vocabulary.WithDataType("int"),
+	)
+	vocabulary.Register(PredicatePhaseCountArchitect,
+		vocabulary.WithDescription("ADR-041 §Per-phase cap: per-chain count of researcher 'architect' phase fires. Cap = 2 (initial + one revision after back-edge re-gather)."),
+		vocabulary.WithDataType("int"),
+	)
+	vocabulary.Register(PredicatePhaseTransitionProceedGather,
+		vocabulary.WithDescription("ADR-041 §Wire shape: per-cycle gate sentinel stamped on the completed researcher's loop entity when the phase validator approves transition into 'gather'. Next-phase spawn rule fires only when this is \"true\"."),
+		vocabulary.WithDataType("string"),
+	)
+	vocabulary.Register(PredicatePhaseTransitionProceedSynthesize,
+		vocabulary.WithDescription("ADR-041 §Wire shape: per-cycle gate sentinel for transition into 'synthesize'. See PredicatePhaseTransitionProceedGather."),
+		vocabulary.WithDataType("string"),
+	)
+	vocabulary.Register(PredicatePhaseTransitionProceedArchitect,
+		vocabulary.WithDescription("ADR-041 §Wire shape: per-cycle gate sentinel for transition into 'architect'. See PredicatePhaseTransitionProceedGather."),
+		vocabulary.WithDataType("string"),
+	)
+	vocabulary.Register(PredicatePhaseTransitionTarget,
+		vocabulary.WithDescription("ADR-041: bare action token the phase validator last evaluated for this chain ('gather'/'synthesize'/'architect'/'emit'). Operator-visible regardless of approve-or-reject outcome."),
+		vocabulary.WithDataType("string"),
+	)
+	vocabulary.Register(PredicatePhaseTransitionRejected,
+		vocabulary.WithDescription("ADR-041: chain-entity marker (\"true\") stamped when the phase validator structurally rejected a transition. Parallel to PredicateRecoveryExhausted for cap-shape stalls."),
+		vocabulary.WithDataType("string"),
+	)
+	vocabulary.Register(PredicatePhaseTransitionRejectReason,
+		vocabulary.WithDescription("ADR-041: short classification token for a phase-transition rejection ('invalid_edge' | 'phase_cap'). Ops-agent groups stalls by this token."),
+		vocabulary.WithDataType("string"),
+	)
+
+	// ADR-041 §"Risks mitigation" structural pre-checks at role
+	// boundaries. SpecModeGate gates reviewer-spec→builder; QAModeGate
+	// gates builder→reviewer-qa. Both follow the proceed-sentinel +
+	// chain-entity-marker pattern of recoverycounter + phase_transition.
+	vocabulary.Register(PredicateSpecModeGateProceed,
+		vocabulary.WithDescription("ADR-041 §Risks mitigation: per-cycle gate sentinel stamped on the reviewer-spec loop entity when the chain carries a chain.research_artifact.loop (i.e., the spec is grounded in upstream research). Reviewer-spec→builder spawn rule fires only when this is \"true\"."),
+		vocabulary.WithDataType("string"),
+	)
+	vocabulary.Register(PredicateSpecModeGateRejected,
+		vocabulary.WithDescription("ADR-041 §Risks mitigation: chain-entity marker (\"true\") stamped when SpecModeGate rejects a reviewer-spec approval (no research-artifact ancestor)."),
+		vocabulary.WithDataType("string"),
+	)
+	vocabulary.Register(PredicateSpecModeGateRejectReason,
+		vocabulary.WithDescription("ADR-041 §Risks mitigation: classification token for spec-mode-gate rejections ('missing_research_artifact')."),
+		vocabulary.WithDataType("string"),
+	)
+	vocabulary.Register(PredicateQAModeGateProceed,
+		vocabulary.WithDescription("ADR-041 §Risks mitigation: per-cycle gate sentinel stamped on the builder loop entity when the builder's tests_passing claim is structurally consistent (tests_run>0 AND tests_failed=0). Builder→reviewer-qa spawn rule fires only when this is \"true\"."),
+		vocabulary.WithDataType("string"),
+	)
+	vocabulary.Register(PredicateQAModeGateRejected,
+		vocabulary.WithDescription("ADR-041 §Risks mitigation: chain-entity marker (\"true\") stamped when QAModeGate rejects a builder claim (tests_run=0 or tests_failed>0 with action=tests_passing)."),
+		vocabulary.WithDataType("string"),
+	)
+	vocabulary.Register(PredicateQAModeGateRejectReason,
+		vocabulary.WithDescription("ADR-041 §Risks mitigation: classification token for qa-mode-gate rejections ('zero_tests_run' | 'tests_failed_nonzero')."),
+		vocabulary.WithDataType("string"),
+	)
+
+	registerOtherPackagePredicates()
+}
+
+// registerOtherPackagePredicates registers chain.* predicates whose
+// constants stay co-located with their writers (chainpause, evidence,
+// emitspecartifact, dispatched, paused, decision). Centralising the
+// registrations here keeps vocab queries (ListByDomain("chain"), RDF
+// export, hierarchy walks) seeing the complete catalog without forcing
+// constants to migrate. Promoting these to constants in this file is a
+// deferred follow-up refactor; the strings are stable (post-2026-05-11
+// 3-part renames) so registration is safe.
+//
+// Split out of init() / registerADR041Predicates() to keep both under
+// revive's function-length threshold. Semantically a continuation of
+// init's central-registration block.
+func registerOtherPackagePredicates() {
 	// chain.dispatched.* — DispatchedStamper (chain/dispatched.go).
 	vocabulary.Register("chain.dispatched.at",
 		vocabulary.WithDescription("ADR-038 §D2: RFC3339 timestamp at which the chain dispatched (chain root's LoopCreated event time). Phase 1b."),
@@ -354,7 +554,7 @@ func init() {
 
 	// chain.evidence.* — evidence.Preprocessor (evidence/). ADR-036
 	// §Phase 2 R3.7.2.k′-bis evidence-summary milestone on
-	// dev-via-spec-builder loop entities.
+	// builder loop entities.
 	vocabulary.Register("chain.evidence.summary_ready",
 		vocabulary.WithDescription("ADR-036 §Phase 2 evidence summary: \"true\" marker indicating the preprocessor stamped a summary on the builder's loop entity."),
 		vocabulary.WithDataType("string"),
@@ -383,23 +583,10 @@ func init() {
 		vocabulary.WithDataType("string"),
 	)
 
-	// chain.plan.* — PlanMilestoneStamper (chain/plan.go). PR C Phase C2.
-	vocabulary.Register("chain.plan.path",
-		vocabulary.WithDescription("PR C Phase C2: path to the rendered planner artifact markdown."),
-		vocabulary.WithDataType("string"),
-	)
-
-	// chain.consensus.* — ConsensusMilestoneStamper (chain/consensus.go).
-	// PR C Phase C3.
-	vocabulary.Register("chain.consensus.path",
-		vocabulary.WithDescription("PR C Phase C3: path to the rendered consensus artifact markdown."),
-		vocabulary.WithDataType("string"),
-	)
-
 	// chain.spec_artifact.* — emit_dev_via_spec_artifact tool
 	// (cmd/semteams/tools/emitspecartifact). Phase 4 milestone.
 	vocabulary.Register("chain.spec_artifact.loop",
-		vocabulary.WithDescription("Phase 4: loop_id of the dev-via-spec-architect whose spec artifact the chain consumed. 3-part canonical shape (2026-05-11 rename from chain.spec_artifact_loop)."),
+		vocabulary.WithDescription("Phase 4: loop_id of the architect-flavour role (researcher-architect under ADR-041 MVP, dev-via-spec-architect under legacy) whose spec artifact the chain consumed. 3-part canonical shape (2026-05-11 rename from chain.spec_artifact_loop)."),
 		vocabulary.WithDataType("string"),
 	)
 	vocabulary.Register("chain.spec_artifact.path",

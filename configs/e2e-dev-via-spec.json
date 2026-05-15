@@ -69,7 +69,7 @@
         "swagger_ui": true,
         "server_info": {
           "title": "SemTeams Dev-via-Spec E2E",
-          "description": "R3.3 of ADR-031: full dev-via-spec chain (planner / reviewer / challenger / architect) ported from SemSpec patterns. Builds on R3.2.2's research-mode-transition: the same six-loop research arc completes (researcher + reviewer + source-acquisition + reviewer + settling pass + reviewer-approve), then the stabilisation rule (R3.2.2 rule_03) spawns the dev-via-spec-planner. From there the dev-via-spec rule chain (configs/rules/dev-via-spec/ rules 01-05) drives the four-role handoff. Stream surface is identical to R3.2.2 (research.artifact.> bound on GRAPH for typed payload retention). max_iterations bumped 8→10 to accommodate the architect's three read_loop_result calls (challenger, planner, research-reviewer) plus its terminal decide. Compose profile: semsource (the SemSource container is required for the substrate-modifying retry pass, same as R2.5/R3.2.2).",
+          "description": "ADR-041 MVP full dev-via-spec chain: researcher (plan/gather/synthesize/architect phases) → reviewer-spec → builder → reviewer-qa, orchestrated by configs/rules/research-mode-transition/ (01a/01b/02/04/05/06) + configs/rules/dev-via-spec/ (02/03/04). The phase-validator (cmd/semteams/phasevalidator/) gates researcher phase transitions and spec-mode + qa-mode reviewer hand-offs. Insufficient verdicts route through the recovery cap (ADR-039). Stream surface: research.artifact.> bound on GRAPH for typed payload retention. max_iterations sized for the longest phase (up to 5 iterations per pass). Compose profile: semsource (required for the substrate-modifying retry pass).",
           "version": "1.0.0"
         }
       }
@@ -115,8 +115,8 @@
       "name": "agentic-dispatch",
       "enabled": true,
       "config": {
-        "default_role": "researcher",
-        "default_tools": ["read_loop_result", "query_entity", "query_entities", "emit_research_artifact"],
+        "default_role": "researcher-plan",
+        "default_tools": ["read_loop_result", "query_entity", "query_entities", "emit_plan"],
         "auto_continue": false,
         "stream_name": "USER",
         "permissions": {
@@ -207,11 +207,8 @@
           "query_entities",
           "summarize_graph",
           "decide",
-          "add_source_repo",
           "emit_research_artifact",
-          "emit_curator_artifact",
           "emit_plan",
-          "emit_consensus",
           "emit_dev_via_spec_artifact",
           "bootstrap_workspace",
           "bash",
@@ -219,7 +216,6 @@
           "write_todos",
           "scratchpad"
         ],
-        "approval_required": ["add_source_repo"],
         "ports": {
           "inputs": [
             {"name": "tool.execute", "type": "jetstream", "subject": "tool.execute.>", "stream_name": "TOOL", "required": true}
@@ -239,20 +235,15 @@
       "enabled": true,
       "config": {
         "rules_files": [
-          "/app/configs/rules/research-mode-transition/01a-research-to-reviewer-after-researcher.json",
-          "/app/configs/rules/research-mode-transition/02-reviewer-rejected-spawn-curator.json",
-          "/app/configs/rules/research-mode-transition/02b-curator-indexed-to-researcher.json",
-          "/app/configs/rules/research-mode-transition/02c-curator-needs-clarification-to-researcher.json",
-          "/app/configs/rules/research-mode-transition/03-stabilise-and-transition.json",
-          "/app/configs/rules/dev-via-spec/01-planner-to-reviewer.json",
-          "/app/configs/rules/dev-via-spec/02-reviewer-rejected-retry-planner.json",
-          "/app/configs/rules/dev-via-spec/03-reviewer-approved-to-challenger.json",
-          "/app/configs/rules/dev-via-spec/04-challenger-concerns-retry-planner.json",
-          "/app/configs/rules/dev-via-spec/05-challenger-accept-to-architect.json",
-          "/app/configs/rules/dev-via-spec/06-architect-emit-to-builder.json",
-          "/app/configs/rules/dev-via-spec/07-builder-decide-to-qa-reviewer.json",
-          "/app/configs/rules/dev-via-spec/08-architect-needs-clarification-to-researcher.json",
-          "/app/configs/rules/dev-via-spec/09-qa-reviewer-needs-clarification-to-architect.json"
+          "/app/configs/rules/research-mode-transition/01a-researcher-synthesize-to-reviewer-research.json",
+          "/app/configs/rules/research-mode-transition/01b-researcher-architect-to-reviewer-spec.json",
+          "/app/configs/rules/research-mode-transition/02-reviewer-rejected-retry-research.json",
+          "/app/configs/rules/research-mode-transition/04-phase-transition-to-gather.json",
+          "/app/configs/rules/research-mode-transition/05-phase-transition-to-synthesize.json",
+          "/app/configs/rules/research-mode-transition/06-phase-transition-to-architect.json",
+          "/app/configs/rules/dev-via-spec/02-reviewer-approved-to-builder.json",
+          "/app/configs/rules/dev-via-spec/03-needs-clarification-to-researcher.json",
+          "/app/configs/rules/dev-via-spec/04-builder-decide-to-reviewer-qa.json"
         ],
         "enable_graph_integration": true,
         "entity_watch_buckets": {

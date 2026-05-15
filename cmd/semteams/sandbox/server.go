@@ -490,9 +490,28 @@ func (s *Server) handleExec(w http.ResponseWriter, r *http.Request) {
 	tm.mu.Lock()
 	defer tm.mu.Unlock()
 
+	// Lazy autocreate. ADR-041 Phase 4 smoke #24 finding: non-builder
+	// roles (architect, reviewer-spec/qa/research) reach /exec before
+	// any role has called bootstrap_workspace, because under MVP only
+	// the builder calls bootstrap. Returning 404 here forced these
+	// roles to terminate with needs_clarification, wedging the chain.
+	// Empty git-init'd worktree is the correct surface for these
+	// inspection-only callers: the shared host volume /artifacts is
+	// mounted ro into the sandbox container regardless, so
+	// `bash cat /artifacts/<kind>/<slug>.md` works once the worktree
+	// (cwd handle) exists. createWorkspace is idempotent — concurrent
+	// or repeated calls return (false, nil) for "exists".
 	if !s.workspaceExists(req.TaskID) {
-		writeError(w, http.StatusNotFound, "worktree not found")
-		return
+		if _, err := s.createWorkspace(r.Context(), req.TaskID); err != nil {
+			s.logger.Error("lazy worktree create on exec failed",
+				"task_id", req.TaskID,
+				"error", err)
+			writeError(w, http.StatusInternalServerError, fmt.Sprintf("lazy worktree create on exec: %v", err))
+			return
+		}
+		s.logger.Info("worktree lazily created on exec",
+			"task_id", req.TaskID,
+			"reason", "ADR-041 non-builder inspection path")
 	}
 
 	workDir := filepath.Join(s.workspaceRoot, req.TaskID)

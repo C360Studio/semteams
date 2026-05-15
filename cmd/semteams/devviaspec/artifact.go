@@ -1,7 +1,8 @@
 // Package devviaspec holds SemTeams-local payload types for the
 // dev-via-spec arc. The Artifact type is the structured terminal output
-// produced by the architect role at the close of a dev-via-spec chain:
-// research → mode-transition → planner → reviewer → challenger → architect.
+// produced by the researcher-architect phase at the close of the MVP arc:
+// plan → gather → synthesize → architect → reviewer (spec) → builder →
+// reviewer (qa).
 //
 // See docs/adr/031-research-flow-and-semspec-handoff.md (§R3.3) for the
 // design rationale and the chain-provenance model that motivates the
@@ -10,7 +11,8 @@
 // The Artifact carries:
 //   - Goal + Context: the "why" grounding from the upstream research arc.
 //   - Actors + IntegrationPoints: the structural inventory the architect
-//     condenses from the planner/reviewer/challenger exchange.
+//     condenses from the prior researcher phases (plan + gather +
+//     synthesize) and reviewer-research feedback.
 //   - Tasks: decomposable-grain work items, each grounded in
 //     at least one actor and one integration point so they cannot float
 //     free of the structural model.
@@ -66,7 +68,8 @@ type IntegrationPoint struct {
 }
 
 // Task is a decomposable-grain work item that the architect
-// scoped from the planner/reviewer/challenger exchange. Grounding fields
+// scoped from the prior researcher phases (plan + gather + synthesize)
+// and reviewer-research feedback. Grounding fields
 // trace it back to the structural inventory so future implementors know
 // which actors and data flows a task touches.
 type Task struct {
@@ -81,17 +84,25 @@ type Task struct {
 // the artifact is traceable to the originating research run and every
 // subsequent role exchange. ArchitectLoop is set server-side by the
 // executor from the calling ToolCall; the LLM supplies the rest.
+//
+// ADR-041 wire-format note: under the MVP roster `PlannerLoop` is the
+// researcher-plan phase loop and `ReviewerLoop` is the reviewer-spec
+// (spec-mode) loop. The JSON tags `planner_loop` / `reviewer_loop` are
+// retained for wire-format stability — renaming them ripples through
+// the schema, payload registry, persona templates, and every emit
+// call site. The rename lands in a dedicated wire-format slice
+// (Phase 3 or a focused 2D follow-on) so this slice stays mechanical.
 type Provenance struct {
 	ResearchArtifactLoop string `json:"research_artifact_loop"`
 	PlannerLoop          string `json:"planner_loop"`
 	ReviewerLoop         string `json:"reviewer_loop"`
-	ChallengerLoop       string `json:"challenger_loop"`
 	ArchitectLoop        string `json:"architect_loop,omitempty"` // set by executor from ToolCall.LoopID
 }
 
 // Artifact is the SemTeams-local payload representing the terminal
 // output of a dev-via-spec arc. It is emitted once per arc by the
-// architect role after the planner/reviewer/challenger chain converges.
+// researcher-architect phase at the close of the researcher's
+// plan→gather→synthesize→architect arc.
 //
 // GeneratedAt and Slug are set server-side by the executor — the LLM
 // neither sees nor sets them (mirrors research.Artifact's server-side
@@ -162,15 +173,15 @@ func (a *Artifact) Validate() error {
 	if a.Provenance.ResearchArtifactLoop == "" {
 		return fmt.Errorf("provenance.research_artifact_loop required")
 	}
-	if a.Provenance.PlannerLoop == "" {
-		return fmt.Errorf("provenance.planner_loop required")
-	}
-	if a.Provenance.ReviewerLoop == "" {
-		return fmt.Errorf("provenance.reviewer_loop required")
-	}
-	if a.Provenance.ChallengerLoop == "" {
-		return fmt.Errorf("provenance.challenger_loop required")
-	}
+	// PlannerLoop + ReviewerLoop are wire-retained slots for the legacy
+	// dev-via-spec arc (planner → reviewer → challenger → architect)
+	// that ADR-041 retired. Under MVP the researcher-architect emits
+	// the artifact directly without intermediate planner/reviewer hops,
+	// so these fields can be empty. The struct keeps the JSON tags for
+	// wire-format stability; tightening Validate would require either a
+	// wire-format break or persona-prose surgery to instruct the
+	// architect to back-fill from lineage triples (deferred to a
+	// focused follow-on slice).
 	for i := range a.Checks {
 		if err := a.Checks[i].Validate(); err != nil {
 			return fmt.Errorf("checks[%d]: %w", i, err)
@@ -201,12 +212,9 @@ func RegisterPayloads(reg *payloadregistry.Registry) error {
 		Domain:      Domain,
 		Category:    CategoryArtifact,
 		Version:     SchemaVersion,
-		Description: "SemTeams dev-via-spec artifact — terminal structured output of the architect role at the close of a research→planner→reviewer→challenger→architect chain. ADR-031 §R3.3.",
+		Description: "SemTeams dev-via-spec artifact — terminal structured output of the researcher-architect phase at the close of an MVP chain (plan→gather→synthesize→architect→reviewer→builder→reviewer). ADR-031 §R3.3, revised by ADR-041.",
 	}); err != nil {
 		return err
 	}
-	if err := registerPlanPayload(reg); err != nil {
-		return err
-	}
-	return registerConsensusPayload(reg)
+	return registerPlanPayload(reg)
 }

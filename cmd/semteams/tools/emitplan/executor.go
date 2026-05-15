@@ -10,8 +10,8 @@
 // emitartifact / emitspecartifact pattern exactly. The migration
 // target is upstream's planned generic write_artifact (ADR-028 §What's
 // not built here). When upstream ships, evaluate migration of all
-// emit_*_artifact / emit_plan / emit_consensus / emit_evidence_summary
-// tools to the generic primitive — see ADR-038 D6.
+// emit_*_artifact / emit_plan / emit_evidence_summary tools to the
+// generic primitive — see ADR-038 D6.
 //
 // Persona contract: the planner persona supplies typed fields
 // (title, goal, context, scope_in/out, epics, depends_on); the tool
@@ -55,7 +55,7 @@ const payloadSubjectPrefix = "dev_via_spec.plan"
 // defaultOutputDir is the markdown render target when
 // SEMTEAMS_PLAN_DIR is unset. Relative to process working
 // directory (the repo root in normal operation).
-const defaultOutputDir = "docs/plans"
+const defaultOutputDir = ".artifacts/plans"
 
 // envOutputDir is the operator override for the markdown output
 // directory. Mirrors SEMTEAMS_DEVVIASPEC_ARTIFACT_DIR /
@@ -63,10 +63,12 @@ const defaultOutputDir = "docs/plans"
 // so it doesn't drift the upstream config schema.
 const envOutputDir = "SEMTEAMS_PLAN_DIR"
 
-// Predicate names stamped on the planner's loop entity. The chain
-// milestone subscriber (cmd/semteams/chain/plan.go) reads
-// predicatePath at reviewer-approval time and propagates to
-// chain.plan.path on the chain entity.
+// Predicate names stamped on the planner's loop entity. ADR-041
+// Phase 3 retired the chain.plan.* milestone subscriber, so these
+// triples are leaf-state on the researcher-plan loop only — no
+// downstream chain-entity propagation. The researcher-architect
+// phase that consumes the plan reads it via lineage triples
+// (lineage.researcher-plan), not chain.plan.path.
 const (
 	predicateRevision    = "dev_via_spec.plan.revision"
 	predicateEpicCount   = "dev_via_spec.plan.epic_count"
@@ -214,7 +216,7 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 
 	// Read chain-canonical lineage + slug stem so the planner persona
 	// stops guessing upstream loop IDs and the chain's slug stays
-	// consistent across emit_plan / emit_consensus / emit_dev_via_spec_artifact.
+	// consistent across emit_plan / emit_dev_via_spec_artifact.
 	// Fail-soft: read errors fall back to LLM-supplied values + the
 	// title-derived slug. Smoke #8 run-5 D1 + D2 fix.
 	//
@@ -328,8 +330,8 @@ func (e *Executor) readChainTriples(ctx context.Context, loopID string) map[stri
 // deriveSlug picks the file slug. Preference order:
 //
 //  1. chain.slug.stem from the chain entity → "<stem>-plan". Stable
-//     across emit_plan / emit_consensus / emit_dev_via_spec_artifact;
-//     this is the smoke #8 run-5 D2 fix.
+//     across emit_plan / emit_dev_via_spec_artifact; this is the
+//     smoke #8 run-5 D2 fix.
 //  2. Title-derived slug via slug.DeriveDated (the pre-D2 path). Used
 //     when chain.slug.stem is absent (legacy chains, chainReader unset,
 //     or the researcher's path predicate didn't render).

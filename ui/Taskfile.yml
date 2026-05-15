@@ -705,9 +705,13 @@ tasks:
           CLI_ARGS: '{{.PROMPT}}'
       # Hard cap on the watcher to bound real-LLM spend if the chain
       # wedges (e.g. a loop iterates indefinitely against tool-result
-      # errors). 1800s = 30 min, ~2x the playbook's 25-min upper bound
-      # estimate. Cleanup + capture defers fire either way.
-      - timeout 1800 task test:e2e:agentic:probe:auto-approve-watcher -- {{.RUN_ID}}
+      # errors). 3600s = 60 min — bumped from 1800s after smoke #26
+      # (2026-05-14) and semspec's parallel evidence showed the OSH-
+      # class prompt routinely needs >30 min when the chain runs
+      # recovery cycles (each cycle adds ~7-10 min on real-LLM).
+      # Cleanup + capture defers fire either way; the timeout is an
+      # upper bound, not a target duration.
+      - timeout 3600 task test:e2e:agentic:probe:auto-approve-watcher -- {{.RUN_ID}}
 
   test:e2e:agentic:smoke7:capture:
     desc: Dump per-loop trajectories + message-log + wedge-report for smoke #7 findings synthesis
@@ -716,10 +720,11 @@ tasks:
       RUN_ID: '{{.RUN_ID | default "smoke7-manual"}}'
       OUT_DIR: '/tmp/{{.RUN_ID}}'
       PORT: '{{.E2E_AGENTIC_UI_PORT | default "3100"}}'
-      # The role the smoke is expected to end on. Smoke #7 expects the
-      # qa-reviewer (R3.7.2.k′ chain shape). Override via env var for
-      # other flows. Empty = skip the chain-shape check.
-      WEDGE_EXPECTED_TERMINAL_ROLE: '{{.WEDGE_EXPECTED_TERMINAL_ROLE | default "dev-via-spec-qa-reviewer"}}'
+      # The role the smoke is expected to end on. Default reviewer-qa
+      # is the ADR-041 MVP chain terminal (renamed from
+      # dev-via-spec-qa-reviewer in Slice 2D-3a). Override via env
+      # var for other flows. Empty = skip the chain-shape check.
+      WEDGE_EXPECTED_TERMINAL_ROLE: '{{.WEDGE_EXPECTED_TERMINAL_ROLE | default "reviewer-qa"}}'
     cmds:
       - mkdir -p {{.OUT_DIR}}
       - |
@@ -738,6 +743,34 @@ tasks:
               || echo "warn: failed to relocate ${SRC}" >&2
           fi
         done
+        # Full container logs + docker-state snapshot — must run BEFORE
+        # the loops-reachable gate below, because the most useful time to
+        # have these is exactly when the stack went sideways. Smoke #25c
+        # (2026-05-14) lost this evidence: loops endpoint returned empty
+        # mid-builder, we couldn't tell why because logs were gone with
+        # the post-cleanup container removal. Both backend and sandbox
+        # carry our product code; dump both.
+        for CONTAINER in semteams-ui-agentic-backend semteams-ui-agentic-sandbox; do
+          if docker ps -a --format '{{`{{.Names}}`}}' | grep -q "^${CONTAINER}$"; then
+            SHORT=$(echo "$CONTAINER" | sed 's/^semteams-ui-agentic-//')
+            docker logs "$CONTAINER" > "${OUT_DIR}/${SHORT}.log" 2>&1 \
+              || echo "warn: docker logs failed for ${CONTAINER}" >&2
+            # inspect JSON includes OOMKilled, ExitCode, RestartCount,
+            # State.Status (running/exited/dead) — answers the "did the
+            # container die" question without retained logs.
+            docker inspect "$CONTAINER" > "${OUT_DIR}/${SHORT}.inspect.json" 2>&1 \
+              || echo "warn: docker inspect failed for ${CONTAINER}" >&2
+          else
+            echo "(container ${CONTAINER} absent at capture time)" \
+              > "${OUT_DIR}/$(echo "$CONTAINER" | sed 's/^semteams-ui-agentic-//').log"
+          fi
+        done
+        # Compose-wide container state snapshot — shows which containers
+        # are alive vs exited at capture time. Quick triage signal before
+        # opening any individual inspect JSON.
+        docker compose -f docker-compose.agentic-e2e.yml --project-name semteams-agentic ps -a \
+          > "${OUT_DIR}/compose-ps.txt" 2>&1 \
+          || echo "warn: compose ps failed" >&2
         # Loops snapshot — input for the trajectory loop below.
         if ! curl -sf "http://localhost:${PORT}/teams-dispatch/loops" > "${OUT_DIR}/loops.json"; then
           echo "warn: stack already torn down or unreachable at port ${PORT}; live-state capture skipped" >&2
@@ -818,7 +851,7 @@ tasks:
     vars:
       RUN_ID: '{{.RUN_ID | default "smoke7-manual"}}'
       OUT_DIR: '/tmp/{{.RUN_ID}}'
-      WEDGE_EXPECTED_TERMINAL_ROLE: '{{.WEDGE_EXPECTED_TERMINAL_ROLE | default "dev-via-spec-qa-reviewer"}}'
+      WEDGE_EXPECTED_TERMINAL_ROLE: '{{.WEDGE_EXPECTED_TERMINAL_ROLE | default "reviewer-qa"}}'
     cmds:
       - |
         OUT_DIR="{{.OUT_DIR}}"
@@ -1136,7 +1169,16 @@ tasks:
       SEMTEAMS_HARNESS_CATALOG_PATH: "{{.SEMTEAMS_HARNESS_CATALOG_PATH}}"
     cmds:
       - echo "Stack config → AGENTIC_CONFIG={{.AGENTIC_CONFIG}} FIXTURE={{.FIXTURE}} PROFILES={{.COMPOSE_PROFILES}}"
-      - docker compose -f docker-compose.agentic-e2e.yml build --no-cache backend
+      # Smoke #25 finding (2026-05-14): rebuilding only `backend` with
+      # --no-cache leaves the sandbox image carrying cached layers from
+      # a prior build — Docker's cache-by-content-hash should pick up
+      # source mutations, but in practice we hit stale binaries on
+      # adjacent slices (Fix A's sandbox/server.go change didn't deploy
+      # despite the source modification, because the cache key on the
+      # Go build layer didn't invalidate as expected). Both images
+      # carry our product code; both need the no-cache treatment to
+      # guarantee a smoke runs the committed source.
+      - docker compose -f docker-compose.agentic-e2e.yml build --no-cache backend sandbox
       - docker compose -f docker-compose.agentic-e2e.yml up -d
       - |
         PORT="{{.E2E_AGENTIC_UI_PORT}}"
@@ -1161,9 +1203,27 @@ tasks:
         exit 1
 
   test:e2e:agentic:cleanup:
-    desc: Tear down the agentic E2E Docker stack
+    desc: Tear down the agentic E2E Docker stack (skipped when DEBUG=1 or KEEP_STACK_UP=1)
     cmds:
-      - npm run test:e2e:cleanup
+      - |
+        # DEBUG=1 / KEEP_STACK_UP=1: skip teardown so the operator can
+        # poke at the running stack post-mortem (docker exec into
+        # backend/sandbox, curl the dispatch endpoint, etc.). Smoke #25c
+        # taught us we lose all evidence with -v cleanup; this is the
+        # opt-in escape hatch. Run `task ui:test:e2e:agentic:cleanup`
+        # manually to tear down after inspection.
+        if [ "${DEBUG:-}" = "1" ] || [ "${KEEP_STACK_UP:-}" = "1" ]; then
+          echo "▶︎  Stack teardown SKIPPED (DEBUG=1 / KEEP_STACK_UP=1)."
+          echo "    Stack is still running. To inspect:"
+          echo "      docker ps --format 'table {{`{{.Names}}\t{{.Status}}`}}' | grep agentic"
+          echo "      docker logs semteams-ui-agentic-backend --tail 200"
+          echo "      docker exec -it semteams-ui-agentic-sandbox bash"
+          echo "      curl http://localhost:3100/teams-dispatch/loops | jq"
+          echo "    To tear down when done:"
+          echo "      task ui:test:e2e:agentic:cleanup  # (with DEBUG unset)"
+          exit 0
+        fi
+        npm run test:e2e:cleanup
 
   test:e2e:sandbox:dood:smoke:
     desc: Smoke #d′ — sandbox DooD trust-boundary verification (ADR-034 §addendum #2)
