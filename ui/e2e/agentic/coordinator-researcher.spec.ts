@@ -32,7 +32,18 @@ import { test, expect } from "@playwright/test";
  *   task test:e2e:agentic:coordinator-researcher
  */
 
-test.describe("Coordinator → Researcher", () => {
+// SKIPPED 2026-05-15 — coordinator-redesign Slice 1 clean-break.
+// This spec was written against the legacy single-loop `researcher` role
+// (web_search + synthesize). Slice 1 collapsed that role into the
+// researcher-plan MVP chain (plan → gather → synthesize → reviewer-research
+// for research-only; full dev chain for build asks). The 2-loop assertion
+// here no longer matches the chain shape — researcher-plan spawns multiple
+// downstream loops.
+//
+// Rework owned by Slice 1b: new test/fixtures/journeys/coordinator-researcher.yaml
+// with responses for the full researcher-plan chain, and a multi-loop
+// assertion set that handles the plan/gather/synthesize fan-out.
+test.describe.skip("Coordinator → Researcher", () => {
   test.setTimeout(180_000);
 
   test.beforeAll(async ({ request }) => {

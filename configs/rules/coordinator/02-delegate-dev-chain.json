@@ -1,0 +1,45 @@
+{
+  "id": "coordinator_delegate_dev_chain",
+  "type": "expression",
+  "name": "Coordinator Delegates to Dev Chain (dev-via-spec mode)",
+  "description": "Fires when a coordinator loop calls decide(action=delegate_dev_chain). Spawns the researcher-plan MVP chain framed for a build ask — the chain runs plan → gather → synthesize → architect → reviewer-spec → builder → reviewer-qa and terminates with a verified artifact. Mirror of 01-delegate-research.json with dev-via-spec framing. ADR-029 + ADR-041 + coordinator-redesign Slice 1. See configs/personas/fragments/coordinator/10-decision-contract.md.",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "agent.loop.role",
+      "operator": "eq",
+      "value": "coordinator",
+      "required": true
+    },
+    {
+      "field": "coordinator.decision.next_action",
+      "operator": "eq",
+      "value": "delegate_dev_chain",
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "publish_agent",
+      "subject": "agent.task.researcher-plan",
+      "role": "researcher-plan",
+      "model": "research",
+      "tools": ["read_loop_result", "emit_plan", "scratchpad", "decide"],
+      "action_allowlist": ["gather", "emit", "needs_clarification"],
+      "properties": {
+        "parent_loop_id": "$entity.instance",
+        "chain_mode": "dev_via_spec"
+      },
+      "prompt": "A coordinator classified the user's message as a build ask requiring a delivered artifact (code, spec, test, deployable change) and delegated to you (parent loop $entity.instance).\n\nIteration 1 — call read_loop_result with loop_id=$entity.instance. The result is the coordinator's structured decide-tool terminal (JSON with action + reason + subtopics + retry_hint). The coordinator's `reason` field captures the user's build intent and the rationale for routing to the dev chain — that is your grounding for what to plan.\n\nIteration 2+ — emit a research plan per researcher-plan/10-plan-rules.md. Since this is a dev-via-spec chain, the synthesize phase will hand off to architect (which emits the spec markdown) and the chain will continue through reviewer-spec → builder → reviewer-qa. Plan accordingly: the research arcs should ground the architect's spec-writing in concrete prior art, conventions, and constraints — not produce a user-facing prose answer.\n\nTerminal: decide(action=\"gather\") to forward into the gather phase, or decide(action=\"needs_clarification\") if the coordinator's reason is too thin to plan from (e.g. target language, runtime, scope unclear)."
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "pattern": "coordinator-front-door",
+    "phase": "ADR-041 + coordinator-redesign Slice 1",
+    "chain_mode": "dev_via_spec",
+    "framing_note": "Mirror of 01-delegate-research.json with dev framing. Same plumbing caveats apply re: properties not propagating to triples; Slice 1b adds the chain.mode triple + structural phase-validator check.",
+    "model_choice": "research model — same as research-only path; plan stage is shared."
+  }
+}

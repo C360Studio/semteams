@@ -1,8 +1,8 @@
 {
   "id": "coordinator_delegate_research",
   "type": "expression",
-  "name": "Coordinator Delegates to Researcher",
-  "description": "Fires when a coordinator loop calls decide(action=delegate_research). The decide tool (processor/agentic-tools/decide.go) writes a `coordinator.next_action` triple on the coordinator loop's entity; this rule matches on that triple and spawns a researcher loop. See upstream semstreams docs/advanced/12-coordinator-pattern.md for the pattern, and configs/rules/deep-research/03-fan-out-subtopics.json for a sibling rule that invert-matches the same triple mechanism.",
+  "name": "Coordinator Delegates to Research Chain (research-only mode)",
+  "description": "Fires when a coordinator loop calls decide(action=delegate_research). Spawns the researcher-plan MVP chain framed for a research-only ask — the chain runs plan → gather → synthesize and terminates at reviewer-research (the synthesize loop emits decide(action=emit), not decide(action=architect)). Clean break from the legacy single-loop researcher role: SemTeams now has ONE research/dev chain primitive (researcher-plan), and the dispatch-time classification by coordinator selects the framing, not a separate role. ADR-029 product-shell wiring + ADR-041 MVP role compression. See configs/personas/fragments/coordinator/10-decision-contract.md for the action taxonomy.",
   "enabled": true,
   "conditions": [
     {
@@ -22,20 +22,24 @@
   "on_enter": [
     {
       "type": "publish_agent",
-      "subject": "agent.task.research",
-      "role": "researcher",
-      "model": "general",
-      "tools": ["web_search", "read_loop_result", "submit_work", "scratchpad"],
+      "subject": "agent.task.researcher-plan",
+      "role": "researcher-plan",
+      "model": "research",
+      "tools": ["read_loop_result", "emit_plan", "scratchpad", "decide"],
+      "action_allowlist": ["gather", "emit", "needs_clarification"],
       "properties": {
-        "parent_loop_id": "$entity.instance"
+        "parent_loop_id": "$entity.instance",
+        "chain_mode": "research_only"
       },
-      "prompt": "A coordinator delegated a research task to you (parent loop $entity.instance). Call read_loop_result with loop_id=$entity.instance to fetch the user's original question, then use web_search to investigate and produce a concise synthesis. Call submit_work with your final answer."
+      "prompt": "A coordinator classified the user's message as a research-only ask (no build artifact required) and delegated to you (parent loop $entity.instance).\n\nIteration 1 — call read_loop_result with loop_id=$entity.instance. The result is the coordinator's structured decide-tool terminal (JSON with action + reason + subtopics + retry_hint). The coordinator's `reason` field captures the user's intent and the rationale for routing to the research chain — that is your grounding for what to plan.\n\nIteration 2+ — emit a research plan per researcher-plan/10-plan-rules.md. Since this is a research-only chain, the synthesize phase will terminate the chain at reviewer-research (no architect / spec / build phases). Keep the plan focused on evidence gathering and synthesis; do NOT plan for build artifacts.\n\nTerminal: decide(action=\"gather\") to forward into the gather phase, decide(action=\"emit\") only if the question is genuinely answerable from the plan itself without gather work, or decide(action=\"needs_clarification\") if the coordinator's reason is too thin to plan from."
     }
   ],
   "on_exit": [],
   "metadata": {
     "pattern": "coordinator-front-door",
-    "upstream_doc": "semstreams/docs/advanced/12-coordinator-pattern.md",
-    "semteams_adr": "docs/adr/029-product-shell-wiring.md"
+    "phase": "ADR-041 + coordinator-redesign Slice 1",
+    "chain_mode": "research_only",
+    "framing_note": "chain_mode property is informational (publish_agent.properties does NOT propagate to triples on the spawned loop per the spec-mode-gate plumbing note in dev-via-spec/02-reviewer-approved-to-builder.json). The structural fork between research-only and dev-via-spec still happens at synthesize's decide() terminal under Slice 1 MVP. Slice 1b will add a chain.mode triple on the chain entity + a structural phase-validator check so synthesize's choice is enforced rather than trusted.",
+    "model_choice": "research model — plan emission for an open-ended user ask benefits from the stronger research-tier model."
   }
 }
