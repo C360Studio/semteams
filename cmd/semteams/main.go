@@ -35,6 +35,7 @@ import (
 	"github.com/c360studio/semteams/cmd/semteams/chain"
 	"github.com/c360studio/semteams/cmd/semteams/chainmode"
 	"github.com/c360studio/semteams/cmd/semteams/chainpause"
+	"github.com/c360studio/semteams/cmd/semteams/chainstall"
 	"github.com/c360studio/semteams/cmd/semteams/evidence"
 	"github.com/c360studio/semteams/cmd/semteams/phasevalidator"
 	"github.com/c360studio/semteams/cmd/semteams/portresolver"
@@ -359,6 +360,24 @@ func startChainMilestoneSubscribers(ctx context.Context, cfg *config.Config, nat
 	// for ops queries and operator dashboards.
 	terminalStamper := chain.NewTerminalStamper(triplePublisher, resolver, entityReader, platform, logger)
 
+	// Coordinator-redesign Slice 2: chainstall.Subscriber.
+	// Fires on producer-role loop completions that the structural gates
+	// (phasevalidator / specModeGate / qaModeGate / NeedsReviewStamper /
+	// recoverycounter) would reject. Routes per-reason: framing-fixable
+	// reasons wake a coordinator via rule 05; budget/structural reasons
+	// stamp chain.stall.awaiting_human for operator verdict at the
+	// /teams-loop/chain-stall/decide HTTP endpoint (deferred follow-up).
+	//
+	// MUST be registered LAST in the handler slice: chainstall reads
+	// chain-entity triples written by sibling handlers on the same
+	// agent.complete event (synchronous request/reply through graph-ingest
+	// ensures consistency, but only if siblings run first). See
+	// cmd/semteams/chainstall/doc.go §"Within-event read-after-sibling-write
+	// coupling" for the full rationale and the contract test that pins
+	// the ordering.
+	stallAuthority, stallThreshold := extractStallConfig(cfg)
+	stallSubscriber := chainstall.NewSubscriber(triplePublisher, resolver, entityReader, platform, stallThreshold, stallAuthority, logger)
+
 	subscriber := chain.NewCompletionSubscriber([]chain.CompletionHandler{
 		dispatched,
 		modeStamper,
@@ -369,6 +388,7 @@ func startChainMilestoneSubscribers(ctx context.Context, cfg *config.Config, nat
 		phaseValidator,
 		specModeGate,
 		qaModeGate,
+		stallSubscriber,
 	}, loopCompletedSubject, logger)
 	if err := subscriber.Start(ctx, natsClient); err != nil {
 		return fmt.Errorf("subscribe to loop completed for chain milestones: %w", err)
@@ -509,6 +529,34 @@ func extractLoopsBucket(cfg *config.Config) string {
 		}
 	}
 	return ""
+}
+
+// extractStallConfig pulls coordinator-redesign Slice 2 chainstall settings
+// from the agentic-dispatch component config: chain_stall_authority
+// (per_reason | all_human) and chain_stall_threshold (recovery cap).
+// Defaults fall back to chainstall.AuthorityPerReason +
+// chainstall.DefaultThreshold (3) so configs omitting these fields land
+// on the table-driven routing path with the same cap as
+// recoverycounter.DefaultThreshold.
+//
+// Reads from the first enabled agentic-dispatch instance (instance name
+// varies by config: "teams-dispatch" in osh-demo / e2e-coordinator,
+// "agentic-dispatch" elsewhere); semteams configs run a single
+// agentic-dispatch so the first-match is unambiguous.
+func extractStallConfig(cfg *config.Config) (authority string, threshold int) {
+	for _, cc := range cfg.Components {
+		if cc.Name != "agentic-dispatch" || !cc.Enabled {
+			continue
+		}
+		var tcfg struct {
+			ChainStallAuthority string `json:"chain_stall_authority"`
+			ChainStallThreshold int    `json:"chain_stall_threshold"`
+		}
+		if err := json.Unmarshal(cc.Config, &tcfg); err == nil {
+			return tcfg.ChainStallAuthority, tcfg.ChainStallThreshold
+		}
+	}
+	return "", 0
 }
 
 // buildRuleManager constructs a rule.ConfigManager (KV-backed rule CRUD)

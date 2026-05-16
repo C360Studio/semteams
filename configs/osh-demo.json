@@ -324,6 +324,7 @@
           "/app/configs/rules/coordinator/03b-respond-direct.json",
           "/app/configs/rules/coordinator/04a-research-terminal-to-coordinator.json",
           "/app/configs/rules/coordinator/04b-qa-terminal-to-coordinator.json",
+          "/app/configs/rules/coordinator/05-chain-stall-to-coordinator.json",
           "/app/configs/rules/research-mode-transition/01a-researcher-synthesize-to-reviewer-research.json",
           "/app/configs/rules/research-mode-transition/01b-researcher-architect-to-reviewer-spec.json",
           "/app/configs/rules/research-mode-transition/02-reviewer-rejected-retry-research.json",

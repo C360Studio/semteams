@@ -347,6 +347,97 @@ const (
 	// the stamper wrote the cluster. Distinct from the reviewer loop's
 	// CompletedAt; observability surfaces use this to age the cluster.
 	PredicateChainTerminalObservedAt = "chain.terminal.observed_at"
+
+	// chain.rejection.* — coordinator-redesign Slice 2. Per-chain cap
+	// counter parallel to chain.recovery.* (ADR-040): chainstall
+	// increments chain.rejection.recovery_count on every structural-gate
+	// stall it observes and stamps chain.rejection.exhausted when the
+	// count exceeds the configured threshold. Distinct from
+	// chain.recovery.* because the recovery counter only tracks
+	// research-reviewer / reviewer-spec INSUFFICIENT terminals, whereas
+	// chain.rejection.* aggregates every reject-reason class
+	// (mode_mismatch, phase_cap, missing_research_artifact, etc.) under
+	// one chain-level cap. The shared "cap-hit → always-human" semantics
+	// is enforced by chainstall regardless of per-reason default route.
+
+	// PredicateChainRejectionRecoveryCount is the chain-level count of
+	// stall-recovery cycles. Incremented monotonically by
+	// cmd/semteams/chainstall on every rejection. String-formatted int so
+	// rule-engine string operators compare cleanly without coercion.
+	PredicateChainRejectionRecoveryCount = "chain.rejection.recovery_count"
+
+	// PredicateChainRejectionExhausted is the chain-level cap-hit marker
+	// stamped on the chain entity when recovery_count exceeds the
+	// configured threshold. Object value "true". Operator-visible
+	// escalation signal; chainstall always routes a cap-hit rejection to
+	// the human-approval path regardless of the per-reason default.
+	PredicateChainRejectionExhausted = "chain.rejection.exhausted"
+
+	// chain.stall.* — coordinator-redesign Slice 2. Audit cluster
+	// chainstall writes when it observes a structural-gate rejection on
+	// a chain that has not reached chain.terminal.reached. Distinct from
+	// chain.paused.* (ADR-037 — FAILED loops), chain.needs_review.*
+	// (ADR-039 Phase 1 — recoverable-pending verdicts),
+	// chain.terminal.* (Slice 1c — end-of-arc), chain.recovery.* (ADR-040
+	// — research-reviewer retry budget), and chain.rejection.* (this
+	// slice's cap counter). The stall cluster captures the per-cycle
+	// "who rejected, why, what route" record so operators can audit the
+	// chain's recovery decisions without re-deriving them from the gate's
+	// reject-reason triples.
+
+	// PredicateChainStallRoutedTo classifies the recovery route chainstall
+	// chose for the rejection: "coordinator" (framing-fixable: persona
+	// drift, weak spawn prompt) or "human" (budget exhaustion, structural
+	// impossibility, or cap-hit escalation). The per-reason routing table
+	// in cmd/semteams/chainstall lives as the single source of truth.
+	PredicateChainStallRoutedTo = "chain.stall.routed_to"
+
+	// PredicateChainStallReason copies the structural gate's reject_reason
+	// token onto the chain.stall.* audit cluster so operators querying by
+	// stall predicate don't have to join against
+	// chain.phase_transition.reject_reason / chain.spec_mode_gate.reject_reason /
+	// chain.qa_mode_gate.reject_reason / chain.needs_review.classification.
+	PredicateChainStallReason = "chain.stall.reason"
+
+	// PredicateChainStallProducerLoopID is the loop_id of the role whose
+	// completion triggered the rejection (synthesize loop for
+	// mode_mismatch; reviewer-spec loop for missing_research_artifact;
+	// builder loop for zero_tests_run / tests_failed_nonzero /
+	// unrouted_needs_clarification; reviewer-research / reviewer-spec
+	// loop for chain.recovery.exhausted). Wake-up rules pass this via
+	// related_loops so the spawned coordinator can read_loop_result on
+	// the producer.
+	PredicateChainStallProducerLoopID = "chain.stall.producer_loop_id"
+
+	// PredicateChainStallProducerRole is the role name of the producer
+	// loop. Audit predicate for ops queries; wake-up rule wiring uses the
+	// related_loops handle directly.
+	PredicateChainStallProducerRole = "chain.stall.producer_role"
+
+	// PredicateChainStallObservedAt is the RFC3339 timestamp of when
+	// chainstall wrote the cluster. Distinct from the producer loop's
+	// CompletedAt; observability surfaces use this to age the cluster.
+	PredicateChainStallObservedAt = "chain.stall.observed_at"
+
+	// PredicateChainStallAwaitingHuman is the chain-level marker stamped
+	// when chainstall routes a rejection to the human-approval path.
+	// Object value "true". The HTTP endpoint at
+	// /teams-loop/chain-stall/decide (deferred to a follow-up commit per
+	// Slice 1c precedent) clears the marker via the operator's verdict.
+	PredicateChainStallAwaitingHuman = "chain.stall.awaiting_human"
+
+	// PredicateChainStallProceed is the per-cycle gate sentinel chainstall
+	// writes onto the producer loop entity when it routes a rejection to
+	// the coordinator wake-up path. Object value "true". The wake-up rule
+	// (configs/rules/coordinator/05-chain-stall-to-coordinator.json) fires
+	// only when this predicate is "true" on the producer loop — same
+	// fail-safe semantics as PredicateRecoveryProceed
+	// (ADR-040): chainstall failure to stamp leaves no proceed → rule
+	// never fires → chain stalls until human inspection. Distinct from
+	// PredicateChainStallRoutedTo (chain-entity audit value): proceed is
+	// on the loop entity, routed_to is on the chain entity for ops
+	// queries.
+	PredicateChainStallProceed = "chain.stall.proceed"
 )
 
 // init registers the chain vocabulary with the upstream vocabulary
@@ -540,7 +631,52 @@ func registerADR041Predicates() {
 		vocabulary.WithDataType("string"),
 	)
 
+	registerCoordinatorSlice2Predicates()
 	registerOtherPackagePredicates()
+}
+
+// registerCoordinatorSlice2Predicates registers the chain.rejection.* +
+// chain.stall.* predicates introduced by coordinator-redesign Slice 2
+// (cmd/semteams/chainstall). Split out of registerADR041Predicates to
+// keep functions under revive's length threshold; semantically a
+// continuation of init's central-registration block.
+func registerCoordinatorSlice2Predicates() {
+	vocabulary.Register(PredicateChainRejectionRecoveryCount,
+		vocabulary.WithDescription("Coordinator-redesign Slice 2: per-chain count of structural-gate rejection cycles aggregated across all reject-reason classes (mode_mismatch, phase_cap, missing_research_artifact, zero_tests_run, tests_failed_nonzero, unrouted_needs_clarification, chain.recovery.exhausted, invalid_edge). Stored as string-formatted int for rule-engine string comparisons. Parallel to chain.recovery.count (ADR-040) but with broader aggregation scope."),
+		vocabulary.WithDataType("int"),
+	)
+	vocabulary.Register(PredicateChainRejectionExhausted,
+		vocabulary.WithDescription("Coordinator-redesign Slice 2: chain-level cap-hit marker (\"true\") stamped when chain.rejection.recovery_count exceeds the configured threshold. Always routes the rejection to the human-approval path regardless of per-reason default. Parallel to chain.recovery.exhausted (ADR-040)."),
+		vocabulary.WithDataType("string"),
+	)
+	vocabulary.Register(PredicateChainStallRoutedTo,
+		vocabulary.WithDescription("Coordinator-redesign Slice 2: routing decision chainstall made for the rejection. Closed-token values: \"coordinator\" (framing-fixable: persona drift, weak spawn prompt — LLM retry has a real chance) | \"human\" (budget exhaustion, structural impossibility, or cap-hit — more LLM calls won't help)."),
+		vocabulary.WithDataType("string"),
+	)
+	vocabulary.Register(PredicateChainStallReason,
+		vocabulary.WithDescription("Coordinator-redesign Slice 2: copy of the structural gate's reject_reason token (mode_mismatch | phase_cap | invalid_edge | missing_research_artifact | zero_tests_run | tests_failed_nonzero | unrouted_needs_clarification | chain.recovery.exhausted) so operators querying by stall predicate don't have to join against four different reject_reason predicates."),
+		vocabulary.WithDataType("string"),
+	)
+	vocabulary.Register(PredicateChainStallProducerLoopID,
+		vocabulary.WithDescription("Coordinator-redesign Slice 2: loop_id of the role whose completion triggered the rejection. Wake-up rules pass this via related_loops so the spawned coordinator can read_loop_result on the producer."),
+		vocabulary.WithDataType("string"),
+	)
+	vocabulary.Register(PredicateChainStallProducerRole,
+		vocabulary.WithDescription("Coordinator-redesign Slice 2: role name of the producer loop (e.g. researcher-synthesize for mode_mismatch, reviewer-spec for missing_research_artifact, builder for qa-mode rejections / unrouted_needs_clarification)."),
+		vocabulary.WithDataType("string"),
+	)
+	vocabulary.Register(PredicateChainStallObservedAt,
+		vocabulary.WithDescription("Coordinator-redesign Slice 2: RFC3339 timestamp when chainstall wrote the cluster. Distinct from the producer loop's CompletedAt — observability surfaces use this to age the cluster."),
+		vocabulary.WithDataType("string"),
+	)
+	vocabulary.Register(PredicateChainStallAwaitingHuman,
+		vocabulary.WithDescription("Coordinator-redesign Slice 2: chain-level marker (\"true\") stamped when chainstall routes a rejection to the human-approval path. The HTTP endpoint at /teams-loop/chain-stall/decide (deferred follow-up) clears the marker via the operator's verdict."),
+		vocabulary.WithDataType("string"),
+	)
+	vocabulary.Register(PredicateChainStallProceed,
+		vocabulary.WithDescription("Coordinator-redesign Slice 2: per-cycle gate sentinel stamped on the producer loop entity when chainstall routes a rejection to the coordinator wake-up path. Wake-up rule 05 fires only when this is \"true\". Same fail-safe semantics as PredicateRecoveryProceed (ADR-040)."),
+		vocabulary.WithDataType("string"),
+	)
 }
 
 // registerOtherPackagePredicates registers chain.* predicates whose

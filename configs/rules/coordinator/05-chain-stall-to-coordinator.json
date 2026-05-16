@@ -1,0 +1,50 @@
+{
+  "id": "coordinator_wake_on_chain_stall",
+  "type": "expression",
+  "name": "Coordinator Wakes on Chain-Stall (per-reason coordinator route)",
+  "description": "Fires when cmd/semteams/chainstall has stamped chain.stall.proceed=\"true\" on a producer loop entity — the per-cycle gate sentinel chainstall writes when routing a structural-gate rejection to the coordinator wake-up path. Spawns a fresh coordinator loop with the producer's loop_id in related_loops and the stall_reason inlined in the spawn prompt so the coordinator can read_loop_result on the producer, diagnose what went wrong, and choose a re-dispatch action that addresses the framing problem.\n\nReason coverage (per cmd/semteams/chainstall/routing.go's reasonToRoute):\n  - mode_mismatch: synthesize emitted decide(architect) under research_only chain mode. Coordinator re-frames the spawn prompt to spell out 'research-only — no architect.'\n  - missing_research_artifact: reviewer-spec approved without a research arc upstream. Coordinator may decide to dispatch research first.\n  - unrouted_needs_clarification (ADR-039 Phase 1 Tier 3): producer asked a structured clarification question; coordinator routes per the chain's per-flow channel-router config.\n\nHuman-route reasons (phase_cap, invalid_edge, zero_tests_run, tests_failed_nonzero, chain.recovery.exhausted) do NOT trigger this rule — chainstall stamps chain.stall.awaiting_human on the chain entity instead and the operator decides via /teams-loop/chain-stall/decide (deferred HTTP endpoint).\n\nCap-hit escalation: when chain.rejection.recovery_count exceeds the configured threshold (default 3 per chainstall.DefaultThreshold), chainstall stamps chain.rejection.exhausted=\"true\" and forces RouteHuman regardless of per-reason default. This rule never fires on cap-hit because chainstall never stamps chain.stall.proceed for human-route stalls.\n\nThe rule fires on the producer's loop-entity triple (chain.stall.proceed) — same dispatch surface every other coordinator wake-up rule uses (04a/04b on coordinator.decision.next_action). Chainstall's chain-entity audit cluster (chain.rejection.* + chain.stall.routed_to / reason / producer_loop_id / producer_role / observed_at) is for ops queries; this rule reads only per-loop sentinels for the spawn decision.",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "chain.stall.proceed",
+      "operator": "eq",
+      "value": "true",
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "publish_agent",
+      "subject": "agent.task.coordinator",
+      "role": "coordinator",
+      "model": "coordinator",
+      "tools": ["read_loop_result", "bash", "decide"],
+      "action_allowlist": ["delegate_research", "delegate_dev_chain", "respond_direct", "ask_user"],
+      "properties": {
+        "wakeup_mode": "chain_stall",
+        "stall_reason": "$entity.triple.chain.stall.reason",
+        "producer_loop_id": "$entity.instance",
+        "producer_role": "$entity.triple.agent.loop.role"
+      },
+      "related_loops": {
+        "producer": "$entity.instance",
+        "researcher": "$entity.triple.lineage.researcher"
+      },
+      "prompt": "The chain you dispatched stalled at a structural gate. Producer role $entity.triple.agent.loop.role at loop $entity.instance attempted to advance the chain, but cmd/semteams/chainstall rejected the transition with reason: $entity.triple.chain.stall.reason.\n\nYour job is to re-dispatch with framing that addresses the rejection. The chain has limited budget — chain.rejection.recovery_count is incremented per stall; at the threshold (default 3) further stalls escalate to human approval regardless of route.\n\nIteration 1 — call read_loop_result on $entity.instance to read the producer's structured terminal. The reason field summarises the producer's intent; the decision.next_action token is the move chainstall rejected. If a prior researcher loop carries context (lineage.researcher in related_loops), read_loop_result on it as well for a fuller picture.\n\nIteration 2 — decide one of:\n  - decide(action=\"delegate_research\", reason=<concrete-research-framing>): re-attempt as a research_only chain. Reserved for mode_mismatch (research_only chain that drifted toward dev-via-spec) and missing_research_artifact (chain that needs research first). Your reason becomes the spawn-prompt framing for the new researcher arc — make it explicit that the goal is a research artifact, no architect phase.\n  - decide(action=\"delegate_dev_chain\", reason=<concrete-dev-framing>): re-attempt as a dev_via_spec chain. Reserved for cases where the prior chain mis-classified and a full plan→architect→builder arc is the right shape.\n  - decide(action=\"respond_direct\", reason=<user-facing-prose>): escalate to user. Describe the stall in plain terms — the chain could not converge on this scope — so the user can refine the request. Reserved for reasons that don't have a clear LLM-fixable framing.\n  - decide(action=\"ask_user\", reason=<clarifying-question>): clarify before deciding. Reserved for cases where the user's original intent is genuinely ambiguous and the producer's stall reveals the gap.\n\nReason guidance per stall_reason:\n  - mode_mismatch: the producer chose a transition incompatible with chain.mode.classification. Today's mode_mismatch case is synthesize emitting decide(architect) under research_only; your re-dispatch should be delegate_research with reason explicitly forbidding architect/spec routing.\n  - missing_research_artifact: the chain's spec arc had no upstream research. Choose delegate_research first if research will plausibly close the gap; otherwise respond_direct to surface the gap to the user.\n  - unrouted_needs_clarification: the producer asked a structured clarification question (read coordinator.blocking_question via read_loop_result). Choose ask_user with the question rephrased for the user, OR respond_direct if you can answer from existing context.\n\nWrite the reason field as plain prose addressing either the new chain's researcher persona (for delegate_*) or the user (for respond_direct / ask_user). The chain is mid-recovery — your reason is what addresses the prior stall, not a generic restatement of the original ask."
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "pattern": "coordinator-wake-up",
+    "phase": "coordinator-redesign Slice 2",
+    "adr": "docs/adr/029-product-shell-wiring.md",
+    "stamper": "cmd/semteams/chainstall/subscriber.go",
+    "routing_table": "cmd/semteams/chainstall/routing.go reasonToRoute",
+    "fire_condition_note": "Conditions match the per-loop chain.stall.proceed sentinel chainstall writes on the producer loop entity (NOT the chain.stall.routed_to triple on the chain entity). Same dispatch shape as 04a/04b — rule engine's firing entity is the producer loop. The chain-entity audit cluster (chain.rejection.* + chain.stall.*) is for ops queries; this rule reads only loop-entity triples for the spawn decision.",
+    "fail_safe_note": "Absence of chain.stall.proceed → rule never fires. chainstall failure (graph blip mid-write) → no proceed → chain stalls until human inspection. Same fail-safe semantics as research-mode-transition/02-reviewer-rejected-retry-research.json's chain.recovery.proceed gate (ADR-040). Operators surface stalled chains via chain.rejection.exhausted / chain.stall.awaiting_human dashboards.",
+    "action_allowlist_rationale": "Slice 2 wake-up coordinator may re-dispatch (delegate_*), terminate to user (respond_direct), or clarify (ask_user). delegate_research / delegate_dev_chain reuse Slice 1's coordinator front-door taxonomy; respond_direct / ask_user reuse Slice 1c's chain-terminal wake-up taxonomy. No new actions — Slice 2 layers behavior on existing verbs.",
+    "cap_escalation_note": "When chain.rejection.recovery_count exceeds threshold (default 3 per chainstall.DefaultThreshold), chainstall stamps chain.rejection.exhausted=\"true\" + forces RouteHuman + does NOT write chain.stall.proceed on the producer loop. So cap-hit chains never reach this rule — they wait for human verdict at /teams-loop/chain-stall/decide (deferred follow-up endpoint).",
+    "deferred_followup": "Human-route path (chain.stall.awaiting_human=\"true\" on chain entity) needs a UI affordance + HTTP endpoint to clear. Deferred per Slice 1c precedent (Piece 1 → Piece 2 split). The Slice 2 PR ships coordinator-route only; operators see human-route stalls in graph queries but cannot resolve them until the follow-up."
+  }
+}
