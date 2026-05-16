@@ -65,7 +65,7 @@
         "swagger_ui": true,
         "server_info": {
           "title": "SemTeams Coordinator E2E",
-          "description": "Coordinator front-door journey: user chat → coordinator classifies → decide tool writes triple → rule spawns researcher-plan (post-Slice 1 clean break from legacy single-loop researcher). Exercises the ADR-029 Pattern-B wiring. Note: only the 01-delegate-research rule is loaded here; for full taxonomy coverage (delegate_dev_chain + ask_user) see osh-demo.json or the journey rework planned in Slice 1b.",
+          "description": "Coordinator front-door journey (Slice 1c full chain): user chat → coordinator classifies via decide(delegate_research) → rule 01 spawns researcher-plan → research-only chain runs plan/gather/synthesize/reviewer-research (rules 04, 05, 01a) → reviewer-research approves → chain.TerminalStamper stamps chain.terminal.* → rule 04a spawns wake-up coordinator → wake-up coordinator decide(respond_direct) → rule 03b publishes prose on user.response bus. Exercises the ADR-029 Pattern-B wiring + Slice 1b chain.mode gate + Slice 1c return path. For dev-via-spec arc coverage see osh-demo.json + e2e-dev-via-spec.json. The recovery rule 02 is loaded but not exercised (our journey approves rev 1 directly).",
           "version": "1.0.0"
         }
       }
@@ -137,12 +137,12 @@
       "name": "agentic-loop",
       "enabled": true,
       "config": {
-        "max_iterations": 6,
-        "timeout": "15s",
+        "max_iterations": 8,
+        "timeout": "60s",
         "stream_name": "AGENT",
         "loops_bucket": "AGENT_LOOPS",
         "consumer": {
-          "ack_wait": "15s",
+          "ack_wait": "60s",
           "heartbeat_interval": "10s",
           "max_deliver": 2
         },
@@ -196,8 +196,19 @@
       "enabled": true,
       "config": {
         "stream_name": "TOOL",
-        "timeout": "10s",
-        "allowed_tools": ["web_search", "decide", "read_loop_result", "submit_work", "scratchpad", "emit_plan"],
+        "timeout": "30s",
+        "allowed_tools": [
+          "decide",
+          "read_loop_result",
+          "submit_work",
+          "scratchpad",
+          "emit_plan",
+          "emit_research_artifact",
+          "query_entity",
+          "query_entities",
+          "bash",
+          "web_search"
+        ],
         "ports": {
           "inputs": [
             {"name": "tool.execute", "type": "jetstream", "subject": "tool.execute.>", "stream_name": "TOOL", "required": true}
@@ -217,7 +228,13 @@
       "enabled": true,
       "config": {
         "rules_files": [
-          "/app/configs/rules/coordinator/01-delegate-research.json"
+          "/app/configs/rules/coordinator/01-delegate-research.json",
+          "/app/configs/rules/coordinator/03b-respond-direct.json",
+          "/app/configs/rules/coordinator/04a-research-terminal-to-coordinator.json",
+          "/app/configs/rules/research-mode-transition/01a-researcher-synthesize-to-reviewer-research.json",
+          "/app/configs/rules/research-mode-transition/02-reviewer-rejected-retry-research.json",
+          "/app/configs/rules/research-mode-transition/04-phase-transition-to-gather.json",
+          "/app/configs/rules/research-mode-transition/05-phase-transition-to-synthesize.json"
         ],
         "enable_graph_integration": true,
         "entity_watch_buckets": {

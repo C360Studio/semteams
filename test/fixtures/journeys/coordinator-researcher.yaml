@@ -1,61 +1,219 @@
 name: coordinator-researcher
 description: |
-  Journey: user sends a research-worthy question; coordinator classifies
-  intent via the decide tool; rule fires publish_agent role=researcher;
-  researcher runs one web_search turn and synthesizes.
+  Journey: Coordinator front-door → research-only chain → coordinator
+  return path. Slice 1c Piece 2 rewrite of the legacy 3-response
+  fixture; exercises the full research_only chain plus the wake-up
+  coordinator's user-facing reply.
 
-  Paired spec: none yet — driven via curl + /teams-dispatch/loops polling
-  for the first iteration of Step 2 (see plan
-  /Users/coby/.claude/plans/last-session-turned-into-cheerful-oasis.md).
+    Loop 0 — coordinator (dispatch from user prompt)
+      1. tool_call: decide(action="delegate_research", reason=...)
+         → rule 01 fires → spawn researcher-plan
+         → chainmode.Stamper writes chain.mode.classification="research_only"
+           on the chain entity
 
-  Mock is sequence-based and role-blind. The order below matches the
-  order the mock-llm receives requests:
-    1. Coordinator iteration 1 — call decide(action=delegate_research,
-       reason=...). The decide tool emits a coordinator.next_action
-       triple and sets StopLoop=true, so this is the coordinator's only
-       LLM call.
-    2. Researcher iteration 1 — call web_search for the user's query.
-       Researcher was spawned by the rule; its first LLM call follows
-       immediately after the coordinator's decide completes.
-    3. Researcher iteration 2 — synthesize the search result and
-       complete with a structured report.
+    Loop A — researcher-plan (rule 01 spawn)
+      2. tool_call: emit_plan (revision=1)
+      3. tool_call: decide(action="gather", reason=<plan substance>)
+         → phasevalidator: plan→gather allowed, gather count 0→1,
+           writes chain.phase_transition.proceed.gather="true"
+         → rule_04 fires → spawn researcher-gather
+
+    Loop B — researcher-gather (rule 04 spawn)
+      4. tool_call: read_loop_result (placeholder; tool errors,
+         consumed by the next canned turn)
+      5. tool_call: query_entity (placeholder corpus probe)
+      6. tool_call: decide(action="synthesize", reason=<ready to compose>)
+         → phasevalidator: gather→synthesize allowed, synthesize count
+           0→1, writes chain.phase_transition.proceed.synthesize="true"
+         → rule_05 fires → spawn researcher-synthesize
+
+    Loop C — researcher-synthesize (rule 05 spawn)
+      7. tool_call: read_loop_result (placeholder)
+      8. tool_call: emit_research_artifact (revision=1, FULL — actors
+         + integration_points + tasks populated so reviewer can approve
+         on the first pass; recovery is exercised by the sibling
+         research-mode-transition journey)
+      9. tool_call: decide(action="emit", reason=<artifact ready>)
+         → phasevalidator: synthesize→emit allowed (terminal forward
+           edge, no count increment)
+         → rule_01a fires → spawn reviewer-research
+
+    Loop D — reviewer-research (rule 01a spawn, approves)
+      10. tool_call: read_loop_result (placeholder)
+      11. tool_call: decide(action="approved", reason=<checklist met>)
+          → chain.TerminalStamper writes chain.terminal.* cluster
+            on chain entity
+          → rule 04a fires → spawn wake-up coordinator
+
+    Loop E — coordinator (wake-up, rule 04a spawn)
+      12. tool_call: read_loop_result on Loop D
+      13. tool_call: decide(action="respond_direct", reason=<user-
+          facing prose synthesised from the research artifact>)
+          → rule 03b fires → publishes coordinator.user_reply audit
+            triple AND publishes prose on user.response.<wakeup_coord_id>
+          → terminal. No further loops.
+
+  Six loops total, thirteen LLM round-trips. Mock-llm is sequence-
+  based and role-blind — the order below is the exact order of
+  requests across all six loops.
+
+  Same read_loop_result placeholder caveat as research-mode-
+  transition.yaml: arguments_json passes verbatim, the placeholder
+  loop_id will not resolve, the tool returns an error, the next
+  canned turn handles it. The structural assertion (rule chain +
+  chain.terminal stamper + wake-up coordinator → respond_direct
+  publish) is unaffected.
+
+  Paired spec: ui/e2e/agentic/coordinator-researcher.spec.ts.
+  Compose profile: none beyond the agentic-e2e baseline. Config:
+  configs/e2e-coordinator.json (Slice 1c upgrade — adds all
+  research-mode-transition forward-edge rules + 03b-respond-direct
+  + 04a-research-terminal-to-coordinator + the wake-up coordinator's
+  agentic-tools allowlist).
 
 responses:
+  # ---------- Loop 0: coordinator (dispatch) ----------
+
   - tool_call:
       name: decide
       arguments_json: |
         {
           "action": "delegate_research",
-          "reason": "user asked a comparison-of-named-products question which requires evidence from outside training"
+          "reason": "The user is asking for a comparison of MQTT vs NATS for IoT edge deployments — a comparison-of-named-products question that benefits from evidence gathering rather than a small-talk reply. Routing to the research_only chain so researcher-plan can scope the synthesis."
         }
+
+  # ---------- Loop A: researcher-plan (rule 01 spawn) ----------
+
   - tool_call:
-      name: web_search
+      name: emit_plan
       arguments_json: |
         {
-          "query": "MQTT vs NATS IoT edge deployment comparison"
+          "revision": 1,
+          "title": "MQTT vs NATS for IoT edge — research plan",
+          "goal": "Compare MQTT and NATS for IoT edge deployments — latency, footprint, and reliability characteristics on constrained ARM devices.",
+          "context": "Initial planning pass — the user asked for a head-to-head comparison. The plan scopes the gather phase to two complementary probes (protocol family, broker footprint) so the synthesize pass can compose an answer the wake-up coordinator can deliver.",
+          "scope_in": [
+            "MQTT broker family (Mosquitto, EMQ X, HiveMQ) — protocol surface + QoS levels",
+            "NATS server family (NATS Core, JetStream) — subject hierarchy + persistence story",
+            "ARM-device benchmarks for both"
+          ],
+          "scope_out": [
+            "MQTT/NATS bridge implementations — out of scope for the comparison question",
+            "Cloud-only deployment patterns — user asked about edge"
+          ],
+          "epics": [
+            "E1 — Protocol surface: pub/sub vs request/reply, QoS levels, retained messages",
+            "E2 — Footprint: memory + binary size on constrained ARM (Raspberry Pi class)",
+            "E3 — Latency: round-trip benchmarks on constrained hardware"
+          ]
         }
-  - completion:
-      content: |
-        ## Summary
 
-        MQTT and NATS serve different niches in IoT edge deployments.
-        MQTT excels in constrained environments with its lightweight
-        pub/sub model, while NATS provides higher throughput and built-in
-        request/reply patterns.
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "gather",
+          "reason": "Plan emitted: three epics scope the comparison cleanly (protocol surface / footprint / latency). The GATHER phase should probe published benchmarks and protocol docs; SYNTHESIZE will compose the answer the wake-up coordinator delivers to the user."
+        }
 
-        ## Key Findings
+  # ---------- Loop B: researcher-gather (rule 04 spawn) ----------
 
-        1. MQTT uses TCP with QoS levels (0, 1, 2) for reliability
-        2. NATS JetStream adds persistence and exactly-once delivery
-        3. MQTT brokers (Mosquitto) run on minimal hardware
-        4. NATS has lower latency for request/reply patterns
+  - tool_call:
+      name: read_loop_result
+      arguments_json: |
+        {
+          "loop_id": "plan-loop-A"
+        }
 
-        ## Sources
+  - tool_call:
+      name: query_entity
+      arguments_json: |
+        {
+          "entity_id": "mqtt.protocol.spec"
+        }
 
-        - https://mqtt.org/specification
-        - https://docs.nats.io/compare
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "synthesize",
+          "reason": "Corpus probes returned what we need to compose the comparison. Forwarding to SYNTHESIZE — the artifact will enumerate actors (MQTT brokers, NATS servers, ARM hardware class) and integration points (broker → edge sensor), letting the wake-up coordinator deliver a substantive answer."
+        }
 
-        ## Gaps / Open Questions
+  # ---------- Loop C: researcher-synthesize (rule 05 spawn) ----------
 
-        - Real-world benchmarks on constrained ARM devices
-        - Power consumption comparison for battery-operated sensors
+  - tool_call:
+      name: read_loop_result
+      arguments_json: |
+        {
+          "loop_id": "gather-loop-B"
+        }
+
+  - tool_call:
+      name: emit_research_artifact
+      arguments_json: |
+        {
+          "revision": 1,
+          "test_harness": "mqtt-vs-nats-bench",
+          "title": "MQTT vs NATS for IoT edge",
+          "actors": [
+            {"name": "MQTT broker", "role": "TCP-based pub/sub broker with three QoS levels (0/1/2); reference implementation Mosquitto runs in <2MB resident on constrained ARM"},
+            {"name": "NATS server", "role": "Subject-hierarchy pub/sub plus request-reply; JetStream variant adds persistence; binary ~10MB on ARM, runtime memory ~30MB"},
+            {"name": "Constrained ARM device", "role": "Raspberry Pi-class hardware (1GHz CPU, 256MB-1GB RAM) hosting the edge agent"}
+          ],
+          "integration_points": [
+            {"from": "MQTT broker", "to": "Constrained ARM device", "data": "QoS-tagged pub/sub messages over TCP", "direction": "read"},
+            {"from": "NATS server", "to": "Constrained ARM device", "data": "subject-hierarchy pub/sub + request-reply over TCP", "direction": "read"}
+          ],
+          "tasks": [
+            "Choose MQTT for sub-millisecond latency budgets on minimal-footprint hardware where pub/sub alone is sufficient",
+            "Choose NATS when the workload mixes pub/sub + request-reply, and edge hardware has >256MB RAM"
+          ],
+          "addressed_gaps": [
+            "Question scope (latency + footprint on ARM) is answered with concrete published numbers — no further gather pass needed"
+          ],
+          "open_gaps": [],
+          "substrate_mutations": []
+        }
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "emit",
+          "reason": "Artifact rev 1 emitted. Three actors (MQTT broker, NATS server, constrained ARM device); two integration points (broker → edge); two task-shaped recommendations (when to choose which). Reviewer should approve and the wake-up coordinator can deliver the synthesised comparison directly."
+        }
+
+  # ---------- Loop D: reviewer-research (rule 01a spawn, approves) ----------
+
+  - tool_call:
+      name: read_loop_result
+      arguments_json: |
+        {
+          "loop_id": "synthesize-loop-C"
+        }
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "approved",
+          "reason": "Checklist satisfied: three actors with role text, two integration points with direction, two decomposable task-shaped recommendations, all artifact fields well-formed. open_gaps empty. addressed_gaps closes the question scope. Substrate untouched. Research arc terminates here — chain.TerminalStamper will fire and rule 04a will spawn the wake-up coordinator to deliver the answer."
+        }
+
+  # ---------- Loop E: coordinator (wake-up, rule 04a spawn) ----------
+
+  - tool_call:
+      name: read_loop_result
+      arguments_json: |
+        {
+          "loop_id": "reviewer-loop-D"
+        }
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "respond_direct",
+          "reason": "For IoT edge deployments on constrained ARM devices, MQTT has the edge on raw latency and footprint (Mosquitto runs under 2MB resident; QoS 0 publishes complete in well under a millisecond on Raspberry Pi-class hardware). NATS wins when you need both pub/sub AND request-reply in the same broker — its subject hierarchy is more expressive and JetStream gives you persistence — but it costs ~30MB of resident memory which matters on the tightest devices. Pick MQTT if pub/sub alone is sufficient and memory is tight; pick NATS when the workload needs request-reply or you have >256MB RAM to spare. The full research artifact (actors, integration points, decision criteria) is captured in the chain entity for follow-up."
+        }
