@@ -112,7 +112,7 @@
       "capability": "general"
     },
     "capabilities": {
-      "coordinator":           { "preferred": ["gemini-flash"], "fallback": ["gemini-pro", "claude-sonnet"], "requires_tools": true },
+      "coordinator":           { "preferred": ["gemini-pro"], "fallback": ["claude-sonnet"], "requires_tools": true },
       "research":              { "preferred": ["gemini-pro"], "fallback": ["claude-sonnet", "gemini-flash"], "requires_tools": true },
       "general":               { "preferred": ["gemini-pro"], "fallback": ["claude-sonnet", "gemini-flash"], "requires_tools": true },
       "planning":              { "preferred": ["gemini-pro"], "fallback": ["claude-sonnet", "gemini-flash"], "requires_tools": true },
