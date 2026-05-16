@@ -49,7 +49,48 @@ import { test, expect } from "@playwright/test";
  * Compose profile:  none beyond the agentic-e2e baseline.
  */
 
-test.describe("Coordinator → Researcher → chainstall → Coordinator (Slice 2)", () => {
+// SKIPPED 2026-05-16 — ADR-041 addendum 2026-05-16 §"Synthesize
+// action_allowlist must be mode-aware" makes the drift scenario this
+// journey exercises structurally impossible on real and mock LLMs
+// alike. Rule 05a (research_only) spawns synthesize with
+// action_allowlist = ["gather", "emit", "needs_clarification"] — the
+// upstream decide tool's allowlist enforcement
+// (semstreams/processor/agentic-tools/decide.go:219) returns
+// InvalidArgs for decide(action="architect") on this loop, so the
+// synthesize loop never terminates with the architect terminal,
+// phasevalidator's modeGateRejects never fires, and chainstall has
+// no mode_mismatch event to detect.
+//
+// The chainstall substrate (Slice 2 Piece 1, PR #159) is still
+// load-bearing for:
+//
+//   1. Other reject reasons (phase_cap, invalid_edge,
+//      missing_research_artifact, zero_tests_run, etc.) — detection
+//      wiring per Finding 3 follow-up (issue #161).
+//   2. Legacy chains without chain.mode (the validator defaults the
+//      mirror to dev_via_spec, but legacy configs without a
+//      coordinator front-door could still emit out-of-allowlist
+//      actions if the rule defaults shifted).
+//
+// Unit-test coverage holds:
+//
+//   - cmd/semteams/chainstall/subscriber_test.go — detectRejection
+//     + audit cluster + idempotency
+//   - test/contract/chain_stall_routing_test.go — routing table
+//     pins mode_mismatch → coordinator
+//   - test/contract/adr041_persona_dirs_test.go
+//     TestADR041_SynthesizeAllowlistMatchesMode — pins the rule split
+//     + allowlist invariants that close the drift class this journey
+//     used to exercise.
+//
+// The journey can be reworked when chainstall detection extends to
+// phase_cap (Finding 3) — that reject reason CAN be reached even
+// with the new allowlist enforcement, and exercises a different
+// branch of the routing table (RouteHuman). For now the addendum
+// removes the load-bearing case this journey was minted to cover;
+// the unit + contract tests carry the structural regression
+// guarantees forward.
+test.describe.skip("Coordinator → Researcher → chainstall → Coordinator (Slice 2)", () => {
   test.beforeAll(async ({ request }) => {
     const health = await request.get("/health");
     expect(health.ok(), "Backend not healthy — stack not running?").toBe(true);

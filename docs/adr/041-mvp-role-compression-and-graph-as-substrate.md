@@ -979,3 +979,130 @@ message naming this addendum.
   that produces a substantive artifact?" If the answer is no, the
   next investigation is into web_search results / persona prompting
   for GATHER — NOT a reintroduction of graph reads.
+
+## Addendum 2026-05-16 — Synthesize action_allowlist must be mode-aware
+
+**Status:** Filed (Coordinator Slice 2 Piece 3 real-LLM smoke evidence).
+
+Empirical finding: under `chain.mode = research_only`, the synthesize
+spawn rule's static `action_allowlist` still includes `architect`.
+Persona reframing alone — including explicit "do not transition to
+architect" directives injected by a coordinator wake-up — does NOT
+reliably prevent synthesize from choosing `decide(action="architect")`.
+
+Evidence: Slice 2 Piece 3 smoke (2026-05-16,
+`/tmp/slice2-piece3-20260516-144412/`). The phasevalidator's
+`chain.mode` gate (Slice 1b Phase B) correctly rejects the
+synthesize→architect transition with `reject_reason=mode_mismatch`.
+The chainstall subscriber (Slice 2 Piece 1) routes to a coordinator
+wake-up that re-frames the retry with `delegate_research` plus an
+explicit anti-drift `reason`. The retry synthesize **drifts again**.
+Two consecutive recovery cycles reproduced the drift; the third
+gather→synthesize transition then hits the per-phase cap
+(`synthesize=2`) and the chain wedges fail-safe.
+
+### Root cause
+
+`configs/rules/research-mode-transition/05-phase-transition-to-synthesize.json`
+declares:
+
+```json
+"action_allowlist": ["architect", "gather", "emit", "needs_clarification"]
+```
+
+This is correct for `dev_via_spec` mode (architect is the canonical
+forward edge) but structurally wrong for `research_only` mode (the
+forward terminal is `emit`; `architect` is illegal). The
+phasevalidator catches the drift at the transition layer, but only
+after the synthesize loop has burned a phase-count slot — and the
+mode-mismatch path then routes through chainstall recovery, which
+itself burns budget.
+
+Persona prose cannot reliably constrain an LLM's `decide` action
+when the action is structurally available in the allowlist. Structural
+gates beat LLM judgment ([[feedback_structural_over_llm_judgment]]).
+The action_allowlist IS the structural gate; today's wiring just
+doesn't vary it by mode.
+
+### Fix
+
+Split `05-phase-transition-to-synthesize.json` into two rules
+mirroring the existing `01a` / `01b` synthesize→reviewer convention:
+
+| Rule | Condition | `action_allowlist` |
+|---|---|---|
+| `05a-phase-transition-to-synthesize-research-only.json` | `chain.phase_transition.proceed.synthesize == "true"` AND `chain.mode == "research_only"` | `["gather", "emit", "needs_clarification"]` (no `architect`) |
+| `05b-phase-transition-to-synthesize-dev-via-spec.json` | `chain.phase_transition.proceed.synthesize == "true"` AND `chain.mode == "dev_via_spec"` | `["architect", "gather", "emit", "needs_clarification"]` (existing) |
+
+The spawn prompt's "Terminal options" section also narrows per mode
+— omit the `decide(action="architect")` bullet in the `05a` prompt
+so the persona's documented options match the structural allowlist
+exactly.
+
+### Why this is structural, not persona work
+
+The action_allowlist is enforced by the framework's `decide` tool:
+out-of-allowlist actions return a tool error and force the LLM to
+retry. That's the same shape as the mode-gate already running in
+phasevalidator, just at decide-time rather than transition-time
+(which is too late under research_only — by the time
+phasevalidator rejects, the synthesize loop has emitted its
+terminal and burned a phase-count slot).
+
+The persona's reframing (chain_mode preamble, anti-drift directive
+from coordinator wake-up) becomes belt-and-suspenders rather than
+the load-bearing constraint. The structural gate carries the
+contract; the persona prose explains it.
+
+### Migration posture
+
+- The split is rule config only; no framework changes.
+- Contract test `TestADR041_Synthesize_AllowlistMatchesMode` (new)
+  walks both rules and asserts the union of allowlists equals the
+  current `05` allowlist, and that `architect` is present in `05b`
+  only. Prevents an operator from accidentally re-merging the rules.
+- If the rule engine supports conditional substitution on
+  `action_allowlist` based on a runtime triple value, the long-term
+  cleanup is a single rule with `$entity.chain.mode`-keyed allowlist.
+  Not in scope today — beta.64 doesn't ship this expressiveness,
+  and the two-rule pattern is already established by `01a` / `01b`.
+
+### What this doesn't fix
+
+This addendum only handles `synthesize`. The same pattern applies
+to any phase where `action_allowlist` varies by mode. Today's
+catalog has one such phase (synthesize). If future modes introduce
+divergent allowlists for `gather`, `architect`, or `emit`, the
+same split convention applies. The contract test should grow to
+cover all such phases as they're added.
+
+### Relationship to chainstall
+
+The chainstall recovery substrate (Slice 2 Piece 1) is the
+safety net for cases where structural prevention fails — operator
+mis-configuration, new modes added without allowlist updates,
+framework bugs. It is NOT the primary remedy. Closing this
+addendum reduces recovery-substrate firing to genuinely
+exceptional cases, where its coordinator wake-up has a real chance
+of converging the chain.
+
+### Companion findings deferred
+
+- Phase-cap detection in chainstall (Piece 1's scope was
+  mode_mismatch only — `reject_reason=phase_cap` does not stamp the
+  `chain.stall.*` audit cluster today). Filed as a GitHub issue;
+  motivated by the same smoke memo. Becomes lower-urgency once this
+  addendum lands because mode-aware allowlists prevent the
+  cap-burn-through pattern that motivated phase_cap detection.
+- Chainstall × phase-cap composition (cap=2 + drift = effectively
+  one retry). Captured in `project_coordinator_slice2_design.md`
+  memory addendum; defer the cap-resize / reset-on-recovery design
+  decision until post-allowlist-split smoke evidence shows whether
+  it's still needed.
+
+### Evidence
+
+`/tmp/slice2-piece3-20260516-144412/` (loops.json, 20 triple
+snapshots, watcher.log, backend-chainstall.log) shows the two
+drift cycles end-to-end. Memory:
+`project_coordinator_slice2_piece3_smoke.md` §"Finding 1".

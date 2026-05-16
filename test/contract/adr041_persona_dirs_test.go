@@ -1178,6 +1178,210 @@ func TestADR041_OpsProgressObserverPersonaGuardrails(t *testing.T) {
 	}
 }
 
+// synthesizeRulePart is the minimum rule shape TestADR041_Synthesize*
+// helpers parse out — conditions to assert the mode-mirror gate, and
+// the publish_agent on_enter to assert role + allowlist.
+type synthesizeRulePart struct {
+	Conditions []struct {
+		Field    string `json:"field"`
+		Operator string `json:"operator"`
+		Value    any    `json:"value"`
+	} `json:"conditions"`
+	OnEnter []struct {
+		Type            string   `json:"type"`
+		Role            string   `json:"role"`
+		ActionAllowlist []string `json:"action_allowlist"`
+	} `json:"on_enter"`
+}
+
+// readSynthesizeRule loads + unmarshals a rule JSON file. Fatals on
+// either failure — both indicate the rule file is broken structurally,
+// not a logical assertion failure.
+func readSynthesizeRule(t *testing.T, p string) synthesizeRulePart {
+	t.Helper()
+	data, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatalf("read %s: %v", p, err)
+	}
+	var r synthesizeRulePart
+	if err := json.Unmarshal(data, &r); err != nil {
+		t.Fatalf("unmarshal %s: %v", p, err)
+	}
+	return r
+}
+
+// conditionValue returns the string-typed value for a named condition
+// field, fataling if the field is absent or non-string.
+func conditionValue(t *testing.T, r synthesizeRulePart, field string) string {
+	t.Helper()
+	for _, c := range r.Conditions {
+		if c.Field != field {
+			continue
+		}
+		s, ok := c.Value.(string)
+		if !ok {
+			t.Fatalf("condition for field %q has non-string value %T", field, c.Value)
+		}
+		return s
+	}
+	t.Fatalf("rule missing condition on field %q", field)
+	return ""
+}
+
+// stringSliceContains is a generic membership check shared by the
+// addendum 2026-05-16 invariants. Kept local to avoid pulling in a
+// slices.Contains dependency for one call site.
+func stringSliceContains(list []string, want string) bool {
+	for _, item := range list {
+		if item == want {
+			return true
+		}
+	}
+	return false
+}
+
+// TestADR041_SynthesizeMirrorWrittenByValidator pins the producer
+// side of the mirror contract that TestADR041_SynthesizeAllowlistMatchesMode
+// pins on the consumer side. Without this guard, an operator could
+// delete the mirror-write block in cmd/semteams/phasevalidator/phase.go
+// while keeping rules 05a + 05b — both consumer tests would still
+// pass, and the chain would wedge silently in production (neither
+// rule fires because the loop-entity mode triple is missing).
+//
+// This is a source-grep test rather than an integration test because
+// the validator's wire-shape contract (writes via TriplePublisher
+// composed of variable Subject/Predicate triples) is hard to assert
+// via the package's public surface without spinning up the full
+// chain.CompletionHandler dispatch path. The grep is anchored on two
+// independent load-bearing tokens — the loop-entity write target
+// (chain.PredicateChainMode) AND the synthesize-only scope check
+// (PhaseSynthesize) — so paraphrase-resistant refactors that preserve
+// the contract pass the test; only deletions or wholesale rewrites
+// break it.
+//
+// Failure mode this guards: a future refactor moves the mirror to a
+// sibling CompletionHandler or removes it as "dead code" when the
+// rules also default-fire on absent-mode (they don't — rules 05a /
+// 05b both require an explicit mode value via the chain.mode.classification
+// condition; absence means neither fires).
+func TestADR041_SynthesizeMirrorWrittenByValidator(t *testing.T) {
+	const phasePath = "../../cmd/semteams/phasevalidator/phase.go"
+	data, err := os.ReadFile(phasePath)
+	if err != nil {
+		t.Fatalf("read %s: %v", phasePath, err)
+	}
+	body := string(data)
+
+	// Anchor 1 — the mirror predicate (chain.PredicateChainMode) must
+	// be written. The package's predicate constants are the only stable
+	// reference for grep; the literal string "chain.mode.classification"
+	// also appears, but constants are the refactor-safe target.
+	const mirrorPredicate = "chain.PredicateChainMode"
+	if !strings.Contains(body, mirrorPredicate) {
+		t.Errorf("%s no longer references %s. ADR-041 addendum 2026-05-16 requires the validator to mirror the chain mode onto the source-loop entity at synthesize-approval time. Without this triple, rules 05a / 05b can't match and the chain wedges silently. If you intentionally moved the mirror, update this test's pointer.", phasePath, mirrorPredicate)
+	}
+
+	// Anchor 2 — the mirror must be scoped to the synthesize target
+	// (PhaseSynthesize == "synthesize"). Other transitions don't have
+	// mode-divergent allowlists, and an unscoped mirror would write
+	// inert noise on every approved transition.
+	const phaseSynthesizeRef = "PhaseSynthesize"
+	if !strings.Contains(body, phaseSynthesizeRef) {
+		t.Errorf("%s no longer references the %s constant; the mirror's synthesize-only scope is the structural invariant that keeps mode-mirror noise off plan/gather/architect transitions.", phasePath, phaseSynthesizeRef)
+	}
+
+	// Anchor 3 — the dev_via_spec default for absent/unknown chain.mode
+	// is load-bearing for backward compat (legacy chains without a
+	// coordinator front-door). Drift to "research_only" as the default
+	// would silently narrow every non-coordinator config's synthesize
+	// allowlist and break the dev arc.
+	const defaultModeRef = "chainmode.ModeDevViaSpec"
+	if !strings.Contains(body, defaultModeRef) {
+		t.Errorf("%s no longer references %s. The mirror defaults to dev_via_spec for absent / unknown chain.mode tokens; without this default, legacy chains route to a non-existent rule and wedge.", phasePath, defaultModeRef)
+	}
+}
+
+// TestADR041_SynthesizeAllowlistMatchesMode pins ADR-041 addendum
+// 2026-05-16 §"Synthesize action_allowlist must be mode-aware". The
+// single original rule 05-phase-transition-to-synthesize was split
+// into 05a (research_only) and 05b (dev_via_spec) so the spawned
+// synthesize loop's action_allowlist can be structurally narrowed for
+// research_only chains — `architect` is excluded so the LLM cannot
+// drift into the dev arc even under persona reframing failure.
+//
+// The test asserts:
+//
+//  1. Both rules exist; the original 05 is gone.
+//  2. Both rules condition on the validator's mode-mirror triple
+//     (chain.mode.classification) alongside the proceed sentinel —
+//     drift here would cause both rules to fire on every transition
+//     OR neither to fire (deadlock).
+//  3. The research_only rule (05a) excludes "architect" from its
+//     allowlist; the dev_via_spec rule (05b) includes it.
+//  4. Both spawn role=researcher-synthesize so downstream rule 01a /
+//     01b matching still works.
+//
+// Failure mode this guards: someone re-merges the rules, broadens
+// 05a's allowlist, or swaps the role to something else (e.g.
+// researcher-synthesize-research-only — that would break 01a's
+// terminal handoff because 01a fires on role=researcher-synthesize).
+func TestADR041_SynthesizeAllowlistMatchesMode(t *testing.T) {
+	const baseDir = "../../configs/rules/research-mode-transition"
+	const oldPath = baseDir + "/05-phase-transition-to-synthesize.json"
+	const path05a = baseDir + "/05a-phase-transition-to-synthesize-research-only.json"
+	const path05b = baseDir + "/05b-phase-transition-to-synthesize-dev-via-spec.json"
+
+	if _, err := os.Stat(oldPath); err == nil {
+		t.Errorf("the original 05-phase-transition-to-synthesize.json still exists; ADR-041 addendum 2026-05-16 split it into 05a + 05b. Re-merging the rules would silently re-introduce the research_only architect-drift class. Delete %s and reference 05a + 05b from rules_files.", oldPath)
+	}
+
+	r05a := readSynthesizeRule(t, path05a)
+	r05b := readSynthesizeRule(t, path05b)
+	assertSynthesizeRuleConditions(t, r05a, "research_only")
+	assertSynthesizeRuleConditions(t, r05b, "dev_via_spec")
+	assertSynthesizeAllowlist(t, r05a, "05a", false /* architect forbidden under research_only */)
+	assertSynthesizeAllowlist(t, r05b, "05b", true /* architect required under dev_via_spec */)
+}
+
+// assertSynthesizeRuleConditions pins both gate conditions: the proceed
+// sentinel (without which the rule fires on every triple write) and the
+// mode-mirror (without which 05a and 05b can't be distinguished).
+func assertSynthesizeRuleConditions(t *testing.T, r synthesizeRulePart, wantMode string) {
+	t.Helper()
+	if got := conditionValue(t, r, "chain.mode.classification"); got != wantMode {
+		t.Errorf("rule condition on chain.mode.classification = %q, want %q", got, wantMode)
+	}
+	if got := conditionValue(t, r, "chain.phase_transition.proceed.synthesize"); got != "true" {
+		t.Errorf("rule condition on chain.phase_transition.proceed.synthesize = %q, want %q", got, "true")
+	}
+}
+
+// assertSynthesizeAllowlist pins the on_enter action's role + allowlist
+// shape. wantArchitect controls whether "architect" must appear in the
+// allowlist (true for dev_via_spec, false for research_only).
+func assertSynthesizeAllowlist(t *testing.T, r synthesizeRulePart, ruleTag string, wantArchitect bool) {
+	t.Helper()
+	if len(r.OnEnter) == 0 {
+		t.Fatalf("rule %s has no on_enter actions", ruleTag)
+	}
+	action := r.OnEnter[0]
+	if action.Role != "researcher-synthesize" {
+		t.Errorf("%s spawns role %q, want %q. Downstream rule 01a / 01b match on role=researcher-synthesize regardless of mode; changing the role would orphan the synthesize terminal.", ruleTag, action.Role, "researcher-synthesize")
+	}
+	architectPresent := stringSliceContains(action.ActionAllowlist, "architect")
+	if wantArchitect && !architectPresent {
+		t.Errorf("%s action_allowlist missing \"architect\" — dev_via_spec chains need architect as the forward edge to the dev arc. Allowlist = %v.", ruleTag, action.ActionAllowlist)
+	}
+	if !wantArchitect && architectPresent {
+		t.Errorf("%s action_allowlist contains \"architect\" — the addendum requires its exclusion under research_only. Allowlist = %v. The whole point of the split is that the decide tool's allowlist enforcement makes synthesize→architect under research_only structurally impossible. Re-introducing architect here reverts the addendum.", ruleTag, action.ActionAllowlist)
+	}
+	for _, required := range []string{"gather", "emit", "needs_clarification"} {
+		if !stringSliceContains(action.ActionAllowlist, required) {
+			t.Errorf("%s action_allowlist missing required action %q. Allowlist = %v.", ruleTag, required, action.ActionAllowlist)
+		}
+	}
+}
+
 // ADR-041 addendum 2026-05-15 — chain agents do not read the graph.
 // The graph is internal harness state — audit, lineage, milestone
 // stamping, evidence aggregation. Only ops agents (whose named job IS

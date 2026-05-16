@@ -859,3 +859,169 @@ func TestPhaseValidator_ModeGate_NonSynthesizeUnaffected(t *testing.T) {
 		t.Error("mode gate must only fire on (synthesize, architect); plan→gather must not be rejected")
 	}
 }
+
+// TestPhaseValidator_SynthesizeMirror_ResearchOnly: ADR-041 addendum
+// 2026-05-16. When the validator approves a gather→synthesize
+// transition AND the chain carries chain.mode.classification ==
+// "research_only", it must mirror that mode onto the source-loop
+// entity alongside the proceed sentinel. Rules 05a / 05b condition on
+// the mirror to fork the spawned synthesize loop's action_allowlist.
+func TestPhaseValidator_SynthesizeMirror_ResearchOnly(t *testing.T) {
+	pub := &recordingPublisher{}
+	entities := &fakeEntityReader{
+		entities: map[string]map[string]any{
+			loopEntityID(testLoopID): {
+				agvocab.CoordinatorNextAction: "synthesize",
+			},
+			testChainEntityID: {
+				chain.PredicateChainMode: chainmode.ModeResearchOnly,
+			},
+		},
+	}
+	v := buildValidator(t, pub, entities)
+	if err := v.HandleLoopCompleted(context.Background(), stampEvent("researcher-gather")); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !pub.hasPredicate(chain.PredicatePhaseTransitionProceedSynthesize) {
+		t.Fatal("expected proceed.synthesize sentinel")
+	}
+	mirror, ok := pub.byPredicate(chain.PredicateChainMode)
+	if !ok {
+		t.Fatal("expected chain.mode mirror on source-loop entity")
+	}
+	if mirror.Subject != loopEntityID(testLoopID) {
+		t.Errorf("mirror subject = %q, want loop entity %q", mirror.Subject, loopEntityID(testLoopID))
+	}
+	if s, _ := mirror.Object.(string); s != chainmode.ModeResearchOnly {
+		t.Errorf("mirror object = %v, want %q", mirror.Object, chainmode.ModeResearchOnly)
+	}
+}
+
+// TestPhaseValidator_SynthesizeMirror_DevViaSpec: symmetric to the
+// research_only case. dev_via_spec chains carry the architect-allowed
+// allowlist on the spawned synthesize loop via rule 05b.
+func TestPhaseValidator_SynthesizeMirror_DevViaSpec(t *testing.T) {
+	pub := &recordingPublisher{}
+	entities := &fakeEntityReader{
+		entities: map[string]map[string]any{
+			loopEntityID(testLoopID): {
+				agvocab.CoordinatorNextAction: "synthesize",
+			},
+			testChainEntityID: {
+				chain.PredicateChainMode: chainmode.ModeDevViaSpec,
+			},
+		},
+	}
+	v := buildValidator(t, pub, entities)
+	if err := v.HandleLoopCompleted(context.Background(), stampEvent("researcher-gather")); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	mirror, ok := pub.byPredicate(chain.PredicateChainMode)
+	if !ok {
+		t.Fatal("expected chain.mode mirror on source-loop entity")
+	}
+	if s, _ := mirror.Object.(string); s != chainmode.ModeDevViaSpec {
+		t.Errorf("mirror object = %v, want %q", mirror.Object, chainmode.ModeDevViaSpec)
+	}
+}
+
+// TestPhaseValidator_SynthesizeMirror_AbsentDefaultsDevViaSpec: legacy
+// configs (no coordinator front-door) carry no chain.mode triple. The
+// mirror must default to dev_via_spec so the spawned synthesize loop
+// inherits the pre-addendum allowlist (architect allowed). Without
+// this default rules 05a / 05b would both miss and the synthesize
+// transition would silently no-op.
+func TestPhaseValidator_SynthesizeMirror_AbsentDefaultsDevViaSpec(t *testing.T) {
+	pub := &recordingPublisher{}
+	entities := &fakeEntityReader{
+		entities: map[string]map[string]any{
+			loopEntityID(testLoopID): {
+				agvocab.CoordinatorNextAction: "synthesize",
+			},
+			testChainEntityID: {}, // no chain.mode triple
+		},
+	}
+	v := buildValidator(t, pub, entities)
+	if err := v.HandleLoopCompleted(context.Background(), stampEvent("researcher-gather")); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	mirror, ok := pub.byPredicate(chain.PredicateChainMode)
+	if !ok {
+		t.Fatal("expected chain.mode mirror on source-loop entity even when chain.mode absent")
+	}
+	if s, _ := mirror.Object.(string); s != chainmode.ModeDevViaSpec {
+		t.Errorf("mirror object = %v, want %q (dev_via_spec default)", mirror.Object, chainmode.ModeDevViaSpec)
+	}
+}
+
+// TestPhaseValidator_SynthesizeMirror_UnknownTokenDefaultsDevViaSpec:
+// an unknown chain.mode token (operator typo, future routing class)
+// must collapse to dev_via_spec rather than passing through. Rules
+// 05a / 05b only match closed-token mode values; leaking the unknown
+// token onto the loop would leave the synthesize transition orphaned
+// (neither rule fires). The default-to-dev_via_spec policy keeps the
+// chain progressing.
+//
+// The validator also emits a slog.Warn when this branch fires so the
+// coercion is visible to operators; this test asserts the coerced
+// output triple, not the log line (log-assertion shape would couple
+// the test to slog handler details; the warn-log is for production
+// visibility, not test pinning).
+func TestPhaseValidator_SynthesizeMirror_UnknownTokenDefaultsDevViaSpec(t *testing.T) {
+	pub := &recordingPublisher{}
+	entities := &fakeEntityReader{
+		entities: map[string]map[string]any{
+			loopEntityID(testLoopID): {
+				agvocab.CoordinatorNextAction: "synthesize",
+			},
+			testChainEntityID: {
+				chain.PredicateChainMode: "experimental_mode_token",
+			},
+		},
+	}
+	v := buildValidator(t, pub, entities)
+	if err := v.HandleLoopCompleted(context.Background(), stampEvent("researcher-gather")); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	mirror, ok := pub.byPredicate(chain.PredicateChainMode)
+	if !ok {
+		t.Fatal("expected chain.mode mirror on source-loop entity")
+	}
+	if s, _ := mirror.Object.(string); s != chainmode.ModeDevViaSpec {
+		t.Errorf("mirror object = %v, want %q (unknown collapses to dev_via_spec default)", mirror.Object, chainmode.ModeDevViaSpec)
+	}
+}
+
+// TestPhaseValidator_SynthesizeMirror_OnlyOnSynthesize: the mirror
+// must NOT land on non-synthesize transitions. plan→gather should
+// approve cleanly without a chain.mode triple on the loop entity —
+// other transitions don't have mode-divergent allowlists, and an
+// extra mirror would be inert noise on the loop's triple set.
+func TestPhaseValidator_SynthesizeMirror_OnlyOnSynthesize(t *testing.T) {
+	pub := &recordingPublisher{}
+	entities := &fakeEntityReader{
+		entities: map[string]map[string]any{
+			loopEntityID(testLoopID): {
+				agvocab.CoordinatorNextAction: "gather",
+			},
+			testChainEntityID: {
+				chain.PredicateChainMode: chainmode.ModeResearchOnly,
+			},
+		},
+	}
+	v := buildValidator(t, pub, entities)
+	if err := v.HandleLoopCompleted(context.Background(), stampEvent("researcher-plan")); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !pub.hasPredicate(chain.PredicatePhaseTransitionProceedGather) {
+		t.Fatal("expected proceed.gather sentinel")
+	}
+	// The chain.mode predicate must NOT be written on this transition —
+	// the mirror is scoped to synthesize-target approvals only.
+	for _, tr := range pub.triples {
+		if tr.Predicate == chain.PredicateChainMode {
+			t.Errorf("chain.mode mirror leaked on plan→gather transition (subject=%q object=%v); mirror should only land on synthesize target",
+				tr.Subject, tr.Object)
+		}
+	}
+}
