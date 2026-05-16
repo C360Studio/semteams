@@ -204,6 +204,7 @@ tasks:
       - task: test:e2e:agentic:deep-research
       - task: test:e2e:agentic:ops-agent
       - task: test:e2e:agentic:coordinator-researcher
+      - task: test:e2e:agentic:coordinator-researcher-stall-recovery
       - task: test:e2e:agentic:task-story-trace
       - task: test:e2e:agentic:action-chips
       - task: test:e2e:agentic:task-title-aliases
@@ -461,6 +462,33 @@ tasks:
           FIXTURE: "{{.FIXTURE}}"
           AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
       - npx playwright test e2e/agentic/coordinator-researcher.spec.ts
+
+  test:e2e:agentic:coordinator-researcher-stall-recovery:
+    desc: Run the Slice 2 chainstall recovery journey (mode_mismatch → coordinator)
+    summary: |
+      Coordinator → research_only chain → synthesize drifts to architect
+      → cmd/semteams/chainstall observes the mode_mismatch rejection and
+      routes recovery to a fresh coordinator (rule 05). Second arc
+      converges → reviewer-research approves → wake-up coordinator
+      (rule 04a) delivers user reply.
+
+      Asserts the full chainstall audit cluster (chain.rejection.* +
+      chain.stall.*) on the Chain 1 chain entity, the per-loop
+      chain.stall.proceed sentinel on Loop C, and the idempotency
+      guard (no eleventh loop under redelivery).
+
+      Ten loops, twenty-three mock-llm round-trips. Same agentic-e2e
+      baseline as coordinator-researcher (no extra compose profile).
+    vars:
+      FIXTURE: coordinator-researcher-stall-recovery.yaml
+      AGENTIC_CONFIG: e2e-coordinator.json
+    cmds:
+      - defer: { task: test:e2e:agentic:cleanup }
+      - task: test:e2e:agentic:stack:up
+        vars:
+          FIXTURE: "{{.FIXTURE}}"
+          AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
+      - npx playwright test e2e/agentic/coordinator-researcher-stall-recovery.spec.ts
 
   test:e2e:agentic:task-story-trace:
     desc: Run the task-story / raw-activity right-rail journey
@@ -1178,7 +1206,28 @@ tasks:
       # Go build layer didn't invalidate as expected). Both images
       # carry our product code; both need the no-cache treatment to
       # guarantee a smoke runs the committed source.
-      - docker compose -f docker-compose.agentic-e2e.yml build --no-cache backend sandbox
+      #
+      # 2026-05-16: scope the sandbox --no-cache rebuild to journeys
+      # that actually activate the `sandbox` (or `local-models`)
+      # compose profile. Mock-llm coordinator/researcher journeys
+      # never start the sandbox container, so the eager rebuild is
+      # pure waste — and worse, the sandbox Dockerfile's apt
+      # bootstrap occasionally flakes (NodeSource setup_22.x against
+      # ports.ubuntu.com noble: transient GPG signature errors),
+      # killing journeys that don't even need it. Sandbox-using
+      # journeys (dev-via-spec, dev-via-spec-qa, smoke7) opt back in
+      # via COMPOSE_PROFILES.
+      - docker compose -f docker-compose.agentic-e2e.yml build --no-cache backend
+      - |
+        case "${COMPOSE_PROFILES:-}" in
+          *sandbox*|*local-models*)
+            echo "Rebuilding sandbox (--no-cache; COMPOSE_PROFILES=${COMPOSE_PROFILES})"
+            docker compose -f docker-compose.agentic-e2e.yml build --no-cache sandbox
+            ;;
+          *)
+            echo "Skipping sandbox --no-cache rebuild (profile not active; COMPOSE_PROFILES=${COMPOSE_PROFILES:-<empty>})"
+            ;;
+        esac
       - docker compose -f docker-compose.agentic-e2e.yml up -d
       - |
         PORT="{{.E2E_AGENTIC_UI_PORT}}"
