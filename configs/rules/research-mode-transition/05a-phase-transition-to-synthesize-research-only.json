@@ -1,0 +1,49 @@
+{
+  "id": "researcher_phase_transition_to_synthesize_research_only",
+  "type": "expression",
+  "name": "Researcher Phase Transition → SYNTHESIZE (research_only mode)",
+  "description": "ADR-041 addendum 2026-05-16 §\"Synthesize action_allowlist must be mode-aware\". Fires when phasevalidator has approved a gather→synthesize transition AND the chain carries chain.mode.classification == \"research_only\" (mirrored onto the source-loop entity by the validator alongside the proceed sentinel). The spawned synthesize loop's action_allowlist OMITS \"architect\" — the LLM cannot drift into the dev arc by structural impossibility, not by persona-prose plea. Sibling 05b handles dev_via_spec chains with the architect-allowed allowlist.",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "chain.phase_transition.proceed.synthesize",
+      "operator": "eq",
+      "value": "true",
+      "required": true
+    },
+    {
+      "field": "chain.mode.classification",
+      "operator": "eq",
+      "value": "research_only",
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "publish_agent",
+      "subject": "agent.task.researcher-synthesize",
+      "role": "researcher-synthesize",
+      "model": "research",
+      "tools": ["read_loop_result", "emit_research_artifact", "scratchpad", "decide"],
+      "action_allowlist": ["gather", "emit", "needs_clarification"],
+      "properties": {
+        "prior_loop_id": "$entity.instance",
+        "phase": "synthesize",
+        "chain_mode": "research_only"
+      },
+      "prompt": "SYNTHESIZE phase entry — RESEARCH_ONLY chain. Source loop $entity.instance (researcher-gather) has handed off with decide(action=\"synthesize\"). Call read_loop_result on that loop to read the gathered evidence in its narrative terminal. Compose the structured research artifact (actors/integration_points/tasks/addressed_gaps/open_gaps) from the evidence per researcher-synthesize/00-identity.md and 10-emit-rules.md. Use scratchpad to draft before the strict-schema emit_research_artifact call.\n\nThis chain was classified RESEARCH_ONLY by the coordinator at dispatch. The architect / dev-via-spec arc is structurally out of scope; your action_allowlist enforces this.\n\nTerminal options (allow-list enforced by phasevalidator): decide(action=\"emit\") research-arc terminal — reviewer-research evaluates the artifact; decide(action=\"gather\") back-edge re-gather when synthesis surfaces a corpus gap (bounded by gather cap=3); decide(action=\"needs_clarification\") when evidence is structurally inconsistent with the plan."
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "phase": "ADR-041 addendum 2026-05-16",
+    "adr": "docs/adr/041-mvp-role-compression-and-graph-as-substrate.md",
+    "adr_addendum": "docs/adr/041-mvp-role-compression-and-graph-as-substrate.md#addendum-2026-05-16--synthesize-action_allowlist-must-be-mode-aware",
+    "validator": "cmd/semteams/phasevalidator/phase.go (PhaseValidator) writes the chain.mode mirror on the source-loop entity at synthesize-approval time. Rule conditions only read the firing entity's own triples; the mirror is the cross-entity bridge.",
+    "proceed_sentinel": "chain.phase_transition.proceed.synthesize on source researcher-gather loop entity",
+    "mode_mirror": "chain.mode.classification on source researcher-gather loop entity (mirrored from chain entity by phasevalidator)",
+    "phase_cap": "Per-phase cap = 2 (ADR-041 §Per-phase cap).",
+    "sibling_rule": "05b-phase-transition-to-synthesize-dev-via-spec.json — dev_via_spec mode keeps architect in the allowlist."
+  }
+}

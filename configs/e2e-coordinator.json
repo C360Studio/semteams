@@ -235,7 +235,8 @@
           "/app/configs/rules/research-mode-transition/01a-researcher-synthesize-to-reviewer-research.json",
           "/app/configs/rules/research-mode-transition/02-reviewer-rejected-retry-research.json",
           "/app/configs/rules/research-mode-transition/04-phase-transition-to-gather.json",
-          "/app/configs/rules/research-mode-transition/05-phase-transition-to-synthesize.json"
+          "/app/configs/rules/research-mode-transition/05a-phase-transition-to-synthesize-research-only.json",
+          "/app/configs/rules/research-mode-transition/05b-phase-transition-to-synthesize-dev-via-spec.json"
         ],
         "enable_graph_integration": true,
         "entity_watch_buckets": {

@@ -9,7 +9,9 @@ description: |
     researcher-plan (dispatch) → decide(gather)
       → rule 04-phase-transition-to-gather → researcher-gather
     researcher-gather → decide(synthesize)
-      → rule 05-phase-transition-to-synthesize → researcher-synthesize
+      → rule 05b-phase-transition-to-synthesize-dev-via-spec
+        → researcher-synthesize (legacy chain — no chain.mode triple;
+          validator defaults the mirror to dev_via_spec so 05b fires)
     researcher-synthesize → emit_research_artifact (rev 1, empty)
                           + decide(emit)
       → rule 01a-researcher-synthesize-to-reviewer-research
@@ -20,7 +22,7 @@ description: |
     researcher-plan (recovery) → decide(gather)
       → rule 04 → researcher-gather
     researcher-gather → decide(synthesize)
-      → rule 05 → researcher-synthesize
+      → rule 05b → researcher-synthesize
     researcher-synthesize → emit_research_artifact (rev 2, full)
                           + decide(emit)
       → rule 01a → reviewer-research

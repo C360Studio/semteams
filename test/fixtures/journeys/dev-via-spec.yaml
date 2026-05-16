@@ -14,7 +14,8 @@ description: |
     researcher-plan (dispatch) → decide(gather)
       → rule 04-phase-transition-to-gather → researcher-gather
     researcher-gather → decide(synthesize)
-      → rule 05-phase-transition-to-synthesize → researcher-synthesize
+      → rule 05b-phase-transition-to-synthesize-dev-via-spec
+        → researcher-synthesize (chain.mode=dev_via_spec)
     researcher-synthesize → emit_research_artifact (rev 1)
                           + decide(architect)
       → rule 06-phase-transition-to-architect → researcher-architect

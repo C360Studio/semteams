@@ -248,13 +248,56 @@ func (v *PhaseValidator) HandleLoopCompleted(ctx context.Context, ev *agentic.Lo
 		return nil
 	}
 
-	// Approved. Three writes: target audit (already in writes), counter
-	// audit on chain entity, proceed sentinel on loop entity. Counter
-	// lands BEFORE proceed — operators inspecting an "approved" chain
-	// see the bump even when the proceed write fails (fail-soft on
-	// loop-entity write blocks the rule fire and stalls fail-safe).
+	// Approved. Counter audit on chain entity, optional mode mirror on
+	// loop entity (synthesize only), then proceed sentinel on loop
+	// entity LAST. Counter lands first — operators inspecting an
+	// "approved" chain see the bump even when downstream writes fail.
+	//
+	// Write order on the loop entity is load-bearing: mirror BEFORE
+	// proceed. The rule engine's entity-state-watch fires on the
+	// proceed sentinel; if proceed landed first and the mirror write
+	// failed (publishAll log-and-continue semantics), the loop would
+	// carry proceed=true with no mode triple, neither 05a nor 05b
+	// would match, and the chain would wedge silently with no
+	// chainstall signal. Mirror-first makes every observable
+	// intermediate state safe — the rule's mode condition is satisfied
+	// by the time the proceed condition can be.
 	writes = append(writes,
 		stamp(tctx.chainEntityID, phaseCountPredicate[tctx.action], strconv.Itoa(newCount)),
+	)
+	// Mirror chain.mode onto the source-loop entity when approving a
+	// synthesize transition (ADR-041 addendum 2026-05-16). Rules 05a /
+	// 05b condition on this mirror to fork the spawned synthesize
+	// loop's action_allowlist by mode — research_only excludes
+	// architect; dev_via_spec keeps it. Rule conditions only read the
+	// firing entity's own triples (rule 06 metadata § "chain_mode_gate"
+	// has a parallel discussion for the architect case), so the
+	// mirror is the cross-entity bridge.
+	//
+	// Absence policy: a chain dispatched without a coordinator
+	// front-door carries no chain.mode triple. Default to dev_via_spec
+	// to preserve pre-Slice-1b behaviour — architect was always in the
+	// synthesize allowlist before the addendum, and legacy configs
+	// without a coordinator front-door run the dev arc by convention.
+	// An explicit-but-unknown token (operator typo, future routing
+	// class) collapses to the same default; the warn-log surfaces the
+	// coercion so operators can spot misconfiguration.
+	if tctx.action == PhaseSynthesize {
+		mode, _ := tctx.chainTriples[chain.PredicateChainMode].(string)
+		if mode != chainmode.ModeResearchOnly && mode != chainmode.ModeDevViaSpec {
+			if mode != "" {
+				v.logger.Warn("phase validator: unknown chain.mode token; defaulting synthesize mirror to dev_via_spec",
+					slog.String("loop_id", ev.LoopID),
+					slog.String("chain_entity", tctx.chainEntityID),
+					slog.String("observed_mode", mode))
+			}
+			mode = chainmode.ModeDevViaSpec
+		}
+		writes = append(writes,
+			stamp(tctx.loopEntityID, chain.PredicateChainMode, mode),
+		)
+	}
+	writes = append(writes,
 		stamp(tctx.loopEntityID, proceedPredicate[tctx.action], "true"),
 	)
 	v.publishAll(ctx, writes)
