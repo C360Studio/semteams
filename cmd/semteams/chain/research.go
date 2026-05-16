@@ -139,7 +139,7 @@ func (s *ResearchMilestoneStamper) HandleLoopCompleted(ctx context.Context, ev *
 	if _, ok := researchReviewerRoles[ev.Role]; !ok || ev.Outcome != agentic.OutcomeSuccess {
 		return nil
 	}
-	if err := validateLoopID(ev.LoopID); err != nil {
+	if err := ValidateLoopID(ev.LoopID); err != nil {
 		return fmt.Errorf("chain.ResearchMilestoneStamper: %w", err)
 	}
 
@@ -166,7 +166,7 @@ func (s *ResearchMilestoneStamper) HandleLoopCompleted(ctx context.Context, ev *
 			slog.String("reviewer_loop_id", ev.LoopID))
 		return nil
 	}
-	if err := validateLoopID(researcherLoopID); err != nil {
+	if err := ValidateLoopID(researcherLoopID); err != nil {
 		s.logger.Warn("research milestone: lineage.researcher value malformed; skipping chain triples",
 			slog.String("reviewer_loop_id", ev.LoopID),
 			slog.String("researcher_loop_id", researcherLoopID),

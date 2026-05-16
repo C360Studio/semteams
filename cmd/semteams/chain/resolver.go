@@ -94,7 +94,7 @@ func NewResolver(parents ParentReader, platform types.PlatformMeta) *Resolver {
 // Bounded by maxAncestryHops; longer walks return an error so a malformed
 // graph cannot wedge a caller.
 func (r *Resolver) ChainID(ctx context.Context, loopID string) (string, error) {
-	if err := validateLoopID(loopID); err != nil {
+	if err := ValidateLoopID(loopID); err != nil {
 		return "", fmt.Errorf("chain.Resolver.ChainID: %w", err)
 	}
 	cur := loopID
@@ -116,7 +116,7 @@ func (r *Resolver) ChainID(ctx context.Context, loopID string) (string, error) {
 		// before passing it back into upstream constructors that panic
 		// on dots/empties. A schema drift or graph corruption shouldn't
 		// take down a subscriber goroutine.
-		if err := validateLoopID(parentLoopID); err != nil {
+		if err := ValidateLoopID(parentLoopID); err != nil {
 			return "", fmt.Errorf("chain.Resolver.ChainID: parent of %q yields invalid loop_id %q: %w", cur, parentLoopID, err)
 		}
 		cur = parentLoopID
@@ -124,11 +124,15 @@ func (r *Resolver) ChainID(ctx context.Context, loopID string) (string, error) {
 	return "", fmt.Errorf("chain.Resolver.ChainID: ancestry walk from %q exceeded %d hops (cycle?)", loopID, maxAncestryHops)
 }
 
-// validateLoopID rejects shapes that would panic the upstream
+// ValidateLoopID rejects shapes that would panic the upstream
 // agentic.LoopExecutionEntityID / ChainExecutionEntityID constructors
-// (empty, contains dot). Callers convert the returned error to the
-// public "chain.Resolver.X" prefix.
-func validateLoopID(loopID string) error {
+// (empty, contains dot). Callers convert the returned error to their
+// own public prefix (e.g. "chain.Resolver.X" or
+// "chainmode.Stamper.X"). Exported so chain-CompletionHandler authors
+// outside this package (cmd/semteams/chainmode) can reuse the same
+// entry-seam check — every chain handler then panic-proofs against
+// malformed wire envelopes identically.
+func ValidateLoopID(loopID string) error {
 	if loopID == "" {
 		return fmt.Errorf("loopID required")
 	}
@@ -240,7 +244,7 @@ func NewNATSParentReader(client *natsclient.Client, platform types.PlatformMeta,
 
 // ReadParent implements ParentReader against a live graph component.
 func (r *NATSParentReader) ReadParent(ctx context.Context, loopID string) (string, error) {
-	if err := validateLoopID(loopID); err != nil {
+	if err := ValidateLoopID(loopID); err != nil {
 		return "", fmt.Errorf("chain.NATSParentReader.ReadParent: %w", err)
 	}
 	entityID := agentic.LoopExecutionEntityID(r.platform.Org, r.platform.Platform, loopID)

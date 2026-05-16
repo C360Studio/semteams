@@ -284,6 +284,69 @@ const (
 	// tests_run=0) or "tests_failed_nonzero" (action=tests_passing
 	// with tests_failed>0). Ops-agent groups stalls by this token.
 	PredicateQAModeGateRejectReason = "chain.qa_mode_gate.reject_reason"
+
+	// PredicateChainMode is the closed-token classification a chain
+	// carries from coordinator-dispatch onwards. Stamped by
+	// cmd/semteams/chainmode.Stamper on the canonical 6-part chain
+	// entity at coordinator-terminal time. Read by the phase validator
+	// (cmd/semteams/phasevalidator) to gate the synthesize→architect
+	// transition: chain.mode.classification == "research_only" refuses
+	// the proceed sentinel; chain.mode.classification == "dev_via_spec"
+	// allows it.
+	//
+	// Object values:
+	//   - "research_only" — set on coordinator
+	//     decide(action=delegate_research). Synthesize must terminate
+	//     at reviewer-research; no architect / spec / builder phases.
+	//   - "dev_via_spec"  — set on coordinator
+	//     decide(action=delegate_dev_chain). Full plan → gather →
+	//     synthesize → architect → reviewer-spec → builder →
+	//     reviewer-qa arc.
+	//
+	// Slice 1b of the coordinator redesign — the structural authority
+	// the validator gates against. Persona-only fork at synthesize
+	// proved unreliable under real LLM (Slice 1 smoke evidence: 2 of 3
+	// synthesize loops chose decide(action=architect) regardless of
+	// the spawn prompt's framing).
+	//
+	// 3-part canonical shape `chain.mode.classification` parallels
+	// `chain.needs_review.classification` (ADR-039 Phase 1 Tier 3) and
+	// satisfies the vocabulary system's domain.category.property
+	// convention. A 2-part `chain.mode` would parseDomainCategory()
+	// with empty category (see this file's package docstring and the
+	// 2026-05-11 vocab-completion pass that renamed every 2-part
+	// chain.* predicate).
+	PredicateChainMode = "chain.mode.classification"
+
+	// PredicateChainTerminalReached marks the chain entity when the
+	// chain has reached its expected end-of-arc. Stamped by
+	// chain.TerminalStamper on reviewer-research(approved) or
+	// reviewer-qa(accept). Object value "true". Distinct from
+	// chain.paused.* (ADR-037 — FAILED loops), chain.needs_review.*
+	// (ADR-039 Phase 1 — recoverable-pending), and chain.recovery.*
+	// (ADR-040 — per-cycle retry budget). Coordinator-redesign Slice 1c
+	// — the structural authority coordinator wake-up rules read from
+	// the chain entity for audit; the rules themselves fire on the
+	// reviewer's loop-entity triples (role + decision.next_action)
+	// because the rule engine's firing entity is the loop, not the
+	// chain.
+	PredicateChainTerminalReached = "chain.terminal.reached"
+
+	// PredicateChainTerminalRole records the role of the terminating
+	// reviewer ("reviewer-research" or "reviewer-qa"). Operator-visible
+	// classification for ops queries; rule wiring uses role directly.
+	PredicateChainTerminalRole = "chain.terminal.role"
+
+	// PredicateChainTerminalLoopID is the loop_id of the terminating
+	// reviewer. Wake-up rules pass this via related_loops so the
+	// spawned coordinator can read_loop_result on it. Audit predicate
+	// on the chain entity.
+	PredicateChainTerminalLoopID = "chain.terminal.loop_id"
+
+	// PredicateChainTerminalObservedAt is the RFC3339 timestamp of when
+	// the stamper wrote the cluster. Distinct from the reviewer loop's
+	// CompletedAt; observability surfaces use this to age the cluster.
+	PredicateChainTerminalObservedAt = "chain.terminal.observed_at"
 )
 
 // init registers the chain vocabulary with the upstream vocabulary
@@ -443,6 +506,37 @@ func registerADR041Predicates() {
 	)
 	vocabulary.Register(PredicateQAModeGateRejectReason,
 		vocabulary.WithDescription("ADR-041 §Risks mitigation: classification token for qa-mode-gate rejections ('zero_tests_run' | 'tests_failed_nonzero')."),
+		vocabulary.WithDataType("string"),
+	)
+
+	// chain.mode — coordinator-redesign Slice 1b. Closed-token
+	// classification stamped by cmd/semteams/chainmode.Stamper at
+	// coordinator-terminal time; read by phase validator to gate
+	// synthesize→architect.
+	vocabulary.Register(PredicateChainMode,
+		vocabulary.WithDescription("Coordinator-redesign Slice 1b: closed-token chain classification (chain.mode.classification) stamped on the canonical 6-part chain entity at coordinator-terminal time. Object values: 'research_only' (coordinator decide(action=delegate_research) — synthesize must terminate at reviewer-research) | 'dev_via_spec' (coordinator decide(action=delegate_dev_chain) — synthesize→architect allowed, full dev arc continues)."),
+		vocabulary.WithDataType("string"),
+	)
+
+	// chain.terminal.* — coordinator-redesign Slice 1c. TerminalStamper
+	// audit cluster stamped on the chain entity when a terminating-reviewer
+	// loop completes with its role-specific approval action. Distinct from
+	// chain.paused.* (ADR-037 failures), chain.needs_review.* (ADR-039
+	// Phase 1 recoverable-pending), chain.recovery.* (ADR-040 retry budget).
+	vocabulary.Register(PredicateChainTerminalReached,
+		vocabulary.WithDescription("Coordinator-redesign Slice 1c: chain-entity marker (\"true\") stamped when a terminating-reviewer loop (reviewer-research/approved or reviewer-qa/accept) completes the chain. Distinct from chain.paused.* (FAILED loops), chain.needs_review.* (recoverable-pending), chain.recovery.* (retry budget) — this is the end-of-arc 'user request answered' signal that coordinator wake-up rules read."),
+		vocabulary.WithDataType("string"),
+	)
+	vocabulary.Register(PredicateChainTerminalRole,
+		vocabulary.WithDescription("Coordinator-redesign Slice 1c: role of the terminating reviewer ('reviewer-research' for research-only chains, 'reviewer-qa' for dev-via-spec chains). Audit predicate for ops queries; rule wiring uses role directly off the loop entity."),
+		vocabulary.WithDataType("string"),
+	)
+	vocabulary.Register(PredicateChainTerminalLoopID,
+		vocabulary.WithDescription("Coordinator-redesign Slice 1c: loop_id of the terminating reviewer. Wake-up rules pass this via related_loops so the spawned coordinator can read_loop_result on the terminal."),
+		vocabulary.WithDataType("string"),
+	)
+	vocabulary.Register(PredicateChainTerminalObservedAt,
+		vocabulary.WithDescription("Coordinator-redesign Slice 1c: RFC3339 timestamp when TerminalStamper wrote the cluster. Distinct from the reviewer loop's CompletedAt — observability surfaces use this to age the cluster."),
 		vocabulary.WithDataType("string"),
 	)
 

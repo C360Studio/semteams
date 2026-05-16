@@ -80,7 +80,14 @@
 //   - chain.phase_transition.rejected — chain entity. Negative marker
 //     when the validator structurally rejected.
 //   - chain.phase_transition.reject_reason — chain entity. Short
-//     classification token ("invalid_edge" | "phase_cap").
+//     classification token ("invalid_edge" | "phase_cap" |
+//     "mode_mismatch"). "mode_mismatch" is coordinator-redesign Slice
+//     1b: synthesize→architect refused when chain.mode.classification
+//     == "research_only". The chain.mode triple is stamped by
+//     cmd/semteams/chainmode at coordinator-terminal time. Adding a
+//     new coordinator routing class requires touching
+//     chainmode.actionToMode AND this validator's mode gate together
+//     — both are pinned by package-level tests.
 //
 // SpecModeGate and QAModeGate use sibling vocabularies
 // (chain.spec_mode_gate.{proceed,rejected,reject_reason} and

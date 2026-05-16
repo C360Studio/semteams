@@ -107,7 +107,7 @@ func (s *NeedsReviewStamper) HandleLoopCompleted(ctx context.Context, ev *agenti
 	if ev.Role != builderRole || ev.Outcome != agentic.OutcomeSuccess {
 		return nil
 	}
-	if err := validateLoopID(ev.LoopID); err != nil {
+	if err := ValidateLoopID(ev.LoopID); err != nil {
 		return fmt.Errorf("chain.NeedsReviewStamper: %w", err)
 	}
 

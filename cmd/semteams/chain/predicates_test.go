@@ -21,6 +21,7 @@ func TestPredicates_RegisteredInVocabulary(t *testing.T) {
 		{"PredicateResearchArtifactLoop", PredicateResearchArtifactLoop},
 		{"PredicatePlanLoop", PredicatePlanLoop},
 		{"PredicatePlanReviewerLoop", PredicatePlanReviewerLoop},
+		{"PredicateChainMode", PredicateChainMode},
 	}
 	for _, tc := range cases {
 		meta := vocabulary.GetPredicateMetadata(tc.predicate)

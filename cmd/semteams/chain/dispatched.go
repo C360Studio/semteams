@@ -78,7 +78,7 @@ func (s *DispatchedStamper) HandleLoopCompleted(ctx context.Context, ev *agentic
 		// Not the chain root; another stamper handles non-root milestones.
 		return nil
 	}
-	if err := validateLoopID(ev.LoopID); err != nil {
+	if err := ValidateLoopID(ev.LoopID); err != nil {
 		// Defensive: shouldn't happen for events that came off the wire,
 		// but a malformed event id should surface as an error rather than
 		// panic the subscriber goroutine via the upstream constructor.
