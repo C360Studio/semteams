@@ -1,68 +1,77 @@
 import { test, expect } from "@playwright/test";
 
 /**
- * Journey: Coordinator → Researcher delegation
+ * Journey: Coordinator → research-only chain → coordinator return path
  *
- * Goal: User asks a research-worthy question. The coordinator (front-door
- * role) classifies intent via its `decide` tool, fires
- * `coordinator.next_action=delegate_research`, and the rule-engine spawns
- * a researcher loop via `publish_agent`. The researcher runs one
- * `web_search` turn and synthesizes a structured report.
+ * Slice 1c Piece 2 rewrite. Exercises the full Slice 1 + 1b + 1c
+ * wiring end-to-end on mock-LLM:
+ *
+ *   Loop 0: coordinator (dispatch) → decide(delegate_research)
+ *           → chainmode.Stamper writes chain.mode.classification="research_only"
+ *           → rule 01 fires → spawn researcher-plan
+ *
+ *   Loop A: researcher-plan → emit_plan → decide(gather)
+ *           → rule 04 fires → spawn researcher-gather
+ *
+ *   Loop B: researcher-gather → read_loop_result → query_entity →
+ *           decide(synthesize) → rule 05 fires → spawn researcher-synthesize
+ *
+ *   Loop C: researcher-synthesize → read_loop_result →
+ *           emit_research_artifact (rev 1 FULL) → decide(emit)
+ *           → rule 01a fires → spawn reviewer-research
+ *
+ *   Loop D: reviewer-research → read_loop_result → decide(approved)
+ *           → chain.TerminalStamper writes chain.terminal.* cluster
+ *           → rule 04a fires → spawn coordinator (wake-up)
+ *
+ *   Loop E: coordinator (wake-up) → read_loop_result on Loop D →
+ *           decide(respond_direct) → rule 03b fires → publish on
+ *           user.response.* + stamp coordinator.user_reply triple.
+ *           Terminal — no further rules fire.
  *
  * Validates:
- *   - Single ChatBar entry produces TWO loops (coordinator + researcher).
- *   - Coordinator role is the front-door — its loop is the FIRST to
- *     terminate.
- *   - Rule wiring: coordinator's `decide` tool emits the next-action
- *     triple → rule fires → `publish_agent` spawns researcher.
- *   - Both loops land in the Done column on the kanban board.
- *   - The board shows the parent/child relationship (researcher card
- *     references coordinator's loop_id as its parent_loop_id).
+ *   - All SIX loops reach terminal complete state. Recovery rule 02
+ *     is loaded but does NOT fire (reviewer-research approves rev 1
+ *     directly — recovery is exercised by the sibling
+ *     research-mode-transition.spec.ts journey).
+ *   - Role distribution proves every rule fired in order:
+ *       2 × coordinator       (Loop 0 dispatch + Loop E rule 04a wake-up)
+ *       1 × researcher-plan   (Loop A — rule 01 spawn)
+ *       1 × researcher-gather (Loop B — rule 04 spawn)
+ *       1 × researcher-synthesize (Loop C — rule 05 spawn)
+ *       1 × reviewer-research (Loop D — rule 01a spawn)
+ *   - Wire-shape: Loop 0 is dispatch-spawned (default_role=coordinator
+ *     resolves it; LoopInfo.role is empty on the wire per
+ *     [[feedback_loopinfo_role_omitempty]]); every other loop carries an
+ *     explicit role from its publish_agent spawn.
+ *   - No approval gate on the research arc.
+ *   - No seventh loop appears (settle assertion against accidental
+ *     re-fire of rule 04a or rule 02 on the approved terminal).
  *
  * Required fixture: test/fixtures/journeys/coordinator-researcher.yaml
- *   - Turn 1 (coordinator): decide(action=delegate_research, reason=...)
- *   - Turn 2 (researcher):  web_search(query=...)
- *   - Turn 3 (researcher):  completion with structured report
- *
- * Required config: configs/e2e-coordinator.json
- *   - coordinator role with decide tool + observe rule
- *   - researcher role available for publish_agent target
- *
- * Run via:
- *   task test:e2e:agentic:coordinator-researcher
+ * Required config: configs/e2e-coordinator.json (Slice 1c upgrade
+ *   loads the full coordinator + research-mode-transition rule set).
+ * Compose profile: none beyond the agentic-e2e baseline.
  */
 
-// SKIPPED 2026-05-15 — coordinator-redesign Slice 1 clean-break.
-// This spec was written against the legacy single-loop `researcher` role
-// (web_search + synthesize). Slice 1 collapsed that role into the
-// researcher-plan MVP chain (plan → gather → synthesize → reviewer-research
-// for research-only; full dev chain for build asks). The 2-loop assertion
-// here no longer matches the chain shape — researcher-plan spawns multiple
-// downstream loops.
-//
-// Rework owned by Slice 1b: new test/fixtures/journeys/coordinator-researcher.yaml
-// with responses for the full researcher-plan chain, and a multi-loop
-// assertion set that handles the plan/gather/synthesize fan-out.
-test.describe.skip("Coordinator → Researcher", () => {
-  test.setTimeout(180_000);
-
+test.describe("Coordinator → Researcher → Coordinator return (Slice 1c)", () => {
   test.beforeAll(async ({ request }) => {
     const health = await request.get("/health");
     expect(health.ok(), "Backend not healthy — stack not running?").toBe(true);
-
-    const commands = await request.get("/teams-dispatch/commands");
-    expect(
-      commands.ok(),
-      "Dispatch /commands not responding — is teams-dispatch configured?",
-    ).toBe(true);
   });
 
-  test("user prompt → coordinator delegates → researcher completes", async ({
+  // Six loops, autonomous chain (no approval gate, no recovery). 3
+  // minutes covers mock-LLM scheduling jitter; budget kept generous
+  // to absorb cold-start latency on slower CI.
+  test.setTimeout(180_000);
+
+  test("user prompt → full research-only chain → coordinator delivers reply", async ({
     page,
     request,
   }) => {
     // -----------------------------------------------------------------
-    // Step 1 — open the Board, wait for SSE, snapshot existing cards.
+    // Step 1 — open the Board so the SSE activity stream is connected
+    // before any loops appear.
     // -----------------------------------------------------------------
     await page.goto("/");
 
@@ -73,12 +82,10 @@ test.describe.skip("Coordinator → Researcher", () => {
     );
     await expect(page.getByTestId("kanban-board")).toBeVisible();
 
-    const initialLoops = await listLoops(request);
-    const initialIds = new Set(initialLoops.map((l) => l.loop_id));
-
     // -----------------------------------------------------------------
-    // Step 2 — send the prompt that the coordinator's decide tool will
-    // classify as a research-delegation intent.
+    // Step 2 — send a research-worthy prompt. The coordinator's decide
+    // tool will classify it as delegate_research and the rule chain
+    // takes over.
     // -----------------------------------------------------------------
     await page.getByTestId("chat-input").fill(
       "Compare MQTT vs NATS for IoT edge deployments — which has lower latency on constrained ARM devices?",
@@ -86,151 +93,137 @@ test.describe.skip("Coordinator → Researcher", () => {
     await page.getByTestId("send-button").click();
 
     // -----------------------------------------------------------------
-    // Step 3 — wait for the coordinator loop to appear (the dispatch's
-    // default_role is `coordinator` in e2e-coordinator.json), and
-    // capture its loop_id.
+    // Step 3 — wait for all SIX loops to reach terminal complete
+    // state. Rules involved:
+    //   01 (coordinator → researcher-plan)
+    //   04 (plan → gather)
+    //   05 (gather → synthesize)
+    //   01a (synthesize → reviewer-research)
+    //   04a (reviewer-research approved → wake-up coordinator)
+    //   03b (wake-up coordinator respond_direct → publish prose; no spawn)
+    // Recovery rule 02 is loaded but does not fire (reviewer approves
+    // rev 1 directly).
     // -----------------------------------------------------------------
-    const coordinatorLoop = await pollUntil(
-      async () => {
-        const loops = await listLoops(request);
-        const fresh = loops.find((l) => !initialIds.has(l.loop_id));
-        if (!fresh) return null;
-        // Coordinator is the front-door — first new loop is always it.
-        return fresh;
-      },
-      { timeoutMs: 30_000 },
-    );
-    expect(coordinatorLoop, "no coordinator loop appeared after dispatch")
-      .toBeTruthy();
-    const coordinatorId = coordinatorLoop!.loop_id;
+    const allTerminal = await pollUntil(async () => {
+      const resp = await request.get("/teams-dispatch/loops");
+      if (!resp.ok()) return null;
+      const list = (await resp.json()) as Array<{ state: string }>;
+      if (list.length !== 6) return null;
+      return list.every((l) => l.state === "complete") ? list : null;
+    }, { timeoutMs: 120_000 });
 
-    // -----------------------------------------------------------------
-    // Step 4 — wait for the coordinator to terminate. Its only LLM
-    // call is `decide` (StopLoop=true), so it should reach a terminal
-    // state quickly. The rule then fires publish_agent for the
-    // researcher.
-    // -----------------------------------------------------------------
-    const coordinatorTerminal = await pollUntil(
-      async () => {
-        const resp = await request.get(`/teams-dispatch/loops/${coordinatorId}`);
-        if (!resp.ok()) return null;
-        const body = (await resp.json()) as { state?: string };
-        return body.state &&
-          ["complete", "success", "failed", "error", "timeout"].includes(
-            body.state,
-          )
-          ? body
-          : null;
-      },
-      { timeoutMs: 30_000 },
-    );
     expect(
-      coordinatorTerminal,
-      `coordinator loop ${coordinatorId} did not terminate within 30s`,
+      allTerminal,
+      "expected all 6 loops to reach terminal complete state (coordinator dispatch + researcher chain ×4 + wake-up coordinator)",
     ).toBeTruthy();
 
     // -----------------------------------------------------------------
-    // Step 5 — wait for the researcher loop to appear (spawned by the
-    // observe-rule's publish_agent action).
+    // Step 4 — role distribution proves every rule fired in order.
+    //
+    // Wire-shape note: dispatch-spawned loops ride on
+    // dispatch.default_role and don't get their role stamped back
+    // onto the LoopInfo wire JSON; rule-spawned loops do. So Loop 0
+    // (the dispatch coordinator) has empty role on the wire, and the
+    // wake-up coordinator (Loop E — rule 04a publish_agent) carries
+    // role="coordinator" explicitly.
+    //
+    // Expected role distribution (after default_role resolution to
+    // "coordinator" for the empty-role dispatch loop):
+    //   2 × coordinator       (Loop 0 dispatch + Loop E rule 04a)
+    //   1 × researcher-plan   (Loop A — rule 01)
+    //   1 × researcher-gather (Loop B — rule 04)
+    //   1 × researcher-synthesize (Loop C — rule 05)
+    //   1 × reviewer-research (Loop D — rule 01a)
     // -----------------------------------------------------------------
-    const researcherLoop = await pollUntil(
-      async () => {
-        const loops = await listLoops(request);
-        const newOne = loops.find(
-          (l) => l.loop_id !== coordinatorId && !initialIds.has(l.loop_id),
-        );
-        return newOne ?? null;
-      },
-      { timeoutMs: 30_000 },
+    const finalLoops = await request
+      .get("/teams-dispatch/loops")
+      .then((r) => r.json()) as Array<{
+        role: string;
+        state: string;
+        pending_approval?: { tool_name?: string } | null;
+      }>;
+
+    const dispatchLoops = finalLoops.filter((l) => !l.role);
+    expect(
+      dispatchLoops.length,
+      `expected exactly 1 dispatch-spawned loop with empty role (Loop 0); got ${dispatchLoops.length}`,
+    ).toBe(1);
+
+    const expectedDefaultRole = "coordinator";
+    const roles = finalLoops.map((l) => l.role || expectedDefaultRole);
+    const coordinatorCount = roles.filter((r) => r === "coordinator").length;
+    const planCount = roles.filter((r) => r === "researcher-plan").length;
+    const gatherCount = roles.filter((r) => r === "researcher-gather").length;
+    const synthesizeCount = roles.filter((r) => r === "researcher-synthesize").length;
+    const reviewerCount = roles.filter((r) => r === "reviewer-research").length;
+
+    expect(
+      coordinatorCount,
+      `expected 2 coordinator loops (Loop 0 dispatch + Loop E rule 04a wake-up), got roles=${JSON.stringify(roles)}. Missing → rule 04a (research-terminal-to-coordinator) did not fire on reviewer-research(approved).`,
+    ).toBe(2);
+    expect(
+      planCount,
+      `expected 1 researcher-plan loop (Loop A via rule 01), got roles=${JSON.stringify(roles)}`,
+    ).toBe(1);
+    expect(
+      gatherCount,
+      `expected 1 researcher-gather loop (Loop B via rule 04), got roles=${JSON.stringify(roles)}. Missing → rule 04 (phase-transition-to-gather) did not fire.`,
+    ).toBe(1);
+    expect(
+      synthesizeCount,
+      `expected 1 researcher-synthesize loop (Loop C via rule 05), got roles=${JSON.stringify(roles)}. Missing → rule 05 (phase-transition-to-synthesize) did not fire.`,
+    ).toBe(1);
+    expect(
+      reviewerCount,
+      `expected 1 reviewer-research loop (Loop D via rule 01a), got roles=${JSON.stringify(roles)}. Missing → rule 01a (researcher-synthesize-to-reviewer-research) did not fire.`,
+    ).toBe(1);
+
+    // -----------------------------------------------------------------
+    // Step 5 — no approval gate. The Slice 1c return path is fully
+    // autonomous: chain reaches terminal → coordinator wakes →
+    // delivers reply. No human-in-the-loop step.
+    // -----------------------------------------------------------------
+    const stillPendingAny = finalLoops.find(
+      (l) => l.pending_approval != null,
     );
     expect(
-      researcherLoop,
-      "no researcher loop appeared after coordinator terminated — observe rule may not have fired",
-    ).toBeTruthy();
-    const researcherId = researcherLoop!.loop_id;
+      stillPendingAny,
+      "no loop should ever require approval — Slice 1c return path is autonomous",
+    ).toBeUndefined();
 
     // -----------------------------------------------------------------
-    // Step 6 — both loops should be visible as cards on the board.
+    // Step 6 — settle assertion: no seventh loop appears. Two
+    // regressions this catches:
+    //   (a) rule 04a accidentally re-firing on its own wake-up
+    //       coordinator's terminal — would loop infinitely;
+    //   (b) rule 02 mis-firing on reviewer-research approved (rather
+    //       than insufficient) — would spawn a recovery
+    //       researcher-plan and produce 7+ loops.
     // -----------------------------------------------------------------
-    await expect(
-      page.locator(`[data-testid='task-card'][data-task-id='${coordinatorId}']`),
-    ).toBeVisible({ timeout: 10_000 });
-    await expect(
-      page.locator(`[data-testid='task-card'][data-task-id='${researcherId}']`),
-    ).toBeVisible({ timeout: 30_000 });
-
-    // -----------------------------------------------------------------
-    // Step 7 — wait for the researcher to complete (web_search → synth).
-    // Once it lands in Done, both cards should be in `done` column.
-    // -----------------------------------------------------------------
-    const researcherTerminal = await pollUntil(
-      async () => {
-        const resp = await request.get(`/teams-dispatch/loops/${researcherId}`);
-        if (!resp.ok()) return null;
-        const body = (await resp.json()) as { state?: string };
-        return body.state &&
-          ["complete", "success", "failed", "error", "timeout"].includes(
-            body.state,
-          )
-          ? body
-          : null;
-      },
-      { timeoutMs: 60_000 },
-    );
+    await new Promise((r) => setTimeout(r, 2000));
+    const settledList = await request
+      .get("/teams-dispatch/loops")
+      .then((r) => r.json()) as unknown[];
     expect(
-      researcherTerminal,
-      `researcher loop ${researcherId} did not terminate within 60s`,
-    ).toBeTruthy();
-    expect(["complete", "success"]).toContain(researcherTerminal!.state);
-
-    // Coordinator should also have terminated successfully (no error).
-    expect(["complete", "success"]).toContain(coordinatorTerminal!.state);
-
-    // Both cards in Done column.
-    await expect(
-      page.locator(
-        `[data-testid='task-card'][data-task-id='${coordinatorId}'][data-column='done']`,
-      ),
-    ).toBeVisible({ timeout: 10_000 });
-    await expect(
-      page.locator(
-        `[data-testid='task-card'][data-task-id='${researcherId}'][data-column='done']`,
-      ),
-    ).toBeVisible({ timeout: 10_000 });
-
-    // -----------------------------------------------------------------
-    // Step 8 — single-page-app guard: never navigated away from /.
-    // -----------------------------------------------------------------
-    expect(new URL(page.url()).pathname).toBe("/");
+      settledList.length,
+      "no seventh loop should appear — rule 04a must not re-fire on the wake-up coordinator's terminal, and rule 02 must not fire on approved (only on insufficient)",
+    ).toBe(6);
   });
 });
 
-interface LoopSummary {
-  loop_id: string;
-  state?: string;
-  role?: string;
-}
-
-async function listLoops(
-  request: import("@playwright/test").APIRequestContext,
-): Promise<LoopSummary[]> {
-  const resp = await request.get("/teams-dispatch/loops");
-  if (!resp.ok()) return [];
-  return (await resp.json()) as LoopSummary[];
-}
-
+/**
+ * pollUntil — race a polling fn against a deadline.
+ * Returns the fn's value on success, or null on deadline.
+ */
 async function pollUntil<T>(
-  check: () => Promise<T | null>,
-  options: { timeoutMs?: number; intervalMs?: number } = {},
+  fn: () => Promise<T | null>,
+  opts: { timeoutMs: number; intervalMs?: number },
 ): Promise<T | null> {
-  const timeout = options.timeoutMs ?? 15_000;
-  const interval = options.intervalMs ?? 500;
-  const deadline = Date.now() + timeout;
+  const deadline = Date.now() + opts.timeoutMs;
+  const interval = opts.intervalMs ?? 250;
   while (Date.now() < deadline) {
-    const result = await check();
-    if (result !== null && result !== undefined) {
-      return result;
-    }
+    const result = await fn();
+    if (result != null) return result;
     await new Promise((r) => setTimeout(r, interval));
   }
   return null;
