@@ -22,6 +22,15 @@ func TestPredicates_RegisteredInVocabulary(t *testing.T) {
 		{"PredicatePlanLoop", PredicatePlanLoop},
 		{"PredicatePlanReviewerLoop", PredicatePlanReviewerLoop},
 		{"PredicateChainMode", PredicateChainMode},
+		{"PredicateChainRejectionRecoveryCount", PredicateChainRejectionRecoveryCount},
+		{"PredicateChainRejectionExhausted", PredicateChainRejectionExhausted},
+		{"PredicateChainStallRoutedTo", PredicateChainStallRoutedTo},
+		{"PredicateChainStallReason", PredicateChainStallReason},
+		{"PredicateChainStallProducerLoopID", PredicateChainStallProducerLoopID},
+		{"PredicateChainStallProducerRole", PredicateChainStallProducerRole},
+		{"PredicateChainStallObservedAt", PredicateChainStallObservedAt},
+		{"PredicateChainStallAwaitingHuman", PredicateChainStallAwaitingHuman},
+		{"PredicateChainStallProceed", PredicateChainStallProceed},
 	}
 	for _, tc := range cases {
 		meta := vocabulary.GetPredicateMetadata(tc.predicate)
