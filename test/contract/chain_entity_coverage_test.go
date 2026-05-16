@@ -140,6 +140,7 @@ func TestChainEntityCoverage_PR_B_Pipeline(t *testing.T) {
 	dispatched := chain.NewDispatchedStamper(pub, platform, nil)
 	research := chain.NewResearchMilestoneStamper(pub, resolver, er, platform, nil)
 	needsReview := chain.NewNeedsReviewStamper(pub, resolver, er, platform, nil)
+	terminal := chain.NewTerminalStamper(pub, resolver, er, platform, nil)
 
 	// We invoke handlers directly. CompletionSubscriber's NATS plumbing
 	// is covered by chain/subscriber_test.go; this contract test focuses
@@ -166,7 +167,7 @@ func TestChainEntityCoverage_PR_B_Pipeline(t *testing.T) {
 		},
 		{
 			LoopID:       "research_reviewer_b",
-			Role:         "research-reviewer",
+			Role:         "reviewer-research",
 			Outcome:      agentic.OutcomeSuccess,
 			ParentLoopID: "researcher_a",
 			CompletedAt:  now.Add(2 * time.Second),
@@ -181,6 +182,9 @@ func TestChainEntityCoverage_PR_B_Pipeline(t *testing.T) {
 		}
 		if err := needsReview.HandleLoopCompleted(context.Background(), ev); err != nil {
 			t.Fatalf("NeedsReviewStamper.HandleLoopCompleted(%s) error: %v", ev.LoopID, err)
+		}
+		if err := terminal.HandleLoopCompleted(context.Background(), ev); err != nil {
+			t.Fatalf("TerminalStamper.HandleLoopCompleted(%s) error: %v", ev.LoopID, err)
 		}
 	}
 
@@ -198,6 +202,10 @@ func TestChainEntityCoverage_PR_B_Pipeline(t *testing.T) {
 		"chain.research_artifact.task_count":  5,
 		"chain.research_artifact.path":        "docs/research/2026-05-08-osh-meshtastic-driver-research.md", // PR C Phase C1
 		"chain.slug.stem":                     "2026-05-08-osh-meshtastic-driver",                           // smoke #8 run-5 D2 fix — stem derived from research path; downstream tools compose <stem>-{plan,implementation}
+		"chain.terminal.reached":              "true",                                                       // Slice 1c — TerminalStamper on reviewer-research(approved)
+		"chain.terminal.role":                 "reviewer-research",                                          // Slice 1c
+		"chain.terminal.loop_id":              "research_reviewer_b",                                        // Slice 1c
+		"chain.terminal.observed_at":          nil,                                                          // Slice 1c — RFC3339 timestamp; presence-only check
 	}
 	for pred, wantObj := range want {
 		gotObj, ok := got[pred]
@@ -265,6 +273,7 @@ func TestChainEntityCoverage_NoBleedOntoLoopEntity(t *testing.T) {
 
 	dispatched := chain.NewDispatchedStamper(pub, platform, nil)
 	research := chain.NewResearchMilestoneStamper(pub, resolver, er, platform, nil)
+	terminal := chain.NewTerminalStamper(pub, resolver, er, platform, nil)
 
 	rootEv := &agentic.LoopCompletedEvent{
 		LoopID:       "dispatch_root",
@@ -273,9 +282,14 @@ func TestChainEntityCoverage_NoBleedOntoLoopEntity(t *testing.T) {
 		ParentLoopID: "",
 		CompletedAt:  time.Now().UTC(),
 	}
+	// Reviewer event uses ADR-041 MVP role naming (reviewer-research),
+	// matching the PR_B_Pipeline test above. ResearchMilestoneStamper
+	// accepts both legacy "research-reviewer" and MVP "reviewer-research"
+	// via its researchReviewerRoles map; TerminalStamper accepts only
+	// MVP. The no-bleed assertion holds under either flavour.
 	reviewerEv := &agentic.LoopCompletedEvent{
 		LoopID:       "reviewer_b",
-		Role:         "research-reviewer",
+		Role:         "reviewer-research",
 		Outcome:      agentic.OutcomeSuccess,
 		ParentLoopID: "researcher_a",
 		CompletedAt:  time.Now().UTC(),
@@ -285,6 +299,9 @@ func TestChainEntityCoverage_NoBleedOntoLoopEntity(t *testing.T) {
 	}
 	if err := research.HandleLoopCompleted(context.Background(), reviewerEv); err != nil {
 		t.Fatalf("research: %v", err)
+	}
+	if err := terminal.HandleLoopCompleted(context.Background(), reviewerEv); err != nil {
+		t.Fatalf("terminal: %v", err)
 	}
 
 	pub.mu.Lock()

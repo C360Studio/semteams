@@ -349,9 +349,20 @@ func startChainMilestoneSubscribers(ctx context.Context, cfg *config.Config, nat
 	// later completes).
 	modeStamper := chainmode.NewStamper(triplePublisher, resolver, entityReader, platform, logger)
 
+	// Coordinator-redesign Slice 1c: chain.terminal stamper. Fires on
+	// terminating-reviewer success (reviewer-research/approved or
+	// reviewer-qa/accept) and writes the chain.terminal.* audit
+	// cluster on the canonical 6-part chain entity. The wake-up rule
+	// (configs/rules/coordinator/04a-/04b-) fires on the reviewer
+	// loop's role + decision triples directly (rule engine's firing
+	// entity = the loop, not the chain); the chain-entity cluster is
+	// for ops queries and operator dashboards.
+	terminalStamper := chain.NewTerminalStamper(triplePublisher, resolver, entityReader, platform, logger)
+
 	subscriber := chain.NewCompletionSubscriber([]chain.CompletionHandler{
 		dispatched,
 		modeStamper,
+		terminalStamper,
 		research,
 		needsReview,
 		recoveryCap,

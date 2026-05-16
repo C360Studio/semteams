@@ -8,17 +8,24 @@ import (
 	"testing"
 )
 
-// TestCoordinatorSlice1ActionTaxonomy locks in the four-value action
-// taxonomy that coordinator-redesign Slice 1 introduces. The persona
-// (10-decision-contract.md) and the rule set
-// (configs/rules/coordinator/01-03) must agree on the action values:
-// every action with a rule downstream must appear in the persona, and
-// every persona action that spawns must have a matching rule.
+// TestCoordinatorSlice1ActionTaxonomy locks in the action taxonomy
+// the coordinator persona (10-decision-contract.md) and its rule set
+// (configs/rules/coordinator/) must agree on:
 //
-// respond_direct is the persona-listed terminal that has NO rule —
-// coordinator just stops on that action. ask_user does have a rule
-// (no spawn; publishes to user.response.* + audit triple), so it
-// counts as wired.
+//   - every rule that gates on `agent.loop.role == "coordinator"` AND
+//     `coordinator.decision.next_action == <action>` must reference an
+//     action value that appears in the persona (orphan rule = dead
+//     code);
+//   - every persona action must have a matching rule (orphan persona
+//     action = no observable behaviour).
+//
+// Slice 1c addition: rules that gate on `agent.loop.role == "<reviewer
+// role>"` AND `coordinator.decision.next_action == <reviewer terminal>`
+// (04a- and 04b- wake-up rules) are coordinator-related but fire on
+// reviewer loops, so their action values come from reviewer personas,
+// not the coordinator persona. The taxonomy check scopes to rules
+// whose firing role is "coordinator"; the wake-up rules are validated
+// separately (test below) for their reviewer-role/approval-token shape.
 func TestCoordinatorSlice1ActionTaxonomy(t *testing.T) {
 	personaPath := "../../configs/personas/fragments/coordinator/10-decision-contract.md"
 	body, err := os.ReadFile(personaPath)
@@ -27,58 +34,14 @@ func TestCoordinatorSlice1ActionTaxonomy(t *testing.T) {
 	}
 	personaText := string(body)
 
-	personaActions := []string{
-		"delegate_research",
-		"delegate_dev_chain",
-		"respond_direct",
-		"ask_user",
-	}
+	personaActions := []string{"delegate_research", "delegate_dev_chain", "respond_direct", "ask_user"}
 	for _, action := range personaActions {
 		if !strings.Contains(personaText, "`"+action+"`") {
 			t.Errorf("persona 10-decision-contract.md missing action value `%s`", action)
 		}
 	}
 
-	ruleDir := "../../configs/rules/coordinator"
-	entries, err := os.ReadDir(ruleDir)
-	if err != nil {
-		t.Fatalf("read %s: %v", ruleDir, err)
-	}
-
-	ruleActions := map[string]string{}
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
-			continue
-		}
-		rulePath := filepath.Join(ruleDir, e.Name())
-		data, err := os.ReadFile(rulePath)
-		if err != nil {
-			t.Fatalf("read %s: %v", rulePath, err)
-		}
-		var rule struct {
-			ID         string `json:"id"`
-			Conditions []struct {
-				Field    string      `json:"field"`
-				Operator string      `json:"operator"`
-				Value    interface{} `json:"value"`
-			} `json:"conditions"`
-		}
-		if err := json.Unmarshal(data, &rule); err != nil {
-			t.Errorf("%s: invalid JSON: %v", e.Name(), err)
-			continue
-		}
-		for _, cond := range rule.Conditions {
-			if cond.Field != "coordinator.decision.next_action" || cond.Operator != "eq" {
-				continue
-			}
-			action, ok := cond.Value.(string)
-			if !ok {
-				t.Errorf("%s: next_action condition value is not a string: %v", e.Name(), cond.Value)
-				continue
-			}
-			ruleActions[action] = e.Name()
-		}
-	}
+	ruleActions := collectCoordinatorRoleActions(t, "../../configs/rules/coordinator")
 
 	// Every rule-listed action MUST appear in the persona — orphan
 	// rule = silent dead code.
@@ -91,17 +54,175 @@ func TestCoordinatorSlice1ActionTaxonomy(t *testing.T) {
 			}
 		}
 		if !found {
-			t.Errorf("rule %s targets action %q which is not in the persona taxonomy",
-				ruleFile, action)
+			t.Errorf("rule %s targets action %q which is not in the persona taxonomy", ruleFile, action)
 		}
 	}
 
-	// Every spawning persona action MUST have a rule. respond_direct
-	// is intentionally rule-less (stop semantics); the rest must wire.
-	wantWired := []string{"delegate_research", "delegate_dev_chain", "ask_user"}
+	// Every persona action MUST have a rule. Slice 1c added the
+	// respond_direct rule (03b-respond-direct.json) — the prior
+	// "rule-less stop" exception no longer applies because the wake-up
+	// case needs respond_direct to publish on the user-response bus.
+	wantWired := []string{"delegate_research", "delegate_dev_chain", "respond_direct", "ask_user"}
 	for _, action := range wantWired {
 		if _, ok := ruleActions[action]; !ok {
 			t.Errorf("persona action %q has no rule in configs/rules/coordinator/", action)
+		}
+	}
+}
+
+// collectCoordinatorRoleActions scans ruleDir for rules whose firing
+// role is "coordinator" and returns a map of action-value → rule file
+// for every coordinator.decision.next_action eq-condition found.
+// Rules with a different firing role (e.g. Slice 1c wake-up rules that
+// gate on reviewer-research / reviewer-qa) are excluded — those carry
+// reviewer-persona actions, not coordinator-persona actions.
+func collectCoordinatorRoleActions(t *testing.T, ruleDir string) map[string]string {
+	t.Helper()
+	entries, err := os.ReadDir(ruleDir)
+	if err != nil {
+		t.Fatalf("read %s: %v", ruleDir, err)
+	}
+	out := map[string]string{}
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
+			continue
+		}
+		rulePath := filepath.Join(ruleDir, e.Name())
+		data, err := os.ReadFile(rulePath)
+		if err != nil {
+			t.Fatalf("read %s: %v", rulePath, err)
+		}
+		var rule struct {
+			Conditions []struct {
+				Field    string      `json:"field"`
+				Operator string      `json:"operator"`
+				Value    interface{} `json:"value"`
+			} `json:"conditions"`
+		}
+		if err := json.Unmarshal(data, &rule); err != nil {
+			t.Errorf("%s: invalid JSON: %v", e.Name(), err)
+			continue
+		}
+		firingRole := ""
+		for _, cond := range rule.Conditions {
+			if cond.Field == "agent.loop.role" && cond.Operator == "eq" {
+				if s, ok := cond.Value.(string); ok {
+					firingRole = s
+				}
+			}
+		}
+		if firingRole != "coordinator" {
+			continue
+		}
+		for _, cond := range rule.Conditions {
+			if cond.Field != "coordinator.decision.next_action" || cond.Operator != "eq" {
+				continue
+			}
+			action, ok := cond.Value.(string)
+			if !ok {
+				t.Errorf("%s: next_action condition value is not a string: %v", e.Name(), cond.Value)
+				continue
+			}
+			out[action] = e.Name()
+		}
+	}
+	return out
+}
+
+// TestCoordinatorSlice1cWakeUpRules locks in the Slice 1c wake-up rule
+// shape: a rule firing on `agent.loop.role == "<reviewer role>"` AND
+// `coordinator.decision.next_action == "<approval token>"` spawns a
+// coordinator-role loop via publish_agent. Pinning the role→token
+// pair here keeps the rule set in sync with
+// cmd/semteams/chain/terminal.go's roleToApprovalAction map; adding a
+// third terminal role requires touching both sides.
+func TestCoordinatorSlice1cWakeUpRules(t *testing.T) {
+	ruleDir := "../../configs/rules/coordinator"
+	wantWakeUpPairs := map[string]string{
+		"reviewer-research": "approved",
+		"reviewer-qa":       "accept",
+	}
+	foundPairs := map[string]string{}
+
+	entries, err := os.ReadDir(ruleDir)
+	if err != nil {
+		t.Fatalf("read %s: %v", ruleDir, err)
+	}
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
+			continue
+		}
+		rulePath := filepath.Join(ruleDir, e.Name())
+		data, err := os.ReadFile(rulePath)
+		if err != nil {
+			t.Fatalf("read %s: %v", rulePath, err)
+		}
+		var rule struct {
+			Conditions []struct {
+				Field    string      `json:"field"`
+				Operator string      `json:"operator"`
+				Value    interface{} `json:"value"`
+			} `json:"conditions"`
+			OnEnter []struct {
+				Type    string `json:"type"`
+				Subject string `json:"subject"`
+				Role    string `json:"role"`
+			} `json:"on_enter"`
+		}
+		if err := json.Unmarshal(data, &rule); err != nil {
+			continue
+		}
+		firingRole, action := "", ""
+		for _, cond := range rule.Conditions {
+			if cond.Field == "agent.loop.role" && cond.Operator == "eq" {
+				if s, ok := cond.Value.(string); ok {
+					firingRole = s
+				}
+			}
+			if cond.Field == "coordinator.decision.next_action" && cond.Operator == "eq" {
+				if s, ok := cond.Value.(string); ok {
+					action = s
+				}
+			}
+		}
+		if _, isWakeUp := wantWakeUpPairs[firingRole]; !isWakeUp {
+			continue
+		}
+		foundPairs[firingRole] = action
+		// Wake-up rules MUST publish_agent to coordinator role on the
+		// exact two-segment subject agent.task.coordinator —
+		// agentic-dispatch subscribes on `agent.task.*` (single-token
+		// wildcard). Subjects with more segments silently drop into
+		// the void (smoke #8 run-11 lesson; see
+		// configs/rules/ops/chain-terminal-observe.json
+		// subject_shape_note for the canonical reference).
+		spawnsCoordinator := false
+		for _, a := range rule.OnEnter {
+			if a.Type != "publish_agent" {
+				continue
+			}
+			if a.Role != "coordinator" {
+				t.Errorf("%s: wake-up rule (firing role %q) publish_agent role=%q, want %q", e.Name(), firingRole, a.Role, "coordinator")
+				continue
+			}
+			if a.Subject != "agent.task.coordinator" {
+				t.Errorf("%s: wake-up rule (firing role %q) publish_agent subject=%q, want %q (agentic-dispatch wildcard requires exact two-segment shape)", e.Name(), firingRole, a.Subject, "agent.task.coordinator")
+			}
+			spawnsCoordinator = true
+		}
+		if !spawnsCoordinator {
+			t.Errorf("%s: wake-up rule (firing role %q) must publish_agent role=coordinator", e.Name(), firingRole)
+		}
+	}
+
+	for role, wantAction := range wantWakeUpPairs {
+		gotAction, ok := foundPairs[role]
+		if !ok {
+			t.Errorf("missing wake-up rule for firing role %q (terminal approval action %q)", role, wantAction)
+			continue
+		}
+		if gotAction != wantAction {
+			t.Errorf("wake-up rule for firing role %q: approval action %q, want %q (must match cmd/semteams/chain/terminal.go roleToApprovalAction)", role, gotAction, wantAction)
 		}
 	}
 }
