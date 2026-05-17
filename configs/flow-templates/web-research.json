@@ -1,0 +1,33 @@
+{
+  "id": "web-research",
+  "name": "Web Research",
+  "description": "Non-software domain: pure source-grounded research over web substrate. Coordinator instantiates with a topic and source budget; researcher plans, queries web_search, synthesizes a source-grounded findings artifact (OSINT discipline — every claim cites a source, confidence is graded, corroboration is noted); reviewer-research grades the artifact against the plan's verifiable outcomes.\n\nFirst non-software template — exercises the harness extensibility claim that adding a new prompt class is config-only. Phase 2a skeleton: body is a valid flow shape that passes Flow.Validate but does not yet wire the agentic components. Phase 2b expands the body to a runnable researcher-only topology (no architect/builder; no semsource), with web_search as the primary tool.",
+  "body": "{\n  \"id\": \"web-research-{{.topic_slug}}\",\n  \"name\": \"Web Research: {{.topic}}\",\n  \"description\": \"Source-grounded web research on {{.topic}} (max_sources={{.max_sources}}, confidence_threshold={{.confidence_threshold}}, model={{.model}}). OSINT discipline: every claim cites a source; confidence graded; corroboration noted.\",\n  \"version\": 0,\n  \"runtime_state\": \"not_deployed\",\n  \"nodes\": [],\n  \"connections\": []\n}",
+  "parameters": [
+    {
+      "name": "topic",
+      "description": "Human-readable research question or topic. Shown in the flow name.",
+      "default": "general topic"
+    },
+    {
+      "name": "topic_slug",
+      "description": "Kebab-case slug of the topic. Used in the flow ID. Coordinator derives from topic.",
+      "default": "general-topic"
+    },
+    {
+      "name": "max_sources",
+      "description": "Maximum number of distinct web sources the researcher should consult before synthesizing. Higher for broad surveys, lower for quick checks.",
+      "default": "10"
+    },
+    {
+      "name": "confidence_threshold",
+      "description": "Minimum confidence level for a claim to land in the findings artifact unqualified. Below this threshold, the claim is marked as 'preliminary' or dropped. Values: 'low' | 'medium' | 'high'.",
+      "default": "medium"
+    },
+    {
+      "name": "model",
+      "description": "LLM endpoint name from the model_registry. Web research benefits from models with strong reading comprehension; claude-haiku is the cost-effective default.",
+      "default": "claude-haiku"
+    }
+  ]
+}
