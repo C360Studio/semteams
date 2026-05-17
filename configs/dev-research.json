@@ -3,7 +3,7 @@
   "platform": {
     "org": "c360",
     "id": "semteams-research",
-    "type": "deep-research",
+    "type": "dev-research",
     "region": "local",
     "instance_id": "agentic-001",
     "environment": "development"

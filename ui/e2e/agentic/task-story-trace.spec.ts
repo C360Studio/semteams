@@ -17,11 +17,11 @@ import { test, expect } from "@playwright/test";
  *   - The "Show raw activity" disclosure opens TaskTrace, which polls
  *     /message-logger/entries and renders rows mentioning the loop_id.
  *
- * Required fixture: test/fixtures/journeys/deep-research.yaml
+ * Required fixture: test/fixtures/journeys/dev-research.yaml
  *   (Reused — any 2-turn fixture with one tool_call yields enough
  *   trajectory steps + log entries to validate.)
  *
- * Required config: configs/e2e-deep-research.json
+ * Required config: configs/e2e-dev-research.json
  *
  * Run via:
  *   task test:e2e:agentic:task-story-trace
@@ -105,7 +105,7 @@ test.describe("Right-rail story + raw activity", () => {
     // -----------------------------------------------------------------
     const storyList = page.getByTestId("story-list");
     await expect(storyList).toBeVisible({ timeout: 15_000 });
-    // At least one step (model_call). The 2-turn deep-research fixture
+    // At least one step (model_call). The 2-turn dev-research fixture
     // produces model_call → tool_call → model_call, so expect ≥ 2 steps.
     await expect(page.getByTestId("story-step")).toHaveCount(
       await page.getByTestId("story-step").count(),

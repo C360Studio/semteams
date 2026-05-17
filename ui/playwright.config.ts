@@ -13,7 +13,7 @@ import { defineConfig, devices } from "@playwright/test";
  * Docker layer is unreliable when Playwright owns the lifecycle.
  *
  * Quick-start:
- *   task test:e2e:deep-research
+ *   task test:e2e:dev-research
  *   task test:e2e:tool-approval-gate
  *   task test:e2e:real-time-activity-stream
  *   task test:e2e:ops-agent

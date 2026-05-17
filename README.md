@@ -30,7 +30,7 @@ covers what SemTeams adds on top.
 | Surface | Path | What it is |
 |---|---|---|
 | Web UI | `ui/` | Svelte 5 + SvelteKit 2 chat / graph explorer / runtime monitor |
-| Flow library | `configs/*.json` | Loadable flow templates — agentic, deep-research, dev-via-spec, ops-observer, … |
+| Flow library | `configs/*.json` | Loadable flow templates — agentic, dev-research, dev-via-spec, ops-observer, … |
 | Personas | `configs/personas/fragments/<role>/*.md` | Role-specific prompt fragments (researcher, coordinator, builder, qa-reviewer, ops, …) |
 | Rules | `configs/rules/<flow>/*.json` | Coordinator/router/approval/observe rules that trigger agent dispatch |
 | Product tools | `cmd/semteams/tools/` | Tool executors that don't belong upstream (source ingest, artifact emission, builder terminal, sandbox bootstrap) |
@@ -65,7 +65,7 @@ task dev:research
 ```
 
 That boots NATS, builds and starts `bin/semteams` against
-`configs/deep-research.json`, then starts the UI proxy. Open
+`configs/dev-research.json`, then starts the UI proxy. Open
 <http://localhost:3001> and type a research question.
 
 `task dev:stop` tears it down.
@@ -75,9 +75,9 @@ That boots NATS, builds and starts `bin/semteams` against
 | You want | Run | Notes |
 |---|---|---|
 | Full agentic chat (general-purpose) | `./bin/semteams --config configs/agentic.json` | Needs NATS up (`task dev:nats:start`) |
-| Deep research with web search | `task dev:research` | Needs `ANTHROPIC_API_KEY` + `BRAVE_SEARCH_API_KEY` |
+| Dev research (software-domain, source-repo substrate) | `task dev:research` | Needs `ANTHROPIC_API_KEY` + `BRAVE_SEARCH_API_KEY` |
 | Onboarding interview demo | `./bin/semteams --config configs/onboarding.json` | Intent classification + `/onboard` |
-| Ops observer over deep research | `./bin/semteams --config configs/e2e-ops-observer.json` | ADR-027 read-only diagnostic agent |
+| Ops observer over dev research | `./bin/semteams --config configs/e2e-ops-observer.json` | ADR-027 read-only diagnostic agent |
 | Dev-via-spec / OSH demo | `./bin/semteams --config configs/osh-demo.json` | Architect → builder → qa chain (sandbox required) |
 
 `task --list` shows everything.

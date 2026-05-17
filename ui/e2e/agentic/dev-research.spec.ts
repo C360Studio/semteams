@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 
 /**
- * Journey: Deep Research
+ * Journey: Dev Research
  *
  * Goal: User asks a research question via the chat bar, the agent
  * researches using web_search, and returns a structured report. The
@@ -9,7 +9,7 @@ import { test, expect } from "@playwright/test";
  * → completion → kanban card in Done column.
  *
  * This is the first "real workflow" journey — it validates that the
- * deep-research config (researcher role, extended iterations/timeout,
+ * dev-research config (researcher role, extended iterations/timeout,
  * no approval gates) works end-to-end.
  *
  * Validates:
@@ -20,22 +20,22 @@ import { test, expect } from "@playwright/test";
  *   - Card transitions: Thinking → Executing → Done
  *   - Backend state matches UI state
  *
- * Required fixture: test/fixtures/journeys/deep-research.yaml
+ * Required fixture: test/fixtures/journeys/dev-research.yaml
  *   - Turn 1: tool_call(name=web_search, args={query: "..."})
  *   - Turn 2: completion with structured report
  *
- * Required config: configs/deep-research.json (via AGENTIC_CONFIG env)
+ * Required config: configs/dev-research.json (via AGENTIC_CONFIG env)
  *   - default_role: researcher
  *   - max_iterations: 25
  *   - approval_required: [] (no gates)
  *
  * Run via:
- *   FIXTURE=deep-research.yaml AGENTIC_CONFIG=deep-research.json \
+ *   FIXTURE=dev-research.yaml AGENTIC_CONFIG=dev-research.json \
  *     npx playwright test --config playwright.agentic.config.ts \
- *     e2e/agentic/deep-research.spec.ts
+ *     e2e/agentic/dev-research.spec.ts
  */
 
-test.describe("Deep Research", () => {
+test.describe("Dev Research", () => {
   test.beforeAll(async ({ request }) => {
     // Verify backend is healthy through Caddy
     const health = await request.get("/health");
@@ -115,7 +115,7 @@ test.describe("Deep Research", () => {
     // -----------------------------------------------------------------
     // Step 4 — wait for the loop to complete
     // The mock-llm fixture has 2 turns: web_search → completion
-    // With the deep-research config, there are no approval gates.
+    // With the dev-research config, there are no approval gates.
     //
     // Assert by kanban column rather than the raw `data-state` attr —
     // upstream emits both `complete` and `success` as terminal states

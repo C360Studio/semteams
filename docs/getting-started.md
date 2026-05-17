@@ -51,7 +51,7 @@ personas, and rules.
 
 ## Boot
 
-### Fastest path (deep research with UI)
+### Fastest path (dev research with UI)
 
 ```bash
 cp .env.example .env                     # add ANTHROPIC_API_KEY at minimum
@@ -74,7 +74,7 @@ Pick a config based on what you want to demo:
 | Config | What it runs | Needs |
 |---|---|---|
 | `agentic.json` / `agentic-claude.json` | General-purpose agent w/ approval-gated write tools | `ANTHROPIC_API_KEY` |
-| `deep-research.json` | Researcher flow with web search + graph query | `ANTHROPIC_API_KEY` (+ `BRAVE_SEARCH_API_KEY` for web) |
+| `dev-research.json` | Researcher flow with web search + graph query (software domain — source-repo substrate via semsource) | `ANTHROPIC_API_KEY` (+ `BRAVE_SEARCH_API_KEY` for web) |
 | `onboarding.json` | Onboarding interview demo (intent classification, `/onboard`) | `ANTHROPIC_API_KEY` |
 | `osh-demo.json` | Dev-via-spec chain (architect → builder → qa) | `ANTHROPIC_API_KEY` + sandbox running |
 | `e2e-*.json` | Mock-LLM journeys driven by Playwright | nothing — uses the mock LLM |

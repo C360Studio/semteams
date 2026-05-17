@@ -137,11 +137,11 @@
                 "role": "ops-analyst",
                 "model": "mock",
                 "properties": {
-                  "flow_name": "deep-research",
+                  "flow_name": "dev-research",
                   "observation_window": 20,
-                  "objective_spec_path": "docs/objectives/deep-research.md"
+                  "objective_spec_path": "docs/objectives/dev-research.md"
                 },
-                "prompt": "Analyze the last 20 completed deep-research loops. Objective spec: docs/objectives/deep-research.md. Use emit_diagnosis to surface findings (one call per finding). When done, call submit_work with a one-paragraph summary listing the finding ids. Persona fragments carry the grounding contract and immutable guardrails."
+                "prompt": "Analyze the last 20 completed dev-research loops. Objective spec: docs/objectives/dev-research.md. Use emit_diagnosis to surface findings (one call per finding). When done, call submit_work with a one-paragraph summary listing the finding ids. Persona fragments carry the grounding contract and immutable guardrails."
               }
             ],
             "on_exit": [],
@@ -149,7 +149,7 @@
               "phase": "ops-agent-phase-1",
               "adr": "semstreams/docs/adr/027-ops-agent-meta-harness.md",
               "adr_status": "accepted",
-              "objective_spec": "docs/objectives/deep-research.md",
+              "objective_spec": "docs/objectives/dev-research.md",
               "evaluation_window": 20,
               "tier": 1
             }

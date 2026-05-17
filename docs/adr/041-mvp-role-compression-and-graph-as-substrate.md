@@ -587,7 +587,7 @@ by phase:
 
 **Phase 3 — Config wiring + mock-LLM smoke + docs sweep.**
 
-- Update `agentic.json`, `agentic-claude.json`, `deep-research.json`,
+- Update `agentic.json`, `agentic-claude.json`, `dev-research.json`,
   `onboarding.json`, `e2e-*.json` configs to load only the 4 chain
   personas.
 - Mock-LLM Playwright journey covers coordinator → researcher
@@ -601,7 +601,7 @@ by phase:
   - [ ] `test/fixtures/journeys/research-with-source.yaml` + `ui/e2e/agentic/research-with-source.spec.ts` (will exercise the "no curator role" path)
   - [ ] `test/fixtures/journeys/research-iterative.yaml` + `ui/e2e/agentic/research-iterative.spec.ts`
   - [ ] `test/fixtures/journeys/research-harness-hit.yaml` + `ui/e2e/agentic/research-harness-hit.spec.ts`
-  - [ ] `test/fixtures/journeys/deep-research.yaml` + `ui/e2e/agentic/deep-research.spec.ts`
+  - [ ] `test/fixtures/journeys/dev-research.yaml` + `ui/e2e/agentic/dev-research.spec.ts`
   - [ ] `test/fixtures/journeys/coordinator-researcher.yaml` + `ui/e2e/agentic/coordinator-researcher.spec.ts`
   - [ ] `test/fixtures/journeys/tool-approval-gate.yaml` + `ui/e2e/agentic/tool-approval-gate.spec.ts` (validates approval seam unchanged)
   - Out of scope for Phase 3 re-run (off-chain or non-role-sensitive):
@@ -712,7 +712,7 @@ researcher-architect-emit and `reviewer(qa)` after builder. The
 phase-graph (line 207) shows `architect → emit → reviewer` with
 no `reviewer(research)` label.
 
-The structural question: a pure-research arc (e.g. `deep-research.json`
+The structural question: a pure-research arc (e.g. `dev-research.json`
 or any non-dev-via-spec deployment that runs only
 `researcher-plan → gather → synthesize → emit`) terminates with a
 reviewer. That reviewer reads a research artifact (not a spec

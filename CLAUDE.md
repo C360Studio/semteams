@@ -29,8 +29,10 @@ tool allowlist for a different *prompt class*:
 - `osh-demo.json` — **software domain.** Multi-phase research →
   architect → builder arc that builds an external integration
   end-to-end.
-- `deep-research.json` — **software domain.** Researcher arc with
-  source-repo substrate acquisition (semsource integration).
+- `dev-research.json` — **software domain.** Researcher arc with
+  source-repo substrate acquisition (semsource integration). Renamed
+  from `deep-research.json` on 2026-05-17 to make the software-domain
+  identity explicit; a web-research chain lands alongside.
 - `e2e-coordinator.json` — chain-shape agnostic; exercises
   coordinator-driven routing between chains.
 - `onboarding.json` — interview-style intent classification with
@@ -129,12 +131,12 @@ task ui:build           # Production build
 |--------|---------|-------|
 | `agentic.json` | Production general-purpose | claude-haiku |
 | `agentic-claude.json` | Production Claude variant | claude-haiku |
-| `deep-research.json` | Production researcher workflow | claude-haiku |
+| `dev-research.json` | Production researcher workflow (software domain — source-repo substrate via semsource) | claude-haiku |
 | `onboarding.json` | Onboarding interview demo (intent classification, profile context, /onboard command) | claude-haiku |
 | `e2e-agentic.json` | E2E testing | mock-llm |
 | `e2e-coordinator.json` | E2E coordinator → researcher journey | mock-llm |
-| `e2e-deep-research.json` | E2E deep-research testing | mock-llm |
-| `e2e-ops-observer.json` | E2E ops observer (ADR-027 Phase 1) — deep-research + observe rule | mock-llm |
+| `e2e-dev-research.json` | E2E dev-research testing | mock-llm |
+| `e2e-ops-observer.json` | E2E ops observer (ADR-027 Phase 1) — dev-research + observe rule | mock-llm |
 
 UI Playwright journey tasks (in `ui/Taskfile.yml`) manage the Docker stack
 lifecycle — Playwright does NOT auto-start the stack. Each task: start →
@@ -167,10 +169,10 @@ deploy it.)
 - `configs/rules/ops/observe-complete-loops.json` — fires once per
   `fire_every_n_events: 20` completed researcher loops.
 - `configs/e2e-ops-observer.json` — single-process e2e config
-  (deep-research components + observe rule) for the Playwright
+  (dev-research components + observe rule) for the Playwright
   journey.
 - `docs/objectives/README.md` — objective-spec schema.
-- `docs/objectives/deep-research.md` — first concrete spec.
+- `docs/objectives/dev-research.md` — first concrete spec.
 
 The ops agent emits findings via the `emit_diagnosis` tool (not raw
 triples). Each call requires `finding`, `recommendation`, `confidence`

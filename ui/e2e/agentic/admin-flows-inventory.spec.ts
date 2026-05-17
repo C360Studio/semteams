@@ -16,7 +16,7 @@ import { test, expect } from "@playwright/test";
  *   - No Create / Edit / Delete affordances are present (regression
  *     guard against re-introducing the editor).
  *
- * Required config: any working backend (deep-research is fine).
+ * Required config: any working backend (dev-research is fine).
  *
  * Run via:
  *   task test:e2e:agentic:admin-flows-inventory

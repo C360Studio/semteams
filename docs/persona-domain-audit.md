@@ -64,7 +64,7 @@ OSH-cleanup branch).
 | Role | Fragments | Verdict | Notes |
 |------|-----------|---------|-------|
 | `coordinator/` | 3 | **fully harness** | The only role purely about classification + routing; no software coupling. |
-| `ops/` | 3 | **mostly harness** | 05-semteams-identity names "deep-research" as a deployment fact; otherwise harness-level. |
+| `ops/` | 3 | **mostly harness** | 05-semteams-identity names "dev-research" as a deployment fact; otherwise harness-level. |
 | `ops-chain-observer/` | 3 | **mixed** | Observation pattern is general; framing binds to "dev-via-spec chain." |
 | `ops-progress-observer/` | 2 | **mixed** | Same as above. |
 | `source-registrar/` | 2 | **software-domain** | Role's purpose is registering source repos. |
@@ -93,7 +93,7 @@ OSH-cleanup branch).
 
 | Fragment | Verdict | Rationale |
 |---|---|---|
-| 05-semteams-identity.md | harness, with leak | Deployment-overlay fragment. Names "deep-research" by name (line ~9). Should reference "the bundled chain templates" instead. |
+| 05-semteams-identity.md | harness, with leak | Deployment-overlay fragment. Names "dev-research" by name (line ~9). Should reference "the bundled chain templates" instead. |
 | 10-objective-grounding.md | harness | General objective-spec grounding. |
 | 20-diagnostic-rules.md | harness | Diagnosis emission shape. |
 
@@ -271,7 +271,7 @@ moves can't separate them; they need editing. Split candidates:
 
 ### 5. The `ops/` deployment-overlay leak is minor and fixable now
 
-`ops/05-semteams-identity.md` names "deep-research" as a specific
+`ops/05-semteams-identity.md` names "dev-research" as a specific
 chain. Change to "the bundled chain templates" or "the chains
 configured in this deployment" — one-line edit, no structural
 impact.

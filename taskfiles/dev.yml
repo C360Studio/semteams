@@ -174,10 +174,10 @@ tasks:
         curl -s "http://localhost:8080/message-logger/kv/$BUCKET?pattern=$PATTERN&limit=20" | jq '.entries[] | {key: .key, revision: .revision}' 2>/dev/null || echo "SemStreams not running"
 
   research:
-    desc: Start semteams with Deep Research workflow (real LLM — requires .env with API keys)
+    desc: Start semteams with Dev Research workflow (real LLM — requires .env with API keys)
     summary: |
-      Boots the full stack for Deep Research: NATS + semteams backend
-      (configs/deep-research.json) + UI. The backend uses claude-haiku
+      Boots the full stack for Dev Research: NATS + semteams backend
+      (configs/dev-research.json) + UI. The backend uses claude-haiku
       by default (configurable in the config). API keys are loaded from
       .env via the Taskfile dotenv directive.
 
@@ -197,11 +197,11 @@ tasks:
       - defer: { task: stop }
       - |
         echo ""
-        echo "Starting semteams Deep Research workflow..."
-        echo "Config: configs/deep-research.json"
+        echo "Starting semteams Dev Research workflow..."
+        echo "Config: configs/dev-research.json"
         echo "Default model: claude-haiku"
         echo ""
-        ./bin/semteams --config configs/deep-research.json &
+        ./bin/semteams --config configs/dev-research.json &
         SEMTEAMS_PID=$!
         echo "Backend PID: $SEMTEAMS_PID (kill with: task dev:stop)"
         echo ""
