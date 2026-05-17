@@ -45,7 +45,7 @@ shared persona corpus at `configs/personas/fragments/` carries
 harness-level guidance only (decide contracts, output structure,
 tool discipline) and stays domain-neutral by design.
 
-Adding a new prompt class — OSINT brief, comparative analysis,
+Adding a new prompt class — web research, comparative analysis,
 decision memo, whatever the next ask is — is a **new chain
 config**, optionally a new emit tool with a domain-fit artifact
 shape, optionally chain-scoped persona fragments. It is **not** a
