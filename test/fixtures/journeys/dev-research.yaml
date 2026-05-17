@@ -1,9 +1,9 @@
-name: deep-research
+name: dev-research
 description: |
   Journey: user asks a research question, agent calls web_search to
   gather information, then completes with a structured report.
 
-  Paired spec: ui/e2e/agentic/deep-research.spec.ts
+  Paired spec: ui/e2e/agentic/dev-research.spec.ts
 
   Response sequence:
     1. Initial prompt → agent calls web_search tool to research the topic

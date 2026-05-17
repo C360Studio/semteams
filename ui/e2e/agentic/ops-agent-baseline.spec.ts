@@ -17,7 +17,7 @@ import { test, expect } from "@playwright/test";
  *      rule (inline in configs/e2e-ops-observer.json) fires publish_agent,
  *      spawning a loop with role=ops-analyst.
  *   4. Poll for that ops loop to appear, then wait for completion.
- *   5. Assert the ops loop's result cites docs/objectives/deep-research.md
+ *   5. Assert the ops loop's result cites docs/objectives/dev-research.md
  *      — proves the rule's inline prompt carried through. (Full persona
  *      fragment grounding is gated on ADR-029 persona.Manager.)
  *

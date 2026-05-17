@@ -15,9 +15,9 @@ import { test, expect } from "@playwright/test";
  *     removes it; duplicate aliases across tasks raise alias-error.
  *
  * Required fixture: any 2-turn fixture that lands a card we can click.
- *   Reuses deep-research.yaml for stack consistency.
+ *   Reuses dev-research.yaml for stack consistency.
  *
- * Required config: configs/e2e-deep-research.json
+ * Required config: configs/e2e-dev-research.json
  *
  * Run via:
  *   task test:e2e:agentic:task-title-aliases

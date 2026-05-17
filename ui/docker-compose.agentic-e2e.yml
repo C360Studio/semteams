@@ -287,7 +287,7 @@ services:
   # semsource/docs/adr/0003-programmatic-source-add-api.md, replies to
   # AddRequest. Only spawned for journeys that exercise the
   # add_source_repo tool — gate via the `semsource` profile so the
-  # default tool-approval-gate / deep-research / etc. journeys skip the
+  # default tool-approval-gate / dev-research / etc. journeys skip the
   # extra boot cost.
   #
   # Image is pulled from ghcr (CI publishes on every main push). For

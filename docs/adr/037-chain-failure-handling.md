@@ -164,7 +164,7 @@ predicate names are pre-claimed.
 The pause primitive is flow-agnostic. The single rule pattern fires
 on any failed loop whose role matches the configured prefix list.
 Adding research-arc, dev-via-spec arc, future harness-via-spec arc,
-deep-research, ops-agent observation arc requires extending the
+dev-research, ops-agent observation arc requires extending the
 prefix list — not duplicating the rule.
 
 Lineage is walked from the failed loop's spawn metadata

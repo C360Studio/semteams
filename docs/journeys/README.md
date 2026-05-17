@@ -33,7 +33,7 @@ Mapped from the superpowers in `docs/proposals/agentic-superpowers.md`:
 | `self-programming-rule-creation` | Self-programming agents (rule writes) | planned |
 | `multi-agent-hierarchy` | Parent/child loop chains | planned |
 | `graph-backed-memory` | Semantic memory recall | planned |
-| `stock-workflow-deep-research` | Pre-built deep-research flow | planned |
+| `stock-workflow-dev-research` | Pre-built dev-research flow | planned |
 
 Initial specs land in Phase C.2 (`tool-approval-gate`) and Phase C.3
 (`real-time-activity-stream`) as tracer-bullet journeys. The rest follow

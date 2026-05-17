@@ -16,7 +16,7 @@ and evaluation script took longer than running all 14 experiments."
 
 Semteams inherits that bottleneck. The ops agent can observe ~113
 graph predicates the semstreams runtime emits, but predicates are not
-self-interpreting. What does "good" look like for a deep-research
+self-interpreting. What does "good" look like for a dev-research
 flow? What does "good" look like for code-review? Different flows,
 different answers. The objective spec is where that answer lives in
 writing, authored once by a human, cited by the ops agent on every
@@ -90,7 +90,7 @@ shrinks. Name that up front.
 How many completed flow runs constitute a meaningful sample before
 the ops agent is allowed to emit a finding. Prevents premature
 diagnosis on small-sample noise. State the window size and the
-rationale (e.g., "20 deep-research loops — typical weekly volume
+rationale (e.g., "20 dev-research loops — typical weekly volume
 at current adoption").
 
 ## What the ops agent does with this

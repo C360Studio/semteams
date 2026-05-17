@@ -201,7 +201,7 @@ tasks:
     cmds:
       - task: test:e2e:agentic:tool-approval-gate
       - task: test:e2e:agentic:real-time-activity-stream
-      - task: test:e2e:agentic:deep-research
+      - task: test:e2e:agentic:dev-research
       - task: test:e2e:agentic:ops-agent
       - task: test:e2e:agentic:coordinator-researcher
       - task: test:e2e:agentic:coordinator-researcher-stall-recovery
@@ -413,25 +413,25 @@ tasks:
           AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
       - npx playwright test e2e/agentic/real-time-activity-stream.spec.ts
 
-  test:e2e:agentic:deep-research:
-    desc: Run the deep-research journey with researcher config + paired fixture
+  test:e2e:agentic:dev-research:
+    desc: Run the dev-research journey with researcher config + paired fixture
     vars:
-      FIXTURE: deep-research.yaml
-      AGENTIC_CONFIG: e2e-deep-research.json
+      FIXTURE: dev-research.yaml
+      AGENTIC_CONFIG: e2e-dev-research.json
     cmds:
       - defer: { task: test:e2e:agentic:cleanup }
       - task: test:e2e:agentic:stack:up
         vars:
           FIXTURE: "{{.FIXTURE}}"
           AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
-      - npx playwright test e2e/agentic/deep-research.spec.ts
+      - npx playwright test e2e/agentic/dev-research.spec.ts
 
   test:e2e:agentic:ops-agent:
     desc: Run the ops-agent baseline journey (ADR-027 Phase 1 — 20 researcher loops + ops diagnostic)
     summary: |
       Drives 20 serial researcher loops against the mock LLM, then
       validates that the ops_observe_complete_loops rule spawns an
-      ops-analyst loop whose completion cites docs/objectives/deep-research.md.
+      ops-analyst loop whose completion cites docs/objectives/dev-research.md.
 
       Long-running: 20 mock researcher loops take ~100s. Set a generous
       timeout when running under CI.
@@ -493,12 +493,12 @@ tasks:
   test:e2e:agentic:task-story-trace:
     desc: Run the task-story / raw-activity right-rail journey
     summary: |
-      Reuses the deep-research fixture to land a completed task, then
+      Reuses the dev-research fixture to land a completed task, then
       drives the right-rail detail panel: Activity tab shows the story
       list; "Show raw activity" disclosure exposes the trace rows.
     vars:
-      FIXTURE: deep-research.yaml
-      AGENTIC_CONFIG: e2e-deep-research.json
+      FIXTURE: dev-research.yaml
+      AGENTIC_CONFIG: e2e-dev-research.json
     cmds:
       - defer: { task: test:e2e:agentic:cleanup }
       - task: test:e2e:agentic:stack:up
@@ -510,8 +510,8 @@ tasks:
   test:e2e:agentic:action-chips:
     desc: Run the persona action-chips journey (Research / Plan / Implement)
     vars:
-      FIXTURE: deep-research.yaml
-      AGENTIC_CONFIG: e2e-deep-research.json
+      FIXTURE: dev-research.yaml
+      AGENTIC_CONFIG: e2e-dev-research.json
     cmds:
       - defer: { task: test:e2e:agentic:cleanup }
       - task: test:e2e:agentic:stack:up
@@ -523,8 +523,8 @@ tasks:
   test:e2e:agentic:task-title-aliases:
     desc: Run the editable-title + alias-chip journey
     vars:
-      FIXTURE: deep-research.yaml
-      AGENTIC_CONFIG: e2e-deep-research.json
+      FIXTURE: dev-research.yaml
+      AGENTIC_CONFIG: e2e-dev-research.json
     cmds:
       - defer: { task: test:e2e:agentic:cleanup }
       - task: test:e2e:agentic:stack:up
@@ -536,8 +536,8 @@ tasks:
   test:e2e:agentic:admin-flows-inventory:
     desc: Run the read-only /admin/flows inventory journey
     vars:
-      FIXTURE: deep-research.yaml
-      AGENTIC_CONFIG: e2e-deep-research.json
+      FIXTURE: dev-research.yaml
+      AGENTIC_CONFIG: e2e-dev-research.json
     cmds:
       - defer: { task: test:e2e:agentic:cleanup }
       - task: test:e2e:agentic:stack:up
@@ -555,14 +555,14 @@ tasks:
   #
   # Tear down any scenario with: task test:e2e:agentic:cleanup
 
-  test:e2e:agentic:dev:deep-research:
-    desc: Boot stack for the deep-research scenario (thin researcher loop + mock-LLM). No playwright.
+  test:e2e:agentic:dev:dev-research:
+    desc: Boot stack for the dev-research scenario (thin researcher loop + mock-LLM). No playwright.
     cmds:
       - task: test:e2e:agentic:dev:_boot
         vars:
-          FIXTURE: deep-research.yaml
-          AGENTIC_CONFIG: e2e-deep-research.json
-          SCENARIO: deep-research
+          FIXTURE: dev-research.yaml
+          AGENTIC_CONFIG: e2e-dev-research.json
+          SCENARIO: dev-research
 
   test:e2e:agentic:dev:ops-agent:
     desc: Boot stack for the ops-agent scenario (researcher + ops observer). No playwright.
@@ -994,7 +994,7 @@ tasks:
     desc: |
       Boot the agentic E2E stack with custom FIXTURE / AGENTIC_CONFIG env
       vars. For named scenarios prefer the dedicated tasks:
-        task test:e2e:agentic:dev:deep-research
+        task test:e2e:agentic:dev:dev-research
         task test:e2e:agentic:dev:ops-agent
         task test:e2e:agentic:dev:tool-approval
         task test:e2e:agentic:dev:real-time-activity

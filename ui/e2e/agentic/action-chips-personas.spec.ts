@@ -23,7 +23,7 @@ import { test, expect } from "@playwright/test";
  * three persona chips here; approve-next gets its own spec once
  * tool-approval-gate boots end-to-end again.
  *
- * Required config: any working backend that boots the page; deep-research
+ * Required config: any working backend that boots the page; dev-research
  * is fine since this spec doesn't actually send a message.
  *
  * Run via:

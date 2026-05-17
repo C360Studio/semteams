@@ -5,7 +5,7 @@
     "id": "semteams-research",
     "type": "agentic-e2e",
     "region": "local",
-    "instance_id": "deep-research-001",
+    "instance_id": "dev-research-001",
     "environment": "test"
   },
   "tier": "agentic",
@@ -57,7 +57,7 @@
         "http_port": 8080,
         "swagger_ui": true,
         "server_info": {
-          "title": "SemTeams Deep Research E2E",
+          "title": "SemTeams Dev Research E2E",
           "description": "Thin agentic loop for deterministic researcher journey testing",
           "version": "1.0.0"
         }

@@ -11,7 +11,7 @@ window — greenfield codebase, the only existing consumer is rule 02).
 ### Scope: this is for the general research arc, not dev-via-spec specifically
 
 SemTeams supports multiple downstream consumers of research artifacts —
-the deep-research arc terminates at an approved artifact for general
+the dev-research arc terminates at an approved artifact for general
 consumption; the dev-via-spec arc additionally hands off to
 planner/reviewer/challenger/architect/builder; future arcs we haven't
 built yet will inherit the same research substrate. The

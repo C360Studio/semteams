@@ -1,22 +1,22 @@
 name: ops-agent-baseline
 description: |
   Journey: validate ADR-027 Phase 1 (ops-agent read-only diagnostic)
-  end-to-end. Drive 20 deep-research loops serially, then let the
+  end-to-end. Drive 20 dev-research loops serially, then let the
   ops_observe_complete_loops rule fire the ops-analyst on the 20th
   completion. Assert the ops loop runs and produces a completion that
-  cites docs/objectives/deep-research.md.
+  cites docs/objectives/dev-research.md.
 
   Paired spec: ui/e2e/agentic/ops-agent-baseline.spec.ts
   Paired config: configs/e2e-ops-observer.json
 
   Response sequence design:
-    - Deep-research loops are driven SERIALLY by the Playwright spec so
+    - Dev-research loops are driven SERIALLY by the Playwright spec so
       that mock-llm responses are consumed in lockstep (the mock has no
       content-matching — just a sequential queue with last-response
       repeat).
-    - Each deep-research iteration consumes 2 responses: one web_search
+    - Each dev-research iteration consumes 2 responses: one web_search
       tool_call, then one synthesis completion.
-    - 20 iterations × 2 = 40 deep-research responses.
+    - 20 iterations × 2 = 40 dev-research responses.
     - The 20th completion fires the ops rule, which publishes to
       agent.task.ops.analyze. The ops-analyst loop picks up that task
       and begins its own iteration — starting at response #41.
@@ -29,14 +29,14 @@ description: |
       only validate the first ops cycle in this fixture).
 
   web_search uses a stub executor when BRAVE_SEARCH_API_KEY is unset —
-  same pattern as deep-research.yaml. graph_query is a built-in tool.
+  same pattern as dev-research.yaml. graph_query is a built-in tool.
 
-  Deep-research responses use a shared YAML anchor (&dr_search,
+  Dev-research responses use a shared YAML anchor (&dr_search,
   &dr_synth) to keep the fixture readable.
 
 responses:
   # -----------------------------------------------------------------
-  # Deep-research iterations 1-20 — each pair (search + synthesis)
+  # Dev-research iterations 1-20 — each pair (search + synthesis)
   # consumed by one researcher loop. See anchor definitions below.
   # -----------------------------------------------------------------
 
@@ -115,7 +115,7 @@ responses:
   # Tool calls land as opaque arguments_json strings — the framework
   # tool executors validate the schema. Evidence entity IDs use the
   # platform pattern c360.semteams-research.* established by the
-  # deep-research e2e config; the mock backend's tool handlers
+  # dev-research e2e config; the mock backend's tool handlers
   # accept these without strict existence checks.
   # -----------------------------------------------------------------
 
@@ -140,8 +140,8 @@ responses:
       name: emit_diagnosis
       arguments_json: |
         {
-          "finding": "baseline primary metric established for deep-research over 20-loop window",
-          "recommendation": "no action — observation only. Per docs/objectives/deep-research.md, baseline value will inform future Pareto comparisons.",
+          "finding": "baseline primary metric established for dev-research over 20-loop window",
+          "recommendation": "no action — observation only. Per docs/objectives/dev-research.md, baseline value will inform future Pareto comparisons.",
           "confidence": 0.85,
           "evidence": [
             "c360.semteams-research.agent.loop.completed.window-1",
@@ -157,7 +157,7 @@ responses:
       arguments_json: |
         {
           "finding": "token cost p95 within Pareto secondary regression budget",
-          "recommendation": "no action — observation only. Per docs/objectives/deep-research.md secondary metric deep_research_tokens_p95, no failure-mode pattern matched.",
+          "recommendation": "no action — observation only. Per docs/objectives/dev-research.md secondary metric dev_research_tokens_p95, no failure-mode pattern matched.",
           "confidence": 0.75,
           "evidence": [
             "c360.semteams-research.agent.loop.completed.window-1",
@@ -172,5 +172,5 @@ responses:
       name: submit_work
       arguments_json: |
         {
-          "summary": "Two findings emitted for deep-research baseline window: primary metric baseline established (high confidence), token cost within Pareto budget (medium confidence). Both observation-only; no recommended actions per docs/objectives/deep-research.md."
+          "summary": "Two findings emitted for dev-research baseline window: primary metric baseline established (high confidence), token cost within Pareto budget (medium confidence). Both observation-only; no recommended actions per docs/objectives/dev-research.md."
         }

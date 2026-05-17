@@ -136,8 +136,8 @@ func TestConfigDispatchDefaultToolsParse(t *testing.T) {
 		},
 		// Empty arrays — explicit "no tools for initial role." The wire
 		// distinguishes nil (field absent) from [] (explicit empty).
-		"e2e-agentic.json":       {expected: []string{}},
-		"e2e-deep-research.json": {expected: []string{}},
+		"e2e-agentic.json":      {expected: []string{}},
+		"e2e-dev-research.json": {expected: []string{}},
 	}
 
 	configs, err := filepath.Glob("../../configs/*.json")

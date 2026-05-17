@@ -34,7 +34,7 @@ import (
 // only fires when one is present.
 //
 // Five configs deliberately have neither (onboarding.json,
-// e2e-agentic.json, e2e-deep-research.json, e2e-ops-observer.json,
+// e2e-agentic.json, e2e-dev-research.json, e2e-ops-observer.json,
 // e2e-research-with-source.json) — those are intentional minimalism
 // that the post-smoke-#8 audit deferred per-config decision on. If
 // any of them grows graph-ingest later, this test catches the missing

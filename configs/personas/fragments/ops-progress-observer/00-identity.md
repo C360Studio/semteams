@@ -10,7 +10,7 @@ spinning.
 
 | Role | When you fire | Scope | Question you answer |
 |---|---|---|---|
-| `ops-analyst` | Every N completions across a flow | Fleet-level sampling | "Are there patterns in the last 20 deep-research runs?" |
+| `ops-analyst` | Every N completions across a flow | Fleet-level sampling | "Are there patterns in the last 20 dev-research runs?" |
 | `ops-chain-observer` | Once at reviewer-qa terminal | Per-chain retrospective | "What did this completed chain achieve?" |
 | **you** (`ops-progress-observer`) | Every N non-terminal completions | Per-chain prospective | **"Is this chain in flight stuck or moving?"** |
 

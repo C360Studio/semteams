@@ -1,12 +1,16 @@
-# Objective: deep-research
+# Objective: dev-research
 
-Flow config: `configs/deep-research.json`.
+Flow config: `configs/dev-research.json`. (Pre-2026-05-17 this chain
+was named `deep-research`; the rename to `dev-research` reflects its
+software-domain identity — researcher arc with source-repo substrate
+acquisition via semsource. Existing metric identifiers below carry
+the new prefix.)
 
 ## 1. Primary metric
 
-**Name**: `deep_research_task_success_rate`
+**Name**: `dev_research_task_success_rate`
 
-**Formula**: Over a window of completed deep-research loops, fraction
+**Formula**: Over a window of completed dev-research loops, fraction
 that satisfy **all three** of the following:
 
 - `agent.loop.outcome = success` on the root research loop.
@@ -19,22 +23,22 @@ Expressed as a graph query:
 ```
 count(loops where outcome=success AND has_evidence_count >= 3 AND synthesis.present=true)
 /
-count(loops where flow_name=deep-research AND state=completed)
+count(loops where flow_name=dev-research AND state=completed)
 ```
 
 **Direction**: up.
 
 **Baseline**: TBD. Establish from the first 20 completed production
-deep-research loops after ADR-028 Layer 1 + the beta.8 consolidation
+dev-research loops after ADR-028 Layer 1 + the beta.8 consolidation
 landed (f91c3d6, 2026-04-17). The spec is emitting findings against
 an unmeasured baseline is itself a finding the ops agent should
 surface.
 
 ## 2. Secondary metrics (Pareto axes)
 
-### `deep_research_cost_usd_p95`
+### `dev_research_cost_usd_p95`
 
-**Formula**: p95 of `LoopCostUSD` across completed deep-research
+**Formula**: p95 of `LoopCostUSD` across completed dev-research
 loops in the window.
 
 **Direction**: down.
@@ -44,7 +48,7 @@ p95 cost by up to 20% if the primary success rate improves by ≥5
 absolute points. Larger cost rises must be flagged explicitly in the
 finding and surface to human review before any Phase 2 action.
 
-### `deep_research_iterations_p95`
+### `dev_research_iterations_p95`
 
 **Formula**: p95 of the iteration count per loop (from
 `LoopIterationCount` or equivalent predicate).
@@ -55,7 +59,7 @@ finding and surface to human review before any Phase 2 action.
 primary improves. A large iteration increase without a primary
 improvement is the signal of a broken tuning, not a Pareto tradeoff.
 
-### `deep_research_tokens_p95`
+### `dev_research_tokens_p95`
 
 **Formula**: p95 of `LoopTokensTotal`.
 
@@ -77,7 +81,7 @@ agent's reasoning and should be self-rejected before emission.
   The ops agent may propose *adding* names to this list; it may not
   propose removing any.
 - `agentic-tools.enable_categories` — must remain `true` where the
-  deep-research config sets it.
+  dev-research config sets it.
 - Model floor — the researcher role must never be proposed to a model
   smaller than Haiku-class. Downgrading below Haiku reliably collapses
   synthesis quality without a visible metric signal.
@@ -132,7 +136,7 @@ even if they score well on the primary.
 
 ## 5. Evaluation window
 
-**Window size**: 20 completed deep-research loops per flow.
+**Window size**: 20 completed dev-research loops per flow.
 
 **Rationale**: Small enough to be achievable at current adoption
 (roughly a week of production usage in early deployments, less once
@@ -143,5 +147,5 @@ wide but serviceable for Phase 1 diagnostic purposes. Phase 3
 Pareto evaluation will need larger windows.
 
 **Trigger**: the `configs/rules/ops/observe-complete-loops.json`
-rule fires once every 20 completed deep-research loops (tracked via
+rule fires once every 20 completed dev-research loops (tracked via
 rule cooldown), publishing a task to the ops agent flow.

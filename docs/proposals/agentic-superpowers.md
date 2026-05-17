@@ -135,7 +135,7 @@ Schema validation and governance already exist. Sandbox evaluation and approval 
 
 Four pre-built flow configurations composing existing components. No new code required.
 
-### Deep Research Flow
+### Dev Research Flow (originally "Deep Research")
 
 **Pattern**: Question -> classifier -> researcher (iterative search + graph queries) -> synthesizer -> answer
 
