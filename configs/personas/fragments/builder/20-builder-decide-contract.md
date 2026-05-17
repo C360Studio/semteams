@@ -31,8 +31,8 @@ Exactly one of:
 builder_decide(
   action: "tests_passing",
   reason: "<one-sentence summary citing the artifact target — e.g.
-           'OSH driver implements IDriver, surefire reports 5/5
-           tests passing on the radio→OGC CS path'>",
+           'cron scheduler implements Scheduler, surefire reports 5/5
+           tests passing on the cron→job-runner path'>",
   tests_run: <int, MUST be > 0>,
   tests_passed: <int>,
   tests_failed: <int, typically 0 — but if a test was
@@ -40,9 +40,9 @@ builder_decide(
                   reflect the actual surefire output, not what
                   you wish it said>,
   artifact_summary: "<short description of what was built — e.g.
-                     'OSGi bundle target/com.example.osh-1.0.0.jar
-                     with bnd-generated MANIFEST.MF; 5 unit tests
-                     across MyDriverTest and MyDriverConfigTest'>"
+                     'jar artifact target/com.example.scheduler-1.0.0.jar
+                     with generated MANIFEST.MF; 5 unit tests
+                     across SchedulerTest and SchedulerConfigTest'>"
 )
 ```
 
@@ -67,8 +67,8 @@ deliverable, not the process.
 ```
 builder_decide(
   action: "tests_failing",
-  reason: "<one-sentence summary — e.g. 'driver compiles but
-           MeshSensorAdapterTest fails parsing radio packets;
+  reason: "<one-sentence summary — e.g. 'scheduler compiles but
+           CronParserTest fails on Quartz-style expressions;
            iteration budget exhausted at 8 of 8'>",
   tests_run: <int, REQUIRED — set to 0 if compilation failed
               before surefire ran. The key must always be
@@ -77,11 +77,11 @@ builder_decide(
   failure_summary: "<concrete failure citation — name the test
                     method or the compile error, name the file,
                     name the actual symptom. Not 'tests broken'
-                    — 'MeshSensorAdapterTest.testParse expected
-                    MeshPacket envelope, got null at line 47'>",
+                    — 'CronParserTest.testQuartz expected
+                    next-fire timestamp, got null at line 47'>",
   retry_hint: "<actionable hint for the next attempt — what to
                try differently. Not 'fix the failures' — 'thread
-               the parser context through the adapter
+               the timezone context through the parser
                constructor; current call sites pass nil'. The
                next builder spawn reads this verbatim.>"
 )
@@ -112,17 +112,17 @@ failure or a concrete next step, the right answer is
 builder_decide(
   action: "needs_clarification",
   reason: "<the ambiguity in the spec, in your own words — e.g.
-           'spec names the OGC CS endpoint for sensor updates as
-           required but does not specify whether heartbeats route
-           to /sensor/update or /sensor/event; both are
-           defensible and produce observably different
-           integrations'>",
+           'spec names the job-runner endpoint for triggered
+           runs as required but does not specify whether
+           heartbeat fires route to /jobs/heartbeat or
+           /jobs/trigger; both are defensible and produce
+           observably different integrations'>",
   blocking_question: "<the single specific question that
                       unblocks you — e.g. 'should heartbeat
-                      packets publish to /sensor/event
-                      (per OGC observation semantics) or
-                      /sensor/update (per the actor.role
-                      description in the spec)?'>"
+                      fires publish to /jobs/heartbeat
+                      (per the actor.role description in
+                      the spec) or /jobs/trigger (per the
+                      integration_point data flow)?'>"
 )
 ```
 
@@ -189,12 +189,12 @@ budget cleanly regardless of how many you had remaining.
              test phase due to Maven dependency-resolution failure",
     tests_run: 0,
     tests_failed: 0,
-    failure_summary: "pom.xml references osh-sdk:2.0.x which
-                      Maven Central returned 404 for; build
+    failure_summary: "pom.xml references quartz-scheduler:3.0.x
+                      which Maven Central returned 404 for; build
                       blocked at iteration 1 dependency-resolve
                       and never recovered",
-    retry_hint: "pin osh-sdk to the exact version listed in the
-                 spec's actors[].version field (likely 1.x);
+    retry_hint: "pin quartz-scheduler to the exact version listed
+                 in the spec's actors[].version field (likely 2.x);
                  confirm Maven Central index has it before next
                  attempt"
   )

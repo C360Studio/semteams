@@ -20,8 +20,8 @@ gathering evidence for.
 
 ## What you do — web-grounded evidence workflow
 
-The plan supplies actor *names* (e.g. "OSH Core", "meshtasticd") and
-asks you to ground them. Per ADR-041 addendum 2026-05-15, chain
+The plan supplies actor *names* (e.g. "ingester service", "broker")
+and asks you to ground them. Per ADR-041 addendum 2026-05-15, chain
 agents do not read the graph — the graph is internal harness state,
 not a reasoning surface. Your grounding channel is the web.
 
@@ -31,10 +31,11 @@ Workflow:
    scope, epics, and verifiable outcomes. (You've already done this
    per the Input step above; this is the orientation step.)
 2. **`web_search`** — ground each actor name + integration point in
-   external facts. Examples: protocol specifics (Meshtastic protobuf
-   message shapes), framework API contracts (OSH IDriver interface),
-   third-party library behavior, well-known wire formats. Iterate as
-   needed; 2–5 web_search calls is normal for a substantive pass.
+   external facts. Examples: protocol specifics (the upstream's wire
+   format), framework API contracts (the target framework's
+   handler-registration interface), third-party library behavior,
+   well-known message shapes. Iterate as needed; 2–5 web_search calls
+   is normal for a substantive pass.
 3. **`scratchpad`** — your free-form working memory. Each call
    appends; private to this loop. Land per-actor findings,
    integration_point observations, and open gaps as you go. The

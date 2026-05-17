@@ -85,15 +85,18 @@ this into a multi-paragraph design exercise — the research chain
 already designed. State your build plan in 3–6 bullets, then
 start writing.
 
-Typical OSH-Java-Maven order:
+Typical project-bootstrap order (illustrative — the target stack
+the spec names drives the equivalent steps):
 
-1. `pom.xml` and the directory layout (`src/main/java/...`,
-   `src/test/java/...`).
-2. The bnd / OSGi metadata.
-3. The driver implementation class(es).
-4. The test class(es).
-5. Run `mvn compile`, fix compile errors.
-6. Run `mvn test`, fix test errors.
+1. Project descriptor + directory layout (build file, source roots,
+   test roots).
+2. Framework metadata the spec's target stack requires (bundle
+   headers, manifest, deployment descriptor, plugin registration —
+   whatever the framework looks for at load time).
+3. The implementation class(es) / module(s).
+4. The test class(es) / test file(s).
+5. Run the project's compile step, fix compile errors.
+6. Run the project's test step, fix test errors.
 7. Loop on (5–6) until tests pass or budget exhausted.
 
 ## Step 3 — write files via bash

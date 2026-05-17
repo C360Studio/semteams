@@ -16,22 +16,22 @@ For each verifiable outcome the upstream chain accepted, emit one
 or more checks where the check's `target` field is the outcome's
 substance:
 
-- Outcome (planner prose): *"When meshtasticd publishes POSITION_APP
-  from node 0xABCD on TCP/4403, the driver emits a CS API observation
-  within 500ms with non-null SensorML schema and matching node_id."*
+- Outcome (planner prose): *"When `inotifyd` reports an `IN_CLOSE_WRITE`
+  event on `/var/spool/incoming/*.csv`, the watcher emits within 500ms
+  a `file.ingested` event on the outbound queue with non-null
+  `sha256` digest and matching `path`."*
 
 - Check (your transcription):
   ```
   {
-    target: "driver emits CS API observation within 500ms when
-             meshtasticd publishes POSITION_APP from node 0xABCD on
-             TCP/4403; observation has non-null SensorML schema and
-             matching node_id",
-    runtime: "external-sidecar",
-    test_harness: "meshtasticd-2.x",
+    target: "watcher emits file.ingested event within 500ms when
+             inotifyd reports IN_CLOSE_WRITE on /var/spool/incoming/*.csv;
+             event has non-null sha256 digest and matching path",
+    runtime: "process-local-testcontainer",
+    test_harness: "filewatcher-1.x",
     test_runtime: "java-junit-testcontainers",
     ref: { type: "template_id",
-           id: "tcp.binary-protobuf.java-junit-testcontainers.v1" },
+           id: "fs.inotify.java-junit-testcontainers.v1" },
     evidence: [...]
   }
   ```
@@ -46,10 +46,11 @@ If a single outcome has both unit-testable AND integration-testable
 substance, emit one check per layer:
 
 - Unit-level: `runtime: in-process-unit` covers the in-language
-  logic (e.g. "POSITION_APP unmarshalling produces correct
-  SensorML field mapping").
-- Integration-level: `runtime: external-sidecar` covers the
-  end-to-end claim ("real meshtasticd → real observation").
+  logic (e.g. "CSV row parsing produces correct
+  `file.ingested` field mapping").
+- Integration-level: `runtime: process-local-testcontainer` covers
+  the end-to-end claim ("real inotify event → real outbound
+  publish").
 
 Both targets paraphrase the same outcome at different abstraction
 levels. Reviewer (spec-mode)'s coverage check is satisfied by
@@ -58,8 +59,8 @@ either layer having at least one check.
 ## When one check → multiple outcomes
 
 If two outcomes describe behaviors a single integration test
-naturally exercises (e.g. "POSITION_APP → observation" AND
-"non-POSITION_APP → no observation"), one check whose `target`
+naturally exercises (e.g. "matching glob → file.ingested" AND
+"non-matching glob → no file.ingested"), one check whose `target`
 references both is fine — but the check's evidence rules should
 structurally enforce both behaviors (e.g. two `test_asserts_subject`
 rules with different expected counts).
@@ -77,7 +78,7 @@ rules with different expected counts).
   ```
   decide(action="needs_clarification",
          reason="Verifiable-outcomes coverage incomplete:
-                 integration_point Meshtastic-radio→OSH-driver-framework
+                 integration_point filesystem→watcher
                  has no outcome in PLAN's enumerated list. PLAN
                  needs to enumerate what observable behavior would
                  prove this integration is working.")
@@ -108,8 +109,9 @@ verifiable-outcomes list one final time. For each:
 - Did I emit at least one check whose target captures this
   outcome's substance?
 - Does the check's runtime / test_harness / test_runtime fit the
-  outcome's substance? (e.g. an outcome about "real meshtasticd
-  packet" needs `external-sidecar`, not `in-process-unit`.)
+  outcome's substance? (e.g. an outcome about "real inotify
+  event" needs `process-local-testcontainer` or
+  `external-sidecar`, not `in-process-unit`.)
 
 If either answer is no for any outcome, fix before calling the tool.
 The tool itself doesn't enforce coverage (that's the reviewer's job

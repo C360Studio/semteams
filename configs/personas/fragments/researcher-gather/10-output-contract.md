@@ -20,9 +20,9 @@ scratchpad entry covers one of:
 - **An integration point**: what flows between two actors, the
   direction, the entity IDs grounding the claim.
 - **A task you decomposed**: concrete deliverable language (not
-  "build an X"; rather "implement OSH IDriver backed by
-  Meshtastic radio events, exposing OGC CS observation
-  endpoints").
+  "build an X"; rather "implement the service's `Handler`
+  interface backed by the upstream JSON-RPC dispatcher, returning
+  a typed response envelope per the API spec").
 - **A gap**: a thing the plan anticipated but the corpus didn't
   surface, with the queries you tried.
 

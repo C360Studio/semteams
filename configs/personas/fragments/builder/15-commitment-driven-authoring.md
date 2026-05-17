@@ -13,12 +13,12 @@ writing code. The shape is:
 ### C1 — <target — the verifiable claim>
 
 - **Runtime**: `process-local-testcontainer`
-- **Test harness**: `meshtasticd-2.x`
-- **Image**: `meshtastic/meshtasticd:2.7.23-alpine`
-- **TCP exposes**: port 4403 (`meshtastic-protobuf`)
+- **Test harness**: `grpc-service-1.x`
+- **Image**: `examplecorp/echo-service:1.2.0`
+- **TCP exposes**: port 50051 (`grpc`)
 - **Test runtime**: `java-junit-testcontainers`
 - **Ref**: filepath `src/test/java/.../FooIT.java`
-           OR template `tcp.binary-protobuf.java-junit-testcontainers.v1`
+           OR template `tcp.grpc.java-junit-testcontainers.v1`
 - **Evidence rules**:
   - `kind1`
   - `kind2`
@@ -139,16 +139,16 @@ A representative Java + Testcontainers shape:
 
 ```java
 @Testcontainers
-class MeshtasticdIntegrationIT {
+class GrpcServiceIntegrationIT {
 
     @Container
-    static GenericContainer<?> meshtasticd =
-        new GenericContainer<>("meshtastic/meshtasticd:2.7.23-alpine")
-            .withExposedPorts(4403)
+    static GenericContainer<?> echoService =
+        new GenericContainer<>("examplecorp/echo-service:1.2.0")
+            .withExposedPorts(50051)
             .waitingFor(Wait.forListeningPort());
 
     @Test
-    void positionAppPacketProducesObservation() {
+    void echoRequestProducesEchoResponse() {
         // Drive test_harness with the check's named input;
         // assert the check's named output claim.
     }
@@ -192,9 +192,9 @@ what to write before the iteration loop starts.
   already runs (the first-user WTF support"
   explicitly structures against).
 - **Pick a different test_harness image than the catalog says.**
-  Operators curate the catalog. If `meshtasticd-2.x` points at
-  `meshtastic/meshtasticd:2.7.23-alpine`, you do not silently swap to
-  `:3.6.0` because one looks fresher. Different image = different
+  Operators curate the catalog. If `grpc-service-1.x` points at
+  `examplecorp/echo-service:1.2.0`, you do not silently swap to
+  `:2.0.0` because one looks fresher. Different image = different
   smoke-contract surface = different verification semantics.
 - **Skip the test_harness on testcontainer checks to "save iteration
   budget."** A check with `runtime=process-local-testcontainer` and

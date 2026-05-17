@@ -26,7 +26,7 @@ researcher-architect or operator needs to resolve the gap.
     does not exist in workspace` → builder didn't write the
     test the researcher-architect committed to.
   - `[fail] surefire_passing_count: expected ≥ 3 passing tests
-    across suites matching "MeshtasticdIT" (1 suites:
+    across suites matching "PromExporterIT" (1 suites:
     [...]), got 1` → the test exists but didn't exercise the
     claim deeply enough.
   - `[fail] test_uses_build_tag: file "foo_test.go" has
@@ -83,13 +83,13 @@ the overall verdict is the conjunction:
 
 Block 1:
 ```
-## Check 1 — driver emits CS API observation when meshtasticd publishes POSITION_APP
+## Check 1 — exporter emits /metrics line within 500ms when sensor sample arrives
 
 Aggregate: 2 pass / 0 fail / 0 unknown / 0 error / total 2 — ALL PASSED
 
 Per-rule:
 - [pass] surefire_passing_count
-- [pass] test_file_exists: src/test/java/com/example/MeshtasticdIT.java
+- [pass] test_file_exists: src/test/java/com/example/PromExporterIT.java
 ```
 
 Reading: every rule satisfied. If this is the only check and
@@ -97,7 +97,7 @@ builder tests_passing, accept.
 
 Block 2:
 ```
-## Check 1 — driver emits CS API observation when meshtasticd publishes POSITION_APP
+## Check 1 — exporter emits /metrics line within 500ms when sensor sample arrives
 
 Aggregate: 0 pass / 0 fail / 1 unknown / 0 error / total 1 — NOT all passed
 
@@ -113,13 +113,13 @@ wiring the registry) can fix.
 
 Block 3:
 ```
-## Check 1 — driver emits CS API observation when meshtasticd publishes POSITION_APP
+## Check 1 — exporter emits /metrics line within 500ms when sensor sample arrives
 
 Aggregate: 1 pass / 1 fail / 0 unknown / 0 error / total 2 — NOT all passed
 
 Per-rule:
 - [pass] surefire_passing_count
-- [fail] test_file_exists: path "src/test/java/com/example/MeshtasticdIT.java" does not exist in workspace
+- [fail] test_file_exists: path "src/test/java/com/example/PromExporterIT.java" does not exist in workspace
 ```
 
 Reading: surefire reports passing tests, but the cited test

@@ -14,10 +14,10 @@ manifest for that harness:
 
 ```json
 {
-  "meshtasticd-2.x": {
-    "id": "meshtasticd-2.x",
-    "image": "meshtastic/meshtasticd:2.7.23-alpine",
-    "ports": {"meshtastic-protobuf": 4403},
+  "graphql-server-1.x": {
+    "id": "graphql-server-1.x",
+    "image": "examplecorp/graphql-server:1.4.0",
+    "ports": {"graphql-http": 4000},
     "tooling_pins": [
       {
         "groupId": "org.testcontainers",
@@ -51,7 +51,7 @@ specific version; if a pin's note names a known incompatibility (e.g.
 "earlier versions hardcode API X but the daemon is at API Y"), trust the
 operator's research.
 
-Example pom snippet for the meshtasticd-2.x manifest above:
+Example pom snippet for the graphql-server-1.x manifest above:
 
 ```xml
 <dependencies>
@@ -82,17 +82,17 @@ the manifest. Instantiate a `GenericContainer<?>` with those exact values:
 
 ```java
 @Testcontainers
-class MeshtasticdIntegrationIT {
+class GraphqlResolverIntegrationIT {
 
     @Container
-    static GenericContainer<?> meshtasticd =
-        new GenericContainer<>("meshtastic/meshtasticd:2.7.23-alpine")  // from manifest.image
-            .withExposedPorts(4403)                                     // from manifest.ports value
+    static GenericContainer<?> graphqlServer =
+        new GenericContainer<>("examplecorp/graphql-server:1.4.0")  // from manifest.image
+            .withExposedPorts(4000)                                  // from manifest.ports value
             .waitingFor(Wait.forListeningPort());
 
     @Test
-    void positionAppPacketProducesObservation() {
-        int port = meshtasticd.getMappedPort(4403);
+    void queryProducesExpectedResolverResponse() {
+        int port = graphqlServer.getMappedPort(4000);
         // connect to localhost:port and drive the harness
     }
 }

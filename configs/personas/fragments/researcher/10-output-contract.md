@@ -32,9 +32,9 @@ Notes on shape:
 - `integration_points` enumerates every actor-to-actor data flow
   with direction. Be explicit about which actor reads from which.
 - `tasks` are decomposable, not aspirational. "Build an
-  X" is too coarse. "Implement OSH `IDriver` interface backed by
-  Meshtastic radio events, exposing OGC CS observation endpoints"
-  is the right granularity.
+  X" is too coarse. "Implement the controller's `Reconciler`
+  interface backed by CRD watch events, emitting status-subresource
+  updates on the parent CRD" is the right granularity.
 - `addressed_gaps` is empty on the first pass; populated on retries.
 - `open_gaps` exists so an honest "I could not find this" beats
   invention.
