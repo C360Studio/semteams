@@ -12,7 +12,7 @@ opener, 2026-05-17). The shared persona corpus should be
 harness-level by design; domain-flavor belongs in chain-scoped
 overlays. Today the shared corpus has drifted toward software
 domain. This audit is the first step toward separating them so
-non-software prompt classes (OSINT, comparative analysis,
+non-software prompt classes (web research, comparative analysis,
 decision memo, etc.) can opt into a clean harness layer.
 
 This document is the artifact of Phase 2a (classification only —
@@ -49,8 +49,8 @@ OSH-cleanup branch).
 
 - **harness** — describes a persona's job (decide-action contract,
   output-contract structure, tool-usage discipline) without
-  assuming software-shaped substrate. Usable as-is for OSINT,
-  comparative analysis, decision memo, etc.
+  assuming software-shaped substrate. Usable as-is for web
+  research, comparative analysis, decision memo, etc.
 - **software-domain** — assumes software-shaped substrate (source
   repos, test_harness, checks[]), or invokes software-flavored
   emission tools (emit_research_artifact, emit_plan,
@@ -223,14 +223,16 @@ encodes.
 
 ### 2. Standing up a non-software chain today requires a fresh corpus
 
-If we want an OSINT chain, we cannot inherit `researcher-plan` /
-`researcher-gather` / `researcher-synthesize` /
-`reviewer-research` from the shared corpus and add OSINT-specific
-fragments on top. Most of those roles' fragments either invoke
-software-flavored emission tools or describe software-flavored
-artifact shapes that don't fit OSINT findings (`actors`,
-`integration_points`, `tasks`, `checks[]` are wrong for "summary,
-key findings, sources, confidence").
+If we want a web-research chain (source-grounded research over
+web substrate, OSINT-influenced discipline applied as the quality
+bar), we cannot inherit `researcher-plan` / `researcher-gather` /
+`researcher-synthesize` / `reviewer-research` from the shared
+corpus and add chain-specific fragments on top. Most of those
+roles' fragments either invoke software-flavored emission tools
+or describe software-flavored artifact shapes that don't fit
+research findings (`actors`, `integration_points`, `tasks`,
+`checks[]` are wrong for "summary, key findings, sources with
+confidence, open questions").
 
 ### 3. The harness-level fragments are real but thin
 
@@ -276,8 +278,8 @@ impact.
 
 ## Recommendation for Phase 2b
 
-When Phase 2b lands (likely concurrent with the OSINT chain
-config), the structural target is:
+When Phase 2b lands (likely concurrent with the web-research
+chain config), the structural target is:
 
 ```
 configs/personas/
@@ -300,7 +302,7 @@ configs/personas/
 │   │   ├── researcher-gather/  # post-split (software portion: forward refs)
 │   │   ├── reviewer-research/  # post-split (software portion: harness-gate)
 │   │   └── ops-chain-observer/ # post-split (software-coupled framing)
-│   └── osint/                  # new, when OSINT chain ships
+│   └── web-research/           # new, when web-research chain ships
 │       └── ...
 ```
 
@@ -311,10 +313,10 @@ once per overlay path. Last-writer-wins semantics already
 supported by `persona.LoadFromDirectory`.
 
 This is a meaty change (file moves + product-shell wiring + chain
-config schema), worth scoping when there is concrete OSINT-chain
-work to justify it. Pre-OSINT, this audit alone is the
-deliverable: it tells future contributors what's harness vs
-software and pre-empts the next OSH-style drift.
+config schema), worth scoping when there is concrete
+web-research chain work to justify it. Pre-web-research, this
+audit alone is the deliverable: it tells future contributors
+what's harness vs software and pre-empts the next OSH-style drift.
 
 ## Defending against future drift (interim)
 
