@@ -10,6 +10,18 @@ populated**. Chain-mode machinery (`chainmode.actionToMode`,
 `phasevalidator.allowedEdges`, `chainstall.detectRejection`) is the
 hardcoded workaround for the empty template inventory.
 
+> **2026-05-17 §Phase 2 redesign — see the addendum at the end of this ADR.**
+> After Phase 1/4/2a shipped (PRs #168/#169/#170), a deeper
+> re-investigation revealed the template-driven-flow framing was
+> the wrong unit for MVP. The corrected design uses
+> **category-keyed rule packs + named persona bundles** running
+> through the framework's existing singleton substrate — no
+> runtime flow construction needed for MVP. The Phase 1/4/2a
+> work stays as **post-MVP scaffolding** for runtime category
+> creation. The original Decision and Phasing sections below
+> reflect pre-redesign thinking; the addendum is the active
+> direction. Read the addendum first.
+
 **Break/fix migration, not additive.** Greenfield posture: we
 build the template-driven path, validate it end-to-end, then
 delete the chain-mode machinery + concrete configs in the same
@@ -637,3 +649,252 @@ machinery, but the templates need to encode equivalent guarantees:
 
 These are not blockers for the ADR — they're the investigation
 agenda for Phases 1-4.
+
+---
+
+## 2026-05-17 §Phase 2 redesign — substrate-plus-overlays, not template instantiation
+
+After Phases 1, 4, and 2a shipped (PRs #168, #169, #170), the
+"5-20KB of escaped JSON per template" framing for Phase 2b
+triggered Coby's pushback ("i do not like the sounds of this").
+A second investigation — re-reading the framework's primitives
+with a different question — revealed that **the template-driven
+flow instantiation model was the wrong unit of work for MVP**.
+This addendum captures the corrected design. The Decision and
+Phasing sections above reflect pre-redesign thinking and are
+preserved for the historical record; this addendum is the active
+direction.
+
+### What changed in the framework reading
+
+The original ADR assumed: "to add a task class, the coordinator
+authors a flow template, instantiates it at runtime, deploys it
+into a fresh component set." That assumes per-task-class
+isolation via separate component instances. The re-investigation
+asked: **why do we need separate component instances at all?**
+
+The answer turned out to be "we mostly don't." The framework
+supports running multiple task classes through a **singleton
+substrate**:
+
+- **One `agentic-loop` instance** drives all task classes.
+  Subscribes to a broad subject (`agent.task.>`); per-task
+  `task.Role` selects the persona; per-task `task.Tools`
+  narrows the LLM-visible tool list; per-task `task.Model`
+  selects the LLM.
+- **One `agentic-tools` instance** with a broad
+  `allowed_tools` ceiling enforces the executor-side safety
+  floor; per-task `task.Tools` (set by rules via
+  `publish_agent` actions) narrows what the LLM actually
+  sees.
+- **One `rule-processor` instance** loads all rule packs via
+  the existing hot-reload `rule.ConfigManager` (KV-watched).
+  Rules pattern-match on event shape and chain context to
+  fire only for their target task class.
+- **One `persona.Manager` instance** reads the global
+  `PERSONAS` KV bucket. Fragments are tagged with `Roles`
+  — which the framework treats as **named addressable
+  bundles**, not just "cognitive role labels." A task with
+  `task.Role = "researcher-web"` pulls exactly the fragments
+  tagged with that name. Bespoke personas are first-class
+  invokable units under this addressing model.
+
+The persona-scoping "gap" from the first investigation pass was
+answering the wrong question. The original framing was "can two
+different `agentic-loop` instances have different persona
+scopes?" — which is moot when there's only one instance.
+Bespoke per-task-class personas are achieved by **creating
+named persona-fragment dirs and addressing them via the role
+field on the task** — exactly the convention the framework's
+addressing system already supports.
+
+### What an MVP task class actually is
+
+A task class = **{ rule pack + named persona bundle + tool
+allowlist + initial role }**. None of these require new
+component instances. Adding a task class = adding rule files +
+persona files + a coordinator-routing entry. Removing one =
+deleting them.
+
+```
+configs/
+  flow-bootstrap.json        # single substrate config: agentic-* + graph-* + http + rule-processor + coordinator's agentic-loop
+  rules/
+    coordinator/             # classifier rules (existing, post-#157-#162)
+    research/                # research-class rule pack
+    web-research/            # web-research-class rule pack
+    dev-via-spec/            # dev-via-spec-class rule pack
+  personas/fragments/
+    coordinator/             # shared classifier (post-#163-#165 cleanup)
+    researcher-research/     # bespoke researcher persona for the research class
+    researcher-web/          # bespoke researcher persona for the web-research class
+    reviewer-research/       # shared reviewer scope (or split per-class as needed)
+    builder-dev/             # dev-via-spec builder persona
+    ...
+```
+
+The framework's `Roles` field on each Persona is the
+addressing key. `task.Role = "researcher-web"` pulls only the
+`researcher-web/*.md` fragments. Coordinator routes by setting
+the role on the spawned task.
+
+### Coordinator's job under the corrected model
+
+Single responsibility: **classify the user prompt into a task
+category, emit `decide(action=<category>)`**. The rule layer
+takes it from there:
+
+1. User prompt arrives → coordinator agentic-loop spawns
+2. Coordinator emits `decide(action=research | web_research | dev_via_spec | ...)`
+3. Category-keyed rule (e.g. `configs/rules/research/01-spawn-researcher.json`) pattern-matches the action, publishes the next agent task with the right role + tools + model
+4. The chain progresses through rule-driven hand-offs until terminal
+5. Reviewer's `decide(action=approved | insufficient | needs_clarification)` terminates the chain or kicks off recovery
+
+This is **essentially what coordinator Slices 1/2 (PRs
+#155-#162) shipped** — minus the chain.mode/phasevalidator/
+chainstall Go machinery that was layered on top. Rules
+pattern-matching on `coordinator.decision.next_action`
+already discriminates task class; we don't need a Go enum for
+it. The chain-mode machinery was the workaround for not
+trusting the rule layer to do its own pattern-matching with a
+clean rule pack per class.
+
+### MVP scope (the new authoritative scope)
+
+| Phase | Work | Touchpoints |
+|---|---|---|
+| **MVP-1** | Bootstrap config wiring the substrate singletons. Replaces `configs/dev-research.json` + `configs/osh-demo.json` as the single boot config. Authored once; runtime adds task classes around it. | `configs/flow-bootstrap.json` |
+| **MVP-2** | Category-keyed rule packs. 2-3 task classes ship in the inventory: `research`, `web-research`, `dev-via-spec`. Each pack is the classic Slice 1/2 shape — spawn rules, terminal handlers, recovery routes — without chain.mode gating. | `configs/rules/<category>/*.json` |
+| **MVP-3** | Named persona inventory. Bespoke researcher / reviewer / builder bundles per category. Builds on the post-#163-#165 cleaned-up shared corpus. | `configs/personas/fragments/<persona-name>/*.md` |
+| **MVP-4** | Coordinator persona teaching the classifier the closed category taxonomy. `decide(action=<category>)` is the terminal. | `configs/personas/fragments/coordinator/*.md` (extend) |
+| **MVP-5** | Mock-LLM journey validating coordinator → category-keyed rule → spawn → terminal end-to-end. | `ui/e2e/agentic/coordinator-category-*.spec.ts` |
+| **MVP-6** | Real-LLM smoke per category (~$0.30-$0.50 per category). | Manual run |
+| **MVP-7** (was original Phase 6) | Migration cut: delete `cmd/semteams/{chainmode,phasevalidator,chainstall}/`; delete the legacy concrete configs; rewrite docs. Single atomic PR. | Reviewer-pass required. |
+
+### MVP debt assessment
+
+**Effectively zero on the framework axis.** The corrected design
+uses framework primitives as intended:
+
+- `Persona.Roles` as the named-bundle addressing key (correct
+  use; just nomenclature is overloaded with "cognitive role")
+- `task.Role` / `task.Tools` / `task.Model` on the task envelope
+  (existing per-task scoping mechanisms, used as designed)
+- `rule.ConfigManager` hot-reload (existing, used as designed)
+- Rule pattern-matching on `coordinator.decision.next_action`
+  triples (existing, used as designed)
+
+**Authoring discipline only**: persona dir names must match
+the role tokens the coordinator emits and the rules expect.
+A single contract test pins this three-way consistency.
+
+### Post-MVP path (what the original ADR was building toward)
+
+Runtime category creation — coordinator authors a new task class
+when no existing one matches a prompt — IS still the long-term
+direction. It requires:
+
+- `flowtemplate.Manager` substrate + tool surface (already
+  available, primed by **PR #168** Phase 1 loader)
+- `deploy_flow` / `start_flow` agent tools (already available,
+  primed by **PR #169** Phase 4 wiring)
+- Reference templates for the inventory (primed by **PR #170**
+  Phase 2a skeletons; full bodies are post-MVP work)
+- Approval-loop UX for "coordinator wants to create this new
+  task class" (post-MVP UI work)
+- Possibly: `persona.Config.BucketName` upstream so per-flow
+  persona scopes can be cleanly isolated (post-MVP if at all
+  — role-suffixing is the workable convention until the
+  inventory exceeds ~10 task classes)
+
+**All three Phase 1/4/2a PRs stay as post-MVP scaffolding.**
+They cost zero MVP friction — the loaders + tools sit primed
+but unused until the post-MVP work activates them.
+
+### What the original ADR text gets right
+
+- **Supersession set** (ADR-037, ADR-039, chain-mode work) —
+  still correct. The migration cut still happens; the
+  replacement is cleaner under the corrected design (rules
+  encode their own valid transitions per category, no global
+  Go gate).
+- **What we learned from chain machinery** — still relevant.
+  Structural-gate discipline, recovery cap, per-reject-reason
+  routing — all become per-category rule-pack design
+  constraints rather than chain.mode Go code.
+- **ADR-038 chain entity** stays — lineage substrate is
+  flow-shape-agnostic and remains useful for any task class
+  that spans multiple loops.
+- **ADR-041 4-role roster** stays — researcher / reviewer /
+  builder / coordinator are the cognitive functions; named
+  persona bundles (`researcher-web`, `reviewer-research`)
+  are addressed under those role names with chain-suffixes.
+
+### What the original ADR text gets wrong
+
+- **"Templates are the only unit of prompt-class definition"
+  (§Decision High-level)** — wrong for MVP. The unit is
+  category-keyed rule packs + named persona bundles. Templates
+  are the post-MVP unit for runtime category creation.
+- **"Each template's body is a full flow JSON"
+  (§Decision Templates parameterize chain shape)** — wrong
+  for MVP. Skeleton templates from PR #170 stand as
+  post-MVP exploration; MVP doesn't need full bodies.
+- **Phases 2b through 5 as originally framed** —
+  superseded by the MVP-1 through MVP-7 table above. The
+  original phases are still useful as the post-MVP
+  expansion sequence.
+
+### Open questions closed by this redesign
+
+- **Original OQ-1 (Phase 4 deploy closure)** — resolved
+  in the §Phase 4 addendum above. Closure stays available
+  for post-MVP.
+- **Original OQ-2 (rule-engine chained tool calls)** —
+  resolved by the §Phase 4 investigation. Not blocking;
+  agents (not rules) sequence tool calls when needed.
+- **Original OQ-3 (multi-flow process)** — confirmed
+  supported but **not needed for MVP**. The corrected
+  design uses singleton substrate, not multi-flow.
+- **Original OQ-4 (parameter typing)** — moot for MVP;
+  becomes a real question post-MVP if/when runtime
+  template instantiation is wired.
+- **Original OQ-5 (approval-loop UX)** — post-MVP UI work.
+
+### New open questions
+
+1. **Recovery routing per category** — coordinator Slice 2
+   shipped chainstall + per-reject-reason routing. Under
+   the redesign, each category's rule pack owns its own
+   recovery routes. Smoke-test that a category's reject
+   handlers compose cleanly without the chainstall
+   primitive. May need a small recovery-rule pattern in
+   each pack.
+2. **Persona naming convention** — `researcher-web` vs
+   `researcher.web` vs `web-research-researcher`? Settle
+   on one before authoring MVP-3 to avoid renaming later.
+   Recommend `<role>-<category>` (e.g. `researcher-web`)
+   so the role prefix sorts together.
+3. **Contract test scope** — assert (persona dir names) ∪
+   (role tokens emitted by coordinator) ∪ (role names
+   referenced in rule actions) are mutually consistent.
+   Single test, three sets. Catches the "added a category
+   but forgot to update the coordinator persona" class of
+   bug at commit time.
+
+### Sequencing for the next session
+
+1. Draft MVP-1 (bootstrap config). Should it derive from
+   `configs/dev-research.json` or be authored fresh from the
+   substrate-singletons design? Either approach works;
+   fresh authoring keeps the boot config small and explicit.
+2. Pick the first MVP category to ship end-to-end. Lean:
+   `research` (closest to existing chain shape; easiest to
+   validate the redesign against the smoke we already have).
+3. After MVP-1 + one category lands and validates on
+   mock-LLM, parallelize MVP-2/3 for the remaining
+   categories.
+
+The migration cut (MVP-7) waits for all categories +
+real-LLM validation. Same posture as the original ADR's
+Phase 6 — atomic deletion PR with reviewer pass.
