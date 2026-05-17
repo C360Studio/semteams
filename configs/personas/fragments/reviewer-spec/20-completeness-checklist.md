@@ -38,8 +38,8 @@ names an external actor).
       need, etc. Doesn't have to be a section called Context; the
       `context` field is the content channel.
 - [ ] **Does `context` reference at least one actor from `actors[]`?**
-      The narrative should name an actor explicitly — "the OSH driver
-      framework's `IDriver` interface" — not just "the driver."
+      The narrative should name an actor explicitly — "the migration
+      runner's `Migrator` interface" — not just "the runner."
 
 ## 3. Actors and integration_points
 
@@ -57,8 +57,8 @@ names an external actor).
       flows data between actors and `integration_points[]` is empty,
       that's a gap — the architect needs to enumerate the flows.
 - [ ] **Does `data` on each integration_point name what flows
-      concretely?** "Data" alone is not concrete; "MeshPacket
-      protobuf messages" or "POSITION_APP packets" is.
+      concretely?** "Data" alone is not concrete; "DDL upgrade
+      statements" or "schema-version increment events" is.
 
 ## 4. Tasks decomposition
 

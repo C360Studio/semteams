@@ -1,11 +1,9 @@
 # Stabilisation gate
 
-Before applying the OSH driver checklist (or any other prompt-
-specific checklist), apply the **stabilisation gate** introduced
-in of. The gate codifies the addendum 2026-04-30
-"Stabilisation as converged change-log" model: a research arc is
-stabilised when the reviewer's checklist passes AND the latest
-revision had no new substrate mutations.
+Before applying the plan-conformance check (or any other
+prompt-specific grading), apply the **stabilisation gate**: a
+research arc is stabilised when the reviewer's grading passes
+AND the latest revision had no new substrate mutations.
 
 The substrate-mutations check is your responsibility, not a
 rule's. Rules don't synthesise structured judgments from
@@ -30,9 +28,9 @@ Concretely:
                   against augmented corpus before approval")
    ```
 
-4. **If the count is zero**, proceed to the standard
-   prompt-specific checklist. Approve only if all checklist
-   items are present and well-formed.
+4. **If the count is zero**, proceed to the plan-conformance
+   check. Approve only if every plan substance bucket maps to
+   artifact content.
 
 Why this lives here and not in a rule: the rule engine cannot
 read the artifact's `substrate_mutations` array. Rules match on
@@ -40,10 +38,9 @@ metadata triples and predicate substitution is string-only — they
 cannot count entries in a nested array. The reviewer (you) reads
 the artifact, you apply the predicate, you emit the structured
 terminal decision (`decide`), and the stabilisation rule (rule
-03) trusts that decision. 2026-04-30
-"Framework-alignment review for emission shape" pins this
-contract.
+03) trusts that decision. 2026-04-30 "Framework-alignment review
+for emission shape" pins this contract.
 
-The stabilisation gate fires before the prompt-specific
-checklist. A retry with new mutations is `insufficient` regardless
-of what else the artifact covers.
+The stabilisation gate fires before plan-conformance grading. A
+retry with new mutations is `insufficient` regardless of what else
+the artifact covers.

@@ -43,10 +43,11 @@ For each entry in `checks[]`:
 
 - [ ] **Is `target` a concrete verifiable claim?** Each check's
       `target` field names a specific input, a specific output,
-      and (when relevant) a timing/threshold. "The driver works"
-      is not a target — flag it. "When a `POSITION_APP` packet
-      arrives on the radio, the driver emits a position triple
-      within 500ms" is.
+      and (when relevant) a timing/threshold. "The consumer works"
+      is not a target — flag it. "When a record with key
+      `order_created` arrives on the Kafka topic, the consumer
+      commits an offset and emits a downstream `order.ack` within
+      500ms" is.
 - [ ] **Is `target` observable, not internal?** "Tests pass" is a
       process state, not a behavior. "Successfully starts" is a
       lifecycle event, not a behavior. Real targets describe
@@ -90,17 +91,17 @@ integration_points.
 
 ## Examples of substance gaps that warrant `insufficient`
 
-- *"`integration_points[]` lists the Meshtastic radio as an
+- *"`integration_points[]` lists the Kafka broker as an
   external actor but `checks[]` is empty. Cannot proceed: builder
   has no verifiable target for the external integration."*
-- *"Check #2 target is 'driver receives data and forwards it' —
-  not concrete; names neither input message type nor output shape.
-  Tighten to specific protobuf message types and observation
+- *"Check #2 target is 'consumer receives data and forwards it' —
+  not concrete; names neither input record key nor output shape.
+  Tighten to specific Kafka record keys and downstream message
   schema."*
-- *"Check #1 target is 'the driver successfully starts.' That's a
+- *"Check #1 target is 'the consumer successfully starts.' That's a
   lifecycle event, not a behavior. Replace with a target that
-  describes what the driver DOES once started."*
-- *"`integration_points[]` entry `meshtastic-radio → osh-driver`
+  describes what the consumer DOES once started."*
+- *"`integration_points[]` entry `kafka-broker → order-consumer`
   has no covering check. Builder has no proof surface for this
   external integration."*
 

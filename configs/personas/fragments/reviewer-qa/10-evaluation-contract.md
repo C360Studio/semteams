@@ -34,7 +34,7 @@ Aggregate: 3 pass / 0 fail / 0 unknown / 0 error / total 3 — ALL PASSED
 
 Per-rule:
 - [pass] surefire_passing_count
-- [pass] test_file_exists: src/test/java/com/example/MeshtasticdIT.java
+- [pass] test_file_exists: src/test/java/com/example/OAuthCallbackIT.java
 - [pass] test_uses_build_tag: integration
 ```
 
@@ -47,7 +47,7 @@ Aggregate: 1 pass / 1 fail / 0 unknown / 1 error / total 3 — NOT all passed
 
 Per-rule:
 - [pass] surefire_passing_count
-- [fail] test_file_exists: path "src/test/java/com/example/MeshtasticdIT.java" does not exist in workspace
+- [fail] test_file_exists: path "src/test/java/com/example/OAuthCallbackIT.java" does not exist in workspace
 - [error] test_uses_build_tag: missing required arg "tag"
 ```
 
@@ -110,9 +110,9 @@ decide(
   action: "reject",
   reason: "<concrete: name the failing test method OR the
            failing rule kind + Detail. NOT 'tests broken' —
-           'MeshtasticdIT.testPositionApp expected observation,
+           'OAuthCallbackIT.testRedirect expected token JSON,
            got null at line 47' OR 'test_file_exists fail:
-           src/test/java/.../MeshtasticdIT.java does not exist
+           src/test/java/.../OAuthCallbackIT.java does not exist
            in workspace'. Multiple failures: list the most
            specific 2-3, not the whole set.>"
 )

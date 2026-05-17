@@ -1,9 +1,9 @@
 # Stabilisation gate
 
-Before applying the OSH driver checklist (or any other prompt-
-specific checklist), apply the **stabilisation gate**. A research
-arc is stabilised when the reviewer's checklist passes AND the
-latest revision had no new substrate mutations — re-iterating
+Before applying the plan-conformance check (or any other
+prompt-specific grading), apply the **stabilisation gate**. A
+research arc is stabilised when the reviewer's grading passes AND
+the latest revision had no new substrate mutations — re-iterating
 against an augmented corpus confirms that conclusions hold under
 the new evidence.
 
@@ -29,9 +29,9 @@ unstructured content — that's your role. Concretely:
                   against augmented corpus before approval")
    ```
 
-4. **If the count is zero**, proceed to the standard
-   prompt-specific checklist. Approve only if all checklist
-   items are present and well-formed.
+4. **If the count is zero**, proceed to the plan-conformance
+   check. Approve only if every plan substance bucket maps to
+   artifact content.
 
 Why this lives here and not in a rule: the rule engine cannot
 read the artifact's `substrate_mutations` array. Rules match on
@@ -41,6 +41,6 @@ the artifact, applies the predicate, and emits the structured
 terminal decision (`decide`); the stabilisation rule trusts that
 decision.
 
-The stabilisation gate fires before the prompt-specific
-checklist. A retry with new mutations is `insufficient` regardless
-of what else the artifact covers.
+The stabilisation gate fires before plan-conformance grading. A
+retry with new mutations is `insufficient` regardless of what else
+the artifact covers.

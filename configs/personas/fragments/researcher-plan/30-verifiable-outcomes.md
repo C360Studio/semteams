@@ -21,10 +21,11 @@ write an integration test from it without making up missing pieces.
 
 **Concrete (verifiable):**
 
-- *"When meshtasticd publishes a protobuf POSITION_APP packet on
-  TCP/4403 from node 0xABCD, the driver MeshtasticSensorModule emits
-  within 500ms a CS API observation with non-null SensorML schema and
-  matching node_id."*
+- *"When the sensor adapter receives a timeseries sample
+  `{name=cpu_temp, value=72.3, ts=…}` on the inbound TCP socket
+  from device `0xABCD`, the adapter exposes within 500ms a
+  Prometheus-format `/metrics` line `cpu_temp{device="0xABCD"} 72.3`
+  with matching `device` label."*
 - *"When the user clicks 'Create flow' on /admin/flows, a POST to
   /flowbuilder/flows is issued with valid JSON and the redirect lands
   on the new flow's edit page."*
@@ -34,11 +35,11 @@ write an integration test from it without making up missing pieces.
 
 **Too vague (reject):**
 
-- *"The driver works."* — names neither input nor output.
+- *"The adapter works."* — names neither input nor output.
 - *"Tests pass."* — describes a process, not an observable behavior.
 - *"The integration is solid."* — no falsifiable claim.
-- *"Receives Meshtastic data and forwards it."* — "Meshtastic data"
-  isn't a message type; "forwards" isn't an output shape.
+- *"Receives sensor data and forwards it."* — "sensor data" isn't a
+  message type; "forwards" isn't an output shape.
 
 **Too narrow (reject — covers nothing the implementer can't trivially satisfy):**
 

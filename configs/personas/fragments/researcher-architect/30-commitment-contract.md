@@ -17,7 +17,8 @@ is required. The integration_point's direction (`read`/`write`)
 doesn't matter — both shapes are external-actor work. Examples
 that REQUIRE a check:
 
-- Driver reads protobuf packets from `meshtasticd` on TCP/4403.
+- Watcher reads `IN_CLOSE_WRITE` events from `inotifyd` on a
+  shared volume.
 - Service writes events to a Kafka topic.
 - UI navigates to `/admin/flows` and the user clicks Create.
 - Tool POSTs to a third-party REST API.
@@ -68,10 +69,10 @@ The `target` field is the verifiable outcome restated in claim-
 shape — same words the planner used, structured to read like a
 falsifiable claim. The `runtime` field is YOUR classification of
 how that claim gets verified. If you find an outcome whose
-substance doesn't fit any runtime (e.g. "meshtasticd's RF physics
-behaviour" — no daemon-side fixture exists), that's the chain's
-gap, not your invention; see "When the chain didn't enumerate
-enough" below.
+substance doesn't fit any runtime (e.g. "inotifyd's kernel-side
+event coalescing behaviour" — no daemon-side fixture exists),
+that's the chain's gap, not your invention; see "When the chain
+didn't enumerate enough" below.
 
 ## Brownfield vs greenfield — the ref field
 
