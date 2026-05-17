@@ -3,7 +3,7 @@ module github.com/c360studio/semteams
 go 1.26.3
 
 require (
-	github.com/c360studio/semstreams v1.0.0-beta.72
+	github.com/c360studio/semstreams v1.0.0-beta.76
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
 	github.com/nats-io/nats.go v1.48.0
@@ -100,6 +100,7 @@ require (
 	golang.org/x/crypto v0.50.0 // indirect
 	golang.org/x/mod v0.34.0 // indirect
 	golang.org/x/net v0.53.0 // indirect
+	golang.org/x/oauth2 v0.34.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/sys v0.43.0 // indirect
 	golang.org/x/text v0.36.0 // indirect
