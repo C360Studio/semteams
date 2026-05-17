@@ -12,6 +12,7 @@ import (
 type CLIConfig struct {
 	ConfigPath           string
 	PersonaFragmentsPath string
+	FlowTemplatesPath    string
 	HarnessCatalogPath   string
 	// WorkspaceRoot is the absolute path where the sandbox mounts builder
 	// workspaces (one sub-directory per loopID). The evidence preprocessor
@@ -47,6 +48,10 @@ func parseFlags() *CLIConfig {
 	flag.StringVar(&cfg.PersonaFragmentsPath, "persona-fragments",
 		getEnv("SEMSTREAMS_PERSONA_FRAGMENTS_PATH", "configs/personas/fragments"),
 		"Directory tree of per-role persona fragment files (env: SEMSTREAMS_PERSONA_FRAGMENTS_PATH). Missing dir is a warning, not fatal.")
+
+	flag.StringVar(&cfg.FlowTemplatesPath, "flow-templates",
+		getEnv("SEMTEAMS_FLOW_TEMPLATES_PATH", "configs/flow-templates"),
+		"Directory of flat *.json flow-template files seeded into the FLOW_TEMPLATES KV bucket at boot (env: SEMTEAMS_FLOW_TEMPLATES_PATH). Missing dir is a warning, not fatal. ADR-042 Phase 1.")
 
 	flag.StringVar(&cfg.HarnessCatalogPath, "harness-catalog",
 		getEnv("SEMTEAMS_HARNESS_CATALOG_PATH", "configs/harnesses.json"),

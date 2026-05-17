@@ -37,6 +37,7 @@ import (
 	"github.com/c360studio/semteams/cmd/semteams/chainpause"
 	"github.com/c360studio/semteams/cmd/semteams/chainstall"
 	"github.com/c360studio/semteams/cmd/semteams/evidence"
+	"github.com/c360studio/semteams/cmd/semteams/flowtemplates"
 	"github.com/c360studio/semteams/cmd/semteams/phasevalidator"
 	"github.com/c360studio/semteams/cmd/semteams/portresolver"
 	"github.com/c360studio/semteams/cmd/semteams/recoverycounter"
@@ -160,11 +161,17 @@ func run() error {
 	// testHarnessMgr feeds the /harnesses HTTP middleware (R3.7.1.f).
 	personaMgr, testHarnessMgr := loadPlatformAssets(ctx, natsClient, cliCfg, slog.Default())
 
+	// 9b-bis. Seed the FLOW_TEMPLATES KV bucket from configs/flow-templates/.
+	// ADR-042 Phase 1. Must run before setupToolsAndPreprocessor so the
+	// list_flow_templates tool sees the inventory on first call. Manager
+	// is threaded through to RegisterBuiltins via the deps struct.
+	flowTemplateMgr := loadFlowTemplates(ctx, natsClient, cliCfg.FlowTemplatesPath, slog.Default())
+
 	// 9c–9f. Build + register tool executors, start the evidence preprocessor
 	// (ADR-036 §Phase 2), and start the chain-pause subscriber (ADR-037 v1).
 	// Extracted to keep run() under revive's function-length threshold while
 	// keeping the ordering invariant: tools before svcDeps, preprocessors after.
-	toolRegistry, chainPauseHTTP, err := setupToolsAndPreprocessor(ctx, cfg, natsClient, platform, configManager, componentRegistry, personaMgr, testHarnessMgr, cliCfg.WorkspaceRoot, slog.Default())
+	toolRegistry, chainPauseHTTP, err := setupToolsAndPreprocessor(ctx, cfg, natsClient, platform, configManager, componentRegistry, personaMgr, flowTemplateMgr, testHarnessMgr, cliCfg.WorkspaceRoot, slog.Default())
 	if err != nil {
 		return err
 	}
@@ -214,6 +221,7 @@ func setupToolsAndPreprocessor(
 	configManager *config.Manager,
 	componentRegistry *component.Registry,
 	personaMgr *persona.Manager,
+	flowTemplateMgr *flowtemplate.Manager,
 	testHarnessMgr *testharness.Manager,
 	workspaceRoot string,
 	logger *slog.Logger,
@@ -235,7 +243,7 @@ func setupToolsAndPreprocessor(
 		RuleManager:         buildRuleManager(ctx, natsClient, configManager, logger),
 		FlowManager:         buildFlowManager(natsClient, logger),
 		PersonaManager:      personaMgr,
-		FlowTemplateManager: buildFlowTemplateManager(natsClient, logger),
+		FlowTemplateManager: flowTemplateMgr,
 		ComponentRegistry:   componentRegistry,
 		LoopsBucket:         extractLoopsBucket(cfg),
 		SkipBuiltins:        []string{"bash"},
@@ -592,13 +600,49 @@ func buildFlowManager(natsClient *natsclient.Client, logger *slog.Logger) execut
 
 // buildFlowTemplateManager constructs a flowtemplate.Manager (KV-backed
 // template CRUD + render). Nil on init failure → registerFlowTemplates
-// skips. Independent reimplementation per ADR-029.
-func buildFlowTemplateManager(natsClient *natsclient.Client, logger *slog.Logger) executors.FlowTemplateManager {
+// skips and the seed loader becomes a no-op. Independent reimplementation
+// per ADR-029.
+//
+// Returns the concrete *flowtemplate.Manager rather than the
+// executors.FlowTemplateManager interface so the same instance can be
+// threaded into both the seed loader (ADR-042 Phase 1) and the
+// agentic-tools deps struct. The concrete type satisfies the interface
+// implicitly.
+func buildFlowTemplateManager(natsClient *natsclient.Client, logger *slog.Logger) *flowtemplate.Manager {
 	mgr, err := flowtemplate.NewManager(natsClient)
 	if err != nil {
 		logger.Warn("flow-template tools disabled: could not initialise flow-template store",
 			"error", err)
 		return nil
+	}
+	return mgr
+}
+
+// loadFlowTemplates seeds the FLOW_TEMPLATES KV bucket from a directory
+// of flat *.json files. Mirror of loadPersonaFragments — same boot-time
+// upsert pattern with a different manager. ADR-042 Phase 1.
+//
+// Returns the manager threaded through so the caller can pass it into
+// the agentic-tools deps struct alongside other Pattern-B managers.
+// Nil manager and missing directory are both non-fatal: the manager
+// being nil disables the template tools entirely; a missing directory
+// just means the operator hasn't authored any templates yet.
+func loadFlowTemplates(ctx context.Context, natsClient *natsclient.Client, root string, logger *slog.Logger) *flowtemplate.Manager {
+	mgr := buildFlowTemplateManager(natsClient, logger)
+	if mgr == nil {
+		return nil
+	}
+	if root == "" {
+		logger.Debug("flow-templates path empty, skipping seed")
+		return mgr
+	}
+	logger.Info("loading flow templates", "root", root)
+	if err := flowtemplates.LoadFromDirectory(ctx, root, mgr, logger); err != nil {
+		logger.Warn("flow-template loader reported errors",
+			"path", root,
+			"error", err)
+		// Return the manager anyway — partial seed is better than no
+		// template CRUD tooling, same posture as loadPersonaFragments.
 	}
 	return mgr
 }
