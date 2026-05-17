@@ -340,22 +340,79 @@ appears in the FLOW_DEFINITIONS KV bucket. Don't deploy yet.
 
 ### Phase 4: Deploy / dispatch closure
 
-This is the load-bearing unknown. Investigate the framework's
-multi-flow runtime first; pick a closure based on findings.
+**Closure picked: Option 1 (upstream `deploy_flow` tool family).**
+Phase 4 investigation 2026-05-17 resolved this — see addendum below.
 
-Best-case (option 1 in §"Open question"): upstream lands
-`deploy_flow` agent tool. Phase 4 becomes "allowlist `deploy_flow`
-in coordinator config under approval_required, write the rule
-that fires after approval to call deploy, write the journey."
+Semteams-side work after upstream lands:
 
-Worst-case (no upstream support and Phase 1's framework alignment
-review uncovers no clean path): product-shell rule action wraps
-the HTTP call into `flowengine.Deploy(flowID)`. Less clean but
-unblocks runtime-flow-changes.
+- Add `buildFlowEngine(configMgr, flowMgr, componentRegistry,
+  natsClient, metricsRegistry, logger) *flowengine.Engine` next to
+  `buildFlowManager` (~25 LoC).
+- Refactor `buildFlowManager` to return `*flowstore.Manager`
+  (concrete) so the same instance threads into both
+  `ToolDependencies.FlowManager` and `flowengine.NewEngine`. Mirrors
+  the `*flowtemplate.Manager` refactor from Phase 1.
+- Thread `metricsRegistry` and the engine through
+  `setupToolsAndPreprocessor` into the deps struct's
+  `FlowEngineManager` field.
+- Coordinator config: allowlist `deploy_flow` and `start_flow` under
+  `approval_required` so coordinator-authored flows route through
+  human approval before going live. `stop_flow` and `undeploy_flow`
+  follow the same gating posture but may not be needed in v1.
 
 **Exit criteria:** Real-LLM smoke (Phase 5 below) shows a user
 prompt produces a deployed running flow that handles the task
 end-to-end, instantiated from a template the coordinator picked.
+
+#### Addendum (2026-05-17): Phase 4 investigation findings
+
+The investigation surfaced three load-bearing facts that resolved
+the closure without ambiguity:
+
+1. **Multi-flow runtime works today.** `service/component_manager.go`
+   already watches `semstreams_config` KV
+   (`OnChange("components.*")`) and dynamically creates + starts new
+   components when new keys appear with `Enabled: true`
+   (`handleComponentConfigUpdate` → `createAndStartComponent`).
+   `flowengine.Engine.Deploy` writes per-component configs to that
+   bucket; `Engine.Start` flips `Enabled: true`. No process
+   restart needed. **Option 3 (process restart) ruled out.**
+
+2. **`flowengine.Engine` is constructible from product-shell.** All
+   six deps (`*config.Manager`, `*flowstore.Manager`,
+   `*component.Registry`, `*natsclient.Client`, `*slog.Logger`,
+   `*metric.MetricsRegistry`) are already in scope at
+   `setupToolsAndPreprocessor`. ~10 LoC to construct.
+
+3. **Rule engine doesn't sequence tool calls — agents do.** The
+   rule engine's `Actions []Action` union does not include a
+   `publish_tool` action; tool dispatch goes through
+   `publish_agent` (which spawns a loop that itself calls N tools
+   in sequence). So the coordinator's `decide` loop handles
+   `instantiate_flow_template` → `create_flow` → `deploy_flow` →
+   `start_flow` as four LLM-driven tool calls within one loop,
+   not as four rule fires. This **resolves ADR-042 open question
+   2** in §"Open questions".
+
+The upstream PR (~300 LoC: `flow_lifecycle.go` executor +
+`FlowEngineManager` interface in `ToolDependencies` + gate in
+`RegisterBuiltins`) was filed against semstreams and shipped in
+**beta.76**. Tool surface: `deploy_flow`, `start_flow`,
+`stop_flow`, `undeploy_flow`, each taking `flow_id: string`.
+`*flowengine.Engine` satisfies the new interface by duck typing.
+
+**Option 2 (product-shell tactical bridge) ruled out** because
+the upstream PR landed on a fast cycle — no need to ship throwaway
+code.
+
+**Pre-Phase-2 prereq surfaced**: templates may want an
+`auto_start: bool` parameter (default `true`). After `deploy_flow`,
+the flow sits at `RuntimeState = deployed_stopped` until
+`start_flow` lands it at `running`. Default `true` lets the
+coordinator stitch the four-call sequence mechanically. `false`
+puts a human gate between deploy and start (e.g. for templates that
+need approval before live traffic). Mirror upstream's
+`flowstore.RuntimeState` vocabulary rather than inventing a new one.
 
 ### Phase 5: Real-LLM validation on the template path
 

@@ -20,6 +20,7 @@ import (
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/componentregistry"
 	"github.com/c360studio/semstreams/config"
+	flowengine "github.com/c360studio/semstreams/engine"
 	"github.com/c360studio/semstreams/flowstore"
 	"github.com/c360studio/semstreams/flowtemplate"
 	"github.com/c360studio/semstreams/metric"
@@ -171,7 +172,7 @@ func run() error {
 	// (ADR-036 §Phase 2), and start the chain-pause subscriber (ADR-037 v1).
 	// Extracted to keep run() under revive's function-length threshold while
 	// keeping the ordering invariant: tools before svcDeps, preprocessors after.
-	toolRegistry, chainPauseHTTP, err := setupToolsAndPreprocessor(ctx, cfg, natsClient, platform, configManager, componentRegistry, personaMgr, flowTemplateMgr, testHarnessMgr, cliCfg.WorkspaceRoot, slog.Default())
+	toolRegistry, chainPauseHTTP, err := setupToolsAndPreprocessor(ctx, cfg, natsClient, platform, configManager, componentRegistry, personaMgr, flowTemplateMgr, testHarnessMgr, metricsRegistry, cliCfg.WorkspaceRoot, slog.Default())
 	if err != nil {
 		return err
 	}
@@ -223,6 +224,7 @@ func setupToolsAndPreprocessor(
 	personaMgr *persona.Manager,
 	flowTemplateMgr *flowtemplate.Manager,
 	testHarnessMgr *testharness.Manager,
+	metricsRegistry *metric.MetricsRegistry,
 	workspaceRoot string,
 	logger *slog.Logger,
 ) (*agentictools.ExecutorRegistry, *chainpause.HTTPHandler, error) {
@@ -235,15 +237,25 @@ func setupToolsAndPreprocessor(
 	// Metadata["task_id"] to chain_id so every role in a chain shares one
 	// sandbox worktree. SkipBuiltins=[bash] omits the framework bash so
 	// the slot is free for the wrapper.
+	// Build flow manager + engine together so they share a single
+	// *flowstore.Manager instance. Engine writes to semstreams_config KV;
+	// component_manager (upstream) watches that bucket and spins up
+	// components dynamically (multi-flow runtime per ADR-042 §Phase 4
+	// addendum). Nil flow manager → engine nil → registerFlowLifecycle
+	// skips. Same gate posture as the other Pattern-B tools.
+	flowMgr := buildFlowManager(natsClient, logger)
+	flowEngine := buildFlowEngine(configManager, flowMgr, componentRegistry, natsClient, metricsRegistry, logger)
+
 	toolRegistry := agentictools.NewExecutorRegistry()
 	if err := executors.RegisterBuiltins(ctx, toolRegistry, executors.ToolDependencies{
 		NATSClient:          natsClient,
 		Platform:            platform,
 		Logger:              logger,
 		RuleManager:         buildRuleManager(ctx, natsClient, configManager, logger),
-		FlowManager:         buildFlowManager(natsClient, logger),
+		FlowManager:         flowMgr,
 		PersonaManager:      personaMgr,
 		FlowTemplateManager: flowTemplateMgr,
+		FlowEngineManager:   flowEngine,
 		ComponentRegistry:   componentRegistry,
 		LoopsBucket:         extractLoopsBucket(cfg),
 		SkipBuiltins:        []string{"bash"},
@@ -588,7 +600,14 @@ func buildRuleManager(ctx context.Context, natsClient *natsclient.Client, config
 // buildFlowManager constructs a flowstore.Manager (KV-backed flow CRUD).
 // Nil on init failure → registerFlows skips. Independent reimplementation
 // per ADR-029.
-func buildFlowManager(natsClient *natsclient.Client, logger *slog.Logger) executors.FlowManager {
+//
+// Returns the concrete *flowstore.Manager rather than the
+// executors.FlowManager interface so the same instance can be threaded
+// into both the agentic-tools deps struct (for create_flow / get_flow
+// CRUD) and flowengine.NewEngine (for deploy_flow / start_flow
+// lifecycle, ADR-042 Phase 4). The concrete type satisfies the
+// interface implicitly.
+func buildFlowManager(natsClient *natsclient.Client, logger *slog.Logger) *flowstore.Manager {
 	mgr, err := flowstore.NewManager(natsClient)
 	if err != nil {
 		logger.Warn("flow CRUD tools disabled: could not initialise flow store",
@@ -596,6 +615,24 @@ func buildFlowManager(natsClient *natsclient.Client, logger *slog.Logger) execut
 		return nil
 	}
 	return mgr
+}
+
+// buildFlowEngine constructs a flowengine.Engine for ADR-042 Phase 4's
+// deploy_flow / start_flow / stop_flow / undeploy_flow agent tools
+// (semstreams beta.76 surface). Returns nil when the flow manager is
+// nil — registerFlowLifecycle skips when the dep is nil, same gate
+// pattern as the other Pattern-B tools.
+//
+// The engine writes to semstreams_config KV; service/component_manager
+// already watches that bucket and spins up new components dynamically
+// (multi-flow runtime). No restart, no second binary. ADR-042 Phase 4
+// addendum captures the investigation.
+func buildFlowEngine(configMgr *config.Manager, flowMgr *flowstore.Manager, componentRegistry *component.Registry, natsClient *natsclient.Client, metricsRegistry *metric.MetricsRegistry, logger *slog.Logger) *flowengine.Engine {
+	if flowMgr == nil {
+		logger.Warn("flow-lifecycle tools disabled: flow manager is nil")
+		return nil
+	}
+	return flowengine.NewEngine(configMgr, flowMgr, componentRegistry, natsClient, logger, metricsRegistry)
 }
 
 // buildFlowTemplateManager constructs a flowtemplate.Manager (KV-backed
