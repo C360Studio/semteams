@@ -1,0 +1,33 @@
+{
+  "id": "dev-via-spec-pipeline",
+  "name": "Dev-via-Spec Pipeline",
+  "description": "Multi-phase research → architect → builder arc that produces an external integration end-to-end. Coordinator instantiates with target framework and sandbox image; researcher plans against the framework substrate; architect emits the spec; builder authors the integration code; qa-reviewer validates.\n\nPhase 2a skeleton — body is a valid flow shape that passes Flow.Validate but does not yet wire the agentic components or sandbox bootstrap. Phase 2b expands the body to include the legacy configs/osh-demo.json topology (dev-via-spec-style rules, builder workspace, test-harness catalog binding), with parameter substitution at LLM-author-controllable knobs only.",
+  "body": "{\n  \"id\": \"dev-via-spec-{{.target_slug}}\",\n  \"name\": \"Dev-via-Spec: {{.target_framework}}\",\n  \"description\": \"Researcher → architect → builder → qa-reviewer chain producing an integration for {{.target_framework}} (sandbox_image={{.sandbox_image}}, max_iterations={{.max_iterations}}, model={{.model}})\",\n  \"version\": 0,\n  \"runtime_state\": \"not_deployed\",\n  \"nodes\": [],\n  \"connections\": []\n}",
+  "parameters": [
+    {
+      "name": "target_framework",
+      "description": "Human-readable name of the framework or system the builder integrates against (e.g. 'OSH driver', 'Kafka Connect', 'OpenTelemetry collector'). Shown in the flow name.",
+      "default": "generic framework"
+    },
+    {
+      "name": "target_slug",
+      "description": "Kebab-case slug of the target framework. Used in the flow ID. Coordinator derives from target_framework.",
+      "default": "generic-framework"
+    },
+    {
+      "name": "sandbox_image",
+      "description": "Container image the builder workspace bootstraps. Match the target framework's runtime — e.g. 'openjdk:21' for Java-based frameworks, 'python:3.12' for Python.",
+      "default": "alpine:3"
+    },
+    {
+      "name": "max_iterations",
+      "description": "Maximum builder loop iterations before terminal. Multi-phase dev-via-spec arcs typically need 10-20.",
+      "default": "12"
+    },
+    {
+      "name": "model",
+      "description": "LLM endpoint name from the model_registry. Builder/architect phases benefit from frontier models; researcher can use claude-haiku.",
+      "default": "claude-haiku"
+    }
+  ]
+}

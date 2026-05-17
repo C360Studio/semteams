@@ -31,6 +31,19 @@ loader skips non-`.json` files and any nested directories.
 substitution happens when the coordinator calls
 `instantiate_flow_template`.
 
+### A note on slug parameters
+
+Some templates declare a paired `topic` / `topic_slug` (or
+`target_framework` / `target_slug`) parameter. The slug variant
+is coordinator-derived because Go's `text/template` substitution
+is string-only with no built-in funcmap for case-folding or
+slugifying. The coordinator persona (Phase 3) is responsible for
+deriving the kebab-case slug from the human-readable input and
+supplying both parameters when calling `instantiate_flow_template`.
+The contract test pins the rendered flow ID to kebab-case so a
+missing-slug parameter fails loud at boot rather than producing
+unparseable flow IDs at runtime.
+
 ## Loader semantics
 
 - **Source of truth**: files here override any KV entries with the
@@ -46,11 +59,28 @@ substitution happens when the coordinator calls
 
 ## Status
 
-**Phase 1 (ADR-042) seeded an empty inventory.** Phase 2 authors
-the first templates (`research-pipeline`, `dev-via-spec-pipeline`,
-`web-research`). Until then, this directory is intentionally empty
-of `.json` files; the loader logs a debug message and the tool
-surface returns "No flow templates configured."
+**Phase 2a (ADR-042) shipped three skeleton templates:**
+
+| Template | Domain | Parameters |
+|---|---|---|
+| `research-pipeline` | Software (source-repo substrate via semsource) | `topic`, `topic_slug`, `max_iterations`, `model` |
+| `dev-via-spec-pipeline` | Software (researcher → architect → builder) | `target_framework`, `target_slug`, `sandbox_image`, `max_iterations`, `model` |
+| `web-research` | Non-software (web substrate, OSINT discipline) | `topic`, `topic_slug`, `max_sources`, `confidence_threshold`, `model` |
+
+Phase 2a bodies are minimal flow skeletons — they pass
+`Flow.Validate()` (id + name + valid runtime_state + empty
+nodes/connections) but do NOT yet wire the agentic components.
+Phase 2b expands each body to a runnable topology mirroring the
+legacy `configs/dev-research.json` / `configs/osh-demo.json`
+shapes, with parameter substitution at LLM-author-controllable
+knobs only.
+
+The current bodies validate the seed + instantiate path
+end-to-end: coordinator can `list_flow_templates`,
+`get_flow_template`, `instantiate_flow_template`, and the
+rendered flow passes `Flow.Validate()`. They do NOT yet produce
+runnable flows; Phase 5's real-LLM smokes are gated on Phase 2b
+expanding the bodies.
 
 See [`docs/adr/042-coordinator-instantiated-flows-via-templates.md`](../../docs/adr/042-coordinator-instantiated-flows-via-templates.md)
 for the full design.

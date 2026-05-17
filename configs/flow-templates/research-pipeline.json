@@ -1,0 +1,28 @@
+{
+  "id": "research-pipeline",
+  "name": "Research Pipeline",
+  "description": "Software-domain researcher arc with source-repo substrate via semsource. Coordinator instantiates with a topic; researcher plans, gathers, synthesizes; reviewer-research approves and replies to the user.\n\nPhase 2a skeleton — body is a valid flow shape that passes Flow.Validate but does not yet wire the agentic components. Phase 2b expands the body to include agentic-dispatch / agentic-loop / agentic-tools / agentic-memory / graph-ingest / rule-processor nodes mirroring the legacy configs/dev-research.json topology, with parameter substitution at the LLM-author-controllable knobs only.",
+  "body": "{\n  \"id\": \"research-pipeline-{{.topic_slug}}\",\n  \"name\": \"Research: {{.topic}}\",\n  \"description\": \"Researcher arc for topic {{.topic}} (max_iterations={{.max_iterations}}, model={{.model}})\",\n  \"version\": 0,\n  \"runtime_state\": \"not_deployed\",\n  \"nodes\": [],\n  \"connections\": []\n}",
+  "parameters": [
+    {
+      "name": "topic",
+      "description": "Human-readable research topic. Shown in the flow name and description.",
+      "default": "general research"
+    },
+    {
+      "name": "topic_slug",
+      "description": "Kebab-case slug of the topic. Used in the flow ID. Coordinator derives from topic.",
+      "default": "general-research"
+    },
+    {
+      "name": "max_iterations",
+      "description": "Maximum researcher loop iterations before terminal. Higher for deep research, lower for quick lookups.",
+      "default": "5"
+    },
+    {
+      "name": "model",
+      "description": "LLM endpoint name from the model_registry. claude-haiku is the cost-effective default; bump to claude-sonnet for harder topics.",
+      "default": "claude-haiku"
+    }
+  ]
+}
