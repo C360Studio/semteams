@@ -4,17 +4,65 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 # SemTeams Project Context
 
-SemTeams is the reference/demo product for agentic teams built on the
-[semstreams](https://github.com/c360studio/semstreams) framework. It has
-**no custom Go components** — every processor comes from semstreams via the
-`github.com/c360studio/semstreams` Go module dependency. The product is the
-Svelte UI, the flow-template config library, the docs, and the
-product-shell wiring in `cmd/semteams/`.
+SemTeams is a **configurable agentic harness** built on the
+[semstreams](https://github.com/c360studio/semstreams) framework
+— the infrastructure that wraps an LLM with tools, memory,
+triggers, context, and channels so the model can *operate* rather
+than answer one-shot prompts. SemStreams owns the components
+(`agentic-dispatch`, `agentic-loop`, `agentic-memory`,
+`agentic-tools`, `agentic-governance`, plus graph/I/O processors,
+gateways, NATS clients). SemTeams owns the product-shell wiring,
+the chain-template library, the shared persona corpus, the Svelte
+UI, and the docs.
 
-> **Note**: The repo's `README.md` is the upstream **SemStreams** README
-> (framework getting-started). It is NOT SemTeams-specific. Use this
-> CLAUDE.md and `docs/adr/029-product-shell-wiring.md` as the
-> authoritative entry points for SemTeams-specific context.
+**There are no custom Go components in SemTeams.** Every processor
+comes from semstreams via the `github.com/c360studio/semstreams`
+Go module dependency. The product shell in `cmd/semteams/` (~600
+LoC) independently wires every framework primitive per ADR-029.
+
+## Bundled chains are illustrative configurations, not the product
+
+The chain templates under `configs/` demonstrate what the harness
+can run. Each config wires a different persona corpus + rule set +
+tool allowlist for a different *prompt class*:
+
+- `osh-demo.json` — **software domain.** Multi-phase research →
+  architect → builder arc that builds an external integration
+  end-to-end.
+- `deep-research.json` — **software domain.** Researcher arc with
+  source-repo substrate acquisition (semsource integration).
+- `e2e-coordinator.json` — chain-shape agnostic; exercises
+  coordinator-driven routing between chains.
+- `onboarding.json` — interview-style intent classification with
+  the `/onboard` command.
+
+**A chain template's domain is part of its identity.** When the
+chain reads source repos, asks a builder to produce code, or
+grounds research against software-shaped substrate, it is a
+*software-domain* chain — and the naming, the example shapes, and
+the bundled persona fragments should make that explicit. The
+shared persona corpus at `configs/personas/fragments/` carries
+harness-level guidance only (decide contracts, output structure,
+tool discipline) and stays domain-neutral by design.
+
+Adding a new prompt class — OSINT brief, comparative analysis,
+decision memo, whatever the next ask is — is a **new chain
+config**, optionally a new emit tool with a domain-fit artifact
+shape, optionally chain-scoped persona fragments. It is **not** a
+rewrite of the shared corpus or the product shell. The goal is
+runtime flexibility: the harness chooses (or is told) which chain
+to run for a given prompt; domain flavor lives in the chain, not
+in the harness.
+
+This framing matters because the corpus has historically drifted
+toward whichever chain was being smoked at the time. The audit
+behind PR #163 (2026-05-17) stripped that accretion; the
+`personas-describe-job-not-plumbing` memory captures the rule.
+
+> **Note**: The repo's `README.md` is the upstream **SemStreams**
+> README (framework getting-started). It is NOT SemTeams-specific.
+> Use this CLAUDE.md and `docs/adr/029-product-shell-wiring.md` as
+> the authoritative entry points for SemTeams-specific context.
 
 ## Tech Stack
 
