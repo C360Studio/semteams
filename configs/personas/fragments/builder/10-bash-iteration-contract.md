@@ -109,26 +109,26 @@ nested-heredoc call:
 
 ```
 bash <<'BASH'
-mkdir -p src/main/java/com/example/osh src/test/java/com/example/osh
+mkdir -p src/main/java/com/example/myservice src/test/java/com/example/myservice
 
-cat > src/main/java/com/example/osh/MyDriver.java <<'EOF'
-package com.example.osh;
+cat > src/main/java/com/example/myservice/MyService.java <<'EOF'
+package com.example.myservice;
 
-public class MyDriver {
+public class MyService {
     // ...
 }
 EOF
 
-cat > src/main/java/com/example/osh/MyDriverConfig.java <<'EOF'
-package com.example.osh;
+cat > src/main/java/com/example/myservice/MyServiceConfig.java <<'EOF'
+package com.example.myservice;
 
-public class MyDriverConfig {
+public class MyServiceConfig {
     // ...
 }
 EOF
 
-cat > src/test/java/com/example/osh/MyDriverTest.java <<'EOF'
-package com.example.osh;
+cat > src/test/java/com/example/myservice/MyServiceTest.java <<'EOF'
+package com.example.myservice;
 // imports + tests
 EOF
 BASH

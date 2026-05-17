@@ -9,21 +9,9 @@ what the plan committed to.
 
 ## Step 1 — read the plan
 
-Walk lineage from your task properties or the chain entity to the
-PLAN-phase loop, then read its terminal:
-
-```
-read_loop_result(prior_loop_id=$entity.triple.lineage.researcher)
-```
-
-(If `lineage.researcher` points at the SYNTHESIZE loop rather than
-PLAN — which is the common case under the MVP roster — `read_loop_result`
-on that loop returns the plan's substance via its `decide.reason`
-when the rendered plan markdown is the canonical reference, or you
-can follow `chain.plan.path` on the chain entity to the rendered
-markdown directly.)
-
-You need three substance buckets from the plan:
+Read the rendered plan markdown via the path in your spawn prompt.
+The plan carries scope, epics, and verifiable outcomes — your three
+substance buckets:
 
 - **Scope** — what was in vs out. An artifact actor outside the
   plan's scope is a gap (silent scope expansion).

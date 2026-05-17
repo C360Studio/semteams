@@ -1,9 +1,8 @@
 # Stabilisation gate
 
 Before applying the plan-conformance check (or any other
-prompt-specific grading), apply the **stabilisation gate**. The
-gate codifies the "Stabilisation as converged change-log" model:
-a research arc is stabilised when the reviewer's grading passes
+prompt-specific grading), apply the **stabilisation gate**: a
+research arc is stabilised when the reviewer's grading passes
 AND the latest revision had no new substrate mutations.
 
 The substrate-mutations check is your responsibility, not a
