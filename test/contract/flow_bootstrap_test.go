@@ -3,10 +3,47 @@ package contract
 import (
 	"encoding/json"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
+
+// flowBootstrapAllowedRulePackPrefixes lists the category-pack
+// directory prefixes that flow-bootstrap.json's rule-processor
+// rules_files may reference. Pack-internal additions are routine
+// (a new spawn rule, a new recovery handler) so a directory prefix
+// is the right shape — adding a new category pack adds one entry.
+//
+// Future category packs (web-research/, dev-via-spec/) extend this
+// list as they land.
+var flowBootstrapAllowedRulePackPrefixes = []string{
+	"/app/configs/rules/research/", // ADR-042 MVP-2 research category pack.
+}
+
+// flowBootstrapAllowedSharedRuleFiles lists individual cross-category
+// rule files that flow-bootstrap.json's rule-processor rules_files
+// may reference. File-level (not prefix-level) because the parent
+// directories carry chain.mode-keyed legacy rules retiring in MVP-7;
+// a directory prefix would silently permit them.
+//
+//   - configs/rules/coordinator/03b-respond-direct.json: shared
+//     user-reply publisher. Research pack's terminal handler delegates
+//     here for the actual user.response.* publish.
+//   - configs/rules/coordinator/03-ask-user.json: shared clarification-
+//     question publisher. Coordinator may emit ask_user during the
+//     wake-up case (see research/07's action_allowlist).
+//
+// Legacy files explicitly NOT allowed: 01-delegate-research.json,
+// 02-delegate-dev-chain.json, 04a-research-terminal-to-coordinator.json,
+// 04b-qa-terminal-to-coordinator.json, 05-chain-stall-to-coordinator.json.
+// All five retire alongside chain.mode in MVP-7; adding any of them
+// to flow-bootstrap.json would double-fire the rule chain (research/07
+// already owns the reviewer-approved → coordinator wake-up).
+var flowBootstrapAllowedSharedRuleFiles = []string{
+	"/app/configs/rules/coordinator/03-ask-user.json",
+	"/app/configs/rules/coordinator/03b-respond-direct.json",
+}
 
 // TestFlowBootstrapShape pins the structural invariants of
 // configs/flow-bootstrap.json per ADR-042 §Phase 2 redesign:
@@ -18,8 +55,11 @@ import (
 //   - Platform identity flags it as bootstrap (id + type).
 //   - The default_role on agentic-dispatch is coordinator
 //     (NOT a chain-specific role like researcher / planner).
-//   - rules_files starts empty (categories load their packs at
-//     runtime via hot-reload or are added in follow-up phases).
+//   - rules_files MAY be non-empty (MVP-2 picked file-based pack
+//     loading), but every entry MUST live under a known
+//     category-pack prefix — no chain.mode-keyed legacy packs
+//     (research-mode-transition/, research-iterative/) and no
+//     ad-hoc paths.
 //   - inline_rules starts empty (no chain-specific inline rules
 //     baked in; the chain-pause / chainstall pieces retire under
 //     ADR-042 §Phase 6 anyway).
@@ -97,8 +137,25 @@ func TestFlowBootstrapShape(t *testing.T) {
 		EntityWatchPatterns []string          `json:"entity_watch_patterns"`
 	}
 	require.NoError(t, json.Unmarshal(rule.Config, &ruleCfg))
-	require.Empty(t, ruleCfg.RulesFiles,
-		"rule-processor.rules_files must start empty in the bootstrap — categories load their packs")
+	allowedFiles := make(map[string]bool, len(flowBootstrapAllowedSharedRuleFiles))
+	for _, f := range flowBootstrapAllowedSharedRuleFiles {
+		allowedFiles[f] = true
+	}
+	for _, rf := range ruleCfg.RulesFiles {
+		var matched bool
+		for _, allowed := range flowBootstrapAllowedRulePackPrefixes {
+			if strings.HasPrefix(rf, allowed) {
+				matched = true
+				break
+			}
+		}
+		if !matched && allowedFiles[rf] {
+			matched = true
+		}
+		require.True(t, matched,
+			"rule-processor.rules_files entry %q does not match an allowed category-pack prefix %v nor a shared-rule allowlist entry %v — chain.mode-keyed legacy packs (research-mode-transition/, research-iterative/, dev-via-spec/) and chain.mode-keyed coordinator rules (01-delegate-research, 02-delegate-dev-chain, 04a/b, 05-chain-stall) belong in legacy configs, not the bootstrap",
+			rf, flowBootstrapAllowedRulePackPrefixes, flowBootstrapAllowedSharedRuleFiles)
+	}
 	require.Empty(t, ruleCfg.InlineRules,
 		"rule-processor.inline_rules must be empty — no chain-specific rules baked into substrate")
 	require.Equal(t, []string{"c360.>"}, ruleCfg.EntityWatchPatterns,

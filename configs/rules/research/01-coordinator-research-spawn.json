@@ -1,0 +1,45 @@
+{
+  "id": "research_coordinator_spawn_plan",
+  "type": "expression",
+  "name": "Coordinator decide(research) → researcher-research-plan",
+  "description": "ADR-042 §Phase 2 redesign MVP-2. First rule of the research category pack. Fires when a coordinator loop terminates with decide(action=research) — the category classification token MVP-4 teaches the coordinator persona to emit. Spawns researcher-research-plan, the pack's plan-phase entry role. Replaces configs/rules/coordinator/01-delegate-research.json (whose decide(action=delegate_research) token spawns the legacy chain.mode-gated researcher-plan role); both rules co-exist during MVP-2 through MVP-6 build-up, the legacy delegate-research retires alongside chain.mode in MVP-7.",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "agent.loop.role",
+      "operator": "eq",
+      "value": "coordinator",
+      "required": true
+    },
+    {
+      "field": "coordinator.decision.next_action",
+      "operator": "eq",
+      "value": "research",
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "publish_agent",
+      "subject": "agent.task.researcher-research-plan",
+      "role": "researcher-research-plan",
+      "model": "research",
+      "tools": ["read_loop_result", "emit_plan", "scratchpad", "decide"],
+      "action_allowlist": ["gather", "emit", "needs_clarification"],
+      "properties": {
+        "parent_loop_id": "$entity.instance",
+        "category": "research"
+      },
+      "prompt": "A coordinator classified the user's message as a research ask and delegated to you (parent loop $entity.instance).\n\nIteration 1 — call read_loop_result with loop_id=$entity.instance. The result is the coordinator's structured decide-tool terminal (JSON with action + reason + subtopics + retry_hint). The coordinator's `reason` field captures the user's intent and the rationale for routing to the research category — that is your grounding for what to plan.\n\nIteration 2+ — emit a research plan per researcher-research-plan/10-plan-rules.md. The research category terminates at reviewer-research after synthesize emits the research artifact (no architect / spec / build phases). Keep the plan focused on evidence gathering and synthesis.\n\nTerminal: decide(action=\"gather\") to forward into the gather phase, decide(action=\"emit\") only if the question is genuinely answerable from the plan itself without gather work, or decide(action=\"needs_clarification\") if the coordinator's reason is too thin to plan from."
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "pack": "research",
+    "phase": "ADR-042 MVP-2",
+    "adr": "docs/adr/042-coordinator-instantiated-flows-via-templates.md",
+    "category_token": "research",
+    "supersedes_legacy": "configs/rules/coordinator/01-delegate-research.json — retires in MVP-7 alongside chain.mode."
+  }
+}

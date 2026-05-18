@@ -1,0 +1,43 @@
+{
+  "id": "research_loop_failed_pause",
+  "type": "expression",
+  "name": "Research-pack loop failed — chain pause marker",
+  "description": "ADR-042 §Phase 2 redesign MVP-2 research pack failure handler. Fires when any research-pack role terminates with outcome=failed BEFORE emitting its decide() terminal — model timeout, NATS blip, OOM, panic, sandbox crash. Without this rule, the failure stalls the chain silently: no downstream rule fires, no operator surface lights up. Stamps a chain.paused.marker triple so operator dashboards (and MVP-5 mock-LLM journey assertions) can surface the pause and attach a recovery decision.\n\nPack-local mirror of configs/rules/chain/00-loop-failed-pause.json (the legacy chain-pause rule, which lists the ADR-041 roster's role tokens but NOT the new researcher-research-* tokens). Both rules co-exist in the source tree during MVP-2 through MVP-6 build-up; legacy chain-pause and its chainpause.Pauser §D5 subscriber retire alongside chain.mode in MVP-7 per ADR-042 §Phase 6. The pack-local rule retires the same day.",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "agent.loop.outcome",
+      "operator": "eq",
+      "value": "failed",
+      "required": true
+    },
+    {
+      "field": "agent.loop.role",
+      "operator": "in",
+      "value": [
+        "researcher-research-plan",
+        "researcher-research-gather",
+        "researcher-research-synthesize",
+        "reviewer-research"
+      ],
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "add_triple",
+      "predicate": "chain.paused.marker",
+      "object": "$now"
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "pack": "research",
+    "phase": "ADR-042 MVP-2",
+    "adr": "docs/adr/042-coordinator-instantiated-flows-via-templates.md",
+    "supersedes_legacy": "configs/rules/chain/00-loop-failed-pause.json (scoped to research-pack roles only). Legacy rule's role list does NOT include the researcher-research-* tokens; without this pack-local mirror, a failed loop would die silently. Both retire together in MVP-7.",
+    "marker_only_note": "Marker-only triple. Stamps chain.paused.marker with a timestamp object — does NOT write the full §D5 audit triple set (chain.paused.cause, .classification, .error_shape, etc.) that the legacy chainpause.Pauser NATS subscriber writes from parsing LoopFailedEvent.Error. For MVP-2 the marker alone is sufficient — UI / ops-observer queries on chain.paused.* find it. Full classification triples retire alongside chainpause in MVP-7 per ADR-042 §Phase 6; pack-local recovery dashboards (post-MVP-7) will read the marker + the original agent.failed.* event off the AGENT stream directly.",
+    "reviewer_pass_origin": "Added 2026-05-17 per reviewer R2 (defensive coverage for MVP-6 real-LLM smoke). Without this rule a model timeout / 5xx / OOM during real-LLM smoke would silently wedge the chain; the marker gives MVP-5 journey assertions and MVP-6 operator-debug a foothold."
+  }
+}

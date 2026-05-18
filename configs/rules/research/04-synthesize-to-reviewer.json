@@ -1,0 +1,48 @@
+{
+  "id": "research_synthesize_to_reviewer",
+  "type": "expression",
+  "name": "researcher-research-synthesize → reviewer-research",
+  "description": "ADR-042 §Phase 2 redesign MVP-2 research pack. Fires when the synthesize-phase researcher terminates with decide(action=emit) — the research category's terminal forward edge. Spawns reviewer-research, which reads the structured research artifact and grades it against the reviewer checklist. Approved terminates the chain (07-reviewer-approved-to-coordinator.json wakes the coordinator for user reply); insufficient triggers 05-reviewer-rejected-retry.json (max_iterations-bounded replan).",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "agent.loop.role",
+      "operator": "eq",
+      "value": "researcher-research-synthesize",
+      "required": true
+    },
+    {
+      "field": "coordinator.decision.next_action",
+      "operator": "eq",
+      "value": "emit",
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "publish_agent",
+      "subject": "agent.task.reviewer-research",
+      "role": "reviewer-research",
+      "model": "reviewing",
+      "tools": ["read_loop_result", "bash", "decide"],
+      "action_allowlist": ["approved", "insufficient", "needs_clarification"],
+      "properties": {
+        "prior_loop_id": "$entity.instance",
+        "category": "research"
+      },
+      "related_loops": {
+        "researcher": "$entity.instance"
+      },
+      "prompt": "The synthesize-phase researcher at loop $entity.instance has emitted a research artifact via emit_research_artifact + decide(action=emit). The rendered markdown is at $entity.triple.research.artifact.path.\n\nIteration 1 — call read_loop_result on $entity.instance for the synthesize phase's narrative terminal. Then `bash cat $entity.triple.research.artifact.path` to read the full structured artifact. read_loop_result returns only the decide() reason; the structured fields (actors/integration_points/tasks/addressed_gaps/open_gaps/test_harness/substrate_mutations/revision) are in the markdown.\n\nIteration 2 — apply the research-category checklist per reviewer-research/10-evaluation-contract.md. If every required field is present, well-formed, and grounded in the gathered evidence, call decide(action=\"approved\", reason=\"<one-sentence summary citing the revision token>\"). If a required field is missing or evidence is thin, call decide(action=\"insufficient\", reason=\"<bullet list of gaps>\"); 05-reviewer-rejected-retry.json gates retries (max_iterations=3). Use decide(action=\"needs_clarification\", reason=..., retry_hint=...) only when the artifact's intent is genuinely ambiguous. Per ADR-041 addendum 2026-05-15: chain agents do not read the graph; bash + read_loop_result are your read channels."
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "pack": "research",
+    "phase": "ADR-042 MVP-2",
+    "adr": "docs/adr/042-coordinator-instantiated-flows-via-templates.md",
+    "pattern": "research category terminal: synthesize-phase researcher emits research artifact → reviewer-research evaluates. Approved wakes coordinator (07); insufficient retries (05).",
+    "supersedes_legacy": "configs/rules/research-mode-transition/01a-researcher-synthesize-to-reviewer-research.json — same hand-off shape, no chain.mode or phasevalidator gating."
+  }
+}
