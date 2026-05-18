@@ -1,0 +1,533 @@
+{
+  "version": "1.1.0",
+  "platform": {
+    "org": "c360",
+    "id": "semteams-bootstrap",
+    "type": "bootstrap",
+    "region": "local",
+    "instance_id": "bootstrap-001",
+    "environment": "development"
+  },
+  "tier": "agentic",
+  "nats": {
+    "urls": [
+      "nats://localhost:4222"
+    ]
+  },
+  "model_registry": {
+    "endpoints": {
+      "claude-haiku": {
+        "provider": "anthropic",
+        "url": "https://api.anthropic.com/v1",
+        "model": "claude-haiku-4-5-20251001",
+        "api_key_env": "ANTHROPIC_API_KEY",
+        "max_tokens": 200000,
+        "supports_tools": true,
+        "stream": true,
+        "max_concurrent": 10,
+        "requests_per_minute": 200
+      },
+      "claude-sonnet": {
+        "provider": "anthropic",
+        "url": "https://api.anthropic.com/v1",
+        "model": "claude-sonnet-4-6",
+        "api_key_env": "ANTHROPIC_API_KEY",
+        "max_tokens": 200000,
+        "supports_tools": true,
+        "stream": true,
+        "reasoning_effort": "low",
+        "max_concurrent": 10,
+        "requests_per_minute": 100
+      },
+      "gemini-flash": {
+        "provider": "openai",
+        "url": "https://generativelanguage.googleapis.com/v1beta/openai",
+        "model": "gemini-2.5-flash",
+        "api_key_env": "GEMINI_API_KEY",
+        "max_tokens": 1048576,
+        "supports_tools": true,
+        "tool_format": "openai",
+        "stream": true,
+        "max_concurrent": 10,
+        "requests_per_minute": 200
+      }
+    },
+    "defaults": {
+      "model": "claude-haiku"
+    }
+  },
+  "services": {
+    "service-manager": {
+      "name": "service-manager",
+      "enabled": true,
+      "config": {
+        "http_port": 8080,
+        "swagger_ui": true,
+        "server_info": {
+          "title": "SemTeams Bootstrap",
+          "description": "Substrate-singleton boot config per ADR-042 §Phase 2 redesign. Agentic + graph + rule-processor components run as singletons; task-category rule packs and named persona bundles run through them. No chain-specific configuration here.",
+          "version": "0.7.0"
+        }
+      }
+    },
+    "component-manager": {
+      "name": "component-manager",
+      "enabled": true,
+      "config": {}
+    },
+    "metrics": {
+      "name": "metrics",
+      "enabled": true,
+      "config": {
+        "port": 9090,
+        "path": "/metrics",
+        "include_go_metrics": true
+      }
+    },
+    "message-logger": {
+      "name": "message-logger",
+      "enabled": true,
+      "config": {
+        "max_entries": 10000,
+        "monitor_subjects": [
+          "agent.>"
+        ],
+        "enable_kv_query": true,
+        "log_level": "INFO"
+      }
+    },
+    "log-forwarder": {
+      "name": "log-forwarder",
+      "enabled": true,
+      "config": {
+        "min_level": "DEBUG",
+        "exclude_sources": []
+      }
+    },
+    "metrics-forwarder": {
+      "name": "metrics-forwarder",
+      "enabled": true,
+      "config": {
+        "push_interval": "5s",
+        "include_go_metrics": false,
+        "include_proc_metrics": false
+      }
+    }
+  },
+  "components": {
+    "graph-ingest": {
+      "type": "processor",
+      "name": "graph-ingest",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [
+            {
+              "name": "graph_ingest_in",
+              "subject": "graph.ingest.>",
+              "type": "jetstream",
+              "description": "Graph ingest events from agent emit tools and operator-side subscribers"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "entity_states",
+              "subject": "ENTITY_STATES",
+              "type": "kv-write",
+              "description": "Entity state KV bucket"
+            }
+          ]
+        },
+        "enable_hierarchy": true
+      }
+    },
+    "graph-query": {
+      "type": "processor",
+      "name": "graph-query",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [
+            {"name": "query_requests", "subject": "graph.query.>", "type": "nats-request"}
+          ],
+          "outputs": []
+        },
+        "request_timeout": "30s",
+        "max_traversal_depth": 5,
+        "max_traversal_nodes": 100
+      }
+    },
+    "rule": {
+      "type": "processor",
+      "name": "rule-processor",
+      "enabled": true,
+      "config": {
+        "entity_watch_patterns": [
+          "c360.>"
+        ],
+        "ports": {
+          "inputs": [
+            {
+              "name": "agent_complete",
+              "subject": "agent.complete.>",
+              "type": "jetstream",
+              "stream_name": "AGENT",
+              "description": "Loop completion events that drive coordinator + category routing rules"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "agent_task",
+              "subject": "agent.task.*",
+              "type": "jetstream",
+              "stream_name": "AGENT",
+              "description": "Agent task triggers from rules"
+            }
+          ]
+        },
+        "enable_graph_integration": true,
+        "rules_files": [],
+        "inline_rules": []
+      }
+    },
+    "teams-loop": {
+      "type": "processor",
+      "name": "agentic-loop",
+      "enabled": true,
+      "config": {
+        "max_iterations": 25,
+        "timeout": "300s",
+        "stream_name": "AGENT",
+        "loops_bucket": "AGENT_LOOPS",
+        "ports": {
+          "inputs": [
+            {
+              "name": "agent.task",
+              "type": "jetstream",
+              "subject": "agent.task.*",
+              "stream_name": "AGENT",
+              "required": true,
+              "description": "Agent task requests"
+            },
+            {
+              "name": "agent.response",
+              "type": "jetstream",
+              "subject": "agent.response.>",
+              "stream_name": "AGENT",
+              "required": true,
+              "description": "Model responses"
+            },
+            {
+              "name": "tool.result",
+              "type": "jetstream",
+              "subject": "tool.result.>",
+              "stream_name": "AGENT",
+              "required": true,
+              "description": "Tool execution results"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "agent.request",
+              "type": "jetstream",
+              "subject": "agent.request.*",
+              "stream_name": "AGENT",
+              "description": "Model requests"
+            },
+            {
+              "name": "tool.execute",
+              "type": "jetstream",
+              "subject": "tool.execute.*",
+              "stream_name": "AGENT",
+              "description": "Tool execution requests"
+            },
+            {
+              "name": "agent.complete",
+              "type": "jetstream",
+              "subject": "agent.complete.*",
+              "stream_name": "AGENT",
+              "description": "Task completions"
+            },
+            {
+              "name": "agent.failed",
+              "type": "jetstream",
+              "subject": "agent.failed.*",
+              "stream_name": "AGENT",
+              "description": "Loop failures — drives the chainpause subscriber (ADR-037 §D5 audit triples). Retires alongside chainpause in ADR-042 §Phase 6 migration cut; until then, declaring the port keeps the bootstrap canonical."
+            }
+          ],
+          "kv_write": [
+            {
+              "name": "loops",
+              "type": "kv-write",
+              "bucket": "AGENT_LOOPS",
+              "description": "Loop state storage"
+            },
+            {
+              "name": "trajectories",
+              "type": "kv-write",
+              "bucket": "AGENT_TRAJECTORIES",
+              "description": "Trajectory storage"
+            }
+          ]
+        }
+      }
+    },
+    "agentic-model": {
+      "type": "processor",
+      "name": "agentic-model",
+      "enabled": true,
+      "config": {
+        "stream_name": "AGENT",
+        "timeout": "30s",
+        "retry": {
+          "max_attempts": 3,
+          "backoff": "exponential"
+        },
+        "ports": {
+          "inputs": [
+            {
+              "name": "agent.request",
+              "type": "jetstream",
+              "subject": "agent.request.>",
+              "stream_name": "AGENT",
+              "required": true,
+              "description": "Agent request input"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "agent.response",
+              "type": "jetstream",
+              "subject": "agent.response.*",
+              "stream_name": "AGENT",
+              "required": true,
+              "description": "Agent response output"
+            }
+          ]
+        }
+      }
+    },
+    "agentic-tools": {
+      "type": "processor",
+      "name": "agentic-tools",
+      "enabled": true,
+      "config": {
+        "stream_name": "AGENT",
+        "timeout": "10s",
+        "allowed_tools": null,
+        "ports": {
+          "inputs": [
+            {
+              "name": "tool.execute",
+              "type": "jetstream",
+              "subject": "tool.execute.>",
+              "stream_name": "AGENT",
+              "required": true,
+              "description": "Tool execution requests"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "tool.result",
+              "type": "jetstream",
+              "subject": "tool.result.*",
+              "stream_name": "AGENT",
+              "required": true,
+              "description": "Tool execution results"
+            }
+          ],
+          "kv_read": [
+            {
+              "name": "entity_states",
+              "type": "kv-read",
+              "bucket": "ENTITY_STATES",
+              "description": "Entity state KV for graph queries"
+            }
+          ]
+        }
+      }
+    },
+    "oasf-generator": {
+      "type": "processor",
+      "name": "oasf-generator",
+      "enabled": true,
+      "config": {
+        "entity_kv_bucket": "ENTITY_STATES",
+        "oasf_kv_bucket": "OASF_RECORDS",
+        "watch_pattern": ">",
+        "generation_debounce": "500ms",
+        "default_agent_version": "1.0.0",
+        "default_authors": [
+          "SemStreams"
+        ],
+        "include_extensions": true,
+        "ports": {
+          "inputs": [
+            {
+              "name": "entity_changes",
+              "subject": "entity.state.>",
+              "type": "kv-watch",
+              "required": true,
+              "description": "Watch for agent entity state changes"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "oasf_records",
+              "subject": "oasf.record.generated.*",
+              "type": "jetstream",
+              "stream_name": "OASF",
+              "required": true,
+              "description": "Generated OASF records"
+            }
+          ],
+          "kv_write": [
+            {
+              "name": "oasf_kv",
+              "type": "kv-write",
+              "bucket": "OASF_RECORDS",
+              "description": "OASF record storage"
+            }
+          ]
+        }
+      }
+    },
+    "directory-bridge": {
+      "type": "output",
+      "name": "directory-bridge",
+      "enabled": true,
+      "config": {
+        "directory_url": "http://localhost:8081",
+        "heartbeat_interval": "30s",
+        "registration_ttl": "5m",
+        "identity_provider": "local",
+        "oasf_kv_bucket": "OASF_RECORDS",
+        "retry_count": 3,
+        "retry_delay": "1s",
+        "ports": {
+          "inputs": [
+            {
+              "name": "oasf_records",
+              "subject": "oasf.record.generated.>",
+              "type": "kv-watch",
+              "required": true,
+              "description": "Watch for generated OASF records"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "registration_events",
+              "subject": "directory.registration.*",
+              "type": "jetstream",
+              "stream_name": "DIRECTORY",
+              "required": false,
+              "description": "Registration events"
+            }
+          ]
+        }
+      }
+    },
+    "a2a-adapter": {
+      "type": "input",
+      "name": "a2a-adapter",
+      "enabled": true,
+      "config": {
+        "transport": "http",
+        "listen_address": ":8282",
+        "agent_card_path": "/.well-known/agent.json",
+        "request_timeout": "30s",
+        "max_concurrent_tasks": 10,
+        "enable_authentication": false,
+        "oasf_bucket": "OASF_RECORDS",
+        "ports": {
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "task_messages",
+              "subject": "agent.task.a2a.*",
+              "type": "jetstream",
+              "stream_name": "AGENT",
+              "required": true,
+              "description": "Task messages to agent dispatch"
+            }
+          ]
+        }
+      }
+    },
+    "otel-exporter": {
+      "type": "output",
+      "name": "otel-exporter",
+      "enabled": true,
+      "config": {
+        "endpoint": "http://localhost:4318",
+        "protocol": "http",
+        "service_name": "semstreams-agentic",
+        "service_version": "1.0.0",
+        "export_traces": true,
+        "export_metrics": true,
+        "export_logs": false,
+        "batch_timeout": "2s",
+        "max_batch_size": 100,
+        "insecure": true,
+        "sampling_rate": 1.0,
+        "ports": {
+          "inputs": [
+            {
+              "name": "agent_events",
+              "subject": "agent.>",
+              "type": "jetstream",
+              "stream_name": "AGENT",
+              "required": true,
+              "description": "Agent lifecycle events for span collection"
+            }
+          ],
+          "outputs": []
+        }
+      }
+    },
+    "teams-dispatch": {
+      "type": "processor",
+      "name": "agentic-dispatch",
+      "enabled": true,
+      "config": {
+        "default_role": "coordinator",
+        "auto_continue": true,
+        "stream_name": "AGENT",
+        "ports": {
+          "inputs": [
+            {
+              "name": "user_messages",
+              "type": "jetstream",
+              "subject": "agent.task.*",
+              "stream_name": "AGENT",
+              "description": "User messages to dispatch"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "tasks",
+              "type": "jetstream",
+              "subject": "agent.task.*",
+              "stream_name": "AGENT",
+              "description": "Task messages to agent loops"
+            }
+          ]
+        },
+        "permissions": {
+          "view": [
+            "*"
+          ],
+          "submit_task": [
+            "*"
+          ],
+          "cancel_own": true,
+          "cancel_any": [],
+          "approve": [
+            "*"
+          ]
+        }
+      }
+    }
+  }
+}
