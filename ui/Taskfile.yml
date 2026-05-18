@@ -992,6 +992,71 @@ tasks:
         echo ""
         cat "$REPORT"
 
+  test:e2e:agentic:smoke6:run:
+    desc: Run smoke #6 (ADR-042 MVP-6 — research-category real-LLM) end-to-end with cleanup
+    summary: |
+      Real-LLM smoke for ADR-042 MVP-6. Boots the bootstrap config
+      (configs/flow-bootstrap.json — real Anthropic claude-haiku for
+      coordinator + research + reviewing capabilities), sends the
+      canonical MVP-5 research prompt, runs the auto-approve watcher
+      (no gates expected in the research category — watcher just polls
+      until all loops terminate), captures trajectories + message log
+      to /tmp/smoke6-<RUN_ID>/, then tears the stack down.
+
+      Sibling task to smoke7 but scoped to the MVP roster — no
+      sandbox/semsource profiles, no chainmode/phasevalidator
+      machinery, just the substrate + research-pack rules. Expected
+      chain shape: six loops total — coordinator dispatch +
+      researcher-research-{plan,gather,synthesize} + reviewer-research
+      (approved) + wake-up coordinator (respond_direct). Matches the
+      mock-LLM journey from MVP-5 (#176).
+
+      Real Anthropic spend (~$0.30-$0.50 per run on claude-haiku-4-5
+      across six loops, roughly 13 model calls). ANTHROPIC_API_KEY
+      required: invoke from the project root so the parent Taskfile's
+      `dotenv: ['.env']` loads it, or export it manually before
+      invoking from this directory.
+
+      Usage (from project root):
+        task ui:test:e2e:agentic:smoke6:run                   # RUN_ID defaults to a date stamp
+        RUN_ID=ticket-176 task ui:test:e2e:agentic:smoke6:run
+
+      Findings synthesis lands in a project_smoke6_findings.md
+      memory record per the MVP-6 plan in [[adr-042-mvp-redesign]].
+    vars:
+      RUN_ID: '{{.RUN_ID | default (printf "smoke6-%s" (now | date "20060102-150405"))}}'
+      AGENTIC_CONFIG: flow-bootstrap.json
+      COMPOSE_PROFILES: ""
+      PROMPT: "Compare MQTT vs NATS for IoT edge deployments — which has lower latency on constrained ARM devices?"
+    preconditions:
+      - sh: '[ -n "$ANTHROPIC_API_KEY" ]'
+        msg: "ANTHROPIC_API_KEY is unset. Add it to the project-root .env (auto-loaded when invoking from project root) or export it in your shell. Smoke #6 routes the research arc to claude-haiku-4-5; without a key the run cannot start."
+    cmds:
+      - 'echo "▶︎  Smoke #6 starting (RUN_ID={{.RUN_ID}}); evidence will land in /tmp/{{.RUN_ID}}/"'
+      - defer: { task: test:e2e:agentic:cleanup }
+      # Re-use smoke7's capture task — generic enough to handle any
+      # real-LLM smoke; just parameterise RUN_ID and the expected
+      # terminal role. The wake-up coordinator's respond_direct is the
+      # research-category terminal; the chain entity's terminal role
+      # is "coordinator" (the wake-up loop).
+      - defer:
+          task: test:e2e:agentic:smoke7:capture
+          vars:
+            RUN_ID: "{{.RUN_ID}}"
+            WEDGE_EXPECTED_TERMINAL_ROLE: coordinator
+      - task: test:e2e:agentic:stack:up
+        vars:
+          FIXTURE: ""
+          AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
+          COMPOSE_PROFILES: "{{.COMPOSE_PROFILES}}"
+      - task: test:e2e:agentic:probe:send
+        vars:
+          CLI_ARGS: '{{.PROMPT}}'
+      # Hard cap on the watcher to bound real-LLM spend. Research
+      # category is short (six loops, ~$0.30) so 600s = 10min is
+      # generous. Cleanup + capture defers fire either way.
+      - timeout 600 task test:e2e:agentic:probe:auto-approve-watcher -- {{.RUN_ID}}
+
   test:e2e:agentic:dev:_boot:
     desc: Internal — boot helper for the per-scenario dev tasks
     internal: true
