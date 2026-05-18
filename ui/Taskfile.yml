@@ -463,6 +463,38 @@ tasks:
           AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
       - npx playwright test e2e/agentic/coordinator-researcher.spec.ts
 
+  test:e2e:agentic:research-mvp:
+    desc: Run the ADR-042 MVP-5 research-category mock-LLM journey
+    summary: |
+      One user prompt drives the full research-category arc end-to-end
+      against the MVP roster:
+
+        Loop 0  coordinator (dispatch)        decide(action="research")
+        Loop A  researcher-research-plan      emit_plan + decide(gather)
+        Loop B  researcher-research-gather    web_search + decide(synthesize)
+        Loop C  researcher-research-synthesize emit_artifact + decide(emit)
+        Loop D  reviewer-research             decide(approved)
+        Loop E  coordinator (wake-up)         decide(respond_direct)
+
+      Validates the substrate-plus-overlays architecture: a single
+      category-keyed rule pack + named persona bundles wired through
+      the framework's singleton substrate (MVP-1 through MVP-4 work
+      shipped under PRs #172/#173/#174/#175).
+
+      Six loops, thirteen mock-LLM round-trips. No approval gate, no
+      recovery. Compose profile: none beyond the agentic-e2e
+      baseline.
+    vars:
+      FIXTURE: research-mvp.yaml
+      AGENTIC_CONFIG: e2e-flow-bootstrap.json
+    cmds:
+      - defer: { task: test:e2e:agentic:cleanup }
+      - task: test:e2e:agentic:stack:up
+        vars:
+          FIXTURE: "{{.FIXTURE}}"
+          AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
+      - npx playwright test e2e/agentic/research-mvp.spec.ts
+
   test:e2e:agentic:coordinator-researcher-stall-recovery:
     desc: Run the Slice 2 chainstall recovery journey (mode_mismatch → coordinator)
     summary: |
