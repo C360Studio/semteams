@@ -2,11 +2,11 @@
   "version": "1.1.0",
   "platform": {
     "org": "c360",
-    "id": "semteams-bootstrap",
-    "type": "bootstrap",
+    "id": "semteams-bootstrap-e2e",
+    "type": "agentic-e2e",
     "region": "local",
-    "instance_id": "bootstrap-001",
-    "environment": "development"
+    "instance_id": "bootstrap-e2e-001",
+    "environment": "test"
   },
   "tier": "agentic",
   "nats": {
@@ -23,50 +23,33 @@
   },
   "model_registry": {
     "endpoints": {
-      "claude-haiku": {
-        "provider": "anthropic",
-        "url": "https://api.anthropic.com/v1",
-        "model": "claude-haiku-4-5-20251001",
-        "api_key_env": "ANTHROPIC_API_KEY",
-        "max_tokens": 200000,
-        "supports_tools": true,
-        "stream": true,
-        "max_concurrent": 10,
-        "requests_per_minute": 200
-      },
-      "claude-sonnet": {
-        "provider": "anthropic",
-        "url": "https://api.anthropic.com/v1",
-        "model": "claude-sonnet-4-6",
-        "api_key_env": "ANTHROPIC_API_KEY",
-        "max_tokens": 200000,
-        "supports_tools": true,
-        "stream": true,
-        "reasoning_effort": "low",
-        "max_concurrent": 10,
-        "requests_per_minute": 100
-      },
-      "gemini-flash": {
+      "general": {
         "provider": "openai",
-        "url": "https://generativelanguage.googleapis.com/v1beta/openai",
-        "model": "gemini-2.5-flash",
-        "api_key_env": "GEMINI_API_KEY",
-        "max_tokens": 1048576,
+        "url": "http://mock-llm:8080/v1",
+        "model": "mock-model",
+        "max_tokens": 4096,
         "supports_tools": true,
         "tool_format": "openai",
-        "stream": true,
-        "max_concurrent": 10,
-        "requests_per_minute": 200
+        "stream": true
+      },
+      "fast": {
+        "provider": "openai",
+        "url": "http://mock-llm:8080/v1",
+        "model": "mock-model",
+        "max_tokens": 2048,
+        "supports_tools": true,
+        "tool_format": "openai",
+        "stream": false
       }
     },
     "defaults": {
-      "model": "claude-haiku"
+      "model": "general"
     },
     "capabilities": {
-      "coordinator": { "preferred": ["claude-haiku"], "fallback": ["claude-sonnet"], "requires_tools": true },
-      "research": { "preferred": ["claude-haiku"], "fallback": ["claude-sonnet", "gemini-flash"], "requires_tools": true },
-      "reviewing": { "preferred": ["claude-haiku"], "fallback": ["claude-sonnet"], "requires_tools": true },
-      "general": { "preferred": ["claude-haiku"], "fallback": ["claude-sonnet", "gemini-flash"], "requires_tools": true }
+      "coordinator": { "preferred": ["general"], "requires_tools": true },
+      "research": { "preferred": ["general"], "fallback": ["fast"], "requires_tools": true },
+      "reviewing": { "preferred": ["general"], "fallback": ["fast"], "requires_tools": true },
+      "general": { "preferred": ["general"], "fallback": ["fast"], "requires_tools": true }
     }
   },
   "services": {
@@ -228,10 +211,20 @@
       "name": "agentic-loop",
       "enabled": true,
       "config": {
-        "max_iterations": 25,
-        "timeout": "300s",
+        "max_iterations": 8,
+        "timeout": "60s",
         "stream_name": "AGENT",
         "loops_bucket": "AGENT_LOOPS",
+        "consumer": {
+          "ack_wait": "60s",
+          "heartbeat_interval": "10s",
+          "max_deliver": 2
+        },
+        "context": {
+          "compact_threshold": 1.0,
+          "headroom_ratio": 0.05,
+          "headroom_tokens": 100
+        },
         "ports": {
           "inputs": [
             {
@@ -313,8 +306,9 @@
       "config": {
         "stream_name": "AGENT",
         "timeout": "30s",
+        "_e2e_divergence": "retry.max_attempts: production bootstrap retries 3x; mock-llm is deterministic and fast — retries here would only mask fixture errors as transient failures. Retry-path coverage is out of scope for this MVP-5 journey; a separate spec can exercise it with a flake-injecting mock-llm fixture if needed.",
         "retry": {
-          "max_attempts": 3,
+          "max_attempts": 1,
           "backoff": "exponential"
         },
         "ports": {
