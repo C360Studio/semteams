@@ -8,25 +8,35 @@ import (
 	"testing"
 )
 
-// TestCoordinatorSlice1ActionTaxonomy locks in the action taxonomy
-// the coordinator persona (10-decision-contract.md) and its rule set
-// (configs/rules/coordinator/) must agree on:
+// TestMVPCoordinatorActionTaxonomy locks in the closed action
+// taxonomy the coordinator persona (10-decision-contract.md) and the
+// rule layer must agree on under the MVP roster (ADR-042 §Phase 2
+// redesign). The MVP boots from configs/flow-bootstrap.json; its
+// rules_files list selects which rules are live. Legacy rules that
+// stay on disk for MVP-7 cleanup (configs/rules/coordinator/
+// 01-delegate-research.json, 02-delegate-dev-chain.json) are NOT
+// loaded by bootstrap, so they are out of scope for the live
+// taxonomy check.
 //
-//   - every rule that gates on `agent.loop.role == "coordinator"` AND
-//     `coordinator.decision.next_action == <action>` must reference an
-//     action value that appears in the persona (orphan rule = dead
-//     code);
-//   - every persona action must have a matching rule (orphan persona
-//     action = no observable behaviour).
+// The closed taxonomy for the MVP deployment is:
 //
-// Slice 1c addition: rules that gate on `agent.loop.role == "<reviewer
-// role>"` AND `coordinator.decision.next_action == <reviewer terminal>`
-// (04a- and 04b- wake-up rules) are coordinator-related but fire on
-// reviewer loops, so their action values come from reviewer personas,
-// not the coordinator persona. The taxonomy check scopes to rules
-// whose firing role is "coordinator"; the wake-up rules are validated
-// separately (test below) for their reviewer-role/approval-token shape.
-func TestCoordinatorSlice1ActionTaxonomy(t *testing.T) {
+//	research        — research-pack rule 01 (research-category arc)
+//	ask_user        — coordinator/03-ask-user.json
+//	respond_direct  — coordinator/03b-respond-direct.json
+//
+// Invariant: every action emitted by the live rule set has a backing
+// persona entry (no rule that fires without LLM-emitted token); every
+// persona action has a backing rule (no LLM token that dead-ends).
+//
+// Slice 1c wake-up rules (rules that gate on `agent.loop.role ==
+// "<reviewer role>"` AND `coordinator.decision.next_action ==
+// <reviewer terminal>`) are coordinator-related but fire on reviewer
+// loops, so their action values come from reviewer personas, not the
+// coordinator persona. The taxonomy check scopes to rules whose
+// firing role is "coordinator"; the wake-up rules are validated
+// separately (TestCoordinatorSlice1cWakeUpRules below) for their
+// reviewer-role/approval-token shape.
+func TestMVPCoordinatorActionTaxonomy(t *testing.T) {
 	personaPath := "../../configs/personas/fragments/coordinator/10-decision-contract.md"
 	body, err := os.ReadFile(personaPath)
 	if err != nil {
@@ -34,17 +44,26 @@ func TestCoordinatorSlice1ActionTaxonomy(t *testing.T) {
 	}
 	personaText := string(body)
 
-	personaActions := []string{"delegate_research", "delegate_dev_chain", "respond_direct", "ask_user"}
+	personaActions := []string{"research", "respond_direct", "ask_user"}
 	for _, action := range personaActions {
+		// Persona must teach the action via its action-value table
+		// (backtick-wrapped token). The "don't invent" warning that
+		// names legacy tokens like delegate_research uses the same
+		// backtick wrapping, so the substring check alone is
+		// insufficient — we anchor on the table heading "When to
+		// use" + the closed-taxonomy section. The presence check
+		// here is structural; the reviewer-pass grades prose
+		// quality.
 		if !strings.Contains(personaText, "`"+action+"`") {
 			t.Errorf("persona 10-decision-contract.md missing action value `%s`", action)
 		}
 	}
 
-	ruleActions := collectCoordinatorRoleActions(t, "../../configs/rules/coordinator")
+	bootstrapRules := bootstrapLoadedRules(t)
+	ruleActions := collectCoordinatorRoleActionsFromFiles(t, bootstrapRules)
 
-	// Every rule-listed action MUST appear in the persona — orphan
-	// rule = silent dead code.
+	// Every live rule action MUST appear in the persona — orphan
+	// rule = silent dead code under the MVP roster.
 	for action, ruleFile := range ruleActions {
 		found := false
 		for _, p := range personaActions {
@@ -54,40 +73,77 @@ func TestCoordinatorSlice1ActionTaxonomy(t *testing.T) {
 			}
 		}
 		if !found {
-			t.Errorf("rule %s targets action %q which is not in the persona taxonomy", ruleFile, action)
+			t.Errorf("bootstrap-wired rule %s targets action %q which is not in the persona taxonomy",
+				ruleFile, action)
 		}
 	}
 
-	// Every persona action MUST have a rule. Slice 1c added the
-	// respond_direct rule (03b-respond-direct.json) — the prior
-	// "rule-less stop" exception no longer applies because the wake-up
-	// case needs respond_direct to publish on the user-response bus.
-	wantWired := []string{"delegate_research", "delegate_dev_chain", "respond_direct", "ask_user"}
-	for _, action := range wantWired {
+	// Every persona action MUST have a live rule. A persona action
+	// without a rule wedges the user (LLM emits the action, nothing
+	// fires).
+	for _, action := range personaActions {
 		if _, ok := ruleActions[action]; !ok {
-			t.Errorf("persona action %q has no rule in configs/rules/coordinator/", action)
+			t.Errorf("persona action %q has no bootstrap-wired rule that fires on coordinator role", action)
 		}
 	}
 }
 
-// collectCoordinatorRoleActions scans ruleDir for rules whose firing
-// role is "coordinator" and returns a map of action-value → rule file
-// for every coordinator.decision.next_action eq-condition found.
-// Rules with a different firing role (e.g. Slice 1c wake-up rules that
-// gate on reviewer-research / reviewer-qa) are excluded — those carry
-// reviewer-persona actions, not coordinator-persona actions.
-func collectCoordinatorRoleActions(t *testing.T, ruleDir string) map[string]string {
+// bootstrapLoadedRules reads configs/flow-bootstrap.json's
+// rule.config.rules_files list and returns absolute paths (within
+// this repo, not the in-container /app/ paths) suitable for
+// downstream file scans.
+func bootstrapLoadedRules(t *testing.T) []string {
 	t.Helper()
-	entries, err := os.ReadDir(ruleDir)
+	data, err := os.ReadFile("../../configs/flow-bootstrap.json")
 	if err != nil {
-		t.Fatalf("read %s: %v", ruleDir, err)
+		t.Fatalf("read flow-bootstrap.json: %v", err)
 	}
+	var bootstrap struct {
+		Components map[string]struct {
+			Config struct {
+				RulesFiles []string `json:"rules_files"`
+			} `json:"config"`
+		} `json:"components"`
+	}
+	if err := json.Unmarshal(data, &bootstrap); err != nil {
+		t.Fatalf("unmarshal flow-bootstrap.json: %v", err)
+	}
+	ruleProc, ok := bootstrap.Components["rule"]
+	if !ok {
+		t.Fatal("rule component not found in flow-bootstrap.json")
+	}
+	out := make([]string, 0, len(ruleProc.Config.RulesFiles))
+	for _, p := range ruleProc.Config.RulesFiles {
+		// Bootstrap stores in-container paths (/app/configs/...);
+		// rewrite to the relative test-cwd path.
+		rel := strings.TrimPrefix(p, "/app/")
+		out = append(out, "../../"+rel)
+	}
+	return out
+}
+
+// collectCoordinatorRoleActionsFromFiles scans the given rule files
+// for rules whose firing role is "coordinator" and returns a map of
+// action-value → rule file basename for every
+// coordinator.decision.next_action condition found. Handles both
+// `eq` (single value) and `in` (array of values) operators so that
+// transitional rules accepting more than one action value surface
+// each accepted value.
+//
+// `in` support is forward-compat — no bootstrap-loaded rule
+// currently uses it on next_action. Future bridging rules (e.g. a
+// rule that accepts a future `dev` category token alongside
+// `research` during a multi-category transition) will rely on it.
+//
+// Rules with a different firing role (e.g. Slice 1c wake-up rules
+// that gate on reviewer-research / reviewer-qa) are excluded —
+// those carry reviewer-persona actions, not coordinator-persona
+// actions.
+func collectCoordinatorRoleActionsFromFiles(t *testing.T, ruleFiles []string) map[string]string {
+	t.Helper()
 	out := map[string]string{}
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
-			continue
-		}
-		rulePath := filepath.Join(ruleDir, e.Name())
+	for _, rulePath := range ruleFiles {
+		base := filepath.Base(rulePath)
 		data, err := os.ReadFile(rulePath)
 		if err != nil {
 			t.Fatalf("read %s: %v", rulePath, err)
@@ -100,7 +156,7 @@ func collectCoordinatorRoleActions(t *testing.T, ruleDir string) map[string]stri
 			} `json:"conditions"`
 		}
 		if err := json.Unmarshal(data, &rule); err != nil {
-			t.Errorf("%s: invalid JSON: %v", e.Name(), err)
+			t.Errorf("%s: invalid JSON: %v", base, err)
 			continue
 		}
 		firingRole := ""
@@ -115,15 +171,34 @@ func collectCoordinatorRoleActions(t *testing.T, ruleDir string) map[string]stri
 			continue
 		}
 		for _, cond := range rule.Conditions {
-			if cond.Field != "coordinator.decision.next_action" || cond.Operator != "eq" {
+			if cond.Field != "coordinator.decision.next_action" {
 				continue
 			}
-			action, ok := cond.Value.(string)
-			if !ok {
-				t.Errorf("%s: next_action condition value is not a string: %v", e.Name(), cond.Value)
-				continue
+			switch cond.Operator {
+			case "eq":
+				action, ok := cond.Value.(string)
+				if !ok {
+					t.Errorf("%s: next_action eq value is not a string: %v", base, cond.Value)
+					continue
+				}
+				out[action] = base
+			case "in":
+				values, ok := cond.Value.([]interface{})
+				if !ok {
+					t.Errorf("%s: next_action in value is not an array: %v", base, cond.Value)
+					continue
+				}
+				for _, v := range values {
+					s, ok := v.(string)
+					if !ok {
+						t.Errorf("%s: next_action in array element is not a string: %v", base, v)
+						continue
+					}
+					out[s] = base
+				}
+			default:
+				t.Errorf("%s: unsupported operator %q on next_action condition", base, cond.Operator)
 			}
-			out[action] = e.Name()
 		}
 	}
 	return out
