@@ -898,3 +898,74 @@ but unused until the post-MVP work activates them.
 The migration cut (MVP-7) waits for all categories +
 real-LLM validation. Same posture as the original ADR's
 Phase 6 — atomic deletion PR with reviewer pass.
+
+## §addendum 2026-05-18 — MVP-7 migration cut (PR #178)
+
+MVP-7 landed as a single atomic PR. Deletions:
+
+- **Go packages**: `cmd/semteams/{chainmode,phasevalidator,chainstall,recoverycounter}/`.
+  All four pinned the legacy chain.mode-keyed gates; the
+  research-pack rule layer reaches the same recovery + terminal
+  behavior without them (pack identity replaces mode classification;
+  rule `max_iterations` replaces per-entity recovery counting).
+- **Concrete configs**: `configs/{agentic.json, agentic-claude.json,
+  dev-research.json, onboarding.json, osh-demo.json, e2e-agentic.json,
+  e2e-coordinator.json, e2e-dev-research.json, e2e-dev-via-spec.json,
+  e2e-ops-observer.json, e2e-research-harness-hit.json,
+  e2e-research-iterative.json, e2e-research-mode-transition.json,
+  e2e-research-with-source.json}`. The surviving pair is
+  `flow-bootstrap.json` (production) + `e2e-flow-bootstrap.json`
+  (mock-LLM clone).
+- **Rule dirs**: `configs/rules/{research-mode-transition,
+  research-iterative, dev-via-spec}/` deleted entirely.
+  `configs/rules/coordinator/{01-delegate-research, 02-delegate-dev-chain,
+  04a-research-terminal-to-coordinator, 04b-qa-terminal-to-coordinator,
+  05-chain-stall-to-coordinator}.json` + `configs/rules/chain/00-loop-failed-pause.json`
+  deleted. Surviving coordinator rules: `03-ask-user.json`,
+  `03b-respond-direct.json`. Surviving research rules:
+  `configs/rules/research/01..08-*.json` (the MVP-2 pack).
+- **Persona dirs**: `configs/personas/fragments/{researcher, researcher-plan,
+  researcher-gather, researcher-synthesize, researcher-architect,
+  reviewer-spec, reviewer-qa, source-registrar, research-reviewer,
+  builder}/` deleted. Surviving roles:
+  `coordinator`, `researcher-research-{plan,gather,synthesize}`,
+  `reviewer-research`, `ops`, `ops-chain-observer`, `ops-progress-observer`.
+- **Fixtures + Playwright specs**: all journey YAML and spec files
+  paired with deleted configs. Surviving: `research-mvp.yaml`,
+  `ops-agent-baseline.yaml`, `real-time-activity-stream.yaml`, plus
+  the spec files for the orthogonal UI tests (task-story-trace,
+  action-chips-personas, task-title-aliases, admin-flows-inventory)
+  which were repointed to the surviving fixture + config.
+- **Contract tests**: `chain_stall_routing_test.go`,
+  `chainstall_handler_order_test.go`, `chain_pause_rule_test.go`,
+  `recovery_cap_rule_test.go`, `dev_via_spec_rules_test.go`,
+  `lineage_threading_test.go`, `adr041_persona_dirs_test.go`.
+  Replacement: `chain_agents_no_graph_test.go` preserves the
+  ADR-041 chain-agents-no-graph-tools invariant + ops-persona
+  presence check.
+- **main.go subscribers**: chainmode.Stamper, phasevalidator.{Phase,SpecMode,QAMode},
+  chainstall.Subscriber, recoverycounter.Counter, plus the
+  `extractStallConfig` helper. Surviving completion handlers:
+  `dispatched`, `terminalStamper`, `research` (milestone),
+  `needsReview`.
+- **chain.terminal**: `reviewerQARole` + `acceptAction` constants
+  retired; `roleToApprovalAction` is single-entry
+  (`reviewer-research → approved`). A future dev-via-spec category
+  pack reintroducing reviewer-qa would extend the table.
+
+What stays out of scope (deferred to follow-up cleanup PR or future
+MVP):
+
+- `cmd/semteams/devviaspec/` Go package — still needed by
+  `tools/emitplan` (Plan payload type is shared with research arc).
+  `artifact.go` is dead under MVP-7 but couples to MVP-1 build via
+  payload registration; cleanup deferred to avoid widening this PR.
+- `tools/emitspecartifact/`, `tools/builderdecide/`, `verification/`,
+  `sandbox/` — all dev-via-spec-arc supporting code. Tool registry
+  still includes them; they're inert under bootstrap (no rule spawns
+  a builder, no persona names them in tool allowlists).
+
+MVP-7 closes the substrate-plus-overlays migration. Future MVPs
+introduce new category packs (dev-via-spec re-introduction,
+web-research, decision-memo, etc.) as additive rule + persona
+inventory without further migration steps.

@@ -146,33 +146,15 @@ func TestChainTerminal_ResearchApproved_StampsCluster(t *testing.T) {
 	}
 }
 
-// TestChainTerminal_QAAccept_StampsCluster — happy path for the
-// dev_via_spec chain. reviewer-qa(accept) lands all four triples.
-func TestChainTerminal_QAAccept_StampsCluster(t *testing.T) {
-	pub := &recordingTerminalPublisher{}
-	s := newTerminalStamperWith("reviewer_qa_xyz", acceptAction, map[string]string{}, pub)
-
-	ev := &agentic.LoopCompletedEvent{
-		LoopID:  "reviewer_qa_xyz",
-		Role:    reviewerQARole,
-		Outcome: agentic.OutcomeSuccess,
-	}
-	if err := s.HandleLoopCompleted(context.Background(), ev); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	got, ok := pub.byPredicate(PredicateChainTerminalRole)
-	if !ok {
-		t.Fatal("chain.terminal.role not written")
-	}
-	if got.Object != reviewerQARole {
-		t.Errorf("Object: got %v, want %q", got.Object, reviewerQARole)
-	}
-}
-
 // TestChainTerminal_NonTerminalActions_NoOp — every other reviewer action
-// (insufficient, reject, needs_clarification, empty) MUST be a no-op for
-// each terminal role. Adding a new approval token requires extending
+// (insufficient, needs_clarification, empty) MUST be a no-op for the
+// terminal role. Adding a new approval token requires extending
 // roleToApprovalAction; the table here pins the closed taxonomy.
+//
+// reviewer-qa retired in ADR-042 MVP-7 alongside the dev-via-spec arc;
+// the table previously included an `accept`/reviewerQARole row pair.
+// A future dev-via-spec category pack reintroducing the role would
+// extend this table.
 func TestChainTerminal_NonTerminalActions_NoOp(t *testing.T) {
 	cases := []struct {
 		role   string
@@ -182,14 +164,6 @@ func TestChainTerminal_NonTerminalActions_NoOp(t *testing.T) {
 		{reviewerResearchRole, "insufficient"},
 		{reviewerResearchRole, "needs_clarification"},
 		{reviewerResearchRole, ""},
-		// reviewer-research must NOT fire on QA's approval token
-		{reviewerResearchRole, acceptAction},
-		// reviewer-qa's non-approval terminals
-		{reviewerQARole, "reject"},
-		{reviewerQARole, "needs_clarification"},
-		{reviewerQARole, ""},
-		// reviewer-qa must NOT fire on research's approval token
-		{reviewerQARole, approvedAction},
 	}
 	for _, c := range cases {
 		t.Run(c.role+"/"+c.action, func(t *testing.T) {
@@ -216,7 +190,7 @@ func TestChainTerminal_NonTerminalActions_NoOp(t *testing.T) {
 func TestChainTerminal_NonTerminalRoles_NoOp(t *testing.T) {
 	pub := &recordingTerminalPublisher{}
 	s := newTerminalStamperWith("loop_id", approvedAction, map[string]string{}, pub)
-	for _, role := range []string{"coordinator", "researcher-plan", "researcher-synthesize", "builder", "dispatch", ""} {
+	for _, role := range []string{"coordinator", "researcher-research-plan", "researcher-research-synthesize", "dispatch", ""} {
 		ev := &agentic.LoopCompletedEvent{
 			LoopID:  "loop_id",
 			Role:    role,
@@ -460,14 +434,17 @@ func TestChainTerminal_PartialClusterFailure_RemainingTriplesLand(t *testing.T) 
 
 // TestRoleToApprovalAction_TablePin — locks the role→approval-action map
 // so any new terminating reviewer requires touching this table AND adding
-// the corresponding configs/rules/coordinator/ wake-up rule.
+// the corresponding wake-up rule in the category's pack dir.
+//
+// Under ADR-042 MVP-7 the map is single-entry (reviewer-research only);
+// reviewer-qa retired with the dev-via-spec arc. A future dev-via-spec
+// category pack reintroducing reviewer-qa would add the row back here.
 func TestRoleToApprovalAction_TablePin(t *testing.T) {
 	want := map[string]string{
 		"reviewer-research": "approved",
-		"reviewer-qa":       "accept",
 	}
 	if len(roleToApprovalAction) != len(want) {
-		t.Fatalf("roleToApprovalAction size: got %d, want %d (any new entry must add a corresponding configs/rules/coordinator/ wake-up rule)", len(roleToApprovalAction), len(want))
+		t.Fatalf("roleToApprovalAction size: got %d, want %d (any new entry must add a corresponding category-pack wake-up rule)", len(roleToApprovalAction), len(want))
 	}
 	for k, v := range want {
 		got, ok := roleToApprovalAction[k]

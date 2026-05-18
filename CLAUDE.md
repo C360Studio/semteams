@@ -22,44 +22,40 @@ LoC) independently wires every framework primitive per ADR-029.
 
 ## Bundled chains are illustrative configurations, not the product
 
-The chain templates under `configs/` demonstrate what the harness
-can run. Each config wires a different persona corpus + rule set +
-tool allowlist for a different *prompt class*:
+## Substrate-plus-overlays architecture (ADR-042 MVP-7, 2026-05-18)
 
-- `osh-demo.json` — **software domain.** Multi-phase research →
-  architect → builder arc that builds an external integration
-  end-to-end.
-- `dev-research.json` — **software domain.** Researcher arc with
-  source-repo substrate acquisition (semsource integration). Renamed
-  from `deep-research.json` on 2026-05-17 to make the software-domain
-  identity explicit; a web-research chain lands alongside.
-- `e2e-coordinator.json` — chain-shape agnostic; exercises
-  coordinator-driven routing between chains.
-- `onboarding.json` — interview-style intent classification with
-  the `/onboard` command.
+The product shell runs **one** flow config — `configs/flow-bootstrap.json`
+— wiring substrate singletons (graph-ingest, graph-query, rule-processor,
+agentic-loop, agentic-dispatch, agentic-tools, agentic-model). Task
+classes are added as **category-keyed rule packs** + named persona
+bundles loaded by the substrate, NOT as separate flow configs.
 
-**A chain template's domain is part of its identity.** When the
-chain reads source repos, asks a builder to produce code, or
-grounds research against software-shaped substrate, it is a
-*software-domain* chain — and the naming, the example shapes, and
-the bundled persona fragments should make that explicit. The
-shared persona corpus at `configs/personas/fragments/` carries
-harness-level guidance only (decide contracts, output structure,
-tool discipline) and stays domain-neutral by design.
+Live task category in MVP-7:
 
-Adding a new prompt class — web research, comparative analysis,
-decision memo, whatever the next ask is — is a **new chain
-config**, optionally a new emit tool with a domain-fit artifact
-shape, optionally chain-scoped persona fragments. It is **not** a
-rewrite of the shared corpus or the product shell. The goal is
-runtime flexibility: the harness chooses (or is told) which chain
-to run for a given prompt; domain flavor lives in the chain, not
-in the harness.
+- **`research`** — coordinator routes prose research asks via
+  `decide(action="research")`. The pack at `configs/rules/research/`
+  drives `researcher-research-plan → researcher-research-gather →
+  researcher-research-synthesize → reviewer-research → coordinator
+  wake-up`. Persona bundles live at
+  `configs/personas/fragments/researcher-research-{plan,gather,synthesize}/`
+  and `configs/personas/fragments/reviewer-research/`.
 
-This framing matters because the corpus has historically drifted
-toward whichever chain was being smoked at the time. The audit
-behind PR #163 (2026-05-17) stripped that accretion; the
-`personas-describe-job-not-plumbing` memory captures the rule.
+Adding a new prompt class (e.g. web-research, dev-via-spec
+reintroduction) is a **new category pack**: rule files under
+`configs/rules/<category>/`, persona bundles under
+`configs/personas/fragments/<role>-<category>-<phase?>/`, plus a
+coordinator-persona entry teaching the new `decide(action=<category>)`
+token. NO new components, NO runtime flow construction. See
+[ADR-042](docs/adr/042-coordinator-instantiated-flows-via-templates.md)
+§Phase 2 redesign for the substrate-plus-overlays rationale.
+
+**Shared persona corpus stays domain-neutral.** The persona corpus at
+`configs/personas/fragments/coordinator/` (plus the role-specific
+dirs above) carries harness-level guidance only (decide contracts,
+output structure, tool discipline). Domain flavor (software-domain,
+information-domain, decision-domain, …) lives in category packs.
+
+The `personas-describe-job-not-plumbing` memory captures the rule.
 
 > **Note**: The repo's `README.md` is the upstream **SemStreams**
 > README (framework getting-started). It is NOT SemTeams-specific.
@@ -129,18 +125,18 @@ task ui:build           # Production build
 
 | Config | Purpose | Model |
 |--------|---------|-------|
-| `agentic.json` | Production general-purpose | claude-haiku |
-| `agentic-claude.json` | Production Claude variant | claude-haiku |
-| `dev-research.json` | Production researcher workflow (software domain — source-repo substrate via semsource) | claude-haiku |
-| `onboarding.json` | Onboarding interview demo (intent classification, profile context, /onboard command) | claude-haiku |
-| `e2e-agentic.json` | E2E testing | mock-llm |
-| `e2e-coordinator.json` | E2E coordinator → researcher journey | mock-llm |
-| `e2e-dev-research.json` | E2E dev-research testing | mock-llm |
-| `e2e-ops-observer.json` | E2E ops observer (ADR-027 Phase 1) — dev-research + observe rule | mock-llm |
+| `flow-bootstrap.json` | Production substrate (ADR-042 MVP). Wires the singleton agentic stack + research category rule pack + coordinator + ops persona corpus. | claude-haiku |
+| `e2e-flow-bootstrap.json` | Mock-LLM clone of flow-bootstrap for Playwright journeys. Same wiring, mock-llm endpoint, disabled compaction. | mock-llm |
 
 UI Playwright journey tasks (in `ui/Taskfile.yml`) manage the Docker stack
 lifecycle — Playwright does NOT auto-start the stack. Each task: start →
 health-check → test → cleanup.
+
+The legacy concrete configs (`osh-demo.json`, `dev-research.json`,
+`agentic.json`, `agentic-claude.json`, `onboarding.json`, all
+`e2e-*` except `e2e-flow-bootstrap.json`) retired in ADR-042 MVP-7
+(PR #178) alongside the `chain.mode` / `phasevalidator` / `chainstall`
+machinery they depended on.
 
 ### Ops Agent Phase 1 (ADR-027, accepted)
 
@@ -166,13 +162,10 @@ deploy it.)
   `10-objective-grounding.md`, `20-diagnostic-rules.md` — persona
   fragments layered above upstream's `ops/00-identity.md` via the
   beta.9 file-loader (digit-prefix ordering).
-- `configs/rules/ops/observe-complete-loops.json` — fires once per
-  `fire_every_n_events: 20` completed researcher loops.
-- `configs/e2e-ops-observer.json` — single-process e2e config
-  (dev-research components + observe rule) for the Playwright
-  journey.
+- `configs/rules/ops/*.json` — observe + diagnose rules. Wired
+  into `configs/flow-bootstrap.json` alongside the research-pack
+  rules.
 - `docs/objectives/README.md` — objective-spec schema.
-- `docs/objectives/dev-research.md` — first concrete spec.
 
 The ops agent emits findings via the `emit_diagnosis` tool (not raw
 triples). Each call requires `finding`, `recommendation`, `confidence`
@@ -236,13 +229,15 @@ hardcoded URL paths). The `name` field points at the upstream factory
 These upstream config fields default `false`; enable per config as needed:
 
 - `agentic-dispatch.enable_intent_classification` — LLM-assisted intent
-  classifier (used by onboarding.json)
+  classifier. Off in flow-bootstrap.json (the coordinator persona does
+  classification via `decide(action=...)`).
 - `agentic-dispatch.enable_onboarding` — `/onboard` command + interview
-  state machine (onboarding.json)
+  state machine. Off in flow-bootstrap.json.
 - `agentic-memory.enable_profile_context` — assemble operating-model
-  profile context on loop creation (onboarding.json)
+  profile context on loop creation. Off in flow-bootstrap.json.
 - `agentic-tools.approval_required` — list of tool names requiring human
-  approval (agentic.json, agentic-claude.json have rule-write tools gated)
+  approval. Off in flow-bootstrap.json (the research-pack arc is
+  autonomous; future category packs may add per-tool gates).
 - `agentic-tools.enable_categories` — tool category filtering for
   role-based access
 - `agentic-governance.enable_tool_governance` — pre-execution governance

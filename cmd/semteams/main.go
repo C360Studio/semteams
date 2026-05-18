@@ -34,14 +34,10 @@ import (
 	"github.com/c360studio/semstreams/service"
 	"github.com/c360studio/semstreams/types"
 	"github.com/c360studio/semteams/cmd/semteams/chain"
-	"github.com/c360studio/semteams/cmd/semteams/chainmode"
 	"github.com/c360studio/semteams/cmd/semteams/chainpause"
-	"github.com/c360studio/semteams/cmd/semteams/chainstall"
 	"github.com/c360studio/semteams/cmd/semteams/evidence"
 	"github.com/c360studio/semteams/cmd/semteams/flowtemplates"
-	"github.com/c360studio/semteams/cmd/semteams/phasevalidator"
 	"github.com/c360studio/semteams/cmd/semteams/portresolver"
-	"github.com/c360studio/semteams/cmd/semteams/recoverycounter"
 	"github.com/c360studio/semteams/cmd/semteams/testharness"
 )
 
@@ -341,74 +337,23 @@ func startChainMilestoneSubscribers(ctx context.Context, cfg *config.Config, nat
 	dispatched := chain.NewDispatchedStamper(triplePublisher, platform, logger)
 	research := chain.NewResearchMilestoneStamper(triplePublisher, resolver, entityReader, platform, logger)
 	needsReview := chain.NewNeedsReviewStamper(triplePublisher, resolver, entityReader, platform, logger)
-	// Threshold=0 → recoverycounter falls back to DefaultThreshold (3).
-	// TODO: plumb from cfg.RecoveryCap.Threshold (or per-flow config) when
-	// the config field exists. Per ADR-040 §addendum 2026-05-11 "Operator
-	// knobs" §1, operators currently bump recoverycounter.DefaultThreshold
-	// or pass a non-zero literal here.
-	recoveryCap := recoverycounter.NewCounter(triplePublisher, resolver, entityReader, platform, 0, logger)
 
-	// ADR-041 structural gates. Each is an independent
-	// chain.CompletionHandler with its own role filter; they share
-	// infrastructure (resolver, entityReader, triplePublisher) and
-	// follow the recoverycounter idiom of writing a proceed sentinel
-	// on the loop entity when a structural contract holds, rejection
-	// triples on the chain entity when it doesn't, and nothing when
-	// any precondition cannot be checked (fail-safe). See
-	// cmd/semteams/phasevalidator/doc.go for the full design rationale.
-	phaseValidator := phasevalidator.NewPhaseValidator(triplePublisher, resolver, entityReader, platform, logger)
-	specModeGate := phasevalidator.NewSpecModeGate(triplePublisher, resolver, entityReader, platform, logger)
-	qaModeGate := phasevalidator.NewQAModeGate(triplePublisher, resolver, entityReader, platform, logger)
-
-	// Coordinator-redesign Slice 1b: chain.mode stamper. Fires on
-	// coordinator-loop terminals carrying delegate_research /
-	// delegate_dev_chain and stamps chain.mode on the canonical
-	// 6-part chain entity. phasevalidator's synthesize→architect
-	// gate reads chain.mode from chainTriples in the same dispatch
-	// cycle (the coordinator's loop completes BEFORE any researcher
-	// loop in the chain, so chain.mode is on disk when synthesize
-	// later completes).
-	modeStamper := chainmode.NewStamper(triplePublisher, resolver, entityReader, platform, logger)
-
-	// Coordinator-redesign Slice 1c: chain.terminal stamper. Fires on
-	// terminating-reviewer success (reviewer-research/approved or
-	// reviewer-qa/accept) and writes the chain.terminal.* audit
-	// cluster on the canonical 6-part chain entity. The wake-up rule
-	// (configs/rules/coordinator/04a-/04b-) fires on the reviewer
-	// loop's role + decision triples directly (rule engine's firing
-	// entity = the loop, not the chain); the chain-entity cluster is
-	// for ops queries and operator dashboards.
+	// chain.terminal stamper. Fires on terminating-reviewer success
+	// (reviewer-research/approved under the MVP roster; see ADR-042
+	// §Phase 2 redesign for the closed taxonomy) and writes the
+	// chain.terminal.* audit cluster on the canonical 6-part chain
+	// entity. The wake-up rule (research/07-reviewer-approved-to-
+	// coordinator.json) fires on the reviewer loop's role + decision
+	// triples directly (rule engine's firing entity = the loop, not
+	// the chain); the chain-entity cluster is for ops queries and
+	// operator dashboards.
 	terminalStamper := chain.NewTerminalStamper(triplePublisher, resolver, entityReader, platform, logger)
-
-	// Coordinator-redesign Slice 2: chainstall.Subscriber.
-	// Fires on producer-role loop completions that the structural gates
-	// (phasevalidator / specModeGate / qaModeGate / NeedsReviewStamper /
-	// recoverycounter) would reject. Routes per-reason: framing-fixable
-	// reasons wake a coordinator via rule 05; budget/structural reasons
-	// stamp chain.stall.awaiting_human for operator verdict at the
-	// /teams-loop/chain-stall/decide HTTP endpoint (deferred follow-up).
-	//
-	// MUST be registered LAST in the handler slice: chainstall reads
-	// chain-entity triples written by sibling handlers on the same
-	// agent.complete event (synchronous request/reply through graph-ingest
-	// ensures consistency, but only if siblings run first). See
-	// cmd/semteams/chainstall/doc.go §"Within-event read-after-sibling-write
-	// coupling" for the full rationale and the contract test that pins
-	// the ordering.
-	stallAuthority, stallThreshold := extractStallConfig(cfg)
-	stallSubscriber := chainstall.NewSubscriber(triplePublisher, resolver, entityReader, platform, stallThreshold, stallAuthority, logger)
 
 	subscriber := chain.NewCompletionSubscriber([]chain.CompletionHandler{
 		dispatched,
-		modeStamper,
 		terminalStamper,
 		research,
 		needsReview,
-		recoveryCap,
-		phaseValidator,
-		specModeGate,
-		qaModeGate,
-		stallSubscriber,
 	}, loopCompletedSubject, logger)
 	if err := subscriber.Start(ctx, natsClient); err != nil {
 		return fmt.Errorf("subscribe to loop completed for chain milestones: %w", err)
@@ -551,34 +496,6 @@ func extractLoopsBucket(cfg *config.Config) string {
 	return ""
 }
 
-// extractStallConfig pulls coordinator-redesign Slice 2 chainstall settings
-// from the agentic-dispatch component config: chain_stall_authority
-// (per_reason | all_human) and chain_stall_threshold (recovery cap).
-// Defaults fall back to chainstall.AuthorityPerReason +
-// chainstall.DefaultThreshold (3) so configs omitting these fields land
-// on the table-driven routing path with the same cap as
-// recoverycounter.DefaultThreshold.
-//
-// Reads from the first enabled agentic-dispatch instance (instance name
-// varies by config: "teams-dispatch" in osh-demo / e2e-coordinator,
-// "agentic-dispatch" elsewhere); semteams configs run a single
-// agentic-dispatch so the first-match is unambiguous.
-func extractStallConfig(cfg *config.Config) (authority string, threshold int) {
-	for _, cc := range cfg.Components {
-		if cc.Name != "agentic-dispatch" || !cc.Enabled {
-			continue
-		}
-		var tcfg struct {
-			ChainStallAuthority string `json:"chain_stall_authority"`
-			ChainStallThreshold int    `json:"chain_stall_threshold"`
-		}
-		if err := json.Unmarshal(cc.Config, &tcfg); err == nil {
-			return tcfg.ChainStallAuthority, tcfg.ChainStallThreshold
-		}
-	}
-	return "", 0
-}
-
 // buildRuleManager constructs a rule.ConfigManager (KV-backed rule CRUD)
 // for use by the Pattern-B rule executors. Nil on init failure →
 // registerRules skips. Note: upstream's runtime hot-reload ConfigManager
@@ -706,13 +623,10 @@ func loadPlatformAssets(ctx context.Context, natsClient *natsclient.Client, cliC
 // or boot-time KV failure that already logged its own warning).
 // Uses multi-role on the Persona so a single record applies to
 // every researcher / reviewer role that touches a test_harness
-// field — researcher phases that select (researcher-plan / gather
-// / synthesize / architect) and reviewer modes that membership-
-// check (reviewer-research, reviewer-spec). Legacy `researcher` +
-// `research-reviewer` are retained in the Roles list for
-// research-iterative configs that have not migrated to the
-// ADR-041 phase-suffixed roster (harness selection is the
-// researcher-architect's concern under MVP).
+// field. Under the ADR-042 MVP-7 roster the live roster is the
+// research-category synthesize phase + reviewer-research; future
+// dev-via-spec category packs reintroducing architect/reviewer-spec
+// would extend this list.
 //
 // Fragment ID `test-harness-catalog.rendered` is intentionally NOT in
 // the project's `\d+-` prefix style operators use for hand-
@@ -748,21 +662,14 @@ func injectRenderedTestHarnessFragment(ctx context.Context, personaMgr *persona.
 		Priority: 45,
 		Content:  body,
 		// The catalog is loaded for every role that touches a
-		// research.artifact.test_harness field — researcher phases that
-		// select (plan/gather/synthesize/architect) and reviewer modes
-		// that membership-check (reviewer-research, reviewer-spec).
-		// Legacy `researcher` + `research-reviewer` retained for
-		// research-iterative configs that have not migrated to the
-		// ADR-041 phase-suffixed roster.
+		// research.artifact.test_harness field — under the ADR-042
+		// MVP-7 roster this is the research-category synthesize phase
+		// (selects test_harness) + reviewer-research (verifies the
+		// stance). Future category packs introducing architect /
+		// reviewer-spec roles would extend the list.
 		Roles: []string{
-			"researcher",
-			"research-reviewer",
-			"researcher-plan",
-			"researcher-gather",
-			"researcher-synthesize",
-			"researcher-architect",
+			"researcher-research-synthesize",
 			"reviewer-research",
-			"reviewer-spec",
 		},
 		Description: "Auto-generated from configs/harnesses.json at boot (ADR-033 R3.7.1).",
 	}
