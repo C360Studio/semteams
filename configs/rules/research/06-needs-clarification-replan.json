@@ -1,0 +1,55 @@
+{
+  "id": "research_needs_clarification_replan",
+  "type": "expression",
+  "name": "Any research-pack role decide(needs_clarification) → researcher-research-plan",
+  "description": "ADR-042 §Phase 2 redesign MVP-2 research pack generic recovery rule. Fires when any chain role within the research pack terminates with decide(action=needs_clarification) — the canonical signal that the current contract cannot complete from available information. Spawns researcher-research-plan with the rejecting role's reason; the new researcher re-enters the chain at the plan phase, addresses the gap, and the chain re-runs through gather/synthesize forward. Recovery shape A per ADR-039 (supersession-via-new-spawn; prior loop entities remain immutable in the graph). max_iterations=3 is informational under the current rule engine (each terminating loop is a distinct entity, so the per-entity rule-state caveat applies).",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "agent.loop.role",
+      "operator": "in",
+      "value": [
+        "researcher-research-plan",
+        "researcher-research-gather",
+        "researcher-research-synthesize",
+        "reviewer-research"
+      ],
+      "required": true
+    },
+    {
+      "field": "coordinator.decision.next_action",
+      "operator": "eq",
+      "value": "needs_clarification",
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "max_iterations": 3,
+  "on_enter": [
+    {
+      "type": "publish_agent",
+      "subject": "agent.task.researcher-research-plan",
+      "role": "researcher-research-plan",
+      "model": "research",
+      "tools": ["read_loop_result", "emit_plan", "scratchpad", "decide"],
+      "action_allowlist": ["gather", "emit", "needs_clarification"],
+      "properties": {
+        "prior_loop_id": "$entity.instance",
+        "category": "research",
+        "phase": "plan",
+        "recovery": "needs_clarification"
+      },
+      "prompt": "Recovery plan pass. The chain role $entity.triple.agent.loop.role at loop $entity.instance terminated with decide(action=needs_clarification) — the prior arc could not complete from available information.\n\nIteration 1 — call read_loop_result on $entity.instance to read the full structured terminal. The reason field names the gap; the retry_hint field (if present) names the framing change the rejecting role wants. If the loop entity carries lineage.researcher (set on roles spawned after the plan phase), call read_loop_result on that loop too to read the prior research artifact verbatim. Your job is to RE-PLAN with the rejecting role's gap addressed, not start from scratch.\n\nIteration 2+ — emit a revised plan per researcher-research-plan/10-plan-rules.md. Carry forward everything from the prior plan that's still correct (scope, epics); tighten or extend only what the rejecting role's gap demands. Terminal: decide(action=\"gather\") to forward into the gather phase, decide(action=\"emit\") for premature emit (reviewer will likely reject), or decide(action=\"needs_clarification\") only when re-planning genuinely cannot proceed."
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "pack": "research",
+    "phase": "ADR-042 MVP-2",
+    "adr": "docs/adr/042-coordinator-instantiated-flows-via-templates.md",
+    "shape": "A",
+    "supersedes_legacy": "configs/rules/dev-via-spec/03-needs-clarification-to-researcher.json — same recovery shape, scoped to research-pack roles only (the dev-via-spec category pack will mint its own generic recovery).",
+    "plan_phase_loop_todo": "MVP-4 follow-on: plan-phase needs_clarification routes here and respawns plan, which can loop until max_iterations (per-entity, effectively unbounded). The semantically correct route for plan-phase needs_clarification is the coordinator (which owns the framing). Legacy chainstall handled this via unrouted_needs_clarification. Resolve in MVP-4 either by (a) teaching the coordinator persona to retry with tightened framing, or (b) splitting this rule into role-specific recovery routes (plan-phase NC → coordinator; downstream NC → plan).",
+    "triple_substitution_audit": "Reviewer-pass C1 (2026-05-17) flagged the legacy prompt's references to non-existent triples coordinator.blocking_question and coordinator.retry_hint (decide.go stamps only next_action + reason; retry_hint is a decide-arg field surfaced via read_loop_result). Reworked to instruct read_loop_result-first, naming retry_hint as a field on the structured terminal."
+  }
+}

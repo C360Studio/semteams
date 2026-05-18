@@ -54,6 +54,12 @@
     },
     "defaults": {
       "model": "claude-haiku"
+    },
+    "capabilities": {
+      "coordinator": { "preferred": ["claude-haiku"], "fallback": ["claude-sonnet"], "requires_tools": true },
+      "research": { "preferred": ["claude-haiku"], "fallback": ["claude-sonnet", "gemini-flash"], "requires_tools": true },
+      "reviewing": { "preferred": ["claude-haiku"], "fallback": ["claude-sonnet"], "requires_tools": true },
+      "general": { "preferred": ["claude-haiku"], "fallback": ["claude-sonnet", "gemini-flash"], "requires_tools": true }
     }
   },
   "services": {
@@ -186,7 +192,18 @@
           ]
         },
         "enable_graph_integration": true,
-        "rules_files": [],
+        "rules_files": [
+          "/app/configs/rules/research/01-coordinator-research-spawn.json",
+          "/app/configs/rules/research/02-plan-to-gather.json",
+          "/app/configs/rules/research/03-gather-to-synthesize.json",
+          "/app/configs/rules/research/04-synthesize-to-reviewer.json",
+          "/app/configs/rules/research/05-reviewer-rejected-retry.json",
+          "/app/configs/rules/research/06-needs-clarification-replan.json",
+          "/app/configs/rules/research/07-reviewer-approved-to-coordinator.json",
+          "/app/configs/rules/research/08-loop-failed-pause.json",
+          "/app/configs/rules/coordinator/03b-respond-direct.json",
+          "/app/configs/rules/coordinator/03-ask-user.json"
+        ],
         "inline_rules": []
       }
     },
