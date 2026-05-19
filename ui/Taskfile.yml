@@ -190,221 +190,23 @@ tasks:
   test:e2e:
     desc: Run all E2E journey specs (each with its own fixture and fresh stack)
     summary: |
-      Runs every Playwright journey under e2e/agentic/ with its paired
-      mock-llm fixture, tearing down the docker stack between runs so
-      mock-llm reloads the right fixture for each journey.
-
-      Slow (each journey re-builds and re-boots the stack — roughly
-      2-3 minutes per journey on first run) but deterministic. Prefer
-      the per-scenario tasks (test:e2e:agentic:<slug>) for iterative
-      development.
+      Runs every Playwright journey under e2e/agentic/ with the
+      research-mvp mock-LLM fixture (the surviving ADR-042 MVP cut),
+      tearing down the docker stack between runs.
     cmds:
-      - task: test:e2e:agentic:tool-approval-gate
-      - task: test:e2e:agentic:real-time-activity-stream
-      - task: test:e2e:agentic:dev-research
+      - task: test:e2e:agentic:research-mvp
       - task: test:e2e:agentic:ops-agent
-      - task: test:e2e:agentic:coordinator-researcher
-      - task: test:e2e:agentic:coordinator-researcher-stall-recovery
+      - task: test:e2e:agentic:real-time-activity-stream
       - task: test:e2e:agentic:task-story-trace
       - task: test:e2e:agentic:action-chips
       - task: test:e2e:agentic:task-title-aliases
       - task: test:e2e:agentic:admin-flows-inventory
-      - task: test:e2e:agentic:research-iterative
-      - task: test:e2e:agentic:research-with-source
-      # research-with-source-acquisition removed under ADR-040 (role hard-deleted)
-      # research-mode-transition + dev-via-spec specs are .fixme'd pending PR 4
-      # mock-llm fixture rewrites for the new source-curator flow.
-
-  test:e2e:agentic:research-with-source:
-    desc: Run the R2 source-acquisition journey (add_source_repo + approval gate + SemSource)
-    summary: |
-      Spawns the SemSource container alongside the regular agentic stack
-      (compose profile `semsource`). The journey exercises add_source_repo
-      end-to-end: source-registrar agent proposes the add → approval gate
-      fires → human approves → tool publishes AddRequest on
-      graph.ingest.add.research → SemSource replies → loop completes.
-
-      Requires the SemSource image at ghcr.io/c360studio/semsource:latest;
-      override with SEMSOURCE_IMAGE if testing an unreleased build.
-    vars:
-      FIXTURE: research-with-source.yaml
-      AGENTIC_CONFIG: e2e-research-with-source.json
-      COMPOSE_PROFILES: semsource
-    cmds:
-      - defer: { task: test:e2e:agentic:cleanup }
-      - task: test:e2e:agentic:stack:up
-        vars:
-          FIXTURE: "{{.FIXTURE}}"
-          AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
-          COMPOSE_PROFILES: "{{.COMPOSE_PROFILES}}"
-      - npx playwright test e2e/agentic/research-with-source.spec.ts
-
-  test:e2e:agentic:tool-approval-gate:
-    desc: Run the tool-approval-gate journey with its paired fixture
-    vars:
-      FIXTURE: tool-approval-gate.yaml
-      AGENTIC_CONFIG: e2e-agentic.json
-    cmds:
-      - defer: { task: test:e2e:agentic:cleanup }
-      - task: test:e2e:agentic:stack:up
-        vars:
-          FIXTURE: "{{.FIXTURE}}"
-          AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
-      - npx playwright test e2e/agentic/tool-approval-gate.spec.ts
-
-  test:e2e:agentic:research-iterative:
-    desc: Run the research-iterative journey with its paired fixture (R1 of ADR-031)
-    vars:
-      FIXTURE: research-iterative.yaml
-      AGENTIC_CONFIG: e2e-research-iterative.json
-    cmds:
-      - defer: { task: test:e2e:agentic:cleanup }
-      - task: test:e2e:agentic:stack:up
-        vars:
-          FIXTURE: "{{.FIXTURE}}"
-          AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
-      - npx playwright test e2e/agentic/research-iterative.spec.ts
-
-  test:e2e:agentic:research-harness-hit:
-    desc: Run the harness-catalog-hit journey (R3.7.1.e of ADR-033)
-    summary: |
-      Single-pass researcher emits an artifact whose `harness` field
-      references the `stub` entry in configs/harnesses-stub.json,
-      mounted via SEMTEAMS_HARNESS_CATALOG_PATH override. Verifies
-      boot-time catalog load + persona-fragment auto-render +
-      emit_research_artifact harness-field plumbing end-to-end.
-      Catalog-miss is structurally a strict subset of this fixture
-      (omit harness field) and is implicitly tested by the existing
-      research-iterative journey.
-    vars:
-      FIXTURE: research-harness-hit.yaml
-      AGENTIC_CONFIG: e2e-research-harness-hit.json
-      SEMTEAMS_HARNESS_CATALOG_PATH: /app/configs/harnesses-stub.json
-    cmds:
-      - defer: { task: test:e2e:agentic:cleanup }
-      - task: test:e2e:agentic:stack:up
-        vars:
-          FIXTURE: "{{.FIXTURE}}"
-          AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
-          SEMTEAMS_HARNESS_CATALOG_PATH: "{{.SEMTEAMS_HARNESS_CATALOG_PATH}}"
-      - npx playwright test e2e/agentic/research-harness-hit.spec.ts
-
-  test:e2e:agentic:research-mode-transition:
-    desc: Run the R3.2.2 research → dev-via-spec mode-transition journey
-    summary: |
-      End-to-end exercise of ADR-031 R3.2.2: stabilisation gate +
-      persona-swap mode transition. Builds on R2.5's chained research
-      + source-acquisition arc; adds the emit_research_artifact tool
-      call inside each researcher pass and the persona-swap rule
-      (03-stabilise-and-transition.json) that fires when the reviewer
-      approves a stabilised arc and spawns the dev-via-spec-planner
-      stub. The reviewer's stabilisation predicate (zero new substrate
-      mutations on the latest revision, per the ADR-031 §addendum
-      2026-04-30 "converged change-log" model) lives in the reviewer
-      persona; the rule trusts the structured terminal output per
-      ADR-028 §Layer 2.
-
-      Seven loops, twenty LLM round-trips. The chain is longer than
-      R2.5's because the stabilisation gate makes "approve on the
-      pass that mutated" structurally impossible — a settling pass
-      with zero new mutations is required before the reviewer can
-      approve.
-
-      Requires the SemSource image at ghcr.io/c360studio/semsource:latest;
-      override with SEMSOURCE_IMAGE if testing an unreleased build.
-    vars:
-      FIXTURE: research-mode-transition.yaml
-      AGENTIC_CONFIG: e2e-research-mode-transition.json
-      COMPOSE_PROFILES: semsource
-    cmds:
-      - defer: { task: test:e2e:agentic:cleanup }
-      - task: test:e2e:agentic:stack:up
-        vars:
-          FIXTURE: "{{.FIXTURE}}"
-          AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
-          COMPOSE_PROFILES: "{{.COMPOSE_PROFILES}}"
-      - npx playwright test e2e/agentic/research-mode-transition.spec.ts
-
-  test:e2e:agentic:dev-via-spec:
-    desc: Run the R3.3 + R3.4b + R3.6.2 dev-via-spec full-chain journey (planner / reviewer / challenger / architect / builder)
-    summary: |
-      End-to-end exercise of ADR-031 R3.3 (port from SemSpec patterns) +
-      R3.4b (architect emits typed artifact) + R3.6.2 (builder slice).
-      Builds on R3.2.2's research-mode-transition: the six-loop research
-      arc completes, the stabilisation rule spawns the dev-via-spec-
-      planner, and the dev-via-spec internal rule chain (configs/rules/
-      dev-via-spec/ rules 01/03/05/06) drives the five-role handoff to
-      builder terminal.
-
-      Eleven loops, thirty-three LLM round-trips. Covers the golden
-      path — every gate (reviewer + challenger) approves on first pass;
-      the builder terminates with builder_decide(tests_failing) per
-      the fixture's mock-LLM constraint (it cannot pre-know the
-      architect's dynamically-dated slug, see fixture comment).
-      Retry rules (02 reviewer-rejected, 04 challenger-concerns,
-      builder iteration-budget exhaustion) are exercised structurally
-      by max_iterations metadata; covering them under e2e is a follow-up
-      if the OSH smoke #6 reveals real-LLM retry behaviour worth pinning.
-
-      Requires the SemSource image at ghcr.io/c360studio/semsource:latest
-      (override with SEMSOURCE_IMAGE if testing an unreleased build) and
-      the sandbox image (built locally from docker/sandbox.Dockerfile).
-    vars:
-      FIXTURE: dev-via-spec.yaml
-      AGENTIC_CONFIG: e2e-dev-via-spec.json
-      COMPOSE_PROFILES: semsource,sandbox
-    cmds:
-      - defer: { task: test:e2e:agentic:cleanup }
-      - task: test:e2e:agentic:stack:up
-        vars:
-          FIXTURE: "{{.FIXTURE}}"
-          AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
-          COMPOSE_PROFILES: "{{.COMPOSE_PROFILES}}"
-      - npx playwright test e2e/agentic/dev-via-spec.spec.ts
-
-  test:e2e:agentic:dev-via-spec-qa:
-    desc: Run the R3.7.2.k′ dev-via-spec full-chain journey extended through the qa-reviewer terminal
-    summary: |
-      End-to-end exercise of ADR-034 R3.7.2.k′ — the post-build
-      review hop. Runs the same eleven loops as
-      test:e2e:agentic:dev-via-spec, but the builder terminates with
-      builder_decide(tests_passing) instead of needs_clarification,
-      which triggers configs/rules/dev-via-spec/07-builder-decide-to-
-      qa-reviewer.json and spawns the dev-via-spec-qa-reviewer
-      (R3.7.2.j′ persona) as Loop L. The qa-reviewer reads the
-      builder's terminal and emits decide(needs_clarification)
-      because the spawn-rule supplies a hardcoded "(stub)" evidence
-      summary — real evidence-rendering plumbing is deferred. See
-      project_smoke7_open_plumbing.md §2.
-
-      Twelve loops, thirty-five LLM round-trips. Mock-LLM only —
-      real LLM exercise lands in smoke #7 (R3.7.2.l′).
-
-      Requires the SemSource image at ghcr.io/c360studio/semsource:latest
-      (override with SEMSOURCE_IMAGE if testing an unreleased build) and
-      the sandbox image (built locally from docker/sandbox.Dockerfile).
-    vars:
-      FIXTURE: dev-via-spec-qa.yaml
-      AGENTIC_CONFIG: e2e-dev-via-spec.json
-      COMPOSE_PROFILES: semsource,sandbox
-    cmds:
-      - defer: { task: test:e2e:agentic:cleanup }
-      - task: test:e2e:agentic:stack:up
-        vars:
-          FIXTURE: "{{.FIXTURE}}"
-          AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
-          COMPOSE_PROFILES: "{{.COMPOSE_PROFILES}}"
-      - npx playwright test e2e/agentic/dev-via-spec-qa.spec.ts
-
-  # test:e2e:agentic:research-with-source-acquisition removed under ADR-040
-  # (role + journey + spec + e2e config hard-deleted — see PR 3 commit
-  # b2100ec for the removal manifest).
 
   test:e2e:agentic:real-time-activity-stream:
-    desc: Run the real-time-activity-stream journey with its paired fixture
+    desc: Run the real-time-activity-stream journey
     vars:
       FIXTURE: real-time-activity-stream.yaml
-      AGENTIC_CONFIG: e2e-agentic.json
+      AGENTIC_CONFIG: e2e-flow-bootstrap.json
     cmds:
       - defer: { task: test:e2e:agentic:cleanup }
       - task: test:e2e:agentic:stack:up
@@ -412,19 +214,6 @@ tasks:
           FIXTURE: "{{.FIXTURE}}"
           AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
       - npx playwright test e2e/agentic/real-time-activity-stream.spec.ts
-
-  test:e2e:agentic:dev-research:
-    desc: Run the dev-research journey with researcher config + paired fixture
-    vars:
-      FIXTURE: dev-research.yaml
-      AGENTIC_CONFIG: e2e-dev-research.json
-    cmds:
-      - defer: { task: test:e2e:agentic:cleanup }
-      - task: test:e2e:agentic:stack:up
-        vars:
-          FIXTURE: "{{.FIXTURE}}"
-          AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
-      - npx playwright test e2e/agentic/dev-research.spec.ts
 
   test:e2e:agentic:ops-agent:
     desc: Run the ops-agent baseline journey (ADR-027 Phase 1 — 20 researcher loops + ops diagnostic)
@@ -437,7 +226,7 @@ tasks:
       timeout when running under CI.
     vars:
       FIXTURE: ops-agent-baseline.yaml
-      AGENTIC_CONFIG: e2e-ops-observer.json
+      AGENTIC_CONFIG: e2e-flow-bootstrap.json
     cmds:
       - defer: { task: test:e2e:agentic:cleanup }
       - task: test:e2e:agentic:stack:up
@@ -445,23 +234,6 @@ tasks:
           FIXTURE: "{{.FIXTURE}}"
           AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
       - npx playwright test e2e/agentic/ops-agent-baseline.spec.ts
-
-  test:e2e:agentic:coordinator-researcher:
-    desc: Run the coordinator → researcher delegation journey
-    summary: |
-      One user prompt produces two loops: coordinator (decide tool) and
-      researcher (web_search + synth). Validates the rule-engine spawn
-      path (publish_agent on coordinator.next_action triple).
-    vars:
-      FIXTURE: coordinator-researcher.yaml
-      AGENTIC_CONFIG: e2e-coordinator.json
-    cmds:
-      - defer: { task: test:e2e:agentic:cleanup }
-      - task: test:e2e:agentic:stack:up
-        vars:
-          FIXTURE: "{{.FIXTURE}}"
-          AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
-      - npx playwright test e2e/agentic/coordinator-researcher.spec.ts
 
   test:e2e:agentic:research-mvp:
     desc: Run the ADR-042 MVP-5 research-category mock-LLM journey
@@ -495,42 +267,11 @@ tasks:
           AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
       - npx playwright test e2e/agentic/research-mvp.spec.ts
 
-  test:e2e:agentic:coordinator-researcher-stall-recovery:
-    desc: Run the Slice 2 chainstall recovery journey (mode_mismatch → coordinator)
-    summary: |
-      Coordinator → research_only chain → synthesize drifts to architect
-      → cmd/semteams/chainstall observes the mode_mismatch rejection and
-      routes recovery to a fresh coordinator (rule 05). Second arc
-      converges → reviewer-research approves → wake-up coordinator
-      (rule 04a) delivers user reply.
-
-      Asserts the full chainstall audit cluster (chain.rejection.* +
-      chain.stall.*) on the Chain 1 chain entity, the per-loop
-      chain.stall.proceed sentinel on Loop C, and the idempotency
-      guard (no eleventh loop under redelivery).
-
-      Ten loops, twenty-three mock-llm round-trips. Same agentic-e2e
-      baseline as coordinator-researcher (no extra compose profile).
-    vars:
-      FIXTURE: coordinator-researcher-stall-recovery.yaml
-      AGENTIC_CONFIG: e2e-coordinator.json
-    cmds:
-      - defer: { task: test:e2e:agentic:cleanup }
-      - task: test:e2e:agentic:stack:up
-        vars:
-          FIXTURE: "{{.FIXTURE}}"
-          AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
-      - npx playwright test e2e/agentic/coordinator-researcher-stall-recovery.spec.ts
-
   test:e2e:agentic:task-story-trace:
-    desc: Run the task-story / raw-activity right-rail journey
-    summary: |
-      Reuses the dev-research fixture to land a completed task, then
-      drives the right-rail detail panel: Activity tab shows the story
-      list; "Show raw activity" disclosure exposes the trace rows.
+    desc: Run the task-story / raw-activity right-rail journey (fixture-agnostic; uses research-mvp for backend activity)
     vars:
-      FIXTURE: dev-research.yaml
-      AGENTIC_CONFIG: e2e-dev-research.json
+      FIXTURE: research-mvp.yaml
+      AGENTIC_CONFIG: e2e-flow-bootstrap.json
     cmds:
       - defer: { task: test:e2e:agentic:cleanup }
       - task: test:e2e:agentic:stack:up
@@ -540,10 +281,10 @@ tasks:
       - npx playwright test e2e/agentic/task-story-trace.spec.ts
 
   test:e2e:agentic:action-chips:
-    desc: Run the persona action-chips journey (Research / Plan / Implement)
+    desc: Run the persona action-chips journey (fixture-agnostic; uses research-mvp for backend activity)
     vars:
-      FIXTURE: dev-research.yaml
-      AGENTIC_CONFIG: e2e-dev-research.json
+      FIXTURE: research-mvp.yaml
+      AGENTIC_CONFIG: e2e-flow-bootstrap.json
     cmds:
       - defer: { task: test:e2e:agentic:cleanup }
       - task: test:e2e:agentic:stack:up
@@ -553,10 +294,10 @@ tasks:
       - npx playwright test e2e/agentic/action-chips-personas.spec.ts
 
   test:e2e:agentic:task-title-aliases:
-    desc: Run the editable-title + alias-chip journey
+    desc: Run the editable-title + alias-chip journey (fixture-agnostic; uses research-mvp for backend activity)
     vars:
-      FIXTURE: dev-research.yaml
-      AGENTIC_CONFIG: e2e-dev-research.json
+      FIXTURE: research-mvp.yaml
+      AGENTIC_CONFIG: e2e-flow-bootstrap.json
     cmds:
       - defer: { task: test:e2e:agentic:cleanup }
       - task: test:e2e:agentic:stack:up
@@ -566,10 +307,10 @@ tasks:
       - npx playwright test e2e/agentic/task-title-aliases.spec.ts
 
   test:e2e:agentic:admin-flows-inventory:
-    desc: Run the read-only /admin/flows inventory journey
+    desc: Run the read-only /admin/flows inventory journey (fixture-agnostic; uses research-mvp for backend activity)
     vars:
-      FIXTURE: dev-research.yaml
-      AGENTIC_CONFIG: e2e-dev-research.json
+      FIXTURE: research-mvp.yaml
+      AGENTIC_CONFIG: e2e-flow-bootstrap.json
     cmds:
       - defer: { task: test:e2e:agentic:cleanup }
       - task: test:e2e:agentic:stack:up
@@ -587,32 +328,14 @@ tasks:
   #
   # Tear down any scenario with: task test:e2e:agentic:cleanup
 
-  test:e2e:agentic:dev:dev-research:
-    desc: Boot stack for the dev-research scenario (thin researcher loop + mock-LLM). No playwright.
-    cmds:
-      - task: test:e2e:agentic:dev:_boot
-        vars:
-          FIXTURE: dev-research.yaml
-          AGENTIC_CONFIG: e2e-dev-research.json
-          SCENARIO: dev-research
-
   test:e2e:agentic:dev:ops-agent:
     desc: Boot stack for the ops-agent scenario (researcher + ops observer). No playwright.
     cmds:
       - task: test:e2e:agentic:dev:_boot
         vars:
           FIXTURE: ops-agent-baseline.yaml
-          AGENTIC_CONFIG: e2e-ops-observer.json
+          AGENTIC_CONFIG: e2e-flow-bootstrap.json
           SCENARIO: ops-agent
-
-  test:e2e:agentic:dev:tool-approval:
-    desc: Boot stack for the tool-approval-gate scenario. No playwright.
-    cmds:
-      - task: test:e2e:agentic:dev:_boot
-        vars:
-          FIXTURE: tool-approval-gate.yaml
-          AGENTIC_CONFIG: e2e-agentic.json
-          SCENARIO: tool-approval
 
   test:e2e:agentic:dev:real-time-activity:
     desc: Boot stack for the real-time-activity-stream scenario. No playwright.
@@ -620,171 +343,31 @@ tasks:
       - task: test:e2e:agentic:dev:_boot
         vars:
           FIXTURE: real-time-activity-stream.yaml
-          AGENTIC_CONFIG: e2e-agentic.json
+          AGENTIC_CONFIG: e2e-flow-bootstrap.json
           SCENARIO: real-time-activity
 
-  test:e2e:agentic:dev:coordinator:
-    desc: Boot stack for the coordinator front-door scenario (coordinator classifies → rule spawns researcher). No playwright.
+  test:e2e:agentic:dev:research-mvp:
+    desc: Boot stack for the ADR-042 MVP-5 research-category scenario (substrate + research pack). No playwright.
     cmds:
       - task: test:e2e:agentic:dev:_boot
         vars:
-          FIXTURE: coordinator-researcher.yaml
-          AGENTIC_CONFIG: e2e-coordinator.json
-          SCENARIO: coordinator
-
-  test:e2e:agentic:dev:research-with-source:
-    desc: Boot stack for the R2 source-acquisition scenario (semsource container + add_source_repo). No playwright.
-    cmds:
-      - task: test:e2e:agentic:dev:_boot
-        vars:
-          FIXTURE: research-with-source.yaml
-          AGENTIC_CONFIG: e2e-research-with-source.json
-          COMPOSE_PROFILES: semsource
-          SCENARIO: research-with-source
-
-  # test:e2e:agentic:dev:research-with-source-acquisition removed under ADR-040
-  # (role hard-deleted; see test:e2e:agentic:research-with-source-acquisition
-  # comment above).
-
-  test:e2e:agentic:dev:research-mode-transition:
-    desc: Boot stack for the R3.2.2 research → dev-via-spec mode-transition scenario (semsource + emit_research_artifact + stabilisation + persona-swap). No playwright.
-    cmds:
-      - task: test:e2e:agentic:dev:_boot
-        vars:
-          FIXTURE: research-mode-transition.yaml
-          AGENTIC_CONFIG: e2e-research-mode-transition.json
-          COMPOSE_PROFILES: semsource
-          SCENARIO: research-mode-transition
-
-  test:e2e:agentic:dev:dev-via-spec:
-    desc: Boot stack for the R3.3 dev-via-spec full-chain scenario (planner / reviewer / challenger / architect-light over the R3.2.2 research substrate). No playwright.
-    cmds:
-      - task: test:e2e:agentic:dev:_boot
-        vars:
-          FIXTURE: dev-via-spec.yaml
-          AGENTIC_CONFIG: e2e-dev-via-spec.json
-          COMPOSE_PROFILES: semsource
-          SCENARIO: dev-via-spec
-
-  test:e2e:agentic:dev:dev-via-spec-qa:
-    desc: Boot stack for the R3.7.2.k′ dev-via-spec-qa scenario (full chain extended through qa-reviewer terminal). No playwright.
-    cmds:
-      - task: test:e2e:agentic:dev:_boot
-        vars:
-          FIXTURE: dev-via-spec-qa.yaml
-          AGENTIC_CONFIG: e2e-dev-via-spec.json
-          COMPOSE_PROFILES: semsource,sandbox
-          SCENARIO: dev-via-spec-qa
-
-  test:e2e:agentic:dev:osh-demo:
-    desc: |
-      Boot the OSH-demo stack — real LLM (claude-sonnet + claude-haiku for
-      the dev-via-spec chain), local seminstruct (qwen3-8b) for every
-      internal-graph capability, semembed for embeddings, real SemSource
-      for source acquisition, sandbox for builder bash + bootstrap_workspace.
-      Manual smoke run (R3.4 OSH demo, extended for R3.7.2.l′ smoke #7).
-      No playwright — see docs/smoke7-osh-meshtastic.md for the playbook.
-    summary: |
-      Requires ANTHROPIC_API_KEY in the environment (the compose forwards
-      it through to the backend). First run pulls
-      ghcr.io/c360studio/seminstruct:qwen3-8b (~5GB) and
-      ghcr.io/c360studio/semembed:latest. Allow ~5min for first boot.
-
-      The OSH prompt to send (from ADR-031): "create a driver for
-      OpenSensorHub using OGC Connected Systems for Meshtastic devices" —
-      send via `task test:e2e:agentic:probe:send -- '<prompt>'` after the
-      stack is up, then watch the chain via `task probe:loops`.
-
-      Expected chain shape (R3.7.2.l′ smoke #7, pre-ADR-040): twelve loops
-      total — six from the research-mode-transition arc (researcher +
-      reviewer + 2× researcher-with-source-acquisition + reviewer +
-      reviewer-approve), then the four-role dev-via-spec chain (planner /
-      reviewer / challenger / architect), then the builder, then the
-      qa-reviewer. ADR-040 reshapes the research arc: the 2×
-      source-acquisition loops become 1× source-curator + 1× re-query
-      researcher (one fewer loop). PR 4 will revalidate the chain shape
-      end-to-end on real LLM.
-      See docs/smoke7-osh-meshtastic.md for what to verify at each phase
-      and how to capture findings — particularly around the qa-reviewer's
-      verdict given the spawn-rule's stubbed evidence_summary (the
-      open-plumbing question this smoke is designed to surface).
-    cmds:
-      - task: test:e2e:agentic:dev:_boot
-        vars:
-          FIXTURE: ""
-          AGENTIC_CONFIG: osh-demo.json
-          COMPOSE_PROFILES: semsource,local-models,sandbox
-          SCENARIO: osh-demo
-
-  test:e2e:agentic:smoke7:run:
-    desc: Run smoke #7 (OSH-Meshtastic real-LLM) end-to-end with cleanup
-    summary: |
-      Real-LLM smoke run for R3.7.2.l′ of ADR-034. Boots the osh-demo
-      stack, sends the canonical OSH prompt, runs the auto-approve
-      watcher (which blocks until every loop terminates), captures
-      trajectories + message log to /tmp/smoke7-<RUN_ID>/, then tears
-      the stack down — same shape as the dev-via-spec scenario task,
-      but with real-LLM cost discipline (defer cleanup so an abort
-      still releases the Docker stack).
-
-      Real Anthropic spend (~$2-5 per full run on claude-sonnet-4-6).
-      ANTHROPIC_API_KEY required: invoke from the project root so the
-      parent Taskfile's `dotenv: ['.env']` loads it, or export it
-      manually before invoking from this directory.
-
-      Usage (from project root):
-        task ui:test:e2e:agentic:smoke7:run                  # RUN_ID defaults to a date stamp
-        RUN_ID=ticket-123 task ui:test:e2e:agentic:smoke7:run
-
-      Findings synthesis lands as ADR-034 §addendum #4 OR as
-      project_smoke7_findings.md memory record per the playbook
-      (docs/smoke7-osh-meshtastic.md §"Capture findings").
-    vars:
-      RUN_ID: '{{.RUN_ID | default (printf "smoke7-%s" (now | date "20060102-150405"))}}'
-      AGENTIC_CONFIG: osh-demo.json
-      COMPOSE_PROFILES: semsource,local-models,sandbox
-      PROMPT: "create a driver for OpenSensorHub using OGC Connected Systems for Meshtastic devices"
-    preconditions:
-      - sh: '[ -n "$ANTHROPIC_API_KEY" ]'
-        msg: "ANTHROPIC_API_KEY is unset. Add it to the project-root .env (auto-loaded when invoking from project root) or export it in your shell. Smoke #7 routes the dev-via-spec chain to claude-sonnet-4-6; without a key the run cannot start."
-    cmds:
-      # Single-quoted YAML scalar so the `#` in "Smoke #7" doesn't trip
-      # YAML's flow-scalar comment rule. Single-quoted strings in YAML are
-      # literal; the Go template `{{.RUN_ID}}` is rendered by Task before
-      # the shell sees the line.
-      - 'echo "▶︎  Smoke #7 starting (RUN_ID={{.RUN_ID}}); evidence will land in /tmp/{{.RUN_ID}}/"'
-      - defer: { task: test:e2e:agentic:cleanup }
-      - defer: { task: test:e2e:agentic:smoke7:capture, vars: { RUN_ID: "{{.RUN_ID}}" } }
-      - task: test:e2e:agentic:stack:up
-        vars:
-          FIXTURE: ""
-          AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
-          COMPOSE_PROFILES: "{{.COMPOSE_PROFILES}}"
-      - task: test:e2e:agentic:probe:send
-        vars:
-          CLI_ARGS: '{{.PROMPT}}'
-      # Hard cap on the watcher to bound real-LLM spend if the chain
-      # wedges (e.g. a loop iterates indefinitely against tool-result
-      # errors). 3600s = 60 min — bumped from 1800s after smoke #26
-      # (2026-05-14) and semspec's parallel evidence showed the OSH-
-      # class prompt routinely needs >30 min when the chain runs
-      # recovery cycles (each cycle adds ~7-10 min on real-LLM).
-      # Cleanup + capture defers fire either way; the timeout is an
-      # upper bound, not a target duration.
-      - timeout 3600 task test:e2e:agentic:probe:auto-approve-watcher -- {{.RUN_ID}}
+          FIXTURE: research-mvp.yaml
+          AGENTIC_CONFIG: e2e-flow-bootstrap.json
+          SCENARIO: research-mvp
 
   test:e2e:agentic:smoke7:capture:
-    desc: Dump per-loop trajectories + message-log + wedge-report for smoke #7 findings synthesis
+    desc: Dump per-loop trajectories + message-log + wedge-report for real-LLM smoke findings synthesis
     internal: true
     vars:
-      RUN_ID: '{{.RUN_ID | default "smoke7-manual"}}'
+      RUN_ID: '{{.RUN_ID | default "smoke-manual"}}'
       OUT_DIR: '/tmp/{{.RUN_ID}}'
       PORT: '{{.E2E_AGENTIC_UI_PORT | default "3100"}}'
-      # The role the smoke is expected to end on. Default reviewer-qa
-      # is the ADR-041 MVP chain terminal (renamed from
-      # dev-via-spec-qa-reviewer in Slice 2D-3a). Override via env
+      # The role the smoke is expected to end on. Default coordinator
+      # is the ADR-042 MVP-7 chain terminal — reviewer-research(approved)
+      # spawns a wake-up coordinator that emits respond_direct, so the
+      # last live loop is the coordinator wake-up. Override via env
       # var for other flows. Empty = skip the chain-shape check.
-      WEDGE_EXPECTED_TERMINAL_ROLE: '{{.WEDGE_EXPECTED_TERMINAL_ROLE | default "reviewer-qa"}}'
+      WEDGE_EXPECTED_TERMINAL_ROLE: '{{.WEDGE_EXPECTED_TERMINAL_ROLE | default "coordinator"}}'
     cmds:
       - mkdir -p {{.OUT_DIR}}
       - |
@@ -1091,9 +674,8 @@ tasks:
     desc: |
       Boot the agentic E2E stack with custom FIXTURE / AGENTIC_CONFIG env
       vars. For named scenarios prefer the dedicated tasks:
-        task test:e2e:agentic:dev:dev-research
+        task test:e2e:agentic:dev:research-mvp
         task test:e2e:agentic:dev:ops-agent
-        task test:e2e:agentic:dev:tool-approval
         task test:e2e:agentic:dev:real-time-activity
 
       Use this task when experimenting with a config that does not yet
@@ -1275,7 +857,7 @@ tasks:
     internal: true
     vars:
       FIXTURE: '{{.FIXTURE | default ""}}'
-      AGENTIC_CONFIG: '{{.AGENTIC_CONFIG | default "e2e-agentic.json"}}'
+      AGENTIC_CONFIG: '{{.AGENTIC_CONFIG | default "e2e-flow-bootstrap.json"}}'
       E2E_AGENTIC_UI_PORT: '{{.E2E_AGENTIC_UI_PORT | default "3100"}}'
       # COMPOSE_PROFILES toggles optional services (e.g. "semsource").
       # Empty default keeps existing journeys boot-fast; the

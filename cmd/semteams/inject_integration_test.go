@@ -47,19 +47,13 @@ func TestInjectRenderedTestHarnessFragment_HappyPath(t *testing.T) {
 	require.Equal(t, "test-harness-catalog.rendered", got.ID)
 	require.Equal(t, 0, got.Category, "synthetic fragment should match project baseline (Category=0)")
 	require.Equal(t, 45, got.Priority, "synthetic should sort after static 40-harness-catalog within Category=0")
-	// Roles list: ADR-041 MVP roster (researcher + reviewer phase suffixes)
-	// plus the legacy `researcher` / `research-reviewer` retained for
-	// research-iterative configs that have not migrated.
+	// Roles list: ADR-042 MVP-7 roster — the synthesize phase selects
+	// test_harness, reviewer-research verifies it. Future category packs
+	// reintroducing architect/reviewer-spec would extend this list.
 	require.ElementsMatch(t,
 		[]string{
-			"researcher",
-			"research-reviewer",
-			"researcher-plan",
-			"researcher-gather",
-			"researcher-synthesize",
-			"researcher-architect",
+			"researcher-research-synthesize",
 			"reviewer-research",
-			"reviewer-spec",
 		},
 		got.Roles)
 	require.Contains(t, got.Content, "1. `stub`", "rendered body should list the seeded test harness")

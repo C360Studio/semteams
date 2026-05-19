@@ -83,9 +83,9 @@ services:
 
   # SemTeams backend with agentic components enabled.
   #
-  # Uses configs/agentic.json (which already points at `http://mock-llm:8080/v1`
-  # for the model registry) instead of protocol-flow.json. See configs/agentic.json
-  # for the component wiring.
+  # Uses configs/e2e-flow-bootstrap.json (mock-LLM clone of the production
+  # bootstrap; points at `http://mock-llm:8080/v1` for the model registry).
+  # Per-task AGENTIC_CONFIG overrides target other surviving configs.
   backend:
     build:
       context: ${BACKEND_CONTEXT:-..}
@@ -120,10 +120,10 @@ services:
       # bash-via-sandbox calls would 404 — but those journeys
       # don't list `bash` in allowed_tools either.
       - SANDBOX_URL=http://sandbox:8090
-      # Cloud-LLM API keys for R3.4 OSH demo (osh-demo.json's
-      # gemini-flash + claude-sonnet endpoints). Empty defaults keep
-      # mock-llm journeys unaffected — the model_registry endpoints
-      # they use don't reference these env vars.
+      # Cloud-LLM API keys for real-LLM smokes (smoke #6 runs
+      # claude-haiku against flow-bootstrap.json). Empty defaults
+      # keep mock-llm journeys unaffected — the model_registry
+      # endpoints they use don't reference these env vars.
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       # R3.7.1 harness catalog path. Default points at the empty
@@ -150,7 +150,7 @@ services:
       - SEMTEAMS_PLAN_DIR=/artifacts/plans
       - SEMTEAMS_DEVVIASPEC_ARTIFACT_DIR=/artifacts/specs
     volumes:
-      - ${BACKEND_CONTEXT:-..}/configs/${AGENTIC_CONFIG:-e2e-agentic.json}:/etc/semstreams/config.json:ro
+      - ${BACKEND_CONTEXT:-..}/configs/${AGENTIC_CONFIG:-e2e-flow-bootstrap.json}:/etc/semstreams/config.json:ro
       - ${BACKEND_CONTEXT:-..}/testdata:/data/testdata:ro
       # ADR-036 §Phase 2 — read-only bind of sandbox workspaces so the
       # evidence preprocessor can read .evidence/checks.json at

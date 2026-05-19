@@ -212,81 +212,101 @@ func collectCoordinatorRoleActionsFromFiles(t *testing.T, ruleFiles []string) ma
 // cmd/semteams/chain/terminal.go's roleToApprovalAction map; adding a
 // third terminal role requires touching both sides.
 func TestCoordinatorSlice1cWakeUpRules(t *testing.T) {
-	ruleDir := "../../configs/rules/coordinator"
+	// Under the ADR-042 MVP roster the wake-up rule lives in the
+	// research-category pack (07-reviewer-approved-to-coordinator.json);
+	// reviewer-qa retired in MVP-7. The scan walks both
+	// configs/rules/coordinator/ and configs/rules/research/ so future
+	// category packs (web-research, dev-via-spec re-introduction) can
+	// add their own wake-up rules without test-side allowlist churn.
+	ruleDirs := []string{
+		"../../configs/rules/coordinator",
+		"../../configs/rules/research",
+	}
 	wantWakeUpPairs := map[string]string{
 		"reviewer-research": "approved",
-		"reviewer-qa":       "accept",
 	}
 	foundPairs := map[string]string{}
 
-	entries, err := os.ReadDir(ruleDir)
-	if err != nil {
-		t.Fatalf("read %s: %v", ruleDir, err)
-	}
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
-			continue
-		}
-		rulePath := filepath.Join(ruleDir, e.Name())
-		data, err := os.ReadFile(rulePath)
+	for _, ruleDir := range ruleDirs {
+		entries, err := os.ReadDir(ruleDir)
 		if err != nil {
-			t.Fatalf("read %s: %v", rulePath, err)
+			t.Fatalf("read %s: %v", ruleDir, err)
 		}
-		var rule struct {
-			Conditions []struct {
-				Field    string      `json:"field"`
-				Operator string      `json:"operator"`
-				Value    interface{} `json:"value"`
-			} `json:"conditions"`
-			OnEnter []struct {
-				Type    string `json:"type"`
-				Subject string `json:"subject"`
-				Role    string `json:"role"`
-			} `json:"on_enter"`
-		}
-		if err := json.Unmarshal(data, &rule); err != nil {
-			continue
-		}
-		firingRole, action := "", ""
-		for _, cond := range rule.Conditions {
-			if cond.Field == "agent.loop.role" && cond.Operator == "eq" {
-				if s, ok := cond.Value.(string); ok {
-					firingRole = s
-				}
-			}
-			if cond.Field == "coordinator.decision.next_action" && cond.Operator == "eq" {
-				if s, ok := cond.Value.(string); ok {
-					action = s
-				}
-			}
-		}
-		if _, isWakeUp := wantWakeUpPairs[firingRole]; !isWakeUp {
-			continue
-		}
-		foundPairs[firingRole] = action
-		// Wake-up rules MUST publish_agent to coordinator role on the
-		// exact two-segment subject agent.task.coordinator —
-		// agentic-dispatch subscribes on `agent.task.*` (single-token
-		// wildcard). Subjects with more segments silently drop into
-		// the void (smoke #8 run-11 lesson; see
-		// configs/rules/ops/chain-terminal-observe.json
-		// subject_shape_note for the canonical reference).
-		spawnsCoordinator := false
-		for _, a := range rule.OnEnter {
-			if a.Type != "publish_agent" {
+		for _, e := range entries {
+			if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
 				continue
 			}
-			if a.Role != "coordinator" {
-				t.Errorf("%s: wake-up rule (firing role %q) publish_agent role=%q, want %q", e.Name(), firingRole, a.Role, "coordinator")
+			rulePath := filepath.Join(ruleDir, e.Name())
+			data, err := os.ReadFile(rulePath)
+			if err != nil {
+				t.Fatalf("read %s: %v", rulePath, err)
+			}
+			var rule struct {
+				Conditions []struct {
+					Field    string      `json:"field"`
+					Operator string      `json:"operator"`
+					Value    interface{} `json:"value"`
+				} `json:"conditions"`
+				OnEnter []struct {
+					Type    string `json:"type"`
+					Subject string `json:"subject"`
+					Role    string `json:"role"`
+				} `json:"on_enter"`
+			}
+			if err := json.Unmarshal(data, &rule); err != nil {
 				continue
 			}
-			if a.Subject != "agent.task.coordinator" {
-				t.Errorf("%s: wake-up rule (firing role %q) publish_agent subject=%q, want %q (agentic-dispatch wildcard requires exact two-segment shape)", e.Name(), firingRole, a.Subject, "agent.task.coordinator")
+			firingRole, action := "", ""
+			for _, cond := range rule.Conditions {
+				if cond.Field == "agent.loop.role" && cond.Operator == "eq" {
+					if s, ok := cond.Value.(string); ok {
+						firingRole = s
+					}
+				}
+				if cond.Field == "coordinator.decision.next_action" && cond.Operator == "eq" {
+					if s, ok := cond.Value.(string); ok {
+						action = s
+					}
+				}
 			}
-			spawnsCoordinator = true
-		}
-		if !spawnsCoordinator {
-			t.Errorf("%s: wake-up rule (firing role %q) must publish_agent role=coordinator", e.Name(), firingRole)
+			wantAction, isWakeUpRole := wantWakeUpPairs[firingRole]
+			if !isWakeUpRole {
+				continue
+			}
+			// Multiple rules may fire on the same reviewer role with
+			// different actions (e.g. research/05-reviewer-rejected-retry
+			// fires on reviewer-research+insufficient and spawns
+			// researcher-research-plan, not coordinator). Filter to
+			// the approval-action variant — only the wake-up rule
+			// pairs the role with the approval token.
+			if action != wantAction {
+				continue
+			}
+			foundPairs[firingRole] = action
+			// Wake-up rules MUST publish_agent to coordinator role on the
+			// exact two-segment subject agent.task.coordinator —
+			// agentic-dispatch subscribes on `agent.task.*` (single-token
+			// wildcard). Subjects with more segments silently drop into
+			// the void (smoke #8 run-11 lesson; see
+			// configs/rules/ops/chain-terminal-observe.json
+			// subject_shape_note for the canonical reference).
+			spawnsCoordinator := false
+			for _, a := range rule.OnEnter {
+				if a.Type != "publish_agent" {
+					continue
+				}
+				if a.Role != "coordinator" {
+					t.Errorf("%s: wake-up rule (firing role %q) publish_agent role=%q, want %q", e.Name(), firingRole, a.Role, "coordinator")
+					continue
+				}
+				if a.Subject != "agent.task.coordinator" {
+					t.Errorf("%s: wake-up rule (firing role %q) publish_agent subject=%q, want %q (agentic-dispatch wildcard requires exact two-segment shape)", e.Name(), firingRole, a.Subject, "agent.task.coordinator")
+				}
+				spawnsCoordinator = true
+			}
+			if !spawnsCoordinator {
+				t.Errorf("%s: wake-up rule (firing role %q) must publish_agent role=coordinator", e.Name(), firingRole)
+			}
 		}
 	}
 
@@ -302,70 +322,8 @@ func TestCoordinatorSlice1cWakeUpRules(t *testing.T) {
 	}
 }
 
-// TestOshDemoUsesCoordinatorDispatch locks in the Slice 1 dispatch
-// flip: osh-demo.json must route through coordinator (not directly
-// to researcher-plan) and must load the three Slice 1 coordinator
-// rules.
-func TestOshDemoUsesCoordinatorDispatch(t *testing.T) {
-	data, err := os.ReadFile("../../configs/osh-demo.json")
-	if err != nil {
-		t.Fatalf("read osh-demo.json: %v", err)
-	}
-	var cfg struct {
-		Components map[string]struct {
-			Config json.RawMessage `json:"config"`
-		} `json:"components"`
-	}
-	if err := json.Unmarshal(data, &cfg); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-
-	dispatchCfg := cfg.Components["teams-dispatch"].Config
-	if len(dispatchCfg) == 0 {
-		t.Fatal("teams-dispatch component missing")
-	}
-	var dispatch struct {
-		DefaultRole  string   `json:"default_role"`
-		DefaultTools []string `json:"default_tools"`
-	}
-	if err := json.Unmarshal(dispatchCfg, &dispatch); err != nil {
-		t.Fatalf("unmarshal dispatch: %v", err)
-	}
-	if dispatch.DefaultRole != "coordinator" {
-		t.Errorf("osh-demo dispatch default_role = %q, want %q (Slice 1 dispatch flip)",
-			dispatch.DefaultRole, "coordinator")
-	}
-	hasDecide := false
-	for _, tool := range dispatch.DefaultTools {
-		if tool == "decide" {
-			hasDecide = true
-			break
-		}
-	}
-	if !hasDecide {
-		t.Errorf("osh-demo dispatch default_tools missing `decide` — coordinator persona requires it: %v",
-			dispatch.DefaultTools)
-	}
-
-	ruleCfg := cfg.Components["rule-processor"].Config
-	var ruleProc struct {
-		RulesFiles []string `json:"rules_files"`
-	}
-	if err := json.Unmarshal(ruleCfg, &ruleProc); err != nil {
-		t.Fatalf("unmarshal rule-processor: %v", err)
-	}
-	wantRules := []string{
-		"/app/configs/rules/coordinator/01-delegate-research.json",
-		"/app/configs/rules/coordinator/02-delegate-dev-chain.json",
-		"/app/configs/rules/coordinator/03-ask-user.json",
-	}
-	loaded := make(map[string]bool, len(ruleProc.RulesFiles))
-	for _, r := range ruleProc.RulesFiles {
-		loaded[r] = true
-	}
-	for _, want := range wantRules {
-		if !loaded[want] {
-			t.Errorf("osh-demo rules_files missing %q (Slice 1 coordinator wiring)", want)
-		}
-	}
-}
+// TestOshDemoUsesCoordinatorDispatch was retired in ADR-042 MVP-7
+// (PR #178): osh-demo.json itself deleted alongside the legacy
+// chain.mode-keyed coordinator rules it pinned. The MVP roster's
+// bootstrap-config taxonomy is now enforced by
+// TestMVPCoordinatorActionTaxonomy + TestFlowBootstrapShape.

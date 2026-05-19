@@ -30,10 +30,10 @@ covers what SemTeams adds on top.
 | Surface | Path | What it is |
 |---|---|---|
 | Web UI | `ui/` | Svelte 5 + SvelteKit 2 chat / graph explorer / runtime monitor |
-| Flow library | `configs/*.json` | Loadable flow templates — agentic, dev-research, dev-via-spec, ops-observer, … |
-| Personas | `configs/personas/fragments/<role>/*.md` | Role-specific prompt fragments (researcher, coordinator, builder, qa-reviewer, ops, …) |
-| Rules | `configs/rules/<flow>/*.json` | Coordinator/router/approval/observe rules that trigger agent dispatch |
-| Product tools | `cmd/semteams/tools/` | Tool executors that don't belong upstream (source ingest, artifact emission, builder terminal, sandbox bootstrap) |
+| Bootstrap config | `configs/flow-bootstrap.json` | ADR-042 substrate-plus-overlays wiring (production); mock-LLM clone at `e2e-flow-bootstrap.json` |
+| Category packs | `configs/rules/<category>/` | Category-keyed rule packs (currently: `research/`). Future packs add new task classes without new components. |
+| Personas | `configs/personas/fragments/<role>/*.md` | Role-specific prompt fragments (coordinator, researcher-research-{plan,gather,synthesize}, reviewer-research, ops*) |
+| Product tools | `cmd/semteams/tools/` | Tool executors that don't belong upstream (source ingest, artifact emission, sandbox bootstrap) |
 | Product shell | `cmd/semteams/main.go` | ~600 LoC binary that wires the framework primitives per [ADR-029](docs/adr/029-product-shell-wiring.md) |
 
 Everything else — the `agentic-*` processors, the rule engine, the
@@ -65,8 +65,10 @@ task dev:research
 ```
 
 That boots NATS, builds and starts `bin/semteams` against
-`configs/dev-research.json`, then starts the UI proxy. Open
-<http://localhost:3001> and type a research question.
+`configs/flow-bootstrap.json` (the ADR-042 production bootstrap),
+then starts the UI proxy. Open <http://localhost:3001> and type a
+research question — the coordinator persona will route it through
+the research-category arc.
 
 `task dev:stop` tears it down.
 
@@ -74,11 +76,9 @@ That boots NATS, builds and starts `bin/semteams` against
 
 | You want | Run | Notes |
 |---|---|---|
-| Full agentic chat (general-purpose) | `./bin/semteams --config configs/agentic.json` | Needs NATS up (`task dev:nats:start`) |
-| Dev research (software-domain, source-repo substrate) | `task dev:research` | Needs `ANTHROPIC_API_KEY` + `BRAVE_SEARCH_API_KEY` |
-| Onboarding interview demo | `./bin/semteams --config configs/onboarding.json` | Intent classification + `/onboard` |
-| Ops observer over dev research | `./bin/semteams --config configs/e2e-ops-observer.json` | ADR-027 read-only diagnostic agent |
-| Dev-via-spec / OSH demo | `./bin/semteams --config configs/osh-demo.json` | Architect → builder → qa chain (sandbox required) |
+| Production bootstrap (research category) | `task dev:research` | Needs `ANTHROPIC_API_KEY`; `BRAVE_SEARCH_API_KEY` recommended (web_search falls back to a stub without it). |
+| Mock-LLM research-category journey | `task ui:test:e2e:agentic:research-mvp` | Playwright + mock-llm + e2e-flow-bootstrap. No API keys. |
+| Real-LLM research-category smoke | `task ui:test:e2e:agentic:smoke6:run` | ~$0.30–$0.50 on claude-haiku. Captures trajectories to `/tmp/smoke6-<RUN_ID>/`. |
 
 `task --list` shows everything.
 

@@ -19,44 +19,30 @@ const (
 	chainTerminalSource = "chain.terminal"
 
 	// reviewerResearchRole is the terminating reviewer role for the
-	// research_only chain shape. Pairs with approvedAction.
+	// research-category chain shape. Pairs with approvedAction. Under the
+	// ADR-042 MVP roster this is the only terminal reviewer; the legacy
+	// reviewer-qa / accept pair retired in MVP-7 (PR #178) alongside the
+	// dev-via-spec arc.
 	reviewerResearchRole = "reviewer-research"
-
-	// reviewerQARole is the terminating reviewer role for the dev_via_spec
-	// chain shape. Pairs with acceptAction.
-	reviewerQARole = "reviewer-qa"
 
 	// approvedAction is the coordinator.decision.next_action value
 	// reviewer-research emits via decide(action="approved"). Sourced from
-	// configs/personas/fragments/reviewer-research/ — action_allowlist on
-	// research-mode-transition/01a-researcher-synthesize-to-reviewer-research.json.
+	// configs/personas/fragments/reviewer-research/ — action_allowlist
+	// on configs/rules/research/04-synthesize-to-reviewer.json (MVP-2).
 	approvedAction = "approved"
-
-	// acceptAction is the coordinator.decision.next_action value
-	// reviewer-qa emits via decide(action="accept"). Sourced from
-	// configs/personas/fragments/reviewer-qa/ — action_allowlist on
-	// dev-via-spec/04-builder-decide-to-reviewer-qa.json.
-	acceptAction = "accept"
 )
 
 // roleToApprovalAction maps the terminating-reviewer role to the
 // coordinator.decision.next_action token that signals "chain terminated
-// cleanly." Distinct vocabularies on purpose: reviewer-research grades a
-// research artifact ("approved" / "insufficient" / "needs_clarification"),
-// reviewer-qa grades a build artifact ("accept" / "reject" /
-// "needs_clarification"). The terminal stamper is the unifying primitive
-// that maps both vocabularies onto a single chain.terminal.reached
-// marker downstream consumers (coordinator wake-up rules, ops queries)
-// can rely on.
-//
-// Single source of truth — extending the chain taxonomy with a third
-// terminal role requires adding an entry here AND the corresponding
-// coordinator wake-up rule in configs/rules/coordinator/. The contract
-// test test/contract/chain_entity_coverage_test.go pins the predicate
+// cleanly." Single-entry map under the MVP roster — extending the
+// chain taxonomy with a second terminal role (e.g. a future
+// dev-via-spec category pack reintroducing reviewer-qa) requires
+// adding an entry here AND the corresponding spawn-coordinator rule
+// in the category's pack dir. The contract test
+// test/contract/chain_entity_coverage_test.go pins the predicate
 // shape both sides agree on.
 var roleToApprovalAction = map[string]string{
 	reviewerResearchRole: approvedAction,
-	reviewerQARole:       acceptAction,
 }
 
 // TerminalStamper writes the chain.terminal.* triple cluster on the
@@ -123,7 +109,7 @@ func NewTerminalStamper(
 //
 // Filter contract:
 //
-//   - ev.Role ∈ {reviewer-research, reviewer-qa}
+//   - ev.Role ∈ {reviewer-research} (the roleToApprovalAction map's keys)
 //   - ev.Outcome == OutcomeSuccess
 //   - coordinator.decision.next_action == the role-specific approval token
 //

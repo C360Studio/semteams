@@ -174,18 +174,15 @@ tasks:
         curl -s "http://localhost:8080/message-logger/kv/$BUCKET?pattern=$PATTERN&limit=20" | jq '.entries[] | {key: .key, revision: .revision}' 2>/dev/null || echo "SemStreams not running"
 
   research:
-    desc: Start semteams with Dev Research workflow (real LLM — requires .env with API keys)
+    desc: Start semteams against the production bootstrap config (real LLM — requires .env with API keys)
     summary: |
-      Boots the full stack for Dev Research: NATS + semteams backend
-      (configs/dev-research.json) + UI. The backend uses claude-haiku
-      by default (configurable in the config). API keys are loaded from
-      .env via the Taskfile dotenv directive.
-
-      The researcher role instructs the agent to:
-      1. Break the question into sub-questions
-      2. Search the knowledge graph (graph query tools)
-      3. Search the web (web_search, http_request)
-      4. Synthesize findings into a structured report
+      Boots the full stack against the ADR-042 production bootstrap:
+      NATS + semteams backend (configs/flow-bootstrap.json) + UI.
+      The bootstrap config wires the substrate singletons + research-
+      category rule pack + coordinator persona; the coordinator routes
+      prose research asks via decide(action="research"). The backend
+      uses claude-haiku by default. API keys are loaded from .env via
+      the Taskfile dotenv directive.
 
       Usage:
         task dev:research
@@ -197,11 +194,11 @@ tasks:
       - defer: { task: stop }
       - |
         echo ""
-        echo "Starting semteams Dev Research workflow..."
-        echo "Config: configs/dev-research.json"
+        echo "Starting semteams against the production bootstrap..."
+        echo "Config: configs/flow-bootstrap.json"
         echo "Default model: claude-haiku"
         echo ""
-        ./bin/semteams --config configs/dev-research.json &
+        ./bin/semteams --config configs/flow-bootstrap.json &
         SEMTEAMS_PID=$!
         echo "Backend PID: $SEMTEAMS_PID (kill with: task dev:stop)"
         echo ""
