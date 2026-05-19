@@ -35,10 +35,8 @@ import (
 	"github.com/c360studio/semstreams/types"
 	"github.com/c360studio/semteams/cmd/semteams/chain"
 	"github.com/c360studio/semteams/cmd/semteams/chainpause"
-	"github.com/c360studio/semteams/cmd/semteams/evidence"
 	"github.com/c360studio/semteams/cmd/semteams/flowtemplates"
 	"github.com/c360studio/semteams/cmd/semteams/portresolver"
-	"github.com/c360studio/semteams/cmd/semteams/testharness"
 )
 
 // Build information constants
@@ -148,15 +146,12 @@ func run() error {
 		return fmt.Errorf("register product payloads: %w", err)
 	}
 
-	// 9b. Load operator-curated platform assets (test_harness catalog +
-	// persona fragments + rendered test_harness fragment for researcher
-	// roles). Test harness catalog (ADR-033 R3.7.1) is built FIRST so
-	// the rendered fragment reflects the curated state; persona
-	// file load runs next; the rendered list is upserted into the
-	// PERSONAS bucket last. Both managers are returned — persona
-	// feeds the tool registry below for Pattern-B persona CRUD,
-	// testHarnessMgr feeds the /harnesses HTTP middleware (R3.7.1.f).
-	personaMgr, testHarnessMgr := loadPlatformAssets(ctx, natsClient, cliCfg, slog.Default())
+	// 9b. Load the persona fragment corpus from disk into the PERSONAS
+	// KV bucket. The test_harness catalog + rendered researcher
+	// fragment (ADR-033 R3.7.1) retired alongside the dev-via-spec
+	// arc in the ADR-042 MVP-7 follow-up sweep, so persona load is
+	// now a single-step.
+	personaMgr := loadPersonaFragments(ctx, natsClient, cliCfg.PersonaFragmentsPath)
 
 	// 9b-bis. Seed the FLOW_TEMPLATES KV bucket from configs/flow-templates/.
 	// ADR-042 Phase 1. Must run before setupToolsAndPreprocessor so the
@@ -168,7 +163,7 @@ func run() error {
 	// (ADR-036 §Phase 2), and start the chain-pause subscriber (ADR-037 v1).
 	// Extracted to keep run() under revive's function-length threshold while
 	// keeping the ordering invariant: tools before svcDeps, preprocessors after.
-	toolRegistry, chainPauseHTTP, err := setupToolsAndPreprocessor(ctx, cfg, natsClient, platform, configManager, componentRegistry, personaMgr, flowTemplateMgr, testHarnessMgr, metricsRegistry, cliCfg.WorkspaceRoot, slog.Default())
+	toolRegistry, chainPauseHTTP, err := setupToolsAndPreprocessor(ctx, cfg, natsClient, platform, configManager, componentRegistry, personaMgr, flowTemplateMgr, metricsRegistry, slog.Default())
 	if err != nil {
 		return err
 	}
@@ -196,7 +191,7 @@ func run() error {
 	// runWithSignalHandling works. Moving it after StartAll silently
 	// drops the chain — the framework logs a warning, but the binary
 	// boots green and X-User-Id is ignored.
-	manager.UseHTTPMiddleware(productMiddleware(testHarnessMgr, chainPauseHTTP, slog.Default())...)
+	manager.UseHTTPMiddleware(productMiddleware(chainPauseHTTP, slog.Default())...)
 
 	// 13. Run application with signal handling
 	return runWithSignalHandling(ctx, manager, cliCfg.ShutdownTimeout)
@@ -219,9 +214,7 @@ func setupToolsAndPreprocessor(
 	componentRegistry *component.Registry,
 	personaMgr *persona.Manager,
 	flowTemplateMgr *flowtemplate.Manager,
-	testHarnessMgr *testharness.Manager,
 	metricsRegistry *metric.MetricsRegistry,
-	workspaceRoot string,
 	logger *slog.Logger,
 ) (*agentictools.ExecutorRegistry, *chainpause.HTTPHandler, error) {
 	// 9c. First-party tool executors. Pattern-B tools (create_rule, etc.)
@@ -260,23 +253,16 @@ func setupToolsAndPreprocessor(
 	}
 
 	// 9d. Product-shell-local tool executors (add_source_repo,
-	// emit_research_artifact, emit_dev_via_spec_artifact, builder_decide,
-	// bootstrap_workspace, chain-scoped bash wrapper). Each tool's
-	// registration comment lives in registerProductTools; see ADR-029 +
-	// tools/README.md for discipline.
-	if err := registerProductTools(toolRegistry, natsClient, platform, testHarnessMgr, logger); err != nil {
+	// emit_research_artifact, emit_plan, chain-scoped bash wrapper).
+	// Each tool's registration comment lives in registerProductTools;
+	// see ADR-029 + tools/README.md for discipline. The dev-via-spec-arc
+	// executors (emit_dev_via_spec_artifact, builder_decide,
+	// bootstrap_workspace) retired in the ADR-042 MVP-7 follow-up sweep.
+	if err := registerProductTools(toolRegistry, natsClient, platform, logger); err != nil {
 		return nil, nil, fmt.Errorf("register product tools: %w", err)
 	}
 
-	// 9e. Evidence preprocessor (ADR-036 §Phase 2, R3.7.2.k′-bis).
-	// Subscribes to agent.complete.> and stamps evidence.summary +
-	// evidence.summary_ready on builder loop entities.
-	// Disabled when workspaceRoot is empty — non-sandbox deployments.
-	if err := startEvidencePreprocessor(ctx, cfg, natsClient, platform, workspaceRoot, logger); err != nil {
-		return nil, nil, fmt.Errorf("start evidence preprocessor: %w", err)
-	}
-
-	// 9f. Chain-pause subscriber + HTTP handler (ADR-037 v1).
+	// 9e. Chain-pause subscriber + HTTP handler (ADR-037 v1).
 	// Subscribes to agent.failed.> and stamps §D5 audit triples when a
 	// managed-arc loop fails. Returns the HTTP handler for POST
 	// /teams-loop/chain-pause/decide — mounted in productMiddleware.
@@ -402,52 +388,6 @@ func startChainPauseSubscriber(ctx context.Context, cfg *config.Config, natsClie
 	decisionHandler := chainpause.NewDecisionHandler(triplePublisher, taskPublisher, pauseDataReader, chainResolver, logger)
 	httpHandler := chainpause.NewHTTPHandler(decisionHandler, logger)
 	return httpHandler, nil
-}
-
-// startEvidencePreprocessor builds the evidence registry with builtins,
-// wraps it in a Preprocessor, and starts its NATS subscription. The
-// subscription is bound to ctx — cancelling ctx (on shutdown signal) will
-// unsubscribe cleanly.
-//
-// workspaceRoot="" disables the preprocessor; the Preprocessor's
-// HandleLoopCompleted returns immediately for every event. This keeps
-// non-sandbox deployments booting without error.
-func startEvidencePreprocessor(ctx context.Context, cfg *config.Config, natsClient *natsclient.Client, platform types.PlatformMeta, workspaceRoot string, logger *slog.Logger) error {
-	reg, err := evidence.NewWithBuiltins()
-	if err != nil {
-		return fmt.Errorf("build evidence registry: %w", err)
-	}
-	triplePublisher := agentictools.NewNATSTriplePublisher(natsClient)
-	// outputDir empty → preprocessor reads SEMTEAMS_EVIDENCE_DIR or falls
-	// back to "docs/evidence". ADR-038 PR C Phase C4: rendered markdown
-	// view at the chain.evidence.summary.path reference.
-	preprocessor := evidence.New(reg, triplePublisher, workspaceRoot, "", platform, logger)
-	// ADR-038 PR B Phase 5 + PR C Phase C4: opt the preprocessor in to
-	// chain entity triple writes so chain.evidence.summary_ready and
-	// chain.evidence.summary.path land alongside the existing
-	// loop-entity triples. Drift-safe — rule_07 still matches on the
-	// loop entity. Markdown render fires from the same chain-opt-in
-	// path.
-	preprocessor.SetChainResolver(chain.NewResolver(chain.NewNATSParentReader(natsClient, platform, chain.DefaultGraphQueryEntitySubject), platform))
-
-	// SUBSCRIBE-side: config-derived. Same agentic-loop port the chain
-	// milestone subscriber binds to.
-	loopCompletedSubject := portresolver.SubjectOrDefault(cfg, "teams-loop", "agent.complete", evidence.DefaultLoopCompletedSubject)
-	sub := evidence.NewNATSSubscriber(preprocessor, loopCompletedSubject, logger)
-	if err := sub.Start(ctx, natsClient); err != nil {
-		return fmt.Errorf("subscribe to loop completed events: %w", err)
-	}
-	if workspaceRoot != "" {
-		logger.Info("evidence preprocessor started",
-			slog.String("workspace_root", workspaceRoot),
-			slog.String("output_dir", preprocessor.OutputDir()),
-			slog.String("loop_completed_subject", loopCompletedSubject),
-			slog.String("org", platform.Org),
-			slog.String("platform", platform.Platform))
-	} else {
-		logger.Info("evidence preprocessor disabled (workspace-root unset; set --workspace-root for sandbox deployments)")
-	}
-	return nil
 }
 
 // loadPersonaFragments seeds the PERSONAS KV bucket from a directory
@@ -598,122 +538,6 @@ func loadFlowTemplates(ctx context.Context, natsClient *natsclient.Client, root 
 		// Return the manager anyway — partial seed is better than no
 		// template CRUD tooling, same posture as loadPersonaFragments.
 	}
-	return mgr
-}
-
-// loadPlatformAssets builds the harness catalog (operator-curated
-// test-harness registry; ADR-033 R3.7.1) and seeds the PERSONAS KV
-// bucket from on-disk fragment files plus a synthetic researcher
-// fragment rendered from the live catalog. Harness load runs FIRST
-// so the rendered list reflects the catalog state operators just
-// curated; persona.LoadFromDirectory then loads the static
-// fragments; finally the rendered list is upserted under a stable
-// fragment ID — Upsert rather than file-write keeps the source
-// tree clean (no boot-time git diffs in configs/personas/).
-func loadPlatformAssets(ctx context.Context, natsClient *natsclient.Client, cliCfg *CLIConfig, logger *slog.Logger) (*persona.Manager, *testharness.Manager) {
-	testHarnessMgr := buildTestHarnessManager(ctx, natsClient, cliCfg.HarnessCatalogPath, logger)
-	personaMgr := loadPersonaFragments(ctx, natsClient, cliCfg.PersonaFragmentsPath)
-	injectRenderedTestHarnessFragment(ctx, personaMgr, testHarnessMgr, logger)
-	return personaMgr, testHarnessMgr
-}
-
-// injectRenderedTestHarnessFragment renders the live test harness catalog
-// into a researcher persona fragment and upserts it into the
-// PERSONAS KV bucket. Skipped when either manager is nil (tests,
-// or boot-time KV failure that already logged its own warning).
-// Uses multi-role on the Persona so a single record applies to
-// every researcher / reviewer role that touches a test_harness
-// field. Under the ADR-042 MVP-7 roster the live roster is the
-// research-category synthesize phase + reviewer-research; future
-// dev-via-spec category packs reintroducing architect/reviewer-spec
-// would extend this list.
-//
-// Fragment ID `test-harness-catalog.rendered` is intentionally NOT in
-// the project's `\d+-` prefix style operators use for hand-
-// authored markdown files — the dot-separator and prefix-less
-// shape mark it as synthetic. The persona file loader keys
-// Upserts on ID, so an operator who later authors a file at
-// `test-harness-catalog.rendered.md` would still collide; the visual
-// distinctness is the operator-facing breadcrumb.
-//
-// Category=0 / Priority=45: Category matches the project's
-// existing baseline (every hand-authored fragment defaults to
-// Category=0 → CategorySystem because the file loader doesn't
-// parse front-matter). Priority=45 places this record AFTER our
-// static 40-harness-catalog.md instructions within the same
-// category, which is the design intent. Intra-Priority ordering
-// for Priority=0 fragments is governed by map-iteration order
-// (pre-existing framework nondeterminism, see ADR-033 §addendum
-// 2026-05-03).
-func injectRenderedTestHarnessFragment(ctx context.Context, personaMgr *persona.Manager, testHarnessMgr *testharness.Manager, logger *slog.Logger) {
-	if personaMgr == nil || testHarnessMgr == nil {
-		return
-	}
-	catalog, err := testHarnessMgr.List(ctx)
-	if err != nil {
-		logger.Warn("test_harness catalog: skipped persona-render injection (List failed)",
-			"error", err)
-		return
-	}
-	body := testharness.RenderResearcherFragment(catalog)
-	p := &persona.Persona{
-		ID:       "test-harness-catalog.rendered",
-		Category: 0, // CategorySystem — matches project baseline; see doc-comment.
-		Priority: 45,
-		Content:  body,
-		// The catalog is loaded for every role that touches a
-		// research.artifact.test_harness field — under the ADR-042
-		// MVP-7 roster this is the research-category synthesize phase
-		// (selects test_harness) + reviewer-research (verifies the
-		// stance). Future category packs introducing architect /
-		// reviewer-spec roles would extend the list.
-		Roles: []string{
-			"researcher-research-synthesize",
-			"reviewer-research",
-		},
-		Description: "Auto-generated from configs/harnesses.json at boot (ADR-033 R3.7.1).",
-	}
-	if err := personaMgr.Upsert(ctx, p); err != nil {
-		logger.Warn("test_harness catalog: synthetic persona fragment upsert failed",
-			"fragment_id", p.ID,
-			"error", err)
-		return
-	}
-	if len(catalog) == 0 {
-		logger.Info("test_harness catalog: rendered persona fragment injected (empty catalog notice)",
-			"fragment_id", p.ID,
-			"roles", p.Roles)
-	} else {
-		logger.Info("test_harness catalog: rendered persona fragment injected",
-			"fragment_id", p.ID,
-			"catalog_entries", len(catalog),
-			"roles", p.Roles)
-	}
-}
-
-// buildTestHarnessManager constructs the SemTeams test harness catalog manager
-// (R3.7.1, ADR-033) and seeds it from the operator-curated JSON file.
-// Returns nil if the KV bucket cannot be opened — the chain still
-// boots; `needs_test_harness` paths report that no catalog is available.
-// A missing catalog file is NOT an error: deployments that don't use
-// test harnesses simply have an empty catalog.
-func buildTestHarnessManager(ctx context.Context, natsClient *natsclient.Client, catalogPath string, logger *slog.Logger) *testharness.Manager {
-	mgr, err := testharness.NewManager(natsClient)
-	if err != nil {
-		logger.Warn("test_harness catalog disabled: could not initialise HARNESSES KV bucket",
-			"error", err)
-		return nil
-	}
-	n, err := mgr.LoadFromFile(ctx, catalogPath)
-	if err != nil {
-		logger.Warn("test_harness catalog file load failed; catalog left in current state",
-			"path", catalogPath,
-			"error", err)
-		return mgr
-	}
-	logger.Info("test_harness catalog loaded",
-		"path", catalogPath,
-		"entries_loaded", n)
 	return mgr
 }
 

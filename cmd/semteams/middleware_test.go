@@ -117,7 +117,7 @@ func TestXUserIDIdentityMiddleware_RejectsControlChars(t *testing.T) {
 // it is deferred to Playwright.
 func TestMainWiringSmoke(_ *testing.T) {
 	m := service.NewServiceManager(service.NewServiceRegistry())
-	m.UseHTTPMiddleware(productMiddleware(nil, nil, slog.Default())...)
+	m.UseHTTPMiddleware(productMiddleware(nil, slog.Default())...)
 	// No assertion: compile-time success is the contract. If
 	// productMiddleware() drifts to an incompatible element type, this
 	// test fails to build.
@@ -127,9 +127,9 @@ func TestMainWiringSmoke(_ *testing.T) {
 // future additions don't reshuffle the identity middleware's slot
 // without an explicit decision.
 func TestProductMiddleware_OrderedOutermostFirst(t *testing.T) {
-	chain := productMiddleware(nil, nil, slog.Default())
-	if len(chain) != 3 {
-		t.Fatalf("chain length = %d, want 3 (identity + test_harness + chain_pause)", len(chain))
+	chain := productMiddleware(nil, slog.Default())
+	if len(chain) != 2 {
+		t.Fatalf("chain length = %d, want 2 (identity + chain_pause)", len(chain))
 	}
 	// Identity check via behaviour: the FIRST entry must lift the header
 	// so downstream middleware (and handlers) see the resolved identity.
@@ -144,7 +144,7 @@ func TestProductMiddleware_OrderedOutermostFirst(t *testing.T) {
 	if observed != "carol" {
 		t.Fatalf("chain[0] is not the identity middleware: observed = %q", observed)
 	}
-	// Test harness middleware is index 1; chain-pause is index 2.
-	// Both pass through on nil manager/handler (verified by the chain accepting
-	// nil values without panicking during the identity probe above).
+	// chain-pause middleware is index 1. Passes through on nil handler
+	// (verified by the chain accepting a nil handler without panicking
+	// during the identity probe above).
 }

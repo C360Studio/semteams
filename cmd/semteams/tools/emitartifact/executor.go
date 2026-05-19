@@ -111,7 +111,7 @@ const defaultOutputDir = ".artifacts/research"
 // envOutputDir is the operator override for the markdown output
 // directory. Kept as env var (not framework config) so it does not
 // drift the upstream config schema — same precedent as
-// SEMTEAMS_DEVVIASPEC_ARTIFACT_DIR.
+// SEMTEAMS_PLAN_DIR (emitplan).
 const envOutputDir = "SEMTEAMS_RESEARCH_ARTIFACT_DIR"
 
 // PayloadPublisher is the narrow surface the executor uses to publish
@@ -214,9 +214,9 @@ func (e *Executor) ListTools() []agentic.ToolDefinition {
 				"integration_points":  map[string]any{"type": "array", "items": integrationPointSchema, "description": "Actor-to-actor data flows with direction."},
 				"tasks":               map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Decomposable-grain tasks derived from the research."},
 				"addressed_gaps":      map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Reviewer-flagged gaps this pass closed."},
-				"open_gaps":           map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Reviewer-flagged gaps still outstanding after this pass. If no test harness in the catalog matches this work, include a 'needs_test_harness: <one-line description of the integration target>' entry here so the chain can route the gap; the marker is `needs_test_harness:` lowercase exactly (case-sensitive) so downstream tooling can reliably grep it."},
+				"open_gaps":           map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Reviewer-flagged gaps still outstanding after this pass. Every artifact must declare a verification stance: include either a 'needs_test_harness: <one-line description of the integration target>' entry (real integration target without a registered harness) or a 'needs_test_harness: not applicable — <reason>' entry (pure-information / non-software work). The marker is `needs_test_harness:` lowercase exactly (case-sensitive) so downstream tooling can reliably grep it."},
 				"substrate_mutations": map[string]any{"type": "array", "items": mutationSchema, "description": "Append-only log of substrate-modifying tool calls across all revisions of this artifact (e.g. add_source_repo). Include prior revisions' entries verbatim plus any new ones from this pass."},
-				"test_harness":        map[string]any{"type": "string", "description": "Name of the test harness from configs/harnesses.json that will verify the integration this research describes. Omit (or leave empty) if no catalog entry matches; in that case ALSO add a `needs_test_harness: ...` line to open_gaps so the chain can route the gap. The tool layer enforces the either/or — artifacts with neither test_harness nor a `needs_test_harness:` open_gaps entry are rejected with `ToolErrorInvalidArgs` (smoke #8 run-9 fix). For genuinely pure work with no external integration, use the explicit `needs_test_harness: not applicable — <reason>` escape hatch."},
+				"test_harness":        map[string]any{"type": "string", "description": "Forward-compat field for a future dev-via-spec re-introduction. The ADR-042 MVP-7 follow-up sweep retired the operator-curated harness catalog (`configs/harnesses.json`); under this deployment there is no catalog to name and this field must stay empty. Declare the verification stance via an `open_gaps` entry instead — see that field's description. The tool layer enforces the either/or — artifacts with neither test_harness nor a `needs_test_harness:` open_gaps entry are rejected with `ToolErrorInvalidArgs` (smoke #8 run-9 fix)."},
 				"title":               map[string]any{"type": "string", "description": "Optional one-line title for this research (e.g. \"OSH Meshtastic driver research\"). Used to derive a stable, human-readable slug for the rendered docs/research/<slug>.md file. Empty falls back to a loop-id-suffixed slug; supplying a title is preferred for readable git history."},
 			},
 			"required": []string{"revision", "actors", "integration_points", "tasks"},

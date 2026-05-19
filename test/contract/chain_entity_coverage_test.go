@@ -223,14 +223,19 @@ func TestChainEntityCoverage_PR_B_Pipeline(t *testing.T) {
 
 	// Negative assertion: predicates from milestones not yet in PR B
 	// scope should NOT appear (catches accidental cross-handler bleed).
+	// chain.spec_artifact.* (emit_dev_via_spec) and chain.evidence.*
+	// (evidence preprocessor) retired in the ADR-042 MVP-7 follow-up
+	// sweep — their writers are gone but the assertions stay as guard-
+	// rails so a future re-introduction of those packages must
+	// re-register the predicates *and* the writing handlers together.
 	notYet := []string{
 		"chain.paused.cause",                  // Phase 3 SHIPPED — but writes from chainpause's agent.failed.* subscriber, not the agent.complete.* path this test drives
 		"chain.decision.verb",                 // Phase 3 SHIPPED — same reason; written by DecisionHandler, not a CompletionHandler
-		"chain.spec_artifact.loop",            // Phase 4 (writes from emit_dev_via_spec, not the chain package)
-		"chain.spec_artifact.path",            // Phase 4
-		"chain.spec_artifact.check_count",     // Phase 4
-		"chain.evidence.summary_ready",        // Phase 5 (writes from evidence preprocessor, not the chain package)
-		"chain.evidence.summary.path",         // PR C Phase C4 (writes from evidence preprocessor, not the chain package)
+		"chain.spec_artifact.loop",            // retired with the dev-via-spec arc
+		"chain.spec_artifact.path",            // retired with the dev-via-spec arc
+		"chain.spec_artifact.check_count",     // retired with the dev-via-spec arc
+		"chain.evidence.summary_ready",        // retired with the evidence preprocessor
+		"chain.evidence.summary.path",         // retired with the evidence preprocessor
 		"chain.dispatched.observed_fallback",  // Phase 1b — only on zero-CompletedAt path; happy path must not emit
 		"chain.needs_review.classification",   // ADR-039 Phase 1 Slice B — only on builder needs_clarification; happy path's tests_passing builder must not emit
 		"chain.needs_review.producer_loop_id", // same
@@ -247,10 +252,10 @@ func TestChainEntityCoverage_PR_B_Pipeline(t *testing.T) {
 
 // TestChainEntityCoverage_NoBleedOntoLoopEntity confirms the chain
 // stampers in PR B don't write onto loop entities (they own the chain
-// entity exclusively). Loop-entity predicate writes happen in
-// emitspecartifact, evidence preprocessor, etc. — not in the chain
-// package. A handler that accidentally targets a loop subject would
-// silently double-write and confuse downstream graph queries.
+// entity exclusively). Loop-entity predicate writes happen elsewhere
+// (e.g. the agentic-loop emitting agent.complete.* triples); a
+// chain-stamper handler that accidentally targets a loop subject
+// would silently double-write and confuse downstream graph queries.
 func TestChainEntityCoverage_NoBleedOntoLoopEntity(t *testing.T) {
 	platform := types.PlatformMeta{Org: "c360", Platform: "test"}
 	pub := &recordingTriplePublisher{}

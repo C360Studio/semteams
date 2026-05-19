@@ -15,9 +15,9 @@ const chainPauseDecidePath = "/teams-loop/chain-pause/decide"
 // /teams-loop/chain-pause/decide and dispatches to the DecisionHandler.
 // All other paths pass through to next unchanged.
 //
-// Middleware-style registration matches the testharness pattern
-// (cmd/semteams/testharness/http.go) — the service-manager owns the HTTP
-// mux and UseHTTPMiddleware is the only product-shell hook.
+// Middleware-style registration is the product shell's only HTTP-mux
+// hook: the upstream service-manager owns the mux and exposes
+// UseHTTPMiddleware as the surface for product-shell handlers.
 //
 // handler may be nil — middleware then passes all requests through
 // (boot still succeeds; POST /teams-loop/chain-pause/decide returns 404).

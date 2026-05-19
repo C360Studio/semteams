@@ -58,9 +58,8 @@ const payloadSubjectPrefix = "dev_via_spec.plan"
 const defaultOutputDir = ".artifacts/plans"
 
 // envOutputDir is the operator override for the markdown output
-// directory. Mirrors SEMTEAMS_DEVVIASPEC_ARTIFACT_DIR /
-// SEMTEAMS_RESEARCH_ARTIFACT_DIR — env var, not framework config,
-// so it doesn't drift the upstream config schema.
+// directory. Mirrors SEMTEAMS_RESEARCH_ARTIFACT_DIR — env var, not
+// framework config, so it doesn't drift the upstream config schema.
 const envOutputDir = "SEMTEAMS_PLAN_DIR"
 
 // Predicate names stamped on the planner's loop entity. ADR-041
