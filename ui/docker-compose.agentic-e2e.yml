@@ -126,6 +126,17 @@ services:
       # endpoints they use don't reference these env vars.
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      # Brave Search key for the framework's web_search executor.
+      # Unlike the cloud-LLM keys above, BRAVE_SEARCH_API_KEY gates
+      # which web_search executor is REGISTERED at boot (real vs
+      # stub) — so passing it unconditionally would make mock-LLM
+      # journeys silently hit real Brave + break determinism. We
+      # use a different env-var name on the compose side (BACKEND_BRAVE_SEARCH_API_KEY)
+      # so individual tasks opt in by mapping it; mock-LLM tasks
+      # don't set it and the backend boots with the stub. The
+      # real-LLM smoke6 task forwards the host's
+      # BRAVE_SEARCH_API_KEY into BACKEND_BRAVE_SEARCH_API_KEY.
+      - BRAVE_SEARCH_API_KEY=${BACKEND_BRAVE_SEARCH_API_KEY:-}
       # emit-tool output dirs land in the shared agentic-artifacts
       # volume so the sandbox can `cat /artifacts/<kind>/<slug>.md`
       # from any role. The dev-via-spec artifact dir
