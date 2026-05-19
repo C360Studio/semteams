@@ -1,3 +1,9 @@
+// Package devviaspec holds SemTeams-local payload types historically
+// associated with the dev-via-spec arc. After the ADR-042 MVP-7
+// follow-up sweep only the Plan payload remains — the research
+// category's emit_plan tool still rides this `dev_via_spec.plan.v1`
+// namespace. The sibling Artifact type retired alongside the rest of
+// the builder arc.
 package devviaspec
 
 import (
@@ -9,10 +15,15 @@ import (
 	"github.com/c360studio/semstreams/payloadregistry"
 )
 
-// CategoryPlan is the Plan payload's category half (the full schema
-// type is dev_via_spec.plan.v1). Sibling to CategoryArtifact within
-// the dev_via_spec domain.
-const CategoryPlan = "plan"
+// Payload type metadata (domain.category.version → "dev_via_spec.plan.v1").
+// The wider dev_via_spec arc retired in the ADR-042 MVP-7 follow-up sweep;
+// the Plan payload survives because the research category's emit_plan tool
+// still rides this namespace.
+const (
+	Domain        = "dev_via_spec"
+	CategoryPlan  = "plan"
+	SchemaVersion = "v1"
+)
 
 // PlanDependsOn records cross-arc references the plan grounds against.
 // ResearchArtifactLoop pins which research run the plan responds to;
@@ -128,10 +139,12 @@ func (p *Plan) UnmarshalJSON(data []byte) error {
 	return json.Unmarshal(data, (*Alias)(p))
 }
 
-// registerPlanPayload adds the Plan factory to the supplied registry.
-// Called from RegisterPayloads alongside Artifact registration so the
-// dev-via-spec package's full payload set is registered together.
-func registerPlanPayload(reg *payloadregistry.Registry) error {
+// RegisterPayloads adds the Plan factory to the supplied registry. The
+// `devviaspec` namespace survives the ADR-042 MVP-7 follow-up sweep only
+// because the research-pack `emit_plan` tool still routes Plan payloads
+// through it; the sibling dev-via-spec Artifact payload was retired
+// alongside the rest of the builder arc.
+func RegisterPayloads(reg *payloadregistry.Registry) error {
 	return reg.Register(&payloadregistry.Registration{
 		Factory:     func() any { return &Plan{} },
 		Domain:      Domain,

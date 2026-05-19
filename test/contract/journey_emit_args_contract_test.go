@@ -15,10 +15,9 @@ import (
 
 // TestJourneyFixtureEmitArgs_Validate walks every mock-llm journey
 // fixture under test/fixtures/journeys and round-trips each
-// `emit_research_artifact` / `emit_plan` / `emit_dev_via_spec_artifact`
-// tool call's arguments_json blob through the same parse + Validate
-// path the production executor uses. (emit_consensus was retired in
-// ADR-041 Slice 2D-5 alongside the challenger role.)
+// `emit_research_artifact` / `emit_plan` tool call's arguments_json
+// blob through the same parse + Validate path the production executor
+// uses.
 //
 // Why this exists: the fixtures encode the canonical "this is how a
 // model following the persona contract calls the tool" example. If the
@@ -30,9 +29,8 @@ import (
 // Coverage is structural well-formedness only — it doesn't check that
 // the args are a *good* example of the persona contract (that's a
 // reviewer judgment), only that they're a *valid* example the executor
-// accepts. The emitspecartifact path isn't covered yet because it
-// builds its payload differently (no exposed devviaspec.Artifact
-// Validate today); add coverage when that surface stabilises.
+// accepts. The emit_dev_via_spec_artifact branch retired alongside the
+// dev-via-spec arc in the ADR-042 MVP-7 follow-up sweep.
 //
 // Loop ID and produced_at are server-supplied at runtime; the test
 // injects synthetic values so Validate() doesn't reject on missing
@@ -103,10 +101,6 @@ func validateJourneyFixture(t *testing.T, path string) {
 			emitTurnsSeen++
 			validatePlanArgs(t, path, i, resp.ToolCall.ArgumentsJSON)
 		}
-		// emit_dev_via_spec_artifact intentionally unhandled — the
-		// fixture's args don't round-trip through a public Validate
-		// today; add coverage when devviaspec.Artifact stabilises a
-		// public Validate surface.
 	}
 
 	t.Logf("%s: validated %d emit_* turn(s)", filepath.Base(path), emitTurnsSeen)

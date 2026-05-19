@@ -969,3 +969,96 @@ MVP-7 closes the substrate-plus-overlays migration. Future MVPs
 introduce new category packs (dev-via-spec re-introduction,
 web-research, decision-memo, etc.) as additive rule + persona
 inventory without further migration steps.
+
+## §addendum 2026-05-19 — MVP-7 follow-up sweep + sandbox always-warm posture
+
+The MVP-7 §addendum (above) tagged six surfaces as "deferred to a
+follow-up cleanup PR." This addendum records the sweep, plus one
+architectural adjustment that surfaced during it.
+
+### Dead-code deletions
+
+| Surface | Disposition |
+|---|---|
+| `cmd/semteams/devviaspec/artifact.go` + `artifact_test.go` | Deleted. The dev-via-spec Artifact payload had no surviving consumer (`emit_dev_via_spec_artifact` retired in MVP-7). The Plan payload moves to be the sole content of `devviaspec/plan.go`; `RegisterPayloads` now only registers Plan. |
+| `cmd/semteams/tools/emitspecartifact/` | Deleted. Architect terminal in the dev-via-spec arc; no rule or persona named it under the MVP-7 roster. |
+| `cmd/semteams/tools/builderdecide/` | Deleted. Builder terminal in the dev-via-spec arc; no rule or persona named it. |
+| `cmd/semteams/verification/` | Deleted. Only consumer was `emitspecartifact` + the evidence preprocessor (also deleted below). |
+| `cmd/semteams/testharness/` | Deleted. Only consumers were `emitspecartifact` (resolving catalog entries into the rendered spec) and `injectRenderedTestHarnessFragment` in `main.go` (rendering the catalog into a researcher-architect persona fragment — the researcher-architect persona itself retired in MVP-7). Boot path simplified: `loadPlatformAssets` is now a single delegation to `loadPersonaFragments`. |
+| `cmd/semteams/tools/bootstrapworkspace/` | Deleted. Builder iteration-1 setup hook; no builder under MVP-7. |
+| `cmd/semteams/evidence/` | Deleted. Preprocessor read `<WorkspaceRoot>/<loopID>/.evidence/checks.json` written by the builder; with no builder, no checks.json is ever produced. The `--workspace-root` CLI flag + `SEMTEAMS_WORKSPACE_ROOT` env retired alongside. |
+| `--harness-catalog` CLI flag + `SEMTEAMS_HARNESS_CATALOG_PATH` env | Retired. Followed testharness/. |
+| `configs/harnesses.json` + `configs/harnesses-stub.json` | Deleted. The testharness catalog files had no remaining loader. |
+| `cmd/semteams/inject_test.go` + `inject_integration_test.go` | Deleted. Targeted `injectRenderedTestHarnessFragment`. |
+| `test/contract/sidecar_contract_test.go` + `journey_emit_args_contract_test.go` + `harness_catalog_contract_test.go` | Deleted. All exercised retired packages. |
+| `test/integration/sandbox_dood_smoke_test.go` | Retained (the sandbox itself survives; see below). |
+
+### Sandbox stays — always-warm posture
+
+The MVP-7 §addendum named `sandbox/` in the deferred-cleanup list,
+characterising it as "inert under bootstrap (no rule spawns a
+builder, no persona names them in tool allowlists)." That
+characterisation captured the *dev-via-spec arc* usage of the
+sandbox but missed the **bash dispatch path**: the framework's
+`BashExecutor` reads `SANDBOX_URL` once at construction and
+dispatches every `bash` call into the sandbox container. The
+research-pack reviewer-research persona uses bash to `cat` the
+synthesize artifact (smoke #6 Finding 2 — bash failed because
+the sandbox profile wasn't activated). Deleting the sandbox would
+either:
+
+1. Lose ADR-032 isolation entirely (bash falls back to local-exec
+   in the backend container with no `cap_drop`, no read-only
+   root, no tmpfs, no resource limits), or
+2. Require dynamic per-prompt provisioning, which upstream's
+   `BashExecutor` cannot pick up without a restart.
+
+Decision: keep the sandbox; flip its compose profile from
+gated (`["sandbox", "local-models"]`) to default-on, and change
+the backend's `depends_on.sandbox.required` from `false` to
+`true`. Backend now waits for sandbox-healthy before becoming
+healthy itself; `BashExecutor` always finds a live dispatch URL.
+The idle reservation (0.5 CPU / 512 MB; 2 CPU / 4 GB under load)
+is the accepted cost.
+
+The `tools/bootstrapworkspace/` package was still deleted in this
+sweep even though the sandbox survives — `bootstrap_workspace` is
+the **builder iteration-1** hook; with no builder, no caller. The
+sandbox now serves only bash dispatch and any future builder
+re-introduction would need to re-add (or replace) bootstrap_workspace
+deliberately, not pick it up by accretion.
+
+This rule applies generally: keep substrate primitives that have
+a live consumer across roles; retire arc-specific tooling whose
+caller retired with the arc.
+
+### What this changes about the original MVP-7 §addendum
+
+The MVP-7 §addendum's deferred list described what would land in
+"a follow-up cleanup PR or future MVP." This addendum is that
+follow-up PR. The sandbox row of the deferred list is **partially
+reversed**: the sandbox stays, but its compose posture flips from
+profile-gated to always-warm to close smoke #6 Finding 2.
+
+### What we learned (preserved as design constraint)
+
+**"Inert under bootstrap" is a per-consumer claim, not a per-package
+claim.** A package can be inert for one consumer (no builder spawns
+under bootstrap) and load-bearing for another (BashExecutor reads
+SANDBOX_URL once at boot). Before deleting product-shell
+infrastructure based on a "no consumer" claim, audit consumers
+**across all surviving roles**, not just the role that historically
+owned the surface.
+
+### Open follow-ups
+
+1. **Smoke #6 Finding 3 (chain-wide recovery cap)** still open.
+   The MVP roster has no chain-wide bound on `needs_clarification`
+   / `insufficient` retries; rule `max_iterations` is per-entity.
+   Risk for production-shaped deployments.
+2. **Smoke #6 Finding 1 (`BRAVE_SEARCH_API_KEY`)** still open.
+   Operator-fixable; flag in the bootstrap config description if
+   the next category pack lands without surfacing the dependency.
+3. **Future category packs introducing a builder** will need to
+   re-add `bootstrap_workspace` (or its eventual upstream
+   equivalent) deliberately. Don't restore it speculatively.

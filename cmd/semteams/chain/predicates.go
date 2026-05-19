@@ -813,18 +813,10 @@ func registerOtherPackagePredicates() {
 		vocabulary.WithDataType("string"),
 	)
 
-	// chain.spec_artifact.* — emit_dev_via_spec_artifact tool
-	// (cmd/semteams/tools/emitspecartifact). Phase 4 milestone.
-	vocabulary.Register("chain.spec_artifact.loop",
-		vocabulary.WithDescription("Phase 4: loop_id of the architect-flavour role (researcher-architect under ADR-041 MVP, dev-via-spec-architect under legacy) whose spec artifact the chain consumed. 3-part canonical shape (2026-05-11 rename from chain.spec_artifact_loop)."),
-		vocabulary.WithDataType("string"),
-	)
-	vocabulary.Register("chain.spec_artifact.path",
-		vocabulary.WithDescription("Phase 4: path to the rendered dev-via-spec artifact markdown."),
-		vocabulary.WithDataType("string"),
-	)
-	vocabulary.Register("chain.spec_artifact.check_count",
-		vocabulary.WithDescription("Phase 4: structural check count for the dev-via-spec artifact (evidence rules + assertions)."),
-		vocabulary.WithDataType("int"),
-	)
+	// chain.spec_artifact.* — emit_dev_via_spec_artifact tool. Retired
+	// in the ADR-042 MVP-7 follow-up sweep alongside the rest of the
+	// dev-via-spec arc; vocabulary entries removed because no
+	// surviving handler stamps them. A future dev-via-spec category
+	// pack reintroducing the architect terminal would re-register the
+	// predicates here.
 }

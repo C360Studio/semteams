@@ -11,22 +11,16 @@ import (
 	"github.com/c360studio/semstreams/payloadregistry"
 	agentictools "github.com/c360studio/semstreams/processor/agentic-tools"
 	"github.com/c360studio/semstreams/processor/agentic-tools/executors"
-	"github.com/c360studio/semstreams/processor/agentic-tools/sandbox"
 	"github.com/c360studio/semstreams/types"
 
 	"github.com/c360studio/semteams/cmd/semteams/chain"
 	"github.com/c360studio/semteams/cmd/semteams/devviaspec"
 	"github.com/c360studio/semteams/cmd/semteams/research"
 	"github.com/c360studio/semteams/cmd/semteams/semsource"
-	"github.com/c360studio/semteams/cmd/semteams/testharness"
 	"github.com/c360studio/semteams/cmd/semteams/tools/addsource"
-	"github.com/c360studio/semteams/cmd/semteams/tools/bootstrapworkspace"
-	"github.com/c360studio/semteams/cmd/semteams/tools/builderdecide"
 	"github.com/c360studio/semteams/cmd/semteams/tools/chainbash"
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitartifact"
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitplan"
-	"github.com/c360studio/semteams/cmd/semteams/tools/emitspecartifact"
-	"github.com/c360studio/semteams/cmd/semteams/verification"
 )
 
 // Environment variables that configure product-shell-local tools.
@@ -48,25 +42,19 @@ const (
 	envSemSourceActor = "SEMTEAMS_SEMSOURCE_ACTOR"
 
 	// envSandboxURL is the base URL of the sandbox HTTP server.
-	// Mirrors upstream BashExecutor's SANDBOX_URL: the bootstrap
-	// tool reuses the same env var so operators don't have to wire
-	// two URLs that should always be the same. Empty disables
-	// bootstrap_workspace registration; the builder
-	// loop is non-functional without it.
+	// Mirrors upstream BashExecutor's SANDBOX_URL: the chain-scoped
+	// bash wrapper reuses the same env var so operators don't have to
+	// wire two URLs that should always be the same. Empty leaves the
+	// inner BashExecutor in its local-exec mode.
 	envSandboxURL = "SANDBOX_URL"
 )
 
 // registerProductPayloads registers all SemTeams-local payload types on top
 // of the framework's first-party payload set (payloadbuiltins.Register).
 // R3.1 (ADR-031): research.Artifact — revision-keyed researcher snapshot.
-// R3.3 (ADR-031 §R3.3): devviaspec.Artifact — terminal architect output.
-// R3.6.2.b (ADR-032 §15): no payload — builder_decide tool emits triples
-// only; full args round-trip through the tool result Content for
-// read_loop_result consumers.
-// R3.7.2.a (ADR-033 §addendum 2026-05-04): verification.Check —
-// architect's structured check against a verification surface (target /
-// runtime / test_harness / test_runtime / ref / evidence). Wired into
-// dev_via_spec.artifact.v2 in R3.7.2.b.
+// ADR-038 PR C Phase C2: devviaspec.Plan — planner output emitted by
+// emit_plan during the research arc (the wider dev-via-spec arc retired
+// in the ADR-042 MVP-7 follow-up sweep; only Plan survives).
 // Add new product-local payload registrations here; keep the ADR reference
 // in the comment so future readers know which slice introduced each type.
 func registerProductPayloads(reg *payloadregistry.Registry) error {
@@ -75,9 +63,6 @@ func registerProductPayloads(reg *payloadregistry.Registry) error {
 	}
 	if err := devviaspec.RegisterPayloads(reg); err != nil {
 		return fmt.Errorf("dev-via-spec payloads: %w", err)
-	}
-	if err := verification.RegisterPayloads(reg); err != nil {
-		return fmt.Errorf("verification payloads: %w", err)
 	}
 	// Headless-semsource compatibility: semsource publishes
 	// semsource.entity.v1 / .status.v1 / .manifest.v1 / .predicates.v1
@@ -96,11 +81,9 @@ func registerProductPayloads(reg *payloadregistry.Registry) error {
 // registerProductTools wires product-shell-local tool executors onto
 // the shared registry, after the framework's RegisterBuiltins has
 // populated it with first-party tools. R2 of ADR-031 adds
-// add_source_repo. R3.2.1 adds emit_research_artifact. R3.3 adds
-// emit_dev_via_spec_artifact. R3.6.2.b adds builder_decide. R3.6.2.d
-// adds bootstrap_workspace.
-// Re-introduce a *config.Config parameter (or switch to a deps struct)
-// once a tool needs deployment-config visibility.
+// add_source_repo. R3.2.1 adds emit_research_artifact. ADR-038 PR C
+// Phase C2 adds emit_plan. ADR-041 Phase 4 adds the chain-scoped bash
+// wrapper.
 //
 // Discipline gate (commission-not-omission): adding a new tool
 // registration here requires a framework-alignment review per
@@ -111,7 +94,7 @@ func registerProductPayloads(reg *payloadregistry.Registry) error {
 // port don't fork; if it's planned but not shipped (e.g. upstream's
 // write_artifact suite per ADR-028 §What's not built here), document
 // the migration target in tools/README.md and an ADR addendum.
-func registerProductTools(reg *agentictools.ExecutorRegistry, natsClient *natsclient.Client, platform types.PlatformMeta, testHarnessMgr *testharness.Manager, logger *slog.Logger) error {
+func registerProductTools(reg *agentictools.ExecutorRegistry, natsClient *natsclient.Client, platform types.PlatformMeta, logger *slog.Logger) error {
 	if err := registerAddSource(reg, natsClient, logger); err != nil {
 		return err
 	}
@@ -119,15 +102,6 @@ func registerProductTools(reg *agentictools.ExecutorRegistry, natsClient *natscl
 		return err
 	}
 	if err := registerEmitPlan(reg, natsClient, platform, logger); err != nil {
-		return err
-	}
-	if err := registerEmitSpecArtifact(reg, natsClient, platform, testHarnessMgr, logger); err != nil {
-		return err
-	}
-	if err := registerBuilderDecide(reg, natsClient, platform, logger); err != nil {
-		return err
-	}
-	if err := registerBootstrapWorkspace(reg, natsClient, platform, logger); err != nil {
 		return err
 	}
 	return registerChainBash(reg, natsClient, platform, logger)
@@ -193,17 +167,15 @@ func registerEmitArtifact(reg *agentictools.ExecutorRegistry, natsClient *natscl
 
 // registerEmitPlan wires the ADR-038 PR C Phase C2 emit_plan executor.
 // Always registered when natsClient is non-nil — same "always on" policy
-// as registerEmitArtifact: any deployment running the dev-via-spec flow
-// needs it. Output directory defaults to "docs/plans" but is overrideable
-// via SEMTEAMS_PLAN_DIR.
+// as registerEmitArtifact: any deployment running a planning role needs
+// it. Output directory defaults to "docs/plans" but is overrideable via
+// SEMTEAMS_PLAN_DIR.
 //
-// Persona contract: the researcher-plan persona fragment
-// 15-emit-plan.md instructs the planner phase to call emit_plan
-// before terminating with decide(action="emit") or
-// decide(action="gather"). Configs that route through the
-// dev-via-spec chain (osh-demo.json, e2e-dev-via-spec.json,
-// e2e-research-mode-transition.json) include emit_plan in
-// agentic-tools.allowed_tools.
+// Persona contract: the research-pack planner persona
+// (researcher-research-plan/15-emit-plan.md) instructs the planner
+// phase to call emit_plan before terminating with decide(action="gather").
+// configs/rules/research/{01,05,06}*.json wire emit_plan into the
+// planner's allowed_tools.
 func registerEmitPlan(reg *agentictools.ExecutorRegistry, natsClient *natsclient.Client, platform types.PlatformMeta, logger *slog.Logger) error {
 	if natsClient == nil {
 		logger.Warn("nats client unavailable; emit_plan registration skipped")
@@ -229,7 +201,7 @@ func registerEmitPlan(reg *agentictools.ExecutorRegistry, natsClient *natsclient
 
 // buildChainLineageReader composes the chain Resolver +
 // NATSEntityReader into a single ChainReader-satisfying adapter the
-// emit-tools take via SetChainReader. Centralised here so all three
+// emit-tools take via SetChainReader. Centralised here so all
 // emit-tools share identical wiring (subject, platform, ancestry walk
 // budget). Subject is the upstream graph-query literal — see
 // chain.DefaultGraphQueryEntitySubject doc-comment for why this is a
@@ -242,107 +214,17 @@ func buildChainLineageReader(natsClient *natsclient.Client, platform types.Platf
 }
 
 // Compile-time guards that chain.LineageReader satisfies the
-// (structurally-identical) ChainReader interfaces declared by the
-// two emit-tool packages. If either interface ever widens (a new
-// method added) and chain.LineageReader is not extended to match,
-// this fails to build — surfacing the drift here rather than at
-// SetChainReader call time. The interfaces stay duplicated per
-// package (each package owns its narrow contract); these vars keep
-// the implementer in lock-step with both.
+// (structurally-identical) ChainReader interface declared by the
+// emit-tool package. If the interface ever widens (a new method
+// added) and chain.LineageReader is not extended to match, this
+// fails to build — surfacing the drift here rather than at
+// SetChainReader call time.
 var (
-	_ emitplan.ChainReader             = (*chain.LineageReader)(nil)
-	_ emitspecartifact.ChainReader     = (*chain.LineageReader)(nil)
-	_ chainbash.ChainResolver          = (*chain.Resolver)(nil)
-	_ chainbash.ChainResolver          = identityChainResolver{}
-	_ bootstrapworkspace.ChainResolver = (*chain.Resolver)(nil)
-	_ chainbash.Inner                  = (*executors.BashExecutor)(nil)
+	_ emitplan.ChainReader    = (*chain.LineageReader)(nil)
+	_ chainbash.ChainResolver = (*chain.Resolver)(nil)
+	_ chainbash.ChainResolver = identityChainResolver{}
+	_ chainbash.Inner         = (*executors.BashExecutor)(nil)
 )
-
-// registerEmitSpecArtifact wires the R3.3 emit_dev_via_spec_artifact executor.
-// Always registered when natsClient is non-nil — same "always on" policy as
-// registerEmitArtifact: the tool is product policy, and any deployment running
-// the dev-via-spec flow needs it to close the arc. Output directory defaults
-// to "docs/specs" but is overrideable via SEMTEAMS_DEVVIASPEC_ARTIFACT_DIR.
-//
-// testHarnessMgr resolves catalog names (the architect's check.test_harness
-// field) into concrete entries the renderer projects into SPEC.md
-// (R3.7.2.h′). Without resolution the builder can't reach the catalog
-// from inside its sandbox; rendered fields close that gap. nil testHarnessMgr
-// is permitted (rare deployments without test_harness wiring) — the renderer
-// falls back to rendering the test_harness name without resolved fields.
-func registerEmitSpecArtifact(reg *agentictools.ExecutorRegistry, natsClient *natsclient.Client, platform types.PlatformMeta, testHarnessMgr *testharness.Manager, logger *slog.Logger) error {
-	if natsClient == nil {
-		logger.Warn("nats client unavailable; emit_dev_via_spec_artifact registration skipped")
-		return nil
-	}
-	triplePublisher := agentictools.NewNATSTriplePublisher(natsClient)
-	// Adapt the test harness manager's Get signature to the executor's
-	// TestHarnessResolver function type. nil manager → nil resolver →
-	// renderer falls back to name-only rendering.
-	var resolver emitspecartifact.TestHarnessResolver
-	if testHarnessMgr != nil {
-		resolver = testHarnessMgr.Get
-	}
-	// Pass empty outputDir so the constructor reads SEMTEAMS_DEVVIASPEC_ARTIFACT_DIR
-	// or falls back to the package default ("docs/specs").
-	executor := emitspecartifact.NewExecutor(triplePublisher, natsClient, platform, logger, "", resolver)
-	// ADR-038 PR B Phase 4: chain entity triple writes. Walks ancestry
-	// from artifact.Provenance.ResearchArtifactLoop (a completed
-	// researcher loop) — the architect's own loop has not stamped
-	// agent.loop.parent yet (only stamped at completion), so we walk
-	// from a completed ancestor that has full lineage stamped. Wired
-	// optional via SetChainResolver to keep the executor's constructor
-	// signature stable and to keep test contexts opt-in.
-	// Subject is the upstream graph-query literal — see
-	// chain.DefaultGraphQueryEntitySubject doc-comment for why this is a
-	// constant rather than a config-resolved port.
-	parentReader := chain.NewNATSParentReader(natsClient, platform, chain.DefaultGraphQueryEntitySubject)
-	chainResolver := chain.NewResolver(parentReader, platform)
-	executor.SetChainResolver(chainResolver)
-	// Smoke #8 run-5 D1 + D2 fix: SetChainReader gives the architect
-	// canonical lineage IDs (research_artifact_loop, plan_loop,
-	// plan_reviewer_loop) + slug stem so provenance and the rendered
-	// slug stop drifting. consensus_loop was dropped in ADR-041 Slice
-	// 2D-4 alongside the chain.consensus.* stamper teardown.
-	// ChainResolver above (used for chain.spec_artifact.* triple
-	// writes) is independent — same underlying NATS plumbing,
-	// different read shape.
-	executor.SetChainReader(buildChainLineageReader(natsClient, platform))
-
-	if err := reg.RegisterTool(emitspecartifact.ToolName, executor); err != nil {
-		return fmt.Errorf("register %s: %w", emitspecartifact.ToolName, err)
-	}
-	logger.Info("Registered product tool",
-		slog.String("name", emitspecartifact.ToolName),
-		slog.String("org", platform.Org),
-		slog.String("platform", platform.Platform))
-	return nil
-}
-
-// registerBuilderDecide wires the R3.6.2.b builder_decide executor — the
-// builder role's terminal validator. Always registered when
-// natsClient is non-nil — same "always on" policy as registerEmitArtifact:
-// the tool is product policy, and any deployment running the dev-via-spec
-// builder slice needs it to close the arc with action-specific evidence.
-// See ADR-032 §15 for the contract and cmd/semteams/tools/builderdecide
-// for the package-level discussion of why this is a sibling tool to
-// upstream `decide` rather than a wrapping replacement.
-func registerBuilderDecide(reg *agentictools.ExecutorRegistry, natsClient *natsclient.Client, platform types.PlatformMeta, logger *slog.Logger) error {
-	if natsClient == nil {
-		logger.Warn("nats client unavailable; builder_decide registration skipped")
-		return nil
-	}
-	triplePublisher := agentictools.NewNATSTriplePublisher(natsClient)
-	executor := builderdecide.NewExecutor(triplePublisher, platform, logger)
-	if err := reg.RegisterTool(builderdecide.ToolName, executor); err != nil {
-		return fmt.Errorf("register %s: %w", builderdecide.ToolName, err)
-	}
-	logger.Info("Registered product tool",
-		slog.String("name", builderdecide.ToolName),
-		slog.String("org", platform.Org),
-		slog.String("platform", platform.Platform))
-	return nil
-}
 
 // registerChainBash wires the ADR-041 Phase 4 chain-scoped bash wrapper
 // under the canonical "bash" name. The framework bash was omitted via
@@ -408,52 +290,6 @@ type identityChainResolver struct{}
 
 func (identityChainResolver) ChainID(_ context.Context, loopID string) (string, error) {
 	return loopID, nil
-}
-
-// registerBootstrapWorkspace wires the R3.6.2.d bootstrap_workspace
-// executor — the builder role's iteration-1 setup hook.
-// Skipped when SANDBOX_URL is unset: the builder loop is
-// non-functional without a sandbox, and the upstream BashExecutor uses
-// the same env var to route bash to the sandbox, so an unset value
-// disables the entire builder slice consistently. See ADR-032 §addendum
-// 2026-05-03 R3.6.2.d for why this lives in product code (chicken-and-
-// egg between rule action timing and publish_agent's task_id generation).
-//
-// ADR-041 Phase 4: a chain resolver is wired via SetChainResolver when
-// natsClient is non-nil. The bootstrap then keys the sandbox worktree
-// on chain_id, matching the chain-scoped bash wrapper so every role in
-// the chain shares one worktree.
-func registerBootstrapWorkspace(reg *agentictools.ExecutorRegistry, natsClient *natsclient.Client, platform types.PlatformMeta, logger *slog.Logger) error {
-	sandboxURL := strings.TrimSpace(os.Getenv(envSandboxURL))
-	if sandboxURL == "" {
-		logger.Info("Product tool not registered (SANDBOX_URL unset)",
-			slog.String("name", bootstrapworkspace.ToolName),
-			slog.String("env_var", envSandboxURL))
-		return nil
-	}
-	client := sandbox.NewClient(sandboxURL)
-	executor, err := bootstrapworkspace.NewExecutor(client, logger, "")
-	if err != nil {
-		return fmt.Errorf("construct %s executor: %w", bootstrapworkspace.ToolName, err)
-	}
-	if natsClient != nil {
-		parentReader := chain.NewNATSParentReader(natsClient, platform, chain.DefaultGraphQueryEntitySubject)
-		executor.SetChainResolver(chain.NewResolver(parentReader, platform))
-	}
-	if err := reg.RegisterTool(bootstrapworkspace.ToolName, executor); err != nil {
-		return fmt.Errorf("register %s: %w", bootstrapworkspace.ToolName, err)
-	}
-	if natsClient == nil {
-		logger.Warn("Registered bootstrap_workspace WITHOUT chain scoping (nats client unavailable); every role will see an empty worktree",
-			slog.String("name", bootstrapworkspace.ToolName),
-			slog.String("sandbox_url", sandboxURL))
-	} else {
-		logger.Info("Registered product tool",
-			slog.String("name", bootstrapworkspace.ToolName),
-			slog.String("sandbox_url", sandboxURL),
-			slog.Bool("chain_scoped", true))
-	}
-	return nil
 }
 
 // readAddSourceConfig parses the environment-driven namespace

@@ -8,7 +8,6 @@ import (
 	agenticdispatch "github.com/c360studio/semstreams/processor/agentic-dispatch"
 	"github.com/c360studio/semstreams/service"
 	"github.com/c360studio/semteams/cmd/semteams/chainpause"
-	"github.com/c360studio/semteams/cmd/semteams/testharness"
 )
 
 // xUserIDHeader is the product-shell convention for naming the
@@ -79,15 +78,15 @@ func sanitiseIdentity(raw string) string {
 //  1. xUserIDIdentityMiddleware — lift X-User-Id into ctx so downstream
 //     handlers see the caller. Runs first so identity is bound before
 //     any product handler that wants to log it.
-//  2. test_harness HTTP middleware — intercepts /harnesses* GETs and serves
-//     the operator/UI catalog read API. Pass-through for all other
-//     paths. Nil-safe: a deployment without a test_harness manager (boot-
-//     time KV failure) skips the intercept transparently.
-//  3. chain-pause HTTP middleware — intercepts POST /teams-loop/chain-pause/decide
+//  2. chain-pause HTTP middleware — intercepts POST /teams-loop/chain-pause/decide
 //     and dispatches to the operator decision handler (ADR-037 v1). Nil-safe:
 //     passes through on nil handler. Must run after xUserIDIdentityMiddleware
 //     so the X-User-Id header is already sanitised by the time handleDecide
 //     reads it.
+//
+// The test_harness HTTP middleware (ADR-033 R3.7.1.f) sat between these
+// two prior to the ADR-042 MVP-7 follow-up sweep; it retired alongside
+// the dev-via-spec arc that fed it.
 //
 // When extending:
 //
@@ -100,10 +99,9 @@ func sanitiseIdentity(raw string) string {
 //     and have it overwrite the X-User-Id header (or call
 //     agenticdispatch.WithIdentity directly). xUserIDIdentityMiddleware
 //     trusts whatever header reaches it.
-func productMiddleware(testHarnessMgr *testharness.Manager, chainPauseHTTP *chainpause.HTTPHandler, logger *slog.Logger) []service.HTTPMiddleware {
+func productMiddleware(chainPauseHTTP *chainpause.HTTPHandler, logger *slog.Logger) []service.HTTPMiddleware {
 	return []service.HTTPMiddleware{
 		xUserIDIdentityMiddleware,
-		testharness.HTTPMiddleware(testHarnessMgr, logger),
 		chainpause.HTTPMiddleware(chainPauseHTTP, logger),
 	}
 }

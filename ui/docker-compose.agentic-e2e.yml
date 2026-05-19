@@ -97,12 +97,16 @@ services:
         condition: service_healthy
       mock-llm:
         condition: service_healthy
-      # required:false so the backend boots when the `sandbox` profile
-      # isn't active. Journeys that need bash-via-sandbox bring it up
-      # via the profile; existing journeys (mock-llm-only) skip it.
+      # ADR-042 MVP-7 follow-up sweep (2026-05-19): sandbox is now
+      # always-warm. The dev-via-spec builder arc retired, but the
+      # framework's BashExecutor reads SANDBOX_URL once at construction
+      # and dispatches every bash call into the sandbox — research-pack
+      # roles use bash too (e.g. reviewer-research cats the synthesize
+      # artifact). required:true so the backend doesn't race past a
+      # cold sandbox and silently fall back to local-exec, which would
+      # lose ADR-032 isolation.
       sandbox:
         condition: service_healthy
-        required: false
     environment:
       - SEMSTREAMS_NATS_URLS=nats://nats:4222
       - SEMSTREAMS_LOG_LEVEL=debug
@@ -112,13 +116,9 @@ services:
       # that don't list the tool in agentic-tools.allowed_tools.
       - SEMTEAMS_SEMSOURCE_NAMESPACES=research
       - SEMTEAMS_SEMSOURCE_DEFAULT_NAMESPACE=research
-      # R3.6.2 sandbox URL — upstream BashExecutor reads SANDBOX_URL
-      # at boot and routes commands through the sandbox container
-      # when set. Profile-gated below; backend boots either way
-      # (depends_on uses required:false). Journeys that don't run
-      # the sandbox profile won't have the sandbox container, so
-      # bash-via-sandbox calls would 404 — but those journeys
-      # don't list `bash` in allowed_tools either.
+      # Upstream BashExecutor reads SANDBOX_URL at boot and routes
+      # every bash call through the sandbox container. Always set under
+      # the always-warm posture (see depends_on above).
       - SANDBOX_URL=http://sandbox:8090
       # Cloud-LLM API keys for real-LLM smokes (smoke #6 runs
       # claude-haiku against flow-bootstrap.json). Empty defaults
@@ -126,48 +126,23 @@ services:
       # endpoints they use don't reference these env vars.
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      # R3.7.1 harness catalog path. Default points at the empty
-      # operator-curated file baked into the image; per-journey
-      # tasks override (e.g. research-harness-hit sets it to
-      # configs/harnesses-stub.json) so a single image services
-      # both empty-catalog and stub-catalog journeys without a
-      # rebuild. ADR-033.
-      - SEMTEAMS_HARNESS_CATALOG_PATH=${SEMTEAMS_HARNESS_CATALOG_PATH:-/app/configs/harnesses.json}
-      # ADR-036 §Phase 2 — evidence preprocessor reads builder workspace
-      # files at builder-loop completion time. Must match the sandbox
-      # container's --workspace arg. :ro enforces D2 (measurer/measured
-      # separation from ADR-033): the backend reads evidence outputs written
-      # by the sandbox; it must never write into the workspace directly.
-      - SEMTEAMS_WORKSPACE_ROOT=/workspace
-      # emit-tool output dirs land in the shared agentic-artifacts volume
-      # (rw here, ro in sandbox at the same /artifacts mountpoint) so
-      # every bash-equipped agent can `cat /artifacts/<kind>/<slug>.md`
-      # without crossing the ADR-033 D2 workspace boundary. Backend
-      # writes; sandbox reads. Host never sees them (named volume, no
-      # bind mount). This is a SEPARATE volume from the workspace one
-      # — D2 still holds: backend never touches /workspace.
+      # emit-tool output dirs land in the shared agentic-artifacts
+      # volume so the sandbox can `cat /artifacts/<kind>/<slug>.md`
+      # from any role. The dev-via-spec artifact dir
+      # (SEMTEAMS_DEVVIASPEC_ARTIFACT_DIR), workspace-root
+      # (SEMTEAMS_WORKSPACE_ROOT) for the evidence preprocessor, and
+      # harness catalog path (SEMTEAMS_HARNESS_CATALOG_PATH) retired
+      # alongside their consumers in the ADR-042 MVP-7 follow-up sweep.
       - SEMTEAMS_RESEARCH_ARTIFACT_DIR=/artifacts/research
       - SEMTEAMS_PLAN_DIR=/artifacts/plans
-      - SEMTEAMS_DEVVIASPEC_ARTIFACT_DIR=/artifacts/specs
     volumes:
       - ${BACKEND_CONTEXT:-..}/configs/${AGENTIC_CONFIG:-e2e-flow-bootstrap.json}:/etc/semstreams/config.json:ro
       - ${BACKEND_CONTEXT:-..}/testdata:/data/testdata:ro
-      # ADR-036 §Phase 2 — read-only bind of sandbox workspaces so the
-      # evidence preprocessor can read .evidence/checks.json at
-      # builder-loop completion time. :ro is load-bearing: D2 separation
-      # (ADR-033) requires the backend never writes into the workspace.
-      # The named volume is auto-created by Docker; when the sandbox
-      # profile is inactive the volume stays empty and the preprocessor's
-      # fail-soft path stamps the plumbing-failure summary, which routes
-      # qa-reviewer to needs_clarification — correct behaviour for
-      # mock-LLM journeys that never spawn a real builder.
-      - sandbox-agentic-workspaces:/workspace:ro
       # Shared artifacts volume — backend writes emit_*_artifact markdown
       # here; sandbox mounts the SAME volume at /artifacts ro so bash-
-      # equipped agents (reviewer-spec / reviewer-qa / researcher-architect)
-      # can read the rendered artifacts. Distinct from the workspace
-      # volume: this is for chain-state artifacts, not measured build
-      # outputs, so D2 doesn't apply.
+      # equipped agents can read the rendered artifacts. The sandbox-
+      # workspaces ro mount (for the evidence preprocessor) retired in
+      # the ADR-042 MVP-7 follow-up sweep alongside the preprocessor.
       - agentic-artifacts:/artifacts
     networks:
       - agentic-net
@@ -184,22 +159,21 @@ services:
   #
   # Inlined rather than `include:`'d on purpose: Compose include would
   # couple the e2e stack's network (agentic-net) and per-journey
-  # lifecycle to the standalone compose file's, and we'd lose the
-  # `profiles: ["sandbox", "local-models"]` override that's specific
-  # to the e2e shape. Two definitions to keep in sync is the
-  # accepted cost. Hardening posture changes (cap_drop, tmpfs, etc.)
-  # MUST land in both places.
+  # lifecycle to the standalone compose file's. Hardening posture
+  # changes (cap_drop, tmpfs, etc.) MUST land in both places.
   #
-  # Profile-gated: journeys that exercise bash (R3.6.2 builder slice
-  # and beyond) bring it up via `--profile sandbox`. Existing mock-
-  # llm journeys skip the boot cost.
+  # ADR-042 MVP-7 follow-up sweep (2026-05-19): always-warm. Profile
+  # gating retired — even research-pack roles use bash (cat the
+  # synthesize artifact in the reviewer-research persona), and we
+  # can't know at boot which prompts will arrive. Backend's
+  # depends_on waits for the sandbox so the BashExecutor doesn't
+  # race past a cold dispatch URL.
   sandbox:
     image: semteams-sandbox:dev
     build:
       context: ${BACKEND_CONTEXT:-..}
       dockerfile: docker/sandbox.Dockerfile
     container_name: semteams-ui-agentic-sandbox
-    profiles: ["sandbox", "local-models"]
     # Default to DooD (Docker-out-of-Docker, ADR-034 §addendum #2) so
     # testcontainer-flavored chains (process-local-testcontainer
     # Approach in ADR-034's verification class table) can spawn sibling

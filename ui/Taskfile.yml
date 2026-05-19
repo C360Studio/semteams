@@ -254,8 +254,8 @@ tasks:
       shipped under PRs #172/#173/#174/#175).
 
       Six loops, thirteen mock-LLM round-trips. No approval gate, no
-      recovery. Compose profile: none beyond the agentic-e2e
-      baseline.
+      recovery. Compose profiles: none; the sandbox container is
+      always-warm under the ADR-042 MVP-7 follow-up posture.
     vars:
       FIXTURE: research-mvp.yaml
       AGENTIC_CONFIG: e2e-flow-bootstrap.json
@@ -486,7 +486,7 @@ tasks:
       Usage:
         task ui:test:e2e:agentic:smoke7:wedge-report                 # RUN_ID=smoke7-manual
         RUN_ID=smoke7-run1 task ui:test:e2e:agentic:smoke7:wedge-report
-        WEDGE_EXPECTED_TERMINAL_ROLE=dev-via-spec-architect RUN_ID=smoke7-run1 task ui:test:e2e:agentic:smoke7:wedge-report
+        WEDGE_EXPECTED_TERMINAL_ROLE=reviewer-research RUN_ID=smoke7-run1 task ui:test:e2e:agentic:smoke7:wedge-report
 
       Reads (best-effort): /tmp/$RUN_ID/loops.json,
       /tmp/$RUN_ID/trajectory-*.json, /tmp/$RUN_ID/tool-issues.log.
@@ -859,21 +859,16 @@ tasks:
       FIXTURE: '{{.FIXTURE | default ""}}'
       AGENTIC_CONFIG: '{{.AGENTIC_CONFIG | default "e2e-flow-bootstrap.json"}}'
       E2E_AGENTIC_UI_PORT: '{{.E2E_AGENTIC_UI_PORT | default "3100"}}'
-      # COMPOSE_PROFILES toggles optional services (e.g. "semsource").
-      # Empty default keeps existing journeys boot-fast; the
-      # research-with-source journey sets COMPOSE_PROFILES=semsource.
+      # COMPOSE_PROFILES toggles optional services (e.g. "semsource",
+      # "local-models"). Empty default keeps existing journeys boot-
+      # fast; the sandbox is always-warm under ADR-042 MVP-7 follow-up
+      # and no longer profile-gated.
       COMPOSE_PROFILES: '{{.COMPOSE_PROFILES | default ""}}'
-      # R3.7.1: per-journey harness catalog override. Default falls
-      # through to the empty configs/harnesses.json baked into the
-      # image; journeys that need a stub harness (research-harness-
-      # hit) set this to /app/configs/harnesses-stub.json.
-      SEMTEAMS_HARNESS_CATALOG_PATH: '{{.SEMTEAMS_HARNESS_CATALOG_PATH | default "/app/configs/harnesses.json"}}'
     env:
       FIXTURE: "{{.FIXTURE}}"
       AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
       E2E_AGENTIC_UI_PORT: "{{.E2E_AGENTIC_UI_PORT}}"
       COMPOSE_PROFILES: "{{.COMPOSE_PROFILES}}"
-      SEMTEAMS_HARNESS_CATALOG_PATH: "{{.SEMTEAMS_HARNESS_CATALOG_PATH}}"
     cmds:
       - echo "Stack config → AGENTIC_CONFIG={{.AGENTIC_CONFIG}} FIXTURE={{.FIXTURE}} PROFILES={{.COMPOSE_PROFILES}}"
       # Smoke #25 finding (2026-05-14): rebuilding only `backend` with
@@ -884,29 +879,9 @@ tasks:
       # despite the source modification, because the cache key on the
       # Go build layer didn't invalidate as expected). Both images
       # carry our product code; both need the no-cache treatment to
-      # guarantee a smoke runs the committed source.
-      #
-      # 2026-05-16: scope the sandbox --no-cache rebuild to journeys
-      # that actually activate the `sandbox` (or `local-models`)
-      # compose profile. Mock-llm coordinator/researcher journeys
-      # never start the sandbox container, so the eager rebuild is
-      # pure waste — and worse, the sandbox Dockerfile's apt
-      # bootstrap occasionally flakes (NodeSource setup_22.x against
-      # ports.ubuntu.com noble: transient GPG signature errors),
-      # killing journeys that don't even need it. Sandbox-using
-      # journeys (dev-via-spec, dev-via-spec-qa, smoke7) opt back in
-      # via COMPOSE_PROFILES.
-      - docker compose -f docker-compose.agentic-e2e.yml build --no-cache backend
-      - |
-        case "${COMPOSE_PROFILES:-}" in
-          *sandbox*|*local-models*)
-            echo "Rebuilding sandbox (--no-cache; COMPOSE_PROFILES=${COMPOSE_PROFILES})"
-            docker compose -f docker-compose.agentic-e2e.yml build --no-cache sandbox
-            ;;
-          *)
-            echo "Skipping sandbox --no-cache rebuild (profile not active; COMPOSE_PROFILES=${COMPOSE_PROFILES:-<empty>})"
-            ;;
-        esac
+      # guarantee a smoke runs the committed source. Always-warm
+      # sandbox means we always rebuild it.
+      - docker compose -f docker-compose.agentic-e2e.yml build --no-cache backend sandbox
       - docker compose -f docker-compose.agentic-e2e.yml up -d
       - |
         PORT="{{.E2E_AGENTIC_UI_PORT}}"
@@ -993,8 +968,8 @@ tasks:
             echo "    if the smoke fails on socket EACCES."
           fi
         fi
-      - docker compose -f docker-compose.agentic-e2e.yml --profile sandbox build sandbox
-      - docker compose -f docker-compose.agentic-e2e.yml --profile sandbox up -d sandbox
+      - docker compose -f docker-compose.agentic-e2e.yml build sandbox
+      - docker compose -f docker-compose.agentic-e2e.yml up -d sandbox
       # Healthcheck loop — `up -d` returns immediately, but the
       # sandbox HTTP server (and the boot-time DooD probe in
       # main.go) need a few seconds to settle. Poll the health
@@ -1023,7 +998,7 @@ tasks:
       # endpoint on agentic-net and the subsequent `down -v` errors
       # with "network has active endpoints".
       - docker ps -aq --filter label=org.semteams.dood-smoke=1 | xargs -r docker rm -f >/dev/null 2>&1 || true
-      - docker compose -f docker-compose.agentic-e2e.yml --profile sandbox down -v
+      - docker compose -f docker-compose.agentic-e2e.yml down -v
 
   # === Linting and Formatting ===
 
