@@ -610,7 +610,7 @@ tasks:
       RUN_ID: '{{.RUN_ID | default (printf "smoke6-%s" (now | date "20060102-150405"))}}'
       AGENTIC_CONFIG: flow-bootstrap.json
       COMPOSE_PROFILES: ""
-      PROMPT: "Compare MQTT vs NATS for IoT edge deployments — which has lower latency on constrained ARM devices?"
+      PROMPT: '{{.PROMPT | default "Compare MQTT vs NATS for IoT edge deployments — which has lower latency on constrained ARM devices?"}}'
       # Capture the host's BRAVE_SEARCH_API_KEY via a sh: var rather
       # than Task's `{{.VAR}}` template — Task's templating context
       # only sees task vars, not dotenv-loaded env vars. `sh:` runs
