@@ -613,26 +613,13 @@ tasks:
       PROMPT: "Compare MQTT vs NATS for IoT edge deployments — which has lower latency on constrained ARM devices?"
       # Capture the host's BRAVE_SEARCH_API_KEY via a sh: var rather
       # than Task's `{{.VAR}}` template — Task's templating context
-      # only sees task vars, not dotenv-loaded env vars. `sh:` runs a
-      # shell that DOES inherit the parent Taskfile's dotenv, so the
-      # captured value is the real key when the host has one. Fall-
-      # through to empty when unset (precondition below catches that
-      # case before we get this far). PR #181 used the template path
-      # by mistake and silently fell through to empty → boot logged
-      # `provider=stub`.
+      # only sees task vars, not dotenv-loaded env vars. `sh:` runs
+      # a shell that DOES inherit the parent Taskfile's dotenv, so
+      # the captured value is the real key when the host has one.
+      # Fall-through to empty when unset (precondition below catches
+      # that case before we get this far).
       HOST_BRAVE_KEY:
         sh: printf '%s' "${BRAVE_SEARCH_API_KEY:-}"
-    env:
-      # Forward the host's BRAVE_SEARCH_API_KEY into the compose-side
-      # gate variable so docker-compose.agentic-e2e.yml's backend
-      # service receives a real Brave-backed web_search executor (vs.
-      # the stub). The compose file reads
-      # ${BACKEND_BRAVE_SEARCH_API_KEY:-}; mock-LLM journey tasks
-      # don't set this var, so they get the deterministic stub.
-      # Without the forward, smoke #6 Finding 1 wedges the chain on
-      # needs_clarification recovery (gather can't ground claims).
-      # See [[compose-env-boot-gate]] for the design lesson.
-      BACKEND_BRAVE_SEARCH_API_KEY: "{{.HOST_BRAVE_KEY}}"
     preconditions:
       - sh: '[ -n "$ANTHROPIC_API_KEY" ]'
         msg: "ANTHROPIC_API_KEY is unset. Add it to the project-root .env (auto-loaded when invoking from project root) or export it in your shell. Smoke #6 routes the research arc to claude-haiku-4-5; without a key the run cannot start."
@@ -656,6 +643,16 @@ tasks:
           FIXTURE: ""
           AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
           COMPOSE_PROFILES: "{{.COMPOSE_PROFILES}}"
+          # Pass the host's BRAVE_SEARCH_API_KEY through to stack:up
+          # as a TASK VAR (not an env block), because Task's env:
+          # blocks DO NOT propagate to sub-tasks invoked via `task:`.
+          # Bisected against PR #181/#182 silent failures: parent's
+          # env block stayed at length 0 in the sub-task shell, so
+          # docker compose substituted `${BACKEND_BRAVE_SEARCH_API_KEY:-}`
+          # to empty and the backend booted with the web_search
+          # stub. The vars-passing path is the documented Task
+          # idiom for cross-task data flow.
+          BACKEND_BRAVE_KEY: "{{.HOST_BRAVE_KEY}}"
       - task: test:e2e:agentic:probe:send
         vars:
           CLI_ARGS: '{{.PROMPT}}'
@@ -888,11 +885,21 @@ tasks:
       # fast; the sandbox is always-warm under ADR-042 MVP-7 follow-up
       # and no longer profile-gated.
       COMPOSE_PROFILES: '{{.COMPOSE_PROFILES | default ""}}'
+      # Opt-in BRAVE_SEARCH_API_KEY forwarding. Real-LLM smokes (smoke6
+      # and similar) pass the host's key via the BACKEND_BRAVE_KEY task
+      # var; mock-LLM journeys leave it unset and the backend boots with
+      # the deterministic web_search stub. See [[compose-env-boot-gate]]
+      # for the design rationale. Stays at this level (stack:up) because
+      # Task's env: blocks don't propagate from a parent task to a sub-
+      # task invoked via `task:` — the env var must be set on the task
+      # that ACTUALLY invokes `docker compose up`.
+      BACKEND_BRAVE_KEY: '{{.BACKEND_BRAVE_KEY | default ""}}'
     env:
       FIXTURE: "{{.FIXTURE}}"
       AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
       E2E_AGENTIC_UI_PORT: "{{.E2E_AGENTIC_UI_PORT}}"
       COMPOSE_PROFILES: "{{.COMPOSE_PROFILES}}"
+      BACKEND_BRAVE_SEARCH_API_KEY: "{{.BACKEND_BRAVE_KEY}}"
     cmds:
       - echo "Stack config → AGENTIC_CONFIG={{.AGENTIC_CONFIG}} FIXTURE={{.FIXTURE}} PROFILES={{.COMPOSE_PROFILES}}"
       # Smoke #25 finding (2026-05-14): rebuilding only `backend` with
