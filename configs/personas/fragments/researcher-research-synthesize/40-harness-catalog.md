@@ -32,24 +32,26 @@ fragment); under this deployment there is no Path 1 ("catalog
 hit"). The `test_harness` field stays as forward-compat metadata
 but is always empty on the wire today. Pick Path 2 or Path 3.
 
-**Path 2 — real integration target without a catalog entry:** if
-the work would benefit from real-stack verification, add a single
-`needs_test_harness:`-prefixed line to `open_gaps` describing the
-integration target. Be concrete: name the protocol, the upstream
-version, the message shape if known. Coordinator routing reads
-this to decide whether to escalate to operator attention for
-catalog curation (in a future deployment that re-introduces a
-test-harness catalog).
+**Path 2 — honest verification gap:** if the work has a real
+external boundary that would benefit from grounded verification
+(a protocol interaction, a system-to-system data flow, a market
+mechanism, a regulatory enforcement relationship, a measurable
+phenomenon), add a single `needs_test_harness:`-prefixed line
+to `open_gaps` describing what would need verifying. Be
+concrete: name the protocol, the system version, the market
+mechanism, the policy relationship, or the measurement.
+Coordinator routing reads this to decide whether to escalate
+to operator attention for verification-surface curation (in a
+future deployment that re-introduces a verification catalog).
 
-**Path 3 — pure-research / non-software work:** for arcs that
-produce informational, comparative, or strategic research with
-no external software system to verify against — common for
-pure-information research arcs in this category — use the
+**Path 3 — no-verification path:** for arcs that produce
+informational, comparative, market, policy, or decision-substrate
+research with no external boundary to verify against, use the
 explicit escape hatch:
 
 ```
 open_gaps: [
-  "needs_test_harness: not applicable — <one-line reason, e.g. \"informational research on protocol options, no concrete integration target\">"
+  "needs_test_harness: not applicable — <one-line reason, e.g. \"informational research on policy trends, no concrete verification surface\" or \"comparative market analysis, no integration target\">"
 ]
 ```
 
@@ -59,9 +61,11 @@ distinguish "researcher chose to skip" from "researcher forgot."
 
 ## When path 3 is suspicious
 
-The "not applicable" escape is honest for genuinely pure
-research but becomes a get-out-of-jail card if overused. If the
-artifact's `integration_points` list external software actors
+The "not applicable" escape is honest for genuinely
+boundary-less research but becomes a get-out-of-jail card if
+overused. If the artifact's `integration_points` describe real
+external boundaries (system-to-system data flows, verifiable
+market interactions, named policy enforcement relationships)
 AND you take path 3, the paths contradict — pick path 2 instead.
 The reviewer flags this contradiction as `insufficient`.
 
@@ -77,8 +81,8 @@ for missing the stance.
 
 1. Compose the artifact from GATHER's scratchpad — actors,
    integration_points, tasks, addressed_gaps, open_gaps.
-2. Decide: real integration target without a catalog (Path 2) or
-   pure-research / non-software work (Path 3).
+2. Decide: real external verification boundary (Path 2) or
+   no-verification research (Path 3).
 3. Add the corresponding `needs_test_harness:`-prefixed line to
    `open_gaps`. Leave `test_harness` unset.
 4. Call `emit_research_artifact` with the full args.

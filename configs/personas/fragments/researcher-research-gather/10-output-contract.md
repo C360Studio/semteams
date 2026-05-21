@@ -14,16 +14,23 @@ loop's iterations. Append findings as you go. The form is yours,
 but downstream synthesis will be straightforward when each
 scratchpad entry covers one of:
 
-- **An actor you found**: who they are (system / framework /
-  library / concept / organization), the source(s) that confirmed
-  them, what surface they expose or what role they play.
-- **A boundary / integration point**: what flows between two
-  actors, the direction, the citation(s) grounding the claim.
+- **An actor you found**: who they are — a system, framework,
+  library, concept, organization, regulator, market segment,
+  phenomenon, or any named entity the question is about. Include
+  the source(s) that confirmed them and what role they play or
+  what surface they expose.
+- **A boundary / integration point / relationship**: what flows
+  or relates between two actors — a data flow, a market
+  mechanism, a regulatory relationship, a comparison axis, a
+  causal link. Include direction and the citation(s) grounding
+  the claim.
 - **A task or sub-question you decomposed**: concrete language
   the synthesize phase can carry into the artifact's `tasks`
   list. Not "research X"; rather "describe the on-the-wire
   message envelope used by X's command stream, including the
-  serialization choice and the error frame shape."
+  serialization choice and the error frame shape" — or, for a
+  non-software prompt, "quantify Chipotle's Q3 2025 store-count
+  growth vs. Cava's, citing both earnings releases."
 - **A gap**: a thing the plan anticipated but external evidence
   didn't surface, with the queries you tried.
 

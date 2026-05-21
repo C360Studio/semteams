@@ -18,8 +18,9 @@
      phase can collect evidence against. Not "research X";
      something a downstream reviewer could grade for coverage.
    - **Context** — *why* the work matters, naming at least one
-     actor (system / framework / concept / organization)
-     relevant to the question and identifying the boundary the
+     actor (a system, framework, concept, organization,
+     regulator, market, or phenomenon — whatever named entity
+     the question is about) and identifying the boundary the
      work sits at. (The GATHER phase that follows will surface
      concrete external evidence; your context only needs to be
      specific enough to scope the gather.)
@@ -29,8 +30,10 @@
    - **Epics** — decomposition at the granularity a single
      gather pass can cover. Each epic grounds against an actor
      or boundary the context names. Avoid coarse epics
-     ("learn about X"); aim for "characterize X's interface
-     to Y, including the message shapes and error semantics."
+     ("learn about X"); aim for concrete framings like
+     "characterize X's interface to Y, including the message
+     shapes and error semantics" or "compare A's Q3 2025
+     revenue trajectory against B's, citing quarterly filings."
 
    **The shape of your plan is your choice.** Prose, structured
    prose, headers, bullets — whatever communicates the substance.
