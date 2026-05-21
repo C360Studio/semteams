@@ -611,6 +611,17 @@ tasks:
       AGENTIC_CONFIG: flow-bootstrap.json
       COMPOSE_PROFILES: ""
       PROMPT: "Compare MQTT vs NATS for IoT edge deployments — which has lower latency on constrained ARM devices?"
+      # Capture the host's BRAVE_SEARCH_API_KEY via a sh: var rather
+      # than Task's `{{.VAR}}` template — Task's templating context
+      # only sees task vars, not dotenv-loaded env vars. `sh:` runs a
+      # shell that DOES inherit the parent Taskfile's dotenv, so the
+      # captured value is the real key when the host has one. Fall-
+      # through to empty when unset (precondition below catches that
+      # case before we get this far). PR #181 used the template path
+      # by mistake and silently fell through to empty → boot logged
+      # `provider=stub`.
+      HOST_BRAVE_KEY:
+        sh: printf '%s' "${BRAVE_SEARCH_API_KEY:-}"
     env:
       # Forward the host's BRAVE_SEARCH_API_KEY into the compose-side
       # gate variable so docker-compose.agentic-e2e.yml's backend
@@ -620,7 +631,8 @@ tasks:
       # don't set this var, so they get the deterministic stub.
       # Without the forward, smoke #6 Finding 1 wedges the chain on
       # needs_clarification recovery (gather can't ground claims).
-      BACKEND_BRAVE_SEARCH_API_KEY: '{{.BRAVE_SEARCH_API_KEY | default ""}}'
+      # See [[compose-env-boot-gate]] for the design lesson.
+      BACKEND_BRAVE_SEARCH_API_KEY: "{{.HOST_BRAVE_KEY}}"
     preconditions:
       - sh: '[ -n "$ANTHROPIC_API_KEY" ]'
         msg: "ANTHROPIC_API_KEY is unset. Add it to the project-root .env (auto-loaded when invoking from project root) or export it in your shell. Smoke #6 routes the research arc to claude-haiku-4-5; without a key the run cannot start."
