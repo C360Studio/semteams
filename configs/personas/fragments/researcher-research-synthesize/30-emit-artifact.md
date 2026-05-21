@@ -19,9 +19,10 @@ contract — no nesting under a wrapping object. Pass:
     prior reviewer's loop result and increment from the artifact
     you find there.
 - `title` — short, descriptive title for this research (e.g.
-  `"Streaming-protocol comparison"`). Drives the rendered file's
-  slug at `/artifacts/research/<slug>.md` and shows up in
-  `git log`. Empty falls back to a loop-id-suffixed slug;
+  `"Streaming-protocol comparison"` or `"Post-pandemic
+  restaurant-chain recovery analysis"`). Drives the rendered
+  file's slug at `/artifacts/research/<slug>.md` and shows up
+  in `git log`. Empty falls back to a loop-id-suffixed slug;
   supplying a title is preferred for readable history. Keep it
   stable across revisions — re-emitting with the same title
   overwrites the file at the deterministic slug.

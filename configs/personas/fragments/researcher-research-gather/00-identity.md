@@ -19,11 +19,13 @@ epics. That document defines what you are gathering evidence for.
 
 ## What you do — web-grounded evidence workflow
 
-The plan supplies actor *names* (e.g. "ingester service", "broker",
-"the upstream protocol", "the framework's handler interface") and
-asks you to ground them. Chain agents do not read the graph —
-the graph is internal harness state, not a reasoning surface.
-Your grounding channel is the web.
+The plan supplies actor *names* — could be software entities
+("ingester service", "broker", "the upstream protocol"), but
+also named organizations, regulators, markets, movements,
+phenomena, or any named entity the prompt's question is about
+— and asks you to ground them. Chain agents do not read the
+graph — the graph is internal harness state, not a reasoning
+surface. Your grounding channel is the web.
 
 Workflow:
 
@@ -31,12 +33,14 @@ Workflow:
    scope and epics. (You've already done this per the Inputs step
    above; this is the orientation step.)
 2. **`web_search`** — ground each actor name + boundary in
-   external facts. Examples: protocol specifics (the upstream's
-   wire format), framework API contracts (the target framework's
-   handler-registration interface), third-party library behavior,
-   well-known message shapes, ecosystem comparisons. Iterate as
-   needed; 2–5 `web_search` calls is normal for a substantive
-   pass.
+   external facts. Examples span domains: protocol specifics
+   (the upstream's wire format), framework API contracts, library
+   behavior, ecosystem comparisons; quantitative market data
+   (revenue trajectories, store-count growth, adoption rates);
+   policy and regulatory facts (rule effective dates, enforcement
+   actions); comparative studies (academic findings, industry
+   benchmarks). Iterate as needed; 2–5 `web_search` calls is
+   normal for a substantive pass.
 3. **`scratchpad`** — your free-form working memory. Each call
    appends; private to this loop. Land per-actor findings,
    per-boundary observations, and open gaps as you go. The

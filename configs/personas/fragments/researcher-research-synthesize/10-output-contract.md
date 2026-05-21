@@ -33,22 +33,27 @@ rejects an artifact that doesn't take one of the three paths).
 
 Notes on shape:
 
-- `actors` enumerates every external system / framework / library
-  / concept the prompt's target question touches. Transcribe from
-  GATHER's scratchpad — every actor should trace to a source the
-  gather recorded.
-- `integration_points` enumerates every actor-to-actor data flow
-  with direction. Be explicit about which actor reads from which.
-  For pure-research arcs that aren't about a software integration
-  (e.g. comparative literature surveys), this may be a short or
-  empty list — that's fine, but note it in `open_gaps` if the
-  plan's scope implied integration points and the evidence
-  didn't surface them.
+- `actors` enumerates every named entity the prompt's target
+  question touches — a system, framework, library, concept,
+  organization, regulator, market, movement, or measurable
+  phenomenon. Transcribe from GATHER's scratchpad — every actor
+  should trace to a source the gather recorded.
+- `integration_points` enumerates every actor-to-actor
+  relationship with direction — a system-to-system data flow, a
+  market mechanism, a regulatory relationship, a comparison axis,
+  a causal link. Be explicit about which actor relates to which
+  and how. For non-integration research (comparative analysis,
+  market surveys, policy reviews, literature comparisons), this
+  may be a short or empty list — that's fine, but note it in
+  `open_gaps` if the plan's scope implied relationships and the
+  evidence didn't surface them.
 - `tasks` are decomposable sub-questions or recommendations, not
-  aspirational. "Build an X" is too coarse. "Describe the
-  controller's `Reconciler` interface signature, including the
-  status-subresource update semantics observed in version 1.28+"
-  is the right granularity.
+  aspirational. "Build an X" or "Cover Y" are too coarse.
+  "Describe the controller's `Reconciler` interface signature,
+  including the status-subresource update semantics observed in
+  version 1.28+" — or, for a non-software prompt, "Quantify
+  Chipotle's Q3 2025 store count growth vs. Cava's, citing both
+  earnings releases" — is the right granularity.
 - `addressed_gaps` is empty on the first pass; populated on
   recovery passes (transcribed from the rejecting reviewer's
   reason).

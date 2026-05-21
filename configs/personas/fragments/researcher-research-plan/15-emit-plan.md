@@ -20,7 +20,8 @@ Pass:
     prior planner loop result and increment from the artifact you
     find there.
 - `title` — short, descriptive title for the plan (e.g.
-  `"Streaming-protocol comparison plan"`). Used as the markdown
+  `"Streaming-protocol comparison plan"` or `"Post-pandemic
+  restaurant-chain recovery analysis"`). Used as the markdown
   H1 heading. The file slug is server-derived from the chain
   entity's `chain.slug.stem` (set when the chain first emitted),
   so your title text drives the heading you see in the rendered
