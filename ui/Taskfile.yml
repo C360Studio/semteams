@@ -657,9 +657,12 @@ tasks:
         vars:
           CLI_ARGS: '{{.PROMPT}}'
       # Hard cap on the watcher to bound real-LLM spend. Research
-      # category is short (six loops, ~$0.30) so 600s = 10min is
-      # generous. Cleanup + capture defers fire either way.
-      - timeout 600 task test:e2e:agentic:probe:auto-approve-watcher -- {{.RUN_ID}}
+      # category is six loops, ~$0.30 on the happy path; bumped to
+      # 1200s (20min) after smoke6-pr184-validation 2026-05-21 saw
+      # synthesize stall on a rate-limit backoff and exhaust the
+      # prior 600s before the chain could emit + review + wake-up.
+      # Cleanup + capture defers fire either way.
+      - timeout 1200 task test:e2e:agentic:probe:auto-approve-watcher -- {{.RUN_ID}}
 
   test:e2e:agentic:dev:_boot:
     desc: Internal — boot helper for the per-scenario dev tasks
