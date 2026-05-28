@@ -1,8 +1,8 @@
 {
-  "id": "research_needs_clarification_replan",
+  "id": "research_needs_clarification_to_coordinator",
   "type": "expression",
-  "name": "Any research-pack role decide(needs_clarification) → researcher-research-plan",
-  "description": "ADR-042 §Phase 2 redesign MVP-2 research pack generic recovery rule. Fires when any chain role within the research pack terminates with decide(action=needs_clarification) — the canonical signal that the current contract cannot complete from available information. Spawns researcher-research-plan with the rejecting role's reason; the new researcher re-enters the chain at the plan phase, addresses the gap, and the chain re-runs through gather/synthesize forward. Recovery shape A per ADR-039 (supersession-via-new-spawn; prior loop entities remain immutable in the graph). max_iterations=3 is informational under the current rule engine (each terminating loop is a distinct entity, so the per-entity rule-state caveat applies).",
+  "name": "Any research-pack role decide(needs_clarification) → coordinator",
+  "description": "ADR-042 §Phase 2 redesign MVP-2 research pack generic recovery rule. Fires when any chain role within the research pack terminates with decide(action=needs_clarification) — the canonical signal that the current contract cannot complete from available information. Spawns the coordinator (the senior thinker that owns framing) with the rejecting role's reason; the coordinator judges whether to re-dispatch research with tightened framing, ask the user for clarification, or respond_direct that the request cannot be served. This rule USED to respawn researcher-research-plan (the resolved 'plan_phase_loop_todo' MVP-4 follow-on); routing to the coordinator instead breaks the plan→gather→synthesize→needs_clarification→plan thrash pattern observed under small-LLM substrate (smoke6-pr184-validation-gemini-2 2026-05-21). Recovery shape A per ADR-039 (supersession-via-new-spawn; prior loop entities remain immutable in the graph).",
   "enabled": true,
   "conditions": [
     {
@@ -28,18 +28,18 @@
   "on_enter": [
     {
       "type": "publish_agent",
-      "subject": "agent.task.researcher-research-plan",
-      "role": "researcher-research-plan",
-      "model": "research",
-      "tools": ["read_loop_result", "emit_plan", "scratchpad", "decide"],
-      "action_allowlist": ["gather", "emit", "needs_clarification"],
+      "subject": "agent.task.coordinator",
+      "role": "coordinator",
+      "model": "coordinator",
+      "tools": ["read_loop_result", "bash", "decide"],
+      "action_allowlist": ["research", "ask_user", "respond_direct"],
       "properties": {
         "prior_loop_id": "$entity.instance",
         "category": "research",
-        "phase": "plan",
+        "phase": "needs_clarification_recovery",
         "recovery": "needs_clarification"
       },
-      "prompt": "Recovery plan pass. The chain role $entity.triple.agent.loop.role at loop $entity.instance terminated with decide(action=needs_clarification) — the prior arc could not complete from available information.\n\nIteration 1 — call read_loop_result on $entity.instance to read the full structured terminal. The reason field names the gap; the retry_hint field (if present) names the framing change the rejecting role wants. If the loop entity carries lineage.researcher (set on roles spawned after the plan phase), call read_loop_result on that loop too to read the prior research artifact verbatim. Your job is to RE-PLAN with the rejecting role's gap addressed, not start from scratch.\n\nIteration 2+ — emit a revised plan per researcher-research-plan/10-plan-rules.md. Carry forward everything from the prior plan that's still correct (scope, epics); tighten or extend only what the rejecting role's gap demands. Terminal: decide(action=\"gather\") to forward into the gather phase, decide(action=\"emit\") for premature emit (reviewer will likely reject), or decide(action=\"needs_clarification\") only when re-planning genuinely cannot proceed."
+      "prompt": "Research-chain recovery. The chain role $entity.triple.agent.loop.role at loop $entity.instance terminated with decide(action=needs_clarification) — the prior arc could not complete from available information. You are the senior thinker; resolve the framing.\n\nIteration 1 — call read_loop_result on $entity.instance to read the full structured terminal. The reason field names the gap; the retry_hint field (if present) names the framing change the rejecting role wants. If the loop entity carries lineage.researcher (set on roles spawned after the plan phase), also read that loop for the prior research artifact / scratchpad context. Walk the chain via lineage links as needed.\n\nIteration 2 — judge what to do:\n\n- decide(action=\"research\", reason=...) if the user's original request is recoverable with tightened framing. Your reason MUST carry the framing fix — be specific about which gap to address and what scope to add/remove. The chain will respawn from the plan phase with the corrected framing.\n- decide(action=\"ask_user\", reason=..., question=...) if a specific clarification from the user would unblock the chain. Ask one focused question; don't make the user re-prompt the whole request.\n- decide(action=\"respond_direct\", reason=...) if the request genuinely cannot be served (out-of-scope, fundamentally underspecified, or the gap is information that doesn't exist). Be honest about the limitation in your reason.\n\nThis recovery routes through you because you carry the strongest reasoning model in the registry; the per-phase roles below you run on smaller models and can't resolve framing ambiguity. If you find the gap is a small-LLM weakness (the rejecting role gave up on something a stronger researcher would handle), name that in your reason — that's signal for ops-feedback."
     }
   ],
   "on_exit": [],
@@ -49,7 +49,7 @@
     "adr": "docs/adr/042-coordinator-instantiated-flows-via-templates.md",
     "shape": "A",
     "supersedes_legacy": "configs/rules/dev-via-spec/03-needs-clarification-to-researcher.json — same recovery shape, scoped to research-pack roles only (the dev-via-spec category pack will mint its own generic recovery).",
-    "plan_phase_loop_todo": "MVP-4 follow-on: plan-phase needs_clarification routes here and respawns plan, which can loop until max_iterations (per-entity, effectively unbounded). The semantically correct route for plan-phase needs_clarification is the coordinator (which owns the framing). Legacy chainstall handled this via unrouted_needs_clarification. Resolve in MVP-4 either by (a) teaching the coordinator persona to retry with tightened framing, or (b) splitting this rule into role-specific recovery routes (plan-phase NC → coordinator; downstream NC → plan).",
+    "plan_phase_loop_todo_resolved_2026_05_22": "Routed to coordinator instead of researcher-research-plan to break the thrash pattern observed in smoke6-pr184-validation-gemini-2: plan→gather→synthesize→needs_clarification→plan→... unbounded. Coordinator owns the framing decision; per-phase roles do not.",
     "triple_substitution_audit": "Reviewer-pass C1 (2026-05-17) flagged the legacy prompt's references to non-existent triples coordinator.blocking_question and coordinator.retry_hint (decide.go stamps only next_action + reason; retry_hint is a decide-arg field surfaced via read_loop_result). Reworked to instruct read_loop_result-first, naming retry_hint as a field on the structured terminal."
   }
 }
