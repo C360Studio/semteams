@@ -1,0 +1,376 @@
+# AGENTS.md
+
+This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
+
+# SemTeams Project Context
+
+SemTeams is a **configurable agentic harness** built on the
+[semstreams](https://github.com/c360studio/semstreams) framework
+— the infrastructure that wraps an LLM with tools, memory,
+triggers, context, and channels so the model can *operate* rather
+than answer one-shot prompts. SemStreams owns the components
+(`agentic-dispatch`, `agentic-loop`, `agentic-memory`,
+`agentic-tools`, `agentic-governance`, plus graph/I/O processors,
+gateways, NATS clients). SemTeams owns the product-shell wiring,
+the chain-template library, the shared persona corpus, the Svelte
+UI, and the docs.
+
+**There are no custom Go components in SemTeams.** Every processor
+comes from semstreams via the `github.com/c360studio/semstreams`
+Go module dependency. The product shell in `cmd/semteams/` (~600
+LoC) independently wires every framework primitive per ADR-029.
+
+## Bundled chains are illustrative configurations, not the product
+
+The chain templates under `configs/` demonstrate what the harness
+can run. Each config wires a different persona corpus + rule set +
+tool allowlist for a different *prompt class*:
+
+- `osh-demo.json` — **software domain.** Multi-phase research →
+  architect → builder arc that builds an external integration
+  end-to-end.
+- `dev-research.json` — **software domain.** Researcher arc with
+  source-repo substrate acquisition (semsource integration). Renamed
+  from `deep-research.json` on 2026-05-17 to make the software-domain
+  identity explicit; a web-research chain lands alongside.
+- `e2e-coordinator.json` — chain-shape agnostic; exercises
+  coordinator-driven routing between chains.
+- `onboarding.json` — interview-style intent classification with
+  the `/onboard` command.
+
+**A chain template's domain is part of its identity.** When the
+chain reads source repos, asks a builder to produce code, or
+grounds research against software-shaped substrate, it is a
+*software-domain* chain — and the naming, the example shapes, and
+the bundled persona fragments should make that explicit. The
+shared persona corpus at `configs/personas/fragments/` carries
+harness-level guidance only (decide contracts, output structure,
+tool discipline) and stays domain-neutral by design.
+
+Adding a new prompt class — web research, comparative analysis,
+decision memo, whatever the next ask is — is a **new chain
+config**, optionally a new emit tool with a domain-fit artifact
+shape, optionally chain-scoped persona fragments. It is **not** a
+rewrite of the shared corpus or the product shell. The goal is
+runtime flexibility: the harness chooses (or is told) which chain
+to run for a given prompt; domain flavor lives in the chain, not
+in the harness.
+
+This framing matters because the corpus has historically drifted
+toward whichever chain was being smoked at the time. The audit
+behind PR #163 (2026-05-17) stripped that accretion; the
+`personas-describe-job-not-plumbing` memory captures the rule.
+
+> **Note**: The repo's `README.md` is the upstream **SemStreams**
+> README (framework getting-started). It is NOT SemTeams-specific.
+> Use this AGENTS.md and `docs/adr/029-product-shell-wiring.md` as
+> the authoritative entry points for SemTeams-specific context.
+
+## Tech Stack
+
+- Go 1.25 — `cmd/semteams/` binary (~600 LoC across `main.go`, `flags.go`,
+  `banner.go`, `logging.go`). Independently implements every
+  framework-wiring pattern per ADR-029 — no imports from upstream
+  `cmd/semstreams/`. See [ADR-029](docs/adr/029-product-shell-wiring.md).
+- Go module: `github.com/c360studio/semstreams` (currently `v1.0.0-beta.25`)
+- NATS JetStream (KV, ObjectStore), Prometheus, slog — via semstreams
+- Task (task runner) — run `task --list` for all commands
+- `ui/` — Svelte 5 + SvelteKit 2 + TypeScript frontend (subtree-imported
+  from semstreams-ui on 2026-04-10, see `ui/.Codex/AGENTS.md` for UI
+  conventions)
+
+## What lives here
+
+| Path | Purpose |
+|------|---------|
+| `cmd/semteams/` | Product-shell binary. Wires Pattern-A/B/C framework primitives per ADR-029 — no custom components, but non-trivial wiring (payload registry, persona loader, Pattern-B managers, `executors.RegisterBuiltins`) |
+| `cmd/openapi-generator/` | Dev tool: generate OpenAPI spec from component registry |
+| `configs/` | Flow-template library. Loadable at runtime via UI |
+| `docs/` | Product and integration documentation |
+| `schemas/`, `specs/` | Generated (via `task schema:generate`) — do not hand-edit |
+| `test/contract/` | Contract tests: payload registry consistency, config sanity checks |
+| `test/e2e/mock/` | Mock OpenAI / AGNTCY server for UI Playwright journeys |
+| `test/fixtures/journeys/` | Playwright journey fixtures (YAML) |
+| `ui/` | Svelte 5 + SvelteKit 2 frontend (graph explorer, flow builder, agentic UI) |
+| `docker/` | Production Dockerfile + optional services compose (observability) |
+
+## What does NOT live here
+
+- Framework code (components, gateways, NATS clients, the graph engine) —
+  all upstream in semstreams.
+- Backend e2e scaffolding — deliberately removed; will be rebuilt from
+  scratch when coordinator/ops-agent work lands.
+- Custom `agentic-*` processors — upstreamed to semstreams as of beta.8.
+
+## Common Tasks
+
+```bash
+task build              # Build bin/semteams
+task test               # Run Go tests (fast)
+task test:race          # Go tests with -race
+task test:integration   # Integration tests (testcontainers; sequential w/ -p 1 on macOS)
+task check              # Go lint + test
+task check:all          # Go + UI lint + type-check + test + build
+task schema:generate    # Regenerate schemas/ + specs/openapi.v3.yaml
+
+# Single Go test (use raw go test — no task wrapper)
+go test ./test/contract/... -run TestConfigDispatch -v
+
+# UI
+task ui:dev             # Start Vite dev server
+task ui:test            # Vitest unit/component tests
+task ui:test:e2e        # Playwright E2E tests (auto-manages Docker stack)
+task ui:lint            # ESLint
+task ui:check           # svelte-check (TypeScript)
+task ui:build           # Production build
+```
+
+## Config Layering
+
+| Config | Purpose | Model |
+|--------|---------|-------|
+| `agentic.json` | Production general-purpose | Codex-haiku |
+| `agentic-Codex.json` | Production Codex variant | Codex-haiku |
+| `dev-research.json` | Production researcher workflow (software domain — source-repo substrate via semsource) | Codex-haiku |
+| `onboarding.json` | Onboarding interview demo (intent classification, profile context, /onboard command) | Codex-haiku |
+| `e2e-agentic.json` | E2E testing | mock-llm |
+| `e2e-coordinator.json` | E2E coordinator → researcher journey | mock-llm |
+| `e2e-dev-research.json` | E2E dev-research testing | mock-llm |
+| `e2e-ops-observer.json` | E2E ops observer (ADR-027 Phase 1) — dev-research + observe rule | mock-llm |
+
+UI Playwright journey tasks (in `ui/Taskfile.yml`) manage the Docker stack
+lifecycle — Playwright does NOT auto-start the stack. Each task: start →
+health-check → test → cleanup.
+
+### Ops Agent Phase 1 (ADR-027, accepted)
+
+Read-only diagnostic agent grounded in per-flow objective specs.
+Status accepted upstream 2026-04-18 (ADR-027 Proposed → Accepted).
+Framework support landed in semstreams `v1.0.0-beta.9`:
+`fire_every_n_events` rule field, persona file-loader,
+`emit_diagnosis` tool, `GET /graph/triples` endpoint. ADR lives at
+`../semstreams/docs/adr/027-ops-agent-meta-harness.md`.
+
+Single-process deployment: the ops agent runs in the same backend as
+the flow it observes. The observe rule fires `publish_agent` with
+`role: ops-analyst`, and the existing `agentic-loop` consumes it
+without a second dispatch. (Upstream ships
+`../semstreams/configs/flows/ops-agent.json` as a reference for
+operators who prefer a standalone ops binary; SemTeams does not
+deploy it.)
+
+- `configs/personas/ops.json` — persona definition. Read-only tool
+  allowlist: `query_entities`, `query_relationships`,
+  `read_loop_result`, `emit_diagnosis`, `submit_work`.
+- `configs/personas/fragments/ops/05-semteams-identity.md`,
+  `10-objective-grounding.md`, `20-diagnostic-rules.md` — persona
+  fragments layered above upstream's `ops/00-identity.md` via the
+  beta.9 file-loader (digit-prefix ordering).
+- `configs/rules/ops/observe-complete-loops.json` — fires once per
+  `fire_every_n_events: 20` completed researcher loops.
+- `configs/e2e-ops-observer.json` — single-process e2e config
+  (dev-research components + observe rule) for the Playwright
+  journey.
+- `docs/objectives/README.md` — objective-spec schema.
+- `docs/objectives/dev-research.md` — first concrete spec.
+
+The ops agent emits findings via the `emit_diagnosis` tool (not raw
+triples). Each call requires `finding`, `recommendation`, `confidence`
+(0.0–1.0), and `evidence` (≥1 graph entity ID). The framework's
+executor mints `{org}.{platform}.ops.diagnosis.finding.{uuid}`
+entities with `ops.diagnosis.{finding,recommendation,confidence,
+evidence,observed_role,severity}` predicates.
+
+Phase 2 (ops proposes changes) is **config-only** per upstream's
+`_phase2_note`: add `create_rule`/`manage_flow`/etc. to
+`allowed_tools` and mirror into `approval_required`. The existing
+`ApprovalFilter` transitions the loop to `LoopStateAwaitingApproval`
+for human review. No framework blocker remaining.
+
+### Product-Shell Wiring (ADR-029)
+
+`cmd/semteams/main.go` independently implements every framework-wiring
+pattern the product relies on — it does **not** import from
+`cmd/semstreams/`. Upstream's `main.go` is reference, not library.
+Mirroring (~50 lines of boot code) is the cost of admission. Live
+wirings:
+
+| Surface | Pattern | Call site |
+|---|---|---|
+| `componentregistry.Register` | C | `setupRegistriesAndManager` |
+| `persona.NewManager` + `LoadFromDirectory` | B | `loadPersonaFragments` |
+| `rule.NewConfigManager` | B | `buildRuleManager` → `executors.RegisterBuiltins` |
+| `flowstore.NewManager` | B | `buildFlowManager` → `executors.RegisterBuiltins` |
+| `flowtemplate.NewManager` | B | `buildFlowTemplateManager` → `executors.RegisterBuiltins` |
+| `payloadregistry.New` + `payloadbuiltins.Register` | A | before tool registry; plumbed via `Dependencies.PayloadRegistry` (beta.18) |
+| `agentictools.NewExecutorRegistry` + `executors.RegisterBuiltins` | A + B tool executors | after persona load; plumbed via `Dependencies.ToolRegistry` (beta.16) |
+
+When a journey breaks because a tool executor isn't firing or persona
+fragments aren't grounding, suspect drift here first.
+
+Product-local subscribers (not tools, not rules) also live here:
+`evidence.NATSSubscriber` (agent.complete.> → evidence triples) and
+`chainpause.Subscriber` (agent.failed.> → §D5 chain.paused triples).
+Both follow the same start-after-tools boot order enforced by
+`setupToolsAndPreprocessor`.
+
+### Component Instance vs Factory
+
+Configs use instance names `teams-dispatch` and `teams-loop` (so HTTP
+endpoints at `/teams-dispatch/*` and `/teams-loop/*` match the UI's
+hardcoded URL paths). The `name` field points at the upstream factory
+(`agentic-dispatch`, `agentic-loop`):
+
+```json
+"components": {
+  "teams-dispatch": {         // instance name → HTTP prefix
+    "type": "processor",
+    "name": "agentic-dispatch", // factory lookup
+    ...
+  }
+}
+```
+
+### Personalization Toggles (agentic-dispatch, agentic-memory, agentic-tools)
+
+These upstream config fields default `false`; enable per config as needed:
+
+- `agentic-dispatch.enable_intent_classification` — LLM-assisted intent
+  classifier (used by onboarding.json)
+- `agentic-dispatch.enable_onboarding` — `/onboard` command + interview
+  state machine (onboarding.json)
+- `agentic-memory.enable_profile_context` — assemble operating-model
+  profile context on loop creation (onboarding.json)
+- `agentic-tools.approval_required` — list of tool names requiring human
+  approval (agentic.json, agentic-Codex.json have rule-write tools gated)
+- `agentic-tools.enable_categories` — tool category filtering for
+  role-based access
+- `agentic-governance.enable_tool_governance` — pre-execution governance
+  filtering
+
+## Reviewer-Pass Protocol (MANDATORY)
+
+Every multi-phase implementation runs a reviewer-pass at every
+critical step. Critical step = phase boundary or commit boundary;
+the agent picks the granularity based on the work's shape.
+
+- `go-reviewer` for backend Go work (`cmd/semteams/`, `test/`,
+  upstream coordination).
+- `svelte-reviewer` for Svelte / TypeScript frontend (`ui/`).
+- Both for cross-stack PRs.
+
+Workflow per critical step:
+
+1. Land the work (commit or phase complete).
+2. Verify locally — build, lint, tests must be green.
+3. Invoke the appropriate reviewer with explicit scope: which
+   files, which contracts, which migration guides if upstream
+   beta is involved.
+4. Apply the reviewer's findings:
+   - **Critical / blocker**: fix before proceeding to next phase.
+   - **Nit / recommendation**: fix in the same cycle if
+     scope-appropriate; defer with a tracking comment if not.
+   - **Disagreement**: explicit, not silent. Document "reviewer
+     flagged X; declining because Y" if the recommendation is
+     not applied.
+5. Verify again post-fix.
+
+Trivial dep bumps / docs-only / single-line edits can skip the
+reviewer pass. Anything touching business logic, security
+surfaces, API contracts, or accessibility runs the reviewer.
+
+This caught a wire-format bug (`time.Duration` typed as `string`
+instead of `number`) and a WCAG 2.5.3 violation in PR #32 that
+would have shipped otherwise.
+
+## Product-Shell-Tool Discipline (MANDATORY)
+
+SemTeams is a reference/demo product on top of semstreams (ADR-029).
+The product shell intentionally stays thin. The trap pattern is
+**accretion** — each individual product-shell tool, rule, or payload
+is defensible; the cumulative drift turns the product shell into a
+bespoke monster (the semspec lesson).
+
+Before adding any of these, do a **framework-alignment review**:
+
+- A new tool in `cmd/semteams/tools/`
+- A new rule action type or rule action shape
+- A new SemTeams-local payload type
+- A new KV bucket
+- A new long-lived stream
+
+The review:
+
+1. Survey upstream `~/go/pkg/mod/github.com/c360studio/semstreams@<current>`
+   for an existing or planned-and-roadmapped equivalent.
+2. If exists → use it. If "near" → port to it; do not fork.
+3. If planned but not shipped → land a domain-specific instance,
+   document the migration target in the relevant ADR addendum.
+4. If not in scope upstream by intent → document why the SemTeams
+   case justifies a product-local primitive, in an ADR.
+
+The evidence trail (the ADR addendum recording the survey + the
+alternatives ruled out + the migration posture) is what protects
+future agents from re-litigating the decision in a vacuum or
+silently extending a pattern they don't understand the *why* of.
+
+Reference: `cmd/semteams/tools/README.md` lists the existing
+product-shell tools with their migration posture and links the
+working-template addendum (ADR-031 §addendum 2026-04-30
+"Framework-alignment review for R3.2 emission shape").
+
+If you cannot point at an upstream pattern your design implements
+or a planned one in the upstream roadmap — **that is a stop signal**.
+Either the design is wrong, or the framework is missing a primitive
+that should be raised upstream rather than worked around in product
+code.
+
+## E2E Active Monitoring Protocol (MANDATORY)
+
+UI Playwright journeys are long-running. MUST monitor actively — never
+block in foreground.
+
+1. Launch via `run_in_background: true`
+2. Monitor three sources every 20–30s:
+   - Test output: non-blocking `TaskOutput` read
+   - Backend logs: `docker compose -f ui/docker-compose.agentic-e2e.yml logs --since=30s`
+   - Message logger: `curl -s http://localhost:3100/message-logger/entries?limit=10 | jq '.[].subject'`
+3. Dump evidence to `/tmp/` for post-mortem
+4. Abort early if stuck in loops or burning tokens on retries
+5. Report with evidence — quote log lines, never guess at root cause
+
+## CI Requirements
+
+Two workflows run:
+
+**`.github/workflows/ci.yml`** (Go):
+1. Lint — `go vet`, `go fmt` (must be clean), `revive` (warnings = failure)
+2. Test — Unit tests with `-race`
+3. Build — Cross-compile Linux binary
+4. Schema Validation — `task schema:generate`, check for uncommitted
+   changes
+
+**`.github/workflows/ui.yml`** (Svelte, path-filtered to `ui/**`):
+1. Lint — `npm run lint`
+2. Type Check — `npm run check`
+3. Unit Tests — `npm run test:unit`
+4. Build — `npm run build`
+
+Before pushing:
+
+```bash
+task lint
+go test -race ./...
+task schema:generate
+git diff schemas/ specs/
+go test ./test/contract/...
+```
+
+## Related Repos
+
+- [semstreams](https://github.com/c360studio/semstreams) — framework.
+  Owns all `agentic-*`, `graph-*`, `rule`, I/O, and gateway components.
+  The place to make framework-level changes.
+- [semdragons](https://github.com/c360studio/semdragons),
+  [semspec](https://github.com/c360studio/semspec) — sibling products
+  that also import semstreams.
