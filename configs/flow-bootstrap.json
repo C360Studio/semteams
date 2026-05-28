@@ -57,16 +57,31 @@
         "stream": true,
         "max_concurrent": 10,
         "requests_per_minute": 200
+      },
+      "gemini-pro": {
+        "provider": "gemini",
+        "url": "https://generativelanguage.googleapis.com/v1beta/openai",
+        "model": "gemini-3.1-pro-preview",
+        "api_key_env": "GEMINI_API_KEY",
+        "wire_backend": "wire",
+        "reasoning_effort": "low",
+        "tool_format": "openai",
+        "request_timeout": "180s",
+        "max_tokens": 1048576,
+        "supports_tools": true,
+        "stream": false,
+        "max_concurrent": 5,
+        "requests_per_minute": 100
       }
     },
     "defaults": {
-      "model": "claude-haiku"
+      "model": "gemini-flash"
     },
     "capabilities": {
-      "coordinator": { "preferred": ["claude-haiku"], "fallback": ["claude-sonnet"], "requires_tools": true },
-      "research": { "preferred": ["claude-haiku"], "fallback": ["claude-sonnet", "gemini-flash"], "requires_tools": true },
-      "reviewing": { "preferred": ["claude-haiku"], "fallback": ["claude-sonnet"], "requires_tools": true },
-      "general": { "preferred": ["claude-haiku"], "fallback": ["claude-sonnet", "gemini-flash"], "requires_tools": true }
+      "coordinator": { "preferred": ["gemini-pro"], "fallback": ["gemini-flash", "claude-haiku"], "requires_tools": true },
+      "research": { "preferred": ["gemini-flash"], "fallback": ["claude-haiku"], "requires_tools": true },
+      "reviewing": { "preferred": ["gemini-flash"], "fallback": ["claude-haiku"], "requires_tools": true },
+      "general": { "preferred": ["gemini-flash"], "fallback": ["claude-haiku"], "requires_tools": true }
     }
   },
   "services": {
@@ -228,7 +243,7 @@
       "name": "agentic-loop",
       "enabled": true,
       "config": {
-        "max_iterations": 25,
+        "max_iterations": 50,
         "timeout": "300s",
         "stream_name": "AGENT",
         "loops_bucket": "AGENT_LOOPS",
