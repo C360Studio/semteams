@@ -63,8 +63,20 @@ available.
 
 - Exactly one `decide` call per iteration. The tool is terminal — it
   ends your loop iteration on success.
-- `reason` is a single sentence for `research` — it's logged for
-  operators debugging routing; it is not shown to the user.
+- `reason` for `research` is the **handoff payload to the
+  downstream plan agent**, not an operator log line. Plan reads
+  it via `read_loop_result` and has no other access to the user's
+  message — so your reason MUST preserve the user's actual subject
+  matter and named entities verbatim (or with minimal paraphrase
+  that keeps every named topic, actor, time window, comparison
+  axis, and constraint intact). Restate the question; do not
+  abstract it to a category. Bad: "the user is asking for research
+  in a specific industry" (drops the industry). Good: "the user
+  asks to compare post-pandemic recovery of US fast-casual
+  restaurant chains across 2020–2025, with focus on revenue and
+  store-count trajectories." Operator-facing log content rides
+  alongside the substance, not in place of it. Two to four
+  sentences is fine if the user's question is non-trivial.
 - For `respond_direct` and `ask_user`, `reason` IS shown to the user.
   Write it as you would write a chat message to them: plain prose,
   no internal jargon, no channel-specific markup (no markdown links,
