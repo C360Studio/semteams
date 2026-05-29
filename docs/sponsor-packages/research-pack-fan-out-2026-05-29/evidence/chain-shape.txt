@@ -1,0 +1,83 @@
+Run 6 chain trace — final happy-path
+=====================================
+RUN_ID:      fan-out-validation-6
+Prompt:      "Compare MQTT vs NATS for IoT edge deployments —
+              which has lower latency on constrained ARM devices?"
+Started:     2026-05-29T15:17:21Z
+Ended:       2026-05-29T15:19:29Z
+Wallclock:   2 minutes 8 seconds
+Models:      coordinator → gemini-3.1-pro-preview
+             research / synthesize / reviewing → gemini-2.5-flash
+
+
+Loop trajectory (8 loops, in spawn order)
+-----------------------------------------
+
+15:17:21  coordinator (dispatch)            iter=0  out=success  decide(action=research, reason="Compare MQTT and NATS for IoT edge deployments, focusing on lower latency on constrained ARM devices.")
+
+15:17:23  researcher-research-plan          iter=3  out=success  decide(action=gather, subtopics=[
+                                                                    "MQTT protocol analysis for constrained ARM devices",
+                                                                    "NATS protocol analysis for constrained ARM devices",
+                                                                    "Performance benchmarking considerations (latency & resources)"
+                                                                  ])
+
+15:17:40  researcher-research-gather (×3 parallel)
+          ├─ Gather #1: MQTT protocol analysis           iter=5  out=success  decide(action=synthesize)
+          ├─ Gather #2: NATS protocol analysis           iter=2  out=success  decide(action=synthesize)
+          └─ Gather #3: Performance benchmarking         iter=3  out=success  decide(action=synthesize)
+
+          [Wall-clock span across the three: ~30 seconds.
+           Sequential would have been ~90 seconds.]
+
+15:18:47  researcher-research-synthesize    iter=4  out=success  decide(action=emit, reason="Aggregated artifact emitted...")
+
+15:19:14  reviewer-research                 iter=2  out=success  decide(action=approved, reason="Substantive cross-protocol comparison with grounded latency claims; sources cited; per-subtopic structure preserved.")
+
+15:19:29  coordinator (wake-up)             iter=0  out=success  decide(action=respond_direct, reason="<user-facing prose answer>")
+
+
+Mechanism trace
+---------------
+
+- Rule 02 (plan → gather): fired once on the planner's
+  decide(gather, subtopics=[...]). for_each over the subtopics
+  list spawned 3 parallel agent.task.researcher-research-gather
+  TaskMessages. JetStream consumer parallelism gave the
+  3 concurrent loops.
+
+- Rule 03a (gather completion → stamp counter): fired 3 times
+  (once per gather completion). Each stamped
+  research.gather.completed_subtopic on the planner's loop
+  entity with the gather's own loop id as Object — natural
+  per-gather deduplication via graph-ingest's
+  (subject, predicate, object) set semantics. Used the path-A
+  workaround lineage triple to avoid the #159 race.
+
+- Rule 03b (join → synthesize): fired once when
+  length_eq(research.gather.completed_subtopic,
+           $entity.triple.coordinator.decision.subtopics.length)
+  matched at 3 = 3. Spawned synthesize with the gather loop
+  IDs inlined as a JSON array via the .triples substitution
+  (no graph-query tool needed).
+
+- Rule 04 (emit → reviewer): standard.
+- Rule 07 (approved → coordinator wake-up): standard.
+
+
+Cost
+----
+
+Total tokens: ~95K in, ~3K out across 13 model calls.
+Approx spend: $0.30 (mostly gemini-flash at ~$0.30/1M in;
+              coordinator call was the only gemini-pro).
+
+
+Evidence
+--------
+
+Trajectories + message log + triple snapshot:
+  /tmp/fan-out-validation-6/   (preserved for inspection;
+                                stack torn down after capture)
+Aggregated artifact rendered:
+  /artifacts/research/2026-05-29-mqtt-vs-nats-*.md
+  (inside backend container before teardown)

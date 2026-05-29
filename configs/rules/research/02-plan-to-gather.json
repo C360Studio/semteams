@@ -26,6 +26,7 @@
       "role": "researcher-research-gather",
       "model": "research",
       "tools": ["read_loop_result", "web_search", "bash", "scratchpad", "decide"],
+      "tool_choice": { "mode": "required" },
       "action_allowlist": ["synthesize", "needs_clarification"],
       "for_each": "$entity.triple.coordinator.decision.subtopics",
       "for_each_var": "subtopic",
@@ -37,7 +38,8 @@
         "phase": "gather"
       },
       "related_loops": {
-        "researcher-plan": "$entity.instance"
+        "researcher-plan": "$entity.instance",
+        "plan-loop-entity-id": "$entity.id"
       },
       "prompt": "GATHER phase entry — fan-out from PLAN. The plan-phase researcher at loop $entity.instance handed off with decide(action=\"gather\", subtopics=[...]). The framework spawned one gatherer per subtopic in parallel; YOU are scoped to one subtopic:\n\n**Your subtopic:** $subtopic\n\nThat string IS your scope. Investigate only what it names — your N-1 sibling gatherers are working their own subtopics concurrently. Call read_loop_result on $entity.instance (the plan loop) for situational awareness (goal, context, full subtopics list), but do NOT expand your assignment beyond your subtopic.\n\nUse web_search to discover candidate sources for your subtopic, then bash + curl to fetch specific URLs when snippet results are insufficient. Accumulate findings in scratchpad per researcher-research-gather/20-iteration-rules.md.\n\nPer ADR-041 addendum 2026-05-15: chain agents do not read the graph; web_search + bash are your only external evidence channels.\n\nTerminate with decide(action=\"synthesize\", reason=\"Subtopic: $subtopic\\n\\n<your subtopic findings — per-actor evidence, per-boundary observations, any open gaps>\") when your subtopic is grounded. Open the reason with the literal 'Subtopic: $subtopic' line so SYNTHESIZE's aggregator can index your contribution. OR decide(action=\"needs_clarification\", reason=\"web_search + bash could not resolve subtopic '$subtopic' — <specific reason>\") when external evidence is structurally insufficient for your subtopic."
     }
@@ -48,6 +50,7 @@
     "phase": "ADR-042 MVP-2 + ADR-046 Phase 1",
     "adr": "docs/adr/042-coordinator-instantiated-flows-via-templates.md",
     "fan_out": "for_each over $entity.triple.coordinator.decision.subtopics — one gatherer per subtopic in parallel. JOIN happens at rules 03a (per-completion stamp) + 03b (length_eq synthesize trigger).",
+    "tool_choice_rationale": "Required-mode forces gemini-flash to emit a tool call every iteration; decide is in the tools list, so the loop terminates via decide(synthesize|needs_clarification) — populating Result with the synthesis-ready reason. Without it, text-only completions strand the LLM's prose output (framework Result field is exclusively populated by tool returns; #133 synthetic-decide doesn't fire on this path). Surfaced by smoke #fan-out-validation-2 2026-05-29: 2 of 3 parallel gemini-flash gathers terminated text-only at 219+ tokens, all stranded. Beta.80 #132 documented pattern.",
     "supersedes_legacy": "configs/rules/research-mode-transition/04-phase-transition-to-gather.json — same forward edge, now fan-out instead of single dispatch."
   }
 }
