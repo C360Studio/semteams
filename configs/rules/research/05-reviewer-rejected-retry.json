@@ -27,6 +27,7 @@
       "role": "researcher-research-plan",
       "model": "research",
       "tools": ["read_loop_result", "emit_plan", "scratchpad", "decide"],
+      "tool_choice": { "mode": "required" },
       "action_allowlist": ["gather", "emit", "needs_clarification"],
       "properties": {
         "reviewer_loop_id": "$entity.instance",

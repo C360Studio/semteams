@@ -27,6 +27,7 @@
       "role": "researcher-research-synthesize",
       "model": "research",
       "tools": ["read_loop_result", "emit_research_artifact", "scratchpad", "decide"],
+      "tool_choice": { "mode": "required" },
       "action_allowlist": ["emit", "needs_clarification"],
       "properties": {
         "plan_loop_id": "$entity.instance",
