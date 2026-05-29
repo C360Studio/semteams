@@ -153,6 +153,10 @@ intentionally thin.
 ## Files
 
 - **`README.md`** — this document.
+- **`evidence/aggregated-artifact.md`** — the actual research artifact
+  produced on run 6: user-facing response, reviewer verdict, full
+  aggregated structured artifact, plus the three per-investigator
+  findings that fed into it. Captured from trajectory data.
 - **`evidence/timeline.md`** — compressed per-run table for the six
   smoke runs, with the specific finding from each.
 - **`evidence/chain-shape.txt`** — verbatim chain trace from run 6
