@@ -1,8 +1,8 @@
 {
   "id": "research_plan_to_gather",
   "type": "expression",
-  "name": "researcher-research-plan → researcher-research-gather",
-  "description": "ADR-042 §Phase 2 redesign MVP-2 research pack. Fires when the plan-phase researcher terminates with decide(action=gather). Spawns the gather-phase researcher with web_search tooling. No chain.phase_transition.proceed.gather sentinel needed — pack identity replaces the phase-validator gate; the role+decide match IS the structural transition.",
+  "name": "researcher-research-plan → researcher-research-gather (fan-out)",
+  "description": "ADR-042 §Phase 2 redesign + ADR-046 Phase 1 fan-out. Fires when the plan-phase researcher terminates with decide(action=gather, subtopics=[...]). The decide tool stamps coordinator.decision.subtopics as a JSON-encoded list triple on the planner's loop entity; this rule uses for_each over that list to spawn ONE researcher-research-gather per subtopic, in parallel (the agentic-loop's JetStream consumer parallelism gives N concurrent loops for free). Each spawned gatherer carries $subtopic in its prompt and properties as its scope. The join half lives in rule 03a (stamp completion on parent) + rule 03b (synthesize when all complete). N=1 (non-decomposable prompt) degenerates to a single sequential gatherer — first-class case, not a special path.",
   "enabled": true,
   "conditions": [
     {
@@ -25,24 +25,29 @@
       "subject": "agent.task.researcher-research-gather",
       "role": "researcher-research-gather",
       "model": "research",
-      "tools": ["read_loop_result", "web_search", "scratchpad", "decide"],
+      "tools": ["read_loop_result", "web_search", "bash", "scratchpad", "decide"],
       "action_allowlist": ["synthesize", "needs_clarification"],
+      "for_each": "$entity.triple.coordinator.decision.subtopics",
+      "for_each_var": "subtopic",
       "properties": {
         "prior_loop_id": "$entity.instance",
+        "plan_loop_id": "$entity.instance",
+        "subtopic": "$subtopic",
         "category": "research",
         "phase": "gather"
       },
       "related_loops": {
-        "researcher": "$entity.instance"
+        "researcher-plan": "$entity.instance"
       },
-      "prompt": "GATHER phase entry. The plan-phase researcher at loop $entity.instance handed off with decide(action=\"gather\"). Call read_loop_result on that loop to read the plan's scope + verifiable outcomes. Then use web_search to ground the plan's actor names + integration points in external facts (protocol specifics, framework APIs, library behavior). Accumulate findings in scratchpad per researcher-research-gather/20-iteration-rules.md.\n\nPer ADR-041 addendum 2026-05-15: chain agents do not read the graph; web_search is your only external evidence channel.\n\nTerminate with decide(action=\"synthesize\", reason=\"<one-sentence summary of evidence accumulated>\") when the plan's questions are covered, OR decide(action=\"needs_clarification\", reason=\"<why web_search could not resolve the plan's question>\") when external evidence is structurally insufficient."
+      "prompt": "GATHER phase entry — fan-out from PLAN. The plan-phase researcher at loop $entity.instance handed off with decide(action=\"gather\", subtopics=[...]). The framework spawned one gatherer per subtopic in parallel; YOU are scoped to one subtopic:\n\n**Your subtopic:** $subtopic\n\nThat string IS your scope. Investigate only what it names — your N-1 sibling gatherers are working their own subtopics concurrently. Call read_loop_result on $entity.instance (the plan loop) for situational awareness (goal, context, full subtopics list), but do NOT expand your assignment beyond your subtopic.\n\nUse web_search to discover candidate sources for your subtopic, then bash + curl to fetch specific URLs when snippet results are insufficient. Accumulate findings in scratchpad per researcher-research-gather/20-iteration-rules.md.\n\nPer ADR-041 addendum 2026-05-15: chain agents do not read the graph; web_search + bash are your only external evidence channels.\n\nTerminate with decide(action=\"synthesize\", reason=\"Subtopic: $subtopic\\n\\n<your subtopic findings — per-actor evidence, per-boundary observations, any open gaps>\") when your subtopic is grounded. Open the reason with the literal 'Subtopic: $subtopic' line so SYNTHESIZE's aggregator can index your contribution. OR decide(action=\"needs_clarification\", reason=\"web_search + bash could not resolve subtopic '$subtopic' — <specific reason>\") when external evidence is structurally insufficient for your subtopic."
     }
   ],
   "on_exit": [],
   "metadata": {
     "pack": "research",
-    "phase": "ADR-042 MVP-2",
+    "phase": "ADR-042 MVP-2 + ADR-046 Phase 1",
     "adr": "docs/adr/042-coordinator-instantiated-flows-via-templates.md",
-    "supersedes_legacy": "configs/rules/research-mode-transition/04-phase-transition-to-gather.json — same forward edge, no phase-validator sentinel."
+    "fan_out": "for_each over $entity.triple.coordinator.decision.subtopics — one gatherer per subtopic in parallel. JOIN happens at rules 03a (per-completion stamp) + 03b (length_eq synthesize trigger).",
+    "supersedes_legacy": "configs/rules/research-mode-transition/04-phase-transition-to-gather.json — same forward edge, now fan-out instead of single dispatch."
   }
 }
