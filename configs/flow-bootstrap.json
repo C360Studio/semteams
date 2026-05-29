@@ -93,8 +93,8 @@
         "swagger_ui": true,
         "server_info": {
           "title": "SemTeams Bootstrap",
-          "description": "Substrate-singleton boot config per ADR-042 §Phase 2 redesign. Agentic + graph + rule-processor components run as singletons; task-category rule packs and named persona bundles run through them. No chain-specific configuration here.",
-          "version": "0.7.0"
+          "description": "Substrate-singleton boot config per ADR-042 §Phase 2 redesign + 2026-05-29 §addendum (multi-tenant sandbox + multi-category orchestration). Agentic + graph + rule-processor components run as singletons; three task-category rule packs (research, sandbox-bootstrap, autoresearch) and named persona bundles run through them. Sandbox-bootstrap + autoresearch reference product-shell tools the §A foundation PR will add (query_sandbox_tenant, emit_bootstrap_*, emit_autoresearch_*); rules load now but those packs' arcs cannot run end-to-end until the foundation lands. Research pack is fully functional.",
+          "version": "0.8.0"
         }
       }
     },
@@ -233,6 +233,27 @@
           "/app/configs/rules/research/06-needs-clarification-replan.json",
           "/app/configs/rules/research/07-reviewer-approved-to-coordinator.json",
           "/app/configs/rules/research/08-loop-failed-pause.json",
+          "/app/configs/rules/sandbox-bootstrap/01-coordinator-bootstrap-spawn.json",
+          "/app/configs/rules/sandbox-bootstrap/02a-plan-skip-to-verify.json",
+          "/app/configs/rules/sandbox-bootstrap/02b-plan-to-execute.json",
+          "/app/configs/rules/sandbox-bootstrap/03-execute-to-verify.json",
+          "/app/configs/rules/sandbox-bootstrap/04-verify-to-reviewer.json",
+          "/app/configs/rules/sandbox-bootstrap/05-reviewer-rejected-retry.json",
+          "/app/configs/rules/sandbox-bootstrap/06-needs-clarification-replan.json",
+          "/app/configs/rules/sandbox-bootstrap/07-reviewer-approved-to-coordinator.json",
+          "/app/configs/rules/sandbox-bootstrap/08-loop-failed-pause.json",
+          "/app/configs/rules/autoresearch/01-coordinator-autoresearch-spawn.json",
+          "/app/configs/rules/autoresearch/02-baseline-to-propose.json",
+          "/app/configs/rules/autoresearch/03-propose-to-execute.json",
+          "/app/configs/rules/autoresearch/04a-execute-stamp-completion.json",
+          "/app/configs/rules/autoresearch/04b-execute-stamp-failed.json",
+          "/app/configs/rules/autoresearch/05-experiment-continue.json",
+          "/app/configs/rules/autoresearch/06-experiment-stop-cap.json",
+          "/app/configs/rules/autoresearch/07-synthesize-to-reviewer.json",
+          "/app/configs/rules/autoresearch/08-reviewer-approved-to-coordinator.json",
+          "/app/configs/rules/autoresearch/09-reviewer-rejected-resynthesize.json",
+          "/app/configs/rules/autoresearch/10-needs-clarification-replan.json",
+          "/app/configs/rules/autoresearch/11-loop-failed-pause.json",
           "/app/configs/rules/coordinator/03b-respond-direct.json",
           "/app/configs/rules/coordinator/03-ask-user.json"
         ],
