@@ -195,6 +195,7 @@ tasks:
       tearing down the docker stack between runs.
     cmds:
       - task: test:e2e:agentic:research-mvp
+      - task: test:e2e:agentic:sandbox-bootstrap-mvp
       - task: test:e2e:agentic:ops-agent
       - task: test:e2e:agentic:real-time-activity-stream
       - task: test:e2e:agentic:task-story-trace
@@ -266,6 +267,41 @@ tasks:
           FIXTURE: "{{.FIXTURE}}"
           AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
       - npx playwright test e2e/agentic/research-mvp.spec.ts
+
+  test:e2e:agentic:sandbox-bootstrap-mvp:
+    desc: Run the ADR-042 §addendum PR 2 sandbox-bootstrap category mock-LLM journey
+    summary: |
+      One user prompt drives the full sandbox-bootstrap category arc
+      end-to-end against the §addendum roster:
+
+        Loop 0  coordinator (dispatch)               decide(action="bootstrap_sandbox")
+        Loop A  provisioner-bootstrap-plan           query_sandbox_tenant + emit_bootstrap_plan + decide(execute)
+        Loop B  provisioner-bootstrap-execute        bash (docker run placeholder) + decide(verify)
+        Loop C  provisioner-bootstrap-verify         bash (docker exec placeholder) + emit_bootstrap_verify(ok) + decide(emit)
+        Loop D  reviewer-bootstrap                   bash (docker inspect placeholder) + emit_bootstrap_committed + decide(approved)
+        Loop E  coordinator (wake-up, chained allowlist)  decide(respond_direct)
+
+      Validates the sandbox-bootstrap pack (PRs landed 454f117 +
+      75a9ee2) against the §A foundation PR's product-shell tools
+      (PR 1 — query_sandbox_tenant + emit_bootstrap_{plan,verify,
+      committed}, sandboxfleet.TenantRegistry, 6-part entity
+      namespace).
+
+      Six loops, eighteen mock-LLM round-trips. No approval gate, no
+      recovery. The chained allowlist on rule 07 is exercised but
+      takes the deliver-to-user branch under the mock-LLM fixture
+      (autoresearch / research downstream routing remains a PR 4
+      structural test).
+    vars:
+      FIXTURE: sandbox-bootstrap-mvp.yaml
+      AGENTIC_CONFIG: e2e-flow-bootstrap.json
+    cmds:
+      - defer: { task: test:e2e:agentic:cleanup }
+      - task: test:e2e:agentic:stack:up
+        vars:
+          FIXTURE: "{{.FIXTURE}}"
+          AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
+      - npx playwright test e2e/agentic/sandbox-bootstrap-mvp.spec.ts
 
   test:e2e:agentic:task-story-trace:
     desc: Run the task-story / raw-activity right-rail journey (fixture-agnostic; uses research-mvp for backend activity)
