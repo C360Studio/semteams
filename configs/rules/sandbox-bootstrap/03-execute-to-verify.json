@@ -1,0 +1,53 @@
+{
+  "id": "bootstrap_execute_to_verify",
+  "type": "expression",
+  "name": "provisioner-bootstrap-execute decide(verify) → provisioner-bootstrap-verify",
+  "description": "ADR-042 §addendum sandbox-bootstrap pack. Fires when execute terminates with decide(action=verify) — provisioning has completed (or skip determined provisioning was unnecessary). Spawns provisioner-bootstrap-verify, which runs the plan's verify_command against the tenant and grades the output against expected_smoke_signature.\n\nMirrors the skip-path verify spawn (rule 02a) but with path=provision in properties so the verify persona knows which path it's on (the skip-path verify recovers via force_refresh on failure; the provision-path verify recovers via re-provisioning if smoke fails post-install).",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "agent.loop.role",
+      "operator": "eq",
+      "value": "provisioner-bootstrap-execute",
+      "required": true
+    },
+    {
+      "field": "coordinator.decision.next_action",
+      "operator": "eq",
+      "value": "verify",
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "publish_agent",
+      "subject": "agent.task.provisioner-bootstrap-verify",
+      "role": "provisioner-bootstrap-verify",
+      "model": "research",
+      "tools": ["read_loop_result", "bash", "emit_bootstrap_verify", "scratchpad", "decide"],
+      "tool_choice": { "mode": "required" },
+      "action_allowlist": ["emit", "needs_clarification"],
+      "properties": {
+        "run_loop_id": "$entity.triple.lineage.bootstrap-run",
+        "execute_loop_id": "$entity.instance",
+        "category": "sandbox-bootstrap",
+        "phase": "verify",
+        "path": "provision"
+      },
+      "related_loops": {
+        "bootstrap-run": "$entity.triple.lineage.bootstrap-run",
+        "run-loop-entity-id": "$entity.triple.lineage.run-loop-entity-id",
+        "bootstrap-execute": "$entity.instance"
+      },
+      "prompt": "SANDBOX-BOOTSTRAP VERIFY — provision path. Execute has finished provisioning the tenant; your job is to prove it works via the plan's verify_command.\n\nIteration 1 — call read_loop_result on $entity.instance (the execute loop) for the provisioning summary: container_name, image, install steps completed. Then read_loop_result on $entity.triple.lineage.bootstrap-run via its plan-loop reference (your prompt's run_loop_id property is the run entity; the plan loop is reachable via that lineage). Actually simpler — your spawn rule's run_loop_id is on the run entity, and the plan stamped sandbox.tenant.verify_command and sandbox.tenant.expected_smoke_signature on the run entity. Read them directly via substitution:\n\n- verify_command: $entity.triple.sandbox.tenant.verify_command\n- expected_smoke_signature: $entity.triple.sandbox.tenant.expected_smoke_signature\n- container_name: $entity.triple.sandbox.tenant.container_name\n- workspace_path: $entity.triple.sandbox.tenant.workspace\n\nIteration 2 — run the verify command inside the tenant: `bash docker exec <container_name> sh -c 'cd <workspace> && <verify_command>'`. Capture stdout (head + tail, under bash tool's output cap) AND exit code.\n\nIteration 3 — grade the output against the expected_smoke_signature:\n- Exit code matches expected (typically 0)\n- Stdout matches expected substring / regex / line-count as the plan named\n- No catastrophic stderr (segfault, OOM, panic)\n\nIteration 4 — call emit_bootstrap_verify with the results:\n```\nemit_bootstrap_verify(\n  smoke_exit_code=<n>,\n  smoke_stdout_tail=\"<last ~200 chars>\",\n  smoke_matches_expected=<bool>,\n  container_name=\"<verbatim>\",\n  workspace_path=\"<verbatim>\"\n)\n```\nTool stamps sandbox.verify.* triples on YOUR loop entity (audit).\n\nIteration 5 — terminal:\n- **smoke matches**: decide(action=\"emit\", reason=\"provision-path verify OK: <container> verify exit=<n> stdout=<one-line>\"). Rule 04 spawns reviewer-bootstrap.\n- **smoke does NOT match**: decide(action=\"emit\", reason=\"provision-path verify FAILED: <specific failure>\"). Reviewer will reject (smoke didn't pass, tenant not actually ready). Recovery routes back to plan; the plan persona on retry should reconsider the install_steps or base_image based on the failure.\n- **execute environment failure** (docker exec returns non-zero with no stdout/stderr, container not running): decide(action=\"needs_clarification\", reason=\"verify environment failure: <reason>\") — recovery to coordinator.\n\nDistinguish smoke failure (the tenant is provisioned but the verify_command produced unexpected output — `decide(emit, reason=\"failed\")`) from environment failure (the verify_command couldn't even run — `decide(needs_clarification)`). Smoke failure routes through reviewer-then-recovery; environment failure routes immediately to coordinator."
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "pack": "sandbox-bootstrap",
+    "phase": "ADR-042 §addendum 2026-05-29 — third pack",
+    "adr": "docs/adr/042-coordinator-instantiated-flows-via-templates.md",
+    "path_property_rationale": "The verify persona handles two paths (skip from rule 02a, provision from rule 03) with the same role. The `path` property in spawn properties tells the persona which one it's on; the recovery shape downstream differs (skip-path failure recovers via force_refresh re-plan; provision-path failure recovers via install_steps revision). Single role, two recovery shapes — explicit path token avoids LLM having to infer from context."
+  }
+}

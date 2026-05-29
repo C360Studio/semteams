@@ -1062,3 +1062,584 @@ owned the surface.
 3. **Future category packs introducing a builder** will need to
    re-add `bootstrap_workspace` (or its eventual upstream
    equivalent) deliberately. Don't restore it speculatively.
+
+## 2026-05-29 §addendum — multi-tenant sandbox fleet + multi-category coordinator orchestration
+
+This addendum captures the architectural decisions surfaced while
+designing the **autoresearch category pack** as the second category
+on the substrate-plus-overlays MVP. Autoresearch is the
+Karpathy/Shopify pattern: a metric is named, the substrate measures
+a baseline, propose→execute iterates against the metric, an
+empirical reviewer (the executor, not the LLM) routes each
+iteration's keep-vs-revert, then a synthesize phase rolls up the
+run. See `configs/rules/autoresearch/README.md` for the pack design.
+
+The pack surfaced three substrate gaps the MVP doesn't yet address.
+Two are real architectural questions; one is an extension to an
+existing primitive. They are deeply intertwined, so they ship as
+one addendum.
+
+### Why this exists
+
+semteams runs continuously and is **general-purpose** — it cannot
+ship a Dockerfile catalog enumerating every target shape
+(`semteams test:integration`, `semspec verify`, hypothetical
+frontend `npm test`, etc.). Targets are described by users at
+request time; provisioning must be dynamic.
+
+The autoresearch pack's first design assumed the sandbox was
+"ready for the target" — an assumption that does a lot of work.
+Reviving a `bootstrap-workspace` role inside the autoresearch
+pack reproduces the MVP-7-deleted Swiss-army-knife anti-pattern.
+The honest design is **multi-tenancy at the sandbox layer + a
+sandbox-bootstrap category pack** the coordinator routes to before
+chaining into autoresearch.
+
+### Decision
+
+Three composable additions on top of the substrate-plus-overlays
+MVP:
+
+1. **Sandbox tenant fleet** — extend the always-warm sandbox model
+   (PR #179) from a singleton container to a **fleet of tenant
+   containers** keyed by stable target signatures. The always-warm
+   sandbox stays as low-latency bash dispatch for ad-hoc commands
+   (research pack's `bash` + `curl`); tenant containers are
+   created/started/stopped on demand for sustained work
+   (autoresearch and future categories that need provisioned
+   environments).
+2. **sandbox-bootstrap as a first-class category pack** —
+   provisions/verifies a tenant on demand; structurally idempotent
+   (reuses healthy tenants, re-provisions stale ones). LLM authors
+   per-target provisioning steps from the user's description; no
+   catalog.
+3. **Coordinator chains categories** — extend the wake-up rule's
+   `action_allowlist` so a chain-terminal coordinator can route to
+   a downstream category instead of always replying to the user.
+   First chained scenario: `bootstrap_sandbox` → wake-up →
+   `autoresearch`.
+
+These compose: user requests autoresearch on target X → coordinator
+decides `bootstrap_sandbox(target=X)` → bootstrap pack provisions
+or reuses tenant X → coordinator wake-up sees ready state →
+coordinator decides `autoresearch(target=X, tenant_ref=...)` →
+autoresearch arc runs against the prepared tenant → coordinator
+wake-up delivers to user.
+
+### §A. Sandbox tenant fleet
+
+#### Tenants are containers, not workspace folders
+
+A naive multi-tenant design puts N workspace folders inside a single
+sandbox container (`/workspaces/<tenant-A>/`,
+`/workspaces/<tenant-B>/`). **Rejected:** tenant isolation is
+filesystem-only; tenant A's `npm install` can corrupt tenant B's
+`node_modules`; concurrent tenant work contends for one container's
+CPU/disk pool; resource limits cannot be set per tenant.
+
+Decision: **each tenant is its own container**, named
+`semteams-tenant-<signature>`, with its own volume mount for
+workspace persistence and its own resource limits (configurable
+per-tenant on creation; sane defaults from the bootstrap pack's
+plan persona).
+
+Lifecycle states tracked in a new `SANDBOX_REGISTRY` KV bucket:
+
+- **`provisioning`** — bootstrap pack is currently creating the
+  tenant (cloning, installing).
+- **`ready_running`** — tenant container is up; can serve
+  `docker exec` calls.
+- **`ready_stopped`** — tenant container is stopped (workspace
+  persists in volume); start-on-next-use is fast.
+- **`stale`** — exists on disk but failed re-verification (dep
+  version drift, repo upstream moved). Needs re-provision.
+- **`evicting`** — slated for cleanup.
+
+Concurrent tenant work runs on independent containers (Docker
+provides the isolation). The host Docker daemon orchestrates;
+semteams' product shell uses the Docker socket to issue
+`run` / `start` / `stop` / `exec` / `rm` commands.
+
+#### Target signature
+
+Each tenant is identified by a stable signature derived from the
+user's target description:
+
+- Command (e.g. `task test:integration`)
+- Source artifact identity (repo URL + revision tag, or fixed
+  path on disk, or `none` for self-contained scripts)
+- Dependency manifest hash (Go version + go.mod hash, or Node
+  version + package-lock hash, or system packages list — whichever
+  is canonical for the target)
+- Base image (default: Ubuntu LTS; bootstrap-plan may override)
+
+Signature = stable hash of the canonicalized tuple. Same target →
+same signature → same tenant container reused across runs.
+Materially-different target details → distinct signature → distinct
+tenant.
+
+**Canonicalization is Go-side, not LLM-side** (per design review H2
+2026-05-29). Cache-key correctness is load-bearing for a long-
+running shared substrate: two users asking the same thing two
+different ways must hit the same tenant (no waste); two users asking
+different things one way must not collide (no silent corruption).
+LLM-prose canonicalization cannot guarantee either — prose normaliz-
+ation is non-deterministic by construction.
+
+The §A foundation PR ships a typed `TargetSignature` struct + a
+deterministic Go canonicalizer:
+
+```go
+package sandbox
+
+type TargetSignature struct {
+    Command   string            // canonical form: lowercase, single-space-separated
+    RepoURL   string            // canonical form: https://host/path, no trailing .git
+    RepoRef   string            // canonical form: 40-char commit SHA when resolvable,
+                                // else the literal ref string
+    Toolchain map[string]string // canonical version strings, lowercase keys
+                                // (e.g. {"go": "1.26.0", "node": "22.10.0"})
+    BaseImage string            // canonical Docker image:tag (no ":latest")
+}
+
+func (s TargetSignature) Hash() string {
+    // Sorted-key marshal + SHA-256; stable across runs.
+}
+
+func Canonicalize(rawCommand, rawSource string, toolchain map[string]string,
+                  rawBaseImage string) (TargetSignature, error) {
+    // Deterministic normalizers: command whitespace, repo URL
+    // (ssh ↔ https, with-or-without .git, trailing slash), ref
+    // (HEAD → SHA, short-SHA → full-SHA via git ls-remote), version
+    // strings (1.26 ↔ 1.26.0, v1.26 ↔ 1.26), base image (image →
+    // image:latest stripped → image:<resolved-tag>).
+    // Returns canonical fields; LLM-provided ambiguity returns an
+    // error the plan persona surfaces as needs_clarification.
+}
+```
+
+The LLM's role: **fill in the typed fields** from the user's prose
+description. emit_bootstrap_plan takes the typed fields; the tool
+executor calls Canonicalize + Hash and stamps the resulting signature.
+The plan persona cannot influence the hash via prose framing.
+
+Estimated cost: ~50-80 LoC in the §A foundation PR (canonicalizer +
+Hash + test). Cheap; pays for itself the first time two users hit
+the same target two different ways.
+
+#### Always-warm vs tenant containers — dual-mode
+
+The always-warm sandbox container (PR #179 / ADR-032) **stays**.
+Its role is unchanged: low-latency `bash` + `curl` dispatch for
+the research pack and any other category that does **ad-hoc**
+shell work without persistent target state.
+
+The tenant containers are **a separate fleet** on the same host,
+each one tied to a target signature, lifecycled by the
+sandbox-bootstrap pack. Categories that need sustained-state
+execution environments (autoresearch, future dev-via-spec
+revival, future CI-runner category) target tenant containers via
+`docker exec`.
+
+Both share the host Docker socket. The always-warm sandbox is the
+"default bash"; tenant containers are the "named execution
+environments." Categories declare which they need; the substrate
+routes to the right one.
+
+This is honest about what each container is for. It also keeps
+existing research-pack flows unchanged — research keeps using
+the always-warm sandbox; autoresearch (and future heavyweight
+categories) use tenants.
+
+#### Docker-in-Docker without DinD daemon
+
+testcontainers-using targets need Docker access from within the
+tenant. Standard pattern: mount the host Docker socket into the
+tenant container; the tenant uses the host daemon to spin up
+ephemeral helper containers (testcontainers) as needed.
+
+No Docker-in-Docker daemon-in-container. No privileged-container
+config. Just socket sharing — the well-trodden CI pattern.
+
+Cross-tenant safety note: tenants sharing the host socket can in
+principle see each other's containers. v1 accepts this; tenants
+are trusted execution environments for substrate-driven work, not
+isolation boundaries for adversarial code. If multi-user
+adversarial scenarios emerge, switch to per-tenant Docker daemons.
+
+**Explicit threat model (per design review H1 2026-05-29):**
+The "trusted execution environment" framing is correct for the
+v1 use case — substrate-driven measurement against
+operator-owned repos on an operator-controlled host. It is NOT
+appropriate for:
+
+- **Adversarial code analysis.** An LLM-authored `install_steps`
+  list has docker-CLI surface inside the tenant (the socket is
+  mounted) — a misbehaving plan persona OR a target whose
+  install steps include something malicious can `docker rm -f`
+  sibling tenants or read their volumes. No isolation enforces
+  the tenant boundary at the Docker layer.
+- **Compromised upstreams.** Targets that fetch dependencies
+  from `npm` / `pypi` / `cargo` / `go modules` / `apt`
+  execute install scripts with the docker socket in scope. A
+  typosquatted or backdoored upstream package can read or
+  modify all tenants. Pin deps where possible; don't point
+  this at "any name + auto-fetch latest" target shapes.
+- **Vulnerable targets with `docker_socket_mount: true`.**
+  testcontainers-using targets that have a remote-code-execution
+  vulnerability + socket access = host root via mount escape.
+  Same risk surface as running the target locally; the tenant
+  isolation does not change it.
+
+**Operator guidance: only point this substrate at targets you
+would `go run` / `npm test` / `pytest` on your own laptop.**
+Adversarial-code analysis needs per-tenant Docker daemons +
+no socket sharing + kernel-isolation (VMs or gVisor). Out of
+scope for v1; revisit if the use case surfaces.
+
+### §B. sandbox-bootstrap as a first-class category pack
+
+#### Coordinator route
+
+`decide(action="bootstrap_sandbox", reason="<target description>")`.
+
+The `reason` field carries the target intent. Coordinator routes
+here when:
+
+- User explicitly asks for sandbox prep ("set up a tenant for
+  task test:integration on semteams"), OR
+- Coordinator is about to chain to a downstream category and the
+  target needs provisioning.
+
+#### Roles
+
+| Role | Job | Terminal |
+|---|---|---|
+| `provisioner-bootstrap-plan` | Parse target description; canonicalize; compute signature; check registry; emit plan (skip / provision / re-provision) + ready_check shape | `decide(execute)` or `decide(skip)` |
+| `provisioner-bootstrap-execute` | Run plan. Skip = no-op. Provision = `docker run -d --name semteams-tenant-<sig> -v ...` then `docker exec` install steps. Re-provision = `docker rm -f` + provision | `decide(verify)` |
+| `provisioner-bootstrap-verify` | Run smoke checks against the tenant via `docker exec`; grade output against plan's expected smoke signature | `decide(emit)` |
+| `reviewer-bootstrap` | Grade verify against plan; on `approved`, stamp registry state=`ready_running` + ready_at + tenant_container_name | `decide(approved|insufficient)` |
+
+#### Idempotency = reuse by default
+
+`provisioner-bootstrap-plan`'s first action is registry lookup:
+
+- Registry hit + state=`ready_running|ready_stopped` + ready_at
+  within freshness window → plan = **skip** (with `docker start`
+  if stopped); the bootstrap arc completes in one execute
+  iteration
+- Registry hit + state=`stale` → plan = re-provision
+- Registry miss → plan = provision from scratch
+
+Repeated bootstrap invocations on a healthy ready tenant are
+near-instant. Reuse is the default; provisioning is the exception.
+This is the long-running semteams' answer to "without a Dockerfile
+catalog, every autoresearch run can't pay full cold-start cost" —
+the registry caches the LLM's per-target work.
+
+#### Per-target provisioning steps are LLM-authored, not catalog-shipped
+
+The bootstrap-plan persona reads the target description and writes
+the provisioning steps inline:
+
+- `base_image` (`ubuntu:24.04`, `golang:1.26`, `node:22`, etc.)
+- `clone_command` (git clone URL + ref)
+- `install_steps` (apt-get list, language-toolchain steps, app deps)
+- `volume_mounts` (workspace + dep caches)
+- `docker_socket_mount` (`true|false` — testcontainers needs it)
+- `verify_command` + `expected_smoke_signature` (exit code +
+  stdout shape for the verify persona to grade against)
+
+These render as a structured `bootstrap_plan` artifact (markdown +
+typed payload) just like research-plan. The plan is the audit trail
+for what was provisioned; the signature is the cache key for
+reuse.
+
+semteams does **not** ship per-target Dockerfiles or compose files.
+The LLM handles per-target containerization on demand. Tradeoff:
+cold-start cost on first invocation per signature; mitigated by
+registry reuse.
+
+#### Freshness window
+
+When is a registry-cached tenant stale enough to re-provision?
+
+- **v1: timestamp + plan-hash.** Tenant is stale if `ready_at` is
+  older than a TTL (24h default, configurable per pack) OR if the
+  current plan-hash differs from the cached plan-hash (the user
+  asked for a new dep version, base image, etc.).
+- **Post-v1:** detect upstream-revision changes (poll git remote,
+  check package-lock drift). Not in v1 scope.
+
+The plan persona is empowered to force re-provision by stamping
+`plan.force_refresh=true` in its decide payload; bypasses registry
+freshness check. Used when the user explicitly asks to rebuild.
+
+### §C. Coordinator chains categories
+
+#### Today's pattern (single-category arcs)
+
+Every category pack's `07-reviewer-approved-to-coordinator.json`
+spawns a coordinator wake-up with
+`action_allowlist: ["respond_direct", "ask_user"]`. The wake-up's
+job is exclusively user-facing — deliver the result, optionally
+ask a follow-up. The coordinator can't continue to a downstream
+category from a wake-up; the chain ends.
+
+#### Extension — per-pack-configurable wake-up allowlist
+
+The wake-up spawn rule's allowlist becomes per-category-pack
+configurable. For chained scenarios (bootstrap → autoresearch),
+bootstrap's wake-up includes `autoresearch` in the allowlist; the
+wake-up coordinator decides whether to deliver to user or
+continue the chain.
+
+Persona contract for chained wake-ups: the spawn prompt carries
+
+- `original_intent` (the user's original message, preserved by
+  the coordinator's first-classification `decide.reason`)
+- `prior_arc_outcome` (what the terminal arc accomplished, plus
+  any keyed state the downstream arc needs — for bootstrap →
+  autoresearch, this is the tenant container name + signature +
+  workspace path)
+- `chain_position` ("first" | "intermediate" | "terminal") —
+  guides whether to chain further or deliver
+
+The wake-up coordinator decides:
+
+- `decide(respond_direct, ...)` — terminal arc was the user's full
+  ask; deliver result
+- `decide(<downstream_category>, ...)` — terminal arc was a
+  precondition; continue
+- `decide(ask_user, ...)` — terminal arc surfaced ambiguity in
+  user's intent
+
+#### Loop protection
+
+Each pack's wake-up `action_allowlist` explicitly **excludes the
+action that originated the prior arc**. After `bootstrap_sandbox`
+terminates, the bootstrap wake-up's allowlist is
+`["respond_direct", "ask_user", "autoresearch", "research"]` (or
+similar), but NOT `bootstrap_sandbox`. Prevents bootstrap →
+bootstrap → bootstrap loops if the LLM mis-routes.
+
+Same pattern applies to terminal-arc wake-ups: autoresearch's
+wake-up excludes `autoresearch`, preventing autoresearch →
+wake-up → autoresearch loops on the same target.
+
+If a downstream-category routing decision is contested (the LLM
+wants to re-route to the originating action), the wake-up
+coordinator must terminate via `respond_direct` or `ask_user`
+with the contestation surfaced to the user.
+
+#### Multi-step state threading
+
+The chain entity (ADR-038) already threads loop-to-loop lineage.
+For multi-category chains, the chain entity grows two new triples
+per arc transition:
+
+- `chain.arc.<position>.category` — which category ran
+  (bootstrap, autoresearch, research)
+- `chain.arc.<position>.tenant_signature` — which tenant the arc
+  used (if any)
+
+UI dashboards reading the chain entity now see multi-arc chains
+naturally: "bootstrap → autoresearch → deliver" renders as a
+3-arc chain with one tenant signature threaded across the
+relevant arcs.
+
+### §D. Consequences
+
+#### What this changes about the MVP-7 substrate
+
+- **Adds `SANDBOX_REGISTRY` KV bucket** to `flow-bootstrap.json`.
+  Small product-shell wiring; no new component.
+- **Adds Docker-socket-mediated tenant management** to the
+  product shell. `cmd/semteams/sandbox/` package (new) hosts
+  `Provision(signature, plan) → container_name` and
+  `Exec(container_name, command) → stdout/exit_code` primitives.
+  Framework-alignment review: no upstream "tenant container
+  fleet" primitive exists or is planned; defensible
+  product-shell-local. ADR addendum to be added when the package
+  lands; documents the survey + the case for product-local + the
+  migration target (port upstream if/when semstreams gains
+  container-management primitives).
+- **Adds new product-shell tools:** `emit_bootstrap_plan`,
+  `emit_bootstrap_verify`, `query_sandbox_tenant` (read-only
+  registry query). Standard typed-emit pattern.
+- **Coordinator persona taxonomy grows by 2 tokens**
+  (`bootstrap_sandbox`, `autoresearch`). Per-pack tokens, same
+  closed-taxonomy contract.
+- **Wake-up rule allowlist becomes per-pack-configurable.** Today
+  hardcoded `["respond_direct", "ask_user"]`; becomes a per-pack
+  field on rule 07's `action_allowlist`. Backwards-compatible:
+  packs that don't chain keep the existing two-token allowlist.
+
+#### What this avoids
+
+- **No Dockerfile catalog.** Targets are not enumerated in
+  advance; provisioning is LLM-driven per target, cached by the
+  registry.
+- **No bootstrap-workspace role inside autoresearch.** Bootstrap
+  is a category pack of its own; autoresearch assumes a ready
+  tenant. Avoids the MVP-7-deleted Swiss-army-knife anti-pattern.
+- **No Docker-in-Docker daemon.** Host socket mount + ephemeral
+  helper containers spawned by tenants.
+- **No "multi-workspace inside one container" framework.** Real
+  multi-tenancy via per-tenant containers; isolation is Docker's
+  job, not a folder structure.
+- **No new container-orchestration substrate.** Docker socket +
+  the registry KV are enough. Kubernetes, Nomad, etc. are out of
+  scope for v1; if cross-host scaling ever matters, that's a
+  separate ADR.
+
+#### Costs
+
+- **First-run cold start per target.** First autoresearch on a
+  new target pays the full provisioning bill (image pull + clone
+  + install + smoke). Estimated 2-30 minutes depending on target
+  complexity. Subsequent runs reuse the registry-cached tenant;
+  near-instant.
+- **Tenant disk footprint.** Each ready tenant occupies workspace
+  volume + container layer. Grows with use. v1 ships manual
+  `task sandbox:gc` (lists stale tenants for operator-driven
+  cleanup); auto-GC with TTL is post-v1.
+- **Cross-tenant resource contention on the host.** Multiple
+  concurrent autoresearch runs (or other heavyweight categories)
+  share the host's CPU, RAM, disk I/O. Tenant containers can
+  declare resource limits (`--cpus`, `--memory`); the plan
+  persona is responsible for sane defaults per target. If
+  concurrent-run pressure surfaces, add a host-level concurrency
+  cap.
+- **Product-shell-tool surface grows** by the bootstrap emit
+  tools + the Docker socket integration. Framework-alignment
+  review posture: defensible product-local, document migration
+  target if upstream gains equivalent primitives.
+
+### §E. Alternatives considered
+
+| Alternative | Why not |
+|---|---|
+| **Per-target Dockerfile catalog in `configs/`** | Cannot enumerate every target shape. semteams is general-purpose; the catalog becomes either stale, incomplete, or both. Same accretion trap as bootstrap-workspace. |
+| **Single multi-purpose sandbox with workspace folders per tenant** | No real isolation. Target A's `npm install` can corrupt target B's `node_modules`. Concurrent tenant work contends for one container's resource pool. No per-tenant resource limits. |
+| **Per-target VMs** | Heavier weight than needed; container-per-tenant is enough isolation for v1 use cases. VMs become interesting only when targets need kernel-level isolation or non-Linux execution. |
+| **Bootstrap inside autoresearch's baseline role** | Couples environment-provisioning to iteration-loop. Single-responsibility violation. MVP-7 deleted this pattern for cause. |
+| **Operator pre-provisions tenants, packs assume ready** | Pushes work to the operator; offers no reuse semantics; doesn't scale beyond one-off demos. |
+| **Compose-catalog of multi-service environments** | Same enumeration trap as Dockerfile catalog, scaled up. The bootstrap pack handling per-target multi-service prep (when needed) is more honest. |
+| **Replace the always-warm sandbox with the tenant fleet** | Conflates two different access patterns (low-latency ad-hoc bash vs sustained-state tenant work). Dual-mode keeps the existing research-pack performance and adds the new capability without trading off. |
+
+### §F. Open follow-ups
+
+These items are noted; none block the multi-tenant sandbox +
+autoresearch ship:
+
+1. **Tenant freshness window detection.** v1 uses TTL + plan-hash;
+   smarter (poll upstream, check package-lock drift) is post-v1.
+2. **Cross-tenant concurrency limits.** v1 has no host-level cap;
+   add if pressure surfaces.
+3. **Auto-GC.** v1 ships manual `task sandbox:gc`; auto-GC with
+   TTL is post-v1.
+4. **Tenant resource quotas.** v1 lets the plan persona set
+   per-tenant `--cpus` / `--memory`; default profiles per target
+   shape (Go test runner vs Node build vs ML training) are
+   post-v1 polish.
+5. **Multi-tenant primitives in framework, not product shell.**
+   `SANDBOX_REGISTRY` + tenant management is currently
+   product-shell-local. If semspec / semdragons gain similar
+   needs, graduate to upstream. Defensible product-local for now;
+   document migration target when the primitive lands.
+6. **Loop protection on multi-category chains** is by allowlist
+   exclusion in v1. If LLM mis-routing surfaces under real-LLM
+   smoke, add a chain-position counter that bounds total arcs per
+   user prompt (e.g. cap=4 arcs per chain).
+7. **UI rendering of multi-arc chains.** Kanban view was tuned
+   for single-arc chains. A bootstrap → autoresearch → wake-up
+   chain has more loops than the UI's typical layout assumes.
+   Likely a UI follow-up after first real-LLM multi-arc smoke
+   surfaces the gap.
+8. **Chainstall-subscriber per-pack opt-out (per review M3 2026-05-29).**
+   The chainstall recovery cap (Slice 2) was tuned for short
+   chains. An autoresearch run at cap=10 has 22+ loops; if the
+   chainstall fires mid-run on a series of reverted iterations,
+   the chain gets killed mid-flight while still inside its
+   budgeted iteration count. v1 punts: the autoresearch and
+   sandbox-bootstrap packs ship without explicit chainstall opt-
+   out and rely on the chainstall's classification not mis-
+   firing on `reverted`-outcome arcs. If smoke validation
+   surfaces premature chainstall kills, the structural fix is a
+   per-pack `chain.opts.disable_chainstall` triple stamped at
+   the coordinator-spawn rule, which the chainstall subscriber
+   reads at evaluation time. Cheap structurally; defer the wire
+   until evidence demands it.
+
+### §G. v1 scope (the actual ship)
+
+This addendum's v1 is **autoresearch pack + sandbox-bootstrap
+pack + multi-tenant sandbox fleet + coordinator-chains-categories
+extension**, shipped together. Splitting the two packs across
+separate PRs creates a window where autoresearch ships without a
+viable provisioning path; the chained design is the honest one.
+
+PR sequence (revised per review M5 2026-05-29):
+
+The original sequence had PR 4 (§C coordinator chains) landing
+before PR 5 (autoresearch pack), but PR 4's chained allowlist
+references the `autoresearch` token that PR 5 introduces. Mock-
+LLM journey for PR 4 would have to stub an autoresearch arc that
+PR 5 then replaces. Two paths: collapse PRs 4+5 into one feature
+unit, OR have PR 4 stub `autoresearch` as a single placeholder
+loop and PR 5 swap. The revised sequence collapses; the stub
+approach was rejected because the stub's wire shape doesn't
+exercise the same chained-allowlist contract the real pack will.
+
+1. **§A — sandbox fleet substrate.** `SANDBOX_REGISTRY` bucket
+   (or `c360.sandbox.tenant.<sig>` entity-namespace per §F-5
+   decision); `cmd/semteams/sandbox/` package (Docker socket
+   integration); typed `TargetSignature` struct + Go canonicalizer
+   (per H2 fix); `emit_bootstrap_*` + `query_sandbox_tenant`
+   product-shell tools. No category pack changes. Unit +
+   integration tests against a mock Docker daemon. Includes
+   contract tests pinning canonicalization stability across
+   prose-framing variants.
+2. **§B — sandbox-bootstrap pack.** Rules (already on disk:
+   `configs/rules/sandbox-bootstrap/`) + personas. Mock-LLM
+   journey: bootstrap a stub tenant; verify the registry state
+   transitions; reuse on second invocation; verify the contract
+   tests at `test/contract/sandbox_bootstrap_rule_pack_test.go`
+   still hold against new persona content.
+3. **§A/§B real-LLM smoke.** Provision a real tenant for the
+   `task test:integration` target on semteams itself. Validates
+   the LLM-authored provisioning + Docker socket flow + reuse
+   semantics + canonicalizer cache-hit-rate behavior. ~$0.50-$2.
+4. **§C + autoresearch (combined feature unit).** Per-pack
+   wake-up allowlist extension; coordinator persona for chained
+   classification; loop-protection rules; autoresearch pack
+   rules (already on disk: `configs/rules/autoresearch/`) +
+   personas; `emit_autoresearch_*` product-shell tools. Mock-LLM
+   journey: user → coordinator → bootstrap → wake-up →
+   autoresearch → wake-up → reply, end-to-end. Contract tests
+   at `test/contract/autoresearch_rule_pack_test.go` hold.
+5. **End-to-end real-LLM smoke.** Same journey, real LLMs.
+   Dogfood target: `task test:integration` on semteams.
+   Validates the autoresearch empirical-reviewer pattern at
+   scale; validates chained-allowlist wake-up routing under
+   real-LLM classification; validates cap-budget accounting
+   including loop-failed iterations (per C1 fix). ~$0.50-$3.
+
+Five PRs (down from six). If scope pressure forces further
+staging, the honest split is **§A+§B as foundation (PRs 1-3),
+§C+autoresearch as feature (PRs 4-5)** — but the foundation
+alone is not
+demoable, and the feature without the foundation is not
+buildable. Plan accordingly.
+
+### References
+
+- [[ADR-029]] — product-shell wiring (sandbox-registry adds to wiring)
+- [[ADR-032]] — sandbox primitive (this addendum extends from single-container to multi-tenant fleet)
+- [[ADR-038]] — chain entity (multi-arc chains stamp `chain.arc.*` triples)
+- [[ADR-046]] — fan-out via `for_each` (orthogonal; autoresearch is sequential iteration)
+- PR #179 — sandbox always-warm (the base primitive the fleet builds alongside)
+- MEMORY: [[project_adr042_mvp_redesign]] — substrate-plus-overlays MVP this extends
+- MEMORY: [[feedback_framework_alignment_review]] — discipline applied to the new product-shell tools
+- MEMORY: [[feedback_fewer_rich_tools]] — bash subsumes file ops; bootstrap emit tools justify themselves on registry-stamp grounds, not file-shape grounds

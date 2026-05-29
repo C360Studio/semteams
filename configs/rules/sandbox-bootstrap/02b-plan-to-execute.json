@@ -1,0 +1,54 @@
+{
+  "id": "bootstrap_plan_to_execute",
+  "type": "expression",
+  "name": "provisioner-bootstrap-plan decide(execute) → provisioner-bootstrap-execute",
+  "description": "ADR-042 §addendum sandbox-bootstrap pack — provision path. Fires when plan terminates with decide(action=execute) — registry miss OR registry stale OR plan_hash changed. Spawns provisioner-bootstrap-execute, which runs docker commands per the plan (provision or re-provision) and prepares the tenant for verify.",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "agent.loop.role",
+      "operator": "eq",
+      "value": "provisioner-bootstrap-plan",
+      "required": true
+    },
+    {
+      "field": "coordinator.decision.next_action",
+      "operator": "eq",
+      "value": "execute",
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "publish_agent",
+      "subject": "agent.task.provisioner-bootstrap-execute",
+      "role": "provisioner-bootstrap-execute",
+      "model": "research",
+      "tools": ["read_loop_result", "bash", "scratchpad", "decide"],
+      "tool_choice": { "mode": "required" },
+      "action_allowlist": ["verify", "needs_clarification"],
+      "properties": {
+        "run_loop_id": "$entity.triple.lineage.bootstrap-run",
+        "plan_loop_id": "$entity.instance",
+        "category": "sandbox-bootstrap",
+        "phase": "execute"
+      },
+      "related_loops": {
+        "bootstrap-run": "$entity.triple.lineage.bootstrap-run",
+        "run-loop-entity-id": "$entity.triple.lineage.run-loop-entity-id",
+        "bootstrap-plan": "$entity.instance"
+      },
+      "prompt": "SANDBOX-BOOTSTRAP EXECUTE — run the plan against Docker.\n\nThe plan at loop $entity.instance emitted a provision or re-provision plan. Your job is to materialise it: docker commands against the host daemon, executed via the always-warm sandbox's bash dispatch (the same bash tool research uses, with Docker socket access).\n\nIteration 1 — call read_loop_result on $entity.instance for the plan's shape:\n- plan.action (provision | reprovision)\n- signature, container_name (`semteams-tenant-<sig>` convention)\n- base_image\n- clone_command (or `none`)\n- install_steps (JSON array; each entry is one shell line)\n- volume_mounts (JSON array; each entry is `<volume_name>:<container_path>`)\n- docker_socket_mount (bool)\n- verify_command (you don't run this — verify phase does)\n- expected_smoke_signature (audit only — verify phase grades against it)\n\nIteration 2 — if plan.action=reprovision, tear down the stale tenant first:\n`bash docker rm -f <container_name>` (continues on `no such container` — already gone is fine).\nThen for stale volumes (if the plan specifies fresh volumes): `bash docker volume rm <volume_name>` for each. Be conservative — only rm volumes the plan explicitly named for fresh start; reusing dep caches across provisions is a feature, not a bug.\n\nIteration 3 — create + start the tenant container:\n\n```\nbash docker run -d \\\n  --name <container_name> \\\n  --restart unless-stopped \\\n  <if docker_socket_mount: -v /var/run/docker.sock:/var/run/docker.sock> \\\n  <for each volume_mount: -v <mount>> \\\n  <base_image> \\\n  sleep infinity\n```\n\nThe `sleep infinity` is the canonical idiom for \"long-lived container that exists to be docker-exec'd into.\" Verify exit code 0 and that the container is `running` via `docker inspect`.\n\nIteration 4 — clone the source into the workspace (if clone_command is not `none`):\n`bash docker exec <container_name> sh -c '<clone_command>'`\nCapture exit code; non-zero is a hard failure — decide(needs_clarification) with the clone error.\n\nIteration 5+ — run install_steps sequentially. For each step:\n`bash docker exec <container_name> sh -c '<step>'`\nCapture exit code per step. On non-zero, terminate decide(needs_clarification, reason=\"install step <N> failed: <step verbatim> — exit <code> — stderr <tail>\"). The recovery rule routes to coordinator; the plan persona on retry can revise install_steps (drop the broken one, swap a dep version, etc.).\n\nLong-running steps note: package installs and language-toolchain installs can take 5-30 minutes. The bash tool has its own per-call timeout (see semteams-shared memory feedback_sandbox_bash_timeouts). For steps you expect to be long-running (e.g. `apt-get install -y build-essential`, `go mod download`, `npm ci`), split into smaller idempotent steps where possible, OR document in scratchpad that this step is expected to be slow so the framework's iteration-budget signal doesn't mislead.\n\nIteration N — once all install_steps complete, terminate: decide(action=\"verify\", reason=\"tenant <container_name> provisioned: base=<image> clone=<source@ref> installed=<N steps>; ready for smoke check\"). Rule 03 spawns verify.\n\nIteration budget — execute is the most LLM-iteration-intensive role in this pack (one iteration per install step). If the plan has 20+ install steps, batch them where idempotent (a single `apt-get install -y A B C D E` is one step, not 5). If the plan was authored with too many fine-grained steps, scratchpad note + batch.\n\nPer ADR-041 addendum 2026-05-15: chain agents do not query the graph. read_loop_result + bash are your read channels."
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "pack": "sandbox-bootstrap",
+    "phase": "ADR-042 §addendum 2026-05-29 — third pack",
+    "adr": "docs/adr/042-coordinator-instantiated-flows-via-templates.md",
+    "docker_socket_access": "Execute uses the always-warm sandbox's bash, which has Docker socket access (PR #179 + the §A foundation PR's mount config). The tenant containers are spawned on the same host daemon. The tenant gets ITS OWN docker socket mount only if the plan.docker_socket_mount=true (for testcontainers / docker-compose targets).",
+    "long_step_timeout_caveat": "Individual install steps can hit per-bash-call timeout (semteams-shared feedback_sandbox_bash_timeouts memory). Mitigation: batch idempotent steps, document slow ones in scratchpad. Future substrate question: per-call timeout overrides on the bash tool for tenant-execute roles.",
+    "tool_choice_rationale": "Required-mode forces gemini-flash through every bash + decide. Without it, mid-iteration text-only completions during install_steps would strand work (research-pack semstreams#158 class)."
+  }
+}

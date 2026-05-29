@@ -1,0 +1,55 @@
+{
+  "id": "bootstrap_plan_skip_to_verify",
+  "type": "expression",
+  "name": "provisioner-bootstrap-plan decide(skip) → provisioner-bootstrap-verify (fast path)",
+  "description": "ADR-042 §addendum sandbox-bootstrap pack — fast path. Fires when plan terminates with decide(action=skip) — the registry hit was fresh and the plan_hash matched, so no provisioning work is needed. Skips execute entirely, routes directly to verify.\n\nVerify still runs because the cached registry record may be stale-but-not-yet-marked-stale: the tenant container may have been killed externally, its workspace may have drift, the host Docker daemon may have restarted. Verify's smoke check is the structural-correctness gate that catches these cases. If verify finds the tenant non-functional, reviewer rejects, recovery rule re-plans with force_refresh=true and the next plan provisions fresh.",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "agent.loop.role",
+      "operator": "eq",
+      "value": "provisioner-bootstrap-plan",
+      "required": true
+    },
+    {
+      "field": "coordinator.decision.next_action",
+      "operator": "eq",
+      "value": "skip",
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "publish_agent",
+      "subject": "agent.task.provisioner-bootstrap-verify",
+      "role": "provisioner-bootstrap-verify",
+      "model": "research",
+      "tools": ["read_loop_result", "bash", "emit_bootstrap_verify", "scratchpad", "decide"],
+      "tool_choice": { "mode": "required" },
+      "action_allowlist": ["emit", "needs_clarification"],
+      "properties": {
+        "run_loop_id": "$entity.triple.lineage.bootstrap-run",
+        "plan_loop_id": "$entity.instance",
+        "category": "sandbox-bootstrap",
+        "phase": "verify",
+        "path": "skip"
+      },
+      "related_loops": {
+        "bootstrap-run": "$entity.triple.lineage.bootstrap-run",
+        "run-loop-entity-id": "$entity.triple.lineage.run-loop-entity-id",
+        "bootstrap-plan": "$entity.instance"
+      },
+      "prompt": "SANDBOX-BOOTSTRAP VERIFY — skip path. The plan determined no provisioning work is needed (registry hit, fresh, plan_hash matched). But before reporting ready, verify the tenant is actually functional.\n\nIteration 1 — call read_loop_result on $entity.instance (the plan loop) for the cached plan shape: signature, container_name, verify_command, expected_smoke_signature, base_image, workspace_path.\n\nIteration 2 — ensure the tenant container is running:\n\n`bash docker inspect -f '{{.State.Status}}' <container_name>` — should return `running`. If `exited`, start it: `bash docker start <container_name>`. If `not found` (the container was removed externally), the registry is stale-but-not-marked. This is RECOVERABLE within the arc — emit a verify-with-container-missing outcome and let reviewer-rejection re-plan with force_refresh. Do NOT decide(needs_clarification) for this case; that would exit the arc and the coordinator's allowlist excludes bootstrap_sandbox (loop protection per ADR-042 §addendum §C). See iteration 6 below.\n\nIteration 3 — run the verify command inside the tenant (skip if container_missing detected in iteration 2): `bash docker exec <container_name> sh -c '<verify_command>'`. Capture stdout + exit code.\n\nIteration 4 — match the captured output against the expected_smoke_signature from the plan. Smoke matches mean:\n- Exit code matches expected (typically 0)\n- Stdout contains the expected substring / matches the expected line count / matches the expected regex (whichever the plan named)\n\nIteration 5 — call emit_bootstrap_verify with the results. The verify_outcome field tells the reviewer what shape the failure took (used by rule 05's recovery persona to set force_refresh):\n\n```\nemit_bootstrap_verify(\n  smoke_exit_code=<n or -1 if not run>,\n  smoke_stdout_tail=\"<last ~200 chars, or empty>\",\n  smoke_matches_expected=<bool>,\n  container_name=\"<from plan>\",\n  workspace_path=\"<from plan>\",\n  verify_outcome=\"<ok | container_missing | smoke_failed>\"\n)\n```\nThe tool stamps sandbox.verify.* triples on YOUR loop entity (audit) including the verify_outcome. Does NOT commit registry ready state; that happens at reviewer approval.\n\nIteration 6 — terminal (all three cases route via decide=emit so reviewer-bootstrap can route the recovery shape inside the arc):\n- **smoke matches expected (verify_outcome=ok)**: decide(action=\"emit\", reason=\"skip-path verify OK: container=<name> exit=<n> smoke=<one-line stdout summary>\"). Rule 04 spawns reviewer-bootstrap; reviewer approves; rule 07 wakes coordinator.\n- **container missing (verify_outcome=container_missing)**: decide(action=\"emit\", reason=\"skip-path verify: container <name> missing on host; registry stale-not-marked; force_refresh needed\"). Reviewer rejects (verify_outcome != ok); rule 05's recovery re-plans with force_refresh=true; plan provisions fresh INSIDE THE SAME ARC. No coordinator exit, no allowlist hole.\n- **smoke fails (verify_outcome=smoke_failed)**: decide(action=\"emit\", reason=\"skip-path verify FAILED: <specific failure>\"). Reviewer rejects; recovery same as container_missing path — force_refresh full provision inside the arc.\n- **catastrophic failure** (docker daemon unreachable host-side, NOT 'this container is missing'): decide(action=\"needs_clarification\", reason=\"verify environment failure: <specific operator-side reason>\"). This IS the case for coordinator exit — daemon-level failure is not recoverable by re-provisioning; operator needs to look at the host."
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "pack": "sandbox-bootstrap",
+    "phase": "ADR-042 §addendum 2026-05-29 — third pack",
+    "adr": "docs/adr/042-coordinator-instantiated-flows-via-templates.md",
+    "skip_path_rationale": "Even on registry-fresh skip, verify runs because external state may have drifted (container killed, host restart, workspace volume corruption). The skip path skips the EXPENSIVE work (clone + install) but keeps the cheap structural check. This is honest declarative-infra idempotency: 'plan + apply with no diff' still runs the verifier in production tools like Terraform / Pulumi for exactly this reason.",
+    "force_refresh_recovery": "When verify fails on the skip path, reviewer rejects. Rule 05's recovery re-plans; the persona reads the reviewer's gap and stamps force_refresh=true in the new plan, bypassing the registry freshness check and forcing a full provision. This routes the chain to the full provision path naturally.",
+    "tool_choice_rationale": "Required-mode keeps gemini-flash on tool path through bash (docker inspect/start/exec), emit_bootstrap_verify, decide."
+  }
+}

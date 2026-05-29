@@ -1,0 +1,58 @@
+{
+  "id": "bootstrap_needs_clarification_replan",
+  "type": "expression",
+  "name": "Any sandbox-bootstrap role decide(needs_clarification) → coordinator",
+  "description": "ADR-042 §addendum sandbox-bootstrap pack recovery rule. Fires when any pack role terminates with decide(action=needs_clarification) — plan (target description ambiguous, signature contention with another arc), execute (catastrophic provisioning failure beyond install-step granularity, docker daemon unreachable), verify (environment failure unrelated to smoke result), reviewer-bootstrap (run state structurally malformed). Spawns a fresh coordinator with the rejecting role's loop_id; the coordinator's allow-list is restricted to respond_direct / ask_user (it cannot re-classify the same chain). Bounded by rule max_iterations=3.\n\nMirrors research and autoresearch packs' needs_clarification handlers, scoped to sandbox-bootstrap role tokens.",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "agent.loop.role",
+      "operator": "in",
+      "value": [
+        "provisioner-bootstrap-plan",
+        "provisioner-bootstrap-execute",
+        "provisioner-bootstrap-verify",
+        "reviewer-bootstrap"
+      ],
+      "required": true
+    },
+    {
+      "field": "coordinator.decision.next_action",
+      "operator": "eq",
+      "value": "needs_clarification",
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "max_iterations": 3,
+  "on_enter": [
+    {
+      "type": "publish_agent",
+      "subject": "agent.task.coordinator",
+      "role": "coordinator",
+      "model": "coordinator",
+      "tools": ["read_loop_result", "bash", "decide"],
+      "tool_choice": { "mode": "required" },
+      "action_allowlist": ["respond_direct", "ask_user"],
+      "properties": {
+        "wakeup_mode": "bootstrap_needs_clarification",
+        "rejecting_role": "$entity.triple.agent.loop.role",
+        "rejecting_loop_id": "$entity.instance",
+        "category": "sandbox-bootstrap"
+      },
+      "related_loops": {
+        "rejecting": "$entity.instance",
+        "bootstrap-run": "$entity.triple.lineage.bootstrap-run"
+      },
+      "prompt": "A sandbox-bootstrap role at loop $entity.instance terminated with decide(action=needs_clarification). The rejecting role could not proceed without either user input or operator intervention.\n\nIteration 1 — call read_loop_result(loop_id=$entity.instance) to read the rejecting role's reason. Possible failure shapes:\n\n- **Target ambiguity**: plan persona could not unambiguously parse the user's target description (base image unclear, source location not stated, deps not enumerable). → ask_user with a specific question (\"which base image — ubuntu, golang, or node?\").\n- **Signature contention**: another bootstrap arc is in flight against the same signature. → respond_direct status (\"signature <sig> is currently being provisioned by another arc; retry in ~<estimate>\").\n- **Docker daemon unreachable**: execute or verify could not reach the host Docker socket. Operator-side problem. → respond_direct describing the environment failure (\"host Docker daemon unreachable; operator action required\").\n- **Source unreachable**: clone command failed because the source URL is gone / private. → ask_user (\"the source URL <url> returned 404 / required auth; correct URL? or different ref?\").\n- **Plan structurally malformed**: reviewer found the run state inconsistent (signature changed mid-arc, etc.). Likely a substrate bug. → respond_direct describing the situation as a structural failure; do not retry blindly.\n\nIteration 2 — decide(action=\"respond_direct\", reason=\"<status prose>\") OR decide(action=\"ask_user\", reason=\"<question prose>\"). Both publish on the user-response bus.\n\nWrite the user-facing reason as plain prose. The user asked for sandbox bootstrap; tell them what happened, where it got stuck, and what action would unblock (user-side answer vs operator-side fix)."
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "pack": "sandbox-bootstrap",
+    "phase": "ADR-042 §addendum 2026-05-29 — third pack",
+    "adr": "docs/adr/042-coordinator-instantiated-flows-via-templates.md",
+    "no_chained_route_here": "This rule's coordinator wake-up does NOT chain to a downstream category — even though §addendum §C extends the wake-up allowlist for the approved path (rule 07). needs_clarification means the arc could not complete; chaining to a downstream that depends on the arc's output is nonsensical. Allowlist stays at respond_direct + ask_user.",
+    "mirrors_research_and_autoresearch_pattern": "Same shape as research/06 and autoresearch/10, scoped to sandbox-bootstrap roles."
+  }
+}

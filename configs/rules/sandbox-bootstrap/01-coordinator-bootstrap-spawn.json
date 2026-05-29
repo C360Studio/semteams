@@ -1,0 +1,53 @@
+{
+  "id": "bootstrap_coordinator_spawn_plan",
+  "type": "expression",
+  "name": "Coordinator decide(bootstrap_sandbox) → provisioner-bootstrap-plan",
+  "description": "ADR-042 §addendum 2026-05-29 sandbox-bootstrap pack. First rule of the pack. Fires when a coordinator loop terminates with decide(action=bootstrap_sandbox, reason=<target description>). Spawns provisioner-bootstrap-plan; the plan persona is responsible for canonicalizing the target, computing the signature, checking the registry, and emitting a plan that either skips (registry hit + fresh + ready) or provisions / re-provisions. The coordinator loop becomes the run entity for this bootstrap arc — mirrors the autoresearch and research pack patterns.",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "agent.loop.role",
+      "operator": "eq",
+      "value": "coordinator",
+      "required": true
+    },
+    {
+      "field": "coordinator.decision.next_action",
+      "operator": "eq",
+      "value": "bootstrap_sandbox",
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "publish_agent",
+      "subject": "agent.task.provisioner-bootstrap-plan",
+      "role": "provisioner-bootstrap-plan",
+      "model": "research",
+      "tools": ["read_loop_result", "query_sandbox_tenant", "emit_bootstrap_plan", "scratchpad", "decide"],
+      "tool_choice": { "mode": "required" },
+      "action_allowlist": ["execute", "skip", "needs_clarification"],
+      "properties": {
+        "run_loop_id": "$entity.instance",
+        "category": "sandbox-bootstrap",
+        "phase": "plan"
+      },
+      "related_loops": {
+        "bootstrap-run": "$entity.instance",
+        "run-loop-entity-id": "$entity.id"
+      },
+      "prompt": "SANDBOX-BOOTSTRAP PLAN — canonicalize target, check registry, emit plan.\n\nA coordinator at loop $entity.instance classified the user's message as a sandbox-bootstrap ask. Its loop entity is your RUN ENTITY for this bootstrap arc.\n\nIteration 1 — call read_loop_result(loop_id=$entity.instance). The reason field carries the target intent: what command will run, what repo (if any), what dependencies. Examples:\n\n- \"Set up a tenant for `task test:integration` on semteams. Needs Go 1.26, Docker socket for testcontainers, semteams repo cloned at main.\"\n- \"Provision a sandbox for running pytest on github.com/example/repo at v2.3.1; deps from pyproject.toml.\"\n- \"Tenant for shell-script profiling — base ubuntu, no clone needed, just bash + hyperfine.\"\n\nIteration 2 — canonicalize the target. Produce these inputs to the signature:\n\n- **command**: the measurement / smoke command verbatim (lowercase, strip surrounding whitespace).\n- **source**: repo URL + ref, OR fixed path on disk, OR `none`. For git refs, prefer immutable refs (tags, commits) over moving ones (main, master); if the user named a moving ref, accept it but log the caveat in your plan.\n- **dependency_manifest**: a stable hash input. Prefer canonical-form manifests (go.mod content + go version, package-lock.json content, pyproject.toml content). For free-form deps lists, sort + dedup + lowercase.\n- **base_image**: pick the smallest image that supports the target (`ubuntu:24.04` default, `golang:1.26` for pure-Go, `node:22` for pure-Node, `python:3.13` for pure-Python). If unclear, default to `ubuntu:24.04` and install language toolchains explicitly.\n\nIteration 3 — call query_sandbox_tenant(signature=<the canonicalized signature>). The tool returns the registry record OR null:\n\n- **null (miss)**: this is a new target. Plan a full provision.\n- **{state: ready_running|ready_stopped, ready_at, plan_hash}**: registry hit. Decide freshness:\n  - Is ready_at older than the pack's TTL (24h v1 default)? → STALE\n  - Does the current plan_hash (computed below) differ from the cached plan_hash? → STALE (user asked for a different version, base image, etc.)\n  - Otherwise → FRESH → plan a SKIP.\n- **{state: stale}**: re-provision (something already marked it stale).\n- **{state: provisioning}**: another bootstrap arc is in flight against this signature. Decide(needs_clarification, reason=\"signature <sig> is currently being provisioned by another bootstrap arc\") — recovery routes to coordinator, which can ask_user to retry later or respond_direct with the status.\n\nIteration 4 — compose the plan. Three shapes, by path:\n\n**SKIP plan** (registry FRESH): all plan fields carry the cached values (so they thread through verify even though execute is a no-op). Set `plan.action=skip`.\n\n**PROVISION plan** (registry MISS): write the full provisioning shape:\n- `base_image`: from iteration 2\n- `clone_command`: full `git clone <url> <workspace>` (or `none` if no clone)\n- `install_steps`: ordered list of shell commands to install deps inside the tenant (apt-get update + apt-get install -y <pkgs>; toolchain installers; `go mod download`, `npm ci`, `pip install`, etc.). Each step is a single shell line.\n- `volume_mounts`: `[\"semteams-tenant-<sig>-workspace:/workspace\"]` + dep caches if appropriate (`semteams-tenant-<sig>-deps:/root/.cache`).\n- `docker_socket_mount`: `true` if the target's measurement command needs Docker (testcontainers, docker-compose-driven tests). `false` otherwise (most). The plan persona is the conservative gate — only true when target description names testcontainers / docker / docker-compose explicitly.\n- `verify_command`: a smoke check that proves the tenant is correctly provisioned. NOT the full measurement command (too expensive); instead a fast subset (`go test ./internal/quickcheck/... -count=1` or `task lint:setup` or `which <tool>`). Should run in <60s.\n- `expected_smoke_signature`: what the verify persona will match against — exit code 0, a specific stdout substring, an output line count, whatever makes the smoke unambiguous.\n- `plan_hash`: stable hash of the above fields. Used for cache-invalidation in subsequent bootstrap runs.\n\n**RE-PROVISION plan** (registry STALE): same shape as PROVISION, but set `plan.action=reprovision` so execute knows to `docker rm -f` first.\n\nIteration 5 — call emit_bootstrap_plan with the full plan payload. The tool stamps sandbox.tenant.* triples on the run entity (signature, base_image, clone_command, install_steps as JSON list, volume_mounts, docker_socket_mount, verify_command, expected_smoke_signature, plan_hash, plan_action) AND updates the registry state to `provisioning` (for execute/reprovision paths) or leaves it at the current ready state (for skip).\n\nIteration 6 — terminal:\n- **Skip path**: decide(action=\"skip\", reason=\"<sig> registry hit, fresh, plan_hash unchanged; verify only\"). Rule 02a routes to verify directly (no execute step). Verify re-runs the smoke against the existing tenant; if smoke fails, the reviewer rejects and recovery re-plans with force_refresh.\n- **Provision / re-provision path**: decide(action=\"execute\", reason=\"<provision shape summary>: base=<image>, clone=<repo>@<ref>, install=<N steps>, socket=<bool>\"). Rule 02b routes to execute.\n- **Contention path**: decide(action=\"needs_clarification\", reason=\"signature <sig> currently being provisioned by another arc\") — see iteration 3.\n\nPer ADR-041 addendum 2026-05-15: chain agents do not query the graph. read_loop_result + query_sandbox_tenant are your read channels."
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "pack": "sandbox-bootstrap",
+    "phase": "ADR-042 §addendum 2026-05-29 — third pack",
+    "adr": "docs/adr/042-coordinator-instantiated-flows-via-templates.md",
+    "category_token": "bootstrap_sandbox",
+    "run_entity_pattern": "Coordinator's loop entity = run entity. sandbox.tenant.* triples accumulate on it via subject override. Mirrors research (PLAN loop) and autoresearch (coordinator loop) patterns.",
+    "registry_seam": "query_sandbox_tenant + emit_bootstrap_plan + emit_bootstrap_committed are the four product-shell tools providing registry access. The §A foundation PR picks the storage shape (separate SANDBOX_REGISTRY KV bucket OR virtual namespace within ENTITY_STATES); the rule layer is storage-agnostic and references the tools by their canonical names.",
+    "idempotency_pattern": "Plan checks registry FIRST. Skip is the fast path on warm tenants. This makes 'bootstrap on already-ready tenant' a near-instant no-op. Pattern equivalent to declarative infrastructure-as-code idempotency (Terraform plan + apply with no diff)."
+  }
+}

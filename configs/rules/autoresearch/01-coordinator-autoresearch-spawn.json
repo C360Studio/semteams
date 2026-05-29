@@ -1,0 +1,58 @@
+{
+  "id": "autoresearch_coordinator_spawn_baseline",
+  "type": "expression",
+  "name": "Coordinator decide(autoresearch) → autoresearch-baseline",
+  "description": "ADR-042 §Phase 2 redesign — second category pack. First rule of the autoresearch category. Fires when a coordinator loop terminates with decide(action=autoresearch, reason=<user's autoresearch intent prose>). Spawns autoresearch-baseline with the coordinator loop ID as the RUN ENTITY (mirrors research pack's PLAN-loop-as-run-entity pattern). Baseline is responsible for parsing the four autoresearch parameters (command, surface, cap, metric_parser) out of the coordinator's reason text via its own LLM iteration, then stamping them onto the run entity via emit_autoresearch_baseline. The structured-params soft contract lives in the coordinator persona (10-decision-contract.md autoresearch entry) and autoresearch-baseline persona, NOT in the rule wire format — the wire stays the canonical decide(action, reason, subtopics, retry_hint) shape, no per-category schema branching.",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "agent.loop.role",
+      "operator": "eq",
+      "value": "coordinator",
+      "required": true
+    },
+    {
+      "field": "coordinator.decision.next_action",
+      "operator": "eq",
+      "value": "autoresearch",
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "add_triple",
+      "predicate": "autoresearch.run.status",
+      "object": "active"
+    },
+    {
+      "type": "publish_agent",
+      "subject": "agent.task.autoresearch-baseline",
+      "role": "autoresearch-baseline",
+      "model": "research",
+      "tools": ["read_loop_result", "bash", "emit_autoresearch_baseline", "scratchpad", "decide"],
+      "tool_choice": { "mode": "required" },
+      "action_allowlist": ["propose", "needs_clarification"],
+      "properties": {
+        "run_loop_id": "$entity.instance",
+        "category": "autoresearch",
+        "phase": "baseline"
+      },
+      "related_loops": {
+        "autoresearch-run": "$entity.instance",
+        "run-loop-entity-id": "$entity.id"
+      },
+      "prompt": "AUTORESEARCH BASELINE — parse parameters + establish metric reference.\n\nA coordinator at loop $entity.instance classified the user's message as an autoresearch ask. Its loop entity is your RUN ENTITY — every iteration's experiment loops accumulate state on it via subject override.\n\nYou have two jobs in this single loop:\n\n**Job 1 — Parse the four autoresearch parameters from the coordinator's terminal.**\n\nIteration 1 — call read_loop_result(loop_id=$entity.instance). The reason field contains the user's autoresearch intent as the coordinator preserved it. Extract:\n\n- **command** — the executable measurement command (e.g. `task test:integration`). Must be a single shell command runnable in the sandbox.\n- **surface** — file globs the propose phase may edit (e.g. `test/, Taskfile.yml`). The smaller, the more honest — never grant the full repo.\n- **cap** — integer iteration cap. v1 stop condition. Reasonable defaults: 10 for cheap measurements (<30s/iter), 5 for slow ones.\n- **metric_parser** — instructions for extracting a numeric value from the command's stdout. Lower-is-better semantics in v1. Example: `last line matching '^Total time: ([0-9.]+)s$', capture group 1, parse as float`.\n\nIf any of the four is genuinely ambiguous in the coordinator's reason, decide(action=\"needs_clarification\", reason=\"<which parameter is ambiguous and why>\") — the recovery rule routes back to the coordinator to tighten with the user.\n\n**Job 2 — Establish the baseline.**\n\nIteration 2 — bash: run the command verbatim in the sandbox. Capture stdout (head + tail; under 100KB cap) AND exit code. Apply the metric_parser to extract a single numeric value.\n\nIteration 3 — call emit_autoresearch_baseline with all parsed parameters AND the baseline measurement:\n\n```\nemit_autoresearch_baseline(\n  command=\"<from job 1>\",\n  surface=\"<from job 1>\",\n  cap=<from job 1>,\n  metric_parser=\"<from job 1>\",\n  baseline_value=<measured number>,\n  baseline_pass=<bool — true iff exit code 0>,\n  baseline_stdout_tail=\"<last ~200 chars for audit>\"\n)\n```\n\nThe tool stamps autoresearch.{command, surface, cap, metric_parser, baseline.value, baseline.pass, baseline.stdout_tail, best.value, best.experiment_id} on the RUN entity (subject override to $entity.triple.lineage.run-loop-entity-id — the spawn-time-stable reference that sidesteps the semstreams#159 race). best.value initializes to baseline.value; best.experiment_id initializes to \"baseline\".\n\nTerminal: decide(action=\"propose\", reason=\"baseline measured: value=<n> pass=<bool>; command=<verbatim>; surface=<verbatim>; cap=<n>; metric_parser=<verbatim>\") to forward into the iteration loop. The reason is the handoff payload — keep all parsed parameters AND the measurement in it so the propose phase has the context.\n\nIf the baseline command crashes (exit code non-zero) OR the metric_parser cannot extract a number, decide(action=\"needs_clarification\", reason=\"baseline establish failed: <specific reason>\") — recovery routes to coordinator.\n\nPer ADR-041 addendum 2026-05-15: chain agents do not query the graph; bash + read_loop_result are your only read channels."
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "pack": "autoresearch",
+    "phase": "ADR-042 §Phase 2 redesign — second pack",
+    "adr": "docs/adr/042-coordinator-instantiated-flows-via-templates.md",
+    "category_token": "autoresearch",
+    "run_entity_pattern": "Coordinator's own loop entity IS the run entity for the iteration loop. Subsequent iterations stamp accumulator triples (autoresearch.experiment.completed, .best.value, .stop.reason) on this entity via subject override. Mirrors research pack's PLAN-loop-as-run-entity pattern.",
+    "wire_shape_rationale": "The decide tool stays canonical (action + reason + subtopics + retry_hint). The four autoresearch parameters are parsed by autoresearch-baseline from the coordinator's reason field, not encoded in the wire. Rationale: per-category positional-subtopic encoding (.0/.1/.2/.3) would need an .N indexed substitution that does not ship in beta.86 (only .length and .triples exist on the suffix-substitution family); per-category keyed-args would proliferate decide-tool schemas across packs. The LLM-side parse is bounded by the strict emit_autoresearch_baseline schema — if the LLM mis-parses, emit fails structurally and the loop retries.",
+    "tool_choice_rationale": "Required-mode keeps gemini-flash on the tool path through both bash (measurement) and emit_autoresearch_baseline (commit). Without it, the baseline measurement risks text-only completion (semstreams#158 class)."
+  }
+}

@@ -1,0 +1,52 @@
+{
+  "id": "autoresearch_reviewer_approved_to_coordinator",
+  "type": "expression",
+  "name": "reviewer-autoresearch decide(approved) → coordinator wake-up",
+  "description": "ADR-042 §Phase 2 redesign autoresearch pack terminal handler. Fires when reviewer-autoresearch terminates with decide(action=approved) — the autoresearch category's chain terminal. Spawns a fresh coordinator loop with the terminal reviewer's loop_id so the coordinator can read_loop_result and synthesize a user-facing reply via decide(action=respond_direct). The respond_direct rule (configs/rules/coordinator/03b-respond-direct.json) publishes the reply on the user-response bus.\n\nMirrors research pack's 07-reviewer-approved-to-coordinator.json exactly — same wake-up shape, scoped to the autoresearch pack.",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "agent.loop.role",
+      "operator": "eq",
+      "value": "reviewer-autoresearch",
+      "required": true
+    },
+    {
+      "field": "coordinator.decision.next_action",
+      "operator": "eq",
+      "value": "approved",
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "publish_agent",
+      "subject": "agent.task.coordinator",
+      "role": "coordinator",
+      "model": "coordinator",
+      "tools": ["read_loop_result", "bash", "decide"],
+      "action_allowlist": ["respond_direct", "ask_user"],
+      "properties": {
+        "wakeup_mode": "chain_terminal_autoresearch",
+        "terminal_loop_id": "$entity.instance",
+        "category": "autoresearch"
+      },
+      "related_loops": {
+        "terminal": "$entity.instance",
+        "autoresearch-run": "$entity.triple.lineage.autoresearch-run"
+      },
+      "prompt": "The autoresearch chain you dispatched has reached its terminal. Reviewer-autoresearch at loop $entity.instance evaluated the autoresearch artifact and approved it.\n\nYour job now is to deliver the result to the user. You are not classifying or delegating — the chain has already done the work.\n\nIteration 1 — call read_loop_result(loop_id=$entity.instance) to read the reviewer's structured verdict. The reviewer's reason summarises the run shape: iterations completed, baseline vs best, improvement percentage. If the reviewer's loop entity carries autoresearch.artifact.path, the structured artifact lives at that path — you may `bash cat $entity.triple.autoresearch.artifact.path` to read the full rollup (journey, kept diffs, open opportunities) if the reviewer's prose is too terse for a user-facing reply.\n\nIteration 2 — call decide(action=\"respond_direct\", reason=\"<your synthesised user-facing answer>\"). The respond_direct rule publishes your reason on the user-response bus.\n\nWrite the reason as plain prose addressing the user directly. The user asked for an optimization run; tell them what happened: did the metric improve, by how much, what the best change was, whether the run plateaued or hit the cap, what's left to try. Don't dump the full journey — pick the substantive headline. 3-6 sentences is usually right.",
+      "tool_choice": { "mode": "required" }
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "pack": "autoresearch",
+    "phase": "ADR-042 §Phase 2 redesign — second pack",
+    "adr": "docs/adr/042-coordinator-instantiated-flows-via-templates.md",
+    "terminal_role": "reviewer-autoresearch",
+    "approval_action": "approved",
+    "mirrors_research_pattern": "Same shape as configs/rules/research/07-reviewer-approved-to-coordinator.json — coordinator wake-up with terminal_loop_id, respond_direct + ask_user allowlist, bash for artifact read. Differs only in the wakeup_mode tag (chain_terminal_autoresearch vs chain_terminal_research) and the related_loops thread (autoresearch-run instead of researcher)."
+  }
+}

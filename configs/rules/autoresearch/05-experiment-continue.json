@@ -1,0 +1,60 @@
+{
+  "id": "autoresearch_experiment_continue",
+  "type": "expression",
+  "name": "experiment.completed length_lt cap → spawn next autoresearch-propose (continue)",
+  "description": "ADR-042 §Phase 2 redesign autoresearch pack — iteration LOOP continue half. Fires on the RUN entity (the coordinator's loop entity, where rule 04 accumulates autoresearch.experiment.completed triples via subject override) when the counter length is strictly less than the iteration cap. Spawns the next autoresearch-propose loop. cooldown=5s guards against double-fire if two execute loops complete in the same evaluation window (impossible under the current single-thread iteration shape, but defensive against future parallel-iteration variants).\n\nNote: this rule fires ON the RUN entity, NOT on the firing execute entity. The run entity carries role=coordinator (the run entity IS the coordinator's loop); the role condition reads as 'the run entity'. The substitution $entity.triple.autoresearch.cap reads the cap that emit_autoresearch_baseline stamped onto the run entity during baseline phase.",
+  "enabled": true,
+  "cooldown": "5s",
+  "conditions": [
+    {
+      "field": "agent.loop.role",
+      "operator": "eq",
+      "value": "coordinator",
+      "required": true
+    },
+    {
+      "field": "autoresearch.run.status",
+      "operator": "eq",
+      "value": "active",
+      "required": true
+    },
+    {
+      "field": "autoresearch.experiment.completed",
+      "operator": "length_lt",
+      "value": "$entity.triple.autoresearch.cap",
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "publish_agent",
+      "subject": "agent.task.autoresearch-propose",
+      "role": "autoresearch-propose",
+      "model": "research",
+      "tools": ["read_loop_result", "bash", "scratchpad", "decide"],
+      "tool_choice": { "mode": "required" },
+      "action_allowlist": ["measure", "needs_clarification"],
+      "properties": {
+        "run_loop_id": "$entity.instance",
+        "category": "autoresearch",
+        "phase": "propose"
+      },
+      "related_loops": {
+        "autoresearch-run": "$entity.instance",
+        "run-loop-entity-id": "$entity.id"
+      },
+      "prompt": "AUTORESEARCH PROPOSE — iteration $entity.triple.autoresearch.experiment.completed.length + 1 of $entity.triple.autoresearch.cap.\n\nA prior iteration's execute loop completed; the run entity's iteration counter is below cap, so you spawn for the next iteration. The run entity at $entity.instance carries the full run state: command, surface, cap, metric_parser, baseline.value, best.value, best.experiment_id, and one autoresearch.experiment.completed triple per iteration so far.\n\nYour prior-iteration context arrives inlined via ADR-048 .triples substitution:\n\n```\n$entity.triple.autoresearch.experiment.completed.triples\n```\n\nThat token resolves to a JSON-encoded array of execute loop IDs for every iteration completed so far. Parse the array; for each ID, call read_loop_result to read that iteration's reason field (carries: hypothesis, value, pass, outcome). Use that journal to:\n\n1. Avoid re-proposing changes that already reverted in a prior iteration.\n2. Build on changes that were kept (which became the new running-best — best.value is $entity.triple.autoresearch.best.value).\n3. Identify directions the journal suggests have headroom.\n\nIteration 1 — read the journal as described above. Also read the run entity's current best via the substitutions in your prompt: command is $entity.triple.autoresearch.command; surface is $entity.triple.autoresearch.surface; best.value is $entity.triple.autoresearch.best.value.\n\nIteration 2 — write your hypothesis to scratchpad. Concrete (file + change pattern + prediction). Within surface. Single-axis. Will not break the pass gate.\n\nIteration 3 — bash: apply the diff. Verify with `git diff --stat` that changes are scoped within surface.\n\nIteration 4 — decide(action=\"measure\", reason=\"<hypothesis + diff summary>\"). Rule 03 spawns execute next.\n\nIf the journal shows the metric has plateaued (last 3+ iterations all reverted with no kept) AND you have no novel hypothesis to try, decide(action=\"needs_clarification\", reason=\"plateau observed after $entity.triple.autoresearch.experiment.completed.length iterations; running best=$entity.triple.autoresearch.best.value vs baseline=$entity.triple.autoresearch.baseline.value; no new hypothesis viable\"). The recovery rule routes to coordinator, which can call respond_direct with the run's current state — soft stop because v1 substrate does not implement plateau-N as a stop condition. (See pack README §Open substrate questions #1.)\n\nPer ADR-041 addendum 2026-05-15: chain agents do not query the graph. read_loop_result + bash + the .triples substitution are your only read channels."
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "pack": "autoresearch",
+    "phase": "ADR-042 §Phase 2 redesign — second pack",
+    "adr": "docs/adr/042-coordinator-instantiated-flows-via-templates.md",
+    "fires_on_run_entity": "Subscribes to the run entity (the coordinator's loop entity, role=coordinator). Rule 04 stamps autoresearch.experiment.completed ON the run entity (via subject override); when the counter changes, rule 05 evaluates length_lt cap. Mutually exclusive with rule 06 (length_eq cap) — exactly one of the two fires per counter change.",
+    "length_lt_operator_requires": "semstreams beta.86+ — OpLengthLt 'length_lt' confirmed in /processor/rule/expression/types.go alongside OpLengthEq and OpLengthGt.",
+    "triples_substitution_requires": "semstreams beta.86 (#155 / ADR-048 PR 4) — $entity.triple.<predicate>.triples substitution. The journal of prior execute loop IDs renders as a JSON array string inlined into the propose prompt; persona prose teaches the JSON-parse pattern.",
+    "soft_plateau_path": "Plateau-N as a HARD stop is deferred (open substrate question #1). The propose persona MAY soft-recommend stop via decide(needs_clarification) when it observes plateau in the journal; the recovery rule routes to coordinator, which can respond_direct with the current state. Soft path because the LLM is the plateau judge, not the substrate."
+  }
+}

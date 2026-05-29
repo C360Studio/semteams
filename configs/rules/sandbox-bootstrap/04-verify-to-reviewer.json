@@ -1,0 +1,52 @@
+{
+  "id": "bootstrap_verify_to_reviewer",
+  "type": "expression",
+  "name": "provisioner-bootstrap-verify decide(emit) → reviewer-bootstrap",
+  "description": "ADR-042 §addendum sandbox-bootstrap pack. Fires when verify terminates with decide(action=emit). Spawns reviewer-bootstrap, which grades the verify emission against the plan's expected shape AND on approval commits the registry state to ready_running via emit_bootstrap_committed.\n\nReviewer-bootstrap differs from reviewer-research and reviewer-autoresearch: it does NOT grade artifact substance, it grades INFRASTRUCTURE READINESS via the verify smoke results + the registry-commit path. Approved means 'the tenant exists, is running, smoke-checked, and the registry has been updated'.",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "agent.loop.role",
+      "operator": "eq",
+      "value": "provisioner-bootstrap-verify",
+      "required": true
+    },
+    {
+      "field": "coordinator.decision.next_action",
+      "operator": "eq",
+      "value": "emit",
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "publish_agent",
+      "subject": "agent.task.reviewer-bootstrap",
+      "role": "reviewer-bootstrap",
+      "model": "reviewing",
+      "tools": ["read_loop_result", "bash", "emit_bootstrap_committed", "decide"],
+      "tool_choice": { "mode": "required" },
+      "action_allowlist": ["approved", "insufficient", "needs_clarification"],
+      "properties": {
+        "verify_loop_id": "$entity.instance",
+        "run_loop_id": "$entity.triple.lineage.bootstrap-run",
+        "category": "sandbox-bootstrap"
+      },
+      "related_loops": {
+        "bootstrap-run": "$entity.triple.lineage.bootstrap-run",
+        "run-loop-entity-id": "$entity.triple.lineage.run-loop-entity-id",
+        "bootstrap-verify": "$entity.instance"
+      },
+      "prompt": "REVIEWER — sandbox-bootstrap. Grade infrastructure readiness; on approval, commit registry state.\n\nThe verify phase at loop $entity.instance ran the plan's smoke command against the tenant and called emit_bootstrap_verify. Your job is to:\n\n1. Confirm the verify smoke matched expectations\n2. Confirm the tenant is actually queryable via docker (defense-in-depth check independent of the verify persona's self-report)\n3. On approval, call emit_bootstrap_committed to update the registry to ready_running state\n\nIteration 1 — call read_loop_result on $entity.instance for the verify terminal:\n- decide.reason summarises what verify saw\n- The verify loop entity carries sandbox.verify.* triples (smoke_exit_code, smoke_stdout_tail, smoke_matches_expected, container_name, workspace_path, verify_outcome) — read them via prompt substitution:\n  - container_name: $entity.triple.sandbox.verify.container_name\n  - smoke_matches: $entity.triple.sandbox.verify.smoke_matches_expected\n  - smoke_exit_code: $entity.triple.sandbox.verify.smoke_exit_code\n  - verify_outcome: $entity.triple.sandbox.verify.verify_outcome  (one of: ok | container_missing | smoke_failed)\n\nAlso read the run entity's plan triples for cross-check via read_loop_result on $entity.triple.lineage.bootstrap-run.\n\nIteration 2 — defense-in-depth: confirm the tenant is queryable (skip when verify_outcome=container_missing — verify already reported it gone).\n`bash docker inspect -f '{{.State.Status}}' <container_name>` — should return `running`. `bash docker exec <container_name> echo readiness-probe` — should return `readiness-probe` and exit 0.\n\nThis catches a class of issues the verify persona's self-report could miss (verify persona lied / hallucinated, container died between verify and reviewer, docker daemon flake). Cheap; ~2 seconds.\n\nIteration 3 — decide based on verify_outcome AND defense-in-depth result:\n- **verify_outcome=ok AND defense-in-depth checks pass**: proceed to approval.\n- **verify_outcome=container_missing**: decide(action=\"insufficient\", reason=\"skip-path failure: container <name> missing on host; registry stale-not-marked; force_refresh required to re-provision\"). Rule 05's recovery persona reads the container_missing signal and sets force_refresh=true on the new plan; provisions fresh INSIDE THE SAME ARC. No coordinator exit.\n- **verify_outcome=smoke_failed OR defense-in-depth check fails**: decide(action=\"insufficient\", reason=\"<specific failure: verify smoke mismatch on <field>; tenant <container> reported running by verify but docker inspect returns <state>; etc.>\"). Rule 05 recovery routes back to plan; on the skip path the persona sets force_refresh=true; on the provision path the persona revises install_steps based on the gap.\n\nIteration 4 (approval path only) — commit the registry:\n```\nemit_bootstrap_committed(\n  signature=\"<from run entity>\",\n  container_name=\"<from verify>\",\n  image=\"<from run entity's plan.base_image>\",\n  workspace=\"<from verify>\",\n  plan_hash=\"<from run entity's plan_hash>\"\n)\n```\nThe tool updates the registry record: state=ready_running, ready_at=$now, last_used=$now, plan_hash=<latest>. This is the cross-run-reuse commit — subsequent bootstrap arcs on the same signature will read this state and take the skip path.\n\nIteration 5 — decide(action=\"approved\", reason=\"tenant <container_name> ready: signature=<sig> image=<image> smoke=<one-line>; registry committed\"). Rule 07 wakes the coordinator with the chained allowlist for downstream-category routing.\n\nSubstance vs structure: this reviewer grades **infrastructure correctness**. Tenant exists, container is running, smoke matched, registry committed. It does NOT grade whether the tenant is the RIGHT tenant for some downstream measurement — that's the autoresearch baseline's verification step. Bootstrap reviewer's contract ends at 'this tenant is provisioned and functional per the plan'.\n\nPer ADR-041 addendum 2026-05-15: chain agents do not query the graph. read_loop_result + bash are your read channels."
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "pack": "sandbox-bootstrap",
+    "phase": "ADR-042 §addendum 2026-05-29 — third pack",
+    "adr": "docs/adr/042-coordinator-instantiated-flows-via-templates.md",
+    "registry_commit_in_reviewer": "Reviewer holds the registry-commit emit tool, not verify. Rationale: separation between 'observe + emit audit' (verify) and 'commit shared state' (reviewer). The reviewer is the structural gate that ensures the registry doesn't get committed on a malformed verify. This mirrors the research / autoresearch pattern where the reviewer's approval is the substrate gate, not just an LLM opinion.",
+    "defense_in_depth_rationale": "Reviewer's iteration 2 (docker inspect + echo readiness-probe) is an INDEPENDENT verification of what verify reported. Costs ~2s; catches a class of failures (verify hallucination, container died between, daemon flake) that the verify self-report can't catch. The cost is justified because registry commit is the load-bearing decision — a bad commit pollutes the cross-run cache for every subsequent bootstrap on this signature."
+  }
+}

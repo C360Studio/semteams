@@ -1,0 +1,54 @@
+{
+  "id": "autoresearch_propose_to_execute",
+  "type": "expression",
+  "name": "autoresearch-propose decide(measure) → autoresearch-execute",
+  "description": "ADR-042 §Phase 2 redesign autoresearch pack. Fires when an autoresearch-propose loop terminates with decide(action=measure) — the propose phase has written a hypothesis to scratchpad, applied a diff via bash within the surface, and is handing off to execute. Spawns autoresearch-execute, which runs the measurement command in the sandbox and calls emit_autoresearch_measurement to stamp the result + compute outcome empirically.",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "agent.loop.role",
+      "operator": "eq",
+      "value": "autoresearch-propose",
+      "required": true
+    },
+    {
+      "field": "coordinator.decision.next_action",
+      "operator": "eq",
+      "value": "measure",
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "publish_agent",
+      "subject": "agent.task.autoresearch-execute",
+      "role": "autoresearch-execute",
+      "model": "research",
+      "tools": ["read_loop_result", "bash", "emit_autoresearch_measurement", "scratchpad", "decide"],
+      "tool_choice": { "mode": "required" },
+      "action_allowlist": ["measured", "needs_clarification"],
+      "properties": {
+        "run_loop_id": "$entity.triple.lineage.autoresearch-run",
+        "propose_loop_id": "$entity.instance",
+        "category": "autoresearch",
+        "phase": "execute"
+      },
+      "related_loops": {
+        "autoresearch-run": "$entity.triple.lineage.autoresearch-run",
+        "run-loop-entity-id": "$entity.triple.lineage.run-loop-entity-id",
+        "autoresearch-propose": "$entity.instance"
+      },
+      "prompt": "AUTORESEARCH EXECUTE — measure the proposed diff and let the empirical compare route the outcome.\n\nThe propose phase at loop $entity.instance applied a diff within the surface. Your job is exactly three things: run the measurement command, capture the metric, call the empirical-compare emit tool. You do NOT decide whether to keep or revert — the emit tool's executor reads the run entity's autoresearch.best.value, compares numerically, and stamps the outcome on your loop. Then the bash revert/keep step happens based on what outcome the tool stamped.\n\nIteration 1 — call read_loop_result on $entity.instance (the propose loop) for the hypothesis + diff summary. The reason field carries: hypothesis, surface-bounded edits, expected qualitative effect.\n\nIteration 2 — bash: run the measurement command (the same command the baseline ran). Capture stdout + exit code. Apply the metric_parser instructions (still in the upstream baseline's terminal — read_loop_result on $entity.triple.lineage.autoresearch-run for the command and parser if you need to re-fetch them). Extract a single numeric value.\n\nIteration 3 — call emit_autoresearch_measurement with the measurement:\n\n```\nemit_autoresearch_measurement(\n  value=<measured number>,\n  pass=<bool — true iff exit code 0>,\n  stdout_tail=\"<last ~200 chars for audit>\",\n  stderr_tail=\"<last ~200 chars if any>\"\n)\n```\n\nThe tool executor (product-shell) does the empirical compare:\n\n1. Reads $entity.triple.autoresearch.best.value from the run entity.\n2. If pass=false → stamps outcome=crashed on your loop.\n3. Else if value < best.value → stamps outcome=kept on your loop AND updates autoresearch.best.value + .best.experiment_id on the run entity.\n4. Else → stamps outcome=reverted on your loop.\n\nThe outcome is on your loop's autoresearch.measurement.outcome triple after this call returns.\n\nIteration 4 — depending on the stamped outcome, revert or keep:\n\n- **outcome=kept**: the diff stays. No action.\n- **outcome=reverted OR outcome=crashed**: revert the working tree via `git checkout -- <surface globs>` (use the surface from $entity.triple.lineage.autoresearch-run's autoresearch.surface triple). This restores the tree to its state before propose applied the diff.\n\nReverting after the empirical compare keeps the working tree at the running-best state so the next propose iteration applies its diff against the same reference as prior iterations.\n\nIteration 5 — call decide(action=\"measured\", reason=\"value=<n> pass=<bool> outcome=<kept|reverted|crashed> — <one-line measurement summary>\"). Rule 04 fires on this and stamps experiment.completed on the run entity. Rules 05 (continue) or 06 (stop-cap) fire next based on the accumulated count.\n\nIf the measurement command itself crashes catastrophically (sandbox unreachable, command not found), call decide(action=\"needs_clarification\", reason=\"execute environment failure: <specific reason>\") — recovery routes to coordinator. Distinguish: command exit code non-zero with stdout is a `pass=false` measurement (the tool stamps outcome=crashed, iteration counts toward cap). Sandbox unreachable / framework-level failure is needs_clarification.\n\nPer ADR-041 addendum 2026-05-15: chain agents do not query the graph. Bash + read_loop_result are your only read channels."
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "pack": "autoresearch",
+    "phase": "ADR-042 §Phase 2 redesign — second pack",
+    "adr": "docs/adr/042-coordinator-instantiated-flows-via-templates.md",
+    "empirical_compare_location": "The compare-and-stamp logic for keep-vs-revert-vs-crash is in the emit_autoresearch_measurement product-shell tool executor (Go code), NOT in the LLM or rule engine. Rationale: routing through the LLM forfeits the empirical-reviewer property (LLM could fabricate 'improved'); routing through a rule needs conditional numeric updates the rule engine does not support today. See pack README §'Empirical reviewer lives in the emit tool' and §'Open substrate questions #2'.",
+    "revert_in_loop": "The revert (git checkout) happens inside the execute loop, after the empirical compare stamps outcome, so each iteration's bash tree state stays consistent. Alternative considered: rule-action-driven revert. Rejected because rule actions cannot easily run shell commands against a specific workspace; the LLM has the surface globs in its prompt context already.",
+    "tool_choice_rationale": "Required-mode keeps gemini-flash on the tool path through bash (measurement), emit_autoresearch_measurement (compare-and-stamp), bash again (revert), decide (terminal). Without it, the loop risks text-only completion mid-iteration."
+  }
+}
