@@ -48,10 +48,12 @@ Process on a recovery pass:
 3. Re-call `emit_plan` per the emit_plan contract (bumped
    revision; same stable title so the rendered file overwrites
    at the deterministic slug). Then re-emit
-   `decide(action="gather", reason="<revised plan>")` — the
-   GATHER phase that follows will re-read external evidence
-   against the revised scope, and the next reviewer pass will
-   re-evaluate from the structured artifact. The emit tool is
+   `decide(action="gather", subtopics=<revised epics list,
+   verbatim>, reason="<revised plan>")` — the GATHER phase that
+   follows fans out one investigator per subtopic against the
+   revised scope, and the next reviewer pass evaluates from the
+   structured artifact. Revisions may add, remove, or rephrase
+   subtopics; each pass spawns the new count. The emit tool is
    additive audit; substance lives in `decide.reason` regardless
    of revision.
 

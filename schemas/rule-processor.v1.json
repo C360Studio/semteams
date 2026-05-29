@@ -65,9 +65,13 @@
                   "type": "string",
                   "description": "bucket"
                 },
-                "context_data": {
-                  "type": "object",
-                  "description": "context_data"
+                "for_each": {
+                  "type": "string",
+                  "description": "for_each"
+                },
+                "for_each_var": {
+                  "type": "string",
+                  "description": "for_each_var"
                 },
                 "id": {
                   "type": "string",
@@ -96,6 +100,10 @@
                 "payload": {
                   "type": "object",
                   "description": "payload"
+                },
+                "phase": {
+                  "type": "string",
+                  "description": "phase"
                 },
                 "predicate": {
                   "type": "string",
@@ -143,9 +151,27 @@
                   "type": "string",
                   "description": "role"
                 },
+                "set": {
+                  "type": "object",
+                  "description": "set"
+                },
                 "subject": {
                   "type": "string",
                   "description": "subject"
+                },
+                "tool_choice": {
+                  "type": "object",
+                  "description": "tool_choice",
+                  "properties": {
+                    "function_name": {
+                      "type": "string",
+                      "description": "function_name"
+                    },
+                    "mode": {
+                      "type": "string",
+                      "description": "mode"
+                    }
+                  }
                 },
                 "tools": {
                   "type": "array",
@@ -191,9 +217,9 @@
                     }
                   }
                 },
-                "workflow_id": {
+                "workflow": {
                   "type": "string",
-                  "description": "workflow_id"
+                  "description": "workflow"
                 },
                 "workflow_slug": {
                   "type": "string",
@@ -305,9 +331,13 @@
                   "type": "string",
                   "description": "bucket"
                 },
-                "context_data": {
-                  "type": "object",
-                  "description": "context_data"
+                "for_each": {
+                  "type": "string",
+                  "description": "for_each"
+                },
+                "for_each_var": {
+                  "type": "string",
+                  "description": "for_each_var"
                 },
                 "id": {
                   "type": "string",
@@ -336,6 +366,10 @@
                 "payload": {
                   "type": "object",
                   "description": "payload"
+                },
+                "phase": {
+                  "type": "string",
+                  "description": "phase"
                 },
                 "predicate": {
                   "type": "string",
@@ -383,9 +417,27 @@
                   "type": "string",
                   "description": "role"
                 },
+                "set": {
+                  "type": "object",
+                  "description": "set"
+                },
                 "subject": {
                   "type": "string",
                   "description": "subject"
+                },
+                "tool_choice": {
+                  "type": "object",
+                  "description": "tool_choice",
+                  "properties": {
+                    "function_name": {
+                      "type": "string",
+                      "description": "function_name"
+                    },
+                    "mode": {
+                      "type": "string",
+                      "description": "mode"
+                    }
+                  }
                 },
                 "tools": {
                   "type": "array",
@@ -431,9 +483,9 @@
                     }
                   }
                 },
-                "workflow_id": {
+                "workflow": {
                   "type": "string",
-                  "description": "workflow_id"
+                  "description": "workflow"
                 },
                 "workflow_slug": {
                   "type": "string",
@@ -463,9 +515,13 @@
                   "type": "string",
                   "description": "bucket"
                 },
-                "context_data": {
-                  "type": "object",
-                  "description": "context_data"
+                "for_each": {
+                  "type": "string",
+                  "description": "for_each"
+                },
+                "for_each_var": {
+                  "type": "string",
+                  "description": "for_each_var"
                 },
                 "id": {
                   "type": "string",
@@ -494,6 +550,10 @@
                 "payload": {
                   "type": "object",
                   "description": "payload"
+                },
+                "phase": {
+                  "type": "string",
+                  "description": "phase"
                 },
                 "predicate": {
                   "type": "string",
@@ -541,9 +601,27 @@
                   "type": "string",
                   "description": "role"
                 },
+                "set": {
+                  "type": "object",
+                  "description": "set"
+                },
                 "subject": {
                   "type": "string",
                   "description": "subject"
+                },
+                "tool_choice": {
+                  "type": "object",
+                  "description": "tool_choice",
+                  "properties": {
+                    "function_name": {
+                      "type": "string",
+                      "description": "function_name"
+                    },
+                    "mode": {
+                      "type": "string",
+                      "description": "mode"
+                    }
+                  }
                 },
                 "tools": {
                   "type": "array",
@@ -589,9 +667,9 @@
                     }
                   }
                 },
-                "workflow_id": {
+                "workflow": {
                   "type": "string",
-                  "description": "workflow_id"
+                  "description": "workflow"
                 },
                 "workflow_slug": {
                   "type": "string",
@@ -621,9 +699,13 @@
                   "type": "string",
                   "description": "bucket"
                 },
-                "context_data": {
-                  "type": "object",
-                  "description": "context_data"
+                "for_each": {
+                  "type": "string",
+                  "description": "for_each"
+                },
+                "for_each_var": {
+                  "type": "string",
+                  "description": "for_each_var"
                 },
                 "id": {
                   "type": "string",
@@ -652,6 +734,10 @@
                 "payload": {
                   "type": "object",
                   "description": "payload"
+                },
+                "phase": {
+                  "type": "string",
+                  "description": "phase"
                 },
                 "predicate": {
                   "type": "string",
@@ -699,9 +785,27 @@
                   "type": "string",
                   "description": "role"
                 },
+                "set": {
+                  "type": "object",
+                  "description": "set"
+                },
                 "subject": {
                   "type": "string",
                   "description": "subject"
+                },
+                "tool_choice": {
+                  "type": "object",
+                  "description": "tool_choice",
+                  "properties": {
+                    "function_name": {
+                      "type": "string",
+                      "description": "function_name"
+                    },
+                    "mode": {
+                      "type": "string",
+                      "description": "mode"
+                    }
+                  }
                 },
                 "tools": {
                   "type": "array",
@@ -747,9 +851,9 @@
                     }
                   }
                 },
-                "workflow_id": {
+                "workflow": {
                   "type": "string",
-                  "description": "workflow_id"
+                  "description": "workflow"
                 },
                 "workflow_slug": {
                   "type": "string",
@@ -798,9 +902,13 @@
                   "type": "string",
                   "description": "bucket"
                 },
-                "context_data": {
-                  "type": "object",
-                  "description": "context_data"
+                "for_each": {
+                  "type": "string",
+                  "description": "for_each"
+                },
+                "for_each_var": {
+                  "type": "string",
+                  "description": "for_each_var"
                 },
                 "id": {
                   "type": "string",
@@ -829,6 +937,10 @@
                 "payload": {
                   "type": "object",
                   "description": "payload"
+                },
+                "phase": {
+                  "type": "string",
+                  "description": "phase"
                 },
                 "predicate": {
                   "type": "string",
@@ -876,9 +988,27 @@
                   "type": "string",
                   "description": "role"
                 },
+                "set": {
+                  "type": "object",
+                  "description": "set"
+                },
                 "subject": {
                   "type": "string",
                   "description": "subject"
+                },
+                "tool_choice": {
+                  "type": "object",
+                  "description": "tool_choice",
+                  "properties": {
+                    "function_name": {
+                      "type": "string",
+                      "description": "function_name"
+                    },
+                    "mode": {
+                      "type": "string",
+                      "description": "mode"
+                    }
+                  }
                 },
                 "tools": {
                   "type": "array",
@@ -924,9 +1054,9 @@
                     }
                   }
                 },
-                "workflow_id": {
+                "workflow": {
                   "type": "string",
-                  "description": "workflow_id"
+                  "description": "workflow"
                 },
                 "workflow_slug": {
                   "type": "string",

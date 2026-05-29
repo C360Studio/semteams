@@ -23,9 +23,16 @@ the `action` arg (the spawn rule fires on
 `coordinator.decision.next_action`). The allow-list for this phase,
 enforced at the rule pre-filter layer:
 
-- `decide(action="gather", reason=...)` — the normal forward path.
-  The GATHER phase consumes your plan and reads external evidence
-  accordingly.
+- `decide(action="gather", subtopics=[...], reason=...)` — the
+  normal forward path. The GATHER phase spawns **once per subtopic
+  in parallel** (ADR-046 Phase 1 `for_each` fan-out). Each gatherer
+  investigates one subtopic; SYNTHESIZE joins their findings when
+  all complete. Your `subtopics` array IS your epic decomposition,
+  one-to-one — see plan rules step 2 for granularity. For prompts
+  that don't decompose into independent angles, emit
+  `subtopics=["<the whole question framed as one investigation>"]`
+  — the fan-out machinery degenerates to a single gatherer and the
+  arc runs sequentially.
 - `decide(action="needs_clarification", reason=..., retry_hint=...)`
   — when the coordinator's framing is too thin to plan from
   (missing input, ambiguous deliverable, contradiction with prior

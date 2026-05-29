@@ -54,13 +54,26 @@ machinery.
 | File | Trigger | Spawn |
 |---|---|---|
 | `01-coordinator-research-spawn.json` | coordinator decide(research) | researcher-research-plan |
-| `02-plan-to-gather.json` | researcher-research-plan decide(gather) | researcher-research-gather |
-| `03-gather-to-synthesize.json` | researcher-research-gather decide(synthesize) | researcher-research-synthesize |
+| `02-plan-to-gather.json` | researcher-research-plan decide(gather, subtopics=[…]) | **N parallel researcher-research-gather** (ADR-046 for_each) |
+| `03a-gather-stamp-completion-on-plan.json` | researcher-research-gather decide(synthesize) | (stamp `research.gather.completed_subtopic` on PLAN loop — counter half of the JOIN) |
+| `03b-synthesize-when-all-gathers-complete.json` | PLAN loop's stamp counter `length_eq` PLAN's subtopics.length | researcher-research-synthesize (aggregates N gather siblings) |
 | `04-synthesize-to-reviewer.json` | researcher-research-synthesize decide(emit) | reviewer-research |
 | `05-reviewer-rejected-retry.json` | reviewer-research decide(insufficient) | researcher-research-plan (max_iterations=3) |
-| `06-needs-clarification-replan.json` | any pack role decide(needs_clarification) | researcher-research-plan (max_iterations=3) |
+| `06-needs-clarification-replan.json` | any pack role decide(needs_clarification) | coordinator (max_iterations=3) |
 | `07-reviewer-approved-to-coordinator.json` | reviewer-research decide(approved) | coordinator (wake-up for respond_direct) |
 | `08-loop-failed-pause.json` | any pack role outcome=failed | chain.paused.marker triple (operator surface) |
+
+### Fan-out shape (rules 02, 03a, 03b)
+
+The planner emits `decide(action="gather", subtopics=[…])`. The `subtopics` list is the planner's epic decomposition, one-to-one. Rule 02's `for_each` over `coordinator.decision.subtopics` spawns one researcher-research-gather per item in parallel, each carrying `$subtopic` as its scope.
+
+Each gatherer's `decide(action="synthesize")` triggers rule 03a, which uses the beta.83 `subject` override to stamp `research.gather.completed_subtopic` on the PLAN loop entity (Object = the gather's own loop id, so the predicate-set deduplicates naturally).
+
+Rule 03b fires on the PLAN loop entity whenever its triples change, matching when the counter's `length_eq` equals the planner's subtopics list length (resolved dynamically via beta.84's `.length` substitution — `$entity.triple.coordinator.decision.subtopics.length`). It spawns ONE researcher-research-synthesize, passing `gather_loop_ids` (the accumulated counter list) so synthesize can `read_loop_result` on each sibling without graph-query tools.
+
+N=1 (non-decomposable prompts) is a first-class case: the planner emits `subtopics=["<the whole question>"]`, rule 02 spawns one gatherer, rule 03a stamps once, rule 03b's `length_eq` matches at count=1, synthesize aggregates one source. No special path.
+
+**Partial failure caveat (Phase A):** if any of the N gatherers terminates `needs_clarification` or `outcome=failed`, the counter never reaches the subtopics length and rule 03b never fires — the chain wedges visibly via rule 08's `chain.paused.marker` (for failures) or routes through rule 06 (for `needs_clarification`). Phase B may add a partial-success recovery rule; today, operator intervention or coordinator re-plan is the recovery.
 
 Approved is terminal apart from the coordinator wake-up. `respond_direct`
 publishes the user-facing reply via the existing

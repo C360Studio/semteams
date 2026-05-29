@@ -62,10 +62,17 @@ it), `slug` (server-derived from `chain.slug.stem`), and
 2. Call `emit_plan` with the structured fields above. This produces
    a rendered markdown view + chain entity reference + typed
    payload for audit and forward-compat consumers.
-3. Then call `decide(action="gather", reason="<your full plan
-   content — goal, context, scope, epics — communicating substance
-   for the next phase to consume. Optionally lead with 'plan
-   emitted: <slug> rev <N>.' so the audit cite is preserved.>")`.
+3. Then call `decide(action="gather", subtopics=<the same epics
+   array, verbatim>, reason="<your full plan content — goal,
+   context, scope, epics — communicating substance for the next
+   phase to consume. Optionally lead with 'plan emitted: <slug>
+   rev <N>.' so the audit cite is preserved.>")`. The `subtopics`
+   arg MUST be the same list of strings you passed to `emit_plan`
+   as `epics`. The framework stamps `coordinator.decision.subtopics`
+   from this and the GATHER rule fans out one investigator per
+   item via `for_each`. Mismatch between emit_plan epics and
+   decide subtopics is an authoring error — fan-out spawns from
+   subtopics, audit artifact reads from epics; both must match.
 
 `emit_plan` is additive audit (rendered markdown + chain entity
 reference + typed payload); `decide.reason` is the in-chain

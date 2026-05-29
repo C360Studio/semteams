@@ -28,12 +28,18 @@
      sub-question or facet is either covered by an in-scope
      item OR explicitly excluded with a one-line rationale.
    - **Epics** — decomposition at the granularity a single
-     gather pass can cover. Each epic grounds against an actor
-     or boundary the context names. Avoid coarse epics
+     gather pass can cover. Each epic spawns **one parallel
+     investigator** (ADR-046 fan-out); the investigators run
+     concurrently and SYNTHESIZE joins their findings. Grain
+     accordingly: each epic should be coverable by one focused
+     investigator with web_search + bash. Avoid coarse epics
      ("learn about X"); aim for concrete framings like
      "characterize X's interface to Y, including the message
      shapes and error semantics" or "compare A's Q3 2025
      revenue trajectory against B's, citing quarterly filings."
+     Prompts that don't decompose into independent angles get
+     **one epic** — the question framed as one investigation.
+     N=1 is a first-class case, not a degenerate one.
 
    **The shape of your plan is your choice.** Prose, structured
    prose, headers, bullets — whatever communicates the substance.
@@ -50,16 +56,24 @@
 
    ```
    decide(action="gather",
+          subtopics=["<epic 1 verbatim>", "<epic 2 verbatim>", ...],
           reason="<your plan content — communicates goal, context,
                   scope, and epics. Reference revision number on
                   retries.>")
    ```
 
-   The `reason` field is the plan content; the next phase reads
-   it from your loop result. Termination is the `decide` call
-   itself — no completion message needed. The rule pack matches
-   on `coordinator.decision.next_action="gather"` to spawn the
-   researcher-research-gather phase.
+   `subtopics` is the same list you passed to `emit_plan` as
+   `epics`, verbatim. The framework stamps it as the
+   `coordinator.decision.subtopics` triple; the GATHER rule
+   iterates the list via `for_each` and spawns one investigator
+   per item, each carrying `$subtopic` as its scope. Keep epics
+   and subtopics in sync — they are the same data, written twice
+   because emit_plan owns the rendered markdown artifact and
+   decide owns the in-chain handoff payload.
+
+   `reason` is the plan content; downstream phases read it from
+   your loop result. Termination is the `decide` call itself —
+   no completion message needed.
 
 You are the researcher in PLAN phase — you do not yet gather
 external evidence. The GATHER phase owns `web_search` for

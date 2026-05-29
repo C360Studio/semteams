@@ -1,0 +1,40 @@
+{
+  "id": "research_gather_stamp_completion",
+  "type": "expression",
+  "name": "Gather completion → stamp counter on PLAN loop",
+  "description": "ADR-046 Phase 1 JOIN — stamp half. Fires when a researcher-research-gather loop completes with decide(action=synthesize). Writes a research.gather.completed_subtopic triple onto the PARENT plan loop entity via the beta.83 #148 subject override ($entity.triple.agent.loop.parent resolves to the planner's loop id, auto-stamped on every for_each-spawned child). The triple's Object is THIS gather's own loop id ($entity.id) so the predicate-set accumulates one triple per distinct gatherer (graph-ingest's per-(subject,predicate,object) set semantics dedup if this rule fires twice for the same gather, e.g. on transient redelivery). Rule 03b reads the accumulated triples on the plan loop, compares length against the planner's subtopics list length via #149 .length substitution, and spawns SYNTHESIZE when all N have stamped. Choosing the loop id (not task id) as Object is so rule 03b's synthesize spawn can pass the list of gather loop ids straight into SYNTHESIZE's properties for read_loop_result calls — no graph walk needed.",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "agent.loop.role",
+      "operator": "eq",
+      "value": "researcher-research-gather",
+      "required": true
+    },
+    {
+      "field": "coordinator.decision.next_action",
+      "operator": "eq",
+      "value": "synthesize",
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "add_triple",
+      "subject": "$entity.triple.agent.loop.parent",
+      "predicate": "research.gather.completed_subtopic",
+      "object": "$entity.id"
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "pack": "research",
+    "phase": "ADR-042 MVP-2 + ADR-046 Phase 1",
+    "adr": "docs/adr/042-coordinator-instantiated-flows-via-templates.md",
+    "join_role": "stamp",
+    "joins_with": "03b-synthesize-when-all-gathers-complete.json",
+    "subject_override_requires": "semstreams beta.83 (#148) — add_triple subject override.",
+    "framework_dedup_note": "Object = $entity.id (the gather's own loop id) — naturally unique per gather. graph-ingest treats triples as a set keyed by (subject, predicate, object); if this rule fires twice for the same gather, the second add_triple is idempotent (same key), counter stays accurate."
+  }
+}
