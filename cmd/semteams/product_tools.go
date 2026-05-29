@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
@@ -16,11 +17,19 @@ import (
 	"github.com/c360studio/semteams/cmd/semteams/chain"
 	"github.com/c360studio/semteams/cmd/semteams/devviaspec"
 	"github.com/c360studio/semteams/cmd/semteams/research"
+	"github.com/c360studio/semteams/cmd/semteams/sandboxfleet"
 	"github.com/c360studio/semteams/cmd/semteams/semsource"
 	"github.com/c360studio/semteams/cmd/semteams/tools/addsource"
 	"github.com/c360studio/semteams/cmd/semteams/tools/chainbash"
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitartifact"
+	"github.com/c360studio/semteams/cmd/semteams/tools/emitautoresearchartifact"
+	"github.com/c360studio/semteams/cmd/semteams/tools/emitautoresearchbaseline"
+	"github.com/c360studio/semteams/cmd/semteams/tools/emitautoresearchmeasurement"
+	"github.com/c360studio/semteams/cmd/semteams/tools/emitbootstrapcommitted"
+	"github.com/c360studio/semteams/cmd/semteams/tools/emitbootstrapplan"
+	"github.com/c360studio/semteams/cmd/semteams/tools/emitbootstrapverify"
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitplan"
+	"github.com/c360studio/semteams/cmd/semteams/tools/querysandboxtenant"
 )
 
 // Environment variables that configure product-shell-local tools.
@@ -104,7 +113,179 @@ func registerProductTools(reg *agentictools.ExecutorRegistry, natsClient *natscl
 	if err := registerEmitPlan(reg, natsClient, platform, logger); err != nil {
 		return err
 	}
+	if err := registerSandboxFleetTools(reg, natsClient, platform, logger); err != nil {
+		return err
+	}
+	if err := registerAutoresearchTools(reg, natsClient, platform, logger); err != nil {
+		return err
+	}
 	return registerChainBash(reg, natsClient, platform, logger)
+}
+
+// registerSandboxFleetTools wires the 4 sandbox-bootstrap pack tools:
+// query_sandbox_tenant + emit_bootstrap_{plan,verify,committed}.
+// Per ADR-042 §addendum 2026-05-29 §A.
+//
+// All four share a single sandboxfleet.TenantRegistry instance —
+// constructing one per tool would still be correct (the registry is
+// stateless across calls) but the shared instance keeps the logger
+// + identity wiring uniform and saves a few allocations per boot.
+//
+// Skipped when natsClient is nil: the registry depends on a live
+// TriplePublisher + EntityTripleReader for the entity-namespace
+// storage. A nil-NATS deployment couldn't honor the rule pack's
+// registry contract; better to surface tool-absent than tool-broken
+// in the LLM's catalog.
+func registerSandboxFleetTools(reg *agentictools.ExecutorRegistry, natsClient *natsclient.Client, platform types.PlatformMeta, logger *slog.Logger) error {
+	if natsClient == nil {
+		logger.Warn("nats client unavailable; sandbox-fleet tools skipped",
+			slog.String("category", "sandbox-bootstrap"))
+		return nil
+	}
+
+	triplePublisher := agentictools.NewNATSTriplePublisher(natsClient)
+	entityReader := chain.NewNATSEntityReader(natsClient, chain.DefaultGraphQueryEntitySubject)
+	// Defensive belt-and-suspenders. Upstream NewNATSTriplePublisher /
+	// NewNATSEntityReader return non-nil today, but their nil-return
+	// behavior is not in the upstream API contract; a future beta
+	// could degrade non-fatally. Surface as a Warn + skip instead of
+	// panicking inside TenantRegistry's constructor.
+	if triplePublisher == nil || entityReader == nil {
+		logger.Warn("sandbox-fleet tools skipped: upstream returned nil triple-publisher or entity-reader",
+			slog.String("category", "sandbox-bootstrap"))
+		return nil
+	}
+	tenantRegistry := sandboxfleet.NewTenantRegistry(triplePublisher, entityReader, platform.Org, platform.Platform, logger)
+
+	queryExecutor := querysandboxtenant.NewExecutor(tenantRegistry, logger)
+	if err := reg.RegisterTool(querysandboxtenant.ToolName, queryExecutor); err != nil {
+		return fmt.Errorf("register %s: %w", querysandboxtenant.ToolName, err)
+	}
+	planExecutor := emitbootstrapplan.NewExecutor(triplePublisher, tenantRegistry, logger)
+	if err := reg.RegisterTool(emitbootstrapplan.ToolName, planExecutor); err != nil {
+		return fmt.Errorf("register %s: %w", emitbootstrapplan.ToolName, err)
+	}
+	verifyExecutor := emitbootstrapverify.NewExecutor(triplePublisher, platform, logger)
+	if err := reg.RegisterTool(emitbootstrapverify.ToolName, verifyExecutor); err != nil {
+		return fmt.Errorf("register %s: %w", emitbootstrapverify.ToolName, err)
+	}
+	committedExecutor := emitbootstrapcommitted.NewExecutor(triplePublisher, tenantRegistry, platform, logger)
+	if err := reg.RegisterTool(emitbootstrapcommitted.ToolName, committedExecutor); err != nil {
+		return fmt.Errorf("register %s: %w", emitbootstrapcommitted.ToolName, err)
+	}
+	logger.Info("Registered sandbox-fleet product tools",
+		slog.String("category", "sandbox-bootstrap"),
+		slog.Int("count", 4))
+	return nil
+}
+
+// registerAutoresearchTools wires the 3 autoresearch pack tools:
+// emit_autoresearch_{baseline,measurement,artifact}. Per ADR-042
+// §addendum 2026-05-29.
+//
+// The measurement tool is the load-bearing empirical reviewer —
+// reads autoresearch.best.value from the run entity via a
+// chain.NATSEntityReader-backed adapter, compares numerically,
+// updates best on outcome=kept. The structural-test-of-the-substrate
+// per the pack README.
+//
+// Skipped when natsClient is nil: baseline + measurement both need
+// the live publisher; measurement additionally needs the entity
+// reader.
+func registerAutoresearchTools(reg *agentictools.ExecutorRegistry, natsClient *natsclient.Client, platform types.PlatformMeta, logger *slog.Logger) error {
+	if natsClient == nil {
+		logger.Warn("nats client unavailable; autoresearch tools skipped",
+			slog.String("category", "autoresearch"))
+		return nil
+	}
+
+	triplePublisher := agentictools.NewNATSTriplePublisher(natsClient)
+	entityReader := chain.NewNATSEntityReader(natsClient, chain.DefaultGraphQueryEntitySubject)
+	// Defensive: same posture as registerSandboxFleetTools above.
+	if triplePublisher == nil || entityReader == nil {
+		logger.Warn("autoresearch tools skipped: upstream returned nil triple-publisher or entity-reader",
+			slog.String("category", "autoresearch"))
+		return nil
+	}
+
+	baselineExecutor := emitautoresearchbaseline.NewExecutor(triplePublisher, logger)
+	if err := reg.RegisterTool(emitautoresearchbaseline.ToolName, baselineExecutor); err != nil {
+		return fmt.Errorf("register %s: %w", emitautoresearchbaseline.ToolName, err)
+	}
+
+	measurementExecutor := emitautoresearchmeasurement.NewExecutor(
+		triplePublisher,
+		bestValueReaderAdapter{reader: entityReader},
+		platform,
+		logger,
+	)
+	if err := reg.RegisterTool(emitautoresearchmeasurement.ToolName, measurementExecutor); err != nil {
+		return fmt.Errorf("register %s: %w", emitautoresearchmeasurement.ToolName, err)
+	}
+
+	artifactExecutor := emitautoresearchartifact.NewExecutor(triplePublisher, platform, logger, "")
+	if err := reg.RegisterTool(emitautoresearchartifact.ToolName, artifactExecutor); err != nil {
+		return fmt.Errorf("register %s: %w", emitautoresearchartifact.ToolName, err)
+	}
+	logger.Info("Registered autoresearch product tools",
+		slog.String("category", "autoresearch"),
+		slog.Int("count", 3))
+	return nil
+}
+
+// bestValueReaderAdapter narrows chain.NATSEntityReader's
+// ReadEntity(ctx, id) → map shape to the
+// emit_autoresearch_measurement BestValueReader contract. Reads the
+// autoresearch.best.value triple off the supplied run entity ID.
+//
+// Numeric shape widening: the graph-query wire decodes JSON
+// numbers into float64 in the steady state, but operator-edited
+// triples / future encoder changes could land int / json.Number /
+// numeric string. The adapter widens for the common defensive
+// shapes; anything else returns a typed error so the executor
+// surfaces "type=string" instead of a misleading "absent" wedge.
+//
+// Returns:
+//   - (val, true, nil)  — numeric hit (float64, int, or json.Number
+//     coercible).
+//   - (0, false, nil)   — triple absent (entity has other triples
+//     but no autoresearch.best.value).
+//   - (0, false, err)   — graph error OR triple present but not
+//     numeric. The error message names the actual type so the wedge
+//     is debuggable from a single log line.
+type bestValueReaderAdapter struct {
+	reader *chain.NATSEntityReader
+}
+
+func (a bestValueReaderAdapter) ReadBestValue(ctx context.Context, runEntityID string) (float64, bool, error) {
+	triples, err := a.reader.ReadEntity(ctx, runEntityID)
+	if err != nil {
+		return 0, false, err
+	}
+	v, ok := triples["autoresearch.best.value"]
+	if !ok {
+		return 0, false, nil
+	}
+	switch n := v.(type) {
+	case float64:
+		return n, true, nil
+	case float32:
+		return float64(n), true, nil
+	case int:
+		return float64(n), true, nil
+	case int32:
+		return float64(n), true, nil
+	case int64:
+		return float64(n), true, nil
+	case json.Number:
+		f, err := n.Float64()
+		if err != nil {
+			return 0, false, fmt.Errorf("autoresearch.best.value present as json.Number %q but not parseable as float64: %w", n, err)
+		}
+		return f, true, nil
+	default:
+		return 0, false, fmt.Errorf("autoresearch.best.value present but not numeric (type=%T value=%v); graph stamp must be a number", v, v)
+	}
 }
 
 // registerAddSource wires the R2 add_source_repo executor. Stays inert
