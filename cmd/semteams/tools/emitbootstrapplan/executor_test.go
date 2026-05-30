@@ -11,9 +11,16 @@ import (
 
 	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/message"
+	"github.com/c360studio/semstreams/types"
 
 	"github.com/c360studio/semteams/cmd/semteams/sandboxfleet"
 )
+
+// platform returns a deterministic PlatformMeta for tests. Mirrors
+// the sibling verify/committed tools' test helper.
+func platform() types.PlatformMeta {
+	return types.PlatformMeta{Org: "c360", Platform: "ops"}
+}
 
 type fakePub struct {
 	mu      sync.Mutex
@@ -81,6 +88,12 @@ func baseArgs() map[string]any {
 	}
 }
 
+// callingLoopID is the bare-UUID loop ID assigned to the plan loop
+// in test fixtures. The Execute path consumes it via call.LoopID
+// to construct the dual-stamp subject entity ID
+// (c360.ops.agent.agentic-loop.execution.<callingLoopID>).
+const callingLoopID = "plan-loop-A"
+
 func runEntityMetadata() map[string]any {
 	return map[string]any{
 		agentic.MetadataKeyRelatedLoops: map[string]any{
@@ -93,10 +106,11 @@ func runEntityMetadata() map[string]any {
 func TestExecutor_HappyProvision(t *testing.T) {
 	pub := &fakePub{}
 	reg := &fakeRegistry{}
-	e := NewExecutor(pub, reg, slog.Default())
+	e := NewExecutor(pub, reg, platform(), slog.Default())
 
 	res, _ := e.Execute(context.Background(), agentic.ToolCall{
 		ID:        "c1",
+		LoopID:    callingLoopID,
 		Name:      ToolName,
 		Arguments: baseArgs(),
 		Metadata:  runEntityMetadata(),
@@ -113,11 +127,30 @@ func TestExecutor_HappyProvision(t *testing.T) {
 		t.Errorf("MarkProvisioning called with empty plan_hash")
 	}
 
-	// All triples stamped on the run entity.
+	// PR 3.1 dual-target stamping: every plan triple appears twice —
+	// once with subject=runEntity, once with subject=callingLoop.
+	// Run entity stays authoritative for the registry namespace;
+	// calling-loop stamp enables rule 02b's $entity.triple.* spawn-
+	// prompt substitution to resolve at fire time. See Execute's
+	// PR 3.1 comment for the why.
+	const runEntity = "c360.ops.agent.agentic-loop.execution.coord-1"
+	const callingLoopEntity = "c360.ops.agent.agentic-loop.execution.plan-loop-A"
+	runCount, callingCount := 0, 0
 	for i, tr := range pub.triples {
-		if tr.Subject != "c360.ops.agent.agentic-loop.execution.coord-1" {
-			t.Errorf("triple[%d] subject = %q, want run entity", i, tr.Subject)
+		switch tr.Subject {
+		case runEntity:
+			runCount++
+		case callingLoopEntity:
+			callingCount++
+		default:
+			t.Errorf("triple[%d] subject = %q, want one of run/calling-loop entity", i, tr.Subject)
 		}
+	}
+	if runCount == 0 || callingCount == 0 {
+		t.Errorf("expected dual-target stamping (run=%d, calling=%d), got asymmetric counts", runCount, callingCount)
+	}
+	if runCount != callingCount {
+		t.Errorf("dual-target stamp count mismatch: run=%d calling=%d (every predicate must land on both subjects)", runCount, callingCount)
 	}
 
 	// Key predicates stamped.
@@ -170,7 +203,7 @@ func TestExecutor_HappyProvision(t *testing.T) {
 func TestExecutor_SkipDoesNotTouchRegistry(t *testing.T) {
 	pub := &fakePub{}
 	reg := &fakeRegistry{}
-	e := NewExecutor(pub, reg, slog.Default())
+	e := NewExecutor(pub, reg, platform(), slog.Default())
 
 	args := baseArgs()
 	args["plan_action"] = "skip"
@@ -180,7 +213,7 @@ func TestExecutor_SkipDoesNotTouchRegistry(t *testing.T) {
 	delete(args, "expected_smoke_signature")
 
 	res, _ := e.Execute(context.Background(), agentic.ToolCall{
-		ID: "c2", Name: ToolName, Arguments: args, Metadata: runEntityMetadata(),
+		ID: "c2", LoopID: callingLoopID, Name: ToolName, Arguments: args, Metadata: runEntityMetadata(),
 	})
 	if res.Error != "" {
 		t.Fatalf("unexpected error: %s", res.Error)
@@ -197,12 +230,12 @@ func TestExecutor_SkipDoesNotTouchRegistry(t *testing.T) {
 func TestExecutor_ReprovisionMarksProvisioning(t *testing.T) {
 	pub := &fakePub{}
 	reg := &fakeRegistry{}
-	e := NewExecutor(pub, reg, slog.Default())
+	e := NewExecutor(pub, reg, platform(), slog.Default())
 
 	args := baseArgs()
 	args["plan_action"] = "reprovision"
 	res, _ := e.Execute(context.Background(), agentic.ToolCall{
-		ID: "c3", Name: ToolName, Arguments: args, Metadata: runEntityMetadata(),
+		ID: "c3", LoopID: callingLoopID, Name: ToolName, Arguments: args, Metadata: runEntityMetadata(),
 	})
 	if res.Error != "" {
 		t.Fatalf("unexpected error: %s", res.Error)
@@ -215,7 +248,7 @@ func TestExecutor_ReprovisionMarksProvisioning(t *testing.T) {
 func TestExecutor_MissingRunEntityFails(t *testing.T) {
 	pub := &fakePub{}
 	reg := &fakeRegistry{}
-	e := NewExecutor(pub, reg, slog.Default())
+	e := NewExecutor(pub, reg, platform(), slog.Default())
 
 	res, _ := e.Execute(context.Background(), agentic.ToolCall{
 		ID: "c4", Name: ToolName, Arguments: baseArgs(),
@@ -230,11 +263,11 @@ func TestExecutor_MissingRunEntityFails(t *testing.T) {
 }
 
 func TestExecutor_InvalidPlanAction(t *testing.T) {
-	e := NewExecutor(&fakePub{}, &fakeRegistry{}, slog.Default())
+	e := NewExecutor(&fakePub{}, &fakeRegistry{}, platform(), slog.Default())
 	args := baseArgs()
 	args["plan_action"] = "garbage"
 	res, _ := e.Execute(context.Background(), agentic.ToolCall{
-		ID: "c5", Name: ToolName, Arguments: args, Metadata: runEntityMetadata(),
+		ID: "c5", LoopID: callingLoopID, Name: ToolName, Arguments: args, Metadata: runEntityMetadata(),
 	})
 	if res.ErrorKind != agentic.ToolErrorInvalidArgs {
 		t.Errorf("error kind = %q, want %q", res.ErrorKind, agentic.ToolErrorInvalidArgs)
@@ -242,11 +275,11 @@ func TestExecutor_InvalidPlanAction(t *testing.T) {
 }
 
 func TestExecutor_MissingVerifyCommandOnProvisionFails(t *testing.T) {
-	e := NewExecutor(&fakePub{}, &fakeRegistry{}, slog.Default())
+	e := NewExecutor(&fakePub{}, &fakeRegistry{}, platform(), slog.Default())
 	args := baseArgs()
 	delete(args, "verify_command")
 	res, _ := e.Execute(context.Background(), agentic.ToolCall{
-		ID: "c6", Name: ToolName, Arguments: args, Metadata: runEntityMetadata(),
+		ID: "c6", LoopID: callingLoopID, Name: ToolName, Arguments: args, Metadata: runEntityMetadata(),
 	})
 	if res.Error == "" {
 		t.Errorf("expected error when verify_command missing on provision")
@@ -256,9 +289,9 @@ func TestExecutor_MissingVerifyCommandOnProvisionFails(t *testing.T) {
 func TestExecutor_RegistryErrorIsNetwork(t *testing.T) {
 	pub := &fakePub{}
 	reg := &fakeRegistry{err: errors.New("nats timeout")}
-	e := NewExecutor(pub, reg, slog.Default())
+	e := NewExecutor(pub, reg, platform(), slog.Default())
 	res, _ := e.Execute(context.Background(), agentic.ToolCall{
-		ID: "c7", Name: ToolName, Arguments: baseArgs(), Metadata: runEntityMetadata(),
+		ID: "c7", LoopID: callingLoopID, Name: ToolName, Arguments: baseArgs(), Metadata: runEntityMetadata(),
 	})
 	if res.ErrorKind != agentic.ToolErrorNetwork {
 		t.Errorf("error kind = %q, want %q", res.ErrorKind, agentic.ToolErrorNetwork)

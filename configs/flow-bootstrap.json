@@ -563,6 +563,7 @@
       "config": {
         "default_role": "coordinator",
         "auto_continue": true,
+        "default_tools": ["decide", "read_loop_result", "scratchpad"],
         "stream_name": "USER",
         "ports": {
           "inputs": [

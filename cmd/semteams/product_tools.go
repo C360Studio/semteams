@@ -161,7 +161,7 @@ func registerSandboxFleetTools(reg *agentictools.ExecutorRegistry, natsClient *n
 	if err := reg.RegisterTool(querysandboxtenant.ToolName, queryExecutor); err != nil {
 		return fmt.Errorf("register %s: %w", querysandboxtenant.ToolName, err)
 	}
-	planExecutor := emitbootstrapplan.NewExecutor(triplePublisher, tenantRegistry, logger)
+	planExecutor := emitbootstrapplan.NewExecutor(triplePublisher, tenantRegistry, platform, logger)
 	if err := reg.RegisterTool(emitbootstrapplan.ToolName, planExecutor); err != nil {
 		return fmt.Errorf("register %s: %w", emitbootstrapplan.ToolName, err)
 	}

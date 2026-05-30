@@ -34,6 +34,7 @@ import (
 	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/message"
 	agentictools "github.com/c360studio/semstreams/processor/agentic-tools"
+	"github.com/c360studio/semstreams/types"
 
 	"github.com/c360studio/semteams/cmd/semteams/sandboxfleet"
 )
@@ -103,23 +104,29 @@ type Registry interface {
 type Executor struct {
 	publisher agentictools.TriplePublisher
 	registry  Registry
+	platform  types.PlatformMeta
 	logger    *slog.Logger
 }
 
 // NewExecutor constructs an Executor. All deps must be non-nil
 // (this is boot-required wiring; foundation PR has no
-// graceful-degradation mode).
-func NewExecutor(publisher agentictools.TriplePublisher, registry Registry, logger *slog.Logger) *Executor {
+// graceful-degradation mode). Platform is required so the executor
+// can construct the calling loop's 6-part entity ID when dual-
+// stamping triples (PR 3.1 wiring fix — see Execute for the why).
+func NewExecutor(publisher agentictools.TriplePublisher, registry Registry, platform types.PlatformMeta, logger *slog.Logger) *Executor {
 	if publisher == nil {
 		panic("emitbootstrapplan.NewExecutor: publisher must not be nil")
 	}
 	if registry == nil {
 		panic("emitbootstrapplan.NewExecutor: registry must not be nil")
 	}
+	if platform.Org == "" || platform.Platform == "" {
+		panic("emitbootstrapplan.NewExecutor: platform.Org and platform.Platform must be set for calling-loop entity ID construction")
+	}
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Executor{publisher: publisher, registry: registry, logger: logger}
+	return &Executor{publisher: publisher, registry: registry, platform: platform, logger: logger}
 }
 
 // ListTools returns the LLM-facing schema. Persona supplies typed
@@ -178,9 +185,31 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 		return errResult(call, agentic.ToolErrorInternal, "%v", err)
 	}
 
+	// PR 3.1 dual-target stamping: build sandbox.tenant.* triples on
+	// (a) the run entity — authoritative for the registry namespace,
+	// unchanged from PR 1, AND (b) the calling loop's entity (the
+	// plan loop). The downstream spawn rule (sandbox-bootstrap/02b)
+	// fires with the plan loop as its trigger entity; its prompt
+	// substitutes `$entity.triple.sandbox.tenant.*` which resolves
+	// against the trigger entity per upstream semantics
+	// (processor/rule/execution_context.go:595). Without the dual
+	// stamp the substitution leaves literal tokens in execute's
+	// spawn prompt; smoke #9 run-1 surfaced this as the load-bearing
+	// plan→execute hop wedge (Finding 1 in [[smoke9-findings]]).
+	//
+	// The duplication is bounded: per-arc, per-plan-call. Subsequent
+	// rules that read sandbox.tenant.* from the run entity (the
+	// registry, the wake-up coordinator) continue to use the run
+	// entity stamp as the source of truth.
+	callingLoopEntityID, err := agentic.TryLoopExecutionEntityID(e.platform.Org, e.platform.Platform, call.LoopID)
+	if err != nil {
+		return errResult(call, agentic.ToolErrorInternal, "construct calling-loop entity ID from loop_id %q: %v", call.LoopID, err)
+	}
+
 	triples := args.triples(runEntityID, sig, planHash)
+	triples = append(triples, args.triples(callingLoopEntityID, sig, planHash)...)
 	if err := e.publisher.AddTriplesBatch(ctx, triples); err != nil {
-		return errResult(call, agentic.ToolErrorNetwork, "stamp plan triples on %s: %v", runEntityID, err)
+		return errResult(call, agentic.ToolErrorNetwork, "stamp plan triples on %s + %s: %v", runEntityID, callingLoopEntityID, err)
 	}
 
 	// Registry mutation: provision/reprovision → MarkProvisioning;

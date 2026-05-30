@@ -1,19 +1,24 @@
 # Execute rules — run the plan against Docker
 
-## Step 1 — Read the plan
+## Step 1 — Read the plan from your spawn prompt
 
-Call `read_loop_result` on the plan loop. Extract:
+The plan persona stamped `sandbox.tenant.*` triples on the plan
+loop entity; rule 02b substitutes them inline into your spawn
+prompt at fire time. You receive the full plan shape literally —
+no `read_loop_result` call needed for plan extraction:
 
-- `plan.action` — `provision` | `reprovision`
+- `plan_action` — `provision` | `reprovision`
 - `signature` + `container_name` (`semteams-tenant-<sig>`)
 - `base_image`
+- `workspace` — container-internal workspace path
 - `clone_command` (or `none`)
-- `install_steps` — JSON array; each entry is one shell line
-- `volume_mounts` — JSON array; each entry is `<volume>:<container_path>`
-- `docker_socket_mount` — bool
-
-You don't need `verify_command` or `expected_smoke_signature` —
-those are for the verify phase.
+- `install_steps` — JSON array literal; parse to iterate
+- `volume_mounts` — JSON array literal; one `<volume>:<container_path>` per entry
+- `docker_socket_mount` — bool literal
+- `verify_command` + `expected_smoke_signature` — pass these through verbatim
+  to your terminal `decide(verify, reason=...)` so the verify phase can
+  recover them (PR 3.1 plumbs plan→execute via triple substitution;
+  execute→verify still uses the decide.reason handoff until PR 3.2)
 
 ## Step 2 — Tear down if re-provisioning
 
@@ -104,11 +109,16 @@ recoverably (scratchpad'd):
 ```
 decide(action="verify", reason="tenant <container_name>
 provisioned: base=<image> clone=<source@ref> installed=<N steps
-clean | step <N> failed>; ready for smoke check")
+clean | step <N> failed>; verify_command=<verbatim>
+expected_smoke_signature=<verbatim>; ready for smoke check")
 ```
 
 The reason is the handoff to verify; keep the install step
-results in it so verify has context for the smoke result.
+results AND the verify_command + expected_smoke_signature
+VERBATIM in it. Verify reads your reason via `read_loop_result`
+to recover the smoke contract (PR 3.2 will plumb these via
+triple substitution like plan→execute; until then your reason
+is the verify hop's handoff channel).
 
 ## Iteration budget
 
