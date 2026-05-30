@@ -35,7 +35,13 @@ description: |
          placeholder — the always-warm sandbox container returns
          simulated success; no real Docker called inside mock-llm
          scope)
-      8. tool_call: decide(action="verify", reason=<provisioned>)
+      8. tool_call: emit_bootstrap_execute(signature, container,
+         image, workspace, plan_hash, plan_action, verify_command,
+         expected_smoke_signature)
+         → sandbox.tenant.* triples forward-stamped on execute loop
+         → unblocks rule 03's $entity.triple.sandbox.tenant.*
+           substitution into verify's spawn prompt
+      9. tool_call: decide(action="verify", reason=<provisioned>)
          → rule sandbox-bootstrap/03-execute-to-verify fires
          → spawn provisioner-bootstrap-verify
 
@@ -202,11 +208,25 @@ responses:
         }
 
   - tool_call:
+      name: emit_bootstrap_execute
+      arguments_json: |
+        {
+          "signature": "52a0a6824485d348706bc264b326723b87f1b8966013dd0587a2d56316b08078",
+          "container_name": "semteams-tenant-52a0a6824485",
+          "image": "ubuntu:24.04",
+          "workspace": "/workspace",
+          "plan_hash": "mock-plan-hash-placeholder",
+          "plan_action": "provision",
+          "verify_command": "cd /workspace && go test ./internal/quickcheck/... -count=1",
+          "expected_smoke_signature": "exit 0; stdout contains PASS"
+        }
+
+  - tool_call:
       name: decide
       arguments_json: |
         {
           "action": "verify",
-          "reason": "Tenant container semteams-tenant-52a0a6824485 provisioned: docker run + apt + Go toolchain + clone + go mod download completed. Forwarding to verify."
+          "reason": "Tenant container semteams-tenant-52a0a6824485 provisioned and plan triples forward-stamped. Forwarding to verify."
         }
 
   # ---------- Loop C: provisioner-bootstrap-verify (rule 03 spawn) ----------

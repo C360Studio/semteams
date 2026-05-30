@@ -75,21 +75,21 @@ const (
 	predicateImage                  = sandboxfleet.PredicateImage
 	predicateWorkspace              = sandboxfleet.PredicateWorkspace
 	predicatePlanHash               = sandboxfleet.PredicatePlanHash
-	predicatePlanAction             = "sandbox.tenant.plan_action"
-	predicatePlanCloneCommand       = "sandbox.tenant.clone_command"
-	predicatePlanInstallSteps       = "sandbox.tenant.install_steps"
-	predicatePlanVolumeMounts       = "sandbox.tenant.volume_mounts"
-	predicatePlanDockerSocketMount  = "sandbox.tenant.docker_socket_mount"
-	predicatePlanVerifyCommand      = "sandbox.tenant.verify_command"
-	predicatePlanExpectedSmoke      = "sandbox.tenant.expected_smoke_signature"
-	predicatePlanForceRefresh       = "sandbox.tenant.force_refresh"
-	predicatePlanRevision           = "sandbox.tenant.plan_revision"
-	predicatePlanCanonicalCommand   = "sandbox.tenant.canonical_command"
-	predicatePlanCanonicalRepoURL   = "sandbox.tenant.canonical_repo_url"
-	predicatePlanCanonicalRepoRef   = "sandbox.tenant.canonical_repo_ref"
-	predicatePlanCanonicalBaseImage = "sandbox.tenant.canonical_base_image"
-	predicatePlanCanonicalToolchain = "sandbox.tenant.canonical_toolchain"
-	predicatePlanStampedAt          = "sandbox.tenant.plan_stamped_at"
+	predicatePlanAction             = sandboxfleet.PredicatePlanAction
+	predicatePlanCloneCommand       = sandboxfleet.PredicatePlanCloneCommand
+	predicatePlanInstallSteps       = sandboxfleet.PredicatePlanInstallSteps
+	predicatePlanVolumeMounts       = sandboxfleet.PredicatePlanVolumeMounts
+	predicatePlanDockerSocketMount  = sandboxfleet.PredicatePlanDockerSocketMount
+	predicatePlanVerifyCommand      = sandboxfleet.PredicatePlanVerifyCommand
+	predicatePlanExpectedSmoke      = sandboxfleet.PredicatePlanExpectedSmoke
+	predicatePlanForceRefresh       = sandboxfleet.PredicatePlanForceRefresh
+	predicatePlanRevision           = sandboxfleet.PredicatePlanRevision
+	predicatePlanCanonicalCommand   = sandboxfleet.PredicatePlanCanonicalCommand
+	predicatePlanCanonicalRepoURL   = sandboxfleet.PredicatePlanCanonicalRepoURL
+	predicatePlanCanonicalRepoRef   = sandboxfleet.PredicatePlanCanonicalRepoRef
+	predicatePlanCanonicalBaseImage = sandboxfleet.PredicatePlanCanonicalBaseImage
+	predicatePlanCanonicalToolchain = sandboxfleet.PredicatePlanCanonicalToolchain
+	predicatePlanStampedAt          = sandboxfleet.PredicatePlanStampedAt
 )
 
 // Registry is the narrow registry-mutation surface this executor

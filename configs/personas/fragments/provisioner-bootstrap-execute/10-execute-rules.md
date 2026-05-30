@@ -15,10 +15,10 @@ no `read_loop_result` call needed for plan extraction:
 - `install_steps` — JSON array literal; parse to iterate
 - `volume_mounts` — JSON array literal; one `<volume>:<container_path>` per entry
 - `docker_socket_mount` — bool literal
-- `verify_command` + `expected_smoke_signature` — pass these through verbatim
-  to your terminal `decide(verify, reason=...)` so the verify phase can
-  recover them (PR 3.1 plumbs plan→execute via triple substitution;
-  execute→verify still uses the decide.reason handoff until PR 3.2)
+- `verify_command` + `expected_smoke_signature` — pass these into
+  `emit_bootstrap_execute` (step 6 below). The tool stamps them on your
+  loop entity so rule 03's spawn-prompt substitution into verify
+  resolves cleanly. No verbatim-in-decide.reason plumbing needed.
 
 ## Step 2 — Tear down if re-provisioning
 
@@ -90,35 +90,58 @@ Capture exit code per step. Two paths on non-zero:
 
 - **install step exited non-zero with diagnostic output** (stderr
   describes a missing package, syntax error, version conflict):
-  this is recoverable by re-planning. Continue to step 6, scratchpad
-  the failure verbatim, and decide(verify, reason="install step <N>
-  failed: <step verbatim> — exit <code>; tenant in partial state
-  for verify to confirm"). Verify will fail smoke; reviewer
-  rejects with specific failure; plan revises install_steps.
+  this is recoverable by re-planning. Scratchpad the failure
+  verbatim, then continue to step 6 (emit_bootstrap_execute) and
+  step 7 (decide(verify, reason="install step <N> failed: <step
+  verbatim> — exit <code>; tenant in partial state for verify to
+  confirm")). Verify will fail smoke; reviewer rejects with
+  specific failure; plan revises install_steps.
 - **install step crashed catastrophically** (docker exec returns
   non-zero with no stderr, container died mid-step, OOM kill):
   decide(needs_clarification, reason="install step <N>
   catastrophically failed: <reason>"). Recovery to coordinator;
   this is not a plan-revision issue.
 
-## Step 6 — Terminal
+## Step 6 — Forward the plan onto your loop entity
 
 After all install_steps either complete cleanly or one fails
-recoverably (scratchpad'd):
+recoverably (scratchpad'd), call `emit_bootstrap_execute` exactly
+once. Every argument is a verbatim echo of the value you received
+in your spawn prompt (the plan's stamp, substituted into your
+prompt by rule 02b):
+
+```
+emit_bootstrap_execute(
+  signature=<your prompt's sandbox.tenant.signature value>,
+  container_name=<your prompt's sandbox.tenant.container_name value>,
+  image=<your prompt's sandbox.tenant.image value>,
+  workspace=<your prompt's sandbox.tenant.workspace value>,
+  plan_hash=<your prompt's sandbox.tenant.plan_hash value>,
+  plan_action=<your prompt's sandbox.tenant.plan_action value>,
+  verify_command=<your prompt's sandbox.tenant.verify_command value>,
+  expected_smoke_signature=<your prompt's sandbox.tenant.expected_smoke_signature value>
+)
+```
+
+No canonicalization, no registry mutation — pure forward-stamp.
+The tool puts the plan's sandbox.tenant.* triples on YOUR loop
+entity so rule 03's spawn-prompt substitution resolves the verify
+prompt cleanly. Without this, verify spawns with literal
+`$entity.triple.sandbox.tenant.*` tokens in its prompt (no smoke
+contract) and wedges.
+
+## Step 7 — Terminal
 
 ```
 decide(action="verify", reason="tenant <container_name>
 provisioned: base=<image> clone=<source@ref> installed=<N steps
-clean | step <N> failed>; verify_command=<verbatim>
-expected_smoke_signature=<verbatim>; ready for smoke check")
+clean | step <N> failed>; ready for smoke check")
 ```
 
-The reason is the handoff to verify; keep the install step
-results AND the verify_command + expected_smoke_signature
-VERBATIM in it. Verify reads your reason via `read_loop_result`
-to recover the smoke contract (PR 3.2 will plumb these via
-triple substitution like plan→execute; until then your reason
-is the verify hop's handoff channel).
+The reason is a one-line audit summary. The verify hop reads the
+smoke contract (verify_command, expected_smoke_signature,
+container_name, workspace) from the triples you stamped in step
+6, not from this reason field.
 
 ## Iteration budget
 

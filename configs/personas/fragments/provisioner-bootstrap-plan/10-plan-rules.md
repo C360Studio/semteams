@@ -75,8 +75,11 @@ values so they thread through verify. Set `plan.action=skip`.
 **PROVISION plan** (registry MISS): write the full shape per
 step 1's extracted parameters PLUS:
 
-- `clone_command`: full `git clone <url> <ref-or-branch> /workspace`
-  (or `none` if no clone needed)
+- `clone_command`: full `git clone --branch <ref-or-branch> <url> /workspace`
+  (or `none` if no clone needed). `--branch` BEFORE the URL; git's
+  positional grammar is `git clone [options] <url> [<dir>]` — putting
+  the branch token after the URL makes git treat it as the directory
+  arg and fail with "Too many arguments" when /workspace follows.
 - `install_steps`: ordered list of single-line shell commands.
   Batch idempotent installs (`apt-get install -y A B C D` is one
   step, not 4). Order matters: apt first, then toolchain installers,

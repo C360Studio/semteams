@@ -36,18 +36,42 @@ const (
 	StateEvicting     State = "evicting"
 )
 
-// Predicate constants stamped on the tenant registry entity. Keep in
-// sync with the sandbox-bootstrap rule pack's $entity.triple.<name>
-// references — the rules + the persona prompts read these.
+// Predicate constants stamped on the tenant registry entity and
+// (via the emit-tool family) on plan / execute / verify / reviewer
+// loop entities. Single-sourced here so the emit tools cannot drift
+// from each other — silent byte-mismatch between, say,
+// emit_bootstrap_plan and emit_bootstrap_execute on
+// `sandbox.tenant.verify_command` would re-open the rule 03
+// substitution wedge that PR 3.2 closes.
+//
+// Keep in sync with the sandbox-bootstrap rule pack's
+// $entity.triple.<name> references — the rules + the persona prompts
+// read these. Adding a new predicate is two-sided: declare here,
+// reference in the rule + persona.
 const (
-	PredicateState         = "sandbox.tenant.state"
-	PredicateSignature     = "sandbox.tenant.signature"
-	PredicateContainerName = "sandbox.tenant.container_name"
-	PredicateImage         = "sandbox.tenant.image"
-	PredicateWorkspace     = "sandbox.tenant.workspace"
-	PredicateReadyAt       = "sandbox.tenant.ready_at"
-	PredicateLastUsed      = "sandbox.tenant.last_used"
-	PredicatePlanHash      = "sandbox.tenant.plan_hash"
+	PredicateState                  = "sandbox.tenant.state"
+	PredicateSignature              = "sandbox.tenant.signature"
+	PredicateContainerName          = "sandbox.tenant.container_name"
+	PredicateImage                  = "sandbox.tenant.image"
+	PredicateWorkspace              = "sandbox.tenant.workspace"
+	PredicateReadyAt                = "sandbox.tenant.ready_at"
+	PredicateLastUsed               = "sandbox.tenant.last_used"
+	PredicatePlanHash               = "sandbox.tenant.plan_hash"
+	PredicatePlanAction             = "sandbox.tenant.plan_action"
+	PredicatePlanVerifyCommand      = "sandbox.tenant.verify_command"
+	PredicatePlanExpectedSmoke      = "sandbox.tenant.expected_smoke_signature"
+	PredicatePlanCloneCommand       = "sandbox.tenant.clone_command"
+	PredicatePlanInstallSteps       = "sandbox.tenant.install_steps"
+	PredicatePlanVolumeMounts       = "sandbox.tenant.volume_mounts"
+	PredicatePlanDockerSocketMount  = "sandbox.tenant.docker_socket_mount"
+	PredicatePlanForceRefresh       = "sandbox.tenant.force_refresh"
+	PredicatePlanRevision           = "sandbox.tenant.plan_revision"
+	PredicatePlanCanonicalCommand   = "sandbox.tenant.canonical_command"
+	PredicatePlanCanonicalRepoURL   = "sandbox.tenant.canonical_repo_url"
+	PredicatePlanCanonicalRepoRef   = "sandbox.tenant.canonical_repo_ref"
+	PredicatePlanCanonicalBaseImage = "sandbox.tenant.canonical_base_image"
+	PredicatePlanCanonicalToolchain = "sandbox.tenant.canonical_toolchain"
+	PredicatePlanStampedAt          = "sandbox.tenant.plan_stamped_at"
 )
 
 // tripleSource tags the triples this package publishes. Distinct from

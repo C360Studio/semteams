@@ -26,6 +26,7 @@ import (
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitautoresearchbaseline"
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitautoresearchmeasurement"
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitbootstrapcommitted"
+	"github.com/c360studio/semteams/cmd/semteams/tools/emitbootstrapexecute"
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitbootstrapplan"
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitbootstrapverify"
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitplan"
@@ -122,9 +123,11 @@ func registerProductTools(reg *agentictools.ExecutorRegistry, natsClient *natscl
 	return registerChainBash(reg, natsClient, platform, logger)
 }
 
-// registerSandboxFleetTools wires the 4 sandbox-bootstrap pack tools:
-// query_sandbox_tenant + emit_bootstrap_{plan,verify,committed}.
-// Per ADR-042 §addendum 2026-05-29 §A.
+// registerSandboxFleetTools wires the 5 sandbox-bootstrap pack tools:
+// query_sandbox_tenant + emit_bootstrap_{plan,execute,verify,committed}.
+// Per ADR-042 §addendum 2026-05-29 §A. emit_bootstrap_execute added
+// in PR 3.2 as the execute-loop forward-stamp (see
+// cmd/semteams/tools/emitbootstrapexecute/executor.go for the why).
 //
 // All four share a single sandboxfleet.TenantRegistry instance —
 // constructing one per tool would still be correct (the registry is
@@ -165,6 +168,10 @@ func registerSandboxFleetTools(reg *agentictools.ExecutorRegistry, natsClient *n
 	if err := reg.RegisterTool(emitbootstrapplan.ToolName, planExecutor); err != nil {
 		return fmt.Errorf("register %s: %w", emitbootstrapplan.ToolName, err)
 	}
+	executeExecutor := emitbootstrapexecute.NewExecutor(triplePublisher, platform, logger)
+	if err := reg.RegisterTool(emitbootstrapexecute.ToolName, executeExecutor); err != nil {
+		return fmt.Errorf("register %s: %w", emitbootstrapexecute.ToolName, err)
+	}
 	verifyExecutor := emitbootstrapverify.NewExecutor(triplePublisher, platform, logger)
 	if err := reg.RegisterTool(emitbootstrapverify.ToolName, verifyExecutor); err != nil {
 		return fmt.Errorf("register %s: %w", emitbootstrapverify.ToolName, err)
@@ -175,7 +182,7 @@ func registerSandboxFleetTools(reg *agentictools.ExecutorRegistry, natsClient *n
 	}
 	logger.Info("Registered sandbox-fleet product tools",
 		slog.String("category", "sandbox-bootstrap"),
-		slog.Int("count", 4))
+		slog.Int("count", 5))
 	return nil
 }
 
