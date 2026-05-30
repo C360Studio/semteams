@@ -700,6 +700,162 @@ tasks:
       # Cleanup + capture defers fire either way.
       - timeout 1200 task test:e2e:agentic:probe:auto-approve-watcher -- {{.RUN_ID}}
 
+  test:e2e:agentic:smoke9:run:
+    desc: Run smoke #9 (ADR-042 §addendum 2026-05-29 PR 3 — sandbox-bootstrap real-LLM) end-to-end with cleanup
+    summary: |
+      Real-LLM smoke for ADR-042 §addendum PR 3 — §A foundation +
+      §B sandbox-bootstrap pack. Boots the bootstrap config
+      (configs/flow-bootstrap.json — real Gemini/Anthropic for
+      coordinator + research + reviewing capabilities), sends a
+      terminal bootstrap-only prompt, runs the auto-approve watcher
+      until all loops terminate, captures trajectories + message log
+      + sandbox.tenant.* triples + tenant container state to
+      /tmp/smoke9-<RUN_ID>/, then tears the stack down.
+
+      Sibling task to smoke6 (research category) but exercises the
+      sandbox-bootstrap pack: coordinator decide(bootstrap_sandbox) →
+      provisioner-bootstrap-{plan,execute,verify} → reviewer-bootstrap
+      (approved) → wake-up coordinator (respond_direct). The wake-up
+      coordinator's allowlist is chained
+      [respond_direct, ask_user, autoresearch, research]; PR 3 picks
+      a prompt that reads unambiguously as terminal bootstrap-only so
+      the wake-up routes to respond_direct (per the pre-flight option
+      (b) recorded in [[adr-042-addendum-pr1-pickup]]).
+
+      Validates per §addendum §G PR 3:
+      - LLM-authored canonicalization (TargetSignature) + plan emit
+      - Docker-socket-driven provisioning (DooD against host daemon)
+      - Tenant container spawned with `semteams-tenant-<sig>` name
+      - emit_bootstrap_plan stamps sandbox.tenant.* triples on run entity
+      - emit_bootstrap_committed transitions registry → ready_running
+      - chain.arc.bootstrap.{category,tenant_signature} on wake-up
+
+      Real spend (~$0.50-$2.00 per run on claude-haiku-4-5 or
+      gemini-2.5-flash; bootstrap-execute can take 5-20min wall-
+      clock for docker image pull + install_steps). At least one of
+      ANTHROPIC_API_KEY / GEMINI_API_KEY required. Invoke from the
+      project root so the parent Taskfile's `dotenv: ['.env']` loads
+      it, or export it manually before invoking from this directory.
+
+      Docker socket must be reachable for the always-warm sandbox
+      to spawn the tenant sibling container (DooD per ADR-034
+      §addendum #2). Verified via the `docker info` precondition
+      below; the compose stack mounts `/var/run/docker.sock` into
+      the sandbox container already.
+
+      Usage (from project root):
+        task ui:test:e2e:agentic:smoke9:run                   # RUN_ID defaults to a date stamp
+        RUN_ID=pr3-validation task ui:test:e2e:agentic:smoke9:run
+        PROMPT='...' RUN_ID=alt task ui:test:e2e:agentic:smoke9:run
+
+      Findings synthesis lands in a project_smoke9_findings.md
+      memory record per the §addendum PR 3 plan; capture should
+      cover registry state transitions + canonicalizer
+      cache-hit-rate behavior on follow-on probes (Iteration 2/3
+      of pickup §"What scope deferred from PR 2 means for PR 3"
+      runs as additional probes against the still-warm stack, not
+      separate smoke task invocations).
+    vars:
+      RUN_ID: '{{.RUN_ID | default (printf "smoke9-%s" (now | date "20060102-150405"))}}'
+      AGENTIC_CONFIG: flow-bootstrap.json
+      COMPOSE_PROFILES: ""
+      # Terminal bootstrap-only prompt per pre-flight option (b) in
+      # [[adr-042-addendum-pr1-pickup]]. Frames the ask as a precursor
+      # WITHOUT naming a downstream metric to optimize — keeps the
+      # wake-up coordinator's chained allowlist resolved to
+      # respond_direct rather than autoresearch. The Go 1.25 +
+      # testcontainers callouts give the plan persona enough surface
+      # to produce a non-trivial install_steps shape (validates
+      # docker_socket_mount=true gating + canonicalizer behavior on
+      # repeated probes).
+      #
+      # IMPORTANT: avoid backticks in the prompt. probe:send
+      # interpolates CLI_ARGS inside double-quoted CONTENT="...";
+      # backtick command-substitution evaluates against the runner's
+      # shell BEFORE the jq escape, so any `cmd` in the prompt
+      # becomes a Task call ("Task does not exist" — observed in the
+      # first PR 3 attempt 2026-05-30). Single-quoted markup is safe.
+      PROMPT: '{{.PROMPT | default "Provision a sandbox tenant for running task test:integration on this semteams repo. Target: github.com/c360studio/semteams at main, base image golang:1.25-bookworm, deps from go.mod. Testcontainers is used by the suite so the tenant needs Docker socket access. Set it up and confirm the registry shows it ready_running — do not actually run the integration tests, do not run autoresearch or any optimization arc; bootstrap only."}}'
+      HOST_BRAVE_KEY:
+        sh: printf '%s' "${BRAVE_SEARCH_API_KEY:-}"
+    preconditions:
+      - sh: '[ -n "$ANTHROPIC_API_KEY" ] || [ -n "$GEMINI_API_KEY" ]'
+        msg: "Both ANTHROPIC_API_KEY and GEMINI_API_KEY are unset. Smoke #9 routes coordinator → gemini-pro (fallback claude-haiku) and bootstrap roles → gemini-flash (fallback claude-haiku). At least one provider must be available. Add to project-root .env or export before invoking."
+      - sh: 'docker info > /dev/null 2>&1'
+        msg: "Docker daemon not reachable. Smoke #9 needs the host daemon up so the always-warm sandbox (DooD per ADR-034 §addendum #2) can spawn the tenant sibling container. Start Docker Desktop / the docker service and retry."
+      # Sanity-check that the e2e stack isn't already running under
+      # a stale project name — smoke6 #25 finding (compose project-
+      # name mismatch leaks orphan containers, [[compose-project-
+      # name-mismatch]]). Either no agentic containers exist OR they
+      # belong to this stack's expected project; otherwise clean up
+      # first.
+      - sh: |
+          STALE=$(docker ps -a --format '{{`{{.Names}}`}}' | grep -E '^semteams-ui-agentic-' || true)
+          if [ -n "$STALE" ]; then
+            echo "stale agentic containers detected (run \`task test:e2e:agentic:cleanup:orphans\` first):" >&2
+            echo "$STALE" >&2
+            exit 1
+          fi
+        msg: "Stale agentic containers leftover from a prior run — see stderr above. Clear with: task ui:test:e2e:agentic:cleanup:orphans"
+    cmds:
+      - 'echo "▶︎  Smoke #9 starting (RUN_ID={{.RUN_ID}}); evidence will land in /tmp/{{.RUN_ID}}/"'
+      - defer: { task: test:e2e:agentic:cleanup }
+      # Reap LLM-spawned tenant containers BEFORE the compose-stack
+      # cleanup. The compose cleanup is scoped to project-name
+      # `semteams-agentic`, but the bootstrap pack's docker-out-of-
+      # docker (DooD) flow has the always-warm sandbox spawn sibling
+      # containers on the host daemon — those are project-less and
+      # leak past compose down. Discovered smoke #9 run-1 2026-05-30
+      # (LLM invented `semteams-tenant-dummy-sig-123` and the
+      # `restart: unless-stopped` clause kept it alive post-smoke).
+      # Names follow the canonical `semteams-tenant-<sig>` convention
+      # (sandboxfleet.TargetSignature.ContainerName) — even LLM-
+      # invented placeholders use the prefix.
+      - defer:
+          task: test:e2e:agentic:smoke9:reap-tenants
+      # Re-use smoke7's capture task — same shape works for any
+      # real-LLM smoke. Terminal role = coordinator (the wake-up
+      # respond_direct loop), matching smoke6.
+      - defer:
+          task: test:e2e:agentic:smoke7:capture
+          vars:
+            RUN_ID: "{{.RUN_ID}}"
+            WEDGE_EXPECTED_TERMINAL_ROLE: coordinator
+      - task: test:e2e:agentic:stack:up
+        vars:
+          FIXTURE: ""
+          AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
+          COMPOSE_PROFILES: "{{.COMPOSE_PROFILES}}"
+          # No Brave key needed for bootstrap (no web_search calls),
+          # but forward it if present so the stack boot matches the
+          # smoke6 shape and operators running both back-to-back
+          # don't see config drift.
+          BACKEND_BRAVE_KEY: "{{.HOST_BRAVE_KEY}}"
+      - task: test:e2e:agentic:probe:send
+        vars:
+          CLI_ARGS: '{{.PROMPT}}'
+      # Hard cap on the watcher. Bootstrap is six loops on the happy
+      # path; provisioner-bootstrap-execute is the long pole (docker
+      # pull base image + install_steps over ~5-20min depending on
+      # base image cache state). 1800s (30min) covers cold-cache
+      # golang base + go mod download + reasonable retries. Cleanup
+      # + capture defers fire either way.
+      - timeout 1800 task test:e2e:agentic:probe:auto-approve-watcher -- {{.RUN_ID}}
+
+  test:e2e:agentic:smoke9:reap-tenants:
+    desc: Force-stop + remove any leaked `semteams-tenant-*` containers spawned by the bootstrap pack's DooD flow
+    internal: true
+    cmds:
+      - |
+        LEAKED=$(docker ps -a --format '{{`{{.Names}}`}}' | grep -E '^semteams-tenant-' || true)
+        if [ -z "$LEAKED" ]; then
+          echo "(no leaked tenant containers)"
+          exit 0
+        fi
+        echo "$LEAKED" | xargs -r docker rm -f >/dev/null 2>&1 \
+          && echo "✓ reaped: $LEAKED" \
+          || echo "warn: tenant reap had errors; investigate manually" >&2
+
   test:e2e:agentic:dev:_boot:
     desc: Internal — boot helper for the per-scenario dev tasks
     internal: true
