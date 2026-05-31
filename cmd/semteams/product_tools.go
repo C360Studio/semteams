@@ -76,14 +76,31 @@ const (
 	// set fail admission terminally.
 	envSandboxAvailableSecrets = "SEMTEAMS_SANDBOX_AVAILABLE_SECRETS"
 
-	// envSandboxRunner selects the Runner implementation. Empty (or
-	// any value besides "cli") wires a NoopRunner that returns a
-	// documented "no production runner configured" error — Manager
-	// produces Terminal attestations, Coordinator routes to
-	// respond_direct, the user gets a clear gap message rather than
-	// a 500. Set to "cli" once the backend process has
-	// @devcontainers/cli + Docker-socket access; PR 4.4 makes the
-	// production-deployment choice empirically.
+	// envSandboxRunner selects the Runner implementation:
+	//   - "api"  → SandboxAPIRunner. Preserves the DooD trust
+	//     boundary: shells `devcontainer up` / `devcontainer exec`
+	//     via the existing sandbox HTTP API (SANDBOX_URL). The
+	//     sandbox container has both the docker socket AND
+	//     @devcontainers/cli (PR 4.1). Production default for
+	//     deployments that already run the sandbox compose service.
+	//     REQUIRES: .devcontainer/ profiles reachable at
+	//     /app/.devcontainer/ inside the sandbox container (compose
+	//     mount; ui/docker-compose.agentic-e2e.yml is the template).
+	//   - "cli"  → CLIRunner. Direct os/exec from the backend
+	//     process. Requires @devcontainers/cli + docker-socket
+	//     access on the backend (NOT mounted in docker/Dockerfile
+	//     today; operator must extend the image if choosing this
+	//     path).
+	//   - "mock" → MockRunner. In-memory happy-path Runner used by
+	//     the mock-LLM journey (test/fixtures/journeys/
+	//     sandbox-mvp.yaml). NOT a production runner — returns
+	//     fabricated Ready attestations. Real-LLM smokes that
+	//     exercise request_sandbox MUST set SEMTEAMS_SANDBOX_RUNNER=api
+	//     explicitly to avoid silently fabricating a Ready attestation
+	//     against the real LLM (would render the smoke meaningless).
+	//   - unset/anything else → NoopRunner. Fail-shut: Manager
+	//     produces Terminal attestation explaining the gap;
+	//     Coordinator routes to respond_direct rather than 500.
 	envSandboxRunner = "SEMTEAMS_SANDBOX_RUNNER"
 )
 
@@ -249,18 +266,43 @@ func boolEnv(name string) bool {
 // the attestation, preventing silent 500s on first call.
 func selectSandboxRunner(logger *slog.Logger) sandboxmanager.Runner {
 	v := strings.TrimSpace(strings.ToLower(os.Getenv(envSandboxRunner)))
-	if v == "cli" {
+	switch v {
+	case "api":
+		baseURL := strings.TrimSpace(os.Getenv(envSandboxURL))
+		runner := sandboxmanager.NewSandboxAPIRunner(baseURL)
+		if runner == nil {
+			// Operator opted into the API runner explicitly but the
+			// URL is empty — config-rotate window typo or compose
+			// regression. Loud Error (not Warn) so it surfaces in
+			// any aggregated log search; remediation field tells
+			// the next operator how to fix it. Per PR 4.4 finding M2.
+			logger.Error("sandbox runner: SEMTEAMS_SANDBOX_RUNNER=api but SANDBOX_URL is empty; falling back to noop",
+				slog.String("env", envSandboxRunner),
+				slog.String("remediation", "set SANDBOX_URL=http://sandbox:8090 (or your compose sandbox-service URL) OR change SEMTEAMS_SANDBOX_RUNNER=mock for tests"))
+			return sandboxmanager.NoopRunner{}
+		}
+		runner.Logger = logger
+		logger.Info("sandbox runner: production API",
+			slog.String("env", envSandboxRunner),
+			slog.String("base_url", baseURL))
+		return runner
+	case "cli":
 		runner := sandboxmanager.NewCLIRunner()
 		runner.Logger = logger
 		logger.Info("sandbox runner: production CLI",
 			slog.String("env", envSandboxRunner),
 			slog.String("value", v))
 		return runner
+	case "mock":
+		logger.Info("sandbox runner: mock (test-only; returns fabricated Ready attestations)",
+			slog.String("env", envSandboxRunner))
+		return sandboxmanager.MockRunner{}
+	default:
+		logger.Warn("sandbox runner: noop (set SEMTEAMS_SANDBOX_RUNNER=api for production; see product_tools.go const block)",
+			slog.String("env", envSandboxRunner),
+			slog.String("value", v))
+		return sandboxmanager.NoopRunner{}
 	}
-	logger.Warn("sandbox runner: noop (set SEMTEAMS_SANDBOX_RUNNER=cli for production)",
-		slog.String("env", envSandboxRunner),
-		slog.String("value", v))
-	return sandboxmanager.NoopRunner{}
 }
 
 // registerAutoresearchTools wires the 3 autoresearch pack tools:

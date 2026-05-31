@@ -75,6 +75,16 @@ COPY --from=builder --chown=semstreams:semstreams /build/semstreams-bin /app/sem
 # Copy example configs (optional, users should mount their own)
 COPY --from=builder --chown=semstreams:semstreams /build/configs /app/configs
 
+# ADR-043 PR 4.4 — copy the canonical .devcontainer/<profile>/
+# devcontainer.json files into the production image. The
+# sandboxmanager.BuiltinCatalog reads them at boot from
+# SEMTEAMS_SANDBOX_REPO_ROOT (default /app), and SandboxAPIRunner
+# passes the absolute paths to `devcontainer up --config <path>`
+# invoked inside the sandbox container — which mounts /app/.devcontainer
+# ro from this image via a shared compose volume (see
+# ui/docker-compose.agentic-e2e.yml + production compose).
+COPY --from=builder --chown=semstreams:semstreams /build/.devcontainer /app/.devcontainer
+
 # Create config directory for mounted configs
 RUN mkdir -p /etc/semstreams && \
     chown semstreams:semstreams /etc/semstreams

@@ -1,0 +1,90 @@
+name: sandbox-mvp
+description: |
+  Journey: ADR-043 PR 4.4 — coordinator dispatch loop exercises the
+  request_sandbox tool flow end-to-end on mock-LLM.
+
+  Demonstrates the ADR-043 three-layer model at the Coordinator
+  tier:
+
+    Loop 0 — coordinator (dispatch from user prompt)
+      1. tool_call: query_sandbox_attestation
+         → chain entity has no prior attestation → miss
+      2. tool_call: request_sandbox
+         → SEMTEAMS_SANDBOX_RUNNER=mock wires MockRunner →
+           attestation.ready=true, attestation.verified.{go,task}
+           populated, sandbox.attestation.* triples stamped on the
+           chain entity
+      3. tool_call: decide(action="respond_direct", reason=<prose>)
+         → rule coordinator/03b-respond-direct fires → publish prose
+         on user.response.* + stamp coordinator.user_reply. Terminal.
+
+  Validates:
+    - request_sandbox + query_sandbox_attestation are reachable from
+      the dispatch coordinator's default_tools (PR 4.2 wiring)
+    - SandboxRequirements parsing through the typed contract
+    - MockRunner end-to-end Ready attestation (validates the
+      Manager.Request orchestration: validate → normalize → match
+      → admit → up → probes → attest → stamp)
+    - chain.Resolver fallback path for chain entity ID
+      (PR 4.2 finding M2 — Warn log naming the missing key)
+    - Single coordinator loop reaches terminal complete state; no
+      rule pack arc spawned (PR 4.2 retire validated empirically)
+
+  Paired spec: ui/e2e/agentic/sandbox-mvp.spec.ts.
+  Compose profile: SEMTEAMS_SANDBOX_RUNNER=mock (set in
+    docker-compose.agentic-e2e.yml backend service env).
+  Config: configs/e2e-flow-bootstrap.json.
+
+responses:
+  # ---------- Loop 0: coordinator (dispatch) — turn 1 ----------
+  # The persona prose (configs/personas/fragments/coordinator/
+  # 20-delegation-rules.md "Provisioning a sandbox") instructs the
+  # coordinator to call query_sandbox_attestation FIRST when work
+  # needs a prepared environment. The mock-LLM emits that call.
+
+  - tool_call:
+      name: query_sandbox_attestation
+      arguments_json: |
+        {
+          "languages": ["go"],
+          "tools": ["task"],
+          "network": "restricted",
+          "verification": [
+            {"name": "go",   "command": "go version"},
+            {"name": "task", "command": "task --version"}
+          ]
+        }
+
+  # ---------- Loop 0: turn 2 ----------
+  # query_sandbox_attestation returned {found: false} because the
+  # chain entity has no prior attestation for this signature. The
+  # coordinator proceeds to request_sandbox with identical
+  # requirements (signature round-trip is the load-bearing claim).
+
+  - tool_call:
+      name: request_sandbox
+      arguments_json: |
+        {
+          "languages": ["go"],
+          "tools": ["task"],
+          "network": "restricted",
+          "verification": [
+            {"name": "go",   "command": "go version"},
+            {"name": "task", "command": "task --version"}
+          ]
+        }
+
+  # ---------- Loop 0: turn 3 ----------
+  # request_sandbox returned a Ready attestation (MockRunner is wired
+  # via SEMTEAMS_SANDBOX_RUNNER=mock). attestation.ready=true,
+  # attestation.profile=go-backend@v1, verified.{go,task} populated.
+  # The coordinator surfaces this to the user via respond_direct.
+  # Terminal decide; rule coordinator/03b fires.
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "respond_direct",
+          "reason": "Sandbox is ready — the go-backend@v1 profile attested cleanly with go and task both verified. You can proceed with the work; capability checks are recorded on the chain entity as sandbox.attestation.* triples for downstream agents. (This is a mock journey; the production deployment uses SandboxAPIRunner against the sandbox container to invoke devcontainer up + preflight probes.)"
+        }

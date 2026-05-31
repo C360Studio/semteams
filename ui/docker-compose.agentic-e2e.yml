@@ -146,6 +146,14 @@ services:
       # alongside their consumers in the ADR-042 MVP-7 follow-up sweep.
       - SEMTEAMS_RESEARCH_ARTIFACT_DIR=/artifacts/research
       - SEMTEAMS_PLAN_DIR=/artifacts/plans
+      # ADR-043 PR 4.4 — sandbox-manager Runner selection. The mock-LLM
+      # e2e stack uses MockRunner so request_sandbox returns Ready
+      # without invoking @devcontainers/cli. Production deployments
+      # set =api to route through the existing sandbox HTTP API
+      # (preserves DooD trust boundary) or =cli for direct os/exec
+      # from the backend (requires docker socket on the backend
+      # image — not mounted by default).
+      - SEMTEAMS_SANDBOX_RUNNER=${SEMTEAMS_SANDBOX_RUNNER:-mock}
     volumes:
       - ${BACKEND_CONTEXT:-..}/configs/${AGENTIC_CONFIG:-e2e-flow-bootstrap.json}:/etc/semstreams/config.json:ro
       - ${BACKEND_CONTEXT:-..}/testdata:/data/testdata:ro
@@ -228,6 +236,17 @@ services:
       - sandbox-agentic-caches-go:/go/pkg/mod
       - sandbox-agentic-caches-npm:/home/sandbox/.npm
       - sandbox-agentic-caches-gradle:/home/sandbox/.gradle
+      # ADR-043 PR 4.4 — devcontainer profile mount. SandboxAPIRunner
+      # invokes `devcontainer up --config /app/.devcontainer/<profile>/
+      # devcontainer.json` inside this container; the same files the
+      # backend reads via BuiltinCatalog must be reachable here under
+      # the SAME path. Read-only mount from the repo root.
+      - ${BACKEND_CONTEXT:-..}/.devcontainer:/app/.devcontainer:ro
+      # ADR-043 PR 4.4 — devcontainer-cli state directory. The CLI
+      # keeps per-workspace-folder container records under
+      # ~/.devcontainer; we pin to a named volume so a sandbox restart
+      # mid-attestation doesn't lose the Up→Exec linkage (review C2).
+      - sandbox-agentic-devcontainer-state:/home/sandbox/.devcontainer
       # Host docker socket bind mount — DooD trust boundary delta per
       # ADR-034 §addendum #2. Tests inside sandbox can spawn arbitrary
       # sibling containers on the host's Docker daemon. For the
@@ -473,4 +492,9 @@ volumes:
   sandbox-agentic-caches-npm:
     driver: local
   sandbox-agentic-caches-gradle:
+    driver: local
+  # ADR-043 PR 4.4 — devcontainer-cli state directory (per-workspace
+  # container records under ~/.devcontainer). Named volume keeps state
+  # alive across sandbox restarts so Up→Exec linkage survives.
+  sandbox-agentic-devcontainer-state:
     driver: local

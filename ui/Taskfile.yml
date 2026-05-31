@@ -195,6 +195,7 @@ tasks:
       tearing down the docker stack between runs.
     cmds:
       - task: test:e2e:agentic:research-mvp
+      - task: test:e2e:agentic:sandbox-mvp
       - task: test:e2e:agentic:ops-agent
       - task: test:e2e:agentic:real-time-activity-stream
       - task: test:e2e:agentic:task-story-trace
@@ -266,6 +267,39 @@ tasks:
           FIXTURE: "{{.FIXTURE}}"
           AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
       - npx playwright test e2e/agentic/research-mvp.spec.ts
+
+  test:e2e:agentic:sandbox-mvp:
+    desc: Run the ADR-043 PR 4.4 sandbox-tools mock-LLM journey
+    summary: |
+      One user prompt drives the coordinator's request_sandbox flow
+      end-to-end against the MockRunner (SEMTEAMS_SANDBOX_RUNNER=mock
+      set in docker-compose.agentic-e2e.yml):
+
+        Loop 0  coordinator (dispatch)  query_sandbox_attestation (miss)
+                                        request_sandbox (Ready via MockRunner)
+                                        decide(action="respond_direct")
+
+      Validates the ADR-043 three-layer model end-to-end on mock-LLM:
+        - request_sandbox + query_sandbox_attestation reachable from
+          the dispatch coordinator's default_tools (PR 4.2 wiring)
+        - SandboxRequirements parsing through the typed contract
+        - MockRunner Ready attestation orchestration
+        - chain.Resolver fallback for chain entity ID (PR 4.2 M2)
+        - Single coordinator loop terminates with respond_direct;
+          NO rule pack arc spawned (PR 4.2 retire validated)
+
+      One loop, three mock-LLM round-trips. No approval gate, no
+      recovery, no chained arc.
+    vars:
+      FIXTURE: sandbox-mvp.yaml
+      AGENTIC_CONFIG: e2e-flow-bootstrap.json
+    cmds:
+      - defer: { task: test:e2e:agentic:cleanup }
+      - task: test:e2e:agentic:stack:up
+        vars:
+          FIXTURE: "{{.FIXTURE}}"
+          AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
+      - npx playwright test e2e/agentic/sandbox-mvp.spec.ts
 
   test:e2e:agentic:task-story-trace:
     desc: Run the task-story / raw-activity right-rail journey (fixture-agnostic; uses research-mvp for backend activity)
