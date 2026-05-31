@@ -152,10 +152,14 @@ func (e *Executor) ListTools() []agentic.ToolDefinition {
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
-				"command":    map[string]any{"type": "string", "description": "Measurement / smoke command verbatim (e.g. 'task test:integration'). Signature input."},
-				"repo_url":   map[string]any{"type": "string", "description": "Source repo URL (ssh or https). Empty for self-contained targets. Signature input."},
-				"repo_ref":   map[string]any{"type": "string", "description": "Source ref (SHA, tag, or branch). Required when repo_url is set. Signature input."},
-				"toolchain":  map[string]any{"type": "object", "description": "Toolchain version map (e.g. {\"go\":\"1.26\"}). Signature input."},
+				"command":  map[string]any{"type": "string", "description": "Measurement / smoke command verbatim (e.g. 'task test:integration'). Signature input."},
+				"repo_url": map[string]any{"type": "string", "description": "Source repo URL (ssh or https). Empty for self-contained targets. Signature input."},
+				"repo_ref": map[string]any{"type": "string", "description": "Source ref (SHA, tag, or branch). Required when repo_url is set. Signature input."},
+				"toolchain": map[string]any{
+					"type":                 "object",
+					"description":          "Toolchain version map — keys are lowercase toolchain names (go, node, python, ruby, ...); values are full semver-like version strings ('1.26.0', '22.10.0'). Signature input. REQUIRED when using a toolchain_* dependency kind: 'toolchain_go' reads toolchain.go; 'toolchain_node' reads toolchain.node. Omitting it when a toolchain_* dep is declared makes Compose fail. Example: {\"go\":\"1.26.0\"}.",
+					"additionalProperties": map[string]any{"type": "string"},
+				},
 				"base_image": map[string]any{"type": "string", "description": "Docker image:tag for the tenant base (no :latest). Signature input."},
 				"source": map[string]any{
 					"type":        "object",
@@ -172,7 +176,7 @@ func (e *Executor) ListTools() []agentic.ToolDefinition {
 					"items": map[string]any{
 						"type": "object",
 						"properties": map[string]any{
-							"kind":     map[string]any{"type": "string", "enum": []string{"apt", "go_mod_download", "npm_ci", "pip_install", "toolchain_go", "toolchain_node", "raw"}, "description": "Dependency shape. raw is an escape hatch — use sparingly; recurring raw uses motivate adding a structured kind."},
+							"kind":     map[string]any{"type": "string", "enum": []string{"apt", "go_mod_download", "npm_ci", "pip_install", "toolchain_go", "toolchain_node", "raw"}, "description": "Dependency shape. 'apt' requires `packages`. 'pip_install' requires `manifest`. 'toolchain_go' requires top-level `toolchain.go` to be set with a version string (e.g. '1.26.0'). 'toolchain_node' requires top-level `toolchain.node` to be set. 'go_mod_download' / 'npm_ci' take no extra fields. 'raw' is an escape hatch (requires `command`) — use sparingly; recurring raw uses motivate adding a structured kind."},
 							"packages": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "apt: package list. Sorted server-side for stable hashing."},
 							"manifest": map[string]any{"type": "string", "description": "pip_install: requirements.txt path OR a pip CLI spec starting with '-' (e.g. '-e .[test]')."},
 							"command":  map[string]any{"type": "string", "description": "raw: verbatim shell line. Last-resort escape hatch."},
