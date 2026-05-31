@@ -152,7 +152,7 @@ That principle is the architectural anchor for everything below.
 │      → reject if privileged + not approved                     │
 │      → reject if secrets requested + not pre-provisioned       │
 │      → reject if public network + not approved for chain       │
-│   3. devcontainer up --workspace-folder /tenants/<sig>         │
+│   3. devcontainer up --workspace-folder ${TENANT_ROOT}/<sig>   │
 │   4. preflight_probes() — execute the requirements.verification │
 │      list inside the container; capture exit codes + stdout    │
 │   5. emit attestation:                                         │
@@ -389,8 +389,8 @@ func Request(ctx, req SandboxRequirements) (Attestation, error) {
 
 Devcontainer `up` and probes shell out via the chain-scoped bash
 tool. No Go library import; `@devcontainers/cli` is invoked as
-`devcontainer up --workspace-folder /tenants/<sig> --config
-<profile>` and the manager parses its JSON output.
+`devcontainer up --workspace-folder ${SEMTEAMS_TENANT_ROOT}/<sig>
+--config <profile>` and the manager parses its JSON output.
 
 ### Layer 3: coordinator persona prose
 
@@ -529,6 +529,30 @@ transfer.
    - Real-LLM smoke #13: full-stack-e2e profile against the
      semteams repo, expect ~$0.10–$0.30 (much faster than #12 —
      no 5-loop chain)
+5. **PR 4.5 — symmetric tenant-root bind + per-tenant profile materialization**
+   Closes smoke #13 probe-2 findings F5 + F6 (the production gaps
+   that blocked the real `devcontainer up` path after probes 0 + 1
+   proved the wiring).
+   - F5: `SandboxAPIRunner.Up` stages the catalog profile JSON into
+     `<workspaceFolder>/.devcontainer/devcontainer.json` via a
+     leading `mkdir+cp` /exec call so devcontainer-cli's
+     `devcontainer-lock.json` sibling write lands in tenant-writable
+     space (the catalog mount stays `:ro` per operator trust posture).
+   - F6: docker-compose binds `${SEMTEAMS_TENANT_ROOT}:${SEMTEAMS_TENANT_ROOT}`
+     symmetrically (host source path == sandbox container target path)
+     so devcontainer-cli's DooD-spawned sibling containers resolve
+     `--mount source=<wsf>` against a real host path on the docker
+     daemon. The pre-PR-4.5 `sandbox-agentic-workspaces` named volume
+     was sandbox-internal-only and broke DooD path translation.
+   - Runner uses the manager-supplied `workspaceFolder` verbatim for
+     `--workspace-folder` (drop the `/workspace/<task_id>`
+     substitution that was the F6 bug).
+   - Manager default `TenantRoot`: `/tenants` → `/var/lib/semteams-tenants`
+     (production-canonical). `SEMTEAMS_TENANT_ROOT` env overrides;
+     Taskfile `stack:up` pre-mkdir's the e2e default
+     (`{{.ROOT_DIR}}/.tenant-workspaces`) and resolves it via
+     `pwd -P` so the bind source is absolute.
+   - Operator's gate: Probe 2 retry + real-LLM smoke #13.
 
 ## Memory cross-links
 

@@ -277,7 +277,10 @@ func TestManagerNew_DefaultsApplied(t *testing.T) {
 		Runner:    &fakeRunner{},
 		Publisher: &fakePublisher{},
 	})
-	if m.tenantRoot != "/tenants" {
+	// PR 4.5 F6: default tenant root is the production-canonical
+	// /var/lib/semteams-tenants path so docker-compose can bind it
+	// symmetrically. Operators override via SEMTEAMS_TENANT_ROOT.
+	if m.tenantRoot != "/var/lib/semteams-tenants" {
 		t.Fatalf("tenantRoot default wrong: %q", m.tenantRoot)
 	}
 	if m.probeTimeout != 30*time.Second {

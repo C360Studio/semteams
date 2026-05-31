@@ -9,7 +9,7 @@ import (
 )
 
 func TestMockRunner_UpReady(t *testing.T) {
-	ref, err := MockRunner{}.Up(context.Background(), "/tenants/abc/workspace", "/cfg.json", nil)
+	ref, err := MockRunner{}.Up(context.Background(), "/var/lib/semteams-tenants/abc/workspace", "/cfg.json", nil)
 	if err != nil {
 		t.Fatalf("Up: %v", err)
 	}
@@ -22,8 +22,8 @@ func TestMockRunner_UpReady(t *testing.T) {
 }
 
 func TestMockRunner_UpStable(t *testing.T) {
-	a, _ := MockRunner{}.Up(context.Background(), "/tenants/abc/workspace", "/cfg.json", nil)
-	b, _ := MockRunner{}.Up(context.Background(), "/tenants/abc/workspace", "/cfg.json", nil)
+	a, _ := MockRunner{}.Up(context.Background(), "/var/lib/semteams-tenants/abc/workspace", "/cfg.json", nil)
+	b, _ := MockRunner{}.Up(context.Background(), "/var/lib/semteams-tenants/abc/workspace", "/cfg.json", nil)
 	if a.ContainerID != b.ContainerID || a.ImageDigest != b.ImageDigest {
 		t.Fatalf("MockRunner not stable across calls: %v vs %v", a, b)
 	}

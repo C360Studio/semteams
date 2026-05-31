@@ -931,14 +931,39 @@ tasks:
       # task invoked via `task:` — the env var must be set on the task
       # that ACTUALLY invokes `docker compose up`.
       BACKEND_BRAVE_KEY: '{{.BACKEND_BRAVE_KEY | default ""}}'
+      # ADR-043 PR 4.5 F6 — tenant-root for the sandbox manager.
+      # docker-compose binds this absolute path symmetrically inside
+      # the sandbox container (sandbox sees the SAME path the host
+      # sees) so devcontainer-cli's DooD-spawned sibling containers
+      # resolve `--mount source=<wsf>` on the host docker daemon
+      # without translation. Default is a per-repo .tenant-workspaces/
+      # under the parent of this Taskfile (ROOT_DIR resolves to
+      # `<repo>/ui`); resolved to an absolute path via pwd -P below.
+      # Operators set SEMTEAMS_TENANT_ROOT explicitly for non-default
+      # layouts (e.g. /var/lib/semteams-tenants on production Linux).
+      SEMTEAMS_TENANT_ROOT:
+        sh: |
+          target="${SEMTEAMS_TENANT_ROOT:-{{.ROOT_DIR}}/.tenant-workspaces}"
+          mkdir -p "$target"
+          # PR 4.5 review C1: macOS Docker Desktop's virtiofs bind
+          # preserves host UIDs (uid 501 typical) but the sandbox
+          # container runs as uid 1001. Without the chmod the
+          # SandboxAPIRunner stage call (mkdir+cp into the tenant
+          # workspace) hits EACCES on first write. 0777 is coarse
+          # but matches the dev-laptop trust posture — production
+          # operators set SEMTEAMS_TENANT_ROOT to an ops-managed dir
+          # with appropriate uid/gid alignment instead.
+          chmod 0777 "$target"
+          (cd "$target" && pwd -P)
     env:
       FIXTURE: "{{.FIXTURE}}"
       AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
       E2E_AGENTIC_UI_PORT: "{{.E2E_AGENTIC_UI_PORT}}"
       COMPOSE_PROFILES: "{{.COMPOSE_PROFILES}}"
       BACKEND_BRAVE_SEARCH_API_KEY: "{{.BACKEND_BRAVE_KEY}}"
+      SEMTEAMS_TENANT_ROOT: "{{.SEMTEAMS_TENANT_ROOT}}"
     cmds:
-      - echo "Stack config → AGENTIC_CONFIG={{.AGENTIC_CONFIG}} FIXTURE={{.FIXTURE}} PROFILES={{.COMPOSE_PROFILES}}"
+      - echo "Stack config → AGENTIC_CONFIG={{.AGENTIC_CONFIG}} FIXTURE={{.FIXTURE}} PROFILES={{.COMPOSE_PROFILES}} TENANT_ROOT={{.SEMTEAMS_TENANT_ROOT}}"
       # Smoke #25 finding (2026-05-14): rebuilding only `backend` with
       # --no-cache leaves the sandbox image carrying cached layers from
       # a prior build — Docker's cache-by-content-hash should pick up

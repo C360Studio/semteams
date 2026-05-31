@@ -63,32 +63,78 @@ func NewSandboxAPIRunner(baseURL string) *SandboxAPIRunner {
 
 // Up materializes the devcontainer via `devcontainer up` over the
 // sandbox HTTP API. The workspaceFolder argument is the host-side
-// path the manager computes (e.g. /tenants/<sig>/workspace); the
-// runner translates it to a sandbox-internal path via taskIDFor and
-// passes the profile config path verbatim — devcontainer config
-// paths must be reachable inside the sandbox container, typically
-// via a compose mount of .devcontainer/ at the same path the
-// backend uses.
+// tenant workspace path the manager computes (e.g.
+// /var/lib/semteams-tenants/<sig>/workspace). PR 4.5 F6 makes that
+// path symmetric: the operator binds the same absolute path on both
+// the host and the sandbox container (via SEMTEAMS_TENANT_ROOT in
+// docker-compose), so devcontainer-cli's DooD-spawned sibling
+// containers resolve the same `--workspace-folder` value on the
+// host daemon side. The runner uses workspaceFolder verbatim — the
+// pre-PR-4.5 `/workspace/<task_id>` substitution was the F6 bug.
+//
+// PR 4.5 F5: before invoking `devcontainer up`, the runner stages
+// the catalog profile JSON into <workspaceFolder>/.devcontainer/
+// devcontainer.json. `devcontainer up` writes a sibling
+// devcontainer-lock.json next to the JSON it reads, and the
+// catalog mount is read-only by design (operator-curated). Staging
+// per-tenant keeps the lockfile writable while preserving the
+// catalog's trust posture.
 func (r *SandboxAPIRunner) Up(ctx context.Context, workspaceFolder, configPath string, env map[string]string) (ContainerRef, error) {
-	taskID := taskIDFor(workspaceFolder)
-	args := []string{
-		"devcontainer", "up",
-		"--workspace-folder", sandboxWorkspacePath(taskID),
-		"--config", configPath,
-		"--log-format", "json",
-		"--remove-existing-container=false",
+	wsf := strings.TrimRight(strings.TrimSpace(workspaceFolder), "/")
+	if wsf == "" {
+		return ContainerRef{}, errors.New("SandboxAPIRunner.Up: empty workspaceFolder")
 	}
+	// Per PR 4.5 review M1: enforce absolute-path discipline so the
+	// stage mkdir lands deterministically. A relative wsf would resolve
+	// against the sandbox per-/exec cwd dir, silently writing detritus
+	// to the wrong root instead of the SEMTEAMS_TENANT_ROOT bind.
+	if !strings.HasPrefix(wsf, "/") {
+		return ContainerRef{}, fmt.Errorf("SandboxAPIRunner.Up: workspaceFolder must be absolute, got %q", workspaceFolder)
+	}
+	taskID := taskIDFor(wsf)
+	stagedConfig := wsf + "/.devcontainer/devcontainer.json"
+
+	// Resolve host-secret passthrough BEFORE any /exec POST so a
+	// missing secret fails fast without leaving behind a half-staged
+	// .devcontainer directory or burning sandbox cycles. Per PR 4.1
+	// finding C1: silent fallback to an empty secret would let probes
+	// pass against an environment the real workload then 401s in.
+	remoteEnvArgs := make([]string, 0, len(env)*2)
 	for k, v := range env {
 		if v == "" {
 			hostVal, ok := os.LookupEnv(k)
 			if !ok {
 				return ContainerRef{}, fmt.Errorf("devcontainer up: secret %q declared but not present in host environment (operator AvailableSecrets policy promised it; export %s before invoking)", k, k)
 			}
-			args = append(args, "--remote-env", k+"="+hostVal)
+			remoteEnvArgs = append(remoteEnvArgs, "--remote-env", k+"="+hostVal)
 			continue
 		}
-		args = append(args, "--remote-env", k+"="+v)
+		remoteEnvArgs = append(remoteEnvArgs, "--remote-env", k+"="+v)
 	}
+
+	// F5: stage the read-only catalog profile into the tenant's
+	// writable workspace. mkdir+cp run as one bash invocation so
+	// either both succeed or neither — partial staging leaves the
+	// dir without a config and devcontainer up surfaces a confusing
+	// "no devcontainer.json" error.
+	stage := joinShell([]string{"mkdir", "-p", wsf + "/.devcontainer"}) +
+		" && " +
+		joinShell([]string{"cp", configPath, stagedConfig})
+	stageRes, err := r.exec(ctx, taskID, stage, 30*time.Second)
+	if err != nil {
+		return ContainerRef{}, fmt.Errorf("stage devcontainer profile into %s: %w", wsf, err)
+	}
+	if stageRes.ExitCode != 0 {
+		return ContainerRef{}, fmt.Errorf("stage devcontainer profile into %s: exit %d; stderr: %s", wsf, stageRes.ExitCode, truncateLine(stageRes.Stderr))
+	}
+
+	args := append([]string{
+		"devcontainer", "up",
+		"--workspace-folder", wsf,
+		"--config", stagedConfig,
+		"--log-format", "json",
+		"--remove-existing-container=false",
+	}, remoteEnvArgs...)
 
 	res, err := r.exec(ctx, taskID, joinShell(args), 5*time.Minute)
 	if err != nil {
@@ -109,10 +155,12 @@ func (r *SandboxAPIRunner) Up(ctx context.Context, workspaceFolder, configPath s
 		ContainerID:           result.ContainerID,
 		RemoteWorkspaceFolder: result.RemoteWorkspaceFolder,
 		// Per PR 4.4 finding M4: stash the host-side task_id on the
-		// ref so Exec posts against the SAME sandbox per-task mutex
-		// as Up. Deriving Exec's task_id from RemoteWorkspaceFolder
-		// would key on the container-internal path and break the
-		// serialization-per-chain claim.
+		// ref so every subsequent /exec call (Exec probes, future Down)
+		// posts against the SAME sandbox per-task mutex as the stage +
+		// up + docker-inspect sequence Up just ran. Deriving Exec's
+		// task_id from RemoteWorkspaceFolder would key on the
+		// container-internal path and break the serialization-per-chain
+		// claim.
 		Properties: map[string]string{"sandbox_task_id": taskID},
 	}
 	ref.ImageDigest = r.resolveImageDigest(ctx, taskID, ref.ContainerID)
@@ -252,13 +300,6 @@ func taskIDFor(workspaceFolder string) string {
 	}
 	clean = strings.TrimRight(clean, "/")
 	return "sandbox-mgr-" + fnv12(clean)
-}
-
-// sandboxWorkspacePath returns the canonical path inside the sandbox
-// container for a given taskID. Mirrors cmd/semteams/sandbox/main.go's
-// --workspace flag (typically /workspace).
-func sandboxWorkspacePath(taskID string) string {
-	return "/workspace/" + taskID
 }
 
 // joinShell concatenates argv into a bash-runnable string with

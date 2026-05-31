@@ -19,9 +19,9 @@ import (
 // path and returns a ContainerRef the manager will pass back to Exec
 // for preflight probes, plus the image digest (sha256:...) the
 // attestation stamps. workspaceFolder is the manager-derived path
-// inside the host's tenant root (e.g. /tenants/<signature>/workspace);
-// the runner shells out to `devcontainer up --workspace-folder
-// <wsf> --config <configPath>`.
+// inside the host's tenant root (e.g.
+// /var/lib/semteams-tenants/<signature>/workspace); the runner shells
+// out to `devcontainer up --workspace-folder <wsf> --config <configPath>`.
 //
 // Exec runs a probe command inside the materialized container and
 // returns its result. The runner does NOT enforce ExpectExit — it
@@ -84,7 +84,11 @@ type ManagerConfig struct {
 	Publisher agentictools.TriplePublisher
 
 	// TenantRoot is the host filesystem path under which the manager
-	// creates per-signature workspace folders. Defaults to "/tenants".
+	// creates per-signature workspace folders. Defaults to
+	// "/var/lib/semteams-tenants" (the production-canonical layout
+	// matching /var/lib/docker). PR 4.5 F6 binds this path
+	// symmetrically inside the sandbox container so devcontainer-cli's
+	// DooD-spawned siblings resolve the same path on the host daemon.
 	TenantRoot string
 
 	// ProbeTimeout caps each preflight probe. Zero defaults to 30s.
@@ -128,7 +132,7 @@ func New(cfg ManagerConfig) *Manager {
 		logger:       cfg.Logger,
 	}
 	if m.tenantRoot == "" {
-		m.tenantRoot = "/tenants"
+		m.tenantRoot = "/var/lib/semteams-tenants"
 	}
 	if m.probeTimeout <= 0 {
 		m.probeTimeout = 30 * time.Second
@@ -329,4 +333,14 @@ func (m *Manager) Policy() AdmissionPolicy {
 		return AdmissionPolicy{}
 	}
 	return m.policy
+}
+
+// TenantRoot returns the resolved tenant-root path (env-supplied or
+// default). Used by product_tools for boot-log visibility so operators
+// can confirm the symmetric-bind path actually took effect.
+func (m *Manager) TenantRoot() string {
+	if m == nil {
+		return ""
+	}
+	return m.tenantRoot
 }

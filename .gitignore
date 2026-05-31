@@ -66,6 +66,13 @@ ui/test-results/
 # Either path keeps the host checkout clean of generated content.
 .artifacts/
 
+# ADR-043 PR 4.5 F6 — per-tenant devcontainer workspaces. Bound into
+# the sandbox container at the same absolute path so DooD-spawned
+# sibling containers see the workspace on the host docker daemon.
+# Default is ui/.tenant-workspaces/ (set by ui/Taskfile.yml's
+# stack:up); operator-set SEMTEAMS_TENANT_ROOT overrides.
+.tenant-workspaces/
+
 # Legacy emit-tool output dirs (pre-ADR-041 default was docs/X).
 # Ignored to prevent further leaks; existing committed files are
 # being deleted alongside the default switch.

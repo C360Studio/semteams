@@ -53,16 +53,22 @@ func TestSandboxAPIRunner_Up_HappyPath(t *testing.T) {
 	// otherwise silently break the substring matches and surface as
 	// confusing "unknown command" failures instead of "joinShell
 	// shape changed."
+	//
+	// PR 4.5 F5: the first /exec is the mkdir+cp stage call that
+	// materialises the catalog profile into the tenant workspace.
+	// Sequence is now: 1=stage, 2=devcontainer up, 3=docker inspect.
 	var callIdx int
 	fs := newFakeSandbox(func(_ sandboxExecRequest) sandboxExecResponse {
 		callIdx++
 		switch callIdx {
 		case 1:
+			return sandboxExecResponse{ExitCode: 0}
+		case 2:
 			return sandboxExecResponse{
 				ExitCode: 0,
 				Stdout:   `{"outcome":"success","containerId":"c-abc","remoteWorkspaceFolder":"/workspaces/x"}`,
 			}
-		case 2:
+		case 3:
 			return sandboxExecResponse{ExitCode: 0, Stdout: "sha256:image123\n"}
 		}
 		t.Fatalf("unexpected /exec call %d", callIdx)
@@ -71,7 +77,8 @@ func TestSandboxAPIRunner_Up_HappyPath(t *testing.T) {
 	defer fs.Close()
 
 	runner := NewSandboxAPIRunner(fs.server.URL)
-	ref, err := runner.Up(context.Background(), "/tenants/abc/workspace", "/app/.devcontainer/go-backend/devcontainer.json", nil)
+	wsf := "/var/lib/semteams-tenants/abc/workspace"
+	ref, err := runner.Up(context.Background(), wsf, "/app/.devcontainer/go-backend/devcontainer.json", nil)
 	if err != nil {
 		t.Fatalf("Up: %v", err)
 	}
@@ -84,21 +91,50 @@ func TestSandboxAPIRunner_Up_HappyPath(t *testing.T) {
 	if ref.ImageDigest != "sha256:image123" {
 		t.Fatalf("image digest wrong: %q", ref.ImageDigest)
 	}
-	if len(fs.requests) < 2 {
-		t.Fatalf("expected at least 2 /exec calls (up + docker inspect); got %d", len(fs.requests))
+	if len(fs.requests) != 3 {
+		t.Fatalf("expected 3 /exec calls (stage + up + docker inspect); got %d", len(fs.requests))
 	}
-	if fs.requests[0].TaskID == "" {
-		t.Fatalf("task_id not populated on Up call")
+	// PR 4.5 F5: the stage call materialises the catalog profile under
+	// <workspaceFolder>/.devcontainer/devcontainer.json so the lockfile
+	// devcontainer-cli writes lands in tenant-writable space, not the
+	// :ro catalog mount. Assert both halves of the staging command.
+	stagedConfig := wsf + "/.devcontainer/devcontainer.json"
+	stageCmd := fs.requests[0].Command
+	if !strings.Contains(stageCmd, "mkdir") || !strings.Contains(stageCmd, wsf+"/.devcontainer") {
+		t.Fatalf("stage call missing mkdir of <wsf>/.devcontainer: %q", stageCmd)
 	}
-	// Per PR 4.4 finding M4: both /exec calls (up + docker inspect)
-	// post against the SAME task_id so the sandbox's per-task mutex
-	// serializes them under a single chain identity.
-	if fs.requests[0].TaskID != fs.requests[1].TaskID {
-		t.Fatalf("up + docker-inspect task_id drift: %q vs %q",
-			fs.requests[0].TaskID, fs.requests[1].TaskID)
+	if !strings.Contains(stageCmd, "cp") || !strings.Contains(stageCmd, stagedConfig) {
+		t.Fatalf("stage call missing cp to staged config path: %q", stageCmd)
+	}
+	if !strings.Contains(stageCmd, "/app/.devcontainer/go-backend/devcontainer.json") {
+		t.Fatalf("stage call missing source configPath: %q", stageCmd)
+	}
+	// PR 4.5 F6: --workspace-folder uses workspaceFolder VERBATIM (was
+	// previously rewritten to /workspace/<task_id>, breaking DooD path
+	// translation when the sandbox tried to spawn a sibling container).
+	upCmd := fs.requests[1].Command
+	if !strings.Contains(upCmd, "'devcontainer' 'up' '--workspace-folder' '"+wsf+"'") {
+		t.Fatalf("up call did not pass workspaceFolder verbatim: %q", upCmd)
+	}
+	// PR 4.5 F5: --config points at the staged path under the
+	// tenant workspace, not the :ro catalog mount path.
+	if !strings.Contains(upCmd, "'--config' '"+stagedConfig+"'") {
+		t.Fatalf("up call did not target staged config: %q", upCmd)
+	}
+	// Per PR 4.4 finding M4: every /exec call posts against the SAME
+	// task_id so the sandbox's per-task mutex serialises them under a
+	// single chain identity.
+	taskID := fs.requests[0].TaskID
+	if taskID == "" {
+		t.Fatalf("task_id not populated on stage call")
+	}
+	for i, r := range fs.requests {
+		if r.TaskID != taskID {
+			t.Fatalf("call %d task_id drift: %q vs %q", i, r.TaskID, taskID)
+		}
 	}
 	// Verify Properties carries the same task_id forward for Exec.
-	if got := ref.Properties["sandbox_task_id"]; got == "" {
+	if got := ref.Properties["sandbox_task_id"]; got != taskID {
 		t.Fatalf("sandbox_task_id not stamped on ref.Properties: %v", ref.Properties)
 	}
 }
@@ -106,18 +142,22 @@ func TestSandboxAPIRunner_Up_HappyPath(t *testing.T) {
 func TestSandboxAPIRunner_UpExec_ShareTaskID(t *testing.T) {
 	// Per PR 4.4 finding M4: Up + Exec must POST against the same
 	// task_id so the sandbox's per-task mutex serializes them.
+	// PR 4.5 F5: a leading stage call lands first, shifting the
+	// sequence to 1=stage, 2=up, 3=inspect, 4=exec.
 	var callIdx int
 	fs := newFakeSandbox(func(_ sandboxExecRequest) sandboxExecResponse {
 		callIdx++
 		switch callIdx {
 		case 1:
+			return sandboxExecResponse{ExitCode: 0}
+		case 2:
 			return sandboxExecResponse{
 				ExitCode: 0,
 				Stdout:   `{"outcome":"success","containerId":"c-1","remoteWorkspaceFolder":"/workspaces/r"}`,
 			}
-		case 2:
-			return sandboxExecResponse{ExitCode: 0, Stdout: "sha256:img"}
 		case 3:
+			return sandboxExecResponse{ExitCode: 0, Stdout: "sha256:img"}
+		case 4:
 			return sandboxExecResponse{ExitCode: 0, Stdout: "go version"}
 		}
 		return sandboxExecResponse{ExitCode: 127}
@@ -125,17 +165,17 @@ func TestSandboxAPIRunner_UpExec_ShareTaskID(t *testing.T) {
 	defer fs.Close()
 
 	runner := NewSandboxAPIRunner(fs.server.URL)
-	ref, err := runner.Up(context.Background(), "/tenants/abc/workspace", "/cfg.json", nil)
+	ref, err := runner.Up(context.Background(), "/var/lib/semteams-tenants/abc/workspace", "/cfg.json", nil)
 	if err != nil {
 		t.Fatalf("Up: %v", err)
 	}
 	if _, err := runner.Exec(context.Background(), ref, "go version"); err != nil {
 		t.Fatalf("Exec: %v", err)
 	}
-	if len(fs.requests) != 3 {
-		t.Fatalf("expected 3 /exec calls (up + inspect + exec); got %d", len(fs.requests))
+	if len(fs.requests) != 4 {
+		t.Fatalf("expected 4 /exec calls (stage + up + inspect + exec); got %d", len(fs.requests))
 	}
-	// All three calls must share the task_id minted at Up.
+	// All four calls must share the task_id minted at Up.
 	taskID := fs.requests[0].TaskID
 	for i, r := range fs.requests {
 		if r.TaskID != taskID {
@@ -153,7 +193,7 @@ func TestSandboxAPIRunner_Up_HostSecretMissingFailsFast(t *testing.T) {
 
 	runner := NewSandboxAPIRunner(fs.server.URL)
 	// Empty value = pass-through from host. SAFETY_TEST_MISSING is unset.
-	_, err := runner.Up(context.Background(), "/tenants/abc/workspace", "/app/.devcontainer/x.json",
+	_, err := runner.Up(context.Background(), "/var/lib/semteams-tenants/abc/workspace", "/app/.devcontainer/x.json",
 		map[string]string{"SANDBOXAPIRUNNER_TEST_MISSING": ""})
 	if err == nil {
 		t.Fatalf("expected error when host secret unset")
@@ -164,18 +204,75 @@ func TestSandboxAPIRunner_Up_HostSecretMissingFailsFast(t *testing.T) {
 }
 
 func TestSandboxAPIRunner_Up_NonZeroExit(t *testing.T) {
+	// PR 4.5 F5: stage call is first; succeed it so the up call (which
+	// surfaces the simulated daemon failure) actually runs.
+	var callIdx int
 	fs := newFakeSandbox(func(_ sandboxExecRequest) sandboxExecResponse {
+		callIdx++
+		if callIdx == 1 {
+			return sandboxExecResponse{ExitCode: 0}
+		}
 		return sandboxExecResponse{ExitCode: 1, Stderr: "docker daemon not running"}
 	})
 	defer fs.Close()
 
 	runner := NewSandboxAPIRunner(fs.server.URL)
-	_, err := runner.Up(context.Background(), "/tenants/abc/workspace", "/app/.devcontainer/x.json", nil)
+	_, err := runner.Up(context.Background(), "/var/lib/semteams-tenants/abc/workspace", "/app/.devcontainer/x.json", nil)
 	if err == nil {
 		t.Fatalf("expected error on non-zero exit")
 	}
 	if !strings.Contains(err.Error(), "daemon not running") {
 		t.Fatalf("stderr not surfaced: %v", err)
+	}
+}
+
+func TestSandboxAPIRunner_Up_StageFailureSurfacesEarly(t *testing.T) {
+	// PR 4.5 F5: if mkdir+cp fails (e.g. EROFS on the workspace bind),
+	// Up must surface that as a clear error BEFORE attempting
+	// `devcontainer up`. The pre-PR-4.5 path conflated stage failures
+	// with "devcontainer up" failures, hiding the production gap that
+	// motivated this change.
+	var callIdx int
+	fs := newFakeSandbox(func(_ sandboxExecRequest) sandboxExecResponse {
+		callIdx++
+		if callIdx == 1 {
+			return sandboxExecResponse{ExitCode: 1, Stderr: "cp: cannot create regular file ‘/var/lib/semteams-tenants/abc/workspace/.devcontainer/devcontainer.json’: Read-only file system"}
+		}
+		t.Fatalf("stage failure must short-circuit Up; got call %d", callIdx)
+		return sandboxExecResponse{}
+	})
+	defer fs.Close()
+
+	runner := NewSandboxAPIRunner(fs.server.URL)
+	_, err := runner.Up(context.Background(), "/var/lib/semteams-tenants/abc/workspace", "/app/.devcontainer/go-backend/devcontainer.json", nil)
+	if err == nil {
+		t.Fatalf("expected stage-failure error")
+	}
+	// PR 4.5 review M3: assert on the wrapper, not the specific stderr
+	// fragment. Real-world failures include EROFS (catalog mount) AND
+	// EACCES (uid mismatch under macOS Docker Desktop virtiofs). Locking
+	// the test to "Read-only file system" would mask the EACCES class.
+	if !strings.Contains(err.Error(), "stage devcontainer profile") {
+		t.Fatalf("err does not name the staging step: %v", err)
+	}
+}
+
+func TestSandboxAPIRunner_Up_EmptyWorkspaceFolder(t *testing.T) {
+	// PR 4.5 F6: workspaceFolder is passed verbatim to `--workspace-folder`
+	// AND used as the stage-call mkdir target. An empty string would
+	// invoke `mkdir -p /.devcontainer && cp ... /.devcontainer/devcontainer.json`
+	// (writes to the sandbox container's root fs, which is read-only).
+	// Fail-fast rejects the call before any /exec POST.
+	fs := newFakeSandbox(func(_ sandboxExecRequest) sandboxExecResponse {
+		t.Fatalf("must not POST on empty workspaceFolder")
+		return sandboxExecResponse{}
+	})
+	defer fs.Close()
+
+	runner := NewSandboxAPIRunner(fs.server.URL)
+	_, err := runner.Up(context.Background(), "", "/cfg.json", nil)
+	if err == nil {
+		t.Fatalf("expected error on empty workspaceFolder")
 	}
 }
 
@@ -185,7 +282,7 @@ func TestSandboxAPIRunner_Up_HTTPError(t *testing.T) {
 	defer fs.Close()
 
 	runner := NewSandboxAPIRunner(fs.server.URL)
-	_, err := runner.Up(context.Background(), "/tenants/abc/workspace", "/app/.devcontainer/x.json", nil)
+	_, err := runner.Up(context.Background(), "/var/lib/semteams-tenants/abc/workspace", "/app/.devcontainer/x.json", nil)
 	if err == nil {
 		t.Fatalf("expected error on 500")
 	}
@@ -238,12 +335,12 @@ func TestNewSandboxAPIRunner_EmptyURL(t *testing.T) {
 }
 
 func TestTaskIDFor_Stable(t *testing.T) {
-	a := taskIDFor("/tenants/abc/workspace")
-	b := taskIDFor("/tenants/abc/workspace/")
+	a := taskIDFor("/var/lib/semteams-tenants/abc/workspace")
+	b := taskIDFor("/var/lib/semteams-tenants/abc/workspace/")
 	if a != b {
 		t.Fatalf("trailing-slash variants drifted: %q vs %q", a, b)
 	}
-	if a == taskIDFor("/tenants/different/workspace") {
+	if a == taskIDFor("/var/lib/semteams-tenants/different/workspace") {
 		t.Fatalf("distinct paths collided")
 	}
 }

@@ -154,6 +154,14 @@ services:
       # from the backend (requires docker socket on the backend
       # image — not mounted by default).
       - SEMTEAMS_SANDBOX_RUNNER=${SEMTEAMS_SANDBOX_RUNNER:-mock}
+      # ADR-043 PR 4.5 F6 — tenant-root path used by the sandbox
+      # manager when computing per-(profile, requirements) workspace
+      # folders. MUST equal the host path bound onto the sandbox
+      # container at the same absolute path so devcontainer-cli's
+      # DooD-spawned sibling containers resolve a consistent bind
+      # source on the host docker daemon. Taskfile pre-mkdir's the
+      # path and exports the env var; required for `up -d`.
+      - SEMTEAMS_TENANT_ROOT=${SEMTEAMS_TENANT_ROOT:?SEMTEAMS_TENANT_ROOT must be set to an absolute host path (Taskfile target sets it via stack:up)}
     volumes:
       - ${BACKEND_CONTEXT:-..}/configs/${AGENTIC_CONFIG:-e2e-flow-bootstrap.json}:/etc/semstreams/config.json:ro
       - ${BACKEND_CONTEXT:-..}/testdata:/data/testdata:ro
@@ -211,8 +219,14 @@ services:
       [
         "--addr",
         ":8090",
+        # ADR-043 PR 4.5 review C2: sandbox `--workspace` is the per-/exec
+        # task cwd root (BashExecutor flows + SandboxAPIRunner's sandbox-
+        # mgr detritus dirs). Kept distinct from SEMTEAMS_TENANT_ROOT
+        # (manager-owned per-tenant devcontainer workspaces). One root
+        # per lifecycle: throwaway named volume here for cwds, operator-
+        # visible host bind for tenant state in the volumes: block below.
         "--workspace",
-        "/workspace",
+        "/sandbox-cwds",
         "--docker-mode-strict",
       ]
     # group_add wires the host docker socket's GID so the unprivileged
@@ -227,7 +241,21 @@ services:
     group_add:
       - "${SANDBOX_DOCKER_SOCK_GID:-0}"
     volumes:
-      - sandbox-agentic-workspaces:/workspace
+      # ADR-043 PR 4.5 review C2 — sandbox per-/exec cwd root. Named
+      # volume isolated from the host: BashExecutor's per-task git-init'd
+      # dirs and SandboxAPIRunner's sandbox-mgr-* detritus dirs both land
+      # here. Throwaway scope; tenant-correctness state lives in the
+      # SEMTEAMS_TENANT_ROOT bind below.
+      - sandbox-agentic-workspaces:/sandbox-cwds
+      # ADR-043 PR 4.5 F6 — symmetric tenant-root bind. Source and target
+      # are the SAME absolute path so devcontainer-cli's DooD-spawned
+      # sibling containers can resolve `--mount source=<wsf>` on the
+      # host docker daemon. SandboxAPIRunner's mkdir+cp+devcontainer-up
+      # use absolute paths under this root; sandbox /exec cwd never lands
+      # here (kept distinct per review C2 above). Taskfile pre-mkdir's
+      # the host path AND chmods it 0777 so the sandbox uid 1001 can
+      # write under virtiofs (review C1).
+      - ${SEMTEAMS_TENANT_ROOT}:${SEMTEAMS_TENANT_ROOT}
       # Shared artifacts volume — ro view of the rw mount on the backend
       # container. Bash-equipped non-builder agents read rendered emit_*
       # artifacts here without crossing the ADR-033 D2 workspace boundary.
@@ -477,11 +505,17 @@ volumes:
     driver: local
   ui-agentic-node-modules:
     driver: local
+  # ADR-043 PR 4.5 review C2 — sandbox per-/exec cwd root. Throwaway
+  # named volume for BashExecutor flows + SandboxAPIRunner's sandbox-mgr
+  # detritus dirs. Kept distinct from the SEMTEAMS_TENANT_ROOT host
+  # bind so DooD-spawned sibling containers can resolve manager-owned
+  # tenant paths on the host docker daemon while sandbox cwd churn
+  # stays in volume-scoped storage.
   sandbox-agentic-workspaces:
     driver: local
   # Shared rendered-artifact volume. rw on backend (emit_*_artifact tools
   # write here), ro on sandbox (bash-equipped agents read here). Distinct
-  # from sandbox-agentic-workspaces so ADR-033 D2 (measurer/measured
+  # from the tenant workspace bind so ADR-033 D2 (measurer/measured
   # separation: backend never writes the workspace) is unaffected.
   agentic-artifacts:
     driver: local

@@ -60,6 +60,18 @@ const (
 	// default "/app" matches docker/Dockerfile's COPY layout.
 	envSandboxRepoRoot = "SEMTEAMS_SANDBOX_REPO_ROOT"
 
+	// envSandboxTenantRoot is the host filesystem path under which
+	// the manager creates per-(profile, requirements) workspace
+	// folders. PR 4.5 F6 makes this path symmetric: docker-compose
+	// binds the same absolute path on host AND inside the sandbox
+	// container so devcontainer-cli's DooD-spawned sibling containers
+	// see consistent bind sources. Production default
+	// "/var/lib/semteams-tenants" matches the /var/lib convention;
+	// e2e overrides to a per-run path under the repo so dev laptops
+	// don't need sudo. The sandbox container's `--workspace` flag
+	// must point at the same value (compose substitutes both).
+	envSandboxTenantRoot = "SEMTEAMS_TENANT_ROOT"
+
 	// envSandboxAllowPublicNetwork unlocks NetworkPolicy=public
 	// admission. Default false (default-deny). When true, requests
 	// declaring `network: public` admit without reviewer signoff
@@ -215,12 +227,14 @@ func registerSandboxManagerTools(reg *agentictools.ExecutorRegistry, natsClient 
 	}
 
 	runner := selectSandboxRunner(logger)
+	tenantRoot := strings.TrimSpace(os.Getenv(envSandboxTenantRoot))
 	manager := sandboxmanager.New(sandboxmanager.ManagerConfig{
-		Catalog:   catalog,
-		Policy:    policy,
-		Runner:    runner,
-		Publisher: triplePublisher,
-		Logger:    logger,
+		Catalog:    catalog,
+		Policy:     policy,
+		Runner:     runner,
+		Publisher:  triplePublisher,
+		TenantRoot: tenantRoot,
+		Logger:     logger,
 	})
 
 	// Both tools share the same chain.Resolver fallback for chain
@@ -242,6 +256,7 @@ func registerSandboxManagerTools(reg *agentictools.ExecutorRegistry, natsClient 
 	logger.Info("Registered sandbox-manager product tools",
 		slog.String("category", "sandbox-manager"),
 		slog.String("repo_root", repoRoot),
+		slog.String("tenant_root", manager.TenantRoot()),
 		slog.Int("profiles", len(catalog.Profiles())),
 		slog.Bool("allow_public_network", policy.AllowPublicNetwork),
 		slog.Bool("allow_privileged", policy.AllowPrivilegedContainers),

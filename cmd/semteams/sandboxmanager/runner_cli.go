@@ -111,13 +111,18 @@ type devcontainerUpResult struct {
 // inspect leaves ImageDigest empty rather than failing Up — image
 // digest is operational metadata, not a correctness gate.
 func (r *CLIRunner) Up(ctx context.Context, workspaceFolder, configPath string, env map[string]string) (ContainerRef, error) {
-	args := []string{
-		"up",
-		"--workspace-folder", workspaceFolder,
-		"--config", configPath,
-		"--log-format", "json",
-		"--remove-existing-container=false",
+	wsf := strings.TrimRight(strings.TrimSpace(workspaceFolder), "/")
+	if wsf == "" {
+		return ContainerRef{}, errors.New("CLIRunner.Up: empty workspaceFolder")
 	}
+	if !strings.HasPrefix(wsf, "/") {
+		return ContainerRef{}, fmt.Errorf("CLIRunner.Up: workspaceFolder must be absolute, got %q", workspaceFolder)
+	}
+
+	// Resolve host-secret passthrough BEFORE staging so a missing
+	// secret fails fast without leaving behind a half-staged
+	// .devcontainer directory. Mirrors SandboxAPIRunner's ordering.
+	remoteEnvArgs := make([]string, 0, len(env)*2)
 	for k, v := range env {
 		if v == "" {
 			// Empty value means "pass-through from host env" per the
@@ -129,11 +134,28 @@ func (r *CLIRunner) Up(ctx context.Context, workspaceFolder, configPath string, 
 			if !ok {
 				return ContainerRef{}, fmt.Errorf("devcontainer up: secret %q declared but not present in host environment (operator AvailableSecrets policy promised it; export %s before invoking)", k, k)
 			}
-			args = append(args, "--remote-env", k+"="+hostVal)
+			remoteEnvArgs = append(remoteEnvArgs, "--remote-env", k+"="+hostVal)
 			continue
 		}
-		args = append(args, "--remote-env", k+"="+v)
+		remoteEnvArgs = append(remoteEnvArgs, "--remote-env", k+"="+v)
 	}
+
+	// PR 4.5 review M2: stage the catalog profile into the tenant's
+	// writable workspace so devcontainer-cli's sibling lockfile write
+	// lands in writable space — same fix SandboxAPIRunner applies via
+	// /exec mkdir+cp. Without this, CLIRunner against a :ro-mounted
+	// catalog hits the same EROFS class the API runner does.
+	stagedConfig, err := stageDevcontainerProfile(wsf, configPath)
+	if err != nil {
+		return ContainerRef{}, fmt.Errorf("stage devcontainer profile into %s: %w", wsf, err)
+	}
+	args := append([]string{
+		"up",
+		"--workspace-folder", wsf,
+		"--config", stagedConfig,
+		"--log-format", "json",
+		"--remove-existing-container=false",
+	}, remoteEnvArgs...)
 
 	cmd := exec.CommandContext(ctx, r.binary(), args...)
 	var stdout, stderr bytes.Buffer
