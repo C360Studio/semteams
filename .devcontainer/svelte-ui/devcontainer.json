@@ -1,0 +1,27 @@
+{
+    "name": "semteams-svelte-ui",
+    "image": "mcr.microsoft.com/devcontainers/javascript-node:2.1.2-22-bookworm",
+    "features": {
+        "ghcr.io/devcontainers/features/github-cli:1": {
+            "version": "2.62.0"
+        }
+    },
+    "containerEnv": {
+        "PLAYWRIGHT_VERSION": "1.60.0",
+        "PLAYWRIGHT_BROWSERS_PATH": "/home/node/.cache/ms-playwright"
+    },
+    "remoteUser": "node",
+    "overrideCommand": false,
+    "shutdownAction": "stopContainer",
+    "postCreateCommand": "sudo apt-get update && sudo apt-get install -y --no-install-recommends jq && npx -y playwright@${PLAYWRIGHT_VERSION} install --with-deps chromium firefox",
+    "customizations": {
+        "semteams": {
+            "profile": "svelte-ui@v1",
+            "advertises": {
+                "languages": ["node"],
+                "tools": ["npm", "playwright", "git", "gh"]
+            },
+            "notes": "Svelte + Vite + Playwright e2e. AllowedNetwork includes 'public' because playwright browser installs + e2e against staging endpoints require outbound HTTP. 'public' admission still requires operator AllowPublicNetwork policy OR chain admission-reviewer approval."
+        }
+    }
+}

@@ -1,0 +1,38 @@
+{
+    "name": "semteams-full-stack-e2e",
+    "image": "mcr.microsoft.com/devcontainers/go:2.1.2-1.25-bookworm",
+    "features": {
+        "ghcr.io/devcontainers/features/node:1": {
+            "version": "22"
+        },
+        "ghcr.io/devcontainers/features/github-cli:1": {
+            "version": "2.62.0"
+        },
+        "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
+            "version": "27.3",
+            "moby": false,
+            "installDockerBuildx": true
+        }
+    },
+    "containerEnv": {
+        "GOTOOLCHAIN": "local",
+        "TASK_VERSION": "v3.51.1",
+        "PLAYWRIGHT_VERSION": "1.60.0",
+        "PLAYWRIGHT_BROWSERS_PATH": "/home/vscode/.cache/ms-playwright"
+    },
+    "remoteUser": "vscode",
+    "overrideCommand": false,
+    "shutdownAction": "stopContainer",
+    "postCreateCommand": "sudo apt-get update && sudo apt-get install -y --no-install-recommends jq && curl -fsSL https://taskfile.dev/install.sh | sudo sh -s -- -d -b /usr/local/bin ${TASK_VERSION} && npx -y playwright@${PLAYWRIGHT_VERSION} install --with-deps chromium",
+    "customizations": {
+        "semteams": {
+            "profile": "full-stack-e2e@v1",
+            "advertises": {
+                "languages": ["go", "node"],
+                "tools": ["task", "docker", "npm", "playwright", "git", "gh"],
+                "services": ["nats"]
+            },
+            "notes": "agentic-e2e stack workload — spawns sibling testcontainers. Docker-outside-of-docker required (host socket mounted) — docker-socket privilege requires admission-reviewer signoff per chain. Shorter TTL (12h) than backend/UI because e2e stacks pull more images and are more sensitive to upstream drift."
+        }
+    }
+}

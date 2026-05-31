@@ -1,0 +1,27 @@
+{
+    "name": "semteams-go-backend",
+    "image": "mcr.microsoft.com/devcontainers/go:2.1.2-1.25-bookworm",
+    "features": {
+        "ghcr.io/devcontainers/features/github-cli:1": {
+            "version": "2.62.0"
+        }
+    },
+    "containerEnv": {
+        "GOTOOLCHAIN": "local",
+        "TASK_VERSION": "v3.51.1"
+    },
+    "remoteUser": "vscode",
+    "overrideCommand": false,
+    "shutdownAction": "stopContainer",
+    "postCreateCommand": "sudo apt-get update && sudo apt-get install -y --no-install-recommends jq && curl -fsSL https://taskfile.dev/install.sh | sudo sh -s -- -d -b /usr/local/bin ${TASK_VERSION}",
+    "customizations": {
+        "semteams": {
+            "profile": "go-backend@v1",
+            "advertises": {
+                "languages": ["go"],
+                "tools": ["task", "gh", "jq", "git"]
+            },
+            "notes": "Pure backend workload. No docker socket. AllowedNetwork: restricted+none — admission rejects 'public'. Egress is NOT firewalled at the host (MVP); see .devcontainer/README.md 'Network posture' for the follow-up to add real egress controls."
+        }
+    }
+}

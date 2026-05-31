@@ -61,6 +61,23 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
 
+# @devcontainers/cli — sandbox manager (ADR-043 Layer 2) shells out
+# to `devcontainer up`/`devcontainer exec` to materialize per-profile
+# environments. Pinned for reproducibility per
+# ADR-043 §Risks #3 ("@devcontainers/cli velocity"); operators bump
+# in lockstep with the canonical-profile catalog in
+# .devcontainer/<name>/devcontainer.json and the catalog `Version`
+# field in cmd/semteams/sandboxmanager/catalog_builtin.go.
+#
+# Installed globally so the CLI resolves on $PATH for both the
+# sandbox process (running probes) and the chain-scoped bash tool
+# (running coordinator-emitted commands). npm cache pre-warmed in
+# the build step; runtime install would race against concurrent
+# sandbox invocations.
+ARG DEVCONTAINERS_CLI_VERSION=0.87.0
+RUN npm install -g @devcontainers/cli@${DEVCONTAINERS_CLI_VERSION} \
+    && npm cache clean --force
+
 # Docker CLI (client only — daemon stays on the host).
 # When the sandbox runs with --docker-mode=dood (ADR-034 §addendum #2),
 # the host's /var/run/docker.sock is bind-mounted and chains use this
