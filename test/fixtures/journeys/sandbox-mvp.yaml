@@ -33,14 +33,18 @@ description: |
   Paired spec: ui/e2e/agentic/sandbox-mvp.spec.ts.
   Compose profile: SEMTEAMS_SANDBOX_RUNNER=mock (set in
     docker-compose.agentic-e2e.yml backend service env).
-  Config: configs/e2e-flow-bootstrap.json.
+  Config: configs/e2e-flow-bootstrap.json (PR 4.4: max_tokens bumped
+    to 16384 on the mock-model to keep utilization below the
+    context-summarizer's 1.0 threshold; without that bump the
+    summarizer fires every turn and eats fixture entries —
+    [[compaction-in-e2e]]).
 
 responses:
-  # ---------- Loop 0: coordinator (dispatch) — turn 1 ----------
+  # ---------- Loop 0 turn 1: query_sandbox_attestation ----------
   # The persona prose (configs/personas/fragments/coordinator/
   # 20-delegation-rules.md "Provisioning a sandbox") instructs the
   # coordinator to call query_sandbox_attestation FIRST when work
-  # needs a prepared environment. The mock-LLM emits that call.
+  # needs a prepared environment.
 
   - tool_call:
       name: query_sandbox_attestation
@@ -55,9 +59,8 @@ responses:
           ]
         }
 
-  # ---------- Loop 0: turn 2 ----------
-  # query_sandbox_attestation returned {found: false} because the
-  # chain entity has no prior attestation for this signature. The
+  # ---------- Loop 0 turn 2: request_sandbox ----------
+  # query_sandbox_attestation returned {found: false}. The
   # coordinator proceeds to request_sandbox with identical
   # requirements (signature round-trip is the load-bearing claim).
 
@@ -74,12 +77,11 @@ responses:
           ]
         }
 
-  # ---------- Loop 0: turn 3 ----------
+  # ---------- Loop 0 turn 3: decide(respond_direct) ----------
   # request_sandbox returned a Ready attestation (MockRunner is wired
   # via SEMTEAMS_SANDBOX_RUNNER=mock). attestation.ready=true,
-  # attestation.profile=go-backend@v1, verified.{go,task} populated.
-  # The coordinator surfaces this to the user via respond_direct.
-  # Terminal decide; rule coordinator/03b fires.
+  # attestation.profile=go-backend@v1. The coordinator surfaces this
+  # to the user via respond_direct. Rule coordinator/03b fires.
 
   - tool_call:
       name: decide

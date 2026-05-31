@@ -9,6 +9,7 @@ import (
 
 	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semstreams/pkg/errs"
 	"github.com/c360studio/semstreams/types"
 )
 
@@ -186,7 +187,25 @@ func NewNATSEntityReader(client *natsclient.Client, subject string) *NATSEntityR
 }
 
 // ReadEntity implements EntityTripleReader against a live graph
-// component.
+// component. Uses natsclient.RequestClassified (beta.87+) so the
+// handler-side "not found: <id>" failure surfaces as a typed
+// errs.IsInvalid error rather than a literal-text body our JSON
+// decoder would mis-parse. Per upstream docs:
+// natsclient/errors.go "Footgun warning" — plain Request() returns
+// the legacy `error: <msg>` body with nil err on handler failure,
+// which is silent-corruption-shaped for any consumer that
+// json.Unmarshals the body.
+//
+// Smoke #13 probe-0 (2026-05-31) surfaced this: ChainID walks
+// agent.loop.parent on dispatch loops; the dispatch-root case has
+// no parent triple → graph-ingest returns "not found: <entity_id>"
+// → plain Request() returned that literal text with nil err →
+// our Unmarshal failed with "invalid character 'e' looking for
+// beginning of value", masquerading as a transient transport
+// error and breaking the chain.Resolver no-parent → chain-root
+// semantics. The RequestClassified migration restores those
+// semantics: invalid-class err means "entity doesn't exist," which
+// for ReadEntity means an empty triple map.
 func (r *NATSEntityReader) ReadEntity(ctx context.Context, entityID string) (map[string]any, error) {
 	req := map[string]string{"id": entityID}
 	reqData, err := json.Marshal(req)
@@ -197,8 +216,16 @@ func (r *NATSEntityReader) ReadEntity(ctx context.Context, entityID string) (map
 	queryCtx, cancel := context.WithTimeout(ctx, graphQueryTimeout)
 	defer cancel()
 
-	respData, err := r.client.Request(queryCtx, r.subject, reqData, graphQueryTimeout)
+	respData, err := r.client.RequestClassified(queryCtx, r.subject, reqData, graphQueryTimeout)
 	if err != nil {
+		// graph-ingest classifies "entity doesn't exist" as Invalid
+		// (see processor/graph-ingest/query.go handleQueryEntityNATS).
+		// For our caller's purposes that's an empty triple map — the
+		// caller's ChainID walk then sees "no parent triple" and
+		// treats the loop as its own chain root.
+		if errs.IsInvalid(err) {
+			return map[string]any{}, nil
+		}
 		return nil, fmt.Errorf("graph entity query for %q: %w", entityID, err)
 	}
 

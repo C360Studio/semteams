@@ -82,49 +82,38 @@ test.describe("ADR-043 PR 4.4 — Sandbox tools mock-LLM journey", () => {
     ).toBeTruthy();
 
     // user.response.* publish proves rule 03b fired on the
-    // respond_direct decide.
+    // respond_direct decide. NOTE: per 03b-respond-direct.json's
+    // publish_properties_omission_note, the publish is SUBJECT-ONLY
+    // — the user-facing prose is NOT in the publish payload. The
+    // prose lives on the loop entity as coordinator.user_reply
+    // (asserted below via /graph/triples).
     const respResp = await request.get(
       "/message-logger/entries?subject_prefix=dispatch.user.response&limit=10",
     );
     expect(respResp.ok(), "/message-logger/entries returned non-OK").toBe(true);
-    const respPayloads = (await respResp.json()) as Array<{
-      subject: string;
-      data?: { reason?: string };
-    }>;
+    const respPayloads = (await respResp.json()) as Array<{ subject: string }>;
     expect(
       respPayloads.length,
       "expected at least one user.response.* publish (rule 03b → respond_direct)",
     ).toBeGreaterThanOrEqual(1);
 
-    // The reason text carries the Coordinator's prose. The
-    // mock-LLM fixture surfaces the Ready attestation in user-facing
-    // terms ("Sandbox is ready").
-    const reason = respPayloads[respPayloads.length - 1]?.data?.reason ?? "";
-    expect(
-      reason.toLowerCase(),
-      "expected respond_direct reason to mention readiness",
-    ).toContain("ready");
-
-    // Per PR 4.4 finding M1: the loop-count + "ready" substring
-    // checks above don't catch the failure mode where request_sandbox
-    // errored but the fixture's third sequential response still
-    // emits decide(respond_direct). Verify the attestation was
-    // actually stamped on the chain entity. The graph/triples
-    // endpoint returns triples matching the predicate filter; a
-    // sandbox.attestation.ready=true row proves Manager.Request
-    // reached its happy path (MockRunner returned Ready, Attest
-    // produced the triple, the publisher succeeded).
-    const triples = await fetchTriples(request, {
+    // Per PR 4.4 finding M1: verify the structural attestation
+    // triples were stamped. Absent triples mean the tool errored
+    // before stamping (Runner failure, publisher drop, etc.) and the
+    // loop-completed signal would have falsely indicated success.
+    // sandbox.attestation.ready=true proves Manager.Request reached
+    // its happy path (MockRunner → Ready → Attest → publisher).
+    const readyTriples = await fetchTriples(request, {
       predicate: "sandbox.attestation.ready",
       limit: 10,
     });
     expect(
-      triples.length,
+      readyTriples.length,
       "expected at least one sandbox.attestation.ready triple — proves request_sandbox reached Manager.Request + stamped via publisher; absence means tool errored before stamping or the publisher dropped the batch",
     ).toBeGreaterThanOrEqual(1);
-    // Object can come back as bool or string "true" depending on the
-    // graph-ingest path; accept either.
-    const obj = triples[0]?.object;
+    // Object can come back as bool or string "true" depending on
+    // the graph-ingest path; accept either.
+    const obj = readyTriples[0]?.object;
     const objStr = typeof obj === "boolean" ? String(obj) : String(obj ?? "");
     expect(
       objStr.toLowerCase(),
@@ -147,6 +136,24 @@ test.describe("ADR-043 PR 4.4 — Sandbox tools mock-LLM journey", () => {
       profileTriples[0]?.object,
       "expected go-backend@v1 profile match for the fixture's requirements",
     ).toBe("go-backend@v1");
+
+    // The user-facing prose lives on the dispatch coordinator loop
+    // entity as coordinator.user_reply (the audit triple the rule
+    // stamps from $entity.triple.coordinator.decision.reason).
+    // Substring-check it carries the readiness signal.
+    const replyTriples = await fetchTriples(request, {
+      predicate: "coordinator.user_reply",
+      limit: 10,
+    });
+    expect(
+      replyTriples.length,
+      "expected coordinator.user_reply triple (audit of respond_direct prose)",
+    ).toBeGreaterThanOrEqual(1);
+    const replyObj = String(replyTriples[0]?.object ?? "").toLowerCase();
+    expect(
+      replyObj,
+      "expected coordinator.user_reply prose to mention readiness",
+    ).toContain("ready");
   });
 });
 
