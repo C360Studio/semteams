@@ -12,6 +12,28 @@ import (
 	"strings"
 )
 
+// NoopRunner is the default Runner the product shell wires when
+// the operator has not opted into a production runner via
+// SEMTEAMS_SANDBOX_RUNNER. It returns a clear error from Up so the
+// Manager produces a Terminal attestation explaining the situation
+// — the Coordinator then routes to respond_direct surfacing the
+// gap to the user. Better than silently 500-ing on first call.
+//
+// Production deployments swap to CLIRunner (direct shell-out from
+// backend; requires Docker-socket access) or a future
+// SandboxAPIRunner (posts to the sandbox container's HTTP API).
+type NoopRunner struct{}
+
+// Up returns a documented "no production runner configured" error.
+func (NoopRunner) Up(_ context.Context, _, _ string, _ map[string]string) (ContainerRef, error) {
+	return ContainerRef{}, fmt.Errorf("sandboxmanager: no production runner configured (set SEMTEAMS_SANDBOX_RUNNER=cli once the backend container has docker-socket access, or wire a sandbox-API-backed runner)")
+}
+
+// Exec mirrors Up — same documented error.
+func (NoopRunner) Exec(_ context.Context, _ ContainerRef, _ string) (ProbeResult, error) {
+	return ProbeResult{}, fmt.Errorf("sandboxmanager: no production runner configured")
+}
+
 // CLIRunner is the production Runner that shells out to the
 // @devcontainers/cli reference implementation. ADR-043 §Realization
 // layer commits to "shell-out, not library import" so our
@@ -23,6 +45,15 @@ import (
 // shells out fresh. Safe to call concurrently — @devcontainers/cli
 // is itself concurrency-safe per workspace folder, and we use
 // distinct workspace folders per signature.
+//
+// Production deployment requirement: the process running CLIRunner
+// must have @devcontainers/cli on PATH AND Docker daemon access
+// (typically /var/run/docker.sock). The semteams backend container
+// does NOT mount the docker socket today; the production wiring
+// either (a) extends docker/Dockerfile to mount the socket, or (b)
+// routes through a future SandboxAPI-backed Runner that posts to
+// the sandbox container (which DOES have the socket). PR 4.4
+// makes the choice empirically.
 type CLIRunner struct {
 	// Binary is the path to the devcontainer executable. Empty
 	// defaults to "devcontainer" (resolved against $PATH).
@@ -268,9 +299,9 @@ func parseUpResult(raw []byte) (devcontainerUpResult, error) {
 
 func truncateLine(s string) string {
 	s = strings.TrimSpace(s)
-	const max = 512
-	if len(s) <= max {
+	const limit = 512
+	if len(s) <= limit {
 		return s
 	}
-	return s[:max] + "…"
+	return s[:limit] + "…"
 }

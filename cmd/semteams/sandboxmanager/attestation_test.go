@@ -238,6 +238,16 @@ func TestAttest_TriplesShape(t *testing.T) {
 		if tr.Source != "sandbox-manager-attestation" {
 			t.Errorf("source not tagged: %q", tr.Source)
 		}
+		// PR 4.2 finding M5: reason / failed-probe slices stamp as
+		// native []string Objects, not joined strings.
+		switch tr.Predicate {
+		case PredicateAttestationDegradedReasons,
+			PredicateAttestationFailedProbes,
+			PredicateAttestationAdmissionReasons:
+			if _, ok := tr.Object.([]string); !ok {
+				t.Errorf("predicate %s: expected []string Object, got %T", tr.Predicate, tr.Object)
+			}
+		}
 	}
 	for p := range want {
 		if !got[p] {

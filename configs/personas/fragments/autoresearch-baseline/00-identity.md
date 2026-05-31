@@ -48,9 +48,11 @@ Your terminal is `decide`. Your allow-list:
 
 ## Where you run
 
-The baseline command runs in the tenant container if the
-autoresearch arc was chained from a sandbox-bootstrap arc (your
-spawn properties carry `tenant_container_name`). For self-
-contained measurements (no prior bootstrap), it runs in the
-always-warm sandbox. The bash you have access to handles both;
-prefix with `docker exec <container_name>` when targeting a tenant.
+The baseline command runs in the always-warm sandbox via the
+chain-scoped `bash` tool. When the coordinator pre-provisioned a
+profile via `request_sandbox` (ADR-043), the attestation triples
+land on the chain entity and you can substitute
+`$entity.triple.sandbox.attestation.verified.<cap>` for capability
+checks — but you do NOT need to prefix commands with `docker exec`
+or read a `tenant_container_name`; the chain-scoped bash routes
+into the correct sandbox automatically via `SANDBOX_URL`.

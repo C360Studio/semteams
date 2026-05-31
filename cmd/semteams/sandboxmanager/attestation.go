@@ -11,17 +11,21 @@ import (
 	"github.com/c360studio/semstreams/message"
 )
 
-// Predicate constants stamped on `sandbox.attestation.*`. Separate
-// namespace from sandboxfleet's `sandbox.tenant.*` registry per
-// ADR-043 §Operational state vs domain truth: attestation triples
-// are operational state, they age out, and they live on the calling
-// chain entity — not on a long-lived tenant entity.
+// Predicate constants stamped on `sandbox.attestation.*`. The
+// namespace is operational state, not domain truth: triples age
+// out per profile TTL and live on the calling chain entity.
 //
 // Coordinator persona prose substitutes
 // `$entity.triple.sandbox.attestation.{ready,profile,verified.*}`
 // when routing on a request_sandbox result. Adding a new predicate
 // is a contract-widening change: declare here, reference in rule +
 // persona, update the docs cross-link.
+//
+// Reasons (degraded / admission_pending / admission_denied) stamp
+// as ARRAYS of strings (one triple, Object = []string), not as a
+// joined string. PR 4.2 finding M5: a reason fragment containing
+// the join separator would silently split into multiple reasons on
+// the read side. Native typed-object triples avoid that class.
 const (
 	PredicateAttestationProfile          = "sandbox.attestation.profile"
 	PredicateAttestationImageDigest      = "sandbox.attestation.image_digest"
@@ -304,14 +308,20 @@ func (a Attestation) Triples(subjectEntityID string) []message.Triple {
 	if a.TerminalReason != "" {
 		out = append(out, baseAttTriple(subjectEntityID, PredicateAttestationTerminalReason, a.TerminalReason, now))
 	}
+	// Per PR 4.2 finding M5: stamp reason slices as native
+	// []string Objects (NATS triple ingest JSON-encodes the Object;
+	// the entity reader returns them as []any on the read side).
+	// Per-reason indexing avoids the separator-collision class
+	// (smoke #12 lesson — string-joined surfaces silently split
+	// when a fragment contains the separator).
 	if len(a.DegradedReasons) > 0 {
-		out = append(out, baseAttTriple(subjectEntityID, PredicateAttestationDegradedReasons, strings.Join(a.DegradedReasons, "; "), now))
+		out = append(out, baseAttTriple(subjectEntityID, PredicateAttestationDegradedReasons, append([]string(nil), a.DegradedReasons...), now))
 	}
 	if len(a.FailedProbes) > 0 {
-		out = append(out, baseAttTriple(subjectEntityID, PredicateAttestationFailedProbes, strings.Join(a.FailedProbes, ","), now))
+		out = append(out, baseAttTriple(subjectEntityID, PredicateAttestationFailedProbes, append([]string(nil), a.FailedProbes...), now))
 	}
 	if len(a.AdmissionReasons) > 0 {
-		out = append(out, baseAttTriple(subjectEntityID, PredicateAttestationAdmissionReasons, strings.Join(a.AdmissionReasons, "; "), now))
+		out = append(out, baseAttTriple(subjectEntityID, PredicateAttestationAdmissionReasons, append([]string(nil), a.AdmissionReasons...), now))
 	}
 
 	// Per-capability verified triples: sorted by name for stable

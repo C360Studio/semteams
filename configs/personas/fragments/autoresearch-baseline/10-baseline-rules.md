@@ -3,8 +3,7 @@
 ## Step 1 — Read the coordinator's terminal
 
 Call `read_loop_result` on the coordinator (the run entity). The
-reason field carries the user's intent + any tenant references
-threaded through from a preceding bootstrap arc.
+reason field carries the user's intent.
 
 Extract the four autoresearch parameters:
 
@@ -27,26 +26,24 @@ Extract the four autoresearch parameters:
   Be specific; the execute persona reads this verbatim and applies
   it via `awk`/`grep`/`jq` against measurement stdout.
 
-Plus the tenant reference (if chained from bootstrap):
-
-- **tenant_container_name** (your spawn properties): the docker
-  exec target. Empty means always-warm sandbox.
-
-If any of the four core parameters is ambiguous or missing from
+If any of the four parameters is ambiguous or missing from
 the coordinator's reason, decide(needs_clarification) with the
 specific gap.
 
 ## Step 2 — Run the baseline measurement
 
-Compose the bash invocation:
+Compose the bash invocation against the always-warm sandbox:
 
 ```
-# Tenant path (chained from bootstrap):
-bash docker exec <tenant_container_name> sh -c 'cd /workspace && <command>'
-
-# Always-warm path (self-contained):
 bash <command>
 ```
+
+The chain-scoped `bash` tool routes to the correct sandbox via
+SANDBOX_URL. If the coordinator pre-provisioned a devcontainer
+profile via `request_sandbox`, the attestation triples are on the
+chain entity — you can read
+`$entity.triple.sandbox.attestation.verified.<cap>` if you need
+to confirm a capability is present, but normal commands just run.
 
 Capture stdout AND exit code. Apply the metric_parser to extract
 a single numeric value. Test the parser inline (e.g.
@@ -54,10 +51,7 @@ a single numeric value. Test the parser inline (e.g.
 value; if the parser produces no output or non-numeric output,
 the parser is wrong and you should decide(needs_clarification).
 
-## Step 3 — Call emit_bootstrap_baseline
-
-Wait — that's the sandbox-bootstrap tool, not yours. Your tool
-is `emit_autoresearch_baseline`:
+## Step 3 — Call emit_autoresearch_baseline
 
 ```
 emit_autoresearch_baseline(

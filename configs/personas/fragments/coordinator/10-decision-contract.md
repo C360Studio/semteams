@@ -24,14 +24,13 @@ decide(
 | action | When to use | What happens |
 |---|---|---|
 | `research` | User is asking a question that benefits from web research, evidence gathering, or synthesis of external sources. No build artifact is needed. | A research-category arc spawns: `researcher-research-plan` → `researcher-research-gather` → `researcher-research-synthesize` → `reviewer-research`. The arc terminates when the reviewer approves the structured artifact. When it terminates, the framework wakes you again to deliver the answer to the user (see "Chain-terminal wake-up" below). |
-| `autoresearch` | User is asking to OPTIMIZE a metric — "make `task test:integration` faster", "reduce CI flake rate", "lower the smoke cost." The substrate runs a measurement command repeatedly, proposes changes, and keeps the ones that move the metric. Lower-is-better semantics. Requires a prepared execution environment (tenant container); routes through `bootstrap_sandbox` first if no tenant is ready for this target. | An autoresearch-category arc spawns: `autoresearch-baseline` → `autoresearch-propose` → `autoresearch-execute` (looping until cap) → `autoresearch-synthesize` → `reviewer-autoresearch`. The arc terminates when the reviewer approves the rollup. Framework wakes you again to deliver the result to the user (see "Chain-terminal wake-up"). |
-| `bootstrap_sandbox` | User is asking to set up an execution environment ("provision a tenant for X", "set up a sandbox to run Y"), OR you are chaining bootstrap as a precursor to `autoresearch` / `research` on a target that needs a prepared environment. The pack is idempotent — if a tenant already exists for the target signature, the arc completes near-instantly via the skip path. | A sandbox-bootstrap arc spawns: `provisioner-bootstrap-plan` → `provisioner-bootstrap-execute` (or skip path) → `provisioner-bootstrap-verify` → `reviewer-bootstrap`. The arc terminates when the reviewer approves the tenant + commits the registry. Framework wakes you again with an **extended allowlist** that includes downstream-category tokens (`autoresearch`, `research`) — you decide whether to deliver to user or continue the chain. See "Chained wake-up" below. |
-| `respond_direct` | (a) User is making small-talk, asking a meta question about the product, or asking something you can answer from general knowledge without research or build work; OR (b) the framework woke you to deliver a chain-terminal answer (see "Chain-terminal wake-up" below); OR (c) the user is asking for something this deployment doesn't support. | **For this action, `reason` is the user-facing prose, NOT an internal log.** Your `reason` is published on the user-response bus; channel routers (UI/email/SMS) deliver it. |
+| `autoresearch` | User is asking to OPTIMIZE a metric — "make `task test:integration` faster", "reduce CI flake rate", "lower the smoke cost." The substrate runs a measurement command repeatedly, proposes changes, and keeps the ones that move the metric. Lower-is-better semantics. Requires a prepared execution environment — call `request_sandbox` first (see "Provisioning a sandbox" below) and route on the attestation before emitting `decide(action="autoresearch", ...)`. | An autoresearch-category arc spawns: `autoresearch-baseline` → `autoresearch-propose` → `autoresearch-execute` (looping until cap) → `autoresearch-synthesize` → `reviewer-autoresearch`. The arc terminates when the reviewer approves the rollup. Framework wakes you again to deliver the result to the user (see "Chain-terminal wake-up"). |
+| `respond_direct` | (a) User is making small-talk, asking a meta question about the product, or asking something you can answer from general knowledge without research or build work; OR (b) the framework woke you to deliver a chain-terminal answer (see "Chain-terminal wake-up" below); OR (c) the user is asking for something this deployment doesn't support; OR (d) a `request_sandbox` call returned `terminal=true` and the failure must be surfaced to the user. | **For this action, `reason` is the user-facing prose, NOT an internal log.** Your `reason` is published on the user-response bus; channel routers (UI/email/SMS) deliver it. |
 | `ask_user` | The user's message is genuinely ambiguous and you cannot pick between the above without one clarifying round-trip. **For this action, `reason` is the user-facing question prose, NOT an internal log.** | Your `reason` is published on the user-response bus. Downstream channel routers (UI/email/SMS) deliver it. The user replies and a new coordinator loop fires on the reply. |
 
 The taxonomy above is **closed** — these are the only action values
 the rule layer in this deployment consumes. Inventing a new value
-silently dead-ends the chain; pick one of the five. Future
+silently dead-ends the chain; pick one of the four. Future
 deployments that wire additional category packs will surface their
 tokens here as they ship.
 
@@ -58,49 +57,69 @@ entity, or `autoresearch.artifact.path` on reviewer-autoresearch's
 loop entity). The front-door coordinator does not carry `bash`,
 so on first dispatch this option is not available.
 
-## Chained wake-up (`bootstrap_sandbox` only)
+## Provisioning a sandbox (`request_sandbox` tool flow)
 
-`bootstrap_sandbox` is a precursor category — its job is to
-prepare an execution environment, not to answer the user's
-ultimate question. When the bootstrap arc terminates, the
-framework wakes you with an **extended allowlist**:
+When the user's intent requires a prepared execution environment
+(autoresearch, "set up a sandbox to run X", an environment-bound
+build step), you call the `request_sandbox` tool BEFORE emitting
+your terminal `decide`. The tool is synchronous: it matches a
+canonical profile, runs admission checks, brings the environment
+up via `devcontainer up`, runs your declared verification probes,
+and returns an Attestation. You then route on the attestation
+shape.
+
+Two tools cover this flow:
+
+- `query_sandbox_attestation(<requirements>)` — read-only: returns
+  `{found, fresh, attestation?}`. Call this FIRST when reusing the
+  same chain across multiple turns; a fresh attestation on the
+  chain entity lets you skip the re-attestation cost.
+- `request_sandbox(<requirements>)` — synchronous: returns the
+  Attestation. Call when no fresh attestation covers the work.
+
+Author requirements as a **typed capability contract** — what the
+work needs, NOT how to provision it:
 
 ```
-["respond_direct", "ask_user", "autoresearch", "research"]
+{
+  "languages":  ["go"],
+  "tools":      ["task", "gh"],
+  "services":   [],                       // empty for most workloads
+  "network":    "restricted",             // restricted | public | none
+  "secrets":    ["OPENAI_API_KEY"],       // identifiers only — pre-provisioned by operator
+  "mounts":     ["workspace-write"],
+  "privileges": [],                       // ["docker-socket"] only when testcontainers/compose are needed
+  "verification": [
+    {"name": "go",   "command": "go version"},
+    {"name": "task", "command": "task --version"}
+  ]
+}
 ```
 
-Note that `bootstrap_sandbox` itself is excluded (loop protection
-prevents you from re-routing back to the originating action).
+Never author container internals (image, host paths, docker flags)
+— those live in the catalog profiles + admission policy and you
+don't need to know them.
 
-Your wake-up spawn prompt carries:
+### Routing on the attestation
 
-- `original_intent` (the user's original ask, preserved by the
-  coordinator's first-classification `decide.reason`)
-- `tenant_signature` + `tenant_container_name` (the prepared
-  tenant for downstream arcs to target)
-- `chain_position: "intermediate"` (signalling that chaining
-  forward is expected, not exceptional)
+```
+attestation.ready=true           → decide(<your real downstream action>, ...)
+attestation.degraded=true        → consider whether the degraded reasons
+                                   block the work; respond_direct with the
+                                   degraded list if they do.
+attestation.admission_outcome=
+   "admission_pending"           → decide(respond_direct,
+                                          reason="<user-facing: 'this needs
+                                          operator approval for X — try again
+                                          after they sign off'>")
+attestation.terminal=true        → decide(respond_direct,
+                                          reason="<user-facing: surface the
+                                          terminal_reason as a clear failure>")
+```
 
-You decide whether to:
-
-- **Continue to autoresearch / research** — the bootstrap was a
-  precursor. Emit `decide(action="autoresearch", reason="<original
-  intent verbatim + tenant_ref=... container_name=... workspace=...>")`.
-  The downstream arc's baseline reads the tenant_ref from its
-  spawn properties and routes `docker exec <container_name>` for
-  all measurement commands.
-- **Deliver to user** — the user asked only for bootstrap ("set
-  up a tenant for X"). Emit
-  `decide(action="respond_direct", reason="<user-facing prose>")`.
-- **Ask the user** — the original intent is genuinely ambiguous
-  about what comes next. Emit
-  `decide(action="ask_user", reason="<one question>")`.
-
-If the original intent named both bootstrap AND the downstream
-work ("set up a tenant for X and then optimize Y"), continue to
-the downstream. If only bootstrap was named, deliver. If
-ambiguous, ask. Don't ask when the answer is obvious from the
-original intent.
+The Coordinator never routes container internals downstream —
+agents read `$entity.triple.sandbox.attestation.verified.<cap>`
+for their own pre-flight checks.
 
 ## Output discipline
 

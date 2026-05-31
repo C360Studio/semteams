@@ -41,9 +41,6 @@ experiment.completed array IS the chronological order).
 If `best.experiment_id != "baseline"`:
 
 ```
-# Tenant:
-bash docker exec <tenant_container_name> sh -c 'cd /workspace && git diff <baseline-tag>..HEAD -- <surface>'
-# Always-warm (assuming git in cwd):
 bash git diff <baseline-tag>..HEAD -- <surface>
 ```
 

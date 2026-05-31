@@ -17,7 +17,7 @@ import (
 	"github.com/c360studio/semteams/cmd/semteams/chain"
 	"github.com/c360studio/semteams/cmd/semteams/devviaspec"
 	"github.com/c360studio/semteams/cmd/semteams/research"
-	"github.com/c360studio/semteams/cmd/semteams/sandboxfleet"
+	"github.com/c360studio/semteams/cmd/semteams/sandboxmanager"
 	"github.com/c360studio/semteams/cmd/semteams/semsource"
 	"github.com/c360studio/semteams/cmd/semteams/tools/addsource"
 	"github.com/c360studio/semteams/cmd/semteams/tools/chainbash"
@@ -25,12 +25,9 @@ import (
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitautoresearchartifact"
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitautoresearchbaseline"
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitautoresearchmeasurement"
-	"github.com/c360studio/semteams/cmd/semteams/tools/emitbootstrapcommitted"
-	"github.com/c360studio/semteams/cmd/semteams/tools/emitbootstrapexecute"
-	"github.com/c360studio/semteams/cmd/semteams/tools/emitbootstrapplan"
-	"github.com/c360studio/semteams/cmd/semteams/tools/emitbootstrapverify"
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitplan"
-	"github.com/c360studio/semteams/cmd/semteams/tools/querysandboxtenant"
+	"github.com/c360studio/semteams/cmd/semteams/tools/querysandboxattestation"
+	"github.com/c360studio/semteams/cmd/semteams/tools/requestsandbox"
 )
 
 // Environment variables that configure product-shell-local tools.
@@ -57,6 +54,37 @@ const (
 	// wire two URLs that should always be the same. Empty leaves the
 	// inner BashExecutor in its local-exec mode.
 	envSandboxURL = "SANDBOX_URL"
+
+	// envSandboxRepoRoot points BuiltinCatalog at the directory
+	// holding `.devcontainer/<profile>/devcontainer.json`. Production
+	// default "/app" matches docker/Dockerfile's COPY layout.
+	envSandboxRepoRoot = "SEMTEAMS_SANDBOX_REPO_ROOT"
+
+	// envSandboxAllowPublicNetwork unlocks NetworkPolicy=public
+	// admission. Default false (default-deny). When true, requests
+	// declaring `network: public` admit without reviewer signoff
+	// (assuming profile allows it).
+	envSandboxAllowPublicNetwork = "SEMTEAMS_SANDBOX_ALLOW_PUBLIC_NETWORK"
+
+	// envSandboxAllowPrivileged unlocks Privilege=privileged
+	// admission. Default false (forbidden — operator-only opt-in).
+	envSandboxAllowPrivileged = "SEMTEAMS_SANDBOX_ALLOW_PRIVILEGED"
+
+	// envSandboxAvailableSecrets is a comma-separated list of secret
+	// identifiers the operator has pre-provisioned (env vars set on
+	// the backend process). Requests declaring a secret not in this
+	// set fail admission terminally.
+	envSandboxAvailableSecrets = "SEMTEAMS_SANDBOX_AVAILABLE_SECRETS"
+
+	// envSandboxRunner selects the Runner implementation. Empty (or
+	// any value besides "cli") wires a NoopRunner that returns a
+	// documented "no production runner configured" error — Manager
+	// produces Terminal attestations, Coordinator routes to
+	// respond_direct, the user gets a clear gap message rather than
+	// a 500. Set to "cli" once the backend process has
+	// @devcontainers/cli + Docker-socket access; PR 4.4 makes the
+	// production-deployment choice empirically.
+	envSandboxRunner = "SEMTEAMS_SANDBOX_RUNNER"
 )
 
 // registerProductPayloads registers all SemTeams-local payload types on top
@@ -114,7 +142,7 @@ func registerProductTools(reg *agentictools.ExecutorRegistry, natsClient *natscl
 	if err := registerEmitPlan(reg, natsClient, platform, logger); err != nil {
 		return err
 	}
-	if err := registerSandboxFleetTools(reg, natsClient, platform, logger); err != nil {
+	if err := registerSandboxManagerTools(reg, natsClient, platform, logger); err != nil {
 		return err
 	}
 	if err := registerAutoresearchTools(reg, natsClient, platform, logger); err != nil {
@@ -123,67 +151,116 @@ func registerProductTools(reg *agentictools.ExecutorRegistry, natsClient *natscl
 	return registerChainBash(reg, natsClient, platform, logger)
 }
 
-// registerSandboxFleetTools wires the 5 sandbox-bootstrap pack tools:
-// query_sandbox_tenant + emit_bootstrap_{plan,execute,verify,committed}.
-// Per ADR-042 §addendum 2026-05-29 §A. emit_bootstrap_execute added
-// in PR 3.2 as the execute-loop forward-stamp (see
-// cmd/semteams/tools/emitbootstrapexecute/executor.go for the why).
+// registerSandboxManagerTools wires the ADR-043 Layer 2 tools:
+// request_sandbox + query_sandbox_attestation. The shared
+// sandboxmanager.Manager holds the canonical-profile catalog,
+// operator-config'd AdmissionPolicy, the production CLIRunner
+// (shells out to @devcontainers/cli), and the triple publisher.
+// Both tools key off the same chain entity (related_loops
+// "chain-entity-id" pinned by the admission rule pack, or fallback
+// to chain.Resolver).
 //
-// All four share a single sandboxfleet.TenantRegistry instance —
-// constructing one per tool would still be correct (the registry is
-// stateless across calls) but the shared instance keeps the logger
-// + identity wiring uniform and saves a few allocations per boot.
+// Skipped when natsClient is nil: both tools need the live
+// publisher (request_sandbox) or entity reader
+// (query_sandbox_attestation). A nil-NATS deployment couldn't
+// honor the attestation-stamp contract.
 //
-// Skipped when natsClient is nil: the registry depends on a live
-// TriplePublisher + EntityTripleReader for the entity-namespace
-// storage. A nil-NATS deployment couldn't honor the rule pack's
-// registry contract; better to surface tool-absent than tool-broken
-// in the LLM's catalog.
-func registerSandboxFleetTools(reg *agentictools.ExecutorRegistry, natsClient *natsclient.Client, platform types.PlatformMeta, logger *slog.Logger) error {
+// Operator config: SEMTEAMS_SANDBOX_REPO_ROOT, _ALLOW_PUBLIC_NETWORK,
+// _ALLOW_PRIVILEGED, _AVAILABLE_SECRETS env vars (see const block).
+func registerSandboxManagerTools(reg *agentictools.ExecutorRegistry, natsClient *natsclient.Client, platform types.PlatformMeta, logger *slog.Logger) error {
 	if natsClient == nil {
-		logger.Warn("nats client unavailable; sandbox-fleet tools skipped",
-			slog.String("category", "sandbox-bootstrap"))
+		logger.Warn("nats client unavailable; sandbox-manager tools skipped",
+			slog.String("category", "sandbox-manager"))
 		return nil
 	}
 
 	triplePublisher := agentictools.NewNATSTriplePublisher(natsClient)
 	entityReader := chain.NewNATSEntityReader(natsClient, chain.DefaultGraphQueryEntitySubject)
-	// Defensive belt-and-suspenders. Upstream NewNATSTriplePublisher /
-	// NewNATSEntityReader return non-nil today, but their nil-return
-	// behavior is not in the upstream API contract; a future beta
-	// could degrade non-fatally. Surface as a Warn + skip instead of
-	// panicking inside TenantRegistry's constructor.
 	if triplePublisher == nil || entityReader == nil {
-		logger.Warn("sandbox-fleet tools skipped: upstream returned nil triple-publisher or entity-reader",
-			slog.String("category", "sandbox-bootstrap"))
+		logger.Warn("sandbox-manager tools skipped: upstream returned nil triple-publisher or entity-reader",
+			slog.String("category", "sandbox-manager"))
 		return nil
 	}
-	tenantRegistry := sandboxfleet.NewTenantRegistry(triplePublisher, entityReader, platform.Org, platform.Platform, logger)
 
-	queryExecutor := querysandboxtenant.NewExecutor(tenantRegistry, logger)
-	if err := reg.RegisterTool(querysandboxtenant.ToolName, queryExecutor); err != nil {
-		return fmt.Errorf("register %s: %w", querysandboxtenant.ToolName, err)
+	repoRoot := os.Getenv(envSandboxRepoRoot)
+	if repoRoot == "" {
+		repoRoot = "/app"
 	}
-	planExecutor := emitbootstrapplan.NewExecutor(triplePublisher, tenantRegistry, platform, logger)
-	if err := reg.RegisterTool(emitbootstrapplan.ToolName, planExecutor); err != nil {
-		return fmt.Errorf("register %s: %w", emitbootstrapplan.ToolName, err)
+	catalog, err := sandboxmanager.BuiltinCatalog(repoRoot)
+	if err != nil {
+		return fmt.Errorf("sandbox catalog: %w", err)
 	}
-	executeExecutor := emitbootstrapexecute.NewExecutor(triplePublisher, platform, logger)
-	if err := reg.RegisterTool(emitbootstrapexecute.ToolName, executeExecutor); err != nil {
-		return fmt.Errorf("register %s: %w", emitbootstrapexecute.ToolName, err)
+
+	policy := sandboxmanager.AdmissionPolicy{
+		AllowPublicNetwork:        boolEnv(envSandboxAllowPublicNetwork),
+		AllowPrivilegedContainers: boolEnv(envSandboxAllowPrivileged),
+		AvailableSecrets:          parseCSV(os.Getenv(envSandboxAvailableSecrets)),
 	}
-	verifyExecutor := emitbootstrapverify.NewExecutor(triplePublisher, platform, logger)
-	if err := reg.RegisterTool(emitbootstrapverify.ToolName, verifyExecutor); err != nil {
-		return fmt.Errorf("register %s: %w", emitbootstrapverify.ToolName, err)
+
+	runner := selectSandboxRunner(logger)
+	manager := sandboxmanager.New(sandboxmanager.ManagerConfig{
+		Catalog:   catalog,
+		Policy:    policy,
+		Runner:    runner,
+		Publisher: triplePublisher,
+		Logger:    logger,
+	})
+
+	// Both tools share the same chain.Resolver fallback for chain
+	// entity ID resolution when the rule pack hasn't pinned it
+	// explicitly (smoke tests, isolated coordinator calls).
+	parentReader := chain.NewNATSParentReader(natsClient, platform, "")
+	resolver := chain.NewResolver(parentReader, platform)
+
+	requestExecutor := requestsandbox.NewExecutor(manager, resolver, platform, logger)
+	if err := reg.RegisterTool(requestsandbox.ToolName, requestExecutor); err != nil {
+		return fmt.Errorf("register %s: %w", requestsandbox.ToolName, err)
 	}
-	committedExecutor := emitbootstrapcommitted.NewExecutor(triplePublisher, tenantRegistry, platform, logger)
-	if err := reg.RegisterTool(emitbootstrapcommitted.ToolName, committedExecutor); err != nil {
-		return fmt.Errorf("register %s: %w", emitbootstrapcommitted.ToolName, err)
+
+	queryExecutor := querysandboxattestation.NewExecutor(catalog, entityReader, resolver, platform, nil, logger)
+	if err := reg.RegisterTool(querysandboxattestation.ToolName, queryExecutor); err != nil {
+		return fmt.Errorf("register %s: %w", querysandboxattestation.ToolName, err)
 	}
-	logger.Info("Registered sandbox-fleet product tools",
-		slog.String("category", "sandbox-bootstrap"),
-		slog.Int("count", 5))
+
+	logger.Info("Registered sandbox-manager product tools",
+		slog.String("category", "sandbox-manager"),
+		slog.String("repo_root", repoRoot),
+		slog.Int("profiles", len(catalog.Profiles())),
+		slog.Bool("allow_public_network", policy.AllowPublicNetwork),
+		slog.Bool("allow_privileged", policy.AllowPrivilegedContainers),
+		slog.Int("available_secrets", len(policy.AvailableSecrets)),
+		slog.Int("count", 2))
 	return nil
+}
+
+// boolEnv accepts "1", "true", "yes" (case-insensitive, trimmed)
+// as opt-in; anything else (including "on", "y", "enabled") is
+// treated as deny. The narrow set is intentional — admission is a
+// security surface where the wrong default direction is the failure
+// mode.
+func boolEnv(name string) bool {
+	v := strings.TrimSpace(strings.ToLower(os.Getenv(name)))
+	return v == "1" || v == "true" || v == "yes"
+}
+
+// selectSandboxRunner picks the Runner based on
+// SEMTEAMS_SANDBOX_RUNNER. Default (unset / unrecognized) returns
+// a NoopRunner that surfaces "no production runner configured" via
+// the attestation, preventing silent 500s on first call.
+func selectSandboxRunner(logger *slog.Logger) sandboxmanager.Runner {
+	v := strings.TrimSpace(strings.ToLower(os.Getenv(envSandboxRunner)))
+	if v == "cli" {
+		runner := sandboxmanager.NewCLIRunner()
+		runner.Logger = logger
+		logger.Info("sandbox runner: production CLI",
+			slog.String("env", envSandboxRunner),
+			slog.String("value", v))
+		return runner
+	}
+	logger.Warn("sandbox runner: noop (set SEMTEAMS_SANDBOX_RUNNER=cli for production)",
+		slog.String("env", envSandboxRunner),
+		slog.String("value", v))
+	return sandboxmanager.NoopRunner{}
 }
 
 // registerAutoresearchTools wires the 3 autoresearch pack tools:

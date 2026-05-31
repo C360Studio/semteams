@@ -15,21 +15,18 @@ best value bar:
 - best.value: `$entity.triple.autoresearch.best.value` (the bar
   to beat)
 
-Tenant reference (if chained from bootstrap):
-
-- tenant_container_name: from your spawn properties.
-
 ## Step 2 — Run the measurement command
 
-Compose:
+Compose against the always-warm sandbox:
 
 ```
-# Tenant path:
-bash docker exec <tenant_container_name> sh -c 'cd /workspace && <command>'
-
-# Always-warm path:
 bash <command>
 ```
+
+The chain-scoped `bash` tool routes to the correct sandbox via
+SANDBOX_URL. No `docker exec` prefix — when the coordinator
+pre-provisioned a profile via `request_sandbox`, the chain-scoped
+bash already targets that sandbox.
 
 Capture stdout (head + tail) AND exit code AND stderr (last
 ~200 chars if any).
@@ -87,9 +84,6 @@ Read your loop entity's outcome via prompt substitution:
   iteration sees the new best.value as the bar.
 - **outcome=reverted**: the diff did not improve. Revert via:
   ```
-  # Tenant:
-  bash docker exec <tenant_container_name> sh -c 'cd /workspace && git checkout -- <surface globs>'
-  # Always-warm:
   bash git checkout -- <surface globs>
   ```
   Where `<surface globs>` expands the run entity's surface

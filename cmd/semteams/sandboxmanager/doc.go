@@ -50,19 +50,9 @@
 // module dep." Migration target: graduate to upstream if a sibling
 // product needs the same three-layer model.
 //
-// Relationship to sandboxfleet: sandboxfleet owns the long-lived
-// tenant registry (sandbox.tenant.*); sandboxmanager owns
-// per-request attestations (sandbox.attestation.*). They share
-// nothing structurally — the tenant signature is the registry's
-// cache key; the attestation signature is (profile,
-// requirements_hash) per ADR-043. Both can coexist for the
-// transition period while the rule pack collapses (PR 4.3
-// retires the bootstrap rules; the tenant registry survives
-// to back any future warm-pool / GC features).
-//
-// Threat model: same as sandboxfleet — appropriate for
-// operator-controlled hosts running operator-owned workloads. NOT
-// appropriate for adversarial code analysis. Admission gates
+// Threat model: appropriate for operator-controlled hosts running
+// operator-owned workloads. NOT appropriate for adversarial code
+// analysis. Admission gates
 // (docker-socket, privileged, public network, host-path mounts)
 // are first-class because they shape the blast radius; they
 // default-deny and route through the admission-reviewer approval

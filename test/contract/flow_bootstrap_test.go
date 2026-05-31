@@ -18,9 +18,12 @@ import (
 // Future category packs (web-research/, dev-via-spec/) extend this
 // list as they land.
 var flowBootstrapAllowedRulePackPrefixes = []string{
-	"/app/configs/rules/research/",          // ADR-042 MVP-2 research category pack.
-	"/app/configs/rules/sandbox-bootstrap/", // ADR-042 §addendum 2026-05-29 sandbox-bootstrap pack.
-	"/app/configs/rules/autoresearch/",      // ADR-042 §addendum 2026-05-29 autoresearch pack.
+	"/app/configs/rules/research/",     // ADR-042 MVP-2 research category pack.
+	"/app/configs/rules/autoresearch/", // ADR-042 §addendum 2026-05-29 autoresearch pack.
+	// Sandbox provisioning is synchronous via the request_sandbox
+	// tool under ADR-043; no rule pack — the prefix was removed
+	// alongside the configs/rules/sandbox-bootstrap/ directory in
+	// PR 4.2.
 }
 
 // flowBootstrapAllowedSharedRuleFiles lists individual cross-category

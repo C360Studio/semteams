@@ -56,22 +56,18 @@ Use whatever shell tools fit:
 - `bash patch < <patch-file>` for multi-line edits.
 - `bash cat > <file> << EOF` for full file rewrites.
 
-If chained from a tenant container:
-
-```
-bash docker exec <tenant_container_name> sh -c 'cd /workspace && <edit command>'
-```
-
-Always-warm path:
+All edits go through the chain-scoped bash tool:
 
 ```
 bash <edit command>
 ```
 
-Verify your scope with `git diff --stat` (or `docker exec ... git
-diff --stat`) — the changed files should be subset of the surface
-globs. If git shows changes outside the surface, you have a bug;
-revert via `git checkout -- <out-of-scope file>`.
+The bash tool routes to the correct sandbox via SANDBOX_URL.
+
+Verify your scope with `bash git diff --stat` — the changed files
+should be a subset of the surface globs. If git shows changes
+outside the surface, you have a bug; revert via `bash git
+checkout -- <out-of-scope file>`.
 
 ## Step 4 — Terminal
 

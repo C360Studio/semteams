@@ -90,21 +90,19 @@ func TestConfigDispatchDefaultToolsParse(t *testing.T) {
 		// config author put in the file (order-sensitive).
 		expected []string
 	}{
-		// PR 3.1 (2026-05-30): both configs scope the dispatch
-		// coordinator's tool list to classify-and-route only. Before this,
-		// default_tools was absent → dispatch loop fell back to global
-		// discovery → all registered tools (including emit_bootstrap_plan,
-		// query_sandbox_tenant, etc.). Smoke #9 PR 3.1 run-1 (loop_a5bda8c)
-		// surfaced the risk empirically: gemini-pro short-circuited the
-		// chain by calling emit_bootstrap_plan directly, which failed
-		// (no run-loop-entity-id in dispatch metadata) and dead-ended the
-		// chain. Scoping the dispatch coordinator to
-		// decide+read_loop_result+scratchpad makes classification the
-		// only path forward. Downstream personas (spawned by rules) still
-		// receive their per-role tool list via the spawn rule's `tools:`
-		// field — unchanged.
-		"flow-bootstrap.json":     {expected: []string{"decide", "read_loop_result", "scratchpad"}},
-		"e2e-flow-bootstrap.json": {expected: []string{"decide", "read_loop_result", "scratchpad"}},
+		// PR 3.1 (2026-05-30) scoped the dispatch coordinator to
+		// classify-and-route only. ADR-043 PR 4.2 (2026-05-31)
+		// extends the list with the two synchronous sandbox tools:
+		// the coordinator's `autoresearch` delegation path calls
+		// query_sandbox_attestation + request_sandbox BEFORE
+		// emitting its terminal decide (per
+		// configs/personas/fragments/coordinator/20-delegation-rules.md
+		// "Provisioning a sandbox" section). These tools are
+		// synchronous + read-only(query) / typed-attestation-return
+		// (request) — they don't risk the smoke #9 short-circuit
+		// pattern that motivated the original scoping.
+		"flow-bootstrap.json":     {expected: []string{"decide", "read_loop_result", "scratchpad", "query_sandbox_attestation", "request_sandbox"}},
+		"e2e-flow-bootstrap.json": {expected: []string{"decide", "read_loop_result", "scratchpad", "query_sandbox_attestation", "request_sandbox"}},
 	}
 
 	configs, err := filepath.Glob("../../configs/*.json")

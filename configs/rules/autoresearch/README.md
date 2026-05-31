@@ -193,32 +193,29 @@ work** the pack files do not include. Per CLAUDE.md
 
 ### Sandbox dependency — per-phase posture (per review M4 2026-05-29)
 
-The pack uses bash in different sandboxing postures per phase. ADR-042
-§addendum 2026-05-29 §A established the dual-mode sandbox model
-(always-warm sandbox + per-tenant containers); this pack consumes both.
+Every autoresearch role runs against the **always-warm sandbox**
+via the chain-scoped `bash` tool. The bash tool routes to the
+correct sandbox via SANDBOX_URL — no `docker exec` prefix, no
+tenant-container-name plumbing.
 
-| Role | Sandbox posture | Why |
+| Role | Tool | What runs |
 |---|---|---|
-| `autoresearch-baseline` | **always-warm sandbox** | Parameter parsing + one initial measurement. The measurement command is the same one used in execute, but baseline runs it once via the always-warm sandbox's bash + `docker exec <tenant>` for cases where the autoresearch is chained from a sandbox-bootstrap arc and the tenant container is already prepared. For standalone autoresearch (no preceding bootstrap), baseline uses always-warm bash directly. |
-| `autoresearch-propose` | **always-warm sandbox** | Diff authoring + `git diff --stat` verification. No measurement; no need for tenant. |
-| `autoresearch-execute` | **tenant container** (preferred) OR always-warm (fallback) | The measurement command runs against the prepared environment. When this autoresearch arc was chained from a sandbox-bootstrap arc, $entity.triple.lineage.autoresearch-run carries a tenant_container_name and execute runs `docker exec <tenant> <command>`. For self-contained measurements (shell-script profiling, no deps), execute can fall back to always-warm. |
-| `autoresearch-synthesize` | **always-warm sandbox** | Artifact composition + `git log` / `git show` reading. No measurement. |
-| `reviewer-autoresearch` | **always-warm sandbox** | Reads the rendered artifact via `bash cat`. No measurement. |
+| `autoresearch-baseline` | `bash` | Parameter parsing + one initial measurement. |
+| `autoresearch-propose` | `bash` | Diff authoring + `bash git diff --stat` verification. |
+| `autoresearch-execute` | `bash` | Measurement command runs against the prepared environment. |
+| `autoresearch-synthesize` | `bash` | Artifact composition + `bash git log` / `bash git show` reading. |
+| `reviewer-autoresearch` | `bash` | Reads the rendered artifact via `bash cat`. |
 
-Tenant container reference threading: the sandbox-bootstrap pack's
-rule 07 chained wake-up stamps `chain.arc.bootstrap.tenant_signature`
-+ passes `tenant_container_name` in coordinator wake-up properties.
-The wake-up coordinator's `decide(autoresearch, reason="<intent +
-tenant_ref>")` threads the tenant references into autoresearch's
-spawn rule. Baseline reads them; subsequent execute spawns inherit
-via related_loops.
+When the coordinator pre-provisioned a devcontainer profile via
+`request_sandbox` (ADR-043), the attestation triples land on the
+chain entity (`sandbox.attestation.*` namespace). Personas can
+read `$entity.triple.sandbox.attestation.verified.<cap>` for
+capability checks before running commands, but the bash tool
+already targets the correct sandbox so most commands just run.
 
-When this autoresearch arc is NOT chained from a bootstrap arc
-(user directly asks for autoresearch on a self-contained target),
-`tenant_container_name` is empty and execute uses always-warm bash.
-If sandbox is down (always-warm), execute loops fail fast and rule
-04b stamps experiment.completed + experiment.loop_failed (per the
-C1 fix; budget-consumed-but-evidence-empty iteration).
+If sandbox is down, execute loops fail fast and rule 04b stamps
+experiment.completed + experiment.loop_failed (per the C1 fix;
+budget-consumed-but-evidence-empty iteration).
 
 ## Open substrate questions (filed as follow-ups, not blockers for ship)
 

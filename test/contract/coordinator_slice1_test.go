@@ -22,9 +22,13 @@ import (
 //
 //	research          — research-pack rule 01 (research-category arc)
 //	autoresearch      — autoresearch-pack rule 01 (per ADR-042 §addendum 2026-05-29)
-//	bootstrap_sandbox — sandbox-bootstrap-pack rule 01 (per ADR-042 §addendum 2026-05-29)
 //	ask_user          — coordinator/03-ask-user.json
 //	respond_direct    — coordinator/03b-respond-direct.json
+//
+// Sandbox provisioning is NOT a coordinator action under ADR-043 —
+// it is the synchronous `request_sandbox` tool the coordinator
+// calls before emitting its terminal decide. No persona action,
+// no rule.
 //
 // Invariant: every action emitted by the live rule set has a backing
 // persona entry (no rule that fires without LLM-emitted token); every
@@ -46,7 +50,7 @@ func TestMVPCoordinatorActionTaxonomy(t *testing.T) {
 	}
 	personaText := string(body)
 
-	personaActions := []string{"research", "autoresearch", "bootstrap_sandbox", "respond_direct", "ask_user"}
+	personaActions := []string{"research", "autoresearch", "respond_direct", "ask_user"}
 	for _, action := range personaActions {
 		// Persona must teach the action via its action-value table
 		// (backtick-wrapped token). The "don't invent" warning that
