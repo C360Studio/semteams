@@ -193,9 +193,17 @@ func canonicalizeRepo(rawURL, rawRef string) (string, string, error) {
 
 // parseRepoURL accepts both ssh ("git@host:path") and https forms
 // and returns a canonical "https://host/path" without trailing
-// slash and without ".git" suffix.
+// slash and without ".git" suffix. Per PR 3.3 reviewer REC-7,
+// embedded whitespace is rejected — url.Parse accepts URLs with
+// spaces in the path, but a space in the canonicalized URL would
+// mis-position the workspace argument in `git clone <url> <ws>`
+// (git would parse the post-space token as the workspace and our
+// /workspace arg as a positional overflow).
 func parseRepoURL(raw string) (string, error) {
 	raw = strings.TrimSpace(raw)
+	if strings.ContainsAny(raw, " \t\n\r") {
+		return "", fmt.Errorf("repo_url %q: contains whitespace (would break shell-positional git clone)", raw)
+	}
 
 	// ssh form: git@host:owner/repo[.git]
 	if rest, ok := strings.CutPrefix(raw, "git@"); ok {
@@ -381,4 +389,10 @@ func (s TargetSignature) TryEntityID(org, platform string) (string, error) {
 var (
 	whitespaceRun      = regexp.MustCompile(`\s+`)
 	versionCorePattern = regexp.MustCompile(`^[0-9]+(\.[0-9]+){0,2}$`)
+	// volumeSuffixPattern restricts caller-supplied volume-name
+	// suffixes to docker-volume-name-legal characters (lowercase
+	// alnum + hyphen). Used by recipe.composeVolumeMounts when
+	// rendering Mount.VolumeSuffix into the full
+	// "semteams-tenant-<prefix>-<suffix>" volume name.
+	volumeSuffixPattern = regexp.MustCompile(`^[a-z0-9-]+$`)
 )

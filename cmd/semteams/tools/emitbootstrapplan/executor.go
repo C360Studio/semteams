@@ -129,40 +129,99 @@ func NewExecutor(publisher agentictools.TriplePublisher, registry Registry, plat
 	return &Executor{publisher: publisher, registry: registry, platform: platform, logger: logger}
 }
 
-// ListTools returns the LLM-facing schema. Persona supplies typed
-// fields; the tool canonicalizes the signature and computes
-// plan_hash. Server-derived: signature, container_name, plan_hash,
-// stamped_at.
+// ListTools returns the LLM-facing schema. PR 3.3: persona supplies
+// STRUCTURED INTENT — source kind, dependency intent (apt/go_mod/
+// npm_ci/pip_install/raw), mount intent (volume_suffix + path), smoke
+// expects (exit_code + stdout_contains). The tool's Go composer
+// (sandboxfleet.Compose) deterministically renders those into the
+// verbatim shell strings stamped on the run + plan-loop entities, so
+// the rule-02b → execute persona contract is unchanged downstream.
+//
+// CLI grammar (git --branch ordering, apt-get -y --no-install-
+// recommends, docker volume-name conventions) lives in the composer,
+// NOT in persona prose. See [[personas-should-not-author-shell]] +
+// ADR-042 §addendum PR 3.3 for the rationale.
+//
+// Server-derived: signature, container_name, plan_hash, clone_command,
+// install_steps, volume_mounts, expected_smoke_signature, stamped_at.
 func (e *Executor) ListTools() []agentic.ToolDefinition {
 	return []agentic.ToolDefinition{{
 		Name: ToolName,
-		Description: "Emit the provisioner-bootstrap-plan's terminal plan. Canonicalizes the target signature server-side (cache-key correctness invariant); computes plan_hash from the provisioning fields; stamps sandbox.tenant.* triples on the run entity; transitions registry state to provisioning for provision/reprovision (skip preserves the cached ready state). " +
+		Description: "Emit the provisioner-bootstrap-plan's terminal plan as STRUCTURED INTENT. Canonicalizes the target signature server-side, composes provisioning shell from typed fields (no LLM-authored shell strings — the composer owns CLI grammar), stamps sandbox.tenant.* triples on the run entity AND the calling loop entity, transitions registry state to provisioning for provision/reprovision (skip preserves the cached ready state). " +
 			"Call exactly once per plan-persona pass before terminating with decide(action=execute|skip).",
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
-				"command":                  map[string]any{"type": "string", "description": "Measurement / smoke command verbatim (e.g. 'task test:integration')."},
-				"repo_url":                 map[string]any{"type": "string", "description": "Source repo URL (ssh or https). Empty for self-contained targets."},
-				"repo_ref":                 map[string]any{"type": "string", "description": "Source ref (SHA, tag, or branch). Required when repo_url is set."},
-				"toolchain":                map[string]any{"type": "object", "description": "Toolchain version map (e.g. {\"go\":\"1.26\"})."},
-				"base_image":               map[string]any{"type": "string", "description": "Docker image:tag for the tenant base (no :latest)."},
-				"clone_command":            map[string]any{"type": "string", "description": "Full `git clone <url> <workspace>` (or 'none' for no-clone)."},
-				"install_steps":            map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Ordered shell commands to install deps inside the tenant. One step per line."},
-				"volume_mounts":            map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Docker volume mounts (e.g. 'semteams-tenant-<sig>-workspace:/workspace')."},
-				"docker_socket_mount":      map[string]any{"type": "boolean", "description": "true if the target's measurement needs Docker (testcontainers, etc.). Conservative gate; default false."},
-				"verify_command":           map[string]any{"type": "string", "description": "Fast smoke command (<60s) the verify persona runs to grade provisioning."},
-				"expected_smoke_signature": map[string]any{"type": "string", "description": "What the verify persona matches against (exit code, stdout substring, etc.)."},
-				"plan_action":              map[string]any{"type": "string", "enum": []string{ActionProvision, ActionReprovision, ActionSkip}, "description": "provision (fresh), reprovision (rm + provision; for stale tenants), or skip (registry hit + fresh)."},
-				"force_refresh":            map[string]any{"type": "boolean", "description": "If true, bypass registry freshness check (operator-explicit rebuild)."},
-				"plan_revision":            map[string]any{"type": "integer", "minimum": 1, "description": "Monotonic across reviewer-rejection retries. 1 on first pass."},
-				"workspace":                map[string]any{"type": "string", "description": "Container-internal workspace path. Typically /workspace. Optional; defaults to /workspace."},
+				"command":    map[string]any{"type": "string", "description": "Measurement / smoke command verbatim (e.g. 'task test:integration'). Signature input."},
+				"repo_url":   map[string]any{"type": "string", "description": "Source repo URL (ssh or https). Empty for self-contained targets. Signature input."},
+				"repo_ref":   map[string]any{"type": "string", "description": "Source ref (SHA, tag, or branch). Required when repo_url is set. Signature input."},
+				"toolchain":  map[string]any{"type": "object", "description": "Toolchain version map (e.g. {\"go\":\"1.26\"}). Signature input."},
+				"base_image": map[string]any{"type": "string", "description": "Docker image:tag for the tenant base (no :latest). Signature input."},
+				"source": map[string]any{
+					"type":        "object",
+					"description": "Source intent. kind=git clones repo_url@repo_ref into workspace (composer emits shallow + single-branch by default; depth/all_branches are explicit opt-outs). kind=none leaves workspace empty.",
+					"properties": map[string]any{
+						"kind":         map[string]any{"type": "string", "enum": []string{"git", "none"}, "description": "git | none. Default git when repo_url present, else none."},
+						"depth":        map[string]any{"type": "integer", "description": "Optional: 0 = default shallow (1), negative = full clone (omit --depth), positive = literal depth."},
+						"all_branches": map[string]any{"type": "boolean", "description": "Optional: true omits --single-branch (fetch all refs). Default false."},
+					},
+				},
+				"dependencies": map[string]any{
+					"type":        "array",
+					"description": "Ordered install intent. Composer emits one shell line per entry with idempotency flags (apt-get -y --no-install-recommends, pip --no-cache-dir, npm ci --no-audit, etc.). Persona owns order; composer owns flags.",
+					"items": map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"kind":     map[string]any{"type": "string", "enum": []string{"apt", "go_mod_download", "npm_ci", "pip_install", "toolchain_go", "toolchain_node", "raw"}, "description": "Dependency shape. raw is an escape hatch — use sparingly; recurring raw uses motivate adding a structured kind."},
+							"packages": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "apt: package list. Sorted server-side for stable hashing."},
+							"manifest": map[string]any{"type": "string", "description": "pip_install: requirements.txt path OR a pip CLI spec starting with '-' (e.g. '-e .[test]')."},
+							"command":  map[string]any{"type": "string", "description": "raw: verbatim shell line. Last-resort escape hatch."},
+						},
+						"required": []string{"kind"},
+					},
+				},
+				"mounts": map[string]any{
+					"type":        "array",
+					"description": "Volume mounts. Composer derives the full volume name from the signature prefix (semteams-tenant-<prefix>-<volume_suffix>).",
+					"items": map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"volume_suffix": map[string]any{"type": "string", "description": "Suffix differentiator (e.g. 'workspace', 'deps'). Must match [a-z0-9-]+."},
+							"path":          map[string]any{"type": "string", "description": "In-container mount path."},
+						},
+						"required": []string{"volume_suffix", "path"},
+					},
+				},
+				"docker_socket_mount": map[string]any{"type": "boolean", "description": "true if the target's measurement needs Docker (testcontainers, etc.). Conservative gate; default false."},
+				"smoke": map[string]any{
+					"type":        "object",
+					"description": "Verify-phase smoke contract. command is the actual shell line verify will run (legitimately LLM-authored — IS the user-intent unit of work). expects encodes the grading rule structurally.",
+					"properties": map[string]any{
+						"command": map[string]any{"type": "string", "description": "Fast smoke command (<60s) the verify persona runs."},
+						"expects": map[string]any{
+							"type": "object",
+							"properties": map[string]any{
+								"exit_code":       map[string]any{"type": "integer", "description": "Required exit status. Default 0."},
+								"stdout_contains": map[string]any{"type": "string", "description": "Optional substring match on stdout."},
+							},
+						},
+					},
+				},
+				"plan_action":   map[string]any{"type": "string", "enum": []string{ActionProvision, ActionReprovision, ActionSkip}, "description": "provision (fresh), reprovision (rm + provision; for stale tenants), or skip (registry hit + fresh)."},
+				"force_refresh": map[string]any{"type": "boolean", "description": "If true, bypass registry freshness check (operator-explicit rebuild)."},
+				"plan_revision": map[string]any{"type": "integer", "minimum": 1, "description": "Monotonic across reviewer-rejection retries. 1 on first pass."},
+				"workspace":     map[string]any{"type": "string", "description": "Container-internal workspace path. Typically /workspace. Optional; defaults to /workspace."},
 			},
 			"required": []string{"command", "base_image", "plan_action"},
 		},
 	}}
 }
 
-// Execute parses, canonicalizes, stamps triples, transitions registry.
+// Execute parses, canonicalizes, composes shell, stamps triples,
+// transitions registry. The structured intent → shell composition
+// happens in sandboxfleet.Compose; the executor stamps the composed
+// shell strings on the run + plan-loop entities so downstream
+// substitution (rule 02b → execute persona) reads literal commands.
 func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.ToolResult, error) {
 	if call.Name != ToolName {
 		return errResult(call, agentic.ToolErrorNotFound, "unknown tool: %s", call.Name)
@@ -178,7 +237,12 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 		return errResult(call, agentic.ToolErrorInvalidArgs, "canonicalize: %v", err)
 	}
 
-	planHash := args.planHash(sig)
+	recipe, err := sandboxfleet.Compose(args.recipeIntent(), sig, args.Workspace)
+	if err != nil {
+		return errResult(call, agentic.ToolErrorInvalidArgs, "compose recipe: %v", err)
+	}
+
+	planHash := args.planHash(sig, recipe)
 
 	runEntityID, err := runEntityFromCall(call)
 	if err != nil {
@@ -206,8 +270,8 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 		return errResult(call, agentic.ToolErrorInternal, "construct calling-loop entity ID from loop_id %q: %v", call.LoopID, err)
 	}
 
-	triples := args.triples(runEntityID, sig, planHash)
-	triples = append(triples, args.triples(callingLoopEntityID, sig, planHash)...)
+	triples := args.triples(runEntityID, sig, recipe, planHash)
+	triples = append(triples, args.triples(callingLoopEntityID, sig, recipe, planHash)...)
 	if err := e.publisher.AddTriplesBatch(ctx, triples); err != nil {
 		return errResult(call, agentic.ToolErrorNetwork, "stamp plan triples on %s + %s: %v", runEntityID, callingLoopEntityID, err)
 	}
@@ -262,24 +326,27 @@ func runEntityFromCall(call agentic.ToolCall) (string, error) {
 	return "", fmt.Errorf("emit_bootstrap_plan: related_loops[%q] missing or empty in call metadata; spawn rule must pin run-loop-entity-id at chain start", runEntityRoleKey)
 }
 
-// parsedArgs is the post-decode plan shape. Fields use the JSON tag
-// the LLM sent; defaults landed in parseArgs / Validate.
+// parsedArgs is the post-decode plan shape. PR 3.3 split: the
+// signature inputs (Command, RepoURL, RepoRef, Toolchain, BaseImage,
+// PlanAction, ForceRefresh, PlanRevision, Workspace,
+// DockerSocketMount) stay flat; the recipe intent (Source,
+// Dependencies, Mounts, Smoke) lives in a nested struct mirrored on
+// sandboxfleet.RecipeIntent and renders through Compose.
 type parsedArgs struct {
-	Command                string
-	RepoURL                string
-	RepoRef                string
-	Toolchain              map[string]string
-	BaseImage              string
-	CloneCommand           string
-	InstallSteps           []string
-	VolumeMounts           []string
-	DockerSocketMount      bool
-	VerifyCommand          string
-	ExpectedSmokeSignature string
-	PlanAction             string
-	ForceRefresh           bool
-	PlanRevision           int
-	Workspace              string
+	Command           string
+	RepoURL           string
+	RepoRef           string
+	Toolchain         map[string]string
+	BaseImage         string
+	Source            sandboxfleet.SourceIntent
+	Dependencies      []sandboxfleet.Dependency
+	Mounts            []sandboxfleet.Mount
+	Smoke             sandboxfleet.SmokeIntent
+	DockerSocketMount bool
+	PlanAction        string
+	ForceRefresh      bool
+	PlanRevision      int
+	Workspace         string
 }
 
 func parseArgs(raw map[string]any) (*parsedArgs, error) {
@@ -310,35 +377,20 @@ func parseArgs(raw map[string]any) (*parsedArgs, error) {
 			p.Toolchain[k] = s
 		}
 	}
-	if v, ok := raw["clone_command"].(string); ok {
-		p.CloneCommand = v
+	if err := parseSource(raw, p); err != nil {
+		return nil, err
 	}
-	if v, ok := raw["install_steps"].([]any); ok {
-		for i, s := range v {
-			str, ok := s.(string)
-			if !ok {
-				return nil, fmt.Errorf("install_steps[%d]: expected string, got %T", i, s)
-			}
-			p.InstallSteps = append(p.InstallSteps, str)
-		}
+	if err := parseDependencies(raw, p); err != nil {
+		return nil, err
 	}
-	if v, ok := raw["volume_mounts"].([]any); ok {
-		for i, s := range v {
-			str, ok := s.(string)
-			if !ok {
-				return nil, fmt.Errorf("volume_mounts[%d]: expected string, got %T", i, s)
-			}
-			p.VolumeMounts = append(p.VolumeMounts, str)
-		}
+	if err := parseMounts(raw, p); err != nil {
+		return nil, err
+	}
+	if err := parseSmoke(raw, p); err != nil {
+		return nil, err
 	}
 	if v, ok := raw["docker_socket_mount"].(bool); ok {
 		p.DockerSocketMount = v
-	}
-	if v, ok := raw["verify_command"].(string); ok {
-		p.VerifyCommand = v
-	}
-	if v, ok := raw["expected_smoke_signature"].(string); ok {
-		p.ExpectedSmokeSignature = v
 	}
 	if v, ok := raw["plan_action"].(string); ok {
 		p.PlanAction = v
@@ -353,10 +405,187 @@ func parseArgs(raw map[string]any) (*parsedArgs, error) {
 		p.Workspace = v
 	}
 
+	// Source kind defaulting: zero-value kind with a repo_url
+	// supplied implies git; without a repo_url, none. Persona can
+	// always override explicitly.
+	if p.Source.Kind == "" {
+		if strings.TrimSpace(p.RepoURL) != "" {
+			p.Source.Kind = sandboxfleet.SourceKindGit
+		} else {
+			p.Source.Kind = sandboxfleet.SourceKindNone
+		}
+	}
+
 	if err := p.validate(); err != nil {
 		return nil, err
 	}
 	return p, nil
+}
+
+func parseSource(raw map[string]any, p *parsedArgs) error {
+	srcRaw, present := raw["source"]
+	if !present {
+		return nil
+	}
+	src, ok := srcRaw.(map[string]any)
+	if !ok {
+		return fmt.Errorf("source: expected object, got %T", srcRaw)
+	}
+	if v, present := src["kind"]; present {
+		s, ok := v.(string)
+		if !ok {
+			return fmt.Errorf("source.kind: expected string, got %T", v)
+		}
+		p.Source.Kind = sandboxfleet.SourceKind(s)
+	}
+	if v, present := src["depth"]; present {
+		// Per PR 3.3 reviewer REC-5: error on wrong type instead of
+		// silently dropping. A persona passing "depth": "shallow"
+		// today would land Depth=0 (default), masking its intent.
+		n, ok := v.(float64)
+		if !ok {
+			return fmt.Errorf("source.depth: expected integer, got %T", v)
+		}
+		p.Source.Depth = int(n)
+	}
+	if v, present := src["all_branches"]; present {
+		b, ok := v.(bool)
+		if !ok {
+			return fmt.Errorf("source.all_branches: expected bool, got %T", v)
+		}
+		p.Source.AllBranches = b
+	}
+	return nil
+}
+
+func parseDependencies(raw map[string]any, p *parsedArgs) error {
+	depsRaw, present := raw["dependencies"]
+	if !present {
+		return nil
+	}
+	deps, ok := depsRaw.([]any)
+	if !ok {
+		return fmt.Errorf("dependencies: expected array, got %T", depsRaw)
+	}
+	for i, d := range deps {
+		m, ok := d.(map[string]any)
+		if !ok {
+			return fmt.Errorf("dependencies[%d]: expected object, got %T", i, d)
+		}
+		var dep sandboxfleet.Dependency
+		if v, present := m["kind"]; present {
+			s, ok := v.(string)
+			if !ok {
+				return fmt.Errorf("dependencies[%d].kind: expected string, got %T", i, v)
+			}
+			dep.Kind = sandboxfleet.DependencyKind(s)
+		}
+		if dep.Kind == "" {
+			return fmt.Errorf("dependencies[%d]: kind required", i)
+		}
+		if pkgsRaw, present := m["packages"]; present {
+			pkgs, ok := pkgsRaw.([]any)
+			if !ok {
+				return fmt.Errorf("dependencies[%d].packages: expected array, got %T", i, pkgsRaw)
+			}
+			for j, pkg := range pkgs {
+				s, ok := pkg.(string)
+				if !ok {
+					return fmt.Errorf("dependencies[%d].packages[%d]: expected string, got %T", i, j, pkg)
+				}
+				dep.Packages = append(dep.Packages, s)
+			}
+		}
+		if v, present := m["manifest"]; present {
+			s, ok := v.(string)
+			if !ok {
+				return fmt.Errorf("dependencies[%d].manifest: expected string, got %T", i, v)
+			}
+			dep.Manifest = s
+		}
+		if v, present := m["command"]; present {
+			s, ok := v.(string)
+			if !ok {
+				return fmt.Errorf("dependencies[%d].command: expected string, got %T", i, v)
+			}
+			dep.Command = s
+		}
+		p.Dependencies = append(p.Dependencies, dep)
+	}
+	return nil
+}
+
+func parseMounts(raw map[string]any, p *parsedArgs) error {
+	mountsRaw, present := raw["mounts"]
+	if !present {
+		return nil
+	}
+	mounts, ok := mountsRaw.([]any)
+	if !ok {
+		return fmt.Errorf("mounts: expected array, got %T", mountsRaw)
+	}
+	for i, m := range mounts {
+		obj, ok := m.(map[string]any)
+		if !ok {
+			return fmt.Errorf("mounts[%d]: expected object, got %T", i, m)
+		}
+		var mount sandboxfleet.Mount
+		if v, present := obj["volume_suffix"]; present {
+			s, ok := v.(string)
+			if !ok {
+				return fmt.Errorf("mounts[%d].volume_suffix: expected string, got %T", i, v)
+			}
+			mount.VolumeSuffix = s
+		}
+		if v, present := obj["path"]; present {
+			s, ok := v.(string)
+			if !ok {
+				return fmt.Errorf("mounts[%d].path: expected string, got %T", i, v)
+			}
+			mount.Path = s
+		}
+		p.Mounts = append(p.Mounts, mount)
+	}
+	return nil
+}
+
+func parseSmoke(raw map[string]any, p *parsedArgs) error {
+	smokeRaw, present := raw["smoke"]
+	if !present {
+		return nil
+	}
+	smoke, ok := smokeRaw.(map[string]any)
+	if !ok {
+		return fmt.Errorf("smoke: expected object, got %T", smokeRaw)
+	}
+	if v, present := smoke["command"]; present {
+		s, ok := v.(string)
+		if !ok {
+			return fmt.Errorf("smoke.command: expected string, got %T", v)
+		}
+		p.Smoke.Command = s
+	}
+	if expRaw, present := smoke["expects"]; present {
+		exp, ok := expRaw.(map[string]any)
+		if !ok {
+			return fmt.Errorf("smoke.expects: expected object, got %T", expRaw)
+		}
+		if v, present := exp["exit_code"]; present {
+			n, ok := v.(float64)
+			if !ok {
+				return fmt.Errorf("smoke.expects.exit_code: expected integer, got %T", v)
+			}
+			p.Smoke.Expects.ExitCode = int(n)
+		}
+		if v, present := exp["stdout_contains"]; present {
+			s, ok := v.(string)
+			if !ok {
+				return fmt.Errorf("smoke.expects.stdout_contains: expected string, got %T", v)
+			}
+			p.Smoke.Expects.StdoutContains = s
+		}
+	}
+	return nil
 }
 
 func (p *parsedArgs) validate() error {
@@ -375,11 +604,8 @@ func (p *parsedArgs) validate() error {
 		return fmt.Errorf("plan_action %q: must be one of provision|reprovision|skip", p.PlanAction)
 	}
 	if p.PlanAction != ActionSkip {
-		if p.VerifyCommand == "" {
-			return fmt.Errorf("verify_command required for plan_action=%s", p.PlanAction)
-		}
-		if p.ExpectedSmokeSignature == "" {
-			return fmt.Errorf("expected_smoke_signature required for plan_action=%s", p.PlanAction)
+		if strings.TrimSpace(p.Smoke.Command) == "" {
+			return fmt.Errorf("smoke.command required for plan_action=%s", p.PlanAction)
 		}
 	}
 	return nil
@@ -392,6 +618,19 @@ func (p *parsedArgs) canonicalizeInput() sandboxfleet.CanonicalizeInput {
 		RepoRef:   p.RepoRef,
 		Toolchain: p.Toolchain,
 		BaseImage: p.BaseImage,
+	}
+}
+
+// recipeIntent projects parsedArgs into the composer's input shape.
+// DockerSocketMount mirrors through so future composer logic that
+// branches on socket-need has a single read point.
+func (p *parsedArgs) recipeIntent() sandboxfleet.RecipeIntent {
+	return sandboxfleet.RecipeIntent{
+		Source:            p.Source,
+		Dependencies:      p.Dependencies,
+		Mounts:            p.Mounts,
+		Smoke:             p.Smoke,
+		DockerSocketMount: p.DockerSocketMount,
 	}
 }
 
@@ -411,7 +650,22 @@ func (p *parsedArgs) canonicalizeInput() sandboxfleet.CanonicalizeInput {
 // (sandbox.tenant.workspace) but not in the cache key.
 //
 // Stable across runs: sorted-key marshal of a sorted-input struct.
-func (p *parsedArgs) planHash(sig sandboxfleet.TargetSignature) string {
+// PR 3.3: hashes the COMPOSED shell strings (recipe.CloneCommand,
+// recipe.InstallSteps, recipe.VolumeMounts), not the raw intent. The
+// composer is deterministic over intent, so this is equivalent to
+// hashing the intent + the composer version — and downstream
+// consumers of plan_hash (the registry's cache-validity check)
+// continue to see the same hash semantics they did pre-PR-3.3 when
+// the persona authored shell directly.
+//
+// ComposerVersion is folded in (PR 3.3 reviewer REC-4) so that bumps
+// to the composer's output semantics deterministically rotate
+// cached plan_hashes. If we change the composer to (say) add a new
+// idempotency flag, bumping sandboxfleet.ComposerVersion forces
+// re-provision on the next arc that hits a cached tenant — even
+// when the composed string happens to be identical for that arc's
+// specific recipe.
+func (p *parsedArgs) planHash(sig sandboxfleet.TargetSignature, recipe sandboxfleet.Recipe) string {
 	type planHashInput struct {
 		BaseImage         string   `json:"base_image"`
 		CloneCommand      string   `json:"clone_command,omitempty"`
@@ -421,15 +675,17 @@ func (p *parsedArgs) planHash(sig sandboxfleet.TargetSignature) string {
 		// Pin to the canonical signature so two prose-framings of
 		// the same target with the same recipe produce the same
 		// plan_hash too.
-		SignatureHash string `json:"signature"`
+		SignatureHash   string `json:"signature"`
+		ComposerVersion int    `json:"composer_version"`
 	}
 	in := planHashInput{
 		BaseImage:         sig.BaseImage,
-		CloneCommand:      p.CloneCommand,
-		InstallSteps:      sortedCopy(p.InstallSteps),
-		VolumeMounts:      sortedCopy(p.VolumeMounts),
+		CloneCommand:      recipe.CloneCommand,
+		InstallSteps:      sortedCopy(recipe.InstallSteps),
+		VolumeMounts:      sortedCopy(recipe.VolumeMounts),
 		DockerSocketMount: p.DockerSocketMount,
 		SignatureHash:     sig.Hash(),
+		ComposerVersion:   sandboxfleet.ComposerVersion,
 	}
 	b, _ := json.Marshal(in)
 	sum := sha256.Sum256(b)
@@ -447,8 +703,12 @@ func sortedCopy(in []string) []string {
 
 // triples builds the deterministic predicate set for the run entity.
 // Workspace is derived from the parsed input (defaulting to
-// "/workspace"); ContainerName from the canonical signature.
-func (p *parsedArgs) triples(runEntityID string, sig sandboxfleet.TargetSignature, planHash string) []message.Triple {
+// "/workspace"); ContainerName from the canonical signature. PR 3.3:
+// recipe fields come from the composer, not from raw LLM input. The
+// triple shape (predicate names + value types) is unchanged so
+// downstream substitution and consumers continue to work without
+// modification.
+func (p *parsedArgs) triples(runEntityID string, sig sandboxfleet.TargetSignature, recipe sandboxfleet.Recipe, planHash string) []message.Triple {
 	now := time.Now().UTC()
 	base := func(pred string, obj any) message.Triple {
 		return message.Triple{
@@ -461,8 +721,8 @@ func (p *parsedArgs) triples(runEntityID string, sig sandboxfleet.TargetSignatur
 		}
 	}
 
-	installStepsJSON, _ := json.Marshal(p.InstallSteps)
-	volumeMountsJSON, _ := json.Marshal(p.VolumeMounts)
+	installStepsJSON, _ := json.Marshal(recipe.InstallSteps)
+	volumeMountsJSON, _ := json.Marshal(recipe.VolumeMounts)
 	toolchainJSON, _ := json.Marshal(sig.Toolchain)
 
 	out := []message.Triple{
@@ -482,8 +742,8 @@ func (p *parsedArgs) triples(runEntityID string, sig sandboxfleet.TargetSignatur
 		base(predicatePlanCanonicalBaseImage, sig.BaseImage),
 		base(predicatePlanCanonicalToolchain, string(toolchainJSON)),
 
-		// Recipe fields.
-		base(predicatePlanCloneCommand, p.CloneCommand),
+		// Recipe fields — composed from structured intent (PR 3.3).
+		base(predicatePlanCloneCommand, recipe.CloneCommand),
 		base(predicatePlanInstallSteps, string(installStepsJSON)),
 		base(predicatePlanVolumeMounts, string(volumeMountsJSON)),
 		base(predicatePlanDockerSocketMount, p.DockerSocketMount),
@@ -496,11 +756,11 @@ func (p *parsedArgs) triples(runEntityID string, sig sandboxfleet.TargetSignatur
 		out = append(out, base(predicatePlanCanonicalRepoURL, sig.RepoURL))
 		out = append(out, base(predicatePlanCanonicalRepoRef, sig.RepoRef))
 	}
-	if p.VerifyCommand != "" {
-		out = append(out, base(predicatePlanVerifyCommand, p.VerifyCommand))
+	if smoke := strings.TrimSpace(p.Smoke.Command); smoke != "" {
+		out = append(out, base(predicatePlanVerifyCommand, smoke))
 	}
-	if p.ExpectedSmokeSignature != "" {
-		out = append(out, base(predicatePlanExpectedSmoke, p.ExpectedSmokeSignature))
+	if recipe.ExpectedSmokeSignature != "" {
+		out = append(out, base(predicatePlanExpectedSmoke, recipe.ExpectedSmokeSignature))
 	}
 	return out
 }

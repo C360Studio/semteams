@@ -37,15 +37,18 @@ canonical fields** so the canonicalizer can do its work.
   resolve to `ubuntu:24.04` (current LTS). Same for language
   images.
 
-## What you do NOT canonicalize
+## What you do NOT canonicalize (composer does it)
 
-- Install steps: the canonicalizer hashes them as a sorted list
-  for the plan_hash, not as freeform prose. Keep them readable.
-- Verify command + expected_smoke_signature: not part of the
-  signature (these affect verification, not what was installed).
-- Volume mount paths: canonicalizer derives these from the
-  signature (`semteams-tenant-<sig>-*`); you only provide the
-  semantic mount points (`/workspace`, `/root/.cache`).
+- **Shell commands** for the recipe (clone, install, mounts).
+  You write structured intent (`source.kind`, `dependencies[]`
+  with typed kinds, `mounts[]` with volume_suffix + path); the
+  Go composer turns it into the actual `git clone …`, `apt-get
+  install -y …`, `<volume>:<path>` strings. CLI grammar is not
+  your responsibility — it is deterministic given the intent,
+  so it lives in code.
+- **Smoke grading shape**: write `smoke.expects.exit_code` and
+  `smoke.expects.stdout_contains` as structured fields; the
+  composer derives the legacy expected_smoke_signature string.
 
 ## Common mistakes that fragment the cache
 

@@ -1643,3 +1643,213 @@ buildable. Plan accordingly.
 - MEMORY: [[project_adr042_mvp_redesign]] — substrate-plus-overlays MVP this extends
 - MEMORY: [[feedback_framework_alignment_review]] — discipline applied to the new product-shell tools
 - MEMORY: [[feedback_fewer_rich_tools]] — bash subsumes file ops; bootstrap emit tools justify themselves on registry-stamp grounds, not file-shape grounds
+
+## §addendum 2026-05-30 — PR 3.3 structured-intent for emit_bootstrap_plan
+
+PR 3.3 of the sandbox-bootstrap PR sequence (PR 3 → 3.1 → 3.2 → 3.3,
+per §G v1 scope). Closes the structural finding surfaced empirically
+by smoke #10 (see `[[project_smoke10_findings]]`).
+
+### Problem
+
+Pre-PR-3.3, `emit_bootstrap_plan` accepted free-form shell strings the
+plan persona authored:
+
+- `clone_command: "git clone …"` — the literal `git` shell line
+- `install_steps: []string` — each entry a shell line
+- `volume_mounts: []string` — each entry `<volume>:<path>` syntax
+- `verify_command: string` — shell snippet
+- `expected_smoke_signature: string` — grading rule as prose
+
+That shape made the LLM the author of git/apt/docker CLI grammar AND
+operational nuance (depth, idempotency, retry-on-flake). The class of
+failure it caused — a recurring pattern of persona-prose grammar
+fixes — surfaced as:
+
+1. PR 3.2 patched `git clone <url> <ref> <workspace>` (illegal) →
+   `git clone --branch <ref> <url> <workspace>` via persona prose.
+2. Smoke #10c wedged on the now-grammar-correct shape because
+   defaulting to full clone of a 40MB repo exceeded the sandbox
+   `/exec` timeout. Next obvious fix: persona prose telling the LLM
+   to add `--depth 1 --single-branch`.
+
+Each individual fix defensible; the cumulative pattern was
+**persona-as-shell-recipe-author** — the trap
+`[[structural-over-llm-judgment]]` and
+`[[personas-should-not-author-shell]]` name. CLI grammar is
+deterministic; encoding it in prompts is Goodhart-pattern format
+compliance.
+
+### Decision
+
+Restructure `emit_bootstrap_plan` to accept **structured intent**:
+
+- `source: { kind: "git" | "none", depth, all_branches }`
+- `dependencies: [{ kind: "apt"|"go_mod_download"|"npm_ci"|"pip_install"|"toolchain_go"|"toolchain_node"|"raw", ... }]`
+- `mounts: [{ volume_suffix, path }]`
+- `smoke: { command, expects: { exit_code, stdout_contains } }`
+
+Add a deterministic Go composer at
+`cmd/semteams/sandboxfleet/recipe.go`
+(`sandboxfleet.Compose(intent, sig, workspace) → Recipe`) that
+renders the intent into the actual shell strings — `git clone`
+with `--branch` BEFORE the URL, `--depth=1` and `--single-branch`
+by default, `apt-get update && apt-get install -y
+--no-install-recommends`, `<sig-prefix>-<suffix>:<path>` volume
+specs, `exit <N>; stdout contains <s>` smoke-grading string.
+
+The triple shape stamped on run + plan-loop entities is **unchanged**
+— same predicate names (`sandbox.tenant.clone_command`,
+`sandbox.tenant.install_steps`, `sandbox.tenant.volume_mounts`,
+`sandbox.tenant.expected_smoke_signature`), same value shapes (shell
+strings + JSON arrays). The composer's output IS what gets stamped.
+Consequence: rule 02b's spawn-prompt substitution, the execute
+persona's bash-emission loop, rule 03/04/07, verify + reviewer
+personas — all unchanged. PR 3.3 is a **producer-side restructure
+only**.
+
+`plan_hash` continues to hash the composed shell strings (not the
+raw intent). Since the composer is deterministic over intent, this
+is equivalent to hashing the intent + the composer version; cache
+semantics downstream are preserved.
+
+### Escape hatch: `DependencyRaw`
+
+`{ "kind": "raw", "command": "<shell line>" }` passes through
+verbatim. Use sparingly. If `raw` is used for the same shape twice
+across smoke runs, add a structured kind in code instead of leaning
+on the escape hatch — that's the bar to widen the composer.
+
+### What this fixes structurally
+
+1. The `git clone` grammar bug class disappears — the composer
+   always emits `--branch` before the URL.
+2. The shallow-vs-full clone choice is in code (default depth=1);
+   smoke #10c's wedge becomes structurally impossible.
+3. Future flag-missing bugs (`apt-get` without `-y`, `pip` without
+   `--no-cache-dir`, `npm ci` without `--no-audit`) land as code
+   changes, not as fragile persona prose.
+4. Volume-naming consistency moves from "persona templates the sig
+   prefix into the string correctly" to "composer derives the full
+   name from `sig.Prefix()`."
+5. New dependency kinds (cargo, gem, etc.) extend by adding a
+   `DependencyKind` constant + a `composeDependency` branch + a
+   test — not by editing persona prose across multiple rule files.
+
+### Why this isn't `[[fewer-rich-tools]]` drift
+
+Pre-PR-3.3, `emit_bootstrap_plan` was "rich" only in that it
+accepted free-form shell strings — the worst of both worlds:
+structured-looking schema, unstructured contents. The PR 3.3 shape
+is rich in the **intent dimension** (the LLM's job is intent
+expression, not shell composition). The tool surface gets more
+typed; the LLM's writing surface gets less load-bearing. Aligns
+with `[[fewer-rich-tools]]` rather than fights it.
+
+### What lands in PR 3.3
+
+- `cmd/semteams/sandboxfleet/recipe.go` — `RecipeIntent` /
+  `Dependency` / `Mount` / `SmokeIntent` types + `Compose()` +
+  unit tests covering each kind, error paths, and deterministic
+  output.
+- `cmd/semteams/sandboxfleet/signature.go` — regex addition
+  (`volumeSuffixPattern` for the composer's mount validation).
+- `cmd/semteams/tools/emitbootstrapplan/executor.go` —
+  `ListTools` schema rewrite, new parseArgs covering nested intent
+  shapes, `parsedArgs.recipeIntent()`, `planHash` + `triples`
+  signatures take the composed `Recipe`. Composer error surfaces
+  as `ToolErrorInvalidArgs`.
+- `cmd/semteams/tools/emitbootstrapplan/executor_test.go` —
+  driven through the new intent shape end-to-end; dual-target
+  stamping invariants preserved; composer-rejection test added.
+- `configs/personas/fragments/provisioner-bootstrap-plan/{10-plan-rules,20-canonicalization-rigor}.md`
+  — describe structured intent fields; CLI-grammar prose retired.
+- `configs/rules/sandbox-bootstrap/01-coordinator-bootstrap-spawn.json` +
+  `05-reviewer-rejected-retry.json` — spawn-prompt prose updated
+  to refer to intent fields instead of shell strings.
+- `configs/rules/sandbox-bootstrap/README.md` +
+  `cmd/semteams/tools/README.md` — schema documentation refreshed
+  to the intent shape with migration-target note.
+- `test/fixtures/journeys/sandbox-bootstrap-mvp.yaml` —
+  `emit_bootstrap_plan` call rewritten to new intent shape.
+  Pre-computed signature `52a0a682…` unchanged (same canonical
+  inputs).
+
+### Validation order
+
+1. `task lint` + `go test ./...` + contract tests — all green.
+2. `task ui:test:e2e:agentic:bootstrap-mvp` — mock-LLM journey
+   green end-to-end against the new intent shape.
+3. Real-LLM smoke (`task smoke:sandbox-bootstrap` or equivalent)
+   — finally validates `emit_bootstrap_execute` (deferred by
+   smoke #10 wedge) AND the structured-intent path under real LLM.
+   ~$0.20-$0.50.
+
+### Memory cross-links
+
+- [[personas-should-not-author-shell]] — the rule this PR closes
+- [[smoke10-findings]] — empirical trigger
+- [[structural-over-llm-judgment]] — adjacent principle
+- [[pr3-1-smoke]] — predecessor wiring PR
+- [[fewer-rich-tools]] — preserved (typed intent vs. free-form shell)
+
+### Reviewer pass + deferred follow-ups
+
+go-reviewer pass run 2026-05-30 against the working tree before
+commit. Verdict: fix-then-commit. No critical issues. Eight
+recommendations + five nits surfaced; the ones applied in-PR:
+
+- **REC-1** — `Mount.Path` shell-injection defense (validate against
+  `:`, `,`, shell-significant chars, whitespace, `..`,
+  non-printable). Closes a class where an adversarial plan persona
+  could append docker flags via path injection
+  (`/x:ro,Z --privileged`). Added with adversarial + legitimate
+  positive tests (REC-6).
+- **REC-3** — `DependencyToolchainGo` / `DependencyToolchainNode`
+  interpolate the literal version from `sig.Toolchain`. The original
+  code emitted shell-variable placeholders (`${TOOLCHAIN_GO_VERSION}`)
+  that nothing set downstream — would have wedged the first real-LLM
+  smoke that used `toolchain_go` on a curl 404. Fail-fast at Compose
+  time when the persona names the kind but omits the toolchain
+  entry. Tested.
+- **REC-4** — `sandboxfleet.ComposerVersion = 1` constant, folded
+  into `planHash`. Future composer-output semantics changes bump
+  the constant and deterministically rotate cached plan_hashes,
+  forcing re-provision rather than reusing a tenant built under
+  the old composer. Cheap defensive insurance.
+- **REC-5** — Strict-type errors in `parseSource` / `parseDependencies`
+  / `parseMounts` / `parseSmoke`. The original `.(T)` form silently
+  dropped wrong-type fields (e.g. `"depth": "shallow"` → `Depth=0`
+  default, intent masked). Now an error names the offending field
+  path; tested across each parse helper.
+- **REC-7** — `parseRepoURL` rejects URLs containing whitespace.
+  `url.Parse` accepts them, but a space in the canonical URL would
+  mis-position the workspace arg in `git clone <url> <workspace>`.
+  Tested.
+- **NIT-3** — Test case for `Expects{}` → `"exit 0"` zero-value
+  default added.
+- **REC-8** — Verified `(ToolResult, nil)` convention matches the
+  three sibling executors (committed / verify / execute). No drift.
+
+Deferred to follow-up work (not blocking this PR's commit):
+
+- **REC-2 — `plan_used_raw_dependency` telemetry triple.** The
+  composer's `DependencyRaw` escape hatch lacks structural
+  detection — the recommendation is to stamp a boolean triple on
+  the run entity when any raw dep is present, so a future ops
+  observer rule (or human review) can detect escape-hatch drift.
+  Defer because the consumer (an ops-observer rule that grades
+  raw-usage growth over time) does not yet exist; landing the
+  telemetry stamp without a consumer creates inert triples without
+  closing the feedback loop. Re-evaluate when ops-agent Phase 2
+  proposes config changes per ADR-027 §Phase 2 — that's the
+  natural consumer surface.
+- **NIT-1 — `--branch <ref>` with 40-char-SHA refs.** Git rejects
+  `--branch <sha>`; the composer always emits `--branch`. Persona
+  prose currently tells the LLM to prefer SHAs. Real-LLM smoke is
+  the surface that will tell us how often this actually happens;
+  defer until the smoke produces a concrete failure shape. If
+  recurrent, the fix is either (a) detect 40-hex-char ref →
+  clone-then-checkout in the composer, or (b) tighten persona
+  prose to require branch/tag names. Option (a) preserves the
+  "personas don't author shell" principle.

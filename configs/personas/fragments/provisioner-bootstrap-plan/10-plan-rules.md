@@ -65,43 +65,78 @@ The tool returns the registry record OR null:
   — coordinator can respond_direct with the status or ask_user
   to retry later.
 
-## Step 4 — Compose the plan
+## Step 4 — Compose the plan (STRUCTURED INTENT, not shell strings)
 
-Three shapes, by path:
+The tool takes **structured intent** — typed fields that describe
+WHAT you want, not the shell command to do it. A deterministic
+Go composer turns intent into the right shell. You never write
+CLI grammar; the composer owns `git`, `apt-get`, `docker`, etc.
+flag syntax.
 
-**SKIP plan** (registry FRESH): all plan fields carry the cached
-values so they thread through verify. Set `plan.action=skip`.
+Three plan shapes, by path:
 
-**PROVISION plan** (registry MISS): write the full shape per
-step 1's extracted parameters PLUS:
+**SKIP plan** (registry FRESH): set `plan_action="skip"`. The
+signature fields + smoke contract still pass through (so verify
+can re-confirm against the cached tenant); skip the recipe.
 
-- `clone_command`: full `git clone --branch <ref-or-branch> <url> /workspace`
-  (or `none` if no clone needed). `--branch` BEFORE the URL; git's
-  positional grammar is `git clone [options] <url> [<dir>]` — putting
-  the branch token after the URL makes git treat it as the directory
-  arg and fail with "Too many arguments" when /workspace follows.
-- `install_steps`: ordered list of single-line shell commands.
-  Batch idempotent installs (`apt-get install -y A B C D` is one
-  step, not 4). Order matters: apt first, then toolchain installers,
-  then app deps (`go mod download`, `npm ci`, `pip install`).
-- `volume_mounts`: `semteams-tenant-<sig>-workspace:/workspace` +
-  `semteams-tenant-<sig>-deps:/root/.cache` for dep caches that
-  speed up re-provisioning later.
-- `verify_command`: a fast smoke (< 60s). NOT the full
-  measurement command. Examples: `which go && go version`,
-  `task lint:setup`, `node -e 'console.log(1)'`, `ls /workspace`.
-- `expected_smoke_signature`: what the verify persona will match
-  against. Exit code + a specific stdout substring or regex.
-  Example: `{exit_code: 0, stdout_contains: "go version go1.26"}`.
+**PROVISION plan** (registry MISS) — fill these intent fields:
 
-**RE-PROVISION plan** (registry STALE): same shape as PROVISION,
-plus `plan.action=reprovision` so execute knows to `docker rm -f`
-the existing container first.
+- `source`: `{ "kind": "git" }` for cloned repos (the tool
+  composes `git clone --depth=1 --single-branch --branch <ref>
+  <url> <workspace>` from your `repo_url` + `repo_ref`). Use
+  `{ "kind": "none" }` for self-contained targets. Opt out of
+  shallow with `"depth": -1` (full clone) when the target needs
+  git history; `"all_branches": true` opts out of single-branch.
+- `dependencies`: ordered array of typed install steps. Order
+  matters; idempotency flags do not (composer owns those).
+  Available kinds:
+  - `{ "kind": "apt", "packages": ["A", "B"] }` — batched
+    apt-get install. The composer emits
+    `apt-get update && apt-get install -y --no-install-recommends ...`.
+    One entry per apt step (don't split into one-per-package).
+  - `{ "kind": "go_mod_download" }` — runs `go mod download`
+    in the workspace. Workspace must contain `go.mod`.
+  - `{ "kind": "npm_ci" }` — runs `npm ci --no-audit --no-fund`
+    in the workspace.
+  - `{ "kind": "pip_install", "manifest": "requirements.txt" }`
+    — installs from a requirements file. Manifest starting with
+    `-` (e.g. `-e .[test]`) is treated as a pip CLI spec.
+  - `{ "kind": "toolchain_go" }` / `{ "kind": "toolchain_node" }`
+    — installs the named language toolchain at the version from
+    your `toolchain` map. The composer emits the standard install
+    script; for non-standard installers use `raw`.
+  - `{ "kind": "raw", "command": "<shell line>" }` — escape
+    hatch for kinds the composer doesn't model. Use sparingly;
+    if you find yourself using `raw` for the same shape twice,
+    that's the signal to add a structured kind in code.
+- `mounts`: array of `{ "volume_suffix": "<name>", "path":
+  "<container path>" }`. Composer derives the full volume name
+  from the signature prefix
+  (`semteams-tenant-<prefix>-<suffix>:<path>`). Typical:
+  `[{ "volume_suffix": "workspace", "path": "/workspace" },
+    { "volume_suffix": "deps",      "path": "/root/.cache" }]`
+  — workspace for source, deps for dep-cache reuse across
+  provisions.
+- `docker_socket_mount`: `true` if the target's measurement
+  command needs Docker (testcontainers, docker-compose). Default
+  `false`.
+- `smoke`: `{ "command": "<shell line>", "expects": { "exit_code":
+  <int>, "stdout_contains": "<substring>" } }`. The `command` is
+  legitimately verbatim shell — it IS the verify-phase unit of
+  work, not a wrapper. Keep it fast (<60s); the full measurement
+  command is too expensive for the smoke. `expects` encodes the
+  grading rule structurally; the composer derives the legacy
+  expected_smoke_signature string from it.
+
+**RE-PROVISION plan** (registry STALE): same intent shape as
+PROVISION, plus `plan_action="reprovision"` so execute knows to
+`docker rm -f` the existing container first.
 
 ## Step 5 — Emit + decide
 
-Call `emit_bootstrap_plan` with the full plan shape. The tool
-stamps `sandbox.tenant.*` triples on the run entity + updates
+Call `emit_bootstrap_plan` with the full intent. The tool
+canonicalizes, composes the recipe, stamps `sandbox.tenant.*`
+triples on the run entity + your plan-loop entity, and updates
 registry state to `provisioning` (for execute paths) or keeps it
 at the current ready state (for skip).
 

@@ -408,6 +408,27 @@ func TestCanonicalizeRepoURL_Forms(t *testing.T) {
 	}
 }
 
+// TestCanonicalizeRepoURL_RejectsWhitespace pins PR 3.3 reviewer
+// REC-7. url.Parse silently accepts URLs with whitespace in the
+// path, which would mis-position the workspace arg in the composed
+// `git clone <url> <workspace>` shell line. We reject up front.
+func TestCanonicalizeRepoURL_RejectsWhitespace(t *testing.T) {
+	cases := []string{
+		"https://github.com/owner/repo with space",
+		"https://github.com/owner/repo\ttab",
+		"https://github.com/owner/repo\nlf",
+		"git@github.com:owner/repo with space",
+	}
+	for _, in := range cases {
+		t.Run(in, func(t *testing.T) {
+			_, err := parseRepoURL(in)
+			if err == nil {
+				t.Errorf("expected error for whitespace-containing URL %q", in)
+			}
+		})
+	}
+}
+
 func TestNormalizeVersion_Forms(t *testing.T) {
 	cases := []struct {
 		in, want string

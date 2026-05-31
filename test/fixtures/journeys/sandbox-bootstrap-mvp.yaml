@@ -19,10 +19,10 @@ description: |
       2. tool_call: read_loop_result (placeholder)
       3. tool_call: query_sandbox_tenant(signature inputs)
          → returns null (registry miss)
-      4. tool_call: emit_bootstrap_plan (provision action,
-         full recipe — base_image, clone_command, install_steps,
-         volume_mounts, docker_socket_mount, verify_command,
-         expected_smoke_signature)
+      4. tool_call: emit_bootstrap_plan (provision action, STRUCTURED
+         INTENT — source, dependencies (apt+toolchain_go+go_mod_download),
+         mounts, smoke{command,expects}, docker_socket_mount)
+         → Go composer renders shell strings
          → registry transitions to provisioning
          → sandbox.tenant.* triples stamped on run entity
       5. tool_call: decide(action="execute", reason=<recipe summary>)
@@ -163,21 +163,33 @@ responses:
           "repo_ref": "main",
           "toolchain": {"go": "1.26.0"},
           "base_image": "ubuntu:24.04",
-          "clone_command": "git clone https://github.com/c360studio/semteams /workspace",
-          "install_steps": [
-            "apt-get update",
-            "apt-get install -y curl ca-certificates git",
-            "curl -fsSL https://go.dev/dl/go1.26.0.linux-amd64.tar.gz -o /tmp/go.tgz",
-            "tar -C /usr/local -xzf /tmp/go.tgz",
-            "cd /workspace && go mod download"
+          "source": {
+            "kind": "git"
+          },
+          "dependencies": [
+            {
+              "kind": "apt",
+              "packages": ["curl", "ca-certificates", "git"]
+            },
+            {
+              "kind": "toolchain_go"
+            },
+            {
+              "kind": "go_mod_download"
+            }
           ],
-          "volume_mounts": [
-            "semteams-tenant-52a0a6824485-workspace:/workspace",
-            "semteams-tenant-52a0a6824485-deps:/root/.cache"
+          "mounts": [
+            {"volume_suffix": "workspace", "path": "/workspace"},
+            {"volume_suffix": "deps", "path": "/root/.cache"}
           ],
           "docker_socket_mount": true,
-          "verify_command": "cd /workspace && go test ./internal/quickcheck/... -count=1",
-          "expected_smoke_signature": "exit 0; stdout contains PASS",
+          "smoke": {
+            "command": "cd /workspace && go test ./internal/quickcheck/... -count=1",
+            "expects": {
+              "exit_code": 0,
+              "stdout_contains": "PASS"
+            }
+          },
           "plan_action": "provision",
           "plan_revision": 1,
           "workspace": "/workspace"

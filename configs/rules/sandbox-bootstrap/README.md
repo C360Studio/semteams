@@ -136,11 +136,18 @@ the §A foundation PR per §G PR sequence):
 - `query_sandbox_tenant(signature) → tenant_record` — read-only
   registry lookup. Returns `{state, container_name, image, workspace,
   ready_at, plan_hash, last_used}` or `null` on miss.
-- `emit_bootstrap_plan(signature, base_image, clone_command,
-  install_steps, volume_mounts, docker_socket_mount, verify_command,
-  expected_smoke_signature, plan_hash, force_refresh)` — stamps the
-  plan triples on the plan loop entity AND updates registry state
-  to `provisioning`.
+- `emit_bootstrap_plan(command, repo_url, repo_ref, toolchain,
+  base_image, source{kind,depth,all_branches},
+  dependencies[{kind,packages,manifest,command}],
+  mounts[{volume_suffix,path}], docker_socket_mount,
+  smoke{command,expects{exit_code,stdout_contains}}, plan_action,
+  force_refresh, plan_revision, workspace)` — STRUCTURED INTENT.
+  The Go composer (sandboxfleet.Compose) renders the actual shell
+  strings (clone, install steps, volume specs, expected_smoke
+  string) so the LLM never authors CLI grammar. Stamps composed
+  triples on the run entity + plan-loop entity AND updates registry
+  state to `provisioning`. See ADR-042 §addendum PR 3.3 and
+  [[personas-should-not-author-shell]] for the structural rationale.
 - `emit_bootstrap_verify(smoke_exit_code, smoke_stdout_tail,
   smoke_matches_expected, container_name, workspace_path)` — stamps
   verify-result triples on the verify loop entity. Does NOT commit
