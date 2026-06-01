@@ -11,7 +11,6 @@
         "TASK_VERSION": "v3.51.1"
     },
     "remoteUser": "vscode",
-    "overrideCommand": false,
     "shutdownAction": "stopContainer",
     "postCreateCommand": "sudo apt-get update && sudo apt-get install -y --no-install-recommends jq && curl -fsSL https://taskfile.dev/install.sh | sudo sh -s -- -d -b /usr/local/bin ${TASK_VERSION}",
     "customizations": {

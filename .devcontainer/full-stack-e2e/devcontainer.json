@@ -21,7 +21,6 @@
         "PLAYWRIGHT_BROWSERS_PATH": "/home/vscode/.cache/ms-playwright"
     },
     "remoteUser": "vscode",
-    "overrideCommand": false,
     "shutdownAction": "stopContainer",
     "postCreateCommand": "sudo apt-get update && sudo apt-get install -y --no-install-recommends jq && curl -fsSL https://taskfile.dev/install.sh | sudo sh -s -- -d -b /usr/local/bin ${TASK_VERSION} && npx -y playwright@${PLAYWRIGHT_VERSION} install --with-deps chromium",
     "customizations": {
