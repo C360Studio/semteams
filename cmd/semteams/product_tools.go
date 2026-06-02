@@ -12,12 +12,14 @@ import (
 	"github.com/c360studio/semstreams/payloadregistry"
 	agentictools "github.com/c360studio/semstreams/processor/agentic-tools"
 	"github.com/c360studio/semstreams/processor/agentic-tools/executors"
+	"github.com/c360studio/semstreams/processor/agentic-tools/runner"
 	"github.com/c360studio/semstreams/types"
 
 	"github.com/c360studio/semteams/cmd/semteams/chain"
 	"github.com/c360studio/semteams/cmd/semteams/devviaspec"
 	"github.com/c360studio/semteams/cmd/semteams/research"
 	"github.com/c360studio/semteams/cmd/semteams/sandboxmanager"
+	"github.com/c360studio/semteams/cmd/semteams/sandboxruntime"
 	"github.com/c360studio/semteams/cmd/semteams/semsource"
 	"github.com/c360studio/semteams/cmd/semteams/tools/addsource"
 	"github.com/c360studio/semteams/cmd/semteams/tools/chainbash"
@@ -575,7 +577,28 @@ var (
 // stays in place under the canonical name so the LLM's tool catalog is
 // consistent across deployments.
 func registerChainBash(reg *agentictools.ExecutorRegistry, natsClient *natsclient.Client, platform types.PlatformMeta, logger *slog.Logger) error {
-	inner := executors.NewBashExecutorFromEnv()
+	// Build the inner BashExecutor. Three construction shapes, picked
+	// by SANDBOX_URL + natsClient availability:
+	//
+	//   - No SANDBOX_URL → local-exec mode. The framework's
+	//     NewBashExecutorFromEnv() path; runs commands on the local
+	//     process via os/exec. No attestation routing applies (there
+	//     is no remote runner to wrap). Used for dev shells without
+	//     the sandbox stack up.
+	//
+	//   - SANDBOX_URL set, no natsClient → always-warm-only mode.
+	//     Construct upstream's *runner.Client directly; skip the
+	//     AttestationRunner wrap because without NATS we have no way
+	//     to read chain attestation triples. Functionally identical
+	//     to pre-Phase-D behavior (NewBashExecutorFromEnv).
+	//
+	//   - SANDBOX_URL set, natsClient present → attestation-aware
+	//     mode. Wrap upstream's *runner.Client with
+	//     sandboxruntime.AttestationRunner so chains with a Phase-A-
+	//     stamped sandbox.attestation.host_workspace_folder route into
+	//     their per-tenant devcontainer via `devcontainer exec`. Other
+	//     chains pass through unchanged.
+	mode, bashExec := buildBashExecutor(natsClient, platform, logger)
 
 	var resolver chainbash.ChainResolver
 	if natsClient != nil {
@@ -591,18 +614,56 @@ func registerChainBash(reg *agentictools.ExecutorRegistry, natsClient *natsclien
 			slog.String("name", chainbash.ToolName))
 	}
 
-	wrapper := chainbash.NewExecutor(inner, resolver, logger)
+	wrapper := chainbash.NewExecutor(bashExec, resolver, logger)
 	if err := reg.RegisterTool(chainbash.ToolName, wrapper); err != nil {
 		return fmt.Errorf("register %s: %w", chainbash.ToolName, err)
-	}
-	mode := "local"
-	if strings.TrimSpace(os.Getenv(envSandboxURL)) != "" {
-		mode = "sandbox"
 	}
 	logger.Info("Registered product tool (chain-scoped bash wrapper)",
 		slog.String("name", chainbash.ToolName),
 		slog.String("mode", mode))
 	return nil
+}
+
+// buildBashExecutor constructs the inner BashExecutor for chainbash to
+// wrap, returning the construction mode (for logging) and the executor.
+// See registerChainBash's docstring for the three-shape decision tree.
+//
+// The attestation-aware mode is the one Phase D adds: when SANDBOX_URL
+// is set AND we have a NATS client (so chain entities are readable),
+// the runner that BashExecutor dispatches through becomes a
+// sandboxruntime.AttestationRunner wrapping upstream's *runner.Client.
+// AttestationRunner reads the chain entity per call and, when an
+// attested per-tenant devcontainer exists, wraps the command in
+// `devcontainer exec --workspace-folder <wsf> bash -lc <cmd>` before
+// delegating. Chains without attestation passthrough unchanged.
+func buildBashExecutor(natsClient *natsclient.Client, platform types.PlatformMeta, logger *slog.Logger) (string, *executors.BashExecutor) {
+	sandboxURL := strings.TrimSpace(os.Getenv(envSandboxURL))
+	if sandboxURL == "" {
+		// Local-exec mode. Nothing to wrap; matches pre-Phase-D behavior
+		// for dev shells where the sandbox stack isn't up.
+		return "local", executors.NewBashExecutorFromEnv()
+	}
+	if natsClient == nil {
+		// Always-warm-only mode. No NATS → no attestation reads → no
+		// routing decisions; construct upstream's default *runner.Client
+		// directly from sandboxURL (vs NewBashExecutorFromEnv which
+		// re-reads the env var — would open a TOCTOU window between our
+		// read above and upstream's, and obscures the symmetry with the
+		// attestation-aware branch below where the only delta is the
+		// WithRunner option).
+		return "sandbox", executors.NewBashExecutor("", sandboxURL)
+	}
+	// Attestation-aware mode. Construct the default *runner.Client
+	// explicitly (mirroring upstream's URL→Client mapping) so we can
+	// hand it to AttestationRunner as the fallback target. The
+	// resulting BashExecutor sends every dispatch through our runner,
+	// which decides per-call whether to wrap-and-route or passthrough.
+	defaultRunner := runner.NewClient(sandboxURL)
+	entityReader := chain.NewNATSEntityReader(natsClient, chain.DefaultGraphQueryEntitySubject)
+	attRunner := sandboxruntime.NewAttestationRunner(defaultRunner, entityReader, platform, logger)
+	// Mode string uses `-` not `+` so log shippers that tokenize on `+`
+	// (some Splunk + ELK configs) see a single value, not two.
+	return "sandbox-attestation", executors.NewBashExecutor("", "", executors.WithRunner(attRunner))
 }
 
 // identityChainResolver is the no-NATS fallback. ChainID returns the
