@@ -30,29 +30,27 @@ import (
 	"time"
 
 	"github.com/c360studio/semstreams/agentic"
-	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/types"
 
+	"github.com/c360studio/semteams/cmd/semteams/chain"
 	"github.com/c360studio/semteams/cmd/semteams/sandboxmanager"
 )
 
 // ToolName is the LLM-facing tool name.
 const ToolName = "query_sandbox_attestation"
 
-// chainEntityRoleKey mirrors requestsandbox; PR 4.3 rules pin it
-// via related_loops["chain-entity-id"].
-const chainEntityRoleKey = "chain-entity-id"
-
 // EntityTripleReader matches the shape used by chain.NATSEntityReader.
-// Declared here so the package doesn't import the chain package.
+// Declared here so the package doesn't import that whole subsystem
+// just for the reader interface.
 type EntityTripleReader interface {
 	ReadEntity(ctx context.Context, entityID string) (map[string]any, error)
 }
 
-// ChainResolver mirrors requestsandbox.
-type ChainResolver interface {
-	ChainID(ctx context.Context, loopID string) (string, error)
-}
+// ChainResolver derives the chain entity ID from the calling loop
+// when the spawn rule didn't pin it via related_loops. Aliases the
+// extracted chain.IDResolver so consumers of this package get the
+// same interface across the codebase.
+type ChainResolver = chain.IDResolver
 
 // Executor implements agentic.ToolExecutor for
 // query_sandbox_attestation.
@@ -211,31 +209,14 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 	}, nil
 }
 
+// chainEntityFromCall delegates to chain.ResolveChainEntityID, wrapping
+// errors with the tool name for log context. Extracted 2026-06-02 when
+// sandboxruntime.AttestationRunner became the third consumer of the
+// same resolution path.
 func (e *Executor) chainEntityFromCall(ctx context.Context, call agentic.ToolCall) (string, error) {
-	if related, ok := call.Metadata[agentic.MetadataKeyRelatedLoops].(map[string]any); ok {
-		if v, ok := related[chainEntityRoleKey].(string); ok && v != "" {
-			return v, nil
-		}
-	}
-	if e.resolver == nil {
-		return "", fmt.Errorf("query_sandbox_attestation: related_loops[%q] missing AND no ChainResolver wired", chainEntityRoleKey)
-	}
-	e.logger.Warn("query_sandbox_attestation: related_loops chain-entity-id missing; using chain.Resolver fallback",
-		slog.String("loop_id", call.LoopID),
-		slog.String("related_key", chainEntityRoleKey))
-	if call.LoopID == "" {
-		return "", fmt.Errorf("query_sandbox_attestation: related_loops[%q] missing AND tool call has no loop_id", chainEntityRoleKey)
-	}
-	chainID, err := e.resolver.ChainID(ctx, call.LoopID)
+	entityID, err := chain.ResolveChainEntityID(ctx, call, e.resolver, e.platform, e.logger)
 	if err != nil {
-		return "", fmt.Errorf("resolve chain id from loop %q: %w", call.LoopID, err)
-	}
-	if chainID == "" {
-		return "", fmt.Errorf("chain.Resolver returned empty chain id for loop %q", call.LoopID)
-	}
-	entityID := fmt.Sprintf("%s.%s.agent.chain.execution.%s", e.platform.Org, e.platform.Platform, chainID)
-	if !message.IsValidEntityID(entityID) {
-		return "", fmt.Errorf("constructed chain entity id %q failed IsValidEntityID", entityID)
+		return "", fmt.Errorf("query_sandbox_attestation: %w", err)
 	}
 	return entityID, nil
 }

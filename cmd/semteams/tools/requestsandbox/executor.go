@@ -37,19 +37,14 @@ import (
 	"log/slog"
 
 	"github.com/c360studio/semstreams/agentic"
-	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/types"
 
+	"github.com/c360studio/semteams/cmd/semteams/chain"
 	"github.com/c360studio/semteams/cmd/semteams/sandboxmanager"
 )
 
 // ToolName is the LLM-facing tool name.
 const ToolName = "request_sandbox"
-
-// chainEntityRoleKey is the related_loops key the spawn rule sets
-// to the chain entity's 6-part ID. PR 4.3's admission-rule will pin
-// it via `"related_loops": { "chain-entity-id": "$chain.entity.id" }`.
-const chainEntityRoleKey = "chain-entity-id"
 
 // Manager is the narrow surface this tool requires. Production
 // supplies *sandboxmanager.Manager; tests inject a fake.
@@ -61,9 +56,7 @@ type Manager interface {
 // ChainResolver derives the chain entity ID from the calling loop
 // when the spawn rule didn't pin it via related_loops. Production
 // supplies *chain.Resolver; tests inject a fake.
-type ChainResolver interface {
-	ChainID(ctx context.Context, loopID string) (string, error)
-}
+type ChainResolver = chain.IDResolver
 
 // Executor implements agentic.ToolExecutor for request_sandbox.
 type Executor struct {
@@ -217,48 +210,17 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 	}, nil
 }
 
-// chainEntityFromCall resolves the chain entity ID for triple
-// stamping. Three sources, in order of preference:
-//
-//  1. related_loops["chain-entity-id"] — set by the rule pack
-//     (PR 4.3) so the calling rule explicitly names the chain
-//     entity. Highest precedence.
-//  2. chain.Resolver.ChainID(loop_id) → construct entity from
-//     chain ID. Used when the tool is invoked outside the rule
-//     pack (smoke tests, isolated coordinator calls).
-//  3. None — return error. Tool requires a chain entity to stamp
-//     on; without it the attestation triples are orphaned.
+// chainEntityFromCall delegates to chain.ResolveChainEntityID, wrapping
+// errors with the tool name for log context. See that function for the
+// three-source resolution priority (related_loops → resolver fallback →
+// error). Extracted 2026-06-02 when sandboxruntime.AttestationRunner
+// became the third consumer of the same path.
 func (e *Executor) chainEntityFromCall(ctx context.Context, call agentic.ToolCall) (string, error) {
-	if related, ok := call.Metadata[agentic.MetadataKeyRelatedLoops].(map[string]any); ok {
-		if v, ok := related[chainEntityRoleKey].(string); ok && v != "" {
-			return v, nil
-		}
-	}
-	if e.resolver == nil {
-		return "", fmt.Errorf("request_sandbox: related_loops[%q] missing AND no ChainResolver wired (chain entity required for attestation stamp)", chainEntityRoleKey)
-	}
-	// Spawn rule didn't pin chain-entity-id — fall back to the
-	// resolver. Loud-warn so operators see the gap during PR 4.3
-	// rule-pack bring-up (a typoed related_loops key would silently
-	// land here forever otherwise).
-	e.logger.Warn("request_sandbox: related_loops chain-entity-id missing; using chain.Resolver fallback",
-		slog.String("loop_id", call.LoopID),
-		slog.String("related_key", chainEntityRoleKey))
-	if call.LoopID == "" {
-		return "", fmt.Errorf("request_sandbox: related_loops[%q] missing AND tool call has no loop_id (resolver fallback unavailable)", chainEntityRoleKey)
-	}
-	chainID, err := e.resolver.ChainID(ctx, call.LoopID)
+	id, err := chain.ResolveChainEntityID(ctx, call, e.resolver, e.platform, e.logger)
 	if err != nil {
-		return "", fmt.Errorf("request_sandbox: resolve chain id from loop %q: %w", call.LoopID, err)
+		return "", fmt.Errorf("request_sandbox: %w", err)
 	}
-	if chainID == "" {
-		return "", fmt.Errorf("request_sandbox: chain.Resolver returned empty chain id for loop %q", call.LoopID)
-	}
-	entityID := fmt.Sprintf("%s.%s.agent.chain.execution.%s", e.platform.Org, e.platform.Platform, chainID)
-	if !message.IsValidEntityID(entityID) {
-		return "", fmt.Errorf("request_sandbox: constructed chain entity id %q failed IsValidEntityID", entityID)
-	}
-	return entityID, nil
+	return id, nil
 }
 
 // parseArgs delegates to sandboxmanager.ParseRequirements — the

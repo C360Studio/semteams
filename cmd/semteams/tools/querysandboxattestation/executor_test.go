@@ -10,6 +10,7 @@ import (
 	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/types"
 
+	"github.com/c360studio/semteams/cmd/semteams/chain"
 	"github.com/c360studio/semteams/cmd/semteams/sandboxmanager"
 )
 
@@ -49,7 +50,7 @@ func makeCall(args map[string]any) agentic.ToolCall {
 		Arguments: args,
 		Metadata: map[string]any{
 			agentic.MetadataKeyRelatedLoops: map[string]any{
-				chainEntityRoleKey: "c360.ops.agent.chain.execution.c1",
+				chain.ChainEntityRoleKey: "c360.ops.agent.chain.execution.c1",
 			},
 		},
 	}
