@@ -744,7 +744,16 @@ tasks:
           task: test:e2e:agentic:smoke7:capture
           vars:
             RUN_ID: "{{.RUN_ID}}"
-            WEDGE_EXPECTED_TERMINAL_ROLE: coordinator
+            # ADR-043 three-layer model is SINGLE-LOOP: HTTP-dispatched
+            # coordinator → request_sandbox → terminal attestation →
+            # decide(respond_direct), all on one loop with role "dispatch"
+            # (the HTTP-default agentic-dispatch role). No phase loops
+            # spawn, no role transitions. The smoke7:capture wedge-report
+            # default WEDGE_EXPECTED_TERMINAL_ROLE=coordinator is for the
+            # research-pack multi-loop chain shape; flagging "dispatch"
+            # explicitly here so a GREEN run-4 doesn't get false-WEDGE-
+            # labeled (run-4 evidence 2026-06-02 surfaced the mis-assertion).
+            WEDGE_EXPECTED_TERMINAL_ROLE: dispatch
       - task: test:e2e:agentic:stack:up
         vars:
           FIXTURE: ""
