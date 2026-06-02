@@ -101,6 +101,26 @@ RUN ARCH=$(dpkg --print-architecture) \
     && install -o root -g root -m 0755 /tmp/docker/docker /usr/local/bin/docker \
     && rm -rf /tmp/docker /tmp/docker.tgz
 
+# Docker Buildx plugin. devcontainer-cli shells `docker buildx version`
+# early in `devcontainer up` and bails if missing — required for any
+# profile that has `features:` (which is all of ours; features get
+# layered onto the base image via a build step). Without buildx, the
+# first-time provisioning of any profile fails before the container
+# starts; smoke #autoresearch-run2 (2026-06-02) surfaced this when the
+# svelte-ui@v1 profile was tried for the first time on a fresh sandbox
+# image. Pre-cached images skipped the build and masked the issue, so
+# it only fires on cache misses.
+#
+# Buildx is a Docker CLI plugin (separate binary at
+# /usr/local/lib/docker/cli-plugins/), distributed via GitHub releases.
+# Pinned; bump as needed.
+ARG DOCKER_BUILDX_VERSION=v0.34.1
+RUN ARCH=$(dpkg --print-architecture) \
+    && mkdir -p /usr/local/lib/docker/cli-plugins \
+    && curl -fsSL "https://github.com/docker/buildx/releases/download/${DOCKER_BUILDX_VERSION}/buildx-${DOCKER_BUILDX_VERSION}.linux-${ARCH}" \
+        -o /usr/local/lib/docker/cli-plugins/docker-buildx \
+    && chmod 0755 /usr/local/lib/docker/cli-plugins/docker-buildx
+
 # Sandbox user owns /workspace, /sandbox-cwds, and the cache mount points.
 # These are mount targets (compose mounts shared named volumes / a host
 # bind here r/w); pre-creating + chowning them so a fresh deploy works
