@@ -11,6 +11,7 @@ import (
 	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // DecisionVerb is the operator's resolution of a chain pause.
@@ -349,6 +350,24 @@ func NewNATSPauseDataReader(client *natsclient.Client, subject string) *NATSPaus
 
 // ReadPauseData queries graph.query.entity for the entity and extracts
 // chain.paused.role and chain.paused.original_model from the response triples.
+//
+// Uses natsclient.RequestClassified (beta.87+) so the handler-side
+// "not found: <id>" failure surfaces as a typed errs.IsInvalid error
+// rather than a literal-text body our JSON decoder would mis-parse.
+// Per upstream docs natsclient/errors.go "Footgun warning" — plain
+// Request() returns the legacy `error: <msg>` body with nil err on
+// handler failure, which is silent-corruption-shaped for any consumer
+// that json.Unmarshals the body. Sibling migration to chain.NATSEntityReader
+// (bae5706); this site surfaced in the audit pass after that commit.
+//
+// Invalid-class err (graph-ingest's "entity doesn't exist" classification)
+// returns ("", "", nil) so the retry path's documented fallback at
+// DecisionHandler.retry kicks in as designed: role="dispatch", model=
+// "claude-haiku". Without classification, the legacy-body unmarshal
+// failure would surface as a wrapped "decode entity response" err that
+// retry() also handles as a Warn-and-fallback, BUT the operator sees
+// a confusing "invalid character 'e'" diagnostic instead of a clean
+// "entity not found" signal.
 func (r *NATSPauseDataReader) ReadPauseData(ctx context.Context, entityID string) (role, model string, err error) {
 	req := map[string]string{"id": entityID}
 	reqData, err := json.Marshal(req)
@@ -360,8 +379,17 @@ func (r *NATSPauseDataReader) ReadPauseData(ctx context.Context, entityID string
 	queryCtx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
-	respData, err := r.client.Request(queryCtx, r.subject, reqData, queryTimeout)
+	respData, err := r.client.RequestClassified(queryCtx, r.subject, reqData, queryTimeout)
 	if err != nil {
+		// graph-ingest classifies "entity doesn't exist" as Invalid
+		// (see processor/graph-ingest/query.go handleQueryEntityNATS).
+		// For ReadPauseData's caller (DecisionHandler.retry) that's a
+		// clean "no §D5 triples yet" signal — return empty role + model
+		// + nil err so the documented fallback (role=dispatch,
+		// model=claude-haiku) triggers cleanly.
+		if errs.IsInvalid(err) {
+			return "", "", nil
+		}
 		return "", "", fmt.Errorf("graph entity query: %w", err)
 	}
 
