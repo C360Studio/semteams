@@ -27,21 +27,22 @@ import (
 // the join separator would silently split into multiple reasons on
 // the read side. Native typed-object triples avoid that class.
 const (
-	PredicateAttestationProfile          = "sandbox.attestation.profile"
-	PredicateAttestationImageDigest      = "sandbox.attestation.image_digest"
-	PredicateAttestationReady            = "sandbox.attestation.ready"
-	PredicateAttestationAttestedAt       = "sandbox.attestation.attested_at"
-	PredicateAttestationDegraded         = "sandbox.attestation.degraded"
-	PredicateAttestationDegradedReasons  = "sandbox.attestation.degraded_reasons"
-	PredicateAttestationFailedProbes     = "sandbox.attestation.failed_probes"
-	PredicateAttestationVerifiedPrefix   = "sandbox.attestation.verified."
-	PredicateAttestationAdmission        = "sandbox.attestation.admission"
-	PredicateAttestationAdmissionReasons = "sandbox.attestation.admission_reasons"
-	PredicateAttestationTerminal         = "sandbox.attestation.terminal"
-	PredicateAttestationTerminalReason   = "sandbox.attestation.terminal_reason"
-	PredicateAttestationRequirementsHash = "sandbox.attestation.requirements_hash"
-	PredicateAttestationSignature        = "sandbox.attestation.signature"
-	PredicateAttestationTTL              = "sandbox.attestation.ttl_seconds"
+	PredicateAttestationProfile             = "sandbox.attestation.profile"
+	PredicateAttestationImageDigest         = "sandbox.attestation.image_digest"
+	PredicateAttestationHostWorkspaceFolder = "sandbox.attestation.host_workspace_folder"
+	PredicateAttestationReady               = "sandbox.attestation.ready"
+	PredicateAttestationAttestedAt          = "sandbox.attestation.attested_at"
+	PredicateAttestationDegraded            = "sandbox.attestation.degraded"
+	PredicateAttestationDegradedReasons     = "sandbox.attestation.degraded_reasons"
+	PredicateAttestationFailedProbes        = "sandbox.attestation.failed_probes"
+	PredicateAttestationVerifiedPrefix      = "sandbox.attestation.verified."
+	PredicateAttestationAdmission           = "sandbox.attestation.admission"
+	PredicateAttestationAdmissionReasons    = "sandbox.attestation.admission_reasons"
+	PredicateAttestationTerminal            = "sandbox.attestation.terminal"
+	PredicateAttestationTerminalReason      = "sandbox.attestation.terminal_reason"
+	PredicateAttestationRequirementsHash    = "sandbox.attestation.requirements_hash"
+	PredicateAttestationSignature           = "sandbox.attestation.signature"
+	PredicateAttestationTTL                 = "sandbox.attestation.ttl_seconds"
 )
 
 // AttestationSource tags triples this package publishes. Distinct
@@ -89,6 +90,17 @@ type Attestation struct {
 	// hash (sha256:...). Empty when AdmissionOutcome != Admitted
 	// (no container was brought up).
 	ImageDigest string
+
+	// HostWorkspaceFolder is the host-side path the manager invoked
+	// `devcontainer up --workspace-folder` with — the bind-mount root
+	// the materialized per-tenant container reads from. Stamped on the
+	// chain entity (`sandbox.attestation.host_workspace_folder`)
+	// intended to be consumed by a forthcoming chain-scoped runner
+	// that routes subsequent bash commands INTO that container via
+	// `devcontainer exec --workspace-folder <wsf>`. Empty when
+	// AdmissionOutcome != Admitted (no container was brought up); the
+	// runner treats absence as "fall back to the always-warm sandbox."
+	HostWorkspaceFolder string
 
 	// Ready reports whether all preflight probes passed. Routes on
 	// this for the happy path.
@@ -186,16 +198,27 @@ func (a Attestation) IsFresh(now time.Time) bool {
 // Probe order in DegradedReasons + FailedProbes is sorted by probe
 // name for stable wire form. Verified map keys mirror probe names
 // case-insensitively (lowercased).
-func Attest(profile Profile, req SandboxRequirements, imageDigest string, probes []ProbeResult, attestedAt time.Time) Attestation {
+//
+// hostWorkspaceFolder is plumbed onto the Attestation so Triples()
+// stamps it on the chain entity; downstream chain-scoped tools route
+// commands into the per-tenant container by reading that triple. Empty
+// string is allowed (e.g. unit tests that don't care about routing).
+//
+// TODO(phase-b): if a fourth correlated positional string arrives here
+// (containerID, mountTarget, etc.), refactor to take ContainerRef
+// instead of the trio. Two positional strings of identical type is the
+// boundary where Go arg-order bugs start.
+func Attest(profile Profile, req SandboxRequirements, imageDigest, hostWorkspaceFolder string, probes []ProbeResult, attestedAt time.Time) Attestation {
 	att := Attestation{
-		ProfileID:        profile.ID(),
-		ImageDigest:      imageDigest,
-		AttestedAt:       attestedAt.UTC(),
-		AdmissionOutcome: AdmissionAdmitted,
-		RequirementsHash: req.Hash(),
-		Signature:        SignatureFor(profile, req),
-		TTL:              profile.ResolvedTTL(),
-		Verified:         make(map[string]string, len(probes)),
+		ProfileID:           profile.ID(),
+		ImageDigest:         imageDigest,
+		HostWorkspaceFolder: hostWorkspaceFolder,
+		AttestedAt:          attestedAt.UTC(),
+		AdmissionOutcome:    AdmissionAdmitted,
+		RequirementsHash:    req.Hash(),
+		Signature:           SignatureFor(profile, req),
+		TTL:                 profile.ResolvedTTL(),
+		Verified:            make(map[string]string, len(probes)),
 	}
 
 	var failed, passed int
@@ -304,6 +327,9 @@ func (a Attestation) Triples(subjectEntityID string) []message.Triple {
 
 	if a.ImageDigest != "" {
 		out = append(out, baseAttTriple(subjectEntityID, PredicateAttestationImageDigest, a.ImageDigest, now))
+	}
+	if a.HostWorkspaceFolder != "" {
+		out = append(out, baseAttTriple(subjectEntityID, PredicateAttestationHostWorkspaceFolder, a.HostWorkspaceFolder, now))
 	}
 	if a.TerminalReason != "" {
 		out = append(out, baseAttTriple(subjectEntityID, PredicateAttestationTerminalReason, a.TerminalReason, now))

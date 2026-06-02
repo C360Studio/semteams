@@ -238,7 +238,7 @@ func (m *Manager) Request(ctx context.Context, chainEntityID string, req Sandbox
 	}
 
 	probes := m.runProbes(ctx, ref, req.Verification)
-	att := Attest(profile, req, ref.ImageDigest, probes, m.now())
+	att := Attest(profile, req, ref.ImageDigest, ref.HostWorkspaceFolder, probes, m.now())
 	m.logger.Info("sandbox attestation rendered",
 		slog.String("profile", profile.ID()),
 		slog.String("signature", att.Signature),

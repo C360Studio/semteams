@@ -11,6 +11,11 @@ func fixedTime() time.Time {
 	return time.Date(2026, 5, 31, 14, 0, 0, 0, time.UTC)
 }
 
+// testHostWorkspaceFolder is the canonical wsf shape Manager.workspaceFor
+// produces (per-signature subdir under TenantRoot). Tests share it so a
+// future path-layout change is a one-line edit, not a search-and-replace.
+const testHostWorkspaceFolder = "/var/lib/semteams-tenants/abc/workspace"
+
 func TestAttest_AllProbesPass_ReadyTrue(t *testing.T) {
 	prof := goBackendProfile()
 	prof.TTL = 6 * time.Hour
@@ -25,7 +30,7 @@ func TestAttest_AllProbesPass_ReadyTrue(t *testing.T) {
 		{Name: "go", Stdout: "go version go1.25.4 linux/amd64", ExitCode: 0},
 		{Name: "task", Stdout: "task tasks:\n  build", ExitCode: 0},
 	}
-	a := Attest(prof, req, "sha256:abc123", probes, fixedTime())
+	a := Attest(prof, req, "sha256:abc123", testHostWorkspaceFolder, probes, fixedTime())
 	if !a.Ready {
 		t.Fatalf("expected Ready=true, got false; %+v", a)
 	}
@@ -50,7 +55,7 @@ func TestAttest_SomeFailDegradedTrue(t *testing.T) {
 		{Name: "go", Stdout: "go version go1.25.4", ExitCode: 0},
 		{Name: "task", Stdout: "", ExitCode: 127, Stderr: "task: command not found"},
 	}
-	a := Attest(prof, req, "sha256:abc", probes, fixedTime())
+	a := Attest(prof, req, "sha256:abc", "", probes, fixedTime())
 	if a.Ready {
 		t.Fatalf("expected Ready=false on degraded")
 	}
@@ -71,7 +76,7 @@ func TestAttest_AllFail_Terminal(t *testing.T) {
 		{Name: "go", ExitCode: 127, Stderr: "not found"},
 		{Name: "task", ExitCode: 127, Stderr: "not found"},
 	}
-	a := Attest(prof, SandboxRequirements{}, "sha256:x", probes, fixedTime())
+	a := Attest(prof, SandboxRequirements{}, "sha256:x", "", probes, fixedTime())
 	if a.Ready {
 		t.Fatalf("expected Ready=false")
 	}
@@ -88,7 +93,7 @@ func TestAttest_ProbeErrCountsAsFailure(t *testing.T) {
 		{Name: "go", Err: errors.New("exec timeout")},
 		{Name: "task", ExitCode: 0},
 	}
-	a := Attest(goBackendProfile(), SandboxRequirements{}, "sha256:x", probes, fixedTime())
+	a := Attest(goBackendProfile(), SandboxRequirements{}, "sha256:x", "", probes, fixedTime())
 	if !a.Degraded {
 		t.Fatalf("expected Degraded=true (mix err + ok)")
 	}
@@ -98,7 +103,7 @@ func TestAttest_ProbeErrCountsAsFailure(t *testing.T) {
 }
 
 func TestAttest_EmptyProbesReady(t *testing.T) {
-	a := Attest(goBackendProfile(), SandboxRequirements{}, "sha256:x", nil, fixedTime())
+	a := Attest(goBackendProfile(), SandboxRequirements{}, "sha256:x", "", nil, fixedTime())
 	if !a.Ready {
 		t.Fatalf("expected Ready=true on empty probe set (container up, no capability gates)")
 	}
@@ -107,7 +112,7 @@ func TestAttest_EmptyProbesReady(t *testing.T) {
 func TestAttest_VerifiedTruncates(t *testing.T) {
 	huge := strings.Repeat("a", 1024)
 	probes := []ProbeResult{{Name: "noisy", Stdout: huge, ExitCode: 0}}
-	a := Attest(goBackendProfile(), SandboxRequirements{}, "sha256:x", probes, fixedTime())
+	a := Attest(goBackendProfile(), SandboxRequirements{}, "sha256:x", "", probes, fixedTime())
 	got := a.Verified["noisy"]
 	if !strings.HasSuffix(got, "(truncated)") {
 		t.Fatalf("verified value not truncated: len=%d", len(got))
@@ -125,7 +130,7 @@ func TestAttest_TriplesSkipEmptyVerified(t *testing.T) {
 		{Name: "silent", Stdout: "", ExitCode: 0},
 		{Name: "loud", Stdout: "ok", ExitCode: 0},
 	}
-	a := Attest(goBackendProfile(), SandboxRequirements{}, "sha256:x", probes, fixedTime())
+	a := Attest(goBackendProfile(), SandboxRequirements{}, "sha256:x", "", probes, fixedTime())
 	triples := a.Triples("c360.platform1.agent.chain.execution.c1")
 	for _, tr := range triples {
 		if tr.Predicate == PredicateAttestationVerifiedPrefix+"silent" {
@@ -159,7 +164,7 @@ func TestProbeResultOK_HonorsExpectExit(t *testing.T) {
 
 func TestAttest_VerifiedKeyLowercased(t *testing.T) {
 	probes := []ProbeResult{{Name: "GO_Version", Stdout: "go1.25", ExitCode: 0}}
-	a := Attest(goBackendProfile(), SandboxRequirements{}, "sha256:x", probes, fixedTime())
+	a := Attest(goBackendProfile(), SandboxRequirements{}, "sha256:x", "", probes, fixedTime())
 	if _, ok := a.Verified["go_version"]; !ok {
 		t.Fatalf("Verified key not lowercased: %v", a.Verified)
 	}
@@ -208,7 +213,7 @@ func TestAttest_TriplesShape(t *testing.T) {
 		{Name: "go", Stdout: "go version go1.25.4", ExitCode: 0},
 		{Name: "task", Stdout: "", ExitCode: 127, Stderr: "task not found"},
 	}
-	a := Attest(goBackendProfile(), SandboxRequirements{Languages: []string{"go"}}, "sha256:img", probes, fixedTime())
+	a := Attest(goBackendProfile(), SandboxRequirements{Languages: []string{"go"}}, "sha256:img", testHostWorkspaceFolder, probes, fixedTime())
 	triples := a.Triples("c360.platform1.agent.chain.execution.testchain")
 
 	if len(triples) == 0 {
@@ -225,6 +230,7 @@ func TestAttest_TriplesShape(t *testing.T) {
 		PredicateAttestationSignature:             true,
 		PredicateAttestationTTL:                   true,
 		PredicateAttestationImageDigest:           true,
+		PredicateAttestationHostWorkspaceFolder:   true,
 		PredicateAttestationDegradedReasons:       true,
 		PredicateAttestationFailedProbes:          true,
 		PredicateAttestationVerifiedPrefix + "go": true,
@@ -257,9 +263,54 @@ func TestAttest_TriplesShape(t *testing.T) {
 }
 
 func TestAttest_TriplesEmptySubjectReturnsNil(t *testing.T) {
-	a := Attest(goBackendProfile(), SandboxRequirements{}, "sha256:x", nil, fixedTime())
+	a := Attest(goBackendProfile(), SandboxRequirements{}, "sha256:x", "", nil, fixedTime())
 	if got := a.Triples(""); got != nil {
 		t.Fatalf("Triples on empty subject should be nil, got %d", len(got))
+	}
+}
+
+func TestAttest_TriplesStampHostWorkspaceFolder(t *testing.T) {
+	// Chain-scoped tools (attestation-aware bash routing) read this
+	// triple to route subsequent commands INTO the per-tenant container
+	// via `devcontainer exec --workspace-folder <wsf>`. Drift in either
+	// the predicate name or the value here breaks that routing
+	// silently. Lock predicate + value + source at the boundary.
+	a := Attest(goBackendProfile(), SandboxRequirements{}, "sha256:img", testHostWorkspaceFolder, nil, fixedTime())
+	triples := a.Triples("c360.platform1.agent.chain.execution.testchain")
+	var found bool
+	for _, tr := range triples {
+		if tr.Predicate != PredicateAttestationHostWorkspaceFolder {
+			continue
+		}
+		found = true
+		got, ok := tr.Object.(string)
+		if !ok {
+			t.Fatalf("host_workspace_folder Object expected string, got %T", tr.Object)
+		}
+		if got != testHostWorkspaceFolder {
+			t.Fatalf("host_workspace_folder value drift: got %q want %q", got, testHostWorkspaceFolder)
+		}
+		if tr.Source != AttestationSource {
+			t.Fatalf("host_workspace_folder source drift: got %q want %q — operators grep on Source", tr.Source, AttestationSource)
+		}
+	}
+	if !found {
+		t.Fatalf("PredicateAttestationHostWorkspaceFolder not stamped — chain-scoped bash routing has nothing to read")
+	}
+}
+
+func TestAttest_TriplesOmitHostWorkspaceFolderWhenEmpty(t *testing.T) {
+	// AdmissionDenied / pre-up failure paths never get a host wsf.
+	// Stamping an empty string would let chain-scoped bash routing
+	// substitute "" and shell `devcontainer exec --workspace-folder ''`
+	// — the same opaque "config not found" failure mode the wsf split
+	// (ce4f07b) fixed in the runner. Omit instead.
+	a := Attest(goBackendProfile(), SandboxRequirements{}, "sha256:img", "", nil, fixedTime())
+	triples := a.Triples("c360.platform1.agent.chain.execution.testchain")
+	for _, tr := range triples {
+		if tr.Predicate == PredicateAttestationHostWorkspaceFolder {
+			t.Fatalf("empty host_workspace_folder must NOT be stamped; routing would substitute '' and fail opaquely")
+		}
 	}
 }
 
@@ -301,5 +352,43 @@ func TestAttestTerminalError(t *testing.T) {
 	}
 	if a.AdmissionOutcome != AdmissionAdmitted {
 		t.Fatalf("expected Admission=Admitted (we made it past admission)")
+	}
+}
+
+// TestNonAdmittedPaths_NeverStampHostWorkspaceFolder guards the wsf
+// triple against leaking through any non-Attest construction path.
+// Background: Phase A's omit-when-empty semantics on Attest are tested
+// directly above, but AttestAdmissionFailure and AttestTerminalError
+// build Attestations without going through Attest(...) at all — a
+// future refactor that consolidated triple-emission into a shared
+// helper could regress and start stamping these paths. Lock the
+// invariant on all three constructors so the wsf field always reflects
+// "the manager actually brought a container up" and never "the manager
+// tried and failed before Up()."
+func TestNonAdmittedPaths_NeverStampHostWorkspaceFolder(t *testing.T) {
+	const subject = "c360.platform1.agent.chain.execution.testchain"
+	cases := []struct {
+		name string
+		a    Attestation
+	}{
+		{"admission-denied", AttestAdmissionFailure(goBackendProfile(), SandboxRequirements{},
+			AdmissionResult{Outcome: AdmissionDenied, DeniedReasons: []string{"secret missing"}}, fixedTime())},
+		{"admission-pending", AttestAdmissionFailure(goBackendProfile(), SandboxRequirements{},
+			AdmissionResult{Outcome: AdmissionPending, PendingReasons: []string{"docker-socket review"}}, fixedTime())},
+		{"terminal-error", AttestTerminalError(goBackendProfile(), SandboxRequirements{}, "devcontainer up failed: exit 1", fixedTime())},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.a.HostWorkspaceFolder != "" {
+				t.Fatalf("%s constructed Attestation with non-empty HostWorkspaceFolder=%q — the field must reflect post-Up state only",
+					tc.name, tc.a.HostWorkspaceFolder)
+			}
+			for _, tr := range tc.a.Triples(subject) {
+				if tr.Predicate == PredicateAttestationHostWorkspaceFolder {
+					t.Fatalf("%s leaked sandbox.attestation.host_workspace_folder=%v — chain routing would substitute a stale path",
+						tc.name, tr.Object)
+				}
+			}
+		})
 	}
 }

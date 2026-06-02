@@ -54,7 +54,7 @@ func TestMockRunner_AttestationFlow(t *testing.T) {
 	probe, _ := MockRunner{}.Exec(context.Background(), ref, "go version")
 	probe.Name = "go"
 	probe.ExpectExit = 0
-	att := Attest(prof, req, ref.ImageDigest, []ProbeResult{probe}, fixedTime())
+	att := Attest(prof, req, ref.ImageDigest, ref.HostWorkspaceFolder, []ProbeResult{probe}, fixedTime())
 	if !att.Ready {
 		t.Fatalf("expected Ready=true with MockRunner end-to-end")
 	}
