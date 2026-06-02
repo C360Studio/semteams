@@ -101,13 +101,18 @@ RUN ARCH=$(dpkg --print-architecture) \
     && install -o root -g root -m 0755 /tmp/docker/docker /usr/local/bin/docker \
     && rm -rf /tmp/docker /tmp/docker.tgz
 
-# Sandbox user owns /workspace and the cache mount points. Cache dirs
-# are mount targets (compose mounts a shared named volume here r/w);
-# pre-creating + chowning them so a fresh deploy works without manual
-# fix-up if the volume is created empty.
+# Sandbox user owns /workspace, /sandbox-cwds, and the cache mount points.
+# These are mount targets (compose mounts shared named volumes / a host
+# bind here r/w); pre-creating + chowning them so a fresh deploy works
+# without manual fix-up if the volume is created empty. Docker initializes
+# named-volume mount points to root:root by default when the target dir
+# doesn't exist in the image — pre-creating with the right ownership is
+# the standard workaround. /sandbox-cwds is the ADR-043 PR 4.5 review C2
+# sandbox cwd root (named volume sandbox-agentic-workspaces; isolated from
+# the SEMTEAMS_TENANT_ROOT host bind used by the sandbox-manager).
 RUN useradd -m -s /bin/bash -U sandbox \
-    && mkdir -p /workspace /go/pkg/mod /home/sandbox/.m2 /home/sandbox/.npm /home/sandbox/.gradle \
-    && chown -R sandbox:sandbox /workspace /go /home/sandbox/.m2 /home/sandbox/.npm /home/sandbox/.gradle
+    && mkdir -p /workspace /sandbox-cwds /go/pkg/mod /home/sandbox/.m2 /home/sandbox/.npm /home/sandbox/.gradle \
+    && chown -R sandbox:sandbox /workspace /sandbox-cwds /go /home/sandbox/.m2 /home/sandbox/.npm /home/sandbox/.gradle
 
 # Binaries from the builder stage.
 COPY --from=builder /sandbox /usr/local/bin/sandbox

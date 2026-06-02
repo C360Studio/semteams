@@ -47,17 +47,16 @@
         "requests_per_minute": 100
       },
       "gemini-flash": {
-        "_comment": "Gemini 3 Flash Preview — matches semspec's working config + upstream canonical (configs/gemini-example.json). provider=gemini + wire_backend=wire engages the framework-owned wire client + GeminiAdapter so thought_signature flow works for 3.x preview models. reasoning_effort=low keeps cost down on coordinator/research/reviewing capabilities.",
-        "provider": "gemini",
+        "_comment": "Gemini 2.5 Flash via OpenAI-compat wire. Smoke #13 run-3 (2026-06-02) surfaced upstream #159 (Gemini 3.x preview's per-tool_call thought_signature is dropped on parallel tool emissions through GeminiAdapter). Reverting to 2.5-flash + provider=openai dodges that surface — 2.5 has no thought_signature semantics. The 51→5 tool fix from semstreams beta.92 (agentic-dispatch HTTP DefaultTools scoping) is the real MALFORMED unblocker on this wire path; the 3.x preview wire was a separate attempt that hit upstream's parallel-tool bug. Flip back when upstream lands the round-trip fix.",
+        "provider": "openai",
         "url": "https://generativelanguage.googleapis.com/v1beta/openai",
-        "model": "gemini-3-flash-preview",
+        "model": "gemini-2.5-flash",
         "api_key_env": "GEMINI_API_KEY",
         "max_tokens": 1048576,
         "supports_tools": true,
         "tool_format": "openai",
         "stream": true,
         "reasoning_effort": "low",
-        "wire_backend": "wire",
         "max_concurrent": 10,
         "requests_per_minute": 200
       },
@@ -79,8 +78,8 @@
       }
     },
     "defaults": {
-      "_comment": "Default 'model' name is a capability key (coordinator) NOT an endpoint name (gemini-flash). agentic-dispatch.resolveModel() returns this verbatim as the spawned-task's req.Model; agentic-model's resolveEndpoint walks GetFallbackChain(req.Model) first, which only returns a chain when req.Model is a capability key. Using 'gemini-flash' here bypasses the capability chain entirely (smoke #13 finding 2026-06-01).",
-      "model": "coordinator"
+      "_comment": "Endpoint name (validator enforced). agentic-model's resolveEndpoint walks GetFallbackChain(req.Model) first, but req.Model is set by agentic-dispatch.resolveModel() which returns GetDefault() verbatim — and defaults.model MUST be an endpoint per the registry validator (model/registry.go:396). Capability-chain semantics for HTTP-dispatched coordinator are unreachable upstream-as-shipped (smoke #13 run-2 finding 2026-06-02): rule-pack publish_agent actions are the only way capabilities fire. gemini-flash chosen here over gemini-pro for cost; the 51→5 tool fix (beta.92) + wire-layer alignment (provider=gemini + wire_backend=wire + 3-flash-preview) above should let the smaller model handle the coordinator persona.",
+      "model": "gemini-flash"
     },
     "capabilities": {
       "coordinator": { "preferred": ["gemini-pro"], "fallback": ["gemini-flash", "claude-haiku"], "requires_tools": true },
