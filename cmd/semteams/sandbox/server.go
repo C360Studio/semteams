@@ -112,11 +112,12 @@ func NewServer(cfg ServerConfig) *Server {
 }
 
 // RegisterRoutes wires the sandbox HTTP API onto mux. Endpoints conform
-// to the upstream sandbox.Client wire format (semstreams beta.36) so
-// upstream BashExecutor reaches our sandbox via SANDBOX_URL without any
-// adapter layer. The single product-shell extension is
-// `GET /worktree/{taskID}/archive` for forensics zip (ADR-032 §10);
-// upstream sandbox.Client doesn't try to use it.
+// to the upstream runner.Client wire format (renamed from sandbox.Client
+// in semstreams beta.91 / PR #184; same wire protocol, originally
+// introduced in beta.36) so upstream BashExecutor reaches our sandbox
+// via SANDBOX_URL without any adapter layer. The single product-shell
+// extension is `GET /worktree/{taskID}/archive` for forensics zip
+// (ADR-032 §10); upstream runner.Client doesn't try to use it.
 func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /health", s.handleHealth)
 	mux.HandleFunc("POST /worktree", s.handleCreateWorktree)
@@ -131,7 +132,7 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 // REQUEST / RESPONSE TYPES
 // =============================================================================
 
-// createWorktreeRequest mirrors upstream sandbox.Client.CreateWorktree
+// createWorktreeRequest mirrors upstream runner.Client.CreateWorktree
 // body shape. The read_only_paths extension (ADR-032 §addendum
 // 2026-05-03) is deliberately additive: upstream's current client omits
 // the field; future upstream PR will add it pass-through.
@@ -141,14 +142,14 @@ type createWorktreeRequest struct {
 }
 
 // worktreeInfo is the response shape for POST /worktree, mirroring
-// upstream sandbox.Client.WorktreeInfo (Status/Path/Branch).
+// upstream runner.Client.WorktreeInfo (Status/Path/Branch).
 type worktreeInfo struct {
 	Status string `json:"status"`
 	Path   string `json:"path"`
 	Branch string `json:"branch"`
 }
 
-// fileWriteRequest mirrors upstream sandbox.Client.WriteFile body shape.
+// fileWriteRequest mirrors upstream runner.Client.WriteFile body shape.
 type fileWriteRequest struct {
 	TaskID  string `json:"task_id"`
 	Path    string `json:"path"`
@@ -165,14 +166,14 @@ type fileReadResponse struct {
 	TotalSize int64  `json:"total_size,omitempty"`
 }
 
-// execRequest mirrors upstream sandbox.Client.Exec body shape.
+// execRequest mirrors upstream runner.Client.Exec body shape.
 type execRequest struct {
 	TaskID    string `json:"task_id"`
 	Command   string `json:"command"`
 	TimeoutMs int    `json:"timeout_ms,omitempty"`
 }
 
-// execResponse mirrors upstream sandbox.Client.ExecResult.
+// execResponse mirrors upstream runner.Client.ExecResult.
 type execResponse struct {
 	Stdout   string `json:"stdout"`
 	Stderr   string `json:"stderr"`

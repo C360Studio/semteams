@@ -16,7 +16,8 @@ import (
 
 // TestUpstreamBashExecutorReachesSandbox is the contract test that
 // pins the wire-format match between upstream's BashExecutor (which
-// uses sandbox.Client) and our sandbox.Server. If upstream changes
+// uses runner.Client, renamed from sandbox.Client in semstreams
+// beta.91 / PR #184) and our sandbox.Server. If upstream changes
 // the wire format and this test still passes, we're still aligned;
 // if it stops passing, our R3.6.1.1 conformance has drifted.
 //

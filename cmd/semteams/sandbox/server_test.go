@@ -46,8 +46,9 @@ func newTestServer(t *testing.T) (*httptest.Server, string) {
 }
 
 // =============================================================================
-// HELPERS — each maps to one upstream sandbox.Client method shape so a
-// future integration test can swap the helpers for sandbox.Client calls
+// HELPERS — each maps to one upstream runner.Client method shape (renamed
+// from sandbox.Client in semstreams beta.91 / PR #184; same wire format) so
+// a future integration test can swap the helpers for runner.Client calls
 // without touching the assertions.
 // =============================================================================
 
