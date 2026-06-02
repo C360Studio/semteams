@@ -395,12 +395,50 @@ func TestExecute_NATSRequestFails(t *testing.T) {
 }
 
 func TestExecute_MalformedReply(t *testing.T) {
-	exec, _ := newExecutorWithCfg(t, defaultCfg(), []byte("{not json"), nil)
+	// Valid JSON but wrong shape — exercises the post-json.Valid
+	// Unmarshal failure path. The pre-Valid guard added 2026-06-02
+	// (Footgun fix mirroring the sibling-site pattern) doesn't fire
+	// here because `42` IS valid JSON; Unmarshal then fails at the
+	// type level (cannot unmarshal number into AddReply struct).
+	exec, _ := newExecutorWithCfg(t, defaultCfg(), []byte("42"), nil)
 	res, _ := exec.Execute(context.Background(), defaultCall(map[string]any{
 		"url": "https://github.com/example/repo",
 	}))
 	if !strings.Contains(res.Error, "decode AddReply") {
 		t.Errorf("Result.Error = %q, want contains 'decode AddReply'", res.Error)
+	}
+}
+
+// TestExecute_LegacyHandlerErrorBody_SurfacedAsToolError verifies the
+// natsclient RequestWithRetry Footgun guard: when the responder returns
+// a Go error, SubscribeForRequests wire-encodes it as a legacy
+// `error: <msg>` text body with nil err. RequestWithRetry has no
+// ClassifyReply variant upstream beta.92, so the body flows through to
+// our caller. Pre-fix, json.Unmarshal would silently corrupt with
+// "invalid character 'e' looking for beginning of value" — the same
+// bug class chain.NATSEntityReader (bae5706) + chainpause.NATSPauseDataReader
+// (10f9d29) closed via RequestClassified. This site uses a json.Valid
+// pre-decode guard as the local workaround until upstream lands the
+// Classified variant for RequestWithRetry.
+func TestExecute_LegacyHandlerErrorBody_SurfacedAsToolError(t *testing.T) {
+	// Mirrors the exact shape SubscribeForRequests emits when a
+	// handler returns a non-classified Go error.
+	body := []byte("error: not found: graph.ingest.add.research")
+	exec, _ := newExecutorWithCfg(t, defaultCfg(), body, nil)
+	res, _ := exec.Execute(context.Background(), defaultCall(map[string]any{
+		"url": "https://github.com/example/repo",
+	}))
+	if res.Error == "" {
+		t.Fatalf("expected tool error on legacy handler-error body, got empty")
+	}
+	if strings.Contains(res.Error, "invalid character 'e'") {
+		t.Errorf("Result.Error leaked the silent-corruption decode failure (pre-fix shape): %q", res.Error)
+	}
+	if !strings.Contains(res.Error, "non-JSON response") {
+		t.Errorf("Result.Error doesn't name the wire-shape class: %q", res.Error)
+	}
+	if !strings.Contains(res.Error, "graph.ingest.add.research") {
+		t.Errorf("Result.Error should surface the upstream body for diagnosis: %q", res.Error)
 	}
 }
 

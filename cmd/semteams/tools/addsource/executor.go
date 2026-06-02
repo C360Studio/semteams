@@ -181,6 +181,25 @@ func (e *RepoExecutor) Execute(ctx context.Context, call agentic.ToolCall) (agen
 		}, nil
 	}
 
+	// natsclient.Client.RequestWithRetry does NOT route through the
+	// ClassifyReply path that RequestClassified uses — when the
+	// responder returns a Go error, SubscribeForRequests wire-encodes
+	// the failure as a legacy `error: <msg>` text body with nil err.
+	// A plain json.Unmarshal on that body fails with "invalid character
+	// 'e' looking for beginning of value", masquerading as a transient
+	// decode error and obscuring the real handler-side failure (sibling
+	// of chain.NATSEntityReader + chainpause.NATSPauseDataReader, both
+	// closed by RequestClassified — but no RequestWithRetryClassified
+	// exists upstream beta.92, so this site uses a json.Valid guard as
+	// the local workaround until upstream lands the classified variant).
+	if !json.Valid(respBytes) {
+		return agentic.ToolResult{
+			CallID: call.ID,
+			Name:   call.Name,
+			Error:  fmt.Sprintf("non-JSON response from %s (likely a handler-side error returned via the legacy text-body wire path): %s", subject, truncateBody(respBytes, 512)),
+		}, nil
+	}
+
 	var reply AddReply
 	if err := json.Unmarshal(respBytes, &reply); err != nil {
 		return agentic.ToolResult{
@@ -308,4 +327,17 @@ func validateRepoURL(s string) error {
 		return fmt.Errorf("url missing host")
 	}
 	return nil
+}
+
+// truncateBody returns the body as a string, capped at maxLen bytes
+// with a `…` suffix when truncated. Used to surface legacy-handler-
+// error response bodies in tool-error messages without flooding the
+// operator's terminal when the responder emits a multi-kilobyte stack
+// trace.
+func truncateBody(b []byte, maxLen int) string {
+	s := strings.TrimSpace(string(b))
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "…"
 }
