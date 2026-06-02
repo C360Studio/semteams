@@ -19,7 +19,7 @@ func (f *fakeRunner) Up(ctx context.Context, wsf, cfg string, env map[string]str
 	if f.upFn != nil {
 		return f.upFn(ctx, wsf, cfg, env)
 	}
-	return ContainerRef{ContainerID: "c1", ImageDigest: "sha256:fake", RemoteWorkspaceFolder: wsf}, nil
+	return ContainerRef{ContainerID: "c1", ImageDigest: "sha256:fake", HostWorkspaceFolder: wsf, RemoteWorkspaceFolder: wsf}, nil
 }
 
 func (f *fakeRunner) Exec(ctx context.Context, ref ContainerRef, command string) (ProbeResult, error) {

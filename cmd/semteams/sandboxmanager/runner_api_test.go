@@ -86,7 +86,13 @@ func TestSandboxAPIRunner_Up_HappyPath(t *testing.T) {
 		t.Fatalf("ContainerID wrong: %q", ref.ContainerID)
 	}
 	if ref.RemoteWorkspaceFolder != "/workspaces/x" {
-		t.Fatalf("workspace wrong: %q", ref.RemoteWorkspaceFolder)
+		t.Fatalf("remote workspace wrong: %q", ref.RemoteWorkspaceFolder)
+	}
+	// The runner must stamp the HOST wsf on the ref so subsequent
+	// Exec passes the same value to `--workspace-folder` that Up
+	// used (devcontainer-cli's container lookup keys on it).
+	if ref.HostWorkspaceFolder != wsf {
+		t.Fatalf("host workspace wrong: %q (want %q)", ref.HostWorkspaceFolder, wsf)
 	}
 	if ref.ImageDigest != "sha256:image123" {
 		t.Fatalf("image digest wrong: %q", ref.ImageDigest)
@@ -295,8 +301,9 @@ func TestSandboxAPIRunner_Exec_ReturnsProbeResult(t *testing.T) {
 	defer fs.Close()
 
 	runner := NewSandboxAPIRunner(fs.server.URL)
+	hostWsf := "/var/lib/semteams-tenants/abc/workspace"
 	res, err := runner.Exec(context.Background(),
-		ContainerRef{ContainerID: "c-abc", RemoteWorkspaceFolder: "/workspaces/x"},
+		ContainerRef{ContainerID: "c-abc", HostWorkspaceFolder: hostWsf, RemoteWorkspaceFolder: "/workspaces/x"},
 		"go version")
 	if err != nil {
 		t.Fatalf("Exec: %v", err)
@@ -306,6 +313,20 @@ func TestSandboxAPIRunner_Exec_ReturnsProbeResult(t *testing.T) {
 	}
 	if !strings.Contains(res.Stdout, "go1.25.4") {
 		t.Fatalf("stdout not propagated: %q", res.Stdout)
+	}
+	// The shelled command must pass the HOST wsf to
+	// `--workspace-folder` (not RemoteWorkspaceFolder). Failure
+	// shape if regressed: "Dev container config not found" from
+	// devcontainer-cli, surfaced as exit 1 on every probe.
+	if len(fs.requests) != 1 {
+		t.Fatalf("expected 1 /exec call, got %d", len(fs.requests))
+	}
+	cmd := fs.requests[0].Command
+	if !strings.Contains(cmd, "'--workspace-folder' '"+hostWsf+"'") {
+		t.Fatalf("Exec did not pass HostWorkspaceFolder to --workspace-folder: %q", cmd)
+	}
+	if strings.Contains(cmd, "'--workspace-folder' '/workspaces/x'") {
+		t.Fatalf("Exec passed RemoteWorkspaceFolder (the smoke-#13 bug): %q", cmd)
 	}
 }
 
@@ -317,11 +338,50 @@ func TestSandboxAPIRunner_Exec_EmptyContainerID(t *testing.T) {
 	}
 }
 
-func TestSandboxAPIRunner_Exec_EmptyWorkspace(t *testing.T) {
+func TestSandboxAPIRunner_Exec_EmptyHostWorkspace(t *testing.T) {
+	// Pre-fix refs only set RemoteWorkspaceFolder; that's no longer
+	// accepted because passing it to `--workspace-folder` is the
+	// smoke-#13 probe-exit-1 bug. Fail loudly on bare ContainerID.
 	runner := NewSandboxAPIRunner("http://placeholder")
 	_, err := runner.Exec(context.Background(), ContainerRef{ContainerID: "c1"}, "echo hi")
 	if err == nil {
-		t.Fatalf("expected error on empty RemoteWorkspaceFolder")
+		t.Fatalf("expected error on empty HostWorkspaceFolder")
+	}
+	if !strings.Contains(err.Error(), "HostWorkspaceFolder") {
+		t.Fatalf("error does not mention HostWorkspaceFolder: %v", err)
+	}
+}
+
+func TestSandboxAPIRunner_Exec_RejectsRemoteOnlyRef(t *testing.T) {
+	// Defensive: even with a non-empty RemoteWorkspaceFolder, the
+	// runner must NOT fall back to it for --workspace-folder. The
+	// pre-fix code did, which made every probe exit 1 in smoke #13.
+	runner := NewSandboxAPIRunner("http://placeholder")
+	_, err := runner.Exec(context.Background(),
+		ContainerRef{ContainerID: "c1", RemoteWorkspaceFolder: "/workspaces/x"},
+		"echo hi")
+	if err == nil {
+		t.Fatalf("expected error on RemoteWorkspaceFolder-only ref")
+	}
+	if !strings.Contains(err.Error(), "HostWorkspaceFolder") {
+		t.Fatalf("error does not mention HostWorkspaceFolder: %v", err)
+	}
+}
+
+func TestSandboxAPIRunner_Exec_RejectsRelativeHostWorkspace(t *testing.T) {
+	// Mirror Up's absolute-path discipline. A relative
+	// HostWorkspaceFolder surfaces as the same opaque "config not
+	// found" devcontainer-cli error that the wsf split fixed; reject
+	// at the boundary instead.
+	runner := NewSandboxAPIRunner("http://placeholder")
+	_, err := runner.Exec(context.Background(),
+		ContainerRef{ContainerID: "c1", HostWorkspaceFolder: "relative/path"},
+		"echo hi")
+	if err == nil {
+		t.Fatalf("expected error on relative HostWorkspaceFolder")
+	}
+	if !strings.Contains(err.Error(), "must be absolute") {
+		t.Fatalf("error does not name the absolute-path rule: %v", err)
 	}
 }
 

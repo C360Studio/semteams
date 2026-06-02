@@ -184,6 +184,7 @@ func (r *CLIRunner) Up(ctx context.Context, workspaceFolder, configPath string, 
 
 	ref := ContainerRef{
 		ContainerID:           result.ContainerID,
+		HostWorkspaceFolder:   wsf,
 		RemoteWorkspaceFolder: result.RemoteWorkspaceFolder,
 	}
 	ref.ImageDigest = r.resolveImageDigest(ctx, result.ContainerID)
@@ -191,32 +192,42 @@ func (r *CLIRunner) Up(ctx context.Context, workspaceFolder, configPath string, 
 }
 
 // Exec runs a probe command inside the materialized container.
-// Shells `devcontainer exec --workspace-folder <wsf> -- bash -lc
+// Shells `devcontainer exec --workspace-folder <host-wsf> bash -lc
 // <command>` so probe authors can use shell features (pipes,
 // redirects). Exit code is mapped from the underlying command's
 // exit code, not from `devcontainer exec` itself — a non-zero
 // command exit is NOT an Exec error (it's a probe failure for
 // Attest to interpret).
 //
-// ref.RemoteWorkspaceFolder is used for the --workspace-folder flag
-// because that's what devcontainer keys on (not the host-side
-// workspace folder). Falls back to a sentinel if RemoteWorkspaceFolder
-// is empty (defensive — shouldn't happen post-Up).
+// --workspace-folder gets HostWorkspaceFolder (the same path Up was
+// invoked with), not RemoteWorkspaceFolder. The CLI uses
+// `--workspace-folder` to look up devcontainer.json on disk AND to
+// derive the devcontainer.local_folder id-label for container
+// discovery — passing the container-internal cwd misses both, and
+// the CLI bails with "Dev container config not found" before the
+// probe ever runs inside the materialized container.
 func (r *CLIRunner) Exec(ctx context.Context, ref ContainerRef, command string) (ProbeResult, error) {
 	if ref.ContainerID == "" {
 		return ProbeResult{}, errors.New("CLIRunner.Exec: ContainerRef has no ContainerID (Up was not called)")
 	}
 	// Per PR 4.1 finding M4: don't fall back to a sentinel workspace
-	// path. A missing RemoteWorkspaceFolder means Up returned a
+	// path. A missing HostWorkspaceFolder means Up returned a
 	// malformed ref; running probes against a guessed path silently
 	// targets the wrong tenant or a non-existent directory.
-	if ref.RemoteWorkspaceFolder == "" {
-		return ProbeResult{}, errors.New("CLIRunner.Exec: ContainerRef.RemoteWorkspaceFolder unset (devcontainer up did not populate)")
+	if ref.HostWorkspaceFolder == "" {
+		return ProbeResult{}, errors.New("CLIRunner.Exec: ContainerRef.HostWorkspaceFolder unset (devcontainer up did not populate; pre-fix refs that only set RemoteWorkspaceFolder are no longer accepted)")
+	}
+	// Mirror Up's absolute-path discipline. A relative
+	// HostWorkspaceFolder would surface as the same opaque
+	// "Dev container config not found" failure that motivated this
+	// whole split — easier to spot at the boundary.
+	if !strings.HasPrefix(ref.HostWorkspaceFolder, "/") {
+		return ProbeResult{}, fmt.Errorf("CLIRunner.Exec: HostWorkspaceFolder must be absolute, got %q", ref.HostWorkspaceFolder)
 	}
 
 	cmd := exec.CommandContext(ctx, r.binary(),
 		"exec",
-		"--workspace-folder", ref.RemoteWorkspaceFolder,
+		"--workspace-folder", ref.HostWorkspaceFolder,
 		"bash", "-lc", command,
 	)
 	var stdout, stderr bytes.Buffer

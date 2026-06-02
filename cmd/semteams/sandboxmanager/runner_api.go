@@ -153,6 +153,7 @@ func (r *SandboxAPIRunner) Up(ctx context.Context, workspaceFolder, configPath s
 
 	ref := ContainerRef{
 		ContainerID:           result.ContainerID,
+		HostWorkspaceFolder:   wsf,
 		RemoteWorkspaceFolder: result.RemoteWorkspaceFolder,
 		// Per PR 4.4 finding M4: stash the host-side task_id on the
 		// ref so every subsequent /exec call (Exec probes, future Down)
@@ -169,30 +170,44 @@ func (r *SandboxAPIRunner) Up(ctx context.Context, workspaceFolder, configPath s
 
 // Exec runs a probe command inside the materialized devcontainer
 // via the sandbox HTTP API. The probe command is wrapped in
-// `devcontainer exec --workspace-folder <wsf> -- bash -lc <command>`
-// so probe authors can use shell features.
+// `devcontainer exec --workspace-folder <host-wsf> bash -lc <command>`
+// so probe authors can use shell features. --workspace-folder gets
+// the HOST workspace folder (same value Up was called with) — the
+// CLI uses it to look up the container by the
+// devcontainer.local_folder label, so passing
+// RemoteWorkspaceFolder (the container-internal cwd) makes the
+// lookup miss and the probe exit 1 with "Dev container config not
+// found" before ever entering the materialized container.
 func (r *SandboxAPIRunner) Exec(ctx context.Context, ref ContainerRef, command string) (ProbeResult, error) {
 	if ref.ContainerID == "" {
 		return ProbeResult{}, errors.New("SandboxAPIRunner.Exec: ContainerRef has no ContainerID (Up was not called)")
 	}
-	if ref.RemoteWorkspaceFolder == "" {
-		return ProbeResult{}, errors.New("SandboxAPIRunner.Exec: ContainerRef.RemoteWorkspaceFolder unset (devcontainer up did not populate)")
+	if ref.HostWorkspaceFolder == "" {
+		return ProbeResult{}, errors.New("SandboxAPIRunner.Exec: ContainerRef.HostWorkspaceFolder unset (devcontainer up did not populate; pre-fix refs that only set RemoteWorkspaceFolder are no longer accepted)")
+	}
+	// Mirror Up's absolute-path discipline. A relative
+	// HostWorkspaceFolder would surface as the same opaque
+	// "Dev container config not found" failure that motivated this
+	// whole split — easier to spot at the boundary.
+	if !strings.HasPrefix(ref.HostWorkspaceFolder, "/") {
+		return ProbeResult{}, fmt.Errorf("SandboxAPIRunner.Exec: HostWorkspaceFolder must be absolute, got %q", ref.HostWorkspaceFolder)
 	}
 	// Use the SAME task_id Up stamped on the ref (per PR 4.4 finding
 	// M4). The sandbox's per-task mutex then serializes Up + every
 	// Exec against the same lifecycle. Fall back to deriving from
-	// RemoteWorkspaceFolder when Properties is absent (defensive —
-	// shouldn't happen post-Up).
+	// HostWorkspaceFolder when Properties is absent (unreachable for
+	// runner-produced refs post-validation; retained for symmetry
+	// with hand-built refs in tests + future refactors).
 	taskID := ""
 	if ref.Properties != nil {
 		taskID = ref.Properties["sandbox_task_id"]
 	}
 	if taskID == "" {
-		taskID = taskIDFor(ref.RemoteWorkspaceFolder)
+		taskID = taskIDFor(ref.HostWorkspaceFolder)
 	}
 	wrapped := joinShell([]string{
 		"devcontainer", "exec",
-		"--workspace-folder", ref.RemoteWorkspaceFolder,
+		"--workspace-folder", ref.HostWorkspaceFolder,
 		"bash", "-lc", command,
 	})
 	res, err := r.exec(ctx, taskID, wrapped, 60*time.Second)

@@ -31,7 +31,7 @@ func TestMockRunner_UpStable(t *testing.T) {
 
 func TestMockRunner_ExecEchoes(t *testing.T) {
 	res, err := MockRunner{}.Exec(context.Background(),
-		ContainerRef{ContainerID: "c1", RemoteWorkspaceFolder: "/w"},
+		ContainerRef{ContainerID: "c1", HostWorkspaceFolder: "/w", RemoteWorkspaceFolder: "/workspaces/mock-x"},
 		"go version")
 	if err != nil {
 		t.Fatalf("Exec: %v", err)

@@ -27,6 +27,7 @@ func (MockRunner) Up(_ context.Context, workspaceFolder, _ string, _ map[string]
 	return ContainerRef{
 		ContainerID:           "mock-" + fnv12(workspaceFolder),
 		ImageDigest:           "sha256:mock" + fnv12(workspaceFolder),
+		HostWorkspaceFolder:   workspaceFolder,
 		RemoteWorkspaceFolder: "/workspaces/mock-" + fnv12(workspaceFolder),
 	}, nil
 }

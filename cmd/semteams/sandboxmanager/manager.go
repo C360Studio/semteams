@@ -37,9 +37,30 @@ type Runner interface {
 // The shape mirrors `devcontainer up`'s JSON output (containerId +
 // remoteWorkspaceFolder + image), but we keep the struct narrow so
 // alternate runners (DevPod, raw docker) can satisfy it.
+//
+// Two workspace-folder paths are stored because @devcontainers/cli
+// resolves them at different layers: `--workspace-folder` is a HOST
+// path (the CLI looks up devcontainer.json and the
+// devcontainer.local_folder label by it), while
+// RemoteWorkspaceFolder is the container-internal cwd `devcontainer
+// up` returns. Earlier code passed RemoteWorkspaceFolder to
+// `--workspace-folder`, which made `devcontainer exec` fail with
+// "Dev container config not found" because no host path matched.
 type ContainerRef struct {
-	ContainerID           string
-	ImageDigest           string
+	ContainerID string
+	ImageDigest string
+	// HostWorkspaceFolder is the path the runner passed to
+	// `devcontainer up --workspace-folder` (the host-side tenant
+	// workspace root). Used by Exec as the same `--workspace-folder`
+	// flag so the CLI's container lookup keys match Up's.
+	HostWorkspaceFolder string
+	// RemoteWorkspaceFolder is the path inside the materialized
+	// container where the workspace is mounted, as reported by
+	// `devcontainer up`'s JSON output. Useful for callers that need
+	// the in-container cwd; NOT what `--workspace-folder` expects.
+	// Reserved for future attestation-manifest / Down /
+	// exec-with-cwd consumers; no live readers in the manager or
+	// runners as of 2026-06-02.
 	RemoteWorkspaceFolder string
 	Properties            map[string]string
 }
