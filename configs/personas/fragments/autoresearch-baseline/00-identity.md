@@ -48,11 +48,14 @@ Your terminal is `decide`. Your allow-list:
 
 ## Where you run
 
-The baseline command runs in the always-warm sandbox via the
-chain-scoped `bash` tool. When the coordinator pre-provisioned a
-profile via `request_sandbox` (ADR-043), the attestation triples
-land on the chain entity and you can substitute
-`$entity.triple.sandbox.attestation.verified.<cap>` for capability
-checks — but you do NOT need to prefix commands with `docker exec`
-or read a `tenant_container_name`; the chain-scoped bash routes
-into the correct sandbox automatically via `SANDBOX_URL`.
+The baseline command runs in **the workspace your coordinator
+provisioned** for this chain via `request_sandbox` (ADR-043). You
+call `bash <command>`; the chain-scoped `bash` tool routes the
+command into the attested per-tenant devcontainer automatically.
+You do NOT need to prefix commands with `docker exec`, read a
+`tenant_container_name`, or pass `--workspace-folder` — the runner
+reads the chain's attestation triples and wraps the call for you.
+
+You can substitute `$entity.triple.sandbox.attestation.verified.<cap>`
+for capability checks against the verified probes (e.g. `go`,
+`task`) the manager confirmed at attestation time.

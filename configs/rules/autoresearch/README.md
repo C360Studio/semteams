@@ -35,10 +35,17 @@ specific substrate claims under test:
    measured value, stamps `autoresearch.measurement.outcome` on the
    execute loop). The rule engine routes on outcome only — no LLM in
    the inner loop.
-3. **Sandbox in the hot path.** Each execute loop runs the measurement
-   command in the sandbox container (`services:sandbox:up`, ADR-032 +
-   PR #179 always-warm). The research pack does not use sandbox; this
-   pack consumes the primitive that PR #179 made always-on.
+3. **Per-tenant container in the hot path.** Each execute loop runs the
+   measurement command inside the per-tenant devcontainer the
+   coordinator provisioned via `request_sandbox` (ADR-043). The
+   chain-scoped `bash` tool wraps every command in `devcontainer exec
+   --workspace-folder <wsf> bash -lc <cmd>` automatically via
+   `sandboxruntime.AttestationRunner` — readers consume the
+   `sandbox.attestation.host_workspace_folder` triple stamped at
+   attestation time. Iterations mutate files that survive between
+   propose loops (the runner keeps the same workspace across the
+   chain's lifetime). The research pack does not use a tenant
+   container; this pack consumes the primitive ADR-043 made routable.
 
 ## Naming convention
 
@@ -191,12 +198,16 @@ work** the pack files do not include. Per CLAUDE.md
   `docs/adr/042-coordinator-instantiated-flows-via-templates.md`
   §addendum (to be added when the tool executor lands).
 
-### Sandbox dependency — per-phase posture (per review M4 2026-05-29)
+### Sandbox dependency — per-phase posture (per ADR-043 §addendum 2026-06-02)
 
-Every autoresearch role runs against the **always-warm sandbox**
-via the chain-scoped `bash` tool. The bash tool routes to the
-correct sandbox via SANDBOX_URL — no `docker exec` prefix, no
-tenant-container-name plumbing.
+Every autoresearch role runs inside **the per-tenant devcontainer the
+coordinator provisioned** via `request_sandbox`. The chain-scoped
+`bash` tool routes commands there automatically:
+`sandboxruntime.AttestationRunner` reads the chain entity's
+`sandbox.attestation.host_workspace_folder` triple (stamped at
+attestation time) and wraps every command in `devcontainer exec
+--workspace-folder <wsf> bash -lc <cmd>` before delegating. No
+`docker exec` prefix, no tenant-container-name plumbing.
 
 | Role | Tool | What runs |
 |---|---|---|
@@ -206,14 +217,33 @@ tenant-container-name plumbing.
 | `autoresearch-synthesize` | `bash` | Artifact composition + `bash git log` / `bash git show` reading. |
 | `reviewer-autoresearch` | `bash` | Reads the rendered artifact via `bash cat`. |
 
-When the coordinator pre-provisioned a devcontainer profile via
-`request_sandbox` (ADR-043), the attestation triples land on the
-chain entity (`sandbox.attestation.*` namespace). Personas can
-read `$entity.triple.sandbox.attestation.verified.<cap>` for
-capability checks before running commands, but the bash tool
-already targets the correct sandbox so most commands just run.
+#### The shell vs the workspace
 
-If sandbox is down, execute loops fail fast and rule 04b stamps
+Two sandbox surfaces with distinct purposes. Pack maintainers reading
+this README first need the dichotomy on screen — it explains why
+autoresearch can NEVER skip the request_sandbox step:
+
+| Surface | What it is | What it's for |
+|---|---|---|
+| The shell (always-warm) | One per backend; generic toolchain. Coordinator's chain-scoped workspace bucket inside it keyed on `chain_id`. | Coordinator's quick peeks. Persona scratchpad dumps. Things where state doesn't matter. |
+| The workspace (per-tenant devcontainer) | Provisioned by `request_sandbox`. Profile-matched, capability-verified, admission-gated, isolated host filesystem. Lives for the chain's lifetime. | The chain's actual workplace. **Autoresearch is all workspace** — every iteration mutates files, runs measured commands, depends on baseline conditions across N loops. |
+
+`AttestationRunner` decides per call: chain has
+`sandbox.attestation.ready=true` AND `host_workspace_folder` non-empty
+→ route to workspace. Else → passthrough to the shell. Phase A's
+omit-when-empty discipline on the triple means admission-denied /
+pre-Up-failure paths never route — there's no per-tenant container
+to route to.
+
+When the coordinator pre-provisioned a profile via `request_sandbox`,
+the attestation triples land on the chain entity
+(`sandbox.attestation.*` namespace). Personas can read
+`$entity.triple.sandbox.attestation.verified.<cap>` for capability
+checks before running commands, but the bash tool already wraps the
+command into the right container so most commands just run.
+
+If the per-tenant container is unreachable (devcontainer-cli error,
+network), execute loops fail fast and rule 04b stamps
 experiment.completed + experiment.loop_failed (per the C1 fix;
 budget-consumed-but-evidence-empty iteration).
 

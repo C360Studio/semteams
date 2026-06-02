@@ -2,20 +2,30 @@
 // route bash tool calls into the right execution environment for the
 // calling chain.
 //
-// The load-bearing claim:
+// # The shell vs the workspace
 //
-//   - The always-warm shared sandbox container (one per backend; see
-//     docker/sandbox.Dockerfile) is for ephemeral exploratory shell
-//     ops. Coordinator dumps to scratchpad, persona peeks at a file,
-//     things where state doesn't matter and reproducibility doesn't
-//     either.
+// Two sandbox surfaces with distinct purposes — the heuristic any
+// future maintainer needs on first read:
 //
-//   - The per-tenant devcontainer that `request_sandbox` provisions
-//     (ADR-043) is the chain's actual workplace. Anywhere the chain
-//     mutates state, runs measured commands, depends on baseline
-//     conditions across multiple iterations (autoresearch is the
-//     paradigm case), needs a profile-verified toolchain, needs
-//     capability isolation.
+//	┌──────────────────────────┬────────────────────────────────────┐
+//	│ Surface                  │ What it's for                      │
+//	├──────────────────────────┼────────────────────────────────────┤
+//	│ The shell                │ Coordinator's quick peeks.         │
+//	│ (always-warm, shared)    │ Persona scratchpad dumps.          │
+//	│ One per backend; generic │ Anywhere state doesn't matter and  │
+//	│ toolchain; chain-scoped  │ reproducibility doesn't either.    │
+//	│ workspace bucket via     │                                    │
+//	│ task_id.                 │                                    │
+//	├──────────────────────────┼────────────────────────────────────┤
+//	│ The workspace            │ The chain's actual workplace.      │
+//	│ (per-tenant devcontainer)│ Anywhere the chain mutates state,  │
+//	│ Provisioned by           │ runs measured commands, depends on │
+//	│ request_sandbox.         │ baseline conditions across         │
+//	│ Profile-matched,         │ iterations (autoresearch is the    │
+//	│ capability-verified,     │ paradigm case), needs a            │
+//	│ admission-gated,         │ profile-verified toolchain, needs  │
+//	│ isolated host filesystem.│ capability isolation.              │
+//	└──────────────────────────┴────────────────────────────────────┘
 //
 // Today upstream's BashExecutor holds one fixed runner pointing at
 // the always-warm shared sandbox. Every chain-scoped bash call goes

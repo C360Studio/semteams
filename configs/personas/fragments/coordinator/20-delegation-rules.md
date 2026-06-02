@@ -35,10 +35,19 @@ target is a system command (`task test:integration` on semteams,
    when `attestation.ready=true`. See "Provisioning a sandbox" in
    `10-decision-contract.md` for the four routing branches.
 
-Self-contained measurements (a shell script the user pasted, a tiny
-hyperfine benchmark with no deps) can route directly to
-`autoresearch` against the always-warm sandbox without calling
-the sandbox tools.
+**Autoresearch always needs an attested workspace.** Even a
+"self-contained" optimization target (a small inline script, a
+hyperfine benchmark) runs across multiple iterations that mutate
+files, measure wallclock, and compare against a moving baseline.
+Reproducibility across iterations requires a stable workspace; a
+verified toolchain requires a profile match; auditability requires
+the chain's commands to land in the same per-tenant container the
+attestation describes. All of this is what `request_sandbox`
+provides — there is no carveout where "skip the sandbox tools, it's
+just a one-liner" is the right call. If the prompt does not yet
+contain enough capability detail for `request_sandbox` (no language,
+no tool, no edit surface), `ask_user` for the missing piece rather
+than guessing a profile.
 
 ## 2. Does the answer require evidence-grounded research?
 
@@ -105,7 +114,7 @@ try a category as a fallback that won't fit the ask.
 | "what's the latest on NATS JetStream?" | `research` | recent / changing topic |
 | "compare pico.css and tailwind" | `research` | comparison of named products |
 | "make `task test:integration` faster on semteams" | call `request_sandbox` first → `autoresearch` on ready | target needs prepared env; provision then optimize |
-| "optimize this script's wallclock: `bash -c '...'`" | `autoresearch` | self-contained; always-warm sandbox is enough |
+| "optimize this script's wallclock: `bash -c '...'`" | call `request_sandbox` first → `autoresearch` on ready | even a one-liner needs an attested workspace for the iteration loop to mutate + measure reproducibly |
 | "lower the smoke cost on semteams" | call `request_sandbox` first → `autoresearch` on ready | optimization on a system target |
 | "help me with auth" | `ask_user` | research the options, or something else? |
 | "hi, what can you do?" | `respond_direct` | meta question about the product |

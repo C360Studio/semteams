@@ -32,18 +32,20 @@ specific gap.
 
 ## Step 2 — Run the baseline measurement
 
-Compose the bash invocation against the always-warm sandbox:
+Run the command in the workspace your coordinator provisioned:
 
 ```
 bash <command>
 ```
 
-The chain-scoped `bash` tool routes to the correct sandbox via
-SANDBOX_URL. If the coordinator pre-provisioned a devcontainer
-profile via `request_sandbox`, the attestation triples are on the
-chain entity — you can read
+The chain-scoped `bash` tool routes commands into the per-tenant
+devcontainer the coordinator created via `request_sandbox` — the
+attestation triples on the chain entity (`sandbox.attestation.*`)
+carry the per-tenant container reference, and the runner wraps your
+command in `devcontainer exec` automatically. You can read
 `$entity.triple.sandbox.attestation.verified.<cap>` if you need
-to confirm a capability is present, but normal commands just run.
+to confirm a capability is present before running, but normal
+commands just run.
 
 Capture stdout AND exit code. Apply the metric_parser to extract
 a single numeric value. Test the parser inline (e.g.

@@ -17,16 +17,25 @@ best value bar:
 
 ## Step 2 — Run the measurement command
 
-Compose against the always-warm sandbox:
+Run the command in the workspace your coordinator provisioned:
 
 ```
 bash <command>
 ```
 
-The chain-scoped `bash` tool routes to the correct sandbox via
-SANDBOX_URL. No `docker exec` prefix — when the coordinator
-pre-provisioned a profile via `request_sandbox`, the chain-scoped
-bash already targets that sandbox.
+The chain-scoped `bash` tool routes commands into the per-tenant
+devcontainer the coordinator created via `request_sandbox`. No
+`docker exec` prefix, no `--workspace-folder` flag, no container
+name lookup — the runner reads the chain entity's
+`sandbox.attestation.host_workspace_folder` triple and wraps your
+command in `devcontainer exec` automatically. You write the command
+as if you were sitting in a shell inside the per-tenant container.
+
+The workspace persists across iterations: the diff propose just
+applied is on disk, your measurement runs against it, and any
+revert step the rules path triggers operates on the same tree. `git
+diff` is your inter-iteration channel — you can see what propose
+changed before deciding how to interpret the measurement.
 
 Capture stdout (head + tail) AND exit code AND stderr (last
 ~200 chars if any).

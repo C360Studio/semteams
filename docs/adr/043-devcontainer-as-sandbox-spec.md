@@ -575,3 +575,112 @@ transfer.
 - PR #45509ef (toolchain schema tightening — survives unchanged conceptually; the lesson informs requirements-contract design)
 - Smoke #11 + #12 evidence under `/tmp/smoke11-pr3-3/` + `/tmp/smoke12-toolchain-schema/`
 - Stash: `stash@{0}` "PR 3.4 sandbox-bootstrap verify forward-stamp (superseded by ADR-043 pivot to devcontainers)"
+
+
+## §addendum 2026-06-02 — Chain-scoped routing into the per-tenant container
+
+**Context.** The original ADR defined the request_sandbox /
+Attestation contract end-to-end up to "the attestation triples land
+on the chain entity." It did not specify how subsequent chain-scoped
+tools (`bash` in particular) should *use* that attestation to route
+their commands into the materialized per-tenant container vs the
+always-warm shared sandbox the framework provisions per backend.
+
+The autoresearch chain investigation 2026-06-02 surfaced the gap as
+load-bearing: upstream's `executors.BashExecutor` held one fixed
+`*runner.Client` pointing at the always-warm sandbox. Every
+chain-scoped bash call went there regardless of whether the
+coordinator had successfully called `request_sandbox`. The autoresearch
+inner loop (propose → execute → measure → revert) was structurally
+unable to use the attested per-tenant container — every iteration ran
+in the wrong place.
+
+**Resolution: framework-side per-call hook + product-side
+attestation-aware Runner.**
+
+Upstream semstreams beta.94 (#198) added an `executors.Runner`
+interface + `executors.WithRunner` BashOption. Product shells inject
+custom Runner implementations for per-call dispatch routing without
+the framework needing to know about devcontainers, attestation, or
+tenancy concepts.
+
+semteams `cmd/semteams/sandboxruntime` ships an `AttestationRunner`
+that satisfies the upstream Runner contract. Per call:
+
+1. Reads `{org}.{platform}.agent.chain.execution.{taskID}` for
+   `sandbox.attestation.{ready, host_workspace_folder}`.
+2. If `ready=true` AND `host_workspace_folder` non-empty: wraps the
+   command in `devcontainer exec --workspace-folder <wsf> bash -lc
+   <cmd>` and delegates to the default runner. The wrapped invocation
+   still flows through the always-warm sandbox's `/exec` endpoint
+   (where `devcontainer-cli` is installed in the DooD topology) →
+   shells into the per-tenant container.
+3. Else (no attestation, ready=false, empty wsf, read error, etc.):
+   passthrough to the default runner unchanged.
+
+`registerChainBash` (cmd/semteams/product_tools.go) wires it in via
+`executors.WithRunner(attRunner)` when both `SANDBOX_URL` and a NATS
+client are available. Other shapes fall back to the pre-change
+behavior unchanged.
+
+**A new attestation predicate: `sandbox.attestation.host_workspace_folder`.**
+
+Stamped at `Manager.Request` time alongside `image_digest`. Phase A
+locked omit-when-empty semantics: admission-denied and pre-Up-failure
+paths do NOT stamp the predicate (an absent triple is the unambiguous
+"no attested workspace; route via passthrough" signal; stamping ""
+would silently substitute into `devcontainer exec --workspace-folder
+''` and reproduce the same "config not found" failure class the wsf
+split — ce4f07b — fixed in the runner itself).
+
+**The heuristic: always-warm is "the shell," per-tenant is "the
+workspace."**
+
+The two sandbox surfaces serve different purposes. Recorded in
+sandboxruntime/doc.go and reflected in the coordinator persona
+(20-delegation-rules.md):
+
+| Surface | What it is | What it's for |
+|---|---|---|
+| The shell (always-warm) | One per backend; generic toolchain (go/java/python/node). Chain-scoped workspace bucket inside it keyed on `chain_id`. | Coordinator's quick peeks. Persona scratchpad dumps. Anywhere state doesn't matter and reproducibility doesn't either. |
+| The workspace (per-tenant devcontainer) | Provisioned by `request_sandbox`. Profile-matched, capability-verified, admission-gated, isolated host filesystem. Lives for the chain's lifetime. | The chain's actual workplace. Anywhere the chain mutates state, runs builds, executes tests, depends on baseline conditions across iterations, needs capability isolation. **Autoresearch is all workspace.** |
+
+The autoresearch personas (baseline / propose / execute / synthesize /
+reviewer-autoresearch) drop the "always-warm sandbox" framing they
+inherited from the pre-attestation-routing era. The coordinator
+delegation rules drop the "self-contained measurements can route
+directly to autoresearch against the always-warm sandbox" carveout —
+even a one-liner needs a verified workspace for iterations to
+mutate + measure reproducibly. If the prompt doesn't carry enough
+detail for `request_sandbox`, `ask_user` for the gap rather than
+guessing a profile.
+
+**Phasing.**
+
+The work shipped in four phases across 2026-06-02:
+
+- **Phase A** (ce4f07b, 1eee20b): stamp the new
+  `host_workspace_folder` predicate at attestation time. Pure
+  semteams change; no upstream dep.
+- **Phase B** (34a7adc9): `sandboxruntime.AttestationRunner` against
+  the upstream interface shape, plus extract a shared
+  `chain.ResolveChainEntityID` helper to retire the duplicated
+  chainEntityFromCall implementations. Built but not wired.
+- **Phase C** (this addendum + persona surgery): docs reflect the
+  new routing posture.
+- **Phase D** (725511d7 + 463020b6): bump semstreams to beta.94,
+  wire `AttestationRunner` via `executors.WithRunner` in
+  `registerChainBash`. The killer-feature wire is closed.
+- **Phase E** (next): pre-seed a Go-test fixture in a tenant
+  workspace + run the autoresearch chain end-to-end on real LLM
+  to validate the inner loop (baseline → propose → execute*N →
+  synthesize → reviewer) fires against an attested per-tenant
+  container.
+
+**Compatibility.**
+
+The wiring is backward-compatible by construction. The Runner
+interface defaults to upstream's `*runner.Client` (URL-based,
+always-warm sandbox) when WithRunner is not supplied. Pre-Phase-D
+behavior survives intact for deployments that don't have a NATS
+client (dev shells) or don't set `SANDBOX_URL` (local-exec mode).

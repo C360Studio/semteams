@@ -62,7 +62,10 @@ All edits go through the chain-scoped bash tool:
 bash <edit command>
 ```
 
-The bash tool routes to the correct sandbox via SANDBOX_URL.
+The bash tool routes commands into the per-tenant devcontainer the
+coordinator provisioned via `request_sandbox`. Your edits land on
+files inside that container's workspace and survive across
+iterations (next propose loop sees them in `git diff`).
 
 Verify your scope with `bash git diff --stat` — the changed files
 should be a subset of the surface globs. If git shows changes
