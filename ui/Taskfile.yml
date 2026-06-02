@@ -698,6 +698,68 @@ tasks:
       # Cleanup + capture defers fire either way.
       - timeout 1200 task test:e2e:agentic:probe:auto-approve-watcher -- {{.RUN_ID}}
 
+  test:e2e:agentic:smoke13:run:
+    desc: Run smoke #13 (ADR-043 real-LLM — coordinator → request_sandbox happy path) end-to-end
+    summary: |
+      Real-LLM smoke for ADR-043 PR 4.5. Boots flow-bootstrap.json with
+      SEMTEAMS_SANDBOX_RUNNER=api so the coordinator's request_sandbox
+      tool drives a real `devcontainer up` through the SandboxAPIRunner
+      → sandbox /exec wire → @devcontainers/cli. Sends a prose prompt
+      that surfaces the request_sandbox flow ("Set up a Go backend
+      sandbox..."), captures trajectories + message log to
+      /tmp/smoke13-<RUN_ID>/, tears the stack down.
+
+      Expected chain shape: single coordinator dispatch loop with three
+      tool calls (query_sandbox_attestation → request_sandbox → decide(
+      action=respond_direct)) and terminal reply. NO research-pack arc
+      spawned — ADR-043 three-layer model routes attestations directly,
+      no dispatch-spawned phase loops.
+
+      Probe 2 retry (20983aa + 5ebcc34) validated F5+F6+F7 manually;
+      this smoke validates the manager+coordinator chain end-to-end on
+      a real LLM. Expected spend ~$0.10-$0.30 on gemini-pro (coordinator
+      preferred per flow-bootstrap.json model_capabilities).
+
+      Real spend requires GEMINI_API_KEY in env (auto-loaded from
+      project-root .env when invoked from project root).
+
+      Usage (from project root):
+        task ui:test:e2e:agentic:smoke13:run                  # RUN_ID defaults to a date stamp
+        RUN_ID=ticket-178 task ui:test:e2e:agentic:smoke13:run
+        PROMPT="..." task ui:test:e2e:agentic:smoke13:run     # custom prompt
+
+      Findings synthesis lands in project_smoke13_findings.md.
+    vars:
+      RUN_ID: '{{.RUN_ID | default (printf "smoke13-%s" (now | date "20060102-150405"))}}'
+      AGENTIC_CONFIG: flow-bootstrap.json
+      COMPOSE_PROFILES: ""
+      PROMPT: '{{.PROMPT | default "Set up a Go backend sandbox for me. Verify that go and task are installed inside it."}}'
+    preconditions:
+      - sh: '[ -n "$GEMINI_API_KEY" ] || [ -n "$ANTHROPIC_API_KEY" ]'
+        msg: "Neither GEMINI_API_KEY nor ANTHROPIC_API_KEY is set. Add to project-root .env (auto-loaded) or export before invoking. Smoke #13 routes coordinator to gemini-pro (preferred) → gemini-flash → claude-haiku per flow-bootstrap.json's model_capabilities."
+    cmds:
+      - 'echo "▶︎  Smoke #13 starting (RUN_ID={{.RUN_ID}}); evidence will land in /tmp/{{.RUN_ID}}/"'
+      - defer: { task: test:e2e:agentic:cleanup }
+      - defer:
+          task: test:e2e:agentic:smoke7:capture
+          vars:
+            RUN_ID: "{{.RUN_ID}}"
+            WEDGE_EXPECTED_TERMINAL_ROLE: coordinator
+      - task: test:e2e:agentic:stack:up
+        vars:
+          FIXTURE: ""
+          AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
+          COMPOSE_PROFILES: "{{.COMPOSE_PROFILES}}"
+          SEMTEAMS_SANDBOX_RUNNER: "api"
+      - task: test:e2e:agentic:probe:send
+        vars:
+          CLI_ARGS: '{{.PROMPT}}'
+      # Hard cap on the watcher. Single coordinator loop with a real
+      # `devcontainer up` (image cached from probe-2 retry; otherwise
+      # ~2-5 min for image pull). 600s is generous for the happy path
+      # but leaves headroom for cold pulls.
+      - timeout 600 task test:e2e:agentic:probe:auto-approve-watcher -- {{.RUN_ID}}
+
   test:e2e:agentic:dev:_boot:
     desc: Internal — boot helper for the per-scenario dev tasks
     internal: true
@@ -931,6 +993,12 @@ tasks:
       # task invoked via `task:` — the env var must be set on the task
       # that ACTUALLY invokes `docker compose up`.
       BACKEND_BRAVE_KEY: '{{.BACKEND_BRAVE_KEY | default ""}}'
+      # ADR-043 PR 4.5 — selects the SandboxManager Runner. Mock-LLM
+      # journeys leave this empty so the backend defaults to
+      # SEMTEAMS_SANDBOX_RUNNER=mock (MockRunner returns fabricated
+      # Ready). Real-LLM smoke #13 sets =api so the manager flows
+      # through the actual SandboxAPIRunner → /exec → @devcontainers/cli.
+      SEMTEAMS_SANDBOX_RUNNER: '{{.SEMTEAMS_SANDBOX_RUNNER | default ""}}'
       # ADR-043 PR 4.5 F6 — tenant-root for the sandbox manager.
       # docker-compose binds this absolute path symmetrically inside
       # the sandbox container (sandbox sees the SAME path the host
@@ -961,6 +1029,7 @@ tasks:
       E2E_AGENTIC_UI_PORT: "{{.E2E_AGENTIC_UI_PORT}}"
       COMPOSE_PROFILES: "{{.COMPOSE_PROFILES}}"
       BACKEND_BRAVE_SEARCH_API_KEY: "{{.BACKEND_BRAVE_KEY}}"
+      SEMTEAMS_SANDBOX_RUNNER: "{{.SEMTEAMS_SANDBOX_RUNNER}}"
       SEMTEAMS_TENANT_ROOT: "{{.SEMTEAMS_TENANT_ROOT}}"
     cmds:
       - echo "Stack config → AGENTIC_CONFIG={{.AGENTIC_CONFIG}} FIXTURE={{.FIXTURE}} PROFILES={{.COMPOSE_PROFILES}} TENANT_ROOT={{.SEMTEAMS_TENANT_ROOT}}"

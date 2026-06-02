@@ -47,18 +47,22 @@
         "requests_per_minute": 100
       },
       "gemini-flash": {
-        "provider": "openai",
+        "_comment": "Gemini 3 Flash Preview — matches semspec's working config + upstream canonical (configs/gemini-example.json). provider=gemini + wire_backend=wire engages the framework-owned wire client + GeminiAdapter so thought_signature flow works for 3.x preview models. reasoning_effort=low keeps cost down on coordinator/research/reviewing capabilities.",
+        "provider": "gemini",
         "url": "https://generativelanguage.googleapis.com/v1beta/openai",
-        "model": "gemini-2.5-flash",
+        "model": "gemini-3-flash-preview",
         "api_key_env": "GEMINI_API_KEY",
         "max_tokens": 1048576,
         "supports_tools": true,
         "tool_format": "openai",
         "stream": true,
+        "reasoning_effort": "low",
+        "wire_backend": "wire",
         "max_concurrent": 10,
         "requests_per_minute": 200
       },
       "gemini-pro": {
+        "_comment": "Gemini 3.1 Pro Preview — provider=gemini + wire_backend=wire engages the framework-owned wire client + GeminiAdapter (required for 3.x preview's per-tool_call thought_signature). stream=true matches semspec's working config (was false; flipped 2026-06-01 smoke #13).",
         "provider": "gemini",
         "url": "https://generativelanguage.googleapis.com/v1beta/openai",
         "model": "gemini-3.1-pro-preview",
@@ -69,13 +73,14 @@
         "request_timeout": "180s",
         "max_tokens": 1048576,
         "supports_tools": true,
-        "stream": false,
+        "stream": true,
         "max_concurrent": 5,
         "requests_per_minute": 100
       }
     },
     "defaults": {
-      "model": "gemini-flash"
+      "_comment": "Default 'model' name is a capability key (coordinator) NOT an endpoint name (gemini-flash). agentic-dispatch.resolveModel() returns this verbatim as the spawned-task's req.Model; agentic-model's resolveEndpoint walks GetFallbackChain(req.Model) first, which only returns a chain when req.Model is a capability key. Using 'gemini-flash' here bypasses the capability chain entirely (smoke #13 finding 2026-06-01).",
+      "model": "coordinator"
     },
     "capabilities": {
       "coordinator": { "preferred": ["gemini-pro"], "fallback": ["gemini-flash", "claude-haiku"], "requires_tools": true },
