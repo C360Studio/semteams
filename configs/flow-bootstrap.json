@@ -47,7 +47,7 @@
         "requests_per_minute": 100
       },
       "gemini-flash": {
-        "_comment": "Gemini 2.5 Flash via OpenAI-compat wire. Smoke #13 run-3 (2026-06-02) surfaced upstream #159 (Gemini 3.x preview's per-tool_call thought_signature is dropped on parallel tool emissions through GeminiAdapter). Reverting to 2.5-flash + provider=openai dodges that surface — 2.5 has no thought_signature semantics. The 51→5 tool fix from semstreams beta.92 (agentic-dispatch HTTP DefaultTools scoping) is the real MALFORMED unblocker on this wire path; the 3.x preview wire was a separate attempt that hit upstream's parallel-tool bug. Flip back when upstream lands the round-trip fix.",
+        "_comment": "Gemini 2.5 Flash via OpenAI-compat. Smoke #13 beta.93 retry (2026-06-02) showed upstream's #188 echo-all-positions fix is NECESSARY but NOT SUFFICIENT for 3.x preview: Gemini's OpenAI-compat endpoint (generativelanguage.googleapis.com/v1beta/openai) does not surface thought_signature in tool-call responses, so the framework's capture path stores zero ReasoningRecords even on parallel tool emissions — there's nothing for the now-corrected echo path to emit, and Gemini's request validator rejects with 'missing thought_signature' anyway. Reverting to 2.5 + provider=openai dodges the surface entirely (2.5 has no thought_signature contract). Flip back when upstream resolves the OpenAI-compat capture gap (or routes Gemini 3.x through Google's native endpoint shape).",
         "provider": "openai",
         "url": "https://generativelanguage.googleapis.com/v1beta/openai",
         "model": "gemini-2.5-flash",

@@ -12,6 +12,7 @@ import (
 
 	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // RepoToolName is the LLM-facing tool name. Listed in
@@ -35,16 +36,23 @@ const defaultBranch = "main"
 
 // NATSRequester is the narrow surface RepoExecutor uses to publish
 // the request and await the reply. *natsclient.Client satisfies it
-// via RequestWithRetry; tests inject a recording fake.
+// via RequestWithRetryClassified; tests inject a recording fake.
 //
-// We use RequestWithRetry (not bare Request) per
+// We use RequestWithRetryClassified (not bare Request or unclassified
+// RequestWithRetry) per
 // semstreams/docs/operations/07-nats-request-retry.md: graph-mutation
 // writes go through retry to avoid silent data loss on NATS startup
-// races / responder restarts. SemSource's add handler is idempotent
-// (deterministic instance names + INSTANCE_EXISTS reply for matching
-// configs), so retry-safe at the responder side.
+// races / responder restarts; classified for the handler-error contract
+// so SemSource-side rejections surface as typed *errs.ClassifiedError
+// (caller branches on errs.IsInvalid / IsTransient / IsFatal) instead
+// of corrupting through json.Unmarshal as the legacy text-body Footgun.
+// SemSource's add handler is idempotent (deterministic instance names +
+// INSTANCE_EXISTS reply for matching configs), so retry-safe at the
+// responder side. Migrated from RequestWithRetry + json.Valid guard
+// when upstream landed the Classified sibling in beta.93 (closes the
+// audit pass after bae5706).
 type NATSRequester interface {
-	RequestWithRetry(ctx context.Context, subject string, data []byte, timeout time.Duration, retry natsclient.RetryConfig) ([]byte, error)
+	RequestWithRetryClassified(ctx context.Context, subject string, data []byte, timeout time.Duration, retry natsclient.RetryConfig) ([]byte, error)
 }
 
 // Config holds the per-deployment policy the executor needs:
@@ -172,31 +180,25 @@ func (e *RepoExecutor) Execute(ctx context.Context, call agentic.ToolCall) (agen
 		timeout = defaultRequestTimeout
 	}
 
-	respBytes, err := e.requester.RequestWithRetry(ctx, subject, payload, timeout, natsclient.DefaultRetryConfig())
+	respBytes, err := e.requester.RequestWithRetryClassified(ctx, subject, payload, timeout, natsclient.DefaultRetryConfig())
 	if err != nil {
+		// Classified handler errors (SemSource rejects with
+		// errs.Classified(errs.ErrorInvalid, ...) for malformed
+		// requests, namespace mismatches, etc.) surface here as a
+		// typed *errs.ClassifiedError after upstream's ClassifyReply
+		// reconstruction. Transport failures (no responders, all
+		// retries exhausted) classify as ErrorTransient. The error
+		// message verbatim from the handler is preserved in err.Error()
+		// per the bare errs.Classified constructor contract.
+		kind := agentic.ToolErrorNetwork
+		if errs.IsInvalid(err) {
+			kind = agentic.ToolErrorInvalidArgs
+		}
 		return agentic.ToolResult{
-			CallID: call.ID,
-			Name:   call.Name,
-			Error:  fmt.Sprintf("nats request to %s failed: %v", subject, err),
-		}, nil
-	}
-
-	// natsclient.Client.RequestWithRetry does NOT route through the
-	// ClassifyReply path that RequestClassified uses — when the
-	// responder returns a Go error, SubscribeForRequests wire-encodes
-	// the failure as a legacy `error: <msg>` text body with nil err.
-	// A plain json.Unmarshal on that body fails with "invalid character
-	// 'e' looking for beginning of value", masquerading as a transient
-	// decode error and obscuring the real handler-side failure (sibling
-	// of chain.NATSEntityReader + chainpause.NATSPauseDataReader, both
-	// closed by RequestClassified — but no RequestWithRetryClassified
-	// exists upstream beta.92, so this site uses a json.Valid guard as
-	// the local workaround until upstream lands the classified variant).
-	if !json.Valid(respBytes) {
-		return agentic.ToolResult{
-			CallID: call.ID,
-			Name:   call.Name,
-			Error:  fmt.Sprintf("non-JSON response from %s (likely a handler-side error returned via the legacy text-body wire path): %s", subject, truncateBody(respBytes, 512)),
+			CallID:    call.ID,
+			Name:      call.Name,
+			Error:     fmt.Sprintf("nats request to %s: %v", subject, err),
+			ErrorKind: kind,
 		}, nil
 	}
 
@@ -327,17 +329,4 @@ func validateRepoURL(s string) error {
 		return fmt.Errorf("url missing host")
 	}
 	return nil
-}
-
-// truncateBody returns the body as a string, capped at maxLen bytes
-// with a `…` suffix when truncated. Used to surface legacy-handler-
-// error response bodies in tool-error messages without flooding the
-// operator's terminal when the responder emits a multi-kilobyte stack
-// trace.
-func truncateBody(b []byte, maxLen int) string {
-	s := strings.TrimSpace(string(b))
-	if len(s) <= maxLen {
-		return s
-	}
-	return s[:maxLen] + "…"
 }

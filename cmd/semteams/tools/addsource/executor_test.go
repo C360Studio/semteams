@@ -4,16 +4,18 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
-// fakeRequester records the most recent RequestWithRetry call and
-// returns a canned response. Each test sets respBytes / respErr; the
+// fakeRequester records the most recent RequestWithRetryClassified call
+// and returns a canned response. Each test sets respBytes / respErr; the
 // fake never blocks, so happy-path tests don't need timeouts. Capturing
 // the retry config lets us assert defaults match natsclient.DefaultRetryConfig().
 type fakeRequester struct {
@@ -25,7 +27,7 @@ type fakeRequester struct {
 	respErr    error
 }
 
-func (f *fakeRequester) RequestWithRetry(_ context.Context, subject string, data []byte, timeout time.Duration, retry natsclient.RetryConfig) ([]byte, error) {
+func (f *fakeRequester) RequestWithRetryClassified(_ context.Context, subject string, data []byte, timeout time.Duration, retry natsclient.RetryConfig) ([]byte, error) {
 	f.gotSubject = subject
 	f.gotPayload = data
 	f.gotTimeout = timeout
@@ -409,36 +411,53 @@ func TestExecute_MalformedReply(t *testing.T) {
 	}
 }
 
-// TestExecute_LegacyHandlerErrorBody_SurfacedAsToolError verifies the
-// natsclient RequestWithRetry Footgun guard: when the responder returns
-// a Go error, SubscribeForRequests wire-encodes it as a legacy
-// `error: <msg>` text body with nil err. RequestWithRetry has no
-// ClassifyReply variant upstream beta.92, so the body flows through to
-// our caller. Pre-fix, json.Unmarshal would silently corrupt with
-// "invalid character 'e' looking for beginning of value" — the same
-// bug class chain.NATSEntityReader (bae5706) + chainpause.NATSPauseDataReader
-// (10f9d29) closed via RequestClassified. This site uses a json.Valid
-// pre-decode guard as the local workaround until upstream lands the
-// Classified variant for RequestWithRetry.
-func TestExecute_LegacyHandlerErrorBody_SurfacedAsToolError(t *testing.T) {
-	// Mirrors the exact shape SubscribeForRequests emits when a
-	// handler returns a non-classified Go error.
-	body := []byte("error: not found: graph.ingest.add.research")
-	exec, _ := newExecutorWithCfg(t, defaultCfg(), body, nil)
+// TestExecute_ClassifiedInvalidErrorSurfacedAsInvalidArgs verifies the
+// post-beta.93 contract: when the SemSource responder returns
+// errs.Classified(errs.ErrorInvalid, ...) for a malformed add (bad
+// namespace, schema violation, duplicate-with-conflict), the
+// RequestWithRetryClassified path reconstructs the *errs.ClassifiedError
+// on this side and the executor surfaces the handler's verbatim
+// message with ErrorKind=invalid_args so downstream filtering can
+// branch correctly.
+//
+// Pre-beta.93 this code used plain RequestWithRetry + a json.Valid
+// pre-decode guard (the json.Valid workaround was the local Footgun
+// fix from b22030e). The Classified migration retires the guard +
+// the legacy-text-body diagnostic shape — upstream's wire layer now
+// preserves the error class through ClassifyReply.
+func TestExecute_ClassifiedInvalidErrorSurfacedAsInvalidArgs(t *testing.T) {
+	classified := errs.Classified(errs.ErrorInvalid, fmt.Errorf("namespace not registered: research"))
+	exec, _ := newExecutorWithCfg(t, defaultCfg(), nil, classified)
 	res, _ := exec.Execute(context.Background(), defaultCall(map[string]any{
 		"url": "https://github.com/example/repo",
 	}))
 	if res.Error == "" {
-		t.Fatalf("expected tool error on legacy handler-error body, got empty")
+		t.Fatalf("expected tool error on classified handler error, got empty")
 	}
-	if strings.Contains(res.Error, "invalid character 'e'") {
-		t.Errorf("Result.Error leaked the silent-corruption decode failure (pre-fix shape): %q", res.Error)
+	if !strings.Contains(res.Error, "namespace not registered") {
+		t.Errorf("Result.Error should surface the handler's verbatim message: %q", res.Error)
 	}
-	if !strings.Contains(res.Error, "non-JSON response") {
-		t.Errorf("Result.Error doesn't name the wire-shape class: %q", res.Error)
+	if res.ErrorKind != agentic.ToolErrorInvalidArgs {
+		t.Errorf("Result.ErrorKind = %q, want %q (Invalid class → InvalidArgs)", res.ErrorKind, agentic.ToolErrorInvalidArgs)
 	}
-	if !strings.Contains(res.Error, "graph.ingest.add.research") {
-		t.Errorf("Result.Error should surface the upstream body for diagnosis: %q", res.Error)
+}
+
+// TestExecute_ClassifiedTransientErrorClassifiedAsNetwork verifies the
+// transport-failure path: when retries are exhausted, ClassifyReply
+// returns the underlying transport error which IsTransient classifies.
+// The executor maps non-Invalid classes to ErrorKind=network so the
+// agent loop's retry policies can branch on it.
+func TestExecute_ClassifiedTransientErrorClassifiedAsNetwork(t *testing.T) {
+	// Any non-Invalid err exercises the default ErrorKind=network branch.
+	exec, _ := newExecutorWithCfg(t, defaultCfg(), nil, errs.Classified(errs.ErrorTransient, fmt.Errorf("no responders available")))
+	res, _ := exec.Execute(context.Background(), defaultCall(map[string]any{
+		"url": "https://github.com/example/repo",
+	}))
+	if res.Error == "" {
+		t.Fatalf("expected tool error on transient err, got empty")
+	}
+	if res.ErrorKind != agentic.ToolErrorNetwork {
+		t.Errorf("Result.ErrorKind = %q, want %q (non-Invalid class → Network)", res.ErrorKind, agentic.ToolErrorNetwork)
 	}
 }
 
