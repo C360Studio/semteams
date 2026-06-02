@@ -47,32 +47,32 @@
         "requests_per_minute": 100
       },
       "gemini-flash": {
-        "_comment": "Gemini 2.5 Flash via OpenAI-compat. Smoke #13 beta.93 retry (2026-06-02) showed upstream's #188 echo-all-positions fix is NECESSARY but NOT SUFFICIENT for 3.x preview: Gemini's OpenAI-compat endpoint (generativelanguage.googleapis.com/v1beta/openai) does not surface thought_signature in tool-call responses, so the framework's capture path stores zero ReasoningRecords even on parallel tool emissions — there's nothing for the now-corrected echo path to emit, and Gemini's request validator rejects with 'missing thought_signature' anyway. Reverting to 2.5 + provider=openai dodges the surface entirely (2.5 has no thought_signature contract). Flip back when upstream resolves the OpenAI-compat capture gap (or routes Gemini 3.x through Google's native endpoint shape).",
-        "provider": "openai",
+        "_comment": "Gemini 3 Flash Preview via the framework-owned wire client (provider=gemini + wire_backend=wire engages GeminiAdapter for thought_signature capture). Aligned with semstreams' canonical gemini-example.json + PR #196's hardened live test shape: stream=false (we have no UI consuming SSE chunks; the coordinator reads the full completion before deciding, and streaming may drop tool_call extra_content on chunk boundaries — the smoke-#13 #194 zero-sigs anomaly reproduced 2026-06-02 with stream=true and the framework's capture path stored 0 ReasoningRecords). reasoning_effort omitted to take the framework default; max_tokens at the model max.",
+        "provider": "gemini",
         "url": "https://generativelanguage.googleapis.com/v1beta/openai",
-        "model": "gemini-2.5-flash",
+        "model": "gemini-3-flash-preview",
         "api_key_env": "GEMINI_API_KEY",
+        "wire_backend": "wire",
         "max_tokens": 1048576,
         "supports_tools": true,
         "tool_format": "openai",
-        "stream": true,
-        "reasoning_effort": "low",
-        "max_concurrent": 10,
-        "requests_per_minute": 200
+        "stream": false,
+        "request_timeout": "180s",
+        "max_concurrent": 5,
+        "requests_per_minute": 100
       },
       "gemini-pro": {
-        "_comment": "Gemini 3.1 Pro Preview — provider=gemini + wire_backend=wire engages the framework-owned wire client + GeminiAdapter (required for 3.x preview's per-tool_call thought_signature). stream=true matches semspec's working config (was false; flipped 2026-06-01 smoke #13).",
+        "_comment": "Gemini 3.1 Pro Preview — provider=gemini + wire_backend=wire engages GeminiAdapter for thought_signature capture. Aligned with semstreams' canonical gemini-example.json + PR #196's hardened live test (stream=false). The 2026-06-01 flip to stream=true (citing 'semspec working config') was reverted 2026-06-02 after smoke-#13 #194 zero-sigs reproduced under stream=true and upstream's PR #196 live test demonstrated the contract works with stream=false. We get no value from streaming in our use case (no UI consuming SSE chunks; the coordinator reads the full completion before deciding) and streaming may drop tool_call extra_content on chunk boundaries.",
         "provider": "gemini",
         "url": "https://generativelanguage.googleapis.com/v1beta/openai",
         "model": "gemini-3.1-pro-preview",
         "api_key_env": "GEMINI_API_KEY",
         "wire_backend": "wire",
-        "reasoning_effort": "low",
         "tool_format": "openai",
         "request_timeout": "180s",
         "max_tokens": 1048576,
         "supports_tools": true,
-        "stream": true,
+        "stream": false,
         "max_concurrent": 5,
         "requests_per_minute": 100
       }
