@@ -131,8 +131,8 @@ RUN ARCH=$(dpkg --print-architecture) \
 # sandbox cwd root (named volume sandbox-agentic-workspaces; isolated from
 # the SEMTEAMS_TENANT_ROOT host bind used by the sandbox-manager).
 RUN useradd -m -s /bin/bash -U sandbox \
-    && mkdir -p /workspace /sandbox-cwds /go/pkg/mod /home/sandbox/.m2 /home/sandbox/.npm /home/sandbox/.gradle \
-    && chown -R sandbox:sandbox /workspace /sandbox-cwds /go /home/sandbox/.m2 /home/sandbox/.npm /home/sandbox/.gradle
+    && mkdir -p /workspace /sandbox-cwds /go/pkg/mod /home/sandbox/.m2 /home/sandbox/.npm /home/sandbox/.gradle /home/sandbox/.docker \
+    && chown -R sandbox:sandbox /workspace /sandbox-cwds /go /home/sandbox/.m2 /home/sandbox/.npm /home/sandbox/.gradle /home/sandbox/.docker
 
 # Binaries from the builder stage.
 COPY --from=builder /sandbox /usr/local/bin/sandbox

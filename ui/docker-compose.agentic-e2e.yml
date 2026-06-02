@@ -294,6 +294,17 @@ services:
       - /tmp:size=512M
       - /var/tmp:size=256M
       - /run:size=64M
+      # devcontainer-cli shells `docker buildx build` during Up to
+      # layer features onto the base image. buildx writes its
+      # per-user CLI state (config.json, contexts, builder metadata)
+      # under $HOME/.docker; without a writable path there, the build
+      # fails with `mkdir /home/sandbox/.docker: read-only file system`
+      # (smoke #autoresearch-phase-E surfaced this 2026-06-02).
+      # tmpfs vs named volume: buildx state is per-CLI-process and
+      # restarts cleanly; no benefit to persisting it across sandbox
+      # restarts, and tmpfs keeps the read-only-root posture intact.
+      - /home/sandbox/.docker:size=64M,uid=1001,gid=1001
+
     deploy:
       resources:
         limits:
