@@ -1,7 +1,7 @@
 # SemTeams UI
 
-The Svelte 5 + SvelteKit 2 frontend for [semteams](../README.md) — a graph
-explorer, flow builder, chat-driven assistant, and agentic operations console
+The Svelte 5 + SvelteKit 2 frontend for [semteams](../README.md) — a task
+board, chat-driven assistant, agentic operations console, and graph explorer
 for the semteams backend.
 
 > **History:** this tree was forked from
@@ -14,17 +14,24 @@ for the semteams backend.
 
 ## Features
 
-- **Graph Explorer** — Interactive knowledge graph visualization (Sigma.js/WebGL)
-  as the default homepage
+- **Task Board** — Kanban-style view of active chains and their child loops
+  as the default homepage (Thinking / Executing / Needs You / Done / Failed
+  columns); clicking a task opens a right-rail detail panel with the loop's
+  trajectory rendered as plain-language narrative
 - **Contextual Chat** — AI assistant with slash commands, context chips, and
   tool integration, including agentic slash commands (`/approve`, `/reject`,
   `/pause`, `/resume`)
-- **Flow Builder** — Visual flow editor for creating and deploying processing
-  pipelines
 - **Agentic Operations** — Real-time agent loop visibility, approval gates for
   high-risk tool calls (`create_rule`, `update_rule`, `delete_rule`, etc.),
-  multi-agent hierarchy rendering, trajectory replay
+  child-loop drill-in with focused TaskStory, `emit_*` tool args rendered
+  as structured ArtifactCard sections
+- **Flow Inventory** — Read-only `/admin/flows` listing of deployed flows.
+  Coordinator authors flow changes via the agent surface; humans approve
+  via the existing approval gate (no JSON editor).
+- **Graph Explorer** — Interactive knowledge graph visualization (Sigma.js
+  / WebGL) at `/graph` for ad-hoc entity exploration.
 - **Runtime Monitoring** — Health, logs, metrics, and message tracing tabs
+  inside the flow detail surface
 - **Runtime Discovery** — Dynamically loads component schemas from
   `/components/types` on the semteams backend
 
@@ -35,7 +42,7 @@ for the semteams backend.
   `$props`)
 - **TypeScript** — Strict types, generated from the semteams OpenAPI spec
 - **Sigma.js** + **Graphology** — WebGL graph visualization
-- **Vitest** + **@testing-library/svelte** — 3300+ unit/component tests
+- **Vitest** + **@testing-library/svelte** — 3500+ unit/component tests
 - **Playwright** — E2E tests
 
 ## Quick Start
@@ -62,7 +69,7 @@ task ui:dev:connect
 BACKEND_HOST=semteams.example.com:8080 task ui:dev:connect
 ```
 
-Open `http://localhost:3001` — you'll land on the graph explorer with chat.
+Open `http://localhost:3001` — you'll land on the Task Board with chat in the top bar.
 
 ### Full Stack from Source
 
@@ -99,12 +106,13 @@ relative fetch calls; Caddy routes them to the right endpoint.
 
 ### Pages
 
-| Route         | Purpose                                               |
-| ------------- | ----------------------------------------------------- |
-| `/`           | Graph explorer (DataView) — default homepage          |
-| `/flows`      | Flow list — create and manage flows                   |
-| `/flows/[id]` | Flow editor — visual canvas, chat, runtime monitoring |
-| `/agents`     | Agent monitoring — live loop state, approvals, replay |
+| Route          | Purpose                                                                  |
+| -------------- | ------------------------------------------------------------------------ |
+| `/`            | Task Board (Kanban) — default homepage with right-rail detail panel      |
+| `/?task=<id>`  | Task Board with a specific task's detail panel open                      |
+| `/graph`       | Graph explorer — ad-hoc entity exploration via Sigma.js                  |
+| `/admin`       | Admin landing — links to read-only flow inventory                        |
+| `/admin/flows` | Read-only flow inventory (coordinator authors flow changes — no editor)  |
 
 ### Key Directories
 
