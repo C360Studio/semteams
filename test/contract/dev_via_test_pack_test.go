@@ -513,6 +513,36 @@ func TestDevViaTestPack_05_RalphTerminalToWalker(t *testing.T) {
 	if want, got := "$entity.triple.lineage.run-loop-entity-id", spawn.RelatedLoops["run-loop-entity-id"]; got != want {
 		t.Errorf("rule 05 related_loops[run-loop-entity-id] = %q; want %q", got, want)
 	}
+
+	// Per Slice 3 reviewer R4: rule 02 pins tool_choice=required;
+	// rule 05 must too — same load-bearing reason (walker must use
+	// the tool path or text-only completion class wedges per
+	// [[failed-loops-wedge-chain]] / semstreams#158).
+	if spawn.ToolChoice == nil {
+		t.Error("rule 05 spawn missing tool_choice — walker may text-out of query_entity / decide")
+	} else if mode, _ := spawn.ToolChoice["mode"].(string); mode != "required" {
+		t.Errorf("rule 05 tool_choice.mode = %q; want %q", mode, "required")
+	}
+}
+
+// TestDevViaTestPack_01_LineageLengthZero pins the Slice 3
+// reviewer B1 fence: rule 01 requires lineage.run-loop-entity-id
+// to be absent (length_eq 0). Front-door coordinators have no
+// lineage; walkers always do (pinned by rules 02 + 05). Without
+// this condition, a walker emitting decide(action=dev_via_test)
+// without subtopics (LLM degeneration, token truncation mid-arg)
+// would re-fire rule 01 and spawn a second Lisa — corrupting the
+// run-entity plan with duplicate stamps. With this fence, the
+// spurious dispatch silently no-ops (walker decision goes
+// nowhere; persona "what NOT to do" warns against this directly).
+//
+// The "silent no-op > corruption" trade-off is the explicit
+// disposition per CLAUDE.md [[structural-over-llm-judgment]].
+func TestDevViaTestPack_01_LineageLengthZero(t *testing.T) {
+	rule := loadDevViaTestRule(t, "01-coordinator-dev-via-test-spawn.json")
+	if !devViaTestLengthCondition(rule, "lineage.run-loop-entity-id", "length_eq", float64(0)) {
+		t.Error("rule 01 missing lineage.run-loop-entity-id length_eq 0 — walker re-dispatch of dev_via_test without subtopics can spawn a duplicate Lisa and corrupt run-entity plan triples")
+	}
 }
 
 // TestCoordinatorPersonaTeachesPlanWalking asserts the coordinator
