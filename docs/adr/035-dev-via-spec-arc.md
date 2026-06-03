@@ -2,6 +2,18 @@
 
 ## Status
 
+**Superseded by
+[ADR-042 §Phase 2 redesign](042-coordinator-instantiated-flows-via-templates.md)
+(MVP-7, 2026-05-18).** The dev-via-spec arc this ADR designed
+(architect → builder → qa) was retired in MVP-7 as part of the
+substrate-plus-overlays consolidation. Task classes ship as
+category-keyed overlays (rule packs + persona bundles) rather
+than as a fixed chain shape; the live packs are research and
+autoresearch. Retained as decision archeology — the per-role
+substance disciplines + the "reviewer grades substance, persona
+is prescriptive only where no grader applies" reasoning carried
+forward into the new overlays.
+
 **Proposed (2026-05-06).** Pulls the dev-via-spec arc decisions
 (R3.3 → R3.5) out of ADR-031, which was growing into a diary across
 seven addenda spanning two products of decisions. ADR-031 keeps the

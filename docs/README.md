@@ -69,35 +69,26 @@ architecture.
 | [**042**](adr/042-coordinator-instantiated-flows-via-templates.md) | **Substrate-plus-overlays.** One product-shell flow, category-keyed rule packs + persona bundles. Current architecture as of MVP-7. |
 | [**043**](adr/043-devcontainer-as-sandbox-spec.md) | **Devcontainer-as-sandbox spec.** Per-tenant attestation + attestation-aware artifact routing. The killer feature autoresearch needed. |
 
-### Imports from upstream — keep, replace, or skip?
+### Framework concepts — go upstream
 
-The following directories were carried over verbatim from
-semstreams when SemTeams was forked into a product shell. They
-explain the **framework**, not the product. Treat them as a
-fallback while you're learning, but the canonical version lives
-upstream and may have moved on:
+This repo previously carried five upstream-semstreams documentation
+directories (`basics/`, `concepts/`, `advanced/`, `operations/`,
+`contributing/`) imported verbatim during the initial subtree
+fork. They explained the framework, not the product, drifted
+independently of upstream, and were removed 2026-06-03 in favour
+of a single pointer at the canonical source:
 
-- [`basics/`](basics/) — framework getting-started, Graphable
-  interface, configuration tiers.
-- [`concepts/`](concepts/) — knowledge graphs, embeddings, payload
-  registry, agentic-systems, orchestration layers.
-- [`advanced/`](advanced/) — agentic components, workflow
-  configuration, JetStream tuning.
-- [`operations/`](operations/) — local monitoring, troubleshooting,
-  distributed tracing.
-- [`contributing/`](contributing/) — testing, schema generation,
-  contract testing, CI integration.
-- [`ROADMAP.md`](ROADMAP.md) — *upstream* roadmap; the SemTeams
-  active arc lives in ADR-031.
-- [`../configs/README.md`](../configs/README.md) — describes the
-  framework's structural / statistical / semantic tiers (graph
-  components), not the product's flow library.
+- **<https://github.com/c360studio/semstreams/tree/main/docs>** —
+  Graphable interface, knowledge-graph model, NATS-stream wiring,
+  payload registry, component reference, agentic primitives.
 
-When upstream content drifts or gets in the way, prefer the
-upstream source of truth at
-<https://github.com/c360studio/semstreams/tree/main/docs> over
-patching here. A targeted cleanup of these imports is on the
-backlog (`project_docs_audit_needed`).
+`docs/ROADMAP.md` was a similar carry-over (the upstream SemStreams
+roadmap) and now holds a SemTeams pointer instead.
+
+`../configs/README.md` is still upstream-shaped — it documents the
+framework's structural / statistical / semantic tiers (the graph
+component family), not the product's flow library. Treat it as
+upstream until it gets the same treatment.
 
 ## Conventions
 

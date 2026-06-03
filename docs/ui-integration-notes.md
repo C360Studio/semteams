@@ -1,5 +1,16 @@
 # UI Integration Notes: Agentic Superpowers
 
+**Status**: Historical reference (as of 2026-06-03 doc audit). This
+doc maps the agentic-superpowers backend phases (1-4) to the
+2026-04-10 UI subtree import and the early Phase A.5 reframe. It
+predates the UI redesign (`docs/proposals/ui-redesign.md`),
+ADR-042 substrate-plus-overlays, ADR-043 sandbox attestation, and
+the 2026-06-03 chain drill-in + ArtifactCard slice. The
+backend-concept → UI-component map below is still useful for
+finding load-bearing files; the *behavioural* surface has moved
+on. For current UI surfaces start at `ui/.claude/CLAUDE.md` and
+`docs/architecture.md`.
+
 Reference for the agentic UI surface that lives at `ui/` in this repo. The
 backend (Phases 1-4) is complete, the UI was subtree-imported from
 `semstreams-ui@c36326d` on 2026-04-10, and Phase A.5 renamed/reframed the tree

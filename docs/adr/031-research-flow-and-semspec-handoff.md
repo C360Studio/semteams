@@ -6,6 +6,16 @@ Accepted — 2026-04-29 (reframed same day from the original
 "SemTeams → SemSpec handoff" framing — see Q5 in the open-questions
 memo for the reframe rationale).
 
+**Superseded for the dev-via-spec arc by
+[ADR-042 §Phase 2 redesign](042-coordinator-instantiated-flows-via-templates.md)
+(MVP-7, 2026-05-18).** The dev-via-spec arc this ADR described
+(architect → builder → qa) was retired in MVP-7 as part of the
+substrate-plus-overlays consolidation; the dispatch coordinator
+now decides task class via `decide(action=<category>)` and live
+packs (research, autoresearch) ship as overlays. The research-flow
+ownership decision (R1–R3.2) is durable; the dev-via-spec
+machinery is archeology.
+
 ## Context
 
 The c360 ecosystem ships two products that look superficially similar

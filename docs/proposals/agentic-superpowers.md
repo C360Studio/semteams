@@ -1,6 +1,10 @@
 # Proposal: Agentic Superpowers via Rules and Flows
 
-**Status**: Draft
+**Status**: Shipped (all phases closed 2026-04-12). The
+substrate-plus-overlays architecture in ADR-042 is the durable form
+of the proposal's "stock flows + rule packs" idea — task classes
+add as overlays (rule packs + persona bundles), not as new flow
+configs. Retained as historical context for the original framing.
 **Date**: 2026-04-06
 **Author**: Coby Leuschke
 
