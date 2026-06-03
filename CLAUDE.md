@@ -57,10 +57,12 @@ information-domain, decision-domain, …) lives in category packs.
 
 The `personas-describe-job-not-plumbing` memory captures the rule.
 
-> **Note**: The repo's `README.md` is the upstream **SemStreams**
-> README (framework getting-started). It is NOT SemTeams-specific.
-> Use this CLAUDE.md and `docs/adr/029-product-shell-wiring.md` as
-> the authoritative entry points for SemTeams-specific context.
+> **Note**: The repo's `README.md` was rewritten as SemTeams-specific
+> and is the canonical entry point for new readers. This CLAUDE.md
+> is the deeper project context (config layering, product-shell
+> wiring map, mandatory protocols); `docs/adr/029-product-shell-wiring.md`
+> (wiring) and `docs/adr/042-coordinator-instantiated-flows-via-templates.md`
+> (substrate-plus-overlays) are the load-bearing ADRs.
 
 ## Tech Stack
 
