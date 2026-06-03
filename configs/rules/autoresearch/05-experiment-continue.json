@@ -1,9 +1,10 @@
 {
   "id": "autoresearch_experiment_continue",
   "type": "expression",
-  "name": "experiment.completed length_lt cap AND no iteration in flight → spawn next autoresearch-propose (continue)",
-  "description": "ADR-042 §Phase 2 redesign autoresearch pack — iteration LOOP continue half. Fires on the RUN entity (the coordinator's loop entity, where rule 04 accumulates autoresearch.experiment.completed triples via subject override) when the counter length is strictly less than the iteration cap AND no propose+execute iteration is currently in flight. Spawns the next autoresearch-propose loop.\n\nIteration-in-flight toggle (2026-06-03 fix for gh#192, with refinement for the self-write-revision filter): the framework's stateful rule evaluator filters self-write replays (ev.Revision > prevState.SourceRevision check), so a rule that toggles its own conditions via its own action does NOT see the resulting Exited transition. To make rule 05's conditions oscillate, the in_flight flag is written by OTHER rules:\n\n- rule 01 (coordinator → autoresearch): stamps in_flight=false (initialize at chain start)\n- rule 03 (propose → execute): stamps in_flight=true on the run entity via subject-override (external write from rule 05's perspective, so rule 05 properly Exits)\n- rule 04a (execute clean completion): stamps in_flight=false on the run entity (so rule 05 re-Enters and spawns the next iteration)\n- rule 04b (execute loop-failed): stamps in_flight=false on the run entity (so the chain continues iterating even after a failed execute — see gh#193 for the consecutive-failure circuit-breaker follow-up)\n\nRule 05's actions do NOT write in_flight directly. This rule fires, spawns propose, and waits for rule 03 (external writer) to flip the flag. Between rule 05 firing and rule 03 firing (~one propose loop's worth of LLM time), no run-entity update happens — rule 05 doesn't re-fire because there's nothing for it to evaluate against.\n\nThis rule ALSO handles iteration 1 (rule 02 baseline→propose was retired in the same fix; it overlapped with this rule's iter-1 spawn and produced the gh#189 duplicate propose). Rule 01 stamps in_flight=false; once baseline completes emit_autoresearch_baseline (which stamps run.status=active + cap + ...), all four conditions become true together → Entered → spawn propose iteration 1.\n\nNote: this rule fires ON the RUN entity, NOT on the firing execute entity. The run entity carries role=coordinator (the run entity IS the coordinator's loop); the role condition reads as 'the run entity'. The substitution $entity.triple.autoresearch.cap reads the cap that emit_autoresearch_baseline stamped onto the run entity during baseline phase.",
+  "name": "experiment.completed length_lt cap → spawn next autoresearch-propose (continue)",
+  "description": "ADR-042 §Phase 2 redesign autoresearch pack — iteration LOOP continue half. Fires on the RUN entity (the coordinator's loop entity, where rule 04 accumulates autoresearch.experiment.completed triples via subject override) when the counter length is strictly less than the iteration cap. Spawns the next autoresearch-propose loop. cooldown=5s guards against double-fire if two execute loops complete in the same evaluation window (impossible under the current single-thread iteration shape, but defensive against future parallel-iteration variants).\n\nNote: this rule fires ON the RUN entity, NOT on the firing execute entity. The run entity carries role=coordinator (the run entity IS the coordinator's loop); the role condition reads as 'the run entity'. The substitution $entity.triple.autoresearch.cap reads the cap that emit_autoresearch_baseline stamped onto the run entity during baseline phase.",
   "enabled": true,
+  "cooldown": "5s",
   "conditions": [
     {
       "field": "agent.loop.role",
@@ -21,12 +22,6 @@
       "field": "autoresearch.experiment.completed",
       "operator": "length_lt",
       "value": "$entity.triple.autoresearch.cap",
-      "required": true
-    },
-    {
-      "field": "autoresearch.iteration.in_flight",
-      "operator": "eq",
-      "value": "false",
       "required": true
     }
   ],

@@ -4,6 +4,7 @@
   "name": "experiment.completed length_eq cap → spawn autoresearch-synthesize (stop)",
   "description": "ADR-042 §Phase 2 redesign autoresearch pack — iteration LOOP stop half. Fires on the RUN entity when the iteration counter reaches the cap. Stamps autoresearch.stop.reason=cap and autoresearch.run.status=stopped on the run entity, and spawns autoresearch-synthesize to roll up the final artifact. Mutually exclusive with rule 05 (continue) — exactly one of the two fires per counter change.\n\nStatus flip is defense-in-depth: rule 05's condition on autoresearch.run.status=active means once 06 flips the status, any belated counter-change cannot re-spawn propose loops. (Under normal flow this is impossible — the counter only increments once per execute, and once length_eq cap fires there are no more execute spawns. But under transient redelivery or future parallel-execute variants the status guard is the safety belt.)",
   "enabled": true,
+  "cooldown": "5s",
   "conditions": [
     {
       "field": "agent.loop.role",
@@ -21,12 +22,6 @@
       "field": "autoresearch.experiment.completed",
       "operator": "length_eq",
       "value": "$entity.triple.autoresearch.cap",
-      "required": true
-    },
-    {
-      "field": "autoresearch.iteration.in_flight",
-      "operator": "eq",
-      "value": "false",
       "required": true
     }
   ],

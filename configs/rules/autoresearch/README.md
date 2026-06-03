@@ -67,63 +67,6 @@ convention (mirroring `reviewer-research`); it is a separate persona
 from `reviewer-research` because the artifact shape it grades is
 different (baseline + experiments + best, not actors/integration_points).
 
-## Iteration-in-flight toggle (gh#192 fix 2026-06-03)
-
-The rule engine's stateful transition model fires `on_enter` actions
-on false→true transitions only. A naive "fire while count<cap" rule
-would enter once at iteration 1 and then sit at `TransitionNone +
-currentlyMatching=true` for the rest of the run — `WhileTrue` actions
-fire instead of `on_enter`, and `WhileTrue` only fires once at
-construction time per the framework. The chain stalled after one
-iteration with `action_count=0`.
-
-The fix is a small state machine on the RUN entity that forces
-condition oscillation. **The flag's true-side write happens from a
-different rule than rule 05** because the framework's self-write-
-revision filter (StatefulEvaluator's `prevState.SourceRevision >=
-ev.Revision` check) would suppress rule 05's re-evaluation against
-its own write, leaving wasMatching stuck at true and breaking the
-next Exited→Entered transition.
-
-| Phase | `iteration.in_flight` | Stamped by |
-|---|---|---|
-| Init (coordinator decides autoresearch) | `"false"` | Rule 01 `add_triple` |
-| Propose → execute spawn | `"true"` | **Rule 03** `add_triple` via subject-override (external to rule 05's state tracker) |
-| Iteration N execute clean completion | `"false"` | Rule 04a `add_triple` (alongside `experiment.completed`) |
-| Iteration N execute loop-failed | `"false"` | Rule 04b `add_triple` (alongside `experiment.completed` + `experiment.loop_failed`) |
-
-Rule 05 (continue) and rule 06 (stop-cap) both require
-`iteration.in_flight eq "false"`, so they only fire when no iteration
-is in progress. Rule 03 flips the flag to true when execute spawns;
-rule 04a/04b flip it back to false at execute completion. Rule 05
-re-Enters per iteration because each flip is an external write that
-properly updates its state tracker.
-
-**Note on value type**: in_flight is stamped as the string `"false"`
-or `"true"` (not bool). The framework's `Action.object` field is
-typed string; bool literals trip JSON unmarshal at config-load. The
-runtime `eq` comparison is string equality, which works correctly
-for boolean-shaped predicates. When count reaches cap, rule 06's
-conditions match (length_eq AND in_flight=false) and synthesize
-spawns.
-
-**Why not WhileTrue + cooldown?** The framework's `cooldown` field
-is honored ONLY for cron-type rules; expression rules ignore it.
-WhileTrue without cooldown fires on every entity state change, which
-would over-spawn proposes during the propose+execute window
-(framework-alignment-reviewed; verified by reading
-processor/rule/stateful_evaluator.go).
-
-**Why was rule 02 retired?** The old `02-baseline-to-propose.json`
-spawned the iteration-1 propose on the baseline entity's
-`decide(propose)` terminal. Rule 05 ALSO fires when baseline's
-`emit_autoresearch_baseline` stamps run.status=active + cap (count<cap
-+ in_flight=false → match). The two rules both spawned a propose for
-the same logical iter-1, producing the gh#189 duplicate-propose bug.
-With the in_flight toggle initializing to `false` in rule 01, rule 05
-cleanly handles iteration 1 alongside iterations 2+; rule 02 became
-redundant.
-
 ## Rules
 
 | File | Trigger | Spawn / Stamp |

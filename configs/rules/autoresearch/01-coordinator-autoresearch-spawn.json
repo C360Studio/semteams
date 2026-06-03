@@ -26,11 +26,6 @@
       "object": "active"
     },
     {
-      "type": "add_triple",
-      "predicate": "autoresearch.iteration.in_flight",
-      "object": "false"
-    },
-    {
       "type": "publish_agent",
       "subject": "agent.task.autoresearch-baseline",
       "role": "autoresearch-baseline",
