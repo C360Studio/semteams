@@ -1,361 +1,72 @@
-# SemStreams Configurations
+# SemTeams Configs
 
-This directory contains configuration files for SemStreams deployment tiers and external services.
+Under [ADR-042 §Phase 2](../docs/adr/042-coordinator-instantiated-flows-via-templates.md)
+(substrate-plus-overlays, MVP-7) there is **one** product-shell
+flow config. New task classes ship as category-keyed rule packs +
+persona bundles, not as new flow configs.
 
-## Deployment Tiers
+## SemTeams flow configs
 
-SemStreams supports a 3-tier deployment model with progressively more capable component configurations:
+| Config | Purpose | Model |
+|---|---|---|
+| [`flow-bootstrap.json`](flow-bootstrap.json) | Production substrate (ADR-042 MVP). Wires the singleton agentic stack (graph-ingest, graph-query, rule-processor, agentic-loop, agentic-dispatch, agentic-tools, agentic-model) + the live category rule packs (research, autoresearch, coordinator, ops) + the persona corpus that drives them. | claude-haiku (default); gemini-flash / claude-sonnet selectable per role |
+| [`e2e-flow-bootstrap.json`](e2e-flow-bootstrap.json) | Mock-LLM clone of flow-bootstrap. Same packs + personas; model registry points at the in-process mock LLM. Used by every Playwright journey under `ui/e2e/agentic/`. | mock-llm |
 
-| Tier | Name | Description | External Services |
-|------|------|-------------|-------------------|
-| 0 | **Structural** | Base tier - rules-only, deterministic behavior | None |
-| 1 | **Statistical** | Adds BM25 embeddings, statistical clustering, anomaly detection | None |
-| 2 | **Semantic** | Full ML with external embedding and LLM services | semembed, seminstruct |
+`task ui:test:e2e:agentic:research-mvp` runs the e2e config end to
+end against the mock LLM (no API keys); `task dev:research` runs
+the production config (needs `ANTHROPIC_API_KEY` at minimum).
 
-### Component-to-Tier Matrix
-
-| Component | Tier 0 (Structural) | Tier 1 (Statistical) | Tier 2 (Semantic) | Description |
-|-----------|:-------------------:|:--------------------:|:-----------------:|-------------|
-| `graph-ingest` | Required | Required | Required | Entity/triple ingestion |
-| `graph-index` | Required | Required | Required | Core relationship indexes |
-| `graph-gateway` | Required | Required | Required | HTTP API (GraphQL/MCP) |
-| `graph-embedding` | - | BM25 | HTTP | Vector embeddings |
-| `graph-clustering` | - | + Structural | + LLM + Semantic | Community detection, structural analysis, anomaly detection |
-| `graph-index-spatial` | Optional | Optional | Optional | Geospatial queries |
-| `graph-index-temporal` | Optional | Optional | Optional | Time-based queries |
-
-### Tier 0: Structural (`structural.json`)
-
-Rules-only deployment without ML inference. Deterministic and predictable.
-
-**Components:**
-- `graph-ingest` - Entity/triple ingestion from streams
-- `graph-index` - Core relationship indexing
-- `graph-gateway` - GraphQL/MCP HTTP gateway
-- `rule-processor` - Stateful rule evaluation
-
-### Tier 1: Statistical (`statistical.json`)
-
-Adds statistical algorithms for embeddings and clustering without external ML services.
-
-**Additional Components:**
-- `graph-embedding` (BM25) - Statistical term-frequency embeddings
-- `graph-clustering` - Community detection with structural analysis and core anomaly detection
-
-### Tier 2: Semantic (`semantic.json`)
-
-Full-featured deployment with external ML services for embeddings and LLM enhancement.
-
-**Enhanced Components:**
-- `graph-embedding` (HTTP) - ML-based vector embeddings via external service
-- `graph-clustering` (+ LLM) - Community detection with LLM summarization, structural analysis, and semantic gap detection
-- `graph-index-spatial` - Geospatial indexing
-- `graph-index-temporal` - Time-based indexing
-
-**Required External Services:**
-- `semembed:8081` - Embedding service
-- `seminstruct:8083` - LLM instruction service
-
-## Graph Component Architecture
-
-The graph processing layer uses a modular component architecture with KV-watch based event flow:
-
-```
-Entity Streams ──► graph-ingest ──► ENTITY_STATES KV
-                                          │
-                                          ▼ (kv-watch)
-                                    graph-index
-                                          │
-                    ┌─────────────────────┼─────────────────────┐
-                    ▼                     ▼                     ▼
-             OUTGOING_INDEX        INCOMING_INDEX        ALIAS_INDEX
-
-Tier 1+ Only:
-        ENTITY_STATES
-              │
-              ▼ (kv-watch)
-        graph-embedding ──► EMBEDDINGS_CACHE
-              │
-              ▼ (reads KV)
-        graph-clustering ──┬──► COMMUNITY_INDEX
-                          ├──► STRUCTURAL_INDEX (k-core, pivot)
-                          └──► ANOMALY_INDEX
-```
-
-## Graph Component Configuration
-
-### graph-ingest
-
-Ingests entities and triples from JetStream.
-
-**Tier:** All tiers (required)
-
-```json
-{
-  "type": "processor",
-  "name": "graph-ingest",
-  "config": {
-    "ports": {
-      "inputs": [
-        {"name": "entity_in", "subject": "entity.>", "type": "jetstream"}
-      ],
-      "outputs": [
-        {"name": "entity_states", "subject": "ENTITY_STATES", "type": "kv"}
-      ]
-    },
-    "enable_hierarchy": true
-  }
-}
-```
-
-### graph-index
-
-Maintains relationship indexes from entity state changes.
-
-**Tier:** All tiers (required)
-
-```json
-{
-  "type": "processor",
-  "name": "graph-index",
-  "config": {
-    "ports": {
-      "inputs": [
-        {"name": "entity_watch", "subject": "ENTITY_STATES", "type": "kv-watch"}
-      ],
-      "outputs": [
-        {"name": "outgoing_index", "subject": "OUTGOING_INDEX", "type": "kv"},
-        {"name": "incoming_index", "subject": "INCOMING_INDEX", "type": "kv"},
-        {"name": "alias_index", "subject": "ALIAS_INDEX", "type": "kv"},
-        {"name": "predicate_index", "subject": "PREDICATE_INDEX", "type": "kv"}
-      ]
-    },
-    "workers": 4,
-    "batch_size": 50
-  }
-}
-```
-
-### graph-embedding
-
-Generates vector embeddings for entities.
-
-**Tier:** Statistical (BM25), Semantic (HTTP)
-
-```json
-{
-  "type": "processor",
-  "name": "graph-embedding",
-  "config": {
-    "ports": {
-      "inputs": [
-        {"name": "entity_watch", "subject": "ENTITY_STATES", "type": "kv-watch"}
-      ],
-      "outputs": [
-        {"name": "embeddings", "subject": "EMBEDDINGS_CACHE", "type": "kv"}
-      ]
-    },
-    "embedder_type": "bm25",
-    "batch_size": 50,
-    "cache_ttl": "1h"
-  }
-}
-```
-
-For Semantic tier, use `"embedder_type": "http"` with a model registry `embedding` capability configured.
-
-### graph-clustering
-
-Performs community detection with optional structural analysis, anomaly detection, and LLM enhancement.
-
-**Tier:** Statistical, Semantic
-
-```json
-{
-  "type": "processor",
-  "name": "graph-clustering",
-  "config": {
-    "ports": {
-      "inputs": [
-        {"name": "entity_watch", "subject": "ENTITY_STATES", "type": "kv-watch"}
-      ],
-      "outputs": [
-        {"name": "communities", "subject": "COMMUNITY_INDEX", "type": "kv"}
-      ]
-    },
-    "detection_interval": "30s",
-    "batch_size": 100,
-    "min_community_size": 2,
-    "enable_llm": false,
-    "enable_structural": true,
-    "pivot_count": 16,
-    "max_hop_distance": 10,
-    "enable_anomaly_detection": true,
-    "anomaly_config": {
-      "enabled": true,
-      "max_anomalies_per_run": 100,
-      "core_anomaly": {
-        "enabled": true,
-        "min_core_level": 2
-      },
-      "semantic_gap": {
-        "enabled": false
-      }
-    }
-  }
-}
-```
-
-**Configuration Options:**
-
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `enable_llm` | bool | `false` | Enable LLM-based community summarization (requires model registry `community_summary` capability) |
-| `enable_structural` | bool | `false` | Enable k-core and pivot distance computation |
-| `pivot_count` | int | `16` | Number of pivot nodes for distance indexing |
-| `max_hop_distance` | int | `10` | Maximum BFS traversal depth |
-| `enable_anomaly_detection` | bool | `false` | Enable anomaly detection (requires enable_structural) |
-| `anomaly_config.core_anomaly.enabled` | bool | `true` | Detect core isolation anomalies |
-| `anomaly_config.semantic_gap.enabled` | bool | `false` | Detect semantic-structural gaps (requires embeddings) |
-
-For Semantic tier, enable LLM and semantic gap detection:
-```json
-{
-  "enable_llm": true,
-  "anomaly_config": {
-    "semantic_gap": {
-      "enabled": true,
-      "similarity_threshold": 0.7,
-      "min_structural_distance": 3
-    }
-  }
-}
-```
-
-### graph-index-spatial (Optional)
-
-Provides geospatial indexing for location-aware queries.
-
-**Tier:** Any tier (optional)
-
-```json
-{
-  "type": "processor",
-  "name": "graph-index-spatial",
-  "config": {
-    "ports": {
-      "inputs": [
-        {"name": "entity_watch", "subject": "ENTITY_STATES", "type": "kv-watch"}
-      ],
-      "outputs": [
-        {"name": "spatial_index", "subject": "SPATIAL_INDEX", "type": "kv"}
-      ]
-    },
-    "geohash_precision": 6,
-    "workers": 4
-  }
-}
-```
-
-### graph-index-temporal (Optional)
-
-Provides time-based indexing for temporal queries.
-
-**Tier:** Any tier (optional)
-
-```json
-{
-  "type": "processor",
-  "name": "graph-index-temporal",
-  "config": {
-    "ports": {
-      "inputs": [
-        {"name": "entity_watch", "subject": "ENTITY_STATES", "type": "kv-watch"}
-      ],
-      "outputs": [
-        {"name": "temporal_index", "subject": "TEMPORAL_INDEX", "type": "kv"}
-      ]
-    },
-    "time_resolution": "hour",
-    "workers": 4
-  }
-}
-```
-
-### graph-gateway
-
-HTTP gateway for GraphQL and MCP access.
-
-**Tier:** All tiers (required)
-
-```json
-{
-  "type": "gateway",
-  "name": "graph-gateway",
-  "config": {
-    "ports": {
-      "inputs": [
-        {"name": "http", "subject": ":8084", "type": "http"}
-      ],
-      "outputs": [
-        {"name": "mutations", "subject": "graph.mutation.*", "type": "nats-request"}
-      ]
-    },
-    "graphql_path": "/graphql",
-    "mcp_path": "/mcp",
-    "bind_address": ":8084",
-    "enable_playground": true
-  }
-}
-```
-
-## KV Buckets
-
-| Bucket | Written By | Watched By | Tier |
-|--------|------------|------------|------|
-| `ENTITY_STATES` | graph-ingest | graph-index, graph-embedding, graph-clustering | All |
-| `OUTGOING_INDEX` | graph-index | graph-clustering | All |
-| `INCOMING_INDEX` | graph-index | graph-clustering | All |
-| `ALIAS_INDEX` | graph-index | - | All |
-| `PREDICATE_INDEX` | graph-index | - | All |
-| `EMBEDDINGS_CACHE` | graph-embedding | graph-clustering | 1+ |
-| `COMMUNITY_INDEX` | graph-clustering | - | 1+ |
-| `STRUCTURAL_INDEX` | graph-clustering | - | 1+ |
-| `ANOMALY_INDEX` | graph-clustering | - | 1+ |
-| `SPATIAL_INDEX` | graph-index-spatial | - | Optional |
-| `TEMPORAL_INDEX` | graph-index-temporal | - | Optional |
-
-## Observability Stack
-
-### Directory Structure
+## What lives where
 
 ```
 configs/
-├── semantic.json               # Tier 2: Semantic configuration
-├── statistical.json            # Tier 1: Statistical configuration
-├── structural.json             # Tier 0: Structural configuration
-├── prometheus/
-│   └── prometheus.yml          # Prometheus scraping configuration
-├── grafana/
-│   ├── provisioning/
-│   │   ├── datasources/
-│   │   │   └── prometheus.yml  # Auto-configure Prometheus datasource
-│   │   └── dashboards/
-│   │       └── default.yml     # Dashboard provider configuration
-│   └── dashboards/
-│       └── semstreams-overview.json  # Overview dashboard
-└── README.md
+├── flow-bootstrap.json          ← production substrate
+├── e2e-flow-bootstrap.json      ← mock-LLM clone
+├── rules/
+│   ├── coordinator/             ← chat front-door rules
+│   ├── research/                ← prose research arc
+│   ├── autoresearch/            ← Karpathy-style iteration loop
+│   └── ops/                     ← parallel observability track
+└── personas/fragments/
+    ├── coordinator/             ← domain-neutral router persona
+    ├── researcher-research-*/   ← plan / gather / synthesize roles
+    ├── reviewer-research/
+    ├── autoresearch-*/          ← baseline / propose / execute / synthesize
+    ├── reviewer-autoresearch/
+    ├── ops/                     ← read-only diagnostic agent
+    ├── ops-chain-observer/
+    └── ops-progress-observer/
 ```
 
-### Usage
+Adding a new task class is a new overlay: drop a rule pack
+directory under `rules/<category>/`, drop persona bundles under
+`personas/fragments/<role>-<category>-<phase?>/`, and teach the
+coordinator's `decide(action=…)` contract one new token. See the
+rule packs above for working templates.
 
-Start observability stack:
-```bash
-task services:start:observability
-```
+## Legacy configs
 
-Access:
-- **Prometheus**: http://localhost:9090
-- **Grafana**: http://localhost:3000 (admin/admin)
+Other JSON files in this directory (`structural.json`,
+`statistical.json`, `semantic.json`, `protocol-flow.json`,
+`hello-world.json`, federation configs, etc.) are upstream
+SemStreams graph-tier deployment examples carried over during the
+initial subtree fork. They are **not** SemTeams product configs.
+A couple are still wired into legacy e2e plumbing under `ui/`
+(see `ui/E2E_SETUP.md`); the rest are unused.
 
-See `docs/OPTIONAL_SERVICES.md` for complete documentation.
+For the upstream graph-tier deployment model (Structural /
+Statistical / Semantic tiers, graph component family, KV bucket
+layout), see
+<https://github.com/c360studio/semstreams/tree/main/docs>.
+
+## Further reading
+
+- [`docs/architecture.md`](../docs/architecture.md) — what runs
+  on top of these configs end-to-end.
+- [`docs/adr/042`](../docs/adr/042-coordinator-instantiated-flows-via-templates.md)
+  — why there is just one config (substrate-plus-overlays).
+- [`docs/adr/029`](../docs/adr/029-product-shell-wiring.md) — how
+  `cmd/semteams/main.go` wires the substrate.
+- [`cmd/semteams/tools/README.md`](../cmd/semteams/tools/README.md)
+  — product-shell tool executors that the `agentic-tools`
+  registry runs.

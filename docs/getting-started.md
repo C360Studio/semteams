@@ -258,7 +258,7 @@ step time is wedged — abort, don't wait for the natural timeout.
 ### Profiling
 
 ```bash
-./bin/semteams --debug --debug-port=8083 --config configs/agentic.json
+./bin/semteams --debug --debug-port=8083 --config configs/flow-bootstrap.json
 # pprof at http://localhost:8083/debug/pprof/
 ```
 
@@ -267,11 +267,14 @@ step time is wedged — abort, don't wait for the natural timeout.
 - **Why is the binary built this way?** —
   [`adr/029-product-shell-wiring.md`](adr/029-product-shell-wiring.md)
   is the single most useful read.
-- **What is the "research / dev-via-spec" arc?** —
-  [`adr/031-research-flow-and-semspec-handoff.md`](adr/031-research-flow-and-semspec-handoff.md)
-  (the active product arc).
+- **What runs end-to-end when I send a prompt?** —
+  [`architecture.md`](architecture.md). The substrate-plus-overlays
+  runtime + the live category packs (research, autoresearch).
+- **Why is it built this way (substrate-plus-overlays)?** —
+  [`adr/042-coordinator-instantiated-flows-via-templates.md`](adr/042-coordinator-instantiated-flows-via-templates.md).
 - **How does the sandbox work?** —
-  [`adr/032-r36-sandbox-design.md`](adr/032-r36-sandbox-design.md).
+  [`adr/043-devcontainer-as-sandbox-spec.md`](adr/043-devcontainer-as-sandbox-spec.md)
+  (current; ADR-032 was the precursor).
 - **How do I write a journey?** —
   [`journeys/README.md`](journeys/README.md). The journey IS the
   Playwright test under `ui/e2e/agentic/`.
