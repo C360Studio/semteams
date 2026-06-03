@@ -190,19 +190,29 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 		return errResult(call, agentic.ToolErrorNetwork, "stamp measurement triples on %s: %v", executeEntityID, err)
 	}
 
-	// On outcome=kept also update best.* on the run entity. The
-	// experiment_id is the calling loop's loop_id (the execute that
-	// won the compare). This becomes the new reference for the
-	// next propose iteration's compare.
-	if outcome == OutcomeKept {
-		runUpdate := []message.Triple{
-			runBaseTriple(runEntityID, runPredicateBestValue, args.Value, now),
-			runBaseTriple(runEntityID, runPredicateBestExperimentID, call.LoopID, now),
-		}
-		if err := e.publisher.AddTriplesBatch(ctx, runUpdate); err != nil {
-			return errResult(call, agentic.ToolErrorNetwork, "update best on run entity %s: %v", runEntityID, err)
-		}
-	}
+	// best.value / best.experiment_id updates on the RUN entity used
+	// to be done here via the publisher's AddTriple. That hit the
+	// first-write-wins trap: GetFieldValue returns the FIRST matching
+	// triple, so once baseline stamped best.value=baseline_value via
+	// emit_autoresearch_baseline, any later AddTriple of a better
+	// value was invisible to scalar reads (synthesize and the next
+	// propose iteration both saw the stale baseline). The
+	// TriplePublisher interface upstream exposes only AddTriple /
+	// AddTriplesBatch — no upsert primitive.
+	//
+	// Fix (2026-06-03): moved the best.* update OUT of this executor
+	// and INTO rule 04c (`04c-execute-promote-best-on-kept.json`),
+	// which uses the rule engine's `update_triple` action — a true
+	// (subject, predicate) upsert. Rule 04c fires on this executor's
+	// `autoresearch.measurement.outcome=kept` stamp (substitution
+	// reads value + experiment_id off the execute entity). The
+	// substitution-driven path avoids needing a new TriplePublisher
+	// method or a per-product Go-side workaround.
+	//
+	// The `new_best` flag in the response below stays accurate (the
+	// executor knows the comparison outcome); downstream rule 04c
+	// performs the actual stamp on the run entity.
+	_ = now // retained for downstream stamps if executor grows them later
 
 	body, _ := json.Marshal(map[string]any{
 		"execute_entity_id":  executeEntityID,

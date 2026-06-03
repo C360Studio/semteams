@@ -241,6 +241,7 @@
           "/app/configs/rules/autoresearch/03-propose-to-execute.json",
           "/app/configs/rules/autoresearch/04a-execute-stamp-completion.json",
           "/app/configs/rules/autoresearch/04b-execute-stamp-failed.json",
+          "/app/configs/rules/autoresearch/04c-execute-promote-best-on-kept.json",
           "/app/configs/rules/autoresearch/05-iteration-dispatch.json",
           "/app/configs/rules/autoresearch/07-synthesize-to-reviewer.json",
           "/app/configs/rules/autoresearch/08-reviewer-approved-to-coordinator.json",

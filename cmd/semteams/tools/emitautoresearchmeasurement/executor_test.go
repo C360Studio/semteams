@@ -103,7 +103,19 @@ func TestCompareOutcome(t *testing.T) {
 	}
 }
 
-func TestExecutor_KeptUpdatesBestOnRunEntity(t *testing.T) {
+func TestExecutor_KeptStampsOutcomeButLeavesRunBestToRule04c(t *testing.T) {
+	// 2026-06-03: the executor used to AddTriple best.value /
+	// best.experiment_id on the run entity directly. That hit the
+	// first-write-wins trap (GetFieldValue returns the FIRST matching
+	// triple; baseline.value stamped first wins forever). The
+	// TriplePublisher interface upstream has no upsert primitive,
+	// so the update_triple responsibility now lives in
+	// configs/rules/autoresearch/04c-execute-promote-best-on-kept.json
+	// which performs the proper scalar upsert via the rule engine.
+	//
+	// This test enforces the new contract: the executor stamps
+	// measurement.* (including outcome=kept) on the execute entity
+	// ONLY; it does NOT touch the run entity's best.*.
 	pub := &fakePub{}
 	reader := &fakeReader{best: 200, hasIt: true}
 	e := NewExecutor(pub, reader, platform(), slog.Default())
@@ -122,25 +134,36 @@ func TestExecutor_KeptUpdatesBestOnRunEntity(t *testing.T) {
 	execEntity := "c360.ops.agent.agentic-loop.execution.exec-7"
 	runEntity := "c360.ops.agent.agentic-loop.execution.coord-1"
 
-	// outcome stamped kept on execute loop.
+	// outcome stamped kept on execute loop — this is what rule 04c
+	// fires on.
 	out, _ := pub.findOn(execEntity, "autoresearch.measurement.outcome")
 	if out != OutcomeKept {
 		t.Errorf("execute outcome = %v, want %q", out, OutcomeKept)
 	}
 
-	// best.value updated on RUN entity to the new value.
-	newBest, _ := pub.findOn(runEntity, "autoresearch.best.value")
-	if newBest != float64(150) {
-		t.Errorf("run best.value = %v, want 150", newBest)
+	// value stamped on execute loop — rule 04c's update_triple
+	// substitutes against this.
+	val, _ := pub.findOn(execEntity, "autoresearch.measurement.value")
+	if val != float64(150) {
+		t.Errorf("execute measurement.value = %v, want 150 (rule 04c's update_triple substitution source)", val)
 	}
-	// best.experiment_id = the execute loop_id.
-	newExp, _ := pub.findOn(runEntity, "autoresearch.best.experiment_id")
-	if newExp != "exec-7" {
-		t.Errorf("run best.experiment_id = %v, want exec-7", newExp)
+
+	// CRITICAL: run entity must NOT receive best.value / best.experiment_id
+	// from the executor anymore. Any such stamp would (a) be invisible to
+	// scalar reads due to the first-write-wins trap, AND (b) waste a NATS
+	// round-trip. Rule 04c handles this.
+	if v, found := pub.findOn(runEntity, "autoresearch.best.value"); found {
+		t.Errorf("run entity best.value stamped by executor (%v); must be delegated to rule 04c update_triple — see executor.go fix-comment 2026-06-03", v)
+	}
+	if v, found := pub.findOn(runEntity, "autoresearch.best.experiment_id"); found {
+		t.Errorf("run entity best.experiment_id stamped by executor (%v); must be delegated to rule 04c update_triple", v)
 	}
 }
 
-func TestExecutor_RevertedLeavesRunBestAlone(t *testing.T) {
+func TestExecutor_RevertedDoesNotStampRunBest(t *testing.T) {
+	// Reverted outcome must also NOT stamp best.* on run entity (rule
+	// 04c only fires on outcome=kept). Sanity-check that no path
+	// leaks through.
 	pub := &fakePub{}
 	reader := &fakeReader{best: 100, hasIt: true}
 	e := NewExecutor(pub, reader, platform(), slog.Default())
@@ -153,7 +176,7 @@ func TestExecutor_RevertedLeavesRunBestAlone(t *testing.T) {
 
 	runEntity := "c360.ops.agent.agentic-loop.execution.coord-1"
 	if _, found := pub.findOn(runEntity, "autoresearch.best.value"); found {
-		t.Errorf("best.value should not be updated on reverted outcome")
+		t.Errorf("best.value stamped on run entity for reverted outcome — must be 0 stamps (rule 04c gates on outcome=kept and lives in the rule layer regardless)")
 	}
 }
 
