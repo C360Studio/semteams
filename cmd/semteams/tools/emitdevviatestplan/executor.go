@@ -1,0 +1,433 @@
+// Package emitdevviatestplan implements the SemTeams-local
+// emit_dev_via_test_plan tool — the producer side of the Lisa
+// (dev-via-test-plan) persona's terminal commit (see ADR-044 +
+// configs/rules/dev-via-test/01-coordinator-dev-via-test-spawn.json).
+//
+// Lisa parses the user's prose ask into a Karpathy-shaped plan
+// (goal + assumptions + non_goals + tasks) and calls this tool to
+// stamp plan.* triples on the RUN ENTITY (the coordinator's loop
+// entity, read from related_loops["run-loop-entity-id"] —
+// mirrors the autoresearch pattern). The triples are the
+// load-bearing artifact: Ralph reads per-task spec via lineage,
+// the coordinator walks plan.task.<id>.status to pick the next
+// ready task, and CBG reads plan.integration_test_command for
+// the chain-end gate.
+//
+// The schema literally encodes Karpathy's four guidelines as
+// required fields:
+//
+//	Rule 1 (think before coding)   → plan.assumptions[] required (may be empty, must be present)
+//	Rule 2 (simplicity first)      → plan.non_goals[] required (may be empty)
+//	Rule 3 (surgical changes)      → task.target_files[] required (≥1)
+//	Rule 4 (goal-driven execution) → task.test_command required
+//
+// Per [[encode-principles-structurally]]: discipline lives in the
+// schema, not persona prose. Lisa CANNOT emit without surfacing
+// assumptions / non-goals / target files / test commands.
+//
+// Discipline note (framework-alignment review): see ADR-044
+// §addendum 2026-06-03. No upstream equivalent — the
+// plan-as-triples + Karpathy-required-schema pattern is
+// SemTeams policy; the migration target is the same generic
+// write_artifact upstream is sketching (ADR-028 §What's not built
+// here). When upstream lands it, evaluate migration of all
+// emit_*_artifact / emit_plan / emit_*_baseline / emit_dev_via_test_plan
+// tools to the generic primitive — same posture as emitplan,
+// emitautoresearchbaseline.
+//
+// Arrays (assumptions, non_goals, target_files, depends_on) are
+// stamped as JSON-encoded strings in triple objects. The rule
+// engine's `$entity.triple.X` substitution interpolates the value
+// verbatim; downstream personas parse the JSON string back into
+// an array. This avoids any per-element triple proliferation and
+// keeps the substitution shape predictable.
+package emitdevviatestplan
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"log/slog"
+	"regexp"
+	"strings"
+	"time"
+
+	"github.com/c360studio/semstreams/agentic"
+	"github.com/c360studio/semstreams/message"
+	agentictools "github.com/c360studio/semstreams/processor/agentic-tools"
+)
+
+// ToolName is the LLM-facing tool name.
+const ToolName = "emit_dev_via_test_plan"
+
+// toolSource tags the triples this tool publishes.
+const toolSource = "dev-via-test-emit-plan"
+
+// runEntityRoleKey is the related_loops key the spawn rule pins
+// to the coordinator's loop entity ID. Same convention as
+// autoresearch.
+const runEntityRoleKey = "run-loop-entity-id"
+
+// Predicate constants stamped on the run (coordinator) entity.
+// Plan-level. Per-task predicates are derived in triples() since
+// they're keyed by task ID.
+const (
+	predicatePlanGoal               = "plan.goal"
+	predicatePlanAssumptions        = "plan.assumptions"
+	predicatePlanNonGoals           = "plan.non_goals"
+	predicatePlanIntegrationTestCmd = "plan.integration_test_command"
+	predicatePlanChainStartGitTag   = "plan.chain_start_git_tag"
+	predicatePlanTaskCount          = "plan.task_count"
+	predicatePlanGeneratedAt        = "plan.generated_at"
+	predicatePlanRevision           = "plan.revision"
+
+	// Per-task predicate prefix. Full keys look like
+	// plan.task.<id>.{goal,assumptions,non_goals,target_files,
+	// test_command,expected_outcome,depends_on,status,position}.
+	predicatePlanTaskPrefix = "plan.task."
+
+	predicateTaskGoal            = "goal"
+	predicateTaskAssumptions     = "assumptions"
+	predicateTaskNonGoals        = "non_goals"
+	predicateTaskTargetFiles     = "target_files"
+	predicateTaskDependsOn       = "depends_on"
+	predicateTaskTestCommand     = "test_command"
+	predicateTaskExpectedOutcome = "expected_outcome"
+	predicateTaskStatus          = "status"
+	predicateTaskPosition        = "position"
+
+	// taskStatusReady is the initial value stamped on every task
+	// at plan emit. Coordinator walker (Slice 3) mutates this via
+	// update_triple to in_progress / done / blocked.
+	taskStatusReady = "ready"
+
+	// defaultChainStartGitTag is the sentinel name CBG diffs against
+	// at chain-end. Lisa's persona is responsible for actually
+	// running `bash git tag <value>` before calling this tool (so
+	// the tag exists on disk when CBG looks for it). Default value
+	// stays a constant here; if a deployment ever needs a chain-id-
+	// scoped tag we add a tool arg.
+	defaultChainStartGitTag = "plan-start"
+)
+
+// taskIDPattern restricts task IDs to lowercase alphanumeric +
+// hyphens, 1-32 chars. Conservative: tighter than "any string"
+// avoids triple-key shape surprises if the rule engine substitutes
+// task IDs into prompts or predicate fragments.
+var taskIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
+
+// Executor implements agentic.ToolExecutor for
+// emit_dev_via_test_plan.
+type Executor struct {
+	publisher agentictools.TriplePublisher
+	logger    *slog.Logger
+}
+
+// NewExecutor constructs an Executor. Publisher must be non-nil.
+func NewExecutor(publisher agentictools.TriplePublisher, logger *slog.Logger) *Executor {
+	if publisher == nil {
+		panic("emitdevviatestplan.NewExecutor: publisher must not be nil")
+	}
+	if logger == nil {
+		logger = slog.Default()
+	}
+	return &Executor{publisher: publisher, logger: logger}
+}
+
+// ListTools returns the LLM-facing schema. Per Karpathy /
+// [[encode-principles-structurally]], assumptions + non_goals are
+// REQUIRED arrays at the plan level (may be empty; must be
+// present), and target_files + test_command are REQUIRED at the
+// task level.
+func (e *Executor) ListTools() []agentic.ToolDefinition {
+	stringArray := func(desc string) map[string]any {
+		return map[string]any{
+			"type":        "array",
+			"items":       map[string]any{"type": "string"},
+			"description": desc,
+		}
+	}
+	taskSchema := map[string]any{
+		"type":                 "object",
+		"additionalProperties": false,
+		"properties": map[string]any{
+			"id":               map[string]any{"type": "string", "pattern": `^[a-z0-9][a-z0-9-]{0,31}$`, "description": "Stable per-task identifier (lowercase alphanumeric + hyphens, 1-32 chars). Used as the plan.task.<id>.* triple key and as Ralph's spawn-time target."},
+			"goal":             map[string]any{"type": "string", "description": "Task-level goal in user's own words. Concrete and verifiable."},
+			"assumptions":      stringArray("Task-local assumptions (Karpathy Rule 1). May be empty; emit [] explicitly if no task-local assumptions beyond plan-level."),
+			"non_goals":        stringArray("Task-local anti-scope (Karpathy Rule 2). May be empty; emit [] explicitly."),
+			"target_files":     stringArray("File globs Ralph may modify (Karpathy Rule 3 — surgical changes). REQUIRED ≥1. Empty means 'no scope' which is invalid; for genuinely cross-cutting work, pick the narrowest accurate set."),
+			"depends_on":       stringArray("Task IDs that must complete before this one is ready. v1 walker is linear so this is ignored; v2 will topo-walk. Emit [] for the first task."),
+			"test_command":     map[string]any{"type": "string", "description": "Karpathy Rule 4 — the executable acceptance command. Single shell command. Ralph iterates until this exits 0."},
+			"expected_outcome": map[string]any{"type": "string", "description": "Human-readable 'done looks like' description. Used by CBG's diff review and operator-facing logging."},
+		},
+		"required": []string{"id", "goal", "assumptions", "non_goals", "target_files", "test_command"},
+	}
+	return []agentic.ToolDefinition{{
+		Name:        ToolName,
+		Description: "Emit the dev-via-test plan. Stamps plan.* triples on the run entity (coordinator's loop entity, read from related_loops['run-loop-entity-id']). Per ADR-044 + [[encode-principles-structurally]]: required fields encode Karpathy's four guidelines structurally — the schema rejects payloads missing assumptions, non_goals, target_files, or test_command. Call exactly once per dev-via-test arc, before the terminal decide(action='planned').",
+		Parameters: map[string]any{
+			"type":                 "object",
+			"additionalProperties": false,
+			"properties": map[string]any{
+				"goal":                     map[string]any{"type": "string", "description": "Chain-level goal in user's own words. One sentence. Concrete and verifiable."},
+				"assumptions":              stringArray("Plan-level assumptions (Karpathy Rule 1). Surface what Lisa is taking for granted about the environment, deps, semantics. May be empty; emit [] explicitly if no plan-level assumptions."),
+				"non_goals":                stringArray("Plan-level anti-scope (Karpathy Rule 2). What this work explicitly excludes. May be empty; emit [] explicitly."),
+				"integration_test_command": map[string]any{"type": "string", "description": "CBG's chain-end full acceptance gate. Runs once at chain end across all task scope. Must be a single shell command."},
+				"revision":                 map[string]any{"type": "integer", "minimum": 1, "description": "Monotonic revision number, starting at 1. Bump on re-plan after coordinator amendment (Slice 3+ walker)."},
+				"tasks": map[string]any{
+					"type":        "array",
+					"minItems":    1,
+					"items":       taskSchema,
+					"description": "Ordered task list. v1 walker walks in order; v2 will respect depends_on. Each task is decomposable enough for one Ralph inner loop to converge.",
+				},
+			},
+			"required": []string{"goal", "assumptions", "non_goals", "integration_test_command", "tasks"},
+		},
+	}}
+}
+
+// Execute parses args, validates, stamps triples on the run entity.
+func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.ToolResult, error) {
+	if call.Name != ToolName {
+		return errResult(call, agentic.ToolErrorNotFound, "unknown tool: %s", call.Name)
+	}
+
+	plan, err := parseArgs(call.Arguments)
+	if err != nil {
+		return errResult(call, agentic.ToolErrorInvalidArgs, "%v", err)
+	}
+
+	runEntityID, err := runEntityFromCall(call)
+	if err != nil {
+		return errResult(call, agentic.ToolErrorInternal, "%v", err)
+	}
+
+	now := time.Now().UTC()
+	triples, err := plan.triples(runEntityID, now)
+	if err != nil {
+		return errResult(call, agentic.ToolErrorInternal, "build triples: %v", err)
+	}
+
+	if err := e.publisher.AddTriplesBatch(ctx, triples); err != nil {
+		return errResult(call, agentic.ToolErrorNetwork, "stamp plan triples on %s: %v", runEntityID, err)
+	}
+
+	body, _ := json.Marshal(map[string]any{
+		"run_entity_id":            runEntityID,
+		"task_count":               len(plan.Tasks),
+		"chain_start_git_tag":      defaultChainStartGitTag,
+		"integration_test_command": plan.IntegrationTestCommand,
+		"revision":                 plan.Revision,
+	})
+
+	e.logger.Info("emit_dev_via_test_plan stamped",
+		slog.String("run_entity_id", runEntityID),
+		slog.Int("task_count", len(plan.Tasks)),
+		slog.Int("revision", plan.Revision),
+		slog.String("integration_test_command", plan.IntegrationTestCommand))
+
+	return agentic.ToolResult{
+		CallID:   call.ID,
+		Name:     call.Name,
+		Content:  string(body),
+		Metadata: map[string]any{"run_entity_id": runEntityID, "task_count": len(plan.Tasks)},
+	}, nil
+}
+
+func runEntityFromCall(call agentic.ToolCall) (string, error) {
+	related, _ := call.Metadata[agentic.MetadataKeyRelatedLoops].(map[string]any)
+	if v, ok := related[runEntityRoleKey].(string); ok && v != "" {
+		return v, nil
+	}
+	return "", fmt.Errorf("emit_dev_via_test_plan: related_loops[%q] missing or empty in call metadata; spawn rule must pin run-loop-entity-id at chain start", runEntityRoleKey)
+}
+
+// task is the per-task spec shape after parse+validate.
+type task struct {
+	ID              string   `json:"id"`
+	Goal            string   `json:"goal"`
+	Assumptions     []string `json:"assumptions"`
+	NonGoals        []string `json:"non_goals"`
+	TargetFiles     []string `json:"target_files"`
+	DependsOn       []string `json:"depends_on"`
+	TestCommand     string   `json:"test_command"`
+	ExpectedOutcome string   `json:"expected_outcome"`
+}
+
+// plan is the parsed+validated payload.
+type plan struct {
+	Goal                   string   `json:"goal"`
+	Assumptions            []string `json:"assumptions"`
+	NonGoals               []string `json:"non_goals"`
+	IntegrationTestCommand string   `json:"integration_test_command"`
+	Revision               int      `json:"revision"`
+	Tasks                  []task   `json:"tasks"`
+}
+
+func parseArgs(raw map[string]any) (*plan, error) {
+	if raw == nil {
+		return nil, fmt.Errorf("arguments are required")
+	}
+	// Round-trip through JSON so the array shapes land as []string
+	// rather than []any (the unmarshaller handles the coercion).
+	buf, err := json.Marshal(raw)
+	if err != nil {
+		return nil, fmt.Errorf("marshal arguments: %w", err)
+	}
+	var p plan
+	dec := json.NewDecoder(strings.NewReader(string(buf)))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&p); err != nil {
+		return nil, fmt.Errorf("unmarshal arguments: %w", err)
+	}
+	if p.Revision == 0 {
+		p.Revision = 1
+	}
+	if err := p.validate(); err != nil {
+		return nil, err
+	}
+	return &p, nil
+}
+
+// validate enforces Karpathy-as-schema: required arrays must be
+// present (nil is rejected; [] is accepted), required scalars
+// non-empty, task IDs unique + pattern-matched, target_files ≥1.
+func (p *plan) validate() error {
+	if strings.TrimSpace(p.Goal) == "" {
+		return fmt.Errorf("plan.goal is required (non-empty)")
+	}
+	if p.Assumptions == nil {
+		return fmt.Errorf("plan.assumptions is required (emit [] explicitly if no assumptions — Karpathy Rule 1)")
+	}
+	if p.NonGoals == nil {
+		return fmt.Errorf("plan.non_goals is required (emit [] explicitly if nothing excluded — Karpathy Rule 2)")
+	}
+	if strings.TrimSpace(p.IntegrationTestCommand) == "" {
+		return fmt.Errorf("plan.integration_test_command is required (CBG's chain-end gate — Karpathy Rule 4 at plan scope)")
+	}
+	if len(p.Tasks) == 0 {
+		return fmt.Errorf("plan.tasks must contain at least one task")
+	}
+	if p.Revision < 1 {
+		return fmt.Errorf("plan.revision must be >= 1 (got %d)", p.Revision)
+	}
+
+	seenIDs := make(map[string]struct{}, len(p.Tasks))
+	for i, t := range p.Tasks {
+		if !taskIDPattern.MatchString(t.ID) {
+			return fmt.Errorf("tasks[%d].id %q does not match required pattern (lowercase alphanumeric + hyphens, 1-32 chars)", i, t.ID)
+		}
+		if _, dup := seenIDs[t.ID]; dup {
+			return fmt.Errorf("tasks[%d].id %q is duplicated; task IDs must be unique within a plan", i, t.ID)
+		}
+		seenIDs[t.ID] = struct{}{}
+		if strings.TrimSpace(t.Goal) == "" {
+			return fmt.Errorf("tasks[%d=%s].goal is required (non-empty)", i, t.ID)
+		}
+		if t.Assumptions == nil {
+			return fmt.Errorf("tasks[%d=%s].assumptions is required (emit [] explicitly)", i, t.ID)
+		}
+		if t.NonGoals == nil {
+			return fmt.Errorf("tasks[%d=%s].non_goals is required (emit [] explicitly)", i, t.ID)
+		}
+		if len(t.TargetFiles) == 0 {
+			return fmt.Errorf("tasks[%d=%s].target_files must contain at least one path (Karpathy Rule 3 — surgical changes; pick the narrowest accurate set)", i, t.ID)
+		}
+		if strings.TrimSpace(t.TestCommand) == "" {
+			return fmt.Errorf("tasks[%d=%s].test_command is required (Karpathy Rule 4 — goal-driven execution)", i, t.ID)
+		}
+		if t.DependsOn == nil {
+			t.DependsOn = []string{}
+			p.Tasks[i] = t
+		}
+	}
+	return nil
+}
+
+// triples assembles the per-emit triple batch. Returns an error
+// only if JSON-encoding an array field somehow fails (impossible
+// for the validated shape; defensive).
+func (p *plan) triples(runEntityID string, now time.Time) ([]message.Triple, error) {
+	base := func(pred string, obj any) message.Triple {
+		return message.Triple{
+			Subject:    runEntityID,
+			Predicate:  pred,
+			Object:     obj,
+			Source:     toolSource,
+			Timestamp:  now,
+			Confidence: 1.0,
+		}
+	}
+	jsonStr := func(v any) (string, error) {
+		b, err := json.Marshal(v)
+		if err != nil {
+			return "", err
+		}
+		return string(b), nil
+	}
+
+	assumptionsJSON, err := jsonStr(p.Assumptions)
+	if err != nil {
+		return nil, fmt.Errorf("encode plan.assumptions: %w", err)
+	}
+	nonGoalsJSON, err := jsonStr(p.NonGoals)
+	if err != nil {
+		return nil, fmt.Errorf("encode plan.non_goals: %w", err)
+	}
+
+	out := make([]message.Triple, 0, 8+len(p.Tasks)*8)
+	out = append(out,
+		base(predicatePlanGoal, p.Goal),
+		base(predicatePlanAssumptions, assumptionsJSON),
+		base(predicatePlanNonGoals, nonGoalsJSON),
+		base(predicatePlanIntegrationTestCmd, p.IntegrationTestCommand),
+		base(predicatePlanChainStartGitTag, defaultChainStartGitTag),
+		base(predicatePlanTaskCount, len(p.Tasks)),
+		base(predicatePlanRevision, p.Revision),
+		base(predicatePlanGeneratedAt, now.Format(time.RFC3339Nano)),
+	)
+
+	for i, t := range p.Tasks {
+		taskAssumptionsJSON, err := jsonStr(t.Assumptions)
+		if err != nil {
+			return nil, fmt.Errorf("encode tasks[%d=%s].assumptions: %w", i, t.ID, err)
+		}
+		taskNonGoalsJSON, err := jsonStr(t.NonGoals)
+		if err != nil {
+			return nil, fmt.Errorf("encode tasks[%d=%s].non_goals: %w", i, t.ID, err)
+		}
+		taskTargetFilesJSON, err := jsonStr(t.TargetFiles)
+		if err != nil {
+			return nil, fmt.Errorf("encode tasks[%d=%s].target_files: %w", i, t.ID, err)
+		}
+		taskDependsOnJSON, err := jsonStr(t.DependsOn)
+		if err != nil {
+			return nil, fmt.Errorf("encode tasks[%d=%s].depends_on: %w", i, t.ID, err)
+		}
+
+		prefix := predicatePlanTaskPrefix + t.ID + "."
+		out = append(out,
+			base(prefix+predicateTaskGoal, t.Goal),
+			base(prefix+predicateTaskAssumptions, taskAssumptionsJSON),
+			base(prefix+predicateTaskNonGoals, taskNonGoalsJSON),
+			base(prefix+predicateTaskTargetFiles, taskTargetFilesJSON),
+			base(prefix+predicateTaskDependsOn, taskDependsOnJSON),
+			base(prefix+predicateTaskTestCommand, t.TestCommand),
+			base(prefix+predicateTaskStatus, taskStatusReady),
+			base(prefix+predicateTaskPosition, i),
+		)
+		if strings.TrimSpace(t.ExpectedOutcome) != "" {
+			out = append(out, base(prefix+predicateTaskExpectedOutcome, t.ExpectedOutcome))
+		}
+	}
+	return out, nil
+}
+
+func errResult(call agentic.ToolCall, kind agentic.ToolErrorKind, format string, args ...any) (agentic.ToolResult, error) {
+	return agentic.ToolResult{
+		CallID:    call.ID,
+		Name:      call.Name,
+		Error:     fmt.Sprintf(format, args...),
+		ErrorKind: kind,
+	}, nil
+}

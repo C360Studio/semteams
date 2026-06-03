@@ -29,6 +29,7 @@ import (
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitautoresearchartifact"
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitautoresearchbaseline"
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitautoresearchmeasurement"
+	"github.com/c360studio/semteams/cmd/semteams/tools/emitdevviatestplan"
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitplan"
 	"github.com/c360studio/semteams/cmd/semteams/tools/querysandboxattestation"
 	"github.com/c360studio/semteams/cmd/semteams/tools/requestsandbox"
@@ -181,7 +182,48 @@ func registerProductTools(reg *agentictools.ExecutorRegistry, natsClient *natscl
 	if err := registerAutoresearchTools(reg, natsClient, platform, logger); err != nil {
 		return err
 	}
+	if err := registerDevViaTestTools(reg, natsClient, logger); err != nil {
+		return err
+	}
 	return registerChainBash(reg, natsClient, platform, logger)
+}
+
+// registerDevViaTestTools wires the dev-via-test pack's emit tools.
+// Slice 1 adds emit_dev_via_test_plan (Lisa's terminal commit).
+// Slices 2-4 may add additional executors (TBD per Ralph
+// measurement-tool decision in Slice 2 — reuse autoresearch's
+// emit_autoresearch_measurement with target=1.0 OR ship a new
+// emit_dev_via_test_measurement; will decide in PR 2).
+//
+// Skipped when natsClient is nil: emit_dev_via_test_plan needs the
+// live publisher to stamp plan.* triples. Mirrors the
+// registerEmitPlan / registerAutoresearchTools nil-NATS posture.
+//
+// Per ADR-044 §addendum 2026-06-03 framework-alignment review: no
+// upstream equivalent; migration target is the same generic
+// write_artifact upstream is sketching (ADR-028 §What's not built
+// here). See cmd/semteams/tools/README.md for the per-tool
+// migration table.
+func registerDevViaTestTools(reg *agentictools.ExecutorRegistry, natsClient *natsclient.Client, logger *slog.Logger) error {
+	if natsClient == nil {
+		logger.Warn("nats client unavailable; dev-via-test tools skipped",
+			slog.String("category", "dev-via-test"))
+		return nil
+	}
+	triplePublisher := agentictools.NewNATSTriplePublisher(natsClient)
+	if triplePublisher == nil {
+		logger.Warn("dev-via-test tools skipped: upstream returned nil triple-publisher",
+			slog.String("category", "dev-via-test"))
+		return nil
+	}
+	planExecutor := emitdevviatestplan.NewExecutor(triplePublisher, logger)
+	if err := reg.RegisterTool(emitdevviatestplan.ToolName, planExecutor); err != nil {
+		return fmt.Errorf("register %s: %w", emitdevviatestplan.ToolName, err)
+	}
+	logger.Info("Registered dev-via-test product tools",
+		slog.String("category", "dev-via-test"),
+		slog.Int("count", 1))
+	return nil
 }
 
 // registerSandboxManagerTools wires the ADR-043 Layer 2 tools:

@@ -1,0 +1,58 @@
+{
+  "id": "dev_via_test_coordinator_spawn_lisa",
+  "type": "expression",
+  "name": "Coordinator decide(dev_via_test) → dev-via-test-plan (Lisa)",
+  "description": "ADR-044 Slice 1 — first rule of the dev-via-test category pack. Fires when a coordinator loop terminates with decide(action=dev_via_test, reason=<user's implementation ask>). Spawns Lisa (dev-via-test-plan) with the coordinator loop ID as the RUN ENTITY (mirrors autoresearch pack's coordinator-loop-as-run-entity pattern). Lisa parses the user's prose into a Karpathy-shaped plan via emit_dev_via_test_plan, which stamps plan.* triples on the run entity for downstream Ralph (Slice 2) and CBG (Slice 4) consumption.",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "agent.loop.role",
+      "operator": "eq",
+      "value": "coordinator",
+      "required": true
+    },
+    {
+      "field": "coordinator.decision.next_action",
+      "operator": "eq",
+      "value": "dev_via_test",
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "add_triple",
+      "predicate": "dev_via_test.run.status",
+      "object": "active"
+    },
+    {
+      "type": "publish_agent",
+      "subject": "agent.task.dev-via-test-plan",
+      "role": "dev-via-test-plan",
+      "model": "research",
+      "tools": ["read_loop_result", "bash", "emit_dev_via_test_plan", "scratchpad", "decide"],
+      "tool_choice": { "mode": "required" },
+      "action_allowlist": ["planned", "needs_clarification"],
+      "properties": {
+        "run_loop_id": "$entity.instance",
+        "category": "dev_via_test",
+        "phase": "plan"
+      },
+      "related_loops": {
+        "dev-via-test-run": "$entity.instance",
+        "run-loop-entity-id": "$entity.id"
+      },
+      "prompt": "DEV-VIA-TEST PLAN — decompose the user's ask into a Karpathy-shaped plan.\n\nA coordinator at loop $entity.instance classified the user's message as a dev-via-test ask. Its loop entity is your RUN ENTITY — every plan.* triple you emit lands there for downstream Ralph + CBG consumption.\n\nYour job in this single loop:\n\n1. Call read_loop_result(loop_id=$entity.instance) to read the coordinator's terminal. The reason field contains the user's ask as the coordinator preserved it.\n\n2. Think structurally about the plan via scratchpad:\n   - assumptions (Karpathy Rule 1): environment, deps, semantics you're taking for granted\n   - non_goals (Karpathy Rule 2): explicit anti-scope; what this work excludes\n   - tasks: sequential decomposition. Each task has its own goal + target_files + test_command. Prefer fewer larger tasks over many tiny ones — ceremony is the cost, not the load-bearing primitive.\n   - integration_test_command: the chain-end full acceptance gate CBG runs\n\n3. Tag the chain start so CBG can diff later: bash git tag plan-start\n\n4. Call emit_dev_via_test_plan(goal, assumptions, non_goals, tasks, integration_test_command). The schema is strict — missing assumptions/non_goals/target_files/test_command rejects structurally. See your 10-emit-contract.md persona fragment for the field-by-field guide.\n\n5. Terminate with decide(action=\"planned\", reason=\"<one-line summary: N tasks targeting <integration test>>\").\n\nIf the user's ask is genuinely too vague to plan — you cannot pick a test command, or you cannot bound the file scope — terminate with decide(action=\"needs_clarification\", reason=\"<specifically what's missing — quote the user's ambiguous phrase>\"). The coordinator will route the question back to the user.\n\nYou're already inside the per-tenant devcontainer (the coordinator called request_sandbox before spawning you). bash routes there automatically via the chain-scoped wrapper."
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "pack": "dev_via_test",
+    "phase": "ADR-044 Slice 1 — Lisa spawn",
+    "adr": "docs/adr/044-dev-via-test-pack.md",
+    "category_token": "dev_via_test",
+    "run_entity_pattern": "Coordinator's own loop entity IS the run entity for the plan. plan.* triples land there; Ralph and CBG read them via lineage threading (subject override via run-loop-entity-id). Mirrors autoresearch pack pattern.",
+    "wire_shape_rationale": "The decide tool stays canonical (action + reason + subtopics + retry_hint). The plan structure is parsed by Lisa from the coordinator's reason field via the strict emit_dev_via_test_plan schema, not encoded in the wire. Per ADR-044 §Sponsor scenarios + autoresearch precedent.",
+    "tool_choice_rationale": "Required-mode keeps the planner on the tool path through emit_dev_via_test_plan. Without it, the planner risks text-only completion (semstreams#158 class) and the strict schema never executes."
+  }
+}

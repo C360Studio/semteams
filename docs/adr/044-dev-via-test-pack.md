@@ -419,6 +419,87 @@ gate (see §Stuck-task recovery).
    $-budget rule later; deferred until a real headless workload
    demands it.
 
+## Addendum 2026-06-03 — Slice 1 framework-alignment review
+
+Per CLAUDE.md "Product-Shell-Tool Discipline" and
+[[framework-alignment-review]]: Slice 1 adds one product-shell tool
+(`emit_dev_via_test_plan`). The review:
+
+**1. Upstream survey.** `~/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.96`
+ships these emit-shaped tools in `processor/agentic-tools/executors/`:
+
+- `decide` — structured terminal output. Pattern.
+- `emit_diagnosis` — typed stamp + render. Pattern.
+- `read_loop_result`, `read_entity`, `query_entities`,
+  `query_relationships` — graph reads. Pattern.
+- `submit_work` — terminal commit. Pattern.
+
+No existing emit-tool ships a Karpathy-schema validator +
+plan-as-triples stamping pattern. The closest siblings
+(`emit_research_artifact`, `emit_autoresearch_baseline`,
+`emit_plan`) all live in product code at `cmd/semteams/tools/`;
+none of them cover the per-task triple-stamping shape this tool
+needs (eight predicates per task ID, all prefixed
+`plan.task.<id>.*`).
+
+**2. Upstream roadmap check.**
+`semstreams/docs/adr/028-orchestration-architecture.md` §"What's not
+built here" anticipates a generic `write_artifact` / `read_artifact`
+/ `list_artifacts` suite. Not shipped in beta.96 (verified
+2026-06-03). Same posture as `emit_research_artifact` (per ADR-031
+§addendum 2026-04-30) and `emit_autoresearch_baseline` (per ADR-042
+§addendum 2026-05-29).
+
+**3. Case for product-shell-local.** The Karpathy schema enforcement
+is the **load-bearing primitive** of this ADR. Per
+[[encode-principles-structurally]]: the discipline (assumptions,
+non_goals, target_files, test_command must be explicitly surfaced)
+must live in code that REJECTS payloads missing those fields. A
+generic `write_artifact` accepting freeform JSON could not enforce
+this. The per-task triple-stamping pattern (`plan.task.<id>.*`) is
+also Lisa-specific — it's what makes the coordinator-walker
+(Slice 3) and Ralph's lineage-read (Slice 2) work without
+re-parsing JSON blobs.
+
+**4. Alternatives ruled out.**
+
+- *Reuse `emit_plan` (from the retired dev-via-spec arc).* Rejected:
+  `emit_plan` renders to markdown + stamps four pointer triples
+  (revision, epic_count, generated_at, path). Ralph + the coordinator
+  walker need *triples* (queryable, substitutable into prompts via
+  `$entity.triple.X`), not a markdown blob behind a path pointer.
+  The markdown rendering would just be ceremony.
+- *Per-element triples for arrays* (`plan.task.<id>.target_files.0`,
+  `plan.task.<id>.target_files.1`, ...). Rejected: triple-count
+  explosion (15 target_files = 15 triples) without any benefit —
+  the rule engine's `$entity.triple.X` substitution can't iterate
+  over indexed predicates today, so the consumer has to JSON-parse
+  anyway. JSON-encoded strings in single triples are the predictable
+  shape.
+- *Inline the schema validation in Lisa's persona prose.* Rejected
+  hard per [[encode-principles-structurally]] and the semspec
+  lesson: persona prose is hopeful, schema is load-bearing. The
+  whole point of using a schema for the Karpathy guidelines is that
+  the LLM CANNOT skip them.
+
+**5. Migration target.** When upstream ships the generic
+`write_artifact` suite (per ADR-028), evaluate migration of
+`emit_dev_via_test_plan` alongside `emit_research_artifact`,
+`emit_plan`, and all `emit_autoresearch_*`. Migration replaces the
+concrete executor with a configured one; the
+Karpathy-required-fields schema stays in product code regardless
+(it's domain-specific to the dev-via-test category contract). If
+upstream's generic primitive exposes a schema-validation hook, the
+JSON-Schema fragment (`taskSchema` + the plan-level required arrays
+in `ListTools()`) lifts cleanly into config. If not, the executor
+shape stays as-is and the migration is limited to swapping the
+triple-publishing backend.
+
+**6. tools/README.md row + ADR row recorded.** The single new tool
+appears in `cmd/semteams/tools/README.md`'s table with the migration
+target named explicitly. This addendum is the ADR-side evidence
+trail per CLAUDE.md.
+
 ## Cross-links
 
 - [ADR-035 dev-via-spec arc](035-dev-via-spec-arc.md) (superseded
