@@ -21,6 +21,12 @@
   "logic": "and",
   "on_enter": [
     {
+      "type": "add_triple",
+      "subject": "$entity.triple.lineage.run-loop-entity-id",
+      "predicate": "autoresearch.iteration.in_flight",
+      "object": "true"
+    },
+    {
       "type": "publish_agent",
       "subject": "agent.task.autoresearch-execute",
       "role": "autoresearch-execute",

@@ -78,19 +78,32 @@ construction time per the framework. The chain stalled after one
 iteration with `action_count=0`.
 
 The fix is a small state machine on the RUN entity that forces
-condition oscillation:
+condition oscillation. **The flag's true-side write happens from a
+different rule than rule 05** because the framework's self-write-
+revision filter (StatefulEvaluator's `prevState.SourceRevision >=
+ev.Revision` check) would suppress rule 05's re-evaluation against
+its own write, leaving wasMatching stuck at true and breaking the
+next Exited→Entered transition.
 
 | Phase | `iteration.in_flight` | Stamped by |
 |---|---|---|
-| Init (coordinator decides autoresearch) | `false` | Rule 01 `add_triple` |
-| Iteration N spawn | `true` | Rule 05 `add_triple` (alongside `publish_agent`) |
-| Iteration N execute completion | `false` | Rule 04a `add_triple` (alongside `experiment.completed`) — also rule 04b on failed-execute |
+| Init (coordinator decides autoresearch) | `"false"` | Rule 01 `add_triple` |
+| Propose → execute spawn | `"true"` | **Rule 03** `add_triple` via subject-override (external to rule 05's state tracker) |
+| Iteration N execute clean completion | `"false"` | Rule 04a `add_triple` (alongside `experiment.completed`) |
+| Iteration N execute loop-failed | `"false"` | Rule 04b `add_triple` (alongside `experiment.completed` + `experiment.loop_failed`) |
 
 Rule 05 (continue) and rule 06 (stop-cap) both require
-`iteration.in_flight == false`, so they only fire when no iteration
-is in progress. The toggle flip after each execute completion
-re-triggers the false→true transition on rule 05, restoring
-`on_enter` semantics per iteration. When count reaches cap, rule 06's
+`iteration.in_flight eq "false"`, so they only fire when no iteration
+is in progress. Rule 03 flips the flag to true when execute spawns;
+rule 04a/04b flip it back to false at execute completion. Rule 05
+re-Enters per iteration because each flip is an external write that
+properly updates its state tracker.
+
+**Note on value type**: in_flight is stamped as the string `"false"`
+or `"true"` (not bool). The framework's `Action.object` field is
+typed string; bool literals trip JSON unmarshal at config-load. The
+runtime `eq` comparison is string equality, which works correctly
+for boolean-shaped predicates. When count reaches cap, rule 06's
 conditions match (length_eq AND in_flight=false) and synthesize
 spawns.
 
