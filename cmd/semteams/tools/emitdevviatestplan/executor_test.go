@@ -69,6 +69,7 @@ func baseArgs() map[string]any {
 		"assumptions":              []any{"Go 1.25 toolchain available"},
 		"non_goals":                []any{"do not refactor time package"},
 		"integration_test_command": "go test ./... && go vet ./...",
+		"revision":                 float64(1),
 		"tasks":                    []any{baseTask()},
 	}
 }
@@ -329,20 +330,38 @@ func TestExecutor_MultiTaskOrdering(t *testing.T) {
 	}
 }
 
-func TestExecutor_RevisionDefaults(t *testing.T) {
+func TestExecutor_RevisionAbsentRejected(t *testing.T) {
+	// Per reviewer R1 (Slice 1 review): revision is required at the
+	// schema level. Absent (Go zero-int) and explicit zero both
+	// surface as the same validator error — no silent coercion.
 	args := baseArgs()
-	// No revision supplied → defaults to 1.
+	delete(args, "revision")
 	pub := &fakePub{}
 	e := NewExecutor(pub, slog.Default())
 	res, _ := e.Execute(context.Background(), agentic.ToolCall{
 		ID: "c", Name: ToolName, Arguments: args, Metadata: runMetadata(),
 	})
-	if res.Error != "" {
-		t.Fatalf("unexpected error: %s", res.Error)
+	if res.Error == "" {
+		t.Fatalf("expected error when revision absent, got none")
 	}
-	rev, _ := pub.find(predicatePlanRevision)
-	if rev != 1 {
-		t.Errorf("revision = %v, want 1 (default)", rev)
+	if !strings.Contains(res.Error, "plan.revision is required") {
+		t.Errorf("error = %q, want substring %q", res.Error, "plan.revision is required")
+	}
+}
+
+func TestExecutor_RevisionZeroRejected(t *testing.T) {
+	args := baseArgs()
+	args["revision"] = float64(0)
+	pub := &fakePub{}
+	e := NewExecutor(pub, slog.Default())
+	res, _ := e.Execute(context.Background(), agentic.ToolCall{
+		ID: "c", Name: ToolName, Arguments: args, Metadata: runMetadata(),
+	})
+	if res.Error == "" {
+		t.Fatalf("expected error when revision=0, got none")
+	}
+	if !strings.Contains(res.Error, "plan.revision is required") {
+		t.Errorf("error = %q, want substring %q", res.Error, "plan.revision is required")
 	}
 }
 
@@ -373,5 +392,51 @@ func TestExecutor_UnknownFieldsRejected(t *testing.T) {
 	})
 	if res.Error == "" {
 		t.Errorf("expected error on unknown top-level field")
+	}
+}
+
+func TestExecutor_UnknownTaskFieldRejected(t *testing.T) {
+	// Per reviewer N2 (Slice 1 review): per-task unknown-field
+	// rejection is the same DisallowUnknownFields call walking into
+	// []task — pin it explicitly so a future schema split doesn't
+	// silently relax this side.
+	args := baseArgs()
+	task := baseTask()
+	task["unexpected_task_field"] = "should fail"
+	args["tasks"] = []any{task}
+	pub := &fakePub{}
+	e := NewExecutor(pub, slog.Default())
+	res, _ := e.Execute(context.Background(), agentic.ToolCall{
+		ID: "c", Name: ToolName, Arguments: args, Metadata: runMetadata(),
+	})
+	if res.Error == "" {
+		t.Errorf("expected error on per-task unknown field")
+	}
+	if !strings.Contains(res.Error, "unknown field") {
+		t.Errorf("error = %q, want substring %q", res.Error, "unknown field")
+	}
+}
+
+func TestExecutor_ExplicitNullRequiredArrayRejected(t *testing.T) {
+	// Per reviewer N7 (Slice 1 review): the validator rejects nil
+	// for required arrays. Persona spec says "emit [] explicitly" —
+	// explicit null is not [] and must surface as a clear error
+	// (not silently treated as the empty array).
+	for _, field := range []string{"assumptions", "non_goals"} {
+		t.Run("plan."+field+" null", func(t *testing.T) {
+			args := baseArgs()
+			args[field] = nil
+			pub := &fakePub{}
+			e := NewExecutor(pub, slog.Default())
+			res, _ := e.Execute(context.Background(), agentic.ToolCall{
+				ID: "c", Name: ToolName, Arguments: args, Metadata: runMetadata(),
+			})
+			if res.Error == "" {
+				t.Fatalf("expected error when plan.%s = null", field)
+			}
+			if !strings.Contains(res.Error, "plan."+field+" is required") {
+				t.Errorf("error = %q, want substring %q", res.Error, "plan."+field+" is required")
+			}
+		})
 	}
 }

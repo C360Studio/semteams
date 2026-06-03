@@ -173,7 +173,7 @@ func (e *Executor) ListTools() []agentic.ToolDefinition {
 				"assumptions":              stringArray("Plan-level assumptions (Karpathy Rule 1). Surface what Lisa is taking for granted about the environment, deps, semantics. May be empty; emit [] explicitly if no plan-level assumptions."),
 				"non_goals":                stringArray("Plan-level anti-scope (Karpathy Rule 2). What this work explicitly excludes. May be empty; emit [] explicitly."),
 				"integration_test_command": map[string]any{"type": "string", "description": "CBG's chain-end full acceptance gate. Runs once at chain end across all task scope. Must be a single shell command."},
-				"revision":                 map[string]any{"type": "integer", "minimum": 1, "description": "Monotonic revision number, starting at 1. Bump on re-plan after coordinator amendment (Slice 3+ walker)."},
+				"revision":                 map[string]any{"type": "integer", "minimum": 1, "description": "Monotonic revision number, starting at 1. Bump on re-plan after coordinator amendment (Slice 3+ walker). Required so absent vs explicit-zero never silently coerces to 1."},
 				"tasks": map[string]any{
 					"type":        "array",
 					"minItems":    1,
@@ -181,7 +181,7 @@ func (e *Executor) ListTools() []agentic.ToolDefinition {
 					"description": "Ordered task list. v1 walker walks in order; v2 will respect depends_on. Each task is decomposable enough for one Ralph inner loop to converge.",
 				},
 			},
-			"required": []string{"goal", "assumptions", "non_goals", "integration_test_command", "tasks"},
+			"required": []string{"goal", "assumptions", "non_goals", "integration_test_command", "revision", "tasks"},
 		},
 	}}
 }
@@ -280,9 +280,10 @@ func parseArgs(raw map[string]any) (*plan, error) {
 	if err := dec.Decode(&p); err != nil {
 		return nil, fmt.Errorf("unmarshal arguments: %w", err)
 	}
-	if p.Revision == 0 {
-		p.Revision = 1
-	}
+	// Per reviewer R1 (Slice 1 review): no default coercion. Absent
+	// (Go zero-int) and explicit `0` both surface as the same
+	// validator error — schema authoritative. Coordinator re-plan
+	// (Slice 3+) must always supply revision explicitly.
 	if err := p.validate(); err != nil {
 		return nil, err
 	}
@@ -309,7 +310,7 @@ func (p *plan) validate() error {
 		return fmt.Errorf("plan.tasks must contain at least one task")
 	}
 	if p.Revision < 1 {
-		return fmt.Errorf("plan.revision must be >= 1 (got %d)", p.Revision)
+		return fmt.Errorf("plan.revision is required and must be >= 1 (got %d); first emit is revision=1, bump on coordinator-requested re-plan", p.Revision)
 	}
 
 	seenIDs := make(map[string]struct{}, len(p.Tasks))

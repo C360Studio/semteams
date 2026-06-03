@@ -215,6 +215,52 @@ func TestCoordinatorDecisionContractHasDevViaTest(t *testing.T) {
 	}
 }
 
+// TestDevViaTestChainStartTagLiteralConsistency pins the
+// `plan-start` literal across the executor constant + Lisa's spawn
+// prompt + the persona's git-tag instruction. Per reviewer N4
+// (Slice 1 review): if any one of these three drifts, CBG (Slice
+// 4) cannot diff the chain-end state against the chain-start
+// snapshot — silent failure mode that would surface only when
+// Slice 4 runs.
+//
+// The literal lives in three places by design (no string substitution
+// across rule/persona boundaries today); this test ensures all three
+// stay in sync.
+func TestDevViaTestChainStartTagLiteralConsistency(t *testing.T) {
+	const literal = "plan-start"
+
+	// Source 1: spawn rule prompt (rule 01's instruction to Lisa).
+	ruleData, err := os.ReadFile(filepath.Join(devViaTestPackDir, "01-coordinator-dev-via-test-spawn.json"))
+	if err != nil {
+		t.Fatalf("read rule 01: %v", err)
+	}
+	if !strings.Contains(string(ruleData), "git tag "+literal) {
+		t.Errorf("rule 01 spawn prompt does not contain %q — Lisa won't create the tag CBG diffs against", "git tag "+literal)
+	}
+
+	// Source 2: Lisa's persona 00-identity.md (the redundant instruction
+	// so the persona reads coherently when read standalone).
+	personaData, err := os.ReadFile("../../configs/personas/fragments/dev-via-test-plan/00-identity.md")
+	if err != nil {
+		t.Fatalf("read 00-identity.md: %v", err)
+	}
+	if !strings.Contains(string(personaData), "git tag "+literal) {
+		t.Errorf("dev-via-test-plan 00-identity.md does not contain %q", "git tag "+literal)
+	}
+
+	// Source 3: executor's defaultChainStartGitTag constant (via the
+	// triple it stamps). We check the README's documented value since
+	// the executor's constant is unexported; pack README is authoritative
+	// for what downstream consumers (Slice 4 CBG) will read.
+	readmeData, err := os.ReadFile(filepath.Join(devViaTestPackDir, "README.md"))
+	if err != nil {
+		t.Fatalf("read pack README: %v", err)
+	}
+	if !strings.Contains(string(readmeData), `plan.chain_start_git_tag        = "`+literal+`"`) {
+		t.Errorf("pack README does not document plan.chain_start_git_tag = %q — consumer drift risk", literal)
+	}
+}
+
 // TestDevViaTestPackWiredInFlowBootstrap asserts the Slice 1 spawn
 // rule's filename appears in flow-bootstrap.json's rules_files list.
 // Without this, the rule never loads at boot and Lisa never spawns
