@@ -500,6 +500,104 @@ appears in `cmd/semteams/tools/README.md`'s table with the migration
 target named explicitly. This addendum is the ADR-side evidence
 trail per CLAUDE.md.
 
+## Addendum 2026-06-03 — Slice 2 (Ralph executor) framework-alignment review + v1 binary semantics
+
+Slice 2 adds one product-shell tool (`emit_dev_via_test_measurement`)
+and three rules (04a/04b/08). The framework-alignment review for
+the new tool + a load-bearing scope decision (v1 binary semantics
+vs the ADR's original autoresearch-pattern reuse).
+
+### Framework-alignment review — `emit_dev_via_test_measurement`
+
+**1. Upstream survey.** Same baseline as Slice 1
+(`semstreams@v1.0.0-beta.96`). No upstream "per-iteration stamp"
+primitive — the closest pattern is `emit_diagnosis` (ops agent)
+which writes typed finding triples but does not condition on
+agentic-loop iteration semantics.
+
+**2. Closest sibling: `emit_autoresearch_measurement`.** That tool
+implements full empirical-reviewer logic (read best.value → compare
+→ stamp outcome → maybe update best). Initial ADR §Open Q 5
+asked: reuse with target=1.0 / higher-is-better inversion, or new
+tool? Decision: **new tool**, because:
+
+- *Semantics genuinely diverge.* Autoresearch's lower-is-better
+  metric optimization has no terminal — every iteration is one of
+  N until the cap. Dev-via-test's `value==1.0` (or simply
+  `pass=true`) IS the terminal — the loop stops, no further
+  iteration. Modeling this as "lower-is-better with target = 0"
+  via inversion is unnatural; the terminal-stop concept doesn't
+  exist in autoresearch's contract.
+- *v1 binary semantics need much less machinery.* No best.value
+  tracking, no kept/reverted dance, no `compareOutcome` function.
+  Just stamp pass + value + tails. ~150 LOC vs autoresearch's ~350.
+- *Autoresearch's contract surface stays clean.* No callers need
+  to opt-in to a direction param; no "is this for autoresearch or
+  for dev-via-test?" branching.
+- *V2 consolidation stays open.* If v2 dev-via-test introduces
+  fractional convergence with kept/reverted, evaluate consolidating
+  with `emit_autoresearch_measurement` at that point — both tools
+  would then implement the same "read best, compare, stamp" shape.
+
+**3. Migration target.** Same as Slice 1 + autoresearch: upstream's
+planned generic `write_artifact` suite ([ADR-028 §What's not built
+here]). If upstream lands it AND the dev-via-test semantics
+generalize to "single-iteration stamp", migration is straightforward.
+
+### V1 binary semantics — scope decision
+
+ADR-044's "Reuse vs deltas" table (line 182) listed reuse of
+autoresearch rule 04c (best.value upsert) with "invert / target 1.0"
+adaptation. Slice 2 **does not** ship rule 04c. Rationale:
+
+- **The dev-via-test test_command is binary in v1.** Either
+  `go test ./...` exits 0 (all tests pass) or it doesn't. There is
+  no "passed 0.7 of tests" until the persona is taught to parse
+  `go test -json` and report fractional progress — which is
+  meaningful work the MVP-1 sponsor scenario (@mavlink-decode)
+  does not require.
+- **No best.value tracking is needed when value is binary.** The
+  value is always 0.0 or 1.0. Once you see 1.0, you're done. The
+  kept/reverted machinery exists in autoresearch because each
+  iteration's change might HURT the metric; for dev-via-test, every
+  iteration is trying to fix tests — there's no harm in changes
+  that "don't help" because we just don't terminate yet.
+- **Forward-compatible wire.** The `emit_dev_via_test_measurement`
+  tool accepts an optional `value` field (0.0..1.0); persona + rules
+  don't read it yet. When v2 introduces fractional convergence, we
+  add rule 04c, extend the persona's "decide between iterations"
+  guidance, and the wire stays backward-compatible.
+- **Defer-with-evidence posture.** If MVP-1 smoke shows Ralph
+  thrashing (e.g., making changes that pass some tests but break
+  others, with no improvement signal), v2 fractional + kept/reverted
+  becomes the documented remediation. Until then, framework
+  `max_iterations` + coordinator `ask_user` (per §Stuck-task
+  recovery) are the safety nets.
+
+### Cross-entity stamping pattern (rules 04a/04b)
+
+Rules 04a/04b each stamp TWO triples — one on Ralph's own loop
+entity (`dev_via_test.execute.outcome`), one on the run entity
+(`dev_via_test.execute.{task_completed,task_failed}`) via
+`$entity.triple.lineage.run-loop-entity-id` subject substitution.
+
+The second triple is load-bearing for Slice 3: the coordinator
+walker watches the run entity for these markers to know which
+Ralph just finished and pick the next ready task.
+
+We do NOT mutate `plan.task.<id>.status` from rules 04a/04b
+directly because the rule engine substitutes triple OBJECTS but
+not PREDICATE FRAGMENTS in beta.96. Predicate substitution
+(`plan.task.${TASK_ID}.status`) would either require framework
+support OR per-task-ID rule generation (cardinality explosion).
+The walker handles per-task status mutation in coordinator code
+via parameterized `update_triple` actions in Slice 3.
+
+This is a deliberate scope split between Slice 2 (data-plane:
+Ralph stamps its terminal state on lineage-threaded entities) and
+Slice 3 (control-plane: walker translates terminal state into
+plan.task.<id>.status mutations + next-task dispatch).
+
 ## Cross-links
 
 - [ADR-035 dev-via-spec arc](035-dev-via-spec-arc.md) (superseded

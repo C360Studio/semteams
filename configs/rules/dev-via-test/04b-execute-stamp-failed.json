@@ -1,0 +1,43 @@
+{
+  "id": "dev_via_test_execute_stamp_failed",
+  "type": "expression",
+  "name": "Ralph loop-failed → stamp task failed on run entity for coordinator pickup",
+  "description": "ADR-044 Slice 2 — Ralph terminal stamp for the loop-failed path. Fires when Ralph's loop terminates with outcome=failed (framework max_iterations ceiling hit, NATS error, panic — anything where decide() never ran). Per ADR-044 §Stuck-task recovery: there is NO auto-retry. This rule stamps dev_via_test.execute.outcome=failed on Ralph's loop entity AND dev_via_test.execute.task_failed=<Ralph's loop ID> on the run entity. Slice 3's walker, on coordinator wake-up, reads these triples + Ralph's stderr_tail (already stamped by emit_dev_via_test_measurement's last call), and emits decide(action='ask_user', reason='task <id> stuck after <N> iters; last error: ...') routing to the human for next-move decision. There is no rule 04c (no best.value upsert) in v1 binary semantics — see ADR-044 §addendum 2026-06-03 Slice 2.",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "agent.loop.role",
+      "operator": "eq",
+      "value": "dev-via-test-execute",
+      "required": true
+    },
+    {
+      "field": "agent.loop.outcome",
+      "operator": "eq",
+      "value": "failed",
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "add_triple",
+      "predicate": "dev_via_test.execute.outcome",
+      "object": "failed"
+    },
+    {
+      "type": "add_triple",
+      "subject": "$entity.triple.lineage.run-loop-entity-id",
+      "predicate": "dev_via_test.execute.task_failed",
+      "object": "$entity.instance"
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "pack": "dev_via_test",
+    "phase": "ADR-044 Slice 2 — Ralph terminal failed",
+    "adr": "docs/adr/044-dev-via-test-pack.md",
+    "recovery_posture": "No auto-retry. Per ADR-044 §Stuck-task recovery: coordinator owns recovery via ask_user. The walker (Slice 3) reads dev_via_test.execute.task_failed + the latest dev_via_test.measurement.stderr_tail (already on Ralph's loop entity) and routes to ask_user with a quote of the actual error. The user decides: amend the spec + re-dispatch, mark task blocked + skip, or kill the chain.",
+    "outcome_difference_from_autoresearch": "Autoresearch rule 04b counts loop-failed executes toward the iteration cap (cap budget = execute attempts, including failures). Dev-via-test has NO per-task iteration cap (framework max_iterations is the only ceiling); loop-failed routes directly to ask_user with no counter to maintain."
+  }
+}

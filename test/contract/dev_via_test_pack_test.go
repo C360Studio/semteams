@@ -261,9 +261,9 @@ func TestDevViaTestChainStartTagLiteralConsistency(t *testing.T) {
 	}
 }
 
-// TestDevViaTestPackWiredInFlowBootstrap asserts the Slice 1 spawn
-// rule's filename appears in flow-bootstrap.json's rules_files list.
-// Without this, the rule never loads at boot and Lisa never spawns
+// TestDevViaTestPackWiredInFlowBootstrap asserts the Slice 1 + 2
+// rule filenames appear in flow-bootstrap.json's rules_files list.
+// Without this, the rules never load at boot and the pack is dead
 // regardless of how good the rule JSON itself is. Mirrors the
 // rules_files_paths_test posture.
 func TestDevViaTestPackWiredInFlowBootstrap(t *testing.T) {
@@ -271,10 +271,233 @@ func TestDevViaTestPackWiredInFlowBootstrap(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read flow-bootstrap.json: %v", err)
 	}
-	want := "/app/configs/rules/dev-via-test/01-coordinator-dev-via-test-spawn.json"
-	if !strings.Contains(string(data), want) {
-		t.Errorf("flow-bootstrap.json rules_files missing %q — Slice 1 spawn rule never loads at boot", want)
+	body := string(data)
+	for _, want := range []string{
+		"/app/configs/rules/dev-via-test/01-coordinator-dev-via-test-spawn.json",
+		"/app/configs/rules/dev-via-test/04a-execute-stamp-converged.json",
+		"/app/configs/rules/dev-via-test/04b-execute-stamp-failed.json",
+		"/app/configs/rules/dev-via-test/08-loop-failed-pause.json",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("flow-bootstrap.json rules_files missing %q — rule never loads at boot", want)
+		}
 	}
+}
+
+// TestDevViaTestPack_04a_ConvergedRule pins the Slice 2 Ralph-success
+// terminal rule. The pack's plan-walker hangs off this rule's stamp
+// of dev_via_test.execute.task_completed on the run entity — Slice 3
+// reads it to know which Ralph just finished and pick the next task.
+//
+// Invariants:
+//
+//  1. Conditions match dev-via-test-execute role + outcome=success +
+//     dev_via_test.measurement.pass=true. All three are load-bearing
+//     (role differentiates from Lisa/CBG; outcome=success ensures
+//     decide() ran; measurement.pass=true is the convergence signal).
+//  2. Stamps dev_via_test.execute.outcome=converged on Ralph's own
+//     entity (audit + slice 3 read convenience).
+//  3. Stamps dev_via_test.execute.task_completed=<ralph-loop-id> on
+//     the RUN entity via $entity.triple.lineage.run-loop-entity-id
+//     subject substitution. THIS is the walker's pickup signal.
+func TestDevViaTestPack_04a_ConvergedRule(t *testing.T) {
+	rule := loadDevViaTestRule(t, "04a-execute-stamp-converged.json")
+
+	if !devViaTestRoleCondition(rule, "dev-via-test-execute") {
+		t.Error("rule 04a does not condition on agent.loop.role = dev-via-test-execute")
+	}
+	if !devViaTestOutcomeCondition(rule, "success") {
+		t.Error("rule 04a does not condition on agent.loop.outcome = success")
+	}
+	if !devViaTestMeasurementPassCondition(rule, true) {
+		t.Error("rule 04a does not condition on dev_via_test.measurement.pass = true — converged signal missing")
+	}
+
+	// Invariant 2 + 3: dual-target stamps.
+	var foundOwnOutcome, foundRunCompleted bool
+	for _, a := range rule.OnEnter {
+		if a.Type != "add_triple" {
+			continue
+		}
+		switch a.Predicate {
+		case "dev_via_test.execute.outcome":
+			if obj, ok := a.Object.(string); !ok || obj != "converged" {
+				t.Errorf("rule 04a outcome stamp object = %v; want %q", a.Object, "converged")
+			}
+			if a.Subject != "" {
+				t.Errorf("rule 04a outcome stamp subject = %q; want empty (defaults to Ralph's own entity)", a.Subject)
+			}
+			foundOwnOutcome = true
+		case "dev_via_test.execute.task_completed":
+			if a.Subject != "$entity.triple.lineage.run-loop-entity-id" {
+				t.Errorf("rule 04a task_completed subject = %q; want %q — walker pickup needs run-entity stamp via lineage", a.Subject, "$entity.triple.lineage.run-loop-entity-id")
+			}
+			if obj, ok := a.Object.(string); !ok || obj != "$entity.instance" {
+				t.Errorf("rule 04a task_completed object = %v; want %q (Ralph's loop ID for walker to read measurement triples)", a.Object, "$entity.instance")
+			}
+			foundRunCompleted = true
+		}
+	}
+	if !foundOwnOutcome {
+		t.Error("rule 04a missing add_triple dev_via_test.execute.outcome=converged on Ralph entity")
+	}
+	if !foundRunCompleted {
+		t.Error("rule 04a missing add_triple dev_via_test.execute.task_completed on run entity — Slice 3 walker has no pickup signal")
+	}
+}
+
+// TestDevViaTestPack_04b_FailedRule pins the Slice 2 Ralph-failed
+// terminal rule. Mirror of 04a for the loop-failed path.
+//
+// Invariants:
+//
+//  1. Conditions match dev-via-test-execute role + outcome=failed.
+//     NO measurement.pass condition (because if the loop failed,
+//     measurement may have never been called; the FRAMEWORK termination
+//     is the signal).
+//  2. Stamps dev_via_test.execute.outcome=failed on Ralph's entity.
+//  3. Stamps dev_via_test.execute.task_failed=<ralph-loop-id> on the
+//     run entity for walker pickup.
+//  4. Does NOT stamp chain.paused.marker — that's rule 08's job for
+//     non-execute roles. Ralph failures go through coordinator
+//     wake-up → ask_user (per ADR §Stuck-task recovery).
+func TestDevViaTestPack_04b_FailedRule(t *testing.T) {
+	rule := loadDevViaTestRule(t, "04b-execute-stamp-failed.json")
+
+	if !devViaTestRoleCondition(rule, "dev-via-test-execute") {
+		t.Error("rule 04b does not condition on agent.loop.role = dev-via-test-execute")
+	}
+	if !devViaTestOutcomeCondition(rule, "failed") {
+		t.Error("rule 04b does not condition on agent.loop.outcome = failed")
+	}
+
+	var foundOwnOutcome, foundRunFailed bool
+	for _, a := range rule.OnEnter {
+		if a.Type != "add_triple" {
+			continue
+		}
+		switch a.Predicate {
+		case "dev_via_test.execute.outcome":
+			if obj, ok := a.Object.(string); !ok || obj != "failed" {
+				t.Errorf("rule 04b outcome stamp object = %v; want %q", a.Object, "failed")
+			}
+			foundOwnOutcome = true
+		case "dev_via_test.execute.task_failed":
+			if a.Subject != "$entity.triple.lineage.run-loop-entity-id" {
+				t.Errorf("rule 04b task_failed subject = %q; want %q", a.Subject, "$entity.triple.lineage.run-loop-entity-id")
+			}
+			if obj, ok := a.Object.(string); !ok || obj != "$entity.instance" {
+				t.Errorf("rule 04b task_failed object = %v; want %q", a.Object, "$entity.instance")
+			}
+			foundRunFailed = true
+		case "chain.paused.marker":
+			t.Error("rule 04b stamps chain.paused.marker — must NOT; Ralph failures go through coordinator wake-up + ask_user, not chain pause (per ADR-044 §Stuck-task recovery). Pause posture is for non-execute roles only (rule 08).")
+		}
+	}
+	if !foundOwnOutcome {
+		t.Error("rule 04b missing add_triple dev_via_test.execute.outcome=failed")
+	}
+	if !foundRunFailed {
+		t.Error("rule 04b missing add_triple dev_via_test.execute.task_failed on run entity")
+	}
+}
+
+// TestDevViaTestPack_08_LoopFailedPauseExcludesRalph pins the Slice 2
+// chain-pause rule's role list. Ralph (dev-via-test-execute) must be
+// EXCLUDED — its failures route through 04b → coordinator wake-up
+// → ask_user, NOT chain pause. Mirrors autoresearch rule 11's
+// exclusion of autoresearch-execute.
+func TestDevViaTestPack_08_LoopFailedPauseExcludesRalph(t *testing.T) {
+	rule := loadDevViaTestRule(t, "08-loop-failed-pause.json")
+	for _, c := range rule.Conditions {
+		if c.Field != "agent.loop.role" || c.Operator != "in" {
+			continue
+		}
+		roles, ok := c.Value.([]any)
+		if !ok {
+			t.Fatalf("rule 08 agent.loop.role condition value is not an array: %T", c.Value)
+		}
+		for _, r := range roles {
+			s, _ := r.(string)
+			if s == "dev-via-test-execute" {
+				t.Error("rule 08 includes dev-via-test-execute in its role list — must be excluded so Ralph failures route through 04b (coordinator wake-up + ask_user), not chain pause")
+			}
+		}
+		// Lisa must be present (no in-arc recovery for Lisa).
+		var foundLisa bool
+		for _, r := range roles {
+			if s, _ := r.(string); s == "dev-via-test-plan" {
+				foundLisa = true
+				break
+			}
+		}
+		if !foundLisa {
+			t.Error("rule 08 missing dev-via-test-plan in its role list — Lisa failures need to pause the chain (no auto-retry path)")
+		}
+		return
+	}
+	t.Error("rule 08 has no agent.loop.role condition with `in` operator")
+}
+
+// TestDevViaTestExecutePersonaTeachesIterationDiscipline asserts
+// Ralph's persona corpus carries the load-bearing concepts: the
+// target_files constraint (Karpathy Rule 3), the test_command
+// convergence signal (Karpathy Rule 4), the emit_dev_via_test_measurement
+// terminal contract, and the no-numeric-caps posture (per
+// [[coordinator-first-not-persona-patches]] and ADR-044 §Stuck-task
+// recovery).
+func TestDevViaTestExecutePersonaTeachesIterationDiscipline(t *testing.T) {
+	root := "../../configs/personas/fragments/dev-via-test-execute"
+	got, err := concatFragmentsDevViaTest(root)
+	if err != nil {
+		t.Fatalf("read dev-via-test-execute fragments: %v", err)
+	}
+	for _, want := range []string{
+		"target_files",                  // Karpathy Rule 3 constraint
+		"test_command",                  // Karpathy Rule 4 convergence signal
+		"emit_dev_via_test_measurement", // terminal commit tool
+		"needs_clarification",           // escalation path
+		"max_iterations",                // framework cap (not persona-level)
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("dev-via-test-execute persona missing %q — Ralph's iteration discipline depends on this concept being taught", want)
+		}
+	}
+	// Negative check: persona MUST NOT carry numeric caps like
+	// "you have 5 tries" — per ADR-044 §Stuck-task recovery, framework
+	// max_iterations is the safety floor; persona prose stays job-focused.
+	for _, badPattern := range []string{
+		"you have 5 tries", "you have 10 tries", "iteration cap",
+		"3 retries", "up to 5 attempts",
+	} {
+		if strings.Contains(got, badPattern) {
+			t.Errorf("dev-via-test-execute persona contains numeric cap phrase %q — per ADR-044, persona has no caps; framework max_iterations is the safety floor", badPattern)
+		}
+	}
+}
+
+// --- helpers added in Slice 2 ---
+
+func devViaTestOutcomeCondition(r *devViaTestRuleJSON, outcome string) bool {
+	for _, c := range r.Conditions {
+		if c.Field == "agent.loop.outcome" && c.Operator == "eq" {
+			if s, ok := c.Value.(string); ok && s == outcome {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func devViaTestMeasurementPassCondition(r *devViaTestRuleJSON, want bool) bool {
+	for _, c := range r.Conditions {
+		if c.Field == "dev_via_test.measurement.pass" && c.Operator == "eq" {
+			if b, ok := c.Value.(bool); ok && b == want {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // --- types + helpers (mirror autoresearchRuleJSON shape) ---

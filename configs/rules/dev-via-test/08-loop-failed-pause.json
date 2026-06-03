@@ -1,0 +1,42 @@
+{
+  "id": "dev_via_test_loop_failed_pause",
+  "type": "expression",
+  "name": "Dev-via-test non-execute role loop-failed → pause chain",
+  "description": "ADR-044 Slice 2 — pause the chain when a non-Ralph dev-via-test role's loop terminates with outcome=failed. Mirrors autoresearch rule 11's posture: execute (Ralph) failures route through 04b (counted toward coordinator wake-up + ask_user); failures in OTHER roles (Lisa today, CBG in Slice 4, plus any reviewer-pack additions) have no in-arc recovery path and need explicit chain pause for operator review. Stamps chain.paused.marker on the loop entity which the chainpause subscriber propagates onto the chain entity via §D5 audit triples (ADR-037).",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "agent.loop.role",
+      "operator": "in",
+      "value": ["dev-via-test-plan"],
+      "required": true
+    },
+    {
+      "field": "agent.loop.outcome",
+      "operator": "eq",
+      "value": "failed",
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "add_triple",
+      "predicate": "chain.paused.marker",
+      "object": "dev_via_test_role_loop_failed"
+    },
+    {
+      "type": "add_triple",
+      "predicate": "chain.paused.role",
+      "object": "$entity.triple.agent.loop.role"
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "pack": "dev_via_test",
+    "phase": "ADR-044 Slice 2 — non-execute chain pause",
+    "adr": "docs/adr/044-dev-via-test-pack.md",
+    "roles_excluded": "dev-via-test-execute (Ralph) — handled by rule 04b instead (stamp + coordinator wake-up + ask_user, no chain pause; the user gets to decide before the chain dies).",
+    "roles_to_add_in_slice_4": "reviewer-dev-via-test (CBG) — Slice 4 will append this to the role 'in' list."
+  }
+}

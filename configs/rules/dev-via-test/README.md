@@ -41,10 +41,10 @@ and @mavlink-hard Accept-gate.
 
 | Slice | Scope | Status |
 |---|---|---|
-| 1 | Lisa planner — `emit_dev_via_test_plan` + persona + rule 01 spawn | in progress |
-| 2 | Ralph executor — measurement tool + persona + rules 03/04a/04b/04c | pending |
-| 3 | Plan walker — coordinator wake-up rule 05 + plan-walking persona fragment | pending |
-| 4 | CBG reviewer — persona + rules 06/07/08 | pending |
+| 1 | Lisa planner — `emit_dev_via_test_plan` + persona + rule 01 spawn | shipped |
+| 2 | Ralph executor — `emit_dev_via_test_measurement` + persona + rules 04a/04b/08 | shipped |
+| 3 | Plan walker — coordinator wake-up + plan-walking persona fragment | pending |
+| 4 | CBG reviewer — persona + rules 06/07; 08 extended | pending |
 
 ## Naming convention
 
@@ -102,8 +102,51 @@ No `plan.task.<id>.retry_count` triple — per ADR-044
 | File | Trigger | Spawn / Stamp |
 |---|---|---|
 | `01-coordinator-dev-via-test-spawn.json` | coordinator decide(dev_via_test) | Lisa + stamp `dev_via_test.run.status=active` on coordinator (run) entity |
+| `04a-execute-stamp-converged.json` | Ralph success + `dev_via_test.measurement.pass=true` | Stamp `dev_via_test.execute.outcome=converged` on Ralph entity + `dev_via_test.execute.task_completed=<ralph-loop-id>` on run entity (for Slice 3 walker pickup) |
+| `04b-execute-stamp-failed.json` | Ralph outcome=failed (max-iter / panic / NATS error) | Stamp `dev_via_test.execute.outcome=failed` on Ralph entity + `dev_via_test.execute.task_failed=<ralph-loop-id>` on run entity. No auto-retry per ADR §Stuck-task recovery. Walker routes to `ask_user`. |
+| `08-loop-failed-pause.json` | Non-execute dev-via-test role (Lisa today; CBG in Slice 4) outcome=failed | Stamp `chain.paused.marker` + `chain.paused.role`. Chainpause subscriber propagates to chain entity (§D5). |
 
-(Rules 03+ land in Slices 2-4.)
+(Slice 3 will add rules for coordinator wake-up + walker dispatch; Slice 4 adds CBG rules + extends rule 08 to include CBG.)
+
+## V1 binary semantics — what's NOT here
+
+The ADR's "Reuse vs deltas" table mentioned reusing rule 04c
+(autoresearch best.value upsert, inverted for higher-is-better /
+target 1.0). **Slice 2 does NOT ship a rule 04c.** Rationale:
+
+- v1 uses **binary** pass/fail semantics — `dev_via_test.measurement.pass=true`
+  is itself the terminal "converged" signal. No best.value tracking is
+  needed because there's no kept/reverted choice to make.
+- Fractional convergence (e.g., 7/10 tests passing → value=0.7) is
+  **deferred to v2.** The `emit_dev_via_test_measurement` tool already
+  accepts an optional `value` field (0.0..1.0) so the wire is forward-
+  compatible; rules + persona just don't read it yet.
+- If v2 introduces kept/reverted with `best.value` upsert, the rule
+  shape will mirror autoresearch 04c (`update_triple` for true upsert);
+  may consolidate the two pack's measurement tools at that point.
+
+Per ADR-044 §addendum 2026-06-03 Slice 2.
+
+## Cross-entity stamping pattern
+
+Rules 04a + 04b each stamp TWO triples — one on Ralph's loop
+entity (`dev_via_test.execute.outcome`), one on the run entity
+(`dev_via_test.execute.{task_completed,task_failed}`) via
+`$entity.triple.lineage.run-loop-entity-id` subject substitution.
+The second triple is the **load-bearing** one for Slice 3 — the
+coordinator walker watches the run entity for `task_completed` /
+`task_failed` markers to know which Ralph just finished and pick
+the next ready task.
+
+We do NOT mutate `plan.task.<id>.status` from rules 04a/04b
+because the rule engine substitutes triple OBJECTS but not
+PREDICATE FRAGMENTS (per beta.96). Predicate substitution
+(`plan.task.${TASK_ID}.status`) would either require framework
+support OR per-task-ID rule generation (cardinality explosion).
+The walker (Slice 3) does the per-task status mutation in
+coordinator code via parameterized `update_triple` actions where
+the task ID is in the rule's scratchpad-derived condition set,
+not the predicate name.
 
 ## Sandbox dependency
 
