@@ -248,6 +248,7 @@
           "/app/configs/rules/autoresearch/09-reviewer-rejected-resynthesize.json",
           "/app/configs/rules/autoresearch/10-needs-clarification-replan.json",
           "/app/configs/rules/autoresearch/11-loop-failed-pause.json",
+          "/app/configs/rules/dev-via-test/01-coordinator-dev-via-test-spawn.json",
           "/app/configs/rules/coordinator/03b-respond-direct.json",
           "/app/configs/rules/coordinator/03-ask-user.json"
         ],
