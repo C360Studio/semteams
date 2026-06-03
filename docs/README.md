@@ -46,17 +46,28 @@ that don't exist upstream.
 ### ADR index (read these first)
 
 The ADRs are the most useful single read for understanding this
-product. They're listed roughly in build order:
+product. They're listed roughly in build order; the **bold** ones
+are the load-bearing reads for understanding the current
+architecture.
 
 | ADR | What it decides |
 |---|---|
 | [023](adr/023-provider-adapters-and-tool-choice.md) | LLM provider adapters and tool-choice handling |
-| [029](adr/029-product-shell-wiring.md) | How `cmd/semteams/main.go` wires framework primitives (the load-bearing reference for any new wiring) |
+| [**029**](adr/029-product-shell-wiring.md) | How `cmd/semteams/main.go` wires framework primitives (the load-bearing reference for any new wiring) |
 | [030](adr/030-approval-flow-ui-and-identity.md) | Approval-flow UI + the `X-User-Id` identity seam |
-| [031](adr/031-research-flow-and-semspec-handoff.md) | Research-flow ownership, dev-via-spec internal mode (active product arc) |
-| [032](adr/032-r36-sandbox-design.md) | R3.6 builder sandbox design |
+| [031](adr/031-research-flow-and-semspec-handoff.md) | Research-flow ownership + dev-via-spec internal mode. *Largely superseded by ADR-042 — dev-via-spec arc retired in MVP-7.* |
+| [032](adr/032-r36-sandbox-design.md) | R3.6 builder sandbox design (precursor to ADR-043) |
 | [033](adr/033-harness-anchored-verification-and-coordinator-authority.md) | Harness-anchored verification + coordinator-as-decision-authority |
 | [034](adr/034-qa-runner-pattern-adoption.md) | QA-runner pattern (verification-runner pivot) |
+| [035](adr/035-dev-via-spec-arc.md) | Dev-via-spec arc. *Superseded by ADR-042; retained for archeology.* |
+| [036](adr/036-test-harness-lifecycle.md) | Test-harness lifecycle |
+| [037](adr/037-chain-failure-handling.md) | Chain failure handling + chain-pause semantics |
+| [038](adr/038-chain-entity-and-milestone-rendering.md) | Chain entity + milestone rendering |
+| [039](adr/039-needs-clarification-recovery.md) | `needs_clarification` recovery routing |
+| [040](adr/040-source-curator-role.md) | Source-curator role split |
+| [041](adr/041-mvp-role-compression-and-graph-as-substrate.md) | MVP role compression + graph-as-substrate. Direct precursor to ADR-042. |
+| [**042**](adr/042-coordinator-instantiated-flows-via-templates.md) | **Substrate-plus-overlays.** One product-shell flow, category-keyed rule packs + persona bundles. Current architecture as of MVP-7. |
+| [**043**](adr/043-devcontainer-as-sandbox-spec.md) | **Devcontainer-as-sandbox spec.** Per-tenant attestation + attestation-aware artifact routing. The killer feature autoresearch needed. |
 
 ### Imports from upstream — keep, replace, or skip?
 

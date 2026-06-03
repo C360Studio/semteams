@@ -31,9 +31,9 @@ covers what SemTeams adds on top.
 |---|---|---|
 | Web UI | `ui/` | Svelte 5 + SvelteKit 2 chat / graph explorer / runtime monitor |
 | Bootstrap config | `configs/flow-bootstrap.json` | ADR-042 substrate-plus-overlays wiring (production); mock-LLM clone at `e2e-flow-bootstrap.json` |
-| Category packs | `configs/rules/<category>/` | Category-keyed rule packs (currently: `research/`). Future packs add new task classes without new components. |
-| Personas | `configs/personas/fragments/<role>/*.md` | Role-specific prompt fragments (coordinator, researcher-research-{plan,gather,synthesize}, reviewer-research, ops*) |
-| Product tools | `cmd/semteams/tools/` | Tool executors that don't belong upstream (source ingest, artifact emission, sandbox bootstrap) |
+| Category packs | `configs/rules/<category>/` | Category-keyed rule packs. Live: `research/` (coordinator → plan → gather → synthesize → reviewer) and `autoresearch/` (Karpathy-style propose/execute iteration loop with empirical keep/revert per ADR-043 sandbox attestation). Plus `coordinator/` (router) and `ops/` (observer). New task classes add a pack — no new components. |
+| Personas | `configs/personas/fragments/<role>/*.md` | Role-specific prompt fragments. Live roles: coordinator, researcher-research-{plan,gather,synthesize}, reviewer-research, autoresearch-{baseline,propose,execute,synthesize}, reviewer-autoresearch, ops-{chain,progress}-observer, ops |
+| Product tools | `cmd/semteams/tools/` | Tool executors that don't belong upstream (source ingest, artifact emission, sandbox bootstrap, autoresearch baseline/measurement/artifact emitters) |
 | Product shell | `cmd/semteams/main.go` | ~600 LoC binary that wires the framework primitives per [ADR-029](docs/adr/029-product-shell-wiring.md) |
 
 Everything else — the `agentic-*` processors, the rule engine, the
@@ -134,9 +134,22 @@ layering, product-shell wiring map, mandatory protocols
 
 ## Status
 
-Active development. Breaking changes expected. The active product
-arc is ADR-031 (research flow + dev-via-spec internal mode); see
-the ADR for current phase.
+Active development. Breaking changes expected. Current architecture
+is **substrate-plus-overlays** per
+[ADR-042](docs/adr/042-coordinator-instantiated-flows-via-templates.md):
+a single product-shell flow wires substrate singletons, and task
+classes are added as category-keyed rule packs + named persona
+bundles rather than separate flow configs. Live packs:
+
+- **research** — coordinator-routed prose research arc.
+- **autoresearch** — Karpathy-style propose/execute iteration loop
+  with empirical keep/revert decisions, per
+  [ADR-043](docs/adr/043-devcontainer-as-sandbox-spec.md)
+  per-tenant devcontainer attestation. Shipped 2026-06-03.
+
+ADR-031 (research-flow + dev-via-spec internal mode) is retained
+for archeology; the dev-via-spec arc it described was retired in
+ADR-042 MVP-7.
 
 ## License
 

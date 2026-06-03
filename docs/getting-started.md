@@ -66,18 +66,29 @@ task dev:research                        # NATS + backend + UI
 ```bash
 task dev:nats:start                                 # if NATS isn't already up
 go build -o bin/semteams ./cmd/semteams
-./bin/semteams --config configs/agentic.json
+./bin/semteams --config configs/flow-bootstrap.json
 ```
 
-Pick a config based on what you want to demo:
+Under ADR-042 §Phase 2 (substrate-plus-overlays, MVP-7) there is
+**one** product-shell flow config:
 
 | Config | What it runs | Needs |
 |---|---|---|
-| `agentic.json` / `agentic-claude.json` | General-purpose agent w/ approval-gated write tools | `ANTHROPIC_API_KEY` |
-| `dev-research.json` | Researcher flow with web search + graph query (software domain — source-repo substrate via semsource) | `ANTHROPIC_API_KEY` (+ `BRAVE_SEARCH_API_KEY` for web) |
-| `onboarding.json` | Onboarding interview demo (intent classification, `/onboard`) | `ANTHROPIC_API_KEY` |
-| `osh-demo.json` | Dev-via-spec chain (architect → builder → qa) | `ANTHROPIC_API_KEY` + sandbox running |
-| `e2e-*.json` | Mock-LLM journeys driven by Playwright | nothing — uses the mock LLM |
+| `flow-bootstrap.json` | The single ADR-042 substrate (graph-ingest, graph-query, rule-processor, agentic-loop, agentic-dispatch, agentic-tools, agentic-model) plus the live category rule packs (`research/`, `autoresearch/`, `coordinator/`, `ops/`) and the persona corpus that drives them. Uses real LLMs. | `ANTHROPIC_API_KEY` (default `claude-haiku`); `GEMINI_API_KEY` for `gemini-flash`; `BRAVE_SEARCH_API_KEY` for web_search |
+| `e2e-flow-bootstrap.json` | Mock-LLM clone of the production bootstrap. Same packs + personas, points the model registry at the in-process mock LLM. Used by every Playwright journey under `ui/e2e/agentic/`. | nothing — mock-LLM |
+
+Adding a task class is a new **category pack**, not a new config:
+rule files under `configs/rules/<category>/`, persona bundles under
+`configs/personas/fragments/<role>-<category>-<phase?>/`, plus a
+coordinator-persona entry teaching the new `decide(action=<category>)`
+token. See ADR-042 §Phase 2 redesign for the rationale and the
+research / autoresearch packs for working templates.
+
+The legacy concrete configs (`agentic.json`, `agentic-claude.json`,
+`dev-research.json`, `onboarding.json`, `osh-demo.json`, plus all
+the `e2e-*` siblings) retired in ADR-042 MVP-7 (PR #178) alongside
+the `chain.mode` / `phasevalidator` / `chainstall` machinery they
+depended on. They live in git history if you need archeology.
 
 `./bin/semteams --validate --config configs/<name>.json` validates a
 config without starting it.
