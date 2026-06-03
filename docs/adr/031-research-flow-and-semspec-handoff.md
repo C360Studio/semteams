@@ -304,9 +304,9 @@ a bounded prompt against an already-indexed corpus.
 - Strategic conversation captured 2026-04-29 (Opus 4.7,
   transcript in session memory). The original cross-product
   framing and the same-day reframe both originated here.
-- Open-questions memo:
-  [`docs/proposals/research-flow-open-questions.md`](../proposals/research-flow-open-questions.md).
-  Q5 captures the reframe rationale in detail.
+- Open-questions memo: `docs/proposals/research-flow-open-questions.md`
+  retired in the 2026-06-03 docs audit — all Q1-Q5 were decided by
+  2026-04-29 and the rationale was folded into this ADR.
 - ADR-030: Approval-Flow UI — provides the human-in-the-loop
   primitive R2 builds on for source-acquisition gates.
 - ADR-029: Product-Shell Wiring — the framework integration

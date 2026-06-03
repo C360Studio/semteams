@@ -2,14 +2,13 @@
 
 ## Status
 
-**Proposed (2026-05-10).** Establishes that `needs_clarification` is
-a recoverable terminal — not a wedge — and codifies the routing
-model that gets a chain past it. Defines a three-tier recovery
-hierarchy (rules → coordinator → review-pause) with a structural
-discriminator and explicit foreclosure on agent post-hoc mutation.
-Consumers of the review-pause cluster are deployment-configured
-(coordinator agent, operator dashboard, metric-emit job) — the
-predicate name doesn't presume which.
+**Accepted + Shipped (Phase 1).** Originally proposed 2026-05-10;
+Phase 1 shipped via #120 (rules 08+09) + #121 (NeedsReviewStamper)
++ #122 (qa-recovery fixture) + #123 (coordinator model-pin). The
+three-tier recovery model (rules → coordinator → review-pause) is
+the canonical recovery shape under ADR-042 — `needs_clarification`
+from any chain role routes to a coordinator wake-up, which can
+ask the user or pause for review.
 
 ### Validation status (2026-05-10)
 

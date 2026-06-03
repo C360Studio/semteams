@@ -2,11 +2,11 @@
 
 ## Status
 
-**Proposed (2026-05-10).** Pins the design before code lands. Splits
-substrate-curation work (add_source_repo + indexing-wait + entity-ID
-discovery) off the researcher into a dedicated `source-curator` role.
-Hard-replaces `researcher-with-source-acquisition` (no deprecation
-window — greenfield codebase, the only existing consumer is rule 02).
+**Accepted + Shipped.** Originally proposed 2026-05-10; doc merged
+#126, implementation validated through smoke #8 runs 14-18 (real-LLM
+curator flow proven against osh-core). Under ADR-042 the curator is
+a category-pack role rather than a fixed chain role, but the
+substrate-vs-research split this ADR codifies is durable.
 
 ### Scope: this is for the general research arc, not dev-via-spec specifically
 

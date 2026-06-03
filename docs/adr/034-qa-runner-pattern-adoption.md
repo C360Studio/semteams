@@ -563,10 +563,10 @@ the smoke run itself is operator-driven (real-API spend).
   loop's `bootstrap_workspace` + `bash` route through the sandbox
   container per ADR-032 §R3.6.2.a). Summary spells out the
   twelve-loop expectation and the qa-reviewer caveat.
-- `docs/smoke7-osh-meshtastic.md` — the playbook. Procedure,
-  per-phase verification, capture-of-findings template,
-  failure-mode quick-reference. Cost estimate (~$2-5 per full
-  run on claude-sonnet-4-6).
+- `docs/smoke7-osh-meshtastic.md` — the playbook (retired in the
+  2026-06-03 docs audit; dev-via-spec arc was retired in ADR-042
+  MVP-7 and the smoke is historical). Git history preserves the
+  procedure if anyone needs the per-phase verification template.
 
 ### What did NOT land
 

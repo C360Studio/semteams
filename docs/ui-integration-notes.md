@@ -3,7 +3,7 @@
 **Status**: Historical reference (as of 2026-06-03 doc audit). This
 doc maps the agentic-superpowers backend phases (1-4) to the
 2026-04-10 UI subtree import and the early Phase A.5 reframe. It
-predates the UI redesign (`docs/proposals/ui-redesign.md`),
+predates the UI redesign (proposal shipped 2026-04-27, retired in the 2026-06-03 docs audit),
 ADR-042 substrate-plus-overlays, ADR-043 sandbox attestation, and
 the 2026-06-03 chain drill-in + ArtifactCard slice. The
 backend-concept → UI-component map below is still useful for

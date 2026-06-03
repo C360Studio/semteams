@@ -2,8 +2,24 @@
 
 ## Status
 
-**Proposed (2026-05-12).** Re-frames the agentic team for MVP based on
-two empirical observations that have hardened across smokes #8 / #19:
+**Accepted + partially superseded.** Accepted 2026-05-15 and shipped
+via PR #148 (34 commits). The **graph-as-substrate** policy from this
+ADR's 2026-05-15 addendum is load-bearing under ADR-042 and is
+referenced by `docs/architecture.md` as the canonical read-rule for
+chain agents.
+
+The **MVP role compression** (researcher-plan/gather/synthesize,
+reviewer-research, architect, builder, reviewer-qa) was **superseded
+by [ADR-042 §Phase 2 redesign](042-coordinator-instantiated-flows-via-templates.md)**
+in MVP-7 (2026-05-18). The dispatch coordinator returned as the
+default role; task classes ship as category-keyed overlays rather
+than a fixed roster. Keep the graph-as-substrate policy; treat the
+role roster as decision archeology.
+
+---
+
+Re-frames the agentic team for MVP based on two empirical
+observations that have hardened across smokes #8 / #19:
 
 1. **Frontier models do not reason from the graph.** Gemini 3.1 Pro,
    Sonnet 4.6, and the same models running semspec arcs ignore graph
