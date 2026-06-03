@@ -1,204 +1,100 @@
 # User Journey Specs
 
-User-facing capability journeys for the semteams agentic superpowers surface.
-Each journey is a **Playwright test file** under `ui/e2e/agentic/` — the test
-IS the spec. No custom schema, no parallel markdown prose, no drift risk.
+User-facing capability journeys for the semteams UI. Each journey
+is a **Playwright test file** under `ui/e2e/agentic/` — the test
+IS the spec. No custom markdown schema, no parallel prose, no
+drift risk.
 
 ## Where things live
 
 | Artifact | Location | Purpose |
 |---|---|---|
 | Journey specs (executable) | `ui/e2e/agentic/<slug>.spec.ts` | Playwright `describe`/`test` — readable AND runnable |
-| Shared mock-llm fixtures | `test/fixtures/journeys/<slug>.yaml` | Deterministic LLM responses, loaded by mock-llm |
+| Shared mock-llm fixtures | `test/fixtures/journeys/<slug>.yaml` | Deterministic LLM responses for the mock-llm container |
+
+The complete inventory of landed journeys is whatever is in
+`ui/e2e/agentic/`. There is no parallel "planned vs landed" table
+here on purpose — that table drifts the moment a spec lands.
 
 ## Why Playwright is the spec
 
-The journey "what we claim to support" claim lives in the test file itself:
+The "what we claim to support" claim lives in the test file itself:
 
-- `test.describe('Tool approval gate', () => { ... })` — the journey name
-- JSDoc at the top — the goal, preconditions, rationale
-- `test('user proposes high-risk tool', async ({ page, request }) => { ... })` — each step
-- Assertions inside the test — backend state (via `request.get('.../loops/{id}')`) AND UI state (via `expect(page.locator(...))`) in the same function
+- `test.describe('…', () => { ... })` — the journey name
+- JSDoc at the top — the goal, preconditions, wire-shape
+  assumptions, citations to relevant ADRs
+- `test('…', async ({ page, request }) => { ... })` — each step
+- Assertions inside the test — backend state (via
+  `request.get('/teams-dispatch/loops/{id}')`) AND UI state (via
+  `expect(page.locator(...))`) in the same function
 
-One source of truth. No "update the markdown, then update the spec" drift.
+One source of truth. No "update the markdown, then update the
+spec" drift.
 
-## Planned journeys
+A solid Playwright spec also (per
+[`feedback_solid_playwright_specs`](../../README.md)):
 
-Mapped from the superpowers in `docs/proposals/agentic-superpowers.md`:
+- Comments the **why** at the top — what's the user journey, what
+  invariants hold, what fixture/config it needs, what wire-shape
+  assumptions are baked in.
+- Asserts the *cause* of the bug class, not just the symptom.
+- Carries clear failure messages on every `expect` that has a
+  non-obvious cause — failure messages are the only doc future-us
+  reads.
 
-| Slug | Superpower | Status |
-|---|---|---|
-| `tool-approval-gate` | Human-in-the-loop approval gates | **landed** (Phase C.2) |
-| `real-time-activity-stream` | Real-time agent activity streaming | **landed** (Phase C.3) |
-| `self-programming-rule-creation` | Self-programming agents (rule writes) | planned |
-| `multi-agent-hierarchy` | Parent/child loop chains | planned |
-| `graph-backed-memory` | Semantic memory recall | planned |
-| `stock-workflow-dev-research` | Pre-built dev-research flow | planned |
-
-Initial specs land in Phase C.2 (`tool-approval-gate`) and Phase C.3
-(`real-time-activity-stream`) as tracer-bullet journeys. The rest follow
-as each capability stabilizes.
+`ui/e2e/agentic/chain-drill-in.spec.ts` (2026-06-03) is the
+template.
 
 ## Adding a new journey
 
-1. Write the Playwright spec at `ui/e2e/agentic/<slug>.spec.ts`. Use
-   `test.describe()` for the journey name, `test()` per step. Include a
-   JSDoc block at the top explaining goal / preconditions / rationale.
-2. If the journey needs deterministic LLM responses, drop a YAML fixture at
-   `test/fixtures/journeys/<slug>.yaml` and point the mock-llm container
-   at it via the Playwright fixture helper.
-3. Backend-state assertions go inline in the test via
-   `await request.get('/teams-dispatch/loops/{id}')` — no separate test
-   file needed. (Component instance names are `teams-dispatch` /
-   `teams-loop` so HTTP prefixes match; factories are upstream
-   `agentic-dispatch` / `agentic-loop`.)
-4. Run it locally: `task ui:test:e2e` (or `cd ui && npm run test:e2e`).
+1. Write the Playwright spec at `ui/e2e/agentic/<slug>.spec.ts`.
+   Use `test.describe()` for the journey name, `test()` per step.
+   Include a JSDoc block at the top.
+2. If the journey needs deterministic LLM responses, drop a YAML
+   fixture at `test/fixtures/journeys/<slug>.yaml`.
+3. Add a `test:e2e:agentic:<slug>` task to `ui/Taskfile.yml` that
+   wires the fixture + the e2e bootstrap config.
+4. Run it: `task ui:test:e2e:agentic:<slug>`.
 
-## How to read a journey spec
-
-A well-structured Playwright journey spec is self-documenting. Example
-skeleton:
-
-```typescript
-/**
- * Journey: Tool approval gate
- *
- * Goal: Agent proposes a high-risk tool, user approves, loop resumes.
- *
- * Preconditions:
- *   - semteams stack running with agentic-dispatch, agentic-loop,
- *     agentic-tools, agentic-governance enabled
- *   - Mock-llm loaded with test/fixtures/journeys/tool-approval-gate.yaml
- *   - User has an active chat session
- *
- * Validates: Phase 4 HITL gate, ApprovalFilter, RequiresApproval enforcement
- */
-
-import { test, expect } from "@playwright/test";
-
-test.describe("Tool approval gate", () => {
-  test("agent proposes high-risk tool and pauses for approval", async ({
-    page,
-    request,
-  }) => {
-    // Step 1: user sends message that triggers the tool
-    await page.goto("/");
-    // ...assert AgentLoopCard appears with state=executing
-
-    // Step 2: loop transitions to awaiting_approval
-    // ...assert ApprovalPrompt renders
-
-    // Step 3: user clicks approve
-    // ...assert loop resumes
-
-    // Step 4: assert final backend state via direct HTTP
-    const loop = await request
-      .get("http://localhost:8080/agentic-dispatch/loops/...")
-      .then((r) => r.json());
-    expect(loop.state).toBe("complete");
-  });
-});
-```
-
-Anyone reading this file understands the journey without having to read
-any other document.
-
-## Rationale for this structure
-
-The original question that started this directory — *"who owns Playwright
-E2E for the agentic superpowers?"* — initially led to a custom markdown
-schema + bash validator + YAML frontmatter design. That was over-engineered:
-Playwright already has a journey DSL (`describe`/`test`), readable structure
-(JSDoc + nested calls), and a built-in fixture system. Inventing a second
-layer on top meant two sources of truth, a custom validator to maintain,
-and a new format for contributors to learn.
-
-Keeping Playwright as the single source avoids all of that. See the plan
-at `.claude/plans/linked-finding-starlight.md` (local) for the full history.
+Component instance names are `teams-dispatch` / `teams-loop` so
+HTTP prefixes match; factories are upstream `agentic-dispatch` /
+`agentic-loop`.
 
 ## Running journeys
 
-From the semteams repo root:
-
 ```bash
-# Run a single journey (fast; iterate here during development)
-task ui:test:e2e:agentic:tool-approval-gate
-task ui:test:e2e:agentic:real-time-activity-stream
+# Single journey (iteration loop)
+task ui:test:e2e:agentic:<slug>
 
-# Run all landed journeys sequentially (slow; for CI or verification)
-task ui:test:e2e:superpowers
+# Bring up stack but don't run anything (poking around)
+task ui:test:e2e:agentic:dev:<scenario>
 
-# Tear down a hung agentic stack
+# Tear down + wipe volumes
 task ui:test:e2e:agentic:cleanup
 ```
 
-Each journey's convenience target sets the required `FIXTURE` env var
-and runs only its own spec file against `playwright.agentic.config.ts`.
-The meta-runner (`ui:test:e2e:superpowers`) tears down the docker stack
-between journeys so mock-llm reloads the right fixture each time — this
-is what makes it slower than running a single journey.
+`task --list` shows the full surface. Mock-llm fixture state is
+held in memory; if a chain doesn't dispatch on a fresh prompt,
+the fixture index probably exhausted — tear the stack down with
+`-v` and re-up.
 
 ## Deliberate-break verification
 
-Because journey specs are the contract for what we claim to support,
-it's worth periodically verifying that they actually *fail* when the
-things they assert about regress. A spec that silently tolerates broken
-behavior is worse than no spec at all.
+A spec that silently tolerates broken behavior is worse than no
+spec at all. When the agentic surface changes meaningfully (and
+at least once after any major dependency bump), pick a couple of
+landed specs and:
 
-This is a manual procedure — a few minutes per journey — that should
-be run whenever the agentic surface changes meaningfully, and at least
-once after any major dependency bump (Playwright, Svelte, svelte-check,
-mock-llm).
+1. Run the journey against a clean tree — confirm it passes.
+2. Introduce a targeted break to something the spec claims to
+   validate (rename a testid, swap a fixture turn, drop a query
+   parameter, etc.).
+3. Re-run. It **must** fail, and the failure message should point
+   clearly at the broken claim. If the spec passes with the
+   deliberate break in place, the spec is too loose.
+4. Revert. Confirm green again.
 
-### Procedure
-
-For each journey in the table above with status **landed**:
-
-1. **Baseline**: run the journey against a clean tree and confirm it
-   passes.
-
-   ```bash
-   task ui:test:e2e:agentic:<slug>
-   ```
-
-2. **Introduce a targeted break** — modify exactly one thing in the
-   production code or backend contract that the spec claims to
-   validate. See "Known deliberate breaks" below for the per-journey
-   list.
-
-3. **Re-run the journey**. It **must** fail, and the failure message
-   should point clearly at the broken claim. If the journey passes
-   with the deliberate break in place, the spec is too loose and
-   needs tightening.
-
-4. **Revert the break** (`git checkout <file>`).
-
-5. **Re-run**. Confirm it passes again, proving the failure in step 3
-   was caused by the break and not a flaky test.
-
-### Known deliberate breaks
-
-#### `tool-approval-gate`
-
-| Break | Where | Expected failure |
-|---|---|---|
-| Rename the Approve button's visible text in `ApprovalPrompt.svelte` (e.g. "Approve" → "Confirm") | `ui/src/lib/components/chat/ApprovalPrompt.svelte` | Spec fails at `loopRow.getByRole("button", { name: "Approve" }).click()` — button not found |
-| Remove the `data-testid="approve-button"` attribute | same file | Spec still passes via role-based locator; widen the break or remove role label to detect |
-| Change the backend signal endpoint path in `agentApi.ts` from `/agentic-dispatch/loops/{id}/signal` | `ui/src/lib/services/agentApi.ts` | Click fires, no signal posted, loop stays in `awaiting_approval`, timeout at state transition assertion |
-| Swap the fixture's tool call from `create_rule` to `query_entity` (a non-approval-gated tool) | `test/fixtures/journeys/tool-approval-gate.yaml` | Loop transitions to `complete` without pausing at `awaiting_approval` — spec times out waiting for the approval badge |
-
-#### `real-time-activity-stream`
-
-| Break | Where | Expected failure |
-|---|---|---|
-| Rename the SSE endpoint from `/agentic-dispatch/activity` to `/agentic-dispatch/events` in the Caddyfile | `ui/Caddyfile.e2e` | `connection-status` never flips to connected — spec times out on the `data-connected="true"` assertion |
-| Make `agentStore` ignore `loop_update` events (early return in the event handler) | `ui/src/lib/stores/agentStore.svelte.ts` | Loop row never appears in the table — spec times out at step 6 |
-| Force a full page reload on every SSE event (add `location.reload()` in the store's event handler) | same file | `page.url()` check at step 9 fails — technically the pathname stays `/agents`, but Playwright may detect the reload; also watchable via network traffic if the assertion needs tightening |
-| Change the `state-badge` text format from `complete` to `finished` in `AgentLoopCard.svelte` | `ui/src/lib/components/chat/AgentLoopCard.svelte` (affects the agents page state badge indirectly) | Spec times out at "state badge reaches complete" |
-
-### When a deliberate break doesn't fail
-
-If the spec passes with a deliberate break in place, the spec is too
-loose: it's asserting on something the break didn't touch. Tighten the
-assertion or add a more specific one, then re-run the deliberate break
-to confirm the new assertion catches it.
+Recording the specific break in the spec's JSDoc as a known-good
+canary is a worthwhile bonus when the spec has a non-obvious
+load-bearing assertion — the next person breaking it can read
+why it's there.

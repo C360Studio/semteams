@@ -1,10 +1,21 @@
 # Objective: dev-research
 
-Flow config: `configs/dev-research.json`. (Pre-2026-05-17 this chain
-was named `deep-research`; the rename to `dev-research` reflects its
-software-domain identity — researcher arc with source-repo substrate
-acquisition via semsource. Existing metric identifiers below carry
-the new prefix.)
+**Status**: Pre-MVP-7 archive (2026-06-03 audit). The
+`configs/dev-research.json` flow this spec was authored against was
+retired in [ADR-042](../adr/042-coordinator-instantiated-flows-via-templates.md)
+MVP-7 alongside the legacy concrete configs. The five-section
+spec structure remains a useful template for an objective spec
+keyed against the current `research` category pack
+([`docs/architecture.md`](../architecture.md#research)) — when that
+spec gets authored, this file should be replaced rather than
+edited in place. The `test/fixtures/journeys/ops-agent-baseline.yaml`
+fixture still references this path and needs the same refresh.
+
+Flow config: `configs/dev-research.json` (retired, see above).
+(Pre-2026-05-17 this chain was named `deep-research`; the rename
+to `dev-research` reflects its software-domain identity —
+researcher arc with source-repo substrate acquisition via semsource.
+Existing metric identifiers below carry the new prefix.)
 
 ## 1. Primary metric
 

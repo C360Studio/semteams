@@ -1,10 +1,18 @@
 # Flow Objective Specs
 
-Objective specs are the contract the ops agent (ADR-027 Phase 1) reads
-before analyzing a flow. Each stock flow in semteams gets one markdown
-file in this directory. Without an objective spec, any diagnosis the
-ops agent produces is ungrounded — "just guessing" — and should be
-treated as such.
+Objective specs are the contract the ops agent
+([ADR-027 Phase 1](https://github.com/c360studio/semstreams/blob/main/docs/adr/027-ops-agent-meta-harness.md))
+reads before analyzing a flow. Each task class in semteams ideally
+gets one markdown file in this directory keyed by category. Without
+an objective spec, any diagnosis the ops agent produces is
+ungrounded — "just guessing" — and should be treated as such.
+
+> **Status note (2026-06-03):** the live `dev-research.md` was
+> authored against the pre-ADR-042 `configs/dev-research.json` flow
+> and has not yet been refreshed for the current research /
+> autoresearch category packs. The five-section structure below is
+> still the canonical template; the open task is authoring
+> per-category specs for the post-MVP-7 packs.
 
 ## Why this exists
 
