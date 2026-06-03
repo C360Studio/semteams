@@ -43,7 +43,7 @@ and @mavlink-hard Accept-gate.
 |---|---|---|
 | 1 | Lisa planner — `emit_dev_via_test_plan` + persona + rule 01 spawn | shipped |
 | 2 | Ralph executor — `emit_dev_via_test_measurement` + persona + rules 04a/04b/08 | shipped |
-| 3 | Plan walker — coordinator wake-up + plan-walking persona fragment | pending |
+| 3 | Plan walker — coordinator wake-up + plan-walking persona fragment + rules 02/03/05 | shipped |
 | 4 | CBG reviewer — persona + rules 06/07; 08 extended | pending |
 
 ## Naming convention
@@ -101,12 +101,15 @@ No `plan.task.<id>.retry_count` triple — per ADR-044
 
 | File | Trigger | Spawn / Stamp |
 |---|---|---|
-| `01-coordinator-dev-via-test-spawn.json` | coordinator decide(dev_via_test) | Lisa + stamp `dev_via_test.run.status=active` on coordinator (run) entity |
-| `04a-execute-stamp-converged.json` | Ralph success + `dev_via_test.measurement.pass=true` | Stamp `dev_via_test.execute.outcome=converged` on Ralph entity + `dev_via_test.execute.task_completed=<ralph-loop-id>` on run entity (for Slice 3 walker pickup) |
-| `04b-execute-stamp-failed.json` | Ralph outcome=failed (max-iter / panic / NATS error) | Stamp `dev_via_test.execute.outcome=failed` on Ralph entity + `dev_via_test.execute.task_failed=<ralph-loop-id>` on run entity. No auto-retry per ADR §Stuck-task recovery. Walker routes to `ask_user`. |
-| `08-loop-failed-pause.json` | Non-execute dev-via-test role (Lisa today; CBG in Slice 4) outcome=failed | Stamp `chain.paused.marker` + `chain.paused.role`. Chainpause subscriber propagates to chain entity (§D5). |
+| `01-coordinator-dev-via-test-spawn.json` | coordinator decide(dev_via_test) + subtopics.length=0 (INITIAL dispatch) | Lisa + stamp `dev_via_test.run.status=active` on coordinator (run) entity |
+| `02-lisa-terminal-to-walker.json` | Lisa decide(planned) | Coordinator walker wake-up with run-entity lineage threaded; reads plan via query_entity, dispatches first task |
+| `03-coordinator-dispatch-ralph.json` | coordinator decide(dev_via_test) + subtopics.length>0 (WALKER dispatch) | Ralph via `for_each` over subtopics — v1 N=1 (serial), v2 N>1 (parallel topo-walk) |
+| `04a-execute-stamp-converged.json` | Ralph success + `dev_via_test.measurement.pass=true` | Stamp `dev_via_test.execute.outcome=converged` on Ralph entity + `dev_via_test.execute.task_completed=<ralph-loop-id>` on run entity (walker pickup) |
+| `04b-execute-stamp-failed.json` | Ralph outcome IN [failed, truncated, cancelled] | Stamp `dev_via_test.execute.outcome=failed` on Ralph entity + `dev_via_test.execute.task_failed=<ralph-loop-id>` on run entity. No auto-retry per ADR §Stuck-task recovery. Walker routes to `ask_user`. |
+| `05-ralph-terminal-to-walker.json` | Ralph outcome IN [success, failed, truncated, cancelled] (ANY terminal) | Coordinator walker wake-up; reads Ralph's terminal via read_loop_result + run-entity state via query_entity; decides next task / ask_user / respond_direct |
+| `08-loop-failed-pause.json` | Non-execute dev-via-test role (Lisa today; CBG in Slice 4) outcome IN [failed, truncated, cancelled] | Stamp `chain.paused.marker` + `chain.paused.role`. Chainpause subscriber propagates to chain entity (§D5). |
 
-(Slice 3 will add rules for coordinator wake-up + walker dispatch; Slice 4 adds CBG rules + extends rule 08 to include CBG.)
+(Slice 4 adds CBG rules + extends rule 08 to include CBG; also replaces rule 05's "all done → respond_direct" with CBG dispatch.)
 
 ## V1 binary semantics — what's NOT here
 
@@ -133,20 +136,48 @@ Rules 04a + 04b each stamp TWO triples — one on Ralph's loop
 entity (`dev_via_test.execute.outcome`), one on the run entity
 (`dev_via_test.execute.{task_completed,task_failed}`) via
 `$entity.triple.lineage.run-loop-entity-id` subject substitution.
-The second triple is the **load-bearing** one for Slice 3 — the
-coordinator walker watches the run entity for `task_completed` /
-`task_failed` markers to know which Ralph just finished and pick
-the next ready task.
+The second triple is the **load-bearing** one for the walker —
+the coordinator wake-up reads the run entity for `task_completed`
+/ `task_failed` markers (multi-valued; one triple per Ralph) to
+compute effective per-task status.
 
-We do NOT mutate `plan.task.<id>.status` from rules 04a/04b
-because the rule engine substitutes triple OBJECTS but not
-PREDICATE FRAGMENTS (per beta.96). Predicate substitution
-(`plan.task.${TASK_ID}.status`) would either require framework
-support OR per-task-ID rule generation (cardinality explosion).
-The walker (Slice 3) does the per-task status mutation in
-coordinator code via parameterized `update_triple` actions where
-the task ID is in the rule's scratchpad-derived condition set,
-not the predicate name.
+We do NOT mutate `plan.task.<id>.status` from rules 04a/04b — the
+rule engine substitutes triple OBJECTS but not PREDICATE FRAGMENTS
+(per beta.96). Predicate substitution (`plan.task.${TASK_ID}.status`)
+would either require framework support OR per-task-ID rule
+generation (cardinality explosion). Instead, the walker computes
+status **derivatively** from the multi-valued execution markers:
+
+- `done` if task ID appears in `task_completed` triples
+- `blocked` if task ID appears in `task_failed` triples
+- `ready` otherwise (initial plan state, no mutation)
+
+This keeps the plan immutable across the chain's lifetime and
+makes the walker's state computation a pure function of run-entity
+contents — no race conditions on partial-write status updates.
+
+## The `dev_via_test` two-mode action token
+
+Slice 3 introduces a dual-mode shape on the same action token:
+
+| Mode | When | Token shape | Routes to |
+|---|---|---|---|
+| Initial dispatch | First coordinator loop (front-door) | `decide(action="dev_via_test", reason=<user ask>)` — **no subtopics** | Rule 01 → Lisa |
+| Walker dispatch | Coordinator woken after Lisa/Ralph terminal | `decide(action="dev_via_test", subtopics=["<task-id>"])` | Rule 03 → Ralph (via for_each) |
+
+Rules 01 and 03 are mutually exclusive on `coordinator.decision.subtopics.length`
+(`length_eq 0` vs `length_gt 0`). The `decide` tool stamps the subtopics
+predicate ONLY when non-empty (verified upstream `processor/agentic-tools/decide.go`),
+so absent + length_eq 0 are equivalent in array-operator semantics
+(per `processor/rule/expression/types.go`).
+
+## v1 walker — linear, single-Ralph-at-a-time
+
+v1 ships sequential dispatch (`subtopics=[<one-id>]`, `for_each` N=1).
+The architecture supports parallel dispatch via `subtopics=[<id1>,<id2>,...]`
+(rule 03's `for_each` over subtopics fans out — same pattern as
+research pack rule 02). Gated by `plan.task.<id>.depends_on`
+topo-walking which is deferred to v2 per ADR-044 §DAG awareness.
 
 ## Sandbox dependency
 

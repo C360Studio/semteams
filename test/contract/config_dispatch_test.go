@@ -101,7 +101,16 @@ func TestConfigDispatchDefaultToolsParse(t *testing.T) {
 		// synchronous + read-only(query) / typed-attestation-return
 		// (request) — they don't risk the smoke #9 short-circuit
 		// pattern that motivated the original scoping.
-		"flow-bootstrap.json":     {expected: []string{"decide", "read_loop_result", "scratchpad", "query_sandbox_attestation", "request_sandbox"}},
+		//
+		// ADR-044 Slice 3 (2026-06-03) added query_entity: the
+		// dev_via_test walker reads run-entity state (plan.task.*
+		// + dev_via_test.execute.task_{completed,failed}) on every
+		// wake-up to compute the next move. Wake-up rules 02 + 05
+		// pass query_entity explicitly in their tools list as
+		// defense-in-depth, but front-door coordinators benefit
+		// from having it by default too (so e.g. ad-hoc "what's
+		// in the graph" inspection works without a tool grant).
+		"flow-bootstrap.json":     {expected: []string{"decide", "read_loop_result", "scratchpad", "query_sandbox_attestation", "request_sandbox", "query_entity"}},
 		"e2e-flow-bootstrap.json": {expected: []string{"decide", "read_loop_result", "scratchpad", "query_sandbox_attestation", "request_sandbox"}},
 	}
 

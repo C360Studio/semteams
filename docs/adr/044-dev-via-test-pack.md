@@ -598,6 +598,118 @@ Ralph stamps its terminal state on lineage-threaded entities) and
 Slice 3 (control-plane: walker translates terminal state into
 plan.task.<id>.status mutations + next-task dispatch).
 
+## Addendum 2026-06-03 — Slice 3 (plan walker) design + scope
+
+Slice 3 wires the coordinator-as-walker control plane: rule 02
+(Lisa→walker), rule 03 (walker→Ralph via for_each), rule 05
+(Ralph→walker), plus `30-plan-walking.md` persona fragment + the
+`dev_via_test` two-mode action shape on the decide tool. Two
+substrate-level design choices worth recording:
+
+### Two-mode `dev_via_test` token (subtopics presence as differentiator)
+
+Slice 1's rule 01 fires on `decide(action="dev_via_test")` to
+spawn Lisa. Slice 3's walker also emits `decide(action="dev_via_test", ...)`
+— to dispatch Ralph at a specific task. Same token, different
+spawn target.
+
+Differentiation via `coordinator.decision.subtopics.length`:
+
+- Rule 01: `length_eq 0` (initial dispatch, no specific target)
+  → spawn Lisa (planner)
+- Rule 03: `length_gt 0` (walker chose target) → spawn Ralph
+  (executor) at `subtopics[0]` via `for_each`
+
+Verified against beta.96:
+
+- `decide` tool stamps `coordinator.decision.subtopics` ONLY when
+  non-empty (`processor/agentic-tools/decide.go`). Empty/nil →
+  no triple stamped.
+- Array operators (`length_eq`, `length_gt`) deliberately treat
+  missing predicate as empty array — `length_eq 0` matches both
+  "absent" and "explicit []" (`processor/rule/expression/types.go`).
+- Mutually exclusive on the same condition triple — no double-fire.
+
+Alternatives considered + rejected:
+
+- *New token (`dispatch_task`, `walk_next`, etc.).* Would have
+  expanded the closed action taxonomy on the coordinator persona
+  — more tokens to maintain, more rules, more documentation. The
+  semantic IS "dev_via_test work" in both cases; subtopics
+  presence cleanly carries the "which task" payload without a
+  new token.
+- *Walker emits via a new tool (`dispatch_next_task`).* Would have
+  required a new product-shell tool just to write a marker triple
+  the rule layer could match on. The decide tool already does
+  exactly this (`coordinator.decision.next_action` stamp); reusing
+  it with the subtopics overload is the framework-aligned shape.
+
+### `for_each` over subtopics for Ralph dispatch (v1 N=1, v2 N>1)
+
+Rule 03 uses `for_each: "$entity.triple.coordinator.decision.subtopics"`
++ `for_each_var: "subtopic"` — the same pattern as research pack's
+rule 02 (verified `configs/rules/research/02-plan-to-gather.json`).
+v1 walker emits single-element subtopics for serial dispatch;
+`for_each` runs once per walker decision and spawns one Ralph.
+
+v2 will support parallel dispatch via multi-element subtopics
+(`subtopics=["t1","t2"]`) — `for_each` spawns N Ralphs concurrently
+(same parallel-loop semantics as research pack's N-gatherer
+fan-out). Gated by `plan.task.<id>.depends_on` topo-walking which
+is deferred to v2 per §DAG awareness; v1 walker chooses one task
+per decision and walks in plan-order.
+
+The choice to ship the same `for_each` pattern even for N=1 means
+the v2 parallelization is a persona-level change ("emit multi-
+element subtopics") rather than a rule/architecture change. Cheap
+upgrade path.
+
+### Derivative status (no plan.task.<id>.status mutation)
+
+Slice 2's rules 04a/04b stamp `dev_via_test.execute.task_completed`
+or `task_failed` on the run entity (multi-valued — one triple per
+Ralph). Slice 3's walker reads ALL these triples and computes
+effective status **derivatively**:
+
+- `done` if task ID appears in `task_completed` list
+- `blocked` if task ID appears in `task_failed` list
+- `ready` otherwise (matches Lisa's initial stamp; never mutated)
+
+Plan.task.<id>.status stays "ready" on every task across the
+chain's lifetime. Status is a pure function of execution markers.
+
+This avoids the predicate-substitution gap (rule engine substitutes
+triple OBJECTS but not predicate fragments — `plan.task.${TASK_ID}.status`
+isn't a thing in beta.96), and eliminates a race-condition class
+(partial-write of status update vs. concurrent walker read). Walker
+state computation is monotonic — adding new markers can only
+advance a task from ready to done/blocked, never the reverse.
+
+The trade-off: walker must read ALL run-entity triples to compute
+status (single `query_entity` call), and process the multi-valued
+markers locally. For plans up to ~50 tasks this is negligible; for
+much larger plans we'd add a "compaction" rule that collapses
+markers into a summary triple. Not worth the design overhead for
+v1.
+
+### Slice 4 handoff
+
+Rule 05's prompt step 4 currently routes "all done" → `respond_direct`
+directly. Slice 4 will:
+
+- Add a new walker action token (likely `dev_via_test_finalize` or
+  reuse `dev_via_test` with `subtopics=["__cbg__"]` sentinel) →
+  spawn CBG (`reviewer-dev-via-test`).
+- Add rule 06 (walker decide finalize → CBG spawn) + rule 07 (CBG
+  approved → coordinator wake-up for respond_direct).
+- Update rule 08's role list to include `reviewer-dev-via-test`.
+- Update walker persona to route "all done" through CBG instead of
+  direct respond_direct.
+
+Slice 3's walker prompt explicitly notes "Slice 4 will replace
+this with a CBG dispatch route" so persona drift between Slice 3
+and Slice 4 stays visible.
+
 ## Cross-links
 
 - [ADR-035 dev-via-spec arc](035-dev-via-spec-arc.md) (superseded
