@@ -4,14 +4,11 @@
 #   NATS + semteams backend (agentic config) + mock-llm (fixture-driven)
 #   + UI + Caddy reverse proxy
 #
-# This is distinct from docker-compose.e2e.yml, which uses protocol-flow.json
-# and has no mock-llm service. Journey tests need agentic.json's components
-# (teams-dispatch, teams-loop, teams-tools, teams-governance) and
-# the mock-llm for deterministic LLM responses.
-#
-# Container names and networks are prefixed `semteams-ui-agentic-*` so this
-# stack can run alongside docker-compose.e2e.yml without collision. Host
-# port defaults to 3100 (vs 3000 for the non-agentic stack).
+# Journey tests need the agentic substrate (teams-dispatch, teams-loop,
+# teams-tools) and the mock-llm for deterministic LLM responses. Container
+# names are prefixed `semteams-ui-agentic-*`; host port defaults to 3100
+# (vs 3001 for the docker-compose.dev.yml backend devloop, so they can
+# run alongside without collision).
 #
 # Usage (via Playwright):
 #   npm run test:e2e:agentic      # loads playwright.agentic.config.ts
