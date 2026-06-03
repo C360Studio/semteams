@@ -97,23 +97,6 @@ func TestExecutor_PassFalseDefaultsValueTo0(t *testing.T) {
 	}
 }
 
-func TestExecutor_ExplicitValueOverridesDefault(t *testing.T) {
-	pub := &fakePub{}
-	e := NewExecutor(pub, testPlatform(), slog.Default())
-	// pass=false but value=0.7 explicitly (e.g. 7/10 tests passing).
-	res, _ := e.Execute(context.Background(), baseCall(map[string]any{
-		"pass":  false,
-		"value": float64(0.7),
-	}))
-	if res.Error != "" {
-		t.Fatalf("unexpected error: %s", res.Error)
-	}
-	got, _ := pub.find(predicateMeasurementValue)
-	if got != 0.7 {
-		t.Errorf("explicit value: got %v, want 0.7", got)
-	}
-}
-
 func TestExecutor_PassMissingRejected(t *testing.T) {
 	pub := &fakePub{}
 	e := NewExecutor(pub, testPlatform(), slog.Default())
@@ -140,18 +123,22 @@ func TestExecutor_PassWrongTypeRejected(t *testing.T) {
 	}
 }
 
-func TestExecutor_ValueOutOfRangeRejected(t *testing.T) {
+func TestExecutor_ValueIsNotLLMArg(t *testing.T) {
+	// Per Slice 2 reviewer R3 + N6: value is NOT an LLM-visible arg
+	// in v1 (derived from pass only). Pinning the rejection here
+	// guards against re-introducing the field accidentally — v2
+	// fractional support is the ONLY thing that lifts this gate.
 	pub := &fakePub{}
 	e := NewExecutor(pub, testPlatform(), slog.Default())
-	cases := []float64{-0.1, 1.5, 2.0}
-	for _, v := range cases {
-		res, _ := e.Execute(context.Background(), baseCall(map[string]any{
-			"pass":  true,
-			"value": v,
-		}))
-		if res.Error == "" {
-			t.Errorf("expected error when value=%v out of [0,1]", v)
-		}
+	res, _ := e.Execute(context.Background(), baseCall(map[string]any{
+		"pass":  true,
+		"value": float64(0.7),
+	}))
+	if res.Error == "" {
+		t.Fatalf("expected unknown-field error for 'value'; got none")
+	}
+	if !strings.Contains(res.Error, "unknown field") {
+		t.Errorf("error = %q, want unknown-field rejection", res.Error)
 	}
 }
 

@@ -14,8 +14,9 @@ sub-tasks. Convergence is the only deliverable.
 
 ## What you do
 
-Each iteration of YOUR loop (single agentic loop with framework's
-`max_iterations` as the safety ceiling — typically 50):
+Each iteration of YOUR loop (single agentic loop; the framework
+runs you until you converge or escalate, with a runaway-safety
+ceiling that exists for protection, not as a budget):
 
 1. **Read the spec** (iteration 1 only — cache the values in scratchpad):
    - your spawn prompt names the task ID and where to read its

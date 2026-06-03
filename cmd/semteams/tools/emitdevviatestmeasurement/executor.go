@@ -13,11 +13,16 @@
 // Stamps on Ralph's loop entity (the entity for call.LoopID):
 //
 //   - dev_via_test.measurement.pass          (bool — exit code 0?)
-//   - dev_via_test.measurement.value         (float — 0.0..1.0;
-//     defaults to 1.0 if pass,
-//     0.0 if not pass; explicit
-//     fractional values supported
-//     for v2 per-test breakdown)
+//   - dev_via_test.measurement.value         (float — derived: 1.0
+//     if pass, 0.0 if not.
+//     Stamped for audit
+//     symmetry with v2
+//     fractional support; NOT
+//     an LLM-visible arg in
+//     v1 to avoid the
+//     pass-vs-value conflict
+//     foot-gun per Slice 2
+//     reviewer R3 + N6.)
 //   - dev_via_test.measurement.stdout_tail   (string — audit, optional)
 //   - dev_via_test.measurement.stderr_tail   (string — audit, optional)
 //   - dev_via_test.measurement.stamped_at    (RFC3339Nano)
@@ -89,21 +94,21 @@ func NewExecutor(publisher agentictools.TriplePublisher, platform types.Platform
 	return &Executor{publisher: publisher, platform: platform, logger: logger}
 }
 
-// ListTools returns the LLM-facing schema. pass is required; value
-// is optional (defaults from pass — 1.0 if pass, 0.0 if not). The
-// optional value field exists for v2 fractional convergence support
-// (e.g. `go test -json` reports 7/10 tests passing → value=0.7,
-// pass=false) without breaking the binary v1 contract.
+// ListTools returns the LLM-facing schema. pass is the only
+// load-bearing signal; value is NOT an arg in v1 (it's derived
+// stamping for audit symmetry — see Slice 2 reviewer R3 + N6).
+// v2 fractional convergence will re-introduce value as an arg
+// when richer test-result payloads (e.g. `go test -json`) drive
+// the kept/reverted machinery.
 func (e *Executor) ListTools() []agentic.ToolDefinition {
 	return []agentic.ToolDefinition{{
 		Name:        ToolName,
-		Description: "Stamp Ralph's per-iteration test-run result on the loop entity. pass=true (test_command exit 0) ⇒ rule 04a routes to coordinator wake-up with task.status=done; pass=false ⇒ Ralph keeps iterating (or hits framework max_iterations and rule 04b routes loop-failed). NO empirical-reviewer logic (unlike emit_autoresearch_measurement) — binary v1 semantics, deferred kept/reverted machinery for v2 fractional convergence.",
+		Description: "Stamp Ralph's per-iteration test-run result on the loop entity. pass=true (test_command exit 0) ⇒ rule 04a routes to coordinator wake-up with task.status=done; pass=false ⇒ Ralph keeps iterating (or hits the framework's runaway-safety ceiling and rule 04b routes loop-failed). NO empirical-reviewer logic (unlike emit_autoresearch_measurement) — binary v1 semantics, deferred kept/reverted machinery for v2 fractional convergence.",
 		Parameters: map[string]any{
 			"type":                 "object",
 			"additionalProperties": false,
 			"properties": map[string]any{
 				"pass":        map[string]any{"type": "boolean", "description": "True iff the task's test_command exited 0. The single load-bearing signal — 04a/04b route on this."},
-				"value":       map[string]any{"type": "number", "minimum": 0.0, "maximum": 1.0, "description": "Optional fractional convergence value 0.0..1.0 (e.g. 7/10 tests passing → 0.7). Defaults to 1.0 if pass else 0.0. v1 binary semantics don't read this — present for v2 fractional support without breaking the schema."},
 				"stdout_tail": map[string]any{"type": "string", "description": "Last ~200 chars of stdout for audit + Ralph's next-iteration context if pass=false."},
 				"stderr_tail": map[string]any{"type": "string", "description": "Last ~200 chars of stderr if any. The 04b loop-failed handler reads this so the coordinator's ask_user can quote the actual error."},
 			},
@@ -134,7 +139,8 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 	}
 
 	now := time.Now().UTC()
-	triples := args.triples(executeEntityID, now)
+	derivedValue := args.derivedValue()
+	triples := args.triples(executeEntityID, derivedValue, now)
 	if err := e.publisher.AddTriplesBatch(ctx, triples); err != nil {
 		return errResult(call, agentic.ToolErrorNetwork, "stamp measurement triples on %s: %v", executeEntityID, err)
 	}
@@ -142,13 +148,13 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 	body, _ := json.Marshal(map[string]any{
 		"execute_entity_id": executeEntityID,
 		"pass":              args.Pass,
-		"value":             args.effectiveValue(),
+		"value":             derivedValue,
 	})
 
 	e.logger.Info("emit_dev_via_test_measurement",
 		slog.String("execute_entity_id", executeEntityID),
 		slog.Bool("pass", args.Pass),
-		slog.Float64("value", args.effectiveValue()))
+		slog.Float64("value", derivedValue))
 
 	return agentic.ToolResult{
 		CallID:  call.ID,
@@ -156,24 +162,22 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 		Content: string(body),
 		Metadata: map[string]any{
 			"pass":  args.Pass,
-			"value": args.effectiveValue(),
+			"value": derivedValue,
 		},
 	}, nil
 }
 
 type parsedArgs struct {
 	Pass       bool
-	Value      *float64 // pointer to distinguish absent (use default) from explicit 0.0
 	StdoutTail string
 	StderrTail string
 }
 
-// effectiveValue applies the "defaults from pass" policy. If
-// Value was supplied explicitly, use it. Else 1.0 if Pass else 0.0.
-func (p *parsedArgs) effectiveValue() float64 {
-	if p.Value != nil {
-		return *p.Value
-	}
+// derivedValue returns the stamped value triple's content. Pure
+// derivation from Pass in v1 — no LLM input. v2 fractional support
+// will re-introduce an LLM-supplied value (with cross-field
+// validation against pass per [[schema-shape-for-cross-field-constraints]]).
+func (p *parsedArgs) derivedValue() float64 {
 	if p.Pass {
 		return 1.0
 	}
@@ -184,6 +188,18 @@ func parseArgs(raw map[string]any) (*parsedArgs, error) {
 	if raw == nil {
 		return nil, fmt.Errorf("arguments are required")
 	}
+	// Per Slice 2 reviewer N4: validate unknown fields FIRST so the
+	// error surfaces before we consume known fields. Schema-thin
+	// posture per [[schema-shape-for-cross-field-constraints]].
+	allowed := map[string]struct{}{
+		"pass": {}, "stdout_tail": {}, "stderr_tail": {},
+	}
+	for k := range raw {
+		if _, ok := allowed[k]; !ok {
+			return nil, fmt.Errorf("unknown field %q (allowed: pass, stdout_tail, stderr_tail)", k)
+		}
+	}
+
 	p := &parsedArgs{}
 	passRaw, ok := raw["pass"]
 	if !ok {
@@ -195,39 +211,16 @@ func parseArgs(raw map[string]any) (*parsedArgs, error) {
 	}
 	p.Pass = pass
 
-	if vRaw, present := raw["value"]; present {
-		v, ok := vRaw.(float64)
-		if !ok {
-			return nil, fmt.Errorf("value must be numeric if supplied, got %T", vRaw)
-		}
-		if v < 0.0 || v > 1.0 {
-			return nil, fmt.Errorf("value must be in [0.0, 1.0] if supplied, got %f", v)
-		}
-		p.Value = &v
-	}
-
 	if s, ok := raw["stdout_tail"].(string); ok {
 		p.StdoutTail = s
 	}
 	if s, ok := raw["stderr_tail"].(string); ok {
 		p.StderrTail = s
 	}
-
-	// Validate unknown fields. emit_dev_via_test_plan uses
-	// DisallowUnknownFields via the JSON decoder; here the parse
-	// is hand-walked, so we whitelist explicitly. Keeps drift loud.
-	allowed := map[string]struct{}{
-		"pass": {}, "value": {}, "stdout_tail": {}, "stderr_tail": {},
-	}
-	for k := range raw {
-		if _, ok := allowed[k]; !ok {
-			return nil, fmt.Errorf("unknown field %q (allowed: pass, value, stdout_tail, stderr_tail)", k)
-		}
-	}
 	return p, nil
 }
 
-func (p *parsedArgs) triples(executeEntityID string, now time.Time) []message.Triple {
+func (p *parsedArgs) triples(executeEntityID string, derivedValue float64, now time.Time) []message.Triple {
 	base := func(pred string, obj any) message.Triple {
 		return message.Triple{
 			Subject:    executeEntityID,
@@ -240,7 +233,7 @@ func (p *parsedArgs) triples(executeEntityID string, now time.Time) []message.Tr
 	}
 	out := []message.Triple{
 		base(predicateMeasurementPass, p.Pass),
-		base(predicateMeasurementValue, p.effectiveValue()),
+		base(predicateMeasurementValue, derivedValue),
 		base(predicateMeasurementStampedAt, now.Format(time.RFC3339Nano)),
 	}
 	if p.StdoutTail != "" {

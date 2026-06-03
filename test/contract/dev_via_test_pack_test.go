@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -367,8 +369,13 @@ func TestDevViaTestPack_04b_FailedRule(t *testing.T) {
 	if !devViaTestRoleCondition(rule, "dev-via-test-execute") {
 		t.Error("rule 04b does not condition on agent.loop.role = dev-via-test-execute")
 	}
-	if !devViaTestOutcomeCondition(rule, "failed") {
-		t.Error("rule 04b does not condition on agent.loop.outcome = failed")
+	// Per Slice 2 reviewer R1: rule 04b matches all three terminal
+	// non-success outcomes so context-length truncation and chain
+	// cancellation don't silently wedge the walker.
+	for _, outcome := range []string{"failed", "truncated", "cancelled"} {
+		if !devViaTestOutcomeCondition(rule, outcome) {
+			t.Errorf("rule 04b does not match agent.loop.outcome = %q — walker will silently wedge on this terminal class", outcome)
+		}
 	}
 
 	var foundOwnOutcome, foundRunFailed bool
@@ -463,26 +470,130 @@ func TestDevViaTestExecutePersonaTeachesIterationDiscipline(t *testing.T) {
 			t.Errorf("dev-via-test-execute persona missing %q — Ralph's iteration discipline depends on this concept being taught", want)
 		}
 	}
-	// Negative check: persona MUST NOT carry numeric caps like
-	// "you have 5 tries" — per ADR-044 §Stuck-task recovery, framework
-	// max_iterations is the safety floor; persona prose stays job-focused.
-	for _, badPattern := range []string{
-		"you have 5 tries", "you have 10 tries", "iteration cap",
-		"3 retries", "up to 5 attempts",
-	} {
-		if strings.Contains(got, badPattern) {
-			t.Errorf("dev-via-test-execute persona contains numeric cap phrase %q — per ADR-044, persona has no caps; framework max_iterations is the safety floor", badPattern)
+	// Negative check: persona MUST NOT carry numeric anchors that
+	// would prime Ralph to reason about budget — per ADR-044
+	// §Stuck-task recovery + [[coordinator-first-not-persona-patches]].
+	// Per Slice 2 reviewer B1: tighter than a literal-string blocklist
+	// because "typically 50" sailed through the original check.
+	// Pattern matches 1-3 digits adjacent to cap-anchoring nouns.
+	numericCap := regexp.MustCompile(`(?i)\b\d{1,3}\b[^.\n]{0,30}\b(iter|attempt|cap|ceiling|tries|retries|max_iterations)\b|\b(iter|attempt|cap|ceiling|tries|retries|max_iterations)\b[^.\n]{0,30}\b\d{1,3}\b`)
+	if loc := numericCap.FindStringIndex(got); loc != nil {
+		start := loc[0] - 30
+		if start < 0 {
+			start = 0
 		}
+		end := loc[1] + 30
+		if end > len(got) {
+			end = len(got)
+		}
+		t.Errorf("dev-via-test-execute persona contains a numeric-cap anchor near %q — per ADR-044, persona has no caps; framework safety ceiling exists for runaway protection, not as a budget Ralph reasons about", got[start:end])
+	}
+}
+
+// TestDevViaTestSpawnRulesPinRunLoopEntityID is the structural
+// fence for the cross-entity stamping pattern. Rules 04a/04b stamp
+// triples on the run entity via $entity.triple.lineage.run-loop-
+// entity-id substitution. If a spawn rule for any dev-via-test-*
+// role forgets to pin "run-loop-entity-id" in related_loops, those
+// stamp rules will error at fire time and the chain wedges silently.
+//
+// Per Slice 2 reviewer R2: pin the contract structurally so Slice 3
+// (walker spawning Ralph) and Slice 4 (coordinator dispatching CBG)
+// cannot ship without the wire-key in place. Today only rule 01
+// (Lisa) spawns; this test ensures any future spawner stays
+// consistent.
+func TestDevViaTestSpawnRulesPinRunLoopEntityID(t *testing.T) {
+	files, err := filepath.Glob(filepath.Join(devViaTestPackDir, "*.json"))
+	if err != nil {
+		t.Fatalf("glob dev-via-test pack: %v", err)
+	}
+	for _, path := range files {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		var rule devViaTestRuleJSON
+		if err := json.Unmarshal(data, &rule); err != nil {
+			t.Fatalf("unmarshal %s: %v", path, err)
+		}
+		for _, a := range rule.OnEnter {
+			if a.Type != "publish_agent" {
+				continue
+			}
+			// Pack-scope spawns: dev-via-test-* + reviewer-dev-via-test.
+			if !strings.HasPrefix(a.Role, "dev-via-test-") && a.Role != "reviewer-dev-via-test" {
+				continue
+			}
+			if v, ok := a.RelatedLoops["run-loop-entity-id"]; !ok || v == "" {
+				t.Errorf("%s spawn of role %q missing related_loops[run-loop-entity-id] — rules 04a/04b/(future 06/07) stamp via $entity.triple.lineage.run-loop-entity-id and will error at fire time without this key (silent chain wedge)",
+					filepath.Base(path), a.Role)
+			}
+		}
+	}
+}
+
+// TestDevViaTestPack_08_RoleListInventory pins the full set of
+// non-execute roles whose loop-failed outcomes must trigger chain
+// pause. Mirrors the autoresearch rule 11 inventory check (per
+// Slice 2 reviewer N8). When Slice 4 lands CBG, this list grows
+// AND rule 08's `in` list must grow to match — the test fails at
+// PR time, not at smoke time.
+func TestDevViaTestPack_08_RoleListInventory(t *testing.T) {
+	wantRoles := map[string]struct{}{
+		"dev-via-test-plan": {},
+		// Slice 4: add "reviewer-dev-via-test" here AND in rule 08.
+	}
+	rule := loadDevViaTestRule(t, "08-loop-failed-pause.json")
+	var gotRoles map[string]struct{}
+	for _, c := range rule.Conditions {
+		if c.Field != "agent.loop.role" || c.Operator != "in" {
+			continue
+		}
+		roles, ok := c.Value.([]any)
+		if !ok {
+			t.Fatalf("rule 08 agent.loop.role condition value is not an array: %T", c.Value)
+		}
+		gotRoles = make(map[string]struct{}, len(roles))
+		for _, r := range roles {
+			if s, ok := r.(string); ok {
+				gotRoles[s] = struct{}{}
+			}
+		}
+		break
+	}
+	if gotRoles == nil {
+		t.Fatal("rule 08 has no agent.loop.role condition with `in` operator — chain pause coverage absent")
+	}
+	if !reflect.DeepEqual(gotRoles, wantRoles) {
+		t.Errorf("rule 08 role list = %v; want exactly %v — any non-Ralph dev-via-test role spawned in the pack must appear so its failures pause the chain (and only such roles; Ralph's failures route through rule 04b instead)",
+			gotRoles, wantRoles)
 	}
 }
 
 // --- helpers added in Slice 2 ---
 
+// devViaTestOutcomeCondition accepts either operator=eq with
+// matching string, OR operator=in with the outcome present in the
+// list. Per Slice 2 reviewer R1: rule 04b widened from eq=failed
+// to in=[failed,truncated,cancelled] to cover all three terminal
+// non-success classes.
 func devViaTestOutcomeCondition(r *devViaTestRuleJSON, outcome string) bool {
 	for _, c := range r.Conditions {
-		if c.Field == "agent.loop.outcome" && c.Operator == "eq" {
+		if c.Field != "agent.loop.outcome" {
+			continue
+		}
+		switch c.Operator {
+		case "eq":
 			if s, ok := c.Value.(string); ok && s == outcome {
 				return true
+			}
+		case "in":
+			if list, ok := c.Value.([]any); ok {
+				for _, v := range list {
+					if s, ok := v.(string); ok && s == outcome {
+						return true
+					}
+				}
 			}
 		}
 	}
