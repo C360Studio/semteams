@@ -42,96 +42,164 @@ type autoresearchConditionJSON struct {
 }
 
 type autoresearchOnEnterJSON struct {
-	Type          string   `json:"type"`
-	Role          string   `json:"role,omitempty"`
-	Subject       string   `json:"subject,omitempty"`
-	Predicate     string   `json:"predicate,omitempty"`
-	ActionAllowed []string `json:"action_allowlist,omitempty"`
+	Type          string                      `json:"type"`
+	Role          string                      `json:"role,omitempty"`
+	Subject       string                      `json:"subject,omitempty"`
+	Predicate     string                      `json:"predicate,omitempty"`
+	Object        any                         `json:"object,omitempty"`
+	ActionAllowed []string                    `json:"action_allowlist,omitempty"`
+	When          []autoresearchConditionJSON `json:"when,omitempty"`
 }
 
-// TestAutoresearchPack_05_06_MutualExclusion pins the structural
-// claim from the autoresearch pack README §"Iteration counter
-// accounting": rule 05 (continue) and rule 06 (stop-cap) must fire
-// mutually exclusively at any single entity-state snapshot. The
-// design-review pass (2026-05-29 H3) called this out: the metadata
-// claims mutual exclusion; the structure must enforce it.
+// TestAutoresearchPack_05_IterationDispatch_PatternA pins the
+// presence-marker iteration-loop pattern (semstreams#204 / R4
+// canonical form, beta.95+). The old rule 02 + 05 + 06 trio was
+// retired in favor of a single rule 05 that handles iter 1 → cap
+// via a presence-marker (`autoresearch.iteration.pending`)
+// triggered remove-then-add cycle.
 //
-// The mathematical basis: rule 05 conditions on
-// `autoresearch.experiment.completed length_lt cap` and rule 06 on
-// `autoresearch.experiment.completed length_eq cap`. For any
-// length value L, exactly one of (L < cap) or (L == cap) is true
-// (assuming L <= cap, which the chain structurally guarantees: rule
-// 04a/04b are the only stamps, and rule 06's status=stopped flip
-// blocks further stamps).
+// Why this exists: the rule engine fires `on_enter` actions only on
+// false→true transitions. Monotonic conditions (e.g. count<cap)
+// stay true across iterations 2..N, so `wasMatching` stays true and
+// the next iteration's marker stamp would otherwise produce
+// `TransitionNone` (empty WhileTrue, action_count=0, chain stalls).
+// The remove_triple in this rule's first on_enter action flips the
+// trigger condition false (Exited), resetting wasMatching for the
+// next Entered cycle.
+//
+// Without these invariants, the iteration loop can't fire past
+// iter 1 (proven empirically across four reverted attempts in June
+// 2026; see semteams 7c82b95 / edf2c5b / cd094727 / 2be0e9f).
 //
 // This test enforces:
 //
-//  1. Both rules condition on the same predicate
-//     (`autoresearch.experiment.completed`).
-//  2. The operator pair is (length_lt, length_eq) — not (length_lt,
-//     length_lte) or any other combination that would overlap.
-//  3. Both reference the same cap value
-//     ($entity.triple.autoresearch.cap) — divergent cap references
-//     would silently break mutual exclusion.
-//  4. Both gate on autoresearch.run.status=active — defense in
-//     depth against belated counter changes after rule 06 has
-//     flipped the status to stopped.
-//
-// What this test does NOT cover: runtime evaluation-order races
-// in the rule engine itself (e.g. whether the engine could fire
-// rule 05 against a stale snapshot showing length < cap while
-// the live snapshot shows length == cap). That belongs to the
-// §A foundation PR's integration suite. This test only verifies
-// the rule JSON is structurally capable of mutual exclusion;
-// runtime correctness is the engine's job and is independently
-// covered.
-func TestAutoresearchPack_05_06_MutualExclusion(t *testing.T) {
-	rule05, err := loadAutoresearchRule(t, "05-experiment-continue.json")
+//  1. Rule conditions include a presence marker on
+//     `autoresearch.iteration.pending ne ""` — without it the
+//     remove-then-add cycle has nothing to remove.
+//  2. The first on_enter action is `remove_triple` on the marker —
+//     ordering matters: clearing the marker before the spawn
+//     actions is what produces the Exited transition.
+//  3. A publish_agent for autoresearch-propose exists with a `when`
+//     clause `$state.iteration <= $entity.triple.autoresearch.cap`.
+//  4. A publish_agent for autoresearch-synthesize exists with a
+//     `when` clause `$state.iteration > $entity.triple.autoresearch.cap`
+//     — the cap-exhaust branch.
+//  5. An update_triple (NOT add_triple) for autoresearch.run.status
+//     = "stopped" with the same cap-exhaust when clause. update_triple
+//     wipes the prior "active" value; add_triple would leave both,
+//     and GetFieldValue's first-wins read would still find "active",
+//     defeating the run.status=active gate's defense-in-depth.
+func TestAutoresearchPack_05_IterationDispatch_PatternA(t *testing.T) {
+	rule, err := loadAutoresearchRule(t, "05-iteration-dispatch.json")
 	if err != nil {
 		t.Fatalf("load rule 05: %v", err)
 	}
-	rule06, err := loadAutoresearchRule(t, "06-experiment-stop-cap.json")
-	if err != nil {
-		t.Fatalf("load rule 06: %v", err)
+
+	// Invariant 1: presence-marker trigger.
+	marker := findCondition(rule, "autoresearch.iteration.pending")
+	if marker == nil {
+		t.Fatal("rule 05 missing autoresearch.iteration.pending condition — the marker trigger is the whole basis of Pattern A")
+	}
+	if marker.Operator != "ne" {
+		t.Errorf("rule 05 iteration.pending operator = %q; want %q (presence check, not equality on a specific value)",
+			marker.Operator, "ne")
+	}
+	if got, ok := marker.Value.(string); !ok || got != "" {
+		t.Errorf("rule 05 iteration.pending compare value = %v; want empty string (presence test)", marker.Value)
 	}
 
-	c05 := findCondition(rule05, "autoresearch.experiment.completed")
-	if c05 == nil {
-		t.Fatal("rule 05 has no condition on autoresearch.experiment.completed — mutual exclusion broken at the predicate layer")
-	}
-	c06 := findCondition(rule06, "autoresearch.experiment.completed")
-	if c06 == nil {
-		t.Fatal("rule 06 has no condition on autoresearch.experiment.completed — mutual exclusion broken at the predicate layer")
-	}
-
-	// Invariant 2: operator pair must be (length_lt, length_eq).
-	if c05.Operator != "length_lt" {
-		t.Errorf("rule 05 operator on experiment.completed = %q; want %q so the continue path fires strictly when L < cap",
-			c05.Operator, "length_lt")
-	}
-	if c06.Operator != "length_eq" {
-		t.Errorf("rule 06 operator on experiment.completed = %q; want %q so the stop path fires strictly when L == cap",
-			c06.Operator, "length_eq")
+	// Invariant 2: first on_enter action must be remove_triple on the
+	// marker. Ordering is load-bearing — clearing the marker must
+	// happen before the spawn actions so the rule's conditions flip
+	// false (Exited) and the next iteration's marker stamp produces
+	// a fresh Entered. If a spawn fires first, the propose loop could
+	// race against the marker still being present.
+	if len(rule.OnEnter) == 0 || rule.OnEnter[0].Type != "remove_triple" ||
+		rule.OnEnter[0].Predicate != "autoresearch.iteration.pending" {
+		t.Errorf("rule 05 first on_enter action = %+v; want remove_triple of autoresearch.iteration.pending so the Exited transition fires before spawn actions",
+			ifFirstOnEnter(rule))
 	}
 
-	// Invariant 3: both must reference the same cap substitution.
+	// Invariant 3 + 4: propose and synthesize publish_agent actions
+	// with matching when clauses on $state.iteration vs cap.
 	wantCap := "$entity.triple.autoresearch.cap"
-	if got, ok := c05.Value.(string); !ok || got != wantCap {
-		t.Errorf("rule 05 cap reference = %v; want %q so cap is data-driven and aligned with rule 06",
-			c05.Value, wantCap)
+	var foundProposeWhen, foundSynthesizeWhen bool
+	for _, a := range rule.OnEnter {
+		if a.Type != "publish_agent" {
+			continue
+		}
+		switch a.Role {
+		case "autoresearch-propose":
+			foundProposeWhen = whenIterationCap(a.When, "lte", wantCap)
+			if !foundProposeWhen {
+				t.Errorf("rule 05 propose spawn missing when {$state.iteration lte %s}; current when = %+v", wantCap, a.When)
+			}
+		case "autoresearch-synthesize":
+			foundSynthesizeWhen = whenIterationCap(a.When, "gt", wantCap)
+			if !foundSynthesizeWhen {
+				t.Errorf("rule 05 synthesize spawn missing when {$state.iteration gt %s} (cap-exhaust branch); current when = %+v", wantCap, a.When)
+			}
+		}
 	}
-	if got, ok := c06.Value.(string); !ok || got != wantCap {
-		t.Errorf("rule 06 cap reference = %v; want %q so cap is data-driven and aligned with rule 05",
-			c06.Value, wantCap)
+	if !foundProposeWhen {
+		t.Error("rule 05 missing publish_agent for autoresearch-propose with the per-iteration when clause")
+	}
+	if !foundSynthesizeWhen {
+		t.Error("rule 05 missing publish_agent for autoresearch-synthesize with the cap-exhaust when clause — chain would loop past cap forever")
 	}
 
-	// Invariant 4: both must gate on autoresearch.run.status=active.
-	if !hasActiveStatusGate(rule05) {
-		t.Error("rule 05 missing autoresearch.run.status=active gate — defense-in-depth against rule 06 flipping status to stopped")
+	// Invariant 5: update_triple (NOT add_triple) for the run.status
+	// stop flip, gated by the same cap-exhaust when clause.
+	var foundStopFlip bool
+	for _, a := range rule.OnEnter {
+		if a.Type != "update_triple" || a.Predicate != "autoresearch.run.status" {
+			continue
+		}
+		if obj, ok := a.Object.(string); !ok || obj != "stopped" {
+			t.Errorf("rule 05 run.status update_triple object = %v; want %q so the status condition correctly fails on belated state changes",
+				a.Object, "stopped")
+		}
+		if !whenIterationCap(a.When, "gt", wantCap) {
+			t.Errorf("rule 05 run.status flip missing when {$state.iteration gt %s}; current when = %+v", wantCap, a.When)
+		}
+		foundStopFlip = true
 	}
-	if !hasActiveStatusGate(rule06) {
-		t.Error("rule 06 missing autoresearch.run.status=active gate — defense-in-depth against re-firing after status flip")
+	if !foundStopFlip {
+		t.Error("rule 05 missing update_triple for autoresearch.run.status='stopped' at cap-exhaust — without it, a belated execute finishing after synthesize spawned would re-trigger the rule and spawn a duplicate synthesize")
 	}
+
+	// add_triple on run.status would be a regression: append-only
+	// stacking means GetFieldValue's first-wins read still finds the
+	// original "active" value, defeating the gate. Explicitly forbid.
+	for _, a := range rule.OnEnter {
+		if a.Type == "add_triple" && a.Predicate == "autoresearch.run.status" {
+			t.Errorf("rule 05 uses add_triple on autoresearch.run.status; must be update_triple — add_triple appends and GetFieldValue's first-wins read would keep returning the original 'active' value")
+		}
+	}
+
+	// Invariant 4 (carry-over from old test): run.status=active gate
+	// stays as defense-in-depth.
+	if !hasActiveStatusGate(rule) {
+		t.Error("rule 05 missing autoresearch.run.status=active gate — defense-in-depth against firing after the cap-exhaust stop flip")
+	}
+}
+
+func ifFirstOnEnter(r *autoresearchRuleJSON) any {
+	if len(r.OnEnter) == 0 {
+		return nil
+	}
+	return r.OnEnter[0]
+}
+
+func whenIterationCap(when []autoresearchConditionJSON, operator, capRef string) bool {
+	for _, w := range when {
+		if w.Field == "$state.iteration" && w.Operator == operator {
+			if s, ok := w.Value.(string); ok && s == capRef {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // TestAutoresearchPack_04a_04b_OutcomeCoverage pins the C1 fix from
@@ -189,6 +257,19 @@ func TestAutoresearchPack_04a_04b_OutcomeCoverage(t *testing.T) {
 	// loop-failed ones in the journey rendering.
 	if !stampsPredicateOnRun(rule04b, "autoresearch.experiment.loop_failed") {
 		t.Error("rule 04b does not stamp autoresearch.experiment.loop_failed — SYNTHESIZE cannot distinguish loop-failed iterations from cleanly-measured ones")
+	}
+
+	// Pattern A (semstreams#204 marker-based iteration loop): both
+	// 04a and 04b must stamp autoresearch.iteration.pending on the
+	// run entity alongside experiment.completed. The new marker
+	// re-triggers rule 05's Entered cycle for the next iteration.
+	// Without this stamp, rule 05 never re-fires after iter 1 (the
+	// monotonic-condition trap that motivated the entire pattern).
+	if !stampsPredicateOnRun(rule04a, "autoresearch.iteration.pending") {
+		t.Error("rule 04a does not stamp autoresearch.iteration.pending — rule 05's iteration loop cannot advance past iter 1")
+	}
+	if !stampsPredicateOnRun(rule04b, "autoresearch.iteration.pending") {
+		t.Error("rule 04b does not stamp autoresearch.iteration.pending — loop-failed executes cannot advance the iteration counter past iter 1")
 	}
 }
 

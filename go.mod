@@ -3,7 +3,7 @@ module github.com/c360studio/semteams
 go 1.26.3
 
 require (
-	github.com/c360studio/semstreams v1.0.0-beta.94
+	github.com/c360studio/semstreams v1.0.0-beta.95
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
 	github.com/nats-io/nats.go v1.48.0

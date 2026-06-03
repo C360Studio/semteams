@@ -26,6 +26,11 @@
       "object": "active"
     },
     {
+      "type": "add_triple",
+      "predicate": "autoresearch.iteration.pending",
+      "object": "initial"
+    },
+    {
       "type": "publish_agent",
       "subject": "agent.task.autoresearch-baseline",
       "role": "autoresearch-baseline",

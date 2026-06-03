@@ -31,6 +31,12 @@
       "subject": "$entity.triple.lineage.run-loop-entity-id",
       "predicate": "autoresearch.experiment.completed",
       "object": "$entity.id"
+    },
+    {
+      "type": "add_triple",
+      "subject": "$entity.triple.lineage.run-loop-entity-id",
+      "predicate": "autoresearch.iteration.pending",
+      "object": "$entity.id"
     }
   ],
   "on_exit": [],

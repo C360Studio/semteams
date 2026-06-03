@@ -67,17 +67,30 @@ convention (mirroring `reviewer-research`); it is a separate persona
 from `reviewer-research` because the artifact shape it grades is
 different (baseline + experiments + best, not actors/integration_points).
 
+## Iteration loop — presence-marker pattern (Pattern A from semstreams#204)
+
+A single rule (`05-iteration-dispatch.json`) handles iter 1 through cap-exhaust by triggering on a presence marker (`autoresearch.iteration.pending ne ""`). The marker is stamped:
+
+- **At chain start** by rule 01 (`pending = "initial"`) — so the rule fires once baseline emits `cap`.
+- **After each execute completion** by rule 04a / 04b (`pending = <execute-entity-id>`) — so the rule fires again for the next iteration.
+
+Rule 05's first action is `remove_triple iteration.pending` — this flips the trigger condition false (Exited transition), resetting `wasMatching` so the next marker stamp produces a fresh Entered. Without the remove-then-add pattern, the rule's conditions would stay monotonic (count<cap stays true) and Entered would never re-fire — chain stalls after iter 1. See semstreams#204 (and the reverted in-flight-toggle attempts at semteams 7c82b95 / edf2c5b / cd094727 / 2be0e9f) for why scalar-toggle workarounds don't work in the current rule engine.
+
+Per-iteration when clauses on the publish_agent actions select between two paths:
+- `$state.iteration <= autoresearch.cap` → spawn the next autoresearch-propose.
+- `$state.iteration > autoresearch.cap` → spawn autoresearch-synthesize AND `update_triple run.status="stopped"` (the update_triple — NOT add_triple — wipes the prior `active` value so this rule's run.status=active condition fails on any belated execute completion that lands after synthesize already spawned).
+
+This retires the old rule 02 (baseline→propose) and rule 06 (length_eq cap stop): rule 05 covers all three roles (iter 1 spawn, iter 2..cap spawn, cap-exhaust synthesize).
+
 ## Rules
 
 | File | Trigger | Spawn / Stamp |
 |---|---|---|
-| `01-coordinator-autoresearch-spawn.json` | coordinator decide(autoresearch) | autoresearch-baseline + stamp `autoresearch.cap`, `.surface`, `.command`, `.run.status=active` on coordinator (run) entity |
-| `02-baseline-to-propose.json` | autoresearch-baseline decide(propose) | autoresearch-propose (iteration 1) |
+| `01-coordinator-autoresearch-spawn.json` | coordinator decide(autoresearch) | autoresearch-baseline + stamp `autoresearch.run.status=active`, `iteration.pending="initial"` on coordinator (run) entity |
 | `03-propose-to-execute.json` | autoresearch-propose decide(measure) | autoresearch-execute |
-| `04a-execute-stamp-completion.json` | autoresearch-execute decide(measured) + outcome=success | stamp `autoresearch.experiment.completed` on run entity (Object = execute loop id) |
-| `04b-execute-stamp-failed.json` | autoresearch-execute outcome=failed (no decide; loop crashed) | stamp `autoresearch.experiment.completed` + `autoresearch.experiment.loop_failed` on run entity |
-| `05-experiment-continue.json` | run entity's `experiment.completed length_lt cap` | autoresearch-propose (next iteration) |
-| `06-experiment-stop-cap.json` | run entity's `experiment.completed length_eq cap` | autoresearch-synthesize + stamp `autoresearch.stop.reason=cap` |
+| `04a-execute-stamp-completion.json` | autoresearch-execute decide(measured) + outcome=success | stamp `autoresearch.experiment.completed` + `iteration.pending=<entity.id>` on run entity (the new pending marker re-triggers rule 05) |
+| `04b-execute-stamp-failed.json` | autoresearch-execute outcome=failed (no decide; loop crashed) | stamp `autoresearch.experiment.completed` + `autoresearch.experiment.loop_failed` + `iteration.pending=<entity.id>` on run entity |
+| `05-iteration-dispatch.json` | run entity's `iteration.pending ne ""` (marker presence) + `cap > 0` + `run.status=active` | (1) remove_triple iteration.pending; (2) publish_agent autoresearch-propose when `$state.iteration <= cap`; (3) publish_agent autoresearch-synthesize + update_triple run.status="stopped" when `$state.iteration > cap` |
 | `07-synthesize-to-reviewer.json` | autoresearch-synthesize decide(emit) | reviewer-autoresearch |
 | `08-reviewer-approved-to-coordinator.json` | reviewer-autoresearch decide(approved) | coordinator (wake-up for respond_direct) |
 | `09-reviewer-rejected-resynthesize.json` | reviewer-autoresearch decide(insufficient) | autoresearch-synthesize (max_iterations=2 — budget already spent on iteration loops, so this re-rolls the rollup but does NOT re-iterate experiments) |
