@@ -263,7 +263,7 @@ func TestDevViaTestChainStartTagLiteralConsistency(t *testing.T) {
 	}
 }
 
-// TestDevViaTestPackWiredInFlowBootstrap asserts the Slice 1 + 2
+// TestDevViaTestPackWiredInFlowBootstrap asserts the Slice 1 + 2 + 3
 // rule filenames appear in flow-bootstrap.json's rules_files list.
 // Without this, the rules never load at boot and the pack is dead
 // regardless of how good the rule JSON itself is. Mirrors the
@@ -276,14 +276,298 @@ func TestDevViaTestPackWiredInFlowBootstrap(t *testing.T) {
 	body := string(data)
 	for _, want := range []string{
 		"/app/configs/rules/dev-via-test/01-coordinator-dev-via-test-spawn.json",
+		"/app/configs/rules/dev-via-test/02-lisa-terminal-to-walker.json",
+		"/app/configs/rules/dev-via-test/03-coordinator-dispatch-ralph.json",
 		"/app/configs/rules/dev-via-test/04a-execute-stamp-converged.json",
 		"/app/configs/rules/dev-via-test/04b-execute-stamp-failed.json",
+		"/app/configs/rules/dev-via-test/05-ralph-terminal-to-walker.json",
 		"/app/configs/rules/dev-via-test/08-loop-failed-pause.json",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("flow-bootstrap.json rules_files missing %q — rule never loads at boot", want)
 		}
 	}
+}
+
+// TestCoordinatorDispatchHasQueryEntityTool asserts the
+// teams-dispatch default_tools list includes query_entity. The
+// Slice 3 walker reads the run entity's plan + execution-state
+// triples via query_entity in EVERY wake-up — without it in the
+// coordinator's default toolset, the walker can't read state and
+// the chain wedges silently.
+//
+// Per Slice 3 design: query_entity is added to default_tools (not
+// per-wake-up-rule tools) so the front-door coordinator also has
+// it. Wake-up rules 02 + 05 explicitly include it in their spawn
+// tools as defense-in-depth.
+func TestCoordinatorDispatchHasQueryEntityTool(t *testing.T) {
+	data, err := os.ReadFile("../../configs/flow-bootstrap.json")
+	if err != nil {
+		t.Fatalf("read flow-bootstrap.json: %v", err)
+	}
+	body := string(data)
+	// Locate teams-dispatch.config.default_tools and assert
+	// query_entity is in the list. Substring match is sufficient —
+	// the dispatch block's default_tools is the only line with
+	// that exact key.
+	if !strings.Contains(body, `"query_entity"`) {
+		t.Error("flow-bootstrap.json teams-dispatch.default_tools does not include \"query_entity\" — Slice 3 walker cannot read run-entity state and chain wedges silently")
+	}
+}
+
+// TestDevViaTestPack_01_SubtopicsLengthZero pins the Slice 3
+// addition to rule 01: the spawn rule now requires
+// coordinator.decision.subtopics.length=0 to differentiate from
+// the walker-dispatch path (rule 03). Without this, walker
+// dispatches (decide with subtopics non-empty) would double-fire
+// rule 01 + rule 03, spawning both Lisa AND Ralph in parallel.
+func TestDevViaTestPack_01_SubtopicsLengthZero(t *testing.T) {
+	rule := loadDevViaTestRule(t, "01-coordinator-dev-via-test-spawn.json")
+	if !devViaTestLengthCondition(rule, "coordinator.decision.subtopics", "length_eq", float64(0)) {
+		t.Error("rule 01 missing coordinator.decision.subtopics length_eq 0 — walker dispatches will double-fire rule 01 + rule 03")
+	}
+}
+
+// TestDevViaTestPack_02_LisaTerminalToWalker pins the Slice 3
+// wake-up rule's shape. The walker can only do its job if:
+//
+//  1. Conditions match Lisa terminal (role=dev-via-test-plan,
+//     outcome=success, next_action=planned).
+//  2. Spawned role is "coordinator" (not a pack-specific walker
+//     role — we deliberately reuse the coordinator role).
+//  3. tools include query_entity (read run-entity state) +
+//     read_loop_result (read previous pack role's terminal).
+//  4. action_allowlist constrains to [dev_via_test, respond_direct,
+//     ask_user] — walker cannot start a new chain via research
+//     or autoresearch, and CANNOT call request_sandbox (already
+//     provisioned).
+//  5. related_loops pins run-loop-entity-id from Lisa's lineage
+//     (NOT $entity.id — the walker is a fresh coordinator loop,
+//     not the original run entity; the original is in Lisa's
+//     lineage).
+//  6. tool_choice=required (walker must use the tool path).
+func TestDevViaTestPack_02_LisaTerminalToWalker(t *testing.T) {
+	rule := loadDevViaTestRule(t, "02-lisa-terminal-to-walker.json")
+
+	if !devViaTestRoleCondition(rule, "dev-via-test-plan") {
+		t.Error("rule 02 does not condition on role=dev-via-test-plan")
+	}
+	if !devViaTestOutcomeCondition(rule, "success") {
+		t.Error("rule 02 does not condition on outcome=success")
+	}
+	if !devViaTestNextActionCondition(rule, "planned") {
+		t.Error("rule 02 does not condition on coordinator.decision.next_action=planned")
+	}
+
+	var spawn *devViaTestOnEnterJSON
+	for i := range rule.OnEnter {
+		if rule.OnEnter[i].Type == "publish_agent" && rule.OnEnter[i].Role == "coordinator" {
+			spawn = &rule.OnEnter[i]
+			break
+		}
+	}
+	if spawn == nil {
+		t.Fatal("rule 02 has no publish_agent for role=coordinator")
+	}
+
+	for _, want := range []string{"read_loop_result", "query_entity", "scratchpad", "decide"} {
+		if !devViaTestSliceHas(spawn.Tools, want) {
+			t.Errorf("rule 02 walker tools missing %q; current = %v", want, spawn.Tools)
+		}
+	}
+
+	for _, want := range []string{"dev_via_test", "respond_direct", "ask_user"} {
+		if !devViaTestSliceHas(spawn.ActionAllowed, want) {
+			t.Errorf("rule 02 action_allowlist missing %q", want)
+		}
+	}
+
+	// Walker must NOT have research, autoresearch, request_sandbox
+	// access — these would let it start a fresh chain or re-provision
+	// a sandbox already in place.
+	for _, forbidden := range []string{"research", "autoresearch"} {
+		if devViaTestSliceHas(spawn.ActionAllowed, forbidden) {
+			t.Errorf("rule 02 action_allowlist includes %q — walker must not start a fresh chain", forbidden)
+		}
+	}
+
+	if want, got := "$entity.triple.lineage.run-loop-entity-id", spawn.RelatedLoops["run-loop-entity-id"]; got != want {
+		t.Errorf("rule 02 related_loops[run-loop-entity-id] = %q; want %q (lineage threading from Lisa)", got, want)
+	}
+
+	if spawn.ToolChoice == nil {
+		t.Error("rule 02 spawn missing tool_choice — walker may text-out of query_entity / decide")
+	} else if mode, _ := spawn.ToolChoice["mode"].(string); mode != "required" {
+		t.Errorf("rule 02 tool_choice.mode = %q; want %q", mode, "required")
+	}
+}
+
+// TestDevViaTestPack_03_DispatchRalphForEach pins the Slice 3
+// walker-dispatch rule's shape. The pack's whole sequential
+// walking pattern hangs off this rule's for_each over subtopics.
+//
+// Invariants:
+//
+//  1. Conditions match coordinator + decide(dev_via_test) +
+//     subtopics.length > 0 (the walker-dispatch path, mutually
+//     exclusive with rule 01).
+//  2. Spawns dev-via-test-execute (Ralph).
+//  3. for_each iterates over $entity.triple.coordinator.decision.subtopics
+//     with for_each_var = subtopic (per ADR-046 Phase 1).
+//  4. properties.task_id substitutes $subtopic — Ralph reads
+//     this to know which task he owns.
+//  5. related_loops pins run-loop-entity-id from walker's lineage
+//     (NOT $entity.id — the walker isn't the run entity).
+//  6. action_allowlist constrains to [measured, needs_clarification].
+//  7. Ralph's tools include bash + emit_dev_via_test_measurement.
+func TestDevViaTestPack_03_DispatchRalphForEach(t *testing.T) {
+	rule := loadDevViaTestRule(t, "03-coordinator-dispatch-ralph.json")
+
+	if !devViaTestRoleCondition(rule, "coordinator") {
+		t.Error("rule 03 does not condition on role=coordinator")
+	}
+	if !devViaTestActionCondition(rule, "dev_via_test") {
+		t.Error("rule 03 does not condition on next_action=dev_via_test")
+	}
+	if !devViaTestLengthCondition(rule, "coordinator.decision.subtopics", "length_gt", float64(0)) {
+		t.Error("rule 03 missing coordinator.decision.subtopics length_gt 0 — rule 01 (Lisa spawn) would double-fire with rule 03 on every walker dispatch")
+	}
+
+	var spawn *devViaTestOnEnterJSON
+	for i := range rule.OnEnter {
+		if rule.OnEnter[i].Type == "publish_agent" && rule.OnEnter[i].Role == "dev-via-test-execute" {
+			spawn = &rule.OnEnter[i]
+			break
+		}
+	}
+	if spawn == nil {
+		t.Fatal("rule 03 has no publish_agent for role=dev-via-test-execute")
+	}
+
+	if spawn.ForEach != "$entity.triple.coordinator.decision.subtopics" {
+		t.Errorf("rule 03 for_each = %q; want %q (subtopics-driven fan-out)",
+			spawn.ForEach, "$entity.triple.coordinator.decision.subtopics")
+	}
+	if spawn.ForEachVar != "subtopic" {
+		t.Errorf("rule 03 for_each_var = %q; want %q (matches $subtopic substitution in prompt + properties)",
+			spawn.ForEachVar, "subtopic")
+	}
+
+	// Ralph's tools must include bash + emit_dev_via_test_measurement.
+	for _, want := range []string{"bash", "emit_dev_via_test_measurement", "decide", "scratchpad"} {
+		if !devViaTestSliceHas(spawn.Tools, want) {
+			t.Errorf("rule 03 Ralph tools missing %q", want)
+		}
+	}
+
+	if want, got := "$entity.triple.lineage.run-loop-entity-id", spawn.RelatedLoops["run-loop-entity-id"]; got != want {
+		t.Errorf("rule 03 related_loops[run-loop-entity-id] = %q; want %q (walker is NOT the run entity; thread from lineage)", got, want)
+	}
+
+	for _, want := range []string{"measured", "needs_clarification"} {
+		if !devViaTestSliceHas(spawn.ActionAllowed, want) {
+			t.Errorf("rule 03 action_allowlist missing %q", want)
+		}
+	}
+}
+
+// TestDevViaTestPack_05_RalphTerminalToWalker pins the Slice 3
+// post-Ralph wake-up rule's shape. Mirror of rule 02 but for the
+// Ralph-terminal path. Critical: outcome condition must cover all
+// four terminal classes (success, failed, truncated, cancelled)
+// so the walker wakes on ANY Ralph termination — failure modes
+// route through walker's ask_user per ADR-044 §Stuck-task recovery.
+func TestDevViaTestPack_05_RalphTerminalToWalker(t *testing.T) {
+	rule := loadDevViaTestRule(t, "05-ralph-terminal-to-walker.json")
+
+	if !devViaTestRoleCondition(rule, "dev-via-test-execute") {
+		t.Error("rule 05 does not condition on role=dev-via-test-execute")
+	}
+	for _, outcome := range []string{"success", "failed", "truncated", "cancelled"} {
+		if !devViaTestOutcomeCondition(rule, outcome) {
+			t.Errorf("rule 05 does not match outcome=%q — walker silently misses %s terminations", outcome, outcome)
+		}
+	}
+
+	var spawn *devViaTestOnEnterJSON
+	for i := range rule.OnEnter {
+		if rule.OnEnter[i].Type == "publish_agent" && rule.OnEnter[i].Role == "coordinator" {
+			spawn = &rule.OnEnter[i]
+			break
+		}
+	}
+	if spawn == nil {
+		t.Fatal("rule 05 has no publish_agent for role=coordinator")
+	}
+
+	for _, want := range []string{"read_loop_result", "query_entity", "scratchpad", "decide"} {
+		if !devViaTestSliceHas(spawn.Tools, want) {
+			t.Errorf("rule 05 walker tools missing %q", want)
+		}
+	}
+	for _, want := range []string{"dev_via_test", "respond_direct", "ask_user"} {
+		if !devViaTestSliceHas(spawn.ActionAllowed, want) {
+			t.Errorf("rule 05 action_allowlist missing %q", want)
+		}
+	}
+	if want, got := "$entity.triple.lineage.run-loop-entity-id", spawn.RelatedLoops["run-loop-entity-id"]; got != want {
+		t.Errorf("rule 05 related_loops[run-loop-entity-id] = %q; want %q", got, want)
+	}
+}
+
+// TestCoordinatorPersonaTeachesPlanWalking asserts the coordinator
+// persona corpus carries the walker contract — the dual-mode
+// dev_via_test token, the query_entity-based state read pattern,
+// and the no-retry posture from ADR-044 §Stuck-task recovery.
+func TestCoordinatorPersonaTeachesPlanWalking(t *testing.T) {
+	root := "../../configs/personas/fragments/coordinator"
+	got, err := concatFragmentsDevViaTest(root)
+	if err != nil {
+		t.Fatalf("read coordinator fragments: %v", err)
+	}
+	for _, want := range []string{
+		"walker",          // role name
+		"query_entity",    // load-bearing tool
+		"plan.task.",      // plan triple predicate prefix
+		"task_completed",  // execution marker
+		"task_failed",     // execution marker
+		"subtopics",       // walker dispatch arg
+		"30-plan-walking", // fragment exists as a referenced unit
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("coordinator persona missing %q — walker contract incomplete", want)
+		}
+	}
+}
+
+// --- helpers added in Slice 3 ---
+
+func devViaTestNextActionCondition(r *devViaTestRuleJSON, action string) bool {
+	for _, c := range r.Conditions {
+		if c.Field == "coordinator.decision.next_action" && c.Operator == "eq" {
+			if s, ok := c.Value.(string); ok && s == action {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func devViaTestLengthCondition(r *devViaTestRuleJSON, field, operator string, want any) bool {
+	for _, c := range r.Conditions {
+		if c.Field == field && c.Operator == operator {
+			// JSON-decoded numbers come back as float64; compare loosely.
+			if cv, ok := c.Value.(float64); ok {
+				if wv, ok := want.(float64); ok && cv == wv {
+					return true
+				}
+			}
+			if c.Value == want {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // TestDevViaTestPack_04a_ConvergedRule pins the Slice 2 Ralph-success
@@ -639,6 +923,8 @@ type devViaTestOnEnterJSON struct {
 	ToolChoice    map[string]any            `json:"tool_choice,omitempty"`
 	ActionAllowed []string                  `json:"action_allowlist,omitempty"`
 	RelatedLoops  map[string]string         `json:"related_loops,omitempty"`
+	ForEach       string                    `json:"for_each,omitempty"`
+	ForEachVar    string                    `json:"for_each_var,omitempty"`
 	When          []devViaTestConditionJSON `json:"when,omitempty"`
 }
 

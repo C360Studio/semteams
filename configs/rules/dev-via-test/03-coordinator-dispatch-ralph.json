@@ -1,0 +1,61 @@
+{
+  "id": "dev_via_test_coordinator_dispatch_ralph",
+  "type": "expression",
+  "name": "Coordinator decide(dev_via_test, subtopics=[task_id]) → dev-via-test-execute (Ralph)",
+  "description": "ADR-044 Slice 3 — walker-dispatch path. Fires when a coordinator loop terminates with decide(action=dev_via_test) AND coordinator.decision.subtopics has at least one element (the walker chose a specific task ID to dispatch; differentiates from rule 01's initial Lisa-spawn path where subtopics is empty). Uses for_each over the subtopics list to spawn ONE Ralph per task ID — v1 dispatches one task at a time (subtopics=[<id>]), so for_each runs once per walker decision. v2 parallel dispatch would emit subtopics=[<id1>,<id2>,...] and for_each spawns N Ralphs in parallel (mirrors research pack rule 02's fan-out pattern; gated by topo-walker work per ADR-044 Open Q DAG).",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "agent.loop.role",
+      "operator": "eq",
+      "value": "coordinator",
+      "required": true
+    },
+    {
+      "field": "coordinator.decision.next_action",
+      "operator": "eq",
+      "value": "dev_via_test",
+      "required": true
+    },
+    {
+      "field": "coordinator.decision.subtopics",
+      "operator": "length_gt",
+      "value": 0,
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "publish_agent",
+      "subject": "agent.task.dev-via-test-execute",
+      "role": "dev-via-test-execute",
+      "model": "claude-haiku",
+      "tools": ["read_loop_result", "query_entity", "bash", "emit_dev_via_test_measurement", "scratchpad", "decide"],
+      "tool_choice": { "mode": "required" },
+      "action_allowlist": ["measured", "needs_clarification"],
+      "for_each": "$entity.triple.coordinator.decision.subtopics",
+      "for_each_var": "subtopic",
+      "properties": {
+        "run_loop_id": "$entity.triple.lineage.run-loop-entity-id",
+        "category": "dev_via_test",
+        "phase": "execute",
+        "task_id": "$subtopic"
+      },
+      "related_loops": {
+        "dev-via-test-run": "$entity.triple.lineage.run-loop-entity-id",
+        "run-loop-entity-id": "$entity.triple.lineage.run-loop-entity-id",
+        "walker-loop-id": "$entity.instance"
+      },
+      "prompt": "DEV-VIA-TEST RALPH — converge on task $subtopic.\n\nYour run entity ID is $entity.triple.lineage.run-loop-entity-id. Call query_entity(entity_id=\"$entity.triple.lineage.run-loop-entity-id\") to read the plan triples and find your task's spec:\n\n- plan.task.$subtopic.goal — what success means for this task\n- plan.task.$subtopic.target_files — JSON-encoded array of file globs you may modify (parse it). Karpathy Rule 3: surgical changes only.\n- plan.task.$subtopic.test_command — the shell command that defines convergence. Run it via bash; exit 0 ⇒ done.\n- plan.task.$subtopic.assumptions / .non_goals — context for what's in/out of scope.\n- plan.task.$subtopic.expected_outcome — human-readable 'done looks like' (optional).\n\nYour iteration loop (per 10-execute-loop.md):\n1. Read the spec (above) — use scratchpad to cache.\n2. Edit files within target_files via bash.\n3. Run the test_command via bash.\n4. Call emit_dev_via_test_measurement(pass=<exit==0>, stdout_tail=..., stderr_tail=...).\n5. If pass=true → decide(action=\"measured\", reason=\"<one-line summary of converging change>\"). Done.\n6. If pass=false → iterate (next iteration of YOUR loop runs steps 2-5 again with the new state in mind).\n\nIf you cannot see a path to passing (spec is unclear, test_command depends on something missing, target_files don't cover what needs changing) → decide(action=\"needs_clarification\", reason=\"<specifically what's blocking — quote the failure, name what's missing>\"). The walker will route to ask_user.\n\nYou run inside the per-tenant devcontainer; bash routes there automatically. The workspace persists across all Ralph instances in this chain — prior Ralphs may have set up files you can reuse, and your changes will be visible to subsequent Ralphs (and to CBG at chain end)."
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "pack": "dev_via_test",
+    "phase": "ADR-044 Slice 3 — walker-dispatch Ralph",
+    "adr": "docs/adr/044-dev-via-test-pack.md",
+    "for_each_pattern": "v1 dispatches single Ralph per walker decision (subtopics=[<id>], N=1). for_each runs once. v2 parallel dispatch via subtopics=[<id1>,<id2>,...] spawns N Ralphs concurrently — mirrors research pack rule 02 fan-out. Gated by topo-walker work (ADR-044 §DAG awareness, deferred to v2).",
+    "rule_01_overlap_note": "Rule 01 (Lisa spawn) and rule 03 (Ralph dispatch) both condition on decide(action=dev_via_test). Differentiation is by subtopics.length: rule 01 fires on length_eq 0 (initial dispatch with no specific target — Lisa plans), rule 03 fires on length_gt 0 (walker chose target). The two rules are mutually exclusive on the same condition triple — no double-fire."
+  }
+}
