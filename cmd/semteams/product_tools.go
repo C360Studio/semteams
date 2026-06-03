@@ -2,12 +2,14 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
 	"strings"
 
+	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/payloadregistry"
 	agentictools "github.com/c360studio/semstreams/processor/agentic-tools"
@@ -367,6 +369,32 @@ func registerAutoresearchTools(reg *agentictools.ExecutorRegistry, natsClient *n
 	}
 
 	artifactExecutor := emitautoresearchartifact.NewExecutor(triplePublisher, platform, logger, "")
+	// Attestation-aware artifact write (semteams#194): when the
+	// sandbox stack is wired AND a chain has a ready per-tenant
+	// devcontainer, the artifact is written INTO that workspace via
+	// /exec so the reviewer's `bash cat` (which routes through
+	// chainbash → AttestationRunner → `devcontainer exec`) resolves
+	// the same file. Without SANDBOX_URL the writer stays nil and the
+	// executor falls back to local backend-fs writes (dev shells,
+	// unit tests, deployments without the sandbox stack).
+	sandboxURL := strings.TrimSpace(os.Getenv(envSandboxURL))
+	if sandboxURL != "" {
+		parentReader := chain.NewNATSParentReader(natsClient, platform, chain.DefaultGraphQueryEntitySubject)
+		resolver := chain.NewResolver(parentReader, platform)
+		chainReader := &chainAttestationReader{
+			entities: entityReader,
+			resolver: resolver,
+			platform: platform,
+			logger:   logger,
+		}
+		writer := newSandboxArtifactWriter(sandboxURL, logger)
+		artifactExecutor.SetAttestationWriter(chainReader, writer)
+		logger.Info("emit_autoresearch_artifact: attestation-aware write enabled",
+			slog.String("sandbox_url", sandboxURL))
+	} else {
+		logger.Info("emit_autoresearch_artifact: SANDBOX_URL unset; local-fs fallback only",
+			slog.String("env", envSandboxURL))
+	}
 	if err := reg.RegisterTool(emitautoresearchartifact.ToolName, artifactExecutor); err != nil {
 		return fmt.Errorf("register %s: %w", emitautoresearchartifact.ToolName, err)
 	}
@@ -374,6 +402,191 @@ func registerAutoresearchTools(reg *agentictools.ExecutorRegistry, natsClient *n
 		slog.String("category", "autoresearch"),
 		slog.Int("count", 3))
 	return nil
+}
+
+// chainAttestationReader implements
+// emitautoresearchartifact.ChainAttestationReader by composing
+// chain.ResolveChainEntityID (related_loops → resolver-walk fallback)
+// with chain.NATSEntityReader. Returns the
+// sandbox.attestation.host_workspace_folder triple when the chain has
+// a ready per-tenant devcontainer; empty string otherwise (no
+// attestation, not ready, or wsf empty — all "no per-tenant container
+// available" from the writer's perspective).
+//
+// Mirrors sandboxruntime.AttestationRunner.resolveWorkspaceFolder: same
+// ready+wsf gating, same fail-soft posture. Distinct types because
+// AttestationRunner reads via taskID (the chain ID rewritten by
+// chainbash) while this reader works from a tool ToolCall — different
+// call sites, identical decision logic.
+type chainAttestationReader struct {
+	entities *chain.NATSEntityReader
+	resolver chain.IDResolver
+	platform types.PlatformMeta
+	logger   *slog.Logger
+}
+
+func (r *chainAttestationReader) HostWorkspaceFolder(ctx context.Context, call agentic.ToolCall) (string, error) {
+	chainEntityID, err := chain.ResolveChainEntityID(ctx, call, r.resolver, r.platform, r.logger)
+	if err != nil {
+		// Surface the resolver error so the executor can decide whether
+		// to log + fall back. The chain-root case (loop_id == chain_id,
+		// no parent triple) returns a valid entity ID via the resolver
+		// branch, NOT an error.
+		return "", fmt.Errorf("resolve chain entity from call: %w", err)
+	}
+	triples, err := r.entities.ReadEntity(ctx, chainEntityID)
+	if err != nil {
+		return "", fmt.Errorf("read chain entity %s: %w", chainEntityID, err)
+	}
+	if triples == nil {
+		return "", nil
+	}
+	ready, _ := triples[sandboxmanager.PredicateAttestationReady].(bool)
+	if !ready {
+		return "", nil
+	}
+	wsf, _ := triples[sandboxmanager.PredicateAttestationHostWorkspaceFolder].(string)
+	return wsf, nil
+}
+
+// sandboxArtifactWriter implements
+// emitautoresearchartifact.SandboxFileWriter by POST-ing a single
+// bash command through upstream's runner.Client (the same /exec
+// endpoint chainbash + SandboxAPIRunner use). The command mkdir's
+// the target parent + base64-decodes the artifact content into the
+// destination — base64 over single-quoted argv side-steps every
+// shell-escape collision class (newlines, quotes, backticks) for
+// arbitrary markdown content.
+//
+// task_id is a fixed string because the artifact write is idempotent
+// and doesn't need to serialize against any other per-chain queue —
+// the synthesize phase emits exactly one artifact between gather
+// and review. (Per sandbox /exec contract, task_id only governs
+// serialization; the file ends up at an absolute host path
+// regardless of which queue handled it.)
+// sandboxExecer is the narrow surface sandboxArtifactWriter uses to
+// POST a single command at the sandbox /exec endpoint.
+// *runner.Client satisfies it; tests inject fakes to assert command
+// shape without spinning up a sandbox.
+type sandboxExecer interface {
+	Exec(ctx context.Context, taskID, command string, timeoutMs int) (*runner.ExecResult, error)
+}
+
+type sandboxArtifactWriter struct {
+	execer sandboxExecer
+	logger *slog.Logger
+}
+
+const (
+	// sandboxWriterTaskID names the per-task serialization queue used
+	// for artifact writes. Constant: every artifact write serializes
+	// against every other — fine because they're rare + fast.
+	sandboxWriterTaskID = "emit-autoresearch-artifact"
+
+	// sandboxWriterTimeoutMs caps the sandbox-side wallclock per write.
+	// 15s is generous for a mkdir + base64-decode + redirect on a few-KB
+	// markdown artifact.
+	sandboxWriterTimeoutMs = 15_000
+
+	// sandboxWriterMaxContentBytes is the upper bound on raw content
+	// size. Linux argv typically tops out at ~128KB; base64 inflates
+	// content by ~33%, so 64KB raw + framing ≈ 86KB on argv. An
+	// autoresearch artifact has never exceeded a few KB; cap at 256KB
+	// to leave room without ever realistically hitting it. Beyond
+	// this, switch to a multi-step write (e.g. POST through runner
+	// WriteFile's /file endpoint) — not worth the complexity until
+	// the data actually demands it.
+	sandboxWriterMaxContentBytes = 256 * 1024
+)
+
+func newSandboxArtifactWriter(sandboxURL string, logger *slog.Logger) *sandboxArtifactWriter {
+	return &sandboxArtifactWriter{
+		execer: runner.NewClient(sandboxURL),
+		logger: logger,
+	}
+}
+
+func (w *sandboxArtifactWriter) WriteFile(ctx context.Context, hostWsf, relPath string, content []byte) error {
+	if hostWsf == "" {
+		return fmt.Errorf("sandboxArtifactWriter: hostWorkspaceFolder is empty")
+	}
+	if relPath == "" {
+		return fmt.Errorf("sandboxArtifactWriter: relPath is empty")
+	}
+	if len(content) > sandboxWriterMaxContentBytes {
+		return fmt.Errorf("sandboxArtifactWriter: content size %d exceeds cap %d (switch to chunked write)",
+			len(content), sandboxWriterMaxContentBytes)
+	}
+	abs := hostWsf
+	if !strings.HasSuffix(abs, "/") {
+		abs += "/"
+	}
+	abs += strings.TrimPrefix(relPath, "/")
+	// abs is guaranteed to contain a "/" by the normalization above:
+	// hostWsf is non-empty (empty rejected at the API boundary) and we
+	// always append a trailing slash before concatenating relPath. The
+	// LastIndex contract is then total — but a future refactor that
+	// bypasses the normalization would hit the -1 panic shape, so the
+	// guard stays explicit.
+	idx := strings.LastIndex(abs, "/")
+	if idx < 0 {
+		return fmt.Errorf("sandboxArtifactWriter: composed path %q has no directory component (normalization broken)", abs)
+	}
+	dir := abs[:idx]
+	encoded := base64.StdEncoding.EncodeToString(content)
+
+	// Composed command: `mkdir -p '<dir>' && printf '%s' '<b64>' | base64 -d > '<abs>'`.
+	// All three substitutions go through shellSingleQuote so any
+	// metacharacters in hostWsf / relPath round-trip safely. base64
+	// output (charset [A-Za-z0-9+/=]) has no metacharacters, but we
+	// quote it uniformly to keep the boundary discipline obvious.
+	cmd := "mkdir -p " + shellSingleQuote(dir) +
+		" && printf '%s' " + shellSingleQuote(encoded) +
+		" | base64 -d > " + shellSingleQuote(abs)
+
+	res, err := w.execer.Exec(ctx, sandboxWriterTaskID, cmd, sandboxWriterTimeoutMs)
+	if err != nil {
+		return fmt.Errorf("sandbox /exec write to %s: %w", abs, err)
+	}
+	if res.TimedOut {
+		return fmt.Errorf("sandbox /exec write to %s timed out after %dms", abs, sandboxWriterTimeoutMs)
+	}
+	if res.ExitCode != 0 {
+		return fmt.Errorf("sandbox /exec write to %s: exit %d; stderr: %s",
+			abs, res.ExitCode, truncateForLog(res.Stderr))
+	}
+	w.logger.Debug("emit_autoresearch_artifact: wrote into tenant workspace",
+		slog.String("host_wsf", hostWsf),
+		slog.String("rel_path", relPath),
+		slog.Int("bytes", len(content)))
+	return nil
+}
+
+// shellSingleQuote single-quote-escapes s for safe inclusion in a
+// bash command line. Mirrors sandboxruntime.shellQuote +
+// sandboxmanager.joinShell's per-token escape — duplicated locally
+// rather than cross-package-coupling because the escape rule is
+// small + each consumer's call site has slightly different shapes.
+// The output is ALWAYS wrapped in outer single quotes (even for
+// empty input — `”` is valid bash for an empty positional arg).
+func shellSingleQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+// truncateForLog caps a stderr/stdout snippet at a few hundred bytes
+// so a runaway error doesn't blow up structured-log shippers. The
+// full content stays in the sandbox container's own logs for ops.
+// ToValidUTF8 guards against the slice landing mid-rune — sandbox
+// stderr is overwhelmingly ASCII, but a UTF-8 message (e.g. a path
+// with non-ASCII bytes) would otherwise leave a half-encoded rune in
+// the structured log.
+func truncateForLog(s string) string {
+	const maxLogBytes = 512
+	s = strings.TrimSpace(s)
+	if len(s) <= maxLogBytes {
+		return s
+	}
+	return strings.ToValidUTF8(s[:maxLogBytes], "") + "…(truncated)"
 }
 
 // bestValueReaderAdapter narrows chain.NATSEntityReader's
@@ -537,17 +750,20 @@ func buildChainLineageReader(natsClient *natsclient.Client, platform types.Platf
 	return chain.NewLineageReader(resolver, entityReader)
 }
 
-// Compile-time guards that chain.LineageReader satisfies the
-// (structurally-identical) ChainReader interface declared by the
-// emit-tool package. If the interface ever widens (a new method
-// added) and chain.LineageReader is not extended to match, this
-// fails to build — surfacing the drift here rather than at
-// SetChainReader call time.
+// Compile-time guards that the product-shell adapters satisfy the
+// (structurally-identical) interfaces declared by the consumer
+// packages. If a consumer interface ever widens (new method added)
+// and the adapter is not extended to match, this fails to build —
+// surfacing the drift here rather than at the SetX call site.
+// Covers: emitplan.ChainReader, chainbash.ChainResolver/Inner, and
+// the emit_autoresearch_artifact attestation-aware write path (#194).
 var (
-	_ emitplan.ChainReader    = (*chain.LineageReader)(nil)
-	_ chainbash.ChainResolver = (*chain.Resolver)(nil)
-	_ chainbash.ChainResolver = identityChainResolver{}
-	_ chainbash.Inner         = (*executors.BashExecutor)(nil)
+	_ emitplan.ChainReader                            = (*chain.LineageReader)(nil)
+	_ chainbash.ChainResolver                         = (*chain.Resolver)(nil)
+	_ chainbash.ChainResolver                         = identityChainResolver{}
+	_ chainbash.Inner                                 = (*executors.BashExecutor)(nil)
+	_ emitautoresearchartifact.ChainAttestationReader = (*chainAttestationReader)(nil)
+	_ emitautoresearchartifact.SandboxFileWriter      = (*sandboxArtifactWriter)(nil)
 )
 
 // registerChainBash wires the ADR-041 Phase 4 chain-scoped bash wrapper

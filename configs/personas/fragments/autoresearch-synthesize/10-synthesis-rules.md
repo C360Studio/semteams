@@ -85,6 +85,7 @@ emit_autoresearch_artifact(
   iterations_kept=<count>,
   iterations_reverted=<count>,
   iterations_crashed=<count>,
+  best_experiment_id="<from run entity — autoresearch.best.experiment_id; use literal 'baseline' when iterations_kept == 0>",
   best_diff_summary="<from step 4>",
   journey=[<ordered list of {iteration, hypothesis, value, outcome}>],
   open_opportunities="<from step 4>"
@@ -92,10 +93,12 @@ emit_autoresearch_artifact(
 ```
 
 The tool renders markdown at /artifacts/autoresearch/<slug>.md
-and stamps `autoresearch.artifact.{title, path, revision}` on
-your loop entity.
+and stamps `autoresearch.artifact.{title, path, revision, cap,
+best_experiment_id, …}` on your loop entity.
 
-## Step 6 — Terminal
+## Step 6 — Terminal — fire decide IMMEDIATELY after emit
+
+Your next action is `decide(action="emit", ...)`. Nothing else.
 
 ```
 decide(action="emit", reason="autoresearch artifact rev <N>:
@@ -103,7 +106,19 @@ baseline=<n> best=<n> (<pct>% improvement); <count> iterations
 (<kept> kept, <reverted> reverted, <crashed> crashed); slug=<slug>")
 ```
 
+The moment `emit_autoresearch_artifact` returns success, the
+artifact is on disk and the triples are stamped. Do not call
+bash, scratchpad, read_loop_result, or re-emit; the tool returns
+non-zero on render failure, and the reviewer is the verifier.
+Your work is done — fire decide.
+
 Rule 07 spawns reviewer-autoresearch next.
+
+If reviewer rejects (action=insufficient), rule 09 re-spawns you
+with a tightened reason citing structural gaps. Address the
+gaps named in the rejection — NOT re-litigation of the underlying
+run. The journal is immutable; only the rollup composition is
+revisable.
 
 ## When to needs_clarification
 

@@ -53,7 +53,10 @@
       },
       "related_loops": {
         "autoresearch-run": "$entity.instance",
-        "run-loop-entity-id": "$entity.id"
+        "run-loop-entity-id": "$entity.id",
+        "command": "$entity.triple.autoresearch.command",
+        "surface": "$entity.triple.autoresearch.surface",
+        "metric_parser": "$entity.triple.autoresearch.metric_parser"
       },
       "when": [
         {
@@ -81,7 +84,10 @@
       },
       "related_loops": {
         "autoresearch-run": "$entity.instance",
-        "run-loop-entity-id": "$entity.id"
+        "run-loop-entity-id": "$entity.id",
+        "command": "$entity.triple.autoresearch.command",
+        "surface": "$entity.triple.autoresearch.surface",
+        "metric_parser": "$entity.triple.autoresearch.metric_parser"
       },
       "when": [
         {

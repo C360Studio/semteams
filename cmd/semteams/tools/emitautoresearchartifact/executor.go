@@ -11,6 +11,24 @@
 // reads the rendered markdown via `bash cat $entity.triple.
 // autoresearch.artifact.path` for substance review.
 //
+// Attestation-aware write target (semteams#194):
+//
+// When the calling chain has a ready per-tenant devcontainer
+// (sandbox.attestation.{ready=true, host_workspace_folder=<wsf>} on
+// the chain entity), the artifact is written INTO that workspace via
+// the sandbox /exec endpoint at <wsf>/.artifacts/autoresearch/<slug>.md.
+// The reviewer's `bash cat` runs through chainbash → AttestationRunner →
+// `devcontainer exec --workspace-folder <wsf>`, landing inside the
+// per-tenant container whose cwd is the wsf bind-mount — so a relative
+// path like `.artifacts/autoresearch/<slug>.md` resolves to the same
+// file from both sides. Without this routing, the write went to the
+// backend container's filesystem and the reviewer's cat saw an empty
+// path.
+//
+// When no attestation is wired (dev shells, unit tests, deployments
+// without the sandbox stack), the writer falls back to local
+// os.WriteFile at e.outputDir — same behavior as before #194.
+//
 // Mirrors the emit_plan / emit_research_artifact pattern exactly:
 // persona supplies typed fields; tool owns format (stable markdown
 // headings). Migration target same as other emit tools.
@@ -53,26 +71,62 @@ const envOutputDir = "SEMTEAMS_AUTORESEARCH_ARTIFACT_DIR"
 // 07/08 (synthesize-to-reviewer / reviewer-approved-to-coordinator)
 // substitutions.
 const (
-	predicateTitle           = "autoresearch.artifact.title"
-	predicatePath            = "autoresearch.artifact.path"
-	predicateRevision        = "autoresearch.artifact.revision"
-	predicateProducedAt      = "autoresearch.artifact.produced_at"
-	predicateImprovementPct  = "autoresearch.artifact.improvement_pct"
-	predicateIterationsKept  = "autoresearch.artifact.iterations_kept"
-	predicateIterationsTotal = "autoresearch.artifact.iterations_completed"
+	predicateTitle            = "autoresearch.artifact.title"
+	predicatePath             = "autoresearch.artifact.path"
+	predicateRevision         = "autoresearch.artifact.revision"
+	predicateProducedAt       = "autoresearch.artifact.produced_at"
+	predicateImprovementPct   = "autoresearch.artifact.improvement_pct"
+	predicateIterationsKept   = "autoresearch.artifact.iterations_kept"
+	predicateIterationsTotal  = "autoresearch.artifact.iterations_completed"
+	predicateCap              = "autoresearch.artifact.cap"
+	predicateBestExperimentID = "autoresearch.artifact.best_experiment_id"
 )
+
+// ChainAttestationReader resolves the per-tenant devcontainer's host
+// workspace folder for the chain that owns the calling tool
+// invocation. Returns ("", nil) when no attestation is present,
+// not ready, or the host_workspace_folder triple is empty — all of
+// which route to the local-fs fallback. Errors are propagated for
+// graph-read failures so the caller can log + degrade gracefully.
+//
+// Implemented in product_tools.go via chain.ResolveChainEntityID +
+// chain.NATSEntityReader; consumer-defines-interface mirrors the
+// pattern in querysandboxattestation + sandboxruntime.AttestationRunner.
+type ChainAttestationReader interface {
+	HostWorkspaceFolder(ctx context.Context, call agentic.ToolCall) (string, error)
+}
+
+// SandboxFileWriter writes content to <hostWorkspaceFolder>/<relPath>
+// via the sandbox /exec endpoint. The artifact lands on the host
+// filesystem at the tenant workspace, which the per-tenant
+// devcontainer sees through the SEMTEAMS_TENANT_ROOT symmetric bind
+// mount (see sandboxmanager/runner_api.go PR 4.5 F6) — so the
+// reviewer's `devcontainer exec ... cat .artifacts/autoresearch/...`
+// resolves to the same file from inside the container.
+//
+// Implemented in product_tools.go via upstream's runner.Client
+// targeting SANDBOX_URL.
+type SandboxFileWriter interface {
+	WriteFile(ctx context.Context, hostWorkspaceFolder, relPath string, content []byte) error
+}
 
 // Executor implements agentic.ToolExecutor for emit_autoresearch_artifact.
 type Executor struct {
-	publisher agentictools.TriplePublisher
-	platform  types.PlatformMeta
-	logger    *slog.Logger
-	outputDir string
+	publisher     agentictools.TriplePublisher
+	platform      types.PlatformMeta
+	logger        *slog.Logger
+	outputDir     string
+	chainReader   ChainAttestationReader
+	sandboxWriter SandboxFileWriter
 }
 
 // NewExecutor constructs an Executor. outputDir empty → reads
 // SEMTEAMS_AUTORESEARCH_ARTIFACT_DIR or falls back to the package
 // default.
+//
+// Attestation-aware routing is opt-in via SetAttestationWriter; without
+// it, the executor writes to the local backend filesystem (legacy
+// behavior preserved for dev shells + unit tests).
 func NewExecutor(publisher agentictools.TriplePublisher, platform types.PlatformMeta, logger *slog.Logger, outputDir string) *Executor {
 	if publisher == nil {
 		panic("emitautoresearchartifact.NewExecutor: publisher must not be nil")
@@ -90,11 +144,21 @@ func NewExecutor(publisher agentictools.TriplePublisher, platform types.Platform
 	return &Executor{publisher: publisher, platform: platform, logger: logger, outputDir: outputDir}
 }
 
+// SetAttestationWriter wires the attestation-aware write path. When
+// both reader and writer are set AND the chain has a ready per-tenant
+// devcontainer, renderMarkdown writes the artifact into the tenant
+// workspace via /exec instead of the local backend filesystem. Either
+// argument nil → keep the local-fs fallback (no-op).
+func (e *Executor) SetAttestationWriter(reader ChainAttestationReader, writer SandboxFileWriter) {
+	e.chainReader = reader
+	e.sandboxWriter = writer
+}
+
 // ListTools returns the LLM-facing schema.
 func (e *Executor) ListTools() []agentic.ToolDefinition {
 	return []agentic.ToolDefinition{{
 		Name:        ToolName,
-		Description: "Emit the autoresearch-synthesize rollup. Renders structured markdown (baseline → best journey, per-iteration breakdown, recommended action) to .artifacts/autoresearch/<slug>.md and stamps autoresearch.artifact.{title,path,revision,produced_at,improvement_pct,iterations_*} on the calling synthesize loop entity. Call once before terminating with decide(action=emit).",
+		Description: "Emit the autoresearch-synthesize rollup. Renders structured markdown (baseline → best journey, per-iteration breakdown, recommended action) to .artifacts/autoresearch/<slug>.md and stamps autoresearch.artifact.{title,path,revision,produced_at,improvement_pct,iterations_*,cap,best_experiment_id} on the calling synthesize loop entity. Call once before terminating with decide(action=emit).",
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -103,17 +167,19 @@ func (e *Executor) ListTools() []agentic.ToolDefinition {
 				"baseline_value":       map[string]any{"type": "number", "description": "Baseline measurement."},
 				"best_value":           map[string]any{"type": "number", "description": "Best measurement reached during the run."},
 				"improvement_pct":      map[string]any{"type": "number", "description": "(baseline - best) / baseline * 100. Can be negative."},
+				"cap":                  map[string]any{"type": "integer", "minimum": 1, "description": "Iteration cap from the run entity (autoresearch.cap). Required for the reviewer's consistency check."},
 				"iterations_completed": map[string]any{"type": "integer", "description": "Total iterations (matches cap or the early-stop count)."},
 				"iterations_kept":      map[string]any{"type": "integer", "description": "Iterations whose diff improved the metric and was kept."},
 				"iterations_reverted":  map[string]any{"type": "integer", "description": "Iterations reverted (no improvement)."},
 				"iterations_crashed":   map[string]any{"type": "integer", "description": "Iterations whose measurement command failed."},
+				"best_experiment_id":   map[string]any{"type": "string", "description": "The experiment_id that achieved best_value (autoresearch.best.experiment_id from the run entity). Use literal 'baseline' when iterations_kept == 0. Required for the reviewer's consistency check that best.experiment_id resolves to a kept journey entry."},
 				"best_diff_summary":    map[string]any{"type": "string", "description": "Prose summary of the diff that won (referencing files + change pattern)."},
 				"journey":              map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "One entry per iteration: '<iter>: hypothesis → value (outcome)'."},
 				"open_opportunities":   map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Hypotheses worth exploring in a follow-up run."},
 				"recommended_action":   map[string]any{"type": "string", "description": "What the operator should do with this run's result (commit best, re-run with different surface, etc.)."},
 				"revision":             map[string]any{"type": "integer", "minimum": 1, "description": "Monotonic across reviewer-rejection retries."},
 			},
-			"required": []string{"title", "command", "baseline_value", "best_value", "iterations_completed", "journey"},
+			"required": []string{"title", "command", "baseline_value", "best_value", "cap", "iterations_completed", "journey", "best_experiment_id"},
 		},
 	}}
 }
@@ -140,7 +206,26 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 
 	now := time.Now().UTC()
 	artifactSlug := slug.DeriveDated(args.Title, call.LoopID, "autoresearch", now)
-	relPath, err := e.renderMarkdown(args, artifactSlug, now)
+
+	// Attestation-aware routing per semteams#194: when the chain has a
+	// ready per-tenant devcontainer, write into <wsf>/.artifacts/...
+	// via /exec so the reviewer's `devcontainer exec ... cat` resolves
+	// the same file. Read failures DON'T fail the tool — log and fall
+	// back to local fs (dev shells, e2e fixtures without sandbox stack
+	// up). Empty wsf → no ready container → local fallback.
+	hostWsf := ""
+	if e.chainReader != nil {
+		wsf, err := e.chainReader.HostWorkspaceFolder(ctx, call)
+		if err != nil {
+			e.logger.Warn("emit_autoresearch_artifact: chain attestation lookup failed; using local-fs fallback",
+				slog.String("loop_id", call.LoopID),
+				slog.Any("error", err))
+		} else {
+			hostWsf = wsf
+		}
+	}
+
+	relPath, err := e.renderMarkdown(ctx, args, artifactSlug, now, hostWsf)
 	if err != nil {
 		return errResult(call, agentic.ToolErrorInternal, "render artifact: %v", err)
 	}
@@ -178,10 +263,12 @@ type parsedArgs struct {
 	BaselineValue       float64
 	BestValue           float64
 	ImprovementPct      float64
+	Cap                 int
 	IterationsCompleted int
 	IterationsKept      int
 	IterationsReverted  int
 	IterationsCrashed   int
+	BestExperimentID    string
 	BestDiffSummary     string
 	Journey             []string
 	OpenOpportunities   []string
@@ -209,6 +296,9 @@ func parseArgs(raw map[string]any) (*parsedArgs, error) {
 	} else if p.BaselineValue != 0 {
 		p.ImprovementPct = (p.BaselineValue - p.BestValue) / p.BaselineValue * 100
 	}
+	if v, ok := raw["cap"].(float64); ok {
+		p.Cap = int(v)
+	}
 	if v, ok := raw["iterations_completed"].(float64); ok {
 		p.IterationsCompleted = int(v)
 	}
@@ -220,6 +310,9 @@ func parseArgs(raw map[string]any) (*parsedArgs, error) {
 	}
 	if v, ok := raw["iterations_crashed"].(float64); ok {
 		p.IterationsCrashed = int(v)
+	}
+	if v, ok := raw["best_experiment_id"].(string); ok {
+		p.BestExperimentID = v
 	}
 	if v, ok := raw["best_diff_summary"].(string); ok {
 		p.BestDiffSummary = v
@@ -247,16 +340,44 @@ func parseArgs(raw map[string]any) (*parsedArgs, error) {
 		p.Revision = int(v)
 	}
 
-	if p.Title == "" {
-		return nil, fmt.Errorf("title is required")
-	}
-	if p.Command == "" {
-		return nil, fmt.Errorf("command is required")
-	}
-	if len(p.Journey) == 0 {
-		return nil, fmt.Errorf("journey must have at least one entry")
+	if err := p.validate(); err != nil {
+		return nil, err
 	}
 	return p, nil
+}
+
+// validate enforces required-field + consistency rules on parsedArgs.
+// Split out so parseArgs stays under revive's function-length cap and
+// validation can be unit-tested independently of JSON shape parsing.
+func (p *parsedArgs) validate() error {
+	if p.Title == "" {
+		return fmt.Errorf("title is required")
+	}
+	if p.Command == "" {
+		return fmt.Errorf("command is required")
+	}
+	if p.Cap <= 0 {
+		return fmt.Errorf("cap is required and must be > 0")
+	}
+	if p.BestExperimentID == "" {
+		return fmt.Errorf("best_experiment_id is required (use literal 'baseline' when iterations_kept == 0)")
+	}
+	// Structural check: the reviewer's consistency contract requires
+	// best_experiment_id == "baseline" exactly when no kept iteration
+	// improved on baseline. Catching this at tool-time pushes the
+	// failure to a debuggable point instead of round-tripping through
+	// reviewer-rejection → resynthesize (smoke #15 surfaced the latter
+	// path as expensive).
+	if p.IterationsKept == 0 && p.BestExperimentID != "baseline" {
+		return fmt.Errorf("best_experiment_id=%q but iterations_kept=0; use literal 'baseline' for negative-result runs", p.BestExperimentID)
+	}
+	if p.IterationsKept > 0 && p.BestExperimentID == "baseline" {
+		return fmt.Errorf("best_experiment_id='baseline' but iterations_kept=%d; pass the kept iteration's experiment_id", p.IterationsKept)
+	}
+	if len(p.Journey) == 0 {
+		return fmt.Errorf("journey must have at least one entry")
+	}
+	return nil
 }
 
 func (p *parsedArgs) triples(loopEntityID, relPath string, now time.Time) []message.Triple {
@@ -278,13 +399,19 @@ func (p *parsedArgs) triples(loopEntityID, relPath string, now time.Time) []mess
 		base(predicateImprovementPct, p.ImprovementPct),
 		base(predicateIterationsKept, p.IterationsKept),
 		base(predicateIterationsTotal, p.IterationsCompleted),
+		base(predicateCap, p.Cap),
+		base(predicateBestExperimentID, p.BestExperimentID),
 	}
 }
 
-func (e *Executor) renderMarkdown(p *parsedArgs, artifactSlug string, now time.Time) (string, error) {
-	if err := os.MkdirAll(e.outputDir, 0o755); err != nil {
-		return "", fmt.Errorf("create output dir %s: %w", e.outputDir, err)
-	}
+// tenantArtifactSubdir is the path under the per-tenant workspace
+// the attestation-aware write lands at. Matches the LOCAL outputDir's
+// trailing component so the relative form (`.artifacts/autoresearch/
+// <slug>.md`) is identical regardless of write target — readers don't
+// need to know which path the writer took.
+const tenantArtifactSubdir = ".artifacts/autoresearch"
+
+func (e *Executor) renderMarkdown(ctx context.Context, p *parsedArgs, artifactSlug string, now time.Time, hostWsf string) (string, error) {
 	tmpl, err := template.New("autoresearch-artifact").Funcs(template.FuncMap{
 		"add": func(i, n int) int { return i + n },
 	}).Parse(artifactTemplate)
@@ -305,11 +432,30 @@ func (e *Executor) renderMarkdown(p *parsedArgs, artifactSlug string, now time.T
 		return "", fmt.Errorf("execute template: %w", err)
 	}
 	filename := artifactSlug + ".md"
+
+	// Attestation-aware path: write into the per-tenant workspace via
+	// /exec so the path the reviewer's bash-cat (which runs inside the
+	// per-tenant devcontainer) resolves to the same file. The stamped
+	// path is workspace-relative — the devcontainer's cwd at the wsf
+	// bind-mount makes it resolve cleanly.
+	if hostWsf != "" && e.sandboxWriter != nil {
+		relPath := filepath.Join(tenantArtifactSubdir, filename)
+		if err := e.sandboxWriter.WriteFile(ctx, hostWsf, relPath, buf.Bytes()); err != nil {
+			return "", fmt.Errorf("write artifact to tenant workspace %s: %w", hostWsf, err)
+		}
+		return relPath, nil
+	}
+
+	// Local-fs fallback: dev shells, unit tests, deployments without
+	// the sandbox stack. Behavior pre-#194.
+	if err := os.MkdirAll(e.outputDir, 0o755); err != nil {
+		return "", fmt.Errorf("create output dir %s: %w", e.outputDir, err)
+	}
 	fullPath := filepath.Join(e.outputDir, filename)
 	if err := os.WriteFile(fullPath, buf.Bytes(), 0o644); err != nil {
 		return "", fmt.Errorf("write file %s: %w", fullPath, err)
 	}
-	return filepath.Join(e.outputDir, filename), nil
+	return fullPath, nil
 }
 
 const artifactTemplate = `# {{ .Title }}
@@ -328,10 +474,13 @@ Command: ` + "`{{ .Command }}`" + `
 
 | Iterations | Count |
 |---|---|
+| Cap | {{ .Cap }} |
 | Completed | {{ .IterationsCompleted }} |
 | Kept | {{ .IterationsKept }} |
 | Reverted | {{ .IterationsReverted }} |
 | Crashed | {{ .IterationsCrashed }} |
+
+**Best experiment:** ` + "`{{ .BestExperimentID }}`" + `
 
 {{ if .BestDiffSummary }}## Best diff
 
