@@ -2,7 +2,7 @@
   "id": "dev_via_test_coordinator_spawn_lisa",
   "type": "expression",
   "name": "Coordinator decide(dev_via_test) → dev-via-test-plan (Lisa)",
-  "description": "ADR-044 Slice 1 + Slice 3 — first rule of the dev-via-test category pack. Fires when a coordinator loop terminates with decide(action=dev_via_test, reason=<user's implementation ask>) AND coordinator.decision.subtopics is empty/absent (the INITIAL dispatch path; Slice 3 added the subtopics.length=0 condition to distinguish from walker-dispatch — see rule 03). Spawns Lisa (dev-via-test-plan) with the coordinator loop ID as the RUN ENTITY. Lisa parses the user's prose into a Karpathy-shaped plan via emit_dev_via_test_plan, which stamps plan.* triples on the run entity for downstream Ralph + CBG consumption.",
+  "description": "ADR-044 Slice 1 + Slice 3 — first rule of the dev-via-test category pack. Fires ONLY on front-door coordinators emitting decide(action=dev_via_test) with no subtopics — both differentiators are load-bearing:\n\n  - subtopics.length=0 (Slice 3 fence): distinguishes initial dispatch from walker-dispatch (rule 03 fires on length>0).\n  - lineage.run-loop-entity-id.length=0 (Slice 3 reviewer B1 fence): a front-door coordinator has no lineage (it's the chain root); walkers always have lineage.run-loop-entity-id (pinned by rules 02 + 05). Without this fence, a confused walker emitting decide(action=dev_via_test) with NO subtopics (LLM forgot the dual-mode contract, hallucinated, token-budget truncation mid-subtopics) would re-fire rule 01 and spawn a SECOND Lisa, corrupting the run state with duplicate plan.* triples. Walker has lineage so this rule's lineage.length_eq 0 condition fails — silent no-op rather than corruption.\n\nSpawns Lisa (dev-via-test-plan) with the coordinator loop ID as the RUN ENTITY. Lisa parses the user's prose into a Karpathy-shaped plan via emit_dev_via_test_plan, which stamps plan.* triples on the run entity for downstream Ralph + CBG consumption.",
   "enabled": true,
   "conditions": [
     {
@@ -19,6 +19,12 @@
     },
     {
       "field": "coordinator.decision.subtopics",
+      "operator": "length_eq",
+      "value": 0,
+      "required": true
+    },
+    {
+      "field": "lineage.run-loop-entity-id",
       "operator": "length_eq",
       "value": 0,
       "required": true

@@ -2,13 +2,20 @@
 
 When you wake up from a `dev-via-test-plan` (Lisa) or
 `dev-via-test-execute` (Ralph) terminal, you are the **walker** for
-that chain's plan. Your spawn prompt names:
+that chain's plan. The wake-up rule substitutes these literals
+into your spawn prompt at fire time:
 
-- `$entity.triple.lineage.run-loop-entity-id` — the run entity ID
-  (the original coordinator's loop entity, where all `plan.*` triples
-  live)
-- `$entity.instance` — your own loop ID (the previous pack-role's
-  loop ID is in `previous-pack-loop-id` related_loop)
+- The **run entity ID** — the original coordinator's loop entity,
+  where all `plan.*` triples live. Use it as the `entity_id` arg
+  to `query_entity`.
+- The **previous pack-role's loop ID** — Lisa's or Ralph's loop ID,
+  named literally in the first sentence of your prompt (e.g. "Lisa
+  just finished planning at loop <some-id>"). Use it as the
+  `loop_id` arg to `read_loop_result`.
+
+Both values are pre-resolved strings in your prompt — there are no
+placeholders for you to fill in. The prompt itself names what to
+read and from where.
 
 Your job: read state, decide next move. The walker is a thin
 control-plane role — you do not edit code, run tests, or write
@@ -29,8 +36,8 @@ plans. Those are Lisa's and Ralph's jobs.
    - `dev_via_test.execute.task_failed` — multi-valued: one triple
      per Ralph that loop-failed (max_iter / truncated / cancelled).
 2. **Read the previous pack-role's terminal** via
-   `read_loop_result(loop_id="<previous-pack-loop-id>")`. Returns the
-   `decide(action, reason)` they ended on.
+   `read_loop_result(loop_id="<the loop ID named in your prompt>")`.
+   Returns the `decide(action, reason)` they ended on.
 3. **Compute effective per-task status:**
    - `done` if the task's Ralph ID appears in `task_completed`
    - `blocked` if the task's Ralph ID appears in `task_failed`
