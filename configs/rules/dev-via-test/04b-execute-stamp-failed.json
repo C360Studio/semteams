@@ -2,7 +2,7 @@
   "id": "dev_via_test_execute_stamp_failed",
   "type": "expression",
   "name": "Ralph loop-failed → stamp task failed on run entity for coordinator pickup",
-  "description": "ADR-044 Slice 2 — Ralph terminal stamp for the loop-failed path. Fires when Ralph's loop terminates with outcome=failed (framework max_iterations ceiling hit, NATS error, panic — anything where decide() never ran). Per ADR-044 §Stuck-task recovery: there is NO auto-retry. This rule stamps dev_via_test.execute.outcome=failed on Ralph's loop entity AND dev_via_test.execute.task_failed=<Ralph's loop ID> on the run entity. Slice 3's walker, on coordinator wake-up, reads these triples + Ralph's stderr_tail (already stamped by emit_dev_via_test_measurement's last call), and emits decide(action='ask_user', reason='task <id> stuck after <N> iters; last error: ...') routing to the human for next-move decision. There is no rule 04c (no best.value upsert) in v1 binary semantics — see ADR-044 §addendum 2026-06-03 Slice 2.",
+  "description": "ADR-044 Slice 2 — Ralph terminal stamp for the loop-failed path. Fires on outcome IN [failed, truncated, cancelled] (per Slice 2 reviewer R1: covers framework max_iterations ceiling, context-length compaction cliff, AND chain cancellation — all three need walker pickup so the chain doesn't wedge silently). Per ADR-044 §Stuck-task recovery: there is NO auto-retry. This rule stamps dev_via_test.execute.outcome=failed on Ralph's loop entity AND dev_via_test.execute.task_failed=<Ralph's loop ID> on the run entity. Slice 3's walker, on coordinator wake-up, reads these triples + Ralph's stderr_tail (already stamped by emit_dev_via_test_measurement's last call), and emits decide(action='ask_user', reason='task <id> stuck; last error: ...') routing to the human for next-move decision. There is no rule 04c (no best.value upsert) in v1 binary semantics — see ADR-044 §addendum 2026-06-03 Slice 2.",
   "enabled": true,
   "conditions": [
     {
@@ -13,8 +13,8 @@
     },
     {
       "field": "agent.loop.outcome",
-      "operator": "eq",
-      "value": "failed",
+      "operator": "in",
+      "value": ["failed", "truncated", "cancelled"],
       "required": true
     }
   ],
