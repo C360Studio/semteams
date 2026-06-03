@@ -29,6 +29,7 @@ import (
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitautoresearchartifact"
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitautoresearchbaseline"
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitautoresearchmeasurement"
+	"github.com/c360studio/semteams/cmd/semteams/tools/emitdevviatestmeasurement"
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitdevviatestplan"
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitplan"
 	"github.com/c360studio/semteams/cmd/semteams/tools/querysandboxattestation"
@@ -182,29 +183,27 @@ func registerProductTools(reg *agentictools.ExecutorRegistry, natsClient *natscl
 	if err := registerAutoresearchTools(reg, natsClient, platform, logger); err != nil {
 		return err
 	}
-	if err := registerDevViaTestTools(reg, natsClient, logger); err != nil {
+	if err := registerDevViaTestTools(reg, natsClient, platform, logger); err != nil {
 		return err
 	}
 	return registerChainBash(reg, natsClient, platform, logger)
 }
 
 // registerDevViaTestTools wires the dev-via-test pack's emit tools.
-// Slice 1 adds emit_dev_via_test_plan (Lisa's terminal commit).
-// Slices 2-4 may add additional executors (TBD per Ralph
-// measurement-tool decision in Slice 2 — reuse autoresearch's
-// emit_autoresearch_measurement with target=1.0 OR ship a new
-// emit_dev_via_test_measurement; will decide in PR 2).
+// Slice 1 adds emit_dev_via_test_plan (Lisa's terminal commit);
+// Slice 2 adds emit_dev_via_test_measurement (Ralph's per-iteration
+// stamp). Slice 4 may add emit_dev_via_test_artifact for CBG.
 //
-// Skipped when natsClient is nil: emit_dev_via_test_plan needs the
-// live publisher to stamp plan.* triples. Mirrors the
-// registerEmitPlan / registerAutoresearchTools nil-NATS posture.
+// Skipped when natsClient is nil: both tools need the live
+// publisher to stamp triples. Mirrors the registerEmitPlan /
+// registerAutoresearchTools nil-NATS posture.
 //
 // Per ADR-044 §addendum 2026-06-03 framework-alignment review: no
 // upstream equivalent; migration target is the same generic
 // write_artifact upstream is sketching (ADR-028 §What's not built
 // here). See cmd/semteams/tools/README.md for the per-tool
 // migration table.
-func registerDevViaTestTools(reg *agentictools.ExecutorRegistry, natsClient *natsclient.Client, logger *slog.Logger) error {
+func registerDevViaTestTools(reg *agentictools.ExecutorRegistry, natsClient *natsclient.Client, platform types.PlatformMeta, logger *slog.Logger) error {
 	if natsClient == nil {
 		logger.Warn("nats client unavailable; dev-via-test tools skipped",
 			slog.String("category", "dev-via-test"))
@@ -220,9 +219,13 @@ func registerDevViaTestTools(reg *agentictools.ExecutorRegistry, natsClient *nat
 	if err := reg.RegisterTool(emitdevviatestplan.ToolName, planExecutor); err != nil {
 		return fmt.Errorf("register %s: %w", emitdevviatestplan.ToolName, err)
 	}
+	measurementExecutor := emitdevviatestmeasurement.NewExecutor(triplePublisher, platform, logger)
+	if err := reg.RegisterTool(emitdevviatestmeasurement.ToolName, measurementExecutor); err != nil {
+		return fmt.Errorf("register %s: %w", emitdevviatestmeasurement.ToolName, err)
+	}
 	logger.Info("Registered dev-via-test product tools",
 		slog.String("category", "dev-via-test"),
-		slog.Int("count", 1))
+		slog.Int("count", 2))
 	return nil
 }
 
