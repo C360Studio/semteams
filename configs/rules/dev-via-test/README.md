@@ -75,7 +75,7 @@ plan.integration_test_command   = "..."
 plan.chain_start_git_tag        = "plan-start"
 plan.task_count                 = N
 plan.revision                   = 1
-plan.generated_at               = RFC3339
+plan.generated_at               = RFC3339Nano
 
 plan.task.<id>.goal             = "..."
 plan.task.<id>.assumptions      = "[<JSON array>]"

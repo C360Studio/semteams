@@ -14,7 +14,7 @@ say a serious software task needs.
 | `non_goals` | **Karpathy Rule 2 — simplicity first** | What this work excludes. Array of strings. Empty `[]` is legal — but think about it. |
 | `integration_test_command` | **Karpathy Rule 4 (plan scope) — goal-driven execution** | CBG's chain-end full acceptance gate. One shell command. Runs across all task scope. |
 | `tasks` | (decomposition) | One or more task objects. See below. |
-| `revision` | (re-planning) | Integer ≥ 1. First emit = 1; bump on coordinator-requested re-plan. |
+| `revision` | (re-planning) | Integer ≥ 1, **required** (no default). First emit = 1; bump on coordinator-requested re-plan. The schema rejects absent or `0` so a re-plan accident can't silently look like a first emit. |
 
 ## Required per task
 
