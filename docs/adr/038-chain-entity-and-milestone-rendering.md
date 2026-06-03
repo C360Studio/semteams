@@ -2,10 +2,11 @@
 
 ## Status
 
-**Proposed (2026-05-07).** Establishes the canonical 6-part chain entity
-that downstream personas query for cross-arc data, retires the slice 4c
-loop_id-substitution pattern, and codifies milestone markdown rendering
-as a healthy side-effect of chain progress (not a canonical store).
+**Accepted + Shipped.** Originally proposed 2026-05-07; PR A/B/C
+shipped via #97 + #107/#108 (silent-subject-mismatch fix). Chain
+entity is the canonical cross-arc carrier under ADR-042
+substrate-plus-overlays; milestone rendering remains a healthy
+side-effect of chain progress.
 
 ## Why this exists
 

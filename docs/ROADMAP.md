@@ -21,9 +21,10 @@ design: the ADR sequence is the audit trail.
   next pack is dropping in as a `configs/rules/<new-category>/`
   directory + persona bundle, not a new flow config.
 - **Open ADRs / proposals** — the
-  [`proposals/`](proposals/) directory holds active design docs
-  (e.g. `agentic-superpowers.md`, `ui-redesign.md`). ADRs that are
-  filed but not yet shipped carry a `**Status:** Filed` marker.
+  [`proposals/`](proposals/) directory holds the few active design
+  docs that survived the 2026-06-03 audit. ADRs that are filed but
+  not yet shipped carry a `**Status:** Filed` marker; shipped ones
+  carry `**Status:** Accepted + Shipped`.
 
 ## Framework roadmap
 

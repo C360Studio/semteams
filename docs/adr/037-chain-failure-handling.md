@@ -2,10 +2,12 @@
 
 ## Status
 
-**Proposed (2026-05-06).** Establishes the chain-pause primitive smoke
-#8 surfaced as missing. Composes with ADR-030 (operator approval
-surface) and reserves seams for ADR-033 (coordinator authority) and
-upstream ADR-027 (ops-agent pattern aggregation).
+**Accepted + Shipped.** Originally proposed 2026-05-06; chain-pause
+primitive shipped via #88 + ADR-038 PR B (#97) — `agent.loop.parent`
+stamping reorder pre-`publishResults` closed the failed-loops-wedge-
+chain class. Surviving under ADR-042 substrate-plus-overlays. Composes
+with ADR-030 (operator approval surface) and ADR-039 (recovery
+routing).
 
 ## Why this exists
 
