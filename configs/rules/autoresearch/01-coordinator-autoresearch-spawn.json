@@ -28,7 +28,7 @@
     {
       "type": "add_triple",
       "predicate": "autoresearch.iteration.in_flight",
-      "object": false
+      "object": "false"
     },
     {
       "type": "publish_agent",
