@@ -67,6 +67,50 @@ convention (mirroring `reviewer-research`); it is a separate persona
 from `reviewer-research` because the artifact shape it grades is
 different (baseline + experiments + best, not actors/integration_points).
 
+## Iteration-in-flight toggle (gh#192 fix 2026-06-03)
+
+The rule engine's stateful transition model fires `on_enter` actions
+on false→true transitions only. A naive "fire while count<cap" rule
+would enter once at iteration 1 and then sit at `TransitionNone +
+currentlyMatching=true` for the rest of the run — `WhileTrue` actions
+fire instead of `on_enter`, and `WhileTrue` only fires once at
+construction time per the framework. The chain stalled after one
+iteration with `action_count=0`.
+
+The fix is a small state machine on the RUN entity that forces
+condition oscillation:
+
+| Phase | `iteration.in_flight` | Stamped by |
+|---|---|---|
+| Init (coordinator decides autoresearch) | `false` | Rule 01 `add_triple` |
+| Iteration N spawn | `true` | Rule 05 `add_triple` (alongside `publish_agent`) |
+| Iteration N execute completion | `false` | Rule 04a `add_triple` (alongside `experiment.completed`) — also rule 04b on failed-execute |
+
+Rule 05 (continue) and rule 06 (stop-cap) both require
+`iteration.in_flight == false`, so they only fire when no iteration
+is in progress. The toggle flip after each execute completion
+re-triggers the false→true transition on rule 05, restoring
+`on_enter` semantics per iteration. When count reaches cap, rule 06's
+conditions match (length_eq AND in_flight=false) and synthesize
+spawns.
+
+**Why not WhileTrue + cooldown?** The framework's `cooldown` field
+is honored ONLY for cron-type rules; expression rules ignore it.
+WhileTrue without cooldown fires on every entity state change, which
+would over-spawn proposes during the propose+execute window
+(framework-alignment-reviewed; verified by reading
+processor/rule/stateful_evaluator.go).
+
+**Why was rule 02 retired?** The old `02-baseline-to-propose.json`
+spawned the iteration-1 propose on the baseline entity's
+`decide(propose)` terminal. Rule 05 ALSO fires when baseline's
+`emit_autoresearch_baseline` stamps run.status=active + cap (count<cap
++ in_flight=false → match). The two rules both spawned a propose for
+the same logical iter-1, producing the gh#189 duplicate-propose bug.
+With the in_flight toggle initializing to `false` in rule 01, rule 05
+cleanly handles iteration 1 alongside iterations 2+; rule 02 became
+redundant.
+
 ## Rules
 
 | File | Trigger | Spawn / Stamp |

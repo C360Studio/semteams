@@ -238,7 +238,6 @@
           "/app/configs/rules/research/07-reviewer-approved-to-coordinator.json",
           "/app/configs/rules/research/08-loop-failed-pause.json",
           "/app/configs/rules/autoresearch/01-coordinator-autoresearch-spawn.json",
-          "/app/configs/rules/autoresearch/02-baseline-to-propose.json",
           "/app/configs/rules/autoresearch/03-propose-to-execute.json",
           "/app/configs/rules/autoresearch/04a-execute-stamp-completion.json",
           "/app/configs/rules/autoresearch/04b-execute-stamp-failed.json",
