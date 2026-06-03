@@ -25,6 +25,20 @@ vi.mock("$lib/services/agentApi", () => ({
       duration_ms: 0,
     }),
     getTrajectories: vi.fn().mockResolvedValue([]),
+    // TaskStory polls /teams-loop/trajectories/<loop_id>; record the
+    // arg so the focused-loop tests can assert which loop's story is
+    // being shown.
+    getLoopTrajectory: vi.fn().mockImplementation((loopId: string) =>
+      Promise.resolve({
+        loop_id: loopId,
+        start_time: "2026-06-03T00:00:00Z",
+        steps: [],
+      }),
+    ),
+    // TaskTrace polls /message-logger/entries; used by the raw-activity
+    // disclosure inside TaskStory. Default to empty so the disclosure
+    // doesn't blow up when opened.
+    getMessages: vi.fn().mockResolvedValue([]),
   },
   AgentApiError: class AgentApiError extends Error {
     statusCode: number;
@@ -266,6 +280,146 @@ describe("TaskDetailPanel", () => {
       render(TaskDetailPanel, { props: { task: makeTask() } });
 
       expect(screen.queryByText(/Sub-tasks/)).not.toBeInTheDocument();
+    });
+
+    it("renders each child as a clickable button", () => {
+      const children = [
+        makeLoop({ loop_id: "c1", role: "researcher" }),
+        makeLoop({ loop_id: "c2", role: "editor" }),
+      ];
+      render(TaskDetailPanel, {
+        props: { task: makeTask({ childLoops: children }) },
+      });
+
+      const items = screen.getAllByTestId("child-item");
+      expect(items).toHaveLength(2);
+      // <button>, not <li>. Carries the loop_id for drill-in selection.
+      items.forEach((el) => {
+        expect(el.tagName).toBe("BUTTON");
+      });
+      expect(items[0]).toHaveAttribute("data-loop-id", "c1");
+      expect(items[1]).toHaveAttribute("data-loop-id", "c2");
+    });
+
+    it("primary loop's trajectory is the default focus", async () => {
+      render(TaskDetailPanel, {
+        props: {
+          task: makeTask({
+            id: "loop_parent",
+            primaryLoop: makeLoop({ loop_id: "loop_parent" }),
+            childLoops: [makeLoop({ loop_id: "c1", role: "researcher" })],
+          }),
+        },
+      });
+      // TaskStory's $effect kicks the initial fetch with the primary
+      // loop_id. No breadcrumb until a child is focused.
+      await vi.waitFor(() => {
+        expect(agentApi.getLoopTrajectory).toHaveBeenCalledWith("loop_parent");
+      });
+      expect(screen.queryByTestId("focus-breadcrumb")).not.toBeInTheDocument();
+    });
+
+    it("clicking a child swaps the right-rail to the child's trajectory", async () => {
+      const user = userEvent.setup();
+      render(TaskDetailPanel, {
+        props: {
+          task: makeTask({
+            id: "loop_parent",
+            primaryLoop: makeLoop({ loop_id: "loop_parent" }),
+            childLoops: [
+              makeLoop({ loop_id: "c1", role: "researcher-research-plan" }),
+              makeLoop({ loop_id: "c2", role: "researcher-research-synthesize" }),
+            ],
+          }),
+        },
+      });
+
+      const synth = screen
+        .getAllByTestId("child-item")
+        .find((el) => el.getAttribute("data-loop-id") === "c2");
+      expect(synth).toBeDefined();
+      await user.click(synth!);
+
+      await vi.waitFor(() => {
+        expect(agentApi.getLoopTrajectory).toHaveBeenCalledWith("c2");
+      });
+      // Visual confirmation: breadcrumb appears with the parent title +
+      // current focus role.
+      const crumb = screen.getByTestId("focus-breadcrumb");
+      expect(crumb).toHaveTextContent(/Back to/);
+      expect(crumb).toHaveTextContent("researcher-research-synthesize");
+      // The focused child also wears a pressed state for screen readers.
+      expect(synth).toHaveAttribute("aria-pressed", "true");
+    });
+
+    it("breadcrumb back-button returns focus to the primary loop", async () => {
+      const user = userEvent.setup();
+      render(TaskDetailPanel, {
+        props: {
+          task: makeTask({
+            id: "loop_parent",
+            primaryLoop: makeLoop({ loop_id: "loop_parent" }),
+            childLoops: [makeLoop({ loop_id: "c1", role: "researcher" })],
+          }),
+        },
+      });
+
+      const child = screen.getByTestId("child-item");
+      await user.click(child);
+      await vi.waitFor(() => {
+        expect(agentApi.getLoopTrajectory).toHaveBeenCalledWith("c1");
+      });
+
+      await user.click(screen.getByTestId("focus-back"));
+
+      // After the back-click, the breadcrumb disappears and the panel
+      // re-polls the primary loop. Use waitFor on the API call because
+      // the polling refresh is asynchronous.
+      await vi.waitFor(() => {
+        const calls = (agentApi.getLoopTrajectory as ReturnType<typeof vi.fn>)
+          .mock.calls;
+        // Last call should be back to the primary.
+        expect(calls[calls.length - 1][0]).toBe("loop_parent");
+      });
+      expect(screen.queryByTestId("focus-breadcrumb")).not.toBeInTheDocument();
+      expect(child).toHaveAttribute("aria-pressed", "false");
+    });
+
+    it("focus does not leak across task changes", async () => {
+      const user = userEvent.setup();
+      // Initial: task A with one child.
+      const { rerender } = render(TaskDetailPanel, {
+        props: {
+          task: makeTask({
+            id: "loop_A",
+            primaryLoop: makeLoop({ loop_id: "loop_A" }),
+            childLoops: [makeLoop({ loop_id: "a_child", role: "researcher" })],
+          }),
+        },
+      });
+
+      await user.click(screen.getByTestId("child-item"));
+      await vi.waitFor(() => {
+        expect(agentApi.getLoopTrajectory).toHaveBeenCalledWith("a_child");
+      });
+
+      // Now switch to task B — A's focused child doesn't exist here.
+      // The derived guard should fall back to B's primary, NOT keep
+      // polling the stale a_child id.
+      await rerender({
+        task: makeTask({
+          id: "loop_B",
+          primaryLoop: makeLoop({ loop_id: "loop_B" }),
+          childLoops: [makeLoop({ loop_id: "b_child", role: "editor" })],
+        }),
+      });
+
+      await vi.waitFor(() => {
+        const calls = (agentApi.getLoopTrajectory as ReturnType<typeof vi.fn>)
+          .mock.calls;
+        expect(calls[calls.length - 1][0]).toBe("loop_B");
+      });
+      expect(screen.queryByTestId("focus-breadcrumb")).not.toBeInTheDocument();
     });
   });
 

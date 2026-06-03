@@ -17,7 +17,19 @@
     ToolCallStep,
   } from "$lib/types/agent";
   import { SvelteSet } from "svelte/reactivity";
+  import ArtifactCard from "./ArtifactCard.svelte";
   import TaskTrace from "./TaskTrace.svelte";
+
+  // Tool-call steps whose `tool_name` matches this prefix render their
+  // arguments through ArtifactCard (structured fields, markdown-aware
+  // text) instead of as raw JSON. Convention across pack-emitters:
+  // emit_plan, emit_research_artifact, emit_autoresearch_baseline,
+  // emit_autoresearch_artifact, emit_autoresearch_measurement, …
+  const EMIT_TOOL_PREFIX = "emit_";
+
+  function isEmitTool(name: string | undefined): boolean {
+    return typeof name === "string" && name.startsWith(EMIT_TOOL_PREFIX);
+  }
 
   interface Props {
     loopId: string;
@@ -219,10 +231,19 @@
             </span>
           </button>
           {#if expanded.has(idx)}
-            <pre
-              class="step-payload"
-              data-testid="story-step-payload"
-            >{fullPayload(step)}</pre>
+            {#if step.step_type === "tool_call" && isEmitTool(step.tool_name)}
+              <div class="step-payload-card" data-testid="story-step-payload">
+                <ArtifactCard
+                  toolName={step.tool_name}
+                  args={(step as ToolCallStep).tool_arguments}
+                />
+              </div>
+            {:else}
+              <pre
+                class="step-payload"
+                data-testid="story-step-payload"
+              >{fullPayload(step)}</pre>
+            {/if}
           {/if}
         </li>
       {/each}
@@ -417,6 +438,12 @@
     max-height: 24rem;
     overflow-y: auto;
     color: var(--ui-text-primary, #111827);
+  }
+
+  .step-payload-card {
+    margin: 0.125rem 0 0.5rem 2.25rem;
+    max-height: 28rem;
+    overflow-y: auto;
   }
 
   .story-empty {

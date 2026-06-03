@@ -202,6 +202,7 @@ tasks:
       - task: test:e2e:agentic:action-chips
       - task: test:e2e:agentic:task-title-aliases
       - task: test:e2e:agentic:admin-flows-inventory
+      - task: test:e2e:agentic:chain-drill-in
 
   test:e2e:agentic:real-time-activity-stream:
     desc: Run the real-time-activity-stream journey
@@ -352,6 +353,19 @@ tasks:
           FIXTURE: "{{.FIXTURE}}"
           AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
       - npx playwright test e2e/agentic/admin-flows-inventory.spec.ts
+
+  test:e2e:agentic:chain-drill-in:
+    desc: Run the chain drill-in + ArtifactCard journey (research-mvp fixture; exercises sub-task focus swap + emit_* rendering)
+    vars:
+      FIXTURE: research-mvp.yaml
+      AGENTIC_CONFIG: e2e-flow-bootstrap.json
+    cmds:
+      - defer: { task: test:e2e:agentic:cleanup }
+      - task: test:e2e:agentic:stack:up
+        vars:
+          FIXTURE: "{{.FIXTURE}}"
+          AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
+      - npx playwright test e2e/agentic/chain-drill-in.spec.ts
 
   # === Interactive dev-mode scenario tasks ===
   #

@@ -31,6 +31,33 @@
   let signalError = $state<string | null>(null);
   let closeBtnRef = $state<HTMLButtonElement | null>(null);
 
+  // Focused-loop state. Defaults to the primary (parent) loop; clicking
+  // a child swaps the right-rail trajectory to that child's story. If
+  // the task changes (e.g. user picks a different card) or the focused
+  // child drops out of childLoops, the derived falls back to the
+  // primary — so we never poll a stale loop ID.
+  let manualFocusId = $state<string | null>(null);
+  const focusedLoopId = $derived.by(() => {
+    if (!manualFocusId) return task.id;
+    if (manualFocusId === task.id) return task.id;
+    return task.childLoops.some((c) => c.loop_id === manualFocusId)
+      ? manualFocusId
+      : task.id;
+  });
+  const focusedChild = $derived(
+    focusedLoopId === task.id
+      ? null
+      : (task.childLoops.find((c) => c.loop_id === focusedLoopId) ?? null),
+  );
+
+  function focusChild(loopId: string) {
+    manualFocusId = loopId;
+  }
+
+  function focusPrimary() {
+    manualFocusId = null;
+  }
+
   // Inline title editor. `editingTitle` flips the heading into an input;
   // `titleDraft` is the buffer the user types into. Save on Enter / blur,
   // cancel on Escape. Empty save clears the override (back to derived).
@@ -274,22 +301,52 @@
             <h3 class="section-title">Sub-tasks ({task.childLoops.length})</h3>
             <ul class="child-list">
               {#each task.childLoops as child (child.loop_id)}
-                <li class="child-item">
-                  <span class="child-state {child.state}">
-                    {child.state.replace(/_/g, " ")}
-                  </span>
-                  <span class="child-role">{child.role}</span>
-                  <span class="child-progress">
-                    {child.iterations}/{child.max_iterations}
-                  </span>
+                <li>
+                  <button
+                    type="button"
+                    class="child-item"
+                    class:focused={focusedLoopId === child.loop_id}
+                    onclick={() => focusChild(child.loop_id)}
+                    data-testid="child-item"
+                    data-loop-id={child.loop_id}
+                    aria-pressed={focusedLoopId === child.loop_id}
+                  >
+                    <span class="child-state {child.state}">
+                      {child.state.replace(/_/g, " ")}
+                    </span>
+                    <span class="child-role">{child.role}</span>
+                    <span class="child-progress">
+                      {child.iterations}/{child.max_iterations}
+                    </span>
+                  </button>
                 </li>
               {/each}
             </ul>
           </section>
         {/if}
 
+        {#if focusedChild}
+          <div class="focus-breadcrumb" data-testid="focus-breadcrumb">
+            <button
+              type="button"
+              class="focus-back"
+              onclick={focusPrimary}
+              data-testid="focus-back"
+              aria-label="Back to parent task story"
+            >
+              ← Back to {task.title}
+            </button>
+            <span class="focus-current">
+              Viewing <span class="focus-current-role">{focusedChild.role}</span>
+            </span>
+          </div>
+        {/if}
+
         <section class="panel-section">
-          <TaskStory loopId={task.id} prompt={task.primaryLoop.prompt} />
+          <TaskStory
+            loopId={focusedLoopId}
+            prompt={focusedChild ? undefined : task.primaryLoop.prompt}
+          />
         </section>
       </div>
     {:else if activeTab === "entities"}
@@ -673,13 +730,73 @@
   }
 
   .child-item {
+    all: unset;
+    box-sizing: border-box;
+    cursor: pointer;
     display: flex;
     align-items: center;
     gap: 0.375rem;
+    width: 100%;
     padding: 0.25rem 0.5rem;
     border-radius: 4px;
     background: var(--ui-surface-secondary, #f9fafb);
     font-size: 0.75rem;
+    text-align: left;
+  }
+
+  .child-item:hover {
+    background: var(--ui-surface-tertiary, #e5e7eb);
+  }
+
+  .child-item:focus-visible {
+    outline: 2px solid var(--ui-interactive-primary, #3b82f6);
+    outline-offset: 1px;
+  }
+
+  .child-item.focused {
+    background: #eff6ff;
+    border-left: 3px solid var(--ui-interactive-primary, #3b82f6);
+    padding-left: calc(0.5rem - 3px);
+  }
+
+  .focus-breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0.5rem 0 0.75rem;
+    padding: 0.375rem 0.5rem;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 4px;
+    font-size: 0.75rem;
+  }
+
+  .focus-back {
+    all: unset;
+    cursor: pointer;
+    color: var(--ui-interactive-primary, #2563eb);
+    font-weight: 500;
+    padding: 0.125rem 0.25rem;
+    border-radius: 3px;
+  }
+
+  .focus-back:hover {
+    background: #dbeafe;
+  }
+
+  .focus-back:focus-visible {
+    outline: 2px solid var(--ui-interactive-primary, #3b82f6);
+    outline-offset: 1px;
+  }
+
+  .focus-current {
+    margin-left: auto;
+    color: var(--ui-text-secondary, #6b7280);
+  }
+
+  .focus-current-role {
+    color: var(--ui-text-primary, #111827);
+    font-weight: 500;
   }
 
   .child-state {
