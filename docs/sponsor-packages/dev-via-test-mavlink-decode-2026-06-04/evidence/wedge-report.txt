@@ -1,0 +1,35 @@
+# Smoke wedge-report (2026-06-04T10:37:53Z)
+
+Loop count: 9
+
+## Per-loop terminal actions
+
+6c6c5c05-3c1  role=reviewer-dev-via-test  state=complete  terminal=decide(action=rejected)
+loop_457ad91  role=(dispatch)             state=complete  terminal=decide(action=dev_via_test)
+fb924d42-cae  role=dev-via-test-plan      state=complete  terminal=decide(action=planned)
+7649cb29-408  role=coordinator            state=complete  terminal=decide(action=dev_via_test)
+995ca2ca-504  role=dev-via-test-execute   state=complete  terminal=decide(action=measured)
+cd04296b-2ef  role=coordinator            state=complete  terminal=decide(action=dev_via_test)
+bc4ddbea-243  role=dev-via-test-execute   state=complete  terminal=decide(action=measured)
+c5e28f39-476  role=coordinator            state=complete  terminal=decide(action=ask_user)
+8ab40577-890  role=coordinator            state=complete  terminal=decide(action=dev_via_test_finalize)
+
+## Chain-shape check
+
+WEDGE — final terminal role is 'coordinator', expected 'dispatch'.
+       The chain stopped before reaching the expected end role.
+       Inspect the last loop's trajectory + triples for the
+       coordinator.next_action that no rule matched.
+
+## Tool-issue tally (from /tmp/smoke-mavlink-decode-run1/tool-issues.log)
+
+(no tool-issue log lines matched filter — likely a clean run)
+
+## Rate-limit indicators (from /tmp/smoke-mavlink-decode-run1/rate-limit-issues.log)
+
+   3 OpenAI API request payload
+   1 sandbox /exec devcontainer up: POST /exec: Post "http://sandbox:8090/exec": cont
+   1 request graph.mutation.triple.add_batch: context deadline exceeded
+   1 manager request: stamp attestation on c360.bootstrap-001.agent.chain.execution.l
+
+Total rate-limit-shaped events: 6

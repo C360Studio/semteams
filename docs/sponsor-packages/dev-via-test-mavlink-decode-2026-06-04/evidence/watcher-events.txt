@@ -1,0 +1,29 @@
+[10:31:20] watcher start (bash 3.2.57(1)-release; prefix=smoke-mavlink-decode-run1; port=3100)
+[10:31:20] NEW LOOP loop_457ad91 role=(dispatch) state=pending
+[10:31:20]   → loop_457ad91 state '' → 'pending'
+[10:31:51]   → loop_457ad91 state 'pending' → 'complete' outcome=success
+[10:31:51] NEW LOOP fb924d42-cae role=dev-via-test-plan state=executing
+[10:31:51]   → fb924d42-cae state '' → 'executing'
+[10:32:21]   → fb924d42-cae state 'executing' → 'complete' outcome=success
+[10:32:21] NEW LOOP 7649cb29-408 role=coordinator state=executing
+[10:32:21]   → 7649cb29-408 state '' → 'executing'
+[10:32:37] NEW LOOP 995ca2ca-504 role=dev-via-test-execute state=executing
+[10:32:37]   → 995ca2ca-504 state '' → 'executing'
+[10:32:37]   → 7649cb29-408 state 'executing' → 'complete' outcome=success
+[10:33:39]   → 995ca2ca-504 state 'executing' → 'complete' outcome=success
+[10:33:39] NEW LOOP cd04296b-2ef role=coordinator state=executing
+[10:33:39]   → cd04296b-2ef state '' → 'executing'
+[10:33:54]   → cd04296b-2ef state 'executing' → 'complete' outcome=success
+[10:33:54] NEW LOOP bc4ddbea-243 role=dev-via-test-execute state=executing
+[10:33:54]   → bc4ddbea-243 state '' → 'executing'
+[10:34:30]   → bc4ddbea-243 state 'executing' → 'complete' outcome=success
+[10:34:30] NEW LOOP 8ab40577-890 role=coordinator state=executing
+[10:34:30]   → 8ab40577-890 state '' → 'executing'
+[10:34:46]   → 8ab40577-890 state 'executing' → 'complete' outcome=success
+[10:34:46] NEW LOOP 6c6c5c05-3c1 role=reviewer-dev-via-test state=executing
+[10:34:46]   → 6c6c5c05-3c1 state '' → 'executing'
+[10:35:33] NEW LOOP c5e28f39-476 role=coordinator state=executing
+[10:35:33]   → c5e28f39-476 state '' → 'executing'
+[10:35:33]   → 6c6c5c05-3c1 state 'executing' → 'complete' outcome=success
+[10:35:44]   → c5e28f39-476 state 'executing' → 'complete' outcome=success
+[10:37:44] All 9 loops terminal + count stable for ~120s; watcher exit.
