@@ -33,7 +33,7 @@
       "model": "coordinator",
       "tools": ["read_loop_result", "query_entity", "scratchpad", "decide"],
       "tool_choice": { "mode": "required" },
-      "action_allowlist": ["dev_via_test", "respond_direct", "ask_user"],
+      "action_allowlist": ["dev_via_test", "dev_via_test_finalize", "respond_direct", "ask_user"],
       "related_loops": {
         "run-loop-entity-id": "$entity.triple.lineage.run-loop-entity-id",
         "previous-pack-loop-id": "$entity.instance",

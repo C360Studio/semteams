@@ -710,6 +710,117 @@ Slice 3's walker prompt explicitly notes "Slice 4 will replace
 this with a CBG dispatch route" so persona drift between Slice 3
 and Slice 4 stays visible.
 
+## Addendum 2026-06-03 — Slice 4 (CBG chain-end gate) design
+
+Slice 4 closes the chain: rule 06 (walker→CBG), rule 07a (CBG
+approved→final coordinator respond_direct), rule 07b (CBG
+rejected→final coordinator ask_user), rule 08 extension to include
+CBG, new `reviewer-dev-via-test` persona dir, new `dev_via_test_finalize`
+action token in the coordinator's closed taxonomy.
+
+### New action token: `dev_via_test_finalize`
+
+Per Slice 3 reviewer R5 + the §Slice 4 handoff sketch above:
+walker emits this token when all `plan.task.*` are done. Distinct
+from `dev_via_test` (which routes to Lisa OR Ralph via rule 01/03's
+subtopics differentiator) to avoid overloading a THIRD meaning on
+the same token.
+
+Alternatives considered + rejected:
+
+- *Reuse `dev_via_test` with sentinel subtopics like `["__cbg__"]`.*
+  Rejected: rule 03's `for_each` over subtopics would dispatch Ralph
+  at task ID `"__cbg__"` (no such task in the plan, Ralph wedges).
+  A new condition `subtopics[0] != "__cbg__"` on rule 03 would work
+  but adds fragility (string-sentinel match).
+- *Reuse `dev_via_test` with empty subtopics from walker.* Rejected
+  per Slice 3 reviewer B1: walker has lineage, so rule 01 (which
+  requires `lineage.run-loop-entity-id length_eq 0`) doesn't fire.
+  The dispatch silently no-ops — chain wedges with no CBG.
+- *Reuse `respond_direct` for "all done."* Rejected — walker would
+  bypass CBG entirely (the gate that catches cross-task drift),
+  defeating the chain-end review purpose. Plus the user-facing
+  rollup the walker writes wouldn't have the integration-test
+  result CBG provides.
+
+The new token is the cleanest dispatch contract: one signal, one
+target, no rule-condition gymnastics, no sentinel-string fragility.
+Cost: one more closed-taxonomy entry the coordinator persona must
+learn. Worth it for clarity.
+
+### Approve/reject split (rules 07a vs 07b)
+
+CBG's two outcomes route to different final-wake-up shapes:
+
+- **Approved** (rule 07a): final coordinator scoped to
+  `[respond_direct, ask_user]`. Delivers CBG's rollup to the user.
+- **Rejected** (rule 07b): final coordinator scoped to
+  `[ask_user, respond_direct]` (ask_user first — that's the expected
+  path). Surfaces CBG's verdict and asks what to do.
+
+Two rules instead of one rule that conditions on the outcome value
+because: (1) rule 07a's prompt is "deliver the result," rule 07b's
+prompt is "ask the user about the failure" — meaningfully different
+guidance for the walker; (2) the `wakeup_mode` properties tag
+differs (chain_terminal_dev_via_test_approved vs _rejected), and
+operator-facing telemetry shouldn't have to grep through verdict
+strings to distinguish.
+
+### CBG's discipline — single-run gate, no recovery loop
+
+Per ADR-044 §CBG's gate at chain-end: "Per-Ralph reviewer is
+optional in v1 (test-pass is the deterministic signal). Don't slip
+into per-Ralph reviewer ceremony — that's the BMAD pattern that
+this ADR exists to avoid."
+
+Slice 4's CBG persona (`reviewer-dev-via-test/10-review-contract.md`)
+extends this discipline to CBG itself:
+
+- ONE integration test run. Failure → reject. No retry, no
+  "let me try with different args."
+- Diff sanity-check is a skim, not a code review. CBG looks for
+  file-scope drift + test-gaming + obvious bugs the integration
+  test doesn't catch.
+- No fixing. CBG rejects and routes to user; Ralph fixes (next
+  chain after user amends plan), user picks the move.
+
+CBG's tool set is deliberately narrow: `query_entity`,
+`read_loop_result`, `bash`, `scratchpad`, `decide`. No
+`emit_*` (CBG doesn't render artifacts — the artifact is the
+diff + integration-test result, both already-on-disk in the
+sandbox); no `request_sandbox` (already provisioned upstream); no
+write tools other than via bash (which can edit files but persona
+forbids it).
+
+### Rule 08 extension (CBG)
+
+CBG loop-failures (panic, framework max-iter without `decide`,
+NATS error, anything where `outcome IN [failed, truncated, cancelled]`)
+have no in-arc recovery path. Per Slice 3 reviewer's `R2/N8`
+structural fence, CBG must appear in rule 08's role list to trigger
+chain.paused on these classes. CBG `decide(rejected)` is NOT a
+loop-failure (`outcome=success`); that routes through rule 07b
+(ask_user).
+
+### Chain flow end-to-end (Slices 1-4)
+
+See `configs/rules/dev-via-test/README.md` for the full ASCII flow.
+Key invariants:
+
+- Lineage threading: every dev-via-test entity carries
+  `lineage.run-loop-entity-id` pointing at the original
+  front-door coordinator's loop entity. Reads from the run
+  entity always target that one ID.
+- Two-mode `dev_via_test` distinguishes Lisa initial vs Ralph
+  walker dispatch (`subtopics.length` differentiator + rule 01's
+  lineage fence per Slice 3 reviewer B1).
+- One-shot `dev_via_test_finalize` dispatches CBG; the chain
+  cannot loop back to plan-editing automatically (no
+  auto-recover per §Stuck-task recovery + §CBG's gate).
+- Failure paths visible: rule 04b (Ralph fails → walker →
+  ask_user), rule 07b (CBG rejects → final → ask_user), rule 08
+  (Lisa/CBG loop-fails → chain.paused).
+
 ## Cross-links
 
 - [ADR-035 dev-via-spec arc](035-dev-via-spec-arc.md) (superseded

@@ -45,9 +45,14 @@ plans. Those are Lisa's and Ralph's jobs.
 4. **Pick the next move:**
    - Next `ready` task exists AND last Ralph converged → dispatch:
      `decide(action="dev_via_test", subtopics=["<next-task-id>"])`
-   - All tasks `done` → `decide(action="respond_direct",
-     reason="<2-3 sentence rollup of what shipped>")`. Slice 4 will
-     replace this with a CBG dispatch route.
+   - All tasks `done` (no ready remaining) → finalize:
+     `decide(action="dev_via_test_finalize", reason="<2-3 sentence
+     pre-CBG rollup of what shipped>")`. Rule 06 dispatches CBG
+     (`reviewer-dev-via-test`) for the chain-end gate; CBG runs
+     `plan.integration_test_command`, diffs against the chain-start
+     tag, and emits approved/rejected. The framework wakes you a
+     FINAL time after CBG terminates (via rule 07a/07b) to deliver
+     the result to the user.
    - Last Ralph escalated (`needs_clarification`) →
      `decide(action="ask_user", reason="<quote Ralph's reason
      verbatim, then ask user to amend / abandon / split>")`
@@ -116,8 +121,14 @@ Same as the decision-contract's general output discipline:
 - Exactly one `decide` call per iteration. The tool is terminal.
 - For `dev_via_test` walker dispatch: `reason` is operator-facing
   (cite the task ID + a one-line summary of why it's next).
+- For `dev_via_test_finalize`: `reason` is the pre-CBG rollup
+  (what shipped, which tasks completed, which were blocked). CBG
+  reads your reason via `read_loop_result` as context before
+  running the integration test.
 - For `ask_user`: `reason` IS the user-facing question. Quote
   Ralph's actual error / clarification request. Ask one question.
-- For `respond_direct` (Slice 3 only — Slice 4 routes via CBG):
-  `reason` IS the user-facing answer. 2-3 sentences summarising
-  what the plan delivered, citing the integration_test_command.
+- For `respond_direct`: `reason` IS the user-facing answer. Use
+  this for early termination (user said quit; chain truly cannot
+  proceed). The post-CBG final wake-up uses respond_direct too,
+  but that's a DIFFERENT coordinator loop dispatched by rule 07a
+  — not a walker decision.

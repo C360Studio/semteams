@@ -263,7 +263,7 @@ func TestDevViaTestChainStartTagLiteralConsistency(t *testing.T) {
 	}
 }
 
-// TestDevViaTestPackWiredInFlowBootstrap asserts the Slice 1 + 2 + 3
+// TestDevViaTestPackWiredInFlowBootstrap asserts the Slice 1-4
 // rule filenames appear in flow-bootstrap.json's rules_files list.
 // Without this, the rules never load at boot and the pack is dead
 // regardless of how good the rule JSON itself is. Mirrors the
@@ -281,6 +281,9 @@ func TestDevViaTestPackWiredInFlowBootstrap(t *testing.T) {
 		"/app/configs/rules/dev-via-test/04a-execute-stamp-converged.json",
 		"/app/configs/rules/dev-via-test/04b-execute-stamp-failed.json",
 		"/app/configs/rules/dev-via-test/05-ralph-terminal-to-walker.json",
+		"/app/configs/rules/dev-via-test/06-coordinator-dispatch-cbg.json",
+		"/app/configs/rules/dev-via-test/07a-cbg-approved-to-coordinator.json",
+		"/app/configs/rules/dev-via-test/07b-cbg-rejected-to-coordinator.json",
 		"/app/configs/rules/dev-via-test/08-loop-failed-pause.json",
 	} {
 		if !strings.Contains(body, want) {
@@ -522,6 +525,172 @@ func TestDevViaTestPack_05_RalphTerminalToWalker(t *testing.T) {
 		t.Error("rule 05 spawn missing tool_choice — walker may text-out of query_entity / decide")
 	} else if mode, _ := spawn.ToolChoice["mode"].(string); mode != "required" {
 		t.Errorf("rule 05 tool_choice.mode = %q; want %q", mode, "required")
+	}
+}
+
+// TestDevViaTestPack_06_DispatchCBG pins the Slice 4 walker-
+// finalize dispatch rule. The chain-end gate hangs off this rule
+// firing on the new dev_via_test_finalize action token.
+//
+// Invariants:
+//
+//  1. Conditions match coordinator + decide(dev_via_test_finalize).
+//     NO subtopics-length condition — finalize never carries
+//     subtopics (CBG dispatch is not parametrized).
+//  2. Spawns reviewer-dev-via-test (CBG).
+//  3. CBG's tools: query_entity (read run-entity state), bash (run
+//     integration test + git diff), read_loop_result (read walker's
+//     pre-CBG rollup), decide, scratchpad.
+//  4. action_allowlist: [approved, rejected] — CBG cannot start a
+//     fresh chain or escalate via needs_clarification (the design
+//     IS one verdict per CBG, no escape hatch).
+//  5. related_loops pins run-loop-entity-id from walker's lineage
+//     (CBG is NOT the run entity; thread from walker).
+//  6. tool_choice=required (CBG must use the tool path).
+func TestDevViaTestPack_06_DispatchCBG(t *testing.T) {
+	rule := loadDevViaTestRule(t, "06-coordinator-dispatch-cbg.json")
+
+	if !devViaTestRoleCondition(rule, "coordinator") {
+		t.Error("rule 06 does not condition on role=coordinator")
+	}
+	if !devViaTestActionCondition(rule, "dev_via_test_finalize") {
+		t.Error("rule 06 does not condition on next_action=dev_via_test_finalize — CBG dispatch token missing")
+	}
+
+	var spawn *devViaTestOnEnterJSON
+	for i := range rule.OnEnter {
+		if rule.OnEnter[i].Type == "publish_agent" && rule.OnEnter[i].Role == "reviewer-dev-via-test" {
+			spawn = &rule.OnEnter[i]
+			break
+		}
+	}
+	if spawn == nil {
+		t.Fatal("rule 06 has no publish_agent for role=reviewer-dev-via-test (CBG)")
+	}
+
+	for _, want := range []string{"query_entity", "bash", "read_loop_result", "decide", "scratchpad"} {
+		if !devViaTestSliceHas(spawn.Tools, want) {
+			t.Errorf("rule 06 CBG tools missing %q (need to read run entity + run integration test + read walker terminal)", want)
+		}
+	}
+	for _, want := range []string{"approved", "rejected"} {
+		if !devViaTestSliceHas(spawn.ActionAllowed, want) {
+			t.Errorf("rule 06 action_allowlist missing %q", want)
+		}
+	}
+	if len(spawn.ActionAllowed) != 2 {
+		t.Errorf("rule 06 action_allowlist = %v; want exactly [approved, rejected] — CBG cannot start a fresh chain or escalate via needs_clarification by design", spawn.ActionAllowed)
+	}
+	if want, got := "$entity.triple.lineage.run-loop-entity-id", spawn.RelatedLoops["run-loop-entity-id"]; got != want {
+		t.Errorf("rule 06 related_loops[run-loop-entity-id] = %q; want %q (CBG threads from walker's lineage)", got, want)
+	}
+	if spawn.ToolChoice == nil {
+		t.Error("rule 06 spawn missing tool_choice — CBG may text-out of bash / decide")
+	} else if mode, _ := spawn.ToolChoice["mode"].(string); mode != "required" {
+		t.Errorf("rule 06 tool_choice.mode = %q; want %q", mode, "required")
+	}
+}
+
+// TestDevViaTestPack_07a_CBGApprovedToCoordinator pins the chain-
+// terminal approved-path wake-up. Mirrors autoresearch rule 08
+// shape — coordinator wakes scoped to respond_direct (deliver
+// CBG's rollup to user).
+func TestDevViaTestPack_07a_CBGApprovedToCoordinator(t *testing.T) {
+	rule := loadDevViaTestRule(t, "07a-cbg-approved-to-coordinator.json")
+
+	if !devViaTestRoleCondition(rule, "reviewer-dev-via-test") {
+		t.Error("rule 07a does not condition on role=reviewer-dev-via-test")
+	}
+	if !devViaTestActionCondition(rule, "approved") {
+		t.Error("rule 07a does not condition on next_action=approved")
+	}
+
+	var spawn *devViaTestOnEnterJSON
+	for i := range rule.OnEnter {
+		if rule.OnEnter[i].Type == "publish_agent" && rule.OnEnter[i].Role == "coordinator" {
+			spawn = &rule.OnEnter[i]
+			break
+		}
+	}
+	if spawn == nil {
+		t.Fatal("rule 07a has no publish_agent for role=coordinator")
+	}
+	if !devViaTestSliceHas(spawn.ActionAllowed, "respond_direct") {
+		t.Error("rule 07a action_allowlist missing respond_direct — final wake-up must deliver to user")
+	}
+	if !devViaTestSliceHas(spawn.Tools, "read_loop_result") {
+		t.Error("rule 07a coordinator tools missing read_loop_result — needed to read CBG's verdict")
+	}
+}
+
+// TestDevViaTestPack_07b_CBGRejectedToCoordinator pins the chain-
+// terminal rejected-path wake-up. Routes through ask_user (no
+// auto-recover per ADR §CBG's gate).
+func TestDevViaTestPack_07b_CBGRejectedToCoordinator(t *testing.T) {
+	rule := loadDevViaTestRule(t, "07b-cbg-rejected-to-coordinator.json")
+
+	if !devViaTestRoleCondition(rule, "reviewer-dev-via-test") {
+		t.Error("rule 07b does not condition on role=reviewer-dev-via-test")
+	}
+	if !devViaTestActionCondition(rule, "rejected") {
+		t.Error("rule 07b does not condition on next_action=rejected")
+	}
+
+	var spawn *devViaTestOnEnterJSON
+	for i := range rule.OnEnter {
+		if rule.OnEnter[i].Type == "publish_agent" && rule.OnEnter[i].Role == "coordinator" {
+			spawn = &rule.OnEnter[i]
+			break
+		}
+	}
+	if spawn == nil {
+		t.Fatal("rule 07b has no publish_agent for role=coordinator")
+	}
+	if !devViaTestSliceHas(spawn.ActionAllowed, "ask_user") {
+		t.Error("rule 07b action_allowlist missing ask_user — rejected path must surface to user (no auto-recover)")
+	}
+}
+
+// TestReviewerDevViaTestPersonaTeachesGate asserts CBG's persona
+// corpus carries the load-bearing concepts: the integration_test_
+// command gate, the diff sanity-check, the approved/rejected
+// terminal, and the explicit no-recovery posture.
+func TestReviewerDevViaTestPersonaTeachesGate(t *testing.T) {
+	root := "../../configs/personas/fragments/reviewer-dev-via-test"
+	got, err := concatFragmentsDevViaTest(root)
+	if err != nil {
+		t.Fatalf("read reviewer-dev-via-test fragments: %v", err)
+	}
+	for _, want := range []string{
+		"integration_test_command", // the gate
+		"chain_start_git_tag",      // the diff anchor
+		"git diff",                 // the diff sanity-check
+		"approved",                 // terminal action
+		"rejected",                 // terminal action
+		"do not iterate",           // no-recovery posture (or similar phrasing)
+	} {
+		// Case-insensitive contains — persona authors phrase naturally
+		if !strings.Contains(strings.ToLower(got), strings.ToLower(want)) {
+			t.Errorf("reviewer-dev-via-test persona missing %q — gate contract incomplete", want)
+		}
+	}
+}
+
+// TestCoordinatorPersonaTeachesFinalize asserts the coordinator
+// decision-contract documents the dev_via_test_finalize action
+// (per Slice 4 — new closed-taxonomy entry).
+func TestCoordinatorPersonaTeachesFinalize(t *testing.T) {
+	path := "../../configs/personas/fragments/coordinator/10-decision-contract.md"
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	text := string(data)
+	if !strings.Contains(text, "`dev_via_test_finalize`") {
+		t.Error("coordinator 10-decision-contract.md does not list `dev_via_test_finalize` as a valid action — walker cannot reach CBG dispatch path")
+	}
+	if !strings.Contains(text, "CBG") || !strings.Contains(text, "integration_test_command") {
+		t.Error("coordinator 10-decision-contract.md dev_via_test_finalize entry should mention CBG + the integration_test_command — wire-shape context")
 	}
 }
 
@@ -849,13 +1018,17 @@ func TestDevViaTestSpawnRulesPinRunLoopEntityID(t *testing.T) {
 // TestDevViaTestPack_08_RoleListInventory pins the full set of
 // non-execute roles whose loop-failed outcomes must trigger chain
 // pause. Mirrors the autoresearch rule 11 inventory check (per
-// Slice 2 reviewer N8). When Slice 4 lands CBG, this list grows
-// AND rule 08's `in` list must grow to match — the test fails at
-// PR time, not at smoke time.
+// Slice 2 reviewer N8). Slice 4 extended to include CBG
+// (reviewer-dev-via-test). Future packs that add non-execute
+// roles MUST grow this set + rule 08's `in` list together — the
+// test fails at PR time, not at smoke time.
 func TestDevViaTestPack_08_RoleListInventory(t *testing.T) {
 	wantRoles := map[string]struct{}{
-		"dev-via-test-plan": {},
-		// Slice 4: add "reviewer-dev-via-test" here AND in rule 08.
+		"dev-via-test-plan":     {}, // Lisa (Slice 1)
+		"reviewer-dev-via-test": {}, // CBG (Slice 4)
+		// dev-via-test-execute (Ralph) is DELIBERATELY excluded —
+		// Ralph failures route through rule 04b (walker wake-up +
+		// ask_user, no chain pause).
 	}
 	rule := loadDevViaTestRule(t, "08-loop-failed-pause.json")
 	var gotRoles map[string]struct{}

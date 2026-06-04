@@ -1,0 +1,52 @@
+{
+  "id": "dev_via_test_cbg_rejected_to_coordinator",
+  "type": "expression",
+  "name": "reviewer-dev-via-test decide(rejected) → coordinator final wake-up (ask_user)",
+  "description": "ADR-044 Slice 4 chain terminal (rejected path). Fires when CBG decides rejected — integration test failed, diff was unsanitary (test-gaming detected, file-scope blown out, etc.), or some structural problem CBG cannot self-resolve. Per ADR-044 §CBG's gate at chain-end: 'v1 does not auto-recover from CBG reject; user picks next move.' Spawns a final coordinator loop scoped to ask_user — the user gets CBG's verdict and decides what to do (amend the plan, kill the chain, etc.).\n\nMirror of rule 07a but routes to ask_user instead of respond_direct because the chain produced a user-visible failure that needs a decision, not just a delivery.",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "agent.loop.role",
+      "operator": "eq",
+      "value": "reviewer-dev-via-test",
+      "required": true
+    },
+    {
+      "field": "coordinator.decision.next_action",
+      "operator": "eq",
+      "value": "rejected",
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "publish_agent",
+      "subject": "agent.task.coordinator",
+      "role": "coordinator",
+      "model": "coordinator",
+      "tools": ["read_loop_result", "decide"],
+      "tool_choice": { "mode": "required" },
+      "action_allowlist": ["ask_user", "respond_direct"],
+      "properties": {
+        "wakeup_mode": "chain_terminal_dev_via_test_rejected",
+        "terminal_loop_id": "$entity.instance",
+        "category": "dev_via_test"
+      },
+      "related_loops": {
+        "terminal": "$entity.instance",
+        "dev-via-test-run": "$entity.triple.lineage.dev-via-test-run"
+      },
+      "prompt": "The dev-via-test chain you dispatched has reached its terminal — but NOT cleanly. CBG (reviewer-dev-via-test) at loop $entity.instance ran the integration test command across the full task scope and REJECTED the work.\n\nYour job now is to surface CBG's verdict to the user and ask what they want to do next. v1 does not auto-recover from CBG rejection (per ADR-044 §CBG's gate at chain-end).\n\nIteration 1 — call read_loop_result(loop_id=$entity.instance) to read CBG's rejected verdict. CBG's reason explains what went wrong: integration test output, diff observations, test-gaming evidence.\n\nIteration 2 — call decide(action=\"ask_user\", reason=\"<your synthesised user-facing message>\"). Quote CBG's verdict; ask the user what to do. Common shapes:\n\n  - Integration test failed: 'The integration test (<command>) failed: <error summary>. Should I amend the plan with additional tasks to cover the gap, or abandon this run?'\n  - File-scope violation: 'CBG flagged that changes spilled outside the planned task scope (<files>). Want to amend the plan, or accept the over-scope?'\n  - Test-gaming: 'CBG flagged test-gaming (<specifics>). The chain needs a re-plan with sharper acceptance criteria.'\n\nOne question per call. Write the reason as plain prose addressing the user directly — no internal jargon, no markdown affordances. The user replies and a NEW coordinator loop fires on the reply (a fresh chain, with whatever the user said as the new ask)."
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "pack": "dev_via_test",
+    "phase": "ADR-044 Slice 4 — chain terminal rejected",
+    "adr": "docs/adr/044-dev-via-test-pack.md",
+    "terminal_role": "reviewer-dev-via-test",
+    "approval_action": "rejected",
+    "no_auto_recover_rationale": "Per ADR-044 §CBG's gate at chain-end + §Stuck-task recovery: chain-level recovery is coordinator-owned via ask_user, not auto-retry. If we auto-spawned a new Lisa with the failure as new context, we'd risk infinite loop on a fundamentally-flawed plan + bypass user judgment about whether to spend more iteration budget."
+  }
+}

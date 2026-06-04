@@ -8,7 +8,7 @@
     {
       "field": "agent.loop.role",
       "operator": "in",
-      "value": ["dev-via-test-plan"],
+      "value": ["dev-via-test-plan", "reviewer-dev-via-test"],
       "required": true
     },
     {
@@ -37,6 +37,6 @@
     "phase": "ADR-044 Slice 2 — non-execute chain pause",
     "adr": "docs/adr/044-dev-via-test-pack.md",
     "roles_excluded": "dev-via-test-execute (Ralph) — handled by rule 04b instead (stamp + coordinator wake-up + ask_user, no chain pause; the user gets to decide before the chain dies).",
-    "roles_to_add_in_slice_4": "reviewer-dev-via-test (CBG) — Slice 4 will append this to the role 'in' list."
+    "slice_4_extension_2026_06_03": "reviewer-dev-via-test (CBG) added to the role 'in' list. CBG loop-failures (panic, framework max-iter without decide, NATS error, etc.) have no in-arc recovery path — chain pause is correct. CBG decide(rejected) is NOT a loop-failure; it routes through rule 07b (ask_user) per the no-auto-recover posture."
   }
 }

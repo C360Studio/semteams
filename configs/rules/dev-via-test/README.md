@@ -44,7 +44,7 @@ and @mavlink-hard Accept-gate.
 | 1 | Lisa planner — `emit_dev_via_test_plan` + persona + rule 01 spawn | shipped |
 | 2 | Ralph executor — `emit_dev_via_test_measurement` + persona + rules 04a/04b/08 | shipped |
 | 3 | Plan walker — coordinator wake-up + plan-walking persona fragment + rules 02/03/05 | shipped |
-| 4 | CBG reviewer — persona + rules 06/07; 08 extended | pending |
+| 4 | CBG reviewer — persona + rules 06/07a/07b; rule 08 extended; new `dev_via_test_finalize` action | shipped |
 
 ## Naming convention
 
@@ -106,10 +106,11 @@ No `plan.task.<id>.retry_count` triple — per ADR-044
 | `03-coordinator-dispatch-ralph.json` | coordinator decide(dev_via_test) + subtopics.length>0 (WALKER dispatch) | Ralph via `for_each` over subtopics — v1 N=1 (serial), v2 N>1 (parallel topo-walk) |
 | `04a-execute-stamp-converged.json` | Ralph success + `dev_via_test.measurement.pass=true` | Stamp `dev_via_test.execute.outcome=converged` on Ralph entity + `dev_via_test.execute.task_completed=<ralph-loop-id>` on run entity (walker pickup) |
 | `04b-execute-stamp-failed.json` | Ralph outcome IN [failed, truncated, cancelled] | Stamp `dev_via_test.execute.outcome=failed` on Ralph entity + `dev_via_test.execute.task_failed=<ralph-loop-id>` on run entity. No auto-retry per ADR §Stuck-task recovery. Walker routes to `ask_user`. |
-| `05-ralph-terminal-to-walker.json` | Ralph outcome IN [success, failed, truncated, cancelled] (ANY terminal) | Coordinator walker wake-up; reads Ralph's terminal via read_loop_result + run-entity state via query_entity; decides next task / ask_user / respond_direct |
-| `08-loop-failed-pause.json` | Non-execute dev-via-test role (Lisa today; CBG in Slice 4) outcome IN [failed, truncated, cancelled] | Stamp `chain.paused.marker` + `chain.paused.role`. Chainpause subscriber propagates to chain entity (§D5). |
-
-(Slice 4 adds CBG rules + extends rule 08 to include CBG; also replaces rule 05's "all done → respond_direct" with CBG dispatch.)
+| `05-ralph-terminal-to-walker.json` | Ralph outcome IN [success, failed, truncated, cancelled] (ANY terminal) | Coordinator walker wake-up; reads Ralph's terminal via read_loop_result + run-entity state via query_entity; decides next task / finalize (CBG) / ask_user / respond_direct |
+| `06-coordinator-dispatch-cbg.json` | Walker decide(dev_via_test_finalize) | CBG (reviewer-dev-via-test) — chain-end gate. Runs `plan.integration_test_command`, diffs against `plan.chain_start_git_tag`, emits approved/rejected |
+| `07a-cbg-approved-to-coordinator.json` | CBG decide(approved) | Final coordinator wake-up scoped to respond_direct — delivers chain result to user |
+| `07b-cbg-rejected-to-coordinator.json` | CBG decide(rejected) | Final coordinator wake-up scoped to ask_user — user picks next move (amend plan, abandon, re-dispatch). No auto-recover per ADR §CBG's gate at chain-end. |
+| `08-loop-failed-pause.json` | Non-execute dev-via-test role (Lisa, CBG) outcome IN [failed, truncated, cancelled] | Stamp `chain.paused.marker` + `chain.paused.role`. Chainpause subscriber propagates to chain entity (§D5). |
 
 ## V1 binary semantics — what's NOT here
 
@@ -178,6 +179,51 @@ The architecture supports parallel dispatch via `subtopics=[<id1>,<id2>,...]`
 (rule 03's `for_each` over subtopics fans out — same pattern as
 research pack rule 02). Gated by `plan.task.<id>.depends_on`
 topo-walking which is deferred to v2 per ADR-044 §DAG awareness.
+
+## End-to-end chain flow (Slices 1-4)
+
+```
+User → front-door coordinator
+  decide(action="dev_via_test", reason=<user ask>)
+  ↓ rule 01 [subtopics.length=0 + lineage.length=0]
+Lisa (dev-via-test-plan)
+  bash git tag plan-start
+  emit_dev_via_test_plan(...)
+  decide(action="planned")
+  ↓ rule 02
+Walker A (coordinator, woken with run-loop-entity-id lineage)
+  query_entity(<run-id>) → reads plan
+  decide(action="dev_via_test", subtopics=["t1"])
+  ↓ rule 03 [subtopics.length>0 + for_each]
+Ralph 1 (dev-via-test-execute, task_id=t1)
+  iterate: bash edit → bash test → emit_dev_via_test_measurement
+  decide(action="measured")
+  ↓ rule 04a (stamp task_completed on run) + rule 05
+Walker B
+  query_entity(<run-id>) → reads plan + execution markers
+  picks next ready task → decide(action="dev_via_test", subtopics=["t2"])
+  ↓ rule 03 → Ralph 2 → rule 05 → Walker C → ...
+  ... when all tasks done ...
+Walker N
+  decide(action="dev_via_test_finalize", reason=<pre-CBG rollup>)
+  ↓ rule 06
+CBG (reviewer-dev-via-test)
+  query_entity(<run-id>) → reads plan.integration_test_command
+  bash <integration_test_command>
+  bash git diff plan-start
+  decide(action="approved" | "rejected")
+  ↓ rule 07a (approved) OR rule 07b (rejected)
+Final coordinator
+  decide(action="respond_direct" | "ask_user")
+  ↓ coordinator/03b-respond-direct.json OR coordinator/03-ask-user.json
+User reply published
+```
+
+Failure paths (per ADR §Stuck-task recovery):
+- Lisa or CBG loop-failed → rule 08 → chain.paused (no auto-recover)
+- Ralph loop-failed → rule 04b → walker wakes → ask_user
+- CBG rejected → rule 07b → ask_user (no auto-re-plan)
+- User responds → fresh coordinator loop (new chain)
 
 ## Sandbox dependency
 
