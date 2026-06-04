@@ -36,6 +36,7 @@
       "action_allowlist": ["dev_via_test", "dev_via_test_finalize", "respond_direct", "ask_user"],
       "related_loops": {
         "run-loop-entity-id": "$entity.triple.lineage.run-loop-entity-id",
+        "dev-via-test-run": "$entity.triple.lineage.dev-via-test-run",
         "previous-pack-loop-id": "$entity.instance",
         "previous-pack-role": "dev-via-test-plan"
       },

@@ -623,6 +623,106 @@ func TestDevViaTestPack_07a_CBGApprovedToCoordinator(t *testing.T) {
 	}
 }
 
+// TestDevViaTestPack_07a_WakeupModeProperty pins the per-Slice-4
+// reviewer R2 telemetry differentiator. The ADR justifies the
+// 07a/07b split partly via "operator-facing telemetry shouldn't
+// have to grep through verdict strings." This test prevents a
+// future refactor that "simplifies" both rules to a shared
+// template from silently dropping the differentiator.
+func TestDevViaTestPack_07a_WakeupModeProperty(t *testing.T) {
+	rule := loadDevViaTestRule(t, "07a-cbg-approved-to-coordinator.json")
+	for _, a := range rule.OnEnter {
+		if a.Type != "publish_agent" {
+			continue
+		}
+		if got := a.Properties["wakeup_mode"]; got != "chain_terminal_dev_via_test_approved" {
+			t.Errorf("rule 07a properties.wakeup_mode = %q; want %q (operator telemetry differentiator per ADR-044 §addendum Slice 4)",
+				got, "chain_terminal_dev_via_test_approved")
+		}
+		return
+	}
+	t.Fatal("rule 07a has no publish_agent action")
+}
+
+func TestDevViaTestPack_07b_WakeupModeProperty(t *testing.T) {
+	rule := loadDevViaTestRule(t, "07b-cbg-rejected-to-coordinator.json")
+	for _, a := range rule.OnEnter {
+		if a.Type != "publish_agent" {
+			continue
+		}
+		if got := a.Properties["wakeup_mode"]; got != "chain_terminal_dev_via_test_rejected" {
+			t.Errorf("rule 07b properties.wakeup_mode = %q; want %q (operator telemetry differentiator per ADR-044 §addendum Slice 4)",
+				got, "chain_terminal_dev_via_test_rejected")
+		}
+		return
+	}
+	t.Fatal("rule 07b has no publish_agent action")
+}
+
+// TestDevViaTestFinalizeTokenLiteralConsistency pins the
+// `dev_via_test_finalize` action token across all surfaces that
+// must agree on the literal: rule 06's condition, rules 02/05's
+// walker action_allowlist, coordinator persona decision-contract
+// + plan-walking fragment, walker prompt step instructions. Per
+// Slice 4 reviewer R8: if a future refactor renames the token,
+// every dependent surface fails simultaneously at PR time, not
+// five smoke-time failures.
+//
+// Mirrors TestDevViaTestChainStartTagLiteralConsistency for the
+// `plan-start` literal (Slice 1 reviewer N4 pattern).
+func TestDevViaTestFinalizeTokenLiteralConsistency(t *testing.T) {
+	const token = "dev_via_test_finalize"
+
+	// Source 1: rule 06 condition.
+	rule06 := loadDevViaTestRule(t, "06-coordinator-dispatch-cbg.json")
+	if !devViaTestActionCondition(rule06, token) {
+		t.Errorf("rule 06 does not condition on next_action=%q — CBG dispatch dead", token)
+	}
+
+	// Source 2 + 3: rules 02 + 05 action_allowlist must include token
+	// (walker emits the action; allowlist gates).
+	for _, name := range []string{"02-lisa-terminal-to-walker.json", "05-ralph-terminal-to-walker.json"} {
+		rule := loadDevViaTestRule(t, name)
+		for _, a := range rule.OnEnter {
+			if a.Type != "publish_agent" {
+				continue
+			}
+			if !devViaTestSliceHas(a.ActionAllowed, token) {
+				t.Errorf("%s walker action_allowlist missing %q — walker cannot reach CBG finalize path", name, token)
+			}
+			break
+		}
+	}
+
+	// Source 4: coordinator persona decision-contract.md.
+	decisionContract, err := os.ReadFile("../../configs/personas/fragments/coordinator/10-decision-contract.md")
+	if err != nil {
+		t.Fatalf("read 10-decision-contract.md: %v", err)
+	}
+	if !strings.Contains(string(decisionContract), "`"+token+"`") {
+		t.Errorf("coordinator 10-decision-contract.md missing %q in closed-taxonomy table", token)
+	}
+
+	// Source 5: coordinator persona plan-walking.md (walker contract).
+	planWalking, err := os.ReadFile("../../configs/personas/fragments/coordinator/30-plan-walking.md")
+	if err != nil {
+		t.Fatalf("read 30-plan-walking.md: %v", err)
+	}
+	if !strings.Contains(string(planWalking), token) {
+		t.Errorf("coordinator 30-plan-walking.md does not reference %q — walker doesn't know to emit it when all tasks done", token)
+	}
+
+	// Source 6: rule 05's walker prompt (post-Ralph wake-up tells
+	// walker explicitly to use this token on "all done").
+	rule05Data, err := os.ReadFile("../../configs/rules/dev-via-test/05-ralph-terminal-to-walker.json")
+	if err != nil {
+		t.Fatalf("read rule 05: %v", err)
+	}
+	if !strings.Contains(string(rule05Data), token) {
+		t.Errorf("rule 05's prompt does not mention %q — walker wake-up doesn't instruct the CBG dispatch path", token)
+	}
+}
+
 // TestDevViaTestPack_07b_CBGRejectedToCoordinator pins the chain-
 // terminal rejected-path wake-up. Routes through ask_user (no
 // auto-recover per ADR §CBG's gate).
@@ -1126,6 +1226,7 @@ type devViaTestOnEnterJSON struct {
 	ToolChoice    map[string]any            `json:"tool_choice,omitempty"`
 	ActionAllowed []string                  `json:"action_allowlist,omitempty"`
 	RelatedLoops  map[string]string         `json:"related_loops,omitempty"`
+	Properties    map[string]string         `json:"properties,omitempty"`
 	ForEach       string                    `json:"for_each,omitempty"`
 	ForEachVar    string                    `json:"for_each_var,omitempty"`
 	When          []devViaTestConditionJSON `json:"when,omitempty"`

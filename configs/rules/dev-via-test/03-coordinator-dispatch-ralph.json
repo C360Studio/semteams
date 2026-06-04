@@ -43,7 +43,7 @@
         "task_id": "$subtopic"
       },
       "related_loops": {
-        "dev-via-test-run": "$entity.triple.lineage.run-loop-entity-id",
+        "dev-via-test-run": "$entity.triple.lineage.dev-via-test-run",
         "run-loop-entity-id": "$entity.triple.lineage.run-loop-entity-id",
         "walker-loop-id": "$entity.instance"
       },

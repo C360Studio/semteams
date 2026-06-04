@@ -29,9 +29,12 @@ fails, you reject; you do NOT iterate to fix it.
    - `plan.task.*` — what each Ralph was supposed to deliver
    - `dev_via_test.execute.task_completed` / `.task_failed` —
      which tasks finished cleanly vs were marked blocked
-2. **Read the walker's terminal** via `read_loop_result(loop_id="<walker-loop-id>")`
-   (named in your spawn prompt). The walker's reason is the
-   pre-CBG rollup — what they thought shipped.
+2. **Read the walker's terminal** via `read_loop_result(loop_id=...)`
+   with the walker loop ID pre-resolved in your spawn prompt (the
+   `$entity.instance` token there substitutes to the walker's bare
+   UUID at rule fire time — no placeholder for you to fill in).
+   The walker's reason is the pre-CBG rollup — what they thought
+   shipped.
 3. **Run the integration test command** via `bash <command>`. This
    is your primary gate. Capture stdout + stderr + exit code.
 4. **Read the cumulative diff** via `bash git diff <plan.chain_start_git_tag>`.
