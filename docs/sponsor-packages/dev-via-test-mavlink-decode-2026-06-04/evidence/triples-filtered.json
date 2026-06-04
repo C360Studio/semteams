@@ -1,0 +1,242 @@
+[
+  {
+    "subject": "c360.bootstrap-001.agent.chain.execution.loop_457ad91c",
+    "predicate": "sandbox.attestation.profile",
+    "object": "go-backend@v1",
+    "source": "sandbox-manager-attestation",
+    "timestamp": "2026-06-04T10:31:47.105004252Z",
+    "confidence": 1
+  },
+  {
+    "subject": "c360.bootstrap-001.agent.chain.execution.loop_457ad91c",
+    "predicate": "sandbox.attestation.ready",
+    "object": true,
+    "source": "sandbox-manager-attestation",
+    "timestamp": "2026-06-04T10:31:47.105004252Z",
+    "confidence": 1
+  },
+  {
+    "subject": "c360.bootstrap-001.agent.chain.execution.loop_457ad91c",
+    "predicate": "sandbox.attestation.attested_at",
+    "object": "2026-06-04T10:31:47.105004252Z",
+    "source": "sandbox-manager-attestation",
+    "timestamp": "2026-06-04T10:31:47.105004252Z",
+    "confidence": 1
+  },
+  {
+    "subject": "c360.bootstrap-001.agent.chain.execution.loop_457ad91c",
+    "predicate": "sandbox.attestation.degraded",
+    "object": false,
+    "source": "sandbox-manager-attestation",
+    "timestamp": "2026-06-04T10:31:47.105004252Z",
+    "confidence": 1
+  },
+  {
+    "subject": "c360.bootstrap-001.agent.chain.execution.loop_457ad91c",
+    "predicate": "sandbox.attestation.admission",
+    "object": "admitted",
+    "source": "sandbox-manager-attestation",
+    "timestamp": "2026-06-04T10:31:47.105004252Z",
+    "confidence": 1
+  },
+  {
+    "subject": "c360.bootstrap-001.agent.chain.execution.loop_457ad91c",
+    "predicate": "sandbox.attestation.terminal",
+    "object": false,
+    "source": "sandbox-manager-attestation",
+    "timestamp": "2026-06-04T10:31:47.105004252Z",
+    "confidence": 1
+  },
+  {
+    "subject": "c360.bootstrap-001.agent.chain.execution.loop_457ad91c",
+    "predicate": "sandbox.attestation.requirements_hash",
+    "object": "e774a0a708602d13d6aae3533fe943aad5d61ee2f38989ee860e37055efe4e82",
+    "source": "sandbox-manager-attestation",
+    "timestamp": "2026-06-04T10:31:47.105004252Z",
+    "confidence": 1
+  },
+  {
+    "subject": "c360.bootstrap-001.agent.chain.execution.loop_457ad91c",
+    "predicate": "sandbox.attestation.signature",
+    "object": "d7d99df29380bd3832fdf45012e99ac1546b81cf4943c968fde874c8d12f466b",
+    "source": "sandbox-manager-attestation",
+    "timestamp": "2026-06-04T10:31:47.105004252Z",
+    "confidence": 1
+  },
+  {
+    "subject": "c360.bootstrap-001.agent.chain.execution.loop_457ad91c",
+    "predicate": "sandbox.attestation.ttl_seconds",
+    "object": 86400,
+    "source": "sandbox-manager-attestation",
+    "timestamp": "2026-06-04T10:31:47.105004252Z",
+    "confidence": 1
+  },
+  {
+    "subject": "c360.bootstrap-001.agent.chain.execution.loop_457ad91c",
+    "predicate": "sandbox.attestation.image_digest",
+    "object": "sha256:edbd7cbf555f65e18d53ef756a997248c9f6c3f929946e2f2d5f529884078ff8",
+    "source": "sandbox-manager-attestation",
+    "timestamp": "2026-06-04T10:31:47.105004252Z",
+    "confidence": 1
+  },
+  {
+    "subject": "c360.bootstrap-001.agent.chain.execution.loop_457ad91c",
+    "predicate": "sandbox.attestation.host_workspace_folder",
+    "object": "/Users/coby/Code/c360/semteams/.tenant-workspaces/d7d99df29380bd38/workspace",
+    "source": "sandbox-manager-attestation",
+    "timestamp": "2026-06-04T10:31:47.105004252Z",
+    "confidence": 1
+  },
+  {
+    "subject": "c360.bootstrap-001.agent.chain.execution.loop_457ad91c",
+    "predicate": "sandbox.attestation.verified.go-check",
+    "object": "go version go1.25.9 linux/arm64",
+    "source": "sandbox-manager-attestation",
+    "timestamp": "2026-06-04T10:31:47.105004252Z",
+    "confidence": 1
+  },
+  {
+    "subject": "c360.bootstrap-001.agent.agentic-loop.execution.fb924d42-cae7-4e82-a133-e3de39add46e",
+    "predicate": "coordinator.decision.next_action",
+    "object": "planned",
+    "source": "coordinator-decide",
+    "timestamp": "2026-06-04T10:32:20.637146254Z",
+    "confidence": 1
+  },
+  {
+    "subject": "c360.bootstrap-001.agent.agentic-loop.execution.fb924d42-cae7-4e82-a133-e3de39add46e",
+    "predicate": "coordinator.decision.reason",
+    "object": "2 tasks: implement MAVLink receiver with testdata, then implement HTTP service and JSON endpoint, targeting 'go test -v ./...'.",
+    "source": "coordinator-decide",
+    "timestamp": "2026-06-04T10:32:20.637146254Z",
+    "confidence": 1
+  },
+  {
+    "subject": "c360.bootstrap-001.agent.agentic-loop.execution.7649cb29-4085-49b1-a9e7-04249648e119",
+    "predicate": "coordinator.decision.next_action",
+    "object": "dev_via_test",
+    "source": "coordinator-decide",
+    "timestamp": "2026-06-04T10:32:33.83980926Z",
+    "confidence": 1
+  },
+  {
+    "subject": "c360.bootstrap-001.agent.agentic-loop.execution.7649cb29-4085-49b1-a9e7-04249648e119",
+    "predicate": "coordinator.decision.reason",
+    "object": "Dispatching the first task in the plan: receiver-logic (position 0), to initialize the project and implement the MAVLink HEARTBEAT receiver logic.",
+    "source": "coordinator-decide",
+    "timestamp": "2026-06-04T10:32:33.83980926Z",
+    "confidence": 1
+  },
+  {
+    "subject": "c360.bootstrap-001.agent.agentic-loop.execution.7649cb29-4085-49b1-a9e7-04249648e119",
+    "predicate": "coordinator.decision.subtopics",
+    "object": "[\"receiver-logic\"]",
+    "source": "coordinator-decide",
+    "timestamp": "2026-06-04T10:32:33.83980926Z",
+    "confidence": 1
+  },
+  {
+    "subject": "c360.bootstrap-001.agent.agentic-loop.execution.995ca2ca-5042-4e35-ba2d-fabe9f98fb1e",
+    "predicate": "dev_via_test.measurement.pass",
+    "object": true,
+    "source": "dev-via-test-emit-measurement",
+    "timestamp": "2026-06-04T10:33:32.112273592Z",
+    "confidence": 1
+  },
+  {
+    "subject": "c360.bootstrap-001.agent.agentic-loop.execution.995ca2ca-5042-4e35-ba2d-fabe9f98fb1e",
+    "predicate": "dev_via_test.measurement.value",
+    "object": 1,
+    "source": "dev-via-test-emit-measurement",
+    "timestamp": "2026-06-04T10:33:32.112273592Z",
+    "confidence": 1
+  },
+  {
+    "subject": "c360.bootstrap-001.agent.agentic-loop.execution.995ca2ca-5042-4e35-ba2d-fabe9f98fb1e",
+    "predicate": "dev_via_test.measurement.stamped_at",
+    "object": "2026-06-04T10:33:32.112273592Z",
+    "source": "dev-via-test-emit-measurement",
+    "timestamp": "2026-06-04T10:33:32.112273592Z",
+    "confidence": 1
+  },
+  {
+    "subject": "c360.bootstrap-001.agent.agentic-loop.execution.995ca2ca-5042-4e35-ba2d-fabe9f98fb1e",
+    "predicate": "dev_via_test.measurement.stdout_tail",
+    "object": "TestParseHeartbeat ... PASS, TestGetHeartbeat ... PASS",
+    "source": "dev-via-test-emit-measurement",
+    "timestamp": "2026-06-04T10:33:32.112273592Z",
+    "confidence": 1
+  },
+  {
+    "subject": "c360.bootstrap-001.agent.agentic-loop.execution.995ca2ca-5042-4e35-ba2d-fabe9f98fb1e",
+    "predicate": "coordinator.decision.next_action",
+    "object": "measured",
+    "source": "coordinator-decide",
+    "timestamp": "2026-06-04T10:33:34.086528552Z",
+    "confidence": 1
+  },
+  {
+    "subject": "c360.bootstrap-001.agent.agentic-loop.execution.995ca2ca-5042-4e35-ba2d-fabe9f98fb1e",
+    "predicate": "coordinator.decision.reason",
+    "object": "Implemented MAVLink v2 HEARTBEAT receiver with ParseHeartbeat and GetHeartbeat methods; created testdata/heartbeat.bin with a valid binary frame; unit tests passing against both frame parsing and concurrent access patterns.",
+    "source": "coordinator-decide",
+    "timestamp": "2026-06-04T10:33:34.086528552Z",
+    "confidence": 1
+  },
+  {
+    "subject": "c360.bootstrap-001.agent.agentic-loop.execution.995ca2ca-5042-4e35-ba2d-fabe9f98fb1e",
+    "predicate": "dev_via_test.execute.outcome",
+    "object": "converged",
+    "source": "rule_engine",
+    "timestamp": "2026-06-04T10:33:34.117799843Z",
+    "confidence": 1
+  },
+  {
+    "subject": "c360.bootstrap-001.agent.agentic-loop.execution.cd04296b-2ef9-48b7-b004-401d16d68d6e",
+    "predicate": "coordinator.decision.next_action",
+    "object": "dev_via_test",
+    "source": "coordinator-decide",
+    "timestamp": "2026-06-04T10:33:50.696848045Z",
+    "confidence": 1
+  },
+  {
+    "subject": "c360.bootstrap-001.agent.agentic-loop.execution.cd04296b-2ef9-48b7-b004-401d16d68d6e",
+    "predicate": "coordinator.decision.reason",
+    "object": "Task receiver-logic completed successfully. Dispatching next task: http-service.",
+    "source": "coordinator-decide",
+    "timestamp": "2026-06-04T10:33:50.696848045Z",
+    "confidence": 1
+  },
+  {
+    "subject": "c360.bootstrap-001.agent.agentic-loop.execution.cd04296b-2ef9-48b7-b004-401d16d68d6e",
+    "predicate": "coordinator.decision.subtopics",
+    "object": "[\"http-service\"]",
+    "source": "coordinator-decide",
+    "timestamp": "2026-06-04T10:33:50.696848045Z",
+    "confidence": 1
+  },
+  {
+    "subject": "c360.bootstrap-001.agent.agentic-loop.execution.loop_457ad91c",
+    "predicate": "coordinator.decision.next_action",
+    "object": "dev_via_test",
+    "source": "coordinator-decide",
+    "timestamp": "2026-06-04T10:31:49.575524961Z",
+    "confidence": 1
+  },
+  {
+    "subject": "c360.bootstrap-001.agent.agentic-loop.execution.loop_457ad91c",
+    "predicate": "coordinator.decision.reason",
+    "object": "Add a Go HTTP service that listens for MAVLink v2 HEARTBEAT frames over UDP on port 14540 and exposes the most recent heartbeat at GET /heartbeat as JSON containing system_id, component_id, autopilot_type, base_mode, and received_at. Use the github.com/bluenviron/gomavlib library for parsing. Include unit tests that decode captured MAVLink HEARTBEAT frames from testdata/ files and assert the parsed fields.",
+    "source": "coordinator-decide",
+    "timestamp": "2026-06-04T10:31:49.575524961Z",
+    "confidence": 1
+  },
+  {
+    "subject": "c360.bootstrap-001.agent.agentic-loop.execution.loop_457ad91c",
+    "predicate": "dev_via_test.run.status",
+    "object": "active",
+    "source": "rule_engine",
+    "timestamp": "2026-06-04T10:31:49.585691378Z",
+    "confidence": 1
+  }
+]
