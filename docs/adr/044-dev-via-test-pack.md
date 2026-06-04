@@ -802,6 +802,28 @@ chain.paused on these classes. CBG `decide(rejected)` is NOT a
 loop-failure (`outcome=success`); that routes through rule 07b
 (ask_user).
 
+### Upstream-criterion for `_finalize` per-pack tokens
+
+Per Slice 4 reviewer R5: the `dev_via_test_finalize` token is the
+right per-pack shape for v1, but the pattern will recur if more
+"outer-loop + inner-arc with chain-end reviewer" packs ship
+(`research_finalize`, `web_research_finalize`, etc.). Per
+CLAUDE.md "Product-Shell-Tool Discipline" + the evidence-trail
+discipline: name the **trigger condition** to escalate to a
+framework primitive rather than letting tokens proliferate.
+
+**Escalation trigger:** when a third dev-via-test-shaped pack
+(coordinator-walked outer loop + per-task inner arc + chain-end
+reviewer that gates on a deterministic signal) ships a `_finalize`
+token, evaluate lifting to a framework-level `coordinator.chain.finalize`
+action with pack-name as a parameter. Two packs is "coincidence";
+three is "pattern" worth a framework primitive.
+
+Until then: per-pack `_finalize` tokens carry the right per-pack
+semantics (different reviewer roles, different artifact shapes,
+different approval contracts) without the cost of a generic
+machinery layer that would have to thread pack-specific state.
+
 ### Chain flow end-to-end (Slices 1-4)
 
 See `configs/rules/dev-via-test/README.md` for the full ASCII flow.
