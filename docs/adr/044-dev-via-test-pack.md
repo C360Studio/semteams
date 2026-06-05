@@ -2,12 +2,22 @@
 
 ## Status
 
-**Proposed (2026-06-03).** Sketches the third live category pack
-on the substrate-plus-overlays MVP after research and autoresearch.
-The pack ships **decompose-and-dispatch software development**:
-one planner emits a structured plan, the coordinator walks tasks
-sequentially, each task converges via a Ralph-style inner loop in
-the per-tenant sandbox, and one reviewer gates the chain end.
+**Accepted + Shipped (Slices 1–6, PR #196).** The third live
+category pack on the substrate-plus-overlays MVP, after research and
+autoresearch. Ships **decompose-and-dispatch software development**:
+one planner (Lisa) emits a structured plan, CBG gates the plan's
+fidelity at chain-start (Slice 6), the coordinator walks tasks
+sequentially, each task converges via a Ralph inner loop in the
+per-tenant sandbox, and CBG gates the integration at chain-end
+(Slice 4) — both gates with a bounded reject/retry/approve verdict
+(Slices 5 + 6). Validated end-to-end on real Gemini
+(`@mavlink-decode`, 2026-06-05): a soft plan → `plan_rejected_retry`
+→ re-plan → `plan_approved` → Ralph used `gomavlib` → chain-end
+`approved`. See the per-slice §addenda below and
+[`docs/architecture.md`](../architecture.md) §dev-via-test.
+
+*Originally proposed 2026-06-03* as the seed sketch; built out over
+Slices 1–6 (commits `508e4038`..`fd2880e1`), each go-reviewed.
 
 Supersedes the design intent of
 [ADR-035 (dev-via-spec arc)](035-dev-via-spec-arc.md), which was
@@ -457,7 +467,7 @@ non_goals, target_files, test_command must be explicitly surfaced)
 must live in code that REJECTS payloads missing those fields. A
 generic `write_artifact` accepting freeform JSON could not enforce
 this. The per-task triple-stamping pattern (`plan.task.<id>.*`) is
-also Lisa-specific — it's what makes the coordinator-walker
+also Lisa-specific — it's what makes the coordinator-coordinator
 (Slice 3) and Ralph's lineage-read (Slice 2) work without
 re-parsing JSON blobs.
 
@@ -466,7 +476,7 @@ re-parsing JSON blobs.
 - *Reuse `emit_plan` (from the retired dev-via-spec arc).* Rejected:
   `emit_plan` renders to markdown + stamps four pointer triples
   (revision, epic_count, generated_at, path). Ralph + the coordinator
-  walker need *triples* (queryable, substitutable into prompts via
+  coordinator need *triples* (queryable, substitutable into prompts via
   `$entity.triple.X`), not a markdown blob behind a path pointer.
   The markdown rendering would just be ceremony.
 - *Per-element triples for arrays* (`plan.task.<id>.target_files.0`,
@@ -582,7 +592,7 @@ entity (`dev_via_test.execute.outcome`), one on the run entity
 `$entity.triple.lineage.run-loop-entity-id` subject substitution.
 
 The second triple is load-bearing for Slice 3: the coordinator
-walker watches the run entity for these markers to know which
+coordinator watches the run entity for these markers to know which
 Ralph just finished and pick the next ready task.
 
 We do NOT mutate `plan.task.<id>.status` from rules 04a/04b
@@ -590,26 +600,26 @@ directly because the rule engine substitutes triple OBJECTS but
 not PREDICATE FRAGMENTS in beta.96. Predicate substitution
 (`plan.task.${TASK_ID}.status`) would either require framework
 support OR per-task-ID rule generation (cardinality explosion).
-The walker handles per-task status mutation in coordinator code
+The coordinator handles per-task status mutation in coordinator code
 via parameterized `update_triple` actions in Slice 3.
 
 This is a deliberate scope split between Slice 2 (data-plane:
 Ralph stamps its terminal state on lineage-threaded entities) and
-Slice 3 (control-plane: walker translates terminal state into
+Slice 3 (control-plane: coordinator translates terminal state into
 plan.task.<id>.status mutations + next-task dispatch).
 
-## Addendum 2026-06-03 — Slice 3 (plan walker) design + scope
+## Addendum 2026-06-03 — Slice 3 (plan coordinator) design + scope
 
-Slice 3 wires the coordinator-as-walker control plane: rule 02
-(Lisa→walker), rule 03 (walker→Ralph via for_each), rule 05
-(Ralph→walker), plus `30-plan-walking.md` persona fragment + the
+Slice 3 wires the coordinator-as-coordinator control plane: rule 02
+(Lisa→coordinator), rule 03 (coordinator→Ralph via for_each), rule 05
+(Ralph→coordinator), plus `30-plan-walking.md` persona fragment + the
 `dev_via_test` two-mode action shape on the decide tool. Two
 substrate-level design choices worth recording:
 
 ### Two-mode `dev_via_test` token (subtopics presence as differentiator)
 
 Slice 1's rule 01 fires on `decide(action="dev_via_test")` to
-spawn Lisa. Slice 3's walker also emits `decide(action="dev_via_test", ...)`
+spawn Lisa. Slice 3's coordinator also emits `decide(action="dev_via_test", ...)`
 — to dispatch Ralph at a specific task. Same token, different
 spawn target.
 
@@ -617,7 +627,7 @@ Differentiation via `coordinator.decision.subtopics.length`:
 
 - Rule 01: `length_eq 0` (initial dispatch, no specific target)
   → spawn Lisa (planner)
-- Rule 03: `length_gt 0` (walker chose target) → spawn Ralph
+- Rule 03: `length_gt 0` (coordinator chose target) → spawn Ralph
   (executor) at `subtopics[0]` via `for_each`
 
 Verified against beta.96:
@@ -638,7 +648,7 @@ Alternatives considered + rejected:
   semantic IS "dev_via_test work" in both cases; subtopics
   presence cleanly carries the "which task" payload without a
   new token.
-- *Walker emits via a new tool (`dispatch_next_task`).* Would have
+- *Coordinator emits via a new tool (`dispatch_next_task`).* Would have
   required a new product-shell tool just to write a marker triple
   the rule layer could match on. The decide tool already does
   exactly this (`coordinator.decision.next_action` stamp); reusing
@@ -649,14 +659,14 @@ Alternatives considered + rejected:
 Rule 03 uses `for_each: "$entity.triple.coordinator.decision.subtopics"`
 + `for_each_var: "subtopic"` — the same pattern as research pack's
 rule 02 (verified `configs/rules/research/02-plan-to-gather.json`).
-v1 walker emits single-element subtopics for serial dispatch;
-`for_each` runs once per walker decision and spawns one Ralph.
+v1 coordinator emits single-element subtopics for serial dispatch;
+`for_each` runs once per coordinator decision and spawns one Ralph.
 
 v2 will support parallel dispatch via multi-element subtopics
 (`subtopics=["t1","t2"]`) — `for_each` spawns N Ralphs concurrently
 (same parallel-loop semantics as research pack's N-gatherer
 fan-out). Gated by `plan.task.<id>.depends_on` topo-walking which
-is deferred to v2 per §DAG awareness; v1 walker chooses one task
+is deferred to v2 per §DAG awareness; v1 coordinator chooses one task
 per decision and walks in plan-order.
 
 The choice to ship the same `for_each` pattern even for N=1 means
@@ -668,7 +678,7 @@ upgrade path.
 
 Slice 2's rules 04a/04b stamp `dev_via_test.execute.task_completed`
 or `task_failed` on the run entity (multi-valued — one triple per
-Ralph). Slice 3's walker reads ALL these triples and computes
+Ralph). Slice 3's coordinator reads ALL these triples and computes
 effective status **derivatively**:
 
 - `done` if task ID appears in `task_completed` list
@@ -681,11 +691,11 @@ chain's lifetime. Status is a pure function of execution markers.
 This avoids the predicate-substitution gap (rule engine substitutes
 triple OBJECTS but not predicate fragments — `plan.task.${TASK_ID}.status`
 isn't a thing in beta.96), and eliminates a race-condition class
-(partial-write of status update vs. concurrent walker read). Walker
+(partial-write of status update vs. concurrent coordinator read). Coordinator
 state computation is monotonic — adding new markers can only
 advance a task from ready to done/blocked, never the reverse.
 
-The trade-off: walker must read ALL run-entity triples to compute
+The trade-off: coordinator must read ALL run-entity triples to compute
 status (single `query_entity` call), and process the multi-valued
 markers locally. For plans up to ~50 tasks this is negligible; for
 much larger plans we'd add a "compaction" rule that collapses
@@ -697,22 +707,22 @@ v1.
 Rule 05's prompt step 4 currently routes "all done" → `respond_direct`
 directly. Slice 4 will:
 
-- Add a new walker action token (likely `dev_via_test_finalize` or
+- Add a new coordinator action token (likely `dev_via_test_finalize` or
   reuse `dev_via_test` with `subtopics=["__cbg__"]` sentinel) →
   spawn CBG (`reviewer-dev-via-test`).
-- Add rule 06 (walker decide finalize → CBG spawn) + rule 07 (CBG
+- Add rule 06 (coordinator decide finalize → CBG spawn) + rule 07 (CBG
   approved → coordinator wake-up for respond_direct).
 - Update rule 08's role list to include `reviewer-dev-via-test`.
-- Update walker persona to route "all done" through CBG instead of
+- Update coordinator persona to route "all done" through CBG instead of
   direct respond_direct.
 
-Slice 3's walker prompt explicitly notes "Slice 4 will replace
+Slice 3's coordinator prompt explicitly notes "Slice 4 will replace
 this with a CBG dispatch route" so persona drift between Slice 3
 and Slice 4 stays visible.
 
 ## Addendum 2026-06-03 — Slice 4 (CBG chain-end gate) design
 
-Slice 4 closes the chain: rule 06 (walker→CBG), rule 07a (CBG
+Slice 4 closes the chain: rule 06 (coordinator→CBG), rule 07a (CBG
 approved→final coordinator respond_direct), rule 07b (CBG
 rejected→final coordinator ask_user), rule 08 extension to include
 CBG, new `reviewer-dev-via-test` persona dir, new `dev_via_test_finalize`
@@ -721,7 +731,7 @@ action token in the coordinator's closed taxonomy.
 ### New action token: `dev_via_test_finalize`
 
 Per Slice 3 reviewer R5 + the §Slice 4 handoff sketch above:
-walker emits this token when all `plan.task.*` are done. Distinct
+coordinator emits this token when all `plan.task.*` are done. Distinct
 from `dev_via_test` (which routes to Lisa OR Ralph via rule 01/03's
 subtopics differentiator) to avoid overloading a THIRD meaning on
 the same token.
@@ -733,14 +743,14 @@ Alternatives considered + rejected:
   at task ID `"__cbg__"` (no such task in the plan, Ralph wedges).
   A new condition `subtopics[0] != "__cbg__"` on rule 03 would work
   but adds fragility (string-sentinel match).
-- *Reuse `dev_via_test` with empty subtopics from walker.* Rejected
-  per Slice 3 reviewer B1: walker has lineage, so rule 01 (which
+- *Reuse `dev_via_test` with empty subtopics from coordinator.* Rejected
+  per Slice 3 reviewer B1: coordinator has lineage, so rule 01 (which
   requires `lineage.run-loop-entity-id length_eq 0`) doesn't fire.
   The dispatch silently no-ops — chain wedges with no CBG.
-- *Reuse `respond_direct` for "all done."* Rejected — walker would
+- *Reuse `respond_direct` for "all done."* Rejected — coordinator would
   bypass CBG entirely (the gate that catches cross-task drift),
   defeating the chain-end review purpose. Plus the user-facing
-  rollup the walker writes wouldn't have the integration-test
+  rollup the coordinator writes wouldn't have the integration-test
   result CBG provides.
 
 The new token is the cleanest dispatch contract: one signal, one
@@ -761,7 +771,7 @@ CBG's two outcomes route to different final-wake-up shapes:
 Two rules instead of one rule that conditions on the outcome value
 because: (1) rule 07a's prompt is "deliver the result," rule 07b's
 prompt is "ask the user about the failure" — meaningfully different
-guidance for the walker; (2) the `wakeup_mode` properties tag
+guidance for the coordinator; (2) the `wakeup_mode` properties tag
 differs (chain_terminal_dev_via_test_approved vs _rejected), and
 operator-facing telemetry shouldn't have to grep through verdict
 strings to distinguish.
@@ -834,7 +844,7 @@ Key invariants:
   front-door coordinator's loop entity. Reads from the run
   entity always target that one ID.
 - Two-mode `dev_via_test` distinguishes Lisa initial vs Ralph
-  walker dispatch (`subtopics.length` differentiator + rule 01's
+  between-task dispatch (`subtopics.length` differentiator + rule 01's
   lineage fence per Slice 3 reviewer B1).
 - One-shot `dev_via_test_finalize` dispatches CBG. The chain never
   loops back to *plan-editing* automatically (no re-plan
@@ -842,7 +852,7 @@ Key invariants:
   loop back to *implementation* on a CBG `rejected_retry`, bounded
   by `plan.cbg_retry_budget` (Slice 5, see §addendum 2026-06-05) —
   re-implement ≠ re-plan.
-- Failure paths visible: rule 04b (Ralph fails → walker →
+- Failure paths visible: rule 04b (Ralph fails → coordinator →
   ask_user), rule 07b (CBG `rejected` → final → ask_user), rules
   07c/07d (CBG `rejected_retry` → bounded re-dispatch, then
   ask_user at budget exhaustion), rule 08 (Lisa/CBG loop-fails →
@@ -923,14 +933,14 @@ coordinator wake-up:
    │                   update_triple plan.task.<id>.status="ready";
    │                   decide(action="dev_via_test", subtopics=["<id>"])
    │                      └─▶ EXISTING rule 03 → Ralph re-runs with finding
-   │                          → walker → dev_via_test_finalize → CBG re-gates
+   │                          → coordinator → dev_via_test_finalize → CBG re-gates
    └─ count >= budget → decide(action="ask_user",
                           reason="CBG rejected <N>× on task <id>;
                           last finding <…>; retry budget exhausted")
 ```
 
 No new Ralph-dispatch primitive: the retry re-enters through the
-**existing walker dispatch (rule 03)**. CBG stays a one-shot gate
+**existing between-task dispatch (rule 03)**. CBG stays a one-shot gate
 *per pass* — it re-fires once after each Ralph re-run, never
 per-task. The moment we have a CBG-per-Ralph we are back in the
 BMAD ceremony this ADR exists to avoid.
@@ -954,7 +964,7 @@ BMAD ceremony this ADR exists to avoid.
    and `plan.task.<id>.review_finding` cannot be written by a rule
    (the `<id>` fragment can't be substituted). The **coordinator**
    writes them via `update_triple` tool calls parameterized by its
-   own scratchpad — the established Slice 3 pattern ("the walker
+   own scratchpad — the established Slice 3 pattern ("the coordinator
    does the per-task mutation in coordinator code"). This is *why*
    07c routes through the coordinator rather than re-dispatching
    Ralph directly: only the coordinator can stamp the finding onto
@@ -1071,7 +1081,7 @@ non-negotiable.
   human, bare `rejected`. Add the discipline note: still one gate
   per pass, no self-iteration.
 - `configs/personas/fragments/coordinator/` (the dev-via-test
-  walker fragment) — teach the 07c wake-up: read reject-count vs
+  coordinator fragment) — teach the 07c wake-up: read reject-count vs
   budget; under budget → stamp `review_finding` + reset task to
   `ready` + `decide(dev_via_test, subtopics=[task])`; at/over budget
   → `ask_user`.
@@ -1195,11 +1205,11 @@ substitution) — the gate catches the low-fidelity *output*.
 
 ```
 Lisa emits plan
-  ↓ rule 02 (REDIRECTED: Lisa-terminal → CBG-plan-review, not → walker)
+  ↓ rule 02 (REDIRECTED: Lisa-terminal → CBG-plan-review, not → coordinator)
 CBG (plan-review mode): read_loop_result(coordinator ask)
                         + query_entity(emitted plan on run entity)
   → decide(approved | rejected_retry | rejected)
-  ├─ approved        → walker proceeds to first Ralph        (new rule 02b)
+  ├─ approved        → coordinator proceeds to first Ralph        (new rule 02b)
   ├─ rejected_retry  → re-dispatch LISA with the finding,
   │                    bounded by plan.lisa_retry_budget      (rules 02c/02d)
   └─ rejected        → ask_user                               (rule 02e)
@@ -1237,7 +1247,7 @@ escalate backstop.
 ### THE load-bearing engine constraint — re-plan must OVERWRITE
 
 Slice 6 introduces the **first real re-plan** in dev-via-test (the
-`revision` field was added speculatively in Slice 3; the walker
+`revision` field was added speculatively in Slice 3; the coordinator
 persona explicitly says "you do not re-plan"). Re-plan hits a wall
 the work-retry didn't:
 
@@ -1302,7 +1312,7 @@ orphans task triples.** `clearPriorPlan` removes per-task predicates
 only for the task IDs in the *new* plan (`plan.taskIDs()`). If a
 re-plan RENAMES or DROPS a task ID (rev1 `parse-frames` → rev2
 `parse`), the old `plan.task.parse-frames.*` triples are never
-cleared — they survive with `status=ready` and the walker would
+cleared — they survive with `status=ready` and the coordinator would
 dispatch a Ralph against the supposed-to-be-dropped task. This is a
 corruption (not just a leak) when it happens. v1 mitigation is
 **prose in two places** (rule 02d's re-plan prompt + Lisa's
@@ -1322,11 +1332,11 @@ that enforces amend-in-place structurally per
 
 ### Rule deltas
 
-- `02-lisa-terminal-to-walker.json` → **redirect** to spawn CBG in
-  `plan_review` mode (was: spawn walker). Rename to
+- `02-lisa-terminal-to-coordinator.json` → **redirect** to spawn CBG in
+  `plan_review` mode (was: spawn coordinator). Rename to
   `02-lisa-terminal-to-plan-review.json`.
-- `02b-plan-approved-to-walker.json` (new) — CBG `approved` →
-  spawn the walker (the old rule-02 behavior; chain proceeds to
+- `02b-plan-approved-to-coordinator.json` (new) — CBG `approved` →
+  spawn the coordinator (the old rule-02 behavior; chain proceeds to
   first Ralph).
 - `02c-plan-retry-stamp.json` (new) — CBG `rejected_retry` → stamp
   `dev_via_test.plan.retry.{finding,pending}` on the run entity

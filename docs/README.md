@@ -33,7 +33,7 @@ that don't exist upstream.
 
 | Path | Purpose |
 |---|---|
-| [`architecture.md`](architecture.md) | What semteams DOES — the substrate-plus-overlays runtime (ADR-042) + live category packs (research, autoresearch) |
+| [`architecture.md`](architecture.md) | What semteams DOES — the substrate-plus-overlays runtime (ADR-042) + the three live category packs (research, autoresearch, dev-via-test) + how a sandbox gets created |
 | [`getting-started.md`](getting-started.md) | New-dev quickstart + debugging recipes |
 | [`adr/`](adr/) | Architectural Decision Records — every load-bearing product-shell decision |
 | [`proposals/`](proposals/) | Active design docs that precede / accompany an ADR. Currently: `agentic-superpowers.md` (shipped 2026-04-12; retained for framing). |
@@ -66,6 +66,7 @@ architecture.
 | [041](adr/041-mvp-role-compression-and-graph-as-substrate.md) | MVP role compression + graph-as-substrate. Direct precursor to ADR-042. |
 | [**042**](adr/042-coordinator-instantiated-flows-via-templates.md) | **Substrate-plus-overlays.** One product-shell flow, category-keyed rule packs + persona bundles. Current architecture as of MVP-7. |
 | [**043**](adr/043-devcontainer-as-sandbox-spec.md) | **Devcontainer-as-sandbox spec.** Per-tenant attestation + attestation-aware artifact routing. The killer feature autoresearch needed. |
+| [**044**](adr/044-dev-via-test-pack.md) | **Dev-via-test pack (Lisa / Ralph / CBG).** Third live category pack — decompose-and-dispatch software dev with a plan-fidelity gate + a chain-end integration gate, both bounded reject/retry/approve. |
 
 ### Framework concepts — go upstream
 
