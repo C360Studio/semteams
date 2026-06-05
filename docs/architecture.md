@@ -63,9 +63,9 @@ addendum 2026-05-15.)
                 ┌─────────────────┼─────────────────┐
                 ▼                 ▼                 ▼
      ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐
-     │ research/        │  │ autoresearch/    │  │  (future pack)   │
-     │ rule pack +      │  │ rule pack +      │  │                  │
-     │ personas         │  │ personas         │  │                  │
+     │ research/        │  │ autoresearch/    │  │ dev-via-test/    │
+     │ rule pack +      │  │ rule pack +      │  │ rule pack +      │
+     │ personas         │  │ personas         │  │ personas         │
      └──────────────────┘  └──────────────────┘  └──────────────────┘
 ```
 
@@ -80,7 +80,7 @@ components, no new flow configs.**
 
 ## Live category packs
 
-Two packs ship today. Each terminates with a coordinator wake-up
+Three packs ship today. Each terminates with a coordinator wake-up
 that reads the chain's artifact and replies to the user.
 
 ### research
@@ -216,6 +216,155 @@ the propose-spawn gate flips false and the synthesize-spawn action
 fires instead. See the rule's prose description for the full
 mechanic.
 
+### dev-via-test
+
+Decompose-and-dispatch software development. The coordinator
+dispatches when the user asks to **build or change code against a
+verifiable acceptance** ("add an endpoint that…", "implement a
+parser with tests"). One planner decomposes the ask into tasks;
+each task converges in the sandbox against its own test; **one
+reviewer (CBG) gates twice** — the *plan* at chain-start and the
+*work* at chain-end. (ADR-044.)
+
+```
+coordinator(dispatch) ──request_sandbox──▶ (per-tenant devcontainer; see §sandbox)
+        │
+        └──decide(dev_via_test)──▶ dev-via-test-plan (Lisa)
+                                          │ emit_dev_via_test_plan
+                                          ▼
+                                 reviewer-dev-via-test  ◀── PLAN GATE (no tests run)
+                                  decide(plan_approved | plan_rejected_retry | plan_rejected)
+                                          │ approved
+                                          ▼
+                          ┌──── coordinator (between tasks) ◀────────┐
+                          │  decide(dev_via_test,            │ (next ready task)
+                          │         subtopics=[task])        │
+                          ▼                                  │
+                 dev-via-test-execute (Ralph)               │
+                 (bash edit→test→emit_dev_via_test_          │
+                  measurement; iterate until pass)          │
+                          └──────────────────────────────────┘
+                                          │ (all tasks done) decide(dev_via_test_finalize)
+                                          ▼
+                                 reviewer-dev-via-test  ◀── WORK GATE (runs integration test + diff)
+                                  decide(approved | rejected_retry | rejected)
+                                          │ approved
+                                          ▼
+                                 coordinator(wake-up) ──▶ user reply
+```
+
+Per-role contracts:
+
+- **dev-via-test-plan (Lisa)** — reads the user's ask (preserved in
+  the coordinator's `decide` reason) via `read_loop_result`. Emits
+  a Karpathy-shaped plan via `emit_dev_via_test_plan`: per-task
+  `goal`, `assumptions[]`, `non_goals[]`, `target_files[]`, and a
+  `test_command` — the **required schema fields encode the planning
+  discipline structurally**, so a plan can't ship without surfacing
+  scope and a verifiable acceptance. Stamps `plan.*` triples on the
+  run entity. Terminal `decide(planned)`.
+- **reviewer-dev-via-test (CBG) — plan gate** — reads the ask +
+  the emitted plan in one `query_entity` call (both live on the run
+  entity) and checks **fidelity**: did every explicit user
+  constraint (named libraries, "do not hand-roll", required test
+  types) survive into the plan, and is each `test_command` a real
+  test rather than a bare `go build`? Terminal `decide(plan_approved
+  | plan_rejected_retry | plan_rejected)`. *Why this gate exists:*
+  a planner can read a constraint and still drop it at emit; Ralph
+  then builds to the soft spec and wastes a chain before the work
+  gate catches it. Catching it here is cheap.
+- **coordinator (between tasks)** — woken between tasks. Reads
+  `plan.task.*` + the per-task completion markers, picks the
+  lowest-position ready task, and dispatches it
+  (`decide(dev_via_test, subtopics=["<task>"])`). When all tasks
+  are done, `decide(dev_via_test_finalize)`. Plan state lives as
+  triples on the run entity, so the walk is **resumable** — kill
+  the process mid-chain, restart, and the coordinator reads where it
+  left off.
+- **dev-via-test-execute (Ralph ×N)** — one loop per task (and one
+  more per retry). Reads its task spec via `query_entity`, edits
+  files within `target_files` in the per-tenant devcontainer,
+  runs the task's `test_command`, and calls
+  `emit_dev_via_test_measurement(pass=<exit==0>)`. Iterates until
+  the test passes; terminal `decide(measured)`.
+- **reviewer-dev-via-test (CBG) — work gate** — at chain-end runs
+  the plan's full `integration_test_command` in the devcontainer
+  and reads the cumulative `git diff` against the chain-start tag —
+  the deterministic cross-task-drift catcher. Terminal
+  `decide(approved | rejected_retry | rejected)`.
+- **coordinator (wake-up)** — reads CBG's verdict and replies to
+  the user (`respond_direct` on approve, `ask_user` on a
+  human-needed reject).
+
+**Both gates are bounded reject/retry/approve** (ADR-044 Slices 5
++ 6). A `*_rejected_retry` routes back for a bounded fix — the work
+gate re-dispatches **Ralph** with the finding (re-implement); the
+plan gate re-dispatches **Lisa** with the finding (re-plan, which
+*upserts* the plan in place). Each retry budget
+(`plan.cbg_retry_budget`, `plan.lisa_retry_budget`) is plan-data
+clamped to a small ceiling; exhaustion escalates to the user. A
+plain `*_rejected` (plan/scope/human problem) escalates immediately
+— the fail-safe default. The bound is enforced structurally by
+`$state.iteration` on a run-entity-anchored driver rule, not by
+persona prose.
+
+## How a sandbox gets created
+
+Both autoresearch and dev-via-test run their `bash` in a real,
+isolated **per-tenant devcontainer** — autoresearch-execute edits +
+measures there, and Lisa / Ralph / CBG all share one. That
+container doesn't appear by magic; the coordinator provisions it
+*before* dispatching the pack, and the chain runs on the
+**attestation** of what it got. (ADR-043.)
+
+The sequence, for a build/optimize ask:
+
+1. **Coordinator calls `request_sandbox` first.** The
+   decision-contract tells the coordinator that `autoresearch` and
+   `dev_via_test` both require a prepared environment, so it calls
+   `request_sandbox` (a product-shell tool) *before* it emits
+   `decide(action=…)`, and routes on the result.
+2. **The sandbox manager picks a canonical profile and provisions.**
+   `request_sandbox` hands a `SandboxRequirements` to the
+   `sandboxmanager` (`cmd/semteams/sandboxmanager/`), which selects
+   one of the **canonical profiles** checked into the repo
+   (`.devcontainer/go-backend/`, `svelte-ui/`, `full-stack-e2e/`) —
+   the LLM never renders a Dockerfile; it requests a profile. The
+   manager's runner then provisions:
+   - `SEMTEAMS_SANDBOX_RUNNER=api` (real): the `SandboxAPIRunner`
+     POSTs to the sandbox sidecar container's `/exec`, which runs
+     `devcontainer up` via `@devcontainers/cli` (Docker-out-of-
+     Docker) against the chosen profile → a per-tenant devcontainer.
+   - `SEMTEAMS_SANDBOX_RUNNER=mock` (default / Playwright journeys):
+     the `MockRunner` returns a fabricated `Ready` so mock-LLM e2e
+     runs need no Docker.
+3. **The manager attests and stamps.** It verifies the container
+   (image digest, probes) and stamps
+   `sandbox.attestation.{ready, verified, profile, image_digest,
+   requirements_hash, host_workspace_folder, signature, outcome,
+   terminal, ttl_seconds, …}` on the chain entity. The coordinator
+   reads `ready` / `terminal` and either dispatches the pack or, on
+   a `terminal` failure, surfaces it to the user via
+   `respond_direct`.
+4. **Every chain agent's `bash` routes into that one container.**
+   A chain-scoped wrapper sends each chain role's `bash` into the
+   per-tenant devcontainer, so Lisa, every Ralph, and CBG (and the
+   autoresearch loops) operate on the **same filesystem** — that's
+   how Ralph's edits are visible to CBG's integration test at
+   chain-end.
+5. **Attestation-aware routing keeps paths consistent.** When an
+   executor writes an artifact *into* the workspace (e.g. an
+   autoresearch rollup), it writes through the host side; the
+   reviewer reads it with `bash cat` from the container side. The
+   `host_workspace_folder` in the attestation maps the two so both
+   resolve to the same path (semteams#194).
+
+So "the sandbox" a chain agent uses is just: a profile the
+coordinator requested, provisioned by `devcontainer up`, attested
+on the chain entity, and addressed by every chain role through the
+same wrapper. Nothing in the chain invents an environment — it
+inherits an attested one.
+
 ## Ops roles (parallel observability track)
 
 Two ops roles operate *off* the chain on a parallel track. They
@@ -306,11 +455,16 @@ loops' output), and their own loop terminal. Nothing else.
   [`adr/043-devcontainer-as-sandbox-spec.md`](adr/043-devcontainer-as-sandbox-spec.md)
   — per-tenant devcontainer attestation + attestation-aware
   routing. The killer feature autoresearch needed.
-- **Per-pack rule packs:** `configs/rules/research/README.md` +
-  `configs/rules/autoresearch/README.md` — every rule has a
+- **Per-pack rule packs:** `configs/rules/research/README.md`,
+  `configs/rules/autoresearch/README.md`,
+  `configs/rules/dev-via-test/README.md` — every rule has a
   description block explaining the trigger conditions, actions,
   and the why (often including the upstream-framework workarounds
   being deployed). Worth reading for any pack work.
+- **dev-via-test pack design:**
+  [`adr/044-dev-via-test-pack.md`](adr/044-dev-via-test-pack.md) —
+  the Lisa/Ralph/CBG roles, plan-as-triples, Karpathy-as-schema,
+  and the per-slice §addenda (the two gates + bounded retries).
 - **Per-role personas:**
   `configs/personas/fragments/<role>/` — identity, output
   contract, iteration rules per role. Read like job descriptions.

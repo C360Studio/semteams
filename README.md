@@ -67,8 +67,19 @@ task dev:research
 That boots NATS, builds and starts `bin/semteams` against
 `configs/flow-bootstrap.json` (the ADR-042 production bootstrap),
 then starts the UI proxy. Open <http://localhost:3001> and type a
-research question — the coordinator persona will route it through
-the research-category arc.
+prompt — the coordinator persona classifies it and routes it to one
+of the **three live category packs**:
+
+- a **research** question (compare X vs Y, how does Z work) → the
+  research arc;
+- an **optimize-a-metric** ask (make this faster / smaller) → the
+  autoresearch iteration loop, in a sandbox;
+- a **build-with-tests** ask (add an endpoint with unit tests) →
+  the dev-via-test pack (Lisa plans → CBG gates the plan → Ralph
+  implements in a sandbox → CBG gates the work).
+
+See [`docs/architecture.md`](docs/architecture.md) for what each
+pack does and **how the sandbox is created**.
 
 `task dev:stop` tears it down.
 

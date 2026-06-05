@@ -2,7 +2,18 @@
 
 ## Status
 
-**Proposed (2026-05-17).** Reframes the next phase of harness
+**Accepted + Shipped (§Phase 2 redesign).** The §Phase 2 redesign
+below — **substrate-plus-overlays** (category-keyed rule packs +
+named persona bundles on the singleton substrate) — is what
+actually shipped, across MVP-1..7 (PRs #172–#179, 2026-05-19) and
+the follow-up sweep. It is the current production architecture
+(`configs/flow-bootstrap.json`); see
+[`docs/architecture.md`](../architecture.md). The original
+template-inventory framing below (Phase 1/4/2a, PRs #168–#170) was
+superseded by the redesign and retained as post-MVP scaffolding for
+runtime category authoring.
+
+*Originally proposed 2026-05-17.* Reframed the next phase of harness
 work after the deep-research → dev-research rename (PR #166) and the
 2026-05-17 harness extensibility audit surfaced that **the framework
 already ships a flow-template substrate that semteams has never
