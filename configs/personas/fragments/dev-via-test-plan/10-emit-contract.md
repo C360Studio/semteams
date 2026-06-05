@@ -30,7 +30,7 @@ say a serious software task needs.
 Optional per task:
 
 - `depends_on` — task IDs that must complete before this is ready.
-  v1 walker is linear (ignores this); v2 will topo-walk. Emit `[]`
+  v1 coordinator is linear (ignores this); v2 will topo-walk. Emit `[]`
   for first task; emit the prior task's ID if expressing intent.
 - `expected_outcome` — human-readable "done looks like". Helps CBG's
   diff review and operator-facing logs. Not load-bearing for Ralph.

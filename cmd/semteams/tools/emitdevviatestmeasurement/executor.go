@@ -34,7 +34,7 @@
 //
 // Rules 04a (converged) + 04b (failed) condition on
 // dev_via_test.measurement.pass + agent.loop.outcome to route to the
-// coordinator wake-up (Slice 3 walker).
+// coordinator wake-up (Slice 3 coordinator).
 //
 // Discipline note (framework-alignment review): see ADR-044
 // §addendum 2026-06-03 Slice 2. No upstream equivalent — same

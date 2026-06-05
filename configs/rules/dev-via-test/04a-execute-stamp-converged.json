@@ -2,7 +2,7 @@
   "id": "dev_via_test_execute_stamp_converged",
   "type": "expression",
   "name": "Ralph success + measurement.pass=true → stamp task converged on run entity",
-  "description": "ADR-044 Slice 2 — Ralph (dev-via-test-execute) terminal stamp for the convergence path. Fires when Ralph's loop terminates with outcome=success (decide() called) AND dev_via_test.measurement.pass=true (emit_dev_via_test_measurement stamped true). Stamps dev_via_test.execute.outcome=converged on Ralph's loop entity AND dev_via_test.execute.task_completed=<Ralph's loop ID> on the run entity (coordinator's loop entity, threaded via run-loop-entity-id lineage). Slice 3's walker reads these on coordinator wake-up to mutate plan.task.<id>.status from 'ready' to 'done' and pick the next task. The walker, not this rule, owns the status update — keeping the per-task-ID predicate substitution out of the rule layer (the rule engine substitutes triple OBJECTS, not predicate fragments in beta.96).",
+  "description": "ADR-044 Slice 2 — Ralph (dev-via-test-execute) terminal stamp for the convergence path. Fires when Ralph's loop terminates with outcome=success (decide() called) AND dev_via_test.measurement.pass=true (emit_dev_via_test_measurement stamped true). Stamps dev_via_test.execute.outcome=converged on Ralph's loop entity AND dev_via_test.execute.task_completed=<Ralph's loop ID> on the run entity (coordinator's loop entity, threaded via run-loop-entity-id lineage). Slice 3's coordinator reads these on coordinator wake-up to mutate plan.task.<id>.status from 'ready' to 'done' and pick the next task. The coordinator, not this rule, owns the status update — keeping the per-task-ID predicate substitution out of the rule layer (the rule engine substitutes triple OBJECTS, not predicate fragments in beta.96).",
   "enabled": true,
   "conditions": [
     {
@@ -44,7 +44,7 @@
     "phase": "ADR-044 Slice 2 — Ralph terminal converged",
     "adr": "docs/adr/044-dev-via-test-pack.md",
     "category_token": "dev_via_test",
-    "run_entity_pattern": "Cross-entity stamp via lineage threading: action 2 targets the run entity (coordinator's loop) by substituting $entity.triple.lineage.run-loop-entity-id (pinned at Ralph's spawn time by Slice 3's walker). The walker reads dev_via_test.execute.task_completed on the run entity to pick which task just finished and walk to the next.",
-    "rule_engine_predicate_substitution_note": "The rule engine substitutes triple OBJECTS via $entity.triple.X / $entity.instance, but does NOT substitute predicate fragments (e.g. plan.task.${TASK_ID}.status). Mutating plan.task.<id>.status from this rule would require either per-task-ID rules (cardinality explosion) or predicate substitution support. The walker (Slice 3) does the per-task mutation in coordinator code via update_triple actions parameterized by walker's scratchpad state."
+    "run_entity_pattern": "Cross-entity stamp via lineage threading: action 2 targets the run entity (coordinator's loop) by substituting $entity.triple.lineage.run-loop-entity-id (pinned at Ralph's spawn time by Slice 3's coordinator). The coordinator reads dev_via_test.execute.task_completed on the run entity to pick which task just finished and walk to the next.",
+    "rule_engine_predicate_substitution_note": "The rule engine substitutes triple OBJECTS via $entity.triple.X / $entity.instance, but does NOT substitute predicate fragments (e.g. plan.task.${TASK_ID}.status). Mutating plan.task.<id>.status from this rule would require either per-task-ID rules (cardinality explosion) or predicate substitution support. The coordinator (Slice 3) does the per-task mutation in coordinator code via update_triple actions parameterized by coordinator's scratchpad state."
   }
 }

@@ -45,7 +45,7 @@ const devViaTestPackDir = "../../configs/rules/dev-via-test"
 //     of the strict-schema emit step (semstreams#158 class).
 //  7. Stamps dev_via_test.run.status = active so future "is this
 //     chain still running dev_via_test" gates have something to
-//     match on (Slice 3 walker uses this).
+//     match on (Slice 3 coordinator uses this).
 func TestDevViaTestPack_01_CoordinatorSpawn(t *testing.T) {
 	rule := loadDevViaTestRule(t, "01-coordinator-dev-via-test-spawn.json")
 
@@ -115,7 +115,7 @@ func TestDevViaTestPack_01_CoordinatorSpawn(t *testing.T) {
 		foundRunStatus = true
 	}
 	if !foundRunStatus {
-		t.Error("rule 01 missing add_triple for dev_via_test.run.status='active' — Slice 3 walker has no gate to match on")
+		t.Error("rule 01 missing add_triple for dev_via_test.run.status='active' — Slice 3 coordinator has no gate to match on")
 	}
 }
 
@@ -277,7 +277,7 @@ func TestDevViaTestPackWiredInFlowBootstrap(t *testing.T) {
 	for _, want := range []string{
 		"/app/configs/rules/dev-via-test/01-coordinator-dev-via-test-spawn.json",
 		"/app/configs/rules/dev-via-test/02-lisa-terminal-to-plan-review.json",
-		"/app/configs/rules/dev-via-test/02b-plan-approved-to-walker.json",
+		"/app/configs/rules/dev-via-test/02b-plan-approved-to-coordinator.json",
 		"/app/configs/rules/dev-via-test/02c-plan-retry-stamp.json",
 		"/app/configs/rules/dev-via-test/02d-plan-retry-driver.json",
 		"/app/configs/rules/dev-via-test/02e-plan-rejected-to-coordinator.json",
@@ -285,7 +285,7 @@ func TestDevViaTestPackWiredInFlowBootstrap(t *testing.T) {
 		"/app/configs/rules/dev-via-test/03-coordinator-dispatch-ralph.json",
 		"/app/configs/rules/dev-via-test/04a-execute-stamp-converged.json",
 		"/app/configs/rules/dev-via-test/04b-execute-stamp-failed.json",
-		"/app/configs/rules/dev-via-test/05-ralph-terminal-to-walker.json",
+		"/app/configs/rules/dev-via-test/05-ralph-terminal-to-coordinator.json",
 		"/app/configs/rules/dev-via-test/06-coordinator-dispatch-cbg.json",
 		"/app/configs/rules/dev-via-test/07a-cbg-approved-to-coordinator.json",
 		"/app/configs/rules/dev-via-test/07b-cbg-rejected-to-coordinator.json",
@@ -302,9 +302,9 @@ func TestDevViaTestPackWiredInFlowBootstrap(t *testing.T) {
 
 // TestCoordinatorDispatchHasQueryEntityTool asserts the
 // teams-dispatch default_tools list includes query_entity. The
-// Slice 3 walker reads the run entity's plan + execution-state
+// Slice 3 coordinator reads the run entity's plan + execution-state
 // triples via query_entity in EVERY wake-up — without it in the
-// coordinator's default toolset, the walker can't read state and
+// coordinator's default toolset, the coordinator can't read state and
 // the chain wedges silently.
 //
 // Per Slice 3 design: query_entity is added to default_tools (not
@@ -322,26 +322,26 @@ func TestCoordinatorDispatchHasQueryEntityTool(t *testing.T) {
 	// the dispatch block's default_tools is the only line with
 	// that exact key.
 	if !strings.Contains(body, `"query_entity"`) {
-		t.Error("flow-bootstrap.json teams-dispatch.default_tools does not include \"query_entity\" — Slice 3 walker cannot read run-entity state and chain wedges silently")
+		t.Error("flow-bootstrap.json teams-dispatch.default_tools does not include \"query_entity\" — Slice 3 coordinator cannot read run-entity state and chain wedges silently")
 	}
 }
 
 // TestDevViaTestPack_01_SubtopicsLengthZero pins the Slice 3
 // addition to rule 01: the spawn rule now requires
 // coordinator.decision.subtopics.length=0 to differentiate from
-// the walker-dispatch path (rule 03). Without this, walker
+// the between-task-dispatch path (rule 03). Without this, coordinator
 // dispatches (decide with subtopics non-empty) would double-fire
 // rule 01 + rule 03, spawning both Lisa AND Ralph in parallel.
 func TestDevViaTestPack_01_SubtopicsLengthZero(t *testing.T) {
 	rule := loadDevViaTestRule(t, "01-coordinator-dev-via-test-spawn.json")
 	if !devViaTestLengthCondition(rule, "coordinator.decision.subtopics", "length_eq", float64(0)) {
-		t.Error("rule 01 missing coordinator.decision.subtopics length_eq 0 — walker dispatches will double-fire rule 01 + rule 03")
+		t.Error("rule 01 missing coordinator.decision.subtopics length_eq 0 — between-task dispatches will double-fire rule 01 + rule 03")
 	}
 }
 
 // TestDevViaTestPack_02_LisaTerminalToPlanReview pins the Slice 6
 // redirect: Lisa-terminal(planned) now spawns CBG in plan_review
-// mode (a fidelity gate BEFORE the walker), not the walker directly.
+// mode (a fidelity gate BEFORE the coordinator), not the coordinator directly.
 //
 //  1. Conditions: role=dev-via-test-plan, outcome=success,
 //     next_action=planned.
@@ -411,11 +411,11 @@ func TestDevViaTestPack_02_LisaTerminalToPlanReview(t *testing.T) {
 	}
 }
 
-// TestDevViaTestPack_02b_PlanApprovedToWalker pins that the walker is
+// TestDevViaTestPack_02b_PlanApprovedToCoordinator pins that the coordinator is
 // now gated behind CBG plan-approval, on the distinct plan_approved
 // token (never colliding with the chain-end approved → rule 07a).
-func TestDevViaTestPack_02b_PlanApprovedToWalker(t *testing.T) {
-	rule := loadDevViaTestRule(t, "02b-plan-approved-to-walker.json")
+func TestDevViaTestPack_02b_PlanApprovedToCoordinator(t *testing.T) {
+	rule := loadDevViaTestRule(t, "02b-plan-approved-to-coordinator.json")
 	if !devViaTestRoleCondition(rule, "reviewer-dev-via-test") {
 		t.Error("rule 02b does not condition on role=reviewer-dev-via-test")
 	}
@@ -430,10 +430,10 @@ func TestDevViaTestPack_02b_PlanApprovedToWalker(t *testing.T) {
 		}
 	}
 	if spawn == nil {
-		t.Fatal("rule 02b has no coordinator walker spawn")
+		t.Fatal("rule 02b has no coordinator spawn")
 	}
 	if !devViaTestSliceHas(spawn.ActionAllowed, "dev_via_test") {
-		t.Error("rule 02b walker allowlist missing dev_via_test (cannot dispatch Ralph)")
+		t.Error("rule 02b coordinator allowlist missing dev_via_test (cannot dispatch Ralph)")
 	}
 }
 
@@ -550,21 +550,21 @@ func TestDevViaTestPack_02e_PlanRejectedToCoordinator(t *testing.T) {
 }
 
 // TestDevViaTestPack_03_DispatchRalphForEach pins the Slice 3
-// walker-dispatch rule's shape. The pack's whole sequential
+// between-task-dispatch rule's shape. The pack's whole sequential
 // walking pattern hangs off this rule's for_each over subtopics.
 //
 // Invariants:
 //
 //  1. Conditions match coordinator + decide(dev_via_test) +
-//     subtopics.length > 0 (the walker-dispatch path, mutually
+//     subtopics.length > 0 (the between-task-dispatch path, mutually
 //     exclusive with rule 01).
 //  2. Spawns dev-via-test-execute (Ralph).
 //  3. for_each iterates over $entity.triple.coordinator.decision.subtopics
 //     with for_each_var = subtopic (per ADR-046 Phase 1).
 //  4. properties.task_id substitutes $subtopic — Ralph reads
 //     this to know which task he owns.
-//  5. related_loops pins run-loop-entity-id from walker's lineage
-//     (NOT $entity.id — the walker isn't the run entity).
+//  5. related_loops pins run-loop-entity-id from coordinator's lineage
+//     (NOT $entity.id — the coordinator isn't the run entity).
 //  6. action_allowlist constrains to [measured, needs_clarification].
 //  7. Ralph's tools include bash + emit_dev_via_test_measurement.
 func TestDevViaTestPack_03_DispatchRalphForEach(t *testing.T) {
@@ -577,7 +577,7 @@ func TestDevViaTestPack_03_DispatchRalphForEach(t *testing.T) {
 		t.Error("rule 03 does not condition on next_action=dev_via_test")
 	}
 	if !devViaTestLengthCondition(rule, "coordinator.decision.subtopics", "length_gt", float64(0)) {
-		t.Error("rule 03 missing coordinator.decision.subtopics length_gt 0 — rule 01 (Lisa spawn) would double-fire with rule 03 on every walker dispatch")
+		t.Error("rule 03 missing coordinator.decision.subtopics length_gt 0 — rule 01 (Lisa spawn) would double-fire with rule 03 on every between-task dispatch")
 	}
 
 	var spawn *devViaTestOnEnterJSON
@@ -608,7 +608,7 @@ func TestDevViaTestPack_03_DispatchRalphForEach(t *testing.T) {
 	}
 
 	if want, got := "$entity.triple.lineage.run-loop-entity-id", spawn.RelatedLoops["run-loop-entity-id"]; got != want {
-		t.Errorf("rule 03 related_loops[run-loop-entity-id] = %q; want %q (walker is NOT the run entity; thread from lineage)", got, want)
+		t.Errorf("rule 03 related_loops[run-loop-entity-id] = %q; want %q (coordinator is NOT the run entity; thread from lineage)", got, want)
 	}
 
 	for _, want := range []string{"measured", "needs_clarification"} {
@@ -622,17 +622,17 @@ func TestDevViaTestPack_03_DispatchRalphForEach(t *testing.T) {
 // post-Ralph wake-up rule's shape. Mirror of rule 02 but for the
 // Ralph-terminal path. Critical: outcome condition must cover all
 // four terminal classes (success, failed, truncated, cancelled)
-// so the walker wakes on ANY Ralph termination — failure modes
-// route through walker's ask_user per ADR-044 §Stuck-task recovery.
+// so the coordinator wakes on ANY Ralph termination — failure modes
+// route through coordinator's ask_user per ADR-044 §Stuck-task recovery.
 func TestDevViaTestPack_05_RalphTerminalToWalker(t *testing.T) {
-	rule := loadDevViaTestRule(t, "05-ralph-terminal-to-walker.json")
+	rule := loadDevViaTestRule(t, "05-ralph-terminal-to-coordinator.json")
 
 	if !devViaTestRoleCondition(rule, "dev-via-test-execute") {
 		t.Error("rule 05 does not condition on role=dev-via-test-execute")
 	}
 	for _, outcome := range []string{"success", "failed", "truncated", "cancelled"} {
 		if !devViaTestOutcomeCondition(rule, outcome) {
-			t.Errorf("rule 05 does not match outcome=%q — walker silently misses %s terminations", outcome, outcome)
+			t.Errorf("rule 05 does not match outcome=%q — coordinator silently misses %s terminations", outcome, outcome)
 		}
 	}
 
@@ -649,7 +649,7 @@ func TestDevViaTestPack_05_RalphTerminalToWalker(t *testing.T) {
 
 	for _, want := range []string{"read_loop_result", "query_entity", "scratchpad", "decide"} {
 		if !devViaTestSliceHas(spawn.Tools, want) {
-			t.Errorf("rule 05 walker tools missing %q", want)
+			t.Errorf("rule 05 coordinator tools missing %q", want)
 		}
 	}
 	for _, want := range []string{"dev_via_test", "respond_direct", "ask_user"} {
@@ -662,17 +662,17 @@ func TestDevViaTestPack_05_RalphTerminalToWalker(t *testing.T) {
 	}
 
 	// Per Slice 3 reviewer R4: rule 02 pins tool_choice=required;
-	// rule 05 must too — same load-bearing reason (walker must use
+	// rule 05 must too — same load-bearing reason (coordinator must use
 	// the tool path or text-only completion class wedges per
 	// [[failed-loops-wedge-chain]] / semstreams#158).
 	if spawn.ToolChoice == nil {
-		t.Error("rule 05 spawn missing tool_choice — walker may text-out of query_entity / decide")
+		t.Error("rule 05 spawn missing tool_choice — coordinator may text-out of query_entity / decide")
 	} else if mode, _ := spawn.ToolChoice["mode"].(string); mode != "required" {
 		t.Errorf("rule 05 tool_choice.mode = %q; want %q", mode, "required")
 	}
 }
 
-// TestDevViaTestPack_06_DispatchCBG pins the Slice 4 walker-
+// TestDevViaTestPack_06_DispatchCBG pins the Slice 4 coordinator-
 // finalize dispatch rule. The chain-end gate hangs off this rule
 // firing on the new dev_via_test_finalize action token.
 //
@@ -683,15 +683,15 @@ func TestDevViaTestPack_05_RalphTerminalToWalker(t *testing.T) {
 //     subtopics (CBG dispatch is not parametrized).
 //  2. Spawns reviewer-dev-via-test (CBG).
 //  3. CBG's tools: query_entity (read run-entity state), bash (run
-//     integration test + git diff), read_loop_result (read walker's
+//     integration test + git diff), read_loop_result (read coordinator's
 //     pre-CBG rollup), decide, scratchpad.
 //  4. action_allowlist: [approved, rejected_retry, rejected] — the
 //     ADR-044 §Slice 5 three-way verdict. CBG cannot start a fresh
 //     chain or escalate via needs_clarification; the only escape
 //     hatches are the two structured reject tokens (rejected_retry
 //     = dev-fixable bounded bounce, rejected = escalate to user).
-//  5. related_loops pins run-loop-entity-id from walker's lineage
-//     (CBG is NOT the run entity; thread from walker).
+//  5. related_loops pins run-loop-entity-id from coordinator's lineage
+//     (CBG is NOT the run entity; thread from coordinator).
 //  6. tool_choice=required (CBG must use the tool path).
 func TestDevViaTestPack_06_DispatchCBG(t *testing.T) {
 	rule := loadDevViaTestRule(t, "06-coordinator-dispatch-cbg.json")
@@ -716,7 +716,7 @@ func TestDevViaTestPack_06_DispatchCBG(t *testing.T) {
 
 	for _, want := range []string{"query_entity", "bash", "read_loop_result", "decide", "scratchpad"} {
 		if !devViaTestSliceHas(spawn.Tools, want) {
-			t.Errorf("rule 06 CBG tools missing %q (need to read run entity + run integration test + read walker terminal)", want)
+			t.Errorf("rule 06 CBG tools missing %q (need to read run entity + run integration test + read coordinator terminal)", want)
 		}
 	}
 	for _, want := range []string{"approved", "rejected_retry", "rejected"} {
@@ -728,7 +728,7 @@ func TestDevViaTestPack_06_DispatchCBG(t *testing.T) {
 		t.Errorf("rule 06 action_allowlist = %v; want exactly [approved, rejected_retry, rejected] — the Slice 5 three-way verdict; CBG cannot start a fresh chain or escalate via needs_clarification by design", spawn.ActionAllowed)
 	}
 	if want, got := "$entity.triple.lineage.run-loop-entity-id", spawn.RelatedLoops["run-loop-entity-id"]; got != want {
-		t.Errorf("rule 06 related_loops[run-loop-entity-id] = %q; want %q (CBG threads from walker's lineage)", got, want)
+		t.Errorf("rule 06 related_loops[run-loop-entity-id] = %q; want %q (CBG threads from coordinator's lineage)", got, want)
 	}
 	if spawn.ToolChoice == nil {
 		t.Error("rule 06 spawn missing tool_choice — CBG may text-out of bash / decide")
@@ -975,8 +975,8 @@ func TestDevViaTestPack_07e_CBGRetryMissingTarget(t *testing.T) {
 // TestDevViaTestFinalizeTokenLiteralConsistency pins the
 // `dev_via_test_finalize` action token across all surfaces that
 // must agree on the literal: rule 06's condition, rules 02/05's
-// walker action_allowlist, coordinator persona decision-contract
-// + plan-walking fragment, walker prompt step instructions. Per
+// coordinator action_allowlist, coordinator persona decision-contract
+// + plan-walking fragment, coordinator prompt step instructions. Per
 // Slice 4 reviewer R8: if a future refactor renames the token,
 // every dependent surface fails simultaneously at PR time, not
 // five smoke-time failures.
@@ -992,18 +992,18 @@ func TestDevViaTestFinalizeTokenLiteralConsistency(t *testing.T) {
 		t.Errorf("rule 06 does not condition on next_action=%q — CBG dispatch dead", token)
 	}
 
-	// Source 2 + 3: the walker rules' action_allowlist must include
-	// token (walker emits the action; allowlist gates). Since Slice 6,
-	// the post-Lisa walker is spawned by 02b (plan_approved), not 02
+	// Source 2 + 3: the coordinator rules' action_allowlist must include
+	// token (coordinator emits the action; allowlist gates). Since Slice 6,
+	// the post-Lisa coordinator is spawned by 02b (plan_approved), not 02
 	// (which now spawns the CBG plan-review gate).
-	for _, name := range []string{"02b-plan-approved-to-walker.json", "05-ralph-terminal-to-walker.json"} {
+	for _, name := range []string{"02b-plan-approved-to-coordinator.json", "05-ralph-terminal-to-coordinator.json"} {
 		rule := loadDevViaTestRule(t, name)
 		for _, a := range rule.OnEnter {
 			if a.Type != "publish_agent" {
 				continue
 			}
 			if !devViaTestSliceHas(a.ActionAllowed, token) {
-				t.Errorf("%s walker action_allowlist missing %q — walker cannot reach CBG finalize path", name, token)
+				t.Errorf("%s coordinator action_allowlist missing %q — coordinator cannot reach CBG finalize path", name, token)
 			}
 			break
 		}
@@ -1018,23 +1018,23 @@ func TestDevViaTestFinalizeTokenLiteralConsistency(t *testing.T) {
 		t.Errorf("coordinator 10-decision-contract.md missing %q in closed-taxonomy table", token)
 	}
 
-	// Source 5: coordinator persona plan-walking.md (walker contract).
+	// Source 5: coordinator persona plan-walking.md (coordinator contract).
 	planWalking, err := os.ReadFile("../../configs/personas/fragments/coordinator/30-plan-walking.md")
 	if err != nil {
 		t.Fatalf("read 30-plan-walking.md: %v", err)
 	}
 	if !strings.Contains(string(planWalking), token) {
-		t.Errorf("coordinator 30-plan-walking.md does not reference %q — walker doesn't know to emit it when all tasks done", token)
+		t.Errorf("coordinator 30-plan-walking.md does not reference %q — coordinator doesn't know to emit it when all tasks done", token)
 	}
 
-	// Source 6: rule 05's walker prompt (post-Ralph wake-up tells
-	// walker explicitly to use this token on "all done").
-	rule05Data, err := os.ReadFile("../../configs/rules/dev-via-test/05-ralph-terminal-to-walker.json")
+	// Source 6: rule 05's coordinator prompt (post-Ralph wake-up tells
+	// coordinator explicitly to use this token on "all done").
+	rule05Data, err := os.ReadFile("../../configs/rules/dev-via-test/05-ralph-terminal-to-coordinator.json")
 	if err != nil {
 		t.Fatalf("read rule 05: %v", err)
 	}
 	if !strings.Contains(string(rule05Data), token) {
-		t.Errorf("rule 05's prompt does not mention %q — walker wake-up doesn't instruct the CBG dispatch path", token)
+		t.Errorf("rule 05's prompt does not mention %q — coordinator wake-up doesn't instruct the CBG dispatch path", token)
 	}
 }
 
@@ -1102,7 +1102,7 @@ func TestCoordinatorPersonaTeachesFinalize(t *testing.T) {
 	}
 	text := string(data)
 	if !strings.Contains(text, "`dev_via_test_finalize`") {
-		t.Error("coordinator 10-decision-contract.md does not list `dev_via_test_finalize` as a valid action — walker cannot reach CBG dispatch path")
+		t.Error("coordinator 10-decision-contract.md does not list `dev_via_test_finalize` as a valid action — coordinator cannot reach CBG dispatch path")
 	}
 	if !strings.Contains(text, "CBG") || !strings.Contains(text, "integration_test_command") {
 		t.Error("coordinator 10-decision-contract.md dev_via_test_finalize entry should mention CBG + the integration_test_command — wire-shape context")
@@ -1112,12 +1112,12 @@ func TestCoordinatorPersonaTeachesFinalize(t *testing.T) {
 // TestDevViaTestPack_01_LineageLengthZero pins the Slice 3
 // reviewer B1 fence: rule 01 requires lineage.run-loop-entity-id
 // to be absent (length_eq 0). Front-door coordinators have no
-// lineage; walkers always do (pinned by rules 02 + 05). Without
-// this condition, a walker emitting decide(action=dev_via_test)
+// lineage; coordinator wake-ups always do (pinned by rules 02 + 05). Without
+// this condition, a coordinator emitting decide(action=dev_via_test)
 // without subtopics (LLM degeneration, token truncation mid-arg)
 // would re-fire rule 01 and spawn a second Lisa — corrupting the
 // run-entity plan with duplicate stamps. With this fence, the
-// spurious dispatch silently no-ops (walker decision goes
+// spurious dispatch silently no-ops (coordinator decision goes
 // nowhere; persona "what NOT to do" warns against this directly).
 //
 // The "silent no-op > corruption" trade-off is the explicit
@@ -1125,14 +1125,16 @@ func TestCoordinatorPersonaTeachesFinalize(t *testing.T) {
 func TestDevViaTestPack_01_LineageLengthZero(t *testing.T) {
 	rule := loadDevViaTestRule(t, "01-coordinator-dev-via-test-spawn.json")
 	if !devViaTestLengthCondition(rule, "lineage.run-loop-entity-id", "length_eq", float64(0)) {
-		t.Error("rule 01 missing lineage.run-loop-entity-id length_eq 0 — walker re-dispatch of dev_via_test without subtopics can spawn a duplicate Lisa and corrupt run-entity plan triples")
+		t.Error("rule 01 missing lineage.run-loop-entity-id length_eq 0 — coordinator re-dispatch of dev_via_test without subtopics can spawn a duplicate Lisa and corrupt run-entity plan triples")
 	}
 }
 
 // TestCoordinatorPersonaTeachesPlanWalking asserts the coordinator
-// persona corpus carries the walker contract — the dual-mode
+// persona corpus carries the plan-walking contract — the dual-mode
 // dev_via_test token, the query_entity-based state read pattern,
 // and the no-retry posture from ADR-044 §Stuck-task recovery.
+// NB: "walk the plan" is a VERB; there is no "coordinator" role — it's
+// the coordinator between tasks (de-named 2026-06-05).
 func TestCoordinatorPersonaTeachesPlanWalking(t *testing.T) {
 	root := "../../configs/personas/fragments/coordinator"
 	got, err := concatFragmentsDevViaTest(root)
@@ -1140,16 +1142,16 @@ func TestCoordinatorPersonaTeachesPlanWalking(t *testing.T) {
 		t.Fatalf("read coordinator fragments: %v", err)
 	}
 	for _, want := range []string{
-		"walker",          // role name
+		"Plan walking",    // the activity (verb form), not a role noun
 		"query_entity",    // load-bearing tool
 		"plan.task.",      // plan triple predicate prefix
 		"task_completed",  // execution marker
 		"task_failed",     // execution marker
-		"subtopics",       // walker dispatch arg
+		"subtopics",       // between-task dispatch arg
 		"30-plan-walking", // fragment exists as a referenced unit
 	} {
 		if !strings.Contains(got, want) {
-			t.Errorf("coordinator persona missing %q — walker contract incomplete", want)
+			t.Errorf("coordinator persona missing %q — plan-walking contract incomplete", want)
 		}
 	}
 }
@@ -1199,7 +1201,7 @@ func devViaTestWhenHas(a *devViaTestOnEnterJSON, field, operator, value string) 
 }
 
 // TestDevViaTestPack_04a_ConvergedRule pins the Slice 2 Ralph-success
-// terminal rule. The pack's plan-walker hangs off this rule's stamp
+// terminal rule. The pack's plan-coordinator hangs off this rule's stamp
 // of dev_via_test.execute.task_completed on the run entity — Slice 3
 // reads it to know which Ralph just finished and pick the next task.
 //
@@ -1213,7 +1215,7 @@ func devViaTestWhenHas(a *devViaTestOnEnterJSON, field, operator, value string) 
 //     entity (audit + slice 3 read convenience).
 //  3. Stamps dev_via_test.execute.task_completed=<ralph-loop-id> on
 //     the RUN entity via $entity.triple.lineage.run-loop-entity-id
-//     subject substitution. THIS is the walker's pickup signal.
+//     subject substitution. THIS is the coordinator's pickup signal.
 func TestDevViaTestPack_04a_ConvergedRule(t *testing.T) {
 	rule := loadDevViaTestRule(t, "04a-execute-stamp-converged.json")
 
@@ -1244,10 +1246,10 @@ func TestDevViaTestPack_04a_ConvergedRule(t *testing.T) {
 			foundOwnOutcome = true
 		case "dev_via_test.execute.task_completed":
 			if a.Subject != "$entity.triple.lineage.run-loop-entity-id" {
-				t.Errorf("rule 04a task_completed subject = %q; want %q — walker pickup needs run-entity stamp via lineage", a.Subject, "$entity.triple.lineage.run-loop-entity-id")
+				t.Errorf("rule 04a task_completed subject = %q; want %q — coordinator pickup needs run-entity stamp via lineage", a.Subject, "$entity.triple.lineage.run-loop-entity-id")
 			}
 			if obj, ok := a.Object.(string); !ok || obj != "$entity.instance" {
-				t.Errorf("rule 04a task_completed object = %v; want %q (Ralph's loop ID for walker to read measurement triples)", a.Object, "$entity.instance")
+				t.Errorf("rule 04a task_completed object = %v; want %q (Ralph's loop ID for coordinator to read measurement triples)", a.Object, "$entity.instance")
 			}
 			foundRunCompleted = true
 		}
@@ -1256,7 +1258,7 @@ func TestDevViaTestPack_04a_ConvergedRule(t *testing.T) {
 		t.Error("rule 04a missing add_triple dev_via_test.execute.outcome=converged on Ralph entity")
 	}
 	if !foundRunCompleted {
-		t.Error("rule 04a missing add_triple dev_via_test.execute.task_completed on run entity — Slice 3 walker has no pickup signal")
+		t.Error("rule 04a missing add_triple dev_via_test.execute.task_completed on run entity — Slice 3 coordinator has no pickup signal")
 	}
 }
 
@@ -1271,7 +1273,7 @@ func TestDevViaTestPack_04a_ConvergedRule(t *testing.T) {
 //     is the signal).
 //  2. Stamps dev_via_test.execute.outcome=failed on Ralph's entity.
 //  3. Stamps dev_via_test.execute.task_failed=<ralph-loop-id> on the
-//     run entity for walker pickup.
+//     run entity for coordinator pickup.
 //  4. Does NOT stamp chain.paused.marker — that's rule 08's job for
 //     non-execute roles. Ralph failures go through coordinator
 //     wake-up → ask_user (per ADR §Stuck-task recovery).
@@ -1283,10 +1285,10 @@ func TestDevViaTestPack_04b_FailedRule(t *testing.T) {
 	}
 	// Per Slice 2 reviewer R1: rule 04b matches all three terminal
 	// non-success outcomes so context-length truncation and chain
-	// cancellation don't silently wedge the walker.
+	// cancellation don't silently wedge the coordinator.
 	for _, outcome := range []string{"failed", "truncated", "cancelled"} {
 		if !devViaTestOutcomeCondition(rule, outcome) {
-			t.Errorf("rule 04b does not match agent.loop.outcome = %q — walker will silently wedge on this terminal class", outcome)
+			t.Errorf("rule 04b does not match agent.loop.outcome = %q — coordinator will silently wedge on this terminal class", outcome)
 		}
 	}
 
@@ -1410,7 +1412,7 @@ func TestDevViaTestExecutePersonaTeachesIterationDiscipline(t *testing.T) {
 // stamp rules will error at fire time and the chain wedges silently.
 //
 // Per Slice 2 reviewer R2: pin the contract structurally so Slice 3
-// (walker spawning Ralph) and Slice 4 (coordinator dispatching CBG)
+// (coordinator spawning Ralph) and Slice 4 (coordinator dispatching CBG)
 // cannot ship without the wire-key in place. Today only rule 01
 // (Lisa) spawns; this test ensures any future spawner stays
 // consistent.
@@ -1456,7 +1458,7 @@ func TestDevViaTestPack_08_RoleListInventory(t *testing.T) {
 		"dev-via-test-plan":     {}, // Lisa (Slice 1)
 		"reviewer-dev-via-test": {}, // CBG (Slice 4)
 		// dev-via-test-execute (Ralph) is DELIBERATELY excluded —
-		// Ralph failures route through rule 04b (walker wake-up +
+		// Ralph failures route through rule 04b (coordinator wake-up +
 		// ask_user, no chain pause).
 	}
 	rule := loadDevViaTestRule(t, "08-loop-failed-pause.json")
