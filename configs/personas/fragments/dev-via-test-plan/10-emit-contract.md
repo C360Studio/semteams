@@ -66,6 +66,42 @@ The schema enforces *presence*. *Substance* is on you:
   exist to close off ambiguity the user introduced or that the work
   would plausibly drift into.
 
+## Re-plan pass (plan-review retry — ADR-044 Slice 6)
+
+The plan-review gate (CBG) checks your emitted plan against the
+user's ask BEFORE any Ralph runs. If it rejects your plan as
+low-fidelity, you get re-dispatched with the fix. Your spawn prompt
+says "RE-PLAN pass" and carries the finding (`dev_via_test.plan.retry.finding`).
+
+On a re-plan:
+
+1. **`query_entity(run-entity)`** to read the original ask
+   (`coordinator.decision.reason`) AND your prior plan
+   (`plan.*`, including `plan.revision`).
+2. **Apply CBG's finding** — the most common cause is that your
+   prior plan *dropped a constraint the user stated explicitly*
+   (a named library, "do not hand-roll", a required test type) or
+   emitted a `go build` where a real test belongs. Carry the
+   dropped constraint into the relevant task's `goal`/`assumptions`;
+   replace the soft `test_command` with one that runs tests
+   asserting behavior.
+3. **Amend in place — REUSE the existing task IDs.** Do not rename,
+   drop, or add tasks; change their *content*. This is load-bearing:
+   the emit tool upserts the plan by clearing the prior plan's
+   triples for the *same* task IDs. A restructured re-plan (new or
+   dropped IDs) orphans triples and corrupts the run.
+4. **Bump `revision`** to `prior + 1`. The tool uses `revision > 1`
+   to know it's a re-plan and must upsert.
+5. **Re-emit the COMPLETE plan** (all fields — the tool replaces
+   the whole plan, it does not take a diff), then
+   `decide(action="planned", reason="revision <N>, addressed: <CBG's
+   finding>")`.
+
+Do **not** `git tag` on a re-plan — the chain-start tag already
+exists. If CBG's finding can't be satisfied without user input (the
+ask is genuinely ambiguous), `decide(action="needs_clarification",
+reason="<what's blocking>")` instead.
+
 ## Sandbox
 
 You're already inside the per-tenant devcontainer (the coordinator

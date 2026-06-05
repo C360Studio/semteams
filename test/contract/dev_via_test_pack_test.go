@@ -276,7 +276,12 @@ func TestDevViaTestPackWiredInFlowBootstrap(t *testing.T) {
 	body := string(data)
 	for _, want := range []string{
 		"/app/configs/rules/dev-via-test/01-coordinator-dev-via-test-spawn.json",
-		"/app/configs/rules/dev-via-test/02-lisa-terminal-to-walker.json",
+		"/app/configs/rules/dev-via-test/02-lisa-terminal-to-plan-review.json",
+		"/app/configs/rules/dev-via-test/02b-plan-approved-to-walker.json",
+		"/app/configs/rules/dev-via-test/02c-plan-retry-stamp.json",
+		"/app/configs/rules/dev-via-test/02d-plan-retry-driver.json",
+		"/app/configs/rules/dev-via-test/02e-plan-rejected-to-coordinator.json",
+		"/app/configs/rules/dev-via-test/02f-lisa-needs-clarification-to-coordinator.json",
 		"/app/configs/rules/dev-via-test/03-coordinator-dispatch-ralph.json",
 		"/app/configs/rules/dev-via-test/04a-execute-stamp-converged.json",
 		"/app/configs/rules/dev-via-test/04b-execute-stamp-failed.json",
@@ -334,26 +339,23 @@ func TestDevViaTestPack_01_SubtopicsLengthZero(t *testing.T) {
 	}
 }
 
-// TestDevViaTestPack_02_LisaTerminalToWalker pins the Slice 3
-// wake-up rule's shape. The walker can only do its job if:
+// TestDevViaTestPack_02_LisaTerminalToPlanReview pins the Slice 6
+// redirect: Lisa-terminal(planned) now spawns CBG in plan_review
+// mode (a fidelity gate BEFORE the walker), not the walker directly.
 //
-//  1. Conditions match Lisa terminal (role=dev-via-test-plan,
-//     outcome=success, next_action=planned).
-//  2. Spawned role is "coordinator" (not a pack-specific walker
-//     role — we deliberately reuse the coordinator role).
-//  3. tools include query_entity (read run-entity state) +
-//     read_loop_result (read previous pack role's terminal).
-//  4. action_allowlist constrains to [dev_via_test, respond_direct,
-//     ask_user] — walker cannot start a new chain via research
-//     or autoresearch, and CANNOT call request_sandbox (already
-//     provisioned).
-//  5. related_loops pins run-loop-entity-id from Lisa's lineage
-//     (NOT $entity.id — the walker is a fresh coordinator loop,
-//     not the original run entity; the original is in Lisa's
-//     lineage).
-//  6. tool_choice=required (walker must use the tool path).
-func TestDevViaTestPack_02_LisaTerminalToWalker(t *testing.T) {
-	rule := loadDevViaTestRule(t, "02-lisa-terminal-to-walker.json")
+//  1. Conditions: role=dev-via-test-plan, outcome=success,
+//     next_action=planned.
+//  2. Spawns reviewer-dev-via-test (CBG), NOT a coordinator.
+//  3. Plan-review tools: query_entity (reads ask + plan in one
+//     call) + read_loop_result + scratchpad + decide; NO bash (no
+//     tests run at the plan gate).
+//  4. action_allowlist = the distinct plan-gate tokens
+//     [plan_approved, plan_rejected_retry, plan_rejected] — disjoint
+//     from the chain-end gate so routing never collides.
+//  5. related_loops carries plan-gate + run-loop-entity-id from
+//     Lisa's lineage.
+func TestDevViaTestPack_02_LisaTerminalToPlanReview(t *testing.T) {
+	rule := loadDevViaTestRule(t, "02-lisa-terminal-to-plan-review.json")
 
 	if !devViaTestRoleCondition(rule, "dev-via-test-plan") {
 		t.Error("rule 02 does not condition on role=dev-via-test-plan")
@@ -362,9 +364,64 @@ func TestDevViaTestPack_02_LisaTerminalToWalker(t *testing.T) {
 		t.Error("rule 02 does not condition on outcome=success")
 	}
 	if !devViaTestNextActionCondition(rule, "planned") {
-		t.Error("rule 02 does not condition on coordinator.decision.next_action=planned")
+		t.Error("rule 02 does not condition on next_action=planned")
 	}
 
+	var spawn *devViaTestOnEnterJSON
+	for i := range rule.OnEnter {
+		if rule.OnEnter[i].Type == "publish_agent" && rule.OnEnter[i].Role == "reviewer-dev-via-test" {
+			spawn = &rule.OnEnter[i]
+			break
+		}
+	}
+	if spawn == nil {
+		t.Fatal("rule 02 has no publish_agent for role=reviewer-dev-via-test (CBG plan-review)")
+	}
+
+	for _, want := range []string{"read_loop_result", "query_entity", "scratchpad", "decide"} {
+		if !devViaTestSliceHas(spawn.Tools, want) {
+			t.Errorf("rule 02 plan-review tools missing %q; current = %v", want, spawn.Tools)
+		}
+	}
+	if devViaTestSliceHas(spawn.Tools, "bash") {
+		t.Error("rule 02 plan-review must NOT grant bash — no tests run at the plan gate (fidelity review only)")
+	}
+
+	for _, want := range []string{"plan_approved", "plan_rejected_retry", "plan_rejected"} {
+		if !devViaTestSliceHas(spawn.ActionAllowed, want) {
+			t.Errorf("rule 02 plan-review allowlist missing %q", want)
+		}
+	}
+	if len(spawn.ActionAllowed) != 3 {
+		t.Errorf("rule 02 allowlist = %v; want exactly the 3 plan-gate tokens (disjoint from chain-end)", spawn.ActionAllowed)
+	}
+	// Distinct tokens: the chain-end verdicts must NOT appear here, or
+	// rule 07a/07b/07c would double-fire on a plan verdict.
+	for _, forbidden := range []string{"approved", "rejected", "rejected_retry"} {
+		if devViaTestSliceHas(spawn.ActionAllowed, forbidden) {
+			t.Errorf("rule 02 allowlist includes chain-end token %q — would collide with the work gate", forbidden)
+		}
+	}
+
+	if want, got := "$entity.triple.lineage.run-loop-entity-id", spawn.RelatedLoops["run-loop-entity-id"]; got != want {
+		t.Errorf("rule 02 related_loops[run-loop-entity-id] = %q; want %q (threads the run entity from Lisa's lineage so CBG reads ask+plan there)", got, want)
+	}
+	if spawn.ToolChoice == nil {
+		t.Error("rule 02 spawn missing tool_choice")
+	}
+}
+
+// TestDevViaTestPack_02b_PlanApprovedToWalker pins that the walker is
+// now gated behind CBG plan-approval, on the distinct plan_approved
+// token (never colliding with the chain-end approved → rule 07a).
+func TestDevViaTestPack_02b_PlanApprovedToWalker(t *testing.T) {
+	rule := loadDevViaTestRule(t, "02b-plan-approved-to-walker.json")
+	if !devViaTestRoleCondition(rule, "reviewer-dev-via-test") {
+		t.Error("rule 02b does not condition on role=reviewer-dev-via-test")
+	}
+	if !devViaTestNextActionCondition(rule, "plan_approved") {
+		t.Error("rule 02b does not condition on next_action=plan_approved")
+	}
 	var spawn *devViaTestOnEnterJSON
 	for i := range rule.OnEnter {
 		if rule.OnEnter[i].Type == "publish_agent" && rule.OnEnter[i].Role == "coordinator" {
@@ -373,38 +430,122 @@ func TestDevViaTestPack_02_LisaTerminalToWalker(t *testing.T) {
 		}
 	}
 	if spawn == nil {
-		t.Fatal("rule 02 has no publish_agent for role=coordinator")
+		t.Fatal("rule 02b has no coordinator walker spawn")
 	}
+	if !devViaTestSliceHas(spawn.ActionAllowed, "dev_via_test") {
+		t.Error("rule 02b walker allowlist missing dev_via_test (cannot dispatch Ralph)")
+	}
+}
 
-	for _, want := range []string{"read_loop_result", "query_entity", "scratchpad", "decide"} {
-		if !devViaTestSliceHas(spawn.Tools, want) {
-			t.Errorf("rule 02 walker tools missing %q; current = %v", want, spawn.Tools)
+// TestDevViaTestPack_02c_PlanRetryStamp pins the plan-retry stamp
+// (plan-phase analog of 07c): on plan_rejected_retry, upsert the
+// finding + add the pending trigger on the RUN entity. No target_task
+// (the whole plan is the unit).
+func TestDevViaTestPack_02c_PlanRetryStamp(t *testing.T) {
+	rule := loadDevViaTestRule(t, "02c-plan-retry-stamp.json")
+	if !devViaTestRoleCondition(rule, "reviewer-dev-via-test") {
+		t.Error("rule 02c does not condition on role=reviewer-dev-via-test")
+	}
+	if !devViaTestNextActionCondition(rule, "plan_rejected_retry") {
+		t.Error("rule 02c does not condition on next_action=plan_rejected_retry")
+	}
+	const runSubject = "$entity.triple.lineage.run-loop-entity-id"
+	var finding, pending *devViaTestOnEnterJSON
+	for i := range rule.OnEnter {
+		switch rule.OnEnter[i].Predicate {
+		case "dev_via_test.plan.retry.finding":
+			finding = &rule.OnEnter[i]
+		case "dev_via_test.plan.retry.pending":
+			pending = &rule.OnEnter[i]
 		}
 	}
+	if finding == nil || finding.Type != "update_triple" || finding.Subject != runSubject {
+		t.Errorf("rule 02c finding stamp wrong: %+v (want update_triple on run entity)", finding)
+	}
+	if obj, _ := finding.Object.(string); obj != "$entity.triple.coordinator.decision.reason" {
+		t.Errorf("rule 02c finding object = %v; want coordinator.decision.reason (CBG's fix-spec)", finding.Object)
+	}
+	if pending == nil || pending.Type != "add_triple" || pending.Subject != runSubject {
+		t.Errorf("rule 02c pending stamp wrong: %+v (want add_triple on run entity)", pending)
+	}
+}
 
-	for _, want := range []string{"dev_via_test", "respond_direct", "ask_user"} {
-		if !devViaTestSliceHas(spawn.ActionAllowed, want) {
-			t.Errorf("rule 02 action_allowlist missing %q", want)
+// TestDevViaTestPack_02d_PlanRetryDriver pins the plan-retry driver
+// (plan-phase analog of 07d): run-entity anchored, $state.iteration
+// vs plan.lisa_retry_budget gates re-dispatch of LISA vs escalate.
+func TestDevViaTestPack_02d_PlanRetryDriver(t *testing.T) {
+	rule := loadDevViaTestRule(t, "02d-plan-retry-driver.json")
+	var hasPending bool
+	for _, c := range rule.Conditions {
+		if c.Field == "dev_via_test.plan.retry.pending" && c.Operator == "ne" {
+			hasPending = true
 		}
 	}
-
-	// Walker must NOT have research, autoresearch, request_sandbox
-	// access — these would let it start a fresh chain or re-provision
-	// a sandbox already in place.
-	for _, forbidden := range []string{"research", "autoresearch"} {
-		if devViaTestSliceHas(spawn.ActionAllowed, forbidden) {
-			t.Errorf("rule 02 action_allowlist includes %q — walker must not start a fresh chain", forbidden)
+	if !hasPending {
+		t.Error("rule 02d does not condition on dev_via_test.plan.retry.pending (ne) — driver never fires")
+	}
+	var removed bool
+	var replan, escalate *devViaTestOnEnterJSON
+	for i := range rule.OnEnter {
+		a := &rule.OnEnter[i]
+		if a.Type == "remove_triple" && a.Predicate == "dev_via_test.plan.retry.pending" {
+			removed = true
+		}
+		if a.Type == "publish_agent" && a.Role == "dev-via-test-plan" {
+			replan = a
+		}
+		if a.Type == "publish_agent" && a.Role == "coordinator" {
+			escalate = a
 		}
 	}
-
-	if want, got := "$entity.triple.lineage.run-loop-entity-id", spawn.RelatedLoops["run-loop-entity-id"]; got != want {
-		t.Errorf("rule 02 related_loops[run-loop-entity-id] = %q; want %q (lineage threading from Lisa)", got, want)
+	if !removed {
+		t.Error("rule 02d does not remove the pending marker (presence-marker re-entry broken)")
 	}
+	if replan == nil {
+		t.Fatal("rule 02d has no Lisa re-dispatch (role=dev-via-test-plan)")
+	}
+	if !devViaTestWhenHas(replan, "$state.iteration", "lte", "$entity.triple.plan.lisa_retry_budget") {
+		t.Error("rule 02d re-plan When must gate $state.iteration <= plan.lisa_retry_budget")
+	}
+	if !devViaTestSliceHas(replan.Tools, "emit_dev_via_test_plan") {
+		t.Error("rule 02d re-planned Lisa missing emit_dev_via_test_plan tool")
+	}
+	// max_iterations:0 (unlimited) is load-bearing — the default
+	// per-action cap of 3 would silently cut re-dispatch off before the
+	// budget (go-reviewer N3 / Slice 5 07d rationale).
+	if replan.MaxIterations == nil || *replan.MaxIterations != 0 {
+		t.Error("rule 02d re-plan action must set max_iterations:0; the When+clamp is the bound, the default cap 3 would cut off before plan.lisa_retry_budget")
+	}
+	if escalate == nil {
+		t.Fatal("rule 02d has no escalate (coordinator) spawn")
+	}
+	if !devViaTestWhenHas(escalate, "$state.iteration", "gt", "$entity.triple.plan.lisa_retry_budget") {
+		t.Error("rule 02d escalate When must gate $state.iteration > plan.lisa_retry_budget")
+	}
+}
 
-	if spawn.ToolChoice == nil {
-		t.Error("rule 02 spawn missing tool_choice — walker may text-out of query_entity / decide")
-	} else if mode, _ := spawn.ToolChoice["mode"].(string); mode != "required" {
-		t.Errorf("rule 02 tool_choice.mode = %q; want %q", mode, "required")
+// TestDevViaTestPack_02e_PlanRejectedToCoordinator pins the plan-gate
+// escalate (plan-phase analog of 07b): plan_rejected → ask_user.
+func TestDevViaTestPack_02e_PlanRejectedToCoordinator(t *testing.T) {
+	rule := loadDevViaTestRule(t, "02e-plan-rejected-to-coordinator.json")
+	if !devViaTestRoleCondition(rule, "reviewer-dev-via-test") {
+		t.Error("rule 02e does not condition on role=reviewer-dev-via-test")
+	}
+	if !devViaTestNextActionCondition(rule, "plan_rejected") {
+		t.Error("rule 02e does not condition on next_action=plan_rejected")
+	}
+	var spawn *devViaTestOnEnterJSON
+	for i := range rule.OnEnter {
+		if rule.OnEnter[i].Type == "publish_agent" && rule.OnEnter[i].Role == "coordinator" {
+			spawn = &rule.OnEnter[i]
+			break
+		}
+	}
+	if spawn == nil {
+		t.Fatal("rule 02e has no coordinator spawn")
+	}
+	if !devViaTestSliceHas(spawn.ActionAllowed, "ask_user") {
+		t.Error("rule 02e allowlist missing ask_user")
 	}
 }
 
@@ -851,9 +992,11 @@ func TestDevViaTestFinalizeTokenLiteralConsistency(t *testing.T) {
 		t.Errorf("rule 06 does not condition on next_action=%q — CBG dispatch dead", token)
 	}
 
-	// Source 2 + 3: rules 02 + 05 action_allowlist must include token
-	// (walker emits the action; allowlist gates).
-	for _, name := range []string{"02-lisa-terminal-to-walker.json", "05-ralph-terminal-to-walker.json"} {
+	// Source 2 + 3: the walker rules' action_allowlist must include
+	// token (walker emits the action; allowlist gates). Since Slice 6,
+	// the post-Lisa walker is spawned by 02b (plan_approved), not 02
+	// (which now spawns the CBG plan-review gate).
+	for _, name := range []string{"02b-plan-approved-to-walker.json", "05-ralph-terminal-to-walker.json"} {
 		rule := loadDevViaTestRule(t, name)
 		for _, a := range rule.OnEnter {
 			if a.Type != "publish_agent" {
@@ -1416,6 +1559,10 @@ type devViaTestOnEnterJSON struct {
 	ForEach       string                    `json:"for_each,omitempty"`
 	ForEachVar    string                    `json:"for_each_var,omitempty"`
 	When          []devViaTestConditionJSON `json:"when,omitempty"`
+	// MaxIterations is a pointer so an explicit 0 (unlimited per-action
+	// firing — load-bearing for budget-gated re-dispatch, Slice 5/6) is
+	// distinguishable from an absent field (default cap 3).
+	MaxIterations *int `json:"max_iterations,omitempty"`
 }
 
 func loadDevViaTestRule(t *testing.T, name string) *devViaTestRuleJSON {

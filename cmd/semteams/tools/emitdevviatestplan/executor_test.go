@@ -12,9 +12,15 @@ import (
 	"github.com/c360studio/semstreams/message"
 )
 
+// fakePub doubles as the add-publisher AND the tripleRemover so tests
+// can exercise the Slice 6 re-plan upsert: removes clear matching
+// triples from the slice, then the re-emit's adds land — mirroring
+// graph-ingest's (subject, predicate) row semantics so a re-emit
+// leaves exactly one triple per predicate.
 type fakePub struct {
-	mu      sync.Mutex
-	triples []message.Triple
+	mu       sync.Mutex
+	triples  []message.Triple
+	removals [][2]string // (subject, predicate) pairs removed, in order
 }
 
 func (f *fakePub) AddTriple(_ context.Context, t message.Triple) error {
@@ -28,6 +34,23 @@ func (f *fakePub) AddTriplesBatch(_ context.Context, ts []message.Triple) error 
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.triples = append(f.triples, ts...)
+	return nil
+}
+
+// RemoveByPredicate drops every triple matching (subject, predicate),
+// emulating graph-ingest's row-level remove. Missing → no-op success.
+func (f *fakePub) RemoveByPredicate(_ context.Context, subject, predicate string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.removals = append(f.removals, [2]string{subject, predicate})
+	kept := f.triples[:0]
+	for _, t := range f.triples {
+		if t.Subject == subject && t.Predicate == predicate {
+			continue
+		}
+		kept = append(kept, t)
+	}
+	f.triples = kept
 	return nil
 }
 
@@ -85,7 +108,7 @@ func runMetadata() map[string]any {
 
 func TestExecutor_Happy(t *testing.T) {
 	pub := &fakePub{}
-	e := NewExecutor(pub, slog.Default())
+	e := NewExecutor(pub, pub, slog.Default())
 	res, _ := e.Execute(context.Background(), agentic.ToolCall{
 		ID: "c1", Name: ToolName, Arguments: baseArgs(), Metadata: runMetadata(),
 	})
@@ -149,7 +172,7 @@ func TestExecutor_Happy(t *testing.T) {
 }
 
 func TestExecutor_MissingRunEntityFails(t *testing.T) {
-	e := NewExecutor(&fakePub{}, slog.Default())
+	e := NewExecutor(&fakePub{}, &fakePub{}, slog.Default())
 	res, _ := e.Execute(context.Background(), agentic.ToolCall{
 		ID: "c2", Name: ToolName, Arguments: baseArgs(),
 	})
@@ -195,7 +218,7 @@ func TestExecutor_RequiredPlanFields(t *testing.T) {
 			args := baseArgs()
 			tc.mutate(args)
 			pub := &fakePub{}
-			e := NewExecutor(pub, slog.Default())
+			e := NewExecutor(pub, pub, slog.Default())
 			res, _ := e.Execute(context.Background(), agentic.ToolCall{
 				ID: "c", Name: ToolName, Arguments: args, Metadata: runMetadata(),
 			})
@@ -266,7 +289,7 @@ func TestExecutor_RequiredTaskFields(t *testing.T) {
 			tc.mutate(task)
 			args["tasks"] = []any{task}
 			pub := &fakePub{}
-			e := NewExecutor(pub, slog.Default())
+			e := NewExecutor(pub, pub, slog.Default())
 			res, _ := e.Execute(context.Background(), agentic.ToolCall{
 				ID: "c", Name: ToolName, Arguments: args, Metadata: runMetadata(),
 			})
@@ -287,7 +310,7 @@ func TestExecutor_DuplicateTaskIDsRejected(t *testing.T) {
 	t2["goal"] = "Different goal but same id"
 	args["tasks"] = []any{t1, t2}
 	pub := &fakePub{}
-	e := NewExecutor(pub, slog.Default())
+	e := NewExecutor(pub, pub, slog.Default())
 	res, _ := e.Execute(context.Background(), agentic.ToolCall{
 		ID: "c", Name: ToolName, Arguments: args, Metadata: runMetadata(),
 	})
@@ -305,7 +328,7 @@ func TestExecutor_MultiTaskOrdering(t *testing.T) {
 	t2["depends_on"] = []any{"t1"}
 	args["tasks"] = []any{t1, t2}
 	pub := &fakePub{}
-	e := NewExecutor(pub, slog.Default())
+	e := NewExecutor(pub, pub, slog.Default())
 	res, _ := e.Execute(context.Background(), agentic.ToolCall{
 		ID: "c", Name: ToolName, Arguments: args, Metadata: runMetadata(),
 	})
@@ -337,7 +360,7 @@ func TestExecutor_RevisionAbsentRejected(t *testing.T) {
 	args := baseArgs()
 	delete(args, "revision")
 	pub := &fakePub{}
-	e := NewExecutor(pub, slog.Default())
+	e := NewExecutor(pub, pub, slog.Default())
 	res, _ := e.Execute(context.Background(), agentic.ToolCall{
 		ID: "c", Name: ToolName, Arguments: args, Metadata: runMetadata(),
 	})
@@ -353,7 +376,7 @@ func TestExecutor_RevisionZeroRejected(t *testing.T) {
 	args := baseArgs()
 	args["revision"] = float64(0)
 	pub := &fakePub{}
-	e := NewExecutor(pub, slog.Default())
+	e := NewExecutor(pub, pub, slog.Default())
 	res, _ := e.Execute(context.Background(), agentic.ToolCall{
 		ID: "c", Name: ToolName, Arguments: args, Metadata: runMetadata(),
 	})
@@ -369,7 +392,7 @@ func TestExecutor_RevisionExplicit(t *testing.T) {
 	args := baseArgs()
 	args["revision"] = float64(3)
 	pub := &fakePub{}
-	e := NewExecutor(pub, slog.Default())
+	e := NewExecutor(pub, pub, slog.Default())
 	res, _ := e.Execute(context.Background(), agentic.ToolCall{
 		ID: "c", Name: ToolName, Arguments: args, Metadata: runMetadata(),
 	})
@@ -407,7 +430,7 @@ func TestExecutor_CBGRetryBudget(t *testing.T) {
 				args["cbg_retry_budget"] = tc.set
 			}
 			pub := &fakePub{}
-			e := NewExecutor(pub, slog.Default())
+			e := NewExecutor(pub, pub, slog.Default())
 			res, _ := e.Execute(context.Background(), agentic.ToolCall{
 				ID: "c", Name: ToolName, Arguments: args, Metadata: runMetadata(),
 			})
@@ -425,11 +448,144 @@ func TestExecutor_CBGRetryBudget(t *testing.T) {
 	}
 }
 
+func TestExecutor_LisaRetryBudget(t *testing.T) {
+	// ADR-044 §Slice 6: same optional/default/clamp posture as
+	// cbg_retry_budget, independent value.
+	cases := []struct {
+		name     string
+		set      any
+		absent   bool
+		wantStmp int
+	}{
+		{name: "absent defaults to 1", absent: true, wantStmp: defaultLisaRetryBudget},
+		{name: "explicit 3 stamped verbatim", set: float64(3), wantStmp: 3},
+		{name: "over max clamped", set: float64(99), wantStmp: maxLisaRetryBudget},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			args := baseArgs()
+			if tc.absent {
+				delete(args, "lisa_retry_budget")
+			} else {
+				args["lisa_retry_budget"] = tc.set
+			}
+			pub := &fakePub{}
+			e := NewExecutor(pub, pub, slog.Default())
+			res, _ := e.Execute(context.Background(), agentic.ToolCall{
+				ID: "c", Name: ToolName, Arguments: args, Metadata: runMetadata(),
+			})
+			if res.Error != "" {
+				t.Fatalf("unexpected error: %s", res.Error)
+			}
+			got, ok := pub.find(predicatePlanLisaRetryBudget)
+			if !ok {
+				t.Fatal("plan.lisa_retry_budget not stamped")
+			}
+			if got != tc.wantStmp {
+				t.Errorf("plan.lisa_retry_budget = %v, want %d", got, tc.wantStmp)
+			}
+		})
+	}
+}
+
+// TestExecutor_RePlanUpserts is the load-bearing Slice 6 test: a
+// re-emit (revision > 1) that reuses the task ID must REPLACE the
+// prior plan, leaving exactly one triple per (run, predicate) — never
+// a stale duplicate that would win on first-match downstream.
+func TestExecutor_RePlanUpserts(t *testing.T) {
+	pub := &fakePub{}
+	e := NewExecutor(pub, pub, slog.Default())
+
+	// Revision 1 — soft plan (the failure shape we caught).
+	rev1 := baseArgs()
+	rev1["goal"] = "Implement MAVLink parsing"
+	task1 := baseTask()
+	task1["id"] = "implement-parsing"
+	task1["goal"] = "parse frames"
+	task1["test_command"] = "go build ./..."
+	rev1["tasks"] = []any{task1}
+	if res, _ := e.Execute(context.Background(), agentic.ToolCall{ID: "1", Name: ToolName, Arguments: rev1, Metadata: runMetadata()}); res.Error != "" {
+		t.Fatalf("rev1 emit error: %s", res.Error)
+	}
+
+	// Revision 2 — the re-planned fix: same task ID, hardened content.
+	rev2 := baseArgs()
+	rev2["goal"] = "Implement MAVLink parsing using gomavlib"
+	rev2["revision"] = float64(2)
+	task2 := baseTask()
+	task2["id"] = "implement-parsing" // REUSE the ID (amend-in-place)
+	task2["goal"] = "parse frames with github.com/bluenviron/gomavlib; do not hand-roll"
+	task2["test_command"] = "go test -run TestHeartbeat ./..."
+	rev2["tasks"] = []any{task2}
+	if res, _ := e.Execute(context.Background(), agentic.ToolCall{ID: "2", Name: ToolName, Arguments: rev2, Metadata: runMetadata()}); res.Error != "" {
+		t.Fatalf("rev2 emit error: %s", res.Error)
+	}
+
+	// Exactly one triple per key predicate, carrying the rev2 value.
+	assertSingle := func(pred, want string) {
+		t.Helper()
+		n := 0
+		var got any
+		for _, tr := range pub.snapshot() {
+			if tr.Predicate == pred {
+				n++
+				got = tr.Object
+			}
+		}
+		if n != 1 {
+			t.Errorf("predicate %q has %d triples after re-plan; want exactly 1 (stale not cleared)", pred, n)
+		}
+		if got != want {
+			t.Errorf("predicate %q = %v after re-plan; want %q", pred, got, want)
+		}
+	}
+	assertSingle(predicatePlanGoal, "Implement MAVLink parsing using gomavlib")
+	assertSingle("plan.task.implement-parsing."+predicateTaskGoal, "parse frames with github.com/bluenviron/gomavlib; do not hand-roll")
+	assertSingle("plan.task.implement-parsing."+predicateTaskTestCommand, "go test -run TestHeartbeat ./...")
+
+	// revision triple is an int — assert it upserted to 2 (exactly one).
+	revCount := 0
+	for _, tr := range pub.snapshot() {
+		if tr.Predicate == predicatePlanRevision {
+			revCount++
+		}
+	}
+	if revCount != 1 {
+		t.Errorf("plan.revision has %d triples after re-plan; want exactly 1", revCount)
+	}
+	rev, _ := pub.find(predicatePlanRevision)
+	if rev != 2 {
+		t.Errorf("plan.revision = %v after re-plan; want 2", rev)
+	}
+	if len(pub.removals) == 0 {
+		t.Error("re-plan made no removals — upsert path not exercised")
+	}
+}
+
+// TestExecutor_RePlanNilRemoverFails: a re-plan with no remover wired
+// must error rather than silently append a stale-winning duplicate.
+func TestExecutor_RePlanNilRemoverFails(t *testing.T) {
+	pub := &fakePub{}
+	e := NewExecutor(pub, nil, slog.Default()) // no remover
+	args := baseArgs()
+	args["revision"] = float64(2)
+	res, _ := e.Execute(context.Background(), agentic.ToolCall{ID: "c", Name: ToolName, Arguments: args, Metadata: runMetadata()})
+	if res.Error == "" {
+		t.Fatal("expected error on re-plan (revision 2) with nil remover")
+	}
+	if !strings.Contains(res.Error, "remover") {
+		t.Errorf("error = %q, want mention of remover", res.Error)
+	}
+	if len(pub.snapshot()) > 0 {
+		t.Errorf("expected no triples stamped when re-plan upsert is impossible, got %d", len(pub.snapshot()))
+	}
+}
+
 func TestExecutor_UnknownFieldsRejected(t *testing.T) {
 	args := baseArgs()
 	args["unexpected_top_level"] = "should fail"
 	pub := &fakePub{}
-	e := NewExecutor(pub, slog.Default())
+	e := NewExecutor(pub, pub, slog.Default())
 	res, _ := e.Execute(context.Background(), agentic.ToolCall{
 		ID: "c", Name: ToolName, Arguments: args, Metadata: runMetadata(),
 	})
@@ -448,7 +604,7 @@ func TestExecutor_UnknownTaskFieldRejected(t *testing.T) {
 	task["unexpected_task_field"] = "should fail"
 	args["tasks"] = []any{task}
 	pub := &fakePub{}
-	e := NewExecutor(pub, slog.Default())
+	e := NewExecutor(pub, pub, slog.Default())
 	res, _ := e.Execute(context.Background(), agentic.ToolCall{
 		ID: "c", Name: ToolName, Arguments: args, Metadata: runMetadata(),
 	})
@@ -470,7 +626,7 @@ func TestExecutor_ExplicitNullRequiredArrayRejected(t *testing.T) {
 			args := baseArgs()
 			args[field] = nil
 			pub := &fakePub{}
-			e := NewExecutor(pub, slog.Default())
+			e := NewExecutor(pub, pub, slog.Default())
 			res, _ := e.Execute(context.Background(), agentic.ToolCall{
 				ID: "c", Name: ToolName, Arguments: args, Metadata: runMetadata(),
 			})
