@@ -1,0 +1,45 @@
+{
+  "id": "dev_via_test_plan_retry_stamp",
+  "type": "expression",
+  "name": "CBG plan_rejected_retry → stamp plan-retry markers on run entity",
+  "description": "ADR-044 §addendum Slice 6 — plan-retry stamp half (plan-phase analog of rule 07c). Fires when CBG (plan-review mode) decides plan_rejected_retry: the plan dropped a constraint or emitted a build-not-test, and a re-plan can fix it. Stamps two markers on the RUN entity (via lineage.run-loop-entity-id subject override):\n\n- dev_via_test.plan.retry.finding (update_triple, upsert) = CBG's reason — the concrete fidelity fix Lisa must apply, surfaced to the re-planning Lisa.\n- dev_via_test.plan.retry.pending (add_triple) = this CBG loop id — the presence marker that triggers the run-entity driver (rule 02d).\n\nUnlike the work-retry (07c), there is NO target_task: the whole plan is the target, and Lisa re-emits a corrected plan. Bounded by plan.lisa_retry_budget via rule 02d's $state.iteration.",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "agent.loop.role",
+      "operator": "eq",
+      "value": "reviewer-dev-via-test",
+      "required": true
+    },
+    {
+      "field": "coordinator.decision.next_action",
+      "operator": "eq",
+      "value": "plan_rejected_retry",
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "update_triple",
+      "subject": "$entity.triple.lineage.run-loop-entity-id",
+      "predicate": "dev_via_test.plan.retry.finding",
+      "object": "$entity.triple.coordinator.decision.reason"
+    },
+    {
+      "type": "add_triple",
+      "subject": "$entity.triple.lineage.run-loop-entity-id",
+      "predicate": "dev_via_test.plan.retry.pending",
+      "object": "$entity.instance"
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "pack": "dev_via_test",
+    "phase": "ADR-044 §addendum Slice 6 — plan-retry stamp",
+    "adr": "docs/adr/044-dev-via-test-pack.md",
+    "paired_with": "02d-plan-retry-driver.json (run-entity driver, $state.iteration vs plan.lisa_retry_budget).",
+    "vs_07c": "Plan-phase analog of the work-retry stamp (07c). No target_task — the plan is the unit, re-emitted whole. finding upserts so the latest CBG verdict wins; pending is the content-free trigger 02d removes each cycle.",
+    "subject_override_requires": "semstreams #147/#148. The CBG plan-review loop carries lineage.run-loop-entity-id from rule 02's related_loops."
+  }
+}

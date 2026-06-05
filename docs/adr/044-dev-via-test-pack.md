@@ -1157,6 +1157,218 @@ if a second consumer wants a counter where no convenient re-entry
 anchor exists. Two uses is "coincidence"; the existing pattern
 covers both today.
 
+## Addendum 2026-06-05 — Slice 6 (plan-review gate)
+
+Status: **Proposed.** Adds a reviewer gate on Lisa's *plan* at
+chain-start, symmetric with the chain-end gate on Ralph's *work*.
+Same three-way verdict (`approved` / `rejected_retry` / `rejected`)
+and the same Slice 5 retry machinery — the retry just re-dispatches
+the **planner** instead of the executor.
+
+### Motivation — a verified plan-fidelity failure
+
+Two real-LLM smoke runs (2026-06-05) on `@mavlink-decode` traced
+the recurring "Ralph hand-rolls instead of using gomavlib" failure
+to its true source: **Lisa's structured emit silently drops the
+user's hard constraints.** Verified end-to-end:
+
+- The user prompt explicitly said "use a real Go MAVLink library
+  (e.g. gomavlib) — do not hand-roll the wire format" + "unit tests
+  that decode captured frames and assert parsed fields."
+- The front-door coordinator **preserved** it (`coordinator.decision.reason`
+  carried "use the 'github.com/bluenviron/gomavlib'…").
+- Lisa **received** it — rule 01 grants Lisa `read_loop_result`,
+  and her `read_loop_result` output contained "bluenviron".
+- But Lisa's emitted plan dropped it: `plan.task.implement-parsing.goal`
+  = "Implement MAVLink HEARTBEAT parsing" (no library, no "don't
+  hand-roll"), and `test_command` = `go build -o service main.go`
+  — a **compile, not a test**. A hand-rolled stub passes it.
+
+So Ralph gets a soft spec + a build-not-test convergence signal,
+hand-rolls (path of least resistance), and CBG catches it only at
+chain-end. The fix belongs at the plan, not Ralph and not Slice 5.
+Lisa's `read_loop_result` channel is left unchanged (it works; the
+uniform read-upstream pattern is cleaner than per-spawn inline
+substitution) — the gate catches the low-fidelity *output*.
+
+### Shape — reuse CBG, port Slice 5
+
+```
+Lisa emits plan
+  ↓ rule 02 (REDIRECTED: Lisa-terminal → CBG-plan-review, not → walker)
+CBG (plan-review mode): read_loop_result(coordinator ask)
+                        + query_entity(emitted plan on run entity)
+  → decide(approved | rejected_retry | rejected)
+  ├─ approved        → walker proceeds to first Ralph        (new rule 02b)
+  ├─ rejected_retry  → re-dispatch LISA with the finding,
+  │                    bounded by plan.lisa_retry_budget      (rules 02c/02d)
+  └─ rejected        → ask_user                               (rule 02e)
+```
+
+**Decisions locked with operator 2026-06-05:**
+
+1. **Reviewer = CBG** (role `reviewer-dev-via-test`), one role / two
+   gates. No new persona dir. A `phase` spawn property
+   (`plan_review` vs `review`) selects the mode; CBG's persona gains
+   a plan-review section. Keeps the roster at "1 planner + N Ralphs
+   + 1 reviewer."
+2. **Retry included in v1** — `rejected_retry` re-plans, same
+   reject/retry/approve pattern as the chain-end gate.
+3. **Separate budget** `plan.lisa_retry_budget` (clamped [1,N] by
+   the executor, default 1), tuned independently from
+   `plan.cbg_retry_budget`.
+
+### What CBG checks at the plan gate (fidelity, not gaming)
+
+General plan-fidelity — nothing scenario-specific:
+
+- Every explicit user constraint (named libraries, forbidden
+  approaches, required test *types*) survives into a task's
+  `goal`/`assumptions`.
+- Each `test_command` **executes behavior** (runs tests that assert
+  outcomes) — a bare `go build`/compile is rejected.
+- `integration_test_command` exercises the user's stated acceptance
+  (e.g. "decode testdata frames and assert fields"), not just build.
+
+These are review judgments (compare ask vs plan) — same LLM-verdict
+risk profile as the chain-end gate, bounded by the same budget +
+escalate backstop.
+
+### THE load-bearing engine constraint — re-plan must OVERWRITE
+
+Slice 6 introduces the **first real re-plan** in dev-via-test (the
+`revision` field was added speculatively in Slice 3; the walker
+persona explicitly says "you do not re-plan"). Re-plan hits a wall
+the work-retry didn't:
+
+- The plan lives as triples on the **run entity** (Slice 3, for
+  resumability). A re-emit with changed content collides:
+  `(run, plan.task.X.goal, "old")` and `(run, plan.task.X.goal,
+  "new")` coexist, and **first-match returns the stale one** (per
+  Slice 5's own `update_triple` upsert rationale + autoresearch
+  rule 05). Append ≠ replace.
+- The emit executor's `TriplePublisher` interface is **add-only**
+  (`AddTriple`/`AddTriplesBatch`) — no remove/query. Verified
+  against semstreams@v1.0.0-beta.96.
+- No triple-mutation **tool** exists upstream or product-shell, so
+  a coordinator-mediated clear (the Slice 5 per-ID-mutation trick)
+  isn't available without building a new tool (fights
+  [[fewer-rich-tools]] + needs a framework-alignment review).
+- Rules can't enumerate/remove `plan.task.<id>.*` (variable
+  predicate fragments).
+
+**Resolution (recommended): executor-side upsert + amend-in-place.**
+Extend `emit_dev_via_test_plan` so that on re-emit (`revision > 1`)
+it **clears the prior plan namespace on the run entity, then
+stamps** — a true upsert. The clear is complete iff the re-plan
+**reuses the prior task IDs** (amends content, doesn't restructure)
+— which is the natural semantics of a fidelity fix ("task X must
+require gomavlib + a real test," not "re-decompose"). So:
+
+- Lisa's re-plan persona: on a retry pass, **reuse the existing
+  task IDs**; amend their `goal`/`assumptions`/`test_command` to
+  satisfy the finding; bump `revision`.
+- The executor gains a **remove capability** — a product-local
+  publish to `graph.mutation.triple.remove` for the predicates it's
+  about to (re)stamp, wired in `product_tools.go` alongside the
+  existing add publisher.
+
+  **Framework-alignment review — RESOLVED (product-local, with
+  direct upstream precedent).** Upstream's `TriplePublisher` is
+  add-only *by design*, and upstream's own `write_todos` tool
+  (`processor/agentic-tools/write_todos.go`) handles the identical
+  "upsert a triple set" need with a **local** `natsTodoWriter`
+  exposing `RemoveByPredicate(ctx, subject, predicate)` that
+  publishes a `graph.RemoveTripleRequest` to
+  `graph.mutation.triple.remove` (request-reply; missing subject →
+  nil). So the pattern is established: tools that upsert wire their
+  own remove writer rather than widening `TriplePublisher`. Slice 6
+  ports this exact shape into a product-local
+  `planTripleUpserter`. No upstream change needed; no new framework
+  primitive. Migration target: if upstream ever lifts
+  `RemoveByPredicate` onto `TriplePublisher`, collapse the local
+  writer onto it (same posture as the other `emit_*` tools).
+
+**Alternative considered — fresh-entity restart.** On
+`rejected_retry`, spawn a fresh Lisa onto a new run entity (old
+plan orphaned, no clear needed). Rejected for v1: forks chain
+identity and re-provisions the sandbox, and the plan-as-triples-on-
+run-entity resumability model (load-bearing for the whole pack) is
+worth preserving. Revisit only if upsert proves costlier than
+expected.
+
+**Accepted residual risk (go-reviewer R1) — restructured re-plan
+orphans task triples.** `clearPriorPlan` removes per-task predicates
+only for the task IDs in the *new* plan (`plan.taskIDs()`). If a
+re-plan RENAMES or DROPS a task ID (rev1 `parse-frames` → rev2
+`parse`), the old `plan.task.parse-frames.*` triples are never
+cleared — they survive with `status=ready` and the walker would
+dispatch a Ralph against the supposed-to-be-dropped task. This is a
+corruption (not just a leak) when it happens. v1 mitigation is
+**prose in two places** (rule 02d's re-plan prompt + Lisa's
+`10-emit-contract.md`: "REUSE the existing task IDs; do not rename,
+drop, or add tasks") + the fact that a `plan_rejected_retry`
+finding is virtually always "add constraint X to task Y" (which
+keeps IDs), + CBG re-gates the re-plan and `query_entity` would
+surface duplicate/orphan tasks. Accepted for v1 because the
+probability is low and the failure is bounded by
+`plan.lisa_retry_budget`. **v2 structural fix (migration path):**
+give the executor a `chain.NATSEntityReader` (already a wired
+pattern), read the prior task-ID set on a re-plan, and either clear
+the OLD∪NEW union or hard-REJECT a re-plan whose ID set differs from
+the prior — turning the silent corruption into a clean tool error
+that enforces amend-in-place structurally per
+[[encode-principles-structurally]].
+
+### Rule deltas
+
+- `02-lisa-terminal-to-walker.json` → **redirect** to spawn CBG in
+  `plan_review` mode (was: spawn walker). Rename to
+  `02-lisa-terminal-to-plan-review.json`.
+- `02b-plan-approved-to-walker.json` (new) — CBG `approved` →
+  spawn the walker (the old rule-02 behavior; chain proceeds to
+  first Ralph).
+- `02c-plan-retry-stamp.json` (new) — CBG `rejected_retry` → stamp
+  `dev_via_test.plan.retry.{finding,pending}` on the run entity
+  (plan-phase analog of 07c; no `target_task` — the whole plan is
+  the target).
+- `02d-plan-retry-driver.json` (new) — run-entity driver,
+  `$state.iteration` vs `plan.lisa_retry_budget`: under budget →
+  re-dispatch Lisa with the finding (reuse-IDs amend); over budget
+  → ask_user. Plan-phase analog of 07d.
+- `02e-plan-rejected-to-coordinator.json` (new) — CBG `rejected`
+  → ask_user (plan-phase analog of 07b).
+- `06-coordinator-dispatch-cbg.json` — CBG's allowlist already
+  `[approved, rejected_retry, rejected]`; ensure the plan-review
+  spawn reuses the same closed set.
+- `emit_dev_via_test_plan` executor — add `lisa_retry_budget`
+  (clamped), the re-emit upsert (clear-then-stamp), and the
+  remove-capable dependency.
+- CBG persona — add a `plan_review` mode section (read ask + plan,
+  fidelity criteria, three-way verdict). Lisa persona — add the
+  re-plan amend-in-place contract (reuse task IDs on a retry pass,
+  read `dev_via_test.plan.retry.finding`).
+
+### Engine facts (carry over from Slice 5, re-verify the new one)
+
+Reused: `$state.iteration` retry budget on a run-entity-anchored
+driver, presence-marker re-entry, subject-override on
+add/remove_triple, `decide` stamps `coordinator.decision.reason`,
+numeric When-clause widening. **New + owed before coding:** confirm
+the `graph.mutation.triple.remove` publish path + clear-then-stamp
+ordering in the executor (test that a `revision > 1` re-emit leaves
+exactly one triple per `(run, plan.*)` predicate).
+
+### Why this finally exercises the retry
+
+The two MVP-1 smoke runs couldn't validate "retry → approved"
+because the *plan* was soft — there was nothing solid for a
+chain-end retry to converge toward. The plan gate bounces a soft
+plan **before Ralph runs**, so the re-planned (high-fidelity) plan
+gives Ralph a hard spec + a real test. Both gates get sharper, and
+the same warm `@mavlink` stack should now drive a clean
+plan-retry → fixed plan → Ralph-with-real-tests path.
+
 ## Cross-links
 
 - [ADR-035 dev-via-spec arc](035-dev-via-spec-arc.md) (superseded

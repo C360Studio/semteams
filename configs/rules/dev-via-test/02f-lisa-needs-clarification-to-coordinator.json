@@ -1,0 +1,51 @@
+{
+  "id": "dev_via_test_lisa_needs_clarification_to_coordinator",
+  "type": "expression",
+  "name": "Lisa decide(needs_clarification) → coordinator ask_user",
+  "description": "ADR-044 §addendum Slice 6 (go-reviewer R2) — routes a planner escalation to the user. Lisa (dev-via-test-plan) may emit decide(needs_clarification) from her FIRST plan (rule 01 allowlist) OR from a re-plan (rule 02d allowlist) when the user's ask can't be turned into a faithful plan without clarification. Before Slice 6 no rule caught role=dev-via-test-plan + next_action=needs_clarification, so it silently dead-ended the chain. Slice 6 actively prompts it (02d's re-plan prompt + Lisa's emit-contract tell her to use it on an impossible finding), so the route is now load-bearing.\n\nMirrors the research/autoresearch needs-clarification-replan pattern, scoped to the planner role. Spawns a coordinator wake-up scoped to ask_user; the user clarifies and a fresh chain fires on their reply.",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "agent.loop.role",
+      "operator": "eq",
+      "value": "dev-via-test-plan",
+      "required": true
+    },
+    {
+      "field": "coordinator.decision.next_action",
+      "operator": "eq",
+      "value": "needs_clarification",
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "publish_agent",
+      "subject": "agent.task.coordinator",
+      "role": "coordinator",
+      "model": "coordinator",
+      "tools": ["read_loop_result", "decide"],
+      "tool_choice": { "mode": "required" },
+      "action_allowlist": ["ask_user", "respond_direct"],
+      "properties": {
+        "wakeup_mode": "plan_needs_clarification",
+        "terminal_loop_id": "$entity.instance",
+        "category": "dev_via_test"
+      },
+      "related_loops": {
+        "terminal": "$entity.instance",
+        "dev-via-test-run": "$entity.triple.lineage.dev-via-test-run"
+      },
+      "prompt": "The dev-via-test planner (Lisa) at loop $entity.instance could not turn the user's request into a faithful plan and emitted needs_clarification.\n\nIteration 1 — call read_loop_result(loop_id=$entity.instance) to read Lisa's reason — what's blocking (ambiguous ask, contradictory requirements, missing detail).\n\nIteration 2 — call decide(action=\"ask_user\", reason=\"<surface Lisa's blocker to the user as a plain-English question; ask for the specific clarification she needs>\"). One question, addressed to the user, no internal jargon. The user replies and a fresh coordinator loop fires on their answer."
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "pack": "dev_via_test",
+    "phase": "ADR-044 §addendum Slice 6 — planner needs_clarification route (go-reviewer R2)",
+    "adr": "docs/adr/044-dev-via-test-pack.md",
+    "review_origin": "go-reviewer R2 (2026-06-05): Lisa's needs_clarification (rule 01 + 02d allowlists) had no routing rule → silent chain dead-end. Slice 6 promotes it from unlikely to prompted, so this route is required.",
+    "catches_both": "Conditions on role=dev-via-test-plan + needs_clarification, so it catches BOTH first-plan (rule 01) and re-plan (rule 02d) escalations."
+  }
+}

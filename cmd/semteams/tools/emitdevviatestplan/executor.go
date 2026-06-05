@@ -81,6 +81,7 @@ const (
 	predicatePlanGeneratedAt        = "plan.generated_at"
 	predicatePlanRevision           = "plan.revision"
 	predicatePlanCBGRetryBudget     = "plan.cbg_retry_budget"
+	predicatePlanLisaRetryBudget    = "plan.lisa_retry_budget"
 
 	// Per-task predicate prefix. Full keys look like
 	// plan.task.<id>.{goal,assumptions,non_goals,target_files,
@@ -121,6 +122,16 @@ const (
 	// defaultCBGRetryBudget (one auto-fix pass, then human).
 	defaultCBGRetryBudget = 1
 	maxCBGRetryBudget     = 5
+
+	// Lisa (plan) re-plan budget (ADR-044 §addendum Slice 6). How many
+	// times the plan-review gate (CBG in plan_review mode) may bounce
+	// Lisa's plan back for a fidelity fix before escalating to the
+	// user. Tuned independently from cbg_retry_budget — plan-retries
+	// and work-retries have different cost/value. Same clamp posture:
+	// the [1, maxLisaRetryBudget] clamp is the structural ceiling rule
+	// 02d's escalate branch relies on.
+	defaultLisaRetryBudget = 1
+	maxLisaRetryBudget     = 5
 )
 
 // taskIDPattern restricts task IDs to lowercase alphanumeric +
@@ -133,18 +144,27 @@ var taskIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
 // emit_dev_via_test_plan.
 type Executor struct {
 	publisher agentictools.TriplePublisher
-	logger    *slog.Logger
+	// remover clears the prior plan on a re-plan (revision > 1) so the
+	// emit is an UPSERT, not an append (ADR-044 §addendum Slice 6).
+	// May be nil — first-emit (revision == 1) never clears, so a nil
+	// remover is fine for deployments that don't re-plan, but a
+	// re-plan with a nil remover surfaces a clear error.
+	remover tripleRemover
+	logger  *slog.Logger
 }
 
 // NewExecutor constructs an Executor. Publisher must be non-nil.
-func NewExecutor(publisher agentictools.TriplePublisher, logger *slog.Logger) *Executor {
+// remover may be nil (no plan-review/re-plan path wired); a re-plan
+// emit then errors rather than silently appending a stale-winning
+// duplicate plan.
+func NewExecutor(publisher agentictools.TriplePublisher, remover tripleRemover, logger *slog.Logger) *Executor {
 	if publisher == nil {
 		panic("emitdevviatestplan.NewExecutor: publisher must not be nil")
 	}
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Executor{publisher: publisher, logger: logger}
+	return &Executor{publisher: publisher, remover: remover, logger: logger}
 }
 
 // ListTools returns the LLM-facing schema. Per Karpathy /
@@ -188,6 +208,7 @@ func (e *Executor) ListTools() []agentic.ToolDefinition {
 				"integration_test_command": map[string]any{"type": "string", "description": "CBG's chain-end full acceptance gate. Runs once at chain end across all task scope. Must be a single shell command."},
 				"revision":                 map[string]any{"type": "integer", "minimum": 1, "description": "Monotonic revision number, starting at 1. Bump on re-plan after coordinator amendment (Slice 3+ walker). Required so absent vs explicit-zero never silently coerces to 1."},
 				"cbg_retry_budget":         map[string]any{"type": "integer", "minimum": 1, "maximum": maxCBGRetryBudget, "description": "OPTIONAL (default 1). How many times the chain-end reviewer (CBG) may bounce a task back for a bounded dev-fix before escalating to the user. Per ADR-044 §Slice 5. Clamped to [1,5] server-side — the clamp is the structural retry ceiling. Set 1 for one auto-fix pass then human (recommended); raise only if the work has a high chance of CBG catching a mechanically-fixable miss the per-task tests can't see."},
+				"lisa_retry_budget":        map[string]any{"type": "integer", "minimum": 1, "maximum": maxLisaRetryBudget, "description": "OPTIONAL (default 1). How many times the plan-review gate (CBG in plan_review mode) may bounce THIS plan back to the planner for a fidelity fix before escalating to the user. Per ADR-044 §Slice 6. Clamped to [1,5] server-side. Independent of cbg_retry_budget (plan-retries vs work-retries). Set 1 for one re-plan pass then human."},
 				"tasks": map[string]any{
 					"type":        "array",
 					"minItems":    1,
@@ -222,6 +243,25 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 		return errResult(call, agentic.ToolErrorInternal, "build triples: %v", err)
 	}
 
+	// Re-plan UPSERT (ADR-044 §addendum Slice 6): on revision > 1 this
+	// is a plan-review re-plan, so the prior plan on the run entity
+	// must be REPLACED, not appended to (triples on the same
+	// (subject, predicate) → first-match returns the stale one). Clear
+	// the plan namespace before stamping. The clear is complete iff
+	// the re-plan reuses the prior task IDs (amend-in-place, per Lisa's
+	// re-plan contract) — a restructured re-plan that drops/renames a
+	// task would orphan its triples. The removes are awaited
+	// (request-reply) before the adds so graph-ingest can't reorder a
+	// stale clear after the fresh stamp.
+	if plan.Revision > 1 {
+		if e.remover == nil {
+			return errResult(call, agentic.ToolErrorInternal, "re-plan (revision %d > 1) requires a triple remover to upsert, but none is wired; cannot replace the prior plan without leaving stale triples", plan.Revision)
+		}
+		if err := e.clearPriorPlan(ctx, runEntityID, plan.taskIDs()); err != nil {
+			return errResult(call, agentic.ToolErrorNetwork, "clear prior plan on %s for re-plan: %v", runEntityID, err)
+		}
+	}
+
 	if err := e.publisher.AddTriplesBatch(ctx, triples); err != nil {
 		return errResult(call, agentic.ToolErrorNetwork, "stamp plan triples on %s: %v", runEntityID, err)
 	}
@@ -247,6 +287,45 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 		Content:  string(body),
 		Metadata: map[string]any{"run_entity_id": runEntityID, "task_count": len(plan.Tasks)},
 	}, nil
+}
+
+// allTaskFieldPredicates is the full set of per-task field suffixes
+// the executor may have stamped. clearPriorPlan removes every one for
+// every task ID so an optional field present in revision N but absent
+// in N+1 (e.g. expected_outcome) doesn't survive as a stale leftover.
+var allTaskFieldPredicates = []string{
+	predicateTaskGoal, predicateTaskAssumptions, predicateTaskNonGoals,
+	predicateTaskTargetFiles, predicateTaskDependsOn, predicateTaskTestCommand,
+	predicateTaskExpectedOutcome, predicateTaskStatus, predicateTaskPosition,
+}
+
+// allPlanLevelPredicates is the fixed (non-task) plan predicate set.
+var allPlanLevelPredicates = []string{
+	predicatePlanGoal, predicatePlanAssumptions, predicatePlanNonGoals,
+	predicatePlanIntegrationTestCmd, predicatePlanChainStartGitTag,
+	predicatePlanTaskCount, predicatePlanRevision, predicatePlanCBGRetryBudget,
+	predicatePlanLisaRetryBudget, predicatePlanGeneratedAt,
+}
+
+// clearPriorPlan removes the full plan namespace on the run entity so
+// a re-plan UPSERTs rather than appends. Removes are sequential +
+// awaited (request-reply) so they all land before the caller's
+// AddTriplesBatch. A missing predicate is a no-op success.
+func (e *Executor) clearPriorPlan(ctx context.Context, runEntityID string, taskIDs []string) error {
+	for _, pred := range allPlanLevelPredicates {
+		if err := e.remover.RemoveByPredicate(ctx, runEntityID, pred); err != nil {
+			return fmt.Errorf("remove %s: %w", pred, err)
+		}
+	}
+	for _, id := range taskIDs {
+		prefix := predicatePlanTaskPrefix + id + "."
+		for _, field := range allTaskFieldPredicates {
+			if err := e.remover.RemoveByPredicate(ctx, runEntityID, prefix+field); err != nil {
+				return fmt.Errorf("remove %s%s: %w", prefix, field, err)
+			}
+		}
+	}
+	return nil
 }
 
 func runEntityFromCall(call agentic.ToolCall) (string, error) {
@@ -277,7 +356,18 @@ type plan struct {
 	IntegrationTestCommand string   `json:"integration_test_command"`
 	Revision               int      `json:"revision"`
 	CBGRetryBudget         int      `json:"cbg_retry_budget"`
+	LisaRetryBudget        int      `json:"lisa_retry_budget"`
 	Tasks                  []task   `json:"tasks"`
+}
+
+// taskIDs returns the plan's task IDs in order — the set
+// clearPriorPlan removes per-task predicates for on a re-plan.
+func (p *plan) taskIDs() []string {
+	ids := make([]string, len(p.Tasks))
+	for i, t := range p.Tasks {
+		ids[i] = t.ID
+	}
+	return ids
 }
 
 func parseArgs(raw map[string]any) (*plan, error) {
@@ -340,6 +430,16 @@ func (p *plan) validate() error {
 	}
 	if p.CBGRetryBudget > maxCBGRetryBudget {
 		p.CBGRetryBudget = maxCBGRetryBudget
+	}
+
+	// Lisa re-plan budget (ADR-044 §Slice 6): same clamp posture as
+	// cbg_retry_budget. Absent / 0 / negative → default; the clamp is
+	// the structural plan-retry ceiling.
+	if p.LisaRetryBudget < 1 {
+		p.LisaRetryBudget = defaultLisaRetryBudget
+	}
+	if p.LisaRetryBudget > maxLisaRetryBudget {
+		p.LisaRetryBudget = maxLisaRetryBudget
 	}
 
 	seenIDs := make(map[string]struct{}, len(p.Tasks))
@@ -415,6 +515,7 @@ func (p *plan) triples(runEntityID string, now time.Time) ([]message.Triple, err
 		base(predicatePlanTaskCount, len(p.Tasks)),
 		base(predicatePlanRevision, p.Revision),
 		base(predicatePlanCBGRetryBudget, p.CBGRetryBudget),
+		base(predicatePlanLisaRetryBudget, p.LisaRetryBudget),
 		base(predicatePlanGeneratedAt, now.Format(time.RFC3339Nano)),
 	)
 

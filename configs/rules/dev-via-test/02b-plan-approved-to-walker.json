@@ -1,0 +1,48 @@
+{
+  "id": "dev_via_test_plan_approved_to_walker",
+  "type": "expression",
+  "name": "CBG plan_approved → coordinator walker (proceed to first Ralph)",
+  "description": "ADR-044 §addendum Slice 6 — when CBG (reviewer-dev-via-test) approves the plan in plan-review mode, wake the coordinator walker to begin walking tasks. This is the old Slice-3 rule-02 behavior, now gated behind the plan-fidelity check. The walker reads plan.task.* from the run entity (threaded via the CBG plan-review loop's lineage.run-loop-entity-id) and dispatches the first ready task.\n\nFires only on next_action=plan_approved (the plan-gate token), so it never collides with the chain-end approved path (rule 07a).",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "agent.loop.role",
+      "operator": "eq",
+      "value": "reviewer-dev-via-test",
+      "required": true
+    },
+    {
+      "field": "coordinator.decision.next_action",
+      "operator": "eq",
+      "value": "plan_approved",
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "publish_agent",
+      "subject": "agent.task.coordinator",
+      "role": "coordinator",
+      "model": "coordinator",
+      "tools": ["read_loop_result", "query_entity", "scratchpad", "decide"],
+      "tool_choice": { "mode": "required" },
+      "action_allowlist": ["dev_via_test", "dev_via_test_finalize", "respond_direct", "ask_user"],
+      "related_loops": {
+        "run-loop-entity-id": "$entity.triple.lineage.run-loop-entity-id",
+        "dev-via-test-run": "$entity.triple.lineage.dev-via-test-run",
+        "previous-pack-loop-id": "$entity.instance",
+        "previous-pack-role": "reviewer-dev-via-test"
+      },
+      "prompt": "DEV-VIA-TEST WALKER (post-plan-approval) — CBG approved the plan at loop $entity.instance. Walk the plan.\n\nYour run entity ID is $entity.triple.lineage.run-loop-entity-id. Call query_entity(entity_id=\"$entity.triple.lineage.run-loop-entity-id\") to read the plan triples (plan.task_count, plan.task.<id>.{goal,target_files,test_command,status,position,...} for each task, plan.integration_test_command).\n\nFirst walk — no Ralph has run yet, so dev_via_test.execute.task_completed and dev_via_test.execute.task_failed triples are absent. Every task with status=ready is eligible. Pick the task with the lowest plan.task.<id>.position.\n\nDispatch:\n- decide(action=\"dev_via_test\", subtopics=[\"<chosen-task-id>\"]) — spawns Ralph at that target (rule 03 + for_each). Use scratchpad first to write down the task ID you picked and why.\n- decide(action=\"ask_user\", reason=\"<question>\") — only if the plan is structurally unusable (no tasks ready; zero tasks). The plan already passed CBG's fidelity gate, so this should be rare.\n- DO NOT call respond_direct here — no Ralph has run; nothing to report yet.\n\nSee your persona's 30-plan-walking.md fragment for the full walker contract."
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "pack": "dev_via_test",
+    "phase": "ADR-044 §addendum Slice 6 — plan approved → walker",
+    "adr": "docs/adr/044-dev-via-test-pack.md",
+    "ports": "The on_enter walker spawn is the old 02-lisa-terminal-to-walker.json behavior, re-gated behind CBG plan-approval. Lineage threading identical (run-loop-entity-id flows from the CBG plan-review loop, which got it from Lisa via rule 02).",
+    "token_disjoint": "Conditions on plan_approved (not approved) so the chain-end rule 07a never fires here and vice versa."
+  }
+}

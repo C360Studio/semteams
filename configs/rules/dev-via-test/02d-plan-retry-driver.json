@@ -1,0 +1,91 @@
+{
+  "id": "dev_via_test_plan_retry_driver",
+  "type": "expression",
+  "name": "Plan-retry pending → re-dispatch Lisa (under budget) | escalate (at budget)",
+  "description": "ADR-044 §addendum Slice 6 — plan-retry DRIVER half (plan-phase analog of rule 07d). Fires on the RUN entity when rule 02c stamps dev_via_test.plan.retry.pending. Anchored to the stable run entity, so $state.iteration is a durable per-run plan-retry counter (state_tracker.go: the retry-budget mechanism).\n\non_enter:\n  1. remove_triple the pending marker (clears it → conditions flip false → TransitionExited resets wasMatching for the next plan-retry; canonical semstreams#204 presence-marker discipline). ExecutionContext.Entity is a fixed pre-action snapshot, so the publish_agent actions still read the durable dev_via_test.plan.retry.finding.\n  2. RE-PLAN branch — when $state.iteration <= plan.lisa_retry_budget: re-dispatch Lisa (dev-via-test-plan) with CBG's finding. Lisa reads the original ask + prior plan + finding via query_entity, amends IN PLACE (reuse task IDs, bump revision), and re-emits — the executor UPSERTS (clears the prior plan first, ADR-044 §Slice 6). Lisa's terminal re-fires rule 02 → CBG re-gates.\n  3. ESCALATE branch — when $state.iteration > plan.lisa_retry_budget: spawn a coordinator wake-up scoped to ask_user. The plan keeps failing fidelity; surface to the user.\n\nplan.lisa_retry_budget is clamped [1,5] at stamp time (emitdevviatestplan executor) — the clamp is the structural ceiling, so escalate always triggers within the budget. Per-action max_iterations=0 (unlimited) because the When clause + clamp ARE the bound.",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "dev_via_test.plan.retry.pending",
+      "operator": "ne",
+      "value": "",
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "id": "clear_plan_retry_pending",
+      "type": "remove_triple",
+      "predicate": "dev_via_test.plan.retry.pending"
+    },
+    {
+      "id": "redispatch_lisa",
+      "type": "publish_agent",
+      "subject": "agent.task.dev-via-test-plan",
+      "role": "dev-via-test-plan",
+      "model": "research",
+      "tools": ["read_loop_result", "bash", "query_entity", "emit_dev_via_test_plan", "scratchpad", "decide"],
+      "tool_choice": { "mode": "required" },
+      "action_allowlist": ["planned", "needs_clarification"],
+      "max_iterations": 0,
+      "when": [
+        {
+          "field": "$state.iteration",
+          "operator": "lte",
+          "value": "$entity.triple.plan.lisa_retry_budget"
+        }
+      ],
+      "properties": {
+        "phase": "plan_retry",
+        "category": "dev_via_test",
+        "retry_attempt": "$state.iteration",
+        "retry_budget": "$entity.triple.plan.lisa_retry_budget"
+      },
+      "related_loops": {
+        "run-loop-entity-id": "$entity.id",
+        "dev-via-test-run": "$entity.instance"
+      },
+      "prompt": "DEV-VIA-TEST PLAN — RE-PLAN pass (attempt $state.iteration of $entity.triple.plan.lisa_retry_budget).\n\nThe plan-review gate (CBG) REJECTED your prior plan as low-fidelity to the user's ask, and judged it re-plannable. Fix it.\n\nCBG's finding (the fidelity fix you MUST apply): $entity.triple.dev_via_test.plan.retry.finding\n\nYour run entity ID is $entity.id. Call query_entity(entity_id=\"$entity.id\") to read:\n- coordinator.decision.reason — the ORIGINAL user ask (your source of truth for what was required).\n- plan.* — your PRIOR plan (the one CBG rejected): plan.goal, plan.integration_test_command, plan.revision, and plan.task.<id>.{goal,assumptions,non_goals,target_files,test_command,...} for each task.\n\nAmend IN PLACE (this is load-bearing for the upsert): \n- REUSE the existing task IDs. Do not rename, drop, or add tasks — amend their content. (A restructured re-plan orphans the old task triples.)\n- Apply CBG's finding: carry every dropped user constraint (named libraries, 'do not hand-roll', required test types) into the relevant task's goal/assumptions; replace any build-not-test test_command with a command that actually runs tests asserting behavior.\n- Set revision = prior plan.revision + 1.\n\nThen re-emit the COMPLETE corrected plan via emit_dev_via_test_plan (all fields, not a diff — the tool upserts the whole plan on the run entity). Then decide(action=\"planned\", reason=\"<one line: revision <N>, addressed CBG's finding by <…>>\"). The plan-review gate re-checks your re-planned plan.\n\nIf CBG's finding is impossible to satisfy without user input (the ask is genuinely ambiguous), decide(action=\"needs_clarification\", reason=\"<what's blocking>\") instead — the coordinator routes to the user. You did NOT re-tag git (the chain-start tag stands); do not run git tag on a re-plan."
+    },
+    {
+      "id": "escalate_plan_retry",
+      "type": "publish_agent",
+      "subject": "agent.task.coordinator",
+      "role": "coordinator",
+      "model": "coordinator",
+      "tools": ["read_loop_result", "query_entity", "scratchpad", "decide"],
+      "tool_choice": { "mode": "required" },
+      "action_allowlist": ["ask_user", "respond_direct"],
+      "max_iterations": 0,
+      "when": [
+        {
+          "field": "$state.iteration",
+          "operator": "gt",
+          "value": "$entity.triple.plan.lisa_retry_budget"
+        }
+      ],
+      "properties": {
+        "wakeup_mode": "plan_retry_exhausted",
+        "category": "dev_via_test",
+        "retry_attempt": "$state.iteration",
+        "retry_budget": "$entity.triple.plan.lisa_retry_budget"
+      },
+      "related_loops": {
+        "run-loop-entity-id": "$entity.id",
+        "dev-via-test-run": "$entity.instance"
+      },
+      "prompt": "DEV-VIA-TEST — PLAN-RETRY budget EXHAUSTED.\n\nThe plan-review gate (CBG) kept rejecting the planner's plan as low-fidelity to the user's ask, and the re-plan budget ($entity.triple.plan.lisa_retry_budget attempts) is now spent after $state.iteration tries. The planner can't produce a faithful plan from the ask as given.\n\nCBG's last finding: $entity.triple.dev_via_test.plan.retry.finding\n\nSurface to the user. Call decide(action=\"ask_user\", reason=\"<plain-English: we couldn't turn your request into a faithful plan after $state.iteration tries — the recurring gap is <restate CBG's finding>. Could you clarify or constrain the request? e.g. <specific question>>\"). One question, addressed to the user, no internal jargon."
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "pack": "dev_via_test",
+    "phase": "ADR-044 §addendum Slice 6 — plan-retry driver",
+    "adr": "docs/adr/044-dev-via-test-pack.md",
+    "paired_with": "02c-plan-retry-stamp.json",
+    "pattern": "Run-entity-anchored driver + presence-marker re-entry + $state.iteration budget gate. Identical structure to rule 07d (work-retry) and autoresearch rule 05, with Lisa re-dispatch instead of Ralph.",
+    "upsert_dependency": "The re-planned Lisa MUST reuse task IDs (amend-in-place) so emit_dev_via_test_plan's revision>1 upsert cleanly replaces the prior plan. The re-plan prompt enforces this; Lisa's 10-emit-contract.md re-plan section reinforces it.",
+    "missing_budget_is_safe": "If plan.lisa_retry_budget substitutes empty, the lexical comparator fallback makes iteration > '' true → escalate on the first retry. Safe (toward human), not a wedge. The happy path always has the budget triple (stamped at plan emit)."
+  }
+}

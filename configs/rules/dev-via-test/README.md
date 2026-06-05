@@ -46,6 +46,7 @@ and @mavlink-hard Accept-gate.
 | 3 | Plan walker — coordinator wake-up + plan-walking persona fragment + rules 02/03/05 | shipped |
 | 4 | CBG reviewer — persona + rules 06/07a/07b; rule 08 extended; new `dev_via_test_finalize` action | shipped |
 | 5 | CBG dev-fixable bounded retry — three-way verdict (`rejected_retry`); rules 07c/07d; `plan.cbg_retry_budget`; persona updates | shipped |
+| 6 | Plan-review gate — CBG checks plan fidelity at chain-start (rule 02 → CBG plan_review); rules 02b/02c/02d/02e; `plan.lisa_retry_budget`; executor upsert (re-plan replaces prior plan); CBG `plan_review` mode + Lisa re-plan contract | shipped |
 
 ## Naming convention
 
@@ -103,7 +104,11 @@ No `plan.task.<id>.retry_count` triple — per ADR-044
 | File | Trigger | Spawn / Stamp |
 |---|---|---|
 | `01-coordinator-dev-via-test-spawn.json` | coordinator decide(dev_via_test) + subtopics.length=0 (INITIAL dispatch) | Lisa + stamp `dev_via_test.run.status=active` on coordinator (run) entity |
-| `02-lisa-terminal-to-walker.json` | Lisa decide(planned) | Coordinator walker wake-up with run-entity lineage threaded; reads plan via query_entity, dispatches first task |
+| `02-lisa-terminal-to-plan-review.json` | Lisa decide(planned) | CBG **plan-review** gate (Slice 6) — reads ask + plan via one query_entity, checks fidelity, emits `plan_approved`/`plan_rejected_retry`/`plan_rejected`. No bash (no tests at chain-start). |
+| `02b-plan-approved-to-walker.json` | CBG decide(plan_approved) | Coordinator walker wake-up (the old rule-02 behavior, now gated behind plan-approval); dispatches first task |
+| `02c-plan-retry-stamp.json` | CBG decide(plan_rejected_retry) | Stamp `dev_via_test.plan.retry.{finding,pending}` on run entity (Slice 6). Re-plan, not re-implement. |
+| `02d-plan-retry-driver.json` | run entity has `dev_via_test.plan.retry.pending` | Re-dispatch **Lisa** with the finding (amend-in-place, upsert) under `plan.lisa_retry_budget`; over budget → ask_user. Run-entity-anchored `$state.iteration`. |
+| `02e-plan-rejected-to-coordinator.json` | CBG decide(plan_rejected) | Plan needs the user (ambiguous ask) → ask_user. Fail-safe default. |
 | `03-coordinator-dispatch-ralph.json` | coordinator decide(dev_via_test) + subtopics.length>0 (WALKER dispatch) | Ralph via `for_each` over subtopics — v1 N=1 (serial), v2 N>1 (parallel topo-walk) |
 | `04a-execute-stamp-converged.json` | Ralph success + `dev_via_test.measurement.pass=true` | Stamp `dev_via_test.execute.outcome=converged` on Ralph entity + `dev_via_test.execute.task_completed=<ralph-loop-id>` on run entity (walker pickup) |
 | `04b-execute-stamp-failed.json` | Ralph outcome IN [failed, truncated, cancelled] | Stamp `dev_via_test.execute.outcome=failed` on Ralph entity + `dev_via_test.execute.task_failed=<ralph-loop-id>` on run entity. No auto-retry per ADR §Stuck-task recovery. Walker routes to `ask_user`. |

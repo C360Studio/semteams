@@ -215,7 +215,11 @@ func registerDevViaTestTools(reg *agentictools.ExecutorRegistry, natsClient *nat
 			slog.String("category", "dev-via-test"))
 		return nil
 	}
-	planExecutor := emitdevviatestplan.NewExecutor(triplePublisher, logger)
+	// Slice 6: the remover lets emit_dev_via_test_plan UPSERT on a
+	// plan-review re-plan (revision > 1). Product-local remove path
+	// (ADR-044 §addendum Slice 6 — mirrors upstream write_todos).
+	planRemover := emitdevviatestplan.NewNATSTripleRemover(natsClient)
+	planExecutor := emitdevviatestplan.NewExecutor(triplePublisher, planRemover, logger)
 	if err := reg.RegisterTool(emitdevviatestplan.ToolName, planExecutor); err != nil {
 		return fmt.Errorf("register %s: %w", emitdevviatestplan.ToolName, err)
 	}
