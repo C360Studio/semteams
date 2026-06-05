@@ -45,6 +45,7 @@ and @mavlink-hard Accept-gate.
 | 2 | Ralph executor — `emit_dev_via_test_measurement` + persona + rules 04a/04b/08 | shipped |
 | 3 | Plan walker — coordinator wake-up + plan-walking persona fragment + rules 02/03/05 | shipped |
 | 4 | CBG reviewer — persona + rules 06/07a/07b; rule 08 extended; new `dev_via_test_finalize` action | shipped |
+| 5 | CBG dev-fixable bounded retry — three-way verdict (`rejected_retry`); rules 07c/07d; `plan.cbg_retry_budget`; persona updates | shipped |
 
 ## Naming convention
 
@@ -107,9 +108,12 @@ No `plan.task.<id>.retry_count` triple — per ADR-044
 | `04a-execute-stamp-converged.json` | Ralph success + `dev_via_test.measurement.pass=true` | Stamp `dev_via_test.execute.outcome=converged` on Ralph entity + `dev_via_test.execute.task_completed=<ralph-loop-id>` on run entity (walker pickup) |
 | `04b-execute-stamp-failed.json` | Ralph outcome IN [failed, truncated, cancelled] | Stamp `dev_via_test.execute.outcome=failed` on Ralph entity + `dev_via_test.execute.task_failed=<ralph-loop-id>` on run entity. No auto-retry per ADR §Stuck-task recovery. Walker routes to `ask_user`. |
 | `05-ralph-terminal-to-walker.json` | Ralph outcome IN [success, failed, truncated, cancelled] (ANY terminal) | Coordinator walker wake-up; reads Ralph's terminal via read_loop_result + run-entity state via query_entity; decides next task / finalize (CBG) / ask_user / respond_direct |
-| `06-coordinator-dispatch-cbg.json` | Walker decide(dev_via_test_finalize) | CBG (reviewer-dev-via-test) — chain-end gate. Runs `plan.integration_test_command`, diffs against `plan.chain_start_git_tag`, emits approved/rejected |
+| `06-coordinator-dispatch-cbg.json` | Walker decide(dev_via_test_finalize) | CBG (reviewer-dev-via-test) — chain-end gate. Runs `plan.integration_test_command`, diffs against `plan.chain_start_git_tag`, emits three-way verdict: `approved` / `rejected_retry` / `rejected` |
 | `07a-cbg-approved-to-coordinator.json` | CBG decide(approved) | Final coordinator wake-up scoped to respond_direct — delivers chain result to user |
-| `07b-cbg-rejected-to-coordinator.json` | CBG decide(rejected) | Final coordinator wake-up scoped to ask_user — user picks next move (amend plan, abandon, re-dispatch). No auto-recover per ADR §CBG's gate at chain-end. |
+| `07b-cbg-rejected-to-coordinator.json` | CBG decide(rejected) | Final coordinator wake-up scoped to ask_user — plan/scope/human problem; user picks next move. No auto-recover for this verdict (fail-safe default). |
+| `07c-cbg-retry-stamp.json` | CBG decide(rejected_retry) **+ subtopics>0** | Stamp `dev_via_test.cbg.retry.{target_task,finding,pending}` on run entity (Slice 5). Dev-fixable bounded retry — re-implement, not re-plan. Fenced on subtopics presence (go-reviewer C1). |
+| `07d-cbg-retry-driver.json` | run entity has `dev_via_test.cbg.retry.pending` | Coordinator wake-up gated on `$state.iteration` vs `plan.cbg_retry_budget`: under budget → re-dispatch Ralph at the task with CBG's finding; over budget → ask_user. Run-entity-anchored so the counter is stable across passes. |
+| `07e-cbg-retry-missing-target.json` | CBG decide(rejected_retry) **+ subtopics=0** | Fail-safe fence (go-reviewer C1): a rejected_retry that names no task can't auto-re-dispatch → escalate to ask_user. Mutually exclusive with 07c; mirrors rule 01's corruption-to-no-op fence. |
 | `08-loop-failed-pause.json` | Non-execute dev-via-test role (Lisa, CBG) outcome IN [failed, truncated, cancelled] | Stamp `chain.paused.marker` + `chain.paused.role`. Chainpause subscriber propagates to chain entity (§D5). |
 
 ## V1 binary semantics — what's NOT here
@@ -180,7 +184,7 @@ The architecture supports parallel dispatch via `subtopics=[<id1>,<id2>,...]`
 research pack rule 02). Gated by `plan.task.<id>.depends_on`
 topo-walking which is deferred to v2 per ADR-044 §DAG awareness.
 
-## End-to-end chain flow (Slices 1-4)
+## End-to-end chain flow (Slices 1-5)
 
 ```
 User → front-door coordinator
@@ -211,18 +215,31 @@ CBG (reviewer-dev-via-test)
   query_entity(<run-id>) → reads plan.integration_test_command
   bash <integration_test_command>
   bash git diff plan-start
-  decide(action="approved" | "rejected")
-  ↓ rule 07a (approved) OR rule 07b (rejected)
+  decide(action="approved" | "rejected_retry" | "rejected")
+  ↓ rule 07a (approved) | 07c→07d (rejected_retry) | 07b (rejected)
 Final coordinator
   decide(action="respond_direct" | "ask_user")
   ↓ coordinator/03b-respond-direct.json OR coordinator/03-ask-user.json
 User reply published
 ```
 
-Failure paths (per ADR §Stuck-task recovery):
+CBG dev-fixable retry loop (Slice 5, see ADR §addendum 2026-06-05):
+
+```
+CBG decide(rejected_retry, subtopics=["t2"], reason=<fix>)
+  ↓ rule 07c — stamp retry markers on run entity
+  ↓ rule 07d [run entity; $state.iteration vs plan.cbg_retry_budget]
+  ├─ under budget → coordinator → decide(dev_via_test, subtopics=["t2"])
+  │     ↓ rule 03 → Ralph re-runs t2 reading cbg.retry.finding → ... → CBG re-gates
+  └─ over budget → coordinator → decide(ask_user)
+```
+
+Failure paths (per ADR §Stuck-task recovery + §addendum Slice 5):
 - Lisa or CBG loop-failed → rule 08 → chain.paused (no auto-recover)
 - Ralph loop-failed → rule 04b → walker wakes → ask_user
-- CBG rejected → rule 07b → ask_user (no auto-re-plan)
+- CBG `rejected` (plan/scope/human) → rule 07b → ask_user (fail-safe default)
+- CBG `rejected_retry` (dev-fixable, subtopics names the task) → rules 07c/07d → bounded re-dispatch, then ask_user at budget exhaustion
+- CBG `rejected_retry` with NO subtopics (malformed) → rule 07e → ask_user (fail-safe; can't pin a target)
 - User responds → fresh coordinator loop (new chain)
 
 ## Sandbox dependency

@@ -92,6 +92,40 @@ v2 will respect `plan.task.<id>.depends_on` for topo-walking and
 support `for_each` parallel dispatch via multi-element `subtopics`.
 v1 ignores `depends_on` — plan order is the contract.
 
+## CBG dev-fixable retry wake-ups (ADR-044 Slice 5)
+
+CBG's chain-end verdict is three-way: `approved`, `rejected_retry`
+(dev-fixable), or `rejected` (needs the user). On `rejected_retry`,
+the framework wakes you in one of two modes — your spawn prompt
+names which (`wakeup_mode`), and carries the target task + CBG's
+finding pre-substituted. You don't hunt for these; they're in the
+prompt.
+
+- **`cbg_retry_redispatch`** (`$state.iteration` ≤ budget) — CBG
+  found a bounded fix Ralph can make within the existing plan, and
+  the retry budget isn't spent. Your default move is to re-dispatch:
+  `decide(action="dev_via_test", subtopics=["<target task id>"])`.
+  A fresh Ralph reads CBG's finding (stamped on the run entity as
+  `dev_via_test.cbg.retry.finding`) as an added acceptance
+  constraint, fixes it, and CBG re-gates. **You may override** to
+  `ask_user` *only* if you judge CBG misclassified — the finding
+  actually needs the user, not Ralph (the plan is wrong, the fix
+  isn't mechanical). Prefer re-dispatch; CBG already judged it
+  dev-fixable.
+- **`cbg_retry_exhausted`** (`$state.iteration` > budget) — the
+  retry budget is spent and CBG still rejects. This is no longer a
+  mechanical fix. `decide(action="ask_user", reason="<surface
+  CBG's finding; the work passes per-task tests but the reviewer
+  has rejected it N times for the same reason; amend the plan or
+  abandon?>")`.
+
+You do **not** count retries or enforce the budget — that's the
+rule layer (`$state.iteration` vs `plan.cbg_retry_budget` in rule
+07d). You just decide the move the wake-up mode calls for. The
+re-dispatch is still a normal `dev_via_test` walker dispatch
+(subtopics = exactly one task id), so everything in §"The
+`dev_via_test` action token has two modes" applies.
+
 ## What NOT to do
 
 - **You do not re-plan.** Lisa's plan is immutable across the chain.

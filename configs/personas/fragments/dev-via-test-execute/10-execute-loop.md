@@ -38,6 +38,37 @@ by the dispatch rule):
 - `plan.task.<your-id>.assumptions` / `plan.task.<your-id>.non_goals`
   — context for what's in / out of scope
 
+## Reviewer retry findings (ADR-044 Slice 5)
+
+The run entity may also carry two retry markers:
+
+- `dev_via_test.cbg.retry.target_task` — the task the chain-end
+  reviewer (CBG) bounced back for a fix
+- `dev_via_test.cbg.retry.finding` — the concrete fix CBG demands
+
+**If `target_task` includes your task ID, this is a retry pass.**
+CBG ran the full integration gate, found your task's prior
+implementation passed its `test_command` but still violated a
+plan-level constraint (a required library hand-rolled, a stated
+behavior missing), and sent it back. The `finding` is an
+**acceptance constraint above your `test_command`**: your test
+may already pass, but unless you satisfy the finding, CBG will
+reject again and the chain burns another retry from
+`plan.cbg_retry_budget`.
+
+Read the finding as if it were an extra line in your spec. Apply
+it surgically (still within `target_files`), keep the existing
+tests green, then converge. If `target_task` doesn't name your
+task — or the markers are absent — this is a normal first pass;
+ignore them.
+
+If the finding asks for something you genuinely cannot do within
+`target_files` (it requires editing files outside your scope, or
+contradicts your `test_command`), don't guess — `decide(
+needs_clarification, reason="CBG retry finding requires <X> but
+my target_files / test_command don't allow it")`. The coordinator
+routes that to the user rather than wasting the retry budget.
+
 ## Handling test failures
 
 When `pass=false`:

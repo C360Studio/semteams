@@ -382,6 +382,49 @@ func TestExecutor_RevisionExplicit(t *testing.T) {
 	}
 }
 
+func TestExecutor_CBGRetryBudget(t *testing.T) {
+	// ADR-044 §Slice 5: cbg_retry_budget is optional with default 1,
+	// clamped to [1, maxCBGRetryBudget]. The clamp is the structural
+	// retry ceiling — rule 07d's escalate branch must always trigger
+	// within it, so an over-specified budget cannot defeat the bound.
+	cases := []struct {
+		name     string
+		set      any // value for cbg_retry_budget; nil-marker means absent
+		absent   bool
+		wantStmp int
+	}{
+		{name: "absent defaults to 1", absent: true, wantStmp: defaultCBGRetryBudget},
+		{name: "explicit 2 stamped verbatim", set: float64(2), wantStmp: 2},
+		{name: "over max clamped to ceiling", set: float64(99), wantStmp: maxCBGRetryBudget},
+		{name: "zero falls back to default", set: float64(0), wantStmp: defaultCBGRetryBudget},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			args := baseArgs()
+			if tc.absent {
+				delete(args, "cbg_retry_budget")
+			} else {
+				args["cbg_retry_budget"] = tc.set
+			}
+			pub := &fakePub{}
+			e := NewExecutor(pub, slog.Default())
+			res, _ := e.Execute(context.Background(), agentic.ToolCall{
+				ID: "c", Name: ToolName, Arguments: args, Metadata: runMetadata(),
+			})
+			if res.Error != "" {
+				t.Fatalf("unexpected error: %s", res.Error)
+			}
+			got, ok := pub.find(predicatePlanCBGRetryBudget)
+			if !ok {
+				t.Fatal("plan.cbg_retry_budget not stamped")
+			}
+			if got != tc.wantStmp {
+				t.Errorf("plan.cbg_retry_budget = %v, want %d", got, tc.wantStmp)
+			}
+		})
+	}
+}
+
 func TestExecutor_UnknownFieldsRejected(t *testing.T) {
 	args := baseArgs()
 	args["unexpected_top_level"] = "should fail"

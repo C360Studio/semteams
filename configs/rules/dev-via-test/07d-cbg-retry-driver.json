@@ -1,0 +1,93 @@
+{
+  "id": "dev_via_test_cbg_retry_driver",
+  "type": "expression",
+  "name": "CBG retry pending → coordinator (re-dispatch under budget | escalate at budget)",
+  "description": "ADR-044 §addendum Slice 5 — CBG dev-fixable bounded retry, DRIVER half. Fires on the RUN entity when rule 07c stamps dev_via_test.cbg.retry.pending. This rule is anchored to the stable run entity (NOT the fresh-each-pass CBG loop), so $state.iteration is a durable per-run retry counter — the framework-blessed retry-budget mechanism (state_tracker.go: 'MaxIterations ... Used with $state.iteration in When clauses for retry budgets').\n\non_enter:\n  1. remove_triple the pending marker (default subject = this run entity). Clearing it flips the rule's condition false → TransitionExited → resets wasMatching, so the NEXT 07c stamp produces a fresh TransitionEntered (iteration++). Canonical semstreams#204 presence-marker discipline (mirrors autoresearch rule 05's clear_pending_marker). Action ordering is substitution-safe: ExecutionContext.Entity is a fixed pre-action snapshot, so the publish_agent actions below still read the marker values even though this remove runs first.\n  2. RE-DISPATCH branch — when $state.iteration <= plan.cbg_retry_budget: spawn a coordinator wake-up (allowlist [dev_via_test, ask_user]). It re-dispatches Ralph at the offending task (decide dev_via_test, subtopics=[<target_task>]) via the EXISTING rule 03 walker path — no new Ralph-dispatch primitive. The coordinator MAY instead ask_user if it judges CBG's finding actually needs the user (coordinator-first override).\n  3. ESCALATE branch — when $state.iteration > plan.cbg_retry_budget: spawn a coordinator wake-up (allowlist [ask_user, respond_direct]). The budget is exhausted; surface to the user.\n\nThe budget (plan.cbg_retry_budget) is clamped to [1,5] at stamp time (emitdevviatestplan executor) — the clamp is the structural ceiling, so the escalate branch always triggers within 5 passes even if a plan over-specifies the budget. Per-action max_iterations=0 (unlimited) on both publish actions because the When clause + budget clamp ARE the bound; the default per-action cap (3) would otherwise silently cut off re-dispatch before the budget.",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "dev_via_test.cbg.retry.pending",
+      "operator": "ne",
+      "value": "",
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "id": "clear_retry_pending_marker",
+      "type": "remove_triple",
+      "predicate": "dev_via_test.cbg.retry.pending"
+    },
+    {
+      "id": "spawn_coordinator_redispatch",
+      "type": "publish_agent",
+      "subject": "agent.task.coordinator",
+      "role": "coordinator",
+      "model": "coordinator",
+      "tools": ["read_loop_result", "query_entity", "scratchpad", "decide"],
+      "tool_choice": { "mode": "required" },
+      "action_allowlist": ["dev_via_test", "ask_user"],
+      "max_iterations": 0,
+      "when": [
+        {
+          "field": "$state.iteration",
+          "operator": "lte",
+          "value": "$entity.triple.plan.cbg_retry_budget"
+        }
+      ],
+      "properties": {
+        "wakeup_mode": "cbg_retry_redispatch",
+        "category": "dev_via_test",
+        "retry_attempt": "$state.iteration",
+        "retry_budget": "$entity.triple.plan.cbg_retry_budget"
+      },
+      "related_loops": {
+        "run-loop-entity-id": "$entity.id",
+        "dev-via-test-run": "$entity.instance"
+      },
+      "prompt": "DEV-VIA-TEST WALKER — CBG dev-fixable retry (attempt $state.iteration of $entity.triple.plan.cbg_retry_budget).\n\nThe chain-end reviewer (CBG) ran the integration gate, REJECTED the work, but judged it a bounded fix Ralph can make WITHIN the existing plan — not a plan/scope problem. CBG named the task and the fix:\n\n  Target task: $entity.triple.dev_via_test.cbg.retry.target_task\n  CBG's finding (the fix Ralph must apply): $entity.triple.dev_via_test.cbg.retry.finding\n\nYour run entity ID is $entity.id. The plan lives there; call query_entity(entity_id=\"$entity.id\") if you want to confirm the target task exists in plan.task.<id>.* before dispatching.\n\nDefault move — re-dispatch Ralph to apply the fix:\n  decide(action=\"dev_via_test\", subtopics=[\"<the task id from Target task above>\"], reason=\"CBG retry $state.iteration: <one line restating the fix>\")\n  Rule 03 spawns a fresh Ralph at that task. The retry-Ralph reads dev_via_test.cbg.retry.finding from the run entity and treats it as an added acceptance constraint beyond its test_command. After it converges, the walker finalizes and CBG re-gates.\n\nOverride — only if you judge CBG misclassified and the finding actually needs the USER (the plan itself is wrong, the constraint is ambiguous, or the fix is not something Ralph can mechanically apply):\n  decide(action=\"ask_user\", reason=\"<surface CBG's finding; ask the user to amend the plan or abandon>\")\n\nPrefer re-dispatch. CBG already judged this dev-fixable; only override when you have a concrete reason it is not. Exactly one decide call.\n\nNOTE: subtopics must be EXACTLY ONE task id (the target task). The Target task value above is a JSON array like [\"http-service\"] — use the id inside it."
+    },
+    {
+      "id": "spawn_coordinator_escalate",
+      "type": "publish_agent",
+      "subject": "agent.task.coordinator",
+      "role": "coordinator",
+      "model": "coordinator",
+      "tools": ["read_loop_result", "query_entity", "scratchpad", "decide"],
+      "tool_choice": { "mode": "required" },
+      "action_allowlist": ["ask_user", "respond_direct"],
+      "max_iterations": 0,
+      "when": [
+        {
+          "field": "$state.iteration",
+          "operator": "gt",
+          "value": "$entity.triple.plan.cbg_retry_budget"
+        }
+      ],
+      "properties": {
+        "wakeup_mode": "cbg_retry_exhausted",
+        "category": "dev_via_test",
+        "retry_attempt": "$state.iteration",
+        "retry_budget": "$entity.triple.plan.cbg_retry_budget"
+      },
+      "related_loops": {
+        "run-loop-entity-id": "$entity.id",
+        "dev-via-test-run": "$entity.instance"
+      },
+      "prompt": "DEV-VIA-TEST WALKER — CBG retry budget EXHAUSTED.\n\nThe chain-end reviewer (CBG) kept rejecting task $entity.triple.dev_via_test.cbg.retry.target_task as dev-fixable, but the retry budget ($entity.triple.plan.cbg_retry_budget auto-fix attempts) is now spent after $state.iteration attempts. The per-task tests pass, but CBG's integration gate / constraint review keeps failing for the same class of reason.\n\nCBG's last finding: $entity.triple.dev_via_test.cbg.retry.finding\n\nThis is no longer a mechanical fix — surface it to the user. Call:\n  decide(action=\"ask_user\", reason=\"<plain-English: the implementation passes the per-task tests but our reviewer has rejected it $state.iteration times for the same issue: <restate CBG's finding>. The auto-fix budget is spent. Do you want to amend the plan with sharper acceptance criteria, or abandon this run?>\")\n\nOne question, addressed directly to the user, no internal jargon. Exactly one decide call."
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "pack": "dev_via_test",
+    "phase": "ADR-044 §addendum Slice 5 — CBG retry driver",
+    "adr": "docs/adr/044-dev-via-test-pack.md",
+    "paired_with": "07c-cbg-retry-stamp.json (CBG-entity stamp half)",
+    "pattern": "Run-entity-anchored driver + presence-marker re-entry + $state.iteration budget gate. Identical structure to autoresearch rule 05 (iteration-dispatch), with CBG's reject as the trigger instead of an execute-completion marker.",
+    "bound_mechanism": "$state.iteration (per-(rule, entity) transition counter, persisted in StateTracker, increments on TransitionEntered) is the retry counter. Anchored to the stable run entity so it accumulates across passes. plan.cbg_retry_budget (clamped [1,5] at stamp by the emitdevviatestplan executor) is the bound; the When-clause split (lte → re-dispatch, gt → escalate) is the routing. The clamp ceiling (5) IS the structural bound — escalate always fires by iteration 6 even if a plan over-specifies the budget. No rule-level max_iterations: per go-reviewer N1, rule-level max_iterations is NOT auto-enforced by selectActions (only surfaced as $state.max_iterations for When clauses, which this rule doesn't use), so a decorative '5' here would only invite drift from the executor's maxCBGRetryBudget. The single source of truth for the ceiling is the executor clamp.",
+    "missing_budget_is_safe": "go-reviewer R2: if plan.cbg_retry_budget ever substitutes empty (e.g. Lisa's plan emit failed but CBG still ran), the lexical fallback in the engine's comparator makes `$state.iteration > \"\"` true and `<= \"\"` false → escalate fires on the FIRST retry. That is a safe failure (toward human), not a wedge or a runaway. The happy path always has the budget triple (stamped at plan emit).",
+    "snapshot_safety_note": "remove_triple of the pending marker is ordered first, but ExecutionContext.Entity is a fixed pre-action snapshot (stateful_evaluator builds ec once before runActions), and triple mutations dispatch as NATS requests that do not mutate the snapshot. So the publish_agent actions still read dev_via_test.cbg.retry.{finding,target_task} (durable; not removed) AND would still read the pending value if needed. Verified against beta.96 stateful_evaluator.runActions.",
+    "no_new_primitive": "Re-dispatch re-enters the existing rule 03 walker path (coordinator decide dev_via_test subtopics=[task]). CBG stays a one-shot gate PER PASS — it re-fires once after each retry-Ralph converges, never per-task. Coordinator-first preserved: the re-dispatch vs ask_user decision is the coordinator's (it can override CBG's dev-fixable judgment)."
+  }
+}

@@ -284,6 +284,9 @@ func TestDevViaTestPackWiredInFlowBootstrap(t *testing.T) {
 		"/app/configs/rules/dev-via-test/06-coordinator-dispatch-cbg.json",
 		"/app/configs/rules/dev-via-test/07a-cbg-approved-to-coordinator.json",
 		"/app/configs/rules/dev-via-test/07b-cbg-rejected-to-coordinator.json",
+		"/app/configs/rules/dev-via-test/07c-cbg-retry-stamp.json",
+		"/app/configs/rules/dev-via-test/07d-cbg-retry-driver.json",
+		"/app/configs/rules/dev-via-test/07e-cbg-retry-missing-target.json",
 		"/app/configs/rules/dev-via-test/08-loop-failed-pause.json",
 	} {
 		if !strings.Contains(body, want) {
@@ -541,9 +544,11 @@ func TestDevViaTestPack_05_RalphTerminalToWalker(t *testing.T) {
 //  3. CBG's tools: query_entity (read run-entity state), bash (run
 //     integration test + git diff), read_loop_result (read walker's
 //     pre-CBG rollup), decide, scratchpad.
-//  4. action_allowlist: [approved, rejected] — CBG cannot start a
-//     fresh chain or escalate via needs_clarification (the design
-//     IS one verdict per CBG, no escape hatch).
+//  4. action_allowlist: [approved, rejected_retry, rejected] — the
+//     ADR-044 §Slice 5 three-way verdict. CBG cannot start a fresh
+//     chain or escalate via needs_clarification; the only escape
+//     hatches are the two structured reject tokens (rejected_retry
+//     = dev-fixable bounded bounce, rejected = escalate to user).
 //  5. related_loops pins run-loop-entity-id from walker's lineage
 //     (CBG is NOT the run entity; thread from walker).
 //  6. tool_choice=required (CBG must use the tool path).
@@ -573,13 +578,13 @@ func TestDevViaTestPack_06_DispatchCBG(t *testing.T) {
 			t.Errorf("rule 06 CBG tools missing %q (need to read run entity + run integration test + read walker terminal)", want)
 		}
 	}
-	for _, want := range []string{"approved", "rejected"} {
+	for _, want := range []string{"approved", "rejected_retry", "rejected"} {
 		if !devViaTestSliceHas(spawn.ActionAllowed, want) {
 			t.Errorf("rule 06 action_allowlist missing %q", want)
 		}
 	}
-	if len(spawn.ActionAllowed) != 2 {
-		t.Errorf("rule 06 action_allowlist = %v; want exactly [approved, rejected] — CBG cannot start a fresh chain or escalate via needs_clarification by design", spawn.ActionAllowed)
+	if len(spawn.ActionAllowed) != 3 {
+		t.Errorf("rule 06 action_allowlist = %v; want exactly [approved, rejected_retry, rejected] — the Slice 5 three-way verdict; CBG cannot start a fresh chain or escalate via needs_clarification by design", spawn.ActionAllowed)
 	}
 	if want, got := "$entity.triple.lineage.run-loop-entity-id", spawn.RelatedLoops["run-loop-entity-id"]; got != want {
 		t.Errorf("rule 06 related_loops[run-loop-entity-id] = %q; want %q (CBG threads from walker's lineage)", got, want)
@@ -657,6 +662,173 @@ func TestDevViaTestPack_07b_WakeupModeProperty(t *testing.T) {
 		return
 	}
 	t.Fatal("rule 07b has no publish_agent action")
+}
+
+// TestDevViaTestPack_07c_CBGRetryStamp pins the ADR-044 §Slice 5
+// stamp half: when CBG decides rejected_retry, the rule stamps the
+// retry markers on the RUN entity (via lineage subject override),
+// NOT on CBG's own loop entity. target_task + finding use
+// update_triple (upsert — latest verdict wins); pending uses
+// add_triple (presence trigger that 07d removes each cycle).
+func TestDevViaTestPack_07c_CBGRetryStamp(t *testing.T) {
+	rule := loadDevViaTestRule(t, "07c-cbg-retry-stamp.json")
+
+	if !devViaTestRoleCondition(rule, "reviewer-dev-via-test") {
+		t.Error("rule 07c does not condition on role=reviewer-dev-via-test")
+	}
+	if !devViaTestActionCondition(rule, "rejected_retry") {
+		t.Error("rule 07c does not condition on next_action=rejected_retry")
+	}
+	// go-reviewer C1: 07c MUST be fenced on subtopics presence so it
+	// can never stamp a literal-garbage target. The complementary
+	// case (rejected_retry + no subtopics) is rule 07e's job.
+	if !devViaTestLengthCondition(rule, "coordinator.decision.subtopics", "length_gt", float64(0)) {
+		t.Error("rule 07c does not fence on coordinator.decision.subtopics length_gt 0 — a subtopics-less rejected_retry would stamp a garbage target_task (go-reviewer C1)")
+	}
+
+	const runSubject = "$entity.triple.lineage.run-loop-entity-id"
+	// go-reviewer R3: pin the object SOURCES, not just the subject +
+	// type — these are the substitution tokens that thread CBG's
+	// verdict onto the run entity; a typo silently breaks the retry.
+	wantObject := map[string]string{
+		"dev_via_test.cbg.retry.target_task": "$entity.triple.coordinator.decision.subtopics",
+		"dev_via_test.cbg.retry.finding":     "$entity.triple.coordinator.decision.reason",
+	}
+	seen := map[string]devViaTestOnEnterJSON{}
+	for _, a := range rule.OnEnter {
+		switch a.Predicate {
+		case "dev_via_test.cbg.retry.target_task", "dev_via_test.cbg.retry.finding", "dev_via_test.cbg.retry.pending":
+			seen[a.Predicate] = a
+		}
+	}
+
+	for _, pred := range []string{"dev_via_test.cbg.retry.target_task", "dev_via_test.cbg.retry.finding"} {
+		a, ok := seen[pred]
+		if !ok {
+			t.Errorf("rule 07c does not stamp %q", pred)
+			continue
+		}
+		if a.Type != "update_triple" {
+			t.Errorf("rule 07c %q type = %q; want update_triple (upsert so the latest CBG verdict overwrites the prior)", pred, a.Type)
+		}
+		if a.Subject != runSubject {
+			t.Errorf("rule 07c %q subject = %q; want %q (markers live on the RUN entity, not CBG's loop)", pred, a.Subject, runSubject)
+		}
+		if obj, _ := a.Object.(string); obj != wantObject[pred] {
+			t.Errorf("rule 07c %q object = %v; want %q (threads CBG's verdict from coordinator.decision.*)", pred, a.Object, wantObject[pred])
+		}
+	}
+
+	pending, ok := seen["dev_via_test.cbg.retry.pending"]
+	if !ok {
+		t.Fatal("rule 07c does not stamp dev_via_test.cbg.retry.pending — 07d's trigger never fires")
+	}
+	if pending.Type != "add_triple" {
+		t.Errorf("rule 07c pending type = %q; want add_triple (presence trigger removed by 07d each cycle, per semstreams#204)", pending.Type)
+	}
+	if pending.Subject != runSubject {
+		t.Errorf("rule 07c pending subject = %q; want %q", pending.Subject, runSubject)
+	}
+}
+
+// TestDevViaTestPack_07d_CBGRetryDriver pins the ADR-044 §Slice 5
+// driver half: anchored to the RUN entity (so $state.iteration is a
+// stable per-run retry counter), it clears the pending marker and
+// routes — re-dispatch under budget, escalate over budget. The
+// When-clauses gate on $state.iteration vs plan.cbg_retry_budget.
+func TestDevViaTestPack_07d_CBGRetryDriver(t *testing.T) {
+	rule := loadDevViaTestRule(t, "07d-cbg-retry-driver.json")
+
+	// Trigger: presence of the pending marker on the run entity.
+	var hasPendingCond bool
+	for _, c := range rule.Conditions {
+		if c.Field == "dev_via_test.cbg.retry.pending" && c.Operator == "ne" {
+			hasPendingCond = true
+		}
+	}
+	if !hasPendingCond {
+		t.Error("rule 07d does not condition on dev_via_test.cbg.retry.pending (ne) — driver never fires")
+	}
+
+	var removedPending bool
+	var redispatch, escalate *devViaTestOnEnterJSON
+	for i := range rule.OnEnter {
+		a := &rule.OnEnter[i]
+		if a.Type == "remove_triple" && a.Predicate == "dev_via_test.cbg.retry.pending" {
+			removedPending = true
+		}
+		if a.Type == "publish_agent" && a.Role == "coordinator" {
+			if devViaTestSliceHas(a.ActionAllowed, "dev_via_test") {
+				redispatch = a
+			} else {
+				escalate = a
+			}
+		}
+	}
+
+	if !removedPending {
+		t.Error("rule 07d does not remove_triple the pending marker — without the clear, the rule can't re-Enter on the next retry (semstreams#204 presence-marker discipline)")
+	}
+
+	if redispatch == nil {
+		t.Fatal("rule 07d has no re-dispatch coordinator spawn (allowlist with dev_via_test)")
+	}
+	if !devViaTestSliceHas(redispatch.ActionAllowed, "ask_user") {
+		t.Error("rule 07d re-dispatch allowlist missing ask_user — coordinator must be able to override CBG's dev-fixable judgment")
+	}
+	if !devViaTestWhenHas(redispatch, "$state.iteration", "lte", "$entity.triple.plan.cbg_retry_budget") {
+		t.Error("rule 07d re-dispatch When clause must gate $state.iteration <= plan.cbg_retry_budget (the bounded-retry budget)")
+	}
+
+	if escalate == nil {
+		t.Fatal("rule 07d has no escalate coordinator spawn (ask_user-only)")
+	}
+	if !devViaTestSliceHas(escalate.ActionAllowed, "ask_user") {
+		t.Error("rule 07d escalate allowlist missing ask_user")
+	}
+	if devViaTestSliceHas(escalate.ActionAllowed, "dev_via_test") {
+		t.Error("rule 07d escalate branch must NOT allow dev_via_test — budget is exhausted, no more auto re-dispatch")
+	}
+	if !devViaTestWhenHas(escalate, "$state.iteration", "gt", "$entity.triple.plan.cbg_retry_budget") {
+		t.Error("rule 07d escalate When clause must gate $state.iteration > plan.cbg_retry_budget")
+	}
+}
+
+// TestDevViaTestPack_07e_CBGRetryMissingTarget pins the go-reviewer
+// C1 fence: a rejected_retry WITHOUT subtopics (07c can't fire,
+// nothing would wake the chain) must escalate to ask_user instead
+// of wedging or stamping a garbage target. 07c (subtopics>0) and
+// 07e (subtopics=0) are a mutually-exclusive split — every
+// rejected_retry routes exactly one way.
+func TestDevViaTestPack_07e_CBGRetryMissingTarget(t *testing.T) {
+	rule := loadDevViaTestRule(t, "07e-cbg-retry-missing-target.json")
+
+	if !devViaTestRoleCondition(rule, "reviewer-dev-via-test") {
+		t.Error("rule 07e does not condition on role=reviewer-dev-via-test")
+	}
+	if !devViaTestActionCondition(rule, "rejected_retry") {
+		t.Error("rule 07e does not condition on next_action=rejected_retry")
+	}
+	if !devViaTestLengthCondition(rule, "coordinator.decision.subtopics", "length_eq", float64(0)) {
+		t.Error("rule 07e does not fence on subtopics length_eq 0 — it must catch ONLY the subtopics-less rejected_retry (the complement of 07c's length_gt 0)")
+	}
+
+	var spawn *devViaTestOnEnterJSON
+	for i := range rule.OnEnter {
+		if rule.OnEnter[i].Type == "publish_agent" && rule.OnEnter[i].Role == "coordinator" {
+			spawn = &rule.OnEnter[i]
+			break
+		}
+	}
+	if spawn == nil {
+		t.Fatal("rule 07e has no publish_agent for role=coordinator — a subtopics-less rejected_retry would wedge (07c won't fire)")
+	}
+	if !devViaTestSliceHas(spawn.ActionAllowed, "ask_user") {
+		t.Error("rule 07e allowlist missing ask_user — the fail-safe escalation for an unpinnable retry")
+	}
+	if devViaTestSliceHas(spawn.ActionAllowed, "dev_via_test") {
+		t.Error("rule 07e must NOT allow dev_via_test — there is no target to re-dispatch")
+	}
 }
 
 // TestDevViaTestFinalizeTokenLiteralConsistency pins the
@@ -862,6 +1034,20 @@ func devViaTestLengthCondition(r *devViaTestRuleJSON, field, operator string, wa
 				}
 			}
 			if c.Value == want {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// devViaTestWhenHas reports whether a publish_agent action carries a
+// When clause matching field/operator/value (Slice 5 — the
+// $state.iteration budget gate on rules 07d's branches).
+func devViaTestWhenHas(a *devViaTestOnEnterJSON, field, operator, value string) bool {
+	for _, c := range a.When {
+		if c.Field == field && c.Operator == operator {
+			if s, ok := c.Value.(string); ok && s == value {
 				return true
 			}
 		}

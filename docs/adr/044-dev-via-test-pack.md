@@ -836,12 +836,326 @@ Key invariants:
 - Two-mode `dev_via_test` distinguishes Lisa initial vs Ralph
   walker dispatch (`subtopics.length` differentiator + rule 01's
   lineage fence per Slice 3 reviewer B1).
-- One-shot `dev_via_test_finalize` dispatches CBG; the chain
-  cannot loop back to plan-editing automatically (no
-  auto-recover per §Stuck-task recovery + §CBG's gate).
+- One-shot `dev_via_test_finalize` dispatches CBG. The chain never
+  loops back to *plan-editing* automatically (no re-plan
+  auto-recover per §Stuck-task recovery + §CBG's gate). It MAY
+  loop back to *implementation* on a CBG `rejected_retry`, bounded
+  by `plan.cbg_retry_budget` (Slice 5, see §addendum 2026-06-05) —
+  re-implement ≠ re-plan.
 - Failure paths visible: rule 04b (Ralph fails → walker →
-  ask_user), rule 07b (CBG rejects → final → ask_user), rule 08
-  (Lisa/CBG loop-fails → chain.paused).
+  ask_user), rule 07b (CBG `rejected` → final → ask_user), rules
+  07c/07d (CBG `rejected_retry` → bounded re-dispatch, then
+  ask_user at budget exhaustion), rule 08 (Lisa/CBG loop-fails →
+  chain.paused).
+
+## Addendum 2026-06-05 — Slice 5 (CBG dev-fixable bounded retry)
+
+Status: **Proposed.** Revises the v1 disposition in §Stuck-task
+recovery and §CBG's gate at chain-end — *scoped to the
+CBG-reject-fixable case only*. Motivated by the MVP-1 smoke
+(`docs/sponsor-packages/dev-via-test-mavlink-decode-2026-06-04/`):
+CBG correctly rejected a constraint violation (hand-rolled MAVLink
+parsing vs the required `gomavlib`), but the only recovery path was
+`ask_user` — throwing away a workspace that was one bounded edit
+away from passing.
+
+### The insight v1 conflated: dev-retry ≠ re-plan
+
+Rule 07b's `no_auto_recover_rationale` reads:
+
+> "If we auto-spawned a new **Lisa** with the failure as new
+> context, we'd risk infinite loop on a fundamentally-flawed plan
+> + bypass user judgment."
+
+That argument is about **re-planning** (new Lisa mutating the plan
+— the plan is the thing under change, so the loop can chase its
+own tail). It does **not** apply to **re-implementing** (re-dispatch
+Ralph against the *fixed* plan and its *fixed*
+`integration_test_command`). In the re-implement case:
+
+- the plan + acceptance suite are the immutable fixed point,
+- CBG's integration gate is the scalar,
+- a bounded Ralph re-dispatch is convergence on a (mostly)
+  deterministic target.
+
+That is structurally the **autoresearch inner-loop pattern** this
+pack already reuses (rules 03/05, best-value upsert) — with CBG's
+pass/fail as the metric instead of `emit_*_measurement`. The v1
+disposition rejected the dangerous recovery (re-plan) and took the
+safe one (re-implement) down with it by accident.
+
+### CBG verdict becomes three-way (fail-safe default preserved)
+
+CBG's `action_allowlist` goes from `["approved", "rejected"]` to
+`["approved", "rejected_retry", "rejected"]`:
+
+| Token | CBG's meaning | Routes to |
+|---|---|---|
+| `approved` | gate passed | **07a** (unchanged) → coordinator `respond_direct` |
+| `rejected_retry` | bounded implementation fix Ralph can do *within the existing plan* (hand-rolled-vs-library, a missing case, a failing assertion) | **07c (new)** → coordinator wake-up → bounded re-dispatch |
+| `rejected` | needs human/coordinator judgment (plan ambiguous, scope fundamentally blown, budget question, infra broken) | **07b** (unchanged) → coordinator `ask_user` |
+
+Bare `rejected` keeps its existing 07b binding, so it is the
+**fail-safe default**: an under-specified or hallucinating CBG that
+forgets the `_retry` suffix escalates to a human rather than
+silently looping. `rejected_retry` is the deliberate opt-in — CBG
+asserting "this is dev-fixable." 07a and 07b are untouched. This
+honors [[rejected-to-coordinator]]: CBG's two reject tokens *are*
+the framing-fixable-vs-structural split, made explicit at the
+point of richest context (CBG just read the diff).
+
+### CBG classifies; coordinator + rules own the bound
+
+Per [[coordinator-first-not-persona-patches]], CBG only
+**classifies** — it never loops itself. The recovery action and the
+bound are owned downstream. `rejected_retry` routes to a
+**coordinator wake-up** (rule 07c), not directly to Ralph:
+
+```
+CBG decide(rejected_retry, target_task=<id>, finding=<text>)
+   │
+   ▼  rule 07c: stamp dev_via_test.cbg.reject=<cbg loop id> on RUN entity;
+   │            spawn coordinator (allowlist: dev_via_test, ask_user)
+   ▼
+coordinator wake-up:
+   reads reject-count vs budget (substituted into spawn prompt)
+   ├─ count < budget → update_triple plan.task.<id>.review_finding=<finding>;
+   │                   update_triple plan.task.<id>.status="ready";
+   │                   decide(action="dev_via_test", subtopics=["<id>"])
+   │                      └─▶ EXISTING rule 03 → Ralph re-runs with finding
+   │                          → walker → dev_via_test_finalize → CBG re-gates
+   └─ count >= budget → decide(action="ask_user",
+                          reason="CBG rejected <N>× on task <id>;
+                          last finding <…>; retry budget exhausted")
+```
+
+No new Ralph-dispatch primitive: the retry re-enters through the
+**existing walker dispatch (rule 03)**. CBG stays a one-shot gate
+*per pass* — it re-fires once after each Ralph re-run, never
+per-task. The moment we have a CBG-per-Ralph we are back in the
+BMAD ceremony this ADR exists to avoid.
+
+### The bound is structural — three load-bearing engine facts
+
+1. **Rule `max_iterations` does not bound a cross-loop retry.**
+   Per autoresearch rule 09's own metadata: "each
+   reviewer-autoresearch loop is a new entity, so the rule's
+   `max_iterations` counter resets per entity. The bound is
+   informational under the current rule engine semantics." Each CBG
+   loop is a fresh entity, so `max_iterations` on 07c would be a
+   no-op as a chain-level cap. The real bound therefore lives as a
+   **multivalued marker count on the stable run entity**:
+   rule 07c does `add_triple dev_via_test.cbg.reject=<loop id>` on
+   `lineage.run-loop-entity-id` (the one stable entity across the
+   chain). Count = `…cbg.reject.length`.
+
+2. **The rule engine substitutes triple OBJECTS, not predicate
+   fragments** (per rule 04a metadata). So `plan.task.<id>.status`
+   and `plan.task.<id>.review_finding` cannot be written by a rule
+   (the `<id>` fragment can't be substituted). The **coordinator**
+   writes them via `update_triple` tool calls parameterized by its
+   own scratchpad — the established Slice 3 pattern ("the walker
+   does the per-task mutation in coordinator code"). This is *why*
+   07c routes through the coordinator rather than re-dispatching
+   Ralph directly: only the coordinator can stamp the finding onto
+   the specific task.
+
+3. **The budget compare is fully structural via `$state.iteration`
+   on a run-entity driver rule** (RESOLVED — source-verified in
+   beta.96; see Open questions #1). `.length`-in-condition does
+   **not** count our markers: `applyTripleLengthSubstitutions`
+   returns on the *first* matching triple and counts *that
+   object's* list length, erroring on a scalar object — so it only
+   works for a single Pattern-B list triple, never for Pattern-A
+   (N scalar triples, which is how `add_triple` accumulates a
+   counter). The framework-blessed mechanism for a retry budget is
+   instead `$state.iteration` vs `$state.max_iterations` in `When`
+   clauses on a rule anchored to the **stable run entity**,
+   re-entered via a presence marker — exactly the autoresearch
+   rule 05 pattern. `state_tracker.go` documents this verbatim:
+   "`MaxIterations`… Used with `$state.iteration` in When clauses
+   for retry budgets." No LLM compare, no `.length`, no upstream
+   change. This is why the retry path is a **two-rule hop** (see
+   deltas): a CBG-entity rule stamps a `pending` marker on the run
+   entity, and a run-entity driver rule does the bounded routing
+   where `$state.iteration` is the stable per-run retry counter.
+
+### Budget placement — plan-data, not a magic number
+
+`plan.cbg_retry_budget` is stamped by Lisa as part of the plan
+(default 1–2), the same way she stamps `integration_test_command`.
+This puts the budget where it is visible and tunable per run, and
+dodges the "magic `retries=1` with no empirical basis" critique
+the v1 disposition (correctly) raised — the number is plan-data the
+user can see and the coordinator surfaces at the `ask_user`
+boundary, not a constant buried in persona prose. Worst-case added
+cost is `budget × (Ralph + CBG)` ≈ `budget × ~$0.15` — bounded and
+visible.
+
+### Two-way classification only (anti-scope)
+
+CBG classifies `retry` vs `escalate` — a binary. It must **not**
+sub-classify failure modes (spec-vs-impl-vs-flake); §Stuck-task
+recovery already forbids that taxonomy in MVP, and the binary is
+the minimum that meets the goal. The failure-mode dataset that
+would justify [[r35-coordinator-meta-reviewer]] is still being
+collected; this slice does not pre-empt it.
+
+### Honest caveat — CBG's verdict is LLM, not deterministic
+
+Unlike the integration suite (deterministic), CBG's
+*constraint-review* verdict is LLM judgment. It can flip-flop
+(reject for reason A, Ralph fixes A, CBG now rejects for reason B).
+The structural reject-count cap + the hard backstop are precisely
+what bound flip-flop runaway. This is the load-bearing reason the
+budget cannot live in persona prose and the escalate-at-cap path is
+non-negotiable.
+
+### Slice 5 file deltas
+
+- `configs/rules/dev-via-test/07c-cbg-retry-stamp.json` (new) —
+  fires on CBG `rejected_retry` **with subtopics present** (the
+  `subtopics length_gt 0` fence is a structural guard, go-reviewer
+  C1; see below). `update_triple` upserts `dev_via_test.cbg.retry.
+  {target_task,finding}` and `add_triple`s `…retry.pending` on the
+  run entity (subject-override to `lineage.run-loop-entity-id`).
+  Mirrors autoresearch rule 04a's run-entity stamp.
+- `configs/rules/dev-via-test/07e-cbg-retry-missing-target.json`
+  (new, go-reviewer C1) — fires on CBG `rejected_retry` **with no
+  subtopics** (`subtopics length_eq 0`). The decide tool stamps
+  `coordinator.decision.subtopics` only when non-empty and there is
+  no unresolved-token guard on triple *objects* (only on subjects),
+  so a subtopics-less `rejected_retry` would otherwise let 07c
+  stamp a literal-garbage target. 07c (subtopics>0) and 07e
+  (subtopics=0) are a mutually-exclusive split — every
+  `rejected_retry` routes exactly one way; the targetless case
+  escalates to `ask_user` (fail-safe, mirrors rule 01's
+  `length_eq 0` corruption-to-no-op fence). Per
+  [[encode-principles-structurally]]: persona prose ("name exactly
+  one task id") is hopeful; this fence is enforcement.
+- `configs/rules/dev-via-test/07a-cbg-approved-to-coordinator.json`
+  — on `approved`, `remove_triple` the `dev_via_test.cbg.retry.
+  {target_task,finding}` markers on the run entity (go-reviewer
+  R1). Inert in v1 linear (rule 03 already gates Ralph's finding-
+  read on a target-task match), but prevents a stale finding from
+  mis-applying when v2 parallel dispatch lands.
+- `configs/rules/dev-via-test/07d-cbg-retry-driver.json` (new) —
+  fires on the **run entity** (condition: `dev_via_test.run.status`
+  active AND `dev_via_test.cbg.retry.pending ne ""`). `on_enter`:
+  (1) `remove_triple` the pending marker (flips conditions false →
+  resets for the next pass, per the semstreams#204 presence-marker
+  discipline); (2) spawn the coordinator wake-up, `when`-gated on
+  `$state.iteration`:
+  - `$state.iteration lte $entity.triple.dev_via_test.cbg_retry_budget`
+    → coordinator gets `decide(dev_via_test, ask_user)` allowlist +
+    a "re-dispatch task `<id>` with finding `<…>`" prompt.
+  - `$state.iteration gt …cbg_retry_budget` → coordinator gets an
+    `ask_user`-only prompt (budget exhausted).
+  The structural ceiling is the executor's budget **clamp**
+  (`maxCBGRetryBudget = 5`), not a rule-level `max_iterations` —
+  per go-reviewer N1, rule-level `max_iterations` is *not*
+  auto-enforced (it's only surfaced as `$state.max_iterations` for
+  When clauses), so a decorative `5` on the rule would do nothing
+  but invite drift from the executor constant. The clamp guarantees
+  the escalate branch always fires by iteration 6. This is the
+  exact autoresearch rule 05 structure (`$state.iteration` vs a
+  substituted cap, presence-marker re-entry), proven in production.
+- `configs/rules/dev-via-test/06-coordinator-dispatch-cbg.json` —
+  extend CBG `action_allowlist` to
+  `["approved", "rejected_retry", "rejected"]`.
+- `configs/personas/fragments/reviewer-dev-via-test/10-review-contract.md`
+  — teach the three-way verdict: when the gate fails because a
+  **bounded implementation fix within the existing plan** would
+  pass it, `rejected_retry` with `target_task` + a concrete
+  `finding`; when it fails because the **plan/scope/budget** needs a
+  human, bare `rejected`. Add the discipline note: still one gate
+  per pass, no self-iteration.
+- `configs/personas/fragments/coordinator/` (the dev-via-test
+  walker fragment) — teach the 07c wake-up: read reject-count vs
+  budget; under budget → stamp `review_finding` + reset task to
+  `ready` + `decide(dev_via_test, subtopics=[task])`; at/over budget
+  → `ask_user`.
+- `configs/personas/fragments/dev-via-test-plan/` (Lisa) — stamp
+  `plan.cbg_retry_budget` (default 1–2) into the plan payload.
+- `configs/personas/fragments/dev-via-test-execute/` (Ralph) — read
+  `plan.task.<id>.review_finding` when present and treat it as an
+  added acceptance constraint for this pass.
+- `dev_via_test.plan.v1` schema — add optional `cbg_retry_budget`
+  (default 1).
+
+NO new components, NO new tool, NO new framework primitive. The
+retry path is pure rule + persona + existing `update_triple` /
+`decide` / rule-03 re-entry.
+
+### Open questions for implementation (resolve before coding)
+
+1. **Count-compare in rule conditions.** RESOLVED 2026-06-05
+   (source-verified against semstreams@v1.0.0-beta.96). Findings:
+   - **`$entity.triple.<predicate>.length` in conditions is real
+     but Pattern-B-only.** Both top-level conditions and per-action
+     `When` clauses run `SubstituteConditionValues` →
+     `applyTripleLengthSubstitutions` (#149). BUT the resolver
+     returns on the *first* matching triple and counts that
+     object's list length (`coerceTripleObjectToStrings`); a scalar
+     object yields the sentinel `[ERROR_LENGTH_NOT_LIST:…]`. So
+     `.length` counts a single list-shaped triple, **not** N
+     accumulated `add_triple` markers. Our reject counter is
+     Pattern A (N scalar triples, like autoresearch
+     `experiment.completed`), so `.length` is the wrong tool.
+   - **`$state.iteration` is the right tool, and it's blessed.**
+     `state_tracker.go`: entity-scoped transition counter,
+     incremented on `TransitionEntered`, preserved on `Exited`,
+     persisted per (rule, entity); doc string names "retry budgets"
+     as its purpose. It resets per entity — so the counting rule
+     must anchor to the **stable run entity** (07d), not the fresh
+     CBG loop entity. Hence the 07c-stamp + 07d-driver split.
+   - **Net:** no LLM-mediated compare, no upstream change. The
+     design above (presence-marker on run entity + `$state.iteration`
+     `When` gate) is the production-proven autoresearch rule 05
+     shape. Coding can proceed.
+2. **Re-gate diff baseline.** On a retry pass CBG diffs against
+   `plan.chain_start_git_tag` (unchanged — correct: it always
+   reviews cumulative work vs chain start). Confirm Ralph's retry
+   edits land in the same tenant workspace (they do — sandbox is
+   chain-scoped) so the diff reflects the fix.
+3. **Marker hygiene.** Should `dev_via_test.cbg.reject` markers be
+   cleared on `approved` after a retry? No — they are the audit
+   ledger of how many passes it took (mirrors autoresearch's
+   `experiment.completed` journal). Surface the count in CBG's
+   final approved rollup ("passed on retry 2 of 2").
+
+### What this does NOT change
+
+- **Ralph-stuck recovery** (§Stuck-task recovery) stays
+  coordinator-`ask_user`, no auto-retry. That path is about Ralph
+  failing to converge on its *own* test_command — a different
+  signal (loop-failed / needs_clarification), not a CBG verdict.
+- **Re-plan** stays out of scope. CBG-fixable retry never mutates
+  the plan's tasks/goals; it only re-implements an existing task
+  with an added finding. A plan that is *wrong* (not just
+  under-implemented) is a bare `rejected` → human.
+- **Per-Ralph reviewers** stay forbidden. CBG is one chain-end
+  gate that may fire more than once; it is not a per-task review.
+
+### Upstream-ask candidate (noted, NOT needed for this slice)
+
+The investigation surfaced a genuine framework gap: there is **no
+condition-usable count of Pattern-A multivalued triples**.
+`.length` counts a single list-object (Pattern B); `.triples`
+enumerates Pattern A but only for prompt prose, not as a numeric
+condition operand; `$state.iteration` counts transitions but only
+works when you have a stable anchor entity + a presence-marker
+re-entry driver. A native `.count` suffix
+(`$entity.triple.<predicate>.count` → number of matching triples,
+usable in `When`/conditions) would let a rule bound a retry
+*without* the anchor-entity + marker round-trip.
+
+Per [[framework-alignment-review]]: this slice does **not** need
+it — the `$state.iteration` driver pattern fully solves our case
+with a production-proven shape. File the `.count` ask upstream only
+if a second consumer wants a counter where no convenient re-entry
+anchor exists. Two uses is "coincidence"; the existing pattern
+covers both today.
 
 ## Cross-links
 
