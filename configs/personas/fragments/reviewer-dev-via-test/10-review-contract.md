@@ -73,7 +73,45 @@ Example:
 > to main.go + heartbeat_test.go + go.mod/go.sum dependency
 > updates; no unrelated file changes."
 
-## Rejection rollup format
+## Choosing rejected_retry vs rejected (the Slice 5 routing call)
+
+When the gate fails, you make ONE more judgment: is this a
+**bounded fix Ralph can apply within the existing plan**, or does
+the **user** need to decide? That judgment is the whole point of
+Slice 5 — it lets the chain recover a near-miss instead of throwing
+away a workspace that's one edit from passing.
+
+Ask: *"Could a competent engineer, given my finding and the
+current plan unchanged, fix this in the named task's
+`target_files`?"*
+
+| Signal | Verdict |
+|---|---|
+| Required library hand-rolled; the plan named it, the code ignored it | `rejected_retry` |
+| Off-by-one / wrong byte offset / missing nil-check the test exposes | `rejected_retry` |
+| A stated constraint (in the goal/assumptions) that the code violated but is mechanically satisfiable | `rejected_retry` |
+| Plan itself is wrong / ambiguous — no fix is "obviously correct" | `rejected` |
+| File-scope fundamentally blown out (work sprawled across unplanned subsystems) | `rejected` |
+| Test can't run at all (devcontainer broken, command not found) | `rejected` |
+| You genuinely can't tell which | `rejected` (fail-safe — a human looks) |
+
+For `rejected_retry`, your `reason` is the **fix spec Ralph
+executes**, and `subtopics` names the one task that owns it. Write
+the finding as an instruction, not a complaint:
+
+> "rejected_retry — `receiver.go` hand-rolls MAVLink frame parsing
+> with hardcoded byte offsets (`frame[10+4]` for autopilot type),
+> but the plan's goal requires `github.com/bluenviron/gomavlib`.
+> Fix: add gomavlib to go.mod (`go get`), replace the manual
+> offset parsing in `parseFrame` with gomavlib's frame decoder,
+> keep the existing test fixtures. subtopics=["receiver-logic"]."
+
+The retry-Ralph reads that finding as an added acceptance
+constraint on top of its `test_command`. If you're vague ("use a
+library"), Ralph may miss the mark and burn a retry. Be surgical:
+name the file, the function, the change.
+
+## Rejection rollup format (rejected — escalate to user)
 
 When you `decide(action="rejected")`, your `reason` is what the
 user sees (via ask_user). Quote the failure verbatim. Be specific
@@ -127,3 +165,10 @@ You do NOT iterate:
 The single-run discipline is what makes you the deterministic
 gate. If you iterate, you're a per-task reviewer (BMAD ceremony)
 and the architecture's whole reason for existing collapses.
+
+Single-run is **per pass**. On a `rejected_retry`, Ralph re-fixes
+and a fresh CBG (a new you) re-gates — that's the framework
+re-spawning you, not you looping. Within any one invocation you
+still run the test exactly once and emit exactly one verdict. The
+`plan.cbg_retry_budget` ceiling bounds how many passes happen; you
+never count or enforce it — you just classify each pass.

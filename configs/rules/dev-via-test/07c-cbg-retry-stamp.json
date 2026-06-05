@@ -1,0 +1,59 @@
+{
+  "id": "dev_via_test_cbg_retry_stamp",
+  "type": "expression",
+  "name": "reviewer-dev-via-test decide(rejected_retry) → stamp retry markers on run entity",
+  "description": "ADR-044 §addendum Slice 5 — CBG dev-fixable bounded retry, stamp half. Fires when CBG (reviewer-dev-via-test) decides rejected_retry: the integration gate failed (or the diff showed a constraint violation) AND CBG judged it a bounded implementation fix Ralph can do WITHIN the existing plan (not a plan/scope/human problem — that's bare `rejected` → rule 07b). CBG names the offending task in decide.subtopics=[<task-id>] and the concrete fix in decide.reason.\n\nThis rule fires on the CBG loop entity (fresh each pass) and writes three markers onto the RUN entity (the original coordinator loop, via lineage.run-loop-entity-id subject override — same #147/#148 pattern as autoresearch rule 04a):\n\n- dev_via_test.cbg.retry.target_task (update_triple, upsert) = CBG's subtopics — which task to re-dispatch. Upsert so only the latest CBG verdict's target survives across passes.\n- dev_via_test.cbg.retry.finding (update_triple, upsert) = CBG's reason — the concrete fix Ralph must apply, read by the retry-Ralph as an added acceptance constraint and surfaced to the coordinator.\n- dev_via_test.cbg.retry.pending (add_triple) = this CBG loop id — the presence marker that triggers the run-entity driver (rule 07d). add_triple (not update) because 07d removes it each cycle; the remove-then-re-add across passes is the canonical semstreams#204 presence-marker discipline.\n\nWhy two rules (07c stamp + 07d driver): the retry BUDGET is bounded by $state.iteration, which is a per-(rule, entity) transition counter that resets on a fresh entity. CBG loops are fresh each pass, so the counting rule MUST anchor to the stable run entity. 07c (CBG entity) only stamps; 07d (run entity) does the bounded routing where $state.iteration is the stable retry counter. See ADR-044 §addendum Slice 5 'The bound is structural'.",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "agent.loop.role",
+      "operator": "eq",
+      "value": "reviewer-dev-via-test",
+      "required": true
+    },
+    {
+      "field": "coordinator.decision.next_action",
+      "operator": "eq",
+      "value": "rejected_retry",
+      "required": true
+    },
+    {
+      "field": "coordinator.decision.subtopics",
+      "operator": "length_gt",
+      "value": 0,
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "update_triple",
+      "subject": "$entity.triple.lineage.run-loop-entity-id",
+      "predicate": "dev_via_test.cbg.retry.target_task",
+      "object": "$entity.triple.coordinator.decision.subtopics"
+    },
+    {
+      "type": "update_triple",
+      "subject": "$entity.triple.lineage.run-loop-entity-id",
+      "predicate": "dev_via_test.cbg.retry.finding",
+      "object": "$entity.triple.coordinator.decision.reason"
+    },
+    {
+      "type": "add_triple",
+      "subject": "$entity.triple.lineage.run-loop-entity-id",
+      "predicate": "dev_via_test.cbg.retry.pending",
+      "object": "$entity.instance"
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "pack": "dev_via_test",
+    "phase": "ADR-044 §addendum Slice 5 — CBG retry stamp",
+    "adr": "docs/adr/044-dev-via-test-pack.md",
+    "paired_with": "07d-cbg-retry-driver.json (run-entity driver, $state.iteration budget gate)",
+    "subject_override_requires": "semstreams #147/#148 (resolveTripleSubject shared by add/update/remove_triple). CBG carries lineage.run-loop-entity-id from rule 06's related_loops.",
+    "upsert_rationale": "target_task + finding use update_triple (remove-then-add upsert) so the latest CBG verdict overwrites the prior one — a stale finding from retry N must not leak into retry N+1. pending uses add_triple because it is a content-free trigger that 07d removes each cycle.",
+    "verdict_split": "CBG action_allowlist (rule 06) is [approved, rejected_retry, rejected]. approved → 07a (respond_direct). rejected_retry → 07c (this rule, bounded re-dispatch). rejected → 07b (ask_user, the fail-safe default for plan/scope/human problems). Bare `rejected` keeps its existing 07b binding so an under-specified CBG escalates rather than silently looping.",
+    "subtopics_fence": "The subtopics length_gt 0 condition is a STRUCTURAL guard (go-reviewer C1, ADR-044 §addendum Slice 5). The decide tool stamps coordinator.decision.subtopics ONLY when non-empty (semstreams decide.go), and there is no unresolved-token guard on add/update_triple OBJECTS (only on subjects). Without this fence, a rejected_retry emitted WITHOUT subtopics would stamp target_task = the literal string '$entity.triple.coordinator.decision.subtopics' (garbage), silently mis-targeting the retry. With the fence, a subtopics-less rejected_retry does NOT fire this rule — rule 07e catches it and escalates to ask_user (fail-safe, mirrors rule 01's length_eq 0 corruption-to-no-op fence). Per [[encode-principles-structurally]]: the persona prose 'name exactly one task id' is hopeful; this fence is enforcement."
+  }
+}

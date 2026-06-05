@@ -80,6 +80,7 @@ const (
 	predicatePlanTaskCount          = "plan.task_count"
 	predicatePlanGeneratedAt        = "plan.generated_at"
 	predicatePlanRevision           = "plan.revision"
+	predicatePlanCBGRetryBudget     = "plan.cbg_retry_budget"
 
 	// Per-task predicate prefix. Full keys look like
 	// plan.task.<id>.{goal,assumptions,non_goals,target_files,
@@ -108,6 +109,18 @@ const (
 	// stays a constant here; if a deployment ever needs a chain-id-
 	// scoped tag we add a tool arg.
 	defaultChainStartGitTag = "plan-start"
+
+	// CBG dev-fixable retry budget (ADR-044 §addendum Slice 5). The
+	// budget is plan-data so it is visible + tunable per run, but it
+	// is CLAMPED here to [1, maxCBGRetryBudget] — the clamp is the
+	// structural retry ceiling. Rule 07d's When clause gates
+	// re-dispatch on `$state.iteration <= plan.cbg_retry_budget`;
+	// clamping the source value guarantees the escalate branch
+	// (`$state.iteration > budget`) always triggers within the
+	// ceiling even if a plan over-specifies the budget. Absent / 0 →
+	// defaultCBGRetryBudget (one auto-fix pass, then human).
+	defaultCBGRetryBudget = 1
+	maxCBGRetryBudget     = 5
 )
 
 // taskIDPattern restricts task IDs to lowercase alphanumeric +
@@ -174,6 +187,7 @@ func (e *Executor) ListTools() []agentic.ToolDefinition {
 				"non_goals":                stringArray("Plan-level anti-scope (Karpathy Rule 2). What this work explicitly excludes. May be empty; emit [] explicitly."),
 				"integration_test_command": map[string]any{"type": "string", "description": "CBG's chain-end full acceptance gate. Runs once at chain end across all task scope. Must be a single shell command."},
 				"revision":                 map[string]any{"type": "integer", "minimum": 1, "description": "Monotonic revision number, starting at 1. Bump on re-plan after coordinator amendment (Slice 3+ walker). Required so absent vs explicit-zero never silently coerces to 1."},
+				"cbg_retry_budget":         map[string]any{"type": "integer", "minimum": 1, "maximum": maxCBGRetryBudget, "description": "OPTIONAL (default 1). How many times the chain-end reviewer (CBG) may bounce a task back for a bounded dev-fix before escalating to the user. Per ADR-044 §Slice 5. Clamped to [1,5] server-side — the clamp is the structural retry ceiling. Set 1 for one auto-fix pass then human (recommended); raise only if the work has a high chance of CBG catching a mechanically-fixable miss the per-task tests can't see."},
 				"tasks": map[string]any{
 					"type":        "array",
 					"minItems":    1,
@@ -218,6 +232,7 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 		"chain_start_git_tag":      defaultChainStartGitTag,
 		"integration_test_command": plan.IntegrationTestCommand,
 		"revision":                 plan.Revision,
+		"cbg_retry_budget":         plan.CBGRetryBudget,
 	})
 
 	e.logger.Info("emit_dev_via_test_plan stamped",
@@ -261,6 +276,7 @@ type plan struct {
 	NonGoals               []string `json:"non_goals"`
 	IntegrationTestCommand string   `json:"integration_test_command"`
 	Revision               int      `json:"revision"`
+	CBGRetryBudget         int      `json:"cbg_retry_budget"`
 	Tasks                  []task   `json:"tasks"`
 }
 
@@ -311,6 +327,19 @@ func (p *plan) validate() error {
 	}
 	if p.Revision < 1 {
 		return fmt.Errorf("plan.revision is required and must be >= 1 (got %d); first emit is revision=1, bump on coordinator-requested re-plan", p.Revision)
+	}
+
+	// CBG retry budget (ADR-044 §Slice 5): optional knob, clamp to
+	// [1, maxCBGRetryBudget]. Absent / 0 / negative → default; the
+	// clamp is the structural retry ceiling, so even a plan that
+	// over-specifies the budget cannot push rule 07d past the
+	// escalate boundary. NOT an error (unlike revision) — a
+	// missing budget is the common case and the default is correct.
+	if p.CBGRetryBudget < 1 {
+		p.CBGRetryBudget = defaultCBGRetryBudget
+	}
+	if p.CBGRetryBudget > maxCBGRetryBudget {
+		p.CBGRetryBudget = maxCBGRetryBudget
 	}
 
 	seenIDs := make(map[string]struct{}, len(p.Tasks))
@@ -385,6 +414,7 @@ func (p *plan) triples(runEntityID string, now time.Time) ([]message.Triple, err
 		base(predicatePlanChainStartGitTag, defaultChainStartGitTag),
 		base(predicatePlanTaskCount, len(p.Tasks)),
 		base(predicatePlanRevision, p.Revision),
+		base(predicatePlanCBGRetryBudget, p.CBGRetryBudget),
 		base(predicatePlanGeneratedAt, now.Format(time.RFC3339Nano)),
 	)
 

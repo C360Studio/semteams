@@ -1,0 +1,57 @@
+{
+  "id": "dev_via_test_cbg_retry_missing_target",
+  "type": "expression",
+  "name": "reviewer-dev-via-test decide(rejected_retry) with NO subtopics → coordinator ask_user (fail-safe)",
+  "description": "ADR-044 §addendum Slice 5 — corruption-to-no-op fence (go-reviewer C1). CBG's rejected_retry verdict REQUIRES a subtopics=[<task-id>] naming which task to re-implement (rule 07c stamps it as the retry target). But the decide tool makes subtopics optional and stamps coordinator.decision.subtopics only when non-empty, and the rule engine has no unresolved-token guard on triple OBJECTS — so a rejected_retry emitted without subtopics would let 07c stamp a literal garbage target. 07c is fenced to fire ONLY on subtopics.length>0; this rule catches the complementary case (rejected_retry + subtopics.length=0) and escalates to the user instead of silently mis-targeting or wedging the chain (07c wouldn't fire, so nothing would wake the coordinator).\n\nMirrors rule 07b (CBG rejected → ask_user) — same final-coordinator wake-up, because a rejected_retry CBG can't pin to a task is, operationally, a plain rejection the user must resolve. Mirrors rule 01's lineage length_eq 0 fence: convert a malformed decision into a safe escalation, never corruption.",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "agent.loop.role",
+      "operator": "eq",
+      "value": "reviewer-dev-via-test",
+      "required": true
+    },
+    {
+      "field": "coordinator.decision.next_action",
+      "operator": "eq",
+      "value": "rejected_retry",
+      "required": true
+    },
+    {
+      "field": "coordinator.decision.subtopics",
+      "operator": "length_eq",
+      "value": 0,
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "publish_agent",
+      "subject": "agent.task.coordinator",
+      "role": "coordinator",
+      "model": "coordinator",
+      "tools": ["read_loop_result", "decide"],
+      "tool_choice": { "mode": "required" },
+      "action_allowlist": ["ask_user", "respond_direct"],
+      "properties": {
+        "wakeup_mode": "cbg_retry_missing_target",
+        "terminal_loop_id": "$entity.instance",
+        "category": "dev_via_test"
+      },
+      "related_loops": {
+        "terminal": "$entity.instance",
+        "dev-via-test-run": "$entity.triple.lineage.dev-via-test-run"
+      },
+      "prompt": "The dev-via-test chain you dispatched has reached its terminal — NOT cleanly. CBG (reviewer-dev-via-test) at loop $entity.instance rejected the work and judged it dev-fixable (rejected_retry), but did NOT name which task to fix (no subtopics). Without a target task, the chain cannot auto-re-dispatch — so this falls to you to surface to the user.\n\nIteration 1 — call read_loop_result(loop_id=$entity.instance) to read CBG's verdict. CBG's reason explains what's wrong.\n\nIteration 2 — call decide(action=\"ask_user\", reason=\"<surface CBG's finding to the user; explain the reviewer wants a fix but didn't pin it to a specific task; ask them to amend the plan or abandon>\"). One question, plain prose, addressed to the user. The user replies and a fresh coordinator loop fires on their answer."
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "pack": "dev_via_test",
+    "phase": "ADR-044 §addendum Slice 5 — rejected_retry missing-target fence",
+    "adr": "docs/adr/044-dev-via-test-pack.md",
+    "review_origin": "go-reviewer C1 (2026-06-05): rejected_retry without subtopics would stamp a garbage target via 07c. Fence 07c on subtopics.length>0 + this rule on subtopics.length=0 = mutually-exclusive split, mirrors rule 01/03's subtopics differentiator.",
+    "mutually_exclusive_with": "07c-cbg-retry-stamp.json (fires on rejected_retry + subtopics.length>0). This rule fires on rejected_retry + subtopics.length=0. No double-fire; every rejected_retry routes exactly one way."
+  }
+}
