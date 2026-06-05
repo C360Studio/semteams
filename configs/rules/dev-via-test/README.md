@@ -43,7 +43,7 @@ and @mavlink-hard Accept-gate.
 |---|---|---|
 | 1 | Lisa planner — `emit_dev_via_test_plan` + persona + rule 01 spawn | shipped |
 | 2 | Ralph executor — `emit_dev_via_test_measurement` + persona + rules 04a/04b/08 | shipped |
-| 3 | Plan walker — coordinator wake-up + plan-walking persona fragment + rules 02/03/05 | shipped |
+| 3 | Plan coordinator — coordinator wake-up + plan-walking persona fragment + rules 02/03/05 | shipped |
 | 4 | CBG reviewer — persona + rules 06/07a/07b; rule 08 extended; new `dev_via_test_finalize` action | shipped |
 | 5 | CBG dev-fixable bounded retry — three-way verdict (`rejected_retry`); rules 07c/07d; `plan.cbg_retry_budget`; persona updates | shipped |
 | 6 | Plan-review gate — CBG checks plan fidelity at chain-start (rule 02 → CBG plan_review); rules 02b/02c/02d/02e; `plan.lisa_retry_budget`; executor upsert (re-plan replaces prior plan); CBG `plan_review` mode + Lisa re-plan contract | shipped |
@@ -86,8 +86,8 @@ plan.task.<id>.target_files     = "[<JSON array>]"
 plan.task.<id>.depends_on       = "[<JSON array>]"
 plan.task.<id>.test_command     = "..."
 plan.task.<id>.expected_outcome = "..."  (optional)
-plan.task.<id>.status           = "ready"  (initial; mutated by walker)
-plan.task.<id>.position         = 0       (emit order; walker uses for linear walk)
+plan.task.<id>.status           = "ready"  (initial; mutated by coordinator)
+plan.task.<id>.position         = 0       (emit order; coordinator uses for linear walk)
 ```
 
 Array fields are JSON-encoded strings so the rule engine's
@@ -105,15 +105,15 @@ No `plan.task.<id>.retry_count` triple — per ADR-044
 |---|---|---|
 | `01-coordinator-dev-via-test-spawn.json` | coordinator decide(dev_via_test) + subtopics.length=0 (INITIAL dispatch) | Lisa + stamp `dev_via_test.run.status=active` on coordinator (run) entity |
 | `02-lisa-terminal-to-plan-review.json` | Lisa decide(planned) | CBG **plan-review** gate (Slice 6) — reads ask + plan via one query_entity, checks fidelity, emits `plan_approved`/`plan_rejected_retry`/`plan_rejected`. No bash (no tests at chain-start). |
-| `02b-plan-approved-to-walker.json` | CBG decide(plan_approved) | Coordinator walker wake-up (the old rule-02 behavior, now gated behind plan-approval); dispatches first task |
+| `02b-plan-approved-to-coordinator.json` | CBG decide(plan_approved) | Coordinator wake-up (the old rule-02 behavior, now gated behind plan-approval); dispatches first task |
 | `02c-plan-retry-stamp.json` | CBG decide(plan_rejected_retry) | Stamp `dev_via_test.plan.retry.{finding,pending}` on run entity (Slice 6). Re-plan, not re-implement. |
 | `02d-plan-retry-driver.json` | run entity has `dev_via_test.plan.retry.pending` | Re-dispatch **Lisa** with the finding (amend-in-place, upsert) under `plan.lisa_retry_budget`; over budget → ask_user. Run-entity-anchored `$state.iteration`. |
 | `02e-plan-rejected-to-coordinator.json` | CBG decide(plan_rejected) | Plan needs the user (ambiguous ask) → ask_user. Fail-safe default. |
-| `03-coordinator-dispatch-ralph.json` | coordinator decide(dev_via_test) + subtopics.length>0 (WALKER dispatch) | Ralph via `for_each` over subtopics — v1 N=1 (serial), v2 N>1 (parallel topo-walk) |
-| `04a-execute-stamp-converged.json` | Ralph success + `dev_via_test.measurement.pass=true` | Stamp `dev_via_test.execute.outcome=converged` on Ralph entity + `dev_via_test.execute.task_completed=<ralph-loop-id>` on run entity (walker pickup) |
-| `04b-execute-stamp-failed.json` | Ralph outcome IN [failed, truncated, cancelled] | Stamp `dev_via_test.execute.outcome=failed` on Ralph entity + `dev_via_test.execute.task_failed=<ralph-loop-id>` on run entity. No auto-retry per ADR §Stuck-task recovery. Walker routes to `ask_user`. |
-| `05-ralph-terminal-to-walker.json` | Ralph outcome IN [success, failed, truncated, cancelled] (ANY terminal) | Coordinator walker wake-up; reads Ralph's terminal via read_loop_result + run-entity state via query_entity; decides next task / finalize (CBG) / ask_user / respond_direct |
-| `06-coordinator-dispatch-cbg.json` | Walker decide(dev_via_test_finalize) | CBG (reviewer-dev-via-test) — chain-end gate. Runs `plan.integration_test_command`, diffs against `plan.chain_start_git_tag`, emits three-way verdict: `approved` / `rejected_retry` / `rejected` |
+| `03-coordinator-dispatch-ralph.json` | coordinator decide(dev_via_test) + subtopics.length>0 (COORDINATOR dispatch) | Ralph via `for_each` over subtopics — v1 N=1 (serial), v2 N>1 (parallel topo-walk) |
+| `04a-execute-stamp-converged.json` | Ralph success + `dev_via_test.measurement.pass=true` | Stamp `dev_via_test.execute.outcome=converged` on Ralph entity + `dev_via_test.execute.task_completed=<ralph-loop-id>` on run entity (coordinator pickup) |
+| `04b-execute-stamp-failed.json` | Ralph outcome IN [failed, truncated, cancelled] | Stamp `dev_via_test.execute.outcome=failed` on Ralph entity + `dev_via_test.execute.task_failed=<ralph-loop-id>` on run entity. No auto-retry per ADR §Stuck-task recovery. Coordinator routes to `ask_user`. |
+| `05-ralph-terminal-to-coordinator.json` | Ralph outcome IN [success, failed, truncated, cancelled] (ANY terminal) | Coordinator wake-up; reads Ralph's terminal via read_loop_result + run-entity state via query_entity; decides next task / finalize (CBG) / ask_user / respond_direct |
+| `06-coordinator-dispatch-cbg.json` | Coordinator decide(dev_via_test_finalize) | CBG (reviewer-dev-via-test) — chain-end gate. Runs `plan.integration_test_command`, diffs against `plan.chain_start_git_tag`, emits three-way verdict: `approved` / `rejected_retry` / `rejected` |
 | `07a-cbg-approved-to-coordinator.json` | CBG decide(approved) | Final coordinator wake-up scoped to respond_direct — delivers chain result to user |
 | `07b-cbg-rejected-to-coordinator.json` | CBG decide(rejected) | Final coordinator wake-up scoped to ask_user — plan/scope/human problem; user picks next move. No auto-recover for this verdict (fail-safe default). |
 | `07c-cbg-retry-stamp.json` | CBG decide(rejected_retry) **+ subtopics>0** | Stamp `dev_via_test.cbg.retry.{target_task,finding,pending}` on run entity (Slice 5). Dev-fixable bounded retry — re-implement, not re-plan. Fenced on subtopics presence (go-reviewer C1). |
@@ -146,7 +146,7 @@ Rules 04a + 04b each stamp TWO triples — one on Ralph's loop
 entity (`dev_via_test.execute.outcome`), one on the run entity
 (`dev_via_test.execute.{task_completed,task_failed}`) via
 `$entity.triple.lineage.run-loop-entity-id` subject substitution.
-The second triple is the **load-bearing** one for the walker —
+The second triple is the **load-bearing** one for the coordinator —
 the coordinator wake-up reads the run entity for `task_completed`
 / `task_failed` markers (multi-valued; one triple per Ralph) to
 compute effective per-task status.
@@ -155,7 +155,7 @@ We do NOT mutate `plan.task.<id>.status` from rules 04a/04b — the
 rule engine substitutes triple OBJECTS but not PREDICATE FRAGMENTS
 (per beta.96). Predicate substitution (`plan.task.${TASK_ID}.status`)
 would either require framework support OR per-task-ID rule
-generation (cardinality explosion). Instead, the walker computes
+generation (cardinality explosion). Instead, the coordinator computes
 status **derivatively** from the multi-valued execution markers:
 
 - `done` if task ID appears in `task_completed` triples
@@ -163,7 +163,7 @@ status **derivatively** from the multi-valued execution markers:
 - `ready` otherwise (initial plan state, no mutation)
 
 This keeps the plan immutable across the chain's lifetime and
-makes the walker's state computation a pure function of run-entity
+makes the coordinator's state computation a pure function of run-entity
 contents — no race conditions on partial-write status updates.
 
 ## The `dev_via_test` two-mode action token
@@ -173,7 +173,7 @@ Slice 3 introduces a dual-mode shape on the same action token:
 | Mode | When | Token shape | Routes to |
 |---|---|---|---|
 | Initial dispatch | First coordinator loop (front-door) | `decide(action="dev_via_test", reason=<user ask>)` — **no subtopics** | Rule 01 → Lisa |
-| Walker dispatch | Coordinator woken after Lisa/Ralph terminal | `decide(action="dev_via_test", subtopics=["<task-id>"])` | Rule 03 → Ralph (via for_each) |
+| Coordinator dispatch | Coordinator woken after Lisa/Ralph terminal | `decide(action="dev_via_test", subtopics=["<task-id>"])` | Rule 03 → Ralph (via for_each) |
 
 Rules 01 and 03 are mutually exclusive on `coordinator.decision.subtopics.length`
 (`length_eq 0` vs `length_gt 0`). The `decide` tool stamps the subtopics
@@ -181,7 +181,7 @@ predicate ONLY when non-empty (verified upstream `processor/agentic-tools/decide
 so absent + length_eq 0 are equivalent in array-operator semantics
 (per `processor/rule/expression/types.go`).
 
-## v1 walker — linear, single-Ralph-at-a-time
+## v1 coordinator — linear, single-Ralph-at-a-time
 
 v1 ships sequential dispatch (`subtopics=[<one-id>]`, `for_each` N=1).
 The architecture supports parallel dispatch via `subtopics=[<id1>,<id2>,...]`
@@ -200,7 +200,7 @@ Lisa (dev-via-test-plan)
   emit_dev_via_test_plan(...)
   decide(action="planned")
   ↓ rule 02
-Walker A (coordinator, woken with run-loop-entity-id lineage)
+Coordinator A (coordinator, woken with run-loop-entity-id lineage)
   query_entity(<run-id>) → reads plan
   decide(action="dev_via_test", subtopics=["t1"])
   ↓ rule 03 [subtopics.length>0 + for_each]
@@ -208,12 +208,12 @@ Ralph 1 (dev-via-test-execute, task_id=t1)
   iterate: bash edit → bash test → emit_dev_via_test_measurement
   decide(action="measured")
   ↓ rule 04a (stamp task_completed on run) + rule 05
-Walker B
+Coordinator B
   query_entity(<run-id>) → reads plan + execution markers
   picks next ready task → decide(action="dev_via_test", subtopics=["t2"])
-  ↓ rule 03 → Ralph 2 → rule 05 → Walker C → ...
+  ↓ rule 03 → Ralph 2 → rule 05 → Coordinator C → ...
   ... when all tasks done ...
-Walker N
+Coordinator N
   decide(action="dev_via_test_finalize", reason=<pre-CBG rollup>)
   ↓ rule 06
 CBG (reviewer-dev-via-test)
@@ -241,7 +241,7 @@ CBG decide(rejected_retry, subtopics=["t2"], reason=<fix>)
 
 Failure paths (per ADR §Stuck-task recovery + §addendum Slice 5):
 - Lisa or CBG loop-failed → rule 08 → chain.paused (no auto-recover)
-- Ralph loop-failed → rule 04b → walker wakes → ask_user
+- Ralph loop-failed → rule 04b → coordinator wakes → ask_user
 - CBG `rejected` (plan/scope/human) → rule 07b → ask_user (fail-safe default)
 - CBG `rejected_retry` (dev-fixable, subtopics names the task) → rules 07c/07d → bounded re-dispatch, then ask_user at budget exhaustion
 - CBG `rejected_retry` with NO subtopics (malformed) → rule 07e → ask_user (fail-safe; can't pin a target)

@@ -99,7 +99,7 @@ const (
 	predicateTaskPosition        = "position"
 
 	// taskStatusReady is the initial value stamped on every task
-	// at plan emit. Coordinator walker (Slice 3) mutates this via
+	// at plan emit. Coordinator (Slice 3) mutates this via
 	// update_triple to in_progress / done / blocked.
 	taskStatusReady = "ready"
 
@@ -189,7 +189,7 @@ func (e *Executor) ListTools() []agentic.ToolDefinition {
 			"assumptions":      stringArray("Task-local assumptions (Karpathy Rule 1). May be empty; emit [] explicitly if no task-local assumptions beyond plan-level."),
 			"non_goals":        stringArray("Task-local anti-scope (Karpathy Rule 2). May be empty; emit [] explicitly."),
 			"target_files":     stringArray("File globs Ralph may modify (Karpathy Rule 3 — surgical changes). REQUIRED ≥1. Empty means 'no scope' which is invalid; for genuinely cross-cutting work, pick the narrowest accurate set."),
-			"depends_on":       stringArray("Task IDs that must complete before this one is ready. v1 walker is linear so this is ignored; v2 will topo-walk. Emit [] for the first task."),
+			"depends_on":       stringArray("Task IDs that must complete before this one is ready. v1 coordinator is linear so this is ignored; v2 will topo-walk. Emit [] for the first task."),
 			"test_command":     map[string]any{"type": "string", "description": "Karpathy Rule 4 — the executable acceptance command. Single shell command. Ralph iterates until this exits 0."},
 			"expected_outcome": map[string]any{"type": "string", "description": "Human-readable 'done looks like' description. Used by CBG's diff review and operator-facing logging."},
 		},
@@ -206,14 +206,14 @@ func (e *Executor) ListTools() []agentic.ToolDefinition {
 				"assumptions":              stringArray("Plan-level assumptions (Karpathy Rule 1). Surface what Lisa is taking for granted about the environment, deps, semantics. May be empty; emit [] explicitly if no plan-level assumptions."),
 				"non_goals":                stringArray("Plan-level anti-scope (Karpathy Rule 2). What this work explicitly excludes. May be empty; emit [] explicitly."),
 				"integration_test_command": map[string]any{"type": "string", "description": "CBG's chain-end full acceptance gate. Runs once at chain end across all task scope. Must be a single shell command."},
-				"revision":                 map[string]any{"type": "integer", "minimum": 1, "description": "Monotonic revision number, starting at 1. Bump on re-plan after coordinator amendment (Slice 3+ walker). Required so absent vs explicit-zero never silently coerces to 1."},
+				"revision":                 map[string]any{"type": "integer", "minimum": 1, "description": "Monotonic revision number, starting at 1. Bump on re-plan after coordinator amendment (Slice 3+ coordinator). Required so absent vs explicit-zero never silently coerces to 1."},
 				"cbg_retry_budget":         map[string]any{"type": "integer", "minimum": 1, "maximum": maxCBGRetryBudget, "description": "OPTIONAL (default 1). How many times the chain-end reviewer (CBG) may bounce a task back for a bounded dev-fix before escalating to the user. Per ADR-044 §Slice 5. Clamped to [1,5] server-side — the clamp is the structural retry ceiling. Set 1 for one auto-fix pass then human (recommended); raise only if the work has a high chance of CBG catching a mechanically-fixable miss the per-task tests can't see."},
 				"lisa_retry_budget":        map[string]any{"type": "integer", "minimum": 1, "maximum": maxLisaRetryBudget, "description": "OPTIONAL (default 1). How many times the plan-review gate (CBG in plan_review mode) may bounce THIS plan back to the planner for a fidelity fix before escalating to the user. Per ADR-044 §Slice 6. Clamped to [1,5] server-side. Independent of cbg_retry_budget (plan-retries vs work-retries). Set 1 for one re-plan pass then human."},
 				"tasks": map[string]any{
 					"type":        "array",
 					"minItems":    1,
 					"items":       taskSchema,
-					"description": "Ordered task list. v1 walker walks in order; v2 will respect depends_on. Each task is decomposable enough for one Ralph inner loop to converge.",
+					"description": "Ordered task list. v1 coordinator walks in order; v2 will respect depends_on. Each task is decomposable enough for one Ralph inner loop to converge.",
 				},
 			},
 			"required": []string{"goal", "assumptions", "non_goals", "integration_test_command", "revision", "tasks"},

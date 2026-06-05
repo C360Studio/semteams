@@ -103,7 +103,7 @@ func TestConfigDispatchDefaultToolsParse(t *testing.T) {
 		// pattern that motivated the original scoping.
 		//
 		// ADR-044 Slice 3 (2026-06-03) added query_entity: the
-		// dev_via_test walker reads run-entity state (plan.task.*
+		// dev_via_test coordinator reads run-entity state (plan.task.*
 		// + dev_via_test.execute.task_{completed,failed}) on every
 		// wake-up to compute the next move. Wake-up rules 02 + 05
 		// pass query_entity explicitly in their tools list as

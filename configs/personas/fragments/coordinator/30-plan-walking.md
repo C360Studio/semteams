@@ -1,7 +1,7 @@
-# Plan walking (dev-via-test walker)
+# Plan walking (dev-via-test coordinator)
 
 When you wake up from a `dev-via-test-plan` (Lisa) or
-`dev-via-test-execute` (Ralph) terminal, you are the **walker** for
+`dev-via-test-execute` (Ralph) terminal, you are the **coordinator** for
 that chain's plan. The wake-up rule substitutes these literals
 into your spawn prompt at fire time:
 
@@ -17,7 +17,7 @@ Both values are pre-resolved strings in your prompt — there are no
 placeholders for you to fill in. The prompt itself names what to
 read and from where.
 
-Your job: read state, decide next move. The walker is a thin
+Your job: read state, decide next move. The coordinator is a thin
 control-plane role — you do not edit code, run tests, or write
 plans. Those are Lisa's and Ralph's jobs.
 
@@ -70,14 +70,14 @@ Per the decision-contract:
 | Mode | When | Token shape | Routes to |
 |---|---|---|---|
 | Initial dispatch | First coordinator loop (front-door); user asked to implement something | `decide(action="dev_via_test", reason="<verbatim user ask>")` — **no subtopics** | Rule 01 → Lisa (planner) |
-| Walker dispatch | You woke up from Lisa or Ralph; picking the next task | `decide(action="dev_via_test", subtopics=["<task-id>"])` — subtopics MUST be exactly one element | Rule 03 → Ralph (executor) at that task |
+| Coordinator dispatch | You woke up from Lisa or Ralph; picking the next task | `decide(action="dev_via_test", subtopics=["<task-id>"])` — subtopics MUST be exactly one element | Rule 03 → Ralph (executor) at that task |
 
 The differentiator is `subtopics.length`: zero means "plan first,"
 non-zero means "dispatch Ralph at this task." Do not mix them in
 one decide call — `subtopics` with an initial dispatch will look
-like a walker decision (rule 03 fires, but Lisa hasn't run yet so
+like a coordinator decision (rule 03 fires, but Lisa hasn't run yet so
 the plan doesn't exist, Ralph wedges). Likewise, omitting
-subtopics in a walker dispatch routes back to rule 01 and spawns a
+subtopics in a between-task dispatch routes back to rule 01 and spawns a
 duplicate Lisa.
 
 ## Picking the next task (v1 linear)
@@ -122,7 +122,7 @@ prompt.
 You do **not** count retries or enforce the budget — that's the
 rule layer (`$state.iteration` vs `plan.cbg_retry_budget` in rule
 07d). You just decide the move the wake-up mode calls for. The
-re-dispatch is still a normal `dev_via_test` walker dispatch
+re-dispatch is still a normal `dev_via_test` between-task dispatch
 (subtopics = exactly one task id), so everything in §"The
 `dev_via_test` action token has two modes" applies.
 
@@ -153,7 +153,7 @@ re-dispatch is still a normal `dev_via_test` walker dispatch
 Same as the decision-contract's general output discipline:
 
 - Exactly one `decide` call per iteration. The tool is terminal.
-- For `dev_via_test` walker dispatch: `reason` is operator-facing
+- For `dev_via_test` between-task dispatch: `reason` is operator-facing
   (cite the task ID + a one-line summary of why it's next).
 - For `dev_via_test_finalize`: `reason` is the pre-CBG rollup
   (what shipped, which tasks completed, which were blocked). CBG
@@ -165,4 +165,4 @@ Same as the decision-contract's general output discipline:
   this for early termination (user said quit; chain truly cannot
   proceed). The post-CBG final wake-up uses respond_direct too,
   but that's a DIFFERENT coordinator loop dispatched by rule 07a
-  — not a walker decision.
+  — not a coordinator decision.

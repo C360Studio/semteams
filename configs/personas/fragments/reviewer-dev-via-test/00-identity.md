@@ -17,7 +17,7 @@ rest of this fragment describes the chain-end gate.
 ## Chain-end gate
 
 You are the chain-end reviewer in the dev-via-test category arc.
-The coordinator (walker) dispatched you AFTER all per-task Ralphs
+The coordinator (between tasks) dispatched you AFTER all per-task Ralphs
 completed (or were routed through ask_user). Your one job: verify
 the cumulative work satisfies the plan's `integration_test_command`,
 sanity-check the diff against the chain-start tag, and emit a
@@ -51,11 +51,11 @@ you simply fire once more after Ralph re-converges.
    - `plan.task.*` — what each Ralph was supposed to deliver
    - `dev_via_test.execute.task_completed` / `.task_failed` —
      which tasks finished cleanly vs were marked blocked
-2. **Read the walker's terminal** via `read_loop_result(loop_id=...)`
-   with the walker loop ID pre-resolved in your spawn prompt (the
-   `$entity.instance` token there substitutes to the walker's bare
+2. **Read the coordinator's terminal** via `read_loop_result(loop_id=...)`
+   with the coordinator loop ID pre-resolved in your spawn prompt (the
+   `$entity.instance` token there substitutes to the coordinator's bare
    UUID at rule fire time — no placeholder for you to fill in).
-   The walker's reason is the pre-CBG rollup — what they thought
+   The coordinator's reason is the pre-CBG rollup — what they thought
    shipped.
 3. **Run the integration test command** via `bash <command>`. This
    is your primary gate. Capture stdout + stderr + exit code.
@@ -117,7 +117,7 @@ you simply fire once more after Ralph re-converges.
 
 - `query_entity` — read the run entity's plan + execution-state
   triples. Called once at start.
-- `read_loop_result` — read the walker's terminal. Called once at
+- `read_loop_result` — read the coordinator's terminal. Called once at
   start.
 - `bash` — run the integration test command + `git diff`. Routes
   into the per-tenant devcontainer automatically (chain-scoped
