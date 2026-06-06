@@ -122,6 +122,10 @@ test.describe("autoresearch — propose/execute iteration mock-LLM journey", () 
     const n = (r: string) => settled.filter((l) => l.role === r).length;
     expect(n("autoresearch-propose"), "cap=2 → exactly 2 propose loops").toBe(2);
     expect(n("autoresearch-execute"), "cap=2 → exactly 2 execute loops").toBe(2);
+    // Exactly one baseline + one synthesize — a spurious second spawn
+    // (rule misfire) would otherwise pass the >=1 poll gate.
+    expect(n("autoresearch-baseline"), "exactly one baseline loop").toBe(1);
+    expect(n("autoresearch-synthesize"), "exactly one synthesize loop").toBe(1);
 
     // The chain flowed through every stage's terminal token.
     const actionTriples = await fetchTriples(request, {
@@ -150,11 +154,16 @@ test.describe("autoresearch — propose/execute iteration mock-LLM journey", () 
       predicate: "autoresearch.best.value",
       limit: 10,
     });
+    // EXACTLY one — rule 04c upserts (remove-then-add) best.value, so
+    // a clean run leaves a single triple. Pinning length===1 (not >=1)
+    // + reading best[0] means a regression to append-only behaviour
+    // (stale 1.20 + new 0.85 both present) FAILS here instead of
+    // passing vacuously off the most-recent element.
     expect(
       best.length,
-      "expected an autoresearch.best.value triple (best promotion)",
-    ).toBeGreaterThanOrEqual(1);
-    const bestVal = Number(best[best.length - 1]?.object);
+      "expected exactly one autoresearch.best.value triple (rule 04c upsert)",
+    ).toBe(1);
+    const bestVal = Number(best[0]?.object);
     expect(
       bestVal,
       `expected best.value (${bestVal}) promoted below the 1.20 baseline`,
