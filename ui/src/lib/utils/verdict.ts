@@ -25,6 +25,8 @@ const APPROVE = new Set([
   "accept",
   "plan_approved",
   "respond_direct",
+  // Forward-compat: no current pack emits decide(action="complete"), but
+  // treat it as a terminal positive if one ever does.
   "complete",
   "completed",
 ]);

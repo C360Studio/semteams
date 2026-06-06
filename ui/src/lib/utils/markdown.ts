@@ -23,6 +23,11 @@
  * headings, and nested lists are intentionally out of scope — when an
  * unsupported construct appears it degrades to escaped plain text, never
  * to unsafe markup.
+ *
+ * Known limitation: a link URL is captured up to the first ')' , so a URL
+ * containing a literal paren (e.g. a Wikipedia "..._(disambiguation)" path)
+ * is truncated at that paren. Safe, just lossy — acceptable for the LLM
+ * prose this renders.
  */
 
 const ESCAPE_MAP: Record<string, string> = {
@@ -91,10 +96,13 @@ function renderInline(escaped: string): string {
   // Italic _x_ — guard against snake_case (require non-word boundary).
   s = s.replace(/(^|[^_\w])_([^_\n]+)_/g, "$1<em>$2</em>");
 
-  // Restore stashed spans.
+  // Restore stashed spans. The `?? ""` guards a literal NUL+digit+NUL
+  // smuggled in the source: with no matching stash entry it resolves to
+  // empty text rather than the string "undefined". (It can never be markup
+  // — source is already escaped — but this keeps output clean.)
   s = s.replace(
     new RegExp(`${STASH}(\\d+)${STASH}`, "g"),
-    (_m, i) => stash[Number(i)],
+    (_m, i) => stash[Number(i)] ?? "",
   );
   return s;
 }
