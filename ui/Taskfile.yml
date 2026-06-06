@@ -269,6 +269,37 @@ tasks:
           AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
       - npx playwright test e2e/agentic/research-mvp.spec.ts
 
+  test:e2e:agentic:dev-via-test:
+    desc: Run the ADR-044 dev-via-test pack (Lisa/Ralph/CBG) mock-LLM journey
+    summary: |
+      One build-with-tests prompt drives the full dev-via-test arc
+      end-to-end against the e2e substrate:
+
+        Loop 0  coordinator (dispatch)       request_sandbox + decide(dev_via_test)
+        Loop A  dev-via-test-plan (Lisa)      emit_dev_via_test_plan + decide(planned)
+        Loop B  reviewer-dev-via-test         decide(plan_approved)   <- PLAN gate
+        Loop C  coordinator (between tasks)   decide(dev_via_test, subtopics=[task])
+        Loop D  dev-via-test-execute (Ralph)  emit_measurement + decide(measured)
+        Loop E  coordinator (between tasks)   decide(dev_via_test_finalize)
+        Loop F  reviewer-dev-via-test         decide(approved)        <- WORK gate
+        Loop G  coordinator (wake-up)         decide(respond_direct)
+
+      Validates the pack shipped in PR #196: both CBG gates spawn the
+      reviewer-dev-via-test role, the distinct plan_approved/approved
+      tokens keep the two gates' routing disjoint (Slice 6), and the
+      chain terminates with a delivered reply. Sandbox is the
+      MockRunner (SEMTEAMS_SANDBOX_RUNNER default = mock).
+    vars:
+      FIXTURE: dev-via-test.yaml
+      AGENTIC_CONFIG: e2e-flow-bootstrap.json
+    cmds:
+      - defer: { task: test:e2e:agentic:cleanup }
+      - task: test:e2e:agentic:stack:up
+        vars:
+          FIXTURE: "{{.FIXTURE}}"
+          AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
+      - npx playwright test e2e/agentic/dev-via-test.spec.ts
+
   test:e2e:agentic:sandbox-mvp:
     desc: Run the ADR-043 PR 4.4 sandbox-tools mock-LLM journey
     summary: |
