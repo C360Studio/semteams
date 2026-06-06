@@ -19,6 +19,8 @@
   import { SvelteSet } from "svelte/reactivity";
   import ArtifactCard from "./ArtifactCard.svelte";
   import TaskTrace from "./TaskTrace.svelte";
+  import { renderMarkdown } from "$lib/utils/markdown";
+  import { classifyVerdict, verdictLabel } from "$lib/utils/verdict";
 
   // Tool-call steps whose `tool_name` matches this prefix render their
   // arguments through ArtifactCard (structured fields, markdown-aware
@@ -29,6 +31,36 @@
 
   function isEmitTool(name: string | undefined): boolean {
     return typeof name === "string" && name.startsWith(EMIT_TOOL_PREFIX);
+  }
+
+  // Every loop ends its turn with a `decide(action, reason)` call — the
+  // routing verdict. We surface it as a prominent chip + always-visible
+  // rationale (rendered as markdown) rather than burying it as a generic
+  // tool-call row, because it's the single most scannable fact about a
+  // loop and is identical across every category pack.
+  function isDecideTool(name: string | undefined): boolean {
+    return name === "decide";
+  }
+
+  function decideAction(step: ToolCallStep): string | undefined {
+    const a = step.tool_arguments?.action;
+    return typeof a === "string" ? a : undefined;
+  }
+
+  function decideReason(step: ToolCallStep): string {
+    const r = step.tool_arguments?.reason;
+    return typeof r === "string" ? r : "";
+  }
+
+  // A model_call carries free-form prose in `response`; render it as
+  // markdown when expanded. Tool calls and tool-decision model calls (no
+  // text response) keep the raw JSON payload.
+  function hasProseResponse(step: TrajectoryStep): step is ModelCallStep {
+    return (
+      step.step_type === "model_call" &&
+      typeof step.response === "string" &&
+      step.response.trim() !== ""
+    );
   }
 
   interface Props {
@@ -209,43 +241,87 @@
   {:else}
     <ol class="story-list" data-testid="story-list">
       {#each trajectory.steps as step, idx (idx + step.timestamp)}
-        <li class="story-step" data-step-type={step.step_type} data-testid="story-step">
-          <button
-            type="button"
-            class="step-button"
-            onclick={() => toggleExpand(idx)}
-            aria-expanded={expanded.has(idx)}
+        {#if step.step_type === "tool_call" && isDecideTool(step.tool_name)}
+          {@const tone = classifyVerdict(decideAction(step))}
+          {@const reason = decideReason(step)}
+          <li
+            class="story-step story-verdict"
+            data-step-type="verdict"
+            data-testid="story-verdict"
+            data-verdict-tone={tone}
           >
-            <span class="line-icon" aria-hidden="true">●</span>
-            <span class="line-body">
-              <span class="step-headline">{lineFor(step)}</span>
-              {#if previewFor(step)}
-                <span class="step-preview">{previewFor(step)}</span>
-              {/if}
-              {#if metaFor(step)}
-                <span class="step-meta">{metaFor(step)}</span>
-              {/if}
-            </span>
-            <span class="line-chevron" aria-hidden="true">
-              {expanded.has(idx) ? "▾" : "▸"}
-            </span>
-          </button>
-          {#if expanded.has(idx)}
-            {#if step.step_type === "tool_call" && isEmitTool(step.tool_name)}
-              <div class="step-payload-card" data-testid="story-step-payload">
-                <ArtifactCard
-                  toolName={step.tool_name}
-                  args={(step as ToolCallStep).tool_arguments}
-                />
+            <span class="line-icon verdict-icon" aria-hidden="true">◆</span>
+            <div class="verdict-body">
+              <div class="verdict-head">
+                <span
+                  class="verdict-chip"
+                  data-tone={tone}
+                  data-testid="verdict-chip"
+                >{verdictLabel(decideAction(step))}</span>
+                <span class="verdict-role">{roleLabel(step)} decided</span>
+                {#if metaFor(step)}
+                  <span class="step-meta verdict-meta">{metaFor(step)}</span>
+                {/if}
               </div>
-            {:else}
-              <pre
-                class="step-payload"
-                data-testid="story-step-payload"
-              >{fullPayload(step)}</pre>
+              {#if reason}
+                <div class="verdict-reason" data-testid="verdict-reason">
+                  <!-- reason is LLM-authored; renderMarkdown escapes first
+                       and emits only a fixed tag whitelist (XSS-safe). -->
+                  <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+                  {@html renderMarkdown(reason)}
+                </div>
+              {/if}
+            </div>
+          </li>
+        {:else}
+          <li class="story-step" data-step-type={step.step_type} data-testid="story-step">
+            <button
+              type="button"
+              class="step-button"
+              onclick={() => toggleExpand(idx)}
+              aria-expanded={expanded.has(idx)}
+            >
+              <span class="line-icon" aria-hidden="true">●</span>
+              <span class="line-body">
+                <span class="step-headline">{lineFor(step)}</span>
+                {#if previewFor(step)}
+                  <span class="step-preview">{previewFor(step)}</span>
+                {/if}
+                {#if metaFor(step)}
+                  <span class="step-meta">{metaFor(step)}</span>
+                {/if}
+              </span>
+              <span class="line-chevron" aria-hidden="true">
+                {expanded.has(idx) ? "▾" : "▸"}
+              </span>
+            </button>
+            {#if expanded.has(idx)}
+              {#if step.step_type === "tool_call" && isEmitTool(step.tool_name)}
+                <div class="step-payload-card" data-testid="story-step-payload">
+                  <ArtifactCard
+                    toolName={step.tool_name}
+                    args={(step as ToolCallStep).tool_arguments}
+                  />
+                </div>
+              {:else if hasProseResponse(step)}
+                <div
+                  class="step-payload step-markdown"
+                  data-testid="story-step-payload"
+                >
+                  <!-- model prose is LLM-authored; renderMarkdown escapes
+                       first and emits only a fixed tag whitelist (XSS-safe). -->
+                  <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+                  {@html renderMarkdown(step.response ?? "")}
+                </div>
+              {:else}
+                <pre
+                  class="step-payload"
+                  data-testid="story-step-payload"
+                >{fullPayload(step)}</pre>
+              {/if}
             {/if}
-          {/if}
-        </li>
+          </li>
+        {/if}
       {/each}
     </ol>
   {/if}
@@ -444,6 +520,170 @@
     margin: 0.125rem 0 0.5rem 2.25rem;
     max-height: 28rem;
     overflow-y: auto;
+  }
+
+  /* Verdict row — the decide(action, reason) surfacing. Chip + always-on
+     rationale, no expand affordance (the reason is the payload). */
+  .story-verdict {
+    display: grid;
+    grid-template-columns: 1.5rem 1fr;
+    gap: 0.5rem;
+    align-items: baseline;
+    padding: 0.4375rem 0.5rem;
+    width: calc(100% - 1rem);
+  }
+
+  .verdict-icon {
+    color: var(--ui-text-secondary, #6b7280);
+    background: var(--ui-surface-primary, #fff);
+    width: 1rem;
+    height: 1rem;
+    line-height: 1;
+    text-align: center;
+    font-size: 0.625rem;
+    align-self: center;
+    z-index: 1;
+  }
+
+  .verdict-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    min-width: 0;
+  }
+
+  .verdict-head {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+  }
+
+  .verdict-chip {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    padding: 0.0625rem 0.375rem;
+    border-radius: 9999px;
+    text-transform: capitalize;
+    border: 1px solid transparent;
+    /* Default (route) tone. */
+    background: #eff6ff;
+    color: #1d4ed8;
+    border-color: #bfdbfe;
+  }
+
+  .verdict-chip[data-tone="approve"] {
+    background: #d1fae5;
+    color: #065f46;
+    border-color: #6ee7b7;
+  }
+
+  .verdict-chip[data-tone="reject"] {
+    background: #fee2e2;
+    color: #991b1b;
+    border-color: #fca5a5;
+  }
+
+  .verdict-chip[data-tone="clarify"] {
+    background: #ffedd5;
+    color: #9a3412;
+    border-color: #fed7aa;
+  }
+
+  .verdict-role {
+    font-size: 0.75rem;
+    color: var(--ui-text-secondary, #6b7280);
+  }
+
+  .verdict-meta {
+    margin-top: 0;
+  }
+
+  .verdict-reason {
+    font-size: 0.8125rem;
+    line-height: 1.5;
+    color: var(--ui-text-primary, #111827);
+    border-left: 2px solid var(--ui-border-subtle, #e5e7eb);
+    padding-left: 0.625rem;
+  }
+
+  /* Tone-tinted left rule so the verdict reads at a glance. */
+  .story-verdict[data-verdict-tone="approve"] .verdict-reason {
+    border-left-color: #6ee7b7;
+  }
+  .story-verdict[data-verdict-tone="reject"] .verdict-reason {
+    border-left-color: #fca5a5;
+  }
+  .story-verdict[data-verdict-tone="clarify"] .verdict-reason {
+    border-left-color: #fed7aa;
+  }
+  .story-verdict[data-verdict-tone="route"] .verdict-reason {
+    border-left-color: #bfdbfe;
+  }
+
+  /* Rendered-markdown payload (model prose). Shares the indent + framing
+     of .step-payload but lays out block elements instead of <pre> text. */
+  .step-markdown {
+    font-family: inherit;
+    white-space: normal;
+  }
+
+  /* Shared element styles for renderMarkdown() output, scoped via :global
+     since the markup is injected with {@html}. */
+  .verdict-reason :global(.md-p),
+  .step-markdown :global(.md-p) {
+    margin: 0 0 0.5rem;
+  }
+  .verdict-reason :global(.md-p:last-child),
+  .step-markdown :global(.md-p:last-child) {
+    margin-bottom: 0;
+  }
+  .verdict-reason :global(.md-h),
+  .step-markdown :global(.md-h) {
+    margin: 0.5rem 0 0.25rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+  .verdict-reason :global(.md-list),
+  .step-markdown :global(.md-list) {
+    margin: 0 0 0.5rem;
+    padding-left: 1.25rem;
+  }
+  .verdict-reason :global(.md-quote),
+  .step-markdown :global(.md-quote) {
+    margin: 0 0 0.5rem;
+    padding-left: 0.625rem;
+    border-left: 2px solid var(--ui-border-subtle, #e5e7eb);
+    color: var(--ui-text-secondary, #6b7280);
+  }
+  .verdict-reason :global(code),
+  .step-markdown :global(code) {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.8125em;
+    background: var(--ui-surface-tertiary, #e5e7eb);
+    padding: 0.0625rem 0.25rem;
+    border-radius: 3px;
+  }
+  .verdict-reason :global(.md-code),
+  .step-markdown :global(.md-code) {
+    margin: 0 0 0.5rem;
+    padding: 0.5rem 0.625rem;
+    background: var(--ui-surface-secondary, #f9fafb);
+    border: 1px solid var(--ui-border-subtle, #e5e7eb);
+    border-radius: 4px;
+    overflow-x: auto;
+    font-size: 0.75rem;
+    line-height: 1.5;
+  }
+  .verdict-reason :global(.md-code code),
+  .step-markdown :global(.md-code code) {
+    background: none;
+    padding: 0;
+  }
+  .verdict-reason :global(a),
+  .step-markdown :global(a) {
+    color: var(--ui-interactive-primary, #2563eb);
+    text-decoration: underline;
   }
 
   .story-empty {

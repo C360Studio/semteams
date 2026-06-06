@@ -16,6 +16,8 @@
   // body readable without a full markdown parser (which would add a
   // dependency + XSS surface for an LLM-authored payload).
 
+  import { renderMarkdown } from "$lib/utils/markdown";
+
   interface Props {
     toolName: string;
     args: Record<string, unknown> | undefined;
@@ -71,6 +73,11 @@
     return spaced.charAt(0).toUpperCase() + spaced.slice(1);
   }
 
+  // Top-level string fields can carry markdown prose (research synthesis,
+  // rollup narratives). renderMarkdown escapes first and emits a fixed tag
+  // whitelist, so its output is XSS-safe for {@html}. Short scalar values
+  // (inside arrays/objects) stay plain — Svelte auto-escapes those.
+
   function formatScalar(v: unknown): string {
     if (v === null) return "null";
     if (v === undefined) return "";
@@ -108,7 +115,10 @@
           <dt class="field-label">{labelForKey(key)}</dt>
           <dd class="field-value">
             {#if typeof value === "string"}
-              <p class="value-text">{value}</p>
+              <!-- LLM-authored prose; renderMarkdown escapes first and emits
+                   a fixed tag whitelist (XSS-safe). -->
+              <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+              <div class="value-text">{@html renderMarkdown(value)}</div>
             {:else if typeof value === "number" || typeof value === "boolean"}
               <p class="value-scalar">{formatScalar(value)}</p>
             {:else if isArrayOfScalars(value)}
@@ -231,9 +241,55 @@
 
   .value-text {
     margin: 0;
-    white-space: pre-wrap;
     word-break: break-word;
     line-height: 1.5;
+  }
+
+  /* renderMarkdown() output styles (injected via {@html}; :global needed). */
+  .value-text :global(.md-p) {
+    margin: 0 0 0.375rem;
+  }
+  .value-text :global(.md-p:last-child) {
+    margin-bottom: 0;
+  }
+  .value-text :global(.md-h) {
+    margin: 0.375rem 0 0.25rem;
+    font-size: 0.8125rem;
+    font-weight: 600;
+  }
+  .value-text :global(.md-list) {
+    margin: 0 0 0.375rem;
+    padding-left: 1.25rem;
+  }
+  .value-text :global(.md-quote) {
+    margin: 0 0 0.375rem;
+    padding-left: 0.5rem;
+    border-left: 2px solid var(--ui-border-subtle, #e5e7eb);
+    color: var(--ui-text-secondary, #6b7280);
+  }
+  .value-text :global(code) {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.8125em;
+    background: var(--ui-surface-tertiary, #e5e7eb);
+    padding: 0.0625rem 0.25rem;
+    border-radius: 3px;
+  }
+  .value-text :global(.md-code) {
+    margin: 0 0 0.375rem;
+    padding: 0.5rem 0.625rem;
+    background: var(--ui-surface-primary, #fff);
+    border: 1px solid var(--ui-border-subtle, #e5e7eb);
+    border-radius: 4px;
+    overflow-x: auto;
+    font-size: 0.75rem;
+  }
+  .value-text :global(.md-code code) {
+    background: none;
+    padding: 0;
+  }
+  .value-text :global(a) {
+    color: var(--ui-interactive-primary, #2563eb);
+    text-decoration: underline;
   }
 
   .value-scalar {

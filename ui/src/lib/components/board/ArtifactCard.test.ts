@@ -48,7 +48,7 @@ describe("ArtifactCard", () => {
     expect(screen.getByText("No additional fields.")).toBeInTheDocument();
   });
 
-  it("renders a string field with white-space preserved", () => {
+  it("renders a multi-paragraph string field as separate markdown paragraphs", () => {
     render(ArtifactCard, {
       props: {
         toolName: "emit_plan",
@@ -57,7 +57,35 @@ describe("ArtifactCard", () => {
     });
     const field = screen.getByTestId("artifact-field");
     expect(field).toHaveAttribute("data-field-key", "goal");
-    expect(within(field).getByText(/line one/).textContent).toContain("line three");
+    // A blank line is a paragraph break: two <p class="md-p"> elements.
+    const paras = field.querySelectorAll("p.md-p");
+    expect(paras.length).toBe(2);
+    expect(paras[0].textContent).toBe("line one");
+    expect(paras[1].textContent).toBe("line three");
+  });
+
+  it("renders markdown inside a string field (bold + inline code)", () => {
+    render(ArtifactCard, {
+      props: {
+        toolName: "emit_research_artifact",
+        args: { summary: "Cut **wallclock** with `go test -p`." },
+      },
+    });
+    const field = screen.getByTestId("artifact-field");
+    expect(field.querySelector("strong")?.textContent).toBe("wallclock");
+    expect(field.querySelector("code")?.textContent).toBe("go test -p");
+  });
+
+  it("escapes HTML in a string field (no raw markup injected)", () => {
+    render(ArtifactCard, {
+      props: {
+        toolName: "emit_plan",
+        args: { goal: "<img src=x onerror=alert(1)>" },
+      },
+    });
+    const field = screen.getByTestId("artifact-field");
+    expect(field.querySelector("img")).toBeNull();
+    expect(field.textContent).toContain("<img src=x onerror=alert(1)>");
   });
 
   it("renders an array of strings as a bullet list", () => {
