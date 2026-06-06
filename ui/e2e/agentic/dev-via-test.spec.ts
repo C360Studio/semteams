@@ -135,6 +135,14 @@ test.describe("ADR-044 — dev-via-test pack mock-LLM journey", () => {
       byRole("reviewer-dev-via-test"),
       "TWO CBG gates — plan-review at chain-start + work-gate at chain-end",
     ).toBe(2);
+    // The spawned coordinator wake-ups (post-plan-approval, post-Ralph,
+    // final) all carry role=coordinator. Floor at 3 (not exact-4: the
+    // front-door dispatch loop's role is omitempty per
+    // feedback_loopinfo_role_omitempty) — catches a missing wake-up.
+    expect(
+      byRole("coordinator"),
+      "≥3 coordinator wake-ups (walker → walker → final)",
+    ).toBeGreaterThanOrEqual(3);
 
     // The decisive proof: the chain flowed through BOTH gates with the
     // DISTINCT per-phase verdict tokens (Slice 6 disjoint routing).
@@ -168,6 +176,15 @@ test.describe("ADR-044 — dev-via-test pack mock-LLM journey", () => {
       ready.length,
       "expected a sandbox.attestation.ready triple — the coordinator provisions a sandbox before dispatching dev_via_test",
     ).toBeGreaterThanOrEqual(1);
+    // Value check, not just presence (graph-ingest may return bool or
+    // string). MockRunner always returns Ready, but the value gate
+    // keeps the assertion meaningful if the runner ever returns
+    // not-ready — matches sandbox-mvp.spec.ts.
+    const rObj = ready[0]?.object;
+    const rStr = typeof rObj === "boolean" ? String(rObj) : String(rObj ?? "");
+    expect(rStr.toLowerCase(), `expected attestation.ready=true; got ${rStr}`).toBe(
+      "true",
+    );
 
     // Terminal: rule 03b published the user reply on respond_direct.
     const resp = await request.get(
@@ -182,6 +199,10 @@ test.describe("ADR-044 — dev-via-test pack mock-LLM journey", () => {
   });
 });
 
+// NOTE: pollUntil/fetchTriples + the Loop/Triple/TERMINAL shapes are
+// duplicated across sandbox-mvp/dev-via-test/autoresearch specs.
+// Follow-up: extract to ui/e2e/helpers/agentic.ts once a 4th spec
+// needs them (go-reviewer 2026-06-06).
 async function fetchTriples(
   request: import("@playwright/test").APIRequestContext,
   params: { subject?: string; predicate?: string; limit?: number },

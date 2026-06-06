@@ -195,6 +195,8 @@ tasks:
       tearing down the docker stack between runs.
     cmds:
       - task: test:e2e:agentic:research-mvp
+      - task: test:e2e:agentic:dev-via-test
+      - task: test:e2e:agentic:autoresearch
       - task: test:e2e:agentic:sandbox-mvp
       - task: test:e2e:agentic:ops-agent
       - task: test:e2e:agentic:real-time-activity-stream
