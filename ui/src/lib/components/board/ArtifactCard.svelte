@@ -11,10 +11,11 @@
   // header, and emits each remaining field as a labelled section. The
   // value renderer handles four shapes: scalar (string/number/boolean),
   // array-of-strings (bullet list), array-of-objects (definition list
-  // per item), object (flat definition list). Multi-line strings preserve
-  // their newlines via white-space: pre-wrap — enough to make a markdown
-  // body readable without a full markdown parser (which would add a
-  // dependency + XSS surface for an LLM-authored payload).
+  // per item), object (flat definition list). Top-level string fields go
+  // through renderMarkdown — a dependency-free, escape-first, XSS-safe
+  // renderer (see markdown.ts) — so a markdown body reads as formatted
+  // prose. Short scalars nested in arrays/objects stay plain (Svelte
+  // auto-escapes those).
 
   import { renderMarkdown } from "$lib/utils/markdown";
 

@@ -242,7 +242,8 @@
     <ol class="story-list" data-testid="story-list">
       {#each trajectory.steps as step, idx (idx + step.timestamp)}
         {#if step.step_type === "tool_call" && isDecideTool(step.tool_name)}
-          {@const tone = classifyVerdict(decideAction(step))}
+          {@const action = decideAction(step)}
+          {@const tone = classifyVerdict(action)}
           {@const reason = decideReason(step)}
           <li
             class="story-step story-verdict"
@@ -257,7 +258,7 @@
                   class="verdict-chip"
                   data-tone={tone}
                   data-testid="verdict-chip"
-                >{verdictLabel(decideAction(step))}</span>
+                >{verdictLabel(action)}</span>
                 <span class="verdict-role">{roleLabel(step)} decided</span>
                 {#if metaFor(step)}
                   <span class="step-meta verdict-meta">{metaFor(step)}</span>
