@@ -20,6 +20,9 @@ import { test, expect } from "@playwright/test";
  *   - Plan's `emit_plan` step expands to ArtifactCard (testid
  *     `artifact-card`) with at least one structured field — NOT the
  *     raw <pre class="step-payload"> JSON.
+ *   - The plan loop's decide(action="gather") surfaces as a verdict
+ *     row (chip + always-visible reason), proving the decide-verdict
+ *     enrichment reads the live trajectory wire shape (Thread #2).
  *   - Breadcrumb back-button restores focus to the parent.
  *
  * **Chain shape note (semstreams beta.96, validated 2026-06-03 via
@@ -224,6 +227,26 @@ test.describe("Chain drill-in + emit_* artifact rendering", () => {
       ),
       "raw <pre> payload appeared alongside ArtifactCard — TaskStory.svelte should swap pre for ArtifactCard when tool_name starts with `emit_`, never render both",
     ).not.toBeVisible();
+
+    // -----------------------------------------------------------------
+    // Step 9b — the decide verdict surfaces on the loop (Thread #2).
+    // The plan loop ends with decide(action="gather") per
+    // research-mvp.yaml Loop A. TaskStory renders it as a standalone
+    // verdict row (chip + always-visible reason), NOT a generic
+    // expandable tool-call step. This proves the verdict reads off the
+    // live trajectory wire shape (tool_arguments.action/reason), the
+    // same shape ArtifactCard consumes above.
+    // -----------------------------------------------------------------
+    const verdict = page.getByTestId("story-verdict").first();
+    await expect(
+      verdict,
+      "expected a decide verdict row in the plan loop's story. If only generic `used decide` steps render, the isDecideTool branch in TaskStory.svelte regressed.",
+    ).toBeVisible({ timeout: 10_000 });
+    // The plan loop's verdict is a routing decision (gather) → route tone.
+    await expect(verdict).toHaveAttribute("data-verdict-tone", "route");
+    await expect(verdict.getByTestId("verdict-chip")).toHaveText("Gather");
+    // The rationale renders (markdown, always visible — no expand needed).
+    await expect(verdict.getByTestId("verdict-reason")).not.toBeEmpty();
 
     // -----------------------------------------------------------------
     // Step 10 — back-button returns focus to the coordinator. The
