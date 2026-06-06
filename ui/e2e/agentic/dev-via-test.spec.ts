@@ -96,7 +96,16 @@ test.describe("ADR-044 — dev-via-test pack mock-LLM journey", () => {
       const allTerminal = list.every((l) => TERMINAL.has(l.state ?? ""));
       // Both gates (plan + work) + planner + executor + settled.
       if (cbg.length >= 2 && lisa.length >= 1 && ralph.length >= 1 && allTerminal) {
-        return list;
+        // Don't settle until the final coordinator wake-up has
+        // delivered — the work-gate going terminal precedes
+        // respond_direct by a beat.
+        const acts = await fetchTriples(request, {
+          predicate: "coordinator.decision.next_action",
+          limit: 50,
+        });
+        if (acts.some((t) => String(t.object ?? "") === "respond_direct")) {
+          return list;
+        }
       }
       return null;
     }, { timeoutMs: 100_000 });

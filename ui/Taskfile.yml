@@ -300,6 +300,36 @@ tasks:
           AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
       - npx playwright test e2e/agentic/dev-via-test.spec.ts
 
+  test:e2e:agentic:autoresearch:
+    desc: Run the autoresearch pack (propose/execute iteration) mock-LLM journey
+    summary: |
+      One optimize-a-metric prompt drives the autoresearch arc
+      end-to-end against the e2e substrate (cap=2):
+
+        Loop 0  coordinator (dispatch)        request_sandbox + decide(autoresearch)
+        Loop A  autoresearch-baseline         emit_baseline(cap=2) + decide(propose)
+        Loop B  autoresearch-propose (iter 1) decide(measure)
+        Loop C  autoresearch-execute (iter 1) emit_measurement(kept) + decide(measured)
+        Loop D  autoresearch-propose (iter 2) decide(measure)
+        Loop E  autoresearch-execute (iter 2) emit_measurement(kept) + decide(measured)
+        Loop F  autoresearch-synthesize       emit_artifact + decide(emit)
+        Loop G  reviewer-autoresearch         decide(approved)
+        Loop H  coordinator (wake-up)         decide(respond_direct)
+
+      Validates the rule-05 presence-marker iteration loop, the cap
+      gate (exactly 2 iterations), best-value promotion (rule 04c),
+      and the reviewer + wake-up terminal. Sandbox is the MockRunner.
+    vars:
+      FIXTURE: autoresearch.yaml
+      AGENTIC_CONFIG: e2e-flow-bootstrap.json
+    cmds:
+      - defer: { task: test:e2e:agentic:cleanup }
+      - task: test:e2e:agentic:stack:up
+        vars:
+          FIXTURE: "{{.FIXTURE}}"
+          AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
+      - npx playwright test e2e/agentic/autoresearch.spec.ts
+
   test:e2e:agentic:sandbox-mvp:
     desc: Run the ADR-043 PR 4.4 sandbox-tools mock-LLM journey
     summary: |
