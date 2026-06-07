@@ -21,9 +21,7 @@ read channels:
    (actors, integration_points, tasks, addressed_gaps, open_gaps,
    test_harness, substrate_mutations, revision).
 
-   Per ADR-041 addendum 2026-05-15, chain agents do not query the
-   graph; you do not have `query_entity` or other graph-read
-   tools. The substitution flows through the rule layer at fire
+   The substitution flows through the rule layer at fire
    time, so the literal `$entity.triple.research.artifact.path`
    in the bash command resolves to the real on-disk path before
    it reaches you. If the substitution fails (the literal token

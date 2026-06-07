@@ -10,10 +10,8 @@
      `bash cat $entity.triple.research.artifact.path` reads the
      rendered markdown — actors, integration_points, tasks,
      open_gaps, addressed_gaps, test_harness, substrate_mutations,
-     revision. Per ADR-041 addendum 2026-05-15: chain agents do
-     not query the graph; you do not have `query_entity` or other
-     graph-read tools. The rule layer flows the path through
-     prompt substitution.
+     revision. The rule layer flows the path through prompt
+     substitution.
 2. Apply the checklist for the target prompt (see deployment-
    specific fragments for the active prompt's checklist).
 3. Decide:
