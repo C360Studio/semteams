@@ -1129,7 +1129,18 @@ tasks:
       # carry our product code; both need the no-cache treatment to
       # guarantee a smoke runs the committed source. Always-warm
       # sandbox means we always rebuild it.
-      - docker compose -f docker-compose.agentic-e2e.yml build --no-cache backend sandbox
+      #
+      # mock-llm is in the list for the same reason: it carries the
+      # fixture-matching code (the role-keyed `responses_by_role` mode,
+      # added 2026-06-08 to mock for_each fan-out chains like research).
+      # `up -d` below does NOT pass --build, so a mock source change
+      # would otherwise run a stale binary until someone manually
+      # rebuilds — and a manual `docker compose build` from a different
+      # CWD lands in a different compose project namespace, so `up -d`
+      # silently keeps the old image. Letting stack:up own the
+      # --no-cache rebuild (same namespace as `up -d`) is the only
+      # reliable fix. See [[mock-llm-rebuild]] + [[compose-project-name-mismatch]].
+      - docker compose -f docker-compose.agentic-e2e.yml build --no-cache backend sandbox mock-llm
       - docker compose -f docker-compose.agentic-e2e.yml up -d
       - |
         PORT="{{.E2E_AGENTIC_UI_PORT}}"
