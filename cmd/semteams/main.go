@@ -17,6 +17,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/c360studio/semstreams/agentic/agentrun"
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/componentregistry"
 	"github.com/c360studio/semstreams/config"
@@ -28,6 +29,7 @@ import (
 	"github.com/c360studio/semstreams/payloadbuiltins"
 	"github.com/c360studio/semstreams/payloadregistry"
 	"github.com/c360studio/semstreams/persona"
+	"github.com/c360studio/semstreams/pkg/lifecycle"
 	agentictools "github.com/c360studio/semstreams/processor/agentic-tools"
 	"github.com/c360studio/semstreams/processor/agentic-tools/executors"
 	rulepkg "github.com/c360studio/semstreams/processor/rule"
@@ -174,6 +176,15 @@ func run() error {
 	svcDeps := createServiceDependencies(natsClient, metricsRegistry, logger, platform, configManager, componentRegistry)
 	svcDeps.ToolRegistry = toolRegistry
 	svcDeps.PayloadRegistry = payloadReg
+
+	// 10a. Wire the shared Lifecycle harness Manager + agent-run workflow
+	// (ADR-053 adoption Phase 1). Must run before configureAndCreateServices so
+	// the rule processor factory installs the manager via SetLifecycleManager.
+	// See attachLifecycleManager for the rationale and the Phase-2 deferral of
+	// the milestone subscriber.
+	if err := attachLifecycleManager(svcDeps, natsClient, logger); err != nil {
+		return err
+	}
 
 	// 11. Configure and create services
 	if err := configureAndCreateServices(cfg, manager, svcDeps); err != nil {
@@ -756,6 +767,34 @@ func createServiceDependencies(
 		Manager:           configManager,
 		ComponentRegistry: componentRegistry,
 	}
+}
+
+// attachLifecycleManager builds the shared Lifecycle harness Manager (ADR-047)
+// and registers the agent-run workflow (ADR-053 D2), plumbing the manager onto
+// svcDeps.LifecycleManager so the rule processor factory installs it (its Setup
+// calls SetLifecycleManager when deps.LifecycleManager is non-nil). With the
+// manager wired, lifecycle_* rule actions and the run-entity substitution
+// ($entity.triple.agent.run.entity_id) resolve at evaluation time instead of
+// failing closed.
+//
+// ADR-053 adoption Phase 1: additive wiring ONLY. No rule pack uses run_scope
+// yet, so the manager mints no AgentRun and this is behavior-neutral — the
+// existing lineage threading (cmd/semteams/chain) is untouched. The agent-run
+// MilestoneSubscriber (D3 terminal authority) is deferred to Phase 2, where
+// run_scope="new" first mints runs for it to resolve. Mirrors upstream
+// cmd/semstreams/main.go §10b–10c boot order (ADR-029).
+//
+// Upstream inlines these two statements directly against svcDeps; the helper
+// here is purely to keep run() under revive's function-length limit, NOT a
+// semantic divergence — a reader diffing against upstream main.go should treat
+// it as the same wiring.
+func attachLifecycleManager(svcDeps *service.Dependencies, natsClient *natsclient.Client, logger *slog.Logger) error {
+	mgr := lifecycle.NewManager(natsClient, logger)
+	if err := agentrun.Register(mgr); err != nil {
+		return fmt.Errorf("register agent-run workflow: %w", err)
+	}
+	svcDeps.LifecycleManager = mgr
+	return nil
 }
 
 // configureAndCreateServices configures the manager and creates all services
