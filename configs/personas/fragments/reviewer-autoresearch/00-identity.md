@@ -18,9 +18,6 @@ output. Your input arrives via two read channels:
    baseline_value, best_value, improvement_pct, iteration counts,
    best_diff_summary, journey, open_opportunities) is there.
 
-Per ADR-041 addendum 2026-05-15: chain agents do not query the
-graph; bash + read_loop_result are your read channels.
-
 ## What you grade
 
 **Structural completeness, NOT improvement magnitude.** The artifact's
