@@ -135,6 +135,10 @@ type OpenAIServer struct {
 	// tool-call-vs-completion heuristic when set). See fixture.go.
 	fixture      *Fixture
 	fixtureIndex int
+	// roleIdx tracks per-bucket cursor positions for role-keyed fixtures.
+	// Key is the bucket index (position in fixture.ResponsesByRole), value
+	// is the next response index within that bucket.
+	roleIdx map[int]int
 
 	// Tracking for assertions
 	requestCount int
@@ -192,11 +196,15 @@ func (s *OpenAIServer) WithResponseSequence(responses []string) *OpenAIServer {
 // fixture's sequence; after exhaustion, the last response is repeated.
 // Fixture responses take precedence over the default
 // tool-call-vs-completion heuristic based on request state.
+//
+// For role-keyed fixtures (ResponsesByRole), per-bucket cursors are
+// initialised to zero and advance independently on each matching request.
 func (s *OpenAIServer) WithFixture(f *Fixture) *OpenAIServer {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.fixture = f
 	s.fixtureIndex = 0
+	s.roleIdx = make(map[int]int)
 	return s
 }
 
@@ -281,6 +289,46 @@ func (s *OpenAIServer) LastRequest() *ChatCompletionRequest {
 	return s.lastRequest
 }
 
+// concatSystemPrompts returns the concatenation of all system-role message
+// contents in msgs. Used to fingerprint the persona loaded for a request.
+func concatSystemPrompts(msgs []ChatMessage) string {
+	var sb strings.Builder
+	for _, m := range msgs {
+		if m.Role == "system" {
+			sb.WriteString(m.Content)
+		}
+	}
+	return sb.String()
+}
+
+// logRequestTrace emits the per-request diagnostic log lines. Extracted to
+// keep handleChatCompletion under the revive function-length limit.
+func logRequestTrace(reqNum, fixIdx int, req ChatCompletionRequest) {
+	toolCount := len(req.Tools)
+	hasToolResults := false
+	var msgBreakdown []string
+	var sysPreviews []string
+	for i, m := range req.Messages {
+		if m.Role == "tool" {
+			hasToolResults = true
+		}
+		msgBreakdown = append(msgBreakdown, fmt.Sprintf("%s(%d)", m.Role, len(m.Content)))
+		if m.Role == "system" {
+			preview := m.Content
+			if len(preview) > 500 {
+				preview = preview[:500] + "…"
+			}
+			preview = strings.ReplaceAll(preview, "\n", " ⏎ ")
+			sysPreviews = append(sysPreviews, fmt.Sprintf("sys[%d]=%q", i, preview))
+		}
+	}
+	log.Printf("[mock-llm] req#%d (fixture idx=%d) model=%s tools=%d has_tool_results=%v stream=%v msgs=[%s]",
+		reqNum, fixIdx, req.Model, toolCount, hasToolResults, req.Stream, strings.Join(msgBreakdown, " "))
+	for _, p := range sysPreviews {
+		log.Printf("[mock-llm]   req#%d %s", reqNum, p)
+	}
+}
+
 func (s *OpenAIServer) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -308,37 +356,12 @@ func (s *OpenAIServer) handleChatCompletion(w http.ResponseWriter, r *http.Reque
 	delay := s.requestDelay
 	s.mu.Unlock()
 
-	// Diagnostic trace — one line per LLM call so fixture consumption is
-	// visible to journey-runners. Includes tool count + whether the
-	// request carries prior tool_result messages (useful for distinguishing
-	// first-call vs post-tool iterations). Also records per-message role
-	// and size breakdown (+ a preview of every system message) so journey
-	// tests can verify the caller actually fed expected persona fragments
-	// into the prompt — the anti-gaming check that proves persona wiring
-	// works, not just that loading succeeded.
-	toolCount := len(req.Tools)
-	hasToolResults := false
-	var msgBreakdown []string
-	var sysPreviews []string
-	for i, m := range req.Messages {
-		if m.Role == "tool" {
-			hasToolResults = true
-		}
-		msgBreakdown = append(msgBreakdown, fmt.Sprintf("%s(%d)", m.Role, len(m.Content)))
-		if m.Role == "system" {
-			preview := m.Content
-			if len(preview) > 500 {
-				preview = preview[:500] + "…"
-			}
-			preview = strings.ReplaceAll(preview, "\n", " ⏎ ")
-			sysPreviews = append(sysPreviews, fmt.Sprintf("sys[%d]=%q", i, preview))
-		}
-	}
-	log.Printf("[mock-llm] req#%d (fixture idx=%d) model=%s tools=%d has_tool_results=%v stream=%v msgs=[%s]",
-		reqNum, fixIdx, req.Model, toolCount, hasToolResults, req.Stream, strings.Join(msgBreakdown, " "))
-	for _, p := range sysPreviews {
-		log.Printf("[mock-llm]   req#%d %s", reqNum, p)
-	}
+	// Pre-compute the concatenated system prompt once; used for both logging
+	// and role-bucket matching. Done outside the lock since it only reads req.
+	sysPrompt := concatSystemPrompts(req.Messages)
+
+	// Diagnostic trace — see logRequestTrace for detail.
+	logRequestTrace(reqNum, fixIdx, req)
 
 	// Apply artificial delay if configured
 	if delay > 0 {
@@ -357,7 +380,7 @@ func (s *OpenAIServer) handleChatCompletion(w http.ResponseWriter, r *http.Reque
 
 	switch {
 	case hasFixture:
-		resp = s.buildFixtureResponse(req.Model)
+		resp = s.buildFixtureResponse(reqNum, req.Model, sysPrompt)
 	case s.hasToolResults(req.Messages):
 		resp = s.buildCompletionResponse(req.Model)
 	case len(req.Tools) > 0:
@@ -550,19 +573,63 @@ func (s *OpenAIServer) buildToolCallResponse(tool Tool, model string) ChatComple
 	}
 }
 
-// buildFixtureResponse returns the next response from the configured
-// fixture. Advances the fixture index on each call and repeats the last
-// entry once exhausted. Caller must have confirmed s.fixture != nil.
-func (s *OpenAIServer) buildFixtureResponse(model string) ChatCompletionResponse {
+// buildFixtureResponse returns the next response from the configured fixture.
+// For sequential fixtures it advances the global index and repeats the last
+// entry on exhaustion. For role-keyed fixtures it matches sysPrompt against
+// bucket Match substrings and advances the matched bucket's cursor
+// independently. Caller must have confirmed s.fixture != nil.
+func (s *OpenAIServer) buildFixtureResponse(reqNum int, model, sysPrompt string) ChatCompletionResponse {
 	s.mu.Lock()
-	idx := s.fixtureIndex
-	if idx >= len(s.fixture.Responses) {
-		// Sequence exhausted — repeat the last entry.
-		idx = len(s.fixture.Responses) - 1
+
+	var entry FixtureResponse
+
+	if len(s.fixture.ResponsesByRole) > 0 {
+		// Role-keyed mode: find the first bucket whose Match is a substring
+		// of the concatenated system prompts.
+		matchedBucket := -1
+		for bi, bucket := range s.fixture.ResponsesByRole {
+			if strings.Contains(sysPrompt, bucket.Match) {
+				matchedBucket = bi
+				break
+			}
+		}
+
+		if matchedBucket < 0 {
+			// No bucket matched — log a clear warning and fall back to the
+			// last response of the first bucket so the loop fails loudly
+			// rather than hanging.
+			preview := sysPrompt
+			if len(preview) > 200 {
+				preview = preview[:200] + "…"
+			}
+			log.Printf("[mock-llm] WARN req#%d no role bucket matched system prompt (sys_preview=%q); falling back to bucket=%q last response — fixture likely has a wrong/missing match fingerprint",
+				reqNum, preview, s.fixture.ResponsesByRole[0].Match)
+			responses := s.fixture.ResponsesByRole[0].Responses
+			entry = responses[len(responses)-1]
+		} else {
+			bucket := s.fixture.ResponsesByRole[matchedBucket]
+			bucketIdx := s.roleIdx[matchedBucket]
+			if bucketIdx >= len(bucket.Responses) {
+				// Bucket exhausted — repeat last entry.
+				bucketIdx = len(bucket.Responses) - 1
+			} else {
+				s.roleIdx[matchedBucket] = bucketIdx + 1
+			}
+			entry = bucket.Responses[bucketIdx]
+			log.Printf("[mock-llm] req#%d bucket=%q idx=%d", reqNum, bucket.Match, bucketIdx)
+		}
 	} else {
-		s.fixtureIndex++
+		// Sequential mode — unchanged from original behaviour.
+		idx := s.fixtureIndex
+		if idx >= len(s.fixture.Responses) {
+			// Sequence exhausted — repeat the last entry.
+			idx = len(s.fixture.Responses) - 1
+		} else {
+			s.fixtureIndex++
+		}
+		entry = s.fixture.Responses[idx]
 	}
-	entry := s.fixture.Responses[idx]
+
 	s.mu.Unlock()
 
 	base := ChatCompletionResponse{
