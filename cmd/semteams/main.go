@@ -180,7 +180,7 @@ func run() error {
 	// 10a. Wire the shared Lifecycle harness Manager + agent-run workflow
 	// (ADR-053 adoption Phase 1). Must run before configureAndCreateServices so
 	// the rule processor factory installs the manager via SetLifecycleManager.
-	// See attachLifecycleManager for the rationale and the Phase-2 deferral of
+	// See attachLifecycleManager for the rationale and the Phase-4 deferral of
 	// the milestone subscriber.
 	if err := attachLifecycleManager(svcDeps, natsClient, logger); err != nil {
 		return err
@@ -777,12 +777,15 @@ func createServiceDependencies(
 // ($entity.triple.agent.run.entity_id) resolve at evaluation time instead of
 // failing closed.
 //
-// ADR-053 adoption Phase 1: additive wiring ONLY. No rule pack uses run_scope
-// yet, so the manager mints no AgentRun and this is behavior-neutral — the
-// existing lineage threading (cmd/semteams/chain) is untouched. The agent-run
-// MilestoneSubscriber (D3 terminal authority) is deferred to Phase 2, where
-// run_scope="new" first mints runs for it to resolve. Mirrors upstream
-// cmd/semstreams/main.go §10b–10c boot order (ADR-029).
+// ADR-053 adoption: this wiring (Phase 1) makes the manager available. Phase 2
+// then adds run_scope="new" at the 3 coordinator root spawns, so the manager
+// now mints an AgentRun per chain — additively: the runs sit in "dispatched"
+// with no consumer, and the existing lineage threading (cmd/semteams/chain) is
+// untouched (dual-write). The agent-run MilestoneSubscriber (D3 terminal
+// authority) is deferred to Phase 4, where it is wired together with the
+// lifecycle_transition rules that first advance a run past "dispatched" —
+// without them D3 would spuriously fail every run on the coordinator's normal
+// terminal. Mirrors upstream cmd/semstreams/main.go §10b–10c boot order (ADR-029).
 //
 // Upstream inlines these two statements directly against svcDeps; the helper
 // here is purely to keep run() under revive's function-length limit, NOT a

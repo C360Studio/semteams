@@ -22,6 +22,7 @@
   "on_enter": [
     {
       "type": "publish_agent",
+      "run_scope": "new",
       "subject": "agent.task.researcher-research-plan",
       "role": "researcher-research-plan",
       "model": "research",

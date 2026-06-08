@@ -32,6 +32,7 @@
     },
     {
       "type": "publish_agent",
+      "run_scope": "new",
       "subject": "agent.task.autoresearch-baseline",
       "role": "autoresearch-baseline",
       "model": "research",
