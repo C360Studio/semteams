@@ -39,6 +39,7 @@
     },
     {
       "type": "publish_agent",
+      "run_scope": "new",
       "subject": "agent.task.dev-via-test-plan",
       "role": "dev-via-test-plan",
       "model": "research",

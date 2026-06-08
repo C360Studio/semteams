@@ -79,18 +79,38 @@ func TestAgentRunRegisterRejectsDoubleWiring(t *testing.T) {
 	}
 }
 
-// TestPhase1RulePacksUseNoRunScopeOrLifecycleActions is the Phase-1↔Phase-2
-// tripwire. Phase 1 wires the lifecycle.Manager but deliberately does NOT start
-// the agentrun.MilestoneSubscriber (D3 terminal authority) — safe ONLY while no
-// rule mints a run (run_scope="new") or drives a terminal transition
-// (lifecycle_* actions). This test pins that invariant structurally so the
-// behavior-neutrality claim can't silently rot: the day a Phase-2 author adds
-// run_scope or a lifecycle_* action, this fails and points them at the
-// MilestoneSubscriber wiring obligation. When that wiring lands, update or
-// retire this guard. See docs/adr/053-adoption-plan.md Phases 2 + 4.
-func TestPhase1RulePacksUseNoRunScopeOrLifecycleActions(t *testing.T) {
-	// Scan the rule packs (where publish_agent / lifecycle_* actions live) and
-	// the two flow configs that load them.
+// mintPointSuffixes are the exactly-3 root spawns that mint an AgentRun in
+// Phase 2 (run_scope="new"). The coordinator's own loop entity is the run root;
+// downstream spawns inherit transitively via the default inherit branch
+// (agentic-loop stamps agent.run on every spawned loop), so they carry NO
+// run_scope. Path suffixes (matched against the walked, slash-normalized paths)
+// rather than full relative paths to stay robust to the test's CWD.
+var mintPointSuffixes = []string{
+	"configs/rules/research/01-coordinator-research-spawn.json",
+	"configs/rules/autoresearch/01-coordinator-autoresearch-spawn.json",
+	"configs/rules/dev-via-test/01-coordinator-dev-via-test-spawn.json",
+}
+
+// TestPhase2RunScopeOnlyAtMintPoints is the ADR-053 Phase-2 topology guard.
+//
+// Two structural invariants of the mint phase:
+//  1. run_scope="new" appears at EXACTLY the 3 coordinator root spawns and
+//     nowhere else. A stray run_scope on a downstream rule would mint a second
+//     run (mis-anchoring the chain's run identity) or mint off a non-loop
+//     entity (silent inherit-fallback). Every run_scope value must be "new" —
+//     "inherit"/"none" are the framework default/opt-out and would be noise here.
+//  2. NO lifecycle_* action types yet. Those (lifecycle_transition/complete/fail)
+//     are Phase 4 — and Phase 4 is where the agentrun.MilestoneSubscriber gets
+//     wired (its D3 zombie guard only has runs to act on once a transition rule
+//     advances them past "dispatched"). This half of the guard trips the day a
+//     lifecycle_* rule lands, pointing the Phase-4 author at the subscriber
+//     wiring (mirror upstream cmd/semstreams/main.go §10d).
+//
+// Phase 2 itself wires NO subscriber: minted runs sit inert in "dispatched"
+// with no consumer, so minting is additive/safe. See docs/adr/053-adoption-plan.md.
+func TestPhase2RunScopeOnlyAtMintPoints(t *testing.T) {
+	// Mint points live in the rule packs; the two flow configs are scanned too
+	// so a stray run_scope pasted into an inline flow rule is still caught.
 	files := collectJSONFiles(t,
 		"../../configs/rules",
 		"../../configs/flow-bootstrap.json",
@@ -100,7 +120,8 @@ func TestPhase1RulePacksUseNoRunScopeOrLifecycleActions(t *testing.T) {
 		t.Fatal("no rule/flow JSON files found — test would pass vacuously; check the scan roots")
 	}
 
-	var violations []string
+	runScopeFiles := map[string]bool{}
+	var badValues, lifecycleActions []string
 	for _, f := range files {
 		raw, err := os.ReadFile(f) //nolint:gosec // test-controlled config paths
 		if err != nil {
@@ -110,17 +131,52 @@ func TestPhase1RulePacksUseNoRunScopeOrLifecycleActions(t *testing.T) {
 		if err := json.Unmarshal(raw, &doc); err != nil {
 			t.Fatalf("unmarshal %s: %v", f, err)
 		}
-		scanPhase2Tokens(doc, f, &violations)
+		norm := filepath.ToSlash(f)
+		scanRunTokens(doc, norm, runScopeFiles, &badValues, &lifecycleActions)
 	}
 
-	if len(violations) > 0 {
-		t.Fatalf("ADR-053 Phase-1 invariant broken — found run_scope / lifecycle_* usage:\n  %s\n\n"+
-			"Phase 1 wires lifecycle.Manager but NOT agentrun.MilestoneSubscriber (D3). Adding\n"+
-			"run_scope=\"new\" or a lifecycle_* action mints/transitions runs that need the\n"+
-			"subscriber's terminal authority. Wire it in cmd/semteams/main.go (mirror upstream\n"+
-			"cmd/semstreams/main.go §10d) and then update/retire this guard.",
-			strings.Join(violations, "\n  "))
+	// Invariant 1a: every run_scope is "new".
+	if len(badValues) > 0 {
+		t.Errorf("run_scope values other than \"new\" found (use the default for inherit/none):\n  %s",
+			strings.Join(badValues, "\n  "))
 	}
+	// Invariant 1b: run_scope appears at exactly the 3 mint points.
+	for _, suffix := range mintPointSuffixes {
+		if !hasSuffixIn(runScopeFiles, suffix) {
+			t.Errorf("expected run_scope=\"new\" at mint point %q, but none found there", suffix)
+		}
+	}
+	for f := range runScopeFiles {
+		if !matchesAnySuffix(f, mintPointSuffixes) {
+			t.Errorf("run_scope found OUTSIDE the 3 mint points: %s — a downstream spawn must inherit "+
+				"(omit run_scope), not mint a second run", f)
+		}
+	}
+	// Invariant 2: no lifecycle_* actions until Phase 4 (which also wires the subscriber).
+	if len(lifecycleActions) > 0 {
+		t.Fatalf("lifecycle_* action(s) found — this is Phase 4 territory:\n  %s\n\n"+
+			"Phase 4 adds terminal-authority transitions AND must wire the agentrun.MilestoneSubscriber\n"+
+			"in cmd/semteams/main.go (upstream §10d) so D3 zombie-prevention is live. Do both, then\n"+
+			"update this guard.", strings.Join(lifecycleActions, "\n  "))
+	}
+}
+
+func hasSuffixIn(files map[string]bool, suffix string) bool {
+	for f := range files {
+		if strings.HasSuffix(f, suffix) {
+			return true
+		}
+	}
+	return false
+}
+
+func matchesAnySuffix(file string, suffixes []string) bool {
+	for _, s := range suffixes {
+		if strings.HasSuffix(file, s) {
+			return true
+		}
+	}
+	return false
 }
 
 // collectJSONFiles expands each root into a list of *.json files (a directory
@@ -153,24 +209,27 @@ func collectJSONFiles(t *testing.T, roots ...string) []string {
 	return out
 }
 
-// scanPhase2Tokens recursively records any "run_scope" key or any action with a
-// "type" of the lifecycle_* family — the two markers that break the Phase-1
-// behavior-neutrality invariant.
-func scanPhase2Tokens(v any, file string, found *[]string) {
+// scanRunTokens recursively records, for the given file: which files carry a
+// run_scope key (runScopeFiles), any run_scope value other than "new"
+// (badValues), and any action with a lifecycle_* type (lifecycleActions).
+func scanRunTokens(v any, file string, runScopeFiles map[string]bool, badValues, lifecycleActions *[]string) {
 	switch node := v.(type) {
 	case map[string]any:
 		if rs, ok := node["run_scope"]; ok {
-			*found = append(*found, fmt.Sprintf("%s: run_scope=%v", file, rs))
+			runScopeFiles[file] = true
+			if s, _ := rs.(string); s != "new" {
+				*badValues = append(*badValues, fmt.Sprintf("%s: run_scope=%v", file, rs))
+			}
 		}
 		if typ, ok := node["type"].(string); ok && strings.HasPrefix(typ, "lifecycle_") {
-			*found = append(*found, fmt.Sprintf("%s: action type %q", file, typ))
+			*lifecycleActions = append(*lifecycleActions, fmt.Sprintf("%s: action type %q", file, typ))
 		}
 		for _, val := range node {
-			scanPhase2Tokens(val, file, found)
+			scanRunTokens(val, file, runScopeFiles, badValues, lifecycleActions)
 		}
 	case []any:
 		for _, item := range node {
-			scanPhase2Tokens(item, file, found)
+			scanRunTokens(item, file, runScopeFiles, badValues, lifecycleActions)
 		}
 	}
 }
