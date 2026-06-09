@@ -1,0 +1,64 @@
+{
+  "id": "dev_via_test_replan_lisa_terminal_to_plan_review",
+  "type": "expression",
+  "name": "Re-plan Lisa terminal (planned) → CBG plan-review gate (re-gate)",
+  "description": "ADR-053 Phase 3b — RE-PLAN sibling of rule 02. Fires when a RE-PLAN Lisa (spawned by rule 02d's plan-retry driver) terminates with decide(action=planned). Splits from rule 02 because the two passes carry the run anchor on DIFFERENT triples:\n\n  - FIRST-PASS Lisa (rule 01, run_scope=new) carries agent.run.entity_id (framework-stamped from RunID) but NO lineage.run-loop-entity-id → rule 02 (gated `lineage.run-loop-entity-id length_eq 0`) sources the anchor from $entity.triple.agent.run.entity_id.\n  - RE-PLAN Lisa (rule 02d, which fires on the RUN entity and re-dispatches with inherit) carries lineage.run-loop-entity-id=$entity.id=chain.execution (02d's related_loops) but NO agent.run.entity_id — because the run entity has no bare agent.run triple for the inherit path to copy into RunID, so the spawn-identity writer never stamps agent.run.entity_id. So this rule (gated `lineage.run-loop-entity-id length_gt 0`) sources the anchor from $entity.triple.lineage.run-loop-entity-id.\n\nThe two rules are mutually exclusive on run-loop-entity-id presence — same corruption-to-no-op discipline as rule 01's lineage fence. Without this split, a re-plan Lisa hits rule 02's agent.run.entity_id substitution which resolves to the literal unresolved token (the predicate is absent on re-plan Lisa) → the re-gate CBG gets a garbage query_entity id and a garbage lineage anchor → the plan-retry loop wedges on the second bounce. See [[phase3-rule-firing-entity-blocks-rehome]].",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "agent.loop.role",
+      "operator": "eq",
+      "value": "dev-via-test-plan",
+      "required": true
+    },
+    {
+      "field": "agent.loop.outcome",
+      "operator": "eq",
+      "value": "success",
+      "required": true
+    },
+    {
+      "field": "coordinator.decision.next_action",
+      "operator": "eq",
+      "value": "planned",
+      "required": true
+    },
+    {
+      "field": "lineage.run-loop-entity-id",
+      "operator": "length_gt",
+      "value": 0,
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "publish_agent",
+      "subject": "agent.task.reviewer-dev-via-test",
+      "role": "reviewer-dev-via-test",
+      "model": "reviewing",
+      "tools": ["read_loop_result", "query_entity", "scratchpad", "decide"],
+      "tool_choice": { "mode": "required" },
+      "action_allowlist": ["plan_approved", "plan_rejected_retry", "plan_rejected"],
+      "properties": {
+        "phase": "plan_review",
+        "category": "dev_via_test",
+        "run_loop_id": "$entity.triple.lineage.run-loop-entity-id",
+        "plan_loop_id": "$entity.instance"
+      },
+      "related_loops": {
+        "run-loop-entity-id": "$entity.triple.lineage.run-loop-entity-id",
+        "dev-via-test-run": "$entity.triple.lineage.dev-via-test-run"
+      },
+      "prompt": "DEV-VIA-TEST CBG — PLAN-REVIEW gate (re-gate of a re-planned plan, before any Ralph).\n\nLisa (the planner) at loop $entity.instance just emitted a RE-PLANNED plan (revision > 1) after you previously bounced it. Your job: verify the re-planned plan now FAITHFULLY captures the user's ask + your prior finding, then emit decide(plan_approved | plan_rejected_retry | plan_rejected). You do NOT run tests here — there is no code yet. This is a fidelity review, not a work review.\n\nYour run entity ID is $entity.triple.lineage.run-loop-entity-id. Call query_entity(entity_id=\"$entity.triple.lineage.run-loop-entity-id\") FIRST — the run entity carries BOTH:\n\n- coordinator.decision.reason — THE USER'S ASK (as the front-door coordinator preserved it). This is your source of truth for what was required.\n- plan.goal, plan.integration_test_command, plan.task.<id>.{goal,assumptions,non_goals,target_files,test_command,...} — the re-planned plan Lisa emitted.\n- plan.revision — bump count (>1 here, since this is a re-plan you already bounced).\n\nOptionally read_loop_result(loop_id=\"$entity.instance\") for Lisa's own planned-decide summary.\n\nFIDELITY CHECKS (see your persona 20-plan-review.md):\n1. Does EVERY explicit user constraint survive into the plan? Named libraries/frameworks, forbidden approaches ('do not hand-roll'), required test TYPES ('unit tests that assert parsed fields') must appear in a task's goal/assumptions — not just be implied.\n2. Is each test_command a REAL test (executes behavior, asserts outcomes)? A bare `go build`/compile is NOT acceptance — reject it.\n3. Does integration_test_command exercise the user's stated acceptance, not just build?\n\nDECIDE:\n- Plan now faithfully captures the ask + tests are real → decide(action=\"plan_approved\", reason=\"<1-2 sentence confirmation>\"). Rule 02b proceeds to the coordinator → first Ralph.\n- Plan still drops a constraint OR a test_command is a build-not-test OR a required test type is missing — and a re-plan can fix it → decide(action=\"plan_rejected_retry\", reason=\"<the CONCRETE fidelity fix>\"). Lisa re-plans again, bounded by plan.lisa_retry_budget.\n- The ask itself is ambiguous/contradictory, or no plan could faithfully capture it without user input → decide(action=\"plan_rejected\", reason=\"<what the user must clarify>\"). Routed to ask_user. Fail-safe default when unsure.\n\nYou are a single-pass gate: one query, one verdict. You do not edit the plan, you do not iterate."
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "pack": "dev_via_test",
+    "phase": "ADR-053 Phase 3b — re-plan sibling of rule 02",
+    "adr": "docs/adr/044-dev-via-test-pack.md",
+    "split_rationale": "Sibling of rule 02 (first-pass). Gated on lineage.run-loop-entity-id PRESENCE (length_gt 0) — re-plan Lisa is spawned from the RUN entity by rule 02d, which threads run-loop-entity-id=$entity.id=chain.execution, so re-plan Lisa carries that lineage but NOT agent.run.entity_id (the run entity has no bare agent.run for the inherit path to copy into RunID). Mutually exclusive with rule 02 (length_eq 0). go-reviewer C1, ADR-053 Phase 3b. See [[phase3-rule-firing-entity-blocks-rehome]].",
+    "duplication_note": "The CBG plan-review spawn block intentionally mirrors rule 02 (only the anchor source + the gating condition + the re-gate prompt framing differ). Keep the two in sync on any change to the plan-review contract (tools/allowlist/fidelity checks). The duplication is the cost of the rule engine's lack of a coalesce/fallback operator for the per-pass anchor source."
+  }
+}

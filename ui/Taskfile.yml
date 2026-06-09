@@ -196,6 +196,7 @@ tasks:
     cmds:
       - task: test:e2e:agentic:research-mvp
       - task: test:e2e:agentic:dev-via-test
+      - task: test:e2e:agentic:dev-via-test-replan
       - task: test:e2e:agentic:autoresearch
       - task: test:e2e:agentic:sandbox-mvp
       - task: test:e2e:agentic:ops-agent
@@ -301,6 +302,34 @@ tasks:
           FIXTURE: "{{.FIXTURE}}"
           AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
       - npx playwright test e2e/agentic/dev-via-test.spec.ts
+
+  test:e2e:agentic:dev-via-test-replan:
+    desc: Run the dev-via-test PLAN-RETRY (re-plan) mock-LLM journey (ADR-053 Phase 3b rule 02g)
+    summary: |
+      Drives ONE plan_rejected_retry so the chain flows through the
+      re-plan loop the happy-path journey never exercises:
+
+        Lisa v1 → CBG plan-review #1 → decide(plan_rejected_retry)
+          → rule 02c (stamp) + 02d (driver) re-dispatch Lisa
+        re-plan Lisa (rev 2) → rule 02g (re-plan re-source) → CBG #2
+          → decide(plan_approved) → coordinator → Ralph → work gate → reply
+
+      The e2e regression guard for the go-reviewer C1 fix (rule-02 split):
+      without rule 02g the re-plan Lisa's `planned` terminal matches no
+      rule (rule 02 is fenced to first-pass via lineage.run-loop-entity-id
+      length_eq 0) and the chain wedges. Asserts 2 Lisa + 3 CBG loops, the
+      plan_rejected_retry→plan_approved trail, and the retry-finding stamped
+      on the agent.chain.execution run entity. Sandbox = MockRunner.
+    vars:
+      FIXTURE: dev-via-test-replan.yaml
+      AGENTIC_CONFIG: e2e-flow-bootstrap.json
+    cmds:
+      - defer: { task: test:e2e:agentic:cleanup }
+      - task: test:e2e:agentic:stack:up
+        vars:
+          FIXTURE: "{{.FIXTURE}}"
+          AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
+      - npx playwright test e2e/agentic/dev-via-test-replan.spec.ts
 
   test:e2e:agentic:autoresearch:
     desc: Run the autoresearch pack (propose/execute iteration) mock-LLM journey

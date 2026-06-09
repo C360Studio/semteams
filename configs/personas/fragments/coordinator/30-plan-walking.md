@@ -5,9 +5,9 @@ When you wake up from a `dev-via-test-plan` (Lisa) or
 that chain's plan. The wake-up rule substitutes these literals
 into your spawn prompt at fire time:
 
-- The **run entity ID** — the original coordinator's loop entity,
-  where all `plan.*` triples live. Use it as the `entity_id` arg
-  to `query_entity`.
+- The **run entity ID** — the run's `agent.chain.execution.<run-id>`
+  entity, where all `plan.*` triples live. Use it as the `entity_id`
+  arg to `query_entity`.
 - The **previous pack-role's loop ID** — Lisa's or Ralph's loop ID,
   named literally in the first sentence of your prompt (e.g. "Lisa
   just finished planning at loop <some-id>"). Use it as the

@@ -69,11 +69,17 @@ func TestDevViaTestPack_01_CoordinatorSpawn(t *testing.T) {
 		t.Fatal("rule 01 has no publish_agent for dev-via-test-plan (Lisa)")
 	}
 
-	// Invariant 3: related_loops pins run-loop-entity-id.
-	related, _ := spawn.RelatedLoops["run-loop-entity-id"]
-	if related != "$entity.id" {
-		t.Errorf("rule 01 related_loops[run-loop-entity-id] = %q; want %q so emit_dev_via_test_plan can stamp on the coordinator's loop entity",
-			related, "$entity.id")
+	// Invariant 3: related_loops pins the run LOOP id (ADR-053 Phase 3b).
+	// Rule 01 threads dev-via-test-run = $entity.instance (the coordinator loop
+	// id); emit_dev_via_test_plan derives the chain.execution run entity id from
+	// it via TryChainExecutionEntityID. Rule 01 does NOT thread run-loop-entity-id
+	// (the chain.execution entity id isn't available at mint time — rule 02
+	// re-sources it from Lisa's framework agent.run.entity_id).
+	if runLoop := spawn.RelatedLoops["dev-via-test-run"]; runLoop != "$entity.instance" {
+		t.Errorf("rule 01 related_loops[dev-via-test-run] = %q; want %q so emit_dev_via_test_plan can derive the run entity id", runLoop, "$entity.instance")
+	}
+	if got := spawn.RelatedLoops["run-loop-entity-id"]; got != "" {
+		t.Errorf("rule 01 still threads run-loop-entity-id = %q — ADR-053 Phase 3b drops it from the mint (rule 02 re-sources from agent.run.entity_id)", got)
 	}
 
 	// Invariant 4: Lisa's tools.
@@ -103,19 +109,17 @@ func TestDevViaTestPack_01_CoordinatorSpawn(t *testing.T) {
 		t.Errorf("rule 01 tool_choice.mode = %q; want %q", mode, "required")
 	}
 
-	// Invariant 7: run.status active stamp.
-	var foundRunStatus bool
+	// Invariant 7: run.status seed moved OUT of rule 01 (ADR-053 Phase 3b).
+	// The dev_via_test.run.status='active' marker is now seeded by
+	// emit_dev_via_test_plan onto the run entity (agent.chain.execution.<runID>),
+	// in the same batch as plan.*, rather than by a rule-01 add_triple on the
+	// coordinator loop — so it lands where the re-homed run state lives. The
+	// marker is unread today (no rule/persona consumes it), so moving it is
+	// behavior-neutral.
 	for _, a := range rule.OnEnter {
-		if a.Type != "add_triple" || a.Predicate != "dev_via_test.run.status" {
-			continue
+		if a.Type == "add_triple" && a.Predicate == "dev_via_test.run.status" {
+			t.Error("rule 01 still stamps dev_via_test.run.status — ADR-053 Phase 3b moved this seed to emit_dev_via_test_plan (run entity); remove the rule-01 add_triple")
 		}
-		if obj, ok := a.Object.(string); !ok || obj != "active" {
-			t.Errorf("rule 01 dev_via_test.run.status add_triple object = %v; want %q", a.Object, "active")
-		}
-		foundRunStatus = true
-	}
-	if !foundRunStatus {
-		t.Error("rule 01 missing add_triple for dev_via_test.run.status='active' — Slice 3 coordinator has no gate to match on")
 	}
 }
 
@@ -403,11 +407,68 @@ func TestDevViaTestPack_02_LisaTerminalToPlanReview(t *testing.T) {
 		}
 	}
 
-	if want, got := "$entity.triple.lineage.run-loop-entity-id", spawn.RelatedLoops["run-loop-entity-id"]; got != want {
-		t.Errorf("rule 02 related_loops[run-loop-entity-id] = %q; want %q (threads the run entity from Lisa's lineage so CBG reads ask+plan there)", got, want)
+	// ADR-053 Phase 3b: rule 02 is the run-anchor re-source point. It threads
+	// run-loop-entity-id from Lisa's framework-stamped agent.run.entity_id (the
+	// chain.execution run entity id) — NOT from lineage propagation — because
+	// rule 01 (the mint) cannot thread the chain.execution id. From here on,
+	// lineage.run-loop-entity-id carries the run entity id downstream.
+	if want, got := "$entity.triple.agent.run.entity_id", spawn.RelatedLoops["run-loop-entity-id"]; got != want {
+		t.Errorf("rule 02 related_loops[run-loop-entity-id] = %q; want %q (re-sources the run entity from Lisa's framework agent.run.entity_id so CBG reads ask+plan on the run entity)", got, want)
 	}
 	if spawn.ToolChoice == nil {
 		t.Error("rule 02 spawn missing tool_choice")
+	}
+
+	// ADR-053 Phase 3b (go-reviewer C1): rule 02 is the FIRST-PASS gate, scoped
+	// by `lineage.run-loop-entity-id length_eq 0` (first-pass Lisa has no
+	// run-loop-entity-id lineage). Re-plan Lisa is handled by the sibling 02g.
+	if !devViaTestHasCondition(rule, "lineage.run-loop-entity-id", "length_eq") {
+		t.Error("rule 02 missing the first-pass discriminator `lineage.run-loop-entity-id length_eq 0` — without it rule 02 also fires on re-plan Lisa, whose agent.run.entity_id is absent (orphaned anchor; go-reviewer C1)")
+	}
+}
+
+// TestDevViaTestPack_02g_ReplanReSource pins the ADR-053 Phase 3b re-plan
+// sibling (go-reviewer C1). Re-plan Lisa is spawned from the RUN entity by rule
+// 02d, so it carries lineage.run-loop-entity-id=chain.execution but NOT
+// agent.run.entity_id. 02g is gated on lineage PRESENCE and sources the anchor
+// from lineage.run-loop-entity-id (NOT agent.run.entity_id, which rule 02 uses
+// for the first pass). The two are mutually exclusive on the lineage key.
+func TestDevViaTestPack_02g_ReplanReSource(t *testing.T) {
+	rule := loadDevViaTestRule(t, "02g-replan-lisa-terminal-to-plan-review.json")
+
+	if !devViaTestRoleCondition(rule, "dev-via-test-plan") {
+		t.Error("rule 02g does not condition on role=dev-via-test-plan")
+	}
+	if !devViaTestNextActionCondition(rule, "planned") {
+		t.Error("rule 02g does not condition on next_action=planned")
+	}
+	// The re-plan discriminator: lineage PRESENT (mutually exclusive with rule 02).
+	if !devViaTestHasCondition(rule, "lineage.run-loop-entity-id", "length_gt") {
+		t.Error("rule 02g missing the re-plan discriminator `lineage.run-loop-entity-id length_gt 0` — must be disjoint from rule 02's length_eq 0")
+	}
+
+	var spawn *devViaTestOnEnterJSON
+	for i := range rule.OnEnter {
+		if rule.OnEnter[i].Type == "publish_agent" && rule.OnEnter[i].Role == "reviewer-dev-via-test" {
+			spawn = &rule.OnEnter[i]
+			break
+		}
+	}
+	if spawn == nil {
+		t.Fatal("rule 02g has no publish_agent for role=reviewer-dev-via-test")
+	}
+	// Re-plan Lisa lacks agent.run.entity_id; the anchor MUST come from lineage.
+	if want, got := "$entity.triple.lineage.run-loop-entity-id", spawn.RelatedLoops["run-loop-entity-id"]; got != want {
+		t.Errorf("rule 02g related_loops[run-loop-entity-id] = %q; want %q (re-plan Lisa has lineage but no agent.run.entity_id)", got, want)
+	}
+	// Must keep the disjoint plan-gate token contract.
+	if len(spawn.ActionAllowed) != 3 {
+		t.Errorf("rule 02g allowlist = %v; want exactly the 3 plan-gate tokens", spawn.ActionAllowed)
+	}
+	for _, forbidden := range []string{"approved", "rejected", "rejected_retry"} {
+		if devViaTestSliceHas(spawn.ActionAllowed, forbidden) {
+			t.Errorf("rule 02g allowlist includes chain-end token %q", forbidden)
+		}
 	}
 }
 
@@ -1404,18 +1465,21 @@ func TestDevViaTestExecutePersonaTeachesIterationDiscipline(t *testing.T) {
 	}
 }
 
-// TestDevViaTestSpawnRulesPinRunLoopEntityID is the structural
-// fence for the cross-entity stamping pattern. Rules 04a/04b stamp
-// triples on the run entity via $entity.triple.lineage.run-loop-
-// entity-id substitution. If a spawn rule for any dev-via-test-*
-// role forgets to pin "run-loop-entity-id" in related_loops, those
-// stamp rules will error at fire time and the chain wedges silently.
+// TestDevViaTestSpawnRulesPinRunLoopEntityID is the structural fence for the
+// cross-entity stamping pattern. Rules 04a/04b/02c/07c stamp triples on the run
+// entity via $entity.triple.lineage.run-loop-entity-id, and personas read it via
+// query_entity — so every pack-scope spawn must thread a run anchor, or those
+// consumers resolve an empty subject and the chain wedges silently.
 //
-// Per Slice 2 reviewer R2: pin the contract structurally so Slice 3
-// (coordinator spawning Ralph) and Slice 4 (coordinator dispatching CBG)
-// cannot ship without the wire-key in place. Today only rule 01
-// (Lisa) spawns; this test ensures any future spawner stays
-// consistent.
+// ADR-053 Phase 3b: a spawn may thread the anchor as EITHER "run-loop-entity-id"
+// (the chain.execution entity id, for subject-override + query_entity consumers)
+// OR "dev-via-test-run" (the run LOOP id, which emit_dev_via_test_plan derives
+// the entity id from via TryChainExecutionEntityID). Rule 01 (the mint) threads
+// ONLY dev-via-test-run, because it cannot thread the chain.execution entity id
+// (minted by the same publish_agent action; rule 02 re-sources run-loop-entity-id
+// from Lisa's framework agent.run.entity_id). Every other spawn threads
+// run-loop-entity-id. The invariant that still bites a silent-wedge bug: a
+// pack-scope spawn that threads NEITHER anchor.
 func TestDevViaTestSpawnRulesPinRunLoopEntityID(t *testing.T) {
 	files, err := filepath.Glob(filepath.Join(devViaTestPackDir, "*.json"))
 	if err != nil {
@@ -1438,8 +1502,10 @@ func TestDevViaTestSpawnRulesPinRunLoopEntityID(t *testing.T) {
 			if !strings.HasPrefix(a.Role, "dev-via-test-") && a.Role != "reviewer-dev-via-test" {
 				continue
 			}
-			if v, ok := a.RelatedLoops["run-loop-entity-id"]; !ok || v == "" {
-				t.Errorf("%s spawn of role %q missing related_loops[run-loop-entity-id] — rules 04a/04b/(future 06/07) stamp via $entity.triple.lineage.run-loop-entity-id and will error at fire time without this key (silent chain wedge)",
+			entityAnchor := a.RelatedLoops["run-loop-entity-id"]
+			loopAnchor := a.RelatedLoops["dev-via-test-run"]
+			if entityAnchor == "" && loopAnchor == "" {
+				t.Errorf("%s spawn of role %q threads NO run anchor — needs related_loops[run-loop-entity-id] (entity id) or [dev-via-test-run] (run loop id); without it the run-entity stamps/reads resolve empty and the chain wedges silently",
 					filepath.Base(path), a.Role)
 			}
 		}
@@ -1598,6 +1664,18 @@ func devViaTestActionCondition(r *devViaTestRuleJSON, action string) bool {
 			if s, ok := c.Value.(string); ok && s == action {
 				return true
 			}
+		}
+	}
+	return false
+}
+
+// devViaTestHasCondition reports whether the rule has a condition on the given
+// field with the given operator (value-agnostic). Used to assert the ADR-053
+// Phase 3b first-pass/re-plan discriminators on lineage.run-loop-entity-id.
+func devViaTestHasCondition(r *devViaTestRuleJSON, field, operator string) bool {
+	for _, c := range r.Conditions {
+		if c.Field == field && c.Operator == operator {
+			return true
 		}
 	}
 	return false
