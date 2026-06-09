@@ -386,30 +386,40 @@ NAK-forever loop), and the subscriber's D3 failure also logs-and-Acks. So
 there is no redelivery wedge, BUT every benign duplicate/re-fire emits an
 ERROR line — which would page a real-LLM smoke monitor armed on
 `"level":"ERROR"`. **REQUIREMENT: every transition rule must be
-phase-guarded** (a condition on the current `agent.run.phase` before the
-`lifecycle_transition`) so the invalid edge is never *attempted*. This
-also closes RISK 4 (below). State-machine testing per
-`feedback_state_machine_testing`: restart mid-run, duplicate terminal,
-out-of-order terminal.
+phase-guarded with the current `agent.run.phase` as a TOP-LEVEL rule
+CONDITION** (e.g. `agent.run.outcome==success` AND `agent.run.phase==
+executing`), **NOT an action-level `when`.** This is the load-bearing
+distinction (Coby review): a top-level condition keeps the rule
+*not-matching* until the edge is legal, so the invalid edge is never
+*attempted* (no ERROR, no lost transition). A phase guard buried in an
+action `when` would let the rule *enter* on `outcome=success` alone, skip
+the action while `dispatched`, and — because the rule already entered —
+never re-enter when the phase advances → the completed transition is
+silently lost. Put phase in the conditions, never in `when`. State-machine
+testing per `feedback_state_machine_testing`: restart mid-run, duplicate
+terminal, out-of-order terminal.
 
-**G2. RISK 4 — the early-marker second-order race (architect-found).** The
-`executing→completed` flow is two async hops: (i) a success rule stamps
-`agent.run.outcome=success` on the run entity; (ii) the run-entity rule
-matches it → transition. On a fast chain the success marker can land while
-the run is still `dispatched` (if `dispatched→executing` hasn't fired yet)
-→ the rule attempts the illegal `dispatched→completed` (no-skip machine) →
-dropped → **the completed transition is permanently lost; the run sticks**
-(markers don't redeliver; no new KV revision re-fires the rule). Mitigation:
-the run-entity transition rule's phase-guard must make it **re-evaluate when
-the phase advances** (not fire-once), OR `dispatched→executing` must be
-proven to always land first. This is the strongest argument for landing a
-rock-solid, fast `dispatched→executing` BEFORE any terminal marker — hence
-the narrowed 4a (§H). (Note: `agent.run.outcome=success` is durable on the
-run entity, so a phase-guarded rule that re-evaluates on the
-`dispatched→executing` KV revision WILL find it and complete — unlike a
-transient signal. Confirm the rule engine re-evaluates a still-true
-condition on a later revision of the same entity; if not, fold the
-completed-check into the `dispatched→executing` rule's success path.)
+**G2. RISK 4 — the early-marker race (RESOLVED by beta.102 semantics +
+top-level phase guard).** The `executing→completed` flow is two async hops:
+(i) a success rule stamps `agent.run.outcome=success` on the run entity;
+(ii) the run-entity rule matches `outcome==success` AND `phase==executing`
+→ transition. On a fast chain the success marker can land while the run is
+still `dispatched`. **With the top-level phase guard (§G), this is benign,
+not a lost transition:** the completed rule's condition is simply FALSE
+while `dispatched` (it does NOT attempt an illegal `dispatched→completed`)
+and the evaluator stores it as not-matching. beta.102 re-evaluates **every**
+entity-state rule on **each** KV revision of the entity, not just rules
+whose specific predicate changed (`message_handler.go:245`); the stateful
+evaluator compares prior `IsMatching=false` → current true and fires
+`on_enter` (`stateful_evaluator.go`), with a durable stale-replay guard for
+exactly-once. So when `dispatched→executing` writes the later KV revision,
+the completed rule re-evaluates, sees `outcome` still true + `phase` now
+`executing`, and enters — exactly once. **Do NOT** fold the success-check
+into the `dispatched→executing` rule; the marker is durable and the
+re-evaluation is automatic. This stays an OPEN ITEM only as a **4a
+production-wire contract test** ("success marker stamped before `executing`,
+the later phase revision completes the run exactly once") — if that test
+ever disproves the beta.102 re-eval behavior, THEN fold the check in.
 
 **H. Slicing (architect-narrowed + Coby review — conditional Go on 4a).**
 - **4a (subscriber + the two clean transitions ONLY):** subscriber wiring +
@@ -464,13 +474,16 @@ completed-check into the `dispatched→executing` rule's success path.)
 4. **Handlers in 4a?** — register a thin `MilestoneHandler` now, or wait
    for Phase 5's stamper re-platform. (Lean: none in 4a — the two
    transitions are pure rules; handlers arrive with the Phase-5 re-platform.)
-5. **Phase-guard re-evaluation (load-bearing for G2)** — confirm a
-   phase-guarded run-entity rule re-evaluates a still-true condition
-   (`agent.run.outcome==success`) on a LATER KV revision of the same entity
-   (the `dispatched→executing` write). If the engine only evaluates on the
-   triggering predicate's change, the durable success marker won't re-drive
-   `completed` — fold the success-check into the `dispatched→executing`
-   rule's path instead. Resolve in the 4a design.
+5. **Phase-guard re-evaluation — RESOLVED (Coby review), retained as a 4a
+   test only.** beta.102 evaluates every entity-state rule on each KV
+   revision (`message_handler.go:245`), and the stateful evaluator fires
+   `on_enter` on a prior-false→current-true flip (`stateful_evaluator.go`),
+   so the durable `agent.run.outcome=success` marker DOES re-drive
+   `completed` on the later `dispatched→executing` revision (exactly once,
+   via the stale-replay guard). No design change; do NOT fold the success-
+   check into `dispatched→executing`. Keep open ONLY as a 4a production-wire
+   contract test ("success marker before `executing` → later phase revision
+   completes exactly once"); revisit only if that test disproves beta.102.
 
 **Architect review (2026-06-09):** spike reviewed against upstream
 beta.102. Verdict: architecture sound (substrate `agent-run` pack,
@@ -494,6 +507,22 @@ failure-injection / state-machine tests (marker-before-executing, duplicate
 terminal, restart mid-run, publish-fail-after-mint) — mock journeys prove
 ordering, these prove state-machine safety (§H). Verdict: **conditional Go
 on 4a after the two P1s are folded in** — done.
+
+**Coby review round 2 (2026-06-09):** two wording/semantics corrections on
+the early-marker race, **no architecture blocker.** (1) The early success
+marker does NOT cause an illegal `dispatched→completed` attempt — IF the
+phase guard is a TOP-LEVEL rule CONDITION (not an action `when`), the rule
+is simply not-matching while `dispatched`; §G/§G2 rewritten to make the
+condition-vs-`when` distinction load-bearing (an action-`when` phase guard
+WOULD lose the transition — the real footgun). (2) Q5 RESOLVED positively
+by beta.102: the processor re-evaluates every entity-state rule per KV
+revision (`message_handler.go:245`) + fires `on_enter` on a
+false→true flip (`stateful_evaluator.go`), so the durable success marker
+re-drives `completed` on the later `dispatched→executing` revision. Do NOT
+fold the success-check into `dispatched→executing`; keep Q5 open only as a
+4a production-wire contract test ("success marker before `executing` →
+later phase revision completes exactly once"). **Net verdict: no new
+blocker; 4a is Go once built with the top-level phase guard.**
 
 ### Phase 5 — Retire the hand-rolled layer
 - Re-platform stampers (`dispatched`/`research`/`needs_review`/`terminal`)
