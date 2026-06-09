@@ -12,8 +12,6 @@ import (
 	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/types"
-
-	"github.com/c360studio/semteams/cmd/semteams/chain"
 )
 
 // fakeTriplePublisher records every AddTriple call. Mirrors the same
@@ -360,158 +358,20 @@ func triplesByPredicate(triples []message.Triple) map[string]any {
 	return out
 }
 
-// stubChainReader returns a fixed (chainEntityID, triples) pair to
-// every ReadChainFor call. Errors land via err. Used to exercise the
-// chain-canonical override paths in Execute.
-type stubChainReader struct {
-	entityID string
-	triples  map[string]any
-	err      error
-	calls    int
-	mu       sync.Mutex
-}
-
-func (s *stubChainReader) ReadChainFor(_ context.Context, _ string) (string, map[string]any, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.calls++
-	if s.err != nil {
-		return s.entityID, nil, s.err
-	}
-	return s.entityID, s.triples, nil
-}
-
-// spyChainReader records the loop ID it was invoked with — separate
-// from stubChainReader so the "what was passed" tests stay obviously
-// distinct from the override-path coverage.
-type spyChainReader struct {
-	entityID   string
-	triples    map[string]any
-	lastLoopID string
-	mu         sync.Mutex
-}
-
-func (s *spyChainReader) ReadChainFor(_ context.Context, loopID string) (string, map[string]any, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.lastLoopID = loopID
-	return s.entityID, s.triples, nil
-}
-
-// TestExecute_ChainAnchorsOnRelatedLoopsResearcher pins the smoke
-// #8 run-7 fix: emit-tools MUST anchor the chain ancestry walk on a
-// completed ancestor's loop_id taken from
-// agent.related_loops.researcher (the framework-supported lineage
-// channel set by every dev-via-spec spawn rule), not the running
-// loop's own LoopID. Smoke #8 run-7 evidence: PR #111's hotfix used
-// bare task properties (which don't propagate); resolver returned
-// the running planner's own ID as chain root and the entity read
-// decoded garbage. agent.related_loops IS purpose-built for cross-arc
-// loop-ID lineage and propagates automatically through ToolCall.Metadata.
-func TestExecute_ChainAnchorsOnRelatedLoopsResearcher(t *testing.T) {
-	exec, _, _, _ := newExecutor(t)
-	stub := &spyChainReader{
-		entityID: "c360.test.agent.chain.execution.dispatch_root",
-		triples:  map[string]any{},
-	}
-	exec.SetChainReader(stub)
-
-	call := defaultCall(defaultPlanArgs())
-	call.Metadata = map[string]any{
-		agentic.MetadataKeyRelatedLoops: map[string]any{
-			"researcher": "researcher-completed",
-		},
-	}
-	if _, err := exec.Execute(context.Background(), call); err != nil {
-		t.Fatalf("Execute err: %v", err)
-	}
-	if stub.lastLoopID != "researcher-completed" {
-		t.Errorf("ReadChainFor lastLoopID = %q, want metadata anchor 'researcher-completed' (running LoopID %q must NOT be used when related_loops.researcher is set)", stub.lastLoopID, call.LoopID)
-	}
-}
-
-// TestExecute_ChainAnchorFallsBackToCallLoopID pins the safety-net:
-// when no metadata anchor is set (test contexts, deployments without
-// the spawn convention), the helper falls back to call.LoopID — same
-// as pre-hotfix behaviour. This branch is what the unit-test cases
-// have always exercised.
-func TestExecute_ChainAnchorFallsBackToCallLoopID(t *testing.T) {
-	exec, _, _, _ := newExecutor(t)
-	stub := &spyChainReader{
-		entityID: "c360.test.agent.chain.execution.dispatch_root",
-		triples:  map[string]any{},
-	}
-	exec.SetChainReader(stub)
-
-	// No metadata set — fallback path.
-	call := defaultCall(defaultPlanArgs())
-	if _, err := exec.Execute(context.Background(), call); err != nil {
-		t.Fatalf("Execute err: %v", err)
-	}
-	if stub.lastLoopID != call.LoopID {
-		t.Errorf("ReadChainFor lastLoopID = %q, want call.LoopID %q (fallback)", stub.lastLoopID, call.LoopID)
-	}
-}
-
-// TestExecute_ChainSlugStemOverridesTitleSlug pins the smoke #8 run-5
-// D2 fix: when the chain entity carries chain.slug.stem, the rendered
-// markdown uses "<stem>-plan" instead of the title-derived slug. This
-// is what keeps the chain's filenames consistent across emit-tools
-// even when persona titles drift mid-chain.
-func TestExecute_ChainSlugStemOverridesTitleSlug(t *testing.T) {
-	exec, tp, _, dir := newExecutor(t)
-	exec.SetChainReader(&stubChainReader{
-		entityID: "c360.test.agent.chain.execution.dispatch_root",
-		triples: map[string]any{
-			chain.PredicateSlugStem: "2026-05-09-osh-meshtastic-driver",
-		},
-	})
-
-	args := defaultPlanArgs()
-	// Persona drifts the title — would normally produce
-	// "<date>-osh-meshtastic-idriver-plan". Chain stem keeps the slug
-	// stable as "2026-05-09-osh-meshtastic-driver-plan".
-	args["title"] = "OSH Meshtastic IDriver Plan"
-
-	res, err := exec.Execute(context.Background(), defaultCall(args))
-	if err != nil {
-		t.Fatalf("Execute err: %v", err)
-	}
-	if res.Error != "" {
-		t.Fatalf("Result.Error = %q, want empty", res.Error)
-	}
-
-	got := triplesByPredicate(tp.snapshot())
-	pathStr, _ := got[predicatePath].(string)
-	const wantSuffix = "/2026-05-09-osh-meshtastic-driver-plan.md"
-	if !strings.HasSuffix(pathStr, wantSuffix) {
-		t.Errorf("rendered path = %q, want suffix %q (chain.slug.stem must override drifting title)", pathStr, wantSuffix)
-	}
-	if !strings.HasPrefix(pathStr, dir) {
-		t.Errorf("path = %q, want prefix %q", pathStr, dir)
-	}
-}
-
-// TestExecute_ChainResearchLoopOverridesDependsOn pins the smoke #8
-// run-5 D1 fix: when the chain entity carries
-// chain.research_artifact.loop, the rendered "Depends on" section
-// reflects the chain's canonical researcher loop ID — even if the
-// persona supplied a different (typically wrong: research-reviewer
-// instead of researcher) value.
-func TestExecute_ChainResearchLoopOverridesDependsOn(t *testing.T) {
+// TestExecute_DependsOnRendersFromLLMArgs pins the ADR-053 Phase 3c
+// posture: emit_plan no longer reads the chain entity, so the rendered
+// "Depends on" section reflects the LLM-supplied research_artifact_loop
+// verbatim (the research pack's planner persona instructs leaving it
+// unset, in which case the section is omitted — covered by the happy
+// path's title-only variant). Replaces the retired chain-override tests
+// (TestExecute_Chain* — smoke #8 run-5 D1/D2), which exercised the
+// dev-via-spec arc's chain.slug.stem / chain.research_artifact.loop
+// reads that never fired in the plan-first research pack.
+func TestExecute_DependsOnRendersFromLLMArgs(t *testing.T) {
 	exec, tp, _, _ := newExecutor(t)
-	exec.SetChainReader(&stubChainReader{
-		entityID: "c360.test.agent.chain.execution.dispatch_root",
-		triples: map[string]any{
-			chain.PredicateResearchArtifactLoop: "researcher_canonical",
-		},
-	})
-
 	args := defaultPlanArgs()
 	args["depends_on"] = map[string]any{
-		// Persona's local guess — typically the research-reviewer loop
-		// (immediate parent), not the researcher (correct upstream).
-		"research_artifact_loop": "research_reviewer_wrong",
+		"research_artifact_loop": "loop-research-001",
 	}
 
 	res, err := exec.Execute(context.Background(), defaultCall(args))
@@ -528,51 +388,7 @@ func TestExecute_ChainResearchLoopOverridesDependsOn(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read rendered markdown: %v", err)
 	}
-	if !strings.Contains(string(body), "researcher_canonical") {
-		t.Errorf("markdown depends_on must use chain-canonical loop ID; got body:\n%s", body)
-	}
-	if strings.Contains(string(body), "research_reviewer_wrong") {
-		t.Errorf("LLM-supplied depends_on must NOT appear when chain entity has the canonical value; got body:\n%s", body)
-	}
-}
-
-// TestExecute_ChainReadFailureFallsBackToLLMValues pins the fail-soft
-// contract: a chain read error logs Warn and falls back to LLM-supplied
-// values. Important so a transient graph blip doesn't 5xx the
-// emit_plan call (which the LLM would interpret as "retry the whole
-// emit," wasting tokens).
-func TestExecute_ChainReadFailureFallsBackToLLMValues(t *testing.T) {
-	exec, tp, _, _ := newExecutor(t)
-	stub := &stubChainReader{
-		entityID: "c360.test.agent.chain.execution.dispatch_root",
-		err:      errors.New("graph timeout"),
-	}
-	exec.SetChainReader(stub)
-
-	args := defaultPlanArgs()
-	args["title"] = "OSH Meshtastic plan"
-	args["depends_on"] = map[string]any{
-		"research_artifact_loop": "loop-research-001",
-	}
-
-	res, err := exec.Execute(context.Background(), defaultCall(args))
-	if err != nil {
-		t.Fatalf("Execute err: %v", err)
-	}
-	if res.Error != "" {
-		t.Fatalf("Result.Error = %q, want empty (chain read failure must not surface to caller)", res.Error)
-	}
-	if stub.calls != 1 {
-		t.Errorf("stub ReadChainFor calls = %d, want 1", stub.calls)
-	}
-
-	got := triplesByPredicate(tp.snapshot())
-	pathStr, _ := got[predicatePath].(string)
-	if !strings.HasSuffix(pathStr, "-osh-meshtastic-plan.md") {
-		t.Errorf("path = %q, want title-derived slug fallback", pathStr)
-	}
-	body, _ := os.ReadFile(pathStr)
 	if !strings.Contains(string(body), "loop-research-001") {
-		t.Errorf("markdown should fall back to LLM-supplied depends_on when chain read fails; got body:\n%s", body)
+		t.Errorf("markdown depends_on must render the LLM-supplied loop ID; got body:\n%s", body)
 	}
 }

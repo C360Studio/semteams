@@ -47,8 +47,8 @@
 
 3. Before terminating, call `emit_plan` per the emit_plan
    contract — the structured-args + audit-trail discipline that
-   renders `/artifacts/plans/<slug>.md` and stamps the chain
-   entity reference. The tool call is additive; substance still
+   renders `/artifacts/plans/<slug>.md` and stamps marker triples
+   on your loop entity. The tool call is additive; substance still
    flows through your `decide.reason` for the next phase.
 
 4. Terminate with a single `decide` call per the identity
