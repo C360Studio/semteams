@@ -769,12 +769,14 @@ func registerEmitPlan(reg *agentictools.ExecutorRegistry, natsClient *natsclient
 	}
 	triplePublisher := agentictools.NewNATSTriplePublisher(natsClient)
 	executor := emitplan.NewExecutor(triplePublisher, natsClient, platform, logger, "")
-	// Smoke #8 run-5 D1 + D2 fix: chain.LineageReader gives the executor
-	// canonical lineage IDs + slug stem from the chain entity so the
-	// planner persona stops guessing upstream loop IDs and the chain's
-	// slug stays consistent. Optional opt-in: if the chain wiring fails
-	// to construct (rare), the executor falls back to LLM-supplied values.
-	executor.SetChainReader(buildChainLineageReader(natsClient, platform))
+	// ADR-053 Phase 3c: emit_plan no longer reads the chain entity. The
+	// old chain.LineageReader read (smoke #8 run-5 D1+D2) served the
+	// retired dev-via-spec arc, where an approved research artifact
+	// preceded the plan. The live research pack is plan-first and the
+	// ResearchMilestoneStamper fires only on the terminal reviewer
+	// approval, so that read never found data — the plan slug is
+	// title-derived. Retiring it drops the last production user of
+	// chain.LineageReader (Phase 5 deletes lineage_reader.go).
 	if err := reg.RegisterTool(emitplan.ToolName, executor); err != nil {
 		return fmt.Errorf("register %s: %w", emitplan.ToolName, err)
 	}
@@ -785,29 +787,14 @@ func registerEmitPlan(reg *agentictools.ExecutorRegistry, natsClient *natsclient
 	return nil
 }
 
-// buildChainLineageReader composes the chain Resolver +
-// NATSEntityReader into a single ChainReader-satisfying adapter the
-// emit-tools take via SetChainReader. Centralised here so all
-// emit-tools share identical wiring (subject, platform, ancestry walk
-// budget). Subject is the upstream graph-query literal — see
-// chain.DefaultGraphQueryEntitySubject doc-comment for why this is a
-// constant rather than a config-resolved port at the request side.
-func buildChainLineageReader(natsClient *natsclient.Client, platform types.PlatformMeta) *chain.LineageReader {
-	parentReader := chain.NewNATSParentReader(natsClient, platform, chain.DefaultGraphQueryEntitySubject)
-	resolver := chain.NewResolver(parentReader, platform)
-	entityReader := chain.NewNATSEntityReader(natsClient, chain.DefaultGraphQueryEntitySubject)
-	return chain.NewLineageReader(resolver, entityReader)
-}
-
 // Compile-time guards that the product-shell adapters satisfy the
 // (structurally-identical) interfaces declared by the consumer
 // packages. If a consumer interface ever widens (new method added)
 // and the adapter is not extended to match, this fails to build —
 // surfacing the drift here rather than at the SetX call site.
-// Covers: emitplan.ChainReader, chainbash.ChainResolver/Inner, and
-// the emit_autoresearch_artifact attestation-aware write path (#194).
+// Covers: chainbash.ChainResolver/Inner and the
+// emit_autoresearch_artifact attestation-aware write path (#194).
 var (
-	_ emitplan.ChainReader                            = (*chain.LineageReader)(nil)
 	_ chainbash.ChainResolver                         = (*chain.Resolver)(nil)
 	_ chainbash.ChainResolver                         = identityChainResolver{}
 	_ chainbash.Inner                                 = (*executors.BashExecutor)(nil)

@@ -108,17 +108,36 @@ ruleProcessor.SetLifecycleManager(lm)             // processor/rule/processor.go
    NOT a Go-handler rewrite. The `agent.run.entity_id` triple is present once
    `run_scope` propagation (Phase 2) stamps the run on each loop entity.
 
-2. **research's plan-as-run-entity vs ADR-053's coordinator-rooted run.**
+2. **research's plan-as-run-entity vs ADR-053's coordinator-rooted run.
+   — RESOLVED (Phase 3c, 2026-06-09): the gather-join STAYS on the plan
+   loop; do NOT re-root it to the run entity.**
    `run_scope=new` mints the run at the **firing loop = coordinator**.
    - **autoresearch + dev-via-test** already anchor run-state on the
      coordinator loop → mint root aligns; re-anchoring is mechanical.
    - **research** anchors gather-join state on the **plan** loop
-     (`run-loop-entity-id = plan $entity.id`, `rule 02`). Its
+     (`plan-loop-entity-id = plan $entity.id`, `rule 02`). Its
      `research.gather.completed_subtopic` counters live on the plan entity.
-     Re-rooting to the coordinator run entity is the **highest-risk** rewrite
-     and must preserve: the `length_eq` join (`03b`), the for_each fan-out
-     cardinality (D5 — per-gatherer facts MUST stay loop-qualified or
-     parallel gatherers erase each other), and the marker semantics.
+     The original premise — "re-root to the coordinator run entity" — was
+     **rejected** in implementation. The gather-join is **per-plan-iteration**
+     join state, not run-wide: rule 05 (reviewer-rejected retry) spawns a
+     *fresh* plan loop that fans out its own gatherers and joins on its own
+     accumulator. The run entity is **shared across plan iterations**, so
+     re-rooting the accumulator there would *introduce* a retry over-counting
+     bug the plan-loop anchor naturally avoids. The join is also threaded
+     **100% via framework lineage** (`related_loops` → `buildLineageTriples`
+     → `lineage.plan-loop-entity-id`), with **zero `cmd/semteams/chain/*`
+     coupling — so re-homing it does nothing for Phase 3's actual goal
+     (retire the hand-rolled chain layer). There is no framework substitute
+     for "the plan loop" anyway (`agent.run.entity_id` is the *coordinator*
+     root, the wrong entity). The survey's "`plan-loop-entity-id` = run-anchor
+     to retire" was a `<x>-loop-entity-id` naming heuristic, not a coupling
+     analysis. **Net: rules 02/03a/03b unchanged; the `length_eq` join, the
+     for_each fan-out cardinality (D5), and the marker semantics are all
+     preserved exactly as-is.** research's only genuine `cmd/semteams/chain/*`
+     coupling was `emit_plan`'s fail-soft chain read (slug-stem / depends-on
+     override, a dev-via-spec affordance dead in the plan-first research pack);
+     3c retires that read, dropping the last production user of
+     `chain.LineageReader`.
 
 Also preserve the **autoresearch iteration-driver presence-marker pattern**
 (rule `05`, semstreams#204) when re-homing its `iteration.pending` /
@@ -157,10 +176,22 @@ Slice by pack, each its own PR + e2e gate, **easiest first**:
   config threading.
 - **3b dev-via-test** (coordinator-rooted): same, plus the plan/CBG retry
   drivers.
-- **3c research** (plan-rooted; highest risk): reconcile per decision #2;
-  keep gather fan-out loop-qualified (D5 cardinality).
-- Migrate `emit_*` tools + `requestsandbox`/`querysandboxattestation`/
-  `chainbash` off `ResolveChainEntityID`/`LineageReader` onto typed `RunID`.
+- **3c research** (plan-rooted) — **SHIPPED 2026-06-09.** Reframed per
+  decision #2's resolution: the gather-join is per-plan-iteration framework
+  lineage, not run-anchor state, so rules 02/03a/03b are **unchanged** (the
+  feared "highest-risk rewrite" was unnecessary and would have introduced a
+  retry over-counting bug). The slice retired `emit_plan`'s fail-soft
+  `chain.LineageReader` read (dead in the plan-first research pack) + its
+  `buildChainLineageReader` wiring + the planner persona's stale
+  chain-derived-slug prose. `emit_research_artifact` already wrote its own
+  loop entity. Net: research no longer uses `chain.LineageReader` (last
+  production user) → Phase 5 can delete `lineage_reader.go`.
+- Migrate the remaining shared chain-resolver users — `chainbash` (bash
+  wrapper, all packs) + `requestsandbox`/`querysandboxattestation` (sandbox
+  tools, dev-via-test/autoresearch) — off `ResolveChainEntityID` onto typed
+  `RunID`. **Deferred to a separate shared-infra slice** (cross-cutting, not
+  research-specific; bundling it into a pack PR would violate the per-pack
+  blast-radius discipline that bounded 3a/3b).
 
 ### Phase 4 — Terminal authority
 - Add `lifecycle_transition` rules at coordinator terminals
@@ -204,8 +235,11 @@ gap ("B") follows thread 3.
 
 1. ~~Rule substitution for the 6-part run entity ID as an upsert subject
    (decision #1)~~ — **RESOLVED beta.102**: `$entity.triple.agent.run.entity_id`.
-2. Cardinality-many run facts (research gather fan-out) — confirm
-   loop-qualified predicate shape on the run entity (D5).
+2. ~~Cardinality-many run facts (research gather fan-out) — confirm
+   loop-qualified predicate shape on the run entity (D5).~~ — **RESOLVED
+   (Phase 3c)**: the gather fan-out facts STAY on the plan loop (naturally
+   loop-qualified by Object=`$entity.id`), not the run entity. Per-iteration
+   isolation is a feature, not a constraint to migrate. See decision #2.
 3. Whether the dispatcher-direct / MCP spawn site needs `RunID` (ADR-053
    "Open at implementation time").
 4. Grammar-collision audit for `agent.run*` tokens before stamping
