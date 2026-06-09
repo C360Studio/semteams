@@ -1,0 +1,208 @@
+name: dev-via-test-replan
+description: |
+  Journey: ADR-053 Phase 3b — dev-via-test PLAN-RETRY (re-plan) path on
+  mock-LLM against configs/e2e-flow-bootstrap.json. The happy-path
+  journey (dev-via-test.yaml) approves the plan on the first pass and
+  therefore never exercises rule 02d (plan-retry driver) or rule 02g
+  (the re-plan plan-review re-source). This journey drives ONE
+  plan_rejected_retry so the chain flows through:
+
+    rule 02 (first-pass plan-review)
+      → CBG decide(plan_rejected_retry)
+      → rule 02c (stamp plan.retry.finding + .pending on the run entity)
+      → rule 02d (driver, $state.iteration ≤ lisa_retry_budget → re-dispatch Lisa)
+      → re-plan Lisa (emit revision 2)
+      → rule 02g (RE-PLAN plan-review re-source: anchors run-loop-entity-id
+                  off $entity.triple.lineage.run-loop-entity-id, because re-plan
+                  Lisa — spawned from the run entity by 02d — carries that
+                  lineage but NOT agent.run.entity_id)
+      → CBG decide(plan_approved)
+      → rule 02b → coordinator → Ralph → work-gate → reply.
+
+  This is the e2e proof of the go-reviewer C1 fix: without rule 02g the
+  re-plan Lisa would hit rule 02's agent.run.entity_id substitution and
+  resolve a garbage literal, wedging the re-plan loop. With it, the
+  re-gate reads the run entity correctly and the chain converges.
+
+  Mock serves responses in GLOBAL ORDER (last repeats once exhausted).
+  The chain stays linear (1-task plan, single Ralph), so the order
+  below == the order of LLM requests. lisa_retry_budget=2 gives clear
+  headroom for the single re-plan (02d fires once, $state.iteration=1).
+
+  Distinct from dev-via-test.yaml ONLY in Loops B/A'/B' (the reject →
+  re-plan → re-approve insert); everything else mirrors the happy path.
+
+  Paired spec: ui/e2e/agentic/dev-via-test-replan.spec.ts.
+  Required config: configs/e2e-flow-bootstrap.json (incl. rule 02g).
+  Required env: SEMTEAMS_SANDBOX_RUNNER=mock on the backend.
+
+responses:
+  # ---------- Loop 0: coordinator (dispatch) ----------
+
+  - tool_call:
+      name: query_sandbox_attestation
+      arguments_json: |
+        {}
+
+  - tool_call:
+      name: request_sandbox
+      arguments_json: |
+        {
+          "profile": "go-backend",
+          "reason": "The user is asking to build a Go HTTP service with unit tests — dev-via-test work needs a prepared Go toolchain before Lisa plans and Ralph implements."
+        }
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "dev_via_test",
+          "reason": "Add a Go HTTP service that decodes MAVLink v2 HEARTBEAT frames over UDP and exposes the latest at GET /heartbeat as JSON. Use a real Go MAVLink library (github.com/bluenviron/gomavlib) — do not hand-roll the wire format. Include unit tests that decode captured frames from testdata/ and assert the parsed fields."
+        }
+
+  # ---------- Loop A: Lisa v1 (dev-via-test-plan) — a LOW-FIDELITY plan ----------
+  # Drops the gomavlib constraint + uses `go build` (a compile, not a test)
+  # so the plan-review gate has a real fidelity reason to bounce it.
+
+  - tool_call:
+      name: emit_dev_via_test_plan
+      arguments_json: |
+        {
+          "goal": "A Go HTTP service that serves heartbeat data at GET /heartbeat as JSON.",
+          "assumptions": ["Go 1.25 toolchain in PATH"],
+          "non_goals": ["No persistence", "No auth on the endpoint"],
+          "integration_test_command": "go build ./...",
+          "revision": 1,
+          "lisa_retry_budget": 2,
+          "tasks": [
+            {
+              "id": "heartbeat-endpoint",
+              "goal": "Serve heartbeat data at GET /heartbeat as JSON.",
+              "assumptions": ["Parse the MAVLink frames"],
+              "non_goals": ["No persistence"],
+              "target_files": ["main.go", "heartbeat_test.go"],
+              "test_command": "go build ./..."
+            }
+          ]
+        }
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "planned",
+          "reason": "Plan emitted (revision 1): one task, heartbeat-endpoint. Routing to the plan-review gate."
+        }
+
+  # ---------- Loop B: CBG plan-review #1 — REJECT for re-plan ----------
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "plan_rejected_retry",
+          "reason": "Low fidelity to the ask: (1) the user required github.com/bluenviron/gomavlib and 'do not hand-roll the wire format', but task heartbeat-endpoint's assumptions drop that constraint; (2) both test_command and integration_test_command are `go build` (a compile, not a test) — the ask requires unit tests that decode captured frames and assert parsed fields. Re-plan: carry the gomavlib constraint into the task assumptions and make the test commands real `go test` invocations."
+        }
+
+  # ---------- Loop A': re-plan Lisa (revision 2) — the CORRECTED plan ----------
+  # Spawned by rule 02d. Reaches the plan-review gate via rule 02g.
+
+  - tool_call:
+      name: emit_dev_via_test_plan
+      arguments_json: |
+        {
+          "goal": "A Go HTTP service that decodes MAVLink v2 HEARTBEAT frames and serves the latest at GET /heartbeat as JSON.",
+          "assumptions": ["Go 1.25 toolchain in PATH", "github.com/bluenviron/gomavlib is fetchable"],
+          "non_goals": ["No persistence", "No auth on the endpoint"],
+          "integration_test_command": "go test ./...",
+          "revision": 2,
+          "lisa_retry_budget": 2,
+          "tasks": [
+            {
+              "id": "heartbeat-endpoint",
+              "goal": "Decode HEARTBEAT frames using gomavlib and serve the latest at GET /heartbeat as JSON.",
+              "assumptions": ["Use github.com/bluenviron/gomavlib for frame parsing; do not hand-roll the wire format"],
+              "non_goals": ["No persistence"],
+              "target_files": ["main.go", "heartbeat_test.go"],
+              "test_command": "go test -run TestHeartbeat ./..."
+            }
+          ]
+        }
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "planned",
+          "reason": "Re-planned (revision 2): addressed the gate's finding — task heartbeat-endpoint now carries the gomavlib + do-not-hand-roll constraint in its assumptions, and the test commands are real go test invocations. Routing back to the plan-review gate."
+        }
+
+  # ---------- Loop B': CBG plan-review #2 (re-gate via rule 02g) — APPROVE ----------
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "plan_approved",
+          "reason": "Revision 2 is faithful: the gomavlib + do-not-hand-roll constraint is in task heartbeat-endpoint's assumptions and the test_command/integration_test_command are real go test invocations that assert decoded fields. Proceed to implementation."
+        }
+
+  # ---------- Loop C: coordinator (between tasks) ----------
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "dev_via_test",
+          "subtopics": ["heartbeat-endpoint"],
+          "reason": "Plan approved (revision 2). Dispatching the only task, heartbeat-endpoint — lowest position, status ready."
+        }
+
+  # ---------- Loop D: Ralph (dev-via-test-execute) ----------
+
+  - tool_call:
+      name: emit_dev_via_test_measurement
+      arguments_json: |
+        {
+          "pass": true,
+          "stdout_tail": "ok  example/heartbeat  0.012s",
+          "stderr_tail": ""
+        }
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "measured",
+          "reason": "Implemented main.go using gomavlib's frame decoder + heartbeat_test.go decoding a captured frame from testdata/; go test -run TestHeartbeat passes."
+        }
+
+  # ---------- Loop E: coordinator (between tasks, all done) ----------
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "dev_via_test_finalize",
+          "reason": "All tasks complete (heartbeat-endpoint converged). Dispatching CBG to run the integration test command across the full scope."
+        }
+
+  # ---------- Loop F: CBG work-gate (reviewer-dev-via-test) ----------
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "approved",
+          "reason": "Integration test (go test ./...) passes; the diff uses gomavlib for frame parsing as required and includes a unit test asserting the decoded heartbeat fields. Work shipped."
+        }
+
+  # ---------- Loop G: final coordinator (wake-up) ----------
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "respond_direct",
+          "reason": "Your Go HTTP service is ready: it decodes MAVLink v2 HEARTBEAT frames using the gomavlib library and serves the latest at GET /heartbeat as JSON, with a unit test that decodes a captured frame and asserts the parsed fields. All tests pass."
+        }
