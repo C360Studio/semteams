@@ -33,11 +33,6 @@
   "logic": "and",
   "on_enter": [
     {
-      "type": "add_triple",
-      "predicate": "dev_via_test.run.status",
-      "object": "active"
-    },
-    {
       "type": "publish_agent",
       "run_scope": "new",
       "subject": "agent.task.dev-via-test-plan",
@@ -52,10 +47,9 @@
         "phase": "plan"
       },
       "related_loops": {
-        "dev-via-test-run": "$entity.instance",
-        "run-loop-entity-id": "$entity.id"
+        "dev-via-test-run": "$entity.instance"
       },
-      "prompt": "DEV-VIA-TEST PLAN — decompose the user's ask into a Karpathy-shaped plan.\n\nA coordinator at loop $entity.instance classified the user's message as a dev-via-test ask. Its loop entity is your RUN ENTITY — every plan.* triple you emit lands there for downstream Ralph + CBG consumption.\n\nYour job in this single loop:\n\n1. Call read_loop_result(loop_id=$entity.instance) to read the coordinator's terminal. The reason field contains the user's ask as the coordinator preserved it.\n\n2. Think structurally about the plan via scratchpad:\n   - assumptions: environment, deps, semantics you're taking for granted\n   - non_goals: explicit anti-scope; what this work excludes\n   - tasks: sequential decomposition. Each task has its own goal + target_files + test_command. Prefer fewer larger tasks over many tiny ones — ceremony is the cost, not the load-bearing primitive.\n   - integration_test_command: the chain-end full acceptance gate CBG runs\n\n3. Tag the chain start so CBG can diff later: bash git tag plan-start\n\n4. Call emit_dev_via_test_plan(goal, assumptions, non_goals, tasks, integration_test_command). The schema is strict — missing assumptions/non_goals/target_files/test_command rejects structurally. See your 10-emit-contract.md persona fragment for the field-by-field guide.\n\n5. Terminate with decide(action=\"planned\", reason=\"<one-line summary: N tasks targeting <integration test>>\").\n\nIf the user's ask is genuinely too vague to plan — you cannot pick a test command, or you cannot bound the file scope — terminate with decide(action=\"needs_clarification\", reason=\"<specifically what's missing — quote the user's ambiguous phrase>\"). The coordinator will route the question back to the user.\n\nYou're already inside the per-tenant devcontainer (the coordinator called request_sandbox before spawning you). bash routes there automatically via the chain-scoped wrapper."
+      "prompt": "DEV-VIA-TEST PLAN — decompose the user's ask into a Karpathy-shaped plan.\n\nA coordinator at loop $entity.instance classified the user's message as a dev-via-test ask. The plan you emit lands on a shared run entity (emit_dev_via_test_plan resolves it for you) for downstream Ralph + CBG consumption.\n\nYour job in this single loop:\n\n1. Call read_loop_result(loop_id=$entity.instance) to read the coordinator's terminal. The reason field contains the user's ask as the coordinator preserved it.\n\n2. Think structurally about the plan via scratchpad:\n   - assumptions: environment, deps, semantics you're taking for granted\n   - non_goals: explicit anti-scope; what this work excludes\n   - tasks: sequential decomposition. Each task has its own goal + target_files + test_command. Prefer fewer larger tasks over many tiny ones — ceremony is the cost, not the load-bearing primitive.\n   - integration_test_command: the chain-end full acceptance gate CBG runs\n\n3. Tag the chain start so CBG can diff later: bash git tag plan-start\n\n4. Call emit_dev_via_test_plan(goal, assumptions, non_goals, tasks, integration_test_command). The schema is strict — missing assumptions/non_goals/target_files/test_command rejects structurally. See your 10-emit-contract.md persona fragment for the field-by-field guide.\n\n5. Terminate with decide(action=\"planned\", reason=\"<one-line summary: N tasks targeting <integration test>>\").\n\nIf the user's ask is genuinely too vague to plan — you cannot pick a test command, or you cannot bound the file scope — terminate with decide(action=\"needs_clarification\", reason=\"<specifically what's missing — quote the user's ambiguous phrase>\"). The coordinator will route the question back to the user.\n\nYou're already inside the per-tenant devcontainer (the coordinator called request_sandbox before spawning you). bash routes there automatically via the chain-scoped wrapper."
     }
   ],
   "on_exit": [],

@@ -5,9 +5,11 @@
 //
 // Lisa parses the user's prose ask into a Karpathy-shaped plan
 // (goal + assumptions + non_goals + tasks) and calls this tool to
-// stamp plan.* triples on the RUN ENTITY (the coordinator's loop
-// entity, read from related_loops["run-loop-entity-id"] —
-// mirrors the autoresearch pattern). The triples are the
+// stamp plan.* triples on the RUN ENTITY (agent.chain.execution.<runID>,
+// whose id is derived from the run loop id in
+// related_loops["dev-via-test-run"] via TryChainExecutionEntityID —
+// ADR-053 Phase 3b, the same derivation run_scope=new uses to mint and
+// symmetric with the autoresearch emit tools). The triples are the
 // load-bearing artifact: Ralph reads per-task spec via lineage,
 // the coordinator walks plan.task.<id>.status to pick the next
 // ready task, and CBG reads plan.integration_test_command for
@@ -55,6 +57,7 @@ import (
 	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/message"
 	agentictools "github.com/c360studio/semstreams/processor/agentic-tools"
+	"github.com/c360studio/semstreams/types"
 )
 
 // ToolName is the LLM-facing tool name.
@@ -63,10 +66,15 @@ const ToolName = "emit_dev_via_test_plan"
 // toolSource tags the triples this tool publishes.
 const toolSource = "dev-via-test-emit-plan"
 
-// runEntityRoleKey is the related_loops key the spawn rule pins
-// to the coordinator's loop entity ID. Same convention as
-// autoresearch.
-const runEntityRoleKey = "run-loop-entity-id"
+// runLoopIDRoleKey is the related_loops key carrying the run (coordinator)
+// LOOP id. The run entity id (agent.chain.execution.<runID>) is derived from
+// it via the framework's canonical chain-execution entity-id function — the
+// same derivation run_scope=new uses to mint, and symmetric with the
+// autoresearch emit tools (ADR-053 Phase 3b). We anchor on the run loop id
+// rather than a pre-computed entity id because rule 01 cannot thread the run
+// entity id (it is minted by the same publish_agent action, so not yet visible
+// to a sibling substitution); dev-via-test-run = $entity.instance is stable.
+const runLoopIDRoleKey = "dev-via-test-run"
 
 // Predicate constants stamped on the run (coordinator) entity.
 // Plan-level. Per-task predicates are derived in triples() since
@@ -82,6 +90,13 @@ const (
 	predicatePlanRevision           = "plan.revision"
 	predicatePlanCBGRetryBudget     = "plan.cbg_retry_budget"
 	predicatePlanLisaRetryBudget    = "plan.lisa_retry_budget"
+
+	// ADR-053 Phase 3b: the run-lifecycle marker moves here from rule 01's
+	// add_triple (which seeded the coordinator loop). emit_plan now seeds it
+	// on the run entity alongside plan.*. Currently unread (no rule/persona
+	// consumes it), kept on the run entity for consistency with autoresearch +
+	// forward-compat with Phase 4 lifecycle rules.
+	predicateRunStatus = "dev_via_test.run.status"
 
 	// Per-task predicate prefix. Full keys look like
 	// plan.task.<id>.{goal,assumptions,non_goals,target_files,
@@ -149,22 +164,24 @@ type Executor struct {
 	// May be nil — first-emit (revision == 1) never clears, so a nil
 	// remover is fine for deployments that don't re-plan, but a
 	// re-plan with a nil remover surfaces a clear error.
-	remover tripleRemover
-	logger  *slog.Logger
+	remover  tripleRemover
+	platform types.PlatformMeta
+	logger   *slog.Logger
 }
 
-// NewExecutor constructs an Executor. Publisher must be non-nil.
+// NewExecutor constructs an Executor. Publisher must be non-nil. platform is
+// used to derive the run entity id from the run loop id (ADR-053 Phase 3b).
 // remover may be nil (no plan-review/re-plan path wired); a re-plan
 // emit then errors rather than silently appending a stale-winning
 // duplicate plan.
-func NewExecutor(publisher agentictools.TriplePublisher, remover tripleRemover, logger *slog.Logger) *Executor {
+func NewExecutor(publisher agentictools.TriplePublisher, remover tripleRemover, platform types.PlatformMeta, logger *slog.Logger) *Executor {
 	if publisher == nil {
 		panic("emitdevviatestplan.NewExecutor: publisher must not be nil")
 	}
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Executor{publisher: publisher, remover: remover, logger: logger}
+	return &Executor{publisher: publisher, remover: remover, platform: platform, logger: logger}
 }
 
 // ListTools returns the LLM-facing schema. Per Karpathy /
@@ -197,7 +214,7 @@ func (e *Executor) ListTools() []agentic.ToolDefinition {
 	}
 	return []agentic.ToolDefinition{{
 		Name:        ToolName,
-		Description: "Emit the dev-via-test plan. Stamps plan.* triples on the run entity (coordinator's loop entity, read from related_loops['run-loop-entity-id']). Per ADR-044 + [[encode-principles-structurally]]: required fields encode Karpathy's four guidelines structurally — the schema rejects payloads missing assumptions, non_goals, target_files, or test_command. Call exactly once per dev-via-test arc, before the terminal decide(action='planned').",
+		Description: "Emit the dev-via-test plan. Stamps plan.* triples on the run entity (resolved for you from the run loop id). Per ADR-044 + [[encode-principles-structurally]]: required fields encode Karpathy's four guidelines structurally — the schema rejects payloads missing assumptions, non_goals, target_files, or test_command. Call exactly once per dev-via-test arc, before the terminal decide(action='planned').",
 		Parameters: map[string]any{
 			"type":                 "object",
 			"additionalProperties": false,
@@ -232,7 +249,7 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 		return errResult(call, agentic.ToolErrorInvalidArgs, "%v", err)
 	}
 
-	runEntityID, err := runEntityFromCall(call)
+	runEntityID, err := runEntityFromCall(call, e.platform)
 	if err != nil {
 		return errResult(call, agentic.ToolErrorInternal, "%v", err)
 	}
@@ -328,12 +345,17 @@ func (e *Executor) clearPriorPlan(ctx context.Context, runEntityID string, taskI
 	return nil
 }
 
-func runEntityFromCall(call agentic.ToolCall) (string, error) {
+func runEntityFromCall(call agentic.ToolCall, platform types.PlatformMeta) (string, error) {
 	related, _ := call.Metadata[agentic.MetadataKeyRelatedLoops].(map[string]any)
-	if v, ok := related[runEntityRoleKey].(string); ok && v != "" {
-		return v, nil
+	runLoopID, ok := related[runLoopIDRoleKey].(string)
+	if !ok || runLoopID == "" {
+		return "", fmt.Errorf("emit_dev_via_test_plan: related_loops[%q] missing or empty in call metadata; spawn rule must pin the run loop id at chain start", runLoopIDRoleKey)
 	}
-	return "", fmt.Errorf("emit_dev_via_test_plan: related_loops[%q] missing or empty in call metadata; spawn rule must pin run-loop-entity-id at chain start", runEntityRoleKey)
+	runEntityID, err := agentic.TryChainExecutionEntityID(platform.Org, platform.Platform, runLoopID)
+	if err != nil {
+		return "", fmt.Errorf("emit_dev_via_test_plan: build run entity id from run loop %q: %w", runLoopID, err)
+	}
+	return runEntityID, nil
 }
 
 // task is the per-task spec shape after parse+validate.
@@ -517,6 +539,10 @@ func (p *plan) triples(runEntityID string, now time.Time) ([]message.Triple, err
 		base(predicatePlanCBGRetryBudget, p.CBGRetryBudget),
 		base(predicatePlanLisaRetryBudget, p.LisaRetryBudget),
 		base(predicatePlanGeneratedAt, now.Format(time.RFC3339Nano)),
+		// ADR-053 Phase 3b: run-lifecycle marker on the run entity (moved from
+		// rule 01's add_triple on the coordinator loop). Idempotent across a
+		// re-plan re-emit (same (subject,predicate,object) dedups).
+		base(predicateRunStatus, "active"),
 	)
 
 	for i, t := range p.Tasks {
