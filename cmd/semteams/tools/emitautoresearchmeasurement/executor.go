@@ -11,8 +11,9 @@
 //
 // On every call, the tool:
 //
-//  1. Reads autoresearch.best.value from the run entity (the
-//     coordinator's loop entity, identified via related_loops).
+//  1. Reads autoresearch.best.value from the run entity
+//     (agent.chain.execution.<runID>, derived from the run loop id in
+//     related_loops["autoresearch-run"] — ADR-053 Phase 3a).
 //
 //  2. Compares the measurement against best.value with lower-
 //     is-better semantics:
@@ -72,9 +73,12 @@ const (
 	OutcomeCrashed  = "crashed"
 )
 
-// runEntityRoleKey is the related_loops key the spawn rule pins to
-// the run entity's 6-part ID.
-const runEntityRoleKey = "run-loop-entity-id"
+// runLoopIDRoleKey is the related_loops key carrying the run (coordinator)
+// LOOP id; the run entity id is derived from it via TryChainExecutionEntityID
+// (ADR-053 Phase 3a — same derivation run_scope=new uses to mint the run, and
+// symmetric with emit_autoresearch_baseline). The execute loop carries this
+// key threaded from rule 05 → rule 03.
+const runLoopIDRoleKey = "autoresearch-run"
 
 // Predicates on the calling execute loop entity. Rules 04a + 04b
 // (clean-completion / loop-failed) key off these.
@@ -158,7 +162,7 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 		return errResult(call, agentic.ToolErrorInvalidArgs, "%v", err)
 	}
 
-	runEntityID, err := runEntityFromCall(call)
+	runEntityID, err := runEntityFromCall(call, e.platform)
 	if err != nil {
 		return errResult(call, agentic.ToolErrorInternal, "%v", err)
 	}
@@ -269,12 +273,17 @@ func compareOutcome(value float64, pass bool, best float64) (string, float64) {
 	return OutcomeReverted, delta
 }
 
-func runEntityFromCall(call agentic.ToolCall) (string, error) {
+func runEntityFromCall(call agentic.ToolCall, platform types.PlatformMeta) (string, error) {
 	related, _ := call.Metadata[agentic.MetadataKeyRelatedLoops].(map[string]any)
-	if v, ok := related[runEntityRoleKey].(string); ok && v != "" {
-		return v, nil
+	runLoopID, ok := related[runLoopIDRoleKey].(string)
+	if !ok || runLoopID == "" {
+		return "", fmt.Errorf("emit_autoresearch_measurement: related_loops[%q] missing or empty; spawn rule must pin the run loop id at chain start", runLoopIDRoleKey)
 	}
-	return "", fmt.Errorf("emit_autoresearch_measurement: related_loops[%q] missing or empty; spawn rule must pin run-loop-entity-id at chain start", runEntityRoleKey)
+	runEntityID, err := agentic.TryChainExecutionEntityID(platform.Org, platform.Platform, runLoopID)
+	if err != nil {
+		return "", fmt.Errorf("emit_autoresearch_measurement: build run entity id from run loop %q: %w", runLoopID, err)
+	}
+	return runEntityID, nil
 }
 
 type parsedArgs struct {
@@ -331,17 +340,6 @@ func (p *parsedArgs) executeTriples(executeEntityID, outcome string, delta, best
 		out = append(out, base(predicateMeasurementStderrTail, p.StderrTail))
 	}
 	return out
-}
-
-func runBaseTriple(subject, predicate string, object any, now time.Time) message.Triple {
-	return message.Triple{
-		Subject:    subject,
-		Predicate:  predicate,
-		Object:     object,
-		Source:     toolSource,
-		Timestamp:  now,
-		Confidence: 1.0,
-	}
 }
 
 func errResult(call agentic.ToolCall, kind agentic.ToolErrorKind, format string, args ...any) (agentic.ToolResult, error) {
