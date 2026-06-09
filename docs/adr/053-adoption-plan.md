@@ -198,6 +198,223 @@ Slice by pack, each its own PR + e2e gate, **easiest first**:
   (approved→completed, failure→failed, ask_user/cancel paths). Verify D3
   zombie guard handles dispatch-root early termination.
 
+#### Phase 4 design spike (2026-06-09) — REVIEW BEFORE WRITING ANY RULES
+
+Phase 4 is the first phase that makes the run *advance* past `dispatched`.
+It is materially more intricate than 3a–3c (the firing-entity constraint
+on transitions + a framework-vs-product division of labor + a real race),
+so this spike pins the design before implementation.
+
+**A. Model (ADR-053 §D3).** Framework **mints** (Phase 2, done) +
+**observes** (the `MilestoneSubscriber`, wired here). The
+**product/coordinator** owns the terminal decision and fires a
+`lifecycle_transition` rule action to `completed`/`failed`/`cancelled`.
+The subscriber's ONLY framework-initiated terminal is the **zombie
+fallback**: the dispatch-root loop terminates (fail/cancel) while the run
+is still `dispatched` → it transitions the run to `failed`/`cancelled`.
+The phase machine is **no-skip**: `dispatched → executing →
+{awaiting_approval, completed, failed, cancelled}`, `awaiting_approval ⇄
+executing`. A run CANNOT go `dispatched → completed` directly.
+
+**B. Load-bearing constraint — transitions fire on the run entity.**
+`executeLifecycleTransition` transitions `ec.EntityID`, the **firing
+entity**, with NO entity override (verified upstream
+`processor/rule/actions_lifecycle.go:40`; the reference rule
+`configs/rules/lifecycle/01-mission-launch.json` transitions
+`$entity.id`). So every run-phase transition rule MUST **fire on the run
+entity** (`agent.chain.execution.<runID>`). The rule processor already
+watches `ENTITY_STATES` `c360.>`, which matches run entities (proven by
+3a's rule 05). → A **new substrate-level rule pack
+`configs/rules/agent-run/`** (loaded by the bootstrap alongside
+`coordinator`/`ops`, NOT a category pack) holds the run-entity-firing
+transition rules. Wire it into `flow-bootstrap.json` +
+`e2e-flow-bootstrap.json`.
+
+**C. The 2-step marker for terminals.** The coordinator/loop terminal
+rules fire on the **coordinator loop**, not the run entity. To reach the
+run: (i) the loop-firing terminal rule `add_triple`s a marker
+(`agent.run.terminal.<state>`) onto the run entity via the subject
+override `$entity.triple.agent.run.entity_id`; (ii) a run-entity-firing
+rule in the `agent-run` pack matches the marker (+ guards current phase)
+→ `lifecycle_transition`. The wake-up coordinator carries
+`agent.run.entity_id` (inherited from the reviewer/CBG loop, which is in
+the run). **GUARD:** a *non-delegating* coordinator answering a plain
+chat via `respond_direct` has NO run (no `run_scope=new` fired) → no
+`agent.run.entity_id` → the marker stamp MUST be conditional on the
+triple's presence so it no-ops for run-less chats (rule-01-fence
+discipline). Grammar-collision audit the `agent.run.terminal.*` tokens
+before stamping (`feedback_grammar_collision_audit_on_new_tokens`).
+
+**D. `dispatched→executing` + the D3 race — THE risk.** D3's *intended*
+invariant is "root terminates while `dispatched` AND **no child handoff**
+= zombie," but the framework code (`agentrun.go:572`) checks ONLY
+`phase=="dispatched"` + `ev.LoopID==runID` — **no children check.** Mint
+⟺ child handoff (both atomic in rule 01's `run_scope=new`), so a
+run-entity rule matching the freshly-minted `agent.run.phase=="dispatched"`
+→ `executing` is the correct "transition-at-handoff" semantic. **RACE:**
+the coordinator (root) dispatches the child, then its own loop terminates
+→ `LoopCompletedEvent(coordinator)`. If `dispatched→executing` has not
+landed when the subscriber processes that event, D3 wrongly `failed`s a
+healthy run. The mint is durable BEFORE the child is even dispatched
+(`actions.go:1193` mint precedes `1330` publish), so the transition
+*likely* lands first — but the window is real and async.
+**Architect-corrected posture:**
+- The D3 bug is **worse than "fails on a timing edge":** D3 maps
+  `CategoryLoopCompleted → "failed"` *unconditionally* (`agentrun.go:574`;
+  only `cancelled` is special-cased). A coordinator that **completes
+  successfully** while the run is still `dispatched` gets the run marked
+  `failed`. The handoff *did* happen.
+- **No deterministic product-config closure exists** (confirmed): every
+  lever — co-firing in rule 01, driving off the child's start, keeping the
+  coordinator alive — fails the firing-entity constraint or isn't
+  configurable. So implement → validate empirically → upstream-ask IS the
+  right posture.
+- **Mock is a POSITIVE race detector, not a blind spot.** Mock-LLM
+  finishes the coordinator's `decide` near-instantly → *shrinks* the window
+  for `dispatched→executing` to land first → mock is MORE likely to lose
+  the race. A green mock run across N runs ⇒ the fast-path ordering is
+  robust; real-LLM then confirms the slow path. **The mock journeys MUST
+  assert `agent.run.phase` directly** (graph-query / KV read == `completed`,
+  NOT `failed`) — current specs assert via UI only and would miss a run
+  silently marked `failed`.
+- **Upstream ask (if it bites), correctly framed:** "D3 must NOT fire on
+  `CategoryLoopCompleted` — a successfully-completed root is by definition
+  not a zombie; only a root that *failed/cancelled* while `dispatched` is."
+  NOT "check `run.Children`" — agent-run declares no `ChildWorkflows`, so
+  `Manager.Children` is empty and the check is unimplementable without a
+  child-link predicate. The Phase-4 watch-item.
+
+**E. Per-pack terminal mapping — the terminals CONVERGE (key finding).**
+
+| Transition | Trigger | Shared? |
+|---|---|---|
+| `dispatched→executing` | run-entity rule on freshly-minted `agent.run.phase=dispatched` | **Universal** (substrate) |
+| `executing→completed` | ALL packs wake coordinator → `decide(respond_direct)` → `coordinator/03b-respond-direct` | **Shared** (one marker + one run-entity rule; guard run-less chats) |
+| `executing→failed` | per-pack `loop-failed-pause` markers **+** D3 | **NOT cleanly shared — coverage holes** (see below) |
+| `executing⇄awaiting_approval` | NOT the CBG gate (it's an automated reviewer) — reserve for the real `approval_required` tool-gate | **Deferred / re-scoped** (see §H 4c) |
+| `→cancelled` | `coordinator/03-ask-user` / cap-exhausted-to-human | **OPEN** (see Q2) |
+
+Only `dispatched→executing` and `executing→completed` are **cleanly
+substrate-shared** (validated across all three journeys). The other rows
+have problems the architect review surfaced:
+
+- **`executing→failed` has un-covered failure paths (HIGH).** No
+  `loop-failed-pause` rule lists the `coordinator` role — so a coordinator
+  (incl. wake-up coordinator) that fails while the run is `executing`
+  stamps no marker, and D3 only fires while `dispatched` → **permanent
+  `executing` zombie** (exactly the class D3 was meant to kill, uncovered
+  past `dispatched`). Also `dev-via-test/08` lists only `dev-via-test-plan`
+  + `reviewer-dev-via-test`, NOT `dev-via-test-execute` (ralph) → a ralph
+  failure stamps no marker. So `executing→failed` needs a `coordinator`-role
+  failed rule in the shared pack **+** a per-pack failed-pause role-list
+  audit → **split into its own slice (4a′)**, not bundled into 4a.
+- **`awaiting_approval` ≠ the CBG gate (MEDIUM).** `06-coordinator-dispatch-cbg`
+  dispatches a `reviewer-dev-via-test` — an **automated** reviewer, not a
+  human pause. The real human-approval surface is
+  `agentic-tools.approval_required` → `ApprovalFilter` →
+  `LoopStateAwaitingApproval` (OFF in flow-bootstrap). So CBG-in-flight
+  stays `executing`; `awaiting_approval` is reserved for the
+  `approval_required` tool-gate if/when enabled.
+
+So **only two** transitions are load-bearing-and-clean for the first slice
+(`dispatched→executing`, `executing→completed`); failure-phase modeling is
+its own slice.
+
+**F. Subscriber wiring (`main.go`).** Construct
+`agentrun.NewMilestoneSubscriber(mgr, loopReader, triplePublisher, org,
+platform, logger)` after the lifecycle manager (today
+`attachLifecycleManager` drops the handle into
+`svcDeps.LifecycleManager` and returns — expose/return it for the
+subscriber). `AddHandler` for product `MilestoneHandler`s — Phase 5
+re-platforms the chain stampers as handlers, so Phase 4 registers none
+(or a thin one). `Start(ctx, natsClient, StartConfig{StreamName})` with
+the stream from config (default `AGENT`), creating 2 durable consumers
+(`agent.complete.*`, `agent.failed.*`). `loopReader` is a
+`LoopTripleReader` for the fallback `ResolveRun` walk (un-threaded
+loops); reuse a NATS entity reader. Boot order: alongside
+`startChainMilestoneSubscribers` / `chainpause`, mirroring the existing
+subscriber boot (ADR-029). The chain stampers KEEP running in parallel
+(dual-write) until Phase 5.
+
+**G. Restart recovery + the phase-guard requirement (architect-corrected).**
+Durable consumers resume from last-ack. The manager has **no same-phase
+short-circuit**: `TransitionWith` on an already-applied edge returns a
+**hard error** (`ErrInvalidTransition` — there is no `executing→executing`
+self-edge; `manager.go:445`) or `ErrTerminalPhase` if already terminal.
+On the rule path that error is **logged at ERROR and dropped**
+(`stateful_evaluator.go:405`) — the KV-watch entity path always Acks (no
+NAK-forever loop), and the subscriber's D3 failure also logs-and-Acks. So
+there is no redelivery wedge, BUT every benign duplicate/re-fire emits an
+ERROR line — which would page a real-LLM smoke monitor armed on
+`"level":"ERROR"`. **REQUIREMENT: every transition rule must be
+phase-guarded** (a condition on the current `agent.run.phase` before the
+`lifecycle_transition`) so the invalid edge is never *attempted*. This
+also closes RISK 4 (below). State-machine testing per
+`feedback_state_machine_testing`: restart mid-run, duplicate terminal,
+out-of-order terminal.
+
+**G2. RISK 4 — the early-marker second-order race (architect-found).** The
+`executing→completed` flow is two async hops: (i) the loop rule stamps
+`agent.run.terminal.completed` on the run entity; (ii) the run-entity rule
+matches it → transition. On a fast chain the marker can land while the run
+is still `dispatched` (if `dispatched→executing` hasn't fired yet) → the
+rule attempts the illegal `dispatched→completed` (no-skip machine) →
+dropped → **the completed transition is permanently lost; the run sticks**
+(markers don't redeliver; no new KV revision re-fires the rule). Mitigation:
+the completed-marker rule's phase-guard must make it **re-evaluate when the
+phase advances** (not fire-once), OR `dispatched→executing` must be proven
+to always land first. This is the strongest argument for landing a
+rock-solid, fast `dispatched→executing` BEFORE any terminal marker — hence
+the narrowed 4a (§H).
+
+**H. Slicing (architect-narrowed — conditional Go on 4a).**
+- **4a (subscriber + the two clean transitions ONLY):** subscriber wiring +
+  the `agent-run` pack with `dispatched→executing` and `executing→completed`
+  (respond_direct marker) — **both phase-guarded** (§G) — + the run-less-chat
+  guard. Deliberately EXCLUDES `executing→failed` (coverage holes, §E) and
+  `awaiting_approval` (re-scoped, §E). This isolates the D3 race (§D) and the
+  early-marker race (§G2) as the two things 4a proves. Gate: go-reviewer +
+  **all 3 pack mock journeys green with a DIRECT `agent.run.phase` assertion
+  (`completed`, not `failed`/`dispatched`)** — mock is the positive race
+  detector — + a **real-LLM research smoke** for the slow-path timing.
+- **4a′ (failure phase, its own slice):** `executing→failed` — add a
+  `coordinator`-role failed rule in the shared pack (fail-while-`executing`
+  → `executing→failed`) + audit each pack's `loop-failed-pause` role list
+  for completeness (dev-via-test missing `ralph`, etc.). Separate because
+  the coverage holes need deliberate work, not a one-liner.
+- **4b:** `ask_user` / `needs_clarification` / cancel run-phase semantics
+  (Q2).
+- **4c:** the real `approval_required` tool-gate → `awaiting_approval`
+  (NOT the CBG automated reviewer, which stays `executing` — §E).
+- Then Phase 5.
+
+**I. Open questions.**
+1. **D3 race** — empirical result; upstream ask ("D3 must not fire on
+   `CategoryLoopCompleted`") if it bites (the watch-item).
+2. **`ask_user` phase** — `awaiting_approval` (waiting on the user), or
+   leave `executing` (the user reply re-dispatches and the run never
+   actually paused), or `cancelled`? Lean: `ask_user` is NOT run-terminal;
+   `needs_clarification`→coordinator recovery stays `executing`; only a
+   genuine dead-end (cap-exhausted-to-human, no recovery) → `cancelled`.
+3. **Marker vocabulary** — finalize `agent.run.terminal.*` predicate names
+   + the grammar-collision audit.
+4. **Handlers in 4a?** — register a thin `MilestoneHandler` now, or wait
+   for Phase 5's stamper re-platform. (Lean: none in 4a — the two
+   transitions are pure rules; handlers arrive with the Phase-5 re-platform.)
+5. **Phase-guard re-evaluation** — confirm a phase-guarded marker rule
+   re-evaluates when the phase advances (closes G2), and that an
+   already-applied transition never *attempts* the invalid edge (closes the
+   ERROR-noise of §G).
+
+**Architect review (2026-06-09):** spike reviewed against upstream
+beta.102. Verdict: architecture sound (substrate `agent-run` pack,
+firing-on-run-entity, 2-step marker, dual-write); **conditional Go on a
+narrowed 4a** with the four fixes folded in above (phase-guards + §G
+rewrite; `executing→failed` split to 4a′; direct `agent.run.phase`
+journey assertions + mock-as-detector; upstream ask reframed). §B/§C/§F
+and the `executing→completed` convergence confirmed sound; multi-iteration
+runs verified to stay `executing` correctly.
+
 ### Phase 5 — Retire the hand-rolled layer
 - Re-platform stampers (`dispatched`/`research`/`needs_review`/`terminal`)
   onto `MilestoneHandler`; `chainpause` + `evidence` onto
