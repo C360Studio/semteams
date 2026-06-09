@@ -1,0 +1,41 @@
+{
+  "id": "agent_run_dispatched_to_executing",
+  "type": "expression",
+  "name": "Run handoff confirmed → dispatched→executing",
+  "description": "ADR-053 Phase 4a — the dispatched→executing trigger, half 2 (the run-entity transition). Fires on the RUN entity (agent.chain.execution.<runID>) when rule 01 has stamped agent.run.handoff there AND the run is still in `dispatched`. Advances the run to `executing` via lifecycle_transition (the firing entity = the run entity, which is what the action transitions).\n\nWHY this matters (ADR-053 §D3): the run must reach `executing` before the dispatch-root coordinator's own terminal event is processed by the MilestoneSubscriber — the D3 zombie guard fails any root that terminates while the run is still `dispatched`. The handoff is confirmed (rule 01 gates on rule.spawned_task), so reaching `executing` here is the correct \"work is in flight\" transition. The D3 race (handoff-marker → this transition vs the coordinator's LoopCompletedEvent) is the empirical watch-item of Phase 4a (see §D).\n\nPHASE GUARD IS A TOP-LEVEL CONDITION, NOT AN ACTION `when` (Coby review round 2): agent.run.phase==dispatched is a rule condition so the rule is simply not-matching until the edge is legal — the illegal dispatched→X is never attempted (no ErrInvalidTransition ERROR log, no lost transition). The processor re-evaluates every entity-state rule on each KV revision (message_handler.go:245), so even if agent.run.handoff lands at the same instant, the transition fires exactly once when both conditions hold.",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "agent.run.handoff",
+      "operator": "ne",
+      "value": "",
+      "required": true
+    },
+    {
+      "field": "agent.run.phase",
+      "operator": "eq",
+      "value": "dispatched",
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "lifecycle_transition",
+      "workflow": "agent-run",
+      "phase": "executing",
+      "reason": "child task handed off (rule.spawned_task confirmed) — run is now executing"
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "pack": "agent-run",
+    "phase": "ADR-053 Phase 4a",
+    "adr": "docs/adr/053-adoption-plan.md",
+    "role": "dispatched→executing (run-entity transition, half 2)",
+    "joins_with": "01-handoff-marker.json",
+    "fires_on": "the run entity (agent.chain.execution.<runID>) — ENTITY_STATES c360.> is watched by the rule processor (proven by autoresearch/05 post-3a). lifecycle_transition resolves workflow=agent-run via the explicit field; LookupByEntityID would also resolve it from the EntityIDPattern.",
+    "phase_guard_is_condition": "agent.run.phase==dispatched is a TOP-LEVEL CONDITION (not an action `when`) so the invalid edge is never attempted (Coby review round 2). See §G/§G2.",
+    "d3_race_watch_item": "Must land before the coordinator-root's LoopCompletedEvent reaches the MilestoneSubscriber's D3 guard, else a healthy run is wrongly failed. Mock journeys (fast coordinator = positive race detector) assert agent.run.phase reaches completed, not failed. Upstream ask if it bites: D3 must not fire on CategoryLoopCompleted (§D)."
+  }
+}

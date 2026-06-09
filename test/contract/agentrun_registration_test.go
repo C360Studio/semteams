@@ -91,24 +91,26 @@ var mintPointSuffixes = []string{
 	"configs/rules/dev-via-test/01-coordinator-dev-via-test-spawn.json",
 }
 
-// TestPhase2RunScopeOnlyAtMintPoints is the ADR-053 Phase-2 topology guard.
+// TestRunScopeMintPointsAndLifecycleTransitions is the ADR-053 run-topology
+// guard (Phase 2 mint points + Phase 4a transition scoping).
 //
-// Two structural invariants of the mint phase:
+// Two structural invariants:
 //  1. run_scope="new" appears at EXACTLY the 3 coordinator root spawns and
 //     nowhere else. A stray run_scope on a downstream rule would mint a second
 //     run (mis-anchoring the chain's run identity) or mint off a non-loop
 //     entity (silent inherit-fallback). Every run_scope value must be "new" —
 //     "inherit"/"none" are the framework default/opt-out and would be noise here.
-//  2. NO lifecycle_* action types yet. Those (lifecycle_transition/complete/fail)
-//     are Phase 4 — and Phase 4 is where the agentrun.MilestoneSubscriber gets
-//     wired (its D3 zombie guard only has runs to act on once a transition rule
-//     advances them past "dispatched"). This half of the guard trips the day a
-//     lifecycle_* rule lands, pointing the Phase-4 author at the subscriber
-//     wiring (mirror upstream cmd/semstreams/main.go §10d).
+//  2. lifecycle_transition actions appear ONLY in the agent-run pack's two
+//     run-entity transition rules (Phase 4a). Run-phase transitions MUST fire on
+//     the run entity, so a lifecycle_* action anywhere else (a pack rule firing
+//     on a loop) is a stray that would try to transition a non-participant loop.
+//     Both transition rules must carry one (else the pack is broken). Phase 4a
+//     also wires the agentrun.MilestoneSubscriber in cmd/semteams/main.go — its
+//     D3 zombie guard only has runs to act on once dispatched→executing advances
+//     them past "dispatched".
 //
-// Phase 2 itself wires NO subscriber: minted runs sit inert in "dispatched"
-// with no consumer, so minting is additive/safe. See docs/adr/053-adoption-plan.md.
-func TestPhase2RunScopeOnlyAtMintPoints(t *testing.T) {
+// See docs/adr/053-adoption-plan.md §Phase 4 design spike.
+func TestRunScopeMintPointsAndLifecycleTransitions(t *testing.T) {
 	// Mint points live in the rule packs; the two flow configs are scanned too
 	// so a stray run_scope pasted into an inline flow rule is still caught.
 	files := collectJSONFiles(t,
@@ -152,12 +154,37 @@ func TestPhase2RunScopeOnlyAtMintPoints(t *testing.T) {
 				"(omit run_scope), not mint a second run", f)
 		}
 	}
-	// Invariant 2: no lifecycle_* actions until Phase 4 (which also wires the subscriber).
-	if len(lifecycleActions) > 0 {
-		t.Fatalf("lifecycle_* action(s) found — this is Phase 4 territory:\n  %s\n\n"+
-			"Phase 4 adds terminal-authority transitions AND must wire the agentrun.MilestoneSubscriber\n"+
-			"in cmd/semteams/main.go (upstream §10d) so D3 zombie-prevention is live. Do both, then\n"+
-			"update this guard.", strings.Join(lifecycleActions, "\n  "))
+	// Invariant 2 (Phase 4a): lifecycle_transition actions appear ONLY in the
+	// agent-run pack's two run-entity transition rules. Anywhere else is a stray
+	// (run-phase transitions must fire on the run entity, not a loop entity).
+	lifecycleTransitionFiles := []string{
+		"configs/rules/agent-run/02-dispatched-to-executing.json",
+		"configs/rules/agent-run/03-executing-to-completed.json",
+	}
+	for _, entry := range lifecycleActions {
+		allowed := false
+		for _, want := range lifecycleTransitionFiles {
+			if strings.Contains(entry, want) {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			t.Errorf("lifecycle_* action outside the agent-run transition rules (run-phase transitions "+
+				"must fire on the run entity): %s", entry)
+		}
+	}
+	for _, want := range lifecycleTransitionFiles {
+		found := false
+		for _, entry := range lifecycleActions {
+			if strings.Contains(entry, want) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("expected a lifecycle_transition action in %s, found none (pack broken)", want)
+		}
 	}
 }
 

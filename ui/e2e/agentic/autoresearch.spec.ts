@@ -179,6 +179,38 @@ test.describe("autoresearch — propose/execute iteration mock-LLM journey", () 
       payloads.length,
       "expected a user.response.* publish (coordinator respond_direct)",
     ).toBeGreaterThanOrEqual(1);
+
+    // ADR-053 Phase 4a — the run reached `completed`, NOT `failed`/`dispatched`/
+    // `executing`. This is the direct agent.run.phase assertion the design spike
+    // names as the merge gate (§D/§H): mock's fast coordinator is the POSITIVE D3-
+    // race detector. It is also the regression guard for go-reviewer C1 — the
+    // autoresearch success stamp (rule 08, subject lineage.run-loop-entity-id)
+    // only resolves because rule 07 threads run-loop-entity-id to the reviewer;
+    // without it the run hangs in `executing` and this assertion goes red.
+    const runPhases = await pollUntil(async () => {
+      const phases = await fetchTriples(request, {
+        predicate: "agent.run.phase",
+        limit: 20,
+      });
+      const objs = phases
+        .filter((t) => String(t.subject ?? "").includes("agent.chain.execution."))
+        .map((t) => String(t.object));
+      // Settle on a terminal phase (completed) or fail fast on failed.
+      if (objs.includes("completed") || objs.includes("failed")) return objs;
+      return null;
+    }, { timeoutMs: 30_000 });
+    expect(
+      runPhases,
+      "agent.run.phase never reached a terminal on the run entity (run stuck in dispatched/executing — handoff or success transition did not fire)",
+    ).toBeTruthy();
+    expect(
+      runPhases,
+      "run must reach completed (ADR-053 Phase 4a executing→completed)",
+    ).toContain("completed");
+    expect(
+      runPhases,
+      "run must NOT be failed — a failed run here means the D3 zombie guard raced the dispatched→executing transition",
+    ).not.toContain("failed");
   });
 });
 

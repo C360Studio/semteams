@@ -21,6 +21,7 @@ var flowBootstrapAllowedRulePackPrefixes = []string{
 	"/app/configs/rules/research/",     // ADR-042 MVP-2 research category pack.
 	"/app/configs/rules/autoresearch/", // ADR-042 §addendum 2026-05-29 autoresearch pack.
 	"/app/configs/rules/dev-via-test/", // ADR-044 dev-via-test pack (Slice 1+).
+	"/app/configs/rules/agent-run/",    // ADR-053 Phase 4a substrate pack: run-phase transitions (dispatched→executing, executing→completed) firing on the run entity. Substrate-level (like coordinator), NOT a category pack.
 	// Sandbox provisioning is synchronous via the request_sandbox
 	// tool under ADR-043; no rule pack — the prefix was removed
 	// alongside the configs/rules/sandbox-bootstrap/ directory in

@@ -1,0 +1,47 @@
+{
+  "id": "agent_run_handoff_marker",
+  "type": "expression",
+  "name": "Coordinator confirmed handoff → stamp agent.run.handoff on run entity",
+  "description": "ADR-053 Phase 4a — the dispatched→executing trigger, half 1 (the firing-entity bridge). lifecycle_transition acts on the FIRING entity, so the run-phase advance must fire on the run entity (agent.chain.execution.<runID>); but the handoff evidence lives on the coordinator LOOP. This rule bridges the two: it fires on the dispatch coordinator loop once the child task is CONFIRMED published, and stamps agent.run.handoff on the run entity (subject override). Rule 02 then matches that marker on the run entity and transitions dispatched→executing.\n\nWHY rule.spawned_task and not bare mint (Coby review P1a): run_scope=new mints the run (agent.run.phase=dispatched) at actions.go:1193 BEFORE the child publish at actions.go:1330, and the publish can fail — which would leave a run minted with no child. rule.spawned_task is stamped on the firing entity ONLY after publish success (actions.go:1353), so it is genuine handoff evidence. Triggering on it (not on the freshly-minted dispatched phase) means a publish failure leaves the run in `dispatched` with no handoff marker → the coordinator's own terminal then trips the D3 zombie guard (subscriber) and fails the run correctly, rather than stranding a childless run in `executing`.\n\nThe subject override $entity.triple.agent.run.entity_id resolves because run_scope=new stamps BOTH agent.run (bare) and agent.run.entity_id (6-part) on the firing/coordinator entity (actions.go:1212-1235). The agent.run.entity_id != \"\" condition is the run-less-chat guard: a non-delegating coordinator answering plain chat fired no run_scope=new, has no agent.run.entity_id, and so never stamps a handoff marker. Idempotent: a recovery/re-dispatch coordinator re-firing this stamps agent.run.handoff again, but rule 02 is phase-guarded (only dispatched→executing) so the re-stamp is a no-op once the run is executing.",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "agent.loop.role",
+      "operator": "eq",
+      "value": "coordinator",
+      "required": true
+    },
+    {
+      "field": "rule.spawned_task",
+      "operator": "ne",
+      "value": "",
+      "required": true
+    },
+    {
+      "field": "agent.run.entity_id",
+      "operator": "ne",
+      "value": "",
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "add_triple",
+      "subject": "$entity.triple.agent.run.entity_id",
+      "predicate": "agent.run.handoff",
+      "object": "$entity.instance"
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "pack": "agent-run",
+    "phase": "ADR-053 Phase 4a",
+    "adr": "docs/adr/053-adoption-plan.md",
+    "role": "handoff-marker (dispatched→executing, half 1: loop→run-entity bridge)",
+    "joins_with": "02-dispatched-to-executing.json",
+    "confirmed_handoff_rationale": "rule.spawned_task (post-publish-success, actions.go:1353), NOT bare mint — publish-failure safety (Coby review P1a). See docs/adr/053-adoption-plan.md §Phase 4 design spike §D.",
+    "subject_override_anchor": "agent.run.entity_id — stamped on the firing/coordinator entity by run_scope=new (actions.go:1212-1235). Also the run-less-chat guard (absent on non-delegating chat coordinators).",
+    "grammar_collision_note": "agent.run.handoff is read by rule 02 as a CONDITION field (GetFieldValue, exact-match) and written here as an add_triple predicate — never used as a $entity.triple.* substitution, so it cannot ReplaceAll-collide with agent.run / agent.run.entity_id / agent.run.phase (semstreams#160 class)."
+  }
+}

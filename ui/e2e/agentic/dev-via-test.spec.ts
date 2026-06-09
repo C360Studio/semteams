@@ -196,6 +196,34 @@ test.describe("ADR-044 — dev-via-test pack mock-LLM journey", () => {
       payloads.length,
       "expected a user.response.* publish (final coordinator respond_direct)",
     ).toBeGreaterThanOrEqual(1);
+
+    // ADR-053 Phase 4a — the run reached `completed`. Direct agent.run.phase
+    // assertion on the run entity (design spike merge gate §D/§H). dev-via-test's
+    // chain-end CBG (rule 07a) stamps agent.run.outcome=success via
+    // lineage.run-loop-entity-id, and rule 03 transitions executing→completed.
+    // `failed` here = the D3 zombie guard raced dispatched→executing.
+    const runPhases = await pollUntil(async () => {
+      const phases = await fetchTriples(request, {
+        predicate: "agent.run.phase",
+        limit: 20,
+      });
+      const objs = phases
+        .filter((t) => String(t.subject ?? "").includes("agent.chain.execution."))
+        .map((t) => String(t.object));
+      if (objs.includes("completed") || objs.includes("failed")) return objs;
+      return null;
+    }, { timeoutMs: 30_000 });
+    expect(
+      runPhases,
+      "agent.run.phase never reached a terminal on the run entity (run stuck in dispatched/executing)",
+    ).toBeTruthy();
+    expect(runPhases, "run must reach completed (ADR-053 Phase 4a)").toContain(
+      "completed",
+    );
+    expect(
+      runPhases,
+      "run must NOT be failed (D3 race / wrong terminal)",
+    ).not.toContain("failed");
   });
 });
 

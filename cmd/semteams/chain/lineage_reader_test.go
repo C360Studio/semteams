@@ -8,6 +8,26 @@ import (
 	"github.com/c360studio/semstreams/agentic"
 )
 
+// fakeEntityReader returns predicate maps keyed by entity_id. (Re-homed here
+// from the deleted research_test.go when the chain milestone stampers were
+// retired under ADR-053 — lineage_reader_test.go is the surviving user.)
+type fakeEntityReader struct {
+	entities map[string]map[string]any
+	err      error
+	calls    int
+}
+
+func (f *fakeEntityReader) ReadEntity(_ context.Context, entityID string) (map[string]any, error) {
+	f.calls++
+	if f.err != nil {
+		return nil, f.err
+	}
+	if m, ok := f.entities[entityID]; ok {
+		return m, nil
+	}
+	return map[string]any{}, nil
+}
+
 // TestLineageReader_HappyPath drives the success case end-to-end:
 // resolver picks chain entity ID, entities returns its predicate map,
 // LineageReader returns both with no error.

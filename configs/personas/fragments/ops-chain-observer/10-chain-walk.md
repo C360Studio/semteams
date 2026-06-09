@@ -51,17 +51,23 @@ Don't hardcode platform values; read them.
 query_entity(id="<chain_entity_id_from_step_1>")
 ```
 
-This is your fused starting point. Per the chain
-entity carries:
+This is your fused starting point. The run entity
+(`agent.chain.execution.<run_id>`) is owned by the agent-run lifecycle
+substrate (ADR-053) and carries:
 
-- `chain.dispatched_at` — when the chain started
-- `chain.research_artifact_loop` — the researcher loop_id
-- `chain.research_artifact.{harness, actor_count, task_count, path}` — research milestone metadata
-- `chain.slug.stem` — chain-stable slug for all artifact filenames
-- `chain.plan_loop`, `chain.plan_reviewer_loop`, `chain.plan.path` — plan milestone (legacy; ADR-041 MVP drops the planner/reviewer split — see ADR-041)
-- `chain.spec_artifact_loop`, `chain.spec_artifact.{path, check_count}` — spec milestone
-- `chain.evidence.summary{_ready, .path}` — evidence preprocessor's verdict (if it ran)
+- `agent.run.phase` — the run's lifecycle phase (`dispatched` →
+  `executing` → `completed` / `failed` / `cancelled`)
+- `agent.run.outcome` — `success` on a reviewer/CBG-approved terminal
+- pack accumulator state when present (`autoresearch.*`, `dev_via_test.*`)
 - `chain.paused.*` — if the chain paused (failed-loop ancestry)
+
+Per-milestone artifact metadata is NO LONGER projected onto the run
+entity (the hand-rolled chain milestone stampers were retired in ADR-053).
+Read it from the producing LOOP entities instead, reached via lineage:
+the researcher/synthesize loop carries `research.artifact.{path,
+test_harness, actors_count, tasks_count}`; reach it via `lineage.researcher`
+on the reviewer loop (related_loops), not a `chain.research_artifact.*`
+triple on the run entity.
 
 ## Step 3 — read each milestone's loop_result
 
@@ -77,7 +83,7 @@ This gives you the qa-reviewer's verdict: `coordinator.next_action`
 
 Then read each milestone loop's result:
 
-- `read_loop_result(loop_id=<chain.research_artifact_loop>)` — researcher's terminal
+- `read_loop_result(loop_id=<lineage.researcher on the reviewer loop>)` — researcher's terminal
 - `read_loop_result(loop_id=<chain.plan_loop>)` — planner's terminal (legacy; ADR-041 MVP collapses planner into researcher-plan)
 - `read_loop_result(loop_id=<chain.plan_reviewer_loop>)` — reviewer's terminal (legacy; same reason)
 - `read_loop_result(loop_id=<chain.spec_artifact_loop>)` — researcher-architect's terminal
