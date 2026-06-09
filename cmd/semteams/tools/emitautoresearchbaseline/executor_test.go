@@ -8,7 +8,12 @@ import (
 
 	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/message"
+	"github.com/c360studio/semstreams/types"
 )
+
+func platform() types.PlatformMeta {
+	return types.PlatformMeta{Org: "c360", Platform: "ops"}
+}
 
 type fakePub struct {
 	mu      sync.Mutex
@@ -63,7 +68,7 @@ func runMetadata() map[string]any {
 
 func TestExecutor_Happy(t *testing.T) {
 	pub := &fakePub{}
-	e := NewExecutor(pub, slog.Default())
+	e := NewExecutor(pub, platform(), slog.Default())
 	res, _ := e.Execute(context.Background(), agentic.ToolCall{
 		ID: "c1", Name: ToolName, Arguments: baseArgs(), Metadata: runMetadata(),
 	})
@@ -71,11 +76,23 @@ func TestExecutor_Happy(t *testing.T) {
 		t.Fatalf("unexpected error: %s", res.Error)
 	}
 
-	wantSubject := "c360.ops.agent.agentic-loop.execution.coord-1"
+	// ADR-053 Phase 3a: the run entity id is derived from the run loop id
+	// (autoresearch-run="coord-1") via TryChainExecutionEntityID, NOT taken
+	// verbatim from run-loop-entity-id. So the subject is the chain.execution
+	// entity, not the coordinator's agentic-loop entity.
+	wantSubject := "c360.ops.agent.chain.execution.coord-1"
 	for _, tr := range pub.triples {
 		if tr.Subject != wantSubject {
 			t.Errorf("subject = %q, want %q", tr.Subject, wantSubject)
 		}
+	}
+
+	// Phase 3a: the run-lifecycle markers are now seeded here (were rule 01).
+	if st, ok := pub.find("autoresearch.run.status"); !ok || st != "active" {
+		t.Errorf("run.status = %v (ok=%v), want active", st, ok)
+	}
+	if ip, ok := pub.find("autoresearch.iteration.pending"); !ok || ip != "initial" {
+		t.Errorf("iteration.pending = %v (ok=%v), want initial", ip, ok)
 	}
 
 	// best.value seeded from baseline.value
@@ -94,17 +111,17 @@ func TestExecutor_Happy(t *testing.T) {
 }
 
 func TestExecutor_MissingRunEntityFails(t *testing.T) {
-	e := NewExecutor(&fakePub{}, slog.Default())
+	e := NewExecutor(&fakePub{}, platform(), slog.Default())
 	res, _ := e.Execute(context.Background(), agentic.ToolCall{
 		ID: "c2", Name: ToolName, Arguments: baseArgs(),
 	})
 	if res.Error == "" {
-		t.Errorf("expected error when run-loop-entity-id missing")
+		t.Errorf("expected error when autoresearch-run (run loop id) missing")
 	}
 }
 
 func TestExecutor_RequiredFields(t *testing.T) {
-	e := NewExecutor(&fakePub{}, slog.Default())
+	e := NewExecutor(&fakePub{}, platform(), slog.Default())
 	for _, k := range []string{"command", "surface", "metric_parser"} {
 		t.Run("missing "+k, func(t *testing.T) {
 			args := baseArgs()
@@ -120,7 +137,7 @@ func TestExecutor_RequiredFields(t *testing.T) {
 }
 
 func TestExecutor_CapMinimum(t *testing.T) {
-	e := NewExecutor(&fakePub{}, slog.Default())
+	e := NewExecutor(&fakePub{}, platform(), slog.Default())
 	args := baseArgs()
 	args["cap"] = float64(0)
 	res, _ := e.Execute(context.Background(), agentic.ToolCall{

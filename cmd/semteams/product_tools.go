@@ -402,7 +402,7 @@ func registerAutoresearchTools(reg *agentictools.ExecutorRegistry, natsClient *n
 		return nil
 	}
 
-	baselineExecutor := emitautoresearchbaseline.NewExecutor(triplePublisher, logger)
+	baselineExecutor := emitautoresearchbaseline.NewExecutor(triplePublisher, platform, logger)
 	if err := reg.RegisterTool(emitautoresearchbaseline.ToolName, baselineExecutor); err != nil {
 		return fmt.Errorf("register %s: %w", emitautoresearchbaseline.ToolName, err)
 	}

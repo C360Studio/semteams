@@ -11,16 +11,18 @@
 // best.{value,experiment_id} so the empirical-compare executor in
 // emit_autoresearch_measurement has a reference to compare against.
 //
-// Stamps on the RUN entity (read from related_loops):
+// Stamps on the RUN entity (agent.chain.execution.<runID>), whose id is
+// derived from the run loop id threaded in related_loops["autoresearch-run"]
+// (ADR-053 Phase 3a — same derivation run_scope=new uses to mint the run):
 //
 //   - autoresearch.command, .surface, .cap, .metric_parser
 //   - autoresearch.baseline.value, .baseline.pass, .baseline.stdout_tail
 //   - autoresearch.best.value (= baseline.value initially)
 //   - autoresearch.best.experiment_id (= "baseline" initially)
-//
-// Mirrors the run-entity-stamp pattern of emit_bootstrap_plan; uses
-// related_loops["run-loop-entity-id"] as the spawn-time-stable
-// reference (sidesteps the semstreams#159 publish-vs-write race).
+//   - autoresearch.run.status="active" + .iteration.pending="initial"
+//     (the run-lifecycle markers; ADR-053 Phase 3a moved these here from
+//     rule 01 so the iteration driver — rule 05, now firing on the run
+//     entity — sees all its conditions go true in one batch).
 //
 // Discipline note (framework-alignment review): defensible
 // product-shell-local; migration target same as other emit tools.
@@ -36,6 +38,7 @@ import (
 	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/message"
 	agentictools "github.com/c360studio/semstreams/processor/agentic-tools"
+	"github.com/c360studio/semstreams/types"
 )
 
 // ToolName is the LLM-facing tool name.
@@ -44,9 +47,14 @@ const ToolName = "emit_autoresearch_baseline"
 // toolSource tags the triples this tool publishes.
 const toolSource = "autoresearch-emit-baseline"
 
-// runEntityRoleKey is the related_loops key the spawn rule pins to
-// the run entity's 6-part ID.
-const runEntityRoleKey = "run-loop-entity-id"
+// runLoopIDRoleKey is the related_loops key carrying the run (coordinator)
+// LOOP id. The run entity id is derived from it via the framework's canonical
+// chain-execution entity-id function — the same way run_scope=new mints the
+// run entity. ADR-053 Phase 3a: we anchor on the run loop id rather than a
+// pre-computed entity id because rule 01 cannot thread the run entity id (it
+// is minted by the same publish_agent action, so not yet visible to a sibling
+// substitution), whereas autoresearch-run = $entity.instance is stable.
+const runLoopIDRoleKey = "autoresearch-run"
 
 // Predicate constants on the run entity. Rules 05/06 (continue/stop)
 // and emit_autoresearch_measurement's compare key off these.
@@ -61,23 +69,31 @@ const (
 	predicateBestValue          = "autoresearch.best.value"
 	predicateBestExperimentID   = "autoresearch.best.experiment_id"
 	predicateBaselineStampedAt  = "autoresearch.baseline.stamped_at"
+	// ADR-053 Phase 3a: the run-lifecycle markers move here from rule 01's
+	// add_triple (which seeded the coordinator loop). emit_baseline now seeds
+	// them on the RUN entity, in the same batch as cap/best.value, so rule 05's
+	// conditions go true together when the driver fires on the run entity.
+	predicateRunStatus        = "autoresearch.run.status"
+	predicateIterationPending = "autoresearch.iteration.pending"
 )
 
 // Executor implements agentic.ToolExecutor for emit_autoresearch_baseline.
 type Executor struct {
 	publisher agentictools.TriplePublisher
+	platform  types.PlatformMeta
 	logger    *slog.Logger
 }
 
-// NewExecutor constructs an Executor. Publisher must be non-nil.
-func NewExecutor(publisher agentictools.TriplePublisher, logger *slog.Logger) *Executor {
+// NewExecutor constructs an Executor. Publisher must be non-nil. platform is
+// used to derive the run entity id from the run loop id (ADR-053 Phase 3a).
+func NewExecutor(publisher agentictools.TriplePublisher, platform types.PlatformMeta, logger *slog.Logger) *Executor {
 	if publisher == nil {
 		panic("emitautoresearchbaseline.NewExecutor: publisher must not be nil")
 	}
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Executor{publisher: publisher, logger: logger}
+	return &Executor{publisher: publisher, platform: platform, logger: logger}
 }
 
 // ListTools returns the LLM-facing schema.
@@ -112,7 +128,7 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 		return errResult(call, agentic.ToolErrorInvalidArgs, "%v", err)
 	}
 
-	runEntityID, err := runEntityFromCall(call)
+	runEntityID, err := runEntityFromCall(call, e.platform)
 	if err != nil {
 		return errResult(call, agentic.ToolErrorInternal, "%v", err)
 	}
@@ -144,12 +160,17 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 	}, nil
 }
 
-func runEntityFromCall(call agentic.ToolCall) (string, error) {
+func runEntityFromCall(call agentic.ToolCall, platform types.PlatformMeta) (string, error) {
 	related, _ := call.Metadata[agentic.MetadataKeyRelatedLoops].(map[string]any)
-	if v, ok := related[runEntityRoleKey].(string); ok && v != "" {
-		return v, nil
+	runLoopID, ok := related[runLoopIDRoleKey].(string)
+	if !ok || runLoopID == "" {
+		return "", fmt.Errorf("emit_autoresearch_baseline: related_loops[%q] missing or empty in call metadata; spawn rule must pin the run loop id at chain start", runLoopIDRoleKey)
 	}
-	return "", fmt.Errorf("emit_autoresearch_baseline: related_loops[%q] missing or empty in call metadata; spawn rule must pin run-loop-entity-id at chain start", runEntityRoleKey)
+	runEntityID, err := agentic.TryChainExecutionEntityID(platform.Org, platform.Platform, runLoopID)
+	if err != nil {
+		return "", fmt.Errorf("emit_autoresearch_baseline: build run entity id from run loop %q: %w", runLoopID, err)
+	}
+	return runEntityID, nil
 }
 
 type parsedArgs struct {
@@ -227,6 +248,13 @@ func (p *parsedArgs) triples(runEntityID string) []message.Triple {
 		base(predicateBestValue, p.BaselineValue),
 		base(predicateBestExperimentID, "baseline"),
 		base(predicateBaselineStampedAt, now.Format(time.RFC3339Nano)),
+		// ADR-053 Phase 3a: seed the run-lifecycle markers on the run
+		// entity in the SAME batch as cap/best.value so rule 05's
+		// conditions (run.status=active, cap>0, iteration.pending≠"")
+		// go true together when the iteration driver fires on the run
+		// entity. Previously seeded by rule 01 on the coordinator loop.
+		base(predicateRunStatus, "active"),
+		base(predicateIterationPending, "initial"),
 	}
 	if p.BaselineStdoutTail != "" {
 		out = append(out, base(predicateBaselineStdoutTail, p.BaselineStdoutTail))
