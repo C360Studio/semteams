@@ -67,6 +67,8 @@ architecture.
 | [**042**](adr/042-coordinator-instantiated-flows-via-templates.md) | **Substrate-plus-overlays.** One product-shell flow, category-keyed rule packs + persona bundles. Current architecture as of MVP-7. |
 | [**043**](adr/043-devcontainer-as-sandbox-spec.md) | **Devcontainer-as-sandbox spec.** Per-tenant attestation + attestation-aware artifact routing. The killer feature autoresearch needed. |
 | [**044**](adr/044-dev-via-test-pack.md) | **Dev-via-test pack (Lisa / Ralph / CBG).** Third live category pack — decompose-and-dispatch software dev with a plan-fidelity gate + a chain-end integration gate, both bounded reject/retry/approve. |
+| [054](adr/054-test-harness-team-proof-environments-before-code.md) | Test-harness team for proof environments before code |
+| [055](adr/055-formal-claim-analysis-for-verification-gates.md) | Formal claim analysis for verification gates |
 
 ### Framework concepts — go upstream
 
