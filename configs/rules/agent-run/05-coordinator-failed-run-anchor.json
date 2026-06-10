@@ -1,0 +1,54 @@
+{
+  "id": "agent_run_coordinator_failed_run_anchor",
+  "type": "expression",
+  "name": "Coordinator loop-failed (run-anchor) → stamp agent.run.outcome=failed",
+  "description": "ADR-053 Phase 4a′ — the coordinator zombie-hole closer, anchor branch 1 of 2 (loops carrying agent.run.entity_id). The gap the slice closes (ADR §E): NO loop-failed-pause rule lists the coordinator role, and the upstream D3 zombie guard fires only while phase==dispatched (agentrun.go:572). So a coordinator that fails involuntarily WHILE the run is executing leaves the run permanently `executing` with no downstream rule waiting on it.\n\nWHICH coordinators this covers (the adversarial 4a′ review boundary — pinned structurally by test/contract TestAgentRunPack_CoordinatorSpawnCoverage):\n  - This rule (the agent.run.entity_id branch) covers executing-flow coordinators that carry agent.run.entity_id via the loop-inherit chain: research RECOVERY (research/06, fired on research roles that carry bare agent.run) and the autoresearch-BASELINE recovery branch (autoresearch/10 firing on baseline, which carries agent.run.entity_id from run_scope=new).\n  - Sibling rule 06 (the lineage branch) covers the dev-via-test intermediate/escalate coordinators that thread lineage.run-loop-entity-id (02b, 02d, 05, 07d).\n  - NOT covered, by design: the POST-APPROVAL wake-up coordinators (research/07, autoresearch/08, dev-via-test/07a) — their parent rule stamps agent.run.outcome=success, so rule 03 completes the run BEFORE the woken coordinator runs; its later failure is post-terminal, not a zombie.\n  - DEFERRED to Phase 4b: the run-entity-descended ask_user/needs_clarification recovery coordinators (autoresearch/10 non-baseline; dev-via-test 02e/02f/07b/07e re-plan branches) carry NEITHER anchor. Their run-phase semantics (a failed human-in-the-loop delivery → failed? cancelled? awaiting_user?) are a 4b design decision; 4b threads their anchor as part of that work. The boundary is asserted, not silent.\n  (The DISPATCH coordinator cannot fail while executing: it terminated when it spawned the first child; a dispatch coordinator that fails BEFORE handoff stays `dispatched` and is D3's job.)\n\nFIRING-ENTITY BRIDGE (the 2-step marker, same as 01-handoff-marker): lifecycle_transition acts on the firing entity, but a coordinator failure fires on the coordinator LOOP. This rule stamps agent.run.outcome=failed on the RUN entity via the subject override $entity.triple.agent.run.entity_id; rule 04 then matches the marker on the run entity (+ phase==executing) and transitions executing→failed.\n\nANCHOR FENCE (length_eq 0): agent.run.entity_id is framework-inherited down an unbroken loop-spawn chain (a publish_agent from a loop copies the firing loop's bare agent.run into the child's RunID, which re-stamps agent.run.entity_id — verified graph_writer.go:535-539 + actions.go:1258-1268). Coordinators spawned by a rule firing ON the run entity (dev-via-test/02d, 07d) carry only lineage.run-loop-entity-id and are handled by sibling rule 06, fenced on lineage PRESENCE (length_gt 0). The two are mutually exclusive on lineage.run-loop-entity-id presence, the same corruption-to-no-op discipline as dev-via-test 02 vs 02g.\n\nRUN-LESS-CHAT GUARD: agent.run.entity_id != \"\" excludes a non-delegating coordinator answering plain chat (no run_scope=new fired → no run anchor) — its loop-failure has no run to fail and must not attempt a phantom transition.\n\nTRIGGER SHAPE: agent.loop.outcome IN [failed, truncated] — the involuntary terminal-failure class (model timeout, panic, max_iterations without a decide, context blowout). A coordinator that successfully decides terminates outcome=success and never matches here, so this is disjoint from the decide-driven spawn/wake-up rules. cancelled is OUT of scope (deliberate abort → Phase 4b).",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "agent.loop.role",
+      "operator": "eq",
+      "value": "coordinator",
+      "required": true
+    },
+    {
+      "field": "agent.loop.outcome",
+      "operator": "in",
+      "value": ["failed", "truncated"],
+      "required": true
+    },
+    {
+      "field": "agent.run.entity_id",
+      "operator": "ne",
+      "value": "",
+      "required": true
+    },
+    {
+      "field": "lineage.run-loop-entity-id",
+      "operator": "length_eq",
+      "value": 0,
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "add_triple",
+      "subject": "$entity.triple.agent.run.entity_id",
+      "predicate": "agent.run.outcome",
+      "object": "failed"
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "pack": "agent-run",
+    "phase": "ADR-053 Phase 4a′",
+    "adr": "docs/adr/053-adoption-plan.md",
+    "role": "coordinator-failed marker (executing→failed, anchor branch 1: agent.run.entity_id)",
+    "joins_with": "04-executing-to-failed.json (consumes the agent.run.outcome=failed marker) + 06-coordinator-failed-lineage-anchor.json (the lineage-anchor sibling).",
+    "covers": "executing-flow coordinators carrying agent.run.entity_id via the loop-inherit chain: research recovery (research/06) + the autoresearch-baseline recovery branch (autoresearch/10 on baseline). NOT the post-approval wake-ups (research/07, autoresearch/08, dev-via-test/07a — those complete via rule 03 first). The lineage-anchor coordinators are rule 06's; the run-entity-descended ask_user/needs_clarification recovery coordinators are deferred to 4b. Boundary pinned by TestAgentRunPack_CoordinatorSpawnCoverage.",
+    "anchor_fence": "lineage.run-loop-entity-id length_eq 0 makes this mutually exclusive with rule 06 (length_gt 0), so a coordinator carrying both anchors (dev-via-test 02b/05 wake-ups) routes to 06 and is never double-stamped. Same fence as dev-via-test 02 vs 02g.",
+    "run_less_chat_guard": "agent.run.entity_id != \"\" — a plain-chat coordinator has no run anchor and must not stamp a phantom failed marker.",
+    "d3_boundary": "D3 (upstream MilestoneSubscriber) owns dispatched-phase root failures; this rule owns executing-phase coordinator failures. Disjoint by phase — no double-fire."
+  }
+}
