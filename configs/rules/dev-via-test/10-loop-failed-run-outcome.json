@@ -1,0 +1,48 @@
+{
+  "id": "dev_via_test_loop_failed_run_outcome",
+  "type": "expression",
+  "name": "Dev-via-test re-plan Lisa / CBG failed → stamp agent.run.outcome=failed (lineage anchor)",
+  "description": "ADR-053 Phase 4a′ — dev-via-test run-failed mapping, anchor branch 2 of 2 (the run-entity-descended roles). Fires when a RE-PLAN Lisa (dev-via-test-plan spawned from the run entity by rule 02d) or CBG (reviewer-dev-via-test, the chain-end gate spawned via rule 06) terminates with an involuntary failure (agent.loop.outcome in [failed, truncated]). Stamps agent.run.outcome=failed on the RUN entity so agent-run/04 transitions executing→failed; a failed re-plan Lisa or CBG has no in-arc recovery and would otherwise hang the run `executing`.\n\nANCHOR (lineage.run-loop-entity-id, length_gt 0): re-plan Lisa carries lineage.run-loop-entity-id=$entity.id=chain.execution (threaded by rule 02d) but NOT agent.run.entity_id; CBG carries lineage.run-loop-entity-id (threaded by rule 06). This mirrors dev-via-test/07a's success-stamp anchor. The length_gt 0 fence makes this mutually exclusive with the first-pass-Lisa branch (rule 09, length_eq 0) and ensures the stamp subject resolves (C1 garbage-literal-subject defense).\n\nCompanion to dev-via-test/08-loop-failed-pause (operator chain.paused.marker, untouched). dev-via-test-execute (Ralph) stays EXCLUDED — Ralph loop-failure routes to coordinator→ask_user; the run stays executing.",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "agent.loop.role",
+      "operator": "in",
+      "value": ["dev-via-test-plan", "reviewer-dev-via-test"],
+      "required": true
+    },
+    {
+      "field": "agent.loop.outcome",
+      "operator": "in",
+      "value": ["failed", "truncated"],
+      "required": true
+    },
+    {
+      "field": "lineage.run-loop-entity-id",
+      "operator": "length_gt",
+      "value": 0,
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "add_triple",
+      "subject": "$entity.triple.lineage.run-loop-entity-id",
+      "predicate": "agent.run.outcome",
+      "object": "failed"
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "pack": "dev_via_test",
+    "phase": "ADR-053 Phase 4a′",
+    "adr": "docs/adr/053-adoption-plan.md",
+    "role": "dev-via-test re-plan Lisa + CBG run-failed mapping (anchor branch 2: lineage.run-loop-entity-id)",
+    "companion_to": "08-loop-failed-pause.json (operator chain.paused.marker + chain.paused.role, untouched).",
+    "anchor": "lineage.run-loop-entity-id — re-plan Lisa (rule 02d) + CBG (rule 06) carry it. Mirrors dev-via-test/07a's success-stamp anchor. First-pass Lisa is the sibling rule 09 (agent.run.entity_id).",
+    "anchor_fence": "lineage.run-loop-entity-id length_gt 0 — mutually exclusive with rule 09 (length_eq 0), splitting first-pass vs re-plan Lisa on the shared dev-via-test-plan token. Same fence as dev-via-test 02 vs 02g.",
+    "budgeted_exclusion": "dev-via-test-execute (Ralph) is NOT here — routes to coordinator→ask_user; the run stays executing.",
+    "consumed_by": "agent-run/04-executing-to-failed.json."
+  }
+}

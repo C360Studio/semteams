@@ -1,0 +1,43 @@
+{
+  "id": "agent_run_executing_to_failed",
+  "type": "expression",
+  "name": "Run failure outcome → executing→failed",
+  "description": "ADR-053 Phase 4a′ — the terminal-failure transition, the symmetric twin of rule 03 (executing→completed). Fires on the RUN entity when a failure outcome (agent.run.outcome=failed) has been stamped there AND the run is `executing`. Advances the run to `failed` via lifecycle_transition. executing→failed is a legal edge in the AgentRun phase machine (semstreams agentrun.go:47: executing → {awaiting_approval, completed, failed, cancelled}).\n\nWHO stamps agent.run.outcome=failed (the marker this rule consumes): the per-pack loop-failed run-outcome rules (research/09, autoresearch/12+13, dev-via-test/09+10 — one non-budgeted-role failure stamps it via the pack's run anchor) AND the coordinator-failed rules (agent-run/05+06 — a coordinator that fails WHILE the run is executing is a zombie the upstream D3 guard cannot catch, because D3 fires only while phase==dispatched). The BUDGETED failures (autoresearch-execute via 04b, dev-via-test-execute/ralph via 04b+05) are intentionally NOT in those role lists: a budgeted loop-failure counts toward the cap / routes to coordinator→ask_user and the run stays `executing` by design.\n\nWHY outcome-driven, decoupled from respond_direct (symmetric to rule 03's P1b): the limitation respond_direct paths (research/06, autoresearch/10 'cannot be served') deliver a real answer and must NOT fail the run; only an explicit agent.run.outcome=failed marker (a genuine non-recoverable loop-failure) drives this transition. cancelled is OUT of 4a′ scope (a deliberate abort → run→cancelled is Phase 4b); the failed marker is stamped only on the involuntary terminal-failure class (agent.loop.outcome in [failed, truncated]).\n\nThe failure marker is DURABLE on the run entity, so the early-marker race (failed stamped while still `dispatched`) is benign: this rule is simply not-matching (phase guard is a TOP-LEVEL condition) until dispatched→executing writes the later KV revision, on which the processor re-evaluates every entity-state rule (message_handler.go:245) and this rule enters exactly once (stale-replay guard). A failure that lands while still `dispatched` is owned by the upstream D3 zombie guard (it fails a dispatched root that terminates without a confirmed handoff), keeping the two authorities disjoint by phase.",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "agent.run.outcome",
+      "operator": "eq",
+      "value": "failed",
+      "required": true
+    },
+    {
+      "field": "agent.run.phase",
+      "operator": "eq",
+      "value": "executing",
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "lifecycle_transition",
+      "workflow": "agent-run",
+      "phase": "failed",
+      "reason": "a non-budgeted chain role (or the coordinator) failed while the run was executing — run failed"
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "pack": "agent-run",
+    "phase": "ADR-053 Phase 4a′",
+    "adr": "docs/adr/053-adoption-plan.md",
+    "role": "executing→failed (run-entity transition)",
+    "twin_of": "03-executing-to-completed.json — identical shape, keyed on agent.run.outcome==failed → phase=failed instead of ==success → completed.",
+    "stamped_by": "research/09 + autoresearch/12+13 + dev-via-test/09+10 (non-budgeted role loop-failures) + agent-run/05+06 (coordinator loop-failures) add_triple agent.run.outcome=failed on the run entity (per-pack subject — see those rules).",
+    "budgeted_exclusion": "autoresearch-execute (04b) and dev-via-test-execute/ralph (04b+05) are NOT in any failed-stamp role list — a budgeted loop-failure keeps the run executing (counter increments / coordinator→ask_user recovery). Do NOT add them.",
+    "cancel_out_of_scope": "agent.loop.outcome==cancelled does NOT stamp this marker — cancel run-phase semantics (executing→cancelled) are Phase 4b. 4a′ covers the involuntary failure class only.",
+    "phase_guard_is_condition": "agent.run.phase==executing is a TOP-LEVEL CONDITION; a durable failed marker stamped early stays not-matching until executing, then enters on the later KV revision (message_handler.go:245). Mirrors rule 03 / Coby review round 2.",
+    "exactly_once": "After the run reaches a terminal phase (failed or completed) the phase guard (agent.run.phase==executing) is false → neither rule 03 nor 04 re-fires; a duplicate failed stamp leaves the condition false, so no invalid-edge ErrTerminalPhase is attempted (no ERROR log). In practice agent.run.outcome carries exactly one value: a failed loop wedges the chain so no success terminal is reached, and a success terminal means every loop completed so none failed. If both ever co-existed, the rule engine's eq reads FIRST-MATCH (the KV-order-first agent.run.outcome triple), so whichever outcome triple is first in KV order drives the transition while the other rule's eq is simply false — the run still reaches exactly one terminal. A divergence is an operator-investigate audit case, not a correctness bug."
+  }
+}

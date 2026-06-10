@@ -7,8 +7,8 @@
   "conditions": [
     {
       "field": "agent.loop.outcome",
-      "operator": "eq",
-      "value": "failed",
+      "operator": "in",
+      "value": ["failed", "truncated"],
       "required": true
     },
     {

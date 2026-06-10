@@ -1,0 +1,63 @@
+name: run-failed
+description: |
+  Journey: ADR-053 Phase 4a′ — executing→failed run transition, end-to-end
+  on mock-LLM against configs/e2e-flow-bootstrap.json.
+
+  ROLE-KEYED fixture. A coordinator dispatches research, then the planner
+  (researcher-research-plan) is WEDGED to an involuntary failure: its bucket
+  serves a single non-terminal `scratchpad` tool_call that repeats on
+  exhaustion, so the planner never emits a decide() and hits the loop's
+  max_iterations (e2e-flow-bootstrap.json max_iterations=8) → OutcomeFailed.
+
+  Substrate behavior this proves (the 4a′ merge gate):
+    1. Loop 0 coordinator(dispatch) → decide(research) → research/01 spawns
+       the planner → rule.spawned_task → agent-run/01 handoff marker →
+       agent-run/02 dispatched→executing. The run is `executing` before the
+       planner fails.
+    2. Loop A researcher-research-plan → scratchpad ×8, never decides →
+       outcome=failed (max_iterations).
+    3. research/08-loop-failed-pause stamps chain.paused.marker on the planner
+       loop (operator surface).
+    4. research/09-loop-failed-run-outcome stamps agent.run.outcome=failed on
+       the RUN entity (anchor agent.run.entity_id — the planner carries it via
+       the loop-spawn inherit chain from research/01 run_scope=new).
+    5. agent-run/04-executing-to-failed fires (agent.run.outcome==failed +
+       agent.run.phase==executing) → executing→failed.
+
+  This is the EXECUTING-phase failure the upstream D3 zombie guard CANNOT
+  reach (D3 fires only while phase==dispatched; here the dispatch coordinator
+  completed successfully with a confirmed handoff, and the run is `executing`
+  when the non-root planner loop fails). The spec asserts
+  agent.run.last_transition_from==executing to prove the transition came from
+  rule 04, not D3's dispatched→failed path.
+
+  Two loops only: coordinator(dispatch) + planner(failed). No gather /
+  synthesize / reviewer — the planner never decided gather.
+
+  Bucket fingerprints (substrings unique to each persona's system prompt):
+    - "Delegation rules"    → coordinator (decide research)
+    - "Emit the typed plan" → researcher-research-plan (wedged to scratchpad)
+
+  Paired spec: ui/e2e/agentic/run-failed.spec.ts.
+  Config: configs/e2e-flow-bootstrap.json.
+
+responses_by_role:
+
+  # ---------- coordinator (dispatch → research) ----------
+  - match: "Delegation rules"
+    responses:
+      - tool_call:
+          name: decide
+          arguments_json: |
+            {
+              "action": "research",
+              "reason": "The user is asking for a comparison that benefits from evidence gathering — routing to the research category so the research-pack arc can scope it. (4a′ failure journey: the planner is wedged to a max-iterations failure to exercise executing→failed.)"
+            }
+
+  # ---------- researcher-research-plan (WEDGED — repeating scratchpad, never decides) ----------
+  - match: "Emit the typed plan"
+    responses:
+      - tool_call:
+          name: scratchpad
+          arguments_json: |
+            {"text": "Decomposing the plan... still thinking through subtopics. (4a′ wedge: this scratchpad call is the only response in the planner bucket, so the mock repeats it every iteration. The planner never reaches a decide() terminal and trips max_iterations → OutcomeFailed, driving the run to executing→failed via research/09 + agent-run/04.)"}

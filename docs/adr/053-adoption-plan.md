@@ -449,13 +449,44 @@ ever disproves the beta.102 re-eval behavior, THEN fold the check in.
     stays `dispatched` → D3 fails it, NOT an `executing` zombie). Per
     `feedback_state_machine_testing` — mock journeys prove happy ordering,
     these prove state-machine safety.
-- **4a′ (failure phase, its own slice):** `executing→failed` — add a
-  `coordinator`-role failed rule in the shared pack (fail-while-`executing`
-  → `executing→failed`) + audit each pack's `loop-failed-pause` role list
-  for completeness (dev-via-test missing `ralph`, etc.). Separate because
-  the coverage holes need deliberate work, not a one-liner.
+- **4a′ (failure phase, its own slice) — SHIPPED 2026-06-10:** `executing→failed`.
+  - **Run-entity transition:** `agent-run/04-executing-to-failed.json`
+    (`agent.run.outcome==failed` + `phase==executing` → `failed`), the
+    symmetric twin of rule 03.
+  - **Non-coordinator role failures → run-failed** (the bigger zombie class):
+    per-pack `…-loop-failed-run-outcome` rules (`research/09`,
+    `autoresearch/12`+`13`, `dev-via-test/09`+`10`) stamp
+    `agent.run.outcome=failed` on the run entity with the same per-pack anchor
+    as the success path (research = `agent.run.entity_id`; autoresearch/dev-via-test
+    split first-pass `run_scope=new` children onto `agent.run.entity_id` vs
+    run-entity-descended roles onto `lineage.run-loop-entity-id`). The existing
+    `…/08`/`…/11` `chain.paused.marker` rules (operator surface) are left
+    intact, now widened to `[failed, truncated]` to match.
+  - **Coordinator-role failures → run-failed:** `agent-run/05` (anchor
+    `agent.run.entity_id`) + `06` (`lineage.run-loop-entity-id`), fenced on
+    lineage presence (`length_eq 0` / `length_gt 0`, the proven 02-vs-02g
+    split). These cover the executing-flow coordinators that carry a readable
+    anchor.
+  - **Audit conclusion on the role lists:** the budgeted execute roles
+    (`autoresearch-execute`, `dev-via-test`/`ralph`) are correctly EXCLUDED —
+    a budgeted loop-failure keeps the run `executing` (04b counter / coordinator
+    →ask_user). Pinned by `TestAgentRunPack_BudgetedRolesExcludedFromFailedStamp`.
+  - **Scope boundary → 4b (deliberate, not silent):** the run-entity-descended
+    `ask_user`/`needs_clarification` recovery coordinators (`autoresearch/10`
+    non-baseline; dev-via-test `02e`/`02f`/`07b`/`07e` re-plan branches) carry
+    NO readable run anchor and would hang `executing` on involuntary failure.
+    Their `action_allowlist ⊆ {respond_direct, ask_user}` — pure
+    human-in-the-loop delivery whose run-phase semantics (and a *failed*
+    delivery's terminal) are 4b's design (Q2). 4b threads their anchor as part
+    of that work. The boundary is pinned structurally by
+    `TestAgentRunPack_CoordinatorSpawnCoverage` — every coordinator-spawn rule
+    is classified post-approval / anchor-covered / deferred-4b, and an
+    unclassified new rule fails the test (the adversarial review's anti-silent-
+    zombie guard). `cancelled` (deliberate abort) is also 4b, not 4a′.
 - **4b:** `ask_user` / `needs_clarification` / cancel run-phase semantics
-  (Q2).
+  (Q2) — INCLUDING threading a readable run anchor onto the deferred recovery
+  coordinators above so their involuntary failure can reach `executing→failed`
+  (or whatever terminal 4b decides for a failed human-in-the-loop delivery).
 - **4c:** the real `approval_required` tool-gate → `awaiting_approval`
   (NOT the CBG automated reviewer, which stays `executing` — §E).
 - Then Phase 5.

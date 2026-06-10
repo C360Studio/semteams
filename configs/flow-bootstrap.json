@@ -237,6 +237,7 @@
           "/app/configs/rules/research/06-needs-clarification-replan.json",
           "/app/configs/rules/research/07-reviewer-approved-to-coordinator.json",
           "/app/configs/rules/research/08-loop-failed-pause.json",
+          "/app/configs/rules/research/09-loop-failed-run-outcome.json",
           "/app/configs/rules/autoresearch/01-coordinator-autoresearch-spawn.json",
           "/app/configs/rules/autoresearch/03-propose-to-execute.json",
           "/app/configs/rules/autoresearch/04a-execute-stamp-completion.json",
@@ -248,6 +249,8 @@
           "/app/configs/rules/autoresearch/09-reviewer-rejected-resynthesize.json",
           "/app/configs/rules/autoresearch/10-needs-clarification-replan.json",
           "/app/configs/rules/autoresearch/11-loop-failed-pause.json",
+          "/app/configs/rules/autoresearch/12-baseline-loop-failed-run-outcome.json",
+          "/app/configs/rules/autoresearch/13-loop-failed-run-outcome.json",
           "/app/configs/rules/dev-via-test/01-coordinator-dev-via-test-spawn.json",
           "/app/configs/rules/dev-via-test/02-lisa-terminal-to-plan-review.json",
           "/app/configs/rules/dev-via-test/02b-plan-approved-to-coordinator.json",
@@ -267,11 +270,16 @@
           "/app/configs/rules/dev-via-test/07d-cbg-retry-driver.json",
           "/app/configs/rules/dev-via-test/07e-cbg-retry-missing-target.json",
           "/app/configs/rules/dev-via-test/08-loop-failed-pause.json",
+          "/app/configs/rules/dev-via-test/09-firstpass-loop-failed-run-outcome.json",
+          "/app/configs/rules/dev-via-test/10-loop-failed-run-outcome.json",
           "/app/configs/rules/coordinator/03b-respond-direct.json",
           "/app/configs/rules/coordinator/03-ask-user.json",
           "/app/configs/rules/agent-run/01-handoff-marker.json",
           "/app/configs/rules/agent-run/02-dispatched-to-executing.json",
-          "/app/configs/rules/agent-run/03-executing-to-completed.json"
+          "/app/configs/rules/agent-run/03-executing-to-completed.json",
+          "/app/configs/rules/agent-run/04-executing-to-failed.json",
+          "/app/configs/rules/agent-run/05-coordinator-failed-run-anchor.json",
+          "/app/configs/rules/agent-run/06-coordinator-failed-lineage-anchor.json"
         ],
         "inline_rules": []
       }

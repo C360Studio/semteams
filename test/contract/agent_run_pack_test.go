@@ -2,7 +2,9 @@ package contract
 
 import (
 	"encoding/json"
+	"io/fs"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -23,14 +25,16 @@ type ruleDoc struct {
 		Value    any    `json:"value"`
 	} `json:"conditions"`
 	OnEnter []struct {
-		Type         string            `json:"type"`
-		Subject      string            `json:"subject"`
-		Predicate    string            `json:"predicate"`
-		Object       any               `json:"object"`
-		Workflow     string            `json:"workflow"`
-		Phase        string            `json:"phase"`
-		When         json.RawMessage   `json:"when"`
-		RelatedLoops map[string]string `json:"related_loops"`
+		Type            string            `json:"type"`
+		Subject         string            `json:"subject"`
+		Predicate       string            `json:"predicate"`
+		Object          any               `json:"object"`
+		Workflow        string            `json:"workflow"`
+		Phase           string            `json:"phase"`
+		When            json.RawMessage   `json:"when"`
+		RelatedLoops    map[string]string `json:"related_loops"`
+		Role            string            `json:"role"`
+		ActionAllowlist []string          `json:"action_allowlist"`
 	} `json:"on_enter"`
 }
 
@@ -54,6 +58,36 @@ func (r ruleDoc) hasCondition(field, op string, value any) bool {
 		}
 	}
 	return false
+}
+
+// hasConditionField matches a (field, operator) pair regardless of value — used
+// for the length_eq/length_gt anchor fences whose value is a JSON number (which
+// hasCondition's == against an int/literal would not match).
+func (r ruleDoc) hasConditionField(field, op string) bool {
+	for _, c := range r.Conditions {
+		if c.Field == field && c.Operator == op {
+			return true
+		}
+	}
+	return false
+}
+
+// roleValues flattens an agent.loop.role condition value into role tokens,
+// handling both the eq form (a string) and the in form (a JSON array).
+func roleValues(v any) []string {
+	switch x := v.(type) {
+	case string:
+		return []string{x}
+	case []any:
+		out := make([]string, 0, len(x))
+		for _, e := range x {
+			if s, ok := e.(string); ok {
+				out = append(out, s)
+			}
+		}
+		return out
+	}
+	return nil
 }
 
 // TestAgentRunPack_HandoffMarker pins rule 01: it bridges the firing-entity gap
@@ -107,6 +141,7 @@ func TestAgentRunPack_TransitionsPhaseGuardedTopLevel(t *testing.T) {
 	}{
 		{"../../configs/rules/agent-run/02-dispatched-to-executing.json", "dispatched", "executing", "agent.run.handoff"},
 		{"../../configs/rules/agent-run/03-executing-to-completed.json", "executing", "completed", "agent.run.outcome"},
+		{"../../configs/rules/agent-run/04-executing-to-failed.json", "executing", "failed", "agent.run.outcome"},
 	}
 	for _, tc := range cases {
 		r := loadRule(t, tc.path)
@@ -232,6 +267,9 @@ func TestAgentRunPack_WiredInBothConfigs(t *testing.T) {
 		"/app/configs/rules/agent-run/01-handoff-marker.json",
 		"/app/configs/rules/agent-run/02-dispatched-to-executing.json",
 		"/app/configs/rules/agent-run/03-executing-to-completed.json",
+		"/app/configs/rules/agent-run/04-executing-to-failed.json",
+		"/app/configs/rules/agent-run/05-coordinator-failed-run-anchor.json",
+		"/app/configs/rules/agent-run/06-coordinator-failed-lineage-anchor.json",
 	}
 	for _, cfg := range []string{"../../configs/flow-bootstrap.json", "../../configs/e2e-flow-bootstrap.json"} {
 		raw, err := os.ReadFile(cfg) //nolint:gosec // test-controlled config path
@@ -242,6 +280,274 @@ func TestAgentRunPack_WiredInBothConfigs(t *testing.T) {
 		for _, f := range wantFiles {
 			if !strings.Contains(s, f) {
 				t.Errorf("%s: missing agent-run rule %q from rules_files", cfg, f)
+			}
+		}
+	}
+}
+
+// failedStampRule pairs a per-pack/coordinator loop-failed run-outcome rule with
+// the run-anchor subject its agent.run.outcome=failed stamp must use. The anchor
+// differs by spawn path (ADR-053 4a′ §E, the same asymmetry as the success path):
+// agent.run.entity_id for loop-spawn-chain roles (research, baseline, first-pass
+// Lisa, loop-fired coordinators), lineage.run-loop-entity-id for run-entity-
+// descended roles (autoresearch propose/synthesize/reviewer, re-plan Lisa, CBG,
+// run-entity-spawned coordinators).
+var failedStampRules = []struct {
+	path    string
+	subject string
+}{
+	{"../../configs/rules/research/09-loop-failed-run-outcome.json", "$entity.triple.agent.run.entity_id"},
+	{"../../configs/rules/autoresearch/12-baseline-loop-failed-run-outcome.json", "$entity.triple.agent.run.entity_id"},
+	{"../../configs/rules/autoresearch/13-loop-failed-run-outcome.json", "$entity.triple.lineage.run-loop-entity-id"},
+	{"../../configs/rules/dev-via-test/09-firstpass-loop-failed-run-outcome.json", "$entity.triple.agent.run.entity_id"},
+	{"../../configs/rules/dev-via-test/10-loop-failed-run-outcome.json", "$entity.triple.lineage.run-loop-entity-id"},
+	{"../../configs/rules/agent-run/05-coordinator-failed-run-anchor.json", "$entity.triple.agent.run.entity_id"},
+	{"../../configs/rules/agent-run/06-coordinator-failed-lineage-anchor.json", "$entity.triple.lineage.run-loop-entity-id"},
+}
+
+// TestAgentRunPack_FailedOutcomeStamps is the failure-side mirror of
+// TestAgentRunPack_SuccessOutcomeStamps: every loop-failed run-outcome rule must
+// stamp agent.run.outcome=failed on the run entity with the correct per-pack
+// run anchor (ADR-053 4a′). The marker is what drives agent-run/04 executing→failed.
+func TestAgentRunPack_FailedOutcomeStamps(t *testing.T) {
+	for _, tc := range failedStampRules {
+		r := loadRule(t, tc.path)
+		var found bool
+		for _, a := range r.OnEnter {
+			if a.Type == "add_triple" && a.Predicate == "agent.run.outcome" {
+				found = true
+				if obj, _ := a.Object.(string); obj != "failed" {
+					t.Errorf("%s: agent.run.outcome object = %v, want \"failed\"", tc.path, a.Object)
+				}
+				if a.Subject != tc.subject {
+					t.Errorf("%s: agent.run.outcome subject = %q, want %q (per-pack run anchor — ADR-053 4a′ §E)", tc.path, a.Subject, tc.subject)
+				}
+			}
+		}
+		if !found {
+			t.Errorf("%s: must stamp agent.run.outcome=failed on the run entity (drives executing→failed)", tc.path)
+		}
+	}
+}
+
+// TestAgentRunPack_FailedStampAnchorGuarded closes the failure-side go-reviewer
+// C1 class: a $entity.triple.<anchor> subject that resolves to an unset triple
+// becomes a literal token, the stamp lands on garbage, and the run hangs
+// `executing` forever. So every lineage-subject stamp MUST guard on
+// lineage.run-loop-entity-id PRESENCE (length_gt 0) and every agent.run.entity_id
+// subject stamp MUST guard on agent.run.entity_id != "". The two coordinator
+// rules additionally fence on lineage presence so they are mutually exclusive.
+func TestAgentRunPack_FailedStampAnchorGuarded(t *testing.T) {
+	for _, tc := range failedStampRules {
+		r := loadRule(t, tc.path)
+		switch tc.subject {
+		case "$entity.triple.lineage.run-loop-entity-id":
+			if !r.hasConditionField("lineage.run-loop-entity-id", "length_gt") {
+				t.Errorf("%s: a lineage.run-loop-entity-id failed-stamp must guard on `lineage.run-loop-entity-id length_gt 0` (C1 garbage-literal-subject defense)", tc.path)
+			}
+		case "$entity.triple.agent.run.entity_id":
+			if !r.hasCondition("agent.run.entity_id", "ne", "") {
+				t.Errorf("%s: an agent.run.entity_id failed-stamp must guard on `agent.run.entity_id != \"\"` (anchor-present / run-less-chat guard)", tc.path)
+			}
+		}
+	}
+
+	// The two coordinator-failed rules must be mutually exclusive on lineage
+	// presence (length_eq 0 vs length_gt 0), so a coordinator carrying both
+	// anchors routes to exactly one and is never double-stamped.
+	c05 := loadRule(t, "../../configs/rules/agent-run/05-coordinator-failed-run-anchor.json")
+	if !c05.hasConditionField("lineage.run-loop-entity-id", "length_eq") {
+		t.Error("agent-run/05 must fence on `lineage.run-loop-entity-id length_eq 0` (mutually exclusive with rule 06)")
+	}
+}
+
+// TestAgentRunPack_BudgetedRolesExcludedFromFailedStamp pins the load-bearing
+// budgeted-vs-fatal invariant: autoresearch-execute (via rule 04b) and
+// dev-via-test-execute/Ralph (via 04b+05→coordinator ask_user) are BUDGETED
+// loop-failures that must keep the run `executing`. A regression that adds either
+// to a failed-outcome-stamp role list would wrongly fail the run on a budgeted
+// iteration.
+func TestAgentRunPack_BudgetedRolesExcludedFromFailedStamp(t *testing.T) {
+	budgeted := []string{"autoresearch-execute", "dev-via-test-execute"}
+	for _, tc := range failedStampRules {
+		r := loadRule(t, tc.path)
+		for _, c := range r.Conditions {
+			if c.Field != "agent.loop.role" {
+				continue
+			}
+			for _, role := range roleValues(c.Value) {
+				for _, b := range budgeted {
+					if role == b {
+						t.Errorf("%s: budgeted role %q must NOT be in a failed-outcome-stamp role list — a budgeted loop-failure keeps the run executing (rule 04b)", tc.path, b)
+					}
+				}
+			}
+		}
+	}
+}
+
+// Coordinator-spawn-rule dispositions for the ADR-053 4a′ executing→failed
+// boundary. A coordinator that fails involuntarily WHILE the run is `executing`
+// must drive executing→failed (agent-run/04) via a marker stamped by the
+// coordinator-failed rules (agent-run/05 keyed on agent.run.entity_id; 06 keyed
+// on lineage.run-loop-entity-id). That only works if the woken coordinator
+// carries a run anchor those rules can read. The adversarial review (ADR-053
+// 4a′) showed some woken coordinators carry NEITHER → a silent executing-zombie.
+// This map + TestAgentRunPack_CoordinatorSpawnCoverage make the boundary
+// STRUCTURAL: every coordinator-spawn rule must be deliberately classified, and
+// each class carries a checkable invariant.
+const (
+	// dispPostApproval: the rule ALSO stamps agent.run.outcome=success, so
+	// agent-run/03 transitions the run to `completed` BEFORE the woken
+	// coordinator could fail — its failure is post-terminal, no coverage needed.
+	dispPostApproval = "post_approval"
+	// dispAnchorThreaded: the rule threads related_loops[run-loop-entity-id], so
+	// the woken coordinator carries lineage.run-loop-entity-id → failure routes
+	// to agent-run/06.
+	dispAnchorThreaded = "anchor_threaded"
+	// dispAnchorInherit: the rule fires only on loop-inherit-chain roles (the
+	// research pack has no run-entity-fired spawn), so the woken coordinator
+	// inherits agent.run.entity_id from its parent's bare agent.run → failure
+	// routes to agent-run/05.
+	dispAnchorInherit = "anchor_inherit"
+	// dispDeferred4b: the woken coordinator is a pure human-in-the-loop delivery
+	// (action_allowlist ⊆ {respond_direct, ask_user}) on an
+	// ask_user/needs_clarification/rejected path whose run-phase semantics
+	// ADR-053 assigns to Phase 4b. Its anchor threading + failure terminal
+	// (failed? cancelled? awaiting_user?) is a 4b design decision, deliberately
+	// NOT closed in 4a′. The run-entity-descended subset of these carries no
+	// readable anchor today — a known, asserted gap, not a silent one.
+	dispDeferred4b = "deferred_4b"
+)
+
+var coordinatorSpawnDisposition = map[string]string{
+	"research_reviewer_approved_to_coordinator":            dispPostApproval,   // research/07
+	"autoresearch_reviewer_approved_to_coordinator":        dispPostApproval,   // autoresearch/08
+	"dev_via_test_cbg_approved_to_coordinator":             dispPostApproval,   // dev-via-test/07a
+	"dev_via_test_plan_approved_to_coordinator":            dispAnchorThreaded, // dev-via-test/02b
+	"dev_via_test_plan_retry_driver":                       dispAnchorThreaded, // dev-via-test/02d
+	"dev_via_test_ralph_terminal_to_coordinator":           dispAnchorThreaded, // dev-via-test/05
+	"dev_via_test_cbg_retry_driver":                        dispAnchorThreaded, // dev-via-test/07d
+	"research_needs_clarification_to_coordinator":          dispAnchorInherit,  // research/06
+	"autoresearch_needs_clarification_replan":              dispDeferred4b,     // autoresearch/10
+	"dev_via_test_plan_rejected_to_coordinator":            dispDeferred4b,     // dev-via-test/02e
+	"dev_via_test_lisa_needs_clarification_to_coordinator": dispDeferred4b,     // dev-via-test/02f
+	"dev_via_test_cbg_rejected_to_coordinator":             dispDeferred4b,     // dev-via-test/07b
+	"dev_via_test_cbg_retry_missing_target":                dispDeferred4b,     // dev-via-test/07e
+}
+
+type coordSpawnInfo struct {
+	threadsRunLoopID bool
+	stampsSuccess    bool
+	allowlist        []string
+}
+
+// findCoordinatorSpawnRules walks the rule packs and returns every rule that
+// spawns a `coordinator` loop, keyed by rule id, with the structural facts the
+// coverage test pins. threadsRunLoopID is AND across all coordinator publish
+// actions in the rule (every spawn must be anchored); allowlist is their union.
+func findCoordinatorSpawnRules(t *testing.T) map[string]coordSpawnInfo {
+	t.Helper()
+	out := map[string]coordSpawnInfo{}
+	root := "../../configs/rules"
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() || !strings.HasSuffix(path, ".json") {
+			return nil
+		}
+		raw, rerr := os.ReadFile(path) //nolint:gosec // test-controlled config path
+		if rerr != nil {
+			return rerr
+		}
+		var r ruleDoc
+		if json.Unmarshal(raw, &r) != nil {
+			return nil // not a rule doc — skip
+		}
+		var info coordSpawnInfo
+		var isCoordSpawn, firstCoord bool
+		firstCoord = true
+		for _, a := range r.OnEnter {
+			if a.Type == "publish_agent" && a.Role == "coordinator" {
+				isCoordSpawn = true
+				_, threaded := a.RelatedLoops["run-loop-entity-id"]
+				if firstCoord {
+					info.threadsRunLoopID = threaded
+					firstCoord = false
+				} else {
+					info.threadsRunLoopID = info.threadsRunLoopID && threaded
+				}
+				info.allowlist = append(info.allowlist, a.ActionAllowlist...)
+			}
+			if a.Type == "add_triple" && a.Predicate == "agent.run.outcome" {
+				if obj, _ := a.Object.(string); obj == "success" {
+					info.stampsSuccess = true
+				}
+			}
+		}
+		if isCoordSpawn {
+			out[r.ID] = info
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk rules dir: %v", err)
+	}
+	return out
+}
+
+// TestAgentRunPack_CoordinatorSpawnCoverage is the structural boundary the
+// adversarial 4a′ review demanded. It asserts EVERY rule that spawns a
+// coordinator is deliberately classified for executing→failed coverage, and
+// that each class holds its checkable invariant. A NEW coordinator-spawn rule
+// (or a new pack) added later without a disposition entry FAILS here — which is
+// exactly the silent-executing-zombie the slice exists to prevent.
+func TestAgentRunPack_CoordinatorSpawnCoverage(t *testing.T) {
+	found := findCoordinatorSpawnRules(t)
+
+	// Completeness: every discovered coordinator-spawn rule must be classified.
+	for id := range found {
+		if _, ok := coordinatorSpawnDisposition[id]; !ok {
+			t.Errorf("coordinator-spawn rule %q is UNCLASSIFIED — add it to coordinatorSpawnDisposition as "+
+				"post_approval / anchor_threaded / anchor_inherit / deferred_4b (ADR-053 4a′). An unclassified "+
+				"coordinator-spawn risks a silent executing-zombie when the woken coordinator fails.", id)
+		}
+	}
+	// No stale entries.
+	for id := range coordinatorSpawnDisposition {
+		if _, ok := found[id]; !ok {
+			t.Errorf("coordinatorSpawnDisposition lists %q but no coordinator-spawn rule with that id exists — remove the stale entry", id)
+		}
+	}
+
+	// Per-disposition invariants.
+	for id, info := range found {
+		switch coordinatorSpawnDisposition[id] {
+		case dispPostApproval:
+			if !info.stampsSuccess {
+				t.Errorf("%s: classified post_approval but does not stamp agent.run.outcome=success — a post_approval "+
+					"coordinator-spawn must complete the run (agent-run/03) before the woken coordinator can fail", id)
+			}
+		case dispAnchorThreaded:
+			if !info.threadsRunLoopID {
+				t.Errorf("%s: classified anchor_threaded but does not thread related_loops[run-loop-entity-id] on every "+
+					"coordinator spawn — the woken coordinator would carry no anchor and hang the run on failure (agent-run/06 misses)", id)
+			}
+		case dispDeferred4b:
+			// The deferral is principled ONLY if the woken coordinator is pure
+			// human-in-the-loop delivery (run-phase semantics are 4b's). If a
+			// deferred rule re-dispatches work it is no longer 4b-semantic and
+			// must instead be anchor-covered.
+			for _, tok := range info.allowlist {
+				if tok != "respond_direct" && tok != "ask_user" {
+					t.Errorf("%s: classified deferred_4b but its action_allowlist contains %q (not respond_direct/ask_user) "+
+						"— it re-dispatches work, so its woken coordinator must be anchor-covered, not deferred. Thread "+
+						"run-loop-entity-id and reclassify anchor_threaded.", id, tok)
+				}
+			}
+			if info.threadsRunLoopID {
+				t.Errorf("%s: classified deferred_4b but threads run-loop-entity-id — it IS anchor-covered; reclassify anchor_threaded", id)
 			}
 		}
 	}
