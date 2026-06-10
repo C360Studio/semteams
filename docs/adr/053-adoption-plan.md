@@ -483,10 +483,40 @@ ever disproves the beta.102 re-eval behavior, THEN fold the check in.
     is classified post-approval / anchor-covered / deferred-4b, and an
     unclassified new rule fails the test (the adversarial review's anti-silent-
     zombie guard). `cancelled` (deliberate abort) is also 4b, not 4a′.
-- **4b:** `ask_user` / `needs_clarification` / cancel run-phase semantics
-  (Q2) — INCLUDING threading a readable run anchor onto the deferred recovery
-  coordinators above so their involuntary failure can reach `executing→failed`
-  (or whatever terminal 4b decides for a failed human-in-the-loop delivery).
+- **4b — run-level CLARIFICATION POLICY (reframed 2026-06-10).** The product
+  requirement is a per-run/per-deployment policy, not "full-auto":
+  - **interactive (default):** the coordinator MAY pause and `ask_user` when
+    user intent is the missing dependency.
+  - **autonomous:** the coordinator MAY NOT block on the user — it resolves
+    ambiguity by an explicit assumption, narrow/retry, or a limitation reply.
+  Q2 RESOLVED (see §I.2): `ask_user`/`needs_clarification` stamp NO run-phase
+  transition; the run stays `executing`. (A genuine "pause into
+  `awaiting_approval` + resume" needs reply-correlation that does not exist
+  today — deferred to 4b-2.) Phasing:
+  - **4b-1 (proceedable now):** (a) thread a readable run anchor
+    (`run-loop-entity-id` from `$entity.triple.lineage.run-loop-entity-id`)
+    onto the deferred recovery coordinators (`02e`/`07b`/`07e` single-add;
+    `autoresearch/10` + `dev-via-test/02f` length-fence SPLITS, mirroring
+    12/13 + 02/02g) so their INVOLUNTARY failure routes to the shipped
+    `agent-run/06` — after this `deferred_4b` is EMPTY (zombie hole closed),
+    update `TestAgentRunPack_CoordinatorSpawnCoverage`. (b) the SemTeams
+    clarification-policy config mode + a coordinator persona variant — BLOCKED
+    on the upstream primitive **semstreams#239** (a config-level decide-action
+    policy applied uniformly to ALL coordinator tasks incl. the front-door,
+    which carries no `action_allowlist`). The product-shell overlay
+    alternative (~12 `ask_user`-stripped rule variants) is rejected as
+    ADR-029 accretion; `autonomous` maps to the framework primitive disabling
+    the blocking `ask_user` decide action.
+  - **4b-2:** the interactive PAUSE — `executing→awaiting_approval` on
+    `ask_user` + reply-correlation (carry the asking-run-id, re-anchor the
+    reply coordinator, resume `awaiting_approval→executing`). Its own slice;
+    gated on building reply-correlation (none today: the reply is a fresh
+    uncorrelated `user.message` turn).
+  - **cancel (deferred, narrow):** `executing→cancelled` fires ONLY on an
+    explicit abandon, NOT on cap/budget exhaustion (those route to `ask_user`
+    and stay `executing`). Likely home is an UPSTREAM widening of the D3 guard
+    to the executing phase (it only covers `dispatched` today), not a
+    product-shell cancel subscriber. Its own slice.
 - **4c:** the real `approval_required` tool-gate → `awaiting_approval`
   (NOT the CBG automated reviewer, which stays `executing` — §E).
 - Then Phase 5.
@@ -494,11 +524,20 @@ ever disproves the beta.102 re-eval behavior, THEN fold the check in.
 **I. Open questions.**
 1. **D3 race** — empirical result; upstream ask ("D3 must not fire on
    `CategoryLoopCompleted`") if it bites (the watch-item).
-2. **`ask_user` phase** — `awaiting_approval` (waiting on the user), or
-   leave `executing` (the user reply re-dispatches and the run never
-   actually paused), or `cancelled`? Lean: `ask_user` is NOT run-terminal;
-   `needs_clarification`→coordinator recovery stays `executing`; only a
-   genuine dead-end (cap-exhausted-to-human, no recovery) → `cancelled`.
+2. **`ask_user` phase — RESOLVED (2026-06-10).** `ask_user` and
+   `needs_clarification` stamp NO run-phase transition; the run stays
+   `executing`. A genuine `awaiting_approval` pause was rejected for 4b-1:
+   there is no reply-correlation today (the user's answer arrives as a fresh,
+   unlinked `user.message` → brand-new coordinator loop — `agentApi.ts`
+   sends only `{content}`, `user.response.*` is a fire-and-forget OUTPUT
+   port), so a real `awaiting_approval→executing` resume is net-new plumbing,
+   and `awaiting_approval` is reserved for the 4c tool-gate. The "waiting on
+   you" affordance is delivered out-of-band from the existing
+   `coordinator.user_question` audit triple + a UI badge, NOT a lifecycle
+   transition. A true pause is deferred to 4b-2 (gated on first building
+   reply-correlation). Whether `ask_user` is even AVAILABLE is the run-level
+   clarification policy (interactive vs autonomous, §H 4b), enforced by the
+   upstream decide-action policy primitive (semstreams#239).
 3. **Marker vocabulary** — finalize the predicate names (`agent.run.handoff`,
    `agent.run.outcome`) + the grammar-collision audit on the `agent.run.*`
    tokens.
