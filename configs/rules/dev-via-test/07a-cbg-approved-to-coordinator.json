@@ -21,6 +21,12 @@
   "logic": "and",
   "on_enter": [
     {
+      "type": "add_triple",
+      "subject": "$entity.triple.lineage.run-loop-entity-id",
+      "predicate": "agent.run.outcome",
+      "object": "success"
+    },
+    {
       "type": "publish_agent",
       "subject": "agent.task.coordinator",
       "role": "coordinator",

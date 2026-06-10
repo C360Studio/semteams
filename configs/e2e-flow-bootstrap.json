@@ -233,7 +233,10 @@
           "/app/configs/rules/autoresearch/10-needs-clarification-replan.json",
           "/app/configs/rules/autoresearch/11-loop-failed-pause.json",
           "/app/configs/rules/coordinator/03b-respond-direct.json",
-          "/app/configs/rules/coordinator/03-ask-user.json"
+          "/app/configs/rules/coordinator/03-ask-user.json",
+          "/app/configs/rules/agent-run/01-handoff-marker.json",
+          "/app/configs/rules/agent-run/02-dispatched-to-executing.json",
+          "/app/configs/rules/agent-run/03-executing-to-completed.json"
         ],
         "inline_rules": []
       }

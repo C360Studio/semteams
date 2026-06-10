@@ -240,8 +240,61 @@ test.describe("ADR-042 MVP-5 — Research category mock-LLM journey", () => {
       respPayloads.length,
       "expected at least one user.response.* publish (rule 03b → dispatch.user.response). Zero entries → either rule 03b did not fire, or dispatch's user.response output port is misconfigured.",
     ).toBeGreaterThanOrEqual(1);
+
+    // -----------------------------------------------------------------
+    // Step 8 — ADR-053 Phase 4a: the run reached `completed`. Direct
+    // agent.run.phase assertion on the run entity (the design spike's
+    // merge gate §D/§H). Research is the loop-spawned-chain path: its
+    // reviewer carries agent.run.entity_id, rule 07 stamps
+    // agent.run.outcome=success, and rule 03 transitions executing→
+    // completed. `failed` here would mean the D3 zombie guard raced the
+    // dispatched→executing transition.
+    // -----------------------------------------------------------------
+    const runPhases = await pollUntil(async () => {
+      const phases = await fetchTriples(request, {
+        predicate: "agent.run.phase",
+        limit: 20,
+      });
+      const objs = phases
+        .filter((t) => String(t.subject ?? "").includes("agent.chain.execution."))
+        .map((t) => String(t.object));
+      if (objs.includes("completed") || objs.includes("failed")) return objs;
+      return null;
+    }, { timeoutMs: 30_000 });
+    expect(
+      runPhases,
+      "agent.run.phase never reached a terminal on the run entity (run stuck in dispatched/executing)",
+    ).toBeTruthy();
+    expect(runPhases, "run must reach completed (ADR-053 Phase 4a)").toContain(
+      "completed",
+    );
+    expect(
+      runPhases,
+      "run must NOT be failed (D3 race / wrong terminal)",
+    ).not.toContain("failed");
   });
 });
+
+/**
+ * fetchTriples — read graph triples via GET /graph/triples (ADR-053 Phase 4a
+ * run-phase assertion). Mirrors the helper in the other agentic journeys.
+ */
+async function fetchTriples(
+  request: import("@playwright/test").APIRequestContext,
+  params: { subject?: string; predicate?: string; limit?: number },
+): Promise<Array<{ subject?: string; object?: unknown }>> {
+  const query = new URLSearchParams();
+  if (params.subject) query.set("subject", params.subject);
+  if (params.predicate) query.set("predicate", params.predicate);
+  if (params.limit) query.set("limit", String(params.limit));
+  const resp = await request.get(`/graph/triples?${query.toString()}`);
+  if (!resp.ok()) {
+    throw new Error(
+      `GET /graph/triples?${query.toString()} returned ${resp.status()}`,
+    );
+  }
+  return (await resp.json()) as Array<{ subject?: string; object?: unknown }>;
+}
 
 /**
  * pollUntil — race a polling fn against a deadline.

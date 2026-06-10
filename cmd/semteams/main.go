@@ -177,12 +177,11 @@ func run() error {
 	svcDeps.ToolRegistry = toolRegistry
 	svcDeps.PayloadRegistry = payloadReg
 
-	// 10a. Wire the shared Lifecycle harness Manager + agent-run workflow
-	// (ADR-053 adoption Phase 1). Must run before configureAndCreateServices so
-	// the rule processor factory installs the manager via SetLifecycleManager.
-	// See attachLifecycleManager for the rationale and the Phase-4 deferral of
-	// the milestone subscriber.
-	if err := attachLifecycleManager(svcDeps, natsClient, logger); err != nil {
+	// 10a. Wire the agent-run substrate: the shared Lifecycle harness Manager +
+	// agent-run workflow (ADR-053 Phase 1) AND the MilestoneSubscriber (Phase 4a
+	// D3 terminal authority). Must run before configureAndCreateServices so the
+	// rule processor factory installs the manager via SetLifecycleManager.
+	if err := wireAgentRunSubstrate(ctx, svcDeps, natsClient, platform, logger); err != nil {
 		return err
 	}
 
@@ -282,84 +281,17 @@ func setupToolsAndPreprocessor(
 		return nil, nil, fmt.Errorf("start chain-pause subscriber: %w", err)
 	}
 
-	// 9g. Chain milestone subscribers (ADR-038 PR B).
-	// One CompletionSubscriber on agent.complete.> demuxes to every
-	// registered chain.CompletionHandler. Each handler decides whether
-	// to fire on the event and writes its predicate cluster onto the
-	// canonical 6-part chain entity (c360.<platform>.agent.chain.execution.<chain_id>).
-	if err := startChainMilestoneSubscribers(ctx, cfg, natsClient, platform, logger); err != nil {
-		return nil, nil, fmt.Errorf("start chain milestone subscribers: %w", err)
-	}
-
+	// 9g. (ADR-053) The hand-rolled chain milestone stampers were RETIRED
+	// here — they wrote chain.* projections onto the canonical
+	// agent.chain.execution.<id> entity, which is now owned exclusively by
+	// the agent-run lifecycle substrate (run_scope=new mint + the agent-run
+	// transition rules). The dual-write was the adoption-plan hedge; keeping
+	// it meant the DispatchedStamper raced the mint for the same entity and
+	// the lifecycle-attach CAS lost, so no run was ever minted. Removing the
+	// stampers makes agent-run the sole writer of the run entity. The
+	// resolver/lineage helpers survive for chainbash + the sandbox tools
+	// (migrated to typed RunID in the follow-up slice).
 	return toolRegistry, chainPauseHTTP, nil
-}
-
-// startChainMilestoneSubscribers wires every ADR-038 chain-milestone
-// CompletionHandler into a single agent.complete.> subscription.
-// Each handler picks events matching its milestone and writes its
-// predicate cluster onto the canonical chain entity. Adding a new
-// milestone is one line in the handler slice.
-//
-// Phase 1b: chain.dispatched_at on chain root.
-// Phase 2:  chain.research_artifact.* on research-reviewer approval.
-// Phase C4 (evidence summary milestone) plugs in via the same slice.
-// ADR-039 Phase 1 Slice B: chain.needs_review.* on builder
-// needs_clarification (Tier 3 fallback).
-// ADR-040 §addendum 2026-05-11: chain.recovery.count (audit) + per-cycle
-// chain.recovery.proceed (gate sentinel on reviewer entity) +
-// chain.recovery.exhausted (cap-hit marker) on research-reviewer
-// "insufficient" terminals. Counter-owned gating; rule_02's third
-// condition (`chain.recovery.proceed eq "true"`) fires only when the
-// Counter has approved the cycle.
-func startChainMilestoneSubscribers(ctx context.Context, cfg *config.Config, natsClient *natsclient.Client, platform types.PlatformMeta, logger *slog.Logger) error {
-	triplePublisher := agentictools.NewNATSTriplePublisher(natsClient)
-
-	// SUBSCRIBE-side subjects (wildcards) come from running config so an
-	// operator port-rewire follows automatically. See ADR-039 / fix-plan
-	// Phase 2: hardcoded subjects across cmd/semteams/ are the smoke #8
-	// root-cause class.
-	loopCompletedSubject := portresolver.SubjectOrDefault(cfg, "teams-loop", "agent.complete", chain.DefaultLoopCompletedSubject)
-
-	// REQUEST/REPLY subject is the constant — graph-query subscribes to
-	// the specific literal "graph.query.entity" inside its
-	// setupQueryHandlers; the port config declares the wildcard
-	// `graph.query.>` only as namespace metadata. An operator who wants
-	// to rewire the entity-read RPC has to patch upstream graph-query's
-	// handler, not just the port config. Constructor still accepts the
-	// param so tests + future config-overrides work the moment that
-	// upstream surface gets parameterized.
-	entityReader := chain.NewNATSEntityReader(natsClient, chain.DefaultGraphQueryEntitySubject)
-	resolver := chain.NewResolver(chain.NewNATSParentReader(natsClient, platform, chain.DefaultGraphQueryEntitySubject), platform)
-
-	dispatched := chain.NewDispatchedStamper(triplePublisher, platform, logger)
-	research := chain.NewResearchMilestoneStamper(triplePublisher, resolver, entityReader, platform, logger)
-	needsReview := chain.NewNeedsReviewStamper(triplePublisher, resolver, entityReader, platform, logger)
-
-	// chain.terminal stamper. Fires on terminating-reviewer success
-	// (reviewer-research/approved under the MVP roster; see ADR-042
-	// §Phase 2 redesign for the closed taxonomy) and writes the
-	// chain.terminal.* audit cluster on the canonical 6-part chain
-	// entity. The wake-up rule (research/07-reviewer-approved-to-
-	// coordinator.json) fires on the reviewer loop's role + decision
-	// triples directly (rule engine's firing entity = the loop, not
-	// the chain); the chain-entity cluster is for ops queries and
-	// operator dashboards.
-	terminalStamper := chain.NewTerminalStamper(triplePublisher, resolver, entityReader, platform, logger)
-
-	subscriber := chain.NewCompletionSubscriber([]chain.CompletionHandler{
-		dispatched,
-		terminalStamper,
-		research,
-		needsReview,
-	}, loopCompletedSubject, logger)
-	if err := subscriber.Start(ctx, natsClient); err != nil {
-		return fmt.Errorf("subscribe to loop completed for chain milestones: %w", err)
-	}
-	logger.Info("chain milestone subscribers started",
-		slog.String("org", platform.Org),
-		slog.String("platform", platform.Platform),
-		slog.String("loop_completed_subject", loopCompletedSubject))
-	return nil
 }
 
 // startChainPauseSubscriber builds the chain-pause pauser + decision handler,
@@ -769,34 +701,70 @@ func createServiceDependencies(
 	}
 }
 
-// attachLifecycleManager builds the shared Lifecycle harness Manager (ADR-047)
-// and registers the agent-run workflow (ADR-053 D2), plumbing the manager onto
+// wireAgentRunSubstrate builds the shared Lifecycle harness Manager (ADR-047),
+// registers the agent-run workflow (ADR-053 D2), plumbs the manager onto
 // svcDeps.LifecycleManager so the rule processor factory installs it (its Setup
-// calls SetLifecycleManager when deps.LifecycleManager is non-nil). With the
-// manager wired, lifecycle_* rule actions and the run-entity substitution
-// ($entity.triple.agent.run.entity_id) resolve at evaluation time instead of
-// failing closed.
+// calls SetLifecycleManager when deps.LifecycleManager is non-nil), and wires the
+// MilestoneSubscriber. With the manager wired, lifecycle_* rule actions and the
+// run-entity substitution ($entity.triple.agent.run.entity_id) resolve at
+// evaluation time instead of failing closed.
 //
-// ADR-053 adoption: this wiring (Phase 1) makes the manager available. Phase 2
-// then adds run_scope="new" at the 3 coordinator root spawns, so the manager
-// now mints an AgentRun per chain — additively: the runs sit in "dispatched"
-// with no consumer, and the existing lineage threading (cmd/semteams/chain) is
-// untouched (dual-write). The agent-run MilestoneSubscriber (D3 terminal
-// authority) is deferred to Phase 4, where it is wired together with the
-// lifecycle_transition rules that first advance a run past "dispatched" —
-// without them D3 would spuriously fail every run on the coordinator's normal
-// terminal. Mirrors upstream cmd/semstreams/main.go §10b–10c boot order (ADR-029).
+// ADR-053 adoption history: Phase 1 made the manager available; Phase 2 added
+// run_scope="new" at the 3 coordinator root spawns (minting an AgentRun per
+// chain, sitting inert in "dispatched"); Phase 4a (this revision) adds the
+// MilestoneSubscriber + the agent-run transition rules together — the subscriber
+// is co-wired with the rules because without dispatched→executing advancing a
+// healthy run past "dispatched", D3 would spuriously fail every run on the
+// coordinator's normal terminal. The existing lineage threading
+// (cmd/semteams/chain) stays untouched (dual-write) until Phase 5. Mirrors
+// upstream cmd/semstreams/main.go §10b–10d boot order (ADR-029).
 //
-// Upstream inlines these two statements directly against svcDeps; the helper
-// here is purely to keep run() under revive's function-length limit, NOT a
-// semantic divergence — a reader diffing against upstream main.go should treat
-// it as the same wiring.
-func attachLifecycleManager(svcDeps *service.Dependencies, natsClient *natsclient.Client, logger *slog.Logger) error {
+// Upstream inlines these statements directly against svcDeps; the helper here is
+// purely to keep run() under revive's function-length limit, NOT a semantic
+// divergence — a reader diffing against upstream main.go should treat it as the
+// same wiring.
+func wireAgentRunSubstrate(ctx context.Context, svcDeps *service.Dependencies, natsClient *natsclient.Client, platform types.PlatformMeta, logger *slog.Logger) error {
 	mgr := lifecycle.NewManager(natsClient, logger)
 	if err := agentrun.Register(mgr); err != nil {
 		return fmt.Errorf("register agent-run workflow: %w", err)
 	}
 	svcDeps.LifecycleManager = mgr
+	// ADR-053 Phase 4a: wire the MilestoneSubscriber (D3 terminal authority)
+	// with the manager, co-landed with the agent-run transition rules. Phase 1
+	// deliberately deferred it — without the dispatched→executing rule advancing
+	// a healthy run past "dispatched", D3 would spuriously fail every run on the
+	// coordinator's normal terminal.
+	return startAgentRunMilestoneSubscriber(ctx, mgr, natsClient, platform, logger)
+}
+
+// startAgentRunMilestoneSubscriber wires the ADR-053 D3 terminal-authority
+// subscriber (Phase 4a). It subscribes to terminal loop events
+// (agent.complete.* / agent.failed.*) on durable JetStream consumers, resolves
+// the run, and applies the narrow zombie-prevention fallback: a dispatch-ROOT
+// loop that terminates while its run is still "dispatched" (no confirmed
+// handoff) transitions the run to failed/cancelled. All other terminal
+// transitions are product rules (configs/rules/agent-run/) — the framework
+// only observes; the coordinator/rules decide (ADR-053 §D3).
+//
+// Wired together with the agent-run transition rules (Phase 4a), NOT in
+// Phase 2: without the dispatched→executing rule advancing a healthy run past
+// "dispatched", this subscriber's D3 guard would fire on every coordinator's
+// normal terminal. No product MilestoneHandlers yet — Phase 5 re-platforms the
+// chain stampers as handlers via AddHandler. Mirrors upstream
+// cmd/semstreams/main.go §10c boot order (ADR-029).
+func startAgentRunMilestoneSubscriber(ctx context.Context, mgr *lifecycle.Manager, natsClient *natsclient.Client, platform types.PlatformMeta, logger *slog.Logger) error {
+	reader := agentrun.NewNATSLoopTripleReader(natsClient)
+	pub := agentrun.NewNATSTriplePublisher(natsClient)
+	sub := agentrun.NewMilestoneSubscriber(mgr, reader, pub, platform.Org, platform.Platform, logger)
+	// StreamName is the JetStream stream holding agent.complete.*/agent.failed.*
+	// (the agentic-loop default "AGENT"). The filter subjects are owned by
+	// Start, not configurable product-side — an operator who rewires teams-loop's
+	// publish subjects must also patch this stream/filter pairing upstream.
+	if _, err := sub.Start(ctx, natsClient, agentrun.StartConfig{StreamName: agentrun.AgentStreamName}); err != nil {
+		return fmt.Errorf("agent-run milestone subscriber start: %w", err)
+	}
+	logger.Info("Started agent-run milestone subscriber (ADR-053 Phase 4a — D3 terminal authority)",
+		slog.String("stream", agentrun.AgentStreamName))
 	return nil
 }
 
