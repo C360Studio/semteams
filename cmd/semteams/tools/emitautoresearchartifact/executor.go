@@ -89,9 +89,10 @@ const (
 // which route to the local-fs fallback. Errors are propagated for
 // graph-read failures so the caller can log + degrade gracefully.
 //
-// Implemented in product_tools.go via chain.ResolveChainEntityID +
-// chain.NATSEntityReader; consumer-defines-interface mirrors the
-// pattern in querysandboxattestation + sandboxruntime.AttestationRunner.
+// Implemented in product_tools.go via runanchor.Anchor (the run anchor on
+// ToolCall.Metadata, ADR-053 Phase 5) + chain.NATSEntityReader;
+// consumer-defines-interface mirrors the pattern in querysandboxattestation +
+// sandboxruntime.AttestationRunner.
 type ChainAttestationReader interface {
 	HostWorkspaceFolder(ctx context.Context, call agentic.ToolCall) (string, error)
 }

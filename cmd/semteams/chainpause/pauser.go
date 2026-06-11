@@ -2,7 +2,6 @@ package chainpause
 
 import (
 	"context"
-	"fmt"
 	"slices"
 	"strings"
 	"time"
@@ -16,22 +15,6 @@ import (
 // agentictools.NATSTriplePublisher satisfies it structurally.
 type TriplePublisher interface {
 	AddTriple(ctx context.Context, triple message.Triple) error
-}
-
-// ChainEntityResolver is the narrow surface the Pauser uses to compute
-// the canonical 6-part chain entity ID for a given failed loop.
-// cmd/semteams/chain.Resolver satisfies it structurally.
-//
-// ADR-038 PR B Phase 3: §D5 chain.paused.* triples land on the chain
-// entity (cross-arc subject), not the failed loop's entity. The walk
-// from a failed loop is reliable post-semstreams beta.56/.57:
-// LoopFailedEvent.ParentLoopID is populated, buildLoopFailureTriples
-// stamps agent.loop.parent at completion, and persistHandlerResult now
-// runs WriteLoopFailure BEFORE publishResults so subscribers consuming
-// agent.failed.* see fully-stamped loop entities the moment the event
-// lands.
-type ChainEntityResolver interface {
-	ChainEntityID(ctx context.Context, loopID string) (string, error)
 }
 
 // PauseResult holds the classification output of a pause-write.
@@ -53,23 +36,19 @@ type PauseResult struct {
 // Fail-soft: any individual triple write error is logged (by callers via the
 // returned error) but does not abort the remaining writes. Triple write errors
 // on the pause path are worse than partial writes — a partial §D5 record is
-// queryable; a zero-triple record is invisible. Resolver failures (graph
-// blip mid-pause) are an exception: without a chain entity ID we can't
-// write any §D5 triple, so we surface the error to the caller and skip
-// the writes entirely. The agent.failed.* event is on the wire regardless,
-// so operators see the failure even when chain.paused.* doesn't land.
+// queryable; a zero-triple record is invisible. A failed loop with no run anchor
+// (ev.RunEntityID == "", a loop outside any run) has no chain entity to stamp, so
+// the §D5 writes are skipped; the agent.failed.* event is on the wire regardless.
 type Pauser struct {
 	publisher TriplePublisher
-	resolver  ChainEntityResolver
 }
 
-// NewPauser constructs a Pauser backed by the given publisher + resolver.
-// The resolver computes the chain entity ID by walking ancestry from the
-// failed loop_id; cmd/semteams/chain.Resolver is the production wiring
-// (it carries platform identity, so the Pauser no longer needs it
-// directly).
-func NewPauser(pub TriplePublisher, resolver ChainEntityResolver) *Pauser {
-	return &Pauser{publisher: pub, resolver: resolver}
+// NewPauser constructs a Pauser backed by the given publisher. The chain entity
+// ID is read off the LoopFailedEvent's RunEntityID, populated by the framework at
+// dispatch (semstreams#250, beta.105) — the ancestry-walk Resolver is retired
+// (ADR-053 Phase 5, ADR-053 D8: subscribers read the resolved run off the wire).
+func NewPauser(pub TriplePublisher) *Pauser {
+	return &Pauser{publisher: pub}
 }
 
 // HandleFailed is the subscription entry point for agent.failed.* events.
@@ -88,9 +67,12 @@ func (p *Pauser) HandleFailed(ctx context.Context, ev *agentic.LoopFailedEvent) 
 		return PauseResult{}, nil
 	}
 
-	entityID, err := p.resolver.ChainEntityID(ctx, ev.LoopID)
-	if err != nil {
-		return PauseResult{}, fmt.Errorf("chainpause.Pauser.HandleFailed: resolve chain entity for failed loop %q: %w", ev.LoopID, err)
+	// The framework resolves the run/chain entity at dispatch and carries it on
+	// the failure event (semstreams#250). No run anchor → the loop is outside a
+	// run; there is no chain entity to stamp §D5 on, so skip.
+	entityID := ev.RunEntityID
+	if entityID == "" {
+		return PauseResult{}, nil
 	}
 	now := time.Now().UTC()
 	cause, classification := classifyError(ev.Error)

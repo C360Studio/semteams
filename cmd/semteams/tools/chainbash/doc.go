@@ -13,20 +13,23 @@
 //
 // How the wrapper works:
 //
-//  1. The framework calls Execute with call.LoopID populated from the
-//     active loop's loop_id.
-//  2. We resolve loop_id → chain_id via chain.Resolver (walks
-//     agent.loop.parent triples back to the chain root).
-//  3. We inject Metadata["task_id"] = chain_id on a shallow copy of
-//     the ToolCall. Upstream's BashExecutor prefers Metadata["task_id"]
-//     over Metadata["loop_id"] when picking the sandbox bucket, so
-//     every role in the same chain talks to the same worktree.
+//  1. The framework calls Execute with the run anchor stamped on
+//     ToolCall.Metadata by agentic-loop dispatch (MetadataKeyRunID = the
+//     run's bare loop-id = chain root; semstreams#250, beta.105).
+//  2. We read it via runanchor.Anchor — no NATS ancestry walk. (This
+//     replaced the hand-rolled chain.Resolver loop_id→chain_id walk in
+//     ADR-053 Phase 5; the framework now resolves the run at dispatch.)
+//  3. We inject Metadata["task_id"] = run_id (the BARE id, not the 6-part
+//     entity id — the sandbox uses it as a worktree dir name and the
+//     AttestationRunner prepends the prefix) on a shallow copy of the
+//     ToolCall. Upstream's BashExecutor prefers Metadata["task_id"] over
+//     Metadata["loop_id"] when picking the sandbox bucket, so every role
+//     in the same chain talks to the same worktree.
 //  4. We delegate to upstream's BashExecutor unchanged.
 //
-// Fail-soft: a chain resolution failure (no parent triples yet, NATS
-// timeout, etc.) does not abort the call. We log at Debug and let
-// upstream fall back to loop_id, preserving behaviour for non-chain
-// invocations and during graceful-degradation paths.
+// Fail-soft: no run anchor (standalone loop / pre-#250 framework) skips
+// the rewrite — upstream falls back to loop_id, preserving behaviour for
+// non-chain invocations.
 //
 // Naming: the wrapper is registered under the canonical "bash" name.
 // LLMs are trained on the `bash` token, and renaming risks behavioural

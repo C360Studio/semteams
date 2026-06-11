@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/c360studio/semstreams/agentic"
+	agvocab "github.com/c360studio/semstreams/vocabulary/agentic"
 )
 
 // recordingTaskPublisher records PublishTask calls.
@@ -34,6 +35,23 @@ func (s *staticPauseDataReader) ReadPauseData(_ context.Context, _ string) (stri
 	return s.role, s.model, s.err
 }
 
+// fakeEntityReader stubs the single-entity graph read the DecisionHandler does to
+// recover the failed loop's run anchor (agent.run.entity_id), replacing the
+// retired ancestry-walk Resolver (ADR-053 Phase 5 / semstreams#250). runEntityID
+// is returned under the agvocab.LoopRunEntityID key; an empty value models a loop
+// with no run anchor; err models a graph-read failure.
+type fakeEntityReader struct {
+	runEntityID string
+	err         error
+}
+
+func (f *fakeEntityReader) ReadEntity(_ context.Context, _ string) (map[string]any, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return map[string]any{agvocab.LoopRunEntityID: f.runEntityID}, nil
+}
+
 func testDecisionHandler(t *testing.T) (*DecisionHandler, *recordingPublisher, *recordingTaskPublisher) {
 	t.Helper()
 	return testDecisionHandlerWithPauseData(t, &staticPauseDataReader{role: "dev-via-spec-reviewer", model: "claude-haiku"})
@@ -41,9 +59,14 @@ func testDecisionHandler(t *testing.T) (*DecisionHandler, *recordingPublisher, *
 
 func testDecisionHandlerWithPauseData(t *testing.T, pauseData PauseDataReader) (*DecisionHandler, *recordingPublisher, *recordingTaskPublisher) {
 	t.Helper()
+	return testDecisionHandlerFull(t, pauseData, &fakeEntityReader{runEntityID: testChainEntityID("test-chain")})
+}
+
+func testDecisionHandlerFull(t *testing.T, pauseData PauseDataReader, entities EntityReader) (*DecisionHandler, *recordingPublisher, *recordingTaskPublisher) {
+	t.Helper()
 	pub := &recordingPublisher{}
 	tasks := &recordingTaskPublisher{}
-	h := NewDecisionHandler(pub, tasks, pauseData, &fakeChainResolver{}, nil)
+	h := NewDecisionHandler(pub, tasks, pauseData, entities, testPlatform(), nil)
 	return h, pub, tasks
 }
 
@@ -231,27 +254,23 @@ func TestDecisionHandler_DecisionTriples_WrittenForAllVerbs(t *testing.T) {
 func TestDecisionHandler_AuditTriplesSubjectIsChainEntity(t *testing.T) {
 	for _, verb := range []string{"retry", "kill", "defer"} {
 		t.Run(verb, func(t *testing.T) {
-			pub := &recordingPublisher{}
-			tasks := &recordingTaskPublisher{}
 			pauseData := &staticPauseDataReader{role: "dev-via-spec-reviewer", model: "claude-haiku"}
-			resolver := &fakeChainResolver{chainRoot: "dispatch_root"}
-			h := NewDecisionHandler(pub, tasks, pauseData, resolver, nil)
+			// The failed loop entity's run anchor points at the chain entity for
+			// "dispatch_root"; every §D5 decision triple must land there.
+			entities := &fakeEntityReader{runEntityID: testChainEntityID("dispatch_root")}
+			h, pub, _ := testDecisionHandlerFull(t, pauseData, entities)
 
 			req := DecisionRequest{FailedLoopID: "researcher_with_source_8", Verb: verb}
 			if err := h.HandleDecision(context.Background(), req, "op"); err != nil {
 				t.Fatalf("HandleDecision: %v", err)
 			}
 
-			if resolver.calls == 0 {
-				t.Fatal("resolver was not consulted")
-			}
-			if resolver.lastArg != "researcher_with_source_8" {
-				t.Errorf("resolver called with %q, want failed loop id", resolver.lastArg)
-			}
-
 			wantSubject := testChainEntityID("dispatch_root")
 			pub.mu.Lock()
 			defer pub.mu.Unlock()
+			if len(pub.triples) == 0 {
+				t.Fatal("no decision triples written")
+			}
 			for _, tr := range pub.triples {
 				if tr.Subject != wantSubject {
 					t.Errorf("decision audit triple %q wrote to %q, want %q (chain entity)", tr.Predicate, tr.Subject, wantSubject)
@@ -261,25 +280,68 @@ func TestDecisionHandler_AuditTriplesSubjectIsChainEntity(t *testing.T) {
 	}
 }
 
-// TestDecisionHandler_ResolverError_ReturnsError verifies that a
-// resolver failure surfaces to the HTTP boundary so the operator gets
-// a real error back instead of a silently-incomplete decision.
-func TestDecisionHandler_ResolverError_ReturnsError(t *testing.T) {
-	pub := &recordingPublisher{}
-	tasks := &recordingTaskPublisher{}
+// TestDecisionHandler_EntityReadError_ReturnsError verifies that a failure to read
+// the failed loop's run anchor surfaces to the HTTP boundary so the operator gets a
+// real error back instead of a silently-incomplete decision (ADR-053 Phase 5).
+func TestDecisionHandler_EntityReadError_ReturnsError(t *testing.T) {
 	pauseData := &staticPauseDataReader{}
-	resolver := &fakeChainResolver{err: errors.New("graph KV unavailable")}
-	h := NewDecisionHandler(pub, tasks, pauseData, resolver, nil)
+	entities := &fakeEntityReader{err: errors.New("graph KV unavailable")}
+	h, pub, tasks := testDecisionHandlerFull(t, pauseData, entities)
 
 	req := DecisionRequest{FailedLoopID: "loop-x", Verb: "retry"}
 	if err := h.HandleDecision(context.Background(), req, "op"); err == nil {
-		t.Fatal("expected resolver error to surface; got nil")
+		t.Fatal("expected entity-read error to surface; got nil")
 	}
 	if len(pub.triples) != 0 {
-		t.Errorf("no triples should be written when resolver fails; got %d", len(pub.triples))
+		t.Errorf("no triples should be written when entity read fails; got %d", len(pub.triples))
 	}
 	if len(tasks.calls) != 0 {
-		t.Errorf("no retry task should be published when resolver fails; got %d", len(tasks.calls))
+		t.Errorf("no retry task should be published when entity read fails; got %d", len(tasks.calls))
+	}
+}
+
+// TestDecisionHandler_NoRunAnchor_ReturnsError verifies that a failed loop whose
+// entity carries no agent.run.entity_id (outside any run) is rejected rather than
+// writing decision triples to an empty subject (ADR-053 Phase 5).
+func TestDecisionHandler_NoRunAnchor_ReturnsError(t *testing.T) {
+	pauseData := &staticPauseDataReader{}
+	entities := &fakeEntityReader{runEntityID: ""}
+	h, pub, tasks := testDecisionHandlerFull(t, pauseData, entities)
+
+	req := DecisionRequest{FailedLoopID: "loop-no-anchor", Verb: "retry"}
+	if err := h.HandleDecision(context.Background(), req, "op"); err == nil {
+		t.Fatal("expected no-run-anchor error to surface; got nil")
+	}
+	if len(pub.triples) != 0 {
+		t.Errorf("no triples should be written when run anchor is missing; got %d", len(pub.triples))
+	}
+	if len(tasks.calls) != 0 {
+		t.Errorf("no retry task should be published when run anchor is missing; got %d", len(tasks.calls))
+	}
+}
+
+// TestDecisionHandler_MalformedFailedLoopID_ReturnsError verifies that a dotted
+// (entity-id-shaped) failed_loop_id — untrusted operator HTTP input that would
+// panic the panicking LoopExecutionEntityID constructor — surfaces as a clean
+// error with no writes, rather than crashing the request goroutine. This is the
+// guard the retired chain.ValidateLoopID used to own (ADR-053 Phase 5); a VALID
+// verb routes past the verb switch straight to the entity-id construction.
+func TestDecisionHandler_MalformedFailedLoopID_ReturnsError(t *testing.T) {
+	pauseData := &staticPauseDataReader{}
+	// A non-empty fake reader so the test fails for the right reason — the error
+	// must come from the malformed-id guard, before any read.
+	entities := &fakeEntityReader{runEntityID: testChainEntityID("unused")}
+	h, pub, tasks := testDecisionHandlerFull(t, pauseData, entities)
+
+	req := DecisionRequest{FailedLoopID: "c360.test.agent.loop.execution.loop-x", Verb: "retry"}
+	if err := h.HandleDecision(context.Background(), req, "op"); err == nil {
+		t.Fatal("expected malformed-id error to surface; got nil")
+	}
+	if len(pub.triples) != 0 {
+		t.Errorf("no triples should be written for a malformed failed_loop_id; got %d", len(pub.triples))
+	}
+	if len(tasks.calls) != 0 {
+		t.Errorf("no retry task should be published for a malformed failed_loop_id; got %d", len(tasks.calls))
 	}
 }
 

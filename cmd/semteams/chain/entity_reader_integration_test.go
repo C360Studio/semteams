@@ -13,18 +13,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestNATSEntityReader_LiveSubject verifies the resolver's ReadEntity
+// TestNATSEntityReader_LiveSubject verifies the reader's ReadEntity
 // call reaches a responder on the production subject and decodes the
 // response shape. Catches the class of bug smoke #8 surfaced (PR D
-// post-mortem): the resolver was sending requests to `graph.query.entity`
+// post-mortem): the reader was sending requests to `graph.query.entity`
 // but no agentic config ran the upstream graph-query processor that
 // subscribes there. Result: every chain milestone subscriber timed out
 // silently and no chain entity triples landed.
 //
 // Why integration not unit: the contract under test IS the subject the
-// reader sends to. A unit test with an in-memory reader (the existing
-// staticEntityReader pattern in chain_entity_coverage_test.go) is blind
-// to this class — it never exercises the wire.
+// reader sends to. A unit test with an in-memory reader is blind to this
+// class — it never exercises the wire.
 //
 // Why a stub responder not real graph-query+graph-ingest: the bug shape
 // is "no responder on the subject the reader uses." A stub on the
@@ -78,14 +77,13 @@ func TestNATSEntityReader_LiveSubject(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	// Empty subject → constructor falls back to DefaultGraphQueryEntitySubject;
-	// matches what main.go passes for the production wiring (see
-	// startChainMilestoneSubscribers — entity-read uses the constant).
+	// matches what main.go passes for the production wiring.
 	reader := NewNATSEntityReader(tc.Client, "")
 	got, err := reader.ReadEntity(ctx, stubEntityID)
 
 	// Wire-format contract: reader must send `{"id": "<entityID>"}` to
 	// the subject the upstream graph-query processor subscribes to.
-	require.NoError(t, err, "ReadEntity against live NATS+stub responder failed — likely subject mismatch (resolver.go uses %q)", DefaultGraphQueryEntitySubject)
+	require.NoError(t, err, "ReadEntity against live NATS+stub responder failed — likely subject mismatch (entity_reader.go uses %q)", DefaultGraphQueryEntitySubject)
 	require.NotNil(t, lastRequest, "stub never received the request — subject mismatch in chain.NATSEntityReader")
 	assert.Equal(t, stubEntityID, lastRequest["id"], "request payload's id field doesn't match what the reader was asked for")
 
@@ -95,45 +93,4 @@ func TestNATSEntityReader_LiveSubject(t *testing.T) {
 	assert.Equal(t, "approved", got["coordinator.decision.next_action"])
 	assert.Equal(t, "researcher-loop-id", got["lineage.researcher"])
 	assert.EqualValues(t, 3, got["agent.loop.iterations"])
-}
-
-// TestNATSParentReader_LiveSubject mirrors TestNATSEntityReader_LiveSubject
-// for the ancestry-walk surface. Same bug class would surface here if the
-// parent reader's subject ever drifted from the entity reader's.
-func TestNATSParentReader_LiveSubject(t *testing.T) {
-	tc := natsclient.NewTestClient(t)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	const childLoopID = "child-loop-uuid"
-	const parentEntityID = "c360.test.agent.agentic-loop.execution.parent-loop-uuid"
-	stubResponse := []byte(`{
-		"id": "c360.test.agent.agentic-loop.execution.` + childLoopID + `",
-		"triples": [
-			{"predicate": "agent.loop.parent", "object": "` + parentEntityID + `"}
-		]
-	}`)
-
-	sub, err := tc.Client.SubscribeForRequests(
-		ctx,
-		DefaultGraphQueryEntitySubject,
-		func(_ context.Context, _ []byte) ([]byte, error) {
-			return stubResponse, nil
-		},
-	)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = sub.Unsubscribe() })
-
-	// Settle (see TestNATSEntityReader_LiveSubject for rationale).
-	time.Sleep(50 * time.Millisecond)
-
-	parentReader := NewNATSParentReader(tc.Client, testPlatform(), "")
-	gotParent, err := parentReader.ReadParent(ctx, childLoopID)
-
-	require.NoError(t, err, "ReadParent against live NATS+stub responder failed — subject mismatch?")
-	// Contract: ReadParent returns the parent's FULL 6-part entity ID
-	// (the object of the agent.loop.parent triple), not just the UUID.
-	// Caller (Resolver.ChainEntityID) parses the ID itself when walking.
-	assert.Equal(t, parentEntityID, gotParent, "parent reader returned a different shape than the agent.loop.parent triple object")
 }

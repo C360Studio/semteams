@@ -44,32 +44,6 @@ func testPlatform() types.PlatformMeta {
 	return types.PlatformMeta{Org: "c360", Platform: "test"}
 }
 
-// fakeChainResolver is a deterministic ChainEntityResolver for tests.
-// It returns a chain entity ID derived from a configurable chain root,
-// or an error when err is set. Both the Pauser tests and the
-// DecisionHandler tests share this fake.
-type fakeChainResolver struct {
-	chainRoot string // loop_id used as chain_id in the returned 6-part ID
-	err       error
-	calls     int
-	lastArg   string
-}
-
-func (f *fakeChainResolver) ChainEntityID(_ context.Context, loopID string) (string, error) {
-	f.calls++
-	f.lastArg = loopID
-	if f.err != nil {
-		return "", f.err
-	}
-	root := f.chainRoot
-	if root == "" {
-		// Default: treat the failed loop as its own chain root so tests
-		// that don't care about ancestry get a deterministic subject.
-		root = loopID
-	}
-	return agentic.ChainExecutionEntityID(testPlatform().Org, testPlatform().Platform, root), nil
-}
-
 // testChainEntityID returns the canonical 6-part chain entity ID a test
 // fixture expects under testPlatform(). Saves the boilerplate at every
 // assertion site.
@@ -79,14 +53,15 @@ func testChainEntityID(chainRoot string) string {
 
 func TestPauser_HandleFailed_ManagedRoleWritesTriplesD5(t *testing.T) {
 	pub := &recordingPublisher{}
-	p := NewPauser(pub, &fakeChainResolver{})
+	p := NewPauser(pub)
 
 	ev := &agentic.LoopFailedEvent{
-		LoopID:  "abc123",
-		TaskID:  "task-1",
-		Outcome: agentic.OutcomeFailed,
-		Role:    "reviewer-spec",
-		Error:   "Anthropic API: overloaded",
+		LoopID:      "abc123",
+		TaskID:      "task-1",
+		Outcome:     agentic.OutcomeFailed,
+		Role:        "reviewer-spec",
+		RunEntityID: testChainEntityID("abc123"),
+		Error:       "Anthropic API: overloaded",
 	}
 
 	result, err := p.HandleFailed(context.Background(), ev)
@@ -132,7 +107,7 @@ func TestPauser_HandleFailed_ManagedRoleWritesTriplesD5(t *testing.T) {
 
 func TestPauser_HandleFailed_UnmanagedRoleSkipped(t *testing.T) {
 	pub := &recordingPublisher{}
-	p := NewPauser(pub, &fakeChainResolver{})
+	p := NewPauser(pub)
 
 	ev := &agentic.LoopFailedEvent{
 		LoopID:  "xyz",
@@ -255,14 +230,15 @@ func TestSanitiseErrorShape_ControlCharsStripped(t *testing.T) {
 
 func TestPauser_HandleFailed_PartialWriteReturnsFirstErr(t *testing.T) {
 	pub := &recordingPublisher{err: errors.New("NATS publish failed")}
-	p := NewPauser(pub, &fakeChainResolver{})
+	p := NewPauser(pub)
 
 	ev := &agentic.LoopFailedEvent{
-		LoopID:  "loop-err",
-		TaskID:  "task-3",
-		Outcome: agentic.OutcomeFailed,
-		Role:    "researcher-plan",
-		Error:   "some error",
+		LoopID:      "loop-err",
+		TaskID:      "task-3",
+		Outcome:     agentic.OutcomeFailed,
+		Role:        "researcher-plan",
+		RunEntityID: testChainEntityID("loop-err"),
+		Error:       "some error",
 	}
 
 	result, err := p.HandleFailed(context.Background(), ev)
@@ -277,14 +253,15 @@ func TestPauser_HandleFailed_PartialWriteReturnsFirstErr(t *testing.T) {
 
 func TestPauser_HandleFailed_ObservedAtIsRFC3339(t *testing.T) {
 	pub := &recordingPublisher{}
-	p := NewPauser(pub, &fakeChainResolver{})
+	p := NewPauser(pub)
 
 	ev := &agentic.LoopFailedEvent{
-		LoopID:  "loop-ts",
-		TaskID:  "task-4",
-		Outcome: agentic.OutcomeFailed,
-		Role:    "researcher-plan",
-		Error:   "timeout",
+		LoopID:      "loop-ts",
+		TaskID:      "task-4",
+		Outcome:     agentic.OutcomeFailed,
+		Role:        "researcher-plan",
+		RunEntityID: testChainEntityID("loop-ts"),
+		Error:       "timeout",
 	}
 
 	_, err := p.HandleFailed(context.Background(), ev)
@@ -310,15 +287,16 @@ func TestPauser_HandleFailed_ObservedAtIsRFC3339(t *testing.T) {
 // correct model without a live graph query (ADR-037 §D7).
 func TestPauser_HandleFailed_CapturesOriginalModel(t *testing.T) {
 	pub := &recordingPublisher{}
-	p := NewPauser(pub, &fakeChainResolver{})
+	p := NewPauser(pub)
 
 	ev := &agentic.LoopFailedEvent{
-		LoopID:  "loop-model",
-		TaskID:  "task-model-1",
-		Outcome: agentic.OutcomeFailed,
-		Role:    "researcher-plan",
-		Model:   "claude-opus-4-5",
-		Error:   "overloaded",
+		LoopID:      "loop-model",
+		TaskID:      "task-model-1",
+		Outcome:     agentic.OutcomeFailed,
+		Role:        "researcher-plan",
+		Model:       "claude-opus-4-5",
+		RunEntityID: testChainEntityID("loop-model"),
+		Error:       "overloaded",
 	}
 
 	if _, err := p.HandleFailed(context.Background(), ev); err != nil {
@@ -346,15 +324,18 @@ func TestPauser_HandleFailed_CapturesOriginalModel(t *testing.T) {
 // retry flow when DecisionHandler reads from the chain entity.
 func TestPauser_HandleFailed_SubjectIsChainEntity(t *testing.T) {
 	pub := &recordingPublisher{}
-	resolver := &fakeChainResolver{chainRoot: "dispatch_root"}
-	p := NewPauser(pub, resolver)
+	p := NewPauser(pub)
 
+	// The framework resolves the run/chain entity at dispatch and carries it on
+	// the failure event (semstreams#250) — a non-root failed loop reports the
+	// run root's entity, not its own.
 	ev := &agentic.LoopFailedEvent{
 		LoopID:       "researcher_gather_8",
 		TaskID:       "task-gather-8",
 		Outcome:      agentic.OutcomeFailed,
 		Role:         "researcher-gather",
 		ParentLoopID: "researcher_plan_7",
+		RunEntityID:  testChainEntityID("dispatch_root"),
 		Error:        "max iterations reached",
 	}
 
@@ -362,14 +343,10 @@ func TestPauser_HandleFailed_SubjectIsChainEntity(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if resolver.calls != 1 {
-		t.Errorf("ChainEntityID calls = %d, want 1", resolver.calls)
-	}
-	if resolver.lastArg != ev.LoopID {
-		t.Errorf("resolver called with %q, want %q (the failed loop_id)", resolver.lastArg, ev.LoopID)
-	}
-
 	wantSubject := testChainEntityID("dispatch_root")
+	if len(pub.triples) == 0 {
+		t.Fatal("expected §D5 triples on the chain entity, got none")
+	}
 	for _, tr := range pub.triples {
 		if tr.Subject != wantSubject {
 			t.Errorf("§D5 triple %q wrote to subject %q, want %q (chain entity)", tr.Predicate, tr.Subject, wantSubject)
@@ -377,31 +354,33 @@ func TestPauser_HandleFailed_SubjectIsChainEntity(t *testing.T) {
 	}
 }
 
-// TestPauser_HandleFailed_ResolverErrorSurfaces verifies that a graph
-// blip mid-pause returns a wrapped error to the caller so the
-// subscriber logs the failure cleanly. Without a chain entity ID
-// the §D5 cluster has no Subject, so writing partial triples to the
-// failed loop entity would silently fragment audit data — surfacing
-// the error and skipping is the correct fail-soft policy.
-func TestPauser_HandleFailed_ResolverErrorSurfaces(t *testing.T) {
+// TestPauser_HandleFailed_NoRunAnchorSkips verifies the fail-soft policy when a
+// managed-role loop fails OUTSIDE a run (ev.RunEntityID == ""): there is no chain
+// entity to stamp §D5 on, so the writes are skipped (no Subject → no fragmented
+// audit data). Under ADR-053 D7 every managed loop carries an inherited run, so
+// this is the defensive path; the agent.failed.* event is on the wire regardless.
+func TestPauser_HandleFailed_NoRunAnchorSkips(t *testing.T) {
 	pub := &recordingPublisher{}
-	resolver := &fakeChainResolver{err: errors.New("graph KV unavailable")}
-	p := NewPauser(pub, resolver)
+	p := NewPauser(pub)
 
 	ev := &agentic.LoopFailedEvent{
-		LoopID:  "loop-resolver-err",
+		LoopID:  "loop-no-run",
 		TaskID:  "task-x",
 		Outcome: agentic.OutcomeFailed,
 		Role:    "builder",
 		Error:   "executor panic",
+		// RunEntityID intentionally empty — loop not part of a run.
 	}
 
-	_, err := p.HandleFailed(context.Background(), ev)
-	if err == nil {
-		t.Fatal("expected resolver error to surface; got nil")
+	result, err := p.HandleFailed(context.Background(), ev)
+	if err != nil {
+		t.Fatalf("no-run-anchor must skip cleanly (no error); got %v", err)
+	}
+	if result.FailedLoopID != "" {
+		t.Errorf("expected empty result when no run anchor; got %+v", result)
 	}
 	if len(pub.triples) != 0 {
-		t.Errorf("no §D5 triples should be written on resolver failure; got %d", len(pub.triples))
+		t.Errorf("no §D5 triples should be written without a run anchor; got %d", len(pub.triples))
 	}
 }
 

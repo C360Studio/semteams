@@ -312,14 +312,13 @@ func startChainPauseSubscriber(ctx context.Context, cfg *config.Config, natsClie
 	loopFailedSubject := portresolver.SubjectOrDefault(cfg, "teams-loop", "agent.failed", chainpause.DefaultLoopFailedSubject)
 	pauseDataReader := chainpause.NewNATSPauseDataReader(natsClient, chainpause.DefaultGraphQueryEntitySubject)
 
-	// ADR-038 PR B Phase 3: chainpause writes §D5 audit triples on the
-	// canonical chain entity (post-semstreams beta.57 the publish-vs-write
-	// race is closed, so the resolver's ancestry walk is reliable on
-	// failed loops too). Same chain.Resolver shape used by every other
-	// chain-triple consumer in the product shell.
-	chainResolver := chain.NewResolver(chain.NewNATSParentReader(natsClient, platform, chain.DefaultGraphQueryEntitySubject), platform)
-
-	pauser := chainpause.NewPauser(triplePublisher, chainResolver)
+	// ADR-038 PR B Phase 3: chainpause writes §D5 audit triples on the canonical
+	// chain entity. ADR-053 Phase 5 (semstreams#250): the Pauser reads the run
+	// anchor straight off the LoopFailedEvent (event.RunEntityID); the
+	// DecisionHandler — which only has an HTTP-body failed_loop_id, no event —
+	// reads the failed loop entity's agent.run.entity_id via a single graph read.
+	// No more ancestry-walk Resolver.
+	pauser := chainpause.NewPauser(triplePublisher)
 	sub := chainpause.NewSubscriber(pauser, loopFailedSubject, logger)
 	if err := sub.Start(ctx, natsClient); err != nil {
 		return nil, fmt.Errorf("subscribe to agent.failed events: %w", err)
@@ -329,7 +328,8 @@ func startChainPauseSubscriber(ctx context.Context, cfg *config.Config, natsClie
 		slog.String("platform", platform.Platform),
 		slog.String("loop_failed_subject", loopFailedSubject))
 
-	decisionHandler := chainpause.NewDecisionHandler(triplePublisher, taskPublisher, pauseDataReader, chainResolver, logger)
+	chainEntityReader := chain.NewNATSEntityReader(natsClient, chain.DefaultGraphQueryEntitySubject)
+	decisionHandler := chainpause.NewDecisionHandler(triplePublisher, taskPublisher, pauseDataReader, chainEntityReader, platform, logger)
 	httpHandler := chainpause.NewHTTPHandler(decisionHandler, logger)
 	return httpHandler, nil
 }
