@@ -151,6 +151,13 @@ services:
       # from the backend (requires docker socket on the backend
       # image — not mounted by default).
       - SEMTEAMS_SANDBOX_RUNNER=${SEMTEAMS_SANDBOX_RUNNER:-mock}
+      # ADR-053 §4b — optional persona overlay tree, loaded AFTER the base
+      # fragments (same-id fragments overwrite). Empty default keeps mock-LLM
+      # journeys on the base (interactive) coordinator persona; the
+      # clarification-autonomous journey sets it to the autonomous coordinator
+      # overlay so the coordinator resolves ambiguity via respond_direct upfront
+      # instead of attempting a policy-barred ask_user.
+      - SEMSTREAMS_PERSONA_OVERLAY_PATH=${SEMSTREAMS_PERSONA_OVERLAY_PATH:-}
       # ADR-043 PR 4.5 F6 — tenant-root path used by the sandbox
       # manager when computing per-(profile, requirements) workspace
       # folders. MUST equal the host path bound onto the sandbox

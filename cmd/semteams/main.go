@@ -153,7 +153,7 @@ func run() error {
 	// fragment (ADR-033 R3.7.1) retired alongside the dev-via-spec
 	// arc in the ADR-042 MVP-7 follow-up sweep, so persona load is
 	// now a single-step.
-	personaMgr := loadPersonaFragments(ctx, natsClient, cliCfg.PersonaFragmentsPath)
+	personaMgr := loadPersonaFragments(ctx, natsClient, cliCfg.PersonaFragmentsPath, cliCfg.PersonaOverlayPath)
 
 	// 9b-bis. Seed the FLOW_TEMPLATES KV bucket from configs/flow-templates/.
 	// ADR-042 Phase 1. Must run before setupToolsAndPreprocessor so the
@@ -338,7 +338,30 @@ func startChainPauseSubscriber(ctx context.Context, cfg *config.Config, natsClie
 // tree shaped <root>/<role>/*.md and returns the manager so it can be
 // threaded into executors.RegisterBuiltins. Non-fatal on init failure —
 // callers must nil-check the return before relying on it.
-func loadPersonaFragments(ctx context.Context, natsClient *natsclient.Client, root string) *persona.Manager {
+//
+// When overlay != "", a SECOND tree is loaded after the base. LoadFromDirectory
+// upserts fragments keyed by <role>/<file-stem>, so an overlay fragment with the
+// same id OVERWRITES the base one and a new-id fragment is ADDED. This is the
+// deployment-mode persona-variant seam (ADR-029 product-shell wiring): e.g. the
+// autonomous coordinator overlay ADDS coordinator/12-autonomous-clarification-
+// policy.md for deployments that bar ask_user via
+// agentic-tools.restricted_decide_actions (ADR-053 §4b), so the coordinator
+// resolves ambiguity with respond_direct upfront instead of attempting a
+// rejected ask_user. The base tree stays the interactive default.
+//
+// NOTE on assembly order: the digit filename prefix (00/10/12/…) is a
+// human-readable convention, NOT a framework-enforced sort key — the file
+// loader sets no Category/Priority, and the prompt registry sorts only on those,
+// so same-category fragments assemble in non-deterministic order. Overlay
+// fragments must therefore be SELF-CONTAINED (the autonomous fragment states its
+// own policy in full; it does not rely on appearing after the base contract).
+//
+// A non-empty overlay that does NOT resolve to a directory is logged loudly and
+// skipped (base persona only) — upstream LoadFromDirectory treats a missing dir
+// as a no-op (returns nil), so without this guard a typo'd overlay path would
+// boot the policy-gated deployment on the wrong persona with no product-shell
+// signal.
+func loadPersonaFragments(ctx context.Context, natsClient *natsclient.Client, root, overlay string) *persona.Manager {
 	if root == "" {
 		slog.Debug("persona fragments path empty, skipping load")
 		return nil
@@ -356,6 +379,20 @@ func loadPersonaFragments(ctx context.Context, natsClient *natsclient.Client, ro
 			"error", err)
 		// Return the manager anyway — partial load is better than no persona
 		// CRUD tooling and the caller already logged the specifics.
+	}
+	if overlay != "" {
+		if fi, statErr := os.Stat(overlay); statErr != nil || !fi.IsDir() {
+			slog.Warn("persona overlay path does not resolve to a directory; overlay NOT applied (base persona only) — check -persona-overlay / SEMSTREAMS_PERSONA_OVERLAY_PATH",
+				"path", overlay,
+				"error", statErr)
+		} else {
+			slog.Info("applying persona overlay (overwrites/adds same-id fragments)", "overlay", overlay)
+			if err := persona.LoadFromDirectory(ctx, overlay, mgr, slog.Default()); err != nil {
+				slog.Warn("persona overlay loader reported errors",
+					"path", overlay,
+					"error", err)
+			}
+		}
 	}
 	return mgr
 }

@@ -372,6 +372,14 @@ tasks:
       asserts a coordinator.user_reply triple (answered) + NO
       coordinator.user_question triple (ask_user blocked, not delivered).
 
+      ADR-053 §4b autonomous persona overlay: the backend ALSO loads the
+      autonomous coordinator overlay (PERSONA_OVERLAY below) on top of the base
+      fragments. Under a real LLM that overlay makes the coordinator skip the
+      ask_user attempt entirely (respond_direct upfront); the mock serves
+      fixtures regardless of persona, so this journey proves the overlay LOADS
+      and does not break the autonomous flow (the policy gate + answer still
+      land). The behavioral skip is a real-LLM-smoke concern.
+
       The generated config (configs/*.gen.json) is gitignored + removed on
       teardown.
     vars:
@@ -385,6 +393,7 @@ tasks:
         vars:
           FIXTURE: "{{.FIXTURE}}"
           AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
+          PERSONA_OVERLAY: configs/personas/fragments-autonomous
       - npx playwright test e2e/agentic/clarification-autonomous.spec.ts
 
   test:e2e:agentic:dev-via-test:
@@ -1229,6 +1238,14 @@ tasks:
       # Ready). Real-LLM smoke #13 sets =api so the manager flows
       # through the actual SandboxAPIRunner → /exec → @devcontainers/cli.
       SEMTEAMS_SANDBOX_RUNNER: '{{.SEMTEAMS_SANDBOX_RUNNER | default ""}}'
+      # ADR-053 §4b — optional persona overlay tree, loaded AFTER the base
+      # fragments (same-id fragments overwrite). Mock-LLM journeys leave it
+      # empty (base persona only); the clarification-autonomous journey sets
+      # it to the autonomous coordinator overlay. Set at THIS level (the task
+      # that invokes `docker compose up`) per the BACKEND_BRAVE_KEY note above —
+      # Task's env: does not propagate from a parent task to a `task:`-invoked
+      # sub-task.
+      PERSONA_OVERLAY: '{{.PERSONA_OVERLAY | default ""}}'
       # ADR-043 PR 4.5 F6 — tenant-root for the sandbox manager.
       # docker-compose binds this absolute path symmetrically inside
       # the sandbox container (sandbox sees the SAME path the host
@@ -1260,6 +1277,7 @@ tasks:
       COMPOSE_PROFILES: "{{.COMPOSE_PROFILES}}"
       BACKEND_BRAVE_SEARCH_API_KEY: "{{.BACKEND_BRAVE_KEY}}"
       SEMTEAMS_SANDBOX_RUNNER: "{{.SEMTEAMS_SANDBOX_RUNNER}}"
+      SEMSTREAMS_PERSONA_OVERLAY_PATH: "{{.PERSONA_OVERLAY}}"
       SEMTEAMS_TENANT_ROOT: "{{.SEMTEAMS_TENANT_ROOT}}"
     cmds:
       - echo "Stack config → AGENTIC_CONFIG={{.AGENTIC_CONFIG}} FIXTURE={{.FIXTURE}} PROFILES={{.COMPOSE_PROFILES}} TENANT_ROOT={{.SEMTEAMS_TENANT_ROOT}}"
