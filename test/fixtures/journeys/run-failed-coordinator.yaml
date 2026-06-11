@@ -1,0 +1,118 @@
+name: run-failed-coordinator
+description: |
+  Journey: ADR-053 Phase 4b-1a — a THREADED recovery coordinator that fails
+  while executing drives the run executing→failed via rule 06 (the lineage
+  anchor). End-to-end on mock-LLM against configs/e2e-flow-bootstrap.json.
+
+  This is the coordinator-failure sibling of run-failed.yaml (which wedges a
+  RESEARCH ROLE, exercising rule 04 via research/09 — the agent.run.entity_id
+  branch). Here a recovery COORDINATOR is wedged, exercising the 4b-1a anchor
+  threading: rule 02e spawns the recovery coordinator with
+  related_loops[run-loop-entity-id] threaded off the CBG's lineage, so when
+  that coordinator fails involuntarily, agent-run/06 (length_gt 0, lineage
+  branch) stamps agent.run.outcome=failed and agent-run/04 drives the run to
+  failed. The empirical proof that the threaded lineage anchor RESOLVES at
+  runtime (not a garbage literal — the go-reviewer C1 class).
+
+  Substrate behavior this proves:
+    1. Loop 0 coordinator(dispatch) → decide(dev_via_test) → rule 01 spawns
+       first-pass Lisa with run_scope=new → rule.spawned_task → agent-run/01
+       handoff marker → agent-run/02 dispatched→executing. Run is `executing`.
+    2. Loop A Lisa → emit_dev_via_test_plan + decide(planned) → rule 02
+       (first-pass plan-review, threads run-loop-entity-id onto CBG) spawns CBG.
+    3. Loop B CBG plan-review → decide(plan_rejected) → rule 02e spawns the
+       recovery coordinator (allow-list respond_direct/ask_user), threading
+       run-loop-entity-id from $entity.triple.lineage.run-loop-entity-id (CBG's
+       lineage). The recovery coordinator now carries lineage.run-loop-entity-id.
+    4. Loop R recovery coordinator → WEDGED: its bucket serves a single
+       non-terminal read_loop_result that repeats on exhaustion (the coordinator
+       has tools [read_loop_result, decide] — no scratchpad), so it never emits a
+       decide() and hits the loop's max_iterations → OutcomeFailed.
+    5. agent-run/06 (role==coordinator + outcome in [failed,truncated] +
+       lineage.run-loop-entity-id length_gt 0) stamps agent.run.outcome=failed on
+       the RUN entity via the lineage anchor. agent-run/05 (length_eq 0) is
+       mutually exclusive and does NOT fire (the coordinator carries lineage).
+    6. agent-run/04-executing-to-failed fires → executing→failed.
+
+  This is the EXECUTING-phase coordinator failure the upstream D3 zombie guard
+  CANNOT reach (D3 fires only while phase==dispatched; here the dispatch
+  coordinator completed with a confirmed handoff, the run is `executing`, and a
+  later-spawned recovery coordinator is what fails). The spec asserts
+  agent.run.last_transition_from==executing to prove rule 04 drove it (the
+  lineage anchor branch), NOT D3's dispatched→failed path.
+
+  Mock serves responses in GLOBAL ORDER (last repeats once exhausted). The chain
+  is linear (1-task plan, single plan-review, then the wedged recovery
+  coordinator), so the order below == the order of LLM requests. No sandbox is
+  requested — Lisa (emit_plan) and CBG plan-review run no bash, and the chain
+  wedges before any Ralph.
+
+  Paired spec: ui/e2e/agentic/run-failed-coordinator.spec.ts.
+  Config: configs/e2e-flow-bootstrap.json (incl. rules 02e + agent-run/06).
+  Required env: SEMTEAMS_SANDBOX_RUNNER=mock on the backend.
+
+responses:
+  # ---------- Loop 0: front-door coordinator → dev_via_test ----------
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "dev_via_test",
+          "reason": "Add a Go HTTP service that decodes MAVLink v2 HEARTBEAT frames over UDP and exposes the latest at GET /heartbeat as JSON. Use github.com/bluenviron/gomavlib — do not hand-roll the wire format. (4b-1a coordinator-failure journey: the plan-review gate rejects, then the recovery coordinator is wedged to a max-iterations failure to exercise executing→failed via rule 06.)"
+        }
+
+  # ---------- Loop A: first-pass Lisa (dev-via-test-plan) ----------
+  - tool_call:
+      name: emit_dev_via_test_plan
+      arguments_json: |
+        {
+          "goal": "A Go HTTP service that decodes MAVLink v2 HEARTBEAT frames and serves the latest at GET /heartbeat as JSON.",
+          "assumptions": ["Go 1.25 toolchain in PATH"],
+          "non_goals": ["No persistence", "No auth on the endpoint"],
+          "integration_test_command": "go test ./...",
+          "revision": 1,
+          "lisa_retry_budget": 2,
+          "tasks": [
+            {
+              "id": "heartbeat-endpoint",
+              "goal": "Decode HEARTBEAT frames and serve the latest at GET /heartbeat as JSON.",
+              "assumptions": ["Parse the MAVLink frames"],
+              "non_goals": ["No persistence"],
+              "target_files": ["main.go", "heartbeat_test.go"],
+              "test_command": "go test -run TestHeartbeat ./..."
+            }
+          ]
+        }
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "planned",
+          "reason": "Plan emitted (revision 1): one task, heartbeat-endpoint. Routing to the plan-review gate."
+        }
+
+  # ---------- Loop B: CBG plan-review → plan_rejected (human-needed) ----------
+  # plan_rejected (not plan_rejected_retry) routes to rule 02e → recovery
+  # coordinator scoped to ask_user, which threads run-loop-entity-id (4b-1a).
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "plan_rejected",
+          "reason": "The ask is ambiguous about the UDP listen address/port and which MAVLink dialect to decode — I cannot turn it into a faithful plan without the user clarifying. Escalating to the user rather than guessing."
+        }
+
+  # ---------- Loop R: recovery coordinator (WEDGED — repeating read_loop_result, never decides) ----------
+  # The 02e recovery coordinator has tools [read_loop_result, decide] (no
+  # scratchpad). This single non-terminal read_loop_result repeats every
+  # iteration (GLOBAL ORDER: last response repeats on exhaustion), so the
+  # coordinator never reaches a decide() terminal and trips max_iterations →
+  # OutcomeFailed → agent-run/06 (lineage anchor) → executing→failed. The
+  # loop_id is a deliberate placeholder: the read result is never consumed (the
+  # point is that the coordinator never decides); a tool error is fed back as a
+  # tool result and does not terminate the loop.
+  - tool_call:
+      name: read_loop_result
+      arguments_json: |
+        {"loop_id": "wedge-no-decide"}

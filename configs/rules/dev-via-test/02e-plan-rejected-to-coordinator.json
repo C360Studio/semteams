@@ -35,7 +35,8 @@
       },
       "related_loops": {
         "terminal": "$entity.instance",
-        "dev-via-test-run": "$entity.triple.lineage.dev-via-test-run"
+        "dev-via-test-run": "$entity.triple.lineage.dev-via-test-run",
+        "run-loop-entity-id": "$entity.triple.lineage.run-loop-entity-id"
       },
       "prompt": "The dev-via-test plan-review gate rejected the plan — and judged it NOT re-plannable (the user's ask needs clarification before any faithful plan is possible). CBG (reviewer-dev-via-test) at loop $entity.instance has the details.\n\nIteration 1 — call read_loop_result(loop_id=$entity.instance) to read CBG's plan_rejected verdict. CBG's reason explains what the user must clarify.\n\nIteration 2 — call decide(action=\"ask_user\", reason=\"<surface CBG's concern to the user as a plain-English question; ask them to clarify or re-scope>\"). One question, addressed to the user, no internal jargon. The user replies and a fresh coordinator loop fires on their answer."
     }
@@ -46,6 +47,7 @@
     "phase": "ADR-044 §addendum Slice 6 — plan rejected → ask_user",
     "adr": "docs/adr/044-dev-via-test-pack.md",
     "vs_07b": "Plan-phase analog of the chain-end rejected→ask_user (07b). Distinct plan_rejected token keeps it disjoint from the work gate.",
-    "no_auto_recover": "plan_rejected (vs plan_rejected_retry) is the human-needed verdict: no auto re-plan. The user clarifies and re-asks (a fresh chain)."
+    "no_auto_recover": "plan_rejected (vs plan_rejected_retry) is the human-needed verdict: no auto re-plan. The user clarifies and re-asks (a fresh chain).",
+    "anchor_disposition": "anchor_threaded (ADR-053 Phase 4b-1a, TestAgentRunPack_CoordinatorSpawnCoverage) — threads run-loop-entity-id from $entity.triple.lineage.run-loop-entity-id onto the woken coordinator so its involuntary failure routes to agent-run/06. Fires on reviewer-dev-via-test (plan-review CBG), which always carries lineage.run-loop-entity-id (threaded by rules 02 + 02g), so no split is needed."
   }
 }

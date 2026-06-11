@@ -207,6 +207,8 @@ tasks:
       - task: test:e2e:agentic:admin-flows-inventory
       - task: test:e2e:agentic:chain-drill-in
       - task: test:e2e:agentic:run-failed
+      - task: test:e2e:agentic:run-failed-coordinator
+      - task: test:e2e:agentic:run-failed-coordinator-inherit
       - task: test:e2e:agentic:clarification-autonomous
 
   test:e2e:agentic:real-time-activity-stream:
@@ -299,6 +301,64 @@ tasks:
           FIXTURE: "{{.FIXTURE}}"
           AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
       - npx playwright test e2e/agentic/run-failed.spec.ts
+
+  test:e2e:agentic:run-failed-coordinator:
+    desc: Run the ADR-053 Phase 4b-1a threaded-recovery-coordinator-failed journey
+    summary: |
+      The coordinator-failure sibling of run-failed. A dev_via_test plan-review
+      gate rejects the plan, so rule 02e spawns a recovery coordinator THREADING
+      run-loop-entity-id off the CBG's lineage (4b-1a anchor work). That recovery
+      coordinator is wedged to a max_iterations failure (repeating non-terminal
+      read_loop_result — it has no scratchpad), so the substrate must drive the
+      run executing→failed via the LINEAGE anchor:
+
+        rule 02e                        → recovery coordinator (threaded)
+        agent-run/06-coordinator-failed → agent.run.outcome=failed (lineage)
+        agent-run/04-executing-to-failed → executing→failed
+
+      Asserts agent.run.last_transition_from==executing to prove rule 04 drove it
+      (via rule 06's lineage-anchor stamp), NOT the upstream D3 dispatched→failed
+      guard. The empirical proof the threaded lineage anchor resolves at runtime.
+      Sandbox = MockRunner (no sandbox requested — wedges before any Ralph).
+    vars:
+      FIXTURE: run-failed-coordinator.yaml
+      AGENTIC_CONFIG: e2e-flow-bootstrap.json
+    cmds:
+      - defer: { task: test:e2e:agentic:cleanup }
+      - task: test:e2e:agentic:stack:up
+        vars:
+          FIXTURE: "{{.FIXTURE}}"
+          AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
+      - npx playwright test e2e/agentic/run-failed-coordinator.spec.ts
+
+  test:e2e:agentic:run-failed-coordinator-inherit:
+    desc: Run the ADR-053 Phase 4b-1a inherit-anchor-recovery-coordinator-failed journey
+    summary: |
+      The anchor_inherit sibling of run-failed-coordinator (which exercises the
+      threaded branch → rule 06). A first-pass Lisa escalates needs_clarification,
+      so rule 02f spawns a recovery coordinator that does NOT thread lineage — it
+      INHERITS agent.run.entity_id off Lisa's bare agent.run. That coordinator is
+      wedged to a max_iterations failure, so the substrate must drive the run
+      executing→failed via the agent.run.entity_id anchor:
+
+        rule 02f                        → recovery coordinator (inherit, no thread)
+        agent-run/05-coordinator-failed → agent.run.outcome=failed (run-anchor)
+        agent-run/04-executing-to-failed → executing→failed
+
+      Closes the empirical gap the 4b-1a review flagged: the inherit
+      coordinator-failure path (rule 05) now has the same end-to-end gate the
+      lineage branch (rule 06) does. Asserts last_transition_from==executing.
+      Sandbox = MockRunner (no sandbox requested — wedges before any plan/Ralph).
+    vars:
+      FIXTURE: run-failed-coordinator-inherit.yaml
+      AGENTIC_CONFIG: e2e-flow-bootstrap.json
+    cmds:
+      - defer: { task: test:e2e:agentic:cleanup }
+      - task: test:e2e:agentic:stack:up
+        vars:
+          FIXTURE: "{{.FIXTURE}}"
+          AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
+      - npx playwright test e2e/agentic/run-failed-coordinator-inherit.spec.ts
 
   test:e2e:agentic:clarification-autonomous:
     desc: Run the ADR-053 4b clarification-policy AUTONOMOUS-mode journey

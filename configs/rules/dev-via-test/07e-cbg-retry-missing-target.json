@@ -41,7 +41,8 @@
       },
       "related_loops": {
         "terminal": "$entity.instance",
-        "dev-via-test-run": "$entity.triple.lineage.dev-via-test-run"
+        "dev-via-test-run": "$entity.triple.lineage.dev-via-test-run",
+        "run-loop-entity-id": "$entity.triple.lineage.run-loop-entity-id"
       },
       "prompt": "The dev-via-test chain you dispatched has reached its terminal — NOT cleanly. CBG (reviewer-dev-via-test) at loop $entity.instance rejected the work and judged it dev-fixable (rejected_retry), but did NOT name which task to fix (no subtopics). Without a target task, the chain cannot auto-re-dispatch — so this falls to you to surface to the user.\n\nIteration 1 — call read_loop_result(loop_id=$entity.instance) to read CBG's verdict. CBG's reason explains what's wrong.\n\nIteration 2 — call decide(action=\"ask_user\", reason=\"<surface CBG's finding to the user; explain the reviewer wants a fix but didn't pin it to a specific task; ask them to amend the plan or abandon>\"). One question, plain prose, addressed to the user. The user replies and a fresh coordinator loop fires on their answer."
     }
@@ -52,6 +53,7 @@
     "phase": "ADR-044 §addendum Slice 5 — rejected_retry missing-target fence",
     "adr": "docs/adr/044-dev-via-test-pack.md",
     "review_origin": "go-reviewer C1 (2026-06-05): rejected_retry without subtopics would stamp a garbage target via 07c. Fence 07c on subtopics.length>0 + this rule on subtopics.length=0 = mutually-exclusive split, mirrors rule 01/03's subtopics differentiator.",
-    "mutually_exclusive_with": "07c-cbg-retry-stamp.json (fires on rejected_retry + subtopics.length>0). This rule fires on rejected_retry + subtopics.length=0. No double-fire; every rejected_retry routes exactly one way."
+    "mutually_exclusive_with": "07c-cbg-retry-stamp.json (fires on rejected_retry + subtopics.length>0). This rule fires on rejected_retry + subtopics.length=0. No double-fire; every rejected_retry routes exactly one way.",
+    "anchor_disposition": "anchor_threaded (ADR-053 Phase 4b-1a, TestAgentRunPack_CoordinatorSpawnCoverage) — threads run-loop-entity-id from $entity.triple.lineage.run-loop-entity-id onto the woken coordinator so its involuntary failure routes to agent-run/06. Fires on reviewer-dev-via-test (chain-end CBG), which always carries lineage.run-loop-entity-id (threaded by rule 06), so no split is needed."
   }
 }

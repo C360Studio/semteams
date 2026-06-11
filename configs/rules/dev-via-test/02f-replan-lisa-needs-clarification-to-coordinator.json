@@ -1,0 +1,60 @@
+{
+  "id": "dev_via_test_replan_lisa_needs_clarification_to_coordinator",
+  "type": "expression",
+  "name": "Re-plan Lisa decide(needs_clarification) → coordinator ask_user (lineage anchor)",
+  "description": "ADR-053 Phase 4b-1a — RE-PLAN sibling of rule 02f. Fires when a RE-PLAN Lisa (dev-via-test-plan spawned from the run entity by rule 02d's plan-retry driver) emits decide(needs_clarification) — the re-plan still can't faithfully capture the ask without user input. Spawns a coordinator wake-up scoped to ask_user; the user clarifies and a fresh chain fires on their reply.\n\nSplits from rule 02f because the two passes carry the run anchor on DIFFERENT triples (the same asymmetry as rules 02 vs 02g and 09 vs 10):\n  - FIRST-PASS Lisa (rule 01, run_scope=new) carries a bare agent.run, so the coordinator INHERITS agent.run.entity_id → rule 02f (anchor_inherit, length_eq 0).\n  - RE-PLAN Lisa (rule 02d, fires on the run entity, inherit) carries lineage.run-loop-entity-id=$entity.id=chain.execution (threaded by 02d) but NO bare agent.run — the run entity has no bare agent.run for the inherit path to copy into RunID. So the coordinator this rule spawns would inherit NO run anchor; we THREAD related_loops[run-loop-entity-id] = $entity.triple.lineage.run-loop-entity-id so a failure routes to agent-run/06 (the lineage branch).\n\nThe length_gt 0 fence makes this mutually exclusive with rule 02f (length_eq 0) and guarantees the threaded source resolves (defends the go-reviewer C1 garbage-literal-subject class).",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "agent.loop.role",
+      "operator": "eq",
+      "value": "dev-via-test-plan",
+      "required": true
+    },
+    {
+      "field": "coordinator.decision.next_action",
+      "operator": "eq",
+      "value": "needs_clarification",
+      "required": true
+    },
+    {
+      "field": "lineage.run-loop-entity-id",
+      "operator": "length_gt",
+      "value": 0,
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "publish_agent",
+      "subject": "agent.task.coordinator",
+      "role": "coordinator",
+      "model": "coordinator",
+      "tools": ["read_loop_result", "decide"],
+      "tool_choice": { "mode": "required" },
+      "action_allowlist": ["ask_user", "respond_direct"],
+      "properties": {
+        "wakeup_mode": "plan_needs_clarification",
+        "terminal_loop_id": "$entity.instance",
+        "category": "dev_via_test"
+      },
+      "related_loops": {
+        "terminal": "$entity.instance",
+        "dev-via-test-run": "$entity.triple.lineage.dev-via-test-run",
+        "run-loop-entity-id": "$entity.triple.lineage.run-loop-entity-id"
+      },
+      "prompt": "The dev-via-test planner (Lisa) at loop $entity.instance could not turn the user's request into a faithful plan EVEN ON A RE-PLAN, and emitted needs_clarification.\n\nIteration 1 — call read_loop_result(loop_id=$entity.instance) to read Lisa's reason — what's blocking (ambiguous ask, contradictory requirements, missing detail) that a re-plan could not resolve.\n\nIteration 2 — call decide(action=\"ask_user\", reason=\"<surface Lisa's blocker to the user as a plain-English question; ask for the specific clarification she needs>\"). One question, addressed to the user, no internal jargon. The user replies and a fresh coordinator loop fires on their answer."
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "pack": "dev_via_test",
+    "phase": "ADR-053 Phase 4b-1a — re-plan sibling of rule 02f",
+    "adr": "docs/adr/044-dev-via-test-pack.md",
+    "anchor_disposition": "anchor_threaded (TestAgentRunPack_CoordinatorSpawnCoverage) — threads run-loop-entity-id onto the woken coordinator so its involuntary failure routes to agent-run/06 (the lineage branch). Closes the deferred_4b zombie hole for the re-plan Lisa escalation.",
+    "split_rationale": "Sibling of rule 02f (first-pass, anchor_inherit). Gated on lineage.run-loop-entity-id length_gt 0 — re-plan Lisa is spawned from the run entity by rule 02d (which threads run-loop-entity-id=$entity.id=chain.execution) and therefore lacks agent.run.entity_id (the run entity has no bare agent.run for the inherit path). Mutually exclusive with rule 02f (length_eq 0). Same first-pass/re-plan anchor split as rules 02 vs 02g and 09 vs 10.",
+    "anchor_fence": "lineage.run-loop-entity-id length_gt 0 — mutually exclusive with rule 02f (length_eq 0), and guarantees the threaded source resolves (C1 garbage-literal-subject defense).",
+    "duplication_note": "The coordinator wake-up block intentionally mirrors rule 02f (only the anchor thread + the gating condition + the re-plan prompt framing differ). Keep the two in sync on any change to the planner-clarification contract (tools/allowlist). The duplication is the cost of the rule engine's lack of a coalesce/fallback operator for the per-pass anchor source — same as rule 02 vs 02g."
+  }
+}

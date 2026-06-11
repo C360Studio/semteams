@@ -35,7 +35,21 @@ type ruleDoc struct {
 		RelatedLoops    map[string]string `json:"related_loops"`
 		Role            string            `json:"role"`
 		ActionAllowlist []string          `json:"action_allowlist"`
+		Tools           []string          `json:"tools"`
 	} `json:"on_enter"`
+}
+
+// sameStrings reports whether two string slices are element-wise equal.
+func sameStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func loadRule(t *testing.T, path string) ruleDoc {
@@ -413,27 +427,31 @@ const (
 	// dispDeferred4b: the woken coordinator is a pure human-in-the-loop delivery
 	// (action_allowlist ⊆ {respond_direct, ask_user}) on an
 	// ask_user/needs_clarification/rejected path whose run-phase semantics
-	// ADR-053 assigns to Phase 4b. Its anchor threading + failure terminal
-	// (failed? cancelled? awaiting_user?) is a 4b design decision, deliberately
-	// NOT closed in 4a′. The run-entity-descended subset of these carries no
-	// readable anchor today — a known, asserted gap, not a silent one.
+	// ADR-053 assigned to Phase 4b. ADR-053 Phase 4b-1a CLOSED every such
+	// deferral: each recovery coordinator now carries a readable run anchor
+	// (anchor_inherit where the firing role has a bare agent.run; anchor_threaded
+	// otherwise) so an involuntary failure drives executing→failed via
+	// agent-run/05 or 06. No rule maps here today; the class is retained because
+	// a future pack MAY introduce a new deferred path before its anchor is wired.
 	dispDeferred4b = "deferred_4b"
 )
 
 var coordinatorSpawnDisposition = map[string]string{
-	"research_reviewer_approved_to_coordinator":            dispPostApproval,   // research/07
-	"autoresearch_reviewer_approved_to_coordinator":        dispPostApproval,   // autoresearch/08
-	"dev_via_test_cbg_approved_to_coordinator":             dispPostApproval,   // dev-via-test/07a
-	"dev_via_test_plan_approved_to_coordinator":            dispAnchorThreaded, // dev-via-test/02b
-	"dev_via_test_plan_retry_driver":                       dispAnchorThreaded, // dev-via-test/02d
-	"dev_via_test_ralph_terminal_to_coordinator":           dispAnchorThreaded, // dev-via-test/05
-	"dev_via_test_cbg_retry_driver":                        dispAnchorThreaded, // dev-via-test/07d
-	"research_needs_clarification_to_coordinator":          dispAnchorInherit,  // research/06
-	"autoresearch_needs_clarification_replan":              dispDeferred4b,     // autoresearch/10
-	"dev_via_test_plan_rejected_to_coordinator":            dispDeferred4b,     // dev-via-test/02e
-	"dev_via_test_lisa_needs_clarification_to_coordinator": dispDeferred4b,     // dev-via-test/02f
-	"dev_via_test_cbg_rejected_to_coordinator":             dispDeferred4b,     // dev-via-test/07b
-	"dev_via_test_cbg_retry_missing_target":                dispDeferred4b,     // dev-via-test/07e
+	"research_reviewer_approved_to_coordinator":                   dispPostApproval,   // research/07
+	"autoresearch_reviewer_approved_to_coordinator":               dispPostApproval,   // autoresearch/08
+	"dev_via_test_cbg_approved_to_coordinator":                    dispPostApproval,   // dev-via-test/07a
+	"dev_via_test_plan_approved_to_coordinator":                   dispAnchorThreaded, // dev-via-test/02b
+	"dev_via_test_plan_retry_driver":                              dispAnchorThreaded, // dev-via-test/02d
+	"dev_via_test_ralph_terminal_to_coordinator":                  dispAnchorThreaded, // dev-via-test/05
+	"dev_via_test_cbg_retry_driver":                               dispAnchorThreaded, // dev-via-test/07d
+	"research_needs_clarification_to_coordinator":                 dispAnchorInherit,  // research/06
+	"autoresearch_needs_clarification_replan":                     dispAnchorInherit,  // autoresearch/10 (baseline — 4b-1a)
+	"autoresearch_descended_needs_clarification_replan":           dispAnchorThreaded, // autoresearch/10b (4b-1a)
+	"dev_via_test_plan_rejected_to_coordinator":                   dispAnchorThreaded, // dev-via-test/02e (4b-1a)
+	"dev_via_test_lisa_needs_clarification_to_coordinator":        dispAnchorInherit,  // dev-via-test/02f (first-pass — 4b-1a)
+	"dev_via_test_replan_lisa_needs_clarification_to_coordinator": dispAnchorThreaded, // dev-via-test/02f-replan (4b-1a)
+	"dev_via_test_cbg_rejected_to_coordinator":                    dispAnchorThreaded, // dev-via-test/07b (4b-1a)
+	"dev_via_test_cbg_retry_missing_target":                       dispAnchorThreaded, // dev-via-test/07e (4b-1a)
 }
 
 type coordSpawnInfo struct {
@@ -534,6 +552,19 @@ func TestAgentRunPack_CoordinatorSpawnCoverage(t *testing.T) {
 				t.Errorf("%s: classified anchor_threaded but does not thread related_loops[run-loop-entity-id] on every "+
 					"coordinator spawn — the woken coordinator would carry no anchor and hang the run on failure (agent-run/06 misses)", id)
 			}
+		case dispAnchorInherit:
+			// anchor_inherit relies on the firing role's bare agent.run
+			// propagating agent.run.entity_id to the woken coordinator (→
+			// agent-run/05, the length_eq 0 branch). If the rule ALSO threaded
+			// run-loop-entity-id the coordinator would carry lineage and route to
+			// agent-run/06 instead — so a threading anchor_inherit rule is
+			// misclassified. (The other half — that the firing role actually
+			// carries a bare agent.run — is a spawn-graph property the mock
+			// journeys verify, not structurally checkable from one rule.)
+			if info.threadsRunLoopID {
+				t.Errorf("%s: classified anchor_inherit but threads run-loop-entity-id — a threaded coordinator carries "+
+					"lineage and routes to agent-run/06, not the inherit path (agent-run/05). Reclassify anchor_threaded.", id)
+			}
 		case dispDeferred4b:
 			// The deferral is principled ONLY if the woken coordinator is pure
 			// human-in-the-loop delivery (run-phase semantics are 4b's). If a
@@ -549,6 +580,87 @@ func TestAgentRunPack_CoordinatorSpawnCoverage(t *testing.T) {
 			if info.threadsRunLoopID {
 				t.Errorf("%s: classified deferred_4b but threads run-loop-entity-id — it IS anchor-covered; reclassify anchor_threaded", id)
 			}
+		}
+	}
+}
+
+// TestDevViaTestReviewerSpawnsThreadRunAnchor pins the load-bearing precondition
+// that the UNFENCED run-loop-entity-id threads on rules 02e/07b/07e rely on: every
+// rule that SPAWNS a reviewer-dev-via-test (CBG) loop must thread
+// related_loops[run-loop-entity-id] onto it. 02e/07b/07e fire ON the CBG and thread
+// run-loop-entity-id from $entity.triple.lineage.run-loop-entity-id WITHOUT a
+// length_gt 0 fence (they rely on the firing CBG always carrying it). A CBG-spawn
+// that omitted the thread would make those threads resolve to a garbage literal
+// (the go-reviewer C1 class) with no fence to no-op it. This makes the precondition
+// structural instead of resting on review (ADR-053 4b-1a review, completeness #3).
+func TestDevViaTestReviewerSpawnsThreadRunAnchor(t *testing.T) {
+	root := "../../configs/rules/dev-via-test"
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		t.Fatalf("read %s: %v", root, err)
+	}
+	var checked int
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
+			continue
+		}
+		r := loadRule(t, filepath.Join(root, e.Name()))
+		for _, a := range r.OnEnter {
+			if a.Type == "publish_agent" && a.Role == "reviewer-dev-via-test" {
+				checked++
+				if _, ok := a.RelatedLoops["run-loop-entity-id"]; !ok {
+					t.Errorf("%s: spawns a reviewer-dev-via-test (CBG) loop but does NOT thread "+
+						"related_loops[run-loop-entity-id] — rules 02e/07b/07e thread run-loop-entity-id off the CBG's "+
+						"lineage WITHOUT a fence, so EVERY CBG spawn must carry it or those threads resolve to a garbage "+
+						"literal (C1). Thread related_loops[run-loop-entity-id].", e.Name())
+				}
+			}
+		}
+	}
+	if checked == 0 {
+		t.Error("found no reviewer-dev-via-test spawns to check — did the CBG-spawn rule shape change? (test is no longer exercising the invariant)")
+	}
+}
+
+// coordSpawnContract returns the (allowlist, tools) of a rule's single coordinator
+// publish_agent — the user-facing contract the anchor-split siblings must keep in sync.
+func coordSpawnContract(r ruleDoc) (allowlist, tools []string) {
+	for _, a := range r.OnEnter {
+		if a.Type == "publish_agent" && a.Role == "coordinator" {
+			return a.ActionAllowlist, a.Tools
+		}
+	}
+	return nil, nil
+}
+
+// TestAnchorSplitSiblingsKeepContractInSync pins that the first-pass/re-plan anchor
+// split siblings — which the rule engine's lack of a coalesce operator forces to
+// DUPLICATE the coordinator wake-up block — keep IDENTICAL action_allowlist + tools.
+// The only intended differences are the lineage fence, the related_loops anchor
+// source, and the prompt framing. Without this, a future edit to one sibling's
+// tools/allowlist could silently diverge (the drift each rule's duplication_note
+// warns of). ADR-053 4b-1a review, go-reviewer #2.
+func TestAnchorSplitSiblingsKeepContractInSync(t *testing.T) {
+	pairs := []struct{ first, sibling string }{
+		{
+			"../../configs/rules/dev-via-test/02f-lisa-needs-clarification-to-coordinator.json",
+			"../../configs/rules/dev-via-test/02f-replan-lisa-needs-clarification-to-coordinator.json",
+		},
+		{
+			"../../configs/rules/autoresearch/10-needs-clarification-replan.json",
+			"../../configs/rules/autoresearch/10b-descended-needs-clarification-replan.json",
+		},
+	}
+	for _, p := range pairs {
+		fa, ft := coordSpawnContract(loadRule(t, p.first))
+		sa, st := coordSpawnContract(loadRule(t, p.sibling))
+		if !sameStrings(fa, sa) {
+			t.Errorf("%s vs %s: coordinator action_allowlist diverged (%v vs %v) — anchor-split siblings must keep "+
+				"the user-facing contract in sync (only the fence/anchor-source/prompt may differ)", p.first, p.sibling, fa, sa)
+		}
+		if !sameStrings(ft, st) {
+			t.Errorf("%s vs %s: coordinator tools diverged (%v vs %v) — anchor-split siblings must keep tools in sync",
+				p.first, p.sibling, ft, st)
 		}
 	}
 }

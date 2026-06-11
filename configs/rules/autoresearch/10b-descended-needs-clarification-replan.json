@@ -1,0 +1,68 @@
+{
+  "id": "autoresearch_descended_needs_clarification_replan",
+  "type": "expression",
+  "name": "autoresearch propose/execute/synthesize/reviewer decide(needs_clarification) → coordinator (lineage anchor)",
+  "description": "ADR-042 §Phase 2 redesign autoresearch pack recovery rule — RUN-ENTITY-DESCENDED branch (ADR-053 Phase 4b-1a anchor split, sibling of rule 10). Fires when autoresearch-propose (no viable hypothesis / plateau soft-stop), autoresearch-execute (sandbox catastrophic failure), autoresearch-synthesize (run state structurally inconsistent), or reviewer-autoresearch (artifact structurally malformed) terminates with decide(action=needs_clarification). Spawns a fresh coordinator (allow-list respond_direct / ask_user) to deliver the situation to the user.\n\nANCHOR (lineage.run-loop-entity-id, threaded → agent-run/06): these roles descend through the run-entity-fired iteration driver (rule 05 threads run-loop-entity-id into propose/synthesize; rule 03 carries it to execute; rule 07 to reviewer). They carry NO bare agent.run (the run entity has none for the inherit path), so the coordinator this rule spawns would inherit NO run anchor — leaving a silent executing-zombie if it failed. So we THREAD related_loops[run-loop-entity-id] = $entity.triple.lineage.run-loop-entity-id onto the coordinator; a failure then routes to agent-run/06 (the lineage branch). The length_gt 0 fence guarantees the thread source resolves (defends the go-reviewer C1 garbage-literal-subject class) and makes this mutually exclusive with rule 10 (baseline, agent.run.entity_id).\n\nMirrors run-failed rule 13 (the descended-roles run-failed branch), scoped to the recovery-coordinator spawn instead of the run-outcome stamp.",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "agent.loop.role",
+      "operator": "in",
+      "value": [
+        "autoresearch-propose",
+        "autoresearch-execute",
+        "autoresearch-synthesize",
+        "reviewer-autoresearch"
+      ],
+      "required": true
+    },
+    {
+      "field": "coordinator.decision.next_action",
+      "operator": "eq",
+      "value": "needs_clarification",
+      "required": true
+    },
+    {
+      "field": "lineage.run-loop-entity-id",
+      "operator": "length_gt",
+      "value": 0,
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "max_iterations": 3,
+  "on_enter": [
+    {
+      "type": "publish_agent",
+      "subject": "agent.task.coordinator",
+      "role": "coordinator",
+      "model": "coordinator",
+      "tools": ["read_loop_result", "bash", "decide"],
+      "tool_choice": { "mode": "required" },
+      "action_allowlist": ["respond_direct", "ask_user"],
+      "properties": {
+        "wakeup_mode": "autoresearch_needs_clarification",
+        "rejecting_role": "$entity.triple.agent.loop.role",
+        "rejecting_loop_id": "$entity.instance",
+        "category": "autoresearch"
+      },
+      "related_loops": {
+        "rejecting": "$entity.instance",
+        "autoresearch-run": "$entity.triple.lineage.autoresearch-run",
+        "run-loop-entity-id": "$entity.triple.lineage.run-loop-entity-id"
+      },
+      "prompt": "An autoresearch role at loop $entity.instance terminated with decide(action=needs_clarification). The role's reason field describes the framing or environment gap that blocked it.\n\nIteration 1 — call read_loop_result(loop_id=$entity.instance) to read the rejecting role's reason + retry_hint.\n\nIteration 2 — your job is to deliver the situation to the user — either as a question (ask_user) when the gap is something the user can fix in one round-trip, or as a status (respond_direct) when the gap is structural and the user should see the partial-progress story. Examples:\n\n- Baseline rejected because metric_parser could not extract a number from stdout → ask_user with a specific question about the expected output format.\n- Propose rejected because the surface is too narrow and the journal shows plateau → respond_direct explaining the run reached its natural stopping point under the current surface; suggest a wider surface for a follow-up run.\n- Execute rejected because the sandbox was unreachable → respond_direct describing the environment failure; this is not a question for the user, it's an operator-side issue.\n\nCall decide(action=\"respond_direct\", reason=\"<status prose>\") OR decide(action=\"ask_user\", reason=\"<question prose>\"). Both are published on the user-response bus."
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "pack": "autoresearch",
+    "phase": "ADR-053 Phase 4b-1a — anchor split (run-entity-descended branch)",
+    "adr": "docs/adr/042-coordinator-instantiated-flows-via-templates.md",
+    "anchor_disposition": "anchor_threaded (TestAgentRunPack_CoordinatorSpawnCoverage) — threads run-loop-entity-id onto the woken coordinator so its involuntary failure routes to agent-run/06 (the lineage branch). Closes the deferred_4b zombie hole for the descended autoresearch roles.",
+    "split_rationale": "Sibling of rule 10 (baseline, anchor_inherit). Split on the firing role's anchor: baseline carries agent.run.entity_id (inherit); propose/execute/synthesize/reviewer carry only lineage.run-loop-entity-id (thread). Same baseline-vs-descended asymmetry as run-failed rules 12 vs 13.",
+    "anchor_fence": "lineage.run-loop-entity-id length_gt 0 — mutually exclusive with rule 10 (baseline, no lineage), and guarantees the threaded source resolves (C1 garbage-literal-subject defense).",
+    "max_iterations_note": "Per-entity caveat applies (research pack's 05 metadata explains in detail). Practical effect under the current rule engine: bound is informational; each needs_clarification is a fresh entity.",
+    "includes_execute": "Unlike run-failed rule 13 (which excludes autoresearch-execute as a BUDGETED loop-failure routed through rule 04b), this rule INCLUDES autoresearch-execute: a VOLUNTARY decide(needs_clarification) from execute (sandbox unreachable) is an escalation, not a budgeted measurement failure, and must reach the user."
+  }
+}
