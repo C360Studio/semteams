@@ -1,0 +1,52 @@
+name: clarification-autonomous
+description: |
+  Journey: ADR-053 Phase 4b — run-level CLARIFICATION POLICY, AUTONOMOUS mode,
+  end-to-end on mock-LLM. Validates the framework decide-action gate
+  (semstreams#239, beta.104) wired into SemTeams via
+  agentic-tools.restricted_decide_actions.
+
+  The paired Taskfile target derives an autonomous config from
+  e2e-flow-bootstrap.json at run time with
+  restricted_decide_actions: ["ask_user"] (no committed duplicate).
+
+  ROLE-KEYED fixture, ONE loop (the FRONT-DOOR coordinator — which carries no
+  per-task action_allowlist, the exact structural hole #239 closes). The
+  coordinator bucket serves two responses IN ORDER:
+    1. decide(action="ask_user", ...) — the model tries to defer to the user.
+       In autonomous mode the framework gate REJECTS it (ToolErrorInvalidArgs,
+       enforced before any decision triple is stamped), so the loop iterates.
+    2. decide(action="respond_direct", ...) — the model re-picks an allowed
+       action and answers autonomously, stating its assumption.
+
+  This proves the autonomous policy END-TO-END: ask_user is barred even on the
+  front door (no allowlist), and the loop re-picks with no dead-end. The paired
+  spec asserts a coordinator.user_reply triple (the coordinator ANSWERED via
+  03b-respond-direct) AND the ABSENCE of a coordinator.user_question triple
+  (03-ask-user never fired — the ask was blocked, not delivered).
+
+  Bucket fingerprint:
+    - "Delegation rules" → coordinator (front-door)
+
+  Paired spec: ui/e2e/agentic/clarification-autonomous.spec.ts.
+  Config: derived from configs/e2e-flow-bootstrap.json with
+  restricted_decide_actions=["ask_user"].
+
+responses_by_role:
+
+  # ---------- front-door coordinator: ask_user (BLOCKED) → respond_direct ----------
+  - match: "Delegation rules"
+    responses:
+      - tool_call:
+          name: decide
+          arguments_json: |
+            {
+              "action": "ask_user",
+              "reason": "Did you mean the staging or the production environment? I need that before I can set anything up."
+            }
+      - tool_call:
+          name: decide
+          arguments_json: |
+            {
+              "action": "respond_direct",
+              "reason": "I'm running in autonomous mode and can't pause to ask you, so I'll proceed on the most reasonable assumption: I'll treat this as the staging environment (the usual default for a setup task). If you actually meant production, re-send the request with that stated and I'll redo it there. Proceeding with staging now."
+            }

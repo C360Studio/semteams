@@ -66,6 +66,12 @@ ui/test-results/
 # Either path keeps the host checkout clean of generated content.
 .artifacts/
 
+# Run-time-derived flow configs for e2e journeys (e.g. the autonomous-mode
+# clarification-policy journey derives e2e-flow-bootstrap-autonomous.gen.json
+# from e2e-flow-bootstrap.json via jq, then removes it on teardown). Never
+# committed — always derived from the canonical config to avoid drift.
+configs/*.gen.json
+
 # ADR-043 PR 4.5 F6 — per-tenant devcontainer workspaces. Bound into
 # the sandbox container at the same absolute path so DooD-spawned
 # sibling containers see the workspace on the host docker daemon.
