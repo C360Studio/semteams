@@ -247,17 +247,18 @@ func setupToolsAndPreprocessor(
 
 	toolRegistry := agentictools.NewExecutorRegistry()
 	if err := executors.RegisterBuiltins(ctx, toolRegistry, executors.ToolDependencies{
-		NATSClient:          natsClient,
-		Platform:            platform,
-		Logger:              logger,
-		RuleManager:         buildRuleManager(ctx, natsClient, configManager, logger),
-		FlowManager:         flowMgr,
-		PersonaManager:      personaMgr,
-		FlowTemplateManager: flowTemplateMgr,
-		FlowEngineManager:   flowEngine,
-		ComponentRegistry:   componentRegistry,
-		LoopsBucket:         extractLoopsBucket(cfg),
-		SkipBuiltins:        []string{"bash"},
+		NATSClient:              natsClient,
+		Platform:                platform,
+		Logger:                  logger,
+		RuleManager:             buildRuleManager(ctx, natsClient, configManager, logger),
+		FlowManager:             flowMgr,
+		PersonaManager:          personaMgr,
+		FlowTemplateManager:     flowTemplateMgr,
+		FlowEngineManager:       flowEngine,
+		ComponentRegistry:       componentRegistry,
+		LoopsBucket:             extractLoopsBucket(cfg),
+		RestrictedDecideActions: extractRestrictedDecideActions(cfg, logger),
+		SkipBuiltins:            []string{"bash"},
 	}); err != nil {
 		return nil, nil, fmt.Errorf("register builtin tools: %w", err)
 	}
@@ -377,6 +378,39 @@ func extractLoopsBucket(cfg *config.Config) string {
 		}
 	}
 	return ""
+}
+
+// extractRestrictedDecideActions reads the deployment-level decide-action
+// restriction policy (semstreams#239, beta.104) from the agentic-tools
+// component config. The decide tool bars these action names for EVERY
+// coordinator task — front-door and rule-spawned alike — composing with and
+// taking precedence over the per-task action_allowlist. This is the
+// run-level CLARIFICATION POLICY seam (ADR-053 Phase 4b): empty = interactive
+// (ask_user available, the default); ["ask_user"] = autonomous (the
+// coordinator must resolve without deferring to the user). The framework owns
+// the generic restrict-list; this product maps its run mode onto it.
+//
+// Independent reimplementation of upstream cmd/semstreams/main.go per ADR-029
+// — not an import. A malformed policy is logged (not silently dropped) so an
+// operator-requested gate never disappears unnoticed.
+func extractRestrictedDecideActions(cfg *config.Config, logger *slog.Logger) []string {
+	for _, cc := range cfg.Components {
+		if cc.Name != "agentic-tools" || !cc.Enabled {
+			continue
+		}
+		var tcfg struct {
+			RestrictedDecideActions []string `json:"restricted_decide_actions"`
+		}
+		if err := json.Unmarshal(cc.Config, &tcfg); err != nil {
+			logger.Warn("agentic-tools config unparseable for restricted_decide_actions — clarification policy NOT applied",
+				"error", err)
+			continue
+		}
+		if len(tcfg.RestrictedDecideActions) > 0 {
+			return tcfg.RestrictedDecideActions
+		}
+	}
+	return nil
 }
 
 // buildRuleManager constructs a rule.ConfigManager (KV-backed rule CRUD)

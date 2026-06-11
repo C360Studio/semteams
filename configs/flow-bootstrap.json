@@ -410,6 +410,7 @@
         "stream_name": "TOOL",
         "timeout": "10s",
         "allowed_tools": null,
+        "restricted_decide_actions": [],
         "ports": {
           "inputs": [
             {
