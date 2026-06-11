@@ -10,7 +10,7 @@ import (
 	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/types"
 
-	"github.com/c360studio/semteams/cmd/semteams/chain"
+	"github.com/c360studio/semteams/cmd/semteams/runanchor"
 	"github.com/c360studio/semteams/cmd/semteams/sandboxmanager"
 )
 
@@ -39,7 +39,7 @@ func newExecutor(t *testing.T, triples map[string]any) (*Executor, *fakeReader) 
 	t.Helper()
 	reader := &fakeReader{triples: triples}
 	fixedNow := func() time.Time { return time.Date(2026, 5, 31, 14, 0, 0, 0, time.UTC) }
-	exec := NewExecutor(newCatalog(t), reader, nil, types.PlatformMeta{Org: "c360", Platform: "ops"}, fixedNow, nil)
+	exec := NewExecutor(newCatalog(t), reader, types.PlatformMeta{Org: "c360", Platform: "ops"}, fixedNow, nil)
 	return exec, reader
 }
 
@@ -50,7 +50,7 @@ func makeCall(args map[string]any) agentic.ToolCall {
 		Arguments: args,
 		Metadata: map[string]any{
 			agentic.MetadataKeyRelatedLoops: map[string]any{
-				chain.ChainEntityRoleKey: "c360.ops.agent.chain.execution.c1",
+				runanchor.ChainEntityRoleKey: "c360.ops.agent.chain.execution.c1",
 			},
 		},
 	}
@@ -303,7 +303,7 @@ func TestNew_PanicsOnNilCatalog(t *testing.T) {
 			t.Fatalf("expected panic")
 		}
 	}()
-	NewExecutor(nil, &fakeReader{}, nil, types.PlatformMeta{Org: "c360", Platform: "ops"}, nil, nil)
+	NewExecutor(nil, &fakeReader{}, types.PlatformMeta{Org: "c360", Platform: "ops"}, nil, nil)
 }
 
 func TestNew_PanicsOnNilReader(t *testing.T) {
@@ -313,5 +313,5 @@ func TestNew_PanicsOnNilReader(t *testing.T) {
 		}
 	}()
 	cat, _ := sandboxmanager.BuiltinCatalog("/repo")
-	NewExecutor(cat, nil, nil, types.PlatformMeta{Org: "c360", Platform: "ops"}, nil, nil)
+	NewExecutor(cat, nil, types.PlatformMeta{Org: "c360", Platform: "ops"}, nil, nil)
 }

@@ -32,15 +32,6 @@ func (f *fakeManager) Catalog() *sandboxmanager.Catalog {
 	return f.catalog
 }
 
-type fakeResolver struct {
-	chainID string
-	err     error
-}
-
-func (f *fakeResolver) ChainID(_ context.Context, _ string) (string, error) {
-	return f.chainID, f.err
-}
-
 func newPlatform() types.PlatformMeta {
 	return types.PlatformMeta{Org: "c360", Platform: "ops"}
 }
@@ -75,7 +66,7 @@ func makeCall(args map[string]any, related map[string]any, loopID string) agenti
 
 func TestExecute_HappyPath_StampsAndReturnsAttestation(t *testing.T) {
 	mgr := &fakeManager{att: happyAttestation()}
-	exec := NewExecutor(mgr, nil, newPlatform(), nil)
+	exec := NewExecutor(mgr, newPlatform(), nil)
 
 	call := makeCall(
 		map[string]any{
@@ -118,16 +109,16 @@ func TestExecute_HappyPath_StampsAndReturnsAttestation(t *testing.T) {
 	}
 }
 
-func TestExecute_ResolverFallback_DerivesChainEntityFromLoopID(t *testing.T) {
+func TestExecute_RunAnchorFallback_DerivesChainEntityFromMetadata(t *testing.T) {
+	// No related_loops pin → fall back to the dispatch-stamped run anchor on
+	// ToolCall.Metadata (semstreams#250). With only MetadataKeyRunID present,
+	// runanchor reconstructs the 6-part entity from org/platform.
 	mgr := &fakeManager{att: happyAttestation()}
-	resolver := &fakeResolver{chainID: "resolvedchain"}
-	exec := NewExecutor(mgr, resolver, newPlatform(), nil)
+	exec := NewExecutor(mgr, newPlatform(), nil)
 
-	call := makeCall(
-		map[string]any{"languages": []any{"go"}},
-		nil, // no related_loops
-		"loop-with-chain",
-	)
+	call := makeCall(map[string]any{"languages": []any{"go"}}, nil, "loop-with-chain")
+	call.Metadata[agentic.MetadataKeyRunID] = "resolvedchain"
+
 	res, err := exec.Execute(context.Background(), call)
 	if err != nil {
 		t.Fatalf("execute: %v", err)
@@ -143,7 +134,7 @@ func TestExecute_ResolverFallback_DerivesChainEntityFromLoopID(t *testing.T) {
 
 func TestExecute_NoResolverAndNoRelated_Errors(t *testing.T) {
 	mgr := &fakeManager{att: happyAttestation()}
-	exec := NewExecutor(mgr, nil, newPlatform(), nil)
+	exec := NewExecutor(mgr, newPlatform(), nil)
 	call := makeCall(map[string]any{"languages": []any{"go"}}, nil, "loop-1")
 	res, _ := exec.Execute(context.Background(), call)
 	if res.Error == "" {
@@ -157,20 +148,6 @@ func TestExecute_NoResolverAndNoRelated_Errors(t *testing.T) {
 	}
 }
 
-func TestExecute_ResolverErr_SurfacesAsInternal(t *testing.T) {
-	mgr := &fakeManager{att: happyAttestation()}
-	resolver := &fakeResolver{err: errors.New("nats timeout")}
-	exec := NewExecutor(mgr, resolver, newPlatform(), nil)
-	call := makeCall(map[string]any{"languages": []any{"go"}}, nil, "loop-1")
-	res, _ := exec.Execute(context.Background(), call)
-	if res.Error == "" {
-		t.Fatalf("expected error when resolver fails")
-	}
-	if !strings.Contains(res.Error, "nats timeout") {
-		t.Fatalf("error should propagate resolver msg: %q", res.Error)
-	}
-}
-
 func TestExecute_AdmissionPending_ReturnsNormally(t *testing.T) {
 	mgr := &fakeManager{att: sandboxmanager.Attestation{
 		ProfileID:        "full-stack-e2e@v1",
@@ -181,7 +158,7 @@ func TestExecute_AdmissionPending_ReturnsNormally(t *testing.T) {
 		Signature:        "sig",
 		TTL:              24 * time.Hour,
 	}}
-	exec := NewExecutor(mgr, nil, newPlatform(), nil)
+	exec := NewExecutor(mgr, newPlatform(), nil)
 	call := makeCall(
 		map[string]any{
 			"languages":  []any{"go", "node"},
@@ -218,7 +195,7 @@ func TestExecute_AdmissionDenied_Terminal_ReturnsNormally(t *testing.T) {
 		Signature:        "sig",
 		TTL:              24 * time.Hour,
 	}}
-	exec := NewExecutor(mgr, nil, newPlatform(), nil)
+	exec := NewExecutor(mgr, newPlatform(), nil)
 	call := makeCall(
 		map[string]any{
 			"languages": []any{"go"},
@@ -240,7 +217,7 @@ func TestExecute_AdmissionDenied_Terminal_ReturnsNormally(t *testing.T) {
 
 func TestExecute_ManagerErr_SurfacesAsNetwork(t *testing.T) {
 	mgr := &fakeManager{att: happyAttestation(), err: errors.New("publish failed")}
-	exec := NewExecutor(mgr, nil, newPlatform(), nil)
+	exec := NewExecutor(mgr, newPlatform(), nil)
 	call := makeCall(
 		map[string]any{"languages": []any{"go"}},
 		map[string]any{"chain-entity-id": "c360.ops.agent.chain.execution.c1"},
@@ -254,7 +231,7 @@ func TestExecute_ManagerErr_SurfacesAsNetwork(t *testing.T) {
 
 func TestExecute_BadArgs_InvalidArgs(t *testing.T) {
 	mgr := &fakeManager{att: happyAttestation()}
-	exec := NewExecutor(mgr, nil, newPlatform(), nil)
+	exec := NewExecutor(mgr, newPlatform(), nil)
 	call := makeCall(
 		map[string]any{"languages": []any{42}}, // not a string
 		map[string]any{"chain-entity-id": "c360.ops.agent.chain.execution.c1"},
@@ -268,7 +245,7 @@ func TestExecute_BadArgs_InvalidArgs(t *testing.T) {
 
 func TestExecute_UnknownTool(t *testing.T) {
 	mgr := &fakeManager{att: happyAttestation()}
-	exec := NewExecutor(mgr, nil, newPlatform(), nil)
+	exec := NewExecutor(mgr, newPlatform(), nil)
 	call := agentic.ToolCall{ID: "c", Name: "not_request_sandbox"}
 	res, _ := exec.Execute(context.Background(), call)
 	if res.ErrorKind != agentic.ToolErrorNotFound {
@@ -344,7 +321,7 @@ func TestNew_PanicsOnMissingDeps(t *testing.T) {
 			t.Fatalf("expected panic on nil manager")
 		}
 	}()
-	NewExecutor(nil, nil, newPlatform(), nil)
+	NewExecutor(nil, newPlatform(), nil)
 }
 
 func TestNew_PanicsOnEmptyPlatform(t *testing.T) {
@@ -353,5 +330,5 @@ func TestNew_PanicsOnEmptyPlatform(t *testing.T) {
 			t.Fatalf("expected panic on empty platform")
 		}
 	}()
-	NewExecutor(&fakeManager{}, nil, types.PlatformMeta{}, nil)
+	NewExecutor(&fakeManager{}, types.PlatformMeta{}, nil)
 }

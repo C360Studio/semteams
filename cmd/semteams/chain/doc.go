@@ -13,28 +13,22 @@
 // agent-run rule pack) owns run-phase authority now. Phase 5 removed the
 // orphaned vocabulary (chain/predicates.go) and the dead chain/lineage_reader.go.
 //
+// ADR-053 Phase 5 (semstreams#250 / beta.105) then retired the ancestry-walking
+// Resolver itself. Run identity now travels on the wire — ToolCall.Metadata
+// carries agent.run_id + agent.run_entity_id, and LoopFailedEvent /
+// LoopCompletedEvent carry RunEntityID — so product-shell consumers reconstruct
+// run identity from the execution context (see cmd/semteams/runanchor) instead
+// of walking agent.loop.parent triples. The Resolver, ParentReader,
+// NATSParentReader, ResolveChainEntityID, IDResolver, ChainEntityRoleKey, and
+// ValidateLoopID all retired with it (the role key moved to runanchor).
+//
 // What still lives here:
 //
-//   - Resolver (resolver.go): given a loop_id, walks `agent.loop.parent`
-//     triples back to the chain root and returns the chain_id (= root loop's
-//     ID) or the canonical 6-part chain entity ID. Used where no run anchor is
-//     available on the execution context: chainpause (walks ancestry from an
-//     agent.failed.* event, which carries no RunID) and the sandbox tools'
-//     fallback path. NATSEntityReader / NATSParentReader back the walk over the
-//     graph.query.entity RPC.
-//
-//   - ResolveChainEntityID + ChainEntityRoleKey (entity_resolver.go): the
-//     canonical "what chain entity does this tool call belong to" lookup —
-//     prefers related_loops["chain-entity-id"] (pinned by the spawn rule),
-//     falling back to the Resolver ancestry walk. ValidateLoopID is the shared
-//     entry-seam guard against malformed loop ids.
-//
-// MIGRATION NOTE (ADR-053 Phase 5): the long-term goal is to retire the
-// ancestry-walking Resolver entirely by reading the loop's RunID directly off
-// the execution context. That is BLOCKED upstream at beta.104 — agentic-loop
-// does not inject the loop's RunID into ToolCall.Metadata (it injects only
-// loop_id), and a failed-loop event carries no RunID. Once the framework
-// exposes the run anchor on the tool/event context, the sandbox tools and
-// chainpause can drop the Resolver. Tracked upstream in semstreams#250 and in
-// the ADR-053 adoption plan §Phase 5.
+//   - NATSEntityReader / EntityTripleReader (entity_reader.go): a single-entity
+//     read over the graph.query.entity RPC, returning a flat predicate→object
+//     map. The one consumer that cannot recover its run anchor from the wire is
+//     the operator-decision path (chainpause.DecisionHandler): it has only an
+//     HTTP-body failed_loop_id, so it reads the failed loop entity's
+//     agent.run.entity_id via this reader. DefaultGraphQueryEntitySubject is the
+//     fallback RPC subject (operators override via the graph-query port config).
 package chain

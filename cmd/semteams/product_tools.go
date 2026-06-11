@@ -20,6 +20,7 @@ import (
 	"github.com/c360studio/semteams/cmd/semteams/chain"
 	"github.com/c360studio/semteams/cmd/semteams/devviaspec"
 	"github.com/c360studio/semteams/cmd/semteams/research"
+	"github.com/c360studio/semteams/cmd/semteams/runanchor"
 	"github.com/c360studio/semteams/cmd/semteams/sandboxmanager"
 	"github.com/c360studio/semteams/cmd/semteams/sandboxruntime"
 	"github.com/c360studio/semteams/cmd/semteams/semsource"
@@ -240,7 +241,8 @@ func registerDevViaTestTools(reg *agentictools.ExecutorRegistry, natsClient *nat
 // (shells out to @devcontainers/cli), and the triple publisher.
 // Both tools key off the same chain entity (related_loops
 // "chain-entity-id" pinned by the admission rule pack, or fallback
-// to chain.Resolver).
+// to the run anchor on ToolCall.Metadata via runanchor.ChainEntityID;
+// the chain.Resolver ancestry walk retired in ADR-053 Phase 5).
 //
 // Skipped when natsClient is nil: both tools need the live
 // publisher (request_sandbox) or entity reader
@@ -290,18 +292,15 @@ func registerSandboxManagerTools(reg *agentictools.ExecutorRegistry, natsClient 
 		Logger:     logger,
 	})
 
-	// Both tools share the same chain.Resolver fallback for chain
-	// entity ID resolution when the rule pack hasn't pinned it
-	// explicitly (smoke tests, isolated coordinator calls).
-	parentReader := chain.NewNATSParentReader(natsClient, platform, "")
-	resolver := chain.NewResolver(parentReader, platform)
-
-	requestExecutor := requestsandbox.NewExecutor(manager, resolver, platform, logger)
+	// Both tools resolve the chain entity off the ToolCall's run anchor
+	// (ADR-053 Phase 5 / semstreams#250): related_loops["chain-entity-id"] when
+	// the rule pack pinned it, else the dispatch-stamped run anchor. No Resolver.
+	requestExecutor := requestsandbox.NewExecutor(manager, platform, logger)
 	if err := reg.RegisterTool(requestsandbox.ToolName, requestExecutor); err != nil {
 		return fmt.Errorf("register %s: %w", requestsandbox.ToolName, err)
 	}
 
-	queryExecutor := querysandboxattestation.NewExecutor(catalog, entityReader, resolver, platform, nil, logger)
+	queryExecutor := querysandboxattestation.NewExecutor(catalog, entityReader, platform, nil, logger)
 	if err := reg.RegisterTool(querysandboxattestation.ToolName, queryExecutor); err != nil {
 		return fmt.Errorf("register %s: %w", querysandboxattestation.ToolName, err)
 	}
@@ -428,13 +427,9 @@ func registerAutoresearchTools(reg *agentictools.ExecutorRegistry, natsClient *n
 	// unit tests, deployments without the sandbox stack).
 	sandboxURL := strings.TrimSpace(os.Getenv(envSandboxURL))
 	if sandboxURL != "" {
-		parentReader := chain.NewNATSParentReader(natsClient, platform, chain.DefaultGraphQueryEntitySubject)
-		resolver := chain.NewResolver(parentReader, platform)
 		chainReader := &chainAttestationReader{
 			entities: entityReader,
-			resolver: resolver,
 			platform: platform,
-			logger:   logger,
 		}
 		writer := newSandboxArtifactWriter(sandboxURL, logger)
 		artifactExecutor.SetAttestationWriter(chainReader, writer)
@@ -454,34 +449,29 @@ func registerAutoresearchTools(reg *agentictools.ExecutorRegistry, natsClient *n
 }
 
 // chainAttestationReader implements
-// emitautoresearchartifact.ChainAttestationReader by composing
-// chain.ResolveChainEntityID (related_loops → resolver-walk fallback)
-// with chain.NATSEntityReader. Returns the
-// sandbox.attestation.host_workspace_folder triple when the chain has
-// a ready per-tenant devcontainer; empty string otherwise (no
-// attestation, not ready, or wsf empty — all "no per-tenant container
-// available" from the writer's perspective).
+// emitautoresearchartifact.ChainAttestationReader by composing the run anchor on
+// ToolCall.Metadata (runanchor.Anchor — ADR-053 Phase 5 / semstreams#250, the
+// retired chain.Resolver walk) with chain.NATSEntityReader. Returns the
+// sandbox.attestation.host_workspace_folder triple when the chain has a ready
+// per-tenant devcontainer; empty string otherwise (no run anchor, no attestation,
+// not ready, or wsf empty — all "no per-tenant container available", which the
+// writer treats as local-fs fallback).
 //
 // Mirrors sandboxruntime.AttestationRunner.resolveWorkspaceFolder: same
 // ready+wsf gating, same fail-soft posture. Distinct types because
-// AttestationRunner reads via taskID (the chain ID rewritten by
-// chainbash) while this reader works from a tool ToolCall — different
-// call sites, identical decision logic.
+// AttestationRunner reads via taskID (the run id rewritten by chainbash) while
+// this reader works from a tool ToolCall — different call sites, identical logic.
 type chainAttestationReader struct {
 	entities *chain.NATSEntityReader
-	resolver chain.IDResolver
 	platform types.PlatformMeta
-	logger   *slog.Logger
 }
 
 func (r *chainAttestationReader) HostWorkspaceFolder(ctx context.Context, call agentic.ToolCall) (string, error) {
-	chainEntityID, err := chain.ResolveChainEntityID(ctx, call, r.resolver, r.platform, r.logger)
-	if err != nil {
-		// Surface the resolver error so the executor can decide whether
-		// to log + fall back. The chain-root case (loop_id == chain_id,
-		// no parent triple) returns a valid entity ID via the resolver
-		// branch, NOT an error.
-		return "", fmt.Errorf("resolve chain entity from call: %w", err)
+	// For an autoresearch run (run_scope=new) the run entity IS the chain
+	// entity. No run anchor (standalone loop / pre-#250) → local-fs fallback.
+	_, chainEntityID := runanchor.Anchor(call, r.platform.Org, r.platform.Platform)
+	if chainEntityID == "" {
+		return "", nil
 	}
 	triples, err := r.entities.ReadEntity(ctx, chainEntityID)
 	if err != nil {
@@ -792,11 +782,9 @@ func registerEmitPlan(reg *agentictools.ExecutorRegistry, natsClient *natsclient
 // packages. If a consumer interface ever widens (new method added)
 // and the adapter is not extended to match, this fails to build —
 // surfacing the drift here rather than at the SetX call site.
-// Covers: chainbash.ChainResolver/Inner and the
-// emit_autoresearch_artifact attestation-aware write path (#194).
+// Covers: chainbash.Inner and the emit_autoresearch_artifact
+// attestation-aware write path (#194).
 var (
-	_ chainbash.ChainResolver                         = (*chain.Resolver)(nil)
-	_ chainbash.ChainResolver                         = identityChainResolver{}
 	_ chainbash.Inner                                 = (*executors.BashExecutor)(nil)
 	_ emitautoresearchartifact.ChainAttestationReader = (*chainAttestationReader)(nil)
 	_ emitautoresearchartifact.SandboxFileWriter      = (*sandboxArtifactWriter)(nil)
@@ -810,24 +798,25 @@ var (
 //   - Inner: upstream's executors.BashExecutor (constructed from env
 //     so it picks up SANDBOX_URL identically to how the framework's
 //     RegisterBuiltins would have).
-//   - Resolver: chain.Resolver backed by NATSParentReader. Walks
-//     agent.loop.parent triples back to the chain root and returns
-//     loop_id == chain_id (ADR-038 D1).
+//   - Run anchor: read off ToolCall.Metadata via cmd/semteams/runanchor
+//     (agent.run_id, the run's bare root loop-id; stamped by agentic-loop
+//     dispatch per semstreams#250 / beta.105). No NATS ancestry walk — the
+//     ADR-053 Phase 5 migration retired chain.Resolver.
 //
-// At every Execute, the wrapper resolves call.LoopID → chain_id and
-// rewrites Metadata["task_id"] = chain_id before delegating. Upstream's
-// BashExecutor uses task_id over loop_id when picking the sandbox
-// worktree, so every role in the chain shares one worktree.
+// At every Execute, the wrapper reads the run's bare loop-id and rewrites
+// Metadata["task_id"] = runID before delegating. Upstream's BashExecutor uses
+// task_id over loop_id when picking the sandbox worktree, so every role in the
+// run shares one worktree. (The bare runID, not the 6-part run entity ID — the
+// AttestationRunner re-prefixes it; a dotted id would double-prefix.)
 //
-// Fail-soft: resolver errors (no parent yet, NATS timeout) skip the
-// rewrite — upstream falls back to loop_id. Matches the behavior the
-// framework had before this wrapper, so a graph regression cannot make
-// non-chain bash unusable.
+// Fail-soft: no run anchor on the metadata (a bash call outside any run) skips
+// the rewrite — upstream falls back to loop_id. Matches the behavior the
+// framework had before this wrapper, so a missing anchor cannot make non-run
+// bash unusable.
 //
-// Always registered: even when natsClient is nil (resolver still works
-// against the chain root case where loop_id == chain_id), the wrapper
-// stays in place under the canonical name so the LLM's tool catalog is
-// consistent across deployments.
+// Always registered: even when natsClient is nil, the wrapper stays in place
+// under the canonical name so the LLM's tool catalog is consistent across
+// deployments (the run anchor is read from metadata, not NATS).
 func registerChainBash(reg *agentictools.ExecutorRegistry, natsClient *natsclient.Client, platform types.PlatformMeta, logger *slog.Logger) error {
 	// Build the inner BashExecutor. Three construction shapes, picked
 	// by SANDBOX_URL + natsClient availability:
@@ -852,21 +841,10 @@ func registerChainBash(reg *agentictools.ExecutorRegistry, natsClient *natsclien
 	//     chains pass through unchanged.
 	mode, bashExec := buildBashExecutor(natsClient, platform, logger)
 
-	var resolver chainbash.ChainResolver
-	if natsClient != nil {
-		parentReader := chain.NewNATSParentReader(natsClient, platform, chain.DefaultGraphQueryEntitySubject)
-		resolver = chain.NewResolver(parentReader, platform)
-	} else {
-		// No NATS → no ancestry walk possible. Use an identity resolver
-		// so the wrapper still delegates correctly; every call looks like
-		// a chain root (loop_id == chain_id) and upstream's loop_id
-		// fallback is what determines the sandbox bucket.
-		resolver = identityChainResolver{}
-		logger.Warn("Registered chain-scoped bash with identity resolver (nats client unavailable)",
-			slog.String("name", chainbash.ToolName))
-	}
-
-	wrapper := chainbash.NewExecutor(bashExec, resolver, logger)
+	// The chain anchor (run's bare loop-id = chain root) arrives on
+	// ToolCall.Metadata, stamped by agentic-loop dispatch (semstreams#250,
+	// beta.105) — no NATS ancestry walk; the wrapper reads it via runanchor.
+	wrapper := chainbash.NewExecutor(bashExec, platform, logger)
 	if err := reg.RegisterTool(chainbash.ToolName, wrapper); err != nil {
 		return fmt.Errorf("register %s: %w", chainbash.ToolName, err)
 	}
@@ -916,15 +894,6 @@ func buildBashExecutor(natsClient *natsclient.Client, platform types.PlatformMet
 	// Mode string uses `-` not `+` so log shippers that tokenize on `+`
 	// (some Splunk + ELK configs) see a single value, not two.
 	return "sandbox-attestation", executors.NewBashExecutor("", "", executors.WithRunner(attRunner))
-}
-
-// identityChainResolver is the no-NATS fallback. ChainID returns the
-// input loop_id unchanged — the wrapper interprets that as "loop is the
-// chain root" and skips the metadata rewrite.
-type identityChainResolver struct{}
-
-func (identityChainResolver) ChainID(_ context.Context, loopID string) (string, error) {
-	return loopID, nil
 }
 
 // readAddSourceConfig parses the environment-driven namespace

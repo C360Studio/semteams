@@ -12,6 +12,8 @@ import (
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/pkg/errs"
+	"github.com/c360studio/semstreams/types"
+	agvocab "github.com/c360studio/semstreams/vocabulary/agentic"
 )
 
 // DecisionVerb is the operator's resolution of a chain pause.
@@ -84,8 +86,9 @@ type PauseDataReader interface {
 // the validator rejects coordinator and auto values at the HTTP boundary per ADR-037 §D3.
 //
 // ADR-038 PR B Phase 3: chain.decision.* / chain.resumed / chain.killed /
-// chain.deferred all land on the canonical chain entity (resolved from
-// the failed loop's ancestry). PauseDataReader reads chain.paused.role
+// chain.deferred all land on the canonical chain entity, read from the
+// failed loop entity's agent.run.entity_id triple (ADR-053 Phase 5 — the
+// ancestry-walk Resolver is retired). PauseDataReader reads chain.paused.role
 // and chain.paused.original_model from the same chain entity at retry
 // time, so the role+model used for the retry spawn match what the
 // Pauser stamped at pause time.
@@ -93,14 +96,24 @@ type DecisionHandler struct {
 	publisher TriplePublisher
 	tasks     TaskPublisher
 	pauseData PauseDataReader
-	resolver  ChainEntityResolver
+	entities  EntityReader
+	platform  types.PlatformMeta
 	logger    *slog.Logger
 }
 
-// NewDecisionHandler constructs a DecisionHandler. The resolver computes
-// the chain entity ID for §D5 audit writes and PauseDataReader queries;
-// cmd/semteams/chain.Resolver is the production wiring.
-func NewDecisionHandler(pub TriplePublisher, tasks TaskPublisher, pauseData PauseDataReader, resolver ChainEntityResolver, logger *slog.Logger) *DecisionHandler {
+// EntityReader reads a single graph entity's predicate→object map. The
+// DecisionHandler uses it to read the failed loop entity's agent.run.entity_id
+// triple — the chain/run entity the §D5 writes + PauseDataReader queries target.
+type EntityReader interface {
+	ReadEntity(ctx context.Context, entityID string) (map[string]any, error)
+}
+
+// NewDecisionHandler constructs a DecisionHandler. Unlike the Pauser (which reads
+// the run anchor off the failure EVENT), the operator-decision path has only the
+// HTTP-body failed_loop_id — no event, no ToolCall — so it reads the failed loop
+// entity's agent.run.entity_id triple via a single graph read (entities) rather
+// than the retired ancestry-walk Resolver (ADR-053 Phase 5 / semstreams#250).
+func NewDecisionHandler(pub TriplePublisher, tasks TaskPublisher, pauseData PauseDataReader, entities EntityReader, platform types.PlatformMeta, logger *slog.Logger) *DecisionHandler {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -108,7 +121,8 @@ func NewDecisionHandler(pub TriplePublisher, tasks TaskPublisher, pauseData Paus
 		publisher: pub,
 		tasks:     tasks,
 		pauseData: pauseData,
-		resolver:  resolver,
+		entities:  entities,
+		platform:  platform,
 		logger:    logger,
 	}
 }
@@ -129,9 +143,25 @@ func (h *DecisionHandler) HandleDecision(ctx context.Context, req DecisionReques
 	}
 
 	reason := sanitiseReason(req.Reason)
-	entityID, err := h.resolver.ChainEntityID(ctx, req.FailedLoopID)
+	// Read the failed loop entity's run anchor (agent.run.entity_id, stamped at
+	// spawn) — the chain/run entity the §D5 writes + pause-data query target.
+	// Single graph read, not the retired ancestry walk (semstreams#250).
+	//
+	// failed_loop_id is untrusted operator HTTP input, so use the non-panicking
+	// constructor: a dotted/malformed id returns a clean error here (→ HTTP 400)
+	// rather than panicking the request goroutine. The retired chain.ValidateLoopID
+	// used to own this guard; TryLoopExecutionEntityID subsumes it (ADR-053 Phase 5).
+	loopEntityID, err := agentic.TryLoopExecutionEntityID(h.platform.Org, h.platform.Platform, req.FailedLoopID)
 	if err != nil {
-		return fmt.Errorf("chainpause.DecisionHandler: resolve chain entity for failed loop %q: %w", req.FailedLoopID, err)
+		return fmt.Errorf("chainpause.DecisionHandler: invalid failed_loop_id %q: %w", req.FailedLoopID, err)
+	}
+	triples, err := h.entities.ReadEntity(ctx, loopEntityID)
+	if err != nil {
+		return fmt.Errorf("chainpause.DecisionHandler: read failed loop entity %q: %w", req.FailedLoopID, err)
+	}
+	entityID, _ := triples[agvocab.LoopRunEntityID].(string)
+	if entityID == "" {
+		return fmt.Errorf("chainpause.DecisionHandler: failed loop %q has no run anchor (%s); not part of a run", req.FailedLoopID, agvocab.LoopRunEntityID)
 	}
 	now := time.Now().UTC()
 
@@ -319,7 +349,8 @@ func (p *NATSTaskPublisher) PublishTask(ctx context.Context, subject string, tas
 // entity via a graph.query.entity NATS request (ADR-037 §D7, ADR-038 PR B
 // Phase 3). The triples chain.paused.role and chain.paused.original_model are
 // written at pause time by the Pauser; the DecisionHandler resolves the chain
-// entity ID for retry-time reads via the same chain.Resolver path.
+// entity ID for retry-time reads from the failed loop's agent.run.entity_id
+// triple (a single graph read; the chain.Resolver walk is retired, ADR-053 Phase 5).
 //
 // Returns ("", "", nil) when the entity is not found in the graph; callers fall
 // back to safe defaults. Network errors are returned so callers can log and fall

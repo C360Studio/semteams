@@ -2,32 +2,17 @@ package chainbash
 
 import (
 	"context"
-	"errors"
 	"io"
 	"log/slog"
 	"testing"
 
 	"github.com/c360studio/semstreams/agentic"
+	"github.com/c360studio/semstreams/types"
 )
 
-// fakeResolver records ChainID calls and returns the configured chain_id
-// or err. Lets us drive the wrapper through every resolution outcome
-// without bringing NATS up.
-type fakeResolver struct {
-	chainID string
-	err     error
-	calls   []string
-}
-
-func (f *fakeResolver) ChainID(_ context.Context, loopID string) (string, error) {
-	f.calls = append(f.calls, loopID)
-	return f.chainID, f.err
-}
-
-// fakeInner records the ToolCall it was handed and returns a stub
-// result. The wrapper's only behavioural contract on top of upstream is
-// what task_id it threads through; capturing the delegated call is what
-// the tests need to assert against.
+// fakeInner records the ToolCall it was handed and returns a stub result. The
+// wrapper's only behavioural contract on top of upstream is what task_id it
+// threads through; capturing the delegated call is what the tests assert against.
 type fakeInner struct {
 	got    agentic.ToolCall
 	result agentic.ToolResult
@@ -45,30 +30,42 @@ func quietLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
 
-func TestExecutor_RewritesTaskID_WhenChainIDDiffersFromLoopID(t *testing.T) {
+func testPlatform() types.PlatformMeta {
+	return types.PlatformMeta{Org: "org", Platform: "plat"}
+}
+
+// withRunID seeds the dispatch-stamped run anchor (semstreams#250) onto a call's
+// metadata — the bare run loop-id agentic-loop puts under MetadataKeyRunID.
+func withRunID(meta map[string]any, runID string) map[string]any {
+	if meta == nil {
+		meta = map[string]any{}
+	}
+	meta[agentic.MetadataKeyRunID] = runID
+	return meta
+}
+
+func TestExecutor_RewritesTaskID_WhenRunIDDiffersFromLoopID(t *testing.T) {
 	t.Parallel()
 	inner := &fakeInner{result: agentic.ToolResult{Content: "ok"}}
-	resolver := &fakeResolver{chainID: "chain-root-uuid"}
-	exec := NewExecutor(inner, resolver, quietLogger())
+	exec := NewExecutor(inner, testPlatform(), quietLogger())
 
 	call := agentic.ToolCall{
 		ID:        "call-1",
 		Name:      "bash",
 		LoopID:    "child-loop-uuid",
 		Arguments: map[string]any{"command": "echo hi"},
-		Metadata:  map[string]any{"loop_id": "child-loop-uuid"},
+		Metadata:  withRunID(map[string]any{"loop_id": "child-loop-uuid"}, "chain-root-uuid"),
 	}
 
-	_, err := exec.Execute(context.Background(), call)
-	if err != nil {
+	if _, err := exec.Execute(context.Background(), call); err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
 
-	gotTaskID, _ := inner.got.Metadata[MetadataKeyTaskID].(string)
-	if gotTaskID != "chain-root-uuid" {
-		t.Errorf("Metadata[task_id] = %q, want %q", gotTaskID, "chain-root-uuid")
+	// task_id is the BARE run id (NOT a 6-part entity id) — the sandbox uses it
+	// as a worktree dir name and the AttestationRunner prepends the prefix.
+	if gotTaskID, _ := inner.got.Metadata[MetadataKeyTaskID].(string); gotTaskID != "chain-root-uuid" {
+		t.Errorf("Metadata[task_id] = %q, want %q (bare run id)", gotTaskID, "chain-root-uuid")
 	}
-	// loop_id should remain intact — task_id is the override key.
 	if gotLoop, _ := inner.got.Metadata["loop_id"].(string); gotLoop != "child-loop-uuid" {
 		t.Errorf("Metadata[loop_id] = %q; should be unchanged", gotLoop)
 	}
@@ -77,10 +74,9 @@ func TestExecutor_RewritesTaskID_WhenChainIDDiffersFromLoopID(t *testing.T) {
 func TestExecutor_DoesNotMutateOriginalToolCall(t *testing.T) {
 	t.Parallel()
 	inner := &fakeInner{result: agentic.ToolResult{Content: "ok"}}
-	resolver := &fakeResolver{chainID: "chain-root"}
-	exec := NewExecutor(inner, resolver, quietLogger())
+	exec := NewExecutor(inner, testPlatform(), quietLogger())
 
-	origMeta := map[string]any{"loop_id": "loop-A"}
+	origMeta := withRunID(map[string]any{"loop_id": "loop-A"}, "chain-root")
 	call := agentic.ToolCall{ID: "call-1", Name: "bash", LoopID: "loop-A", Metadata: origMeta}
 
 	if _, err := exec.Execute(context.Background(), call); err != nil {
@@ -91,81 +87,115 @@ func TestExecutor_DoesNotMutateOriginalToolCall(t *testing.T) {
 	}
 }
 
-func TestExecutor_FailsSoftOnResolverError(t *testing.T) {
+func TestExecutor_FailsSoftWhenNoRunAnchor(t *testing.T) {
 	t.Parallel()
+	// No run anchor on the call (standalone loop / pre-#250). The wrapper must
+	// not rewrite task_id — upstream falls back to loop_id.
 	inner := &fakeInner{result: agentic.ToolResult{Content: "ok"}}
-	resolver := &fakeResolver{err: errors.New("nats timeout")}
-	exec := NewExecutor(inner, resolver, quietLogger())
+	exec := NewExecutor(inner, testPlatform(), quietLogger())
 
 	call := agentic.ToolCall{
 		ID:       "call-1",
 		Name:     "bash",
 		LoopID:   "orphan-loop",
-		Metadata: map[string]any{"loop_id": "orphan-loop"},
+		Metadata: map[string]any{"loop_id": "orphan-loop"}, // no MetadataKeyRunID
 	}
 
-	if _, err := exec.Execute(context.Background(), call); err != nil {
-		t.Fatalf("Execute returned error on resolver-failure soft-fallback: %v", err)
-	}
-	// No task_id rewrite happened — upstream falls back to loop_id.
-	if _, has := inner.got.Metadata[MetadataKeyTaskID]; has {
-		t.Errorf("task_id should NOT be set on resolver error; got %v", inner.got.Metadata[MetadataKeyTaskID])
-	}
-}
-
-func TestExecutor_SkipsRewriteWhenChainIDEqualsLoopID(t *testing.T) {
-	t.Parallel()
-	// Loop is the chain root: ChainID returns the same loop_id back.
-	// We can skip the rewrite (no allocation, same behaviour).
-	inner := &fakeInner{result: agentic.ToolResult{Content: "ok"}}
-	resolver := &fakeResolver{chainID: "root-loop"}
-	exec := NewExecutor(inner, resolver, quietLogger())
-
-	call := agentic.ToolCall{ID: "call-1", Name: "bash", LoopID: "root-loop"}
 	if _, err := exec.Execute(context.Background(), call); err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
 	if _, has := inner.got.Metadata[MetadataKeyTaskID]; has {
-		t.Errorf("unnecessary task_id rewrite when chain_id == loop_id")
+		t.Errorf("task_id should NOT be set with no run anchor; got %v", inner.got.Metadata[MetadataKeyTaskID])
 	}
 }
 
-func TestExecutor_FallbackToMetadataLoopID_WhenTypedFieldEmpty(t *testing.T) {
+func TestExecutor_SkipsRewriteWhenRunIDEqualsLoopID(t *testing.T) {
 	t.Parallel()
+	// The call's loop IS the chain/run root: run id == loop id → no rewrite.
 	inner := &fakeInner{result: agentic.ToolResult{Content: "ok"}}
-	resolver := &fakeResolver{chainID: "chain-from-meta"}
-	exec := NewExecutor(inner, resolver, quietLogger())
+	exec := NewExecutor(inner, testPlatform(), quietLogger())
 
-	// Typed LoopID empty; loop_id only present in Metadata. Wrapper
-	// should still resolve.
 	call := agentic.ToolCall{
 		ID:       "call-1",
 		Name:     "bash",
-		Metadata: map[string]any{"loop_id": "loop-from-meta"},
+		LoopID:   "root-loop",
+		Metadata: withRunID(map[string]any{"loop_id": "root-loop"}, "root-loop"),
 	}
 	if _, err := exec.Execute(context.Background(), call); err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
-	if len(resolver.calls) != 1 || resolver.calls[0] != "loop-from-meta" {
-		t.Errorf("resolver.ChainID called with %v, want [loop-from-meta]", resolver.calls)
+	if _, has := inner.got.Metadata[MetadataKeyTaskID]; has {
+		t.Errorf("unnecessary task_id rewrite when run_id == loop_id")
+	}
+}
+
+func TestExecutor_UsesMetadataLoopID_ForRootSkipCheck(t *testing.T) {
+	t.Parallel()
+	// Typed LoopID empty; loop_id only in Metadata. The wrapper reads the run
+	// anchor from metadata and uses the metadata loop_id for the root-skip check;
+	// since run_id != loop_id, it rewrites task_id to the bare run id.
+	inner := &fakeInner{result: agentic.ToolResult{Content: "ok"}}
+	exec := NewExecutor(inner, testPlatform(), quietLogger())
+
+	call := agentic.ToolCall{
+		ID:       "call-1",
+		Name:     "bash",
+		Metadata: withRunID(map[string]any{"loop_id": "loop-from-meta"}, "chain-from-meta"),
+	}
+	if _, err := exec.Execute(context.Background(), call); err != nil {
+		t.Fatalf("Execute: %v", err)
 	}
 	if gotTaskID, _ := inner.got.Metadata[MetadataKeyTaskID].(string); gotTaskID != "chain-from-meta" {
 		t.Errorf("Metadata[task_id] = %q, want %q", gotTaskID, "chain-from-meta")
 	}
 }
 
-func TestExecutor_NoLoopID_DelegatesUnchanged(t *testing.T) {
+func TestExecutor_NilMetadata_DelegatesUnchanged(t *testing.T) {
 	t.Parallel()
+	// Nil metadata → no run anchor → delegate unchanged, no panic, no task_id.
 	inner := &fakeInner{result: agentic.ToolResult{Content: "ok"}}
-	resolver := &fakeResolver{} // should never be called
-	exec := NewExecutor(inner, resolver, quietLogger())
+	exec := NewExecutor(inner, testPlatform(), quietLogger())
 
-	call := agentic.ToolCall{ID: "call-1", Name: "bash"}
+	call := agentic.ToolCall{ID: "call-1", Name: "bash", LoopID: "child-loop"}
 	if _, err := exec.Execute(context.Background(), call); err != nil {
-		t.Fatalf("Execute: %v", err)
+		t.Fatalf("Execute panicked or errored on nil Metadata: %v", err)
 	}
-	if len(resolver.calls) != 0 {
-		t.Errorf("resolver should not be called when loop_id absent; got %v", resolver.calls)
+	if _, has := inner.got.Metadata[MetadataKeyTaskID]; has {
+		t.Errorf("nil-metadata call must delegate unchanged (no run anchor)")
+	}
+}
+
+// TestExecutor_MisroutedCall_ReturnsNotFound pins the defence-in-depth guard:
+// a call whose Name isn't the wrapper's registered ToolName must return a clean
+// ToolErrorNotFound and must NOT delegate to the inner executor (which would
+// silently rewrite metadata on the wrong tool).
+func TestExecutor_MisroutedCall_ReturnsNotFound(t *testing.T) {
+	t.Parallel()
+	inner := &fakeInner{result: agentic.ToolResult{Content: "should not run"}}
+	exec := NewExecutor(inner, testPlatform(), quietLogger())
+
+	call := agentic.ToolCall{
+		ID:       "call-misroute",
+		Name:     "not-bash",
+		LoopID:   "loop-A",
+		Metadata: withRunID(map[string]any{}, "chain-root-uuid"),
+	}
+	res, err := exec.Execute(context.Background(), call)
+	if err != nil {
+		t.Fatalf("Execute returned a transport error; want a tool-result error: %v", err)
+	}
+	if res.ErrorKind != agentic.ToolErrorNotFound {
+		t.Errorf("ErrorKind = %q, want %q", res.ErrorKind, agentic.ToolErrorNotFound)
+	}
+	if res.Error == "" {
+		t.Error("expected a descriptive Error string on the misrouted result")
+	}
+	if res.CallID != "call-misroute" || res.Name != "not-bash" {
+		t.Errorf("result identity = (CallID %q, Name %q), want (call-misroute, not-bash)", res.CallID, res.Name)
+	}
+	// The inner executor must never have run (its got-call stays zero-valued).
+	if inner.got.ID != "" {
+		t.Errorf("inner executor was delegated to on a misrouted call (got ID %q)", inner.got.ID)
 	}
 }
 
@@ -173,29 +203,10 @@ func TestExecutor_ListTools_Delegates(t *testing.T) {
 	t.Parallel()
 	wantTools := []agentic.ToolDefinition{{Name: "bash", Description: "wrapped", Parameters: map[string]any{"type": "object"}}}
 	inner := &fakeInner{tools: wantTools}
-	exec := NewExecutor(inner, &fakeResolver{}, quietLogger())
+	exec := NewExecutor(inner, testPlatform(), quietLogger())
 
 	got := exec.ListTools()
 	if len(got) != 1 || got[0].Name != "bash" || got[0].Description != "wrapped" {
 		t.Errorf("ListTools = %+v, want %+v", got, wantTools)
-	}
-}
-
-// Nil-Metadata path: withTaskID must allocate a fresh map rather than
-// indexing into a nil map (which would panic). Regression guard for
-// callers that thread loop_id only via the typed field.
-func TestExecutor_NilMetadata_AllocatesAndRewrites(t *testing.T) {
-	t.Parallel()
-	inner := &fakeInner{result: agentic.ToolResult{Content: "ok"}}
-	resolver := &fakeResolver{chainID: "chain-root"}
-	exec := NewExecutor(inner, resolver, quietLogger())
-
-	// LoopID set via typed field only; Metadata is nil.
-	call := agentic.ToolCall{ID: "call-1", Name: "bash", LoopID: "child-loop"}
-	if _, err := exec.Execute(context.Background(), call); err != nil {
-		t.Fatalf("Execute panicked or errored on nil Metadata: %v", err)
-	}
-	if gotTaskID, _ := inner.got.Metadata[MetadataKeyTaskID].(string); gotTaskID != "chain-root" {
-		t.Errorf("Metadata[task_id] = %q, want %q", gotTaskID, "chain-root")
 	}
 }

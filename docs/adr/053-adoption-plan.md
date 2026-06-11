@@ -679,14 +679,35 @@ blocker; 4a is Go once built with the top-level phase guard.**
   the live `chain.paused.*`/`chain.decision.*` predicates live in `chainpause/`,
   unaffected; `task schema:generate` is a no-op after removal). So "keep
   predicates.go vocabulary" in the original sketch was wrong — it was dead.
-- **BLOCKED on semstreams#250:** `resolver.go` + `entity_resolver.go` survive.
-  The Resolver ancestry-walk cannot be retired yet because there is no wire run
-  anchor on the tool/event execution context at beta.104 — `agentic-loop` injects
-  only `loop_id` (not `RunID`) into `ToolCall.Metadata`, and `chainpause` walks
-  from `agent.failed.*` events that carry no RunID. Once #250 surfaces the run
-  anchor on `ToolCall.Metadata`, migrate `chainbash`/`requestsandbox`/
-  `querysandboxattestation` to read it directly and delete `resolver.go` +
-  `entity_resolver.go`. Net LOC negative either way.
+- **DONE (2026-06-11, `feat/adr-053-phase5-retire-resolver`):** semstreams#250
+  shipped in **beta.105** — the framework resolves the run/chain entity at
+  dispatch and carries it on the execution context:
+  `ToolCall.Metadata[agent.run_id]` (bare root loop-id) + `[agent.run_entity_id]`
+  (6-part), `LoopFailedEvent.RunEntityID` / `LoopCompletedEvent.RunEntityID` on
+  the wire, and `agentic.TryChainExecutionEntityID` as the non-panicking
+  reconstructor. The ancestry-walk `Resolver` is retired:
+  - NEW `cmd/semteams/runanchor/` — `Anchor(call, org, platform)` reads the
+    metadata anchor (reconstructs the 6-part entity from the bare runID when only
+    `run_id` is present); `ChainEntityID` resolves in precedence order
+    related_loops["chain-entity-id"] pin → run anchor. Replaces the deleted
+    `chain.ResolveChainEntityID` / `chain.IDResolver` / `chain.ChainEntityRoleKey`.
+  - `chainbash` reads the **bare** runID and rewrites `Metadata["task_id"]` to it
+    (NOT the 6-part entity — the sandbox uses task_id as a worktree dir name and
+    `AttestationRunner` re-prefixes; a dotted id double-prefixes).
+  - `requestsandbox` + `querysandboxattestation` use `runanchor.ChainEntityID`.
+  - `chainpause.Pauser` reads `ev.RunEntityID` straight off the failure event;
+    `chainpause.DecisionHandler` — the operator HTTP path with only a
+    `failed_loop_id` (no event, no ToolCall) — does a SINGLE graph read of the
+    failed loop entity's `agent.run.entity_id` via the surviving
+    `chain.NATSEntityReader` (using `TryLoopExecutionEntityID` so untrusted dotted
+    input returns HTTP 400, not a panic — the guard the deleted
+    `chain.ValidateLoopID` used to own).
+  - Deleted `chain/resolver.go` + `chain/entity_resolver.go` + their tests; what
+    survives in `chain/` is the single-entity read (`NATSEntityReader` /
+    `EntityTripleReader`, now in `entity_reader.go`). Net **−547 LOC**.
+  - go-reviewer pass caught the dotted-`failed_loop_id` panic regression (now
+    fixed + tested). Build, `-race`, lint, schema (zero diff), contract, and the
+    chain integration test (live NATS) all green.
 
 ### Phase 6 — Tests, contract, docs
 - Author `chain_entity_coverage` contract test (D7/D8 wire fields, D4 mint

@@ -32,7 +32,7 @@ import (
 	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/types"
 
-	"github.com/c360studio/semteams/cmd/semteams/chain"
+	"github.com/c360studio/semteams/cmd/semteams/runanchor"
 	"github.com/c360studio/semteams/cmd/semteams/sandboxmanager"
 )
 
@@ -46,28 +46,21 @@ type EntityTripleReader interface {
 	ReadEntity(ctx context.Context, entityID string) (map[string]any, error)
 }
 
-// ChainResolver derives the chain entity ID from the calling loop
-// when the spawn rule didn't pin it via related_loops. Aliases the
-// extracted chain.IDResolver so consumers of this package get the
-// same interface across the codebase.
-type ChainResolver = chain.IDResolver
-
 // Executor implements agentic.ToolExecutor for
 // query_sandbox_attestation.
 type Executor struct {
 	catalog  *sandboxmanager.Catalog
 	entities EntityTripleReader
-	resolver ChainResolver
 	platform types.PlatformMeta
 	now      func() time.Time
 	logger   *slog.Logger
 }
 
-// NewExecutor constructs an Executor. catalog + entities + platform
-// are boot-required; resolver may be nil (caller must supply chain
-// entity via related_loops). now defaults to time.Now (UTC) when
-// nil.
-func NewExecutor(catalog *sandboxmanager.Catalog, entities EntityTripleReader, resolver ChainResolver, platform types.PlatformMeta, now func() time.Time, logger *slog.Logger) *Executor {
+// NewExecutor constructs an Executor. catalog + entities + platform are
+// boot-required. The chain entity ID is read off the ToolCall's run anchor
+// (ADR-053 Phase 5 / semstreams#250) — no Resolver. now defaults to time.Now
+// (UTC) when nil.
+func NewExecutor(catalog *sandboxmanager.Catalog, entities EntityTripleReader, platform types.PlatformMeta, now func() time.Time, logger *slog.Logger) *Executor {
 	if catalog == nil {
 		panic("querysandboxattestation.NewExecutor: catalog must not be nil")
 	}
@@ -83,7 +76,7 @@ func NewExecutor(catalog *sandboxmanager.Catalog, entities EntityTripleReader, r
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Executor{catalog: catalog, entities: entities, resolver: resolver, platform: platform, now: now, logger: logger}
+	return &Executor{catalog: catalog, entities: entities, platform: platform, now: now, logger: logger}
 }
 
 // ListTools returns the LLM-facing schema. Args are a subset of
@@ -154,7 +147,7 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 	}
 	signature := sandboxmanager.SignatureFor(profile, req)
 
-	chainEntityID, err := e.chainEntityFromCall(ctx, call)
+	chainEntityID, err := e.chainEntityFromCall(call)
 	if err != nil {
 		return errResult(call, agentic.ToolErrorInternal, "%v", err), nil
 	}
@@ -209,12 +202,11 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 	}, nil
 }
 
-// chainEntityFromCall delegates to chain.ResolveChainEntityID, wrapping
-// errors with the tool name for log context. Extracted 2026-06-02 when
-// sandboxruntime.AttestationRunner became the third consumer of the
-// same resolution path.
-func (e *Executor) chainEntityFromCall(ctx context.Context, call agentic.ToolCall) (string, error) {
-	entityID, err := chain.ResolveChainEntityID(ctx, call, e.resolver, e.platform, e.logger)
+// chainEntityFromCall resolves the chain entity ID via runanchor.ChainEntityID:
+// related_loops["chain-entity-id"] first, else the dispatch-stamped run anchor on
+// ToolCall.Metadata (ADR-053 Phase 5 / semstreams#250 — no Resolver walk).
+func (e *Executor) chainEntityFromCall(call agentic.ToolCall) (string, error) {
+	entityID, err := runanchor.ChainEntityID(call, e.platform.Org, e.platform.Platform)
 	if err != nil {
 		return "", fmt.Errorf("query_sandbox_attestation: %w", err)
 	}
