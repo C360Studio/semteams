@@ -251,6 +251,29 @@ These upstream config fields default `false`; enable per config as needed:
   `decide(ask_user)` is rejected → the loop re-picks `respond_direct`/
   re-dispatch, no dead-end). Threaded via `extractRestrictedDecideActions` →
   `RegisterBuiltins` in `cmd/semteams/main.go` (ADR-029).
+  - **Autonomous persona overlay (ADR-053 §4b polish).** An autonomous
+    deployment SHOULD also load the autonomous coordinator persona overlay so
+    the coordinator skips the otherwise-rejected `ask_user` attempt entirely
+    (the LLM resolves ambiguity via `respond_direct` upfront — upstream
+    `decide.go:312` says "fix the persona prompt rather than loosening the
+    policy"). Set `-persona-overlay`/`SEMSTREAMS_PERSONA_OVERLAY_PATH` to
+    `configs/personas/fragments-autonomous`; `loadPersonaFragments` loads it
+    AFTER the base tree, and `LoadFromDirectory`'s `<role>/<id>` upsert
+    overwrites/adds same-id fragments (here it ADDS
+    `coordinator/12-autonomous-clarification-policy.md`). The base
+    `coordinator/10-decision-contract.md` stays the interactive default and
+    handles a stray rejection gracefully even WITHOUT the overlay. The e2e
+    `clarification-autonomous` journey wires the overlay via the Taskfile
+    `PERSONA_OVERLAY` var; the behavioral skip is a real-LLM-smoke concern
+    (the mock serves fixtures regardless of persona). The gate
+    (`restricted_decide_actions`) and the overlay are **intentionally
+    decoupled**: the gate is ENFORCEMENT (barred actions are rejected
+    regardless of persona); the overlay is an OPTIMIZATION (skip the wasted
+    iteration). A deployment that sets the gate but forgets the overlay still
+    recovers — the base `10-decision-contract.md` tells the coordinator to
+    `respond_direct` with an assumption on an off-policy rejection rather than
+    wedge. `loadPersonaFragments` guards a non-resolving overlay path with a
+    loud WARN (a typo'd path boots base-only, not silently).
 - `agentic-governance.enable_tool_governance` — pre-execution governance
   filtering
 
