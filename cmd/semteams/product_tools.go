@@ -775,8 +775,8 @@ func registerEmitPlan(reg *agentictools.ExecutorRegistry, natsClient *natsclient
 	// preceded the plan. The live research pack is plan-first and the
 	// ResearchMilestoneStamper fires only on the terminal reviewer
 	// approval, so that read never found data — the plan slug is
-	// title-derived. Retiring it drops the last production user of
-	// chain.LineageReader (Phase 5 deletes lineage_reader.go).
+	// title-derived. Retiring it dropped the last production user of
+	// chain.LineageReader, which ADR-053 Phase 5 then deleted.
 	if err := reg.RegisterTool(emitplan.ToolName, executor); err != nil {
 		return fmt.Errorf("register %s: %w", emitplan.ToolName, err)
 	}

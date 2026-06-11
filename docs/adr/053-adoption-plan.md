@@ -617,11 +617,26 @@ later phase revision completes exactly once"). **Net verdict: no new
 blocker; 4a is Go once built with the top-level phase guard.**
 
 ### Phase 5 — Retire the hand-rolled layer
-- Re-platform stampers (`dispatched`/`research`/`needs_review`/`terminal`)
-  onto `MilestoneHandler`; `chainpause` + `evidence` onto
-  `MilestoneSubscriber`. Delete `resolver.go`/`entity_resolver.go`/
-  `lineage_reader.go`/`subscriber.go` (or reduce to fallback-only with WARN).
-  Keep `predicates.go` vocabulary. Net LOC negative.
+- The stampers + `subscriber.go` were already retired in Phase 4a (the
+  `chain.*` milestone projections are gone; the agent-run substrate owns
+  run-phase authority).
+- **PARTIAL (2026-06-11, `chore/adr-053-phase5-dead-chain-cleanup`):** deleted
+  the genuinely-dead survivors — `lineage_reader.go` (no production consumer
+  since Phase 3c retired emit_plan's read; `AnchorFromMetadata`/`AnchorRoleKeys`/
+  `ReadChainFor` all unreferenced) AND `predicates.go` in full (all 42 `Predicate*`
+  constants were orphaned vocabulary for the RETIRED chainmode/phasevalidator/
+  chainstall/needs-review/ADR-040/ADR-041 machinery — zero external references;
+  the live `chain.paused.*`/`chain.decision.*` predicates live in `chainpause/`,
+  unaffected; `task schema:generate` is a no-op after removal). So "keep
+  predicates.go vocabulary" in the original sketch was wrong — it was dead.
+- **BLOCKED on semstreams#250:** `resolver.go` + `entity_resolver.go` survive.
+  The Resolver ancestry-walk cannot be retired yet because there is no wire run
+  anchor on the tool/event execution context at beta.104 — `agentic-loop` injects
+  only `loop_id` (not `RunID`) into `ToolCall.Metadata`, and `chainpause` walks
+  from `agent.failed.*` events that carry no RunID. Once #250 surfaces the run
+  anchor on `ToolCall.Metadata`, migrate `chainbash`/`requestsandbox`/
+  `querysandboxattestation` to read it directly and delete `resolver.go` +
+  `entity_resolver.go`. Net LOC negative either way.
 
 ### Phase 6 — Tests, contract, docs
 - Author `chain_entity_coverage` contract test (D7/D8 wire fields, D4 mint
