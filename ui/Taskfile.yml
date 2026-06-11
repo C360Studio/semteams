@@ -928,6 +928,58 @@ tasks:
       # Cleanup + capture defers fire either way.
       - timeout 1200 task test:e2e:agentic:probe:auto-approve-watcher -- {{.RUN_ID}}
 
+  test:e2e:agentic:smoke:autonomous:run:
+    desc: Real-LLM smoke — ADR-053 §4b autonomous coordinator persona overlay (verify the ask_user SKIP)
+    summary: |
+      Boots flow-bootstrap.json DERIVED (jq) with
+      restricted_decide_actions=["ask_user"] (the autonomous gate) AND loads the
+      autonomous coordinator persona overlay (PERSONA_OVERLAY=
+      configs/personas/fragments-autonomous). Sends a genuinely-ambiguous prompt
+      that a BASE (interactive) coordinator would normally clarify via ask_user.
+
+      With the overlay the real coordinator should go STRAIGHT to respond_direct
+      (stating an assumption / the missing-context limitation) — ZERO ask_user
+      attempts. The clarification-autonomous MOCK journey can only prove the gate
+      + that the overlay LOADS (the mock serves fixtures regardless of persona);
+      this smoke proves the BEHAVIORAL skip on a real LLM.
+
+      Tiny spend: a single front-door coordinator loop (~1-2 model calls), no
+      category dispatch, no sandbox. Captures the coordinator trajectory to
+      /tmp/<RUN_ID>/. SKIP CHECK after the run: the coordinator trajectory should
+      contain ONE decide(respond_direct) and NO decide(ask_user) tool call (a
+      rejected ask_user would appear as a decide call returning a tool error).
+
+      Usage (from project root so .env auto-loads ANTHROPIC/GEMINI keys):
+        task ui:test:e2e:agentic:smoke:autonomous:run
+        PROMPT="..." task ui:test:e2e:agentic:smoke:autonomous:run
+    vars:
+      RUN_ID: '{{.RUN_ID | default (printf "smoke-autonomous-%s" (now | date "20060102-150405"))}}'
+      PROMPT: '{{.PROMPT | default "Go ahead and set it up the way we discussed."}}'
+    preconditions:
+      - sh: '[ -n "$GEMINI_API_KEY" ] || [ -n "$ANTHROPIC_API_KEY" ]'
+        msg: "Neither GEMINI_API_KEY nor ANTHROPIC_API_KEY is set (the coordinator model). Add to the project-root .env (auto-loaded when invoking from root) or export. flow-bootstrap.json routes the coordinator to gemini-pro/flash with a claude-haiku fallback."
+    cmds:
+      - 'echo "▶︎  autonomous-overlay smoke (RUN_ID={{.RUN_ID}}); evidence → /tmp/{{.RUN_ID}}/"'
+      - defer: { task: test:e2e:agentic:cleanup }
+      - defer: rm -f ../configs/flow-bootstrap-autonomous.gen.json
+      - defer:
+          task: test:e2e:agentic:smoke7:capture
+          vars:
+            RUN_ID: "{{.RUN_ID}}"
+            WEDGE_EXPECTED_TERMINAL_ROLE: coordinator
+      - jq '.components["agentic-tools"].config.restricted_decide_actions=["ask_user"]' ../configs/flow-bootstrap.json > ../configs/flow-bootstrap-autonomous.gen.json
+      - task: test:e2e:agentic:stack:up
+        vars:
+          FIXTURE: ""
+          AGENTIC_CONFIG: flow-bootstrap-autonomous.gen.json
+          PERSONA_OVERLAY: configs/personas/fragments-autonomous
+      - task: test:e2e:agentic:probe:send
+        vars:
+          CLI_ARGS: '{{.PROMPT}}'
+      # Single coordinator loop, no gates — the watcher just polls to terminal +
+      # captures the trajectory. 600s cap bounds spend on a stall.
+      - timeout 600 task test:e2e:agentic:probe:auto-approve-watcher -- {{.RUN_ID}}
+
   test:e2e:agentic:smoke13:run:
     desc: Run smoke #13 (ADR-043 real-LLM — coordinator → request_sandbox happy path) end-to-end
     summary: |
@@ -1437,6 +1489,11 @@ tasks:
     desc: Run type checking
     cmds:
       - npm run check
+
+  build:
+    desc: Production build (vite). Mirrors the ui.yml CI build step + the root check:all task.
+    cmds:
+      - npm run build
 
   # === CI ===
 
