@@ -246,7 +246,10 @@
           "/app/configs/rules/agent-run/03-executing-to-completed.json",
           "/app/configs/rules/agent-run/04-executing-to-failed.json",
           "/app/configs/rules/agent-run/05-coordinator-failed-run-anchor.json",
-          "/app/configs/rules/agent-run/06-coordinator-failed-lineage-anchor.json"
+          "/app/configs/rules/agent-run/06-coordinator-failed-lineage-anchor.json",
+          "/app/configs/rules/agent-run/07-ask-user-pause-run-anchor.json",
+          "/app/configs/rules/agent-run/08-ask-user-pause-lineage-anchor.json",
+          "/app/configs/rules/agent-run/09-executing-to-awaiting-on-clarification.json"
         ],
         "inline_rules": []
       }

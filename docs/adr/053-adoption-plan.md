@@ -531,14 +531,64 @@ ever disproves the beta.102 re-eval behavior, THEN fold the check in.
     recovery coordinator resolves to the correct `chain.execution` run entity.
   - **4b-2:** the interactive PAUSE — `executing→awaiting_approval` on
     `ask_user` + reply-correlation (carry the asking-run-id, re-anchor the
-    reply coordinator, resume `awaiting_approval→executing`). Its own slice;
-    gated on building reply-correlation (none today: the reply is a fresh
-    uncorrelated `user.message` turn).
+    reply coordinator, resume `awaiting_approval→executing`). Its own slice.
+
+    **DESIGN SPIKE (2026-06-11, architect-reviewed) — facts resolved:**
+    - The lifecycle GRAPH needs no change: `executing⇄awaiting_approval` edges
+      are already legal (`agentrun.go:45-52`). 4b-2 reuses `awaiting_approval`
+      (human DECISION: not a new `awaiting_user` phase) — the UI disambiguates
+      4b-2's clarification (`coordinator.user_question`, no `pending_approval`)
+      from 4c's tool-gate (`pending_approval` present).
+    - **`reply_to` does NOT re-anchor to the run** (corrects the "no
+      reply-correlation today" framing): `reply_to` re-uses the loop-id STRING
+      but `CreateLoopWithID` (`agentic-loop/state.go:132-156`) OVERWRITES the
+      loop entity with a fresh one — no continue-path, RunID unset, run triples
+      not re-stamped. So the reply lands run-orphaned; net-new run-anchor
+      threading IS required (resolved below).
+    - **Autonomous mode gates 4b-2 for free**: under
+      `restricted_decide_actions:["ask_user"]` the framework rejects
+      `decide(ask_user)` BEFORE the `coordinator.decision.next_action=ask_user`
+      triple is stamped (`decide.go:307-322`), so every 4b-2 rule (all gated on
+      that triple) is structurally inert in autonomous mode. No rule-level gate
+      needed; pinned by a contract assertion.
+    - **Scope** (human DECISION): backend-first. PR-1 = pause; PR-2 = resume +
+      the upstream field; UI (surface question + reply affordance) is a deferred
+      follow-up (operators verify via `nats sub`/run-entity polling meanwhile,
+      per `03-ask-user.json`'s `open_followup`).
+
+    **PR-1 (pause, product-shell only, no upstream):** the in-run `ask_user`
+    pauses the run. Recovery coordinators that `ask_user` within a run carry the
+    run anchor as EITHER `agent.run.entity_id` (inherit) OR
+    `lineage.run-loop-entity-id` (threaded) — the 4b-1a split — so the pause
+    marker is an anchor PAIR mirroring 05/06: `agent-run/07-ask-user-pause-run-anchor`
+    (`agent.run.entity_id != ""` + lineage `length_eq 0`) +
+    `08-ask-user-pause-lineage-anchor` (lineage `length_gt 0`), each stamping
+    `agent.run.clarification_pending=$entity.instance` on the run entity.
+    `09-executing-to-awaiting-on-clarification` is the run-entity transition
+    (`clarification_pending != ""` + `phase==executing` top-level guard →
+    `awaiting_approval`), modelled on rule 02. The front-door `ask_user` (no run
+    minted) does NOT pause — there is no run; the run-anchor guard makes it a
+    no-op. PR-1 is strictly more honest than today (was `executing`-forever on
+    ask_user, now `awaiting_approval`-forever until PR-2's resume).
+
+    **PR-2 (resume + upstream U1):** thread the asking run id through the reply.
+    Upstream **U1** (file the ask): add `RunID`/`RunEntityID` to
+    `HTTPMessageRequest` + the reply `TaskMessage` (`component.go:717-725`) so
+    the reply re-anchors via the EXISTING `SetRunID`+`graph_writer` path
+    (closing a structural hole in the dispatch-coordinator pattern, not a new
+    primitive — D3 resolution: thread-the-anchor, NOT making `CreateLoopWithID`
+    continue loops). Rules `10`/`11` (resume marker + `awaiting_approval→executing`),
+    gated on a reply discriminator (`agent.loop.reply_to`). Marker hygiene (D2):
+    the resume transition `on_exit`-clears `clarification_pending` so the
+    ask→reply→ask cycle re-enters cleanly (state-machine dup/restart defense).
   - **cancel (deferred, narrow):** `executing→cancelled` fires ONLY on an
     explicit abandon, NOT on cap/budget exhaustion (those route to `ask_user`
     and stay `executing`). Likely home is an UPSTREAM widening of the D3 guard
     to the executing phase (it only covers `dispatched` today), not a
-    product-shell cancel subscriber. Its own slice.
+    product-shell cancel subscriber. Its own slice. NOTE (go-reviewer N2): a 4b-2
+    run that pauses on `ask_user` and is NEVER replied to parks in
+    `awaiting_approval` with no terminal-timeout — an abandoned-clarification run
+    is this cancel/timeout slice's job (tracked here, not a 4b-2-PR-1/PR-2 blocker).
 - **4c:** the real `approval_required` tool-gate → `awaiting_approval`
   (NOT the CBG automated reviewer, which stays `executing` — §E).
 - Then Phase 5.

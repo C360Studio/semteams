@@ -156,6 +156,7 @@ func TestAgentRunPack_TransitionsPhaseGuardedTopLevel(t *testing.T) {
 		{"../../configs/rules/agent-run/02-dispatched-to-executing.json", "dispatched", "executing", "agent.run.handoff"},
 		{"../../configs/rules/agent-run/03-executing-to-completed.json", "executing", "completed", "agent.run.outcome"},
 		{"../../configs/rules/agent-run/04-executing-to-failed.json", "executing", "failed", "agent.run.outcome"},
+		{"../../configs/rules/agent-run/09-executing-to-awaiting-on-clarification.json", "executing", "awaiting_approval", "agent.run.clarification_pending"},
 	}
 	for _, tc := range cases {
 		r := loadRule(t, tc.path)
@@ -284,6 +285,9 @@ func TestAgentRunPack_WiredInBothConfigs(t *testing.T) {
 		"/app/configs/rules/agent-run/04-executing-to-failed.json",
 		"/app/configs/rules/agent-run/05-coordinator-failed-run-anchor.json",
 		"/app/configs/rules/agent-run/06-coordinator-failed-lineage-anchor.json",
+		"/app/configs/rules/agent-run/07-ask-user-pause-run-anchor.json",
+		"/app/configs/rules/agent-run/08-ask-user-pause-lineage-anchor.json",
+		"/app/configs/rules/agent-run/09-executing-to-awaiting-on-clarification.json",
 	}
 	for _, cfg := range []string{"../../configs/flow-bootstrap.json", "../../configs/e2e-flow-bootstrap.json"} {
 		raw, err := os.ReadFile(cfg) //nolint:gosec // test-controlled config path
@@ -372,6 +376,85 @@ func TestAgentRunPack_FailedStampAnchorGuarded(t *testing.T) {
 	c05 := loadRule(t, "../../configs/rules/agent-run/05-coordinator-failed-run-anchor.json")
 	if !c05.hasConditionField("lineage.run-loop-entity-id", "length_eq") {
 		t.Error("agent-run/05 must fence on `lineage.run-loop-entity-id length_eq 0` (mutually exclusive with rule 06)")
+	}
+}
+
+// TestAgentRunPack_AskUserPauseMarkers pins the 4b-2 interactive-pause marker
+// pair (07/08): each fires on a coordinator decide(ask_user) WITHIN a run and
+// stamps agent.run.clarification_pending on the run entity via the correct
+// per-anchor subject, fenced so the subject resolves and the pair is mutually
+// exclusive (same anchor discipline as the coordinator-failed pair 05/06). The
+// next_action==ask_user trigger is ALSO the autonomous-inertness gate: under
+// restricted_decide_actions=["ask_user"] the framework rejects decide(ask_user)
+// BEFORE that triple is stamped, so neither rule can fire in autonomous mode —
+// 4b-2 is interactive-only by construction.
+func TestAgentRunPack_AskUserPauseMarkers(t *testing.T) {
+	cases := []struct {
+		path      string
+		subject   string
+		lineageOp string // the lineage fence operator
+	}{
+		{"../../configs/rules/agent-run/07-ask-user-pause-run-anchor.json", "$entity.triple.agent.run.entity_id", "length_eq"},
+		{"../../configs/rules/agent-run/08-ask-user-pause-lineage-anchor.json", "$entity.triple.lineage.run-loop-entity-id", "length_gt"},
+	}
+	for _, tc := range cases {
+		r := loadRule(t, tc.path)
+		if !r.hasCondition("agent.loop.role", "eq", "coordinator") {
+			t.Errorf("%s: must fire on agent.loop.role==coordinator", tc.path)
+		}
+		// The ask_user trigger — ALSO the autonomous-inertness gate.
+		if !r.hasCondition("coordinator.decision.next_action", "eq", "ask_user") {
+			t.Errorf("%s: must trigger on coordinator.decision.next_action==ask_user — the trigger AND the autonomous-inertness "+
+				"gate (decide(ask_user) is rejected pre-stamp under restricted_decide_actions, so this rule can't fire in autonomous mode)", tc.path)
+		}
+		var stamps bool
+		for _, a := range r.OnEnter {
+			if a.Type == "add_triple" && a.Predicate == "agent.run.clarification_pending" {
+				stamps = true
+				if a.Subject != tc.subject {
+					t.Errorf("%s: clarification_pending subject = %q, want %q (per-anchor run subject)", tc.path, a.Subject, tc.subject)
+				}
+			}
+		}
+		if !stamps {
+			t.Errorf("%s: must add_triple agent.run.clarification_pending on the run entity (drives agent-run/09 executing→awaiting_approval)", tc.path)
+		}
+		// Anchor fence so the subject resolves + the pair is mutually exclusive.
+		if !r.hasConditionField("lineage.run-loop-entity-id", tc.lineageOp) {
+			t.Errorf("%s: must fence on `lineage.run-loop-entity-id %s 0` (subject-resolves + mutual exclusion with the sibling — mirrors 05/06)", tc.path, tc.lineageOp)
+		}
+	}
+	// Rule 07 (run-anchor) additionally guards agent.run.entity_id != "" — the
+	// run-less-chat guard (a front-door ask_user has no run to pause).
+	r07 := loadRule(t, "../../configs/rules/agent-run/07-ask-user-pause-run-anchor.json")
+	if !r07.hasCondition("agent.run.entity_id", "ne", "") {
+		t.Error("agent-run/07 must guard agent.run.entity_id != \"\" (run-less-chat guard — a front-door ask_user has no run to pause)")
+	}
+}
+
+// TestAgentRunPack_AskUserPauseAutonomousInert is the NAMED structural pin the
+// 4b-2 rule metadata + README reference: the pause markers (07/08) CANNOT fire in
+// autonomous mode. The mechanism is UPSTREAM ORDERING — under
+// agentic-tools.restricted_decide_actions=["ask_user"] the framework rejects
+// decide(ask_user) (ToolErrorInvalidArgs) BEFORE the
+// coordinator.decision.next_action=ask_user triple is published (semstreams
+// beta.104 decide.go:307-322 runs before the next_action stamp at :362-370). Both
+// pause markers gate on that triple, so neither can enter in autonomous mode — no
+// rule-level autonomous gate is needed. This test makes the named claim concrete
+// (the structural proxy: 07/08 trigger ONLY on next_action==ask_user). The
+// end-to-end proof that autonomous mode stamps ZERO such triples is the shipped
+// clarification-autonomous.spec.ts.
+func TestAgentRunPack_AskUserPauseAutonomousInert(t *testing.T) {
+	for _, path := range []string{
+		"../../configs/rules/agent-run/07-ask-user-pause-run-anchor.json",
+		"../../configs/rules/agent-run/08-ask-user-pause-lineage-anchor.json",
+	} {
+		r := loadRule(t, path)
+		if !r.hasCondition("coordinator.decision.next_action", "eq", "ask_user") {
+			t.Errorf("%s: must gate on coordinator.decision.next_action==ask_user — that triple is what makes the rule "+
+				"autonomous-inert (restricted_decide_actions rejects decide(ask_user) before the triple is stamped). Without "+
+				"this exact gate the inertness claim in the rule metadata + README would be false.", path)
+		}
 	}
 }
 

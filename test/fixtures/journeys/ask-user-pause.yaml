@@ -1,0 +1,74 @@
+name: ask-user-pause
+description: |
+  Journey: ADR-053 Phase 4b-2 PR-1 — an in-run coordinator decide(ask_user)
+  pauses the run executing→awaiting_approval, end-to-end on mock-LLM against
+  configs/e2e-flow-bootstrap.json (INTERACTIVE mode — restricted_decide_actions=[]
+  by default, so ask_user is permitted).
+
+  A first-pass Lisa escalates needs_clarification (rule 01 allowlist), so rule 02f
+  spawns a recovery coordinator that carries the run anchor as agent.run.entity_id
+  (inherit — first-pass Lisa was spawned run_scope=new). That recovery coordinator
+  emits decide(ask_user) — and because it belongs to a run, the 4b-2 pause fires:
+    - agent-run/07-ask-user-pause-run-anchor stamps agent.run.clarification_pending
+      on the RUN entity (via $entity.triple.agent.run.entity_id).
+    - agent-run/09-executing-to-awaiting-on-clarification (clarification_pending +
+      phase==executing) transitions the run executing→awaiting_approval.
+  The run is honestly PAUSED on a human reply. PR-1 has no resume yet — the run
+  parks in awaiting_approval (strictly more honest than the prior
+  executing-forever-on-ask_user). Resume (awaiting_approval→executing) is PR-2.
+
+  Substrate behavior this proves:
+    1. Loop 0 coordinator(dispatch) → decide(dev_via_test) → rule 01 run_scope=new
+       → handoff → run executing.
+    2. Loop A first-pass Lisa → decide(needs_clarification) → rule 02f spawns the
+       inherit recovery coordinator (carries agent.run.entity_id).
+    3. Loop R recovery coordinator → decide(ask_user) → coordinator/03-ask-user
+       stamps coordinator.user_question; agent-run/07 stamps
+       agent.run.clarification_pending on the run entity.
+    4. agent-run/09 fires → executing→awaiting_approval.
+
+  Exercises rule 07 (run-anchor branch). Rule 08 (the lineage-anchor sibling) is
+  structurally pinned by TestAgentRunPack_AskUserPauseMarkers + is the same shape.
+
+  This is an EXECUTING-phase pause, NOT a terminal — the run reaches
+  awaiting_approval and does NOT complete or fail (no reviewer approved; the
+  coordinator asked rather than answered). The spec asserts
+  agent.run.last_transition_from==executing to prove rule 09 drove it.
+
+  Mock serves responses in GLOBAL ORDER. No sandbox requested (the chain pauses
+  before any plan/Ralph). Paired spec: ui/e2e/agentic/ask-user-pause.spec.ts.
+  Config: configs/e2e-flow-bootstrap.json (incl. agent-run/07 + 09).
+
+responses:
+  # ---------- Loop 0: front-door coordinator → dev_via_test ----------
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "dev_via_test",
+          "reason": "Add a Go HTTP service that decodes MAVLink v2 HEARTBEAT frames over UDP and serves the latest at GET /heartbeat as JSON. (4b-2 pause journey: first-pass Lisa escalates needs_clarification, then the recovery coordinator asks the user a clarifying question to exercise executing→awaiting_approval.)"
+        }
+
+  # ---------- Loop A: first-pass Lisa → needs_clarification ----------
+  # rule 01 allowlist = [planned, needs_clarification]; Lisa escalates on turn 1.
+  # rule 02f (first-pass, lineage length_eq 0) spawns the INHERIT recovery
+  # coordinator (carries agent.run.entity_id).
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "needs_clarification",
+          "reason": "The ask does not specify the UDP listen address/port or the MAVLink dialect to decode — I need the user to clarify before a faithful plan is possible."
+        }
+
+  # ---------- Loop R: recovery coordinator → ask_user (PAUSES the run) ----------
+  # The 02f recovery coordinator (interactive mode, allowlist [ask_user,
+  # respond_direct]) asks the user. agent-run/07 stamps clarification_pending on
+  # the run entity → agent-run/09 transitions executing→awaiting_approval.
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "ask_user",
+          "reason": "Quick clarification before I build the heartbeat service: which UDP address and port should it listen on for MAVLink frames, and which MAVLink dialect (e.g. common / ardupilotmega) should I decode? Once you confirm I'll proceed."
+        }

@@ -1,0 +1,43 @@
+{
+  "id": "agent_run_executing_to_awaiting_on_clarification",
+  "type": "expression",
+  "name": "Clarification pending → executing→awaiting_approval",
+  "description": "ADR-053 Phase 4b-2 PR-1 — the interactive-pause transition, half 2 (the run-entity transition). Fires on the RUN entity (agent.chain.execution.<runID>) when rule 07 or 08 has stamped agent.run.clarification_pending there AND the run is still `executing`. Advances the run to `awaiting_approval` via lifecycle_transition (the firing entity = the run entity, which is what the action transitions). The run is now honestly paused on a human reply rather than misleadingly `executing`.\n\nMirrors 02-dispatched-to-executing.json exactly (marker trigger + top-level phase guard + lifecycle_transition). The executing→awaiting_approval edge is already legal in the upstream transition table (agentrun.go), so no lifecycle change.\n\nPHASE GUARD IS A TOP-LEVEL CONDITION, NOT AN ACTION `when` (Coby review round 2): agent.run.phase==executing is a rule condition, so the rule is simply not-matching until the edge is legal — the illegal transition is never attempted and the durable clarification_pending marker re-drives the transition exactly once when the phase is executing (beta.103+ re-evaluates every entity-state rule per KV revision).\n\nSHARED PHASE WITH 4c: awaiting_approval is also 4c's tool-gate phase. They are distinguished by CAUSE, not phase: 4b-2 stamps agent.run.clarification_pending + the asking loop has coordinator.user_question and NO pending_approval; 4c's tool-gate sets pending_approval. The UI follow-up disambiguates on those triples.\n\nDOES NOT collide with 03/04 (executing→completed/failed): a recovery coordinator's ask_user stamps clarification_pending but NOT agent.run.outcome, so rules 03/04 do not fire; and once the run is awaiting_approval their phase==executing guard excludes them. PR-1 ends here (run parked in awaiting_approval); PR-2 adds the resume + marker-clear.",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "agent.run.clarification_pending",
+      "operator": "ne",
+      "value": "",
+      "required": true
+    },
+    {
+      "field": "agent.run.phase",
+      "operator": "eq",
+      "value": "executing",
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "lifecycle_transition",
+      "workflow": "agent-run",
+      "phase": "awaiting_approval",
+      "reason": "coordinator asked the user a clarifying question — run paused awaiting reply (ADR-053 4b-2)"
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "pack": "agent-run",
+    "phase": "ADR-053 Phase 4b-2 PR-1",
+    "adr": "docs/adr/053-adoption-plan.md",
+    "role": "executing→awaiting_approval (run-entity transition, half 2)",
+    "joins_with": "07-ask-user-pause-run-anchor.json + 08-ask-user-pause-lineage-anchor.json (the markers).",
+    "fires_on": "the run entity (agent.chain.execution.<runID>) — same firing-entity discipline as 02/03/04.",
+    "phase_guard_is_condition": "agent.run.phase==executing is a TOP-LEVEL CONDITION (not an action `when`) so the invalid edge is never attempted (Coby review round 2).",
+    "edge_is_legal_upstream": "executing→awaiting_approval is already in the agentrun lifecycle transition table — no upstream change.",
+    "vs_4c": "Shares awaiting_approval with 4c's approval_required tool-gate; distinguished by cause (clarification_pending + coordinator.user_question vs pending_approval), not by phase.",
+    "pr1_end_state": "PR-1 has no resume — the run parks in awaiting_approval (strictly more honest than the prior executing-forever-on-ask_user). PR-2 adds awaiting_approval→executing + clears clarification_pending."
+  }
+}
