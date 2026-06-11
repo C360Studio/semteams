@@ -209,6 +209,7 @@ tasks:
       - task: test:e2e:agentic:run-failed
       - task: test:e2e:agentic:run-failed-coordinator
       - task: test:e2e:agentic:run-failed-coordinator-inherit
+      - task: test:e2e:agentic:ask-user-pause
       - task: test:e2e:agentic:clarification-autonomous
 
   test:e2e:agentic:real-time-activity-stream:
@@ -359,6 +360,35 @@ tasks:
           FIXTURE: "{{.FIXTURE}}"
           AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
       - npx playwright test e2e/agentic/run-failed-coordinator-inherit.spec.ts
+
+  test:e2e:agentic:ask-user-pause:
+    desc: Run the ADR-053 Phase 4b-2 interactive-pause journey (in-run ask_user → awaiting_approval)
+    summary: |
+      A first-pass Lisa escalates needs_clarification, so rule 02f spawns a
+      recovery coordinator (inherit anchor: agent.run.entity_id). That coordinator
+      emits decide(ask_user) — and because it belongs to a run, the 4b-2 pause
+      fires:
+
+        coordinator/03-ask-user                            → coordinator.user_question
+        agent-run/07-ask-user-pause-run-anchor             → agent.run.clarification_pending (run entity)
+        agent-run/09-executing-to-awaiting-on-clarification → executing→awaiting_approval
+
+      The run is honestly paused on a human reply (PR-1 has no resume — it parks
+      in awaiting_approval; resume is PR-2). Asserts agent.run.phase reaches
+      awaiting_approval (NOT completed/failed) + last_transition_from==executing,
+      and the clarification_pending marker that distinguishes a 4b-2 pause from a
+      4c tool-gate. Interactive mode (restricted_decide_actions=[]). Sandbox =
+      MockRunner (no sandbox requested — pauses before any plan/Ralph).
+    vars:
+      FIXTURE: ask-user-pause.yaml
+      AGENTIC_CONFIG: e2e-flow-bootstrap.json
+    cmds:
+      - defer: { task: test:e2e:agentic:cleanup }
+      - task: test:e2e:agentic:stack:up
+        vars:
+          FIXTURE: "{{.FIXTURE}}"
+          AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
+      - npx playwright test e2e/agentic/ask-user-pause.spec.ts
 
   test:e2e:agentic:clarification-autonomous:
     desc: Run the ADR-053 4b clarification-policy AUTONOMOUS-mode journey

@@ -29,6 +29,34 @@ matches the marker and transitions.
 | `04-executing-to-failed.json` | run entity | `agent.run.outcome==failed` + `phase==executing` → `failed`. The symmetric twin of `03`. (Phase 4a′.) |
 | `05-coordinator-failed-run-anchor.json` | coordinator loop | A coordinator that fails (`outcome in [failed,truncated]`) **while executing** and carries `agent.run.entity_id` (lineage absent) stamps `agent.run.outcome=failed` on the run entity. The zombie D3 can't catch (D3 fires only while `dispatched`). (Phase 4a′.) |
 | `06-coordinator-failed-lineage-anchor.json` | coordinator loop | Same, for coordinators carrying `lineage.run-loop-entity-id` (dev-via-test 02b/02d/05/07d + the 4b-1a threaded recovery coordinators autoresearch/10b, dev-via-test 02e/02f-replan/07b/07e) — fenced on `length_gt 0`, stamps via the lineage anchor. Mutually exclusive with `05`. (Phase 4a′ + 4b-1a.) |
+| `07-ask-user-pause-run-anchor.json` | coordinator loop | An in-run coordinator emitting `decide(ask_user)` and carrying `agent.run.entity_id` (lineage absent) stamps `agent.run.clarification_pending=$entity.instance` on the run entity. The interactive-pause marker, anchor branch 1. (Phase 4b-2.) |
+| `08-ask-user-pause-lineage-anchor.json` | coordinator loop | Same, for `decide(ask_user)` coordinators carrying `lineage.run-loop-entity-id` (`length_gt 0`) — stamps via the lineage anchor. Mutually exclusive with `07`. (Phase 4b-2.) |
+| `09-executing-to-awaiting-on-clarification.json` | run entity | `agent.run.clarification_pending` + `phase==executing` → `awaiting_approval`. The run is honestly paused on a human reply. Resume (`awaiting_approval→executing`) + marker-clear arrive in PR-2. (Phase 4b-2.) |
+
+### Interactive pause (4b-2)
+
+`decide(ask_user)` from a coordinator that belongs to a run pauses the run
+`executing→awaiting_approval` (rules `07`/`08` markers → `09` transition), rather
+than misleadingly staying `executing` while blocked on a human. Same anchor-pair
+shape as the coordinator-failed pair (`05`/`06`): the recovery coordinators that
+`ask_user` carry EITHER `agent.run.entity_id` (inherit — research/06,
+autoresearch/10 baseline, dev-via-test/02f first-pass → rule `07`) OR
+`lineage.run-loop-entity-id` (threaded — autoresearch/10b, dev-via-test
+02e/02f-replan/07b/07e → rule `08`).
+
+The **front-door** `ask_user` (an ambiguous FIRST turn) does NOT pause — no run is
+minted, so the run-anchor guard makes `07`/`08` a no-op. Only an in-flight run that
+needs clarification pauses.
+
+`awaiting_approval` is **shared with 4c**'s `approval_required` tool-gate;
+distinguished by CAUSE, not phase — 4b-2 sets `agent.run.clarification_pending` +
+the asking loop has `coordinator.user_question` and no `pending_approval`; 4c sets
+`pending_approval`. The deferred UI follow-up disambiguates on those.
+
+**Autonomous mode is inert by construction**: under
+`restricted_decide_actions:["ask_user"]` the framework rejects `decide(ask_user)`
+before the decision triple is stamped, so `07`/`08` (gated on that triple) never
+fire. Pinned by `TestAgentRunPack_AskUserPauseAutonomousInert`.
 
 ### Coordinator-failure coverage boundary (4a′ / 4b-1a)
 
