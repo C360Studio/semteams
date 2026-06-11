@@ -242,6 +242,15 @@ These upstream config fields default `false`; enable per config as needed:
   autonomous; future category packs may add per-tool gates).
 - `agentic-tools.enable_categories` — tool category filtering for
   role-based access
+- `agentic-tools.restricted_decide_actions` — the run-level **clarification
+  policy** (ADR-053 Phase 4b / semstreams#239, beta.104). A list of `decide`
+  action names barred for EVERY coordinator task — front-door AND rule-spawned
+  — taking precedence over per-task `action_allowlist`. `[]` (default) =
+  **interactive** (`ask_user` available); `["ask_user"]` = **autonomous** (the
+  coordinator must resolve without deferring to a human; an off-policy
+  `decide(ask_user)` is rejected → the loop re-picks `respond_direct`/
+  re-dispatch, no dead-end). Threaded via `extractRestrictedDecideActions` →
+  `RegisterBuiltins` in `cmd/semteams/main.go` (ADR-029).
 - `agentic-governance.enable_tool_governance` — pre-execution governance
   filtering
 
