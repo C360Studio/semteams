@@ -507,6 +507,28 @@ ever disproves the beta.102 re-eval behavior, THEN fold the check in.
     alternative (~12 `ask_user`-stripped rule variants) is rejected as
     ADR-029 accretion; `autonomous` maps to the framework primitive disabling
     the blocking `ask_user` decide action.
+  - **4b-1 SHIPPED.** (b) the clarification-policy config landed as **4b-1b**
+    (#208, 2026-06-11) — semstreams#239 shipped upstream as
+    `agentic-tools.restricted_decide_actions`, wired + validated by the
+    `clarification-autonomous` mock journey. (a) the anchor-threading landed as
+    **4b-1a** (2026-06-11): `autoresearch/10` split → `10` (baseline,
+    **anchor_inherit**→`agent-run/05`) + `10b` (propose/execute/synthesize/
+    reviewer, **anchor_threaded**→`agent-run/06`); `dev-via-test/02f` split →
+    `02f` (first-pass Lisa, **anchor_inherit**) + `02f-replan` (re-plan Lisa,
+    **anchor_threaded**); `02e`/`07b`/`07e` single-add thread. **Correction to
+    the plan sketch above:** first-pass Lisa (`02f`) and the `autoresearch`
+    baseline (`10`) are `run_scope=new` roles that carry a bare `agent.run`, so
+    their spawned coordinator INHERITS `agent.run.entity_id` → they are
+    `anchor_inherit`→rule 05, NOT threaded→06 (verified in `actions.go`/
+    `graph_writer.go`). The governing principle: **thread iff the firing role
+    lacks a bare `agent.run`** (run-entity-descended roles); inherit otherwise.
+    `deferred_4b` is now EMPTY; `TestAgentRunPack_CoordinatorSpawnCoverage`
+    gained an `anchor_inherit` invariant + sibling-sync + reviewer-spawn-thread
+    pins. Two mock journeys prove anchor resolution end-to-end on mock-LLM:
+    `run-failed-coordinator` (threaded → rule 06) and
+    `run-failed-coordinator-inherit` (inherit → rule 05). An adversarial
+    anchor-reachability review (7 skeptics, default "zombie") confirmed every
+    recovery coordinator resolves to the correct `chain.execution` run entity.
   - **4b-2:** the interactive PAUSE — `executing→awaiting_approval` on
     `ask_user` + reply-correlation (carry the asking-run-id, re-anchor the
     reply coordinator, resume `awaiting_approval→executing`). Its own slice;

@@ -1,26 +1,26 @@
 {
   "id": "autoresearch_needs_clarification_replan",
   "type": "expression",
-  "name": "Any autoresearch role decide(needs_clarification) → coordinator",
-  "description": "ADR-042 §Phase 2 redesign autoresearch pack recovery rule. Fires when any autoresearch role terminates with decide(action=needs_clarification) — baseline (parameter parse failed / sandbox unreachable), propose (no viable hypothesis / plateau soft-stop), execute (sandbox catastrophic failure), synthesize (run state structurally inconsistent), or reviewer-autoresearch (artifact structurally malformed for review). Spawns a fresh coordinator with the rejecting role's loop_id; the coordinator's allow-list is restricted to respond_direct / ask_user (it cannot re-classify the same chain). Bounded by rule max_iterations=3.\n\nMirrors research pack's 06-needs-clarification-replan.json exactly, scoped to autoresearch role tokens.",
+  "name": "autoresearch-baseline decide(needs_clarification) → coordinator (inherit anchor)",
+  "description": "ADR-042 §Phase 2 redesign autoresearch pack recovery rule — BASELINE branch (ADR-053 Phase 4b-1a anchor split). Fires when autoresearch-baseline terminates with decide(action=needs_clarification) — parameter parse failed / sandbox unreachable / baseline command crashed. Spawns a fresh coordinator (allow-list respond_direct / ask_user) to deliver the situation to the user.\n\nWHY split from the other autoresearch roles (the §E anchor asymmetry, mirrors run-failed rules 12/13): baseline is spawned by rule 01 with run_scope=new, so it carries a bare agent.run triple (graph_writer.go:535-539) — the coordinator this rule spawns therefore INHERITS agent.run.entity_id down the loop-spawn chain (actions.go default-inherit copies the firing loop's bare agent.run into the child RunID). So if that woken coordinator fails involuntarily while the run is executing, agent-run/05 (the agent.run.entity_id branch) drives executing→failed — anchor_inherit, no threading needed. The run-entity-descended roles (propose/execute/synthesize/reviewer) carry NO bare agent.run (spawned by the run-entity-fired rules 03/05/07), so their coordinator inherits nothing and must thread the anchor explicitly — sibling rule 10b.\n\nMirrors research pack's 06-needs-clarification-replan.json (also anchor_inherit), scoped to autoresearch-baseline.",
   "enabled": true,
   "conditions": [
     {
       "field": "agent.loop.role",
-      "operator": "in",
-      "value": [
-        "autoresearch-baseline",
-        "autoresearch-propose",
-        "autoresearch-execute",
-        "autoresearch-synthesize",
-        "reviewer-autoresearch"
-      ],
+      "operator": "eq",
+      "value": "autoresearch-baseline",
       "required": true
     },
     {
       "field": "coordinator.decision.next_action",
       "operator": "eq",
       "value": "needs_clarification",
+      "required": true
+    },
+    {
+      "field": "agent.run.entity_id",
+      "operator": "ne",
+      "value": "",
       "required": true
     }
   ],
@@ -51,9 +51,12 @@
   "on_exit": [],
   "metadata": {
     "pack": "autoresearch",
-    "phase": "ADR-042 §Phase 2 redesign — second pack",
+    "phase": "ADR-042 §Phase 2 redesign — second pack; ADR-053 Phase 4b-1a anchor split",
     "adr": "docs/adr/042-coordinator-instantiated-flows-via-templates.md",
-    "max_iterations_note": "Per-entity caveat applies (research pack's 05 metadata explains in detail). Practical effect under the current rule engine: bound is informational; each needs_clarification is a fresh entity. Real chain-wide bound is the Slice 2 chainstall machinery on top.",
-    "mirrors_research_pattern": "Same shape as configs/rules/research/06-needs-clarification-replan.json, scoped to autoresearch role tokens."
+    "anchor_disposition": "anchor_inherit (TestAgentRunPack_CoordinatorSpawnCoverage) — baseline carries a bare agent.run (rule 01 run_scope=new), so the spawned coordinator inherits agent.run.entity_id and a failure routes to agent-run/05. NO run-loop-entity-id thread.",
+    "split_rationale": "Sibling of rule 10b (propose/execute/synthesize/reviewer). The two are split on the firing role's anchor: baseline carries agent.run.entity_id (inherit → rule 05); the descended roles carry only lineage.run-loop-entity-id (thread → rule 06). Same baseline-vs-descended asymmetry as run-failed rules 12 vs 13 and the success path (autoresearch/08).",
+    "anchor_guard": "agent.run.entity_id != \"\" documents + enforces the inherit dependency (a run-less baseline cannot exist — rule 01 run_scope=new always mints — but the guard makes the anchor_inherit contract explicit).",
+    "max_iterations_note": "Per-entity caveat applies (research pack's 05 metadata explains in detail). Practical effect under the current rule engine: bound is informational; each needs_clarification is a fresh entity.",
+    "mirrors_research_pattern": "Same shape as configs/rules/research/06-needs-clarification-replan.json (also anchor_inherit), scoped to autoresearch-baseline."
   }
 }

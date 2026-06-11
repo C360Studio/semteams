@@ -1,8 +1,8 @@
 {
   "id": "dev_via_test_lisa_needs_clarification_to_coordinator",
   "type": "expression",
-  "name": "Lisa decide(needs_clarification) → coordinator ask_user",
-  "description": "ADR-044 §addendum Slice 6 (go-reviewer R2) — routes a planner escalation to the user. Lisa (dev-via-test-plan) may emit decide(needs_clarification) from her FIRST plan (rule 01 allowlist) OR from a re-plan (rule 02d allowlist) when the user's ask can't be turned into a faithful plan without clarification. Before Slice 6 no rule caught role=dev-via-test-plan + next_action=needs_clarification, so it silently dead-ended the chain. Slice 6 actively prompts it (02d's re-plan prompt + Lisa's emit-contract tell her to use it on an impossible finding), so the route is now load-bearing.\n\nMirrors the research/autoresearch needs-clarification-replan pattern, scoped to the planner role. Spawns a coordinator wake-up scoped to ask_user; the user clarifies and a fresh chain fires on their reply.",
+  "name": "First-pass Lisa decide(needs_clarification) → coordinator ask_user (inherit anchor)",
+  "description": "ADR-044 §addendum Slice 6 (go-reviewer R2) — routes a FIRST-PASS planner escalation to the user. First-pass Lisa (dev-via-test-plan spawned by rule 01) may emit decide(needs_clarification) when the user's ask can't be turned into a faithful plan without clarification. Before Slice 6 no rule caught role=dev-via-test-plan + next_action=needs_clarification, so it silently dead-ended the chain. Slice 6 actively prompts it (Lisa's emit-contract tells her to use it on an impossible finding), so the route is load-bearing.\n\nADR-053 Phase 4b-1a anchor split: this rule is now fenced to FIRST-PASS Lisa (lineage.run-loop-entity-id length_eq 0). First-pass Lisa is spawned by rule 01 with run_scope=new, so it carries a bare agent.run triple (graph_writer.go:535-539) and the coordinator this rule spawns INHERITS agent.run.entity_id down the loop-spawn chain — so an involuntary failure of that woken coordinator routes to agent-run/05 (anchor_inherit, no thread). The RE-PLAN Lisa (spawned from the run entity by rule 02d, carries lineage.run-loop-entity-id but NO bare agent.run) is the sibling rule 02f-replan, which must thread the anchor explicitly. Same first-pass/re-plan anchor split as rules 02 vs 02g and 09 vs 10.\n\nMirrors the research needs-clarification-replan pattern (also anchor_inherit), scoped to first-pass Lisa. Spawns a coordinator wake-up scoped to ask_user; the user clarifies and a fresh chain fires on their reply.",
   "enabled": true,
   "conditions": [
     {
@@ -15,6 +15,12 @@
       "field": "coordinator.decision.next_action",
       "operator": "eq",
       "value": "needs_clarification",
+      "required": true
+    },
+    {
+      "field": "lineage.run-loop-entity-id",
+      "operator": "length_eq",
+      "value": 0,
       "required": true
     }
   ],
@@ -43,9 +49,10 @@
   "on_exit": [],
   "metadata": {
     "pack": "dev_via_test",
-    "phase": "ADR-044 §addendum Slice 6 — planner needs_clarification route (go-reviewer R2)",
+    "phase": "ADR-044 §addendum Slice 6 — planner needs_clarification route (go-reviewer R2); ADR-053 Phase 4b-1a anchor split",
     "adr": "docs/adr/044-dev-via-test-pack.md",
     "review_origin": "go-reviewer R2 (2026-06-05): Lisa's needs_clarification (rule 01 + 02d allowlists) had no routing rule → silent chain dead-end. Slice 6 promotes it from unlikely to prompted, so this route is required.",
-    "catches_both": "Conditions on role=dev-via-test-plan + needs_clarification, so it catches BOTH first-plan (rule 01) and re-plan (rule 02d) escalations."
+    "anchor_disposition": "anchor_inherit (ADR-053 Phase 4b-1a, TestAgentRunPack_CoordinatorSpawnCoverage) — first-pass Lisa carries a bare agent.run (rule 01 run_scope=new), so the spawned coordinator inherits agent.run.entity_id and a failure routes to agent-run/05. NO run-loop-entity-id thread.",
+    "split_rationale": "Fenced to first-pass Lisa via lineage.run-loop-entity-id length_eq 0 (rule 01 threads only dev-via-test-run, no run-loop-entity-id). RE-PLAN Lisa (spawned from the run entity by rule 02d, carries lineage.run-loop-entity-id but NO bare agent.run) is the sibling rule 02f-replan — it must thread the anchor (anchor_threaded → rule 06). Mutually exclusive on lineage.run-loop-entity-id presence. Same first-pass/re-plan split as rules 02 vs 02g."
   }
 }

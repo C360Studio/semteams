@@ -28,9 +28,9 @@ matches the marker and transitions.
 | `03-executing-to-completed.json` | run entity | `agent.run.outcome==success` + `phase==executing` → `completed`. |
 | `04-executing-to-failed.json` | run entity | `agent.run.outcome==failed` + `phase==executing` → `failed`. The symmetric twin of `03`. (Phase 4a′.) |
 | `05-coordinator-failed-run-anchor.json` | coordinator loop | A coordinator that fails (`outcome in [failed,truncated]`) **while executing** and carries `agent.run.entity_id` (lineage absent) stamps `agent.run.outcome=failed` on the run entity. The zombie D3 can't catch (D3 fires only while `dispatched`). (Phase 4a′.) |
-| `06-coordinator-failed-lineage-anchor.json` | coordinator loop | Same, for coordinators carrying `lineage.run-loop-entity-id` (dev-via-test 02b/02d/05/07d) — fenced on `length_gt 0`, stamps via the lineage anchor. Mutually exclusive with `05`. (Phase 4a′.) |
+| `06-coordinator-failed-lineage-anchor.json` | coordinator loop | Same, for coordinators carrying `lineage.run-loop-entity-id` (dev-via-test 02b/02d/05/07d + the 4b-1a threaded recovery coordinators autoresearch/10b, dev-via-test 02e/02f-replan/07b/07e) — fenced on `length_gt 0`, stamps via the lineage anchor. Mutually exclusive with `05`. (Phase 4a′ + 4b-1a.) |
 
-### Coordinator-failure coverage boundary (4a′ / 4b)
+### Coordinator-failure coverage boundary (4a′ / 4b-1a)
 
 Not every coordinator that *could* fail needs an executing→failed rule. The
 disposition of every coordinator-spawn rule is pinned by
@@ -42,15 +42,19 @@ coordinator-spawn rule fails that test, so the boundary can't drift silently:
   `dev-via-test/07a`) — stamp `agent.run.outcome=success`, so rule 03 completes
   the run *before* the woken coordinator runs; a later failure is post-terminal.
   No coverage needed.
-- **anchor-covered** — rules 05 (`agent.run.entity_id` via inherit:
-  `research/06` + autoresearch/10's baseline branch) and 06
-  (`lineage.run-loop-entity-id` via threading: dev-via-test `02b`/`02d`/`05`/`07d`).
-- **deferred to 4b** — the run-entity-descended `ask_user`/`needs_clarification`
-  recovery coordinators (`autoresearch/10` non-baseline; dev-via-test
-  `02e`/`02f`/`07b`/`07e` re-plan branches) carry no readable anchor. Their
-  `action_allowlist ⊆ {respond_direct, ask_user}` — pure human-in-the-loop
-  delivery whose run-phase semantics (and a failed delivery's terminal) ADR-053
-  assigns to Phase 4b. 4b threads their anchor as part of that work.
+- **anchor_inherit** → rule 05 (`agent.run.entity_id` via the loop-spawn inherit
+  chain — the firing role carries a bare `agent.run`): `research/06`,
+  `autoresearch/10` (baseline), `dev-via-test/02f` (first-pass Lisa).
+- **anchor_threaded** → rule 06 (`lineage.run-loop-entity-id` threaded onto the
+  woken coordinator — the firing role descends through a run-entity-fired rule
+  and carries no bare `agent.run`): the intermediate/escalate coordinators
+  dev-via-test `02b`/`02d`/`05`/`07d`, plus the **4b-1a** recovery coordinators
+  `autoresearch/10b` and dev-via-test `02e`/`02f-replan`/`07b`/`07e`.
+- **deferred_4b (now empty)** — ADR-053 Phase 4b-1a threaded an anchor onto every
+  run-entity-descended `ask_user`/`needs_clarification` recovery coordinator, so
+  the zombie hole is closed: no coordinator-spawn path lacks executing→failed
+  coverage. The disposition class is retained in the test only for a future pack
+  that might introduce a new deferred path before wiring its anchor.
 
 The success outcome (`agent.run.outcome=success`) is stamped by the three
 reviewer/CBG-**approved** terminal rules (`research/07`, `autoresearch/08`,

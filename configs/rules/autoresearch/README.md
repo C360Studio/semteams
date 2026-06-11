@@ -95,7 +95,8 @@ This retires the old rule 02 (baseline→propose) and rule 06 (length_eq cap sto
 | `07-synthesize-to-reviewer.json` | autoresearch-synthesize decide(emit) | reviewer-autoresearch |
 | `08-reviewer-approved-to-coordinator.json` | reviewer-autoresearch decide(approved) | coordinator (wake-up for respond_direct) |
 | `09-reviewer-rejected-resynthesize.json` | reviewer-autoresearch decide(insufficient) | autoresearch-synthesize (max_iterations=2 — budget already spent on iteration loops, so this re-rolls the rollup but does NOT re-iterate experiments) |
-| `10-needs-clarification-replan.json` | any pack role decide(needs_clarification) | coordinator (max_iterations=3) |
+| `10-needs-clarification-replan.json` | **autoresearch-baseline** decide(needs_clarification) | coordinator (max_iterations=3; **anchor_inherit** — baseline carries a bare agent.run from rule 01 run_scope=new, so the woken coordinator inherits agent.run.entity_id → a failure routes to agent-run/05) |
+| `10b-descended-needs-clarification-replan.json` | **autoresearch-propose/execute/synthesize/reviewer** decide(needs_clarification) | coordinator (max_iterations=3; **anchor_threaded** — these run-entity-descended roles carry no bare agent.run, so the rule threads run-loop-entity-id onto the coordinator → a failure routes to agent-run/06). Split from rule 10 because the two carry the run anchor on different triples (ADR-053 Phase 4b-1a, same baseline-vs-descended asymmetry as rules 12/13). |
 | `11-loop-failed-pause.json` | any pack role EXCEPT autoresearch-execute terminates with outcome=failed | stamp `chain.paused.marker` (autoresearch-execute loop-failures route through 04b instead — counted toward cap, chain continues) |
 
 ### Iteration counter accounting (per reviewer C1 fix 2026-05-29)
@@ -104,9 +105,9 @@ The cap budget measures **execute attempts**, not "clean executes." Three classe
 
 - **Clean (outcome=success + decide=measured):** rule 04a stamps `experiment.completed` and `measurement.outcome=kept|reverted|crashed` (executor-computed). Counts toward cap. Normal path.
 - **Loop-failed (outcome=failed, no decide):** rule 04b stamps `experiment.completed` AND `experiment.loop_failed`. Counts toward cap; chain continues to next propose. SYNTHESIZE's rollup marks these "iterations that consumed budget without producing measurement data."
-- **Needs clarification (outcome=success + decide=needs_clarification):** rule 10 routes to coordinator. Does NOT count toward cap — structural failure surfaces to user; the run can be re-issued with tightened framing.
+- **Needs clarification (outcome=success + decide=needs_clarification):** rule 10 (baseline) / rule 10b (propose/execute/synthesize/reviewer) routes to coordinator. Does NOT count toward cap — structural failure surfaces to user; the run can be re-issued with tightened framing.
 
-Pre-execute failures (propose persona can't form a hypothesis, propose's revert step crashes before spawning execute) similarly bypass the cap counter and route through rule 10. The semantic boundary: the cap protects the user against runaway execute spend; failures BEFORE/OUTSIDE execute are user-visible and re-issuable, not silent budget waste.
+Pre-execute failures (propose persona can't form a hypothesis, propose's revert step crashes before spawning execute) similarly bypass the cap counter and route through rule 10b (propose is a run-entity-descended role). The semantic boundary: the cap protects the user against runaway execute spend; failures BEFORE/OUTSIDE execute are user-visible and re-issuable, not silent budget waste.
 
 ### Iteration shape (rules 02-06)
 

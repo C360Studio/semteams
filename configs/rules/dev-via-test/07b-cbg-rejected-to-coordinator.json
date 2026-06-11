@@ -35,7 +35,8 @@
       },
       "related_loops": {
         "terminal": "$entity.instance",
-        "dev-via-test-run": "$entity.triple.lineage.dev-via-test-run"
+        "dev-via-test-run": "$entity.triple.lineage.dev-via-test-run",
+        "run-loop-entity-id": "$entity.triple.lineage.run-loop-entity-id"
       },
       "prompt": "The dev-via-test chain you dispatched has reached its terminal — but NOT cleanly. CBG (reviewer-dev-via-test) at loop $entity.instance ran the integration test command across the full task scope and REJECTED the work.\n\nYour job now is to surface CBG's verdict to the user and ask what they want to do next. v1 does not auto-recover from CBG rejection.\n\nIteration 1 — call read_loop_result(loop_id=$entity.instance) to read CBG's rejected verdict. CBG's reason explains what went wrong: integration test output, diff observations, test-gaming evidence.\n\nIteration 2 — call decide(action=\"ask_user\", reason=\"<your synthesised user-facing message>\"). Quote CBG's verdict; ask the user what to do. Common shapes:\n\n  - Integration test failed: 'The integration test (<command>) failed: <error summary>. Should I amend the plan with additional tasks to cover the gap, or abandon this run?'\n  - File-scope violation: 'CBG flagged that changes spilled outside the planned task scope (<files>). Want to amend the plan, or accept the over-scope?'\n  - Test-gaming: 'CBG flagged test-gaming (<specifics>). The chain needs a re-plan with sharper acceptance criteria.'\n  - Infrastructure failure (CBG couldn't run the test at all — devcontainer broken, command not found, network down): 'The acceptance test couldn't run: <bash error verbatim>. Looks like the sandbox or build setup is broken. Want me to re-provision the sandbox and retry the chain, or abandon?'\n\nOne question per call. Write the reason as plain prose addressing the user directly — no internal jargon, no markdown affordances. The user replies and a NEW coordinator loop fires on the reply (a fresh chain, with whatever the user said as the new ask)."
     }
@@ -47,6 +48,7 @@
     "adr": "docs/adr/044-dev-via-test-pack.md",
     "terminal_role": "reviewer-dev-via-test",
     "approval_action": "rejected",
-    "no_auto_recover_rationale": "Per ADR-044 §CBG's gate at chain-end + §Stuck-task recovery: chain-level recovery is coordinator-owned via ask_user, not auto-retry. If we auto-spawned a new Lisa with the failure as new context, we'd risk infinite loop on a fundamentally-flawed plan + bypass user judgment about whether to spend more iteration budget."
+    "no_auto_recover_rationale": "Per ADR-044 §CBG's gate at chain-end + §Stuck-task recovery: chain-level recovery is coordinator-owned via ask_user, not auto-retry. If we auto-spawned a new Lisa with the failure as new context, we'd risk infinite loop on a fundamentally-flawed plan + bypass user judgment about whether to spend more iteration budget.",
+    "anchor_disposition": "anchor_threaded (ADR-053 Phase 4b-1a, TestAgentRunPack_CoordinatorSpawnCoverage) — threads run-loop-entity-id from $entity.triple.lineage.run-loop-entity-id onto the woken coordinator so its involuntary failure routes to agent-run/06. Fires on reviewer-dev-via-test (chain-end CBG), which always carries lineage.run-loop-entity-id (threaded by rule 06), so no split is needed."
   }
 }

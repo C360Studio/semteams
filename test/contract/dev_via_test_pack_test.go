@@ -286,6 +286,7 @@ func TestDevViaTestPackWiredInFlowBootstrap(t *testing.T) {
 		"/app/configs/rules/dev-via-test/02d-plan-retry-driver.json",
 		"/app/configs/rules/dev-via-test/02e-plan-rejected-to-coordinator.json",
 		"/app/configs/rules/dev-via-test/02f-lisa-needs-clarification-to-coordinator.json",
+		"/app/configs/rules/dev-via-test/02f-replan-lisa-needs-clarification-to-coordinator.json",
 		"/app/configs/rules/dev-via-test/03-coordinator-dispatch-ralph.json",
 		"/app/configs/rules/dev-via-test/04a-execute-stamp-converged.json",
 		"/app/configs/rules/dev-via-test/04b-execute-stamp-failed.json",
