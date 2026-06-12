@@ -286,7 +286,8 @@
           "/app/configs/rules/agent-run/08-ask-user-pause-lineage-anchor.json",
           "/app/configs/rules/agent-run/09-executing-to-awaiting-on-clarification.json",
           "/app/configs/rules/agent-run/10-clarification-reply-resume-marker.json",
-          "/app/configs/rules/agent-run/11-resume-awaiting-to-executing.json"
+          "/app/configs/rules/agent-run/11-resume-awaiting-to-executing.json",
+          "/app/configs/rules/agent-run/12-executing-to-awaiting-on-approval.json"
         ],
         "inline_rules": []
       }
@@ -355,6 +356,13 @@
               "subject": "agent.failed.*",
               "stream_name": "AGENT",
               "description": "Loop failures — drives the chainpause subscriber (ADR-037 §D5 audit triples). Retires alongside chainpause in ADR-042 §Phase 6 migration cut; until then, declaring the port keeps the bootstrap canonical."
+            },
+            {
+              "name": "agent.approval_pending",
+              "type": "jetstream",
+              "subject": "agent.approval_pending.*",
+              "stream_name": "AGENT",
+              "description": "Tool-gate approval-pending events — drives the approvalpause subscriber (ADR-053 §4c: run-phase reflection of the loop-level approval_required gate). Declaring the port keeps the subject covered by the AGENT stream so PublishToStream succeeds and lets portresolver resolve the subscribe subject."
             }
           ],
           "kv_write": [

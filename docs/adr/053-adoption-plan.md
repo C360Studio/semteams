@@ -696,25 +696,60 @@ ever disproves the beta.102 re-eval behavior, THEN fold the check in.
       (`clarification_resumed` vs `approval_resumed`) and MUST NOT cross-resume — pin
       this in the contract tests (a 4c approval pause must not be resumed by rule 11,
       and vice-versa).
-    - **Anchor split?** OPEN — which loops can be approval-gated? Any agent loop that
-      calls a gated tool. If approval-gated loops can carry ONLY `lineage`
-      (run-entity-descended) rather than `agent.run.entity_id`, the subscriber's
-      anchor read needs the same precedence the runanchor package uses, OR the pause
-      rule needs a 07/08-style anchor split. RESOLVE during PR-1 by enumerating which
-      roles/loops carry which anchor (same method as 4b-1a).
+    - **Anchor split? — RESOLVED (PR-1, 2026-06-12): NO rule split; Go-side
+      precedence.** The pause marker is stamped by the SUBSCRIBER (Go), not a rule
+      (the tool-gate pause is in-memory loop state with no triple for a rule to fire
+      on — unlike the clarification pause's `coordinator.user_question`). Because the
+      subscriber reads the gated loop entity directly and can branch in code, it
+      resolves the anchor with the same precedence `runanchor` uses —
+      `agent.run.entity_id` (inherit) then `lineage.run-loop-entity-id` (threaded) —
+      and stamps `agent.run.approval_pending` on whichever it found. So there is NO
+      07/08-style rule split; the pause RULE (12) is a single marker→transition,
+      direct mirror of rule 09. Pinned by `TestHandlePending_{InheritAnchor,
+      LineageFallback,AnchorPrecedence}`.
 
   *Decomposition (mirror 4b-2): 4c-PR-1 (pause) + 4c-PR-2 (resume).*
-    - **PR-1 (pause):** `approvalpause` subscriber (pause half) + `agent.run.approval_pending`
-      vocab + the pause rule + main.go wiring + contract tests + extend the
-      `tool-approval-gate` mock journey (ADR-030) to assert `agent.run.phase`
-      reaches `awaiting_approval` with `agent.run.approval_pending` set (the
-      4c-vs-4b-2 distinguishing marker). NOTE: `approval_required` is NOT set in any
-      current config — the journey config must gate a tool the coordinator calls
-      (the existing `tool-approval-gate` fixture already drives a loop into
-      approval-pause; extend it).
-    - **PR-2 (resume):** subscriber resume half + `agent.run.approval_resumed` +
-      the resume rule (bounce-proof) + journey extension (POST the approval →
-      assert `awaiting_approval→executing` + marker cleared + no bounce).
+    - **PR-1 (pause) — SHIPPED (2026-06-12, branch
+      `feat/adr-053-4b2-pr2-activate-resume`):** `cmd/semteams/approvalpause`
+      subscriber (pause half: consume `agent.approval_pending.<loopID>`, resolve the
+      run anchor via one `chain.NATSEntityReader` read, stamp
+      `agent.run.approval_pending` on the run entity) + the `MarkerApprovalPending`
+      vocab const + `configs/rules/agent-run/12-executing-to-awaiting-on-approval.json`
+      (mirror of 09, with the bounce-proof `approval_resumed length_eq 0` guard
+      shipped now for PR-2) + `main.go` `startApprovalPauseSubscriber` (boot order
+      after chainpause) + the `agent.approval_pending` output port on teams-loop in
+      BOTH configs (so `PublishToStream` is stream-covered + portresolver resolves)
+      + `approval_required:["create_rule"]` in the **e2e config ONLY** (prod stays
+      autonomous per CLAUDE.md) + contract tests (`TestAgentRunPack_ApprovalPauseBounceGuard`,
+      `ApprovalMarkerSubscriberParity`, `PauseDisambiguation4bVs4c`,
+      `ApprovalRequiredGatePerConfig`) + the `approval-pause` mock journey.
+      - **Journey correction (Q1, 2026-06-12):** the design note said to *extend the
+        existing `tool-approval-gate` journey* — but that journey's `create_rule`
+        loop is a **run-less front-door coordinator** (it mints no run; verified by
+        trace), so it could never exercise a run-level pause. PR-1 ships a NEW in-run
+        journey (`test/fixtures/journeys/approval-pause.yaml` +
+        `ui/e2e/agentic/approval-pause.spec.ts`) that mirrors the proven
+        `ask-user-pause` (4b-2) scaffold: dev-via-test → first-pass Lisa
+        `needs_clarification` → rule 02f spawns the recovery coordinator (inherit
+        anchor `agent.run.entity_id`) → that coordinator calls the gated `create_rule`
+        → loop parks in `awaiting_approval` → approvalpause stamps the run marker →
+        rule 12 transitions `executing→awaiting_approval`. Asserts the run reaches
+        `awaiting_approval` with `agent.run.approval_pending` set and
+        `agent.run.clarification_pending` ABSENT (the 4c-vs-4b-2 distinction) +
+        `last_transition_from==executing`.
+      - **Upstream-fragility note (Coby, 2026-06-12):** the approval path
+        (`gateForApproval`'s `agent.approval_pending` publish, the `ApprovalFilter`,
+        `BeginAwaitingApproval`, and PR-2's `ResolveApprovalIfPending`) has thin
+        real-world exercise. The mock journey is the decisive end-to-end proof that
+        the gated tool actually parks the loop and emits the event the subscriber
+        consumes — treated as a gap-exposer, not assumed solid.
+    - **PR-2 (resume):** subscriber resume half (consume
+      `agent.approval_response.<loopID>`, re-read the run anchor, stamp
+      `agent.run.approval_resumed`) + the resume rule (mirror of 11: bounce-proof
+      ordered marker-clear — rule 12 already carries its mutual-exclusion guard) +
+      journey extension (POST the approval via the existing
+      `/teams-dispatch/loops/{id}/approval` → assert `awaiting_approval→executing` +
+      both markers cleared + no bounce).
   - Then Phase 5.
 
 **I. Open questions.**

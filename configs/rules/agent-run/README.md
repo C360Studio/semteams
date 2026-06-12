@@ -100,6 +100,39 @@ with `run_id` + `in_reply_to` (no seeding) and asserts
 production human-facing reply affordance (surface `coordinator.user_question`,
 capture the free-text answer, POST the anchors) is a separate UI follow-up slice.
 
+### Tool-gate pause (4c PR-1 — rule `12` + the `approvalpause` subscriber)
+
+The run-phase reflection of the existing **loop-level** `approval_required`
+tool-gate (ADR-030). When a loop calls a tool listed in
+`agentic-tools.approval_required`, upstream rejects the call with the
+`approval_required:` prefix and the loop transitions to
+`LoopStateAwaitingApproval`, emitting `agent.approval_pending.<loopID>`. The loop
+pauses today, but the RUN stayed misleadingly `executing` — the same honesty gap
+4b-2 closed for clarification.
+
+Unlike 4b-2's clarification (which had a persona-decision triple for rules
+`07`/`08` to fire on), the tool-gate pause is **in-memory loop state with no graph
+triple**. So the product-shell subscriber `cmd/semteams/approvalpause` consumes the
+`agent.approval_pending` wire event, graph-reads the gated loop's run anchor
+(`agent.run.entity_id`, falling back to `lineage.run-loop-entity-id` — the 4b-1a
+inherit/threaded split, **absorbed in Go** so there is no `07`/`08`-analog rule),
+and stamps `agent.run.approval_pending` on the run entity. Rule `12`
+(`approval_pending` + `phase==executing` top-level guard + the bounce-proof
+`approval_resumed length_eq 0` guard) is the marker→transition half — a direct
+mirror of rule `09`. A run-less gated loop (front-door coordinator) has no anchor
+and is a no-op, exactly mirroring the front-door `ask_user`.
+
+**Disjoint from 4b-2.** Both pauses land in `awaiting_approval`; they never
+cross-resume because their cause-markers are distinct predicates
+(`approval_pending`/`approval_resumed` vs `clarification_pending`/
+`clarification_resumed`). Pinned by the `agent_run_pack` disambiguation tests.
+Prod (`flow-bootstrap.json`) sets **no** `approval_required` (autonomous), so the
+subscriber + rule are inert there; the `e2e-flow-bootstrap.json` gates `create_rule`
+to drive the `approval-pause` mock journey. The PR-2 resume half
+(`agent.approval_pending`'s `agent.approval_response.<loopID>` twin → stamp
+`approval_resumed` → transition `awaiting_approval→executing` + clear both markers)
+is the next slice; rule `12` already carries its bounce-proof guard.
+
 ### Coordinator-failure coverage boundary (4a′ / 4b-1a)
 
 Not every coordinator that *could* fail needs an executing→failed rule. The
@@ -180,6 +213,9 @@ recovery). `cancelled` is out of 4a′ scope (→ `cancelled`, Phase 4b).
 - `cancel` semantics — an abandoned clarification parks in `awaiting_approval`
   with no terminal-timeout; the cancel/timeout slice (likely an upstream D3
   widening to the `executing`/`awaiting_approval` phase) is deferred (4b).
-- The real `approval_required` tool-gate → `awaiting_approval` (4c). The
-  dev-via-test CBG gate is an automated reviewer and stays `executing`.
+- **4c PR-2 resume** — the tool-gate PAUSE (rule `12` + the `approvalpause`
+  subscriber) has landed; the RESUME half (consume `agent.approval_response`,
+  stamp `agent.run.approval_resumed`, transition `awaiting_approval→executing` +
+  clear both markers) is the next slice. The dev-via-test CBG gate is an automated
+  reviewer and stays `executing` (not an `approval_required` tool-gate).
 - Product `MilestoneHandler`s (Phase 5 re-platforms the chain stampers).
