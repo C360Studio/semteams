@@ -95,7 +95,8 @@ bounce guard) **and behaviorally** by the `clarification-resume` mock journey
 (`ui/e2e/agentic/clarification-resume.spec.ts` + `test/fixtures/journeys/
 clarification-resume.yaml`), which drives the real dispatch `/message` reply path
 with `run_id` + `in_reply_to` (no seeding) and asserts
-`awaiting_approval→executing→completed` + both markers cleared + no re-pause. A
+`awaiting_approval→executing` + both markers cleared + no re-pause (the run stays
+`executing` — a plain coordinator `respond_direct` stamps no `agent.run.outcome`). A
 production human-facing reply affordance (surface `coordinator.user_question`,
 capture the free-text answer, POST the anchors) is a separate UI follow-up slice.
 

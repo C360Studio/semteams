@@ -614,8 +614,11 @@ ever disproves the beta.102 re-eval behavior, THEN fold the check in.
       `/message` endpoint with `run_id` + `in_reply_to` read from the paused run's
       triples (the same direct-API pattern `tool-approval-gate` uses; no seeding,
       no triple-write seam needed). DECISIVE assertion:
-      `awaiting_approval→executing→completed` + both markers cleared + no re-pause.
-      The former `..._BlockedOnUpstream` Skip gate was retired.
+      `awaiting_approval→executing` + both markers cleared + no re-pause (the run
+      stays `executing` — a plain coordinator `respond_direct` stamps no
+      `agent.run.outcome`, so there is no completion; the journey proves the resume
+      MECHANIC, not work completion). The former `..._BlockedOnUpstream` Skip gate
+      was retired.
     - *Remaining (separate slice):* a production human-facing reply affordance —
       no UI surface yet renders `coordinator.user_question` with a free-text answer
       box that POSTs the anchors. Deferred to the UI thread (it pairs with surfacing

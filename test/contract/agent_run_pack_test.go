@@ -540,7 +540,8 @@ func TestAgentRunPack_ClarificationResumeTransition(t *testing.T) {
 // (ui/e2e/agentic/clarification-resume.spec.ts + test/fixtures/journeys/
 // clarification-resume.yaml) drives the real reply path (POST /teams-dispatch/
 // message with run_id + in_reply_to; no seeding) and asserts
-// awaiting_approval→executing→completed + both markers cleared + no re-pause.
+// awaiting_approval→executing + both markers cleared + no re-pause (the run stays
+// executing — a plain coordinator respond_direct stamps no agent.run.outcome).
 // The former TestAgentRunPack_ClarificationResumeJourney_BlockedOnUpstream Skip
 // gate was retired when that journey landed.
 

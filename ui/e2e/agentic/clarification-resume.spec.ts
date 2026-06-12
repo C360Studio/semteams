@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 
 /**
  * Journey: ADR-053 Phase 4b-2 PR-2 — an in-run clarification PAUSE is RESUMED by
- * the operator's reply, driving the run awaiting_approval→executing→completed.
+ * the operator's reply, driving the run awaiting_approval→executing.
  *
  * This is the resume twin of ask-user-pause.spec.ts. The pause half is identical:
  *
@@ -58,7 +58,7 @@ import { test, expect } from "@playwright/test";
 const RUN_PREFIX = ".agent.chain.execution.";
 const LOOP_PREFIX = ".agent.agentic-loop.execution.";
 
-test.describe("ADR-053 Phase 4b-2 PR-2 — operator reply resumes a paused run (awaiting_approval→executing→completed)", () => {
+test.describe("ADR-053 Phase 4b-2 PR-2 — operator reply resumes a paused run (awaiting_approval→executing)", () => {
   test.beforeAll(async ({ request }) => {
     const health = await request.get("/health");
     expect(health.ok(), "Backend not healthy — stack not running?").toBe(true);
@@ -66,7 +66,7 @@ test.describe("ADR-053 Phase 4b-2 PR-2 — operator reply resumes a paused run (
 
   test.setTimeout(150_000);
 
-  test("clarification reply with run_id + in_reply_to resumes the run and completes", async ({
+  test("clarification reply with run_id + in_reply_to resumes the run", async ({
     page,
     request,
   }) => {
@@ -108,6 +108,10 @@ test.describe("ADR-053 Phase 4b-2 PR-2 — operator reply resumes a paused run (
     //   in_reply_to = bare loop-id of the loop carrying coordinator.user_question
     //                 (the recovery coordinator that asked).
     // -----------------------------------------------------------------
+    // [0] is safe ONLY because this journey runs exactly one run — every
+    // agent.run.phase triple on a run entity carries that run's subject, so
+    // bareIdAfter yields the same runID from any of them. A multi-run regression
+    // would silently pick an arbitrary run here.
     const runEntityId = String(pausedPhase![0].subject ?? "");
     const runId = bareIdAfter(runEntityId, RUN_PREFIX);
     expect(runId, `could not extract bare runID from ${runEntityId}`).toBeTruthy();
@@ -190,7 +194,11 @@ test.describe("ADR-053 Phase 4b-2 PR-2 — operator reply resumes a paused run (
 
     // -----------------------------------------------------------------
     // Step 8 — the reply loop carried the real wire anchor: agent.loop.reply_to
-    // was stamped (proves beta.106 threaded in_reply_to → buildSpawnIdentityTriples).
+    // was stamped (proves beta.106 threaded in_reply_to → buildSpawnIdentityTriples),
+    // AND it points at the asking loop's entity (proves the reply referenced the
+    // RIGHT loop, not just that some reply triple exists). buildSpawnIdentityTriples
+    // reconstructs the object as LoopExecutionEntityID(in_reply_to), which equals
+    // the asking loop's entity ID (the coordinator.user_question subject).
     // -----------------------------------------------------------------
     const replyTo = await fetchTriples(request, {
       predicate: "agent.loop.reply_to",
@@ -200,6 +208,13 @@ test.describe("ADR-053 Phase 4b-2 PR-2 — operator reply resumes a paused run (
       replyTo.length,
       "expected an agent.loop.reply_to triple on the resumed loop (semstreams#256 / beta.106 typed reply identity). Zero → the reply path did not thread in_reply_to.",
     ).toBeGreaterThanOrEqual(1);
+    expect(
+      replyTo.map((t) => String(t.object)),
+      "agent.loop.reply_to must point at the asking loop's entity (" +
+        askingLoopEntity +
+        ") — proves the reply referenced the loop that asked, not an arbitrary loop. Got: " +
+        JSON.stringify(replyTo.map((t) => t.object)),
+    ).toContain(askingLoopEntity);
 
     // -----------------------------------------------------------------
     // Step 9 — rule 11 also cleared clarification_resumed (removed last). Required
