@@ -631,9 +631,91 @@ ever disproves the beta.102 re-eval behavior, THEN fold the check in.
     run that pauses on `ask_user` and is NEVER replied to parks in
     `awaiting_approval` with no terminal-timeout — an abandoned-clarification run
     is this cancel/timeout slice's job (tracked here, not a 4b-2-PR-1/PR-2 blocker).
-- **4c:** the real `approval_required` tool-gate → `awaiting_approval`
-  (NOT the CBG automated reviewer, which stays `executing` — §E).
-- Then Phase 5.
+- **4c (DESIGN — investigated 2026-06-12, ready for PR-1):** the real
+  `agentic-tools.approval_required` tool-gate → run `awaiting_approval` (NOT the
+  CBG automated reviewer, which stays `executing` — §E). This is the run-phase
+  REFLECTION of the existing, already-working loop-level approval gate (ADR-030:
+  `ApprovalFilter` → `LoopStateAwaitingApproval` → `PendingApprovalSection` + `POST
+  /loops/{id}/approval`). The loop pauses today; the RUN stays misleadingly
+  `executing` — the same honesty gap 4b-2 closed for clarification.
+
+  *The signals (investigated, beta.106).* Unlike 4b-2's clarification (which had a
+  persona-decision triple `coordinator.user_question` to fire on), the tool-gate
+  pause is **in-memory loop state** (`LoopEntity.State`, the LoopManager map) with
+  **no graph triple** — but it DOES emit two wire events on the AGENT stream, each
+  carrying only `LoopID` (NO run anchor):
+    - **Pause:** `agent.approval_pending.<loopID>` (`agentic.ApprovalPendingEvent`,
+      published by `gateForApproval`, handlers.go:1889) — "so a product-layer UI can
+      surface the request."
+    - **Resume:** `agent.approval_response.<loopID>` (`agentic.ApprovalResponse`,
+      the human's approve/reject decision; `ResolveApprovalIfPending` re-injects the
+      tool result and the loop continues its NORMAL flow — there is no dedicated
+      "resumed" event, the response IS the resume signal).
+
+  *Framework-alignment review (MANDATORY — new product-shell subscriber).*
+    1. Survey: is there an upstream/planned equivalent that stamps a RUN-phase
+       triple from the approval events? NO — upstream models approval at the LOOP
+       level (in-memory state + the two wire events for a UI). Run-phase modelling
+       is SemTeams' layer (ADR-053 adoption); upstream has no run-phase consumer of
+       these events and none is roadmapped.
+    2. In-product precedent: **`cmd/semteams/chainpause/`** is EXACTLY this pattern —
+       a product-shell `Subscriber`+`Pauser` that fires on a loop wire event
+       (`agent.failed.>`), resolves the loop's run anchor via a graph read
+       (`chain.NATSEntityReader`, the single surviving `chain/` reader after Phase 5),
+       and stamps run-level triples. 4c is a parallel subscriber pair, same shape,
+       same anchor-resolution mechanism.
+    3. Decision: net-new product-local subscriber is JUSTIFIED and aligned — it
+       consumes existing upstream wire events (no new upstream primitive) and reuses
+       the surviving graph reader. Migration posture: if upstream ever stamps an
+       `agent.run.approval_pending` itself (it does not today), retire the subscriber
+       for the upstream triple — same posture as the run-anchor wire (#250/#256).
+
+  *The design (mirrors 4b-2 pause/resume + the chainpause subscriber).*
+    - **Subscriber:** `cmd/semteams/approvalpause/` (parallel to `chainpause`).
+      `agent.approval_pending.<loopID>` → graph-read the loop's `agent.run.entity_id`
+      → stamp `agent.run.approval_pending` (= the paused loop instance) on the run
+      entity. `agent.approval_response.<loopID>` → graph-read the run anchor → stamp
+      `agent.run.approval_resumed` (the resume marker). Wired in `main.go` with the
+      start-after-tools boot order (like chainpause + the evidence subscriber).
+      Run-anchor reads use `natsclient.RequestClassified` + `errs.IsInvalid`
+      ([[natsclient-request-classified]]), and a loop with no run anchor (front-door
+      single loop) is a no-op (mirrors front-door `ask_user`).
+    - **Rules (new agent-run pack files):** a PAUSE rule (`agent.run.approval_pending`
+      + `phase==executing` top-level guard → `awaiting_approval`, mirror of 09) + a
+      RESUME rule (`agent.run.approval_resumed` + `phase==awaiting_approval` →
+      `executing` + ordered marker-clear, mirror of 11, with the same bounce-proof
+      `approval_resumed length_eq 0` guard on the pause rule). The
+      `executing⇄awaiting_approval` edges are already legal (`agentrun.go`), no
+      lifecycle change.
+    - **4b-2-vs-4c disambiguation (load-bearing):** both pauses land in
+      `awaiting_approval`. They are distinguished by CAUSE-MARKER, not phase: 4b-2
+      sets `agent.run.clarification_pending` (asking loop has
+      `coordinator.user_question`, NO `pending_approval`); 4c sets
+      `agent.run.approval_pending` (loop in `LoopStateAwaitingApproval`,
+      `pending_approval` present). The two resume rules key on DISTINCT markers
+      (`clarification_resumed` vs `approval_resumed`) and MUST NOT cross-resume — pin
+      this in the contract tests (a 4c approval pause must not be resumed by rule 11,
+      and vice-versa).
+    - **Anchor split?** OPEN — which loops can be approval-gated? Any agent loop that
+      calls a gated tool. If approval-gated loops can carry ONLY `lineage`
+      (run-entity-descended) rather than `agent.run.entity_id`, the subscriber's
+      anchor read needs the same precedence the runanchor package uses, OR the pause
+      rule needs a 07/08-style anchor split. RESOLVE during PR-1 by enumerating which
+      roles/loops carry which anchor (same method as 4b-1a).
+
+  *Decomposition (mirror 4b-2): 4c-PR-1 (pause) + 4c-PR-2 (resume).*
+    - **PR-1 (pause):** `approvalpause` subscriber (pause half) + `agent.run.approval_pending`
+      vocab + the pause rule + main.go wiring + contract tests + extend the
+      `tool-approval-gate` mock journey (ADR-030) to assert `agent.run.phase`
+      reaches `awaiting_approval` with `agent.run.approval_pending` set (the
+      4c-vs-4b-2 distinguishing marker). NOTE: `approval_required` is NOT set in any
+      current config — the journey config must gate a tool the coordinator calls
+      (the existing `tool-approval-gate` fixture already drives a loop into
+      approval-pause; extend it).
+    - **PR-2 (resume):** subscriber resume half + `agent.run.approval_resumed` +
+      the resume rule (bounce-proof) + journey extension (POST the approval →
+      assert `awaiting_approval→executing` + marker cleared + no bounce).
+  - Then Phase 5.
 
 **I. Open questions.**
 1. **D3 race** — empirical result; upstream ask ("D3 must not fire on
