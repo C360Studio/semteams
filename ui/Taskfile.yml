@@ -210,6 +210,7 @@ tasks:
       - task: test:e2e:agentic:run-failed-coordinator
       - task: test:e2e:agentic:run-failed-coordinator-inherit
       - task: test:e2e:agentic:ask-user-pause
+      - task: test:e2e:agentic:clarification-resume
       - task: test:e2e:agentic:clarification-autonomous
 
   test:e2e:agentic:real-time-activity-stream:
@@ -389,6 +390,44 @@ tasks:
           FIXTURE: "{{.FIXTURE}}"
           AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
       - npx playwright test e2e/agentic/ask-user-pause.spec.ts
+
+  test:e2e:agentic:clarification-resume:
+    desc: Run the ADR-053 Phase 4b-2 PR-2 interactive-RESUME journey (operator reply → awaiting_approval→executing)
+    summary: |
+      The resume twin of ask-user-pause. The pause half is identical (first-pass
+      Lisa escalates needs_clarification → recovery coordinator decide(ask_user) →
+      run parks in awaiting_approval). Then the spec POSTs the operator's answer to
+      the dispatch /message endpoint with the resumable-reply anchors threaded by
+      semstreams#256 (beta.106):
+
+        run_id      → TaskMessage.RunID      → agent.run.entity_id on the reply loop
+        in_reply_to → TaskMessage.InReplyTo  → agent.loop.reply_to on the reply loop
+
+      buildSpawnIdentityTriples stamps both at spawn (before any LLM call), firing:
+
+        agent-run/10-clarification-reply-resume-marker → agent.run.clarification_resumed
+        agent-run/11-resume-awaiting-to-executing      → awaiting_approval→executing
+                                                          + clear BOTH markers
+
+      The resumed coordinator decide(respond_direct) answers directly; the run
+      resumes to `executing` and stays there (a plain coordinator respond_direct
+      stamps no agent.run.outcome, so no completion — the journey proves the
+      RESUME MECHANIC, not work completion). DECISIVE assertion: the run that
+      REACHED awaiting_approval LEAVES it to `executing` with both clarification
+      markers cleared, and a settle window confirms no bounce back to
+      awaiting_approval. Reply driven via the direct dispatch API (no UI affordance
+      yet — that is the deferred B2 slice); no triple seeding (real wire anchors).
+      Interactive mode (restricted_decide_actions=[]). Sandbox = MockRunner.
+    vars:
+      FIXTURE: clarification-resume.yaml
+      AGENTIC_CONFIG: e2e-flow-bootstrap.json
+    cmds:
+      - defer: { task: test:e2e:agentic:cleanup }
+      - task: test:e2e:agentic:stack:up
+        vars:
+          FIXTURE: "{{.FIXTURE}}"
+          AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
+      - npx playwright test e2e/agentic/clarification-resume.spec.ts
 
   test:e2e:agentic:clarification-autonomous:
     desc: Run the ADR-053 4b clarification-policy AUTONOMOUS-mode journey

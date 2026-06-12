@@ -1,0 +1,98 @@
+name: clarification-resume
+description: |
+  Journey: ADR-053 Phase 4b-2 PR-2 — an in-run clarification PAUSE is RESUMED by
+  the operator's reply, driving the run awaiting_approval→executing, end-to-end on
+  mock-LLM against configs/e2e-flow-bootstrap.json (INTERACTIVE mode).
+
+  This is the resume twin of ask-user-pause.yaml. The pause half is IDENTICAL
+  (same 3 global-order responses); the new fourth response is the RESUMED
+  coordinator that re-enters carrying the operator's answer.
+
+  Pause half (proves the run parks in awaiting_approval — PR-1):
+    1. Loop 0 front-door coordinator → decide(dev_via_test) → run executing.
+    2. Loop A first-pass Lisa → decide(needs_clarification) → rule 02f spawns the
+       inherit recovery coordinator (carries agent.run.entity_id).
+    3. Loop R recovery coordinator → decide(ask_user) → coordinator/03-ask-user
+       stamps coordinator.user_question; agent-run/07 stamps
+       agent.run.clarification_pending on the run entity; agent-run/09 fires
+       executing→awaiting_approval.
+
+  Resume half (NEW — proves PR-2, ACTIVE on semstreams beta.106 / #256):
+    4. The spec POSTs the operator's answer to the dispatch /message endpoint with
+       run_id (the paused run's bare runID) + in_reply_to (Loop R's bare loop-id),
+       read from the paused run's triples. semstreams#256 (beta.106) threads both
+       onto the reply TaskMessage, so buildSpawnIdentityTriples stamps
+       agent.run.entity_id (from run_id) + agent.loop.reply_to (from in_reply_to)
+       on the resumed coordinator loop AT SPAWN — before any LLM call. That fires:
+         agent-run/10-clarification-reply-resume-marker → agent.run.clarification_resumed
+         agent-run/11-resume-awaiting-to-executing      → awaiting_approval→executing
+                                                           + clear BOTH markers
+       The resumed coordinator then decides respond_direct (this fourth response) and
+       answers directly. A plain coordinator respond_direct stamps NO
+       agent.run.outcome (only the per-pack reviewer-approved paths do), so the run
+       resumes to `executing` and STAYS there — the original dev_via_test work was
+       abandoned when the recovery coordinator asked instead of planning (the
+       documented incomplete-run case owned by the future cancel/timeout slice). The
+       run's honest arc is dispatched→executing→awaiting_approval→executing.
+
+  The decisive proof of resume is durable and race-free: the run that REACHED
+  awaiting_approval LEAVES it to `executing` with BOTH clarification markers cleared
+  (only agent-run/11 does that). A never-resumed run stays stuck in awaiting_approval
+  with pending set; a bounce flaps back. A settle window re-asserts executing (no
+  re-pause). last_transition_from is deliberately NOT the gate — it is fragile across
+  the spawn/transition race; the marker-clear + phase==executing end state is airtight.
+
+  No sandbox is requested (the chain pauses before any plan/Ralph; the resumed
+  coordinator answers directly). Mock serves responses in GLOBAL ORDER.
+  Paired spec: ui/e2e/agentic/clarification-resume.spec.ts.
+  Config: configs/e2e-flow-bootstrap.json (incl. agent-run/07+09+10+11).
+
+responses:
+  # ---------- Loop 0: front-door coordinator → dev_via_test ----------
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "dev_via_test",
+          "reason": "Add a Go HTTP service that decodes MAVLink v2 HEARTBEAT frames over UDP and serves the latest at GET /heartbeat as JSON. (4b-2 resume journey: first-pass Lisa escalates needs_clarification, the recovery coordinator asks a clarifying question, then the operator's answer resumes the run.)"
+        }
+
+  # ---------- Loop A: first-pass Lisa → needs_clarification ----------
+  # rule 01 allowlist = [planned, needs_clarification]; Lisa escalates on turn 1.
+  # rule 02f (first-pass, lineage length_eq 0) spawns the INHERIT recovery
+  # coordinator (carries agent.run.entity_id).
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "needs_clarification",
+          "reason": "The ask does not specify the UDP listen address/port or the MAVLink dialect to decode — I need the user to clarify before a faithful plan is possible."
+        }
+
+  # ---------- Loop R: recovery coordinator → ask_user (PAUSES the run) ----------
+  # The 02f recovery coordinator (interactive mode, allowlist [ask_user,
+  # respond_direct]) asks the user. agent-run/07 stamps clarification_pending on
+  # the run entity → agent-run/09 transitions executing→awaiting_approval.
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "ask_user",
+          "reason": "Quick clarification before I build the heartbeat service: which UDP address and port should it listen on for MAVLink frames, and which MAVLink dialect (e.g. common / ardupilotmega) should I decode? Once you confirm I'll proceed."
+        }
+
+  # ---------- Resumed coordinator: operator answered → respond_direct ----------
+  # The spec POSTs the answer with run_id + in_reply_to. The reply re-enters as a
+  # front-door coordinator loop carrying agent.run.entity_id + agent.loop.reply_to
+  # → rules 10/11 resume the run (awaiting_approval→executing + clear markers)
+  # BEFORE this LLM call. This response then answers directly; the loop completes
+  # and the run stays `executing` (a plain coordinator respond_direct stamps no
+  # agent.run.outcome, so there is no run-completion — that is fine, the journey
+  # proves the resume mechanic).
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "respond_direct",
+          "reason": "Thanks — with the listen address 0.0.0.0:14550 and the common MAVLink dialect confirmed, I have what I need. The HEARTBEAT decoder service is unambiguous now and I'll proceed on those parameters."
+        }

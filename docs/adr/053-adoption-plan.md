@@ -571,13 +571,13 @@ ever disproves the beta.102 re-eval behavior, THEN fold the check in.
     no-op. PR-1 is strictly more honest than today (was `executing`-forever on
     ask_user, now `awaiting_approval`-forever until PR-2's resume).
 
-    **PR-2 (resume): inert rule slice SHIPPED (2026-06-11); upstream U1 FILED as
-    semstreams#256.** Two halves:
+    **PR-2 (resume): ACTIVATED on semstreams beta.106 (2026-06-12); upstream U1
+    semstreams#256 SHIPPED via PR #261.** Two halves, both now landed:
 
-    - *Product-shell inert slice (shipped, this PR):* rule `10`
+    - *Product-shell slice (rules `10`/`11`):* rule `10`
       (`10-clarification-reply-resume-marker`) fires on the reply coordinator loop
       — gated on `agent.run.entity_id != ""` (the run anchor #256 threads onto the
-      reply) + `lineage.clarification-reply != ""` (the reply discriminator) — and
+      reply) + `agent.loop.reply_to != ""` (the reply discriminator) — and
       stamps `agent.run.clarification_resumed` on the run. Rule `11`
       (`11-resume-awaiting-to-executing`) fires on the run entity
       (`clarification_resumed != ""` + `phase==awaiting_approval` top-level guard)
@@ -592,27 +592,34 @@ ever disproves the beta.102 re-eval behavior, THEN fold the check in.
       pause↔resume bounce regardless of re-eval granularity. Pinned by
       `TestAgentRunPack_ClarificationResume{Marker,Transition}` +
       `TestAgentRunPack_PauseResumeBounceGuard` + the transition/wiring tests.
-      The rules are **inert in production** until #256 (a real reply loop carries
-      neither trigger field today).
-    - *Upstream U1 (semstreams#256, filed):* "make the HTTP reply path resumable" —
-      the reply branch (`component.go:716-723`, `msg.ReplyTo != ""`) drops THREE
-      things: `RunID` (the `TaskMessage.RunID` field exists, just unset → no
-      `agent.run.entity_id`), any reply discriminator (no `agent.loop.reply_to`
-      triple exists), and `msg.Metadata` (killing the `related_loops → lineage.*`
-      channel). #256 asks for two small reply-branch threads: the run anchor
-      (Thread 1 — `run_id` on `HTTPMessageRequest`→`task.RunID`, or framework-
-      recovered) + the reply identity (Thread 2 — propagate `msg.Metadata` so the
-      client supplies `related_loops{clarification-reply}` → `lineage.clarification-
-      reply`, OR a typed `agent.loop.reply_to`). Both reuse existing machinery; no
-      new primitive. The slice is authored against the preferred Thread-2 shape
-      (`lineage.clarification-reply`); the typed alternative is a one-line rule
-      swap.
-    - *Behavioral mock journey — deferred to #256's landing.* The slice is inert,
-      and the e2e harness has only a triple-READ helper (`GET /graph/triples`); a
-      faithful seeded journey would need a net-new triple-write seam
-      (framework-alignment territory). When #256 ships, the real reply path
-      produces the trigger triples, so the `clarification-resume` journey drives the
-      resume FOR REAL (no seeding) — a strictly better gate than a seeded fake.
+      Both trigger triples are stamped at SPAWN by `buildSpawnIdentityTriples`
+      whenever a reply carries `run_id` + `in_reply_to`, so the resume fires on loop
+      creation (before any LLM call).
+    - *Upstream U1 (semstreams#256 → PR #261, beta.106):* "make the HTTP reply path
+      resumable". The pre-fix reply branch dropped `RunID` and carried no reply
+      discriminator. #261 threads two reply-branch fields: **Thread 1** the run
+      anchor (`HTTPMessageRequest.run_id → UserMessage.RunID → TaskMessage.RunID` →
+      existing `SetRunID`/`buildSpawnIdentityTriples` stamps `agent.run.entity_id`)
+      + **Thread 2** the reply identity (typed `in_reply_to → TaskMessage.InReplyTo`
+      → new `agent.loop.reply_to` triple, a 6-part loop entity ref via
+      `agvocab.LoopReplyTo`). The maintainer DELIBERATELY chose the typed predicate
+      over a third `lineage.*` overload — so rule `10`'s discriminator was swapped
+      `lineage.clarification-reply` → `agent.loop.reply_to` (the documented one-line
+      change; the lineage-namespace caveat is gone). #261 also consolidated the two
+      byte-identical task-build sites into `buildTaskMessage` (the drift source).
+    - *Behavioral mock journey — LANDED with activation.* The `clarification-resume`
+      journey (`ui/e2e/agentic/clarification-resume.spec.ts` +
+      `test/fixtures/journeys/clarification-resume.yaml`) drives the resume FOR REAL:
+      it reuses the pause flow, then POSTs the operator's answer to the dispatch
+      `/message` endpoint with `run_id` + `in_reply_to` read from the paused run's
+      triples (the same direct-API pattern `tool-approval-gate` uses; no seeding,
+      no triple-write seam needed). DECISIVE assertion:
+      `awaiting_approval→executing→completed` + both markers cleared + no re-pause.
+      The former `..._BlockedOnUpstream` Skip gate was retired.
+    - *Remaining (separate slice):* a production human-facing reply affordance —
+      no UI surface yet renders `coordinator.user_question` with a free-text answer
+      box that POSTs the anchors. Deferred to the UI thread (it pairs with surfacing
+      `awaiting_approval`).
   - **cancel (deferred, narrow):** `executing→cancelled` fires ONLY on an
     explicit abandon, NOT on cap/budget exhaustion (those route to `ask_user`
     and stay `executing`). Likely home is an UPSTREAM widening of the D3 guard

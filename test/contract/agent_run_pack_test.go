@@ -535,20 +535,14 @@ func TestAgentRunPack_ClarificationResumeTransition(t *testing.T) {
 	}
 }
 
-// TestAgentRunPack_ClarificationResumeJourney_BlockedOnUpstream is a tracked,
-// non-optional gate for the DEFERRED behavioral mock journey (go-reviewer R2).
-// The 4b-2 resume rules (10/11) are inert until semstreams#256 threads the run
-// anchor + reply identity onto the reply TaskMessage; the e2e harness has only a
-// triple-READ helper, so a faithful seeded journey would need a net-new write
-// seam. When #256 lands, the real reply path produces the trigger triples, so a
-// `clarification-resume` Playwright journey can drive the resume FOR REAL (assert
-// awaiting_approval→executing + both markers cleared + NO re-pause) — a strictly
-// better gate than a seeded fake. This Skip keeps the obligation VISIBLE (it
-// surfaces in `go test -v` output) so the journey can't silently evaporate from
-// the #256 adoption PR. Delete this test when the journey lands.
-func TestAgentRunPack_ClarificationResumeJourney_BlockedOnUpstream(t *testing.T) {
-	t.Skip("blocked on semstreams#256: the behavioral clarification-resume mock journey lands WITH #256 (drives the real reply path, no seeding). Tracked gate — see configs/rules/agent-run/README.md §Resume + docs/adr/053-adoption-plan.md §4b-2 PR-2.")
-}
+// NOTE: the behavioral resume journey is now LIVE — semstreams#256 shipped in
+// beta.106, so the `clarification-resume` Playwright journey
+// (ui/e2e/agentic/clarification-resume.spec.ts + test/fixtures/journeys/
+// clarification-resume.yaml) drives the real reply path (POST /teams-dispatch/
+// message with run_id + in_reply_to; no seeding) and asserts
+// awaiting_approval→executing→completed + both markers cleared + no re-pause.
+// The former TestAgentRunPack_ClarificationResumeJourney_BlockedOnUpstream Skip
+// gate was retired when that journey landed.
 
 // TestAgentRunPack_PauseResumeBounceGuard pins the structural mutual-exclusion
 // that makes the pause↔resume cycle bounce-proof: rule 09 (pause) must carry the
