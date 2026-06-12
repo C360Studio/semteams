@@ -1,0 +1,89 @@
+name: approval-resume
+description: |
+  Journey: ADR-053 Phase 4c PR-2 — the tool-gate RESUME. The resume twin of
+  approval-pause. The pause half is identical (dev-via-test → first-pass Lisa
+  needs_clarification → recovery coordinator calls the gated create_rule → the loop
+  parks in awaiting_approval → the run pauses executing→awaiting_approval). Then the
+  spec POSTs the operator's APPROVAL to the real dispatch endpoint:
+
+    POST /teams-dispatch/loops/{loopId}/approval  {"decision":"approve"}
+
+  which publishes agent.approval_response.<loopId>. TWO consumers react:
+    1. The agentic-loop's agent.approval_response input port (NEWLY declared on
+       teams-loop for 4c PR-2) → handleApprovalResponseMessage → ResolveApprovalIfPending
+       un-parks the loop, re-dispatches create_rule with ApprovedBy set (the
+       ApprovalFilter bypasses the gate on a pre-approved call), and the loop continues.
+    2. The product-shell approvalpause subscriber → stamps agent.run.approval_resumed
+       on the run entity → agent-run/13 transitions the run awaiting_approval→executing
+       and clears BOTH approval markers.
+
+  After create_rule executes, the resumed recovery coordinator decide(respond_direct)
+  answers directly (response #4 below). The run resumes to `executing` and STAYS there
+  — a plain coordinator respond_direct stamps no agent.run.outcome, so there is no
+  completion; this journey proves the RESUME MECHANIC, not work completion (same shape
+  as the 4b-2 clarification-resume journey).
+
+  DECISIVE assertion: the run that REACHED awaiting_approval LEAVES it to `executing`
+  with BOTH approval markers cleared, and a settle window confirms NO bounce back to
+  awaiting_approval (exercises rule 12's approval_resumed length_eq 0 guard + rule 13's
+  ordered marker-clear live). Approval driven via the direct dispatch API (no UI
+  affordance yet — that is the deferred UI slice); no triple seeding.
+
+  Exercises the thinly-tested upstream approval RESUME path end-to-end:
+  GetPendingApprovalCallID (dispatch must have consumed agent.approval_pending),
+  publishApprovalResponse, ResolveApprovalIfPending, and the ApprovalFilter's
+  ApprovedBy bypass. Mock serves responses in GLOBAL ORDER. Sandbox = MockRunner.
+  Paired spec: ui/e2e/agentic/approval-resume.spec.ts. Config:
+  configs/e2e-flow-bootstrap.json (approval_required:[create_rule], agent-run/12+13,
+  the agent.approval_pending + agent.approval_response ports).
+
+responses:
+  # ---------- Loop 0: front-door coordinator → dev_via_test ----------
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "dev_via_test",
+          "reason": "Add a Go HTTP service that decodes MAVLink v2 HEARTBEAT frames over UDP and serves the latest at GET /heartbeat as JSON. (4c resume journey: first-pass Lisa escalates needs_clarification, then the recovery coordinator calls a gated tool; the operator approves and the run resumes executing.)"
+        }
+
+  # ---------- Loop A: first-pass Lisa → needs_clarification ----------
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "needs_clarification",
+          "reason": "The ask does not specify the UDP listen address/port or the MAVLink dialect to decode — I need the user to clarify before a faithful plan is possible."
+        }
+
+  # ---------- Loop R: recovery coordinator → create_rule (GATED → PAUSES) ----------
+  - tool_call:
+      name: create_rule
+      arguments_json: |
+        {
+          "name": "heartbeat-stale-alert",
+          "description": "Alert when no MAVLink HEARTBEAT frame has been decoded within the staleness window",
+          "condition": {
+            "predicate": "mavlink.heartbeat.last_seen_age_seconds",
+            "operator": ">",
+            "value": 5
+          },
+          "action": {
+            "type": "alert",
+            "severity": "warning",
+            "message": "No MAVLink heartbeat decoded in the last 5s"
+          }
+        }
+
+  # ---------- Loop R (resumed): recovery coordinator → respond_direct ----------
+  # After the operator approves, create_rule executes (ApprovalFilter bypasses on the
+  # pre-approved call) and the loop gets the tool result. This is its next LLM turn:
+  # it answers directly. The run stays `executing` (respond_direct stamps no outcome),
+  # so the journey proves the resume mechanic, not completion.
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "respond_direct",
+          "reason": "Created the heartbeat-stale-alert rule as approved. I'll proceed with the MAVLink heartbeat service build next."
+        }

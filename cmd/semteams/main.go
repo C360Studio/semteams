@@ -35,6 +35,7 @@ import (
 	rulepkg "github.com/c360studio/semstreams/processor/rule"
 	"github.com/c360studio/semstreams/service"
 	"github.com/c360studio/semstreams/types"
+	"github.com/c360studio/semteams/cmd/semteams/approvalpause"
 	"github.com/c360studio/semteams/cmd/semteams/chain"
 	"github.com/c360studio/semteams/cmd/semteams/chainpause"
 	"github.com/c360studio/semteams/cmd/semteams/flowtemplates"
@@ -282,6 +283,18 @@ func setupToolsAndPreprocessor(
 		return nil, nil, fmt.Errorf("start chain-pause subscriber: %w", err)
 	}
 
+	// 9f. Approval-pause subscriber (ADR-053 §4c PR-1). Subscribes to
+	// agent.approval_pending.> and stamps agent.run.approval_pending on the run
+	// entity when an in-run loop's gated tool call pauses the loop, so rule
+	// agent-run/12 can transition the run executing→awaiting_approval (the
+	// run-phase reflection of the loop-level approval_required gate). No HTTP
+	// surface — the approve/reject decision reuses the existing dispatch
+	// POST /teams-dispatch/loops/{id}/approval (ADR-030); PR-2 will add the
+	// resume-marker half.
+	if err := startApprovalPauseSubscriber(ctx, cfg, natsClient, platform, logger); err != nil {
+		return nil, nil, fmt.Errorf("start approval-pause subscriber: %w", err)
+	}
+
 	// 9g. (ADR-053) The hand-rolled chain milestone stampers were RETIRED
 	// here — they wrote chain.* projections onto the canonical
 	// agent.chain.execution.<id> entity, which is now owned exclusively by
@@ -332,6 +345,40 @@ func startChainPauseSubscriber(ctx context.Context, cfg *config.Config, natsClie
 	decisionHandler := chainpause.NewDecisionHandler(triplePublisher, taskPublisher, pauseDataReader, chainEntityReader, platform, logger)
 	httpHandler := chainpause.NewHTTPHandler(decisionHandler, logger)
 	return httpHandler, nil
+}
+
+// startApprovalPauseSubscriber wires the ADR-053 §4c PR-1 approval-pause subscriber:
+// it subscribes to agent.approval_pending.> (the loop-level tool-gate event, which
+// carries only the loop id — NO run anchor, unlike the #250 LoopFailedEvent), reads
+// the gated loop's run anchor via a single graph entity read, and stamps
+// agent.run.approval_pending on the run entity so rule agent-run/12 transitions the
+// run executing→awaiting_approval. Mirrors startChainPauseSubscriber's wiring.
+//
+// SUBSCRIBE-side (agent.approval_pending wildcard): config-derived via portresolver.
+// REQUEST-side (graph.query.entity literal): constant — same rationale as
+// startChainPauseSubscriber. A run-less gated loop (front-door coordinator) resolves
+// no anchor and is a no-op.
+func startApprovalPauseSubscriber(ctx context.Context, cfg *config.Config, natsClient *natsclient.Client, platform types.PlatformMeta, logger *slog.Logger) error {
+	triplePublisher := agentictools.NewNATSTriplePublisher(natsClient)
+	entityReader := chain.NewNATSEntityReader(natsClient, chain.DefaultGraphQueryEntitySubject)
+
+	// PAUSE subject (agent.approval_pending, published by teams-loop) + RESUME
+	// subject (agent.approval_response, published by teams-dispatch's approval
+	// endpoint). Both config-derived via portresolver; REQUEST-side graph read uses
+	// the literal constant (same rationale as startChainPauseSubscriber).
+	approvalPendingSubject := portresolver.SubjectOrDefault(cfg, "teams-loop", "agent.approval_pending", approvalpause.DefaultApprovalPendingSubject)
+	approvalResponseSubject := portresolver.SubjectOrDefault(cfg, "teams-dispatch", "agent.approval_response", approvalpause.DefaultApprovalResponseSubject)
+	pauser := approvalpause.NewPauser(entityReader, triplePublisher, platform.Org, platform.Platform)
+	sub := approvalpause.NewSubscriber(pauser, approvalPendingSubject, approvalResponseSubject, logger)
+	if err := sub.Start(ctx, natsClient); err != nil {
+		return fmt.Errorf("subscribe to agent.approval_pending/response events: %w", err)
+	}
+	logger.Info("approval-pause subscriber started",
+		slog.String("org", platform.Org),
+		slog.String("platform", platform.Platform),
+		slog.String("approval_pending_subject", approvalPendingSubject),
+		slog.String("approval_response_subject", approvalResponseSubject))
+	return nil
 }
 
 // loadPersonaFragments seeds the PERSONAS KV bucket from a directory

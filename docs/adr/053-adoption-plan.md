@@ -571,13 +571,13 @@ ever disproves the beta.102 re-eval behavior, THEN fold the check in.
     no-op. PR-1 is strictly more honest than today (was `executing`-forever on
     ask_user, now `awaiting_approval`-forever until PR-2's resume).
 
-    **PR-2 (resume): inert rule slice SHIPPED (2026-06-11); upstream U1 FILED as
-    semstreams#256.** Two halves:
+    **PR-2 (resume): ACTIVATED on semstreams beta.106 (2026-06-12); upstream U1
+    semstreams#256 SHIPPED via PR #261.** Two halves, both now landed:
 
-    - *Product-shell inert slice (shipped, this PR):* rule `10`
+    - *Product-shell slice (rules `10`/`11`):* rule `10`
       (`10-clarification-reply-resume-marker`) fires on the reply coordinator loop
       — gated on `agent.run.entity_id != ""` (the run anchor #256 threads onto the
-      reply) + `lineage.clarification-reply != ""` (the reply discriminator) — and
+      reply) + `agent.loop.reply_to != ""` (the reply discriminator) — and
       stamps `agent.run.clarification_resumed` on the run. Rule `11`
       (`11-resume-awaiting-to-executing`) fires on the run entity
       (`clarification_resumed != ""` + `phase==awaiting_approval` top-level guard)
@@ -592,38 +592,194 @@ ever disproves the beta.102 re-eval behavior, THEN fold the check in.
       pause↔resume bounce regardless of re-eval granularity. Pinned by
       `TestAgentRunPack_ClarificationResume{Marker,Transition}` +
       `TestAgentRunPack_PauseResumeBounceGuard` + the transition/wiring tests.
-      The rules are **inert in production** until #256 (a real reply loop carries
-      neither trigger field today).
-    - *Upstream U1 (semstreams#256, filed):* "make the HTTP reply path resumable" —
-      the reply branch (`component.go:716-723`, `msg.ReplyTo != ""`) drops THREE
-      things: `RunID` (the `TaskMessage.RunID` field exists, just unset → no
-      `agent.run.entity_id`), any reply discriminator (no `agent.loop.reply_to`
-      triple exists), and `msg.Metadata` (killing the `related_loops → lineage.*`
-      channel). #256 asks for two small reply-branch threads: the run anchor
-      (Thread 1 — `run_id` on `HTTPMessageRequest`→`task.RunID`, or framework-
-      recovered) + the reply identity (Thread 2 — propagate `msg.Metadata` so the
-      client supplies `related_loops{clarification-reply}` → `lineage.clarification-
-      reply`, OR a typed `agent.loop.reply_to`). Both reuse existing machinery; no
-      new primitive. The slice is authored against the preferred Thread-2 shape
-      (`lineage.clarification-reply`); the typed alternative is a one-line rule
-      swap.
-    - *Behavioral mock journey — deferred to #256's landing.* The slice is inert,
-      and the e2e harness has only a triple-READ helper (`GET /graph/triples`); a
-      faithful seeded journey would need a net-new triple-write seam
-      (framework-alignment territory). When #256 ships, the real reply path
-      produces the trigger triples, so the `clarification-resume` journey drives the
-      resume FOR REAL (no seeding) — a strictly better gate than a seeded fake.
-  - **cancel (deferred, narrow):** `executing→cancelled` fires ONLY on an
-    explicit abandon, NOT on cap/budget exhaustion (those route to `ask_user`
-    and stay `executing`). Likely home is an UPSTREAM widening of the D3 guard
-    to the executing phase (it only covers `dispatched` today), not a
-    product-shell cancel subscriber. Its own slice. NOTE (go-reviewer N2): a 4b-2
-    run that pauses on `ask_user` and is NEVER replied to parks in
-    `awaiting_approval` with no terminal-timeout — an abandoned-clarification run
-    is this cancel/timeout slice's job (tracked here, not a 4b-2-PR-1/PR-2 blocker).
-- **4c:** the real `approval_required` tool-gate → `awaiting_approval`
-  (NOT the CBG automated reviewer, which stays `executing` — §E).
-- Then Phase 5.
+      Both trigger triples are stamped at SPAWN by `buildSpawnIdentityTriples`
+      whenever a reply carries `run_id` + `in_reply_to`, so the resume fires on loop
+      creation (before any LLM call).
+    - *Upstream U1 (semstreams#256 → PR #261, beta.106):* "make the HTTP reply path
+      resumable". The pre-fix reply branch dropped `RunID` and carried no reply
+      discriminator. #261 threads two reply-branch fields: **Thread 1** the run
+      anchor (`HTTPMessageRequest.run_id → UserMessage.RunID → TaskMessage.RunID` →
+      existing `SetRunID`/`buildSpawnIdentityTriples` stamps `agent.run.entity_id`)
+      + **Thread 2** the reply identity (typed `in_reply_to → TaskMessage.InReplyTo`
+      → new `agent.loop.reply_to` triple, a 6-part loop entity ref via
+      `agvocab.LoopReplyTo`). The maintainer DELIBERATELY chose the typed predicate
+      over a third `lineage.*` overload — so rule `10`'s discriminator was swapped
+      `lineage.clarification-reply` → `agent.loop.reply_to` (the documented one-line
+      change; the lineage-namespace caveat is gone). #261 also consolidated the two
+      byte-identical task-build sites into `buildTaskMessage` (the drift source).
+    - *Behavioral mock journey — LANDED with activation.* The `clarification-resume`
+      journey (`ui/e2e/agentic/clarification-resume.spec.ts` +
+      `test/fixtures/journeys/clarification-resume.yaml`) drives the resume FOR REAL:
+      it reuses the pause flow, then POSTs the operator's answer to the dispatch
+      `/message` endpoint with `run_id` + `in_reply_to` read from the paused run's
+      triples (the same direct-API pattern `tool-approval-gate` uses; no seeding,
+      no triple-write seam needed). DECISIVE assertion:
+      `awaiting_approval→executing` + both markers cleared + no re-pause (the run
+      stays `executing` — a plain coordinator `respond_direct` stamps no
+      `agent.run.outcome`, so there is no completion; the journey proves the resume
+      MECHANIC, not work completion). The former `..._BlockedOnUpstream` Skip gate
+      was retired.
+    - *Remaining (separate slice):* a production human-facing reply affordance —
+      no UI surface yet renders `coordinator.user_question` with a free-text answer
+      box that POSTs the anchors. Deferred to the UI thread (it pairs with surfacing
+      `awaiting_approval`).
+  - **cancel / timeout reaper (deferred, narrow):** `executing→cancelled` fires
+    ONLY on an explicit abandon, NOT on cap/budget exhaustion (those route to
+    `ask_user` and stay `executing`). Likely home is an UPSTREAM widening of the D3
+    guard to the executing phase (it only covers `dispatched` today), not a
+    product-shell cancel subscriber. Its own slice. This slice owns TWO
+    awaiting_approval-wedge classes, both "a run parked in `awaiting_approval` with
+    no terminal-timeout":
+    - **(go-reviewer N2, 4b-2):** a run that pauses on `ask_user` and is NEVER
+      replied to parks forever.
+    - **(go-reviewer C1, 4c PR-2):** the upstream approval-TIMEOUT sweeper
+      (`approval_sweeper.go`) un-parks the loop IN-PROCESS and does NOT publish an
+      `agent.approval_response`, so 4c's run-phase resume (coupled to a PUBLISHED
+      response) never fires → the run wedges in `awaiting_approval` while the loop
+      moves on. **LATENT, not live:** both flow configs set no `ApprovalTimeout`
+      (zero = wait-indefinitely), so the sweeper never fires; an operator who sets a
+      tool-gate timeout re-opens it. The **symmetric upstream fix** is to have the
+      sweeper publish its synthetic `ApprovalResponse` (it already builds the exact
+      payload) — **FILED as semstreams#266**; until then the reaper is the
+      product-shell backstop. Documented in rule 13's `timeout_resume_gap`.
+- **4c (DESIGN — investigated 2026-06-12, ready for PR-1):** the real
+  `agentic-tools.approval_required` tool-gate → run `awaiting_approval` (NOT the
+  CBG automated reviewer, which stays `executing` — §E). This is the run-phase
+  REFLECTION of the existing, already-working loop-level approval gate (ADR-030:
+  `ApprovalFilter` → `LoopStateAwaitingApproval` → `PendingApprovalSection` + `POST
+  /loops/{id}/approval`). The loop pauses today; the RUN stays misleadingly
+  `executing` — the same honesty gap 4b-2 closed for clarification.
+
+  *The signals (investigated, beta.106).* Unlike 4b-2's clarification (which had a
+  persona-decision triple `coordinator.user_question` to fire on), the tool-gate
+  pause is **in-memory loop state** (`LoopEntity.State`, the LoopManager map) with
+  **no graph triple** — but it DOES emit two wire events on the AGENT stream, each
+  carrying only `LoopID` (NO run anchor):
+    - **Pause:** `agent.approval_pending.<loopID>` (`agentic.ApprovalPendingEvent`,
+      published by `gateForApproval`, handlers.go:1889) — "so a product-layer UI can
+      surface the request."
+    - **Resume:** `agent.approval_response.<loopID>` (`agentic.ApprovalResponse`,
+      the human's approve/reject decision; `ResolveApprovalIfPending` re-injects the
+      tool result and the loop continues its NORMAL flow — there is no dedicated
+      "resumed" event, the response IS the resume signal).
+
+  *Framework-alignment review (MANDATORY — new product-shell subscriber).*
+    1. Survey: is there an upstream/planned equivalent that stamps a RUN-phase
+       triple from the approval events? NO — upstream models approval at the LOOP
+       level (in-memory state + the two wire events for a UI). Run-phase modelling
+       is SemTeams' layer (ADR-053 adoption); upstream has no run-phase consumer of
+       these events and none is roadmapped.
+    2. In-product precedent: **`cmd/semteams/chainpause/`** is EXACTLY this pattern —
+       a product-shell `Subscriber`+`Pauser` that fires on a loop wire event
+       (`agent.failed.>`), resolves the loop's run anchor via a graph read
+       (`chain.NATSEntityReader`, the single surviving `chain/` reader after Phase 5),
+       and stamps run-level triples. 4c is a parallel subscriber pair, same shape,
+       same anchor-resolution mechanism.
+    3. Decision: net-new product-local subscriber is JUSTIFIED and aligned — it
+       consumes existing upstream wire events (no new upstream primitive) and reuses
+       the surviving graph reader. Migration posture: if upstream ever stamps an
+       `agent.run.approval_pending` itself (it does not today), retire the subscriber
+       for the upstream triple — same posture as the run-anchor wire (#250/#256).
+
+  *The design (mirrors 4b-2 pause/resume + the chainpause subscriber).*
+    - **Subscriber:** `cmd/semteams/approvalpause/` (parallel to `chainpause`).
+      `agent.approval_pending.<loopID>` → graph-read the loop's `agent.run.entity_id`
+      → stamp `agent.run.approval_pending` (= the paused loop instance) on the run
+      entity. `agent.approval_response.<loopID>` → graph-read the run anchor → stamp
+      `agent.run.approval_resumed` (the resume marker). Wired in `main.go` with the
+      start-after-tools boot order (like chainpause + the evidence subscriber).
+      Run-anchor reads use `natsclient.RequestClassified` + `errs.IsInvalid`
+      ([[natsclient-request-classified]]), and a loop with no run anchor (front-door
+      single loop) is a no-op (mirrors front-door `ask_user`).
+    - **Rules (new agent-run pack files):** a PAUSE rule (`agent.run.approval_pending`
+      + `phase==executing` top-level guard → `awaiting_approval`, mirror of 09) + a
+      RESUME rule (`agent.run.approval_resumed` + `phase==awaiting_approval` →
+      `executing` + ordered marker-clear, mirror of 11, with the same bounce-proof
+      `approval_resumed length_eq 0` guard on the pause rule). The
+      `executing⇄awaiting_approval` edges are already legal (`agentrun.go`), no
+      lifecycle change.
+    - **4b-2-vs-4c disambiguation (load-bearing):** both pauses land in
+      `awaiting_approval`. They are distinguished by CAUSE-MARKER, not phase: 4b-2
+      sets `agent.run.clarification_pending` (asking loop has
+      `coordinator.user_question`, NO `pending_approval`); 4c sets
+      `agent.run.approval_pending` (loop in `LoopStateAwaitingApproval`,
+      `pending_approval` present). The two resume rules key on DISTINCT markers
+      (`clarification_resumed` vs `approval_resumed`) and MUST NOT cross-resume — pin
+      this in the contract tests (a 4c approval pause must not be resumed by rule 11,
+      and vice-versa).
+    - **Anchor split? — RESOLVED (PR-1, 2026-06-12): NO rule split; Go-side
+      precedence.** The pause marker is stamped by the SUBSCRIBER (Go), not a rule
+      (the tool-gate pause is in-memory loop state with no triple for a rule to fire
+      on — unlike the clarification pause's `coordinator.user_question`). Because the
+      subscriber reads the gated loop entity directly and can branch in code, it
+      resolves the anchor with the same precedence `runanchor` uses —
+      `agent.run.entity_id` (inherit) then `lineage.run-loop-entity-id` (threaded) —
+      and stamps `agent.run.approval_pending` on whichever it found. So there is NO
+      07/08-style rule split; the pause RULE (12) is a single marker→transition,
+      direct mirror of rule 09. Pinned by `TestHandlePending_{InheritAnchor,
+      LineageFallback,AnchorPrecedence}`.
+
+  *Decomposition (mirror 4b-2): 4c-PR-1 (pause) + 4c-PR-2 (resume).*
+    - **PR-1 (pause) — SHIPPED (2026-06-12, branch
+      `feat/adr-053-4b2-pr2-activate-resume`):** `cmd/semteams/approvalpause`
+      subscriber (pause half: consume `agent.approval_pending.<loopID>`, resolve the
+      run anchor via one `chain.NATSEntityReader` read, stamp
+      `agent.run.approval_pending` on the run entity) + the `MarkerApprovalPending`
+      vocab const + `configs/rules/agent-run/12-executing-to-awaiting-on-approval.json`
+      (mirror of 09, with the bounce-proof `approval_resumed length_eq 0` guard
+      shipped now for PR-2) + `main.go` `startApprovalPauseSubscriber` (boot order
+      after chainpause) + the `agent.approval_pending` output port on teams-loop in
+      BOTH configs (so `PublishToStream` is stream-covered + portresolver resolves)
+      + `approval_required:["create_rule"]` in the **e2e config ONLY** (prod stays
+      autonomous per CLAUDE.md) + contract tests (`TestAgentRunPack_ApprovalPauseBounceGuard`,
+      `ApprovalMarkerSubscriberParity`, `PauseDisambiguation4bVs4c`,
+      `ApprovalRequiredGatePerConfig`) + the `approval-pause` mock journey.
+      - **Journey correction (Q1, 2026-06-12):** the design note said to *extend the
+        existing `tool-approval-gate` journey* — but that journey's `create_rule`
+        loop is a **run-less front-door coordinator** (it mints no run; verified by
+        trace), so it could never exercise a run-level pause. PR-1 ships a NEW in-run
+        journey (`test/fixtures/journeys/approval-pause.yaml` +
+        `ui/e2e/agentic/approval-pause.spec.ts`) that mirrors the proven
+        `ask-user-pause` (4b-2) scaffold: dev-via-test → first-pass Lisa
+        `needs_clarification` → rule 02f spawns the recovery coordinator (inherit
+        anchor `agent.run.entity_id`) → that coordinator calls the gated `create_rule`
+        → loop parks in `awaiting_approval` → approvalpause stamps the run marker →
+        rule 12 transitions `executing→awaiting_approval`. Asserts the run reaches
+        `awaiting_approval` with `agent.run.approval_pending` set and
+        `agent.run.clarification_pending` ABSENT (the 4c-vs-4b-2 distinction) +
+        `last_transition_from==executing`.
+      - **Upstream-fragility note (Coby, 2026-06-12):** the approval path
+        (`gateForApproval`'s `agent.approval_pending` publish, the `ApprovalFilter`,
+        `BeginAwaitingApproval`, and PR-2's `ResolveApprovalIfPending`) has thin
+        real-world exercise. The mock journey is the decisive end-to-end proof that
+        the gated tool actually parks the loop and emits the event the subscriber
+        consumes — treated as a gap-exposer, not assumed solid.
+    - **PR-2 (resume) — SHIPPED (2026-06-12, same branch):** `approvalpause` resume
+      half — `HandleResponse` consumes `agent.approval_response.<loopID>`, re-reads the
+      run anchor via the SHARED `stampRunMarker` helper (refactored out of the pause
+      half), and stamps `agent.run.approval_resumed`. The Subscriber now binds BOTH
+      core subscriptions (pending + response). Rule
+      `13-resume-awaiting-to-executing-on-approval.json` mirrors rule 11: ordered
+      on_enter `[transition→executing, remove approval_pending, remove
+      approval_resumed]`; rule 12's `approval_resumed length_eq 0` guard (shipped in
+      PR-1) makes the bounce impossible. The marker is **decision-independent**
+      (approve/reject/modify all un-park the loop). Contract tests:
+      `ApprovalResumeTransition` (exact 3-action order + subject-less removes),
+      `ApprovalMarkerSubscriberParity` (rule 13 ↔ subscriber), `PauseDisambiguation4bVs4c`
+      extended (rule 13 clears approval_* only, never clarification_*; rule 11 the
+      mirror). `approval-resume` mock journey GREEN.
+      - **CRITICAL WIRING (the upstream-fragility flag paid off):** the loop did NOT
+        consume `agent.approval_response` — teams-loop declared no such input port, and
+        the loop's `setupSubscriptions` only subscribes to DECLARED input ports
+        (`component.go:592` switch). Without it the loop can NEVER resume. PR-2 adds the
+        `agent.approval_response` INPUT port on teams-loop (the consumer) + the matching
+        OUTPUT port on teams-dispatch (the publisher, for AGENT-stream coverage of
+        `PublishToStream` + `ResolveSubject`) in BOTH configs. The dispatch's
+        `GetPendingApprovalCallID` (it consumes `agent.approval_pending` via
+        `inputPortStream`/`inputPortSubject` DEFAULTS — works thanks to PR-1's
+        teams-loop `agent.approval_pending` output port giving AGENT-stream coverage) is
+        exercised for the first time by this journey's `POST .../approval`.
+  - Then Phase 5.
 
 **I. Open questions.**
 1. **D3 race** — empirical result; upstream ask ("D3 must not fire on

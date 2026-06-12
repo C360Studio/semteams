@@ -1,0 +1,50 @@
+{
+  "id": "agent_run_executing_to_awaiting_on_approval",
+  "type": "expression",
+  "name": "Approval pending → executing→awaiting_approval (tool-gate)",
+  "description": "ADR-053 Phase 4c PR-1 — the tool-gate pause transition (the run-phase reflection of the existing loop-level approval_required gate, ADR-030). Fires on the RUN entity (agent.chain.execution.<runID>) when the approvalpause subscriber has stamped agent.run.approval_pending there AND the run is still `executing` AND no resume is in flight. Advances the run to `awaiting_approval` via lifecycle_transition. The run is now honestly paused on a human approval rather than misleadingly `executing` while a gated tool call waits.\n\nWHO STAMPS THE MARKER: unlike the 4b-2 clarification pause (where rules 07/08 fire on the asking coordinator loop and stamp clarification_pending), the tool-gate pause is in-memory loop state (LoopEntity.State = LoopStateAwaitingApproval) with NO graph triple for a rule to fire on. So the product-shell subscriber cmd/semteams/approvalpause consumes the agent.approval_pending.<loopID> wire event, graph-reads the gated loop's run anchor (agent.run.entity_id, falling back to lineage.run-loop-entity-id — the 4b-1a inherit/threaded split, absorbed in Go), and stamps agent.run.approval_pending on the run entity. THIS rule is the marker→transition half (mirror of rule 09); there is no 07/08-analog rule because the subscriber does the anchor resolution.\n\nMirrors 09-executing-to-awaiting-on-clarification.json exactly (marker trigger + top-level phase guard + lifecycle_transition). The executing→awaiting_approval edge is already legal in the upstream transition table (agentrun.go), so no lifecycle change.\n\nPHASE GUARD IS A TOP-LEVEL CONDITION, NOT AN ACTION `when` (Coby review round 2): agent.run.phase==executing is a rule condition, so the rule is simply not-matching until the edge is legal — the illegal transition is never attempted and the durable approval_pending marker re-drives the transition exactly once when the phase is executing (beta.103+ re-evaluates every entity-state rule per KV revision).\n\nRESUME MUTUAL-EXCLUSION (agent.run.approval_resumed length_eq 0): the bounce-proof guard, forward-compatible with PR-2. PR-1 never stamps approval_resumed (the guard is always satisfied); PR-2's resume rule will stamp approval_resumed on the run the instant an ApprovalResponse arrives, then transition awaiting_approval→executing and remove BOTH markers (approval_pending first, then approval_resumed). Without this guard, that resume transition back to `executing` would briefly satisfy THIS rule's (approval_pending + phase==executing) while approval_pending is still being cleared → an infinite pause↔resume bounce. With it, this rule is structurally dead from the moment a resume starts until both markers are gone, regardless of re-eval granularity. Shipped on the pause rule now (mirrors how rule 09 carries the clarification_resumed guard) so PR-2 adds only the resume rules, never re-touches this one.\n\nSHARED PHASE WITH 4b-2: awaiting_approval is also 4b-2's clarification phase. They are distinguished by CAUSE-MARKER, not phase: 4c sets agent.run.approval_pending (gated loop in LoopStateAwaitingApproval, pending_approval present); 4b-2 sets agent.run.clarification_pending (asking loop has coordinator.user_question, NO pending_approval). The two markers and their resume twins are DISJOINT and MUST NOT cross-resume — pinned by the agent_run_pack disambiguation contract tests.\n\nDOES NOT collide with 03/04 (executing→completed/failed): a gated loop stamps approval_pending but NOT agent.run.outcome, so rules 03/04 do not fire; and once the run is awaiting_approval their phase==executing guard excludes them. DOES NOT collide with 09: 09 triggers on clarification_pending, this rule on approval_pending — disjoint top-level triggers.",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "agent.run.approval_pending",
+      "operator": "ne",
+      "value": "",
+      "required": true
+    },
+    {
+      "field": "agent.run.phase",
+      "operator": "eq",
+      "value": "executing",
+      "required": true
+    },
+    {
+      "field": "agent.run.approval_resumed",
+      "operator": "length_eq",
+      "value": 0,
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "lifecycle_transition",
+      "workflow": "agent-run",
+      "phase": "awaiting_approval",
+      "reason": "a loop called a tool gated by approval_required — run paused awaiting human approval (ADR-053 4c)"
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "pack": "agent-run",
+    "phase": "ADR-053 Phase 4c PR-1",
+    "adr": "docs/adr/053-adoption-plan.md",
+    "role": "tool-gate pause transition (executing→awaiting_approval, run-entity transition)",
+    "marker_stamped_by": "cmd/semteams/approvalpause subscriber (consumes agent.approval_pending.<loopID>, resolves the run anchor via graph read, stamps agent.run.approval_pending). No 07/08-analog rule — the subscriber absorbs the anchor split in Go.",
+    "joins_with": "09-executing-to-awaiting-on-clarification.json (the 4b-2 twin; disjoint trigger). PR-2 will add the approval resume rules (the agent.run.approval_resumed twin — already this rule's mutual-exclusion guard).",
+    "fires_on": "the run entity (agent.chain.execution.<runID>) — same firing-entity discipline as 02/03/04/09.",
+    "phase_guard_is_condition": "agent.run.phase==executing is a TOP-LEVEL CONDITION (not an action `when`) so the invalid edge is never attempted (Coby review round 2).",
+    "resume_mutual_exclusion": "agent.run.approval_resumed length_eq 0 — the bounce-proof guard, shipped now (PR-1) for PR-2. Mirrors rule 09's clarification_resumed guard.",
+    "edge_is_legal_upstream": "executing→awaiting_approval is already in the agentrun lifecycle transition table — no upstream change.",
+    "vs_4b2": "Shares awaiting_approval with 4b-2's clarification pause; distinguished by cause-marker (approval_pending + pending_approval vs clarification_pending + coordinator.user_question), not by phase. The two markers and resume twins are disjoint — no cross-resume."
+  }
+}
