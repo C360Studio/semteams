@@ -1,0 +1,52 @@
+{
+  "id": "agent_run_resume_awaiting_to_executing",
+  "type": "expression",
+  "name": "Clarification resumed → awaiting_approval→executing (+ clear markers)",
+  "description": "ADR-053 Phase 4b-2 PR-2 — the interactive-RESUME transition, half 2 (the run-entity transition). Fires on the RUN entity (agent.chain.execution.<runID>) when rule 10 has stamped agent.run.clarification_resumed there AND the run is parked in `awaiting_approval`. Advances the run back to `executing` via lifecycle_transition and clears BOTH clarification markers, so the run resumes honestly and a future clarification can pause again. The mirror of pause rule 09.\n\nORDERED on_enter (bounce-proof): (1) lifecycle_transition awaiting_approval→executing; (2) remove_triple agent.run.clarification_pending; (3) remove_triple agent.run.clarification_resumed. The ORDER + rule 09's resume-mutual-exclusion guard (agent.run.clarification_resumed length_eq 0) make a pause↔resume bounce impossible at EVERY intermediate KV revision, WITHOUT needing an atomic-write primitive:\n  R0 (pre): phase=awaiting_approval, pending set, resumed set — rule 11 matches.\n  R1 (after transition): phase=executing, pending set, resumed set — rule 09 blocked (its clarification_resumed length_eq 0 guard fails; resumed is still set).\n  R2 (after remove pending): phase=executing, pending GONE, resumed set — rule 09 blocked (its clarification_pending ne \"\" fails).\n  R3 (after remove resumed): phase=executing, both gone — rule 09 blocked (pending gone).\nAt no revision can rule 09 re-fire, so the run cannot bounce back to awaiting_approval. clarification_pending is removed BEFORE clarification_resumed precisely so the window between R2 and R3 (resumed-still-set, pending-gone) is also safe.\n\nWHY clear BOTH markers (not just for cleanliness): clarification_resumed MUST be cleared or rule 09 stays permanently blocked (the guard) and a SECOND clarification could never pause. clarification_pending MUST be cleared or rule 09 would re-fire the instant clarification_resumed is gone. Both are required for repeated ask→answer cycles to work.\n\nPHASE GUARD IS A TOP-LEVEL CONDITION (agent.run.phase==awaiting_approval), not an action `when` — same discipline as 02/03/04/09. The awaiting_approval→executing edge is already legal in the upstream transition table (agentrun.go), so no lifecycle change.\n\nDISTINCT FROM 4c: this resumes a 4b-2 CLARIFICATION pause (gated on clarification_resumed). A 4c tool-gate pause sets pending_approval and is resumed by its own (future) rule; this rule does not touch it.\n\nINERT UNTIL semstreams#256: rule 10 (which stamps the trigger) cannot fire until the reply path threads the run anchor + reply discriminator. The behavioral mock journey is DEFERRED to #256's landing — it will drive the real reply path and assert phase awaiting_approval→executing + both markers cleared + NO re-pause (no seeding; there is no triple-write seam in the e2e harness today). Until then, pinned STRUCTURALLY by TestAgentRunPack_ClarificationResumeTransition (exact 3-action order + subject-less removes) + TestAgentRunPack_PauseResumeBounceGuard.",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "agent.run.clarification_resumed",
+      "operator": "ne",
+      "value": "",
+      "required": true
+    },
+    {
+      "field": "agent.run.phase",
+      "operator": "eq",
+      "value": "awaiting_approval",
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "lifecycle_transition",
+      "workflow": "agent-run",
+      "phase": "executing",
+      "reason": "user answered the clarifying question — run resumed (ADR-053 4b-2)"
+    },
+    {
+      "type": "remove_triple",
+      "predicate": "agent.run.clarification_pending"
+    },
+    {
+      "type": "remove_triple",
+      "predicate": "agent.run.clarification_resumed"
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "pack": "agent-run",
+    "phase": "ADR-053 Phase 4b-2 PR-2",
+    "adr": "docs/adr/053-adoption-plan.md",
+    "role": "awaiting_approval→executing + marker-clear (run-entity transition, half 2)",
+    "joins_with": "10-clarification-reply-resume-marker.json (the reply marker) + 09-executing-to-awaiting-on-clarification.json (the pause twin, whose clarification_resumed length_eq 0 guard makes this rule bounce-proof).",
+    "fires_on": "the run entity (agent.chain.execution.<runID>) — same firing-entity discipline as 02/03/04/09.",
+    "remove_triple_subject": "no subject override → defaults to the firing entity (resolveTripleSubject → ec.EntityID = the run entity), so the run's own markers are cleared.",
+    "ordered_removes_are_load_bearing": "transition → remove pending → remove resumed, in THAT order. Combined with rule 09's clarification_resumed length_eq 0 guard, every intermediate KV revision keeps rule 09 blocked (resumed-still-set OR pending-gone). No atomic-write primitive needed; bounce is impossible regardless of re-eval granularity.",
+    "phase_guard_is_condition": "agent.run.phase==awaiting_approval is a TOP-LEVEL CONDITION so the invalid edge is never attempted.",
+    "edge_is_legal_upstream": "awaiting_approval→executing is already in the agentrun lifecycle transition table — no upstream change.",
+    "inert_until": "semstreams#256 — rule 10's trigger fields aren't on a real reply loop until the reply path threads them. Pinned structurally by the agent_run_pack contract tests now; the behavioral clarification-resume journey is deferred to #256's landing (will drive the real reply path, no seeding)."
+  }
+}

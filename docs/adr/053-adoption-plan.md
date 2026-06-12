@@ -571,16 +571,48 @@ ever disproves the beta.102 re-eval behavior, THEN fold the check in.
     no-op. PR-1 is strictly more honest than today (was `executing`-forever on
     ask_user, now `awaiting_approval`-forever until PR-2's resume).
 
-    **PR-2 (resume + upstream U1):** thread the asking run id through the reply.
-    Upstream **U1** (file the ask): add `RunID`/`RunEntityID` to
-    `HTTPMessageRequest` + the reply `TaskMessage` (`component.go:717-725`) so
-    the reply re-anchors via the EXISTING `SetRunID`+`graph_writer` path
-    (closing a structural hole in the dispatch-coordinator pattern, not a new
-    primitive — D3 resolution: thread-the-anchor, NOT making `CreateLoopWithID`
-    continue loops). Rules `10`/`11` (resume marker + `awaiting_approval→executing`),
-    gated on a reply discriminator (`agent.loop.reply_to`). Marker hygiene (D2):
-    the resume transition `on_exit`-clears `clarification_pending` so the
-    ask→reply→ask cycle re-enters cleanly (state-machine dup/restart defense).
+    **PR-2 (resume): inert rule slice SHIPPED (2026-06-11); upstream U1 FILED as
+    semstreams#256.** Two halves:
+
+    - *Product-shell inert slice (shipped, this PR):* rule `10`
+      (`10-clarification-reply-resume-marker`) fires on the reply coordinator loop
+      — gated on `agent.run.entity_id != ""` (the run anchor #256 threads onto the
+      reply) + `lineage.clarification-reply != ""` (the reply discriminator) — and
+      stamps `agent.run.clarification_resumed` on the run. Rule `11`
+      (`11-resume-awaiting-to-executing`) fires on the run entity
+      (`clarification_resumed != ""` + `phase==awaiting_approval` top-level guard)
+      and does, IN ORDER: `lifecycle_transition→executing`, remove
+      `clarification_pending`, remove `clarification_resumed`. Single marker rule
+      (no 07/08-style split) because #256 gives the reply loop `agent.run.entity_id`
+      directly. **Marker-clear is bounce-proof WITHOUT an atomic-write primitive
+      (improves on the original on_exit sketch):** rule `09` gained a
+      `clarification_resumed length_eq 0` guard, and rule `11` removes
+      `clarification_pending` BEFORE `clarification_resumed` — so at every
+      intermediate KV revision rule `09` is blocked by either marker, no
+      pause↔resume bounce regardless of re-eval granularity. Pinned by
+      `TestAgentRunPack_ClarificationResume{Marker,Transition}` +
+      `TestAgentRunPack_PauseResumeBounceGuard` + the transition/wiring tests.
+      The rules are **inert in production** until #256 (a real reply loop carries
+      neither trigger field today).
+    - *Upstream U1 (semstreams#256, filed):* "make the HTTP reply path resumable" —
+      the reply branch (`component.go:716-723`, `msg.ReplyTo != ""`) drops THREE
+      things: `RunID` (the `TaskMessage.RunID` field exists, just unset → no
+      `agent.run.entity_id`), any reply discriminator (no `agent.loop.reply_to`
+      triple exists), and `msg.Metadata` (killing the `related_loops → lineage.*`
+      channel). #256 asks for two small reply-branch threads: the run anchor
+      (Thread 1 — `run_id` on `HTTPMessageRequest`→`task.RunID`, or framework-
+      recovered) + the reply identity (Thread 2 — propagate `msg.Metadata` so the
+      client supplies `related_loops{clarification-reply}` → `lineage.clarification-
+      reply`, OR a typed `agent.loop.reply_to`). Both reuse existing machinery; no
+      new primitive. The slice is authored against the preferred Thread-2 shape
+      (`lineage.clarification-reply`); the typed alternative is a one-line rule
+      swap.
+    - *Behavioral mock journey — deferred to #256's landing.* The slice is inert,
+      and the e2e harness has only a triple-READ helper (`GET /graph/triples`); a
+      faithful seeded journey would need a net-new triple-write seam
+      (framework-alignment territory). When #256 ships, the real reply path
+      produces the trigger triples, so the `clarification-resume` journey drives the
+      resume FOR REAL (no seeding) — a strictly better gate than a seeded fake.
   - **cancel (deferred, narrow):** `executing→cancelled` fires ONLY on an
     explicit abandon, NOT on cap/budget exhaustion (those route to `ask_user`
     and stay `executing`). Likely home is an UPSTREAM widening of the D3 guard
