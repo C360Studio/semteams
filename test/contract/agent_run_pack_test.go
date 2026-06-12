@@ -466,21 +466,24 @@ func TestAgentRunPack_AskUserPauseAutonomousInert(t *testing.T) {
 // agent.run.clarification_resumed on the run entity via the run-anchor subject
 // override. Single rule (no 07/08-style anchor split) because semstreams#256
 // threads the run anchor onto the reply, so the reply loop always carries
-// agent.run.entity_id. The reply discriminator (lineage.clarification-reply) is
+// agent.run.entity_id. The reply discriminator (agent.loop.reply_to) is
 // what distinguishes a reply from any other coordinator loop in the run.
 func TestAgentRunPack_ClarificationResumeMarker(t *testing.T) {
 	r := loadRule(t, "../../configs/rules/agent-run/10-clarification-reply-resume-marker.json")
 	if !r.hasCondition("agent.loop.role", "eq", "coordinator") {
 		t.Error("agent-run/10: must fire on agent.loop.role==coordinator")
 	}
-	// The run anchor (Thread 1) — present on the reply loop only post-#256.
+	// The run anchor (Thread 1) — semstreams#256 (beta.106) threads run_id onto
+	// the reply, so the reply loop carries agent.run.entity_id.
 	if !r.hasCondition("agent.run.entity_id", "ne", "") {
 		t.Error("agent-run/10: must require agent.run.entity_id != \"\" (the run anchor threaded by semstreams#256)")
 	}
 	// The reply discriminator (Thread 2) — the loop-local signal that this is a
-	// clarification reply, not just any run coordinator.
-	if !r.hasCondition("lineage.clarification-reply", "ne", "") {
-		t.Error("agent-run/10: must require lineage.clarification-reply != \"\" (the reply discriminator — without it the rule would fire on every run coordinator)")
+	// clarification reply, not just any run coordinator. semstreams#256 shipped
+	// the TYPED shape in beta.106: in_reply_to → agent.loop.reply_to triple
+	// (agvocab.LoopReplyTo), NOT a lineage.* overload.
+	if !r.hasCondition("agent.loop.reply_to", "ne", "") {
+		t.Error("agent-run/10: must require agent.loop.reply_to != \"\" (the reply discriminator — without it the rule would fire on every run coordinator)")
 	}
 	var stamps bool
 	for _, a := range r.OnEnter {
