@@ -157,6 +157,7 @@ func TestAgentRunPack_TransitionsPhaseGuardedTopLevel(t *testing.T) {
 		{"../../configs/rules/agent-run/03-executing-to-completed.json", "executing", "completed", "agent.run.outcome"},
 		{"../../configs/rules/agent-run/04-executing-to-failed.json", "executing", "failed", "agent.run.outcome"},
 		{"../../configs/rules/agent-run/09-executing-to-awaiting-on-clarification.json", "executing", "awaiting_approval", "agent.run.clarification_pending"},
+		{"../../configs/rules/agent-run/11-resume-awaiting-to-executing.json", "awaiting_approval", "executing", "agent.run.clarification_resumed"},
 	}
 	for _, tc := range cases {
 		r := loadRule(t, tc.path)
@@ -288,6 +289,8 @@ func TestAgentRunPack_WiredInBothConfigs(t *testing.T) {
 		"/app/configs/rules/agent-run/07-ask-user-pause-run-anchor.json",
 		"/app/configs/rules/agent-run/08-ask-user-pause-lineage-anchor.json",
 		"/app/configs/rules/agent-run/09-executing-to-awaiting-on-clarification.json",
+		"/app/configs/rules/agent-run/10-clarification-reply-resume-marker.json",
+		"/app/configs/rules/agent-run/11-resume-awaiting-to-executing.json",
 	}
 	for _, cfg := range []string{"../../configs/flow-bootstrap.json", "../../configs/e2e-flow-bootstrap.json"} {
 		raw, err := os.ReadFile(cfg) //nolint:gosec // test-controlled config path
@@ -455,6 +458,105 @@ func TestAgentRunPack_AskUserPauseAutonomousInert(t *testing.T) {
 				"autonomous-inert (restricted_decide_actions rejects decide(ask_user) before the triple is stamped). Without "+
 				"this exact gate the inertness claim in the rule metadata + README would be false.", path)
 		}
+	}
+}
+
+// TestAgentRunPack_ClarificationResumeMarker pins the 4b-2 PR-2 resume marker
+// (rule 10): a coordinator loop re-entering as a clarification REPLY stamps
+// agent.run.clarification_resumed on the run entity via the run-anchor subject
+// override. Single rule (no 07/08-style anchor split) because semstreams#256
+// threads the run anchor onto the reply, so the reply loop always carries
+// agent.run.entity_id. The reply discriminator (lineage.clarification-reply) is
+// what distinguishes a reply from any other coordinator loop in the run.
+func TestAgentRunPack_ClarificationResumeMarker(t *testing.T) {
+	r := loadRule(t, "../../configs/rules/agent-run/10-clarification-reply-resume-marker.json")
+	if !r.hasCondition("agent.loop.role", "eq", "coordinator") {
+		t.Error("agent-run/10: must fire on agent.loop.role==coordinator")
+	}
+	// The run anchor (Thread 1) — present on the reply loop only post-#256.
+	if !r.hasCondition("agent.run.entity_id", "ne", "") {
+		t.Error("agent-run/10: must require agent.run.entity_id != \"\" (the run anchor threaded by semstreams#256)")
+	}
+	// The reply discriminator (Thread 2) — the loop-local signal that this is a
+	// clarification reply, not just any run coordinator.
+	if !r.hasCondition("lineage.clarification-reply", "ne", "") {
+		t.Error("agent-run/10: must require lineage.clarification-reply != \"\" (the reply discriminator — without it the rule would fire on every run coordinator)")
+	}
+	var stamps bool
+	for _, a := range r.OnEnter {
+		if a.Type == "add_triple" && a.Predicate == "agent.run.clarification_resumed" {
+			stamps = true
+			if a.Subject != "$entity.triple.agent.run.entity_id" {
+				t.Errorf("agent-run/10: clarification_resumed subject = %q, want $entity.triple.agent.run.entity_id (the run entity)", a.Subject)
+			}
+		}
+	}
+	if !stamps {
+		t.Error("agent-run/10: must add_triple agent.run.clarification_resumed on the run entity (drives agent-run/11 awaiting_approval→executing)")
+	}
+}
+
+// TestAgentRunPack_ClarificationResumeTransition pins the 4b-2 PR-2 resume
+// transition (rule 11) AND the bounce-proof contract that depends on action
+// ORDER. The on_enter must be EXACTLY [lifecycle_transition→executing,
+// remove clarification_pending, remove clarification_resumed] in that order:
+// combined with rule 09's clarification_resumed length_eq 0 guard, every
+// intermediate KV revision keeps rule 09 blocked, so the run can never bounce
+// back to awaiting_approval. clarification_pending MUST be removed before
+// clarification_resumed (else the resumed-set-but-pending-gone window would
+// re-arm rule 09 once resumed is cleared). A regression that reorders these or
+// drops a remove re-introduces the infinite pause↔resume bounce.
+func TestAgentRunPack_ClarificationResumeTransition(t *testing.T) {
+	r := loadRule(t, "../../configs/rules/agent-run/11-resume-awaiting-to-executing.json")
+	if !r.hasCondition("agent.run.clarification_resumed", "ne", "") {
+		t.Error("agent-run/11: must trigger on agent.run.clarification_resumed != \"\"")
+	}
+	if len(r.OnEnter) != 3 {
+		t.Fatalf("agent-run/11: want exactly 3 on_enter actions [transition, remove pending, remove resumed], got %d", len(r.OnEnter))
+	}
+	if r.OnEnter[0].Type != "lifecycle_transition" || r.OnEnter[0].Phase != "executing" {
+		t.Errorf("agent-run/11: on_enter[0] must be lifecycle_transition→executing, got type=%q phase=%q", r.OnEnter[0].Type, r.OnEnter[0].Phase)
+	}
+	if r.OnEnter[1].Type != "remove_triple" || r.OnEnter[1].Predicate != "agent.run.clarification_pending" {
+		t.Errorf("agent-run/11: on_enter[1] must remove agent.run.clarification_pending (BEFORE clarification_resumed — bounce-proof order), got type=%q predicate=%q", r.OnEnter[1].Type, r.OnEnter[1].Predicate)
+	}
+	if r.OnEnter[2].Type != "remove_triple" || r.OnEnter[2].Predicate != "agent.run.clarification_resumed" {
+		t.Errorf("agent-run/11: on_enter[2] must remove agent.run.clarification_resumed (AFTER clarification_pending), got type=%q predicate=%q", r.OnEnter[2].Type, r.OnEnter[2].Predicate)
+	}
+	// neither remove may carry a subject override — both must default to the
+	// firing entity (the run entity) so the run's own markers are cleared.
+	for i := 1; i <= 2; i++ {
+		if r.OnEnter[i].Subject != "" {
+			t.Errorf("agent-run/11: on_enter[%d] remove_triple must NOT set a subject (defaults to the firing run entity); got %q", i, r.OnEnter[i].Subject)
+		}
+	}
+}
+
+// TestAgentRunPack_ClarificationResumeJourney_BlockedOnUpstream is a tracked,
+// non-optional gate for the DEFERRED behavioral mock journey (go-reviewer R2).
+// The 4b-2 resume rules (10/11) are inert until semstreams#256 threads the run
+// anchor + reply identity onto the reply TaskMessage; the e2e harness has only a
+// triple-READ helper, so a faithful seeded journey would need a net-new write
+// seam. When #256 lands, the real reply path produces the trigger triples, so a
+// `clarification-resume` Playwright journey can drive the resume FOR REAL (assert
+// awaiting_approval→executing + both markers cleared + NO re-pause) — a strictly
+// better gate than a seeded fake. This Skip keeps the obligation VISIBLE (it
+// surfaces in `go test -v` output) so the journey can't silently evaporate from
+// the #256 adoption PR. Delete this test when the journey lands.
+func TestAgentRunPack_ClarificationResumeJourney_BlockedOnUpstream(t *testing.T) {
+	t.Skip("blocked on semstreams#256: the behavioral clarification-resume mock journey lands WITH #256 (drives the real reply path, no seeding). Tracked gate — see configs/rules/agent-run/README.md §Resume + docs/adr/053-adoption-plan.md §4b-2 PR-2.")
+}
+
+// TestAgentRunPack_PauseResumeBounceGuard pins the structural mutual-exclusion
+// that makes the pause↔resume cycle bounce-proof: rule 09 (pause) must carry the
+// agent.run.clarification_resumed length_eq 0 guard, so the instant rule 10
+// stamps clarification_resumed the pause rule is dead until rule 11 clears both
+// markers. Dropping this guard re-introduces the infinite bounce (rule 11's
+// transition back to executing would re-trip rule 09 while pending is still set).
+func TestAgentRunPack_PauseResumeBounceGuard(t *testing.T) {
+	r := loadRule(t, "../../configs/rules/agent-run/09-executing-to-awaiting-on-clarification.json")
+	if !r.hasConditionField("agent.run.clarification_resumed", "length_eq") {
+		t.Error("agent-run/09: must guard `agent.run.clarification_resumed length_eq 0` — the bounce-proof mutual-exclusion with the resume (rule 10/11). Without it, rule 11's awaiting_approval→executing re-trips rule 09 → infinite pause↔resume bounce.")
 	}
 }
 

@@ -157,14 +157,16 @@ func TestRunScopeMintPointsAndLifecycleTransitions(t *testing.T) {
 	// Invariant 2 (Phase 4a/4a′/4b-2): lifecycle_transition actions appear ONLY in
 	// the agent-run pack's run-entity transition rules. Anywhere else is a stray
 	// (run-phase transitions must fire on the run entity, not a loop entity). The
-	// marker rules (4a′ coordinator-failed 05/06; 4b-2 pause markers 07/08) only
-	// add_triple — they carry NO lifecycle_transition — so only the run-entity
-	// transitions (02/03/04 + 4b-2's 09) appear here.
+	// marker rules (4a′ coordinator-failed 05/06; 4b-2 pause markers 07/08; 4b-2
+	// resume marker 10) only add_triple — they carry NO lifecycle_transition — so
+	// only the run-entity transitions (02/03/04 + 4b-2's pause 09 + resume 11)
+	// appear here.
 	lifecycleTransitionFiles := []string{
 		"configs/rules/agent-run/02-dispatched-to-executing.json",
 		"configs/rules/agent-run/03-executing-to-completed.json",
 		"configs/rules/agent-run/04-executing-to-failed.json",
 		"configs/rules/agent-run/09-executing-to-awaiting-on-clarification.json",
+		"configs/rules/agent-run/11-resume-awaiting-to-executing.json",
 	}
 	for _, entry := range lifecycleActions {
 		allowed := false

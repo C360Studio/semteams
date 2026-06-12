@@ -284,7 +284,9 @@
           "/app/configs/rules/agent-run/06-coordinator-failed-lineage-anchor.json",
           "/app/configs/rules/agent-run/07-ask-user-pause-run-anchor.json",
           "/app/configs/rules/agent-run/08-ask-user-pause-lineage-anchor.json",
-          "/app/configs/rules/agent-run/09-executing-to-awaiting-on-clarification.json"
+          "/app/configs/rules/agent-run/09-executing-to-awaiting-on-clarification.json",
+          "/app/configs/rules/agent-run/10-clarification-reply-resume-marker.json",
+          "/app/configs/rules/agent-run/11-resume-awaiting-to-executing.json"
         ],
         "inline_rules": []
       }
