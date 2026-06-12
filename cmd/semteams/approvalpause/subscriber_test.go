@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/message"
@@ -20,16 +21,20 @@ func envelopeFor(t *testing.T, payload message.Payload) []byte {
 	return data
 }
 
-// TestHandleMsg_ApprovalPending decodes a real ApprovalPendingEvent envelope and
-// drives the Pauser — the wire-decode half of the subscriber, exercising the
+func newSubscriber(reader EntityTripleReader, pub TriplePublisher) *Subscriber {
+	return NewSubscriber(NewPauser(reader, pub, testOrg, testPlatform), "", "", nil)
+}
+
+// TestHandlePendingMsg_ApprovalPending decodes a real ApprovalPendingEvent envelope
+// and drives the Pauser — the wire-decode half of the PAUSE path, exercising the
 // category gate + payload unmarshal against the upstream marshaller.
-func TestHandleMsg_ApprovalPending(t *testing.T) {
+func TestHandlePendingMsg_ApprovalPending(t *testing.T) {
 	const runEntity = "c360.ops.agent.chain.execution.run-77"
 	reader := &fakeReader{triples: map[string]any{"agent.run.entity_id": runEntity}}
 	pub := &fakePublisher{}
-	sub := NewSubscriber(NewPauser(reader, pub, testOrg, testPlatform), "", nil)
+	sub := newSubscriber(reader, pub)
 
-	sub.handleMsg(context.Background(), envelopeFor(t, &agentic.ApprovalPendingEvent{
+	sub.handlePendingMsg(context.Background(), envelopeFor(t, &agentic.ApprovalPendingEvent{
 		LoopID:   "loop-77",
 		CallID:   "call-77",
 		ToolName: "create_rule",
@@ -43,39 +48,85 @@ func TestHandleMsg_ApprovalPending(t *testing.T) {
 	}
 }
 
-// TestHandleMsg_SkipsOtherCategory: a non-approval_pending envelope on the wildcard
-// is ignored (no read, no write).
-func TestHandleMsg_SkipsOtherCategory(t *testing.T) {
+// TestHandleResponseMsg_ApprovalResponse decodes a real ApprovalResponse envelope and
+// drives the resume half — stamps agent.run.approval_resumed (4c PR-2).
+func TestHandleResponseMsg_ApprovalResponse(t *testing.T) {
+	const runEntity = "c360.ops.agent.chain.execution.run-88"
+	reader := &fakeReader{triples: map[string]any{"agent.run.entity_id": runEntity}}
+	pub := &fakePublisher{}
+	sub := newSubscriber(reader, pub)
+
+	sub.handleResponseMsg(context.Background(), envelopeFor(t, &agentic.ApprovalResponse{
+		LoopID:     "loop-88",
+		CallID:     "call-88",
+		Decision:   agentic.ApprovalDecisionApprove,
+		ApprovedBy: "ui-anonymous",
+		DecidedAt:  time.Unix(0, 0).UTC(),
+	}))
+
+	if len(pub.written) != 1 {
+		t.Fatalf("want 1 triple written from a decoded approval_response event, got %d", len(pub.written))
+	}
+	if pub.written[0].Subject != runEntity || pub.written[0].Predicate != MarkerApprovalResumed {
+		t.Errorf("decoded response stamped wrong triple: %+v", pub.written[0])
+	}
+}
+
+// TestHandlePendingMsg_SkipsOtherCategory: a non-approval_pending envelope on the
+// pending wildcard is ignored (no read, no write). Cross-channel guard — the
+// response category must NOT trigger the pending handler.
+func TestHandlePendingMsg_SkipsOtherCategory(t *testing.T) {
 	reader := &fakeReader{triples: map[string]any{"agent.run.entity_id": "x"}}
 	pub := &fakePublisher{}
-	sub := NewSubscriber(NewPauser(reader, pub, testOrg, testPlatform), "", nil)
+	sub := newSubscriber(reader, pub)
 
-	// A different category on the same wildcard — must be skipped. Hand-built so
-	// the test does not depend on another payload's validation rules.
-	sub.handleMsg(context.Background(), []byte(`{"type":{"category":"loop_failed"},"payload":{}}`))
+	// An approval_response envelope must be ignored by the PENDING handler.
+	sub.handlePendingMsg(context.Background(), []byte(`{"type":{"category":"approval_response"},"payload":{}}`))
 
 	if reader.lastReadID != "" {
-		t.Error("non-approval_pending category must not trigger a graph read")
+		t.Error("non-approval_pending category must not trigger a graph read on the pending handler")
 	}
 	if len(pub.written) != 0 {
 		t.Errorf("non-approval_pending category wrote %d triples, want 0", len(pub.written))
 	}
 }
 
-// TestHandleMsg_SkipsMalformed: garbage bytes are dropped without panicking.
+// TestHandleResponseMsg_SkipsOtherCategory: the response handler ignores a
+// pending-category envelope (the reverse cross-channel guard).
+func TestHandleResponseMsg_SkipsOtherCategory(t *testing.T) {
+	reader := &fakeReader{triples: map[string]any{"agent.run.entity_id": "x"}}
+	pub := &fakePublisher{}
+	sub := newSubscriber(reader, pub)
+
+	sub.handleResponseMsg(context.Background(), []byte(`{"type":{"category":"approval_pending"},"payload":{}}`))
+
+	if reader.lastReadID != "" {
+		t.Error("non-approval_response category must not trigger a graph read on the response handler")
+	}
+	if len(pub.written) != 0 {
+		t.Errorf("non-approval_response category wrote %d triples, want 0", len(pub.written))
+	}
+}
+
+// TestHandleMsg_SkipsMalformed: garbage bytes are dropped without panicking on both
+// handlers.
 func TestHandleMsg_SkipsMalformed(t *testing.T) {
 	pub := &fakePublisher{}
-	sub := NewSubscriber(NewPauser(&fakeReader{}, pub, testOrg, testPlatform), "", nil)
-	sub.handleMsg(context.Background(), []byte("{not json"))
+	sub := newSubscriber(&fakeReader{}, pub)
+	sub.handlePendingMsg(context.Background(), []byte("{not json"))
+	sub.handleResponseMsg(context.Background(), []byte("{not json"))
 	if len(pub.written) != 0 {
 		t.Error("malformed envelope must write nothing")
 	}
 }
 
-// TestNewSubscriber_DefaultSubject: empty subject falls back to the wildcard.
-func TestNewSubscriber_DefaultSubject(t *testing.T) {
-	sub := NewSubscriber(nil, "", nil)
-	if sub.subject != DefaultApprovalPendingSubject {
-		t.Errorf("default subject = %q, want %q", sub.subject, DefaultApprovalPendingSubject)
+// TestNewSubscriber_DefaultSubjects: empty subjects fall back to the wildcards.
+func TestNewSubscriber_DefaultSubjects(t *testing.T) {
+	sub := NewSubscriber(nil, "", "", nil)
+	if sub.pendingSubject != DefaultApprovalPendingSubject {
+		t.Errorf("default pending subject = %q, want %q", sub.pendingSubject, DefaultApprovalPendingSubject)
+	}
+	if sub.responseSubject != DefaultApprovalResponseSubject {
+		t.Errorf("default response subject = %q, want %q", sub.responseSubject, DefaultApprovalResponseSubject)
 	}
 }

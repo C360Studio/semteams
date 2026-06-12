@@ -623,14 +623,25 @@ ever disproves the beta.102 re-eval behavior, THEN fold the check in.
       no UI surface yet renders `coordinator.user_question` with a free-text answer
       box that POSTs the anchors. Deferred to the UI thread (it pairs with surfacing
       `awaiting_approval`).
-  - **cancel (deferred, narrow):** `executing→cancelled` fires ONLY on an
-    explicit abandon, NOT on cap/budget exhaustion (those route to `ask_user`
-    and stay `executing`). Likely home is an UPSTREAM widening of the D3 guard
-    to the executing phase (it only covers `dispatched` today), not a
-    product-shell cancel subscriber. Its own slice. NOTE (go-reviewer N2): a 4b-2
-    run that pauses on `ask_user` and is NEVER replied to parks in
-    `awaiting_approval` with no terminal-timeout — an abandoned-clarification run
-    is this cancel/timeout slice's job (tracked here, not a 4b-2-PR-1/PR-2 blocker).
+  - **cancel / timeout reaper (deferred, narrow):** `executing→cancelled` fires
+    ONLY on an explicit abandon, NOT on cap/budget exhaustion (those route to
+    `ask_user` and stay `executing`). Likely home is an UPSTREAM widening of the D3
+    guard to the executing phase (it only covers `dispatched` today), not a
+    product-shell cancel subscriber. Its own slice. This slice owns TWO
+    awaiting_approval-wedge classes, both "a run parked in `awaiting_approval` with
+    no terminal-timeout":
+    - **(go-reviewer N2, 4b-2):** a run that pauses on `ask_user` and is NEVER
+      replied to parks forever.
+    - **(go-reviewer C1, 4c PR-2):** the upstream approval-TIMEOUT sweeper
+      (`approval_sweeper.go`) un-parks the loop IN-PROCESS and does NOT publish an
+      `agent.approval_response`, so 4c's run-phase resume (coupled to a PUBLISHED
+      response) never fires → the run wedges in `awaiting_approval` while the loop
+      moves on. **LATENT, not live:** both flow configs set no `ApprovalTimeout`
+      (zero = wait-indefinitely), so the sweeper never fires; an operator who sets a
+      tool-gate timeout re-opens it. The **symmetric upstream fix** is to have the
+      sweeper publish its synthetic `ApprovalResponse` (it already builds the exact
+      payload) — **FILED as semstreams#266**; until then the reaper is the
+      product-shell backstop. Documented in rule 13's `timeout_resume_gap`.
 - **4c (DESIGN — investigated 2026-06-12, ready for PR-1):** the real
   `agentic-tools.approval_required` tool-gate → run `awaiting_approval` (NOT the
   CBG automated reviewer, which stays `executing` — §E). This is the run-phase
@@ -743,13 +754,31 @@ ever disproves the beta.102 re-eval behavior, THEN fold the check in.
         real-world exercise. The mock journey is the decisive end-to-end proof that
         the gated tool actually parks the loop and emits the event the subscriber
         consumes — treated as a gap-exposer, not assumed solid.
-    - **PR-2 (resume):** subscriber resume half (consume
-      `agent.approval_response.<loopID>`, re-read the run anchor, stamp
-      `agent.run.approval_resumed`) + the resume rule (mirror of 11: bounce-proof
-      ordered marker-clear — rule 12 already carries its mutual-exclusion guard) +
-      journey extension (POST the approval via the existing
-      `/teams-dispatch/loops/{id}/approval` → assert `awaiting_approval→executing` +
-      both markers cleared + no bounce).
+    - **PR-2 (resume) — SHIPPED (2026-06-12, same branch):** `approvalpause` resume
+      half — `HandleResponse` consumes `agent.approval_response.<loopID>`, re-reads the
+      run anchor via the SHARED `stampRunMarker` helper (refactored out of the pause
+      half), and stamps `agent.run.approval_resumed`. The Subscriber now binds BOTH
+      core subscriptions (pending + response). Rule
+      `13-resume-awaiting-to-executing-on-approval.json` mirrors rule 11: ordered
+      on_enter `[transition→executing, remove approval_pending, remove
+      approval_resumed]`; rule 12's `approval_resumed length_eq 0` guard (shipped in
+      PR-1) makes the bounce impossible. The marker is **decision-independent**
+      (approve/reject/modify all un-park the loop). Contract tests:
+      `ApprovalResumeTransition` (exact 3-action order + subject-less removes),
+      `ApprovalMarkerSubscriberParity` (rule 13 ↔ subscriber), `PauseDisambiguation4bVs4c`
+      extended (rule 13 clears approval_* only, never clarification_*; rule 11 the
+      mirror). `approval-resume` mock journey GREEN.
+      - **CRITICAL WIRING (the upstream-fragility flag paid off):** the loop did NOT
+        consume `agent.approval_response` — teams-loop declared no such input port, and
+        the loop's `setupSubscriptions` only subscribes to DECLARED input ports
+        (`component.go:592` switch). Without it the loop can NEVER resume. PR-2 adds the
+        `agent.approval_response` INPUT port on teams-loop (the consumer) + the matching
+        OUTPUT port on teams-dispatch (the publisher, for AGENT-stream coverage of
+        `PublishToStream` + `ResolveSubject`) in BOTH configs. The dispatch's
+        `GetPendingApprovalCallID` (it consumes `agent.approval_pending` via
+        `inputPortStream`/`inputPortSubject` DEFAULTS — works thanks to PR-1's
+        teams-loop `agent.approval_pending` output port giving AGENT-stream coverage) is
+        exercised for the first time by this journey's `POST .../approval`.
   - Then Phase 5.
 
 **I. Open questions.**

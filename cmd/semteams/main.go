@@ -362,16 +362,22 @@ func startApprovalPauseSubscriber(ctx context.Context, cfg *config.Config, natsC
 	triplePublisher := agentictools.NewNATSTriplePublisher(natsClient)
 	entityReader := chain.NewNATSEntityReader(natsClient, chain.DefaultGraphQueryEntitySubject)
 
+	// PAUSE subject (agent.approval_pending, published by teams-loop) + RESUME
+	// subject (agent.approval_response, published by teams-dispatch's approval
+	// endpoint). Both config-derived via portresolver; REQUEST-side graph read uses
+	// the literal constant (same rationale as startChainPauseSubscriber).
 	approvalPendingSubject := portresolver.SubjectOrDefault(cfg, "teams-loop", "agent.approval_pending", approvalpause.DefaultApprovalPendingSubject)
+	approvalResponseSubject := portresolver.SubjectOrDefault(cfg, "teams-dispatch", "agent.approval_response", approvalpause.DefaultApprovalResponseSubject)
 	pauser := approvalpause.NewPauser(entityReader, triplePublisher, platform.Org, platform.Platform)
-	sub := approvalpause.NewSubscriber(pauser, approvalPendingSubject, logger)
+	sub := approvalpause.NewSubscriber(pauser, approvalPendingSubject, approvalResponseSubject, logger)
 	if err := sub.Start(ctx, natsClient); err != nil {
-		return fmt.Errorf("subscribe to agent.approval_pending events: %w", err)
+		return fmt.Errorf("subscribe to agent.approval_pending/response events: %w", err)
 	}
 	logger.Info("approval-pause subscriber started",
 		slog.String("org", platform.Org),
 		slog.String("platform", platform.Platform),
-		slog.String("approval_pending_subject", approvalPendingSubject))
+		slog.String("approval_pending_subject", approvalPendingSubject),
+		slog.String("approval_response_subject", approvalResponseSubject))
 	return nil
 }
 

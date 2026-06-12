@@ -252,7 +252,8 @@
           "/app/configs/rules/agent-run/09-executing-to-awaiting-on-clarification.json",
           "/app/configs/rules/agent-run/10-clarification-reply-resume-marker.json",
           "/app/configs/rules/agent-run/11-resume-awaiting-to-executing.json",
-          "/app/configs/rules/agent-run/12-executing-to-awaiting-on-approval.json"
+          "/app/configs/rules/agent-run/12-executing-to-awaiting-on-approval.json",
+          "/app/configs/rules/agent-run/13-resume-awaiting-to-executing-on-approval.json"
         ],
         "inline_rules": []
       }
@@ -301,6 +302,13 @@
               "stream_name": "TOOL",
               "required": true,
               "description": "Tool execution results"
+            },
+            {
+              "name": "agent.approval_response",
+              "type": "jetstream",
+              "subject": "agent.approval_response.*",
+              "stream_name": "AGENT",
+              "description": "Human approve/reject/modify decisions (ADR-053 §4c PR-2). The loop's setupSubscriptions routes this port to handleApprovalResponseMessage → ResolveApprovalIfPending, which un-parks the gated loop. WITHOUT this declared input the loop never subscribes and can NEVER resume from an approval gate. Also drives the approvalpause subscriber's run-phase resume marker."
             }
           ],
           "outputs": [
@@ -614,6 +622,13 @@
               "type": "nats",
               "subject": "user.response.*",
               "description": "Responses back to users (fire-and-forget; channel routers fan out to UI/email/SMS)"
+            },
+            {
+              "name": "agent.approval_response",
+              "type": "jetstream",
+              "subject": "agent.approval_response.*",
+              "stream_name": "AGENT",
+              "description": "Approve/reject/modify decisions published by POST /teams-dispatch/loops/{id}/approval (ADR-053 §4c PR-2). Declared so PublishToStream is AGENT-stream-covered, ResolveSubject resolves the subject, and the AGENT stream carries agent.approval_response.* for the teams-loop consumer + the approvalpause resume subscriber."
             }
           ]
         },

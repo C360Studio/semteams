@@ -100,7 +100,7 @@ with `run_id` + `in_reply_to` (no seeding) and asserts
 production human-facing reply affordance (surface `coordinator.user_question`,
 capture the free-text answer, POST the anchors) is a separate UI follow-up slice.
 
-### Tool-gate pause (4c PR-1 — rule `12` + the `approvalpause` subscriber)
+### Tool-gate pause + resume (4c — rules `12`/`13` + the `approvalpause` subscriber)
 
 The run-phase reflection of the existing **loop-level** `approval_required`
 tool-gate (ADR-030). When a loop calls a tool listed in
@@ -127,11 +127,24 @@ cross-resume because their cause-markers are distinct predicates
 (`approval_pending`/`approval_resumed` vs `clarification_pending`/
 `clarification_resumed`). Pinned by the `agent_run_pack` disambiguation tests.
 Prod (`flow-bootstrap.json`) sets **no** `approval_required` (autonomous), so the
-subscriber + rule are inert there; the `e2e-flow-bootstrap.json` gates `create_rule`
-to drive the `approval-pause` mock journey. The PR-2 resume half
-(`agent.approval_pending`'s `agent.approval_response.<loopID>` twin → stamp
-`approval_resumed` → transition `awaiting_approval→executing` + clear both markers)
-is the next slice; rule `12` already carries its bounce-proof guard.
+subscriber + rules are inert there; the `e2e-flow-bootstrap.json` gates `create_rule`
+to drive the `approval-pause` + `approval-resume` mock journeys.
+
+**Resume (4c PR-2 — rule `13`).** When the human approves/rejects/modifies via
+`POST /teams-dispatch/loops/{id}/approval`, dispatch publishes
+`agent.approval_response.<loopID>`. TWO consumers react: (1) the teams-loop
+`agent.approval_response` **input port** (declared for PR-2 — without it the loop
+never subscribes and can NEVER resume) routes to `ResolveApprovalIfPending`, which
+un-parks the loop; (2) the `approvalpause` subscriber stamps
+`agent.run.approval_resumed` on the run entity. Rule `13` (`approval_resumed` +
+`phase==awaiting_approval` top-level guard) does, IN ORDER: transition
+`awaiting_approval→executing`, remove `approval_pending`, remove `approval_resumed`.
+The marker is **decision-independent** — approve, reject, AND modify all un-park the
+loop. **Bounce-proof** the same way as 4b-2: rule `12`'s `approval_resumed length_eq
+0` guard + rule `13`'s ordered removes make rule `12` dead at every intermediate KV
+revision. Pinned by `TestAgentRunPack_ApprovalResumeTransition` +
+`ApprovalMarkerSubscriberParity` + the `approval-resume` journey (POSTs the real
+approval, asserts `awaiting_approval→executing` + both markers cleared + no bounce).
 
 ### Coordinator-failure coverage boundary (4a′ / 4b-1a)
 
@@ -213,9 +226,10 @@ recovery). `cancelled` is out of 4a′ scope (→ `cancelled`, Phase 4b).
 - `cancel` semantics — an abandoned clarification parks in `awaiting_approval`
   with no terminal-timeout; the cancel/timeout slice (likely an upstream D3
   widening to the `executing`/`awaiting_approval` phase) is deferred (4b).
-- **4c PR-2 resume** — the tool-gate PAUSE (rule `12` + the `approvalpause`
-  subscriber) has landed; the RESUME half (consume `agent.approval_response`,
-  stamp `agent.run.approval_resumed`, transition `awaiting_approval→executing` +
-  clear both markers) is the next slice. The dev-via-test CBG gate is an automated
-  reviewer and stays `executing` (not an `approval_required` tool-gate).
+- **A production human-facing approval affordance for the run-phase pause** — the
+  loop-level approval UI (PendingApprovalSection + `POST /loops/{id}/approval`)
+  exists (ADR-030); the 4c run-phase pause/resume (rules `12`/`13`) is backend-only.
+  Surfacing `awaiting_approval` at the RUN level pairs with the deferred 4b-2 reply
+  affordance (a UI slice). The dev-via-test CBG gate is an automated reviewer and
+  stays `executing` (not an `approval_required` tool-gate).
 - Product `MilestoneHandler`s (Phase 5 re-platforms the chain stampers).

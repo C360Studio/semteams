@@ -161,6 +161,7 @@ func TestAgentRunPack_TransitionsPhaseGuardedTopLevel(t *testing.T) {
 		{"../../configs/rules/agent-run/09-executing-to-awaiting-on-clarification.json", "executing", "awaiting_approval", "agent.run.clarification_pending"},
 		{"../../configs/rules/agent-run/11-resume-awaiting-to-executing.json", "awaiting_approval", "executing", "agent.run.clarification_resumed"},
 		{"../../configs/rules/agent-run/12-executing-to-awaiting-on-approval.json", "executing", "awaiting_approval", "agent.run.approval_pending"},
+		{"../../configs/rules/agent-run/13-resume-awaiting-to-executing-on-approval.json", "awaiting_approval", "executing", "agent.run.approval_resumed"},
 	}
 	for _, tc := range cases {
 		r := loadRule(t, tc.path)
@@ -295,6 +296,7 @@ func TestAgentRunPack_WiredInBothConfigs(t *testing.T) {
 		"/app/configs/rules/agent-run/10-clarification-reply-resume-marker.json",
 		"/app/configs/rules/agent-run/11-resume-awaiting-to-executing.json",
 		"/app/configs/rules/agent-run/12-executing-to-awaiting-on-approval.json",
+		"/app/configs/rules/agent-run/13-resume-awaiting-to-executing-on-approval.json",
 	}
 	for _, cfg := range []string{"../../configs/flow-bootstrap.json", "../../configs/e2e-flow-bootstrap.json"} {
 		raw, err := os.ReadFile(cfg) //nolint:gosec // test-controlled config path
@@ -575,20 +577,58 @@ func TestAgentRunPack_ApprovalPauseBounceGuard(t *testing.T) {
 	}
 }
 
-// TestAgentRunPack_ApprovalMarkerSubscriberParity pins that the predicate rule 12
-// triggers on is EXACTLY the predicate the approvalpause subscriber stamps. The
-// subscriber (Go) and the rule (config) are two halves of the same pause; a drift in
-// either silently breaks the 4c tool-gate (the run would never leave executing). This
-// is the 4c analog of chainpause's ManagedRoles bidirectional-parity test.
+// TestAgentRunPack_ApprovalMarkerSubscriberParity pins that the predicates rules 12
+// and 13 key on are EXACTLY the predicates the approvalpause subscriber stamps. The
+// subscriber (Go) and the rules (config) are two halves of the same pause/resume; a
+// drift in either silently breaks the 4c tool-gate (the run would never leave
+// executing, or never resume). This is the 4c analog of chainpause's ManagedRoles
+// bidirectional-parity test.
 func TestAgentRunPack_ApprovalMarkerSubscriberParity(t *testing.T) {
-	r := loadRule(t, "../../configs/rules/agent-run/12-executing-to-awaiting-on-approval.json")
-	if !r.hasCondition(approvalpause.MarkerApprovalPending, "ne", "") {
-		t.Errorf("agent-run/12: must trigger on %q != \"\" (the predicate the approvalpause subscriber stamps). Subscriber/rule drift breaks the 4c pause.", approvalpause.MarkerApprovalPending)
+	pause := loadRule(t, "../../configs/rules/agent-run/12-executing-to-awaiting-on-approval.json")
+	if !pause.hasCondition(approvalpause.MarkerApprovalPending, "ne", "") {
+		t.Errorf("agent-run/12: must trigger on %q != \"\" (the predicate the approvalpause subscriber stamps on pause). Subscriber/rule drift breaks the 4c pause.", approvalpause.MarkerApprovalPending)
 	}
-	// The bounce guard must reference the subscriber's resume-marker constant too,
-	// so PR-2's subscriber half and this guard stay on one predicate.
-	if !r.hasConditionField(approvalpause.MarkerApprovalResumed, "length_eq") {
+	// The pause rule's bounce guard must reference the subscriber's resume-marker
+	// constant, so the pause + resume halves stay on one predicate.
+	if !pause.hasConditionField(approvalpause.MarkerApprovalResumed, "length_eq") {
 		t.Errorf("agent-run/12: bounce guard must reference %q (the approvalpause resume-marker constant)", approvalpause.MarkerApprovalResumed)
+	}
+	// The RESUME rule (13) must trigger on the resume-marker constant the subscriber
+	// stamps on an approval response.
+	resume := loadRule(t, "../../configs/rules/agent-run/13-resume-awaiting-to-executing-on-approval.json")
+	if !resume.hasCondition(approvalpause.MarkerApprovalResumed, "ne", "") {
+		t.Errorf("agent-run/13: must trigger on %q != \"\" (the predicate the approvalpause subscriber stamps on resume).", approvalpause.MarkerApprovalResumed)
+	}
+}
+
+// TestAgentRunPack_ApprovalResumeTransition pins rule 13's bounce-proof ordered
+// marker-clear: exactly [transition→executing, remove approval_pending, remove
+// approval_resumed] in THAT order. Combined with rule 12's approval_resumed length_eq
+// 0 guard, every intermediate KV revision keeps rule 12 blocked, so the run cannot
+// bounce back to awaiting_approval. approval_pending MUST be removed BEFORE
+// approval_resumed (else the resumed-set-but-pending-gone window re-arms rule 12 once
+// resumed clears). A regression reordering these or dropping a remove re-introduces
+// the infinite pause↔resume bounce. The 4c twin of ClarificationResumeTransition.
+func TestAgentRunPack_ApprovalResumeTransition(t *testing.T) {
+	r := loadRule(t, "../../configs/rules/agent-run/13-resume-awaiting-to-executing-on-approval.json")
+	if len(r.OnEnter) != 3 {
+		t.Fatalf("agent-run/13: want exactly 3 on_enter actions [transition, remove pending, remove resumed], got %d", len(r.OnEnter))
+	}
+	if r.OnEnter[0].Type != "lifecycle_transition" || r.OnEnter[0].Phase != "executing" {
+		t.Errorf("agent-run/13: on_enter[0] must be lifecycle_transition→executing, got type=%q phase=%q", r.OnEnter[0].Type, r.OnEnter[0].Phase)
+	}
+	if r.OnEnter[1].Type != "remove_triple" || r.OnEnter[1].Predicate != "agent.run.approval_pending" {
+		t.Errorf("agent-run/13: on_enter[1] must remove agent.run.approval_pending (BEFORE approval_resumed — bounce-proof order), got type=%q predicate=%q", r.OnEnter[1].Type, r.OnEnter[1].Predicate)
+	}
+	if r.OnEnter[2].Type != "remove_triple" || r.OnEnter[2].Predicate != "agent.run.approval_resumed" {
+		t.Errorf("agent-run/13: on_enter[2] must remove agent.run.approval_resumed (AFTER approval_pending), got type=%q predicate=%q", r.OnEnter[2].Type, r.OnEnter[2].Predicate)
+	}
+	// The remove_triple actions must NOT carry a subject override — they default to
+	// the firing entity (the run entity), clearing the run's own markers.
+	for i := 1; i <= 2; i++ {
+		if r.OnEnter[i].Subject != "" {
+			t.Errorf("agent-run/13: on_enter[%d] remove must have no subject override (defaults to the run entity), got %q", i, r.OnEnter[i].Subject)
+		}
 	}
 }
 
@@ -618,10 +658,27 @@ func TestAgentRunPack_PauseDisambiguation4bVs4c(t *testing.T) {
 
 	// The 4b-2 resume (rule 11) must clear clarification markers ONLY — never an
 	// approval marker (else it would resume a 4c pause it didn't cause).
-	resume := loadRule(t, "../../configs/rules/agent-run/11-resume-awaiting-to-executing.json")
-	for _, a := range resume.OnEnter {
+	resume4b2 := loadRule(t, "../../configs/rules/agent-run/11-resume-awaiting-to-executing.json")
+	if !resume4b2.hasCondition("agent.run.clarification_resumed", "ne", "") {
+		t.Error("agent-run/11 must trigger on agent.run.clarification_resumed")
+	}
+	for _, a := range resume4b2.OnEnter {
 		if a.Type == "remove_triple" && strings.HasPrefix(a.Predicate, "agent.run.approval_") {
 			t.Errorf("agent-run/11 (4b-2 resume) must not remove a 4c approval marker (%q) — cross-resume hazard", a.Predicate)
+		}
+	}
+	// The 4c resume (rule 13) is the mirror: triggers on approval_resumed, clears
+	// approval markers ONLY — never a clarification marker.
+	resume4c := loadRule(t, "../../configs/rules/agent-run/13-resume-awaiting-to-executing-on-approval.json")
+	if !resume4c.hasCondition("agent.run.approval_resumed", "ne", "") {
+		t.Error("agent-run/13 must trigger on agent.run.approval_resumed")
+	}
+	if resume4c.hasConditionField("agent.run.clarification_resumed", "ne") {
+		t.Error("agent-run/13 (4c resume) must NOT trigger on agent.run.clarification_resumed — disjoint from 4b-2")
+	}
+	for _, a := range resume4c.OnEnter {
+		if a.Type == "remove_triple" && strings.HasPrefix(a.Predicate, "agent.run.clarification_") {
+			t.Errorf("agent-run/13 (4c resume) must not remove a 4b-2 clarification marker (%q) — cross-resume hazard", a.Predicate)
 		}
 	}
 }

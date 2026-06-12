@@ -159,9 +159,9 @@ func TestRunScopeMintPointsAndLifecycleTransitions(t *testing.T) {
 	// (run-phase transitions must fire on the run entity, not a loop entity). The
 	// marker rules (4a′ coordinator-failed 05/06; 4b-2 pause markers 07/08; 4b-2
 	// resume marker 10) only add_triple — they carry NO lifecycle_transition; and the
-	// 4c tool-gate marker (agent.run.approval_pending) is stamped by the approvalpause
-	// SUBSCRIBER (no rule) — so only the run-entity transitions (02/03/04 + 4b-2's
-	// pause 09 + resume 11 + 4c's pause 12) appear here.
+	// 4c tool-gate markers (agent.run.approval_{pending,resumed}) are stamped by the
+	// approvalpause SUBSCRIBER (no rule) — so only the run-entity transitions (02/03/04
+	// + 4b-2's pause 09 + resume 11 + 4c's pause 12 + resume 13) appear here.
 	lifecycleTransitionFiles := []string{
 		"configs/rules/agent-run/02-dispatched-to-executing.json",
 		"configs/rules/agent-run/03-executing-to-completed.json",
@@ -169,6 +169,7 @@ func TestRunScopeMintPointsAndLifecycleTransitions(t *testing.T) {
 		"configs/rules/agent-run/09-executing-to-awaiting-on-clarification.json",
 		"configs/rules/agent-run/11-resume-awaiting-to-executing.json",
 		"configs/rules/agent-run/12-executing-to-awaiting-on-approval.json",
+		"configs/rules/agent-run/13-resume-awaiting-to-executing-on-approval.json",
 	}
 	for _, entry := range lifecycleActions {
 		allowed := false

@@ -200,6 +200,96 @@ func TestHandlePending_ReaderError(t *testing.T) {
 	}
 }
 
+// TestHandleResponse_StampsResumed: an approval response on a run-anchored loop
+// stamps agent.run.approval_resumed on the run entity (4c PR-2). Approve, reject, and
+// modify all resume — the marker is decision-independent.
+func TestHandleResponse_StampsResumed(t *testing.T) {
+	const runEntity = "c360.ops.agent.chain.execution.run-r1"
+	for _, decision := range []string{
+		agentic.ApprovalDecisionApprove,
+		agentic.ApprovalDecisionReject,
+		agentic.ApprovalDecisionModify,
+	} {
+		reader := &fakeReader{triples: map[string]any{"agent.run.entity_id": runEntity}}
+		pub := &fakePublisher{}
+		p := NewPauser(reader, pub, testOrg, testPlatform)
+
+		res, err := p.HandleResponse(context.Background(), &agentic.ApprovalResponse{
+			LoopID: "loop-r1", CallID: "call-r1", Decision: decision, ApprovedBy: "u",
+		})
+		if err != nil {
+			t.Fatalf("decision=%s: HandleResponse error: %v", decision, err)
+		}
+		if !res.Stamped || res.RunEntityID != runEntity || res.Decision != decision {
+			t.Fatalf("decision=%s: bad result %+v", decision, res)
+		}
+		if len(pub.written) != 1 || pub.written[0].Predicate != MarkerApprovalResumed || pub.written[0].Subject != runEntity {
+			t.Errorf("decision=%s: must stamp %s on the run entity, got %+v", decision, MarkerApprovalResumed, pub.written)
+		}
+	}
+}
+
+// TestHandleResponse_RunlessLoop: an approval response for a run-less loop is a
+// benign no-op (mirrors the pause-side no-op).
+func TestHandleResponse_RunlessLoop(t *testing.T) {
+	reader := &fakeReader{triples: map[string]any{"agent.loop.role": "coordinator"}}
+	pub := &fakePublisher{}
+	p := NewPauser(reader, pub, testOrg, testPlatform)
+
+	res, err := p.HandleResponse(context.Background(), &agentic.ApprovalResponse{LoopID: "loop-x", Decision: "approve"})
+	if err != nil {
+		t.Fatalf("run-less response must not error: %v", err)
+	}
+	if res.Stamped || len(pub.written) != 0 {
+		t.Errorf("run-less response must not stamp: %+v", res)
+	}
+}
+
+// TestHandleResponse_NilEvent: a nil event is a no-op.
+func TestHandleResponse_NilEvent(t *testing.T) {
+	p := NewPauser(&fakeReader{}, &fakePublisher{}, testOrg, testPlatform)
+	if _, err := p.HandleResponse(context.Background(), nil); err != nil {
+		t.Errorf("nil response must be a no-op, got %v", err)
+	}
+}
+
+// TestHandleResponse_MalformedLoopID: the resume half shares stampRunMarker's
+// fail-soft discipline — a malformed loop id returns an error and does NOT read or
+// write (the symmetric pin to TestHandlePending_MalformedLoopID, so a refactor that
+// special-cases the pending path can't silently regress the resume path).
+func TestHandleResponse_MalformedLoopID(t *testing.T) {
+	reader := &fakeReader{}
+	pub := &fakePublisher{}
+	p := NewPauser(reader, pub, testOrg, testPlatform)
+
+	_, err := p.HandleResponse(context.Background(), &agentic.ApprovalResponse{LoopID: "bad.loop.id", Decision: "approve"})
+	if err == nil {
+		t.Fatal("expected an error for a malformed loop id")
+	}
+	if reader.lastReadID != "" {
+		t.Error("must not attempt a graph read for a malformed loop id")
+	}
+	if len(pub.written) != 0 {
+		t.Error("must not write any triple for a malformed loop id")
+	}
+}
+
+// TestHandleResponse_ReaderError: a graph-read failure on the resume path surfaces
+// as a wrapped error and writes nothing (symmetric pin).
+func TestHandleResponse_ReaderError(t *testing.T) {
+	reader := &fakeReader{err: errors.New("graph unavailable")}
+	pub := &fakePublisher{}
+	p := NewPauser(reader, pub, testOrg, testPlatform)
+
+	_, err := p.HandleResponse(context.Background(), &agentic.ApprovalResponse{LoopID: "loop-err", Decision: "approve"})
+	if err == nil {
+		t.Fatal("expected an error when the reader fails")
+	}
+	if len(pub.written) != 0 {
+		t.Error("must not write any triple when the reader fails")
+	}
+}
+
 // TestHandlePending_PublisherError: a triple-write failure surfaces as a wrapped
 // error with Stamped=false.
 func TestHandlePending_PublisherError(t *testing.T) {
