@@ -34,6 +34,7 @@ function makeTask(overrides: Partial<TaskInfo> = {}): TaskInfo {
     childLoops: [],
     childNeedsAttention: false,
     childAttentionCount: 0,
+    runPause: null,
     ...overrides,
   };
 }
@@ -95,5 +96,43 @@ describe("TaskCard", () => {
     render(TaskCard, { props: { task: makeTask({ column: "needs_you" }) } });
 
     expect(screen.getByTestId("task-card")).toHaveAttribute("data-column", "needs_you");
+  });
+
+  // ---------------------------------------------------------------------------
+  // run-waiting-badge (run-level pause affordance)
+  // ---------------------------------------------------------------------------
+
+  it("does not render run-waiting-badge when runPause is null", () => {
+    render(TaskCard, { props: { task: makeTask({ runPause: null }) } });
+
+    expect(screen.queryByTestId("run-waiting-badge")).not.toBeInTheDocument();
+  });
+
+  it("renders run-waiting-badge with 'Answer needed' for clarification pause", () => {
+    render(TaskCard, {
+      props: {
+        task: makeTask({
+          runPause: { cause: "clarification", askingLoopId: "loop-ask", question: "Q?" },
+        }),
+      },
+    });
+
+    const badge = screen.getByTestId("run-waiting-badge");
+    expect(badge).toBeInTheDocument();
+    expect(badge).toHaveTextContent("Answer needed");
+  });
+
+  it("renders run-waiting-badge with 'Approval needed' for tool_gate pause", () => {
+    render(TaskCard, {
+      props: {
+        task: makeTask({
+          runPause: { cause: "tool_gate", gatedLoopId: "loop-gated" },
+        }),
+      },
+    });
+
+    const badge = screen.getByTestId("run-waiting-badge");
+    expect(badge).toBeInTheDocument();
+    expect(badge).toHaveTextContent("Approval needed");
   });
 });

@@ -10,6 +10,7 @@ import type { AgentLoop } from "$lib/types/agent";
 // getTrajectory/getTrajectories calls.
 vi.mock("$lib/services/agentApi", () => ({
   agentApi: {
+    sendMessage: vi.fn().mockResolvedValue({ content: "ok" }),
     sendSignal: vi.fn().mockResolvedValue({ status: "sent" }),
     submitApproval: vi.fn().mockResolvedValue({
       loop_id: "loop_001",
@@ -85,6 +86,7 @@ function makeTask(overrides: Partial<TaskInfo> = {}): TaskInfo {
     childLoops: [],
     childNeedsAttention: false,
     childAttentionCount: 0,
+    runPause: null,
     ...overrides,
   };
 }
@@ -197,6 +199,50 @@ describe("TaskDetailPanel", () => {
 
       expect(screen.queryByText("Pause")).not.toBeInTheDocument();
       expect(screen.queryByTestId("approval-approve")).not.toBeInTheDocument();
+    });
+  });
+
+  describe("run-level waiting affordance (ADR-053 4b-2 / 4c)", () => {
+    it("renders RunWaitingSection when the run is paused (clarification)", () => {
+      // The front-door loop is typically `complete` when a descendant pauses,
+      // so the run-pause surfaces via task.runPause, not the loop state.
+      render(TaskDetailPanel, {
+        props: {
+          task: makeTask({
+            state: "complete",
+            runPause: {
+              cause: "clarification",
+              askingLoopId: "loop-ask-1",
+              question: "Which region?",
+            },
+          }),
+        },
+      });
+
+      expect(screen.getByTestId("run-waiting-section")).toBeInTheDocument();
+      expect(screen.getByTestId("run-reply-input")).toBeInTheDocument();
+      expect(screen.getByTestId("run-question")).toHaveTextContent("Which region?");
+    });
+
+    it("renders RunWaitingSection when the run is paused (tool_gate)", () => {
+      render(TaskDetailPanel, {
+        props: {
+          task: makeTask({
+            state: "complete",
+            runPause: { cause: "tool_gate", gatedLoopId: "loop-gated-1" },
+          }),
+        },
+      });
+
+      expect(screen.getByTestId("run-waiting-section")).toBeInTheDocument();
+      expect(screen.getByTestId("run-approve")).toBeInTheDocument();
+      expect(screen.getByTestId("run-reject")).toBeInTheDocument();
+    });
+
+    it("does NOT render RunWaitingSection when runPause is null", () => {
+      render(TaskDetailPanel, { props: { task: makeTask({ runPause: null }) } });
+
+      expect(screen.queryByTestId("run-waiting-section")).not.toBeInTheDocument();
     });
   });
 
