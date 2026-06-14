@@ -429,6 +429,40 @@ tasks:
           AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
       - npx playwright test e2e/agentic/clarification-resume.spec.ts
 
+  test:e2e:agentic:clarification-resume-ui:
+    desc: Run the ADR-053 Phase 4b-2 run-waiting UI affordance journey (operator resumes a paused run THROUGH the UI)
+    summary: |
+      The UI-driven twin of clarification-resume. The pause half is identical
+      (first-pass Lisa escalates needs_clarification → recovery coordinator
+      decide(ask_user) → run parks in awaiting_approval). The difference: this
+      journey resumes the run through the operator-facing UI, not the raw API.
+
+      It proves the deferred "B2 UI slice":
+        - the runStatus poll of /graph/triples surfaces the run-level pause as a
+          "Answer needed" badge on the front-door card (runID === the card's
+          loop_id) and a RunWaitingSection in the detail panel;
+        - the rendered question prose proves deriveRunStatuses joined
+          coordinator.user_question to the run via the BARE asking-loop id (the
+          wire-shape fix — clarification_pending.object is $entity.instance, a
+          bare UUID, NOT a full entity ref; the unit tests masked this);
+        - clicking Send posts run_id + in_reply_to (the bare asking-loop id) →
+          beta.106 stamps the anchors at spawn → agent-run/10→11 resume the run
+          (awaiting_approval→executing + clear markers) → the affordance unmounts.
+
+      Reuses the clarification-resume.yaml fixture (mock serves responses in
+      global order, so the typed reply content is free). Interactive mode
+      (restricted_decide_actions=[]). Sandbox = MockRunner.
+    vars:
+      FIXTURE: clarification-resume.yaml
+      AGENTIC_CONFIG: e2e-flow-bootstrap.json
+    cmds:
+      - defer: { task: test:e2e:agentic:cleanup }
+      - task: test:e2e:agentic:stack:up
+        vars:
+          FIXTURE: "{{.FIXTURE}}"
+          AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
+      - npx playwright test e2e/agentic/clarification-resume-ui.spec.ts
+
   test:e2e:agentic:clarification-autonomous:
     desc: Run the ADR-053 4b clarification-policy AUTONOMOUS-mode journey
     summary: |
