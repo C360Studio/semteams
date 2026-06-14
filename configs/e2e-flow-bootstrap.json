@@ -203,7 +203,24 @@
                 "predicates": [
                   "autoresearch.best.value",
                   "autoresearch.best.experiment_id",
-                  "autoresearch.run.status"
+                  "autoresearch.run.status",
+                  "autoresearch.iteration.pending"
+                ]
+              }
+            ]
+          },
+          {
+            "name": "dev-via-test.retry-projection",
+            "entity_pattern": "*.*.agent.chain.execution.*",
+            "groups": [
+              {
+                "mode": "replace-owned",
+                "predicates": [
+                  "dev_via_test.plan.retry.pending",
+                  "dev_via_test.plan.retry.finding",
+                  "dev_via_test.cbg.retry.pending",
+                  "dev_via_test.cbg.retry.finding",
+                  "dev_via_test.cbg.retry.target_task"
                 ]
               }
             ]

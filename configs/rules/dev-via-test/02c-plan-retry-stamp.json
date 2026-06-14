@@ -21,13 +21,13 @@
   "logic": "and",
   "on_enter": [
     {
-      "type": "update_triple",
+      "type": "replace_owned",
       "subject": "$entity.triple.lineage.run-loop-entity-id",
       "predicate": "dev_via_test.plan.retry.finding",
       "object": "$entity.triple.coordinator.decision.reason"
     },
     {
-      "type": "add_triple",
+      "type": "replace_owned",
       "subject": "$entity.triple.lineage.run-loop-entity-id",
       "predicate": "dev_via_test.plan.retry.pending",
       "object": "$entity.instance"

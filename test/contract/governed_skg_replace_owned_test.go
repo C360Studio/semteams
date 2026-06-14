@@ -142,9 +142,18 @@ func declaredReplaceOwnedPredicates(cfg ruleProcessorOwnershipConfig) map[string
 // must match or the mock journey would validate a different envelope than ships.
 func TestReplaceOwned_FlowConfigsDeclarePackContract(t *testing.T) {
 	wantPredicates := []string{
+		// PR #219 — autoresearch single-valued scalar replaces.
 		"autoresearch.best.value",
 		"autoresearch.best.experiment_id",
 		"autoresearch.run.status",
+		// Fast-follow — autoresearch iteration presence marker.
+		"autoresearch.iteration.pending",
+		// Fast-follow — dev-via-test retry/iteration coordination gates.
+		"dev_via_test.plan.retry.pending",
+		"dev_via_test.plan.retry.finding",
+		"dev_via_test.cbg.retry.pending",
+		"dev_via_test.cbg.retry.finding",
+		"dev_via_test.cbg.retry.target_task",
 	}
 
 	for _, flowPath := range []string{flowBootstrapPath, e2eFlowBootstrapPath} {
@@ -230,9 +239,20 @@ func TestReplaceOwned_MigratedRulesUseOwnedLane(t *testing.T) {
 		predicate string
 	}
 	targets := []target{
+		// PR #219 — autoresearch single-valued scalar replaces.
 		{"../../configs/rules/autoresearch/04c-execute-promote-best-on-kept.json", "autoresearch.best.value"},
 		{"../../configs/rules/autoresearch/04c-execute-promote-best-on-kept.json", "autoresearch.best.experiment_id"},
 		{"../../configs/rules/autoresearch/05-iteration-dispatch.json", "autoresearch.run.status"},
+		// Fast-follow — autoresearch iteration presence marker (set 04a/04b, clear 05).
+		{"../../configs/rules/autoresearch/04a-execute-stamp-completion.json", "autoresearch.iteration.pending"},
+		{"../../configs/rules/autoresearch/04b-execute-stamp-failed.json", "autoresearch.iteration.pending"},
+		{"../../configs/rules/autoresearch/05-iteration-dispatch.json", "autoresearch.iteration.pending"},
+		// Fast-follow — dev-via-test retry coordination gates.
+		{"../../configs/rules/dev-via-test/02c-plan-retry-stamp.json", "dev_via_test.plan.retry.finding"},
+		{"../../configs/rules/dev-via-test/02c-plan-retry-stamp.json", "dev_via_test.plan.retry.pending"},
+		{"../../configs/rules/dev-via-test/07c-cbg-retry-stamp.json", "dev_via_test.cbg.retry.target_task"},
+		{"../../configs/rules/dev-via-test/07c-cbg-retry-stamp.json", "dev_via_test.cbg.retry.finding"},
+		{"../../configs/rules/dev-via-test/07c-cbg-retry-stamp.json", "dev_via_test.cbg.retry.pending"},
 	}
 
 	for _, tg := range targets {
@@ -241,15 +261,22 @@ func TestReplaceOwned_MigratedRulesUseOwnedLane(t *testing.T) {
 		var rule ownershipRuleJSON
 		require.NoError(t, json.Unmarshal(raw, &rule), "unmarshal %s", tg.file)
 
-		var lane string
+		// Assert EVERY action touching this predicate is on the owned lane —
+		// not just the last one — so a future mixed-lane write (one
+		// replace_owned + one stray add_triple/remove_triple on the same
+		// predicate in the same file) can't slip past on last-write-wins.
+		var lanes []string
 		for _, a := range rule.allActions() {
 			if a.Predicate == tg.predicate {
-				lane = a.Type
+				lanes = append(lanes, a.Type)
 			}
 		}
-		require.Equalf(t, "replace_owned", lane,
-			"%s: predicate %q must be written by a replace_owned action (atomic owned replace, ADR-056 Decision 3), got %q",
-			tg.file, tg.predicate, lane)
+		require.NotEmptyf(t, lanes, "%s: predicate %q has no triple action — migration regressed", tg.file, tg.predicate)
+		for _, lane := range lanes {
+			require.Equalf(t, "replace_owned", lane,
+				"%s: predicate %q must be written ONLY by replace_owned actions (atomic owned replace, ADR-056 Decision 3), got %q among %v",
+				tg.file, tg.predicate, lane, lanes)
+		}
 	}
 }
 

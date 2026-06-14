@@ -2,7 +2,7 @@
   "id": "dev_via_test_plan_retry_driver",
   "type": "expression",
   "name": "Plan-retry pending → re-dispatch Lisa (under budget) | escalate (at budget)",
-  "description": "ADR-044 §addendum Slice 6 — plan-retry DRIVER half (plan-phase analog of rule 07d). Fires on the RUN entity when rule 02c stamps dev_via_test.plan.retry.pending. Anchored to the stable run entity, so $state.iteration is a durable per-run plan-retry counter (state_tracker.go: the retry-budget mechanism).\n\non_enter:\n  1. remove_triple the pending marker (clears it → conditions flip false → TransitionExited resets wasMatching for the next plan-retry; canonical semstreams#204 presence-marker discipline). ExecutionContext.Entity is a fixed pre-action snapshot, so the publish_agent actions still read the durable dev_via_test.plan.retry.finding.\n  2. RE-PLAN branch — when $state.iteration <= plan.lisa_retry_budget: re-dispatch Lisa (dev-via-test-plan) with CBG's finding. Lisa reads the original ask + prior plan + finding via query_entity, amends IN PLACE (reuse task IDs, bump revision), and re-emits — the executor UPSERTS (clears the prior plan first, ADR-044 §Slice 6). Lisa's terminal re-fires rule 02 → CBG re-gates.\n  3. ESCALATE branch — when $state.iteration > plan.lisa_retry_budget: spawn a coordinator wake-up scoped to ask_user. The plan keeps failing fidelity; surface to the user.\n\nplan.lisa_retry_budget is clamped [1,5] at stamp time (emitdevviatestplan executor) — the clamp is the structural ceiling, so escalate always triggers within the budget. Per-action max_iterations=0 (unlimited) because the When clause + clamp ARE the bound.",
+  "description": "ADR-044 §addendum Slice 6 — plan-retry DRIVER half (plan-phase analog of rule 07d). Fires on the RUN entity when rule 02c stamps dev_via_test.plan.retry.pending. Anchored to the stable run entity, so $state.iteration is a durable per-run plan-retry counter (state_tracker.go: the retry-budget mechanism).\n\non_enter:\n  1. replace_owned (empty object) clears the pending marker → conditions flip false → TransitionExited resets wasMatching for the next plan-retry; canonical semstreams#204 presence-marker discipline. (Migrated from remove_triple to the owned lane, ADR-056 #278 / beta.110; the atomic single-revision clear is equivalent for the presence-marker re-entry.) ExecutionContext.Entity is a fixed pre-action snapshot, so the publish_agent actions still read the durable dev_via_test.plan.retry.finding.\n  2. RE-PLAN branch — when $state.iteration <= plan.lisa_retry_budget: re-dispatch Lisa (dev-via-test-plan) with CBG's finding. Lisa reads the original ask + prior plan + finding via query_entity, amends IN PLACE (reuse task IDs, bump revision), and re-emits — the executor UPSERTS (clears the prior plan first, ADR-044 §Slice 6). Lisa's terminal re-fires rule 02 → CBG re-gates.\n  3. ESCALATE branch — when $state.iteration > plan.lisa_retry_budget: spawn a coordinator wake-up scoped to ask_user. The plan keeps failing fidelity; surface to the user.\n\nplan.lisa_retry_budget is clamped [1,5] at stamp time (emitdevviatestplan executor) — the clamp is the structural ceiling, so escalate always triggers within the budget. Per-action max_iterations=0 (unlimited) because the When clause + clamp ARE the bound.",
   "enabled": true,
   "conditions": [
     {
@@ -16,7 +16,7 @@
   "on_enter": [
     {
       "id": "clear_plan_retry_pending",
-      "type": "remove_triple",
+      "type": "replace_owned",
       "predicate": "dev_via_test.plan.retry.pending"
     },
     {

@@ -33,7 +33,7 @@
       "object": "$entity.id"
     },
     {
-      "type": "add_triple",
+      "type": "replace_owned",
       "subject": "$entity.triple.lineage.run-loop-entity-id",
       "predicate": "autoresearch.iteration.pending",
       "object": "$entity.id"
