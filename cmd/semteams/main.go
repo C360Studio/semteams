@@ -17,6 +17,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/agentic/agentrun"
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/componentregistry"
@@ -30,11 +31,15 @@ import (
 	"github.com/c360studio/semstreams/payloadregistry"
 	"github.com/c360studio/semstreams/persona"
 	"github.com/c360studio/semstreams/pkg/lifecycle"
+	"github.com/c360studio/semstreams/pkg/ownership"
+	"github.com/c360studio/semstreams/pkg/projection"
 	agentictools "github.com/c360studio/semstreams/processor/agentic-tools"
 	"github.com/c360studio/semstreams/processor/agentic-tools/executors"
 	rulepkg "github.com/c360studio/semstreams/processor/rule"
 	"github.com/c360studio/semstreams/service"
 	"github.com/c360studio/semstreams/types"
+	"github.com/c360studio/semstreams/vocabulary"
+	agvocab "github.com/c360studio/semstreams/vocabulary/agentic"
 	"github.com/c360studio/semteams/cmd/semteams/approvalpause"
 	"github.com/c360studio/semteams/cmd/semteams/chain"
 	"github.com/c360studio/semteams/cmd/semteams/chainpause"
@@ -181,7 +186,9 @@ func run() error {
 	// 10a. Wire the agent-run substrate: the shared Lifecycle harness Manager +
 	// agent-run workflow (ADR-053 Phase 1) AND the MilestoneSubscriber (Phase 4a
 	// D3 terminal authority). Must run before configureAndCreateServices so the
-	// rule processor factory installs the manager via SetLifecycleManager.
+	// rule processor factory installs the manager via SetLifecycleManager. Also
+	// activates the ADR-056 observe-only ownership substrate (EnsureBuckets +
+	// AttachOwnership) — see the helper.
 	if err := wireAgentRunSubstrate(ctx, svcDeps, natsClient, platform, logger); err != nil {
 		return err
 	}
@@ -843,6 +850,46 @@ func createServiceDependencies(
 // same wiring.
 func wireAgentRunSubstrate(ctx context.Context, svcDeps *service.Dependencies, natsClient *natsclient.Client, platform types.PlatformMeta, logger *slog.Logger) error {
 	mgr := lifecycle.NewManager(natsClient, logger)
+
+	// ADR-056 Decision 5 (observe-only) — attach the owner registry BEFORE the
+	// agent-run workflow registers, so the workflow's phase+audit claim lands in
+	// the shared OWNER_CLAIMS epoch (cross-owner overlap surfaced; observe-only on
+	// this tag — a collision is LOGGED, not bricked). EnsureBuckets is EAGER here,
+	// not in graph-ingest: graph-ingest's initStorage runs only after services
+	// start (configureAndCreateServices, below), too late for this Register, so
+	// creating the buckets there would make every registration a silent no-op.
+	// Best-effort: a NATS hiccup logs + skips; ownership is never a boot gate.
+	// Mirrors upstream cmd/semstreams/main.go §10b boot order (ADR-029).
+	//
+	// SHUTDOWN POSTURE (reviewer-flagged divergence from upstream, deliberately
+	// deferred). ctx is the app-root context.Background() — signal-cancellation is
+	// a downstream child in runWithSignalHandling, so it never reaches here. TWO
+	// presence heartbeaters run on ctx and stop only at process exit: the static
+	// one started below, AND the lifecycle Manager's own, started INSIDE
+	// AttachOwnership. Upstream scopes both to a cancellable hbCtx cancelled before
+	// natsClient.Close; we do not, because run() is at revive's 50-statement
+	// function-length cliff and threading hbCancel back through run() breaches it.
+	// On THIS observe-only tag the only exposure is a benign WARN if a heartbeat
+	// Put races natsClient.Close (no write gate, no corruption). Revisit at the
+	// ADR-056 enforcement increment (owner-token lease) — when presence liveness
+	// becomes load-bearing — alongside the milestone subscriber's discarded stop
+	// func (both want a shutdown-scoped ctx). Tracked in docs/governed-skg-readiness.md.
+	if ownerReg, err := ownership.EnsureBuckets(ctx, natsClient, logger, vocabulary.InverseResolver); err != nil {
+		logger.Warn("ownership: bucket bootstrap failed — lifecycle ownership disabled this boot", slog.Any("error", err))
+	} else {
+		mgr.AttachOwnership(ctx, ownerReg) // also starts the Manager's own presence heartbeater (see posture above)
+		// The static loop-execution projection owner derives a real OwnerClaim, so
+		// without ongoing heartbeats its OWNER_PRESENCE key ages out after
+		// PresenceTTL and the next registrant compacts the claim out — give it its
+		// own heartbeater (the second goroutine noted above).
+		staticOwnerHB := ownerReg.NewHeartbeater(ownership.HeartbeatInterval)
+		go staticOwnerHB.Run(ctx)
+		if err := projection.BindAndHeartbeat(ctx, ownerReg, staticOwnerHB, "agentic-loop-graph-writer",
+			loopExecutionProjectionContract()); err != nil {
+			logger.Warn("ownership: loop-execution projection contract registration failed", slog.Any("error", err))
+		}
+	}
+
 	if err := agentrun.Register(mgr); err != nil {
 		return fmt.Errorf("register agent-run workflow: %w", err)
 	}
@@ -884,6 +931,38 @@ func startAgentRunMilestoneSubscriber(ctx context.Context, mgr *lifecycle.Manage
 	logger.Info("Started agent-run milestone subscriber (ADR-053 Phase 4a — D3 terminal authority)",
 		slog.String("stream", agentrun.AgentStreamName))
 	return nil
+}
+
+// loopExecutionProjectionContract declares the ADR-056 Decision-6 graph
+// projection contract for the loop-execution entity: the agentic-loop graph
+// writer owns the spawn-identity origin predicates on every loop-execution
+// entity (replace-owned mode). Registered through pkg/projection so the claim
+// DERIVES from the contract rather than a hand-maintained ownership slice
+// (Decision 6). Observe-only on this tag — the claim surfaces overlaps but does
+// not yet gate writes. Mirrors upstream cmd/semstreams/main.go
+// loopExecutionProjectionContract verbatim (ADR-029); a reader diffing against
+// upstream should treat it as the same declaration.
+func loopExecutionProjectionContract() projection.Contract {
+	return projection.Contract{
+		Name:          "agentic.loop-execution",
+		MessageType:   agentic.LoopExecutionMessageType().Key(),
+		EntityPattern: "*.*.agent.agentic-loop.execution.*",
+		Groups: []projection.PredicateGroup{{
+			Mode: ownership.ModeReplaceOwned,
+			Predicates: []string{
+				agvocab.LoopRole,
+				agvocab.LoopTask,
+				agvocab.LoopParent,
+				agvocab.LoopRun,
+				agvocab.LoopRunEntityID,
+				agvocab.LoopReplyTo,
+				agvocab.LoopWorkflow,
+				agvocab.LoopWorkflowStep,
+				agvocab.LoopUser,
+				agvocab.LoopDescription,
+			},
+		}},
+	}
 }
 
 // configureAndCreateServices configures the manager and creates all services
