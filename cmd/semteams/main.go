@@ -136,36 +136,20 @@ func run() error {
 		return err
 	}
 
-	// 9a. Build the shared payload registry and register first-party
-	// builtins (agentic, message, dispatch, rule, operating-model,
-	// github-webhook, objectstore). Per beta.18: payload registry is
-	// constructor-injected via component.Dependencies.PayloadRegistry,
-	// so it must exist before services are constructed. Mirrors upstream
-	// cmd/semstreams/main.go.
-	payloadReg := payloadregistry.New()
-	if err := payloadbuiltins.Register(payloadReg); err != nil {
-		return fmt.Errorf("register builtin payloads: %w", err)
+	// 9a. Build the shared payload registry (framework first-party builtins +
+	// SemTeams-local product payloads). Per beta.18 it is constructor-injected via
+	// component.Dependencies.PayloadRegistry, so it must exist before services are
+	// constructed. See buildPayloadRegistry for the full set + ADR references.
+	payloadReg, err := buildPayloadRegistry()
+	if err != nil {
+		return err
 	}
 
-	// 9a.1. Register SemTeams-local product payloads on top of the
-	// framework's first-party set. See registerProductPayloads for the
-	// full set and their ADR references.
-	if err := registerProductPayloads(payloadReg); err != nil {
-		return fmt.Errorf("register product payloads: %w", err)
-	}
-
-	// 9b. Load the persona fragment corpus from disk into the PERSONAS
-	// KV bucket. The test_harness catalog + rendered researcher
-	// fragment (ADR-033 R3.7.1) retired alongside the dev-via-spec
-	// arc in the ADR-042 MVP-7 follow-up sweep, so persona load is
-	// now a single-step.
-	personaMgr := loadPersonaFragments(ctx, natsClient, cliCfg.PersonaFragmentsPath, cliCfg.PersonaOverlayPath)
-
-	// 9b-bis. Seed the FLOW_TEMPLATES KV bucket from configs/flow-templates/.
-	// ADR-042 Phase 1. Must run before setupToolsAndPreprocessor so the
-	// list_flow_templates tool sees the inventory on first call. Manager
-	// is threaded through to RegisterBuiltins via the deps struct.
-	flowTemplateMgr := loadFlowTemplates(ctx, natsClient, cliCfg.FlowTemplatesPath, slog.Default())
+	// 9b. Seed the persona fragment corpus (PERSONAS bucket) + the flow-template
+	// inventory (FLOW_TEMPLATES bucket) from disk. Must run before
+	// setupToolsAndPreprocessor so the list_flow_templates tool sees the inventory
+	// on first call. Both managers thread into the tool/preprocessor wiring.
+	personaMgr, flowTemplateMgr := seedKVCorpora(ctx, natsClient, cliCfg.PersonaFragmentsPath, cliCfg.PersonaOverlayPath, cliCfg.FlowTemplatesPath)
 
 	// 9c–9f. Build + register tool executors, start the evidence preprocessor
 	// (ADR-036 §Phase 2), and start the chain-pause subscriber (ADR-037 v1).
@@ -189,7 +173,8 @@ func run() error {
 	// rule processor factory installs the manager via SetLifecycleManager. Also
 	// activates the ADR-056 observe-only ownership substrate (EnsureBuckets +
 	// AttachOwnership) — see the helper.
-	if err := wireAgentRunSubstrate(ctx, svcDeps, natsClient, platform, logger); err != nil {
+	ownerReg, staticOwnerHB, err := wireAgentRunSubstrate(ctx, svcDeps, natsClient, platform, logger)
+	if err != nil {
 		return err
 	}
 
@@ -197,6 +182,16 @@ func run() error {
 	if err := configureAndCreateServices(cfg, manager, svcDeps); err != nil {
 		return err
 	}
+
+	// 11b. ADR-056 #278 inc 2 — bind the substrate rule pack's projection
+	// contracts under the ownership substrate (owner "rule-pack.semteams"). Done
+	// HERE — after configureAndCreateServices constructs the rule processor (so
+	// manager.ProjectionBinders() sees it) and BEFORE StartAll — never from the
+	// hot-reload path (re-binding would self-overlap the pack's own claims). The
+	// pack contracts are read ONCE, statically. Best-effort / observe-only: a nil
+	// registry (EnsureBuckets failed) is a no-op and per-pack overlaps are logged,
+	// never a boot gate. Mirrors upstream cmd/semstreams/main.go §11b (ADR-029).
+	service.BindRulePackContracts(ctx, manager, ownerReg, staticOwnerHB, logger)
 
 	// 12. Register product HTTP middleware. Per beta.23: must run before
 	// StartAll, since the framework reads the chain at server boot. The
@@ -826,6 +821,35 @@ func createServiceDependencies(
 	}
 }
 
+// buildPayloadRegistry constructs the shared payload registry, registering the
+// framework first-party builtins (agentic, message, dispatch, rule,
+// operating-model, github-webhook, objectstore) then the SemTeams-local product
+// payloads on top. Per beta.18 the registry is constructor-injected via
+// component.Dependencies.PayloadRegistry, so it must exist before services are
+// constructed. Extracted from run() to keep it under revive's function-length
+// threshold (same rationale as setupToolsAndPreprocessor). Mirrors upstream
+// cmd/semstreams/main.go's payload-registration block.
+func buildPayloadRegistry() (*payloadregistry.Registry, error) {
+	reg := payloadregistry.New()
+	if err := payloadbuiltins.Register(reg); err != nil {
+		return nil, fmt.Errorf("register builtin payloads: %w", err)
+	}
+	if err := registerProductPayloads(reg); err != nil {
+		return nil, fmt.Errorf("register product payloads: %w", err)
+	}
+	return reg, nil
+}
+
+// seedKVCorpora loads the persona fragment corpus (PERSONAS bucket) and the
+// flow-template inventory (FLOW_TEMPLATES bucket, ADR-042 Phase 1) from disk,
+// returning the managers run() threads into the tool/preprocessor wiring.
+// Extracted from run() to keep it under revive's function-length threshold.
+func seedKVCorpora(ctx context.Context, natsClient *natsclient.Client, personaRoot, personaOverlay, flowTemplateRoot string) (*persona.Manager, *flowtemplate.Manager) {
+	personaMgr := loadPersonaFragments(ctx, natsClient, personaRoot, personaOverlay)
+	flowTemplateMgr := loadFlowTemplates(ctx, natsClient, flowTemplateRoot, slog.Default())
+	return personaMgr, flowTemplateMgr
+}
+
 // wireAgentRunSubstrate builds the shared Lifecycle harness Manager (ADR-047),
 // registers the agent-run workflow (ADR-053 D2), plumbs the manager onto
 // svcDeps.LifecycleManager so the rule processor factory installs it (its Setup
@@ -848,7 +872,14 @@ func createServiceDependencies(
 // purely to keep run() under revive's function-length limit, NOT a semantic
 // divergence — a reader diffing against upstream main.go should treat it as the
 // same wiring.
-func wireAgentRunSubstrate(ctx context.Context, svcDeps *service.Dependencies, natsClient *natsclient.Client, platform types.PlatformMeta, logger *slog.Logger) error {
+//
+// Returns the ownership Registry + the static-owner Heartbeater so run() can
+// reuse the SAME pair to bind the rule-pack projection contracts AFTER the rule
+// processors are constructed (service.BindRulePackContracts, ADR-056 #278 inc 2).
+// Both are nil when EnsureBuckets fails (ownership disabled this boot) — the
+// bind is then a no-op. Mirrors upstream cmd/semstreams/main.go, which lifts the
+// same handles to run() scope for the post-services bind (ADR-029).
+func wireAgentRunSubstrate(ctx context.Context, svcDeps *service.Dependencies, natsClient *natsclient.Client, platform types.PlatformMeta, logger *slog.Logger) (*ownership.Registry, *ownership.Heartbeater, error) {
 	mgr := lifecycle.NewManager(natsClient, logger)
 
 	// ADR-056 Decision 5 (observe-only) — attach the owner registry BEFORE the
@@ -874,15 +905,23 @@ func wireAgentRunSubstrate(ctx context.Context, svcDeps *service.Dependencies, n
 	// ADR-056 enforcement increment (owner-token lease) — when presence liveness
 	// becomes load-bearing — alongside the milestone subscriber's discarded stop
 	// func (both want a shutdown-scoped ctx). Tracked in docs/governed-skg-readiness.md.
-	if ownerReg, err := ownership.EnsureBuckets(ctx, natsClient, logger, vocabulary.InverseResolver); err != nil {
+	// ownerReg + staticOwnerHB are lifted to function scope (nil until the
+	// EnsureBuckets else-branch assigns them) so run() can reuse the SAME registry
+	// + heartbeater to bind the rule-pack projection contracts after the rule
+	// processors are constructed (service.BindRulePackContracts, ADR-056 #278
+	// inc 2). Mirrors upstream cmd/semstreams/main.go's run()-scope lift.
+	var ownerReg *ownership.Registry
+	var staticOwnerHB *ownership.Heartbeater
+	if reg, err := ownership.EnsureBuckets(ctx, natsClient, logger, vocabulary.InverseResolver); err != nil {
 		logger.Warn("ownership: bucket bootstrap failed — lifecycle ownership disabled this boot", slog.Any("error", err))
 	} else {
+		ownerReg = reg
 		mgr.AttachOwnership(ctx, ownerReg) // also starts the Manager's own presence heartbeater (see posture above)
 		// The static loop-execution projection owner derives a real OwnerClaim, so
 		// without ongoing heartbeats its OWNER_PRESENCE key ages out after
 		// PresenceTTL and the next registrant compacts the claim out — give it its
 		// own heartbeater (the second goroutine noted above).
-		staticOwnerHB := ownerReg.NewHeartbeater(ownership.HeartbeatInterval)
+		staticOwnerHB = ownerReg.NewHeartbeater(ownership.HeartbeatInterval)
 		go staticOwnerHB.Run(ctx)
 		if err := projection.BindAndHeartbeat(ctx, ownerReg, staticOwnerHB, "agentic-loop-graph-writer",
 			loopExecutionProjectionContract()); err != nil {
@@ -891,7 +930,7 @@ func wireAgentRunSubstrate(ctx context.Context, svcDeps *service.Dependencies, n
 	}
 
 	if err := agentrun.Register(mgr); err != nil {
-		return fmt.Errorf("register agent-run workflow: %w", err)
+		return ownerReg, staticOwnerHB, fmt.Errorf("register agent-run workflow: %w", err)
 	}
 	svcDeps.LifecycleManager = mgr
 	// ADR-053 Phase 4a: wire the MilestoneSubscriber (D3 terminal authority)
@@ -899,7 +938,7 @@ func wireAgentRunSubstrate(ctx context.Context, svcDeps *service.Dependencies, n
 	// deliberately deferred it — without the dispatched→executing rule advancing
 	// a healthy run past "dispatched", D3 would spuriously fail every run on the
 	// coordinator's normal terminal.
-	return startAgentRunMilestoneSubscriber(ctx, mgr, natsClient, platform, logger)
+	return ownerReg, staticOwnerHB, startAgentRunMilestoneSubscriber(ctx, mgr, natsClient, platform, logger)
 }
 
 // startAgentRunMilestoneSubscriber wires the ADR-053 D3 terminal-authority
