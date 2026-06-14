@@ -5,6 +5,7 @@
   import { agentApi } from "$lib/services/agentApi";
   import { taskLabels } from "$lib/stores/taskLabels.svelte";
   import PendingApprovalSection from "./PendingApprovalSection.svelte";
+  import RunWaitingSection from "./RunWaitingSection.svelte";
   import StateBadge from "./StateBadge.svelte";
   import TaskStory from "./TaskStory.svelte";
 
@@ -247,6 +248,10 @@
         loopId={task.id}
         pendingApproval={task.primaryLoop.pending_approval}
       />
+    {/if}
+
+    {#if task.runPause}
+      <RunWaitingSection runId={task.id} pause={task.runPause} />
     {/if}
 
     <div class="action-buttons">

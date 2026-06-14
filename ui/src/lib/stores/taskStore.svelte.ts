@@ -13,6 +13,7 @@ import { replaceState } from "$app/navigation";
 import { agentStore } from "./agentStore.svelte";
 import { taskRefs } from "./taskRefs.svelte";
 import { taskLabels } from "./taskLabels.svelte";
+import { runStatus } from "./runStatus.svelte";
 import {
   type TaskInfo,
   type TaskColumn,
@@ -76,6 +77,16 @@ function createTaskStore() {
           titleOverride: taskLabels.getTitle(loop.loop_id),
           aliases: taskLabels.getAliases(loop.loop_id),
         },
+        // runID === top-level coordinator's loop_id (the kanban task id).
+        // runStatus polls /graph/triples for run-level pause markers; null
+        // when the run is not paused.
+        //
+        // runStatus.get() reads a SvelteMap, so this access registers a
+        // reactive dependency: when a poll set()s/delete()s a pause, this
+        // $derived.by re-runs and the card re-columns. Do NOT swap the
+        // backing SvelteMap for a plain Map (here or in runStatus.svelte.ts)
+        // — that silently severs this reactivity.
+        runStatus.get(loop.loop_id)?.pause ?? null,
       ),
     );
   });

@@ -7,6 +7,24 @@
 
 import type { AgentLoop, AgentLoopState } from "./agent";
 
+/**
+ * Why a run is paused and waiting for the operator.
+ *
+ * tool_gate:      a rule-spawned recovery loop called a gated tool — the
+ *                 operator must approve/reject via
+ *                 POST /teams-dispatch/loops/{gatedLoopId}/approval.
+ *
+ * clarification:  a rule-spawned recovery coordinator called ask_user —
+ *                 the operator must reply via
+ *                 POST /teams-dispatch/message { content, run_id, in_reply_to }.
+ *
+ * Defined here (not in runStatus.svelte.ts) to break the potential circular
+ * import: runStatus imports task.ts types, not vice-versa.
+ */
+export type RunPause =
+  | { cause: "tool_gate"; gatedLoopId: string }
+  | { cause: "clarification"; askingLoopId: string; question: string };
+
 /** Kanban column identifiers. Each maps to one or more AgentLoopStates. */
 export type TaskColumn =
   | "thinking"
@@ -126,6 +144,17 @@ export interface TaskInfo {
 
   /** Count of child loops needing attention. */
   childAttentionCount: number;
+
+  /**
+   * Set when the run (identified by task.id === bare runID) is parked
+   * awaiting the operator. Null when the run is not paused at the run
+   * level. When non-null, the card is forced into the "needs_you" column
+   * regardless of the primary loop's own state.
+   *
+   * Populated by taskStore by reading runStatus.get(loop.loop_id).
+   * Kept null-able so deriveTaskInfo stays pure (no store import).
+   */
+  runPause: RunPause | null;
 }
 
 /** Column priority for "most urgent wins" aggregation over child loops. */
@@ -176,12 +205,18 @@ export interface TaskLabelData {
  * Derive a TaskInfo from a top-level loop and its children.
  * The task's column is the most-urgent state across itself and all
  * children (needs_you > failed > executing > thinking > done).
+ *
+ * When runPause is non-null the run is parked at the run level waiting
+ * on the operator — the effective column is forced to "needs_you"
+ * regardless of the primary loop's own state (which is often "complete"
+ * because the front-door coordinator finished but a descendant paused).
  */
 export function deriveTaskInfo(
   primaryLoop: AgentLoop,
   childLoops: AgentLoop[],
   shortRef: number | null = null,
   labels: TaskLabelData = { titleOverride: null, aliases: [] },
+  runPause: RunPause | null = null,
 ): TaskInfo {
   const primaryColumn = loopStateToColumn(primaryLoop.state);
 
@@ -192,6 +227,12 @@ export function deriveTaskInfo(
     if (COLUMN_URGENCY[childCol] > COLUMN_URGENCY[effectiveColumn]) {
       effectiveColumn = childCol;
     }
+  }
+
+  // A run-level pause (descendant paused while the parent is often already
+  // complete) forces the card into "needs_you" regardless of child/primary state.
+  if (runPause !== null) {
+    effectiveColumn = "needs_you";
   }
 
   const attentionChildren = childLoops.filter(
@@ -226,6 +267,7 @@ export function deriveTaskInfo(
     childLoops,
     childNeedsAttention: attentionChildren.length > 0,
     childAttentionCount: attentionChildren.length,
+    runPause,
   };
 }
 

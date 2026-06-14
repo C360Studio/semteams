@@ -7,6 +7,7 @@ import {
   COLUMNS,
   type TaskColumn,
   type TaskInfo,
+  type RunPause,
 } from "./task";
 
 // ---------------------------------------------------------------------------
@@ -135,6 +136,7 @@ describe("deriveTaskInfo", () => {
     expect(task.childLoops).toHaveLength(0);
     expect(task.childNeedsAttention).toBe(false);
     expect(task.childAttentionCount).toBe(0);
+    expect(task.runPause).toBeNull();
   });
 
   it("title preference: prompt → task_id → truncated loop_id", () => {
@@ -349,6 +351,48 @@ describe("deriveTaskInfo", () => {
     });
     expect(t.aliases).toEqual(["mqtt", "iot"]);
   });
+
+  // ---------------------------------------------------------------------------
+  // runPause — run-level pause forcing column
+  // ---------------------------------------------------------------------------
+
+  it("runPause defaults to null when omitted", () => {
+    const t = deriveTaskInfo(makeLoop(), []);
+    expect(t.runPause).toBeNull();
+  });
+
+  it("runPause is passed through onto the TaskInfo", () => {
+    const pause: RunPause = { cause: "tool_gate", gatedLoopId: "loop-gated" };
+    const t = deriveTaskInfo(makeLoop({ state: "complete" }), [], null, undefined, pause);
+    expect(t.runPause).toEqual(pause);
+  });
+
+  it("runPause forces effectiveColumn to needs_you even when primary loop is complete", () => {
+    const pause: RunPause = { cause: "tool_gate", gatedLoopId: "loop-gated" };
+    const t = deriveTaskInfo(
+      makeLoop({ state: "complete" }),
+      [],
+      null,
+      undefined,
+      pause,
+    );
+    expect(t.column).toBe("needs_you");
+    // The primary loop state is still surfaced as-is (not mutated)
+    expect(t.state).toBe("complete");
+  });
+
+  it("runPause forces needs_you even when a done child would otherwise win", () => {
+    const parent = makeLoop({ state: "complete", loop_id: "parent" });
+    const child = makeLoop({ state: "complete", loop_id: "child", parent_loop_id: "parent" });
+    const pause: RunPause = { cause: "clarification", askingLoopId: "loop-ask", question: "Q?" };
+    const t = deriveTaskInfo(parent, [child], null, undefined, pause);
+    expect(t.column).toBe("needs_you");
+  });
+
+  it("null runPause does not affect column derivation", () => {
+    const t = deriveTaskInfo(makeLoop({ state: "complete" }), [], null, undefined, null);
+    expect(t.column).toBe("done");
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -372,6 +416,7 @@ describe("resolveTaskMention", () => {
       childLoops: [],
       childNeedsAttention: false,
       childAttentionCount: 0,
+      runPause: null,
       ...overrides,
     };
   }

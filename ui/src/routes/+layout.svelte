@@ -4,6 +4,7 @@
 	import { agentStore } from '$lib/stores/agentStore.svelte';
 	import { systemStatus } from '$lib/stores/systemStatus.svelte';
 	import { taskRefs } from '$lib/stores/taskRefs.svelte';
+	import { runStatus } from '$lib/stores/runStatus.svelte';
 	import TopNav from '$lib/components/layout/TopNav.svelte';
 	import ChatBar from '$lib/components/layout/ChatBar.svelte';
 
@@ -12,12 +13,16 @@
 	// Tie SSE + status-poll lifecycles to the layout via $effect — Svelte
 	// runs the cleanup on layout teardown. systemStatus polls /health on
 	// an interval and reads agentStore reactively for the SSE leg.
+	// runStatus polls /graph/triples for run-level pause markers (ADR-053
+	// Phase 4b-2 / 4c) so the board can surface "Waiting on you" badges.
 	$effect(() => {
 		agentStore.connect();
 		systemStatus.start();
+		runStatus.start();
 		return () => {
 			agentStore.disconnect();
 			systemStatus.stop();
+			runStatus.stop();
 		};
 	});
 

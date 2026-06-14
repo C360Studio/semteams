@@ -52,6 +52,13 @@
     </div>
   {/if}
 
+  {#if task.runPause}
+    <div class="run-waiting-badge" data-testid="run-waiting-badge">
+      <span class="badge-dot" aria-hidden="true"></span>
+      {task.runPause.cause === "clarification" ? "Answer needed" : "Approval needed"}
+    </div>
+  {/if}
+
   {#if task.childNeedsAttention}
     <div class="child-attention" data-testid="child-attention">
       {task.childAttentionCount} child{task.childAttentionCount === 1 ? '' : 'ren'} awaiting approval
@@ -149,6 +156,42 @@
     font-variant-numeric: tabular-nums;
     color: var(--ui-text-secondary, #6b7280);
     white-space: nowrap;
+  }
+
+  .run-waiting-badge {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    color: var(--col-needs-you, #f97316);
+    background: color-mix(in srgb, var(--col-needs-you, #f97316) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--col-needs-you, #f97316) 35%, transparent);
+    border-radius: 9999px;
+    padding: 0.125rem 0.5rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    align-self: flex-start;
+  }
+
+  /* Real element, aria-hidden — a CSS `content: '●'` pseudo-dot is announced
+     as "black circle" by some screen readers; the badge text is the label. */
+  .badge-dot {
+    width: 0.375rem;
+    height: 0.375rem;
+    border-radius: 50%;
+    background: currentColor;
+    flex: none;
+    animation: pulse 1.4s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .badge-dot {
+      animation: none;
+    }
   }
 
   .child-attention {

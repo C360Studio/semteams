@@ -27,11 +27,25 @@ export class AgentApiError extends Error {
 }
 
 export const agentApi = {
-  async sendMessage(content: string): Promise<{ content: string }> {
+  /**
+   * Send a message to the dispatch. Supports optional run-level reply
+   * anchors for the ADR-053 4b-2 clarification resume path:
+   *   - opts.runId      → run_id in the body (re-attaches to the paused run)
+   *   - opts.inReplyTo  → in_reply_to in the body (marks reply to the asking loop)
+   * Omitting opts (or leaving fields undefined) produces the same body as
+   * the original single-arg signature so existing callers are unaffected.
+   */
+  async sendMessage(
+    content: string,
+    opts?: { runId?: string; inReplyTo?: string },
+  ): Promise<{ content: string }> {
+    const body: Record<string, string> = { content };
+    if (opts?.runId) body.run_id = opts.runId;
+    if (opts?.inReplyTo) body.in_reply_to = opts.inReplyTo;
     const response = await fetch(`${DISPATCH_BASE}/message`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content }),
+      body: JSON.stringify(body),
     });
     if (!response.ok) {
       const error = await response.json().catch(() => ({}));

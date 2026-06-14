@@ -99,6 +99,40 @@ describe("agentApi", () => {
         AgentApiError,
       );
     });
+
+    it("includes run_id and in_reply_to when opts are provided", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ content: "ok" }),
+      });
+
+      await agentApi.sendMessage("My reply", {
+        runId: "run-abc",
+        inReplyTo: "loop-ask-1",
+      });
+
+      const [, init] = mockFetch.mock.calls[0];
+      expect(JSON.parse(init.body)).toEqual({
+        content: "My reply",
+        run_id: "run-abc",
+        in_reply_to: "loop-ask-1",
+      });
+    });
+
+    it("omits run_id/in_reply_to when opts are absent", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ content: "ok" }),
+      });
+
+      await agentApi.sendMessage("Hello no opts");
+
+      const [, init] = mockFetch.mock.calls[0];
+      const parsed = JSON.parse(init.body);
+      expect(parsed).toEqual({ content: "Hello no opts" });
+      expect(parsed.run_id).toBeUndefined();
+      expect(parsed.in_reply_to).toBeUndefined();
+    });
   });
 
   // =========================================================================
