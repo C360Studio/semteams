@@ -521,14 +521,16 @@ func TestDevViaTestPack_02c_PlanRetryStamp(t *testing.T) {
 			pending = &rule.OnEnter[i]
 		}
 	}
-	if finding == nil || finding.Type != "update_triple" || finding.Subject != runSubject {
-		t.Errorf("rule 02c finding stamp wrong: %+v (want update_triple on run entity)", finding)
+	// ADR-056 #278 fast-follow: both markers migrated to the owned lane
+	// (replace_owned, owned by rule-pack.semteams via dev-via-test.retry-projection).
+	if finding == nil || finding.Type != "replace_owned" || finding.Subject != runSubject {
+		t.Errorf("rule 02c finding stamp wrong: %+v (want replace_owned on run entity)", finding)
 	}
 	if obj, _ := finding.Object.(string); obj != "$entity.triple.coordinator.decision.reason" {
 		t.Errorf("rule 02c finding object = %v; want coordinator.decision.reason (CBG's fix-spec)", finding.Object)
 	}
-	if pending == nil || pending.Type != "add_triple" || pending.Subject != runSubject {
-		t.Errorf("rule 02c pending stamp wrong: %+v (want add_triple on run entity)", pending)
+	if pending == nil || pending.Type != "replace_owned" || pending.Subject != runSubject {
+		t.Errorf("rule 02c pending stamp wrong: %+v (want replace_owned on run entity)", pending)
 	}
 }
 
@@ -550,7 +552,7 @@ func TestDevViaTestPack_02d_PlanRetryDriver(t *testing.T) {
 	var replan, escalate *devViaTestOnEnterJSON
 	for i := range rule.OnEnter {
 		a := &rule.OnEnter[i]
-		if a.Type == "remove_triple" && a.Predicate == "dev_via_test.plan.retry.pending" {
+		if a.Type == "replace_owned" && a.Predicate == "dev_via_test.plan.retry.pending" {
 			removed = true
 		}
 		if a.Type == "publish_agent" && a.Role == "dev-via-test-plan" {
@@ -870,9 +872,10 @@ func TestDevViaTestPack_07b_WakeupModeProperty(t *testing.T) {
 // TestDevViaTestPack_07c_CBGRetryStamp pins the ADR-044 §Slice 5
 // stamp half: when CBG decides rejected_retry, the rule stamps the
 // retry markers on the RUN entity (via lineage subject override),
-// NOT on CBG's own loop entity. target_task + finding use
-// update_triple (upsert — latest verdict wins); pending uses
-// add_triple (presence trigger that 07d removes each cycle).
+// NOT on CBG's own loop entity. All three use replace_owned (ADR-056
+// #278 / beta.110 — owned by rule-pack.semteams): target_task + finding
+// are single-valued current-state (latest verdict atomically wins);
+// pending is the presence trigger 07d clears each cycle.
 func TestDevViaTestPack_07c_CBGRetryStamp(t *testing.T) {
 	rule := loadDevViaTestRule(t, "07c-cbg-retry-stamp.json")
 
@@ -911,8 +914,8 @@ func TestDevViaTestPack_07c_CBGRetryStamp(t *testing.T) {
 			t.Errorf("rule 07c does not stamp %q", pred)
 			continue
 		}
-		if a.Type != "update_triple" {
-			t.Errorf("rule 07c %q type = %q; want update_triple (upsert so the latest CBG verdict overwrites the prior)", pred, a.Type)
+		if a.Type != "replace_owned" {
+			t.Errorf("rule 07c %q type = %q; want replace_owned (atomic owned upsert so the latest CBG verdict overwrites the prior)", pred, a.Type)
 		}
 		if a.Subject != runSubject {
 			t.Errorf("rule 07c %q subject = %q; want %q (markers live on the RUN entity, not CBG's loop)", pred, a.Subject, runSubject)
@@ -926,8 +929,8 @@ func TestDevViaTestPack_07c_CBGRetryStamp(t *testing.T) {
 	if !ok {
 		t.Fatal("rule 07c does not stamp dev_via_test.cbg.retry.pending — 07d's trigger never fires")
 	}
-	if pending.Type != "add_triple" {
-		t.Errorf("rule 07c pending type = %q; want add_triple (presence trigger removed by 07d each cycle, per semstreams#204)", pending.Type)
+	if pending.Type != "replace_owned" {
+		t.Errorf("rule 07c pending type = %q; want replace_owned (presence trigger cleared by 07d each cycle, per semstreams#204; owned lane per ADR-056 #278)", pending.Type)
 	}
 	if pending.Subject != runSubject {
 		t.Errorf("rule 07c pending subject = %q; want %q", pending.Subject, runSubject)
@@ -957,7 +960,7 @@ func TestDevViaTestPack_07d_CBGRetryDriver(t *testing.T) {
 	var redispatch, escalate *devViaTestOnEnterJSON
 	for i := range rule.OnEnter {
 		a := &rule.OnEnter[i]
-		if a.Type == "remove_triple" && a.Predicate == "dev_via_test.cbg.retry.pending" {
+		if a.Type == "replace_owned" && a.Predicate == "dev_via_test.cbg.retry.pending" {
 			removedPending = true
 		}
 		if a.Type == "publish_agent" && a.Role == "coordinator" {
@@ -970,7 +973,7 @@ func TestDevViaTestPack_07d_CBGRetryDriver(t *testing.T) {
 	}
 
 	if !removedPending {
-		t.Error("rule 07d does not remove_triple the pending marker — without the clear, the rule can't re-Enter on the next retry (semstreams#204 presence-marker discipline)")
+		t.Error("rule 07d does not clear the pending marker via replace_owned — without the clear, the rule can't re-Enter on the next retry (semstreams#204 presence-marker discipline; owned lane per ADR-056 #278)")
 	}
 
 	if redispatch == nil {

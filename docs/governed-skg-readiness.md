@@ -180,12 +180,37 @@ declared replace-owned contract; predicate must be a literal) + a regression pin
 that the three migrated predicates stay on the owned lane (vs a silent revert to
 `update_triple` / `add_triple`).
 
-**Deferred to fast-follow (NOT in this slice):** the HITL `*_pending` /
-`*_resumed` set→clear markers (agent-run pack — `remove_triple` → `replace_owned`
-empty-object clear), `autoresearch.iteration.pending` (presence marker, entangled
-with the transition-detection remove ordering), and the dev-via-test
-retry/iteration gates. Kept out to leave the transition mechanics untouched in
-the first slice.
+**Fast-follow (shipped on top of #219) — coordination gates → `replace_owned`.**
+A second slice migrates the cleanly rule-pack-owned clearable coordination state:
+
+- `autoresearch.iteration.pending` (set rules 04a/04b, cleared rule 05) — added to
+  the `autoresearch.run-projection` contract. The rule-05 first-action clear stays
+  ordered-first so the presence-marker re-entry (semstreams#204) is unchanged; the
+  atomic empty-object clear is equivalent to the prior `remove_triple`.
+- dev-via-test retry gates — `dev_via_test.{plan,cbg}.retry.{pending,finding}` +
+  `cbg.retry.target_task` (set rules 02c/07c, cleared rules 02d/07d/07a) — a new
+  `dev-via-test.retry-projection` contract. Validated by the `dev-via-test-replan`
+  journey (asserts the retry-finding stamp on the run entity).
+
+Note on the STAMP lane: `replace_owned` is must-exist (no auto-vivify — unlike the
+`add_triple` / `update_triple` it replaces). The migrated stamps all target the run
+anchor via `lineage.run-loop-entity-id`, which only resolves once the run entity
+exists, so the anchor is always present mid-chain — a no-op in practice, and the
+intended ADR-056 semantics (it pre-aligns these writes with the coming ADR-055
+must-exist flip). The one consequence: a future refactor that moved a stamp earlier
+than run-anchor birth would surface as a logged Error (`entity_not_found`) rather
+than a silent auto-vivify — fail-fast, which is the desired direction.
+
+**Still deferred — the agent-run HITL pair (clarification + approval), as a unit.**
+`agent.run.clarification_{pending,resumed}` is fully rule-written (ownable today),
+BUT its sibling `agent.run.approval_{pending,resumed}` is SET by the `approvalpause`
+Go subscriber (`cmd/semteams/approvalpause/`), not a rule — so rule-pack ownership
+is the wrong owner for it; the subscriber is the natural owner and needs the
+executor/subscriber-side owned-write lane (feedback item B below). The two HITL
+markers are a coherent, delicate ADR-053 resume subsystem (rule 11's ordered clears
++ rule 09's `length_eq 0` bounce guard), so migrating clarification alone would
+split the pair across two lanes for marginal benefit (presence markers have no
+read-between-revisions gap). Migrate BOTH together once `approval_*` is ownable.
 
 ### The two traps (do NOT read a zero as a pass on beta.109)
 

@@ -28,7 +28,7 @@
   "on_enter": [
     {
       "id": "clear_pending_marker",
-      "type": "remove_triple",
+      "type": "replace_owned",
       "predicate": "autoresearch.iteration.pending"
     },
     {

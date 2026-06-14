@@ -27,19 +27,19 @@
   "logic": "and",
   "on_enter": [
     {
-      "type": "update_triple",
+      "type": "replace_owned",
       "subject": "$entity.triple.lineage.run-loop-entity-id",
       "predicate": "dev_via_test.cbg.retry.target_task",
       "object": "$entity.triple.coordinator.decision.subtopics"
     },
     {
-      "type": "update_triple",
+      "type": "replace_owned",
       "subject": "$entity.triple.lineage.run-loop-entity-id",
       "predicate": "dev_via_test.cbg.retry.finding",
       "object": "$entity.triple.coordinator.decision.reason"
     },
     {
-      "type": "add_triple",
+      "type": "replace_owned",
       "subject": "$entity.triple.lineage.run-loop-entity-id",
       "predicate": "dev_via_test.cbg.retry.pending",
       "object": "$entity.instance"
@@ -51,8 +51,8 @@
     "phase": "ADR-044 §addendum Slice 5 — CBG retry stamp",
     "adr": "docs/adr/044-dev-via-test-pack.md",
     "paired_with": "07d-cbg-retry-driver.json (run-entity driver, $state.iteration budget gate)",
-    "subject_override_requires": "semstreams #147/#148 (resolveTripleSubject shared by add/update/remove_triple). CBG carries lineage.run-loop-entity-id from rule 06's related_loops.",
-    "upsert_rationale": "target_task + finding use update_triple (remove-then-add upsert) so the latest CBG verdict overwrites the prior one — a stale finding from retry N must not leak into retry N+1. pending uses add_triple because it is a content-free trigger that 07d removes each cycle.",
+    "subject_override_requires": "semstreams #147/#148 (resolveTripleSubject shared by add/update/remove/replace_owned). CBG carries lineage.run-loop-entity-id from rule 06's related_loops.",
+    "upsert_rationale": "All three markers use replace_owned (ADR-056 #278 / beta.110 — atomic owned replace-by-(subject,predicate), owned by rule-pack.semteams via the dev-via-test.retry-projection contract). target_task + finding are single-valued current-state, so the latest CBG verdict atomically overwrites the prior one — a stale finding from retry N must not leak into retry N+1. pending is the content-free presence trigger 07d clears (replace_owned empty-object) each cycle. Supersedes the prior update_triple (target_task/finding) + add_triple (pending) bare-lane writes.",
     "verdict_split": "CBG action_allowlist (rule 06) is [approved, rejected_retry, rejected]. approved → 07a (respond_direct). rejected_retry → 07c (this rule, bounded re-dispatch). rejected → 07b (ask_user, the fail-safe default for plan/scope/human problems). Bare `rejected` keeps its existing 07b binding so an under-specified CBG escalates rather than silently looping.",
     "subtopics_fence": "The subtopics length_gt 0 condition is a STRUCTURAL guard (go-reviewer C1, ADR-044 §addendum Slice 5). The decide tool stamps coordinator.decision.subtopics ONLY when non-empty (semstreams decide.go), and there is no unresolved-token guard on add/update_triple OBJECTS (only on subjects). Without this fence, a rejected_retry emitted WITHOUT subtopics would stamp target_task = the literal string '$entity.triple.coordinator.decision.subtopics' (garbage), silently mis-targeting the retry. With the fence, a subtopics-less rejected_retry does NOT fire this rule — rule 07e catches it and escalates to ask_user (fail-safe, mirrors rule 01's length_eq 0 corruption-to-no-op fence). Per [[encode-principles-structurally]]: the persona prose 'name exactly one task id' is hopeful; this fence is enforcement."
   }

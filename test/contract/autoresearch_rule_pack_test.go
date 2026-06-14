@@ -63,9 +63,9 @@ type autoresearchOnEnterJSON struct {
 // stay true across iterations 2..N, so `wasMatching` stays true and
 // the next iteration's marker stamp would otherwise produce
 // `TransitionNone` (empty WhileTrue, action_count=0, chain stalls).
-// The remove_triple in this rule's first on_enter action flips the
-// trigger condition false (Exited), resetting wasMatching for the
-// next Entered cycle.
+// The replace_owned (empty-object) clear in this rule's first on_enter
+// action flips the trigger condition false (Exited), resetting wasMatching
+// for the next Entered cycle (migrated from remove_triple, ADR-056 #278).
 //
 // Without these invariants, the iteration loop can't fire past
 // iter 1 (proven empirically across four reverted attempts in June
@@ -76,9 +76,9 @@ type autoresearchOnEnterJSON struct {
 //  1. Rule conditions include a presence marker on
 //     `autoresearch.iteration.pending ne ""` — without it the
 //     remove-then-add cycle has nothing to remove.
-//  2. The first on_enter action is `remove_triple` on the marker —
-//     ordering matters: clearing the marker before the spawn
-//     actions is what produces the Exited transition.
+//  2. The first on_enter action clears the marker via `replace_owned`
+//     (empty object) — ordering matters: clearing the marker before the
+//     spawn actions is what produces the Exited transition.
 //  3. A publish_agent for autoresearch-propose exists with a `when`
 //     clause `$state.iteration <= $entity.triple.autoresearch.cap`.
 //  4. A publish_agent for autoresearch-synthesize exists with a
@@ -108,15 +108,18 @@ func TestAutoresearchPack_05_IterationDispatch_PatternA(t *testing.T) {
 		t.Errorf("rule 05 iteration.pending compare value = %v; want empty string (presence test)", marker.Value)
 	}
 
-	// Invariant 2: first on_enter action must be remove_triple on the
-	// marker. Ordering is load-bearing — clearing the marker must
-	// happen before the spawn actions so the rule's conditions flip
-	// false (Exited) and the next iteration's marker stamp produces
-	// a fresh Entered. If a spawn fires first, the propose loop could
-	// race against the marker still being present.
-	if len(rule.OnEnter) == 0 || rule.OnEnter[0].Type != "remove_triple" ||
+	// Invariant 2: first on_enter action must CLEAR the marker via
+	// replace_owned (empty object) — migrated from remove_triple to the
+	// owned lane (ADR-056 #278 / beta.110; iteration.pending is owned by
+	// rule-pack.semteams). Ordering is load-bearing — clearing the marker
+	// must happen before the spawn actions so the rule's conditions flip
+	// false (Exited) and the next iteration's marker stamp produces a fresh
+	// Entered. If a spawn fires first, the propose loop could race against
+	// the marker still being present. The atomic single-revision clear is
+	// equivalent to the prior remove_triple for the presence-marker re-entry.
+	if len(rule.OnEnter) == 0 || rule.OnEnter[0].Type != "replace_owned" ||
 		rule.OnEnter[0].Predicate != "autoresearch.iteration.pending" {
-		t.Errorf("rule 05 first on_enter action = %+v; want remove_triple of autoresearch.iteration.pending so the Exited transition fires before spawn actions",
+		t.Errorf("rule 05 first on_enter action = %+v; want replace_owned (clear) of autoresearch.iteration.pending so the Exited transition fires before spawn actions",
 			ifFirstOnEnter(rule))
 	}
 
@@ -395,9 +398,15 @@ func stampsExperimentCompleted(r *autoresearchRuleJSON) bool {
 	return stampsPredicateOnRun(r, "autoresearch.experiment.completed")
 }
 
+// stampsPredicateOnRun reports whether the rule writes `predicate` onto the run
+// entity (via the lineage subject override). Accepts both the bare append lane
+// (add_triple — e.g. the multi-valued experiment.completed counter) and the
+// owned lane (replace_owned — e.g. the single-valued iteration.pending marker,
+// migrated in the ADR-056 #278 fast-follow). The invariant is "stamped on the
+// run entity," independent of which write lane.
 func stampsPredicateOnRun(r *autoresearchRuleJSON, predicate string) bool {
 	for _, a := range r.OnEnter {
-		if a.Type == "add_triple" && a.Predicate == predicate &&
+		if (a.Type == "add_triple" || a.Type == "replace_owned") && a.Predicate == predicate &&
 			strings.Contains(a.Subject, "lineage.run-loop-entity-id") {
 			return true
 		}

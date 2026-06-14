@@ -46,12 +46,12 @@
       "prompt": "The dev-via-test chain you dispatched has reached its terminal. CBG (reviewer-dev-via-test) at loop $entity.instance ran the integration test command across the full task scope and APPROVED the work.\n\nYour job now is to deliver the result to the user. You are not classifying, delegating, or re-reviewing — the chain has already done the work and CBG has validated it.\n\nIteration 1 — call read_loop_result(loop_id=$entity.instance) to read CBG's approved verdict. CBG's reason summarises: what shipped (the user-facing capability), integration test result, any noteworthy observations from the diff.\n\nIteration 2 — call decide(action=\"respond_direct\", reason=\"<your synthesised user-facing answer>\"). The respond_direct rule publishes your reason on the user-response bus.\n\nWrite the reason as plain prose addressing the user directly. The user asked for an implementation; tell them what shipped, that the acceptance test passed, and any caveats worth flagging (e.g., if some tasks were marked blocked by Ralph but the integration test still passed because other tasks covered the scope). 3-6 sentences is usually right; don't dump CBG's full rollup, pick the headline."
     },
     {
-      "type": "remove_triple",
+      "type": "replace_owned",
       "subject": "$entity.triple.lineage.run-loop-entity-id",
       "predicate": "dev_via_test.cbg.retry.target_task"
     },
     {
-      "type": "remove_triple",
+      "type": "replace_owned",
       "subject": "$entity.triple.lineage.run-loop-entity-id",
       "predicate": "dev_via_test.cbg.retry.finding"
     }
