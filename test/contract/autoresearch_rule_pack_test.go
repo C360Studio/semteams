@@ -84,9 +84,9 @@ type autoresearchOnEnterJSON struct {
 //  4. A publish_agent for autoresearch-synthesize exists with a
 //     `when` clause `$state.iteration > $entity.triple.autoresearch.cap`
 //     — the cap-exhaust branch.
-//  5. An update_triple (NOT add_triple) for autoresearch.run.status
-//     = "stopped" with the same cap-exhaust when clause. update_triple
-//     wipes the prior "active" value; add_triple would leave both,
+//  5. A replace_owned (NOT add_triple) for autoresearch.run.status
+//     = "stopped" with the same cap-exhaust when clause. replace_owned
+//     atomically wipes the prior "active" value; add_triple would leave both,
 //     and GetFieldValue's first-wins read would still find "active",
 //     defeating the run.status=active gate's defense-in-depth.
 func TestAutoresearchPack_05_IterationDispatch_PatternA(t *testing.T) {
@@ -148,15 +148,19 @@ func TestAutoresearchPack_05_IterationDispatch_PatternA(t *testing.T) {
 		t.Error("rule 05 missing publish_agent for autoresearch-synthesize with the cap-exhaust when clause — chain would loop past cap forever")
 	}
 
-	// Invariant 5: update_triple (NOT add_triple) for the run.status
-	// stop flip, gated by the same cap-exhaust when clause.
+	// Invariant 5: replace_owned (NOT add_triple) for the run.status
+	// stop flip, gated by the same cap-exhaust when clause. Migrated from
+	// update_triple to the atomic owned lane in the ADR-056 #278 adoption
+	// (semstreams beta.110); run.status is owned by the rule-pack.semteams
+	// projection contract. See governed_skg_replace_owned_test.go for the
+	// envelope pin.
 	var foundStopFlip bool
 	for _, a := range rule.OnEnter {
-		if a.Type != "update_triple" || a.Predicate != "autoresearch.run.status" {
+		if a.Type != "replace_owned" || a.Predicate != "autoresearch.run.status" {
 			continue
 		}
 		if obj, ok := a.Object.(string); !ok || obj != "stopped" {
-			t.Errorf("rule 05 run.status update_triple object = %v; want %q so the status condition correctly fails on belated state changes",
+			t.Errorf("rule 05 run.status replace_owned object = %v; want %q so the status condition correctly fails on belated state changes",
 				a.Object, "stopped")
 		}
 		if !whenIterationCap(a.When, "gt", wantCap) {
@@ -165,7 +169,7 @@ func TestAutoresearchPack_05_IterationDispatch_PatternA(t *testing.T) {
 		foundStopFlip = true
 	}
 	if !foundStopFlip {
-		t.Error("rule 05 missing update_triple for autoresearch.run.status='stopped' at cap-exhaust — without it, a belated execute finishing after synthesize spawned would re-trigger the rule and spawn a duplicate synthesize")
+		t.Error("rule 05 missing replace_owned for autoresearch.run.status='stopped' at cap-exhaust — without it, a belated execute finishing after synthesize spawned would re-trigger the rule and spawn a duplicate synthesize")
 	}
 
 	// add_triple on run.status would be a regression: append-only
@@ -173,7 +177,7 @@ func TestAutoresearchPack_05_IterationDispatch_PatternA(t *testing.T) {
 	// original "active" value, defeating the gate. Explicitly forbid.
 	for _, a := range rule.OnEnter {
 		if a.Type == "add_triple" && a.Predicate == "autoresearch.run.status" {
-			t.Errorf("rule 05 uses add_triple on autoresearch.run.status; must be update_triple — add_triple appends and GetFieldValue's first-wins read would keep returning the original 'active' value")
+			t.Errorf("rule 05 uses add_triple on autoresearch.run.status; must be replace_owned — add_triple appends and GetFieldValue's first-wins read would keep returning the original 'active' value")
 		}
 	}
 

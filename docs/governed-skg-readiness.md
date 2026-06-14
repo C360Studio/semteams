@@ -6,8 +6,11 @@ map** of what our rule packs will do under the new contract. The live
 observe-only metrics (named below) are the **verification gate** — a metric read
 we did not predict is a broken filter, not a quiet system.
 
-- Authored 2026-06-14. Status: pre-bump (we are on `v1.0.0-beta.108`, which
-  carries only the observe-only substrate; the breaking flips are forthcoming).
+- Authored 2026-06-14. Status: **on `v1.0.0-beta.110`** — the observe-only
+  ownership substrate (beta.109, PR #218) PLUS the #278 rule-pack
+  projection-producer adoption (this change; see the beta.110 section below). The
+  breaking ADR-055 must-exist flip + the ADR-056 owner-token write-lease are still
+  forthcoming upstream.
 - Upstream ADRs: [`055`](../../semstreams/docs/adr/055-graph-write-intent-taxonomy.md)
   (envelope-on-birth, must-exist flip), [`056`](../../semstreams/docs/adr/056-authoritative-semantic-state.md)
   (predicate-group ownership, **Accepted** 06-13),
@@ -113,6 +116,76 @@ Follow-up (breadth, not blocking): the same substrate-level findings generalize
 across packs (all use bare-triple markers on the shared substrate); running the
 autoresearch / dev-via-test journeys would confirm the Group-C `update_triple`
 (`best.value`) and retry-marker paths empirically.
+
+### beta.110 — #278 adoption: autoresearch scalar replaces → `replace_owned`
+
+Upstream shipped our #278 ask in beta.110 (#281 docs / #282 main-side bind /
+#283 `replace_owned` + envelope validation). The must-exist flip and the
+owner-token lease are NOT in this tag, so Group-B origin-first work, the trap
+metrics, and the deferred clean-heartbeat shutdown all stay deferred — beta.110
+is purely the rule-pack projection-producer capability, additive / non-breaking
+(pin-bump verified: build/vet/`-race`/lint/schema + `run-failed` mock journey).
+
+**What we adopted (first slice — the autoresearch single-valued scalar replaces):**
+
+- `pack_id: "semteams"` on the single substrate rule processor (both flow
+  configs). semteams runs ONE rule processor for all category packs (ADR-042
+  substrate-singleton), so the framework-level "pack" is the whole substrate
+  corpus → ONE owner `rule-pack.semteams`, with per-category ownership carved by
+  named `projection_contracts`. This is the upstream multi-contract-per-owner
+  design, NOT a per-category processor split (which would fight ADR-042).
+- A named `autoresearch.run-projection` contract: a `replace-owned` group owning
+  `autoresearch.best.value`, `autoresearch.best.experiment_id`,
+  `autoresearch.run.status` on `*.*.agent.chain.execution.*` (the run anchor,
+  `agentrun.EntityIDPattern`).
+- Rules `autoresearch/04c` (best.value + best.experiment_id) and `autoresearch/05`
+  (run.status flip) flipped `update_triple` → `replace_owned` — the atomic owned
+  replace-by-(subject, predicate) via `update_with_triples`, closing the
+  non-atomic remove-then-add read-between-revisions gap the rules documented.
+  (`replace_owned` honors subject-override + object substitution exactly as
+  `update_triple` did; only the PREDICATE must be a literal — verified, both
+  predicates are literal.)
+- Wiring: `cmd/semteams/main.go` now calls `service.BindRulePackContracts` after
+  the rule processors are constructed (mirrors upstream §11b, ADR-029);
+  `wireAgentRunSubstrate` returns the ownership Registry + Heartbeater so the bind
+  reuses the same pair. The executor `ownerID` is set independently by the rule
+  processor factory when `pack_id` is present (`SetProjectionOwner`), so writes
+  carry owner `rule-pack.semteams` regardless of the bind.
+
+**Framework-alignment posture (CLAUDE.md mandatory review):** this ADOPTS the
+upstream #278 primitive (`replace_owned` + `projection.Contract` binding) — the
+"exists upstream → use it" case, no product-local fork. The primitive was
+requested by us (semstreams#278) and shipped to spec.
+
+**Owner-claim disjointness (verified by design; observe-only at runtime):**
+`rule-pack.semteams` claims `{autoresearch.best.value, .best.experiment_id,
+run.status}` (replace-owned) on `*.*.agent.chain.execution.*`. The lifecycle
+`agent-run` owner claims `{agent.run.phase}` (cas-transition) + the `agent.run.*`
+audit/struct fields (replace-owned) on the SAME pattern. The predicate sets are
+disjoint → the blessed multi-owner-by-predicate-group pattern, no overlap. (An
+overlap would WARN, not brick — `BindRulePackContracts` is observe-only this tag.)
+
+**Known boundary — the executor-seeds-then-rule-owns split.**
+`emit_autoresearch_baseline` / `emit_autoresearch_measurement` (Go tool
+executors) SEED `best.value` / `run.status` via the bare `add_triple` lane (their
+`TriplePublisher` has no owned lane), and the rule's first `replace_owned`
+reconciles that seed away. On the observe-only tag this mixed-writer seed is
+benign; an executor-side owned-write lane is a SEPARATE upstream gap (feedback
+item B below — rule packs got a derivation entry point in #278; executors did
+not). Tracked, not blocking.
+
+**Structural pin:** `test/contract/governed_skg_replace_owned_test.go` reproduces
+the framework's boot-time envelope check (every `replace_owned` predicate ⊆ the
+declared replace-owned contract; predicate must be a literal) + a regression pin
+that the three migrated predicates stay on the owned lane (vs a silent revert to
+`update_triple` / `add_triple`).
+
+**Deferred to fast-follow (NOT in this slice):** the HITL `*_pending` /
+`*_resumed` set→clear markers (agent-run pack — `remove_triple` → `replace_owned`
+empty-object clear), `autoresearch.iteration.pending` (presence marker, entangled
+with the transition-detection remove ordering), and the dev-via-test
+retry/iteration gates. Kept out to leave the transition mechanics untouched in
+the first slice.
 
 ### The two traps (do NOT read a zero as a pass on beta.109)
 
@@ -279,11 +352,13 @@ ever diverge, the draft wins.
 
 ## Posture
 
-- **Do not migrate yet.** The substrate is observe-only; the must-exist flip is
-  gated upstream on hatch-empty + a green crash-recovery test. Premature
-  `RegisterOwner` calls would be churn — and we have nothing to register anyway
-  (no rule write reaches the owned lane; the Class-2 set *would* register, but the
-  lane to do so does not exist yet — that is feedback item 1/2).
+- **Partially migrated (beta.110).** Feedback items 1 + 2 SHIPPED upstream in
+  beta.110 (#278), so the autoresearch single-valued scalar replaces now register
+  ownership (`rule-pack.semteams`) + write via `replace_owned` (see the beta.110
+  adoption section above). The remaining Class-2 set (HITL markers, retry/iteration
+  gates) is fast-follow. The must-exist flip (ADR-055) is still gated upstream on
+  hatch-empty + a green crash-recovery test, so the Group-B origin-first work
+  stays deferred.
 - **On beta.109 (the first integration pass):** confirm rule packs run unchanged
   (mock-LLM e2e + real-LLM smoke), watch the *real* observe-only signals
   (`foreign_edge_unclaimed_total` = 0; `mutation_rejections_total` baseline = no

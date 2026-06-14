@@ -227,6 +227,23 @@
           ]
         },
         "enable_graph_integration": true,
+        "pack_id": "semteams",
+        "projection_contracts": [
+          {
+            "name": "autoresearch.run-projection",
+            "entity_pattern": "*.*.agent.chain.execution.*",
+            "groups": [
+              {
+                "mode": "replace-owned",
+                "predicates": [
+                  "autoresearch.best.value",
+                  "autoresearch.best.experiment_id",
+                  "autoresearch.run.status"
+                ]
+              }
+            ]
+          }
+        ],
         "rules_files": [
           "/app/configs/rules/research/01-coordinator-research-spawn.json",
           "/app/configs/rules/research/02-plan-to-gather.json",
