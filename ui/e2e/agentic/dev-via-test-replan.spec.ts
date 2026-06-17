@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { assertAnchorBornFirst, RUN_ANCHOR } from "./born_first";
 
 /**
  * Journey: ADR-053 Phase 3b — dev-via-test PLAN-RETRY (re-plan) path on
@@ -176,6 +177,17 @@ test.describe("ADR-053 Phase 3b — dev-via-test re-plan (02g) mock-LLM journey"
       String(findings[0]?.subject ?? ""),
       "plan.retry.finding must be stamped on the agent.chain.execution run entity",
     ).toContain("agent.chain.execution.");
+
+    // BORN-FIRST gate (ADR-055/056 must-exist flip, semteams#222). The
+    // replace_owned plan.retry.finding marker (rule 02c) lands on the run anchor;
+    // prove that anchor was BORN-FIRST by the lifecycle Manager (carries
+    // agent.run.phase), not auto-vivified by the marker.
+    await assertAnchorBornFirst(request, {
+      markerPredicate: "dev_via_test.plan.retry.finding",
+      envelopePredicate: RUN_ANCHOR.envelope,
+      anchorSubstr: RUN_ANCHOR.substr,
+      label: "dev-via-test/02c plan.retry.finding (run anchor)",
+    });
 
     // Terminal: the final coordinator delivered the reply.
     const resp = await request.get(

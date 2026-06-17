@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { assertAnchorBornFirst, RUN_ANCHOR, LOOP_ANCHOR } from "./born_first";
 
 /**
  * Journey: ADR-042 MVP-5 — coordinator → research-category arc →
@@ -272,6 +273,29 @@ test.describe("ADR-042 MVP-5 — Research category mock-LLM journey", () => {
       runPhases,
       "run must NOT be failed (D3 race / wrong terminal)",
     ).not.toContain("failed");
+
+    // BORN-FIRST gate (ADR-055/056 must-exist flip, semteams#222) — TWO anchors.
+    // (1) Run anchor: research/07 stamps agent.run.outcome=success on the
+    //     chain.execution run anchor; prove it was born by the lifecycle Manager
+    //     (carries agent.run.phase), not auto-vivified by the outcome marker.
+    await assertAnchorBornFirst(request, {
+      markerPredicate: "agent.run.outcome",
+      markerObject: "success",
+      envelopePredicate: RUN_ANCHOR.envelope,
+      anchorSubstr: RUN_ANCHOR.substr,
+      label: "research/07 run-outcome marker (run anchor)",
+    });
+    // (2) Plan-loop anchor: research/03a stamps research.gather.completed_subtopic
+    //     onto the PLANNER's loop entity (lineage.plan-loop-entity-id →
+    //     agent.agentic-loop.execution.*); prove that loop was born by the
+    //     agentic-loop graph writer (carries agent.loop.role spawn-identity), not
+    //     auto-vivified by the gather marker.
+    await assertAnchorBornFirst(request, {
+      markerPredicate: "research.gather.completed_subtopic",
+      envelopePredicate: LOOP_ANCHOR.envelope,
+      anchorSubstr: LOOP_ANCHOR.substr,
+      label: "research/03a gather.completed_subtopic (plan-loop anchor)",
+    });
   });
 });
 
