@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { assertAnchorBornFirst, RUN_ANCHOR } from "./born_first";
 
 /**
  * Journey: autoresearch pack (Karpathy propose/execute iteration
@@ -211,6 +212,18 @@ test.describe("autoresearch — propose/execute iteration mock-LLM journey", () 
       runPhases,
       "run must NOT be failed — a failed run here means the D3 zombie guard raced the dispatched→executing transition",
     ).not.toContain("failed");
+
+    // BORN-FIRST gate (ADR-055/056 must-exist flip, semteams#222). rule 04c
+    // upserts autoresearch.best.value onto the run anchor (lineage.run-loop-entity-id
+    // → agent.chain.execution.*). Prove that anchor was BORN-FIRST by the lifecycle
+    // Manager (carries agent.run.phase), not auto-vivified by the best.value marker.
+    // Fails under simulated auto-vivify (a stub would carry only best.value).
+    await assertAnchorBornFirst(request, {
+      markerPredicate: "autoresearch.best.value",
+      envelopePredicate: RUN_ANCHOR.envelope,
+      anchorSubstr: RUN_ANCHOR.substr,
+      label: "autoresearch/04c best.value (run anchor)",
+    });
   });
 });
 

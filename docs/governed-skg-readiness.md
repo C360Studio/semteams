@@ -321,34 +321,52 @@ exempt from the lease). The point is the opposite: Class 2 is real rule-pack-own
 state that has no ownership lane and no derivation entry point — which is exactly
 the upstream feedback (`governed-skg-upstream-feedback-draft.md`, Findings A + B).
 
-## Per-pack test list (anchor-before-marker)
+## Per-pack test list (anchor-before-marker) — PROVEN (semteams#222, 2026-06-17)
 
-Testable **today** on mock-LLM — assert the anchor entity is present in
-`ENTITY_STATES` at the moment its marker rule fires. Independent of the flip;
-the must-exist reject is the production confirmation post-flip.
+Each pack's marker→anchor born-first ordering is now ASSERTED in its mock-LLM
+journey via `ui/e2e/agentic/born_first.ts` (`assertAnchorBornFirst`). The
+assertion derives the anchor from the MARKER's own subject, then asserts that
+entity carries its born-first ENVELOPE — a lifecycle/spawn identity predicate the
+framework stamps at birth: `agent.run.phase` for `*.*.agent.chain.execution.*`
+run anchors (lifecycle Manager, at Create); `agent.loop.role` for
+`*.*.agent.agentic-loop.execution.*` loop/plan anchors (agentic-loop graph writer,
+at spawn). This FAILS under simulated auto-vivify — a marker-vivified bare stub
+carries ONLY the marker, never the birth-stamped envelope. All green on
+mock-LLM beta.111.
 
-- [ ] **agent-run** — run anchor (`agent.run.entity_id`) present before rules
-  `01` (handoff), `05`/`07` stamp; lineage anchor present before `06`/`08`.
-  Drive: dispatch a category (run_scope=new) → assert run entity exists → reach
-  terminal/pause → assert `agent.run.outcome` / `clarification_pending` lands.
-- [ ] **autoresearch** — run-loop anchor (`lineage.run-loop-entity-id`) present
-  before `04a`/`04b` (experiment markers), `04c` (best.value), `08`/`12`/`13`
-  (outcome). Drive: spawn autoresearch → first experiment completes → assert
-  anchor exists → assert `experiment.completed` + `best.value` land.
-- [ ] **dev-via-test** — run-loop / plan anchor present before `02c`, `04a`/`04b`,
-  `07a`/`07c`, `09`/`10`. Drive: first-pass Lisa → execute → assert anchor →
-  assert `execute.task_completed` / `agent.run.outcome` land.
-- [ ] **research** — plan-loop anchor (`lineage.plan-loop-entity-id`) present
-  before `03a` (`gather.completed_subtopic`); run anchor before `07`/`09`
-  (outcome). Drive: research plan → gather a subtopic → assert anchors → assert
-  markers land.
-- [ ] **coordinator** — Group A only (`subject: null`); confirm `03`/`03b` write
-  to the firing coordinator loop, no anchor dependency. (Smoke-level only.)
-- [ ] **ops** — no foreign-subject rule stamp; ops findings are minted by the
-  `emit_diagnosis` tool executor (upstream). **Watch-item**, not our test:
-  confirm upstream `emit_diagnosis` births its `…ops.diagnosis.finding.{uuid}`
-  entities with a semantic envelope (ADR-055 §2) — ops findings are `content`
-  profile (ADR-054).
+- [x] **agent-run** — run anchor born-first before `agent.run.outcome` (rule 09).
+  `run-failed.spec.ts` Step 4b. GREEN.
+- [x] **autoresearch** — run anchor born-first before `autoresearch.best.value`
+  (rule 04c). `autoresearch.spec.ts`. GREEN.
+- [x] **dev-via-test** — run anchor born-first before `dev_via_test.plan.retry.finding`
+  (rule 02c). `dev-via-test-replan.spec.ts`. GREEN. All dev-via-test markers target
+  the SAME `chain.execution` run anchor (via `lineage.run-loop-entity-id`), so the
+  replan proof covers the pack. ⚠️ The dev-via-test HAPPY-PATH journey
+  (`dev-via-test.spec.ts`) is currently red on a PRE-EXISTING, unrelated issue —
+  `sandbox.attestation.ready` is not landing (deterministic across 3 builds
+  2026-06-17, survives a 30s poll; was a documented intermittent flake, now
+  consistent). NOT a born-first concern; flagged for separate investigation (env
+  vs. a sandbox-provisioning/MockRunner regression).
+- [x] **research** — TWO anchors. Run anchor born-first before `agent.run.outcome`
+  (rule 07); plan-loop anchor born-first (`agent.loop.role`) before
+  `research.gather.completed_subtopic` (rule 03a — the LOOP_ANCHOR case).
+  `research-mvp.spec.ts`. GREEN.
+- [x] **coordinator** — Group A (`subject: null`): rules `03`/`03b` write to the
+  FIRING coordinator loop (always exists — it is the entity being processed). No
+  foreign-anchor stamp → zero must-exist risk BY CONSTRUCTION. Exercised by the
+  `clarification-*` journeys; no born-first assertion needed.
+- [ ] **ops** — UPSTREAM watch-item (NOT our test): confirm semstreams'
+  `emit_diagnosis` births its `…ops.diagnosis.finding.{uuid}` entities with a
+  semantic envelope (ADR-055 §2; `content` profile). Our ops rules stamp no
+  foreign-subject marker. Flag for upstream.
+- [x] **Observe-only signals clean** — backend logs clean during live runs (fresh
+  scrape 2026-06-17): zero ownership-overlap WARNs, zero foreign-edge /
+  mutation-rejection / ERROR lines. Metric counters (`foreign_edge_unclaimed_total`
+  = 0, `mutation_rejections_total` baseline) were read explicitly in beta.109
+  (PR #218) and are unchanged by construction — our writes never hit the
+  foreign-edge lane that beta.111's routing modified. (`/metrics` is not exposed on
+  a mapped e2e port, so a counter re-scrape in e2e is unavailable; the log-side
+  scrape + the beta.109 counter read cover it.)
 
 ## Upstream feedback
 

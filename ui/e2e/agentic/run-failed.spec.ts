@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { assertAnchorBornFirst, RUN_ANCHOR } from "./born_first";
 
 /**
  * Journey: ADR-053 Phase 4a′ — executing→failed run transition.
@@ -114,6 +115,22 @@ test.describe("ADR-053 Phase 4a′ — executing→failed run transition", () =>
       "the failed transition must come FROM executing (rule 04, agent-run/04-executing-to-failed) — a from-phase of 'dispatched' would mean the D3 zombie guard fired on the dispatched root instead. Got: " +
         JSON.stringify(fromPhases),
     ).toContain("executing");
+
+    // -----------------------------------------------------------------
+    // Step 4b — BORN-FIRST gate (ADR-055/056 must-exist flip, semteams#222).
+    // research/09 stamps agent.run.outcome onto the run anchor via the
+    // agent.run.entity_id anchor. Prove that anchor was BORN-FIRST (by the
+    // lifecycle Manager) and not auto-vivified by the marker: the same entity
+    // must carry agent.run.phase. Fails under simulated auto-vivify (a stub
+    // would carry only agent.run.outcome).
+    // -----------------------------------------------------------------
+    await assertAnchorBornFirst(request, {
+      markerPredicate: "agent.run.outcome",
+      markerObject: "failed",
+      envelopePredicate: RUN_ANCHOR.envelope,
+      anchorSubstr: RUN_ANCHOR.substr,
+      label: "agent-run/09 run-outcome marker (run anchor)",
+    });
 
     // -----------------------------------------------------------------
     // Step 5 — research/08-loop-failed-pause fired: chain.paused.marker is
