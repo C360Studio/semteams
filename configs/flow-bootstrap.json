@@ -173,7 +173,8 @@
             }
           ]
         },
-        "enable_hierarchy": true
+        "enable_hierarchy": true,
+        "enforce_owner_lease": true
       }
     },
     "graph-query": {

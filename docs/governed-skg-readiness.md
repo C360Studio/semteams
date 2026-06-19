@@ -6,11 +6,47 @@ map** of what our rule packs will do under the new contract. The live
 observe-only metrics (named below) are the **verification gate** — a metric read
 we did not predict is a broken filter, not a quiet system.
 
-- Authored 2026-06-14. Status: **on `v1.0.0-beta.110`** — the observe-only
-  ownership substrate (beta.109, PR #218) PLUS the #278 rule-pack
-  projection-producer adoption (this change; see the beta.110 section below). The
-  breaking ADR-055 must-exist flip + the ADR-056 owner-token write-lease are still
-  forthcoming upstream.
+- Authored 2026-06-14. Status: **on `v1.0.0-beta.113`** — the BREAKING ADR-055
+  must-exist flip (beta.112 #300) AND the ADR-056 owner-token write-lease (PR-1..5)
+  are LANDED + ADOPTED with **FULL ownership-contract compliance**
+  (`enforce_owner_lease` ON; see the **beta.113 section** immediately below). Prior:
+  observe-only substrate (beta.109, #218) + #278 rule-pack projection-producer
+  adoption (beta.110, #219/#220) + beta.111 insulated bump (#221).
+
+## beta.113 — must-exist flip ADOPTED + owner-lease ENFORCED (full compliance)
+
+The breaking governed-SKG batch landed (beta.112 #300 must-exist flip + ADR-056
+owner-token write-lease PR-1..5 + the ADR-058 boot refactor; beta.113 #303 adds
+graph-query discovery, additive). semteams adopted it with **full ADR-056
+ownership-contract compliance** — not the "enforcement is off by default, skip it"
+half-measure:
+
+- **Producer compliance (token presentation).** `cmd/semteams/main.go` mirrors
+  upstream's ADR-058 wiring (ADR-029): `service.WireOwnership` (buckets + Registry +
+  loop-execution contract + Manager heartbeater) + Phase-B `NewOwnershipService`
+  (static heartbeater) + Phase-B `NewMilestoneService`. Every owner — the
+  loop-execution graph writer, the agent-run lifecycle Manager, and the
+  `rule-pack.semteams` `replace_owned` producer (via `BindRulePackContracts`) — mints
+  + presents its `<owner>#<incarnation>` OwnerToken from the SAME live Registry, so
+  its writes match the live lease.
+- **Clean shutdown (the fence's liveness dependency).** `service.WireOwnershipShutdown`
+  gives the cancel+join (run()-deferred → LIFO before `natsClient.Close`), so a dying
+  incarnation releases OWNER_PRESENCE promptly. This closes the previously-deferred
+  clean-heartbeat-shutdown item — now load-bearing.
+- **Consumer enforcement.** `enforce_owner_lease: true` on graph-ingest in BOTH flow
+  configs. The fence is ENGAGED: a stale/superseded incarnation's cached token fails
+  the lease check (`pkg/ownership/doc.go`: the reject "protects the rule-pack
+  replace_owned producer"). Single-process semteams ⇒ one incarnation in steady
+  state ⇒ no false-reject; the only reject window is a redeploy overlap, where
+  rejecting the dying incarnation's late write is the DESIRED fence behavior.
+
+**Verified GREEN (mock-LLM, beta.113, enforcement ON):** all four pack journeys
+— `autoresearch`, `run-failed`, `research-mvp`, `dev-via-test-replan` — pass with
+clean boot, **zero `entity_not_found`** (must-exist flip: born-first holds across
+agent-run / autoresearch / research run+plan-loop / dev-via-test) and **zero
+`owner_lease_stale`** (every owned write presents a matching token). go-reviewer:
+full compliance verified against beta.113 source, 0 Critical/Major. This is the
+post-break confirmation #222 asks for.
 - Upstream ADRs: [`055`](../../semstreams/docs/adr/055-graph-write-intent-taxonomy.md)
   (envelope-on-birth, must-exist flip), [`056`](../../semstreams/docs/adr/056-authoritative-semantic-state.md)
   (predicate-group ownership, **Accepted** 06-13),
@@ -395,13 +431,16 @@ ever diverge, the draft wins.
 
 ## Posture
 
-- **Partially migrated (beta.110).** Feedback items 1 + 2 SHIPPED upstream in
-  beta.110 (#278), so the autoresearch single-valued scalar replaces now register
-  ownership (`rule-pack.semteams`) + write via `replace_owned` (see the beta.110
-  adoption section above). The remaining Class-2 set (HITL markers, retry/iteration
-  gates) is fast-follow. The must-exist flip (ADR-055) is still gated upstream on
-  hatch-empty + a green crash-recovery test, so the Group-B origin-first work
-  stays deferred.
+- **FULLY MIGRATED + COMPLIANT + ENFORCING (beta.113).** The must-exist flip
+  (ADR-055) and the owner-token write-lease (ADR-056 PR-1..5) are LANDED and
+  ADOPTED: all rule-pack owned writes register ownership (`rule-pack.semteams`) +
+  write via `replace_owned` presenting a live-lease-matching OwnerToken;
+  `enforce_owner_lease` is ON; clean cancel+join shutdown released. The Group-B
+  origin-first invariant is no longer a prediction — it is verified by the four
+  born-first pack journeys reading **zero `entity_not_found`** under the live flip.
+  (See the beta.113 section above.) Only the agent-run HITL pair remains deferred
+  — its `approval_*` half is subscriber-written, needing the executor/subscriber-
+  side owned-write lane, NOT a rule-pack concern.
 - **On beta.109 (the first integration pass):** confirm rule packs run unchanged
   (mock-LLM e2e + real-LLM smoke), watch the *real* observe-only signals
   (`foreign_edge_unclaimed_total` = 0; `mutation_rejections_total` baseline = no
