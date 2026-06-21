@@ -6,12 +6,29 @@ map** of what our rule packs will do under the new contract. The live
 observe-only metrics (named below) are the **verification gate** — a metric read
 we did not predict is a broken filter, not a quiet system.
 
-- Authored 2026-06-14. Status: **on `v1.0.0-beta.113`** — the BREAKING ADR-055
+- Authored 2026-06-14. Status: **on `v1.0.0-beta.114`** — the BREAKING ADR-055
   must-exist flip (beta.112 #300) AND the ADR-056 owner-token write-lease (PR-1..5)
   are LANDED + ADOPTED with **FULL ownership-contract compliance**
-  (`enforce_owner_lease` ON; see the **beta.113 section** immediately below). Prior:
+  (`enforce_owner_lease` ON; see the **beta.113 section** below). Prior:
   observe-only substrate (beta.109, #218) + #278 rule-pack projection-producer
   adoption (beta.110, #219/#220) + beta.111 insulated bump (#221).
+- **beta.113 → 114 (2026-06-21): trivial additive bump, ZERO rule-pack delta.**
+  beta.114 ships #311 (HTTPClientPort declarative descriptor — component wiring),
+  #307 (graph-query bounded `QueryPrefixAll` auto-pager — additive query capability,
+  extends beta.113 #303 prefix-discovery), and #308 (docs refresh for the must-exist
+  flip). None touch the rule-pack / governed-SKG write surface. Verified clean:
+  build/vet/gofmt, `-race` (25 pkgs), lint (0 new), schema-no-drift; `go.mod` hash
+  unchanged ⇒ no transitive dep change; the `autoresearch` mock-LLM journey re-passed
+  green (born-first + `replace_owned` + owner-lease surfaces re-exercised). The only
+  remaining rule-pack migration — the agent-run HITL pair (`clarification_*` +
+  `approval_*` → `replace_owned`) — stays deferred: beta.114 does NOT bring the
+  subscriber-side owned-write lane that `approval_*` needs. **That lane is now
+  tracked upstream as semstreams#313** (filed 2026-06-21, residual to #278, on the
+  semstreams backlog). The accurate ask: a reusable Go owned-write helper (a
+  `TripleMutator.ReplaceOwned` analog factored out of the rule processor) — the
+  binding half already exists (`projection.Bind`/`BindAndHeartbeat`, #280; used by
+  the `agentic-loop-graph-writer`, a non-rule/non-Manager Go writer). Migrate the
+  HITL pair as a unit once #313 ships.
 
 ## beta.113 — must-exist flip ADOPTED + owner-lease ENFORCED (full compliance)
 
@@ -206,9 +223,9 @@ overlap would WARN, not brick — `BindRulePackContracts` is observe-only this t
 executors) SEED `best.value` / `run.status` via the bare `add_triple` lane (their
 `TriplePublisher` has no owned lane), and the rule's first `replace_owned`
 reconciles that seed away. On the observe-only tag this mixed-writer seed is
-benign; an executor-side owned-write lane is a SEPARATE upstream gap (feedback
-item B below — rule packs got a derivation entry point in #278; executors did
-not). Tracked, not blocking.
+benign; an executor-side owned-write lane is a SEPARATE upstream gap — now
+**filed as semstreams#313** (residual to #278: rule packs got a derivation entry
+point in #278; subscribers/executors did not). Tracked, not blocking.
 
 **Structural pin:** `test/contract/governed_skg_replace_owned_test.go` reproduces
 the framework's boot-time envelope check (every `replace_owned` predicate ⊆ the
@@ -242,11 +259,12 @@ than a silent auto-vivify — fail-fast, which is the desired direction.
 BUT its sibling `agent.run.approval_{pending,resumed}` is SET by the `approvalpause`
 Go subscriber (`cmd/semteams/approvalpause/`), not a rule — so rule-pack ownership
 is the wrong owner for it; the subscriber is the natural owner and needs the
-executor/subscriber-side owned-write lane (feedback item B below). The two HITL
-markers are a coherent, delicate ADR-053 resume subsystem (rule 11's ordered clears
-+ rule 09's `length_eq 0` bounce guard), so migrating clarification alone would
-split the pair across two lanes for marginal benefit (presence markers have no
-read-between-revisions gap). Migrate BOTH together once `approval_*` is ownable.
+executor/subscriber-side owned-write lane (**filed upstream as semstreams#313**,
+residual to #278). The two HITL markers are a coherent, delicate ADR-053 resume
+subsystem (rule 11's ordered clears + rule 09's `length_eq 0` bounce guard), so
+migrating clarification alone would split the pair across two lanes for marginal
+benefit (presence markers have no read-between-revisions gap). Migrate BOTH
+together once #313 ships and `approval_*` is ownable.
 
 ### The two traps (do NOT read a zero as a pass on beta.109)
 
@@ -428,6 +446,22 @@ ever diverge, the draft wins.
 4. **Object-token semantics** — spec `$entity.instance` vs `$entity.id` vs
    `$entity.triple.*`; normalize `agent-run/07,08` (the pinned marker-object
    asymmetry that once broke run-resume).
+5. **Reusable Go owned-write helper for subscribers/executors** — FILED as
+   **semstreams#313** (2026-06-21, residual to #278, on the semstreams backlog).
+   #278 gave *rule packs* the owned-write lane; the lifecycle `Manager` already had
+   one. A Go *subscriber/executor* still cannot do an owned replace-by-(s,p): the
+   only emitter is `TripleMutator.ReplaceOwned` inside `processor/rule`. NOTE the
+   binding half is NOT the gap — `projection.Bind`/`BindAndHeartbeat` (#280, authored
+   by us) is already general-purpose and used by the `agentic-loop-graph-writer` (a
+   non-rule/non-Manager Go writer); `UpdateEntityWithTriplesRequest.OwnerToken` is
+   public. Ask: factor a `ReplaceOwned` analog out of the rule processor so any Go
+   component holding a bound token can emit `update_with_triples`. Beneficiaries:
+   (1) the `approval_{pending,resumed}` HITL markers (set by our `approvalpause`
+   subscriber — why the ADR-053 HITL pair can't migrate as a unit); (2) the product
+   tool-executor seed-reconcile pattern (`emit_autoresearch_*` seeds
+   `best.value`/`run.status` on the bare lane, reconciled by a rule's `replace_owned`).
+   Backlog / non-blocking (presence markers don't need CAS; the seed-reconcile is
+   benign).
 
 ## Posture
 
