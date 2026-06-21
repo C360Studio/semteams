@@ -315,8 +315,40 @@ compare across runs, and easy for implementation loops to ignore.
 6. Does the MVP need a UI surface, or is graph + artifact evidence
    enough for the first proof?
 
+## Addendum 2026-06-21 — Folded under the ADR-056 umbrella; brownfield extension
+
+[ADR-056](056-openspec-spec-driven-development-umbrella.md) (OpenSpec-
+compatible, environment-gated spec-driven development) is the integrating
+umbrella; this ADR is its **env-readiness layer** (ADR-056 §D4/§D6, P3).
+Three clarifications the umbrella fixes:
+
+1. **The foundation is already shipped.** ADR-043's devcontainer sandbox
+   + attestation (`sandboxmanager`, `sandbox.attestation.*`) provisions a
+   container and proves it is up — used by autoresearch and dev-via-test
+   today. **This ADR is the *unbuilt extension*** (harness profiles,
+   readiness records, proof dependencies, the gate) needed for
+   **service-heavy** targets (PX4 SITL, OSH). For a typical brownfield
+   Go/Node repo, ADR-043 attestation + *"the repo's own test suite runs
+   green in the sandbox"* may be a sufficient v1 readiness check.
+2. **Brownfield extension (P3).** The fixed 3-profile catalog
+   (`go-backend`/`svelte-ui`/`full-stack-e2e`) is fine for our own repo
+   but insufficient for an arbitrary target. Brownfield (UC-1) adds
+   **topology-driven profile selection/derivation** — the *detector* is
+   net-new; it reuses this ADR's §D2 profile schema. Greenfield (UC-3)
+   adds **profile authoring**.
+3. **The claims come from the spec layer.** The OpenSpec **EARS
+   acceptance criteria** ([ADR-057 §D3](057-openspec-graph-spec-model-and-create-change.md))
+   are the *claims* this layer proves; the spec's `test_command`s are the
+   *smoke/proof*; the harness profile is what makes those commands
+   runnable.
+
+**Status** stays **Proposed**; flip to **Accepted** when P3 is committed
+to build (ADR-056 §How this decomposes).
+
 ## Related
 
+- [ADR-056: OpenSpec-Compatible, Environment-Gated Spec-Driven Development (umbrella)](056-openspec-spec-driven-development-umbrella.md)
+- [ADR-057: OpenSpec Graph Spec Model and `create_change`](057-openspec-graph-spec-model-and-create-change.md)
 - [ADR-033](033-harness-anchored-verification-and-coordinator-authority.md)
 - [ADR-034: Verification execution via verification-runner pattern](034-qa-runner-pattern-adoption.md)
 - [ADR-036: Test-Harness Lifecycle and Verification Machinery](036-test-harness-lifecycle.md)

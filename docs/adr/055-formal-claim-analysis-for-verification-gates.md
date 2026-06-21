@@ -284,8 +284,28 @@ facts on the graph.
 5. Which finding kinds are blockers versus warnings in the first MVP?
 6. When does a solver runner earn a follow-up ADR?
 
+## Addendum 2026-06-21 — Folded under the ADR-056 umbrella
+
+[ADR-056](056-openspec-spec-driven-development-umbrella.md) (OpenSpec-
+compatible, environment-gated spec-driven development) is the integrating
+umbrella; this ADR is its **formal-claims gate** (ADR-056 §D4/§D6, P3),
+companion to ADR-054.
+
+The spec layer *feeds* this analyzer with concrete inputs: the OpenSpec
+**EARS acceptance criteria** ([ADR-057 §D3](057-openspec-graph-spec-model-and-create-change.md))
+are the **claims**; the harness profiles + readiness records (ADR-054 §D2/§D3)
+are the **proof**; the spec's `test_command`s are the **smoke**. The
+analyzer's job is unchanged — check that this claim/proof-dep/readiness/
+waiver graph is coherent *before* releasing an implementation packet —
+but the umbrella names where its inputs come from.
+
+**Status** stays **Proposed**; flip to **Accepted** when P3 is committed
+to build (ADR-056 §How this decomposes).
+
 ## Related
 
+- [ADR-056: OpenSpec-Compatible, Environment-Gated Spec-Driven Development (umbrella)](056-openspec-spec-driven-development-umbrella.md)
+- [ADR-057: OpenSpec Graph Spec Model and `create_change`](057-openspec-graph-spec-model-and-create-change.md)
 - [ADR-033](033-harness-anchored-verification-and-coordinator-authority.md)
 - [ADR-036](036-test-harness-lifecycle.md)
 - [ADR-042](042-coordinator-instantiated-flows-via-templates.md)

@@ -17,6 +17,14 @@ design: the ADR sequence is the audit trail.
   [ADR-043 devcontainer-as-sandbox spec](adr/043-devcontainer-as-sandbox-spec.md)
   defines per-tenant attestation + attestation-aware artifact
   routing. Shipped 2026-06-03 alongside the autoresearch pack.
+- **Spec-driven development (umbrella + deployment roadmap)** —
+  [ADR-056 OpenSpec-compatible, environment-gated spec-driven development](adr/056-openspec-spec-driven-development-umbrella.md)
+  records the settled decisions and the **north-star deployment roadmap**
+  (D0→D6; the *initial deployment surface* is autonomous issue→PR on one
+  repo). The first buildable slice is
+  [ADR-057 graph spec model + `create_change`](adr/057-openspec-graph-spec-model-and-create-change.md)
+  (Proposed). Consistent with the ADR-as-audit-trail stance above: the
+  roadmap lives *in* an ADR, not a separate forward-looking doc.
 - **Live category packs** — `research/` and `autoresearch/`. The
   next pack is dropping in as a `configs/rules/<new-category>/`
   directory + persona bundle, not a new flow config.

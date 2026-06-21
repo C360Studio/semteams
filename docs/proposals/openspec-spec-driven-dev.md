@@ -1,8 +1,25 @@
 # Proposal: OpenSpec-Compatible, Environment-Gated Spec-Driven Development
 
-**Status**: Draft / idea-phase (2026-06-21). Tracking doc for a multi-phase
-initiative. Nothing here is committed; this exists to work the shape through
-use cases before any ADR or code.
+**Status**: Working notes (2026-06-21). The *settled* decisions here have
+graduated to **[ADR-056](../adr/056-openspec-spec-driven-development-umbrella.md)**
+(umbrella, **Accepted**) — which is now the authoritative home for the
+cross-cutting decisions and the decomposed north-star deployment roadmap —
+and the first buildable slice (P1/P2) is specified in
+**[ADR-057](../adr/057-openspec-graph-spec-model-and-create-change.md)**
+(**Proposed**). This doc stays as the open-decision scratchpad and
+use-case walkthrough.
+
+> **Correction (2026-06-21, verified against semstreams beta.113):** the
+> UC-2 / North-star claim below that *"no GitHub issue/PR integration
+> exists today"* is **stale**. Upstream ships `github_read`
+> (`github_get_issue`/`github_list_issues`/`github_search_issues`/
+> `github_get_pr`/`github_get_file`) and `github_write`
+> (`github_create_branch`/`github_commit_file`/`github_create_pr`/
+> `github_add_comment`/`github_add_label`); they are simply not wired into
+> the semteams product shell yet. Issue *creation* is the one GitHub gap.
+> See [ADR-056 §North-star deployment roadmap](../adr/056-openspec-spec-driven-development-umbrella.md)
+> for the corrected picture (net-new D2 work = poll/scheduled trigger +
+> autonomous cost breaker + wiring, *not* GitHub access).
 **Author**: Coby Leuschke (with Claude)
 **Related ADRs**: [042](../adr/042-coordinator-instantiated-flows-via-templates.md)
 (substrate-plus-overlays), [043](../adr/043-devcontainer-as-sandbox-spec.md)
