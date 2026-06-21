@@ -358,6 +358,31 @@ risk. P3 is independently useful (it makes *any* hard scenario honest). UC-1
    they stay; this is the umbrella that adds the OpenSpec spec layer + routing and
    sequences the work.)
 
+## How this becomes ADRs (decomposition)
+
+This proposal is the umbrella; committed decisions crystallize as **separate
+ADRs, written just-in-time** — when a slice is committed to building, not all
+upfront. The repo's ADR norm is granular (one pack/decision per ADR), and writing
+the whole chain as one speculative ADR is the ADR-035 trap (it specified the
+dev-via-spec arc upfront and was superseded wholesale by ADR-041/042). So:
+decompose by *decision*, write each ADR at the start of its phase, and **reuse /
+amend existing ADRs** wherever the decision already exists.
+
+| Decision | ADR | When | Reuses / amends |
+|---|---|---|---|
+| OpenSpec spec model on the graph (predicate namespaces, render/ingest round-trip, EARS, compat depth) + the `create_change` journey | **New** | P1/P2 | — (foundational) |
+| Spec-driven execution: `dev-from-task` (reuse Ralph+CBG, no Lisa) + coordinator method-routing + new `decide()` tokens | **New**, or an **addendum to ADR-044** (it is "dev-via-test minus Lisa") | P4 | ADR-044, ADR-042 |
+| Proof-environment readiness + brownfield topology detection | **Amend ADR-054/055** (Proposed → Accepted) + a brownfield-detection addendum | P3 | ADR-054, ADR-055, ADR-043 |
+| Issue-queue → PR automation (autonomous loop, GitHub integration) | **New** | P5 (UC-2) | ADR-053 (autonomous policy) |
+| North-star surfaces (notifications, scheduled triggers, multi-repo, Pages) | **New, one each** | later, when scoped | ADR-027 (ops), ADR-053 (HITL) |
+
+Near-term this is **~2 new ADRs** (spec model; spec-driven execution/routing) plus
+**accepting/amending ADR-054/055** — not five. Two judgment calls deferred to
+authoring time: (a) **routing** may fold into the two journey ADRs (each adds its
+`decide()` token) or earn its own ADR if the method-selection logic + Goodhart
+rationale prove substantial; (b) **`dev-from-task`** may be cleaner as an
+**ADR-044 addendum** than a new ADR.
+
 ## Relationship to existing work
 
 - **ADR-054/055** own the env-readiness layer; this proposal activates and
