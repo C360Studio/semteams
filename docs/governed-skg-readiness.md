@@ -6,12 +6,23 @@ map** of what our rule packs will do under the new contract. The live
 observe-only metrics (named below) are the **verification gate** — a metric read
 we did not predict is a broken filter, not a quiet system.
 
-- Authored 2026-06-14. Status: **on `v1.0.0-beta.113`** — the BREAKING ADR-055
+- Authored 2026-06-14. Status: **on `v1.0.0-beta.114`** — the BREAKING ADR-055
   must-exist flip (beta.112 #300) AND the ADR-056 owner-token write-lease (PR-1..5)
   are LANDED + ADOPTED with **FULL ownership-contract compliance**
-  (`enforce_owner_lease` ON; see the **beta.113 section** immediately below). Prior:
+  (`enforce_owner_lease` ON; see the **beta.113 section** below). Prior:
   observe-only substrate (beta.109, #218) + #278 rule-pack projection-producer
   adoption (beta.110, #219/#220) + beta.111 insulated bump (#221).
+- **beta.113 → 114 (2026-06-21): trivial additive bump, ZERO rule-pack delta.**
+  beta.114 ships #311 (HTTPClientPort declarative descriptor — component wiring),
+  #307 (graph-query bounded `QueryPrefixAll` auto-pager — additive query capability,
+  extends beta.113 #303 prefix-discovery), and #308 (docs refresh for the must-exist
+  flip). None touch the rule-pack / governed-SKG write surface. Verified clean:
+  build/vet/gofmt, `-race` (25 pkgs), lint (0 new), schema-no-drift; `go.mod` hash
+  unchanged ⇒ no transitive dep change; the `autoresearch` mock-LLM journey re-passed
+  green (born-first + `replace_owned` + owner-lease surfaces re-exercised). The only
+  remaining rule-pack migration — the agent-run HITL pair (`clarification_*` +
+  `approval_*` → `replace_owned`) — stays deferred: beta.114 does NOT bring the
+  subscriber-side owned-write lane (feedback item B) that `approval_*` needs.
 
 ## beta.113 — must-exist flip ADOPTED + owner-lease ENFORCED (full compliance)
 
