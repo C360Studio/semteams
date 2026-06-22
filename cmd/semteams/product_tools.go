@@ -30,6 +30,7 @@ import (
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitautoresearchartifact"
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitautoresearchbaseline"
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitautoresearchmeasurement"
+	"github.com/c360studio/semteams/cmd/semteams/tools/emitchange"
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitdevviatestmeasurement"
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitdevviatestplan"
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitplan"
@@ -187,6 +188,9 @@ func registerProductTools(reg *agentictools.ExecutorRegistry, natsClient *natscl
 	if err := registerDevViaTestTools(reg, natsClient, platform, logger); err != nil {
 		return err
 	}
+	if err := registerCreateChangeTools(reg, natsClient, platform, logger); err != nil {
+		return err
+	}
 	return registerChainBash(reg, natsClient, platform, logger)
 }
 
@@ -231,6 +235,48 @@ func registerDevViaTestTools(reg *agentictools.ExecutorRegistry, natsClient *nat
 	logger.Info("Registered dev-via-test product tools",
 		slog.String("category", "dev-via-test"),
 		slog.Int("count", 2))
+	return nil
+}
+
+// registerCreateChangeTools wires the create_change pack's emit tool
+// (ADR-057 §D5). emit_change is the change.* analogue of
+// emit_dev_via_test_plan: the author role stamps a structured OpenSpec
+// change (change.<slug>.* triples) on the run entity for the reviewer
+// gate + the P4 dev-from-task hand-off.
+//
+// Skipped when natsClient is nil: the tool needs the live publisher to
+// stamp triples. Mirrors the registerDevViaTestTools nil-NATS posture.
+//
+// v1 is single-emit with NO remover (ADR-057 §Build addendum's
+// deferred-upsert coupling): when the rule pack adds reviewer→author
+// recovery (ADR-039 needs-clarification), THAT slice adds the
+// triple-remover upsert, mirroring emitdevviatestplan's remover. Until
+// then a re-author would double-stamp, which the single-emit happy path
+// never hits.
+//
+// Per ADR-057 §Framework-alignment review: no upstream equivalent
+// (verified absent in semstreams beta.114); migration target is the
+// same generic write_artifact suite upstream is sketching (ADR-028
+// §What's not built here). See cmd/semteams/tools/README.md.
+func registerCreateChangeTools(reg *agentictools.ExecutorRegistry, natsClient *natsclient.Client, platform types.PlatformMeta, logger *slog.Logger) error {
+	if natsClient == nil {
+		logger.Warn("nats client unavailable; create-change tools skipped",
+			slog.String("category", "create-change"))
+		return nil
+	}
+	triplePublisher := agentictools.NewNATSTriplePublisher(natsClient)
+	if triplePublisher == nil {
+		logger.Warn("create-change tools skipped: upstream returned nil triple-publisher",
+			slog.String("category", "create-change"))
+		return nil
+	}
+	changeExecutor := emitchange.NewExecutor(triplePublisher, platform, logger)
+	if err := reg.RegisterTool(emitchange.ToolName, changeExecutor); err != nil {
+		return fmt.Errorf("register %s: %w", emitchange.ToolName, err)
+	}
+	logger.Info("Registered create-change product tools",
+		slog.String("category", "create-change"),
+		slog.Int("count", 1))
 	return nil
 }
 
