@@ -12,6 +12,14 @@
 // The model is split across files by artifact: this file holds the capability
 // spec types; model_delta.go the change-delta types; model_change.go the
 // proposal/design/tasks types.
+//
+// Reuse seam (ADR-057 §Framework-alignment 5a): the format layer here
+// (model*.go, parse.go, render.go, change.go) is 100% stdlib — it implements the
+// external OpenSpec standard, not a SemTeams concept, so it is an extraction
+// candidate (target: semstreams pkg/openspec) once a second product needs
+// OpenSpec interchange. Keep these files dependency-free. The graph adapter
+// (facts.go/facts_change.go, model ↔ spec.*/change.* per §D1) is product-specific
+// and stays in SemTeams; it is the only part with a SemTeams dep (slug).
 package openspec
 
 // Spec is a capability's living specification — the content of one

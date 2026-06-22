@@ -32,6 +32,14 @@ import (
 	"github.com/c360studio/semteams/cmd/semteams/slug"
 )
 
+// ChangeEntityPrefix returns the "change.<slug>." predicate prefix that
+// Change.Facts() stamps under. A writer (e.g. the emit_change tool) that adds
+// writer-only graph-state predicates — status, acceptance_command, the §D6
+// execution-rich task fields — uses this so its facts share the change's subtree
+// with the pure content facts. (The living-spec analogue is added when the
+// slice-6 spec writer needs it.)
+func ChangeEntityPrefix(slug string) string { return changePrefix + slug + "." }
+
 // Fact is a subject-less graph assertion: the predicate key and object that the
 // OpenSpec model determines — a message.Triple minus the fields the writer owns
 // (Subject/Source/Timestamp/Confidence). ADR-057 §D1 defines the predicate
