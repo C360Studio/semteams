@@ -31,7 +31,7 @@
       "subject": "agent.task.coordinator",
       "role": "coordinator",
       "model": "coordinator",
-      "tools": ["read_loop_result", "query_entity", "decide"],
+      "tools": ["read_loop_result", "render_openspec", "decide"],
       "action_allowlist": ["respond_direct", "ask_user"],
       "properties": {
         "wakeup_mode": "chain_terminal_create_change",
@@ -42,7 +42,7 @@
       "related_loops": {
         "terminal": "$entity.instance"
       },
-      "prompt": "The create-change chain you dispatched has reached its terminal. Reviewer-create-change at loop $entity.instance evaluated the drafted change and approved it.\n\nYour job now is to deliver the result to the user. You are not classifying or delegating — the chain has already done the work.\n\nIteration 1 — call read_loop_result(loop_id=$entity.instance) to read the reviewer's verdict (the reason field summarises why the change was approved). For a richer user-facing summary, call query_entity(entity_id=\"$entity.triple.agent.run.entity_id\") to read the change itself: change.<slug>.proposal.* (intent/scope), change.<slug>.delta.<cap>.* (the requirements), and change.<slug>.task.<n>.* (the implementation tasks).\n\nIteration 2 — call decide(action=\"respond_direct\", reason=\"<your user-facing summary of the change: what it proposes, the key requirements it adds/modifies, and that it is ready as a reviewed spec change>\"). The respond_direct rule (coordinator/03b) publishes your reason on the user-response bus.\n\nWrite the reason as plain prose addressing the user directly — no channel-specific markup. Aim for a complete summary in 2-6 sentences; the user does not see the change document itself, so name the slug and the headline requirements."
+      "prompt": "The create-change chain you dispatched has reached its terminal. Reviewer-create-change at loop $entity.instance evaluated the drafted change and approved it.\n\nYour job now is to deliver the reviewed change to the user. You are not classifying or delegating — the chain has already done the work.\n\nIteration 1 — call render_openspec() to get the approved change rendered as OpenSpec markdown (proposal + requirement deltas + tasks). It reads the change off the run entity for you; omit the slug — there is exactly one change to render. Optionally call read_loop_result(loop_id=$entity.instance) for the reviewer's one-line verdict.\n\nIteration 2 — call decide(action=\"respond_direct\", reason=\"<deliver the change to the user>\"). Lead with a one-sentence summary of what the change proposes, then include the rendered OpenSpec markdown from render_openspec so the user has the actual spec, not just a description. The respond_direct rule (coordinator/03b) publishes your reason on the user-response bus."
     }
   ],
   "on_exit": [],
@@ -53,6 +53,6 @@
     "terminal_role": "reviewer-create-change",
     "approval_action": "approved",
     "anchor": "agent.run.entity_id — framework-inherited on the reviewer (loop-spawn chain). Mirrors research/07.",
-    "render_on_demand": "The change is delivered as a prose summary; full OpenSpec markdown is available on demand via render_openspec (added with the render/ingest tool pair, ADR-057 OQ1). When that tool lands, add it to this wake-up coordinator's tools so it can render + attach the markdown."
+    "render_on_demand": "The wake-up coordinator calls render_openspec (ADR-057 OQ1 pair) to render the approved change.<slug>.* off the run entity to OpenSpec markdown and delivers it in respond_direct — so the user gets the actual reviewed spec, not just a prose summary. render_openspec auto-discovers the single change on the entity (no slug needed)."
   }
 }

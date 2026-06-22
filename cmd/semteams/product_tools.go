@@ -35,6 +35,7 @@ import (
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitdevviatestplan"
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitplan"
 	"github.com/c360studio/semteams/cmd/semteams/tools/querysandboxattestation"
+	"github.com/c360studio/semteams/cmd/semteams/tools/renderopenspec"
 	"github.com/c360studio/semteams/cmd/semteams/tools/requestsandbox"
 )
 
@@ -274,9 +275,27 @@ func registerCreateChangeTools(reg *agentictools.ExecutorRegistry, natsClient *n
 	if err := reg.RegisterTool(emitchange.ToolName, changeExecutor); err != nil {
 		return fmt.Errorf("register %s: %w", emitchange.ToolName, err)
 	}
+
+	// render_openspec — the read/render half of the OQ1 tool pair. Reads the
+	// change.<slug>.* the author stamped on the run entity and renders it to
+	// OpenSpec markdown (openspec.RenderChangeFolder). The wake-up coordinator
+	// (create-change/03) calls it to deliver the actual reviewed spec.
+	entityReader := chain.NewNATSEntityReader(natsClient, chain.DefaultGraphQueryEntitySubject)
+	if entityReader == nil {
+		logger.Warn("render_openspec skipped: upstream returned nil entity-reader",
+			slog.String("category", "create-change"))
+		logger.Info("Registered create-change product tools",
+			slog.String("category", "create-change"),
+			slog.Int("count", 1))
+		return nil
+	}
+	renderExecutor := renderopenspec.NewExecutor(entityReader, platform, logger)
+	if err := reg.RegisterTool(renderopenspec.ToolName, renderExecutor); err != nil {
+		return fmt.Errorf("register %s: %w", renderopenspec.ToolName, err)
+	}
 	logger.Info("Registered create-change product tools",
 		slog.String("category", "create-change"),
-		slog.Int("count", 1))
+		slog.Int("count", 2))
 	return nil
 }
 
@@ -834,6 +853,7 @@ var (
 	_ chainbash.Inner                                 = (*executors.BashExecutor)(nil)
 	_ emitautoresearchartifact.ChainAttestationReader = (*chainAttestationReader)(nil)
 	_ emitautoresearchartifact.SandboxFileWriter      = (*sandboxArtifactWriter)(nil)
+	_ renderopenspec.EntityReader                     = (*chain.NATSEntityReader)(nil)
 )
 
 // registerChainBash wires the ADR-041 Phase 4 chain-scoped bash wrapper

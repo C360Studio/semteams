@@ -12,9 +12,12 @@ description: |
   The mock serves these responses in GLOBAL ORDER (last repeats once
   exhausted). The chain is linear (one author → one reviewer), so the
   order below == the order of LLM requests across all loops. Placeholder
-  reads (read_loop_result / bash / query_entity) are omitted: the mock
-  doesn't follow personas, and the rules fire on the decide actions + the
-  emit_change stamp, not on those reads.
+  reads (read_loop_result / bash / query_entity / render_openspec) are
+  omitted: the mock doesn't follow personas, and the rules fire on the
+  decide actions + the emit_change stamp, not on those reads. (rule 03
+  grants the wake-up coordinator render_openspec to deliver the rendered
+  spec; on real-LLM it calls it before respond_direct — the mock skips
+  straight to the decide, exactly as dev-via-test omits its reads.)
 
   No sandbox: the author authors greenfield from the coordinator's ask
   (its bash tool — for reading an existing openspec/ tree — is unused on

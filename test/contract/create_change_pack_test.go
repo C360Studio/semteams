@@ -206,6 +206,12 @@ func TestCreateChangePack_03_ApprovedToCoordinator(t *testing.T) {
 	if spawn == nil {
 		t.Fatal("rule 03 has no coordinator wake-up spawn")
 	}
+	// The wake-up coordinator delivers the actual reviewed spec via
+	// render_openspec (ADR-057 OQ1 pair) — without it in the wake-up tools the
+	// coordinator can only summarize, not render the change.
+	if !ccSliceHas(spawn.Tools, "render_openspec") {
+		t.Errorf("rule 03 wake-up tools missing render_openspec; current = %v — the coordinator can't deliver the rendered spec", spawn.Tools)
+	}
 	wantActions := []string{"respond_direct", "ask_user"}
 	if len(spawn.ActionAllowed) != len(wantActions) {
 		t.Errorf("rule 03 wake-up allowlist = %v; want exactly %v (a re-classify token would loop the chain)", spawn.ActionAllowed, wantActions)

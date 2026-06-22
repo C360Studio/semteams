@@ -572,6 +572,43 @@ Major after fixes. Two build decisions worth pinning:
   nil remover). Until that loop exists there is no live re-author trigger, so
   the gap is latent, not live.
 
+## Build addendum 2026-06-22 — P2 slice 4 (`render_openspec`; the OQ1 pair, render half)
+
+`cmd/semteams/tools/renderopenspec/` — the read/render half of the OQ1 tool pair.
+It resolves the run entity from the call's run anchor (`runanchor.Anchor`), reads
+the `change.<slug>.*` triples, reconstructs the change via the pure
+`openspec.ChangeFromFacts`, and renders it through a new pure
+`openspec.RenderChangeFolder` (proposal + per-capability delta specs + tasks, each
+under an `openspec/changes/<slug>/` HTML-comment file marker). `slug` is optional —
+it auto-discovers the single change on the entity. **Primary consumer (P2):** the
+create-change wake-up coordinator (`configs/rules/create-change/03`) calls it to
+deliver the *actual* reviewed spec to the user, not a prose summary.
+
+- **Thin graph adapter; format logic stays pure.** `RenderChangeFolder` lives in
+  the dep-free `openspec` package alongside the other renderers, keeping the format
+  layer extraction-ready (§Framework-alignment 5a). The tool only does the graph
+  read + the predicate→`Fact` mapping. Writer-only graph-state
+  (`status`/`acceptance_command`/§D6 task fields) is not modeled by
+  `ChangeFromFacts`, so it never leaks into the rendered markdown (asserted in the
+  tool tests).
+- **Framework-alignment review.** Read-shaped like upstream `read_loop_result` /
+  `read_entity` / `query_entities`, but none returns a *rendered OpenSpec
+  projection* — so none substitutes. Migration target = the same anticipated
+  `read_artifact`/`write_artifact` suite (ADR-028 §What's not built here, verified
+  absent in semstreams beta.114) as `emit_change`'s. See
+  `cmd/semteams/tools/README.md`.
+- **`ingest_openspec` (the pair's read-from-FS half) is DEFERRED to UC-1.** The
+  greenfield `create_change` journey has no `openspec/` tree to ingest (the author
+  writes from scratch; brownfield context-read is `bash` in v1), so ingest has no
+  v1 consumer. Its stamping variant loads living specs as owned `spec.*` predicates
+  — the governed-SKG `replace_owned` lifecycle this ADR explicitly stages to v2
+  (§compat depth). Build it with UC-1, where the brownfield clone→ingest flow gives
+  it a consumer and the living-spec model is in scope.
+- **render-to-sandbox-FS (write the `openspec/changes/<slug>/` folder for a PR) is
+  the UC-1 extension of `render_openspec`** — it needs a sandbox FS writer (mirror
+  `emit_autoresearch_artifact`) and a PR flow not present in P2. v1 returns the
+  rendered markdown as the tool result.
+
 ## Related
 
 - [ADR-056](056-openspec-spec-driven-development-umbrella.md) — umbrella;
