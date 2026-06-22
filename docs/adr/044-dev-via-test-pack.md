@@ -1390,3 +1390,47 @@ plan-retry → fixed plan → Ralph-with-real-tests path.
 - [Karpathy guidelines skill](https://github.com/multica-ai/andrej-karpathy-skills/blob/main/skills/karpathy-guidelines/SKILL.md)
   — basis for the spec schema's required fields; structural
   encoding rationale in [[encode-principles-structurally]]
+
+## Addendum 2026-06-21 — `dev-from-task`: spec-first reuse of this pack (ADR-056 P4)
+
+[ADR-056](056-openspec-spec-driven-development-umbrella.md) §D5 adds a
+spec-first execution journey, **`dev-from-task`**, as a *pure addition*
+that reuses this pack. **Lisa does not move and dev-via-test is not
+refactored** — the working prompt-first happy path
+(`prompt → Lisa → Ralph×N → CBG`) stays green.
+
+The insight: the **ralph loop + CBG work-gate + coordinator plan-walking
+are the shared execution primitive.** dev-via-test wraps it with Lisa
+(prompt → tasks). `dev-from-task` wraps the *same* primitive fed by a
+spec's tasks instead:
+
+- **dev-via-test** (this pack, untouched): `prompt → Lisa → Ralph×N → CBG`.
+  Lisa lives here, and only here (rules `01`/`02`).
+- **`dev-from-task`** (new, P4): `tasks → Ralph×N → CBG` — equivalent to
+  this pack *minus Lisa*, entered with `plan.task.*` triples **already
+  populated** (by a `create_change`,
+  [ADR-057](057-openspec-graph-spec-model-and-create-change.md), or
+  hand-authored). Reuses the coordinator-walk (rules `03`/`05` +
+  `30-plan-walking`), the Ralph execute loop (rule `03` →
+  `dev-via-test-execute`, `04a`/`04b`), and the CBG chain-end gate
+  (`06`/`07*`) **unchanged**. The only dropped piece is the Lisa planning
+  prefix (`01`/`02`).
+
+**Integration seam.** `dev-from-task` enters with `plan.task.*` (Ralph's
+input) **and** `plan.integration_test_command` + `plan.chain_start_git_tag`
+(CBG's chain-end inputs) on the run entity — see §Plan state as triples.
+[ADR-057 §D6](057-openspec-graph-spec-model-and-create-change.md) fixes
+the `change.<slug>.task.<i>.*` schema as a **superset** of the
+planner-authored `plan.task.*` fields, *and* carries a chain-level
+`change.<slug>.acceptance_command` that reprojects to
+`plan.integration_test_command`. So the P4 dispatch step is: reproject the
+per-task fields (`change.<slug>.task.<i>` → `plan.task.<id>`) **plus** the
+chain-level acceptance command; the dispatcher mints the coordinator-walk
+state (`status`/`position`/`depends_on`) and `plan.chain_start_git_tag` at
+sandbox entry (runtime state, not spec data). **Given those are populated,
+Ralph and CBG run unchanged** — this is a reprojection, not a transform of
+the execution contract. Recording it now keeps ADR-057's P2 task output
+compatible with this pack.
+
+The detailed P4 ADR (or an addendum here) is written when P4 starts, per
+ADR-056 §D7 (just-in-time). This note records only the reuse contract.
