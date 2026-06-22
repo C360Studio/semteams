@@ -292,7 +292,7 @@ umbrella; this ADR is its **formal-claims gate** (ADR-056 §D4/§D6, P3),
 companion to ADR-054.
 
 The spec layer *feeds* this analyzer with concrete inputs: the OpenSpec
-**EARS acceptance criteria** ([ADR-057 §D3](057-openspec-graph-spec-model-and-create-change.md))
+**Given/When/Then scenarios** ([ADR-057 §D3](057-openspec-graph-spec-model-and-create-change.md))
 are the **claims**; the harness profiles + readiness records (ADR-054 §D2/§D3)
 are the **proof**; the spec's `test_command`s are the **smoke**. The
 analyzer's job is unchanged — check that this claim/proof-dep/readiness/

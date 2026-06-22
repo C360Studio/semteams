@@ -67,8 +67,9 @@ projection (hydration) and an interchange format — never the source of
 authority.** This is the same stance ADR-054/055 already take. The
 governed-SKG ownership model (beta.113 `replace_owned` + owner-lease) is
 the substrate for *"a living spec that evolves via archived deltas."*
-Acceptance criteria use **EARS** notation (`When <trigger>, the system
-shall <response>`) — machine-checkable and 1:1 mappable to a future test.
+Requirements use OpenSpec's native form — an RFC-2119 `SHALL` statement
+plus `Given/When/Then` scenarios (**not** EARS; verified 2026-06-22,
+ADR-057 §D3) — machine-checkable and 1:1 mappable to a dev-via-test step.
 
 ### D2. Two journeys, not one chain
 

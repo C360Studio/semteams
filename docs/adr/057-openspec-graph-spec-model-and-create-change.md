@@ -51,12 +51,16 @@ is **owned** (single authoritative value, `replace_owned`, owner-lease);
 **Living spec (owned current-state):**
 
 ```
-spec.<cap>.requirement.<id>.text        = "<requirement prose>"
-spec.<cap>.requirement.<id>.acceptance  = ["<EARS clause>", ...]   // JSON-encoded
-spec.<cap>.requirement.<id>.status      = "active"
-spec.<cap>.title                        = "<capability title>"
+spec.<cap>.purpose                       = "<## Purpose prose>"
+spec.<cap>.requirement.<rid>.name        = "<### Requirement: Name>"
+spec.<cap>.requirement.<rid>.statement   = "The system SHALL <behavior>"    // RFC-2119: SHALL/MUST/SHOULD/MAY
+spec.<cap>.requirement.<rid>.scenarios   = [{name, steps:[{kw,text}]}, ...]  // JSON; Given/When/Then steps
+spec.<cap>.requirement.<rid>.status      = "active"
 ```
 
+Here `<cap>` = the OpenSpec `specs/<domain>/` folder name; `<rid>` = the
+slugified `### Requirement: <Name>` title (OpenSpec has no formal IDs).
+Scenarios are stored as structured Given/When/Then steps (§D3), not EARS.
 These are written via `replace_owned` so the living spec has exactly one
 authoritative current value per requirement and evolves only by archive
 (§D4). The owner is the spec-layer writer; writes comply with the
@@ -65,15 +69,20 @@ governed-SKG owner-lease (born-first; see §Risks).
 **Change (append evidence — immutable once written):**
 
 ```
-change.<slug>.proposal.why              = "<why this change>"
-change.<slug>.proposal.what_changes     = "<summary>"
-change.<slug>.proposal.impact           = "<affected caps / breaking?>"
-change.<slug>.delta.<cap>.<id>.op        = "add" | "modify" | "remove"
-change.<slug>.delta.<cap>.<id>.text      = "<new/changed requirement text>"
-change.<slug>.delta.<cap>.<id>.acceptance= ["<EARS clause>", ...]   // JSON-encoded
-change.<slug>.task.<i>.*                 = (see §D6)
+change.<slug>.proposal.intent           = "<## Intent — why this change>"
+change.<slug>.proposal.scope_in         = ["<in-scope>", ...]      // JSON-encoded
+change.<slug>.proposal.scope_out        = ["<out-of-scope>", ...]  // JSON-encoded
+change.<slug>.proposal.approach         = "<## Approach — high-level direction>"
+change.<slug>.design.*                  = optional design.md (technical_approach, decisions[], data_flow, file_changes[])
+change.<slug>.delta.<cap>.<rid>.op       = "added" | "modified" | "removed"   // OpenSpec ## ADDED/MODIFIED/REMOVED
+change.<slug>.delta.<cap>.<rid>.statement= "The system SHALL <behavior>"      // added/modified
+change.<slug>.delta.<cap>.<rid>.scenarios= [{name, steps:[…]}, ...]            // added/modified — Given/When/Then (JSON)
+change.<slug>.delta.<cap>.<rid>.previously="<old statement>"                   // modified only — OpenSpec "(Previously: …)"
+change.<slug>.delta.<cap>.<rid>.rationale= "<why deprecated>"                  // removed only — OpenSpec "(Rationale: …)"
+change.<slug>.task.<n>.*                 = (see §D6; n = OpenSpec dotted number "1.1", + done-state)
 change.<slug>.acceptance_command         = "<full-suite command CBG re-runs>"  // → plan.integration_test_command
 change.<slug>.status                     = "draft" | "reviewed" | "archived"
+change.<slug>.archive_date               = "YYYY-MM-DD"   // set on archive (folder prefix)
 ```
 
 `acceptance_command` is **chain-level** (one per change, not per task) —
@@ -95,15 +104,19 @@ indexed predicates.
 
 P1 ships two pure, isolated transforms:
 
-- **Render** (`graph → OpenSpec markdown`): hydrate `specs/<cap>/spec.md`,
-  `changes/<slug>/{proposal,tasks}.md`, and the delta
-  `changes/<slug>/specs/<cap>/spec.md` from the triples above. Hydration
-  is a projection — lossy by design (richer graph-only fields are not
-  rendered).
-- **Ingest** (`OpenSpec markdown → graph`): parse an existing
-  `openspec/` tree (living specs and/or change folders) into the triples
-  above. This is the brownfield "pick up current OpenSpec specs"
-  capability (UC-1 step 2).
+- **Render** (`graph → OpenSpec markdown`): hydrate `specs/<cap>/spec.md`
+  (`## Purpose` + `### Requirement:` SHALL statements + `#### Scenario:`
+  Given/When/Then blocks), `changes/<slug>/{proposal,design,tasks}.md`, and
+  the delta `changes/<slug>/specs/<cap>/spec.md` (`## ADDED/MODIFIED/REMOVED
+  Requirements`, with `(Previously: …)` / `(Rationale: …)`) from the triples
+  above. Hydration is a projection — lossy by design (richer graph-only
+  fields are not rendered).
+- **Ingest** (`OpenSpec markdown → graph`): parse an existing `openspec/`
+  tree (living specs, change folders, and `archive/`) into the triples
+  above, preserving the Given/When/Then scenario steps. This is the
+  brownfield "pick up current OpenSpec specs" capability (UC-1 step 2). Note
+  OpenSpec `tasks.md` is **thin** (checkboxes only) — ingest recovers task
+  text + done-state, **not** the execution-rich fields (§D6).
 
 **Round-trip acceptance is semantic stability, not byte-stability.**
 `ingest(render(G))` must equal `G` on the modeled predicates; `render`
@@ -113,16 +126,23 @@ markdown formatting drift is irrelevant — only the modeled facts must
 survive the loop. P1's gate is this round-trip on one real OpenSpec
 fixture.
 
-### D3. EARS acceptance criteria
+### D3. Requirement format — RFC-2119 statement + Given/When/Then scenarios
 
-Acceptance is stored as **EARS** clauses (`When <trigger>, the system
-shall <response>`) on both living requirements and change deltas. EARS is
-machine-checkable, maps 1:1 to a future test command, and is the
-de-facto SDD standard. The emit tool (§Framework-alignment) **structurally
-validates** that every requirement/delta carries ≥1 EARS-shaped clause —
-the discipline lives in the schema that rejects non-compliant payloads,
-not in persona prose ([[encode-principles-structurally]]). EARS clauses
-are the **claims** the env-readiness layer (ADR-054/055) later proves.
+OpenSpec is **not** EARS (verified against the upstream format 2026-06-22 —
+see §Grounding addendum). A requirement is an **RFC-2119 statement** ("The
+system **SHALL** / MUST / SHOULD / MAY <behavior>") plus one or more
+**Given/When/Then scenarios** — the testable acceptance criteria. The
+*scenarios* (not an EARS clause) map 1:1 to a dev-via-test step and are the
+**claims** the env-readiness layer (ADR-054/055) later proves. The
+`emit_change` tool (§Framework-alignment) **structurally validates** that
+every requirement carries a SHALL-class statement and ≥1 scenario with at
+least a `WHEN` and a `THEN` — the discipline lives in the schema that
+rejects non-compliant payloads, not persona prose
+([[encode-principles-structurally]]). Storing the canonical form as
+OpenSpec's own shape (per the 2026-06-22 decision — native, not
+EARS-with-conversion) keeps render/ingest a faithful round-trip; an
+EARS / Spec-Kit converter is added at *those* ingest boundaries only if and
+when we support them.
 
 ### D4. OpenSpec compat depth — staged
 
@@ -184,14 +204,16 @@ triples). To keep that seam a **reprojection, not a transform**,
 `plan.task.*` fields:
 
 ```
-change.<slug>.task.<i>.goal             // == plan.task.<id>.goal
-change.<slug>.task.<i>.target_files     // == plan.task.<id>.target_files (JSON)
-change.<slug>.task.<i>.test_command     // == plan.task.<id>.test_command
-change.<slug>.task.<i>.assumptions      // == plan.task.<id>.assumptions (JSON)
-change.<slug>.task.<i>.non_goals        // == plan.task.<id>.non_goals (JSON)
-change.<slug>.task.<i>.expected_outcome // == plan.task.<id>.expected_outcome
-change.<slug>.task.<i>.acceptance       // EARS — spec-layer-only, NOT projected
-change.<slug>.task.<i>.requirement_ref  // -> delta.<cap>.<id> — spec-layer-only
+change.<slug>.task.<n>.goal             // == plan.task.<id>.goal           ┐ execution-rich
+change.<slug>.task.<n>.target_files     // == plan.task.<id>.target_files   │ (project to
+change.<slug>.task.<n>.test_command     // == plan.task.<id>.test_command   │  plan.task.*;
+change.<slug>.task.<n>.assumptions      // == plan.task.<id>.assumptions    │  graph-only,
+change.<slug>.task.<n>.non_goals        // == plan.task.<id>.non_goals      │  NOT in
+change.<slug>.task.<n>.expected_outcome // == plan.task.<id>.expected_outcome ┘ tasks.md)
+change.<slug>.task.<n>.text             // OpenSpec checkbox prose — renders "- [ ] <n> <text>" ┐ native
+change.<slug>.task.<n>.done             // OpenSpec checkbox state (- [ ] / - [x])              │ (render
+change.<slug>.task.<n>.section          // OpenSpec "## <section>" grouping                     ┘ tasks.md)
+change.<slug>.task.<n>.requirement_ref  // -> delta.<cap>.<rid> the task implements — spec-layer-only
 ```
 
 Those six `==` predicates are exactly Lisa's planner-authored
@@ -214,8 +236,17 @@ So the P4 dispatch step is: reproject the six per-task fields
 `acceptance_command → integration_test_command`; the dispatcher mints the
 walk-state and the git tag. **Given those are populated, Ralph and CBG run
 unchanged** — no change to the execute loop or the reviewer contract. The
-spec-only fields (`acceptance` EARS, `requirement_ref`) are dropped at the
-seam (they ground the spec layer / ADR-054/055 claims, not execution).
+OpenSpec-native + linkage fields (`text`/`done`/`section`/`requirement_ref`)
+are dropped at the seam (they render the spec / ground ADR-054/055 claims,
+not execution).
+
+**Ingest asymmetry.** This superset is the *render* direction (graph →
+OpenSpec drops the execution-rich six). The *ingest* direction cannot invent
+them: a brownfield OpenSpec `tasks.md` is thin checkboxes, so an ingested
+change's tasks carry only `text`/`done`/`section`/`<n>` and must be
+**enriched** (`create_change` re-planning, or a planner hop) before
+`dev-from-task` can dispatch them to Ralph. Ingest-then-execute is therefore
+not automatic for brownfield tasks — it routes through enrichment first.
 
 **This ADR fixes the schema; P4 specifies the projection mechanism** (a
 dispatch-time rule vs. a `dev-from-task` entry tool — deferred per ADR-056
@@ -232,22 +263,25 @@ has to transform.
 / `list_artifacts` suite anticipated by semstreams ADR-028 §"What's not
 built here" **remains unshipped** (same posture ADR-044 §addendum recorded
 at beta.96). No upstream primitive renders/parses OpenSpec or validates
-EARS/delta shapes. `replace_owned` (governed-SKG) *is* shipped and is the
+OpenSpec requirement/delta shapes. `replace_owned` (governed-SKG) *is*
+shipped and is the
 owned-write substrate for §D1/§D4.
 
 **2. Net-new product-shell surface.** Three product-local pieces, joining
 the existing `emit*` family in `cmd/semteams/tools/` (`emitplan`,
 `emitdevviatestplan`, `emitartifact`, …):
 
-- `emit_change` — stamps `change.<slug>.*` triples; **validates EARS +
-  delta-op + the task superset (§D6) structurally** (rejects payloads
-  missing acceptance clauses or required task fields). Domain-specific,
-  exactly like `emit_dev_via_test_plan`'s Karpathy validator.
+- `emit_change` — stamps `change.<slug>.*` triples; **validates the
+  SHALL+scenario requirement shape + delta-op + the task superset (§D6)
+  structurally** (rejects payloads missing scenarios or required task
+  fields). Domain-specific, exactly like `emit_dev_via_test_plan`'s
+  Karpathy validator.
 - OpenSpec **render** + **ingest** — graph↔markdown transforms (§D2).
   Likely a product-shell tool pair or a subscriber; resolved at P1 build.
 
-**3. Case for product-shell-local.** The EARS/delta/task-superset schema
-enforcement is the load-bearing primitive (§D3, §D6) — a generic
+**3. Case for product-shell-local.** The requirement (SHALL+scenario) /
+delta / task-superset schema enforcement is the load-bearing primitive
+(§D3, §D6) — a generic
 freeform-JSON `write_artifact` could not enforce it. This is the same
 ruling as ADR-044 §addendum (Slice 1 §3).
 
@@ -255,15 +289,15 @@ ruling as ADR-044 §addendum (Slice 1 §3).
 they render markdown + stamp pointer triples; the spec layer needs
 queryable `change.*` triples (substitutable via `$entity.triple.X`), not
 a blob behind a path. (b) *Index-exploded array predicates* — rejected
-per §D1 (rule engine can't iterate indexed predicates). (c) *EARS
-validation in persona prose* — rejected hard; persona prose is hopeful,
-schema is load-bearing.
+per §D1 (rule engine can't iterate indexed predicates). (c) *requirement/
+scenario validation in persona prose* — rejected hard; persona prose is
+hopeful, schema is load-bearing.
 
 **5. Migration target.** When upstream ships the ADR-028 generic
 `write_artifact` suite, evaluate migrating `emit_change` alongside
 `emit_plan` / `emit_dev_via_test_plan` / `emit_autoresearch_*`. The
-EARS/delta schema stays product-local regardless (domain-specific to the
-OpenSpec contract); if the generic primitive exposes a schema-validation
+requirement/delta schema stays product-local regardless (domain-specific
+to the OpenSpec contract); if the generic primitive exposes a schema-validation
 hook, the JSON-Schema fragment lifts into config. The render/ingest pair
 is a stronger upstream candidate (other products may want OpenSpec
 interchange) — flag it for upstream after a second product needs it, per
@@ -284,7 +318,7 @@ evidence trail.
 | JSON-encoded-array-in-one-triple discipline | ✓ | | |
 | Spec/change predicate model | | | `spec.*` / `change.*` |
 | OpenSpec render + ingest | | | net-new transforms |
-| EARS + delta + task-superset schema | | | `emit_change` validator |
+| Requirement (SHALL+scenario) + delta + task schema | | | `emit_change` validator |
 | `create-change` persona bundle + rule pack | | | net-new |
 
 **No new components. No framework changes.** Config + product-shell tools
@@ -295,7 +329,7 @@ on the existing substrate.
 - **P1 gate** — round-trip (§D2) on one real OpenSpec fixture:
   `ingest → render → ingest` is stable on the modeled predicates.
 - **P2 gate** — `create_change` turns a prompt into a reviewer-passed
-  change (proposal + delta + ≥1 EARS-validated requirement + tasks in the
+  change (proposal + delta + ≥1 scenario-validated requirement + tasks in the
   §D6 superset shape) on a brownfield fixture with an existing
   `openspec/` dir, validated on real-LLM smoke. The change renders to
   valid OpenSpec markdown. dev-via-test/Lisa journeys stay green
@@ -346,11 +380,14 @@ Cost/iteration are **observations**, not gates (the ADR-044 posture).
 1. **Render/ingest as tool vs subscriber?** A coordinator-invoked tool
    pair, or a subscriber reacting to `change.*` writes? Resolve at P1
    (cf. ADR-055 OQ1 — same tool-vs-subscriber question for the analyzer).
-2. **Capability (`<cap>`) identity** — how are capabilities named/keyed
-   for brownfield ingest (derive from `openspec/specs/<dir>` vs a topology
-   fact)? Ties to ADR-056 OQ2 brownfield detection.
-3. **`<slug>` minting + collisions** — coordinator-authored vs derived
-   from the prompt; collision policy on re-runs.
+2. **Capability + requirement identity** — RESOLVED by OpenSpec convention:
+   `<cap>` = the `specs/<domain>/` folder name; `<rid>` = the slugified
+   `### Requirement: <Name>` title (no formal IDs). Residue: slug-collision
+   policy when two titles slugify equal, and how `<cap>` is chosen when
+   *authoring* a new capability (ties to ADR-056 OQ2 brownfield detection).
+3. **Change `<slug>` minting + collisions** — OpenSpec names changes
+   descriptively (e.g. `add-dark-mode`); coordinator-authored vs
+   prompt-derived + collision policy on re-runs stays open.
 4. **v2 archive ordering** — when a delta archives into a living
    requirement under owner-lease, what is the born-first sequence
    (entity must exist before the owned write; see §Risks)?
@@ -365,14 +402,46 @@ Cost/iteration are **observations**, not gates (the ADR-044 posture).
    writes lack a subscriber-side owned-write lane) is a watch-item if a
    spec write ever sits behind an approval gate.
 2. **Spec quality from the LLM.** Vague deltas diverge downstream — same
-   risk as Lisa. Mitigated by the reviewer gate (ADR-039) + EARS
-   structural enforcement (§D3).
+   risk as Lisa. Mitigated by the reviewer gate (ADR-039) + the
+   SHALL+scenario structural enforcement (§D3).
 3. **Round-trip lossiness mistaken for a bug.** Markdown is a lossy
    projection by design; the gate is semantic (graph) stability, not byte
    equality (§D2) — document this so a formatting diff is not chased.
 4. **Predicate sprawl.** Held down by JSON-encoded arrays in single
    triples (§D1) and the OpenSpec-visible-subset rule (richer fields stay
    graph-only, not every field becomes a triple).
+
+## Grounding addendum 2026-06-22 — OpenSpec format research
+
+This ADR's first draft (2026-06-21) assumed **EARS** acceptance criteria. A
+web-research pass against the canonical OpenSpec source corrected the model
+*before* any code (the point of P1 step 1). Corrections folded into §D1/§D2/
+§D3/§D6 above:
+
+- **OpenSpec does not use EARS.** It uses **RFC-2119 `SHALL` requirement
+  statements + `GIVEN/WHEN/THEN` scenarios** (verified across the README,
+  `docs/concepts.md`, and `docs/getting-started.md`). Canonical-form
+  decision (2026-06-22): store OpenSpec's native shape, *not*
+  EARS-with-conversion (§D3).
+- **`design.md` is a first-class change artifact** (Technical Approach /
+  Architecture Decisions / Data Flow / File Changes) — added as
+  `change.<slug>.design.*`.
+- **`proposal.md`** sections are Intent / Scope (in/out) / Approach — the
+  §D1 proposal predicates were aligned (from the invented why/what/impact).
+- **`tasks.md` is thin** (`- [ ] 1.1` checkboxes, grouped by `##` section,
+  no structured fields) — confirms the §D6 superset is render-direction
+  only and adds the ingest-enrichment note.
+- **No formal requirement IDs** — capability = `specs/<domain>/` folder,
+  requirement key = slugified `### Requirement: <Name>` (OQ2/OQ3 narrowed).
+- **MODIFIED** carries `(Previously: …)`, **REMOVED** carries
+  `(Rationale: …)` — added to the delta model.
+
+Lifecycle (`/opsx:propose → /opsx:apply → /opsx:archive`; CLI `openspec
+init|list|show|validate|archive`) and `archive/<YYYY-MM-DD-name>/` match
+§D4's staged compat. Package `@fission-ai/openspec` (Node ≥20.19).
+
+Sources (Fission-AI/OpenSpec, `main`): <https://github.com/Fission-AI/OpenSpec>
+· `docs/concepts.md` · `docs/getting-started.md`.
 
 ## Related
 
@@ -385,6 +454,6 @@ Cost/iteration are **observations**, not gates (the ADR-044 posture).
   for the P4 seam.
 - [ADR-054](054-test-harness-team-proof-environments-before-code.md) /
   [ADR-055](055-formal-claim-analysis-for-verification-gates.md) — consume
-  the EARS clauses (§D3) as claims.
+  the Given/When/Then scenarios (§D3) as claims.
 - Governed-SKG (beta.113 `replace_owned` + owner-lease) — owned-write
   substrate for §D1/§D4.
