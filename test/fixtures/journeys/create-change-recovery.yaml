@@ -1,0 +1,246 @@
+name: create-change-recovery
+description: |
+  Journey: ADR-057 §D5 create_change pack — the REJECT-RECOVERY path
+  (rule 04) on mock-LLM against configs/e2e-flow-bootstrap.json. The
+  companion to create-change.yaml (the happy approve path): this one
+  exercises the reviewer→coordinator recovery the happy path never
+  reaches, giving the rule-04 / anchor_inherit recovery spawn live
+  coverage (go-reviewer Nit 2).
+
+  The mock serves these responses in GLOBAL ORDER. Placeholder reads
+  (read_loop_result / bash / query_entity / render_openspec) are omitted
+  — the rules fire on the decide actions + the emit_change stamp.
+
+  Chain (reject → re-dispatch → approve):
+
+    Loop 0 — coordinator (front-door dispatch)
+      1. decide(create_change)          → rule 01 → author1 (run R1)
+
+    Loop A — author-create-change #1
+      2. emit_change (add-mfa)           → stamps change.add-mfa.* on R1
+      3. decide(drafted)                 → rule 02 → reviewer1
+
+    Loop B — reviewer-create-change #1 (gate)
+      4. decide(rejected)                → rule 04 → recovery coordinator
+         (fixable gap: enrollment lacks rate-limiting)
+
+    Loop C — coordinator (rejected recovery — inherits R1's anchor)
+      5. decide(create_change)           → rule 01 → author2 (run R2, fresh)
+         (re-dispatch with the gap folded in — supersession, ADR-039 Shape A)
+
+    Loop D — author-create-change #2
+      6. emit_change (add-mfa, tightened) → stamps change.add-mfa.* on R2
+      7. decide(drafted)                 → rule 02 → reviewer2
+
+    Loop E — reviewer-create-change #2 (gate)
+      8. decide(approved)                → rule 03 → stamp R2 success + wake-up
+
+    Loop F — coordinator (wake-up)
+      9. decide(respond_direct)          → user.response.*
+
+  Validates:
+    - rule 04 (reviewer decide(rejected)) spawns a recovery coordinator
+      (role=coordinator, recovery=rejected) — the anchor_inherit path.
+    - the recovery coordinator re-dispatches create_change → rule 01
+      fires again (no lineage fence) → a FRESH author on a new run
+      (supersession; no change.* double-stamp — distinct run entities).
+    - the re-dispatched arc reaches approved → a run completes.
+    - R1 (the original run) stays `executing` — accepted v1 recovery
+      semantics: the rejected path stamps no run outcome; the original
+      run is superseded, not completed (the cancel/timeout reaper is
+      deferred). The spec asserts a run COMPLETED (R2), not that all do.
+
+  Paired spec: ui/e2e/agentic/create-change-recovery.spec.ts.
+  Required config: configs/e2e-flow-bootstrap.json.
+
+responses:
+  # ---------- Loop 0: coordinator (front-door dispatch) ----------
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "create_change",
+          "reason": "Draft a spec change to add multi-factor authentication (TOTP) to our auth capability: users enroll a TOTP authenticator, and login requires a valid code for MFA-enabled accounts."
+        }
+
+  # ---------- Loop A: author-create-change #1 ----------
+
+  - tool_call:
+      name: emit_change
+      arguments_json: |
+        {
+          "slug": "add-mfa",
+          "proposal": {
+            "intent": "Protect user accounts against credential-stuffing by requiring a second factor at login.",
+            "scope_in": ["TOTP authenticator enrollment", "TOTP verification at login"],
+            "scope_out": ["SMS and push factors", "account recovery codes"],
+            "approach": "Store a per-user encrypted TOTP secret, add an enrollment endpoint, and gate session issuance on a valid TOTP code for MFA-enabled accounts."
+          },
+          "deltas": [
+            {
+              "capability": "auth",
+              "added": [
+                {
+                  "name": "TOTP enrollment",
+                  "statement": "The system SHALL allow an authenticated user to enroll a TOTP authenticator and store the shared secret encrypted at rest.",
+                  "scenarios": [
+                    {
+                      "name": "User enrolls a TOTP authenticator",
+                      "steps": [
+                        {"kw": "GIVEN", "text": "an authenticated user without MFA enabled"},
+                        {"kw": "WHEN", "text": "they request enrollment and submit a valid code from their authenticator app"},
+                        {"kw": "THEN", "text": "the system stores the encrypted TOTP secret and marks MFA enabled for the account"}
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "tasks": [
+            {
+              "section": "1. Enrollment",
+              "number": "1.1",
+              "text": "Add encrypted TOTP secret storage and the enrollment endpoint",
+              "goal": "Persist a per-user encrypted TOTP secret and expose POST /mfa/enroll that verifies a first code before enabling MFA.",
+              "target_files": ["internal/auth/mfa.go", "internal/auth/mfa_test.go"],
+              "test_command": "go test ./internal/auth/ -run TestEnroll",
+              "assumptions": ["A KMS-backed helper exists to encrypt secrets at rest"],
+              "non_goals": ["No recovery-code generation in this task"],
+              "requirement_ref": "auth/TOTP enrollment"
+            }
+          ],
+          "acceptance_command": "go test ./internal/auth/..."
+        }
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "drafted",
+          "reason": "Change add-mfa drafted: TOTP enrollment requirement in the auth capability with a Given/When/Then scenario, plus an enrollment task. Routing to the reviewer gate."
+        }
+
+  # ---------- Loop B: reviewer-create-change #1 (rejects) ----------
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "rejected",
+          "reason": "Fixable gap: the TOTP enrollment requirement does not bound enrollment attempts — without a rate limit, enrollment is a brute-force surface. Re-draft so the enrollment requirement (or a sibling) SHALL rate-limit failed verification attempts during enrollment, with a scenario asserting lockout after N failures."
+        }
+
+  # ---------- Loop C: coordinator (rejected recovery → re-dispatch) ----------
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "create_change",
+          "reason": "Re-dispatch add-mfa with the reviewer's fix folded in: keep TOTP enrollment + verification, AND add that the system SHALL rate-limit failed TOTP attempts (lock the account after 5 failures in 15 minutes), with a scenario asserting the lockout. Original ask: add MFA (TOTP enrollment + login verification) to the auth capability."
+        }
+
+  # ---------- Loop D: author-create-change #2 (tightened re-draft) ----------
+
+  - tool_call:
+      name: emit_change
+      arguments_json: |
+        {
+          "slug": "add-mfa",
+          "proposal": {
+            "intent": "Protect user accounts against credential-stuffing by requiring a second factor at login, with brute-force protection on the factor.",
+            "scope_in": ["TOTP authenticator enrollment", "TOTP verification at login", "rate-limiting failed TOTP attempts"],
+            "scope_out": ["SMS and push factors", "account recovery codes"],
+            "approach": "Store a per-user encrypted TOTP secret, add an enrollment endpoint, gate session issuance on a valid TOTP code, and lock the account after repeated failed TOTP attempts."
+          },
+          "deltas": [
+            {
+              "capability": "auth",
+              "added": [
+                {
+                  "name": "TOTP enrollment",
+                  "statement": "The system SHALL allow an authenticated user to enroll a TOTP authenticator and store the shared secret encrypted at rest.",
+                  "scenarios": [
+                    {
+                      "name": "User enrolls a TOTP authenticator",
+                      "steps": [
+                        {"kw": "GIVEN", "text": "an authenticated user without MFA enabled"},
+                        {"kw": "WHEN", "text": "they request enrollment and submit a valid code from their authenticator app"},
+                        {"kw": "THEN", "text": "the system stores the encrypted TOTP secret and marks MFA enabled for the account"}
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "name": "TOTP attempt rate limiting",
+                  "statement": "The system SHALL lock an account's TOTP verification after 5 failed attempts within 15 minutes.",
+                  "scenarios": [
+                    {
+                      "name": "Account locks after repeated failures",
+                      "steps": [
+                        {"kw": "GIVEN", "text": "a user with MFA enabled"},
+                        {"kw": "WHEN", "text": "they submit an incorrect TOTP code 5 times within 15 minutes"},
+                        {"kw": "THEN", "text": "the system rejects further TOTP attempts until the lockout window elapses"}
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "tasks": [
+            {
+              "section": "1. Enrollment",
+              "number": "1.1",
+              "text": "Add encrypted TOTP secret storage and the enrollment endpoint",
+              "goal": "Persist a per-user encrypted TOTP secret and expose POST /mfa/enroll that verifies a first code before enabling MFA.",
+              "target_files": ["internal/auth/mfa.go", "internal/auth/mfa_test.go"],
+              "test_command": "go test ./internal/auth/ -run TestEnroll",
+              "assumptions": ["A KMS-backed helper exists to encrypt secrets at rest"],
+              "non_goals": [],
+              "requirement_ref": "auth/TOTP enrollment"
+            },
+            {
+              "section": "2. Rate limiting",
+              "number": "2.1",
+              "text": "Lock TOTP verification after repeated failures",
+              "goal": "Track failed TOTP attempts per account and reject further attempts after 5 failures in 15 minutes.",
+              "target_files": ["internal/auth/ratelimit.go", "internal/auth/ratelimit_test.go"],
+              "test_command": "go test ./internal/auth/ -run TestLockout",
+              "assumptions": [],
+              "non_goals": [],
+              "requirement_ref": "auth/TOTP attempt rate limiting"
+            }
+          ],
+          "acceptance_command": "go test ./internal/auth/..."
+        }
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "drafted",
+          "reason": "Re-drafted add-mfa addressing the reviewer's gap: added a TOTP attempt rate-limiting requirement (lockout after 5 failures in 15 min) with a scenario, plus a rate-limiting task. Routing back to the reviewer gate."
+        }
+
+  # ---------- Loop E: reviewer-create-change #2 (approves) ----------
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "approved",
+          "reason": "The re-drafted change addresses the rate-limiting gap: the new TOTP attempt rate-limiting requirement carries a SHALL with a concrete lockout threshold and a testable scenario, and a matching task. Both requirements are now complete and faithful. Approved."
+        }
+
+  # ---------- Loop F: coordinator (wake-up) ----------
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "respond_direct",
+          "reason": "Your spec change is ready (after one review round): add-mfa adds three reviewed requirements to the auth capability — TOTP enrollment, TOTP verification at login, and TOTP attempt rate-limiting (account lockout after 5 failures in 15 minutes). Each has a Given/When/Then acceptance scenario and a matching implementation task."
+        }
