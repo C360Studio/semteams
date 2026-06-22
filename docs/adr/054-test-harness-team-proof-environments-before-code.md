@@ -336,8 +336,8 @@ Three clarifications the umbrella fixes:
    **topology-driven profile selection/derivation** — the *detector* is
    net-new; it reuses this ADR's §D2 profile schema. Greenfield (UC-3)
    adds **profile authoring**.
-3. **The claims come from the spec layer.** The OpenSpec **EARS
-   acceptance criteria** ([ADR-057 §D3](057-openspec-graph-spec-model-and-create-change.md))
+3. **The claims come from the spec layer.** The OpenSpec **Given/When/Then
+   scenarios** ([ADR-057 §D3](057-openspec-graph-spec-model-and-create-change.md))
    are the *claims* this layer proves; the spec's `test_command`s are the
    *smoke/proof*; the harness profile is what makes those commands
    runnable.

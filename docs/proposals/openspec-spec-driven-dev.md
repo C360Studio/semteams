@@ -20,6 +20,13 @@ use-case walkthrough.
 > See [ADR-056 §North-star deployment roadmap](../adr/056-openspec-spec-driven-development-umbrella.md)
 > for the corrected picture (net-new D2 work = poll/scheduled trigger +
 > autonomous cost breaker + wiring, *not* GitHub access).
+
+> **Correction (2026-06-22, verified against the OpenSpec format):** the
+> **EARS** references below (the "Acceptance criteria use EARS notation"
+> claim and the `+ EARS acceptance` mapping-table rows) are **superseded**.
+> OpenSpec does not use EARS — it uses RFC-2119 `SHALL` statements +
+> `Given/When/Then` scenarios. See
+> [ADR-057 §D3 + §Grounding addendum](../adr/057-openspec-graph-spec-model-and-create-change.md).
 **Author**: Coby Leuschke (with Claude)
 **Related ADRs**: [042](../adr/042-coordinator-instantiated-flows-via-templates.md)
 (substrate-plus-overlays), [043](../adr/043-devcontainer-as-sandbox-spec.md)
