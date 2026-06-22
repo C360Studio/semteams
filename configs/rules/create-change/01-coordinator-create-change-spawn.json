@@ -1,0 +1,53 @@
+{
+  "id": "create_change_coordinator_spawn_author",
+  "type": "expression",
+  "name": "Coordinator decide(create_change) → author-create-change",
+  "description": "ADR-057 §D5 — first rule of the create-change category pack. Fires when a coordinator loop terminates with decide(action=create_change) — the category classification token the coordinator persona (10-decision-contract.md) emits for a spec-authoring ask. Spawns author-create-change, the pack's one-shot drafting role.\n\nNo lineage fence (mirrors research/01, NOT dev-via-test/01): the create-change wake-up coordinator (rule 03 approved) is restricted to respond_direct/ask_user and cannot re-emit create_change, and the recovery coordinator (rules 04/05) SHOULD re-fire this rule to re-dispatch a fresh change — both reasons the dual-mode dev-via-test fence does not apply here.\n\nrun_scope=new mints the run with RunID=this coordinator's loop id, so the author's agent.run.entity_id == chain.execution.<coordinator-loop-id>; related_loops['create-change-run'] pins that SAME loop id, which emit_change resolves to the run entity via TryChainExecutionEntityID. The author stamps change.<slug>.* there for the reviewer gate (rule 02) + the P4 dev-from-task hand-off (ADR-057 §D6).",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "agent.loop.role",
+      "operator": "eq",
+      "value": "coordinator",
+      "required": true
+    },
+    {
+      "field": "coordinator.decision.next_action",
+      "operator": "eq",
+      "value": "create_change",
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "publish_agent",
+      "run_scope": "new",
+      "subject": "agent.task.author-create-change",
+      "role": "author-create-change",
+      "model": "research",
+      "tools": ["read_loop_result", "bash", "emit_change", "scratchpad", "decide"],
+      "tool_choice": { "mode": "required" },
+      "action_allowlist": ["drafted", "needs_clarification"],
+      "properties": {
+        "run_loop_id": "$entity.instance",
+        "category": "create_change",
+        "phase": "author"
+      },
+      "related_loops": {
+        "create-change-run": "$entity.instance"
+      },
+      "prompt": "CREATE-CHANGE AUTHOR — turn the user's ask into a structured OpenSpec change.\n\nA coordinator at loop $entity.instance classified the user's message as a spec-authoring ask. The change you emit lands on a shared run entity (emit_change resolves it for you) for the reviewer gate + downstream hand-off.\n\nYour job in this single loop:\n\n1. Call read_loop_result(loop_id=$entity.instance) to read the coordinator's terminal. The reason field carries the user's ask as the coordinator preserved it.\n\n2. If the workspace already carries an openspec/ directory, read the relevant existing capability specs for context — `bash ls openspec/specs` then `bash cat openspec/specs/<capability>/spec.md` for any capability your change touches. Ground your delta in what already exists; do not restate unchanged requirements.\n\n3. Think the change through via scratchpad:\n   - proposal: intent (why), scope (in/out), approach\n   - delta(s): per capability, the ADDED / MODIFIED / REMOVED requirements. Every ADDED or MODIFIED requirement MUST carry an RFC-2119 'The system SHALL …' statement AND at least one Given/When/Then scenario (a WHEN and a THEN minimum). MODIFIED carries a '(Previously: …)' note; REMOVED carries a '(Rationale: …)' note.\n   - tasks: the implementation breakdown. Each task carries goal + target_files (≥1) + test_command + assumptions + non_goals so a later build step can execute it without re-planning. Link each task to the requirement it implements via requirement_ref='<capability>/<requirement name>'.\n   - acceptance_command: the chain-end full acceptance suite a later build step would run.\n\n4. Call emit_change(slug, proposal, deltas, tasks, acceptance_command). The schema is strict — a requirement missing its SHALL or a scenario, or a task missing target_files/test_command, rejects structurally. See your 10-emit-contract.md persona fragment for the field-by-field guide.\n\n5. Terminate with decide(action=\"drafted\", reason=\"<one-line summary: change <slug> — N requirements across M capabilities, K tasks>\").\n\nIf the ask is genuinely too vague to specify — you cannot name the capability, or you cannot write a single testable requirement — terminate with decide(action=\"needs_clarification\", reason=\"<specifically what's missing — quote the user's ambiguous phrase>\"). The coordinator will route the question back to the user."
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "pack": "create_change",
+    "phase": "ADR-057 §D5 — author spawn",
+    "adr": "docs/adr/057-openspec-graph-spec-model-and-create-change.md",
+    "category_token": "create_change",
+    "run_entity_pattern": "Coordinator's own loop entity IS the run entity for the change. change.<slug>.* triples land there (emit_change resolves it from related_loops['create-change-run']); the reviewer reads them via agent.run.entity_id (framework-inherited). Mirrors the dev-via-test + research pack patterns.",
+    "no_lineage_fence_rationale": "Unlike dev-via-test/01, no lineage.run-loop-entity-id fence: create-change is single-dispatch (no between-task mode) and the recovery coordinator (rules 04/05) MUST be able to re-fire this rule to re-dispatch a fresh change (supersession-via-new-spawn, ADR-039 Shape A). Mirrors research/01.",
+    "tool_choice_rationale": "Required-mode keeps the author on the tool path through emit_change. Without it the author risks text-only completion (semstreams#158 class) and the strict schema never executes."
+  }
+}

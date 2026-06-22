@@ -1,0 +1,40 @@
+{
+  "id": "create_change_loop_failed_pause",
+  "type": "expression",
+  "name": "Create-change loop failed — chain pause marker",
+  "description": "ADR-057 §D5 — create-change failure handler (operator surface). Fires when any create-change role terminates with outcome=failed/truncated BEFORE emitting its decide() terminal — model timeout, NATS blip, OOM, panic. Without this rule the failure stalls the chain silently: no downstream rule fires, no operator surface lights up. Stamps a chain.paused.marker triple (subjectless, on the failed loop entity) so operator dashboards + mock-LLM journey assertions can surface the pause.\n\nPack-local mirror of research/08-loop-failed-pause.json, scoped to create-change roles. The run-phase companion is rule 07 (stamps agent.run.outcome=failed on the run entity); the two fire on the same event with different subjects and do not conflict.",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "agent.loop.outcome",
+      "operator": "in",
+      "value": ["failed", "truncated"],
+      "required": true
+    },
+    {
+      "field": "agent.loop.role",
+      "operator": "in",
+      "value": [
+        "author-create-change",
+        "reviewer-create-change"
+      ],
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "add_triple",
+      "predicate": "chain.paused.marker",
+      "object": "$now"
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "pack": "create_change",
+    "phase": "ADR-057 §D5",
+    "adr": "docs/adr/057-openspec-graph-spec-model-and-create-change.md",
+    "companion_to": "07-loop-failed-run-outcome.json (run-phase transition). This rule is the operator chain.paused.marker.",
+    "marker_only_note": "Marker-only triple (timestamp object). Mirrors research/08 — the marker alone is sufficient for UI / ops-observer queries on chain.paused.*; full classification triples are out of scope for the pack."
+  }
+}

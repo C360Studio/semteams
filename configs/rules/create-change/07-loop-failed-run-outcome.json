@@ -1,0 +1,49 @@
+{
+  "id": "create_change_loop_failed_run_outcome",
+  "type": "expression",
+  "name": "Create-change loop failed → stamp agent.run.outcome=failed on the run entity",
+  "description": "ADR-053 Phase 4a′ pattern, applied to create-change. Fires when any create-change role terminates with an involuntary failure (outcome in [failed, truncated]) BEFORE emitting its decide() terminal. Stamps agent.run.outcome=failed on the RUN entity so agent-run/04 transitions executing→failed — otherwise the failed loop wedges the chain and the run stays `executing` forever (the zombie this pattern kills).\n\nRun-phase COMPANION to rule 06 (which stamps chain.paused.marker on the loop for the operator surface). 06 surfaces 'this loop paused, look'; this rule advances the run lifecycle. Same event, different subjects (06: subjectless on the loop; 07: the run entity via the anchor override) — no conflict.\n\nANCHOR (agent.run.entity_id): every create-change role carries agent.run.entity_id — create-change is an unbroken loop-spawn chain from the run_scope=new dispatch (rule 01), so the framework re-stamps agent.run.entity_id at every spawn (graph_writer.go:535-539). No create-change loop is spawned by a run-entity-fired rule, so none falls back to a lineage-only anchor — no anchor split needed (unlike dev-via-test). Mirrors research/09.",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "agent.loop.outcome",
+      "operator": "in",
+      "value": ["failed", "truncated"],
+      "required": true
+    },
+    {
+      "field": "agent.loop.role",
+      "operator": "in",
+      "value": [
+        "author-create-change",
+        "reviewer-create-change"
+      ],
+      "required": true
+    },
+    {
+      "field": "agent.run.entity_id",
+      "operator": "ne",
+      "value": "",
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "add_triple",
+      "subject": "$entity.triple.agent.run.entity_id",
+      "predicate": "agent.run.outcome",
+      "object": "failed"
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "pack": "create_change",
+    "phase": "ADR-053 Phase 4a′ pattern",
+    "adr": "docs/adr/057-openspec-graph-spec-model-and-create-change.md",
+    "role": "create-change run-failed mapping (drives executing→failed)",
+    "companion_to": "06-loop-failed-pause.json (operator chain.paused.marker, untouched). This rule adds the run-phase transition.",
+    "anchor": "agent.run.entity_id — framework-inherited on every create-change role via the loop-spawn chain (no run-entity-fired spawn). Mirrors research/09's anchor + research/07's success-stamp anchor.",
+    "consumed_by": "agent-run/04-executing-to-failed.json (agent.run.outcome==failed + phase==executing → failed)."
+  }
+}

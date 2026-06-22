@@ -1,0 +1,58 @@
+{
+  "id": "create_change_author_to_reviewer",
+  "type": "expression",
+  "name": "author-create-change decide(drafted) → reviewer-create-change",
+  "description": "ADR-057 §D5 — the create-change forward edge. Fires when author-create-change terminates with decide(action=drafted) — the author has stamped change.<slug>.* on the run entity via emit_change. Spawns reviewer-create-change to gate the draft for gaps and clarity BEFORE it is delivered as the standalone deliverable.\n\nThe reviewer inherits agent.run.entity_id from the author (the author carries a bare agent.run from rule 01's run_scope=new dispatch, so the framework re-stamps the anchor on this spawn — graph_writer.go:535-539; same loop-spawn-chain inheritance research relies on). One query_entity on that run entity returns BOTH coordinator.decision.reason (the user's ask, carried on the run entity for run_scope=new dispatches) AND the change.<slug>.* the author emitted — the reviewer checks fidelity + completeness in a single read. related_loops['author'] lets it read_loop_result for the author's drafting narrative.",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "agent.loop.role",
+      "operator": "eq",
+      "value": "author-create-change",
+      "required": true
+    },
+    {
+      "field": "agent.loop.outcome",
+      "operator": "eq",
+      "value": "success",
+      "required": true
+    },
+    {
+      "field": "coordinator.decision.next_action",
+      "operator": "eq",
+      "value": "drafted",
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "publish_agent",
+      "subject": "agent.task.reviewer-create-change",
+      "role": "reviewer-create-change",
+      "model": "reviewing",
+      "tools": ["read_loop_result", "query_entity", "scratchpad", "decide"],
+      "tool_choice": { "mode": "required" },
+      "action_allowlist": ["approved", "rejected", "needs_clarification"],
+      "properties": {
+        "run_loop_id": "$entity.triple.agent.run.entity_id",
+        "author_loop_id": "$entity.instance",
+        "category": "create_change",
+        "phase": "review"
+      },
+      "related_loops": {
+        "author": "$entity.instance"
+      },
+      "prompt": "CREATE-CHANGE REVIEWER — gate the drafted change before it is delivered.\n\nThe author at loop $entity.instance just emitted a change via emit_change + decide(action=drafted). Your job: verify the change is complete, well-formed, and faithful to the user's ask, then emit decide(approved | rejected | needs_clarification). You do NOT edit the change — you are a single-pass gate.\n\nYour run entity ID is $entity.triple.agent.run.entity_id. Call query_entity(entity_id=\"$entity.triple.agent.run.entity_id\") FIRST — the run entity carries BOTH:\n\n- coordinator.decision.reason — THE USER'S ASK (as the front-door coordinator preserved it). Your source of truth for what was required.\n- change.<slug>.* — the change the author emitted: change.<slug>.proposal.* (intent/scope/approach), change.<slug>.delta.<cap>.* (the ADDED/MODIFIED/REMOVED requirements + their scenarios), and change.<slug>.task.<n>.* (the implementation tasks).\n\nOptionally read_loop_result(loop_id=\"$entity.instance\") for the author's own drafting narrative.\n\nREVIEW CHECKS (see your persona 20-review-contract.md):\n1. Fidelity: does the change address the user's actual ask? Did any explicit constraint get dropped?\n2. Requirement quality: does EVERY added/modified requirement carry an RFC-2119 SHALL statement AND at least one Given/When/Then scenario? (The schema enforces presence; you judge whether the scenario actually tests the requirement.)\n3. Unresolved markers: scan for [NEEDS CLARIFICATION] markers or hand-wave the author left in. An unresolved marker is never a silent pass.\n4. Task soundness: does each task name real target_files + a real test_command (a test, not a bare build), and link to a requirement it implements?\n\nDECIDE:\n- The change is complete, faithful, and every requirement is testable → decide(action=\"approved\", reason=\"<1-2 sentence confirmation naming the slug>\"). Rule 03 wakes the coordinator to deliver it.\n- The change has fixable gaps (a dropped constraint, a weak scenario, a build-not-test task) that a fresh re-draft could resolve → decide(action=\"rejected\", reason=\"<the CONCRETE gaps: name what is missing and where>\"). Rule 04 routes to the coordinator, which re-dispatches a tightened create_change.\n- The ask itself is ambiguous/contradictory, or an unresolved question needs the user → decide(action=\"needs_clarification\", reason=\"<what the user must clarify>\"). Rule 05 routes to the coordinator. This is the fail-safe when the gap is not a clean re-draft fix."
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "pack": "create_change",
+    "phase": "ADR-057 §D5 — reviewer gate dispatch",
+    "adr": "docs/adr/057-openspec-graph-spec-model-and-create-change.md",
+    "one_query_gets_both": "The run entity (agent.chain.execution.<runID>) carries coordinator.decision.reason (the ask) AND the change.<slug>.* triples (emit_change stamps them there). So the reviewer reads ask + change in a single query_entity — same pattern as dev-via-test/02's plan-review gate.",
+    "anchor": "Reviewer inherits agent.run.entity_id via the loop-spawn chain (author carries bare agent.run from rule 01's run_scope=new). No explicit lineage thread needed — create-change has no run-entity-fired rule (unlike dev-via-test/02d). Mirrors research, which also relies on default-inherit.",
+    "no_bash": "Review reads the change from the graph (query_entity), not the filesystem — emit_change stamps triples, it does not render a file. Rendering to OpenSpec markdown is on-demand (render_openspec), not part of the gate."
+  }
+}

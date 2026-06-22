@@ -787,6 +787,9 @@ var coordinatorSpawnDisposition = map[string]string{
 	"dev_via_test_replan_lisa_needs_clarification_to_coordinator": dispAnchorThreaded, // dev-via-test/02f-replan (4b-1a)
 	"dev_via_test_cbg_rejected_to_coordinator":                    dispAnchorThreaded, // dev-via-test/07b (4b-1a)
 	"dev_via_test_cbg_retry_missing_target":                       dispAnchorThreaded, // dev-via-test/07e (4b-1a)
+	"create_change_reviewer_approved_to_coordinator":              dispPostApproval,   // create-change/03 (stamps success first)
+	"create_change_reviewer_rejected_to_coordinator":              dispAnchorInherit,  // create-change/04 (spawned from reviewer; inherits agent.run.entity_id)
+	"create_change_needs_clarification_to_coordinator":            dispAnchorInherit,  // create-change/05 (spawned from pack role; inherits agent.run.entity_id)
 }
 
 type coordSpawnInfo struct {
