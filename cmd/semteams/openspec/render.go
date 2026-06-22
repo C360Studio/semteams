@@ -108,3 +108,159 @@ func renderScenario(b *strings.Builder, sc Scenario) {
 		b.WriteString("\n")
 	}
 }
+
+// RenderProposal renders a Proposal back to OpenSpec proposal.md markdown.
+// Scope is written under canonical "In scope:" / "Out of scope:" labels (a
+// flat-bullet input thus normalises to labelled in-scope). Same
+// semantic-stability contract as RenderSpec. Panics on a nil Proposal.
+func RenderProposal(p *Proposal) string {
+	var b strings.Builder
+
+	b.WriteString("# ")
+	b.WriteString(p.Title)
+	b.WriteString("\n")
+
+	if p.Intent != "" {
+		b.WriteString("\n## Intent\n")
+		b.WriteString(p.Intent)
+		b.WriteString("\n")
+	}
+
+	if len(p.ScopeIn) > 0 || len(p.ScopeOut) > 0 {
+		b.WriteString("\n## Scope\n")
+		if len(p.ScopeIn) > 0 {
+			b.WriteString("In scope:\n")
+			renderBullets(&b, p.ScopeIn)
+		}
+		if len(p.ScopeOut) > 0 {
+			if len(p.ScopeIn) > 0 {
+				b.WriteString("\n")
+			}
+			b.WriteString("Out of scope:\n")
+			renderBullets(&b, p.ScopeOut)
+		}
+	}
+
+	if p.Approach != "" {
+		b.WriteString("\n## Approach\n")
+		b.WriteString(p.Approach)
+		b.WriteString("\n")
+	}
+
+	return b.String()
+}
+
+// RenderDesign renders a Design back to OpenSpec design.md markdown. Same
+// semantic-stability contract as RenderSpec. Panics on a nil Design.
+func RenderDesign(d *Design) string {
+	var b strings.Builder
+
+	b.WriteString("# ")
+	b.WriteString(d.Title)
+	b.WriteString("\n")
+
+	if d.TechnicalApproach != "" {
+		b.WriteString("\n## Technical Approach\n")
+		b.WriteString(d.TechnicalApproach)
+		b.WriteString("\n")
+	}
+
+	if len(d.Decisions) > 0 {
+		b.WriteString("\n## Architecture Decisions\n")
+		for _, dec := range d.Decisions {
+			b.WriteString("\n### Decision: ")
+			b.WriteString(dec.Name)
+			b.WriteString("\n")
+			if dec.Body != "" {
+				b.WriteString(dec.Body)
+				b.WriteString("\n")
+			}
+		}
+	}
+
+	if d.DataFlow != "" {
+		b.WriteString("\n## Data Flow\n")
+		b.WriteString(d.DataFlow)
+		b.WriteString("\n")
+	}
+
+	if len(d.FileChanges) > 0 {
+		b.WriteString("\n## File Changes\n")
+		for _, fc := range d.FileChanges {
+			renderFileChange(&b, fc)
+		}
+	}
+
+	return b.String()
+}
+
+// renderFileChange writes one "## File Changes" bullet — the inverse of
+// parseFileChange: "- `<path>`" plus " (<kind>)" when Kind is set.
+func renderFileChange(b *strings.Builder, fc FileChange) {
+	b.WriteString("- `")
+	b.WriteString(fc.Path)
+	b.WriteString("`")
+	if fc.Kind != "" {
+		b.WriteString(" (")
+		b.WriteString(fc.Kind)
+		b.WriteString(")")
+	}
+	b.WriteString("\n")
+}
+
+// RenderTasks renders a Tasks back to OpenSpec tasks.md markdown. A section
+// with an empty Name renders its tasks with no "## " heading (the implicit
+// section). Same semantic-stability contract as RenderSpec. Panics on nil.
+func RenderTasks(t *Tasks) string {
+	var b strings.Builder
+
+	b.WriteString("# ")
+	b.WriteString(t.Title)
+	b.WriteString("\n")
+
+	for _, sec := range t.Sections {
+		if sec.Name != "" {
+			b.WriteString("\n## ")
+			b.WriteString(sec.Name)
+			b.WriteString("\n")
+		}
+		for _, task := range sec.Tasks {
+			b.WriteString("- [")
+			if task.Done {
+				b.WriteByte('x')
+			} else {
+				b.WriteByte(' ')
+			}
+			b.WriteString("]")
+			if content := taskContent(task); content != "" {
+				b.WriteByte(' ')
+				b.WriteString(content)
+			}
+			b.WriteString("\n")
+		}
+	}
+
+	return b.String()
+}
+
+// taskContent joins a task's number and text into the bullet body — the
+// inverse of splitTaskNumber.
+func taskContent(t Task) string {
+	switch {
+	case t.Number != "" && t.Text != "":
+		return t.Number + " " + t.Text
+	case t.Number != "":
+		return t.Number
+	default:
+		return t.Text
+	}
+}
+
+// renderBullets writes each item as a "- <item>" line.
+func renderBullets(b *strings.Builder, items []string) {
+	for _, it := range items {
+		b.WriteString("- ")
+		b.WriteString(it)
+		b.WriteString("\n")
+	}
+}
