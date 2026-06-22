@@ -324,3 +324,258 @@ func parenAnnotation(trimmed, label string) (string, bool) {
 	inner := strings.TrimSuffix(strings.TrimSpace(trimmed[len(prefix):]), ")")
 	return strings.TrimSpace(inner), true
 }
+
+// ParseProposal parses a change proposal.md body into a Proposal. Sections are
+// matched case-insensitively by prefix; "## Scope" bullets are split by the
+// "In scope:" / "Out of scope:" sub-labels, defaulting to in-scope when a flat
+// bullet list is used. Lenient and infallible (ADR-057 §D2).
+func ParseProposal(md string) *Proposal {
+	p := &Proposal{}
+
+	var (
+		section  string // "intent" | "scope" | "approach" | ""
+		scopeOut bool   // within scope: are we under "Out of scope:"?
+		intent   []string
+		approach []string
+	)
+
+	for raw := range strings.SplitSeq(md, "\n") {
+		line := strings.TrimRight(raw, " \t\r")
+		trimmed := strings.TrimSpace(line)
+
+		switch {
+		case strings.HasPrefix(line, "## "):
+			section, scopeOut = proposalSection(strings.TrimPrefix(line, "## ")), false
+		case strings.HasPrefix(line, "# "):
+			p.Title = strings.TrimSpace(strings.TrimPrefix(line, "# "))
+		case trimmed == "":
+			// ignore
+		default:
+			switch section {
+			case "intent":
+				intent = append(intent, trimmed)
+			case "approach":
+				approach = append(approach, trimmed)
+			case "scope":
+				switch low := strings.ToLower(trimmed); {
+				case strings.HasPrefix(low, "in scope"):
+					scopeOut = false
+				case strings.HasPrefix(low, "out of scope"), strings.HasPrefix(low, "out-of-scope"):
+					scopeOut = true
+				default:
+					if body, ok := bulletBody(trimmed); ok {
+						if scopeOut {
+							p.ScopeOut = append(p.ScopeOut, body)
+						} else {
+							p.ScopeIn = append(p.ScopeIn, body)
+						}
+					}
+				}
+			}
+		}
+	}
+
+	p.Intent = strings.TrimSpace(strings.Join(intent, "\n"))
+	p.Approach = strings.TrimSpace(strings.Join(approach, "\n"))
+	return p
+}
+
+// proposalSection classifies a "## " heading body for a proposal.
+func proposalSection(heading string) string {
+	switch h := strings.ToLower(strings.TrimSpace(heading)); {
+	case strings.HasPrefix(h, "intent"):
+		return "intent"
+	case strings.HasPrefix(h, "scope"):
+		return "scope"
+	case strings.HasPrefix(h, "approach"):
+		return "approach"
+	default:
+		return ""
+	}
+}
+
+// ParseDesign parses a change design.md body into a Design. Lenient and
+// infallible (ADR-057 §D2).
+func ParseDesign(md string) *Design {
+	d := &Design{}
+
+	var (
+		section   string // "technical" | "decisions" | "dataflow" | "filechanges" | ""
+		technical []string
+		dataFlow  []string
+		curDec    *DesignDecision
+		decBody   []string
+	)
+
+	flushDecision := func() {
+		if curDec != nil {
+			curDec.Body = strings.TrimSpace(strings.Join(decBody, "\n"))
+			d.Decisions = append(d.Decisions, *curDec)
+		}
+		curDec = nil
+		decBody = nil
+	}
+
+	for raw := range strings.SplitSeq(md, "\n") {
+		line := strings.TrimRight(raw, " \t\r")
+		trimmed := strings.TrimSpace(line)
+
+		switch {
+		case strings.HasPrefix(line, "### Decision:"):
+			flushDecision()
+			curDec = &DesignDecision{Name: strings.TrimSpace(strings.TrimPrefix(line, "### Decision:"))}
+		case strings.HasPrefix(line, "## "):
+			flushDecision()
+			section = designSection(strings.TrimPrefix(line, "## "))
+		case strings.HasPrefix(line, "# "):
+			d.Title = strings.TrimSpace(strings.TrimPrefix(line, "# "))
+		case trimmed == "":
+			// ignore
+		default:
+			switch section {
+			case "technical":
+				technical = append(technical, trimmed)
+			case "dataflow":
+				dataFlow = append(dataFlow, trimmed)
+			case "decisions":
+				if curDec != nil {
+					decBody = append(decBody, trimmed)
+				}
+			case "filechanges":
+				if fc, ok := parseFileChange(trimmed); ok {
+					d.FileChanges = append(d.FileChanges, fc)
+				}
+			}
+		}
+	}
+	flushDecision()
+
+	d.TechnicalApproach = strings.TrimSpace(strings.Join(technical, "\n"))
+	d.DataFlow = strings.TrimSpace(strings.Join(dataFlow, "\n"))
+	return d
+}
+
+// designSection classifies a "## " heading body for a design doc.
+func designSection(heading string) string {
+	switch h := strings.ToLower(strings.TrimSpace(heading)); {
+	case strings.HasPrefix(h, "technical approach"):
+		return "technical"
+	case strings.HasPrefix(h, "architecture decision"):
+		return "decisions"
+	case strings.HasPrefix(h, "data flow"):
+		return "dataflow"
+	case strings.HasPrefix(h, "file change"):
+		return "filechanges"
+	default:
+		return ""
+	}
+}
+
+// parseFileChange parses a "## File Changes" bullet, e.g. "- `path/to/x` (new)",
+// into a FileChange. Returns false if the bullet has no backtick-quoted path.
+func parseFileChange(trimmed string) (FileChange, bool) {
+	body, ok := bulletBody(trimmed)
+	if !ok || !strings.HasPrefix(body, "`") {
+		return FileChange{}, false
+	}
+	end := strings.Index(body[1:], "`")
+	if end < 0 {
+		return FileChange{}, false
+	}
+	fc := FileChange{Path: body[1 : 1+end]}
+	if rest := strings.TrimSpace(body[1+end+1:]); strings.HasPrefix(rest, "(") && strings.HasSuffix(rest, ")") {
+		fc.Kind = strings.TrimSpace(rest[1 : len(rest)-1])
+	}
+	return fc, true
+}
+
+// ParseTasks parses a change tasks.md body into a Tasks. Each "## " heading
+// opens a section; "- [ ] / [x]" bullets are tasks (any bullet is accepted as
+// a task — lenient). Tasks before any heading land in an implicit unnamed
+// section. Lenient and infallible (ADR-057 §D2/§D6).
+func ParseTasks(md string) *Tasks {
+	t := &Tasks{}
+
+	var cur *TaskSection
+	flushSection := func() {
+		if cur != nil {
+			t.Sections = append(t.Sections, *cur)
+		}
+		cur = nil
+	}
+
+	for raw := range strings.SplitSeq(md, "\n") {
+		line := strings.TrimRight(raw, " \t\r")
+		trimmed := strings.TrimSpace(line)
+
+		switch {
+		case strings.HasPrefix(line, "## "):
+			flushSection()
+			cur = &TaskSection{Name: strings.TrimSpace(strings.TrimPrefix(line, "## "))}
+		case strings.HasPrefix(line, "# "):
+			t.Title = strings.TrimSpace(strings.TrimPrefix(line, "# "))
+		case trimmed == "":
+			// ignore
+		default:
+			if task, ok := parseTaskBullet(trimmed); ok {
+				if cur == nil {
+					cur = &TaskSection{} // implicit unnamed section
+				}
+				cur.Tasks = append(cur.Tasks, task)
+			}
+		}
+	}
+	flushSection()
+
+	return t
+}
+
+// parseTaskBullet parses a task checkbox bullet into a Task. A leading "[x]" /
+// "[X]" marks Done; "[ ]" or no checkbox marks not-done. The remainder is split
+// into an optional dotted Number and the text. Returns false for non-bullets.
+func parseTaskBullet(trimmed string) (Task, bool) {
+	body, ok := bulletBody(trimmed)
+	if !ok {
+		return Task{}, false
+	}
+	done := false
+	switch {
+	case strings.HasPrefix(body, "[x]"), strings.HasPrefix(body, "[X]"):
+		done, body = true, strings.TrimSpace(body[3:])
+	case strings.HasPrefix(body, "[ ]"):
+		body = strings.TrimSpace(body[3:])
+	}
+	number, text := splitTaskNumber(body)
+	return Task{Number: number, Text: text, Done: done}, true
+}
+
+// splitTaskNumber separates a leading dotted number ("1.1") from the task text.
+func splitTaskNumber(s string) (number, text string) {
+	head, rest, found := strings.Cut(s, " ")
+	if found && isTaskNumber(head) {
+		return head, strings.TrimSpace(rest)
+	}
+	if isTaskNumber(s) {
+		return s, ""
+	}
+	return "", s
+}
+
+// isTaskNumber reports whether s is a dotted task number (digits and dots, at
+// least one digit), e.g. "1" or "1.2".
+func isTaskNumber(s string) bool {
+	if s == "" {
+		return false
+	}
+	hasDigit := false
+	for _, r := range s {
+		switch {
+		case r >= '0' && r <= '9':
+			hasDigit = true
+		case r == '.':
+		default:
+			return false
+		}
+	}
+	return hasDigit
+}
