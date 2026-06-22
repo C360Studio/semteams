@@ -377,9 +377,23 @@ Cost/iteration are **observations**, not gates (the ADR-044 posture).
 
 ## Open Questions
 
-1. **Render/ingest as tool vs subscriber?** A coordinator-invoked tool
-   pair, or a subscriber reacting to `change.*` writes? Resolve at P1
-   (cf. ADR-055 OQ1 — same tool-vs-subscriber question for the analyzer).
+1. **Render/ingest as tool vs subscriber?** — **RESOLVED (2026-06-22):
+   a product-shell tool pair**, joining the existing `emit_*` / `query_*`
+   family, not a subscriber. Rationale: (a) neither direction has a clean
+   reactive trigger — ingest fires on a flow moment (repo cloned / sandbox
+   ready with an `openspec/` dir), and render is "on demand" (§D5); a
+   subscriber fits event→side-effect, these are imperative journey steps;
+   (b) both touch the sandbox workspace filesystem (ingest reads
+   `openspec/`, render writes it back for a PR), the established
+   product-shell-tool-called-by-a-sandbox-role pattern (chainbash /
+   request_sandbox precedent); (c) family coherence — the whole
+   product-shell surface is tools, and `emit_change` (the `change.*`
+   producer) is already one. Render is additionally usable as a plain
+   internal function for the on-demand deliverable; it is exposed as an
+   LLM tool only if a role needs to preview. Slice 5's subject-less
+   mapping is wiring-agnostic, so this choice cost no rework. (ADR-055
+   OQ1 — the analyzer's tool-vs-subscriber question — is independent and
+   stays open under that ADR.)
 2. **Capability + requirement identity** — RESOLVED by OpenSpec convention:
    `<cap>` = the `specs/<domain>/` folder name; `<rid>` = the slugified
    `### Requirement: <Name>` title (no formal IDs). Residue: slug-collision
@@ -442,6 +456,64 @@ init|list|show|validate|archive`) and `archive/<YYYY-MM-DD-name>/` match
 
 Sources (Fission-AI/OpenSpec, `main`): <https://github.com/Fission-AI/OpenSpec>
 · `docs/concepts.md` · `docs/getting-started.md`.
+
+## Build addendum 2026-06-22 — slice 5 (the P1→P2 bridge: model ↔ graph facts)
+
+P1 shipped the markdown↔model format layer (#229). Slice 5 adds the
+model↔graph mapping in the same `cmd/semteams/openspec` package
+(`facts.go`, `facts_change.go`, `facts_test.go`), keeping it a **pure**
+layer (no graph/NATS import). It firms up the §D1 sketch into a built
+contract; the deltas below are refinements made during the build, not
+departures from the model:
+
+- **Subject-less `Fact{Predicate, Object string}`.** The mapping emits a
+  message.Triple *minus* the fields a writer owns (Subject / Source /
+  Timestamp / Confidence). The graph-writing caller supplies those. This
+  is what makes slice 5 **independent of OQ1** (tool vs subscriber) and of
+  OQ2/OQ3 (entity identity): the same `Spec.Facts()` / `Change.Facts()` /
+  `*FromFacts` transforms serve either wiring. It mirrors the precedent
+  `plan.triples(runEntityID, now)` (emit_dev_via_test_plan), which is
+  likewise subject-parameterised.
+- **Object is always a string** — prose verbatim, scalars via `strconv`,
+  arrays/scenarios JSON-encoded (§D1). The wire JSON shapes
+  (`{name,steps:[{kw,text}]}` for scenarios; `[{name,body}]` decisions;
+  `[{path,kind}]` file-changes) are pinned via DTOs decoupled from the Go
+  model field names, so the model can evolve without breaking stored facts.
+- **Ordering is order-of-fact-list-independent** (graph reads are
+  unordered): spec/delta requirements carry an explicit
+  `…​.<rid>.position` fact; **tasks are keyed by an integer index `<i>`**
+  (`change.<slug>.task.<i>.{number,text,done,section}`), reconstructed by
+  numeric sort. **Clarifies §D1/§D6:** the `<n>` in the task schema blocks
+  is that integer index `<i>`, **not** the OpenSpec dotted label — the
+  dotted "1.1" is preserved as `.number` (it may be absent or duplicated
+  in a thin brownfield `tasks.md`, so it cannot be the key).
+- **`<rid>` = `slug.Slugify(name)`**, collisions disambiguated `-2`/`-3`
+  deterministically (§D1/OQ2). The original name is always stored in
+  `.name` (for delta requirements too, not only living-spec ones — §D1's
+  delta block omitted it), so the inverse recovers the name from the fact
+  and never un-slugifies a (possibly suffixed) rid.
+- **Heading text (the model `Title` fields) is not modeled** — §D1 carries
+  no title predicate; a `# heading` is a render-synthesised projection
+  (§D2 blesses formatting drift). The round-trip ignores `Title` (and the
+  diagnostic `Warnings`), nothing else.
+- **Writer-only graph-state is excluded from the pure mapping** — the
+  lifecycle `…​.status` / `change.<slug>.{status,archive_date}`, the
+  chain-level `acceptance_command`, and the §D6 execution-rich task fields
+  (goal/target_files/test_command/…) are stamped by `emit_change` (P2),
+  not derived from the OpenSpec model. The two predicate-shape tests
+  actively assert they are *not* emitted here. This is what keeps the
+  round-trip honest: it covers exactly the markdown-representable surface
+  (§D2).
+
+**P1 gate extended to facts:** `Facts∘FromFacts` is semantically stable
+(ADR-057 §D2) on the real `add-mfa` change folder and the `auth` living
+spec, plus rid-collision / dotted-capability / >9-task-ordering /
+nil-vs-empty edge cases. go-reviewer pass: 0 Critical / 0 Major.
+
+**OQ1 (render/ingest tool vs subscriber) resolved → tool pair** (see
+Open Questions §1). It is the *wiring* of these transforms (P2), which
+slice 5 was deliberately built not to depend on — so the resolution cost
+no rework.
 
 ## Related
 
