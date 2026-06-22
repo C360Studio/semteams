@@ -1,0 +1,171 @@
+name: create-change
+description: |
+  Journey: ADR-057 §D5 create_change pack (author / reviewer) end-to-end
+  on mock-LLM against configs/e2e-flow-bootstrap.json. The first
+  end-to-end coverage of the create-change journey — validates the
+  orchestration the pack added: the coordinator front-door classifies a
+  spec-authoring ask, the author emits a structured OpenSpec change via
+  emit_change (real executor — stamps change.<slug>.* on the run entity
+  and enforces the §D3/§D6 discipline), the reviewer gate approves, and
+  the coordinator wakes to deliver the reviewed change.
+
+  The mock serves these responses in GLOBAL ORDER (last repeats once
+  exhausted). The chain is linear (one author → one reviewer), so the
+  order below == the order of LLM requests across all loops. Placeholder
+  reads (read_loop_result / bash / query_entity / render_openspec) are
+  omitted: the mock doesn't follow personas, and the rules fire on the
+  decide actions + the emit_change stamp, not on those reads. (rule 03
+  grants the wake-up coordinator render_openspec to deliver the rendered
+  spec; on real-LLM it calls it before respond_direct — the mock skips
+  straight to the decide, exactly as dev-via-test omits its reads.)
+
+  No sandbox: the author authors greenfield from the coordinator's ask
+  (its bash tool — for reading an existing openspec/ tree — is unused on
+  this fixture), so no SEMTEAMS_SANDBOX_RUNNER is needed.
+
+  Chain (happy path — drafted, then approved):
+
+    Loop 0 — coordinator (dispatch)
+      1. decide(create_change)
+         → rule 01 → spawn author-create-change (run_scope=new)
+
+    Loop A — author-create-change
+      2. emit_change (slug=add-mfa, 2 SHALL+GWT requirements, 2 §D6 tasks)
+         → stamps change.add-mfa.* on the run entity
+      3. decide(drafted)
+         → rule 02 → spawn reviewer-create-change
+
+    Loop B — reviewer-create-change (gate)
+      4. decide(approved)
+         → rule 03 → stamp agent.run.outcome=success + spawn coordinator
+
+    Loop C — coordinator (wake-up)
+      5. decide(respond_direct)
+         → coordinator/03b-respond-direct → user.response.*
+
+  Validates:
+    - create_change rule pack wired + firing in the e2e substrate.
+    - emit_change resolves the run entity from
+      related_loops["create-change-run"] (rule 01 pin) and stamps a
+      schema-valid change.add-mfa.* (the executor rejects a non-compliant
+      payload, so a stamp == a valid change).
+    - the reviewer gate spawns + approves on the distinct `approved` token.
+    - rule 03 stamps run success → agent-run/03 completes the run.
+    - terminal respond_direct publishes the user reply.
+
+  Paired spec: ui/e2e/agentic/create-change.spec.ts.
+  Required config: configs/e2e-flow-bootstrap.json.
+
+responses:
+  # ---------- Loop 0: coordinator (dispatch) ----------
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "create_change",
+          "reason": "Draft a spec change to add multi-factor authentication to our auth capability: users should be able to enroll a TOTP authenticator, and login should require a valid TOTP code for any account with MFA enabled. The deliverable is the reviewed change, not the implementation."
+        }
+
+  # ---------- Loop A: author-create-change ----------
+
+  - tool_call:
+      name: emit_change
+      arguments_json: |
+        {
+          "slug": "add-mfa",
+          "proposal": {
+            "intent": "Protect user accounts against credential-stuffing by requiring a second factor at login.",
+            "scope_in": ["TOTP authenticator enrollment", "TOTP verification at login"],
+            "scope_out": ["SMS and push factors", "account recovery codes"],
+            "approach": "Store a per-user encrypted TOTP secret, add an enrollment endpoint that verifies a first code, and gate session issuance on a valid TOTP code for MFA-enabled accounts."
+          },
+          "deltas": [
+            {
+              "capability": "auth",
+              "added": [
+                {
+                  "name": "TOTP enrollment",
+                  "statement": "The system SHALL allow an authenticated user to enroll a TOTP authenticator and store the shared secret encrypted at rest.",
+                  "scenarios": [
+                    {
+                      "name": "User enrolls a TOTP authenticator",
+                      "steps": [
+                        {"kw": "GIVEN", "text": "an authenticated user without MFA enabled"},
+                        {"kw": "WHEN", "text": "they request enrollment and submit a valid code from their authenticator app"},
+                        {"kw": "THEN", "text": "the system stores the encrypted TOTP secret and marks MFA enabled for the account"}
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "name": "TOTP verification at login",
+                  "statement": "The system SHALL require a valid TOTP code before issuing a session for any account with MFA enabled.",
+                  "scenarios": [
+                    {
+                      "name": "Login requires a valid second factor",
+                      "steps": [
+                        {"kw": "GIVEN", "text": "a user with MFA enabled who has passed password authentication"},
+                        {"kw": "WHEN", "text": "they submit an incorrect TOTP code"},
+                        {"kw": "THEN", "text": "the system rejects the login and issues no session"}
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "tasks": [
+            {
+              "section": "1. Enrollment",
+              "number": "1.1",
+              "text": "Add encrypted TOTP secret storage and the enrollment endpoint",
+              "goal": "Persist a per-user encrypted TOTP secret and expose POST /mfa/enroll that verifies a first code before enabling MFA.",
+              "target_files": ["internal/auth/mfa.go", "internal/auth/mfa_test.go"],
+              "test_command": "go test ./internal/auth/ -run TestEnroll",
+              "assumptions": ["A KMS-backed helper exists to encrypt secrets at rest"],
+              "non_goals": ["No recovery-code generation in this task"],
+              "requirement_ref": "auth/TOTP enrollment"
+            },
+            {
+              "section": "2. Login gating",
+              "number": "2.1",
+              "text": "Gate session issuance on a valid TOTP code",
+              "goal": "Require a valid TOTP code at login for MFA-enabled accounts before issuing a session.",
+              "target_files": ["internal/auth/login.go", "internal/auth/login_test.go"],
+              "test_command": "go test ./internal/auth/ -run TestLoginMFA",
+              "assumptions": [],
+              "non_goals": [],
+              "requirement_ref": "auth/TOTP verification at login"
+            }
+          ],
+          "acceptance_command": "go test ./internal/auth/..."
+        }
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "drafted",
+          "reason": "Change add-mfa drafted: 2 requirements in the auth capability (TOTP enrollment + verification at login), each with a Given/When/Then scenario, and 2 implementation tasks. Routing to the reviewer gate."
+        }
+
+  # ---------- Loop B: reviewer-create-change (gate) ----------
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "approved",
+          "reason": "Change add-mfa is complete and faithful to the ask: both requirements carry an RFC-2119 SHALL statement and a testable Given/When/Then scenario, the two tasks name real target files + test commands and link to their requirements. Approved."
+        }
+
+  # ---------- Loop C: coordinator (wake-up) ----------
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "respond_direct",
+          "reason": "Your spec change is ready: add-mfa adds two reviewed requirements to the auth capability — TOTP enrollment (store an encrypted per-user secret via an enrollment endpoint) and TOTP verification at login (require a valid code before issuing a session for MFA-enabled accounts). Each requirement has a Given/When/Then acceptance scenario, and the change includes a two-task implementation plan."
+        }

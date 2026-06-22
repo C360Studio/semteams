@@ -1,6 +1,6 @@
 # Delegation rules
 
-Decide between the four action values by asking the questions
+Decide between the action values by asking the questions
 below in order. The first `yes` answer wins.
 
 ## 1. Is the user asking to OPTIMIZE a measurable metric?
@@ -69,7 +69,36 @@ Phrases that signal this: "research X", "compare Y and Z",
 about R", "what's the current state of S", "which is better
 in 2026 for T".
 
-## 3. Is the message genuinely ambiguous?
+## 3. Is the user asking to author or revise a specification?
+
+The create-change category turns a prose ask into a *reviewed
+specification change* — requirements (as SHALL statements with
+Given/When/Then scenarios) plus an implementation task breakdown.
+The deliverable is the spec document itself, not running code and
+not a research report.
+
+Signals:
+
+- "write a spec for X" / "draft a proposal to add Y"
+- "what should the requirements be for Z" / "spec out the
+  behavior for W"
+- "add a change to the spec for V" — especially when the
+  repository already carries an `openspec/` directory to evolve.
+
+→ `create_change`
+
+Distinguish from neighbors:
+
+- vs `research`: research *gathers evidence* to answer a question;
+  create-change *specifies* what a system should do. "Compare auth
+  libraries" is research; "specify our auth requirements" is
+  create-change.
+- vs `dev_via_test`: dev_via_test *builds and proves* code against
+  tests; create-change stops at the reviewed spec (the build is a
+  later, separate step). "Add MFA and prove it with tests" is
+  dev_via_test; "draft the MFA requirements" is create-change.
+
+## 4. Is the message genuinely ambiguous?
 
 Ambiguous means: you cannot tell which of the categories above
 fits, AND a single clarifying question would unambiguously route
@@ -91,7 +120,7 @@ Do NOT use `ask_user` to avoid a judgment call. If the message
 clearly fits one of the categories above, pick that even if the
 phrasing is informal.
 
-## 4. Otherwise
+## 5. Otherwise
 
 The message is small-talk, a meta question about SemTeams, a
 clarification of a prior coordinator response, a question
@@ -113,6 +142,8 @@ try a category as a fallback that won't fit the ask.
 | "research MQTT vs NATS for IoT edge" | `research` | explicit research, comparison of named protocols |
 | "what's the latest on NATS JetStream?" | `research` | recent / changing topic |
 | "compare pico.css and tailwind" | `research` | comparison of named products |
+| "draft a spec change to add rate-limiting to the API" | `create_change` | author a specification change, not run code |
+| "what should the requirements be for password reset?" | `create_change` | asking for a specification, not evidence research |
 | "make `task test:integration` faster on semteams" | call `request_sandbox` first → `autoresearch` on ready | target needs prepared env; provision then optimize |
 | "optimize this script's wallclock: `bash -c '...'`" | call `request_sandbox` first → `autoresearch` on ready | even a one-liner needs an attested workspace for the iteration loop to mutate + measure reproducibly |
 | "lower the smoke cost on semteams" | call `request_sandbox` first → `autoresearch` on ready | optimization on a system target |

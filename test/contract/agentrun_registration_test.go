@@ -79,16 +79,18 @@ func TestAgentRunRegisterRejectsDoubleWiring(t *testing.T) {
 	}
 }
 
-// mintPointSuffixes are the exactly-3 root spawns that mint an AgentRun in
+// mintPointSuffixes are the category-pack root spawns that mint an AgentRun in
 // Phase 2 (run_scope="new"). The coordinator's own loop entity is the run root;
 // downstream spawns inherit transitively via the default inherit branch
 // (agentic-loop stamps agent.run on every spawned loop), so they carry NO
 // run_scope. Path suffixes (matched against the walked, slash-normalized paths)
-// rather than full relative paths to stay robust to the test's CWD.
+// rather than full relative paths to stay robust to the test's CWD. One entry
+// per category pack (research, autoresearch, dev-via-test, create-change).
 var mintPointSuffixes = []string{
 	"configs/rules/research/01-coordinator-research-spawn.json",
 	"configs/rules/autoresearch/01-coordinator-autoresearch-spawn.json",
 	"configs/rules/dev-via-test/01-coordinator-dev-via-test-spawn.json",
+	"configs/rules/create-change/01-coordinator-create-change-spawn.json",
 }
 
 // TestRunScopeMintPointsAndLifecycleTransitions is the ADR-053 run-topology
@@ -150,7 +152,7 @@ func TestRunScopeMintPointsAndLifecycleTransitions(t *testing.T) {
 	}
 	for f := range runScopeFiles {
 		if !matchesAnySuffix(f, mintPointSuffixes) {
-			t.Errorf("run_scope found OUTSIDE the 3 mint points: %s — a downstream spawn must inherit "+
+			t.Errorf("run_scope found OUTSIDE the category-pack mint points: %s — a downstream spawn must inherit "+
 				"(omit run_scope), not mint a second run", f)
 		}
 	}

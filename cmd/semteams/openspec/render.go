@@ -2,6 +2,73 @@ package openspec
 
 import "strings"
 
+// RenderChangeFolder renders a whole Change as a single OpenSpec-markdown
+// document — the proposal, optional design, per-capability delta specs, and
+// tasks, each under an HTML-comment file marker naming its
+// openspec/changes/<slug>/ path. It is the on-demand projection the
+// render_openspec tool returns and any caller that needs the change as one
+// readable doc (vs. WriteChange's multi-file folder on disk).
+//
+// Pure + dep-free (composes the per-artifact renderers); stays in this package
+// alongside them so the format layer remains extraction-ready (ADR-057
+// §Framework-alignment 5a). Cosmetic "# Title" headings are NOT modeled by the
+// graph (facts_change.go), so an artifact reconstructed via ChangeFromFacts has
+// an empty Title; this fills a sensible default on a LOCAL copy (never mutates
+// the caller's Change).
+func RenderChangeFolder(c *Change) string {
+	var b strings.Builder
+	b.WriteString("# OpenSpec change: ")
+	b.WriteString(c.Slug)
+	b.WriteString("\n")
+
+	base := "openspec/changes/" + c.Slug + "/"
+	if c.Proposal != nil {
+		p := *c.Proposal
+		if p.Title == "" {
+			p.Title = "Proposal"
+		}
+		writeChangeArtifact(&b, base+"proposal.md", RenderProposal(&p))
+	}
+	if c.Design != nil {
+		d := *c.Design
+		if d.Title == "" {
+			d.Title = "Design"
+		}
+		writeChangeArtifact(&b, base+"design.md", RenderDesign(&d))
+	}
+	for i := range c.Deltas {
+		// Value copy for the Title write; the inner slices (Added/Modified/Removed)
+		// are shared with the caller, which is safe ONLY because RenderDelta reads
+		// them and never mutates. Keep that invariant if the render path changes.
+		d := c.Deltas[i]
+		if d.Title == "" {
+			d.Title = d.Capability
+		}
+		writeChangeArtifact(&b, base+"specs/"+d.Capability+"/spec.md", RenderDelta(&d))
+	}
+	if c.Tasks != nil {
+		t := *c.Tasks
+		if t.Title == "" {
+			t.Title = "Tasks"
+		}
+		writeChangeArtifact(&b, base+"tasks.md", RenderTasks(&t))
+	}
+	return b.String()
+}
+
+// writeChangeArtifact appends one file's rendered content under an
+// HTML-comment marker naming its in-folder path, normalising a trailing
+// newline so artifacts don't run together.
+func writeChangeArtifact(b *strings.Builder, path, content string) {
+	b.WriteString("\n<!-- ")
+	b.WriteString(path)
+	b.WriteString(" -->\n\n")
+	b.WriteString(content)
+	if !strings.HasSuffix(content, "\n") {
+		b.WriteString("\n")
+	}
+}
+
 // RenderSpec renders a Spec back to OpenSpec capability spec.md markdown. The
 // output is canonical (one blank line between blocks, "- " bullets); it is not
 // guaranteed to be byte-identical to arbitrary input, because the round-trip

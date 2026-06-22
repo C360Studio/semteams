@@ -298,10 +298,38 @@ hopeful, schema is load-bearing.
 `emit_plan` / `emit_dev_via_test_plan` / `emit_autoresearch_*`. The
 requirement/delta schema stays product-local regardless (domain-specific
 to the OpenSpec contract); if the generic primitive exposes a schema-validation
-hook, the JSON-Schema fragment lifts into config. The render/ingest pair
-is a stronger upstream candidate (other products may want OpenSpec
-interchange) — flag it for upstream after a second product needs it, per
-the two-scenarios-before-substrate rule.
+hook, the JSON-Schema fragment lifts into config.
+
+**5a. OpenSpec FORMAT-LAYER placement (tracked, 2026-06-22).** The
+`cmd/semteams/openspec` package splits along a clean reuse seam, verified
+by import audit:
+
+- **Pure format layer** — `model*.go`, `parse.go`, `render.go`, `change.go`
+  (markdown ↔ Go model) — is **100% stdlib, zero c360/semstreams deps**. It
+  implements an *external* standard (Fission-AI/OpenSpec), not a SemTeams
+  concept, so it is a genuine reusable library and a strong shared-substrate
+  candidate (SDD/OpenSpec is widely adopted).
+- **Graph adapter** — `facts.go` / `facts_change.go` (model ↔ `spec.*`/
+  `change.*`) — encodes *this ADR's* §D1 predicate schema and is the only
+  part with a SemTeams dep (`slug`). It is product-specific and does **not**
+  travel with the format layer.
+
+Posture: **stay in `cmd/semteams/openspec` for now** — one consumer
+(SemTeams), and the two-scenarios-before-substrate rule says don't extract
+shared substrate before a second need proves the API shape. (A SemTeams
+`pkg/` move buys nothing: the repo has no `pkg/` convention — all
+product-internal Go lives under `cmd/semteams/` — and it would stay
+module-internal anyway.) **Trigger to extract:** a second consumer (most
+likely semspec wanting OpenSpec interchange) or a decision to open-source.
+**Target:** **semstreams `pkg/openspec/`** — it fits the existing
+utility-lib precedent there (`pkg/text`, `pkg/swecommon`, `pkg/buffer`),
+is *not* agentic substrate so it doesn't bloat the framework core, and
+matches how this project already shares Go (everything reusable routes
+through semstreams). Extract the **format layer only**; `facts.go` stays
+here as the §D1 adapter. (Alternative: a standalone `openspec-go` module —
+cleaner + open-sourceable, but a new release surface; prefer the
+semstreams `pkg/` route unless we choose to open-source.) Until then, keep
+the format files dep-free so the extraction stays a trivial move.
 
 **6. Evidence trail.** `cmd/semteams/tools/README.md` gains rows for the
 new tools with migration targets at P1 build; this §is the ADR-side
@@ -514,6 +542,72 @@ nil-vs-empty edge cases. go-reviewer pass: 0 Critical / 0 Major.
 Open Questions §1). It is the *wiring* of these transforms (P2), which
 slice 5 was deliberately built not to depend on — so the resolution cost
 no rework.
+
+## Build addendum 2026-06-22 — P2 slice 1 (the `emit_change` tool)
+
+`cmd/semteams/tools/emitchange/` (executor + payload + schema + tests) — the
+author role's terminal commit, mirroring `emit_dev_via_test_plan`. Reuses
+slice 5's `openspec.Change.Facts()` for the markdown-representable content and
+adds the writer-only graph-state (`change.<slug>.status=draft` /
+`acceptance_command` / `generated_at` + the per-task §D6 execution-rich fields),
+stamped on the run entity (`related_loops["create-change-run"]` →
+`TryChainExecutionEntityID`). The §D3 (SHALL-class + WHEN/THEN scenario) and §D6
+(per-task goal/target_files≥1/test_command/assumptions/non_goals) discipline is
+enforced structurally in the schema + validator. go-reviewer: 0 Critical / 0
+Major after fixes. Two build decisions worth pinning:
+
+- **`requirement_ref` is validated + normalized.** The author writes
+  `"<capability>/<requirement name>"`; emit_change rejects a ref that resolves
+  to no added/modified requirement (a silent dangling link otherwise) and
+  rewrites it to the `"<capability>/<rid>"` key form. It also enforces
+  **per-capability `<rid>` uniqueness**, so `Change.Facts()` never silently
+  disambiguates a collision with a `-2` suffix the author can't predict.
+- **Single-emit for now; upsert deferred — COUPLING.** v1 stamps once (no
+  remover/revision), like `emit_dev_via_test_plan`'s first slice. A reviewer
+  bounce that re-runs the author would append a second `change.<slug>.*` set
+  (first-match reads then return the stale one). **When the
+  `configs/rules/create-change/` pack adds the reviewer→author recovery loop
+  (ADR-039), that same PR must add the triple-remover upsert** (mirror
+  `emitdevviatestplan/remover.go`, including the loud error on re-emit with a
+  nil remover). Until that loop exists there is no live re-author trigger, so
+  the gap is latent, not live.
+
+## Build addendum 2026-06-22 — P2 slice 4 (`render_openspec`; the OQ1 pair, render half)
+
+`cmd/semteams/tools/renderopenspec/` — the read/render half of the OQ1 tool pair.
+It resolves the run entity from the call's run anchor (`runanchor.Anchor`), reads
+the `change.<slug>.*` triples, reconstructs the change via the pure
+`openspec.ChangeFromFacts`, and renders it through a new pure
+`openspec.RenderChangeFolder` (proposal + per-capability delta specs + tasks, each
+under an `openspec/changes/<slug>/` HTML-comment file marker). `slug` is optional —
+it auto-discovers the single change on the entity. **Primary consumer (P2):** the
+create-change wake-up coordinator (`configs/rules/create-change/03`) calls it to
+deliver the *actual* reviewed spec to the user, not a prose summary.
+
+- **Thin graph adapter; format logic stays pure.** `RenderChangeFolder` lives in
+  the dep-free `openspec` package alongside the other renderers, keeping the format
+  layer extraction-ready (§Framework-alignment 5a). The tool only does the graph
+  read + the predicate→`Fact` mapping. Writer-only graph-state
+  (`status`/`acceptance_command`/§D6 task fields) is not modeled by
+  `ChangeFromFacts`, so it never leaks into the rendered markdown (asserted in the
+  tool tests).
+- **Framework-alignment review.** Read-shaped like upstream `read_loop_result` /
+  `read_entity` / `query_entities`, but none returns a *rendered OpenSpec
+  projection* — so none substitutes. Migration target = the same anticipated
+  `read_artifact`/`write_artifact` suite (ADR-028 §What's not built here, verified
+  absent in semstreams beta.114) as `emit_change`'s. See
+  `cmd/semteams/tools/README.md`.
+- **`ingest_openspec` (the pair's read-from-FS half) is DEFERRED to UC-1.** The
+  greenfield `create_change` journey has no `openspec/` tree to ingest (the author
+  writes from scratch; brownfield context-read is `bash` in v1), so ingest has no
+  v1 consumer. Its stamping variant loads living specs as owned `spec.*` predicates
+  — the governed-SKG `replace_owned` lifecycle this ADR explicitly stages to v2
+  (§compat depth). Build it with UC-1, where the brownfield clone→ingest flow gives
+  it a consumer and the living-spec model is in scope.
+- **render-to-sandbox-FS (write the `openspec/changes/<slug>/` folder for a PR) is
+  the UC-1 extension of `render_openspec`** — it needs a sandbox FS writer (mirror
+  `emit_autoresearch_artifact`) and a PR flow not present in P2. v1 returns the
+  rendered markdown as the tool result.
 
 ## Related
 

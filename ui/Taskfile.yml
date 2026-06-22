@@ -195,6 +195,7 @@ tasks:
       tearing down the docker stack between runs.
     cmds:
       - task: test:e2e:agentic:research-mvp
+      - task: test:e2e:agentic:create-change
       - task: test:e2e:agentic:dev-via-test
       - task: test:e2e:agentic:dev-via-test-replan
       - task: test:e2e:agentic:autoresearch
@@ -277,6 +278,39 @@ tasks:
           FIXTURE: "{{.FIXTURE}}"
           AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
       - npx playwright test e2e/agentic/research-mvp.spec.ts
+
+  test:e2e:agentic:create-change:
+    desc: Run the ADR-057 §D5 create_change-category mock-LLM journey
+    summary: |
+      One spec-authoring prompt drives the full create-change arc
+      end-to-end against the e2e substrate:
+
+        Loop 0  coordinator (dispatch)      decide(action="create_change")
+        Loop A  author-create-change        emit_change + decide(drafted)
+        Loop B  reviewer-create-change      decide(approved)
+        Loop C  coordinator (wake-up)       decide(respond_direct)
+
+      Validates the create-change pack (ADR-057 §D5) wired through the
+      substrate-plus-overlays architecture: the coordinator classifies a
+      spec-authoring ask, the author stamps a schema-valid change.<slug>.*
+      via the REAL emit_change executor, the reviewer gate approves, and
+      the coordinator wakes to deliver the reviewed change.
+
+      Four loops, no sandbox (the author authors greenfield — its bash
+      tool, for reading an existing openspec/ tree, is unused on this
+      fixture). The emit_change payload's §D3/§D6 validity is pinned
+      separately at `go test` time by
+      test/contract/create_change_fixture_test.go.
+    vars:
+      FIXTURE: create-change.yaml
+      AGENTIC_CONFIG: e2e-flow-bootstrap.json
+    cmds:
+      - defer: { task: test:e2e:agentic:cleanup }
+      - task: test:e2e:agentic:stack:up
+        vars:
+          FIXTURE: "{{.FIXTURE}}"
+          AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
+      - npx playwright test e2e/agentic/create-change.spec.ts
 
   test:e2e:agentic:run-failed:
     desc: Run the ADR-053 Phase 4a′ executing→failed run-transition journey
