@@ -159,3 +159,168 @@ func parseStep(bullet string) Step {
 	}
 	return Step{Text: bullet}
 }
+
+// deltaSection is the current "## ADDED/MODIFIED/REMOVED Requirements" section
+// while parsing a delta.
+type deltaSection int
+
+const (
+	sectionNone deltaSection = iota
+	sectionAdded
+	sectionModified
+	sectionRemoved
+)
+
+// reqAccum accumulates one "### Requirement:" block during delta parsing,
+// before it is dispatched into Delta.Added/Modified/Removed on flush.
+type reqAccum struct {
+	name       string
+	scenarios  []Scenario
+	previously string
+	rationale  string
+}
+
+// ParseDelta parses a change delta spec.md body into a Delta. It reuses the
+// requirement/scenario grammar of ParseSpec, adding the three delta sections
+// and the "(Previously: ...)" / "(Rationale: ...)" annotations. Like ParseSpec
+// it is lenient and infallible (ADR-057 §D2/§D3): a "### Requirement:" outside
+// any ADDED/MODIFIED/REMOVED section, or a scenario before any requirement, is
+// dropped with a warning.
+func ParseDelta(md string) *Delta {
+	d := &Delta{}
+
+	var (
+		section deltaSection
+		cur     *reqAccum
+		curScen *Scenario
+		stmt    []string
+	)
+
+	flushScenario := func() {
+		if cur != nil && curScen != nil {
+			cur.scenarios = append(cur.scenarios, *curScen)
+		}
+		curScen = nil
+	}
+	flushRequirement := func() {
+		flushScenario()
+		if cur != nil {
+			statement := ""
+			if len(stmt) > 0 {
+				statement = strings.TrimSpace(strings.Join(stmt, "\n"))
+			}
+			appendDeltaRequirement(d, section, cur, statement)
+		}
+		cur = nil
+		stmt = nil
+	}
+
+	for raw := range strings.SplitSeq(md, "\n") {
+		line := strings.TrimRight(raw, " \t\r")
+		trimmed := strings.TrimSpace(line)
+
+		switch {
+		case strings.HasPrefix(line, "#### Scenario:"):
+			flushScenario()
+			name := strings.TrimSpace(strings.TrimPrefix(line, "#### Scenario:"))
+			if cur == nil {
+				d.Warnings = append(d.Warnings,
+					fmt.Sprintf("scenario %q before any requirement; dropped", name))
+				break
+			}
+			curScen = &Scenario{Name: name}
+
+		case strings.HasPrefix(line, "### Requirement:"):
+			flushRequirement()
+			cur = &reqAccum{name: strings.TrimSpace(strings.TrimPrefix(line, "### Requirement:"))}
+
+		case strings.HasPrefix(line, "## "):
+			flushRequirement()
+			section = parseDeltaSection(strings.TrimPrefix(line, "## "))
+
+		case strings.HasPrefix(line, "# "):
+			d.Title = strings.TrimSpace(strings.TrimPrefix(line, "# "))
+
+		case trimmed == "":
+			// blank line — ignore
+
+		default:
+			if cur != nil {
+				if v, ok := parenAnnotation(trimmed, "Previously"); ok {
+					cur.previously = v
+					break
+				}
+				if v, ok := parenAnnotation(trimmed, "Rationale"); ok {
+					cur.rationale = v
+					break
+				}
+			}
+			if body, ok := bulletBody(trimmed); ok && curScen != nil {
+				curScen.Steps = append(curScen.Steps, parseStep(body))
+				break
+			}
+			if cur != nil && curScen == nil {
+				stmt = append(stmt, trimmed)
+			}
+		}
+	}
+	flushRequirement()
+
+	return d
+}
+
+// appendDeltaRequirement dispatches a completed requirement accumulator into
+// the matching Delta section, recording a warning for the lossy REMOVED case
+// (content beyond name+rationale) and the orphan (sectionNone) case.
+func appendDeltaRequirement(d *Delta, section deltaSection, cur *reqAccum, statement string) {
+	req := Requirement{Name: cur.name, Statement: statement, Scenarios: cur.scenarios}
+	switch section {
+	case sectionAdded:
+		d.Added = append(d.Added, req)
+	case sectionModified:
+		d.Modified = append(d.Modified, ModifiedRequirement{Requirement: req, Previously: cur.previously})
+	case sectionRemoved:
+		if statement != "" || len(cur.scenarios) > 0 {
+			d.Warnings = append(d.Warnings,
+				fmt.Sprintf("removed requirement %q carries a statement or scenarios; only name + rationale are kept", cur.name))
+		}
+		d.Removed = append(d.Removed, RemovedRequirement{Name: cur.name, Rationale: cur.rationale})
+	default: // sectionNone
+		d.Warnings = append(d.Warnings,
+			fmt.Sprintf("requirement %q outside any ADDED/MODIFIED/REMOVED section; dropped", cur.name))
+	}
+}
+
+// parseDeltaSection maps a "## " heading body to its delta section. The match
+// is a case-insensitive prefix (not exact): OpenSpec's canonical heading is
+// "## ADDED Requirements", but brownfield/LLM output also writes "## Added" or
+// "## ADDED". An unrelated "## Added Notes" would false-positive into the
+// section; that is an accepted leniency tradeoff (strict validation is
+// emit_change's job, §D3). An unrecognised heading yields sectionNone.
+func parseDeltaSection(heading string) deltaSection {
+	switch h := strings.ToUpper(strings.TrimSpace(heading)); {
+	case strings.HasPrefix(h, "ADDED"):
+		return sectionAdded
+	case strings.HasPrefix(h, "MODIFIED"):
+		return sectionModified
+	case strings.HasPrefix(h, "REMOVED"):
+		return sectionRemoved
+	default:
+		return sectionNone
+	}
+}
+
+// parenAnnotation parses a single-line "(Label: value)" annotation, matching
+// the label case-insensitively for lenient ingest (OpenSpec emits the
+// canonical capitalized form, but brownfield/LLM output may not). It returns
+// the trimmed value and true on a match, else "", false. The closing ")" is
+// optional — a value with no terminator is taken to end-of-line — and an
+// interior ")" is preserved, since only the final one is trimmed.
+func parenAnnotation(trimmed, label string) (string, bool) {
+	prefix := "(" + label + ":"
+	if len(trimmed) < len(prefix) || !strings.EqualFold(trimmed[:len(prefix)], prefix) {
+		return "", false
+	}
+	inner := strings.TrimSuffix(strings.TrimSpace(trimmed[len(prefix):]), ")")
+	return strings.TrimSpace(inner), true
+}
