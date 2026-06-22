@@ -32,6 +32,23 @@ import (
 // non-ASCII-alphanumeric characters to a single "-".
 var nonAlnum = regexp.MustCompile(`[^a-z0-9]+`)
 
+// Slugify returns the bare lower-kebab-case slug of s with no date prefix
+// and no fallback: s is lowercased, trimmed, and every run of
+// non-[a-z0-9] characters is collapsed to a single "-", with leading and
+// trailing "-" removed. An input with no ASCII-alphanumeric content
+// yields "".
+//
+// This is the un-dated primitive DeriveDated builds on. Use it where a
+// stable key is wanted rather than a dated artifact filename — e.g. the
+// OpenSpec graph layer derives a requirement's <rid> predicate key by
+// slugifying its "### Requirement: <Name>" title (ADR-057 §D1). Callers
+// that need uniqueness across a set must disambiguate collisions
+// themselves (two distinct titles can slugify equal — ADR-057 OQ2).
+func Slugify(s string) string {
+	out := nonAlnum.ReplaceAllString(strings.ToLower(strings.TrimSpace(s)), "-")
+	return strings.Trim(out, "-")
+}
+
 // StemFromPath extracts the chain-stable slug stem from a rendered
 // artifact path. Strips the directory, the .md extension, and the
 // trailing "-<kindSuffix>" if present; returns empty when the input
@@ -106,8 +123,7 @@ func DeriveDated(title, loopID, fallbackPrefix string, t time.Time) string {
 			source = fallbackPrefix
 		}
 	}
-	s := nonAlnum.ReplaceAllString(source, "-")
-	s = strings.Trim(s, "-")
+	s := Slugify(source)
 	// Final defensive fallback: if normalisation reduced the slug to
 	// empty AND a prefix was supplied, use the prefix verbatim. When
 	// no prefix is supplied (spec-artifact's contract path), leave
