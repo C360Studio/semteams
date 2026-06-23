@@ -142,6 +142,63 @@ func TestAgentRunPack_HandoffMarker(t *testing.T) {
 	if !stampsHandoff {
 		t.Error("handoff marker must add_triple agent.run.handoff on the run entity")
 	}
+	// Single-anchor guard: rule 01 handles the length_eq 1 case (front-door
+	// mint OR between-task inherit — both carry exactly one run anchor). The
+	// dual-anchor (recovery re-dispatch) case is rule 01b. The split keeps the
+	// ambiguous $entity.triple.agent.run.entity_id subject correct: with one
+	// anchor it resolves unambiguously.
+	// Pin the VALUE (1), not just the operator: the single/dual split is only
+	// sound at exactly length_eq 1 vs length_gt 1. length_eq 2 (or 01b at
+	// length_gt 0) would silently break the partition. JSON numbers decode to
+	// float64.
+	if !r.hasCondition("agent.run.entity_id", "length_eq", float64(1)) {
+		t.Error("rule 01 must gate on agent.run.entity_id length_eq 1 (exact value) — without it, it also fires on a dual-anchor recovery coordinator and stamps the handoff on the inherited (wrong) run; rule 01b owns that case")
+	}
+}
+
+// TestAgentRunPack_HandoffMarkerRedispatch pins rule 01b: the dual-anchor
+// (recovery re-dispatch) handoff. A coordinator that inherited a prior run's
+// anchor AND minted a fresh one carries two agent.run.entity_id triples;
+// $entity.triple.agent.run.entity_id is first-written-wins → resolves to the
+// inherited (wrong) run. 01b targets the SELF-MINTED run by its literal id
+// (chain.execution.<own loop>) so the re-dispatched run advances
+// dispatched→executing→completed.
+//
+//  1. Fires on coordinator + rule.spawned_task + agent.run.entity_id length_gt 1.
+//  2. Stamps agent.run.handoff on the literal self-minted run subject
+//     ($entity.org.$entity.platform.agent.chain.execution.$entity.instance),
+//     NOT $entity.triple.agent.run.entity_id (which would resolve to the
+//     inherited run).
+//  3. Mutually exclusive with rule 01 (length_eq 1 vs length_gt 1).
+func TestAgentRunPack_HandoffMarkerRedispatch(t *testing.T) {
+	r := loadRule(t, "../../configs/rules/agent-run/01b-handoff-marker-redispatch.json")
+
+	if !r.hasCondition("agent.loop.role", "eq", "coordinator") {
+		t.Error("rule 01b must fire on the coordinator loop")
+	}
+	if !r.hasCondition("rule.spawned_task", "ne", "") {
+		t.Error("rule 01b must gate on rule.spawned_task != \"\" (confirmed handoff)")
+	}
+	// Pin the value (1): length_gt 0 would make 01b fire on single-anchor
+	// dispatches too → double-handoff. The {1} vs {2,3,...} partition is only
+	// sound at length_gt 1.
+	if !r.hasCondition("agent.run.entity_id", "length_gt", float64(1)) {
+		t.Error("rule 01b must gate on agent.run.entity_id length_gt 1 (exact value — length_gt 0 would fire on single-anchor dispatches too, double-stamping the handoff; mutually exclusive with rule 01's length_eq 1)")
+	}
+
+	const selfMintedSubject = "$entity.org.$entity.platform.agent.chain.execution.$entity.instance"
+	var stampsHandoff bool
+	for _, a := range r.OnEnter {
+		if a.Type == "add_triple" && a.Predicate == "agent.run.handoff" {
+			stampsHandoff = true
+			if a.Subject != selfMintedSubject {
+				t.Errorf("rule 01b handoff subject = %q, want %q (the self-minted run, NOT $entity.triple.agent.run.entity_id which resolves to the inherited run)", a.Subject, selfMintedSubject)
+			}
+		}
+	}
+	if !stampsHandoff {
+		t.Error("rule 01b must add_triple agent.run.handoff on the self-minted run entity")
+	}
 }
 
 // TestAgentRunPack_TransitionsPhaseGuardedTopLevel pins the load-bearing Coby

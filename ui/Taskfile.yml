@@ -196,6 +196,7 @@ tasks:
     cmds:
       - task: test:e2e:agentic:research-mvp
       - task: test:e2e:agentic:create-change
+      - task: test:e2e:agentic:create-change-recovery
       - task: test:e2e:agentic:dev-via-test
       - task: test:e2e:agentic:dev-via-test-replan
       - task: test:e2e:agentic:autoresearch
@@ -311,6 +312,38 @@ tasks:
           FIXTURE: "{{.FIXTURE}}"
           AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
       - npx playwright test e2e/agentic/create-change.spec.ts
+
+  test:e2e:agentic:create-change-recovery:
+    desc: Run the ADR-057 §D5 create_change REJECT-RECOVERY mock-LLM journey
+    summary: |
+      The companion to create-change (the happy approve path): drives the
+      reviewer→coordinator recovery path (rule 04) that the happy path never
+      reaches, giving the anchor_inherit recovery spawn live coverage
+      (go-reviewer Nit 2):
+
+        Loop 0  coordinator (dispatch)     decide(create_change)
+        Loop A  author #1                  emit_change + decide(drafted)
+        Loop B  reviewer #1                decide(rejected)        [rule 04]
+        Loop C  coordinator (recovery)     decide(create_change)   [re-dispatch]
+        Loop D  author #2                  emit_change + decide(drafted)
+        Loop E  reviewer #2                decide(approved)
+        Loop F  coordinator (wake-up)      decide(respond_direct)
+
+      Proves: rule 04 spawns the recovery coordinator (which inherits the run
+      anchor), it re-dispatches create_change (rule 01 fires again — no lineage
+      fence) onto a FRESH run, and the re-dispatched arc reaches approved +
+      completed (supersession; the original run stays executing — accepted v1
+      recovery semantics, the reaper is deferred).
+    vars:
+      FIXTURE: create-change-recovery.yaml
+      AGENTIC_CONFIG: e2e-flow-bootstrap.json
+    cmds:
+      - defer: { task: test:e2e:agentic:cleanup }
+      - task: test:e2e:agentic:stack:up
+        vars:
+          FIXTURE: "{{.FIXTURE}}"
+          AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
+      - npx playwright test e2e/agentic/create-change-recovery.spec.ts
 
   test:e2e:agentic:run-failed:
     desc: Run the ADR-053 Phase 4a′ executing→failed run-transition journey
