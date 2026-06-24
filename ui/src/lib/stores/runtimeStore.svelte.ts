@@ -85,6 +85,7 @@ export interface RuntimeStoreState {
 
 const MAX_LOGS = 1000;
 const _METRICS_INTERVAL_MS = 5000; // Expected interval for rate calculation (documentation)
+const METRICS_FRESHNESS_TICK_MS = 10_000;
 
 // ============================================================================
 // Store Implementation using Svelte 5 runes
@@ -102,6 +103,24 @@ function createRuntimeStore() {
   let metricsRaw = new SvelteMap<string, MetricValue>();
   let metricsRates = new SvelteMap<string, number>();
   let lastMetricsTimestamp = $state<number | null>(null);
+  let metricsNow = $state(Date.now());
+  let metricsClockInterval: ReturnType<typeof setInterval> | null = null;
+
+  function startMetricsClock() {
+    metricsNow = Date.now();
+    if (metricsClockInterval !== null || typeof window === "undefined") return;
+    metricsClockInterval = setInterval(() => {
+      metricsNow = Date.now();
+    }, METRICS_FRESHNESS_TICK_MS);
+  }
+
+  function stopMetricsClock() {
+    if (metricsClockInterval !== null) {
+      clearInterval(metricsClockInterval);
+      metricsClockInterval = null;
+    }
+    metricsNow = Date.now();
+  }
 
   return {
     // ========================================================================
@@ -138,6 +157,9 @@ function createRuntimeStore() {
     get lastMetricsTimestamp() {
       return lastMetricsTimestamp;
     },
+    get metricsNow() {
+      return metricsNow;
+    },
 
     // ========================================================================
     // Connection State
@@ -145,6 +167,8 @@ function createRuntimeStore() {
 
     setConnected(isConnected: boolean, newFlowId?: string) {
       connected = isConnected;
+      if (isConnected) startMetricsClock();
+      else stopMetricsClock();
       if (newFlowId !== undefined) {
         flowId = newFlowId;
       }
@@ -325,6 +349,7 @@ function createRuntimeStore() {
       }
 
       lastMetricsTimestamp = timestamp;
+      metricsNow = Date.now();
     },
 
     // ========================================================================
@@ -419,6 +444,7 @@ function createRuntimeStore() {
       metricsRaw.clear();
       metricsRates.clear();
       lastMetricsTimestamp = null;
+      stopMetricsClock();
     },
   };
 }

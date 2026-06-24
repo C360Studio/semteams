@@ -7,7 +7,10 @@ import (
 	agentictools "github.com/c360studio/semstreams/processor/agentic-tools"
 	"github.com/c360studio/semstreams/types"
 
+	"github.com/c360studio/semteams/cmd/semteams/tools/analyzeproof"
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitchange"
+	"github.com/c360studio/semteams/cmd/semteams/tools/projectspecplan"
+	"github.com/c360studio/semteams/cmd/semteams/tools/renderopenspec"
 )
 
 // TestRegisterCreateChangeTools_NilNATSSkips covers the nil-NATS boot
@@ -30,5 +33,14 @@ func TestRegisterCreateChangeTools_NilNATSSkips(t *testing.T) {
 	}
 	if got := reg.GetTool(emitchange.ToolName); got != nil {
 		t.Errorf("emit_change registered despite nil NATS client; want skipped (got %T)", got)
+	}
+	if got := reg.GetTool(renderopenspec.ToolName); got != nil {
+		t.Errorf("render_openspec registered despite nil NATS client; want skipped (got %T)", got)
+	}
+	if got := reg.GetTool(analyzeproof.ToolName); got != nil {
+		t.Errorf("analyze_proof_readiness registered despite nil NATS client; want skipped (got %T)", got)
+	}
+	if got := reg.GetTool(projectspecplan.ToolName); got != nil {
+		t.Errorf("project_spec_tasks registered despite nil NATS client; want skipped (got %T)", got)
 	}
 }

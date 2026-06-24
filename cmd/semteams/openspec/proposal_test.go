@@ -1,6 +1,7 @@
 package openspec
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -31,6 +32,32 @@ func TestProposalRoundTrip(t *testing.T) {
 	once := RenderProposal(first)
 	if twice := RenderProposal(ParseProposal(once)); once != twice {
 		t.Errorf("proposal render not idempotent:\n once =\n%s\n twice =\n%s", once, twice)
+	}
+}
+
+func TestParseProposal_PreservesExtraSections(t *testing.T) {
+	md := "# Proposal: X\n\n## Intent\nship it\n\n## Future Roadmap\n### Skill Import Adapter\nMarkdown seeds a reviewed pack.\n"
+	want := []MarkdownSection{{
+		Heading: "Future Roadmap",
+		Body:    "### Skill Import Adapter\nMarkdown seeds a reviewed pack.",
+	}}
+
+	got := ParseProposal(md)
+	if diff := cmp.Diff(want, got.ExtraSections); diff != "" {
+		t.Errorf("extra sections mismatch (-want +got):\n%s", diff)
+	}
+	rendered := RenderProposal(got)
+	for _, want := range []string{
+		"## Future Roadmap",
+		"### Skill Import Adapter",
+		"Markdown seeds a reviewed pack.",
+	} {
+		if !strings.Contains(rendered, want) {
+			t.Errorf("rendered proposal missing %q\n%s", want, rendered)
+		}
+	}
+	if diff := cmp.Diff(got, ParseProposal(rendered)); diff != "" {
+		t.Errorf("proposal extra-section round-trip not stable (-got +reparsed):\n%s", diff)
 	}
 }
 

@@ -1,0 +1,67 @@
+{
+  "id": "proof_readiness_failed_no_route_pause",
+  "type": "expression",
+  "name": "formal_claims failed without route summary → proof_readiness pause marker",
+  "description": "OpenSpec SDD task 2.3 / ADR-055 D4 — fail closed if the analyzer reports failed but emits no routeable summary. The current analyzer should normally emit test_harness or coordinator; this rule is the defensive pause path for schema drift, future analyzer bugs, or a solver-backed analyzer returning an incomplete envelope.",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "formal_claims.status",
+      "operator": "eq",
+      "value": "failed",
+      "required": true
+    },
+    {
+      "field": "formal_claims.route.test_harness",
+      "operator": "length_eq",
+      "value": 0,
+      "required": true
+    },
+    {
+      "field": "formal_claims.route.coordinator",
+      "operator": "length_eq",
+      "value": 0,
+      "required": true
+    },
+    {
+      "field": "formal_claims.route.implementation",
+      "operator": "length_eq",
+      "value": 0,
+      "required": true
+    },
+    {
+      "field": "proof_readiness.routed",
+      "operator": "length_eq",
+      "value": 0,
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "add_triple",
+      "subject": "$entity.id",
+      "predicate": "proof_readiness.route",
+      "object": "pause"
+    },
+    {
+      "type": "add_triple",
+      "subject": "$entity.id",
+      "predicate": "proof_readiness.pause_required",
+      "object": "true"
+    },
+    {
+      "type": "add_triple",
+      "subject": "$entity.id",
+      "predicate": "proof_readiness.routed",
+      "object": "true"
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "pack": "proof-readiness",
+    "phase": "OpenSpec SDD 2.3 — fail-closed pause marker",
+    "adr": "docs/adr/055-formal-claim-analysis-for-verification-gates.md",
+    "flow_contract": "Pause is represented as governed graph facts for the run-health surface; a later lifecycle pause rule may consume proof_readiness.pause_required=true."
+  }
+}

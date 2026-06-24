@@ -37,10 +37,16 @@ import { SvelteMap } from "svelte/reactivity";
 import { getTriples } from "$lib/services/runStatusApi";
 import type { RawTriple } from "$lib/services/runStatusApi";
 import type { RunPause } from "$lib/types/task";
+import {
+  deriveGraphRunHealthFacts,
+  RUN_HEALTH_PREDICATES,
+  type GraphRunHealthFacts,
+} from "$lib/utils/runHealth";
 
 export interface RunStatus {
   runId: string;
   pause: RunPause | null;
+  healthFacts: GraphRunHealthFacts | null;
 }
 
 const RUN_INFIX = ".agent.chain.execution.";
@@ -63,6 +69,35 @@ function toBareLoopId(loopRef: string): string {
   return loopRef.includes(LOOP_INFIX) ? bareIdAfter(loopRef, LOOP_INFIX) : loopRef;
 }
 
+function runEntityIdsFromTriples(...batches: RawTriple[][]): string[] {
+  const seen: Record<string, true> = {};
+  for (const batch of batches) {
+    for (const triple of batch) {
+      if (!triple.subject.includes(RUN_INFIX)) continue;
+      if (!bareIdAfter(triple.subject, RUN_INFIX)) continue;
+      seen[triple.subject] = true;
+    }
+  }
+  return Object.keys(seen);
+}
+
+function dedupeTriples(triples: RawTriple[]): RawTriple[] {
+  const seen: Record<string, true> = {};
+  const out: RawTriple[] = [];
+  for (const triple of triples) {
+    const key = [
+      triple.subject,
+      triple.predicate,
+      triple.object,
+      triple.timestamp ?? "",
+    ].join("\u0000");
+    if (seen[key]) continue;
+    seen[key] = true;
+    out.push(triple);
+  }
+  return out;
+}
+
 /**
  * Pure helper: derive the run-status map from three triple arrays.
  * Exported so tests can drive the parse logic without timers or fetch mocks.
@@ -80,7 +115,14 @@ export function deriveRunStatuses(
   approvalTriples: RawTriple[],
   clarTriples: RawTriple[],
   questionTriples: RawTriple[],
+  healthTriples: RawTriple[] = [],
 ): SvelteMap<string, RunStatus> {
+  const healthFacts = deriveGraphRunHealthFacts([
+    ...approvalTriples,
+    ...clarTriples,
+    ...healthTriples,
+  ]);
+
   // Plain objects used here (not Map/Set) to satisfy the
   // svelte/prefer-svelte-reactivity rule that applies file-wide to
   // .svelte.ts files. These are local intermediaries in a pure function,
@@ -120,6 +162,9 @@ export function deriveRunStatuses(
     ...Object.keys(clarByRunEntity).filter(
       (k) => !(k in approvalByRunEntity),
     ),
+    ...[...healthFacts.values()]
+      .map((facts) => facts.runEntityId)
+      .filter((id) => !(id in approvalByRunEntity) && !(id in clarByRunEntity)),
   ];
 
   for (const runEntityId of allRunEntityIds) {
@@ -132,6 +177,7 @@ export function deriveRunStatuses(
       result.set(bareRunId, {
         runId: bareRunId,
         pause: { cause: "tool_gate", gatedLoopId },
+        healthFacts: healthFacts.get(bareRunId) ?? null,
       });
     } else if (runEntityId in clarByRunEntity) {
       // clarification: object is the BARE loop UUID (already the reply anchor).
@@ -142,6 +188,13 @@ export function deriveRunStatuses(
       result.set(bareRunId, {
         runId: bareRunId,
         pause: { cause: "clarification", askingLoopId, question },
+        healthFacts: healthFacts.get(bareRunId) ?? null,
+      });
+    } else {
+      result.set(bareRunId, {
+        runId: bareRunId,
+        pause: null,
+        healthFacts: healthFacts.get(bareRunId) ?? null,
       });
     }
   }
@@ -166,13 +219,34 @@ function createRunStatusStore() {
     const ctrl = new AbortController();
     currentAbort = ctrl;
     try {
-      const [approvalTriples, clarTriples, questionTriples] = await Promise.all([
+      const [approvalTriples, clarTriples, questionTriples, ...healthBatches] = await Promise.all([
         getTriples({ predicate: "agent.run.approval_pending", limit: 100, signal: ctrl.signal }),
         getTriples({ predicate: "agent.run.clarification_pending", limit: 100, signal: ctrl.signal }),
         getTriples({ predicate: "coordinator.user_question", limit: 100, signal: ctrl.signal }),
+        ...RUN_HEALTH_PREDICATES.map((predicate) =>
+          getTriples({ predicate, limit: 100, signal: ctrl.signal }),
+        ),
       ]);
+      const healthTriples = healthBatches.flat();
+      const runEntityIds = runEntityIdsFromTriples(
+        approvalTriples,
+        clarTriples,
+        healthTriples,
+      );
+      const subjectBatches = runEntityIds.length > 0
+        ? await Promise.all(
+            runEntityIds.map((subject) =>
+              getTriples({ subject, limit: 500, signal: ctrl.signal }),
+            ),
+          )
+        : [];
 
-      const derived = deriveRunStatuses(approvalTriples, clarTriples, questionTriples);
+      const derived = deriveRunStatuses(
+        approvalTriples,
+        clarTriples,
+        questionTriples,
+        dedupeTriples([...healthTriples, ...subjectBatches.flat()]),
+      );
 
       // Replace map contents to exactly the set of currently-paused runs.
       // Runs that resolved drop out; newly-paused runs appear.

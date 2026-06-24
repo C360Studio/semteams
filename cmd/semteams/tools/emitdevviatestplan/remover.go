@@ -65,23 +65,23 @@ func NewNATSTripleRemover(client *natsclient.Client) tripleRemover {
 
 // RemoveByPredicate removes the (subject, predicate) row. A missing
 // subject/predicate is success (nothing to clear) — graph-ingest
-// returns Success=true for a no-op remove, mirroring write_todos.
+// returns a success-only RemoveTripleResponse for a no-op remove,
+// mirroring write_todos.
 func (r *natsTripleRemover) RemoveByPredicate(ctx context.Context, subject, predicate string) error {
 	req := graph.RemoveTripleRequest{Subject: subject, Predicate: predicate}
 	reqData, err := json.Marshal(req)
 	if err != nil {
 		return fmt.Errorf("marshal remove-triple request: %w", err)
 	}
-	respData, err := r.client.RequestWithRetry(ctx, removeTripleSubject, reqData, removeTimeout, natsclient.DefaultRetryConfig())
+	respData, err := r.client.RequestWithRetryClassified(ctx, removeTripleSubject, reqData, removeTimeout, natsclient.DefaultRetryConfig())
 	if err != nil {
 		return fmt.Errorf("request %s: %w", removeTripleSubject, err)
 	}
+	// ADR-060: handler failures arrive as the classified err above; the
+	// response body is success-only.
 	var resp graph.RemoveTripleResponse
 	if err := json.Unmarshal(respData, &resp); err != nil {
 		return fmt.Errorf("unmarshal remove response: %w", err)
-	}
-	if !resp.Success {
-		return fmt.Errorf("graph-ingest rejected remove of (%s, %s): %s", subject, predicate, resp.Error)
 	}
 	return nil
 }

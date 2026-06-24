@@ -6,6 +6,7 @@
 // TaskInfo, not AgentLoop directly.
 
 import type { AgentLoop, AgentLoopState } from "./agent";
+import type { RunHealth } from "$lib/utils/runHealth";
 
 /**
  * Why a run is paused and waiting for the operator.
@@ -155,6 +156,12 @@ export interface TaskInfo {
    * Kept null-able so deriveTaskInfo stays pure (no store import).
    */
   runPause: RunPause | null;
+
+  /**
+   * Synthesized run answer for "is this thing working?" Built from graph facts
+   * plus primary/child loop state. Null while the board has not derived one.
+   */
+  runHealth: RunHealth | null;
 }
 
 /** Column priority for "most urgent wins" aggregation over child loops. */
@@ -217,6 +224,7 @@ export function deriveTaskInfo(
   shortRef: number | null = null,
   labels: TaskLabelData = { titleOverride: null, aliases: [] },
   runPause: RunPause | null = null,
+  runHealth: RunHealth | null = null,
 ): TaskInfo {
   const primaryColumn = loopStateToColumn(primaryLoop.state);
 
@@ -268,6 +276,7 @@ export function deriveTaskInfo(
     childNeedsAttention: attentionChildren.length > 0,
     childAttentionCount: attentionChildren.length,
     runPause,
+    runHealth,
   };
 }
 

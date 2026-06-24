@@ -14,6 +14,8 @@ import { agentStore } from "./agentStore.svelte";
 import { taskRefs } from "./taskRefs.svelte";
 import { taskLabels } from "./taskLabels.svelte";
 import { runStatus } from "./runStatus.svelte";
+import { runtimeStore } from "./runtimeStore.svelte";
+import { deriveMetricsEvidence, deriveRunHealth } from "$lib/utils/runHealth";
 import {
   type TaskInfo,
   type TaskColumn,
@@ -52,6 +54,14 @@ function createTaskStore() {
   // become tasks; their children are grouped under them.
   let tasks = $derived.by(() => {
     const allLoops = agentStore.loopsList;
+    const metricsEvidence = deriveMetricsEvidence({
+      metrics: runtimeStore.getMetricsArray(),
+      healthComponents: runtimeStore.healthComponents,
+      connected: runtimeStore.connected,
+      error: runtimeStore.error,
+      lastMetricsTimestamp: runtimeStore.lastMetricsTimestamp,
+      now: runtimeStore.metricsNow,
+    });
 
     // Separate top-level loops from children. Uses a plain object (not
     // Map) to avoid the svelte/prefer-svelte-reactivity lint rule — this
@@ -68,10 +78,20 @@ function createTaskStore() {
       }
     }
 
-    return topLevel.map((loop) =>
-      deriveTaskInfo(
+    return topLevel.map((loop) => {
+      const childLoops = childrenByParent[loop.loop_id] ?? [];
+      const status = runStatus.get(loop.loop_id);
+      const pause = status?.pause ?? null;
+      const runHealth = deriveRunHealth({
+        runId: loop.loop_id,
+        loops: [loop, ...childLoops],
+        pause,
+        graph: status?.healthFacts ?? null,
+        metrics: metricsEvidence,
+      });
+      return deriveTaskInfo(
         loop,
-        childrenByParent[loop.loop_id] ?? [],
+        childLoops,
         taskRefs.get(loop.loop_id),
         {
           titleOverride: taskLabels.getTitle(loop.loop_id),
@@ -86,9 +106,10 @@ function createTaskStore() {
         // $derived.by re-runs and the card re-columns. Do NOT swap the
         // backing SvelteMap for a plain Map (here or in runStatus.svelte.ts)
         // — that silently severs this reactivity.
-        runStatus.get(loop.loop_id)?.pause ?? null,
-      ),
-    );
+        pause,
+        runHealth,
+      );
+    });
   });
 
   // Derive column-grouped tasks.

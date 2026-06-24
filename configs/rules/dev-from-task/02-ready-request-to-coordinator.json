@@ -1,0 +1,69 @@
+{
+  "id": "dev_from_task_ready_request_to_coordinator",
+  "type": "expression",
+  "name": "Approved, proof-ready OpenSpec request → coordinator projects tasks and dispatches first Ralph",
+  "description": "OpenSpec SDD task 3.2 — run-entity driver. Fires only when a reviewed change run is approved, proof-readiness says implementation is allowed, and an explicit dev_from_task.requested marker exists. It spawns a coordinator walker to project OpenSpec task facts into plan.* and dispatch exactly one ready task through the existing dev_via_test Ralph path. This is intentionally a bridge pack, not a second execution control plane.",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "agent.run.outcome",
+      "operator": "eq",
+      "value": "success",
+      "required": true
+    },
+    {
+      "field": "proof_readiness.implementation_ready",
+      "operator": "eq",
+      "value": "true",
+      "required": true
+    },
+    {
+      "field": "dev_from_task.requested",
+      "operator": "ne",
+      "value": "",
+      "required": true
+    },
+    {
+      "field": "dev_from_task.started",
+      "operator": "length_eq",
+      "value": 0,
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "add_triple",
+      "subject": "$entity.id",
+      "predicate": "dev_from_task.started",
+      "object": "true"
+    },
+    {
+      "type": "publish_agent",
+      "subject": "agent.task.coordinator",
+      "role": "coordinator",
+      "model": "coordinator",
+      "tools": ["project_spec_tasks", "query_entity", "query_sandbox_attestation", "request_sandbox", "bash", "scratchpad", "decide"],
+      "tool_choice": { "mode": "required" },
+      "action_allowlist": ["dev_via_test", "ask_user", "respond_direct"],
+      "properties": {
+        "wakeup_mode": "dev_from_task_project_and_dispatch",
+        "category": "dev_from_task",
+        "phase": "project_and_dispatch"
+      },
+      "related_loops": {
+        "run-loop-entity-id": "$entity.id",
+        "dev-via-test-run": "$entity.id"
+      },
+      "prompt": "DEV-FROM-TASK COORDINATOR — project an approved OpenSpec change and dispatch exactly one ready task.\n\nYour run entity ID is $entity.id. This run is already approved by reviewer-create-change and proof-readiness stamped proof_readiness.implementation_ready=true. You are NOT planning from prose and you MUST NOT spawn Lisa. The approved change facts on the run entity own what done means.\n\nIteration plan:\n\n1. Call project_spec_tasks(). Omit slug unless the tool tells you there are multiple changes and asks for one. This losslessly projects change.<slug>.task.* plus the acceptance command into plan.* on the same run entity, including plan.done_authority.*.\n\n2. Call query_entity(entity_id=\"$entity.id\") to read the projected plan.task.* facts, plan.integration_test_command, plan.chain_start_git_tag, and plan.done_authority.*.\n\n3. Ensure the execution workspace is ready. Use query_sandbox_attestation first when possible; otherwise call request_sandbox with requirements derived from the plan's test commands and target files. Only continue when the attestation is ready. If provisioning is terminal or degraded in a way that blocks the tests, decide(action=\"respond_direct\", reason=\"<surface the sandbox blocker clearly>\") or decide(action=\"ask_user\", reason=\"<one concrete question>\").\n\n4. Create the chain-start git tag in the workspace before any Ralph mutates files. Use bash to run: git tag -f <plan.chain_start_git_tag>. This is the tag CBG will diff against later.\n\n5. Pick the ready task with the lowest plan.task.<id>.position. In v1, dispatch exactly one task: decide(action=\"dev_via_test\", subtopics=[\"<task-id>\"], reason=\"Projecting approved OpenSpec change <slug>; dispatching <task-id>.\"). This re-enters the existing dev-via-test rule 03 and spawns Ralph.\n\nIf projection fails because the change is thin, unapproved, or ambiguous, ask the user to revise the spec rather than inventing tasks. If there are no ready tasks, ask_user with the exact missing plan facts. Do not call dev_via_test without subtopics; that token without subtopics is the Lisa front-door path and would re-plan from prose."
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "pack": "dev-from-task",
+    "phase": "OpenSpec SDD 3.2 — task projection to first Ralph",
+    "reuses": "configs/rules/dev-via-test/03-coordinator-dispatch-ralph.json and downstream Ralph/CBG rules",
+    "done_authority": "Approved OpenSpec change facts own desired behavior; project_spec_tasks only maps them into plan.*; Ralph executes one task; CBG judges final done.",
+    "hitl_contract": "Implementation requires both proof_readiness.implementation_ready=true and dev_from_task.requested; proof-readiness alone never auto-starts code changes."
+  }
+}

@@ -98,7 +98,31 @@ Distinguish from neighbors:
   later, separate step). "Add MFA and prove it with tests" is
   dev_via_test; "draft the MFA requirements" is create-change.
 
-## 4. Is the message genuinely ambiguous?
+## 4. Is the user asking to implement an approved spec?
+
+The dev-from-task bridge implements a reviewed OpenSpec change from
+the current run. It skips Lisa because the approved spec already
+owns the plan. It projects the change's execution-rich task facts
+into `plan.*`, verifies the sandbox, tags the chain start, and then
+dispatches exactly one ready task through Ralph.
+
+Signals:
+
+- "implement this spec" after a create-change approval.
+- `/implement-spec <change-slug>` from a run/spec review surface.
+- "start building the approved change" when the UI has selected a
+  reviewed run that is proof-ready.
+
+→ `dev_from_task`
+
+Use this only when the loop is attached to the reviewed run. If the
+user asks from a free-floating chat turn and you cannot identify the
+approved run/spec, ask them to select the reviewed spec in the UI or
+provide the run/change identifier. Do not emit `dev_via_test` with a
+prose restatement in this case — that would spawn Lisa and re-plan
+instead of preserving the approved OpenSpec authority.
+
+## 5. Is the message genuinely ambiguous?
 
 Ambiguous means: you cannot tell which of the categories above
 fits, AND a single clarifying question would unambiguously route
@@ -120,7 +144,7 @@ Do NOT use `ask_user` to avoid a judgment call. If the message
 clearly fits one of the categories above, pick that even if the
 phrasing is informal.
 
-## 5. Otherwise
+## 6. Otherwise
 
 The message is small-talk, a meta question about SemTeams, a
 clarification of a prior coordinator response, a question
@@ -144,6 +168,7 @@ try a category as a fallback that won't fit the ask.
 | "compare pico.css and tailwind" | `research` | comparison of named products |
 | "draft a spec change to add rate-limiting to the API" | `create_change` | author a specification change, not run code |
 | "what should the requirements be for password reset?" | `create_change` | asking for a specification, not evidence research |
+| "implement the approved rate-limiting spec" | `dev_from_task` when attached to that reviewed run | preserve the approved OpenSpec tasks; skip Lisa |
 | "make `task test:integration` faster on semteams" | call `request_sandbox` first → `autoresearch` on ready | target needs prepared env; provision then optimize |
 | "optimize this script's wallclock: `bash -c '...'`" | call `request_sandbox` first → `autoresearch` on ready | even a one-liner needs an attested workspace for the iteration loop to mutate + measure reproducibly |
 | "lower the smoke cost on semteams" | call `request_sandbox` first → `autoresearch` on ready | optimization on a system target |
@@ -164,9 +189,10 @@ try a category as a fallback that won't fit the ask.
   An autoresearch loop against an empty workspace burns LLM
   budget and produces nothing useful.
 - You do not call `request_sandbox` speculatively. Call it only
-  when you're going to route to a category that needs the
-  environment — today that means `autoresearch` on a system
-  target.
+  when you're going to route to a category or bridge that needs the
+  environment — today that means `autoresearch`, initial
+  `dev_via_test`, or the dev-from-task bridge when it is ready to
+  dispatch implementation.
 - You do not stack multiple questions into one `ask_user` call.
   One question per turn; you'll get another turn if you need one.
 - You do not invent action values to express finer-grained intent.

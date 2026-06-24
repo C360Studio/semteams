@@ -214,6 +214,8 @@ func RenderProposal(p *Proposal) string {
 		b.WriteString("\n")
 	}
 
+	renderExtraSections(&b, p.ExtraSections)
+
 	return b.String()
 }
 
@@ -258,7 +260,24 @@ func RenderDesign(d *Design) string {
 		}
 	}
 
+	renderExtraSections(&b, d.ExtraSections)
+
 	return b.String()
+}
+
+func renderExtraSections(b *strings.Builder, sections []MarkdownSection) {
+	for _, sec := range sections {
+		if sec.Heading == "" {
+			continue
+		}
+		b.WriteString("\n## ")
+		b.WriteString(sec.Heading)
+		b.WriteString("\n")
+		if sec.Body != "" {
+			b.WriteString(sec.Body)
+			b.WriteString("\n")
+		}
+	}
 }
 
 // renderFileChange writes one "## File Changes" bullet — the inverse of

@@ -1,0 +1,50 @@
+{
+  "id": "dev_from_task_request_by_lineage",
+  "type": "expression",
+  "name": "Coordinator decide(dev_from_task) with lineage.run-loop-entity-id → stamp run request",
+  "description": "OpenSpec SDD task 3.2 — lineage sibling for run-attached coordinator wake-ups that do not carry agent.run.entity_id but do carry lineage.run-loop-entity-id. Keeps the request-stamp behavior identical to 01a while avoiding unresolved subject substitutions.",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "agent.loop.role",
+      "operator": "eq",
+      "value": "coordinator",
+      "required": true
+    },
+    {
+      "field": "coordinator.decision.next_action",
+      "operator": "eq",
+      "value": "dev_from_task",
+      "required": true
+    },
+    {
+      "field": "lineage.run-loop-entity-id",
+      "operator": "ne",
+      "value": "",
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "add_triple",
+      "subject": "$entity.triple.lineage.run-loop-entity-id",
+      "predicate": "dev_from_task.requested",
+      "object": "$entity.instance"
+    },
+    {
+      "type": "add_triple",
+      "subject": "$entity.triple.lineage.run-loop-entity-id",
+      "predicate": "dev_from_task.requested_reason",
+      "object": "$entity.triple.coordinator.decision.reason"
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "pack": "dev-from-task",
+    "phase": "OpenSpec SDD 3.2 — explicit implementation request marker",
+    "anchor_branch": "lineage.run-loop-entity-id",
+    "paired_with": "01a-coordinator-request-run-anchor.json",
+    "hitl_contract": "Proof-readiness may mark a run implementation-ready, but implementation starts only after this explicit request marker exists."
+  }
+}

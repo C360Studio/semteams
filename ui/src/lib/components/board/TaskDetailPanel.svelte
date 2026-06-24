@@ -5,6 +5,8 @@
   import { agentApi } from "$lib/services/agentApi";
   import { taskLabels } from "$lib/stores/taskLabels.svelte";
   import PendingApprovalSection from "./PendingApprovalSection.svelte";
+  import RunEvidencePanel from "./RunEvidencePanel.svelte";
+  import RunHealthPanel from "./RunHealthPanel.svelte";
   import RunWaitingSection from "./RunWaitingSection.svelte";
   import StateBadge from "./StateBadge.svelte";
   import TaskStory from "./TaskStory.svelte";
@@ -16,16 +18,13 @@
 
   let { task, onClose }: Props = $props();
 
-  // Tab definitions. Activity tells the story (model_call / tool_call
-  // narrative + raw-activity escape hatch). Entities + Logs are next
-  // up; placeholders for now. The previous "Trace" tab was a parallel
-  // view of the same wire data and ended up confusing — folded under
-  // "Show raw activity" inside Activity.
-  type TabId = "activity" | "entities" | "logs";
+  // Activity tells the story. Evidence keeps the raw trajectory,
+  // message-log, and run graph facts one click away from the run-health
+  // summary without making those receipts the default reading path.
+  type TabId = "activity" | "evidence";
   const TABS: { id: TabId; label: string }[] = [
     { id: "activity", label: "Activity" },
-    { id: "entities", label: "Entities" },
-    { id: "logs", label: "Logs" },
+    { id: "evidence", label: "Evidence" },
   ];
   let activeTab = $state<TabId>("activity");
 
@@ -254,6 +253,10 @@
       <RunWaitingSection runId={task.id} pause={task.runPause} />
     {/if}
 
+    {#if task.runHealth}
+      <RunHealthPanel health={task.runHealth} />
+    {/if}
+
     <div class="action-buttons">
       {#if isActiveState(task.state)}
         <button type="button" class="action-btn" onclick={() => handleSignal("pause")}>
@@ -354,22 +357,12 @@
           />
         </section>
       </div>
-    {:else if activeTab === "entities"}
-      <div id="panel-entities" role="tabpanel" data-testid="panel-entities" class="placeholder-tab">
-        <p class="placeholder-title">Scoped knowledge graph</p>
-        <p class="placeholder-body">
-          Entities this task's loops touched, with relationships. Will port
-          the working sigma.js viz from semdragons, scoped to entities
-          minted by these loops.
-        </p>
-      </div>
-    {:else if activeTab === "logs"}
-      <div id="panel-logs" role="tabpanel" data-testid="panel-logs" class="placeholder-tab">
-        <p class="placeholder-title">Filtered logs</p>
-        <p class="placeholder-body">
-          Raw message-logger view, filtered to subjects related to this
-          task. For when "Trace" doesn't go deep enough.
-        </p>
+    {:else if activeTab === "evidence"}
+      <div id="panel-evidence" role="tabpanel" data-testid="panel-evidence">
+        <RunEvidencePanel
+          loopId={focusedLoopId}
+          runEntityId={task.runHealth?.runEntityId ?? null}
+        />
       </div>
     {/if}
   </div>

@@ -1,6 +1,7 @@
 package openspec
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -41,6 +42,32 @@ func TestDesignRoundTrip(t *testing.T) {
 	once := RenderDesign(first)
 	if twice := RenderDesign(ParseDesign(once)); once != twice {
 		t.Errorf("design render not idempotent:\n once =\n%s\n twice =\n%s", once, twice)
+	}
+}
+
+func TestParseDesign_PreservesExtraSections(t *testing.T) {
+	md := "# Design: X\n\n## Technical Approach\nUse graph facts.\n\n## Future Roadmap\n### Skill Import Adapter\nMarkdown becomes a reviewed OpenSpec change.\n"
+	want := []MarkdownSection{{
+		Heading: "Future Roadmap",
+		Body:    "### Skill Import Adapter\nMarkdown becomes a reviewed OpenSpec change.",
+	}}
+
+	got := ParseDesign(md)
+	if diff := cmp.Diff(want, got.ExtraSections); diff != "" {
+		t.Errorf("extra sections mismatch (-want +got):\n%s", diff)
+	}
+	rendered := RenderDesign(got)
+	for _, want := range []string{
+		"## Future Roadmap",
+		"### Skill Import Adapter",
+		"Markdown becomes a reviewed OpenSpec change.",
+	} {
+		if !strings.Contains(rendered, want) {
+			t.Errorf("rendered design missing %q\n%s", want, rendered)
+		}
+	}
+	if diff := cmp.Diff(got, ParseDesign(rendered)); diff != "" {
+		t.Errorf("design extra-section round-trip not stable (-got +reparsed):\n%s", diff)
 	}
 }
 

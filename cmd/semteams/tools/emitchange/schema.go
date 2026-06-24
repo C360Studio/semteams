@@ -52,6 +52,7 @@ func (e *Executor) ListTools() []agentic.ToolDefinition {
 		"section":          map[string]any{"type": "string", "description": "OpenSpec '## <section>' grouping (e.g. '1. TOTP'). Group all tasks of a section together (sections must be contiguous)."},
 		"number":           map[string]any{"type": "string", "description": "OpenSpec dotted label (e.g. '1.1'). Optional; cosmetic — the graph keys tasks by position."},
 		"text":             map[string]any{"type": "string", "description": "OpenSpec checkbox prose — renders '- [ ] <number> <text>'."},
+		"done":             map[string]any{"type": "boolean", "description": "OpenSpec checkbox state. Defaults false for newly proposed work; preserved for ingested/handoff changes."},
 		"goal":             map[string]any{"type": "string", "description": "§D6 execution goal Ralph drives to. Concrete and verifiable."},
 		"target_files":     stringArray("§D6 file globs the executor may modify (≥1 — surgical scope)."),
 		"test_command":     map[string]any{"type": "string", "description": "§D6 executable acceptance command Ralph iterates until it exits 0."},

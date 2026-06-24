@@ -21,6 +21,9 @@ type Proposal struct {
 	ScopeOut []string
 	// Approach is the "## Approach" prose — high-level direction.
 	Approach string
+	// ExtraSections preserves non-normative "## ..." sections that are not part
+	// of the modeled OpenSpec proposal contract, such as Future Roadmap notes.
+	ExtraSections []MarkdownSection
 }
 
 // Design is a change's design.md (ADR-057 §D1 change.<slug>.design.*): the
@@ -37,6 +40,17 @@ type Design struct {
 	DataFlow string
 	// FileChanges are the "## File Changes" bullets (`path` + kind).
 	FileChanges []FileChange
+	// ExtraSections preserves non-normative "## ..." sections that are not part
+	// of the modeled OpenSpec design contract, such as Future Roadmap notes.
+	ExtraSections []MarkdownSection
+}
+
+// MarkdownSection is an unmodeled top-level "## <Heading>" section preserved
+// for filesystem round-trip/export fidelity. The graph fact model intentionally
+// ignores it; it is prose source material, not governed execution state.
+type MarkdownSection struct {
+	Heading string
+	Body    string
 }
 
 // DesignDecision is one "### Decision: <Name>" block under Architecture

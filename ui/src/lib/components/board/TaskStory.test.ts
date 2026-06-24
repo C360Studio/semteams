@@ -96,6 +96,76 @@ describe("TaskStory — decide verdict surfacing", () => {
     expect(verdict).toHaveAttribute("data-verdict-tone", "reject");
   });
 
+  it("surfaces CBG approved as the final gate", async () => {
+    vi.mocked(agentApi.getLoopTrajectory).mockResolvedValue(
+      trajectory([
+        {
+          step_type: "tool_call",
+          timestamp: "2026-06-06T00:00:01Z",
+          tool_name: "decide",
+          tool_arguments: {
+            action: "approved",
+            reason:
+              "Integration gate `task test` passed and diff stayed in scope.",
+          },
+          capability: "reviewer-dev-via-test",
+        },
+      ]),
+    );
+
+    render(TaskStory, { props: { loopId: "loop-1" } });
+
+    const verdict = await screen.findByTestId("story-verdict");
+    expect(verdict).toHaveAttribute("data-gate", "cbg-final");
+    expect(verdict).toHaveAttribute("data-verdict-tone", "approve");
+    expect(
+      within(verdict).getByTestId("cbg-final-gate-label"),
+    ).toHaveTextContent("CBG final gate");
+    expect(
+      within(verdict).getByText("CBG final gate passed"),
+    ).toBeInTheDocument();
+    expect(within(verdict).getByTestId("verdict-reason")).toHaveTextContent(
+      "Integration gate",
+    );
+  });
+
+  it("surfaces CBG rejected retry with target task and visible evidence", async () => {
+    vi.mocked(agentApi.getLoopTrajectory).mockResolvedValue(
+      trajectory([
+        {
+          step_type: "tool_call",
+          timestamp: "2026-06-06T00:00:01Z",
+          tool_name: "decide",
+          tool_arguments: {
+            action: "rejected_retry",
+            subtopics: ["task-2"],
+            reason:
+              "Diff violates target scope; move the parser fix back under `mavlink/`.",
+          },
+          capability: "reviewer-dev-via-test",
+        },
+      ]),
+    );
+
+    render(TaskStory, { props: { loopId: "loop-1" } });
+
+    const verdict = await screen.findByTestId("story-verdict");
+    expect(verdict).toHaveAttribute("data-gate", "cbg-final");
+    expect(verdict).toHaveAttribute("data-verdict-tone", "reject");
+    expect(within(verdict).getByTestId("verdict-chip")).toHaveTextContent(
+      "Rejected retry",
+    );
+    expect(
+      within(verdict).getByText("CBG final gate requested retry"),
+    ).toBeInTheDocument();
+    expect(within(verdict).getByTestId("cbg-target-task")).toHaveTextContent(
+      "Target task-2",
+    );
+    expect(within(verdict).getByTestId("verdict-reason")).toHaveTextContent(
+      "Diff violates target scope",
+    );
+  });
+
   it("renders markdown inside a verdict reason", async () => {
     vi.mocked(agentApi.getLoopTrajectory).mockResolvedValue(
       trajectory([
@@ -210,5 +280,61 @@ describe("TaskStory — non-decide tool calls keep generic rendering", () => {
       expect(screen.getByTestId("story-step")).toBeInTheDocument(),
     );
     expect(screen.queryByTestId("story-verdict")).toBeNull();
+  });
+});
+
+describe("TaskStory — proof-readiness artifacts", () => {
+  it("renders analyze_proof_readiness as structured proof cards", async () => {
+    vi.mocked(agentApi.getLoopTrajectory).mockResolvedValue(
+      trajectory([
+        {
+          step_type: "tool_call",
+          timestamp: "2026-06-06T00:00:01Z",
+          tool_name: "analyze_proof_readiness",
+          tool_arguments: {},
+          tool_result: JSON.stringify({
+            status: "failed",
+            finding_count: 1,
+            findings: [
+              {
+                kind: "missing_proof_dependency",
+                route: "test_harness",
+                dependency: "px4_sitl.boots",
+                reason: "required proof dependency is not ready",
+              },
+            ],
+            proof_facts: {
+              dependencies: [
+                {
+                  id: "px4_sitl.boots",
+                  status: "missing",
+                  description: "PX4 SITL boots headlessly",
+                },
+              ],
+              readiness: [],
+              evidence: [],
+              waivers: [],
+            },
+          }),
+          tool_status: "success",
+          capability: "coordinator",
+        },
+      ]),
+    );
+
+    render(TaskStory, { props: { loopId: "loop-1" } });
+
+    const step = await screen.findByTestId("story-step");
+    await userEvent.click(within(step).getByRole("button"));
+
+    expect(
+      await screen.findByTestId("proof-readiness-card"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("proof-dependencies-card")).toHaveTextContent(
+      "px4_sitl.boots",
+    );
+    expect(screen.getByTestId("proof-dependencies-card")).toHaveTextContent(
+      "PX4 SITL boots headlessly",
+    );
   });
 });

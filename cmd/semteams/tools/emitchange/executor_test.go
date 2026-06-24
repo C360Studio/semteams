@@ -54,7 +54,17 @@ func validPayload() map[string]any {
 		"slug": "add-mfa",
 		"proposal": map[string]any{
 			"intent": "Mitigate password-only compromise.", "approach": "Add a TOTP step.",
-			"scope_in": []string{"TOTP"}, "scope_out": []string{},
+			"scope_in": []string{"TOTP"}, "scope_out": []string{"WebAuthn"},
+		},
+		"design": map[string]any{
+			"technical_approach": "Layer TOTP after password verification.",
+			"decisions": []map[string]any{{
+				"name": "TOTP over SMS", "body": "Avoid SMS gateway and SIM-swap dependency.",
+			}},
+			"data_flow": "password -> totp -> session",
+			"file_changes": []map[string]any{{
+				"path": "auth/totp.go", "kind": "new",
+			}},
 		},
 		"deltas": []map[string]any{{
 			"capability": "auth",
@@ -114,14 +124,25 @@ func TestEmitChange_HappyPath(t *testing.T) {
 		"change.add-mfa.acceptance_command": "go test ./...",
 		// content half (via openspec.Change.Facts)
 		"change.add-mfa.proposal.intent":                                  "Mitigate password-only compromise.",
+		"change.add-mfa.proposal.scope_in":                                `["TOTP"]`,
+		"change.add-mfa.proposal.scope_out":                               `["WebAuthn"]`,
+		"change.add-mfa.proposal.approach":                                "Add a TOTP step.",
+		"change.add-mfa.design.technical_approach":                        "Layer TOTP after password verification.",
+		"change.add-mfa.design.decisions":                                 `[{"name":"TOTP over SMS","body":"Avoid SMS gateway and SIM-swap dependency."}]`,
+		"change.add-mfa.design.data_flow":                                 "password -> totp -> session",
+		"change.add-mfa.design.file_changes":                              `[{"path":"auth/totp.go","kind":"new"}]`,
 		"change.add-mfa.delta.auth.multi-factor-authentication.op":        "added",
 		"change.add-mfa.delta.auth.multi-factor-authentication.statement": "The system SHALL require a second factor.",
 		"change.add-mfa.task.0.text":                                      "Generate secrets",      // content (slice 5)
 		"change.add-mfa.task.0.section":                                   "1. TOTP",               // content
+		"change.add-mfa.task.0.number":                                    "1.1",                   // content
+		"change.add-mfa.task.0.done":                                      "false",                 // content
 		"change.add-mfa.task.0.goal":                                      "Per-user TOTP secrets", // writer (§D6)
 		"change.add-mfa.task.0.test_command":                              "go test ./auth/...",    // writer
 		"change.add-mfa.task.0.requirement_ref":                           "auth/multi-factor-authentication",
 		"change.add-mfa.task.0.target_files":                              `["auth/totp.go"]`,
+		"change.add-mfa.task.0.assumptions":                               `[]`,
+		"change.add-mfa.task.0.non_goals":                                 `[]`,
 	}
 	for k, v := range wantStr {
 		if got, _ := m[k].(string); got != v {
@@ -163,6 +184,19 @@ func TestEmitChange_ExpectedOutcomeOptional(t *testing.T) {
 	}
 	if got, _ := pub2.byPredicate()["change.add-mfa.task.0.expected_outcome"].(string); got != "secrets persisted" {
 		t.Errorf("expected_outcome = %q, want %q", got, "secrets persisted")
+	}
+}
+
+func TestEmitChange_TaskDonePreserved(t *testing.T) {
+	pub := &fakePub{}
+	ex := NewExecutor(pub, platform(), nil)
+	args := validPayload()
+	args["tasks"].([]map[string]any)[0]["done"] = true
+	if _, err := ex.Execute(context.Background(), callWith(args)); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if got, _ := pub.byPredicate()["change.add-mfa.task.0.done"].(string); got != "true" {
+		t.Errorf("done = %q, want true", got)
 	}
 }
 
@@ -332,16 +366,23 @@ func TestEmitChange_UnknownToolName(t *testing.T) {
 	}
 }
 
-// sanity: the schema declares the tool and the top-level required fields.
+// sanity: the schema declares the tool and the OpenSpec + §D6 payload fields.
 func TestEmitChange_SchemaShape(t *testing.T) {
 	defs := (&Executor{}).ListTools()
 	if len(defs) != 1 || defs[0].Name != ToolName {
 		t.Fatalf("want one %q tool, got %+v", ToolName, defs)
 	}
 	raw, _ := json.Marshal(defs[0].Parameters)
-	for _, req := range []string{"slug", "proposal", "deltas", "tasks", "acceptance_command"} {
+	for _, req := range []string{
+		"slug", "proposal", "deltas", "tasks", "acceptance_command",
+		"intent", "scope_in", "scope_out", "approach",
+		"technical_approach", "decisions", "data_flow", "file_changes",
+		"capability", "added", "modified", "removed", "statement", "scenarios", "previously", "rationale",
+		"section", "number", "text", "done",
+		"goal", "target_files", "test_command", "assumptions", "non_goals", "expected_outcome", "requirement_ref",
+	} {
 		if !strings.Contains(string(raw), `"`+req+`"`) {
-			t.Errorf("schema missing required field %q", req)
+			t.Errorf("schema missing field %q", req)
 		}
 	}
 }

@@ -1,0 +1,56 @@
+{
+  "id": "proof_readiness_test_harness_handoff",
+  "type": "expression",
+  "name": "formal_claims failed with test_harness route → proof_readiness test-harness marker",
+  "description": "OpenSpec SDD task 2.3 / ADR-055 D4 — consumes formal_claims.route.test_harness=present on the run entity and records a flow-native handoff marker for the test-harness slice. The test-harness team is a later category pack; this rule deliberately stops at governed graph facts instead of inventing a side-channel subscriber or pretending the team exists before its profile/emission contract lands.",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "formal_claims.status",
+      "operator": "eq",
+      "value": "failed",
+      "required": true
+    },
+    {
+      "field": "formal_claims.route.test_harness",
+      "operator": "eq",
+      "value": "present",
+      "required": true
+    },
+    {
+      "field": "proof_readiness.routed",
+      "operator": "length_eq",
+      "value": 0,
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "add_triple",
+      "subject": "$entity.id",
+      "predicate": "proof_readiness.route",
+      "object": "test_harness"
+    },
+    {
+      "type": "add_triple",
+      "subject": "$entity.id",
+      "predicate": "proof_readiness.test_harness_required",
+      "object": "true"
+    },
+    {
+      "type": "add_triple",
+      "subject": "$entity.id",
+      "predicate": "proof_readiness.routed",
+      "object": "true"
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "pack": "proof-readiness",
+    "phase": "OpenSpec SDD 2.3 — test-harness handoff marker",
+    "adr": "docs/adr/055-formal-claim-analysis-for-verification-gates.md",
+    "flow_contract": "The exact formal_claims.route.test_harness predicate exists because the rule engine matches literal predicates, not formal_claims.finding.* wildcard paths.",
+    "downstream": "Future test-harness category pack consumes proof_readiness.test_harness_required=true and formal_claims.finding.* evidence."
+  }
+}

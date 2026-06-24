@@ -11,7 +11,11 @@ import type { AgentLoop } from "$lib/types/agent";
 vi.mock("$lib/services/agentApi", () => ({
   agentApi: {
     sendMessage: vi.fn().mockResolvedValue({ content: "ok" }),
-    sendSignal: vi.fn().mockResolvedValue({ status: "sent" }),
+    sendSignal: vi.fn().mockResolvedValue({
+      loop_id: "loop_001",
+      signal: "pause",
+      status: "sent",
+    }),
     submitApproval: vi.fn().mockResolvedValue({
       loop_id: "loop_001",
       decision: "approve",
@@ -36,10 +40,6 @@ vi.mock("$lib/services/agentApi", () => ({
         steps: [],
       }),
     ),
-    // TaskTrace polls /message-logger/entries; used by the raw-activity
-    // disclosure inside TaskStory. Default to empty so the disclosure
-    // doesn't blow up when opened.
-    getMessages: vi.fn().mockResolvedValue([]),
   },
   AgentApiError: class AgentApiError extends Error {
     statusCode: number;
@@ -51,7 +51,25 @@ vi.mock("$lib/services/agentApi", () => ({
   },
 }));
 
+vi.mock("$lib/services/runStatusApi", () => ({
+  getTriples: vi.fn().mockResolvedValue([]),
+}));
+
+vi.mock("$lib/services/messageLoggerApi", () => ({
+  messageLoggerApi: {
+    fetchEntries: vi.fn().mockResolvedValue([]),
+  },
+  entryMentionsLoop: vi.fn(() => false),
+  classifyEntry: vi.fn(() => "other"),
+}));
+
 import { agentApi } from "$lib/services/agentApi";
+import { getTriples } from "$lib/services/runStatusApi";
+import {
+  classifyEntry,
+  entryMentionsLoop,
+  messageLoggerApi,
+} from "$lib/services/messageLoggerApi";
 
 function makeLoop(overrides: Partial<AgentLoop> = {}): AgentLoop {
   return {
@@ -87,12 +105,44 @@ function makeTask(overrides: Partial<TaskInfo> = {}): TaskInfo {
     childNeedsAttention: false,
     childAttentionCount: 0,
     runPause: null,
+    runHealth: null,
     ...overrides,
   };
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(agentApi.sendMessage).mockResolvedValue({ content: "ok" });
+  vi.mocked(agentApi.sendSignal).mockResolvedValue({
+    loop_id: "loop_001",
+    signal: "pause",
+    status: "sent",
+  });
+  vi.mocked(agentApi.submitApproval).mockResolvedValue({
+    loop_id: "loop_001",
+    decision: "approve",
+    accepted: true,
+    timestamp: "2026-04-29T11:00:00Z",
+  });
+  vi.mocked(agentApi.getTrajectory).mockResolvedValue({
+    loop_id: "",
+    role: "",
+    iterations: 0,
+    outcome: "",
+    duration_ms: 0,
+  });
+  vi.mocked(agentApi.getTrajectories).mockResolvedValue([]);
+  vi.mocked(agentApi.getLoopTrajectory).mockImplementation((loopId: string) =>
+    Promise.resolve({
+      loop_id: loopId,
+      start_time: "2026-06-03T00:00:00Z",
+      steps: [],
+    }),
+  );
+  vi.mocked(getTriples).mockResolvedValue([]);
+  vi.mocked(messageLoggerApi.fetchEntries).mockResolvedValue([]);
+  vi.mocked(entryMentionsLoop).mockReturnValue(false);
+  vi.mocked(classifyEntry).mockReturnValue("other");
 });
 
 describe("TaskDetailPanel", () => {
@@ -243,6 +293,34 @@ describe("TaskDetailPanel", () => {
       render(TaskDetailPanel, { props: { task: makeTask({ runPause: null }) } });
 
       expect(screen.queryByTestId("run-waiting-section")).not.toBeInTheDocument();
+    });
+  });
+
+  describe("run health", () => {
+    it("renders the run health gate, next action, evidence freshness, and active loop count", () => {
+      render(TaskDetailPanel, {
+        props: {
+          task: makeTask({
+            runHealth: {
+              state: "working",
+              label: "Working",
+              currentGate: "reviewer-dev-via-test reviewing",
+              nextAction: "Wait for the current loop or gate to emit evidence",
+              detail: "reviewer-dev-via-test is reviewing.",
+              evidenceFreshness: "fresh",
+              activeLoopCount: 1,
+              signals: [],
+            },
+          }),
+        },
+      });
+
+      const panel = screen.getByTestId("run-health-panel");
+      expect(panel).toHaveTextContent("Working");
+      expect(panel).toHaveTextContent("reviewer-dev-via-test reviewing");
+      expect(panel).toHaveTextContent("Wait for the current loop or gate to emit evidence");
+      expect(panel).toHaveTextContent("fresh");
+      expect(panel).toHaveTextContent("1");
     });
   });
 
@@ -470,14 +548,12 @@ describe("TaskDetailPanel", () => {
   });
 
   describe("tabs", () => {
-    it("renders three tabs (Activity is the only one with content today)", () => {
-      // Trace tab was folded into Activity (under "Show raw activity"
-      // toggle) — having two tabs for the same data confused users
-      // who didn't know our internal taxonomy.
+    it("renders Activity and Evidence tabs", () => {
       render(TaskDetailPanel, { props: { task: makeTask() } });
       expect(screen.getByTestId("tab-activity")).toBeInTheDocument();
-      expect(screen.getByTestId("tab-entities")).toBeInTheDocument();
-      expect(screen.getByTestId("tab-logs")).toBeInTheDocument();
+      expect(screen.getByTestId("tab-evidence")).toBeInTheDocument();
+      expect(screen.queryByTestId("tab-entities")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("tab-logs")).not.toBeInTheDocument();
       expect(screen.queryByTestId("tab-trace")).not.toBeInTheDocument();
     });
 
@@ -488,32 +564,48 @@ describe("TaskDetailPanel", () => {
         "true",
       );
       expect(screen.getByTestId("panel-activity")).toBeInTheDocument();
-      expect(screen.queryByTestId("panel-entities")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("panel-evidence")).not.toBeInTheDocument();
     });
 
     it("clicking a tab switches the visible panel", async () => {
       const user = userEvent.setup();
       render(TaskDetailPanel, { props: { task: makeTask() } });
 
-      await user.click(screen.getByTestId("tab-entities"));
+      await user.click(screen.getByTestId("tab-evidence"));
 
-      expect(screen.getByTestId("tab-entities")).toHaveAttribute(
+      expect(screen.getByTestId("tab-evidence")).toHaveAttribute(
         "aria-selected",
         "true",
       );
-      expect(screen.getByTestId("panel-entities")).toBeInTheDocument();
+      expect(screen.getByTestId("panel-evidence")).toBeInTheDocument();
+      expect(screen.getByTestId("run-evidence-panel")).toBeInTheDocument();
       expect(screen.queryByTestId("panel-activity")).not.toBeInTheDocument();
     });
 
-    it("placeholder tabs surface what's coming, don't pretend to deliver", async () => {
+    it("Evidence tab keeps raw receipts behind the summary", async () => {
       const user = userEvent.setup();
-      render(TaskDetailPanel, { props: { task: makeTask() } });
+      render(TaskDetailPanel, {
+        props: {
+          task: makeTask({
+            runHealth: {
+              state: "working",
+              label: "Working",
+              runEntityId: "c360.semteams.agent.chain.execution.loop_001",
+              currentGate: "coordinator executing",
+              nextAction: "Wait for evidence",
+              detail: "Coordinator is executing.",
+              evidenceFreshness: "fresh",
+              activeLoopCount: 1,
+              signals: [],
+            },
+          }),
+        },
+      });
 
-      await user.click(screen.getByTestId("tab-entities"));
-      expect(screen.getByText("Scoped knowledge graph")).toBeInTheDocument();
-
-      await user.click(screen.getByTestId("tab-logs"));
-      expect(screen.getByText("Filtered logs")).toBeInTheDocument();
+      await user.click(screen.getByTestId("tab-evidence"));
+      expect(screen.getByText("Raw trajectory")).toBeInTheDocument();
+      expect(screen.getByText("Message log")).toBeInTheDocument();
+      expect(screen.getByText("Run graph triples")).toBeInTheDocument();
     });
   });
 });

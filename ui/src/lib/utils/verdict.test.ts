@@ -3,13 +3,27 @@ import { classifyVerdict, verdictLabel } from "./verdict";
 
 describe("classifyVerdict", () => {
   test("terminal-positive outcomes → approve", () => {
-    for (const a of ["approved", "plan_approved", "respond_direct", "accepted"]) {
+    for (const a of [
+      "approved",
+      "plan_approved",
+      "respond_direct",
+      "accepted",
+    ]) {
       expect(classifyVerdict(a)).toBe("approve");
     }
   });
 
   test("negative outcomes → reject", () => {
-    for (const a of ["rejected", "failed", "blocked", "aborted"]) {
+    for (const a of [
+      "rejected",
+      "rejected_retry",
+      "plan_rejected",
+      "plan_rejected_retry",
+      "failed",
+      "blocked",
+      "aborted",
+      "insufficient",
+    ]) {
       expect(classifyVerdict(a)).toBe("reject");
     }
   });
