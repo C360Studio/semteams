@@ -1,5 +1,7 @@
 import { test, expect } from "@playwright/test";
 
+const RUN_INFIX = ".agent.chain.execution.";
+
 /**
  * Journey: ADR-053 Phase 4c PR-1 — an in-run loop's approval_required tool-gate
  * pauses the run executing→awaiting_approval (the run-phase reflection of the
@@ -170,6 +172,46 @@ test.describe("ADR-053 Phase 4c — in-run tool-gate pauses the run (executing�
       ).length,
       "agent.run.clarification_pending must be ABSENT — a 4c tool-gate pause must not be mistaken for (or cross-resumed with) a 4b-2 clarification pause.",
     ).toBe(0);
+
+    // -----------------------------------------------------------------
+    // Step 7 — UI surface (OpenSpec change 6.2): the paused run must not
+    // look merely idle or still-working. The board should show the
+    // operator-facing Approval needed badge, and the detail panel should
+    // answer "what is this waiting on?" with both the RunWaitingSection and
+    // run-health summary.
+    // -----------------------------------------------------------------
+    const pausedRunEntity = String(approvalMarkers?.[0]?.subject ?? "");
+    const pausedRunId = bareIdAfter(pausedRunEntity, RUN_INFIX);
+    expect(
+      pausedRunId,
+      `could not extract bare run id from approval marker subject ${pausedRunEntity}`,
+    ).toBeTruthy();
+
+    await expect(
+      page.getByTestId("run-waiting-badge").first(),
+      "no Approval needed badge appeared on the board for the paused run",
+    ).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId("run-waiting-badge").first()).toHaveText(
+      "Approval needed",
+    );
+
+    await page.goto(`/?task=${pausedRunId}`);
+    await expect(page.getByTestId("task-detail-panel")).toBeVisible({
+      timeout: 10_000,
+    });
+    await expect(
+      page.getByTestId("run-waiting-section"),
+      "RunWaitingSection did not render for the approval-paused run",
+    ).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId("run-approval-section")).toBeVisible();
+
+    const healthPanel = page.getByTestId("run-health-panel");
+    await expect(healthPanel).toBeVisible();
+    await expect(healthPanel).toContainText("Waiting");
+    await expect(healthPanel).toContainText("Tool approval");
+    await expect(healthPanel).toContainText(
+      "Approve or reject the gated tool call",
+    );
   });
 });
 
@@ -188,6 +230,12 @@ async function fetchTriples(
     );
   }
   return (await resp.json()) as Array<{ subject?: string; object?: unknown }>;
+}
+
+/** Extract the bare id after a fixed entity-ID infix. */
+function bareIdAfter(entityId: string, infix: string): string {
+  const idx = entityId.indexOf(infix);
+  return idx === -1 ? "" : entityId.slice(idx + infix.length);
 }
 
 async function pollUntil<T>(
