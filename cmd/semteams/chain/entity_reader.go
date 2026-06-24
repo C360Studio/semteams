@@ -83,12 +83,11 @@ func NewNATSEntityReader(client *natsclient.Client, subject string) *NATSEntityR
 // ReadEntity implements EntityTripleReader against a live graph
 // component. Uses natsclient.RequestClassified (beta.87+) so the
 // handler-side "not found: <id>" failure surfaces as a typed
-// errs.IsInvalid error rather than a literal-text body our JSON
-// decoder would mis-parse. Per upstream docs:
-// natsclient/errors.go "Footgun warning" — plain Request() returns
-// the legacy `error: <msg>` body with nil err on handler failure,
-// which is silent-corruption-shaped for any consumer that
-// json.Unmarshals the body.
+// errs.IsInvalid error rather than a raw error envelope our JSON
+// decoder would mis-parse. Per upstream's ADR-060 contract, request/reply
+// handlers return either a success body or a classified error; consumers
+// that need to branch on handler failures must use the classified client
+// methods rather than raw Request.
 //
 // An invalid-class err means "entity doesn't exist," which for
 // ReadEntity means an empty triple map — callers decide whether an

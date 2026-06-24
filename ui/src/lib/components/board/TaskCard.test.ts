@@ -35,6 +35,7 @@ function makeTask(overrides: Partial<TaskInfo> = {}): TaskInfo {
     childNeedsAttention: false,
     childAttentionCount: 0,
     runPause: null,
+    runHealth: null,
     ...overrides,
   };
 }
@@ -134,5 +135,28 @@ describe("TaskCard", () => {
     const badge = screen.getByTestId("run-waiting-badge");
     expect(badge).toBeInTheDocument();
     expect(badge).toHaveTextContent("Approval needed");
+  });
+
+  it("renders compact run health when available", () => {
+    render(TaskCard, {
+      props: {
+        task: makeTask({
+          runHealth: {
+            state: "blocked",
+            label: "Blocked",
+            currentGate: "Readiness Gate",
+            nextAction: "Build the harness",
+            detail: "Required proof dependencies are not ready.",
+            evidenceFreshness: "unknown",
+            activeLoopCount: 0,
+            signals: [],
+          },
+        }),
+      },
+    });
+
+    const badge = screen.getByTestId("run-health-badge");
+    expect(badge).toHaveTextContent("Blocked");
+    expect(badge).toHaveTextContent("Readiness Gate");
   });
 });

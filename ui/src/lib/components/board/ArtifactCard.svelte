@@ -17,6 +17,15 @@
   // prose. Short scalars nested in arrays/objects stay plain (Svelte
   // auto-escapes those).
 
+  import {
+    ArrowDownTray,
+    CheckCircle,
+    ClipboardDocument,
+    Icon,
+    PencilSquare,
+    XCircle,
+    ArrowPath,
+  } from "svelte-hero-icons";
   import { renderMarkdown } from "$lib/utils/markdown";
 
   interface Props {
@@ -26,6 +35,18 @@
 
   let { toolName, args }: Props = $props();
 
+  type ReviewDecision = "approved" | "rejected" | "revision";
+  interface OpenSpecFile {
+    path: string;
+    content: string;
+  }
+
+  let reviewMode = $state<"preview" | "edit">("preview");
+  let reviewDecision = $state<ReviewDecision | null>(null);
+  let editDraft = $state("");
+  let editedOpenSpecMarkdown = $state<string | null>(null);
+  let exportStatus = $state<string | null>(null);
+
   // Header lifts `title` + `revision` out of args. Both are conventions
   // across emit_* tools (emit_plan.title + emit_*.revision in the
   // research/autoresearch pack fixtures).
@@ -33,9 +54,30 @@
     args && typeof args.title === "string" ? args.title : null,
   );
   const revisionValue = $derived(
-    args && (typeof args.revision === "number" || typeof args.revision === "string")
+    args &&
+      (typeof args.revision === "number" || typeof args.revision === "string")
       ? String(args.revision)
       : null,
+  );
+  const isOpenSpecChange = $derived(
+    toolName === "emit_change" && isPlainObject(args),
+  );
+  const openSpecSlug = $derived(
+    isOpenSpecChange ? stringField(args, "slug", "change") : "",
+  );
+  const openSpecFiles = $derived(
+    isOpenSpecChange && args ? renderOpenSpecFiles(args, openSpecSlug) : [],
+  );
+  const openSpecMarkdown = $derived(
+    isOpenSpecChange ? renderOpenSpecDocument(openSpecFiles, openSpecSlug) : "",
+  );
+  const effectiveOpenSpecMarkdown = $derived(
+    editedOpenSpecMarkdown ?? openSpecMarkdown,
+  );
+  const openSpecFolderManifest = $derived(
+    isOpenSpecChange
+      ? renderOpenSpecFolderManifest(openSpecFiles, openSpecSlug)
+      : "",
   );
 
   // Everything except title + revision renders as a section. Stable
@@ -43,6 +85,7 @@
   // unknown shape directly would need a $derived; do it inline below.
   const sectionKeys = $derived.by<string[]>(() => {
     if (!args) return [];
+    if (isOpenSpecChange) return [];
     return Object.keys(args).filter((k) => k !== "title" && k !== "revision");
   });
 
@@ -59,7 +102,9 @@
       Array.isArray(v) &&
       v.every(
         (x) =>
-          typeof x === "string" || typeof x === "number" || typeof x === "boolean",
+          typeof x === "string" ||
+          typeof x === "number" ||
+          typeof x === "boolean",
       )
     );
   }
@@ -90,11 +135,328 @@
       return "(unserialisable)";
     }
   }
+
+  function stringField(
+    obj: Record<string, unknown> | undefined,
+    key: string,
+    fallback = "",
+  ): string {
+    const v = obj?.[key];
+    return typeof v === "string" && v.trim() ? v : fallback;
+  }
+
+  function stringList(v: unknown): string[] {
+    return Array.isArray(v)
+      ? v.filter((x): x is string => typeof x === "string")
+      : [];
+  }
+
+  function objectList(v: unknown): Array<Record<string, unknown>> {
+    return Array.isArray(v)
+      ? v.filter((x): x is Record<string, unknown> => isPlainObject(x))
+      : [];
+  }
+
+  function titleFromSlug(slug: string): string {
+    return slug
+      .split("-")
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" ");
+  }
+
+  function linesForList(items: string[]): string[] {
+    return items.length > 0 ? items.map((item) => `- ${item}`) : ["- none"];
+  }
+
+  function stepKeyword(step: Record<string, unknown>): string {
+    const kw = step.kw ?? step.keyword;
+    return typeof kw === "string" && kw.trim()
+      ? kw.trim().toUpperCase()
+      : "AND";
+  }
+
+  function renderRequirement(req: Record<string, unknown>): string {
+    const name = stringField(req, "name", "Requirement");
+    const statement = stringField(req, "statement");
+    const scenarios = objectList(req.scenarios);
+    const out = [`### Requirement: ${name}`, statement, ""];
+    for (const scenario of scenarios) {
+      out.push(`#### Scenario: ${stringField(scenario, "name", "Scenario")}`);
+      for (const step of objectList(scenario.steps)) {
+        out.push(`- ${stepKeyword(step)} ${stringField(step, "text")}`);
+      }
+      out.push("");
+    }
+    return out.join("\n").trimEnd();
+  }
+
+  function normalizeMarkdown(lines: string[]): string {
+    return (
+      lines
+        .join("\n")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim() + "\n"
+    );
+  }
+
+  function renderProposalContent(
+    change: Record<string, unknown>,
+    slug: string,
+  ): string {
+    const proposal: Record<string, unknown> = isPlainObject(change.proposal)
+      ? change.proposal
+      : {};
+    return normalizeMarkdown([
+      `# Proposal: ${titleFromSlug(slug) || slug}`,
+      "",
+      "## Intent",
+      stringField(proposal, "intent"),
+      "",
+      "## Scope",
+      "In scope:",
+      ...linesForList(stringList(proposal.scope_in)),
+      "",
+      "Out of scope:",
+      ...linesForList(stringList(proposal.scope_out)),
+      "",
+      "## Approach",
+      stringField(proposal, "approach"),
+    ]);
+  }
+
+  function renderDesignContent(
+    change: Record<string, unknown>,
+    slug: string,
+  ): string | null {
+    const design: Record<string, unknown> | null = isPlainObject(change.design)
+      ? change.design
+      : null;
+    if (!design) return null;
+
+    const out = [
+      `# Design: ${titleFromSlug(slug) || slug}`,
+      "",
+      "## Technical Approach",
+      stringField(design, "technical_approach"),
+    ];
+    const decisions = objectList(design.decisions);
+    if (decisions.length) {
+      out.push("", "## Architecture Decisions", "");
+      for (const decision of decisions) {
+        out.push(`### Decision: ${stringField(decision, "name", "Decision")}`);
+        out.push(stringField(decision, "body"));
+        out.push("");
+      }
+    }
+    if (stringField(design, "data_flow")) {
+      out.push("## Data Flow", stringField(design, "data_flow"));
+    }
+    const files = objectList(design.file_changes);
+    if (files.length) {
+      out.push("", "## File Changes");
+      for (const file of files) {
+        const kind = stringField(file, "kind");
+        const path = stringField(file, "path");
+        out.push(`- \`${path}\`${kind ? ` (${kind})` : ""}`);
+      }
+    }
+    return normalizeMarkdown(out);
+  }
+
+  function renderDeltaContent(delta: Record<string, unknown>): string {
+    const capability = stringField(delta, "capability", "capability");
+    const out = [
+      `# Delta for ${titleFromSlug(capability) || capability}`,
+      "",
+      "## ADDED Requirements",
+      "",
+    ];
+    const added = objectList(delta.added);
+    out.push(...(added.length ? added.map(renderRequirement) : ["_None._"]));
+    out.push("", "## MODIFIED Requirements", "");
+    const modified = objectList(delta.modified);
+    if (modified.length) {
+      for (const req of modified) {
+        out.push(renderRequirement(req));
+        out.push(`(Previously: ${stringField(req, "previously")})`);
+        out.push("");
+      }
+    } else {
+      out.push("_None._", "");
+    }
+    out.push("## REMOVED Requirements", "");
+    const removed = objectList(delta.removed);
+    if (removed.length) {
+      for (const req of removed) {
+        out.push(`### Requirement: ${stringField(req, "name", "Requirement")}`);
+        out.push(`(Rationale: ${stringField(req, "rationale")})`);
+        out.push("");
+      }
+    } else {
+      out.push("_None._", "");
+    }
+    return normalizeMarkdown(out);
+  }
+
+  function renderOpenSpecTasksContent(
+    tasks: Array<Record<string, unknown>>,
+  ): string {
+    const out = ["# Tasks", ""];
+    let currentSection: string | null = null;
+    for (const task of tasks) {
+      const section = stringField(task, "section");
+      if (section !== currentSection) {
+        if (out[out.length - 1] !== "") out.push("");
+        out.push(`## ${section || "Tasks"}`);
+        currentSection = section;
+      }
+      const done = task.done === true ? "x" : " ";
+      const number = stringField(task, "number");
+      const label = number
+        ? `${number} ${stringField(task, "text")}`
+        : stringField(task, "text");
+      out.push(`- [${done}] ${label}`);
+    }
+    return normalizeMarkdown(out);
+  }
+
+  function renderOpenSpecFiles(
+    change: Record<string, unknown>,
+    slug: string,
+  ): OpenSpecFile[] {
+    const files: OpenSpecFile[] = [
+      {
+        path: `openspec/changes/${slug}/proposal.md`,
+        content: renderProposalContent(change, slug),
+      },
+    ];
+    const design = renderDesignContent(change, slug);
+    if (design) {
+      files.push({
+        path: `openspec/changes/${slug}/design.md`,
+        content: design,
+      });
+    }
+    for (const delta of objectList(change.deltas)) {
+      const capability = stringField(delta, "capability", "capability");
+      files.push({
+        path: `openspec/changes/${slug}/specs/${capability}/spec.md`,
+        content: renderDeltaContent(delta),
+      });
+    }
+    const tasks = objectList(change.tasks);
+    if (tasks.length) {
+      files.push({
+        path: `openspec/changes/${slug}/tasks.md`,
+        content: renderOpenSpecTasksContent(tasks),
+      });
+    }
+    return files;
+  }
+
+  function renderOpenSpecDocument(files: OpenSpecFile[], slug: string): string {
+    const out = [`# OpenSpec change: ${slug}`, ""];
+    for (const file of files) {
+      out.push(`<!-- ${file.path} -->`, file.content.trim(), "");
+    }
+    return normalizeMarkdown(out);
+  }
+
+  function renderOpenSpecFolderManifest(
+    files: OpenSpecFile[],
+    slug: string,
+  ): string {
+    return `${JSON.stringify(
+      {
+        kind: "openspec.change.folder",
+        slug,
+        files,
+      },
+      null,
+      2,
+    )}\n`;
+  }
+
+  function startOpenSpecEdit() {
+    editDraft = effectiveOpenSpecMarkdown;
+    reviewMode = "edit";
+    exportStatus = null;
+  }
+
+  function finishOpenSpecEdit() {
+    editedOpenSpecMarkdown = editDraft;
+    reviewMode = "preview";
+    exportStatus = "Draft updated";
+  }
+
+  function setReviewDecision(decision: ReviewDecision) {
+    reviewDecision = decision;
+    exportStatus =
+      decision === "approved"
+        ? "Approved"
+        : decision === "rejected"
+          ? "Rejected"
+          : "Revision requested";
+  }
+
+  function currentOpenSpecText(): string {
+    return reviewMode === "edit" ? editDraft : effectiveOpenSpecMarkdown;
+  }
+
+  async function copyOpenSpec() {
+    exportStatus = null;
+    const text = currentOpenSpecText();
+    try {
+      await navigator.clipboard.writeText(text);
+      exportStatus = "Copied";
+    } catch {
+      exportStatus = "Copy failed";
+    }
+  }
+
+  function downloadTextFile(filename: string, text: string, mimeType: string) {
+    const blob = new Blob([text], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function downloadOpenSpec() {
+    exportStatus = null;
+    downloadTextFile(
+      `${openSpecSlug || "openspec-change"}.md`,
+      currentOpenSpecText(),
+      "text/markdown;charset=utf-8",
+    );
+    exportStatus = "Document downloaded";
+  }
+
+  function downloadOpenSpecManifest() {
+    exportStatus = null;
+    downloadTextFile(
+      `${openSpecSlug || "openspec-change"}.openspec-folder.json`,
+      openSpecFolderManifest,
+      "application/json;charset=utf-8",
+    );
+    exportStatus = "Folder manifest downloaded";
+  }
 </script>
 
-<article class="artifact-card" data-testid="artifact-card" data-tool-name={toolName}>
+<article
+  class="artifact-card"
+  data-testid="artifact-card"
+  data-tool-name={toolName}
+>
   <header class="artifact-header">
-    <span class="artifact-tool" data-testid="artifact-tool-name">{toolName}</span>
+    <span class="artifact-tool" data-testid="artifact-tool-name"
+      >{toolName}</span
+    >
     {#if revisionValue !== null}
       <span class="artifact-revision" data-testid="artifact-revision">
         rev {revisionValue}
@@ -106,7 +468,139 @@
     <h4 class="artifact-title" data-testid="artifact-title">{titleValue}</h4>
   {/if}
 
-  {#if !args || sectionKeys.length === 0}
+  {#if isOpenSpecChange}
+    <section class="openspec-review" data-testid="openspec-review-panel">
+      <div class="openspec-summary">
+        <div>
+          <p class="openspec-eyebrow">OpenSpec change</p>
+          <h4 class="openspec-title" data-testid="openspec-title">
+            {openSpecSlug}
+          </h4>
+        </div>
+        {#if stringField(args, "acceptance_command")}
+          <p class="openspec-command" data-testid="openspec-acceptance">
+            {stringField(args, "acceptance_command")}
+          </p>
+        {/if}
+      </div>
+
+      <div class="openspec-actions" aria-label="Spec review actions">
+        <button
+          type="button"
+          class="openspec-btn"
+          data-testid="openspec-edit"
+          onclick={startOpenSpecEdit}
+          title="Edit rendered OpenSpec"
+        >
+          <Icon src={PencilSquare} size="15" />
+          <span>Edit</span>
+        </button>
+        <button
+          type="button"
+          class="openspec-btn"
+          data-testid="openspec-approve"
+          onclick={() => setReviewDecision("approved")}
+          title="Approve spec"
+        >
+          <Icon src={CheckCircle} size="15" />
+          <span>Approve</span>
+        </button>
+        <button
+          type="button"
+          class="openspec-btn"
+          data-testid="openspec-revision"
+          onclick={() => setReviewDecision("revision")}
+          title="Request revision"
+        >
+          <Icon src={ArrowPath} size="15" />
+          <span>Revise</span>
+        </button>
+        <button
+          type="button"
+          class="openspec-btn danger"
+          data-testid="openspec-reject"
+          onclick={() => setReviewDecision("rejected")}
+          title="Reject spec"
+        >
+          <Icon src={XCircle} size="15" />
+          <span>Reject</span>
+        </button>
+      </div>
+
+      <div class="openspec-export-actions" aria-label="Spec export actions">
+        <button
+          type="button"
+          class="openspec-btn"
+          data-testid="openspec-copy"
+          onclick={copyOpenSpec}
+          title="Copy OpenSpec handoff document"
+        >
+          <Icon src={ClipboardDocument} size="15" />
+          <span>Copy</span>
+        </button>
+        <button
+          type="button"
+          class="openspec-btn"
+          data-testid="openspec-download"
+          onclick={downloadOpenSpec}
+          title="Download OpenSpec handoff document"
+        >
+          <Icon src={ArrowDownTray} size="15" />
+          <span>Download Doc</span>
+        </button>
+        <button
+          type="button"
+          class="openspec-btn"
+          data-testid="openspec-download-folder"
+          onclick={downloadOpenSpecManifest}
+          title="Download OpenSpec folder manifest"
+        >
+          <Icon src={ArrowDownTray} size="15" />
+          <span>Download Folder</span>
+        </button>
+      </div>
+
+      {#if reviewDecision}
+        <p
+          class="openspec-state"
+          data-testid="openspec-review-state"
+          data-state={reviewDecision}
+        >
+          {reviewDecision === "approved"
+            ? "Approved"
+            : reviewDecision === "rejected"
+              ? "Rejected"
+              : "Revision requested"}
+        </p>
+      {/if}
+      {#if exportStatus}
+        <p class="openspec-state" data-testid="openspec-export-state">
+          {exportStatus}
+        </p>
+      {/if}
+
+      {#if reviewMode === "edit"}
+        <textarea
+          class="openspec-editor"
+          data-testid="openspec-editor"
+          bind:value={editDraft}
+          aria-label="Edit OpenSpec artifact"
+        ></textarea>
+        <button
+          type="button"
+          class="openspec-btn primary"
+          data-testid="openspec-save-edit"
+          onclick={finishOpenSpecEdit}
+        >
+          Save Draft
+        </button>
+      {:else}
+        <pre
+          class="openspec-preview"
+          data-testid="openspec-preview">{effectiveOpenSpecMarkdown}</pre>
+      {/if}
+    </section>
+  {:else if !args || sectionKeys.length === 0}
     <p class="artifact-empty">No additional fields.</p>
   {:else}
     <dl class="artifact-fields">
@@ -211,6 +705,140 @@
     color: var(--ui-text-tertiary, #9ca3af);
     font-style: italic;
     font-size: 0.75rem;
+  }
+
+  .openspec-review {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .openspec-summary {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--ui-border-subtle, #e5e7eb);
+  }
+
+  .openspec-eyebrow {
+    margin: 0 0 0.125rem;
+    font-size: 0.6875rem;
+    color: var(--ui-text-secondary, #6b7280);
+    letter-spacing: 0;
+  }
+
+  .openspec-title {
+    margin: 0;
+    font-size: 0.875rem;
+    line-height: 1.3;
+    color: var(--ui-text-primary, #111827);
+    word-break: break-word;
+  }
+
+  .openspec-command {
+    margin: 0;
+    max-width: 100%;
+    padding: 0.25rem 0.375rem;
+    border: 1px solid var(--ui-border-subtle, #e5e7eb);
+    border-radius: 4px;
+    background: var(--ui-surface-primary, #fff);
+    color: var(--ui-text-secondary, #6b7280);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.6875rem;
+    overflow-wrap: anywhere;
+  }
+
+  .openspec-actions,
+  .openspec-export-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+  }
+
+  .openspec-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem;
+    min-height: 1.75rem;
+    max-width: 100%;
+    padding: 0.25rem 0.5rem;
+    border: 1px solid var(--ui-border-muted, #d1d5db);
+    border-radius: 4px;
+    background: var(--ui-surface-primary, #fff);
+    color: var(--ui-text-primary, #111827);
+    font: inherit;
+    font-size: 0.75rem;
+    line-height: 1.2;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .openspec-btn :global(svg) {
+    flex: 0 0 auto;
+  }
+
+  .openspec-btn:hover {
+    background: var(--ui-surface-tertiary, #e5e7eb);
+  }
+
+  .openspec-btn.primary {
+    background: var(--ui-interactive-primary, #2563eb);
+    border-color: var(--ui-interactive-primary, #2563eb);
+    color: #fff;
+  }
+
+  .openspec-btn.danger {
+    color: var(--ui-danger, #b91c1c);
+    border-color: color-mix(in srgb, var(--ui-danger, #b91c1c) 35%, #fff);
+  }
+
+  .openspec-state {
+    margin: 0;
+    padding: 0.25rem 0.375rem;
+    border-radius: 4px;
+    background: var(--ui-surface-primary, #fff);
+    border: 1px solid var(--ui-border-subtle, #e5e7eb);
+    color: var(--ui-text-secondary, #6b7280);
+    font-size: 0.75rem;
+  }
+
+  .openspec-state[data-state="approved"] {
+    color: var(--ui-success, #047857);
+  }
+
+  .openspec-state[data-state="rejected"] {
+    color: var(--ui-danger, #b91c1c);
+  }
+
+  .openspec-editor,
+  .openspec-preview {
+    width: 100%;
+    border: 1px solid var(--ui-border-subtle, #e5e7eb);
+    border-radius: 4px;
+    background: var(--ui-surface-primary, #fff);
+    color: var(--ui-text-primary, #111827);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.75rem;
+    line-height: 1.45;
+  }
+
+  .openspec-editor {
+    min-height: 16rem;
+    padding: 0.5rem;
+    resize: vertical;
+  }
+
+  .openspec-preview {
+    margin: 0;
+    max-height: 24rem;
+    padding: 0.625rem;
+    overflow: auto;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
   }
 
   .artifact-fields {

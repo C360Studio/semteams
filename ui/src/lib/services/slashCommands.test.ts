@@ -373,10 +373,10 @@ describe("parseSlashCommand — page availability", () => {
 // ---------------------------------------------------------------------------
 
 describe("getCommandsForPage — flow-builder", () => {
-  // Updated count: 5 original + 4 agent-control commands (approve, reject, pause, resume) = 9
-  it("returns all 9 commands for flow-builder", () => {
+  // flow-builder excludes data-view-only /query, but includes governed spec shortcuts.
+  it("returns all 13 commands for flow-builder", () => {
     const commands = getCommandsForPage("flow-builder");
-    expect(commands).toHaveLength(9);
+    expect(commands).toHaveLength(13);
   });
 
   it("includes search on flow-builder", () => {
@@ -413,10 +413,10 @@ describe("getCommandsForPage — flow-builder", () => {
 });
 
 describe("getCommandsForPage — data-view", () => {
-  // Updated count: 4 original + 4 agent-control commands (approve, reject, pause, resume) = 8
-  it("returns 8 commands for data-view (no /flow, no /debug)", () => {
+  // data-view excludes /flow and /debug, but includes /query plus governed spec shortcuts.
+  it("returns 12 commands for data-view (no /flow, no /debug)", () => {
     const commands = getCommandsForPage("data-view");
-    expect(commands).toHaveLength(8);
+    expect(commands).toHaveLength(12);
   });
 
   it("includes search on data-view", () => {
@@ -733,5 +733,121 @@ describe("filterCommands — agent-control commands", () => {
   it("'de' matches /reject via 'deny' alias on data-view", () => {
     const filtered = filterCommands("de", "data-view");
     expect(filtered.some((c) => c.name === "reject")).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Spec-driven development slash commands
+// ---------------------------------------------------------------------------
+
+describe("parseSlashCommand — spec shortcuts", () => {
+  it("/export-spec parses a change slug and defaults to folder export", () => {
+    const result = parseSlashCommand("/export-spec add-mfa", "flow-builder");
+    expect(result).not.toBeNull();
+    expect(result!.command.name).toBe("export-spec");
+    expect(result!.result.intent).toBe("agent-control");
+    expect(result!.result.params).toMatchObject({
+      action: "export-spec",
+      changeSlug: "add-mfa",
+      format: "folder",
+    });
+  });
+
+  it("/export-spec accepts the rendered document format", () => {
+    const result = parseSlashCommand(
+      "/export-spec add-mfa document",
+      "data-view",
+    );
+    expect(result).not.toBeNull();
+    expect(result!.result.params).toMatchObject({
+      action: "export-spec",
+      changeSlug: "add-mfa",
+      format: "document",
+      requestedFormat: "document",
+    });
+  });
+
+  it("/implement-spec parses the approved change slug", () => {
+    const result = parseSlashCommand(
+      "/implement-spec spec-driven-dev-readiness-hitl",
+      "flow-builder",
+    );
+    expect(result).not.toBeNull();
+    expect(result!.command.name).toBe("implement-spec");
+    expect(result!.result.intent).toBe("agent-control");
+    expect(result!.result.params).toMatchObject({
+      action: "implement-spec",
+      changeSlug: "spec-driven-dev-readiness-hitl",
+    });
+  });
+
+  it("/dev-via-spec is only a compatibility alias for /implement-spec", () => {
+    const result = parseSlashCommand("/dev-via-spec add-mfa", "data-view");
+    expect(result).not.toBeNull();
+    expect(result!.command.name).toBe("implement-spec");
+    expect(result!.result.content).toBe("/implement-spec add-mfa");
+    expect(result!.result.params).toMatchObject({
+      action: "implement-spec",
+      changeSlug: "add-mfa",
+    });
+  });
+
+  it("/run-status parses an optional run id", () => {
+    const result = parseSlashCommand("/run-status run-123", "flow-builder");
+    expect(result).not.toBeNull();
+    expect(result!.command.name).toBe("run-status");
+    expect(result!.result.params).toMatchObject({
+      action: "run-status",
+      runId: "run-123",
+    });
+  });
+
+  it("/evidence parses an optional evidence target", () => {
+    const result = parseSlashCommand(
+      "/evidence mavlink.mission_upload.verifiable",
+      "data-view",
+    );
+    expect(result).not.toBeNull();
+    expect(result!.command.name).toBe("evidence");
+    expect(result!.result.params).toMatchObject({
+      action: "evidence",
+      target: "mavlink.mission_upload.verifiable",
+    });
+  });
+});
+
+describe("getCommandsForPage — includes spec shortcuts", () => {
+  it("flow-builder includes spec export, implementation, run status, and evidence shortcuts", () => {
+    const names = getCommandsForPage("flow-builder").map((c) => c.name);
+    expect(names).toContain("export-spec");
+    expect(names).toContain("implement-spec");
+    expect(names).toContain("run-status");
+    expect(names).toContain("evidence");
+  });
+
+  it("data-view includes spec export, implementation, run status, and evidence shortcuts", () => {
+    const names = getCommandsForPage("data-view").map((c) => c.name);
+    expect(names).toContain("export-spec");
+    expect(names).toContain("implement-spec");
+    expect(names).toContain("run-status");
+    expect(names).toContain("evidence");
+  });
+});
+
+describe("filterCommands — spec shortcuts", () => {
+  it("'ex' matches /export-spec without hiding /explain", () => {
+    const filtered = filterCommands("ex", "flow-builder");
+    expect(filtered.some((c) => c.name === "export-spec")).toBe(true);
+    expect(filtered.some((c) => c.name === "explain")).toBe(true);
+  });
+
+  it("'dev' matches /implement-spec via compatibility alias", () => {
+    const filtered = filterCommands("dev", "data-view");
+    expect(filtered.some((c) => c.name === "implement-spec")).toBe(true);
+  });
+
+  it("'proof' matches /evidence via alias", () => {
+    const filtered = filterCommands("proof", "flow-builder");
+    expect(filtered.some((c) => c.name === "evidence")).toBe(true);
   });
 });

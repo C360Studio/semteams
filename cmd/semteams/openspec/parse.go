@@ -337,7 +337,17 @@ func ParseProposal(md string) *Proposal {
 		scopeOut bool   // within scope: are we under "Out of scope:"?
 		intent   []string
 		approach []string
+		extra    *MarkdownSection
+		extraRaw []string
 	)
+	flushExtra := func() {
+		if extra != nil {
+			extra.Body = strings.TrimSpace(strings.Join(extraRaw, "\n"))
+			p.ExtraSections = append(p.ExtraSections, *extra)
+		}
+		extra = nil
+		extraRaw = nil
+	}
 
 	for raw := range strings.SplitSeq(md, "\n") {
 		line := strings.TrimRight(raw, " \t\r")
@@ -345,7 +355,12 @@ func ParseProposal(md string) *Proposal {
 
 		switch {
 		case strings.HasPrefix(line, "## "):
-			section, scopeOut = proposalSection(strings.TrimPrefix(line, "## ")), false
+			flushExtra()
+			heading := strings.TrimSpace(strings.TrimPrefix(line, "## "))
+			section, scopeOut = proposalSection(heading), false
+			if section == "" {
+				extra = &MarkdownSection{Heading: heading}
+			}
 		case strings.HasPrefix(line, "# "):
 			p.Title = strings.TrimSpace(strings.TrimPrefix(line, "# "))
 		case trimmed == "":
@@ -371,9 +386,14 @@ func ParseProposal(md string) *Proposal {
 						}
 					}
 				}
+			default:
+				if extra != nil {
+					extraRaw = append(extraRaw, trimmed)
+				}
 			}
 		}
 	}
+	flushExtra()
 
 	p.Intent = strings.TrimSpace(strings.Join(intent, "\n"))
 	p.Approach = strings.TrimSpace(strings.Join(approach, "\n"))
@@ -405,6 +425,8 @@ func ParseDesign(md string) *Design {
 		dataFlow  []string
 		curDec    *DesignDecision
 		decBody   []string
+		extra     *MarkdownSection
+		extraRaw  []string
 	)
 
 	flushDecision := func() {
@@ -415,18 +437,31 @@ func ParseDesign(md string) *Design {
 		curDec = nil
 		decBody = nil
 	}
+	flushExtra := func() {
+		if extra != nil {
+			extra.Body = strings.TrimSpace(strings.Join(extraRaw, "\n"))
+			d.ExtraSections = append(d.ExtraSections, *extra)
+		}
+		extra = nil
+		extraRaw = nil
+	}
 
 	for raw := range strings.SplitSeq(md, "\n") {
 		line := strings.TrimRight(raw, " \t\r")
 		trimmed := strings.TrimSpace(line)
 
 		switch {
-		case strings.HasPrefix(line, "### Decision:"):
+		case section == "decisions" && strings.HasPrefix(line, "### Decision:"):
 			flushDecision()
 			curDec = &DesignDecision{Name: strings.TrimSpace(strings.TrimPrefix(line, "### Decision:"))}
 		case strings.HasPrefix(line, "## "):
 			flushDecision()
-			section = designSection(strings.TrimPrefix(line, "## "))
+			flushExtra()
+			heading := strings.TrimSpace(strings.TrimPrefix(line, "## "))
+			section = designSection(heading)
+			if section == "" {
+				extra = &MarkdownSection{Heading: heading}
+			}
 		case strings.HasPrefix(line, "# "):
 			d.Title = strings.TrimSpace(strings.TrimPrefix(line, "# "))
 		case trimmed == "":
@@ -445,10 +480,15 @@ func ParseDesign(md string) *Design {
 				if fc, ok := parseFileChange(trimmed); ok {
 					d.FileChanges = append(d.FileChanges, fc)
 				}
+			default:
+				if extra != nil {
+					extraRaw = append(extraRaw, trimmed)
+				}
 			}
 		}
 	}
 	flushDecision()
+	flushExtra()
 
 	d.TechnicalApproach = strings.TrimSpace(strings.Join(technical, "\n"))
 	d.DataFlow = strings.TrimSpace(strings.Join(dataFlow, "\n"))

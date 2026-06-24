@@ -137,6 +137,7 @@ describe("deriveTaskInfo", () => {
     expect(task.childNeedsAttention).toBe(false);
     expect(task.childAttentionCount).toBe(0);
     expect(task.runPause).toBeNull();
+    expect(task.runHealth).toBeNull();
   });
 
   it("title preference: prompt → task_id → truncated loop_id", () => {
@@ -361,6 +362,26 @@ describe("deriveTaskInfo", () => {
     expect(t.runPause).toBeNull();
   });
 
+  it("runHealth defaults to null when omitted", () => {
+    const t = deriveTaskInfo(makeLoop(), []);
+    expect(t.runHealth).toBeNull();
+  });
+
+  it("runHealth is passed through onto the TaskInfo", () => {
+    const health = {
+      state: "working" as const,
+      label: "Working",
+      currentGate: "coordinator executing",
+      nextAction: "Wait for evidence",
+      detail: "Coordinator is executing.",
+      evidenceFreshness: "unknown" as const,
+      activeLoopCount: 1,
+      signals: [],
+    };
+    const t = deriveTaskInfo(makeLoop(), [], null, undefined, null, health);
+    expect(t.runHealth).toBe(health);
+  });
+
   it("runPause is passed through onto the TaskInfo", () => {
     const pause: RunPause = { cause: "tool_gate", gatedLoopId: "loop-gated" };
     const t = deriveTaskInfo(makeLoop({ state: "complete" }), [], null, undefined, pause);
@@ -417,6 +438,7 @@ describe("resolveTaskMention", () => {
       childNeedsAttention: false,
       childAttentionCount: 0,
       runPause: null,
+      runHealth: null,
       ...overrides,
     };
   }

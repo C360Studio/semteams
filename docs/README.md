@@ -35,6 +35,7 @@ that don't exist upstream.
 |---|---|
 | [`architecture.md`](architecture.md) | What semteams DOES — the substrate-plus-overlays runtime (ADR-042) + the three live category packs (research, autoresearch, dev-via-test) + how a sandbox gets created |
 | [`getting-started.md`](getting-started.md) | New-dev quickstart + debugging recipes |
+| [`product/vocabulary-map.md`](product/vocabulary-map.md) | Product vocabulary and UI label guidance |
 | [`adr/`](adr/) | Architectural Decision Records — every load-bearing product-shell decision |
 | [`proposals/`](proposals/) | Active design docs that precede / accompany an ADR. Currently: `agentic-superpowers.md` (shipped 2026-04-12; retained for framing). |
 | [`objectives/`](objectives/) | Per-flow objective specs the ops agent grounds against (ADR-027) |

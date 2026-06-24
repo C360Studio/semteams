@@ -34,6 +34,7 @@ const APPROVE = new Set([
 /** Negative / blocking outcomes. */
 const REJECT = new Set([
   "rejected",
+  "rejected_retry",
   "reject",
   "denied",
   "deny",
@@ -42,6 +43,9 @@ const REJECT = new Set([
   "fail",
   "abort",
   "aborted",
+  "plan_rejected",
+  "plan_rejected_retry",
+  "insufficient",
 ]);
 
 /** Outcomes that hand back to a human / need more input. */

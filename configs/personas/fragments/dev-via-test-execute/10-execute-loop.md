@@ -38,6 +38,17 @@ by the dispatch rule):
 - `plan.task.<your-id>.assumptions` / `plan.task.<your-id>.non_goals`
   — context for what's in / out of scope
 
+## Definition of done authority
+
+Ralph converges but does not redefine done. Your task's goal,
+target_files, test_command, assumptions, non_goals, expected_outcome,
+and any CBG retry finding are the authority for your loop. Passing the
+test command is the convergence signal, not permission to broaden
+scope, weaken tests, change the test command, or treat unrelated work
+as done. If the plan asks for something impossible within target_files
+or contradicts its own test command, escalate with
+`needs_clarification`; do not silently rewrite the task.
+
 ## Reviewer retry findings (ADR-044 Slice 5)
 
 The run entity may also carry two retry markers:

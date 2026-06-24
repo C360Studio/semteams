@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { attachJourneyEvidenceReport } from "./e2e_report";
 
 /**
  * Journey: ADR-057 §D5 create_change pack (author / reviewer) mock-LLM
@@ -47,6 +48,7 @@ const TERMINAL = new Set([
   "cancelled",
   "truncated",
 ]);
+const RUN_INFIX = ".agent.chain.execution.";
 
 test.describe("ADR-057 — create_change pack mock-LLM journey", () => {
   test.beforeAll(async ({ request }) => {
@@ -61,7 +63,7 @@ test.describe("ADR-057 — create_change pack mock-LLM journey", () => {
   test("spec-authoring prompt → author emits change → reviewer approves → reply", async ({
     page,
     request,
-  }) => {
+  }, testInfo) => {
     await page.goto("/");
     await expect(page.getByTestId("connection-status")).toHaveAttribute(
       "data-summary",
@@ -130,6 +132,11 @@ test.describe("ADR-057 — create_change pack mock-LLM journey", () => {
       byRole("coordinator"),
       "≥1 coordinator wake-up (rule 03 → respond_direct)",
     ).toBeGreaterThanOrEqual(1);
+    const authorLoop = settled.find((l) => l.role === "author-create-change");
+    const authorLoopId = String(authorLoop?.loop_id ?? "");
+    expect(authorLoopId, "expected an author-create-change loop id").not.toBe(
+      "",
+    );
 
     // The chain flowed through the pack's distinct tokens.
     const actionTriples = await fetchTriples(request, {
@@ -213,6 +220,161 @@ test.describe("ADR-057 — create_change pack mock-LLM journey", () => {
       runPhases,
       "run must NOT be failed (D3 race / wrong terminal)",
     ).not.toContain("failed");
+
+    // -----------------------------------------------------------------
+    // UI coverage for OpenSpec review/export + run health (OpenSpec change
+    // 6.2). The backend assertions above prove the chain ran; this drives
+    // the operator surface that answers "is this thing working?" and lets a
+    // human review/edit/export the generated spec before it is handed off.
+    // -----------------------------------------------------------------
+    const runId = bareIdAfter(changeSubject, RUN_INFIX);
+    expect(
+      runId,
+      `could not extract the front-door run id from ${changeSubject}`,
+    ).toBeTruthy();
+
+    const runCard = page.locator(
+      `[data-testid='task-card'][data-task-id='${runId}']`,
+    );
+    await expect(
+      runCard,
+      `run card ${runId} did not render in the board after create-change settled`,
+    ).toBeVisible({ timeout: 30_000 });
+
+    await page.goto(`/?task=${runId}`);
+    await expect(page.getByTestId("task-detail-panel")).toBeVisible({
+      timeout: 10_000,
+    });
+
+    const healthPanel = page.getByTestId("run-health-panel");
+    await expect(
+      healthPanel,
+      "run health summary did not render in the detail panel",
+    ).toBeVisible({ timeout: 30_000 });
+    await expect(healthPanel).toHaveAttribute(
+      "aria-label",
+      /Run health: (Working|Complete)/,
+    );
+    await expect(healthPanel).toContainText("Next");
+    await expect(healthPanel).toContainText("Evidence");
+    await expect(healthPanel).toContainText("Active loops");
+
+    const authorChild = page.locator(
+      `[data-testid='child-item'][data-loop-id='${authorLoopId}']`,
+    );
+    await expect(
+      authorChild,
+      `author child row ${authorLoopId} did not appear under the run card`,
+    ).toBeVisible({ timeout: 10_000 });
+    await authorChild.click();
+
+    const emitChangeStep = page
+      .getByTestId("story-step")
+      .filter({ hasText: /used emit_change/ })
+      .first();
+    await expect(
+      emitChangeStep,
+      "expected the author trajectory to include the live emit_change call",
+    ).toBeVisible({ timeout: 15_000 });
+    await emitChangeStep.click();
+
+    await expect(page.getByTestId("artifact-card")).toBeVisible();
+    await expect(page.getByTestId("artifact-tool-name")).toHaveText(
+      "emit_change",
+    );
+    await expect(page.getByTestId("openspec-review-panel")).toBeVisible();
+    await expect(page.getByTestId("openspec-title")).toHaveText("add-mfa");
+    await expect(page.getByTestId("openspec-preview")).toContainText(
+      "# OpenSpec change: add-mfa",
+    );
+    await expect(page.getByTestId("openspec-preview")).toContainText(
+      "<!-- openspec/changes/add-mfa/specs/auth/spec.md -->",
+    );
+
+    await page.getByTestId("openspec-edit").click();
+    await expect(page.getByTestId("openspec-editor")).toHaveValue(
+      /# OpenSpec change: add-mfa/,
+    );
+    await page
+      .getByTestId("openspec-editor")
+      .fill("# Edited OpenSpec\n\nManual reviewer note.\n");
+    await page.getByTestId("openspec-save-edit").click();
+    await expect(page.getByTestId("openspec-export-state")).toHaveText(
+      "Draft updated",
+    );
+    await expect(page.getByTestId("openspec-preview")).toContainText(
+      "Manual reviewer note.",
+    );
+
+    await page.getByTestId("openspec-approve").click();
+    await expect(page.getByTestId("openspec-review-state")).toHaveAttribute(
+      "data-state",
+      "approved",
+    );
+
+    const docDownload = page.waitForEvent("download");
+    await page.getByTestId("openspec-download").click();
+    const doc = await docDownload;
+    expect(doc.suggestedFilename()).toBe("add-mfa.md");
+    await expect(page.getByTestId("openspec-export-state")).toHaveText(
+      "Document downloaded",
+    );
+
+    const folderDownload = page.waitForEvent("download");
+    await page.getByTestId("openspec-download-folder").click();
+    const folder = await folderDownload;
+    expect(folder.suggestedFilename()).toBe("add-mfa.openspec-folder.json");
+    await expect(page.getByTestId("openspec-export-state")).toHaveText(
+      "Folder manifest downloaded",
+    );
+
+    const report = await attachJourneyEvidenceReport({
+      journeyName: "create-change",
+      fixture: "create-change.yaml",
+      config: "e2e-flow-bootstrap.json",
+      request,
+      testInfo,
+      runIds: [runId],
+      runEntityIds: [changeSubject],
+      observations: {
+        authorLoopId,
+        runPhases,
+        openspecReviewState: "approved",
+      },
+      artifactOutputs: [
+        {
+          name: doc.suggestedFilename(),
+          kind: "openspec-single-document",
+          contentType: "text/markdown",
+          path: await downloadPath(doc),
+          metadata: { slug: "add-mfa", source: "openspec-download" },
+        },
+        {
+          name: folder.suggestedFilename(),
+          kind: "openspec-folder-manifest",
+          contentType: "application/json",
+          path: await downloadPath(folder),
+          metadata: { slug: "add-mfa", source: "openspec-download-folder" },
+        },
+      ],
+    });
+    expect(
+      report.models.resolved.some((model) => model.provider && model.model),
+      "journey report must resolve provider + model id from the active config",
+    ).toBe(true);
+    expect(
+      report.artifacts.explicit_outputs.map((artifact) => artifact.kind),
+      "journey report must attach the exported OpenSpec document and folder manifest",
+    ).toEqual(
+      expect.arrayContaining([
+        "openspec-single-document",
+        "openspec-folder-manifest",
+      ]),
+    );
+    expect(
+      report.artifacts.tool_calls.some((call) => call.tool === "emit_change"),
+      "journey report must include the live emit_change artifact tool call",
+    ).toBe(true);
   });
 });
 
@@ -235,6 +397,22 @@ async function fetchTriples(
     );
   }
   return (await resp.json()) as Triple[];
+}
+
+/** Extract the bare id after a fixed entity-ID infix. */
+function bareIdAfter(entityId: string, infix: string): string {
+  const idx = entityId.indexOf(infix);
+  return idx === -1 ? "" : entityId.slice(idx + infix.length);
+}
+
+async function downloadPath(
+  download: import("@playwright/test").Download,
+): Promise<string | null> {
+  try {
+    return await download.path();
+  } catch {
+    return null;
+  }
 }
 
 async function pollUntil<T>(

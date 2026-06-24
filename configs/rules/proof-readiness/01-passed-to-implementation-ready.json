@@ -1,0 +1,56 @@
+{
+  "id": "proof_readiness_passed_to_implementation_ready",
+  "type": "expression",
+  "name": "formal_claims passed → proof_readiness implementation-ready marker",
+  "description": "OpenSpec SDD task 2.3 / ADR-055 D4 — consumes the analyzer's exact route summary on the run entity. When formal_claims.status=passed, this rule releases the run to the future dev-from-task slice by stamping proof_readiness.route=implementation and proof_readiness.implementation_ready=true. It does NOT publish a raw NATS event and does NOT spawn implementation directly; dev-from-task (P4) consumes the graph marker once that pack exists.",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "formal_claims.status",
+      "operator": "eq",
+      "value": "passed",
+      "required": true
+    },
+    {
+      "field": "formal_claims.route.implementation",
+      "operator": "eq",
+      "value": "present",
+      "required": true
+    },
+    {
+      "field": "proof_readiness.routed",
+      "operator": "length_eq",
+      "value": 0,
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "add_triple",
+      "subject": "$entity.id",
+      "predicate": "proof_readiness.route",
+      "object": "implementation"
+    },
+    {
+      "type": "add_triple",
+      "subject": "$entity.id",
+      "predicate": "proof_readiness.implementation_ready",
+      "object": "true"
+    },
+    {
+      "type": "add_triple",
+      "subject": "$entity.id",
+      "predicate": "proof_readiness.routed",
+      "object": "true"
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "pack": "proof-readiness",
+    "phase": "OpenSpec SDD 2.3 — passed route marker",
+    "adr": "docs/adr/055-formal-claim-analysis-for-verification-gates.md",
+    "flow_contract": "Rules consume formal_claims.route.* summary predicates emitted by analyze_proof_readiness; no wildcard predicate matching and no raw NATS subscriber.",
+    "downstream": "dev-from-task P4 consumes proof_readiness.implementation_ready=true plus change.<slug>.task.*."
+  }
+}

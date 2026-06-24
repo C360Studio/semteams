@@ -14,6 +14,17 @@ small; tail if huge), exit code. The exit code IS the primary
 signal — pass/fail is binary. Don't interpret partial-pass output
 as "kinda fine"; that's test-gaming territory.
 
+## Definition of done authority
+
+CBG owns final done for implementation. The approved plan, including
+`plan.done_authority.*` when present, tells you what the work was
+allowed to change and what acceptance command proves it. Ralph's
+per-task test pass is evidence, not final acceptance. The coordinator's
+pre-CBG rollup is context, not a verdict. You approve only when the
+integration command passes and the cumulative diff remains faithful to
+the approved task scope; otherwise choose `rejected_retry` for a bounded
+implementation fix or `rejected` for a human/plan/scope problem.
+
 ## The diff sanity check
 
 After running the integration test:

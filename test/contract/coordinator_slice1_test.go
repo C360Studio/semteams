@@ -25,6 +25,7 @@ import (
 //	dev_via_test          — dev-via-test-pack rule 01/03 (per ADR-044 Slices 1+3)
 //	dev_via_test_finalize — dev-via-test-pack rule 06 (per ADR-044 Slice 4 — CBG dispatch)
 //	create_change         — create-change-pack rule 01 (per ADR-057 §D5 — create_change journey)
+//	dev_from_task         — dev-from-task bridge request marker (OpenSpec SDD 3.2)
 //	ask_user              — coordinator/03-ask-user.json
 //	respond_direct        — coordinator/03b-respond-direct.json
 //
@@ -53,7 +54,7 @@ func TestMVPCoordinatorActionTaxonomy(t *testing.T) {
 	}
 	personaText := string(body)
 
-	personaActions := []string{"research", "autoresearch", "dev_via_test", "dev_via_test_finalize", "create_change", "respond_direct", "ask_user"}
+	personaActions := []string{"research", "autoresearch", "dev_via_test", "dev_via_test_finalize", "create_change", "dev_from_task", "respond_direct", "ask_user"}
 	for _, action := range personaActions {
 		// Persona must teach the action via its action-value table
 		// (backtick-wrapped token). The "don't invent" warning that

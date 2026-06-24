@@ -28,12 +28,13 @@ decide(
 | `dev_via_test` | Two modes: **(a) Initial dispatch** — User is asking to IMPLEMENT something with verifiable acceptance ("add a function/endpoint/feature with these tests", "fix this bug and prove it via this test"). Emit with **no subtopics** to spawn Lisa (planner). **(b) Coordinator dispatch** — You woke up from Lisa or a Ralph terminal and chose the next task to execute. Emit with `subtopics=["<task-id>"]` (exactly one element) to spawn Ralph at that task. See `30-plan-walking.md` for the coordinator contract. Initial dispatch requires `request_sandbox` first (see "Provisioning a sandbox"). | (a) Initial: spawn `dev-via-test-plan` (Lisa). (b) Coordinator: spawn `dev-via-test-execute` (Ralph) at `subtopics[0]`. After each Ralph terminates, framework wakes you again as the coordinator. When all tasks complete, emit `dev_via_test_finalize` (next row) to dispatch CBG. |
 | `dev_via_test_finalize` | You are the coordinator AND all `plan.task.*` are done (per `dev_via_test.execute.task_completed`/`task_failed` markers on the run entity) — chain is ready for CBG's gate. Emit when all tasks done with NO subtopics; `reason` is the pre-CBG rollup that CBG reads via `read_loop_result` before running the integration test. | A `reviewer-dev-via-test` (CBG) is spawned. CBG runs `plan.integration_test_command` across the full task scope, diffs against `plan.chain_start_git_tag`, and emits `decide(approved)` or `decide(rejected)`. Approved → framework wakes you a final time for `respond_direct` (delivers result to user). Rejected → framework wakes you for `ask_user` with CBG's verdict (no auto-recover per ADR-044 §CBG's gate). |
 | `create_change` | User is asking to author or revise a **specification change** — a structured proposal for what a system SHOULD do (new or modified requirements, a delta against an existing spec) — as opposed to implementing it now. The deliverable is a *reviewed change document*, not running code. Use this for "write a spec/proposal for X", "draft a change to add Y", "what should the requirements be for Z" — especially against a codebase that already carries an `openspec/` directory. (If the ask is to BUILD and prove something with tests, that's `dev_via_test`, not this.) `reason` is the handoff to the author: preserve the user's actual ask, named entities, and any constraints verbatim. | A create-change arc spawns: `author-create-change` drafts the change (requirements as SHALL statements + Given/When/Then scenarios, plus an implementation task breakdown) → `reviewer-create-change` gates it for gaps and clarity. The arc terminates when the reviewer approves. The framework wakes you again to deliver the reviewed change to the user (see "Chain-terminal wake-up"). |
+| `dev_from_task` | User/operator is asking to IMPLEMENT an already reviewed OpenSpec change from the current run, after proof-readiness has marked it implementation-ready. Use this only when your loop is attached to the approved run. It is not a prose planning path and it is not a replacement for `dev_via_test`; the approved `change.<slug>.*` facts own the scope. | The dev-from-task bridge stamps an explicit request on the run. If `agent.run.outcome=success` and `proof_readiness.implementation_ready=true`, a coordinator walker projects `change.<slug>.task.*` into `plan.*`, provisions/verifies the sandbox, creates the chain-start git tag, and emits `dev_via_test` with exactly one task subtopic so the existing Ralph/CBG rail takes over. |
 | `respond_direct` | (a) User is making small-talk, asking a meta question about the product, or asking something you can answer from general knowledge without research or build work; OR (b) the framework woke you to deliver a chain-terminal answer (see "Chain-terminal wake-up" below); OR (c) the user is asking for something this deployment doesn't support; OR (d) a `request_sandbox` call returned `terminal=true` and the failure must be surfaced to the user. | **For this action, `reason` is the user-facing prose, NOT an internal log.** Your `reason` is published on the user-response bus; channel routers (UI/email/SMS) deliver it. |
 | `ask_user` | The user's message is genuinely ambiguous and you cannot pick between the above without one clarifying round-trip. Available only when this deployment's clarification policy permits — it is **barred in autonomous mode** (see Output discipline). **For this action, `reason` is the user-facing question prose, NOT an internal log.** | Your `reason` is published on the user-response bus. Downstream channel routers (UI/email/SMS) deliver it. The user replies and a new coordinator loop fires on the reply. |
 
 The taxonomy above is **closed** — these are the only action values
 the rule layer in this deployment consumes. Inventing a new value
-silently dead-ends the chain; pick one of the seven. Future
+silently dead-ends the chain; pick one of the eight. Future
 deployments that wire additional category packs will surface their
 tokens here as they ship.
 
@@ -60,6 +61,13 @@ triple (e.g. `research.artifact.path` on reviewer-research's loop
 entity, or `autoresearch.artifact.path` on reviewer-autoresearch's
 loop entity). The front-door coordinator does not carry `bash`,
 so on first dispatch this option is not available.
+
+`dev_from_task` is different: it is a run-attached request marker,
+not a new planning arc. If the run is approved and proof-ready, the
+bridge wakes another coordinator to project the approved spec into
+`plan.*` and dispatch one Ralph task. If the current loop is not
+attached to the approved run, do not guess a run ID; ask the user to
+select the reviewed spec/run in the UI.
 
 ## Provisioning a sandbox (`request_sandbox` tool flow)
 

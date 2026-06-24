@@ -1,4 +1,7 @@
 import { test, expect } from "@playwright/test";
+import { attachJourneyEvidenceReport } from "./e2e_report";
+
+const RUN_INFIX = ".agent.chain.execution.";
 
 /**
  * Journey: ADR-053 Phase 4c PR-1 — an in-run loop's approval_required tool-gate
@@ -49,7 +52,7 @@ test.describe("ADR-053 Phase 4c — in-run tool-gate pauses the run (executing�
   test("recovery coordinator gated create_rule → run transitions executing→awaiting_approval", async ({
     page,
     request,
-  }) => {
+  }, testInfo) => {
     // -----------------------------------------------------------------
     // Step 1 — open the Board so the SSE stream connects.
     // -----------------------------------------------------------------
@@ -170,6 +173,75 @@ test.describe("ADR-053 Phase 4c — in-run tool-gate pauses the run (executing�
       ).length,
       "agent.run.clarification_pending must be ABSENT — a 4c tool-gate pause must not be mistaken for (or cross-resumed with) a 4b-2 clarification pause.",
     ).toBe(0);
+
+    // -----------------------------------------------------------------
+    // Step 7 — UI surface (OpenSpec change 6.2): the paused run must not
+    // look merely idle or still-working. The board should show the
+    // operator-facing Approval needed badge, and the detail panel should
+    // answer "what is this waiting on?" with both the RunWaitingSection and
+    // run-health summary.
+    // -----------------------------------------------------------------
+    const pausedRunEntity = String(approvalMarkers?.[0]?.subject ?? "");
+    const pausedRunId = bareIdAfter(pausedRunEntity, RUN_INFIX);
+    expect(
+      pausedRunId,
+      `could not extract bare run id from approval marker subject ${pausedRunEntity}`,
+    ).toBeTruthy();
+
+    await expect(
+      page.getByTestId("run-waiting-badge").first(),
+      "no Approval needed badge appeared on the board for the paused run",
+    ).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId("run-waiting-badge").first()).toHaveText(
+      "Approval needed",
+    );
+
+    await page.goto(`/?task=${pausedRunId}`);
+    await expect(page.getByTestId("task-detail-panel")).toBeVisible({
+      timeout: 10_000,
+    });
+    await expect(
+      page.getByTestId("run-waiting-section"),
+      "RunWaitingSection did not render for the approval-paused run",
+    ).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId("run-approval-section")).toBeVisible();
+
+    const healthPanel = page.getByTestId("run-health-panel");
+    await expect(healthPanel).toBeVisible();
+    await expect(healthPanel).toContainText("Waiting");
+    await expect(healthPanel).toContainText("Tool approval");
+    await expect(healthPanel).toContainText(
+      "Approve or reject the gated tool call",
+    );
+
+    const report = await attachJourneyEvidenceReport({
+      journeyName: "approval-pause",
+      fixture: "approval-pause.yaml",
+      config: "e2e-flow-bootstrap.json",
+      request,
+      testInfo,
+      runIds: [pausedRunId],
+      runEntityIds: [pausedRunEntity],
+      observations: {
+        runPhases,
+        fromPhases,
+        approvalPendingSubject: approvalMarkers?.[0]?.subject,
+        approvalPendingObject: approvalMarkers?.[0]?.object,
+        waitingSurface: "tool approval",
+      },
+    });
+    expect(
+      report.models.resolved.some((model) => model.provider && model.model),
+      "journey report must resolve provider + model id from the active config",
+    ).toBe(true);
+    expect(
+      report.evidence.loops.states.executing,
+      "journey report should capture the approval-paused child loop as executing with pending_approval",
+    ).toBeGreaterThanOrEqual(1);
+    expect(
+      report.run.phases.some((phase) => phase.object === "awaiting_approval"),
+      "journey report must capture the run awaiting_approval phase",
+    ).toBe(true);
   });
 });
 
@@ -188,6 +260,12 @@ async function fetchTriples(
     );
   }
   return (await resp.json()) as Array<{ subject?: string; object?: unknown }>;
+}
+
+/** Extract the bare id after a fixed entity-ID infix. */
+function bareIdAfter(entityId: string, infix: string): string {
+  const idx = entityId.indexOf(infix);
+  return idx === -1 ? "" : entityId.slice(idx + infix.length);
 }
 
 async function pollUntil<T>(

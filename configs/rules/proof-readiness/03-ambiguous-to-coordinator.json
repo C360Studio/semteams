@@ -1,0 +1,55 @@
+{
+  "id": "proof_readiness_ambiguous_to_coordinator",
+  "type": "expression",
+  "name": "formal_claims ambiguous → proof_readiness coordinator marker",
+  "description": "OpenSpec SDD task 2.3 / ADR-055 D4 — ambiguous analysis means the run lacks accepted proof claims or has a coordinator-routed modeling problem. The route remains graph-first: stamp proof_readiness.route=coordinator and proof_readiness.requires_clarification=true for the UI/coordinator surface to consume. No raw NATS path.",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "formal_claims.status",
+      "operator": "eq",
+      "value": "ambiguous",
+      "required": true
+    },
+    {
+      "field": "formal_claims.route.coordinator",
+      "operator": "eq",
+      "value": "present",
+      "required": true
+    },
+    {
+      "field": "proof_readiness.routed",
+      "operator": "length_eq",
+      "value": 0,
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "add_triple",
+      "subject": "$entity.id",
+      "predicate": "proof_readiness.route",
+      "object": "coordinator"
+    },
+    {
+      "type": "add_triple",
+      "subject": "$entity.id",
+      "predicate": "proof_readiness.requires_clarification",
+      "object": "true"
+    },
+    {
+      "type": "add_triple",
+      "subject": "$entity.id",
+      "predicate": "proof_readiness.routed",
+      "object": "true"
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "pack": "proof-readiness",
+    "phase": "OpenSpec SDD 2.3 — ambiguous route marker",
+    "adr": "docs/adr/055-formal-claim-analysis-for-verification-gates.md",
+    "flow_contract": "The UI/coordinator asks for better spec/proof modeling from graph facts; no private planning bucket."
+  }
+}

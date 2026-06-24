@@ -384,12 +384,12 @@ func NewNATSPauseDataReader(client *natsclient.Client, subject string) *NATSPaus
 //
 // Uses natsclient.RequestClassified (beta.87+) so the handler-side
 // "not found: <id>" failure surfaces as a typed errs.IsInvalid error
-// rather than a literal-text body our JSON decoder would mis-parse.
-// Per upstream docs natsclient/errors.go "Footgun warning" — plain
-// Request() returns the legacy `error: <msg>` body with nil err on
-// handler failure, which is silent-corruption-shaped for any consumer
-// that json.Unmarshals the body. Sibling migration to chain.NATSEntityReader
-// (bae5706); this site surfaced in the audit pass after that commit.
+// rather than a raw error envelope our JSON decoder would mis-parse.
+// Per upstream's ADR-060 contract, request/reply handlers return either
+// a success body or a classified error; consumers that need to branch on
+// handler failures must use the classified client methods rather than
+// raw Request. Sibling migration to chain.NATSEntityReader (bae5706);
+// this site surfaced in the audit pass after that commit.
 //
 // Invalid-class err (graph-ingest's "entity doesn't exist" classification)
 // returns ("", "", nil) so the retry path's documented fallback at

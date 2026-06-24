@@ -5,8 +5,25 @@ import type {
 } from "$lib/types/slashCommand";
 
 // ---------------------------------------------------------------------------
-// Command registry — 6 core + 4 agent-control slash commands
+// Command registry — core navigation/search commands plus governed agent
+// control shortcuts. Slash commands are UI shortcuts only: mutating commands
+// resolve to the same agent-control action envelope as visible controls.
 // ---------------------------------------------------------------------------
+
+function firstArg(args: string): string | undefined {
+  const trimmed = args.trim();
+  if (!trimmed) return undefined;
+  return trimmed.split(/\s+/, 1)[0];
+}
+
+function argsAfterFirst(args: string): string | undefined {
+  const trimmed = args.trim();
+  if (!trimmed) return undefined;
+  const spaceIndex = trimmed.search(/\s/);
+  if (spaceIndex === -1) return undefined;
+  const rest = trimmed.slice(spaceIndex + 1).trim();
+  return rest || undefined;
+}
 
 export const COMMANDS: SlashCommand[] = [
   {
@@ -142,6 +159,80 @@ export const COMMANDS: SlashCommand[] = [
       intent: "agent-control",
       content: `/resume ${args}`.trim(),
       params: { action: "resume", loopId: args.trim() },
+    }),
+  },
+  {
+    name: "export-spec",
+    aliases: ["spec-export"],
+    description: "Export an OpenSpec change artifact",
+    usage: "/export-spec <change-slug> [folder|document]",
+    intent: "agent-control",
+    availableOn: ["flow-builder", "data-view"],
+    parse: (args: string) => {
+      const changeSlug = firstArg(args);
+      const requestedFormat = argsAfterFirst(args);
+      const format =
+        requestedFormat === "document" || requestedFormat === "folder"
+          ? requestedFormat
+          : "folder";
+      return {
+        intent: "agent-control",
+        content: `/export-spec ${args}`.trim(),
+        params: {
+          action: "export-spec",
+          changeSlug,
+          format,
+          requestedFormat,
+        },
+      };
+    },
+  },
+  {
+    name: "implement-spec",
+    aliases: ["dev-via-spec"],
+    description: "Start governed implementation for an approved OpenSpec change",
+    usage: "/implement-spec <change-slug>",
+    intent: "agent-control",
+    availableOn: ["flow-builder", "data-view"],
+    parse: (args: string) => ({
+      intent: "agent-control",
+      content: `/implement-spec ${args}`.trim(),
+      params: {
+        action: "implement-spec",
+        changeSlug: firstArg(args),
+      },
+    }),
+  },
+  {
+    name: "run-status",
+    aliases: ["run"],
+    description: "Show the current governed run status",
+    usage: "/run-status [run-id]",
+    intent: "agent-control",
+    availableOn: ["flow-builder", "data-view"],
+    parse: (args: string) => ({
+      intent: "agent-control",
+      content: `/run-status ${args}`.trim(),
+      params: {
+        action: "run-status",
+        runId: firstArg(args),
+      },
+    }),
+  },
+  {
+    name: "evidence",
+    aliases: ["proof"],
+    description: "Show proof evidence for a run, claim, or dependency",
+    usage: "/evidence [run-id|claim-id|dependency-id]",
+    intent: "agent-control",
+    availableOn: ["flow-builder", "data-view"],
+    parse: (args: string) => ({
+      intent: "agent-control",
+      content: `/evidence ${args}`.trim(),
+      params: {
+        action: "evidence",
+        target: firstArg(args),
+      },
     }),
   },
 ];

@@ -836,6 +836,7 @@ var coordinatorSpawnDisposition = map[string]string{
 	"dev_via_test_plan_retry_driver":                              dispAnchorThreaded, // dev-via-test/02d
 	"dev_via_test_ralph_terminal_to_coordinator":                  dispAnchorThreaded, // dev-via-test/05
 	"dev_via_test_cbg_retry_driver":                               dispAnchorThreaded, // dev-via-test/07d
+	"dev_from_task_ready_request_to_coordinator":                  dispAnchorThreaded, // dev-from-task/02
 	"research_needs_clarification_to_coordinator":                 dispAnchorInherit,  // research/06
 	"autoresearch_needs_clarification_replan":                     dispAnchorInherit,  // autoresearch/10 (baseline — 4b-1a)
 	"autoresearch_descended_needs_clarification_replan":           dispAnchorThreaded, // autoresearch/10b (4b-1a)

@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { TaskInfo } from "$lib/types/task";
+  import RunHealthPanel from "./RunHealthPanel.svelte";
   import StateBadge from "./StateBadge.svelte";
 
   interface Props {
@@ -57,6 +58,10 @@
       <span class="badge-dot" aria-hidden="true"></span>
       {task.runPause.cause === "clarification" ? "Answer needed" : "Approval needed"}
     </div>
+  {/if}
+
+  {#if task.runHealth}
+    <RunHealthPanel health={task.runHealth} compact />
   {/if}
 
   {#if task.childNeedsAttention}

@@ -1,0 +1,56 @@
+{
+  "id": "dev_from_task_request_by_run_anchor",
+  "type": "expression",
+  "name": "Coordinator decide(dev_from_task) with agent.run.entity_id → stamp run request",
+  "description": "OpenSpec SDD task 3.2 — explicit HITL request marker for implementation from a reviewed OpenSpec change. This anchor branch covers coordinator loops that carry the framework run anchor as agent.run.entity_id. It does not spawn implementation directly; it only records the operator/coordinator request on the run entity. Rule 02 consumes the marker together with proof_readiness.implementation_ready=true.",
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "agent.loop.role",
+      "operator": "eq",
+      "value": "coordinator",
+      "required": true
+    },
+    {
+      "field": "coordinator.decision.next_action",
+      "operator": "eq",
+      "value": "dev_from_task",
+      "required": true
+    },
+    {
+      "field": "agent.run.entity_id",
+      "operator": "ne",
+      "value": "",
+      "required": true
+    },
+    {
+      "field": "lineage.run-loop-entity-id",
+      "operator": "length_eq",
+      "value": 0,
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "add_triple",
+      "subject": "$entity.triple.agent.run.entity_id",
+      "predicate": "dev_from_task.requested",
+      "object": "$entity.instance"
+    },
+    {
+      "type": "add_triple",
+      "subject": "$entity.triple.agent.run.entity_id",
+      "predicate": "dev_from_task.requested_reason",
+      "object": "$entity.triple.coordinator.decision.reason"
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "pack": "dev-from-task",
+    "phase": "OpenSpec SDD 3.2 — explicit implementation request marker",
+    "anchor_branch": "agent.run.entity_id",
+    "paired_with": "01b-coordinator-request-lineage.json",
+    "hitl_contract": "Proof-readiness may mark a run implementation-ready, but implementation starts only after this explicit request marker exists."
+  }
+}

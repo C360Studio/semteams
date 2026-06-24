@@ -18,6 +18,7 @@
   } from "$lib/types/agent";
   import { SvelteSet } from "svelte/reactivity";
   import ArtifactCard from "./ArtifactCard.svelte";
+  import ProofReadinessCard from "./ProofReadinessCard.svelte";
   import TaskTrace from "./TaskTrace.svelte";
   import { renderMarkdown } from "$lib/utils/markdown";
   import { classifyVerdict, verdictLabel } from "$lib/utils/verdict";
@@ -31,6 +32,10 @@
 
   function isEmitTool(name: string | undefined): boolean {
     return typeof name === "string" && name.startsWith(EMIT_TOOL_PREFIX);
+  }
+
+  function isProofReadinessTool(name: string | undefined): boolean {
+    return name === "analyze_proof_readiness";
   }
 
   // Every loop ends its turn with a `decide(action, reason)` call — the
@@ -50,6 +55,36 @@
   function decideReason(step: ToolCallStep): string {
     const r = step.tool_arguments?.reason;
     return typeof r === "string" ? r : "";
+  }
+
+  function decideSubtopics(step: ToolCallStep): string[] {
+    const subtopics = step.tool_arguments?.subtopics;
+    return Array.isArray(subtopics)
+      ? subtopics.filter((item): item is string => typeof item === "string")
+      : [];
+  }
+
+  function isCBGFinalGate(
+    step: ToolCallStep,
+    action: string | undefined,
+  ): boolean {
+    const role = step.capability ?? "";
+    return (
+      role === "reviewer-dev-via-test" &&
+      (action === "approved" ||
+        action === "rejected" ||
+        action === "rejected_retry")
+    );
+  }
+
+  function verdictRoleText(
+    step: ToolCallStep,
+    action: string | undefined,
+  ): string {
+    if (!isCBGFinalGate(step, action)) return `${roleLabel(step)} decided`;
+    if (action === "approved") return "Final Review Gate passed";
+    if (action === "rejected_retry") return "Final Review Gate requested retry";
+    return "Final Review Gate rejected";
   }
 
   // A model_call carries free-form prose in `response`; render it as
@@ -245,21 +280,35 @@
           {@const action = decideAction(step)}
           {@const tone = classifyVerdict(action)}
           {@const reason = decideReason(step)}
+          {@const isCBGGate = isCBGFinalGate(step, action)}
+          {@const targetTasks = decideSubtopics(step)}
           <li
             class="story-step story-verdict"
             data-step-type="verdict"
             data-testid="story-verdict"
             data-verdict-tone={tone}
+            data-gate={isCBGGate ? "cbg-final" : undefined}
           >
             <span class="line-icon verdict-icon" aria-hidden="true">◆</span>
             <div class="verdict-body">
               <div class="verdict-head">
+                {#if isCBGGate}
+                  <span class="verdict-gate" data-testid="cbg-final-gate-label">
+                    Final Review Gate
+                  </span>
+                {/if}
                 <span
                   class="verdict-chip"
                   data-tone={tone}
-                  data-testid="verdict-chip"
-                >{verdictLabel(action)}</span>
-                <span class="verdict-role">{roleLabel(step)} decided</span>
+                  data-testid="verdict-chip">{verdictLabel(action)}</span
+                >
+                <span class="verdict-role">{verdictRoleText(step, action)}</span
+                >
+                {#if isCBGGate && targetTasks.length > 0}
+                  <span class="verdict-target" data-testid="cbg-target-task">
+                    Target {targetTasks.join(", ")}
+                  </span>
+                {/if}
                 {#if metaFor(step)}
                   <span class="step-meta verdict-meta">{metaFor(step)}</span>
                 {/if}
@@ -275,7 +324,11 @@
             </div>
           </li>
         {:else}
-          <li class="story-step" data-step-type={step.step_type} data-testid="story-step">
+          <li
+            class="story-step"
+            data-step-type={step.step_type}
+            data-testid="story-step"
+          >
             <button
               type="button"
               class="step-button"
@@ -304,6 +357,12 @@
                     args={(step as ToolCallStep).tool_arguments}
                   />
                 </div>
+              {:else if step.step_type === "tool_call" && isProofReadinessTool(step.tool_name)}
+                <div class="step-payload-card" data-testid="story-step-payload">
+                  <ProofReadinessCard
+                    result={(step as ToolCallStep).tool_result}
+                  />
+                </div>
               {:else if hasProseResponse(step)}
                 <div
                   class="step-payload step-markdown"
@@ -317,8 +376,7 @@
               {:else}
                 <pre
                   class="step-payload"
-                  data-testid="story-step-payload"
-                >{fullPayload(step)}</pre>
+                  data-testid="story-step-payload">{fullPayload(step)}</pre>
               {/if}
             {/if}
           </li>
@@ -335,7 +393,8 @@
         <span class="step-meta">
           {fmtDuration(trajectory.duration)}
           {#if trajectory.total_tokens_in !== undefined || trajectory.total_tokens_out !== undefined}
-            · {(trajectory.total_tokens_in ?? 0) + (trajectory.total_tokens_out ?? 0)} tokens
+            · {(trajectory.total_tokens_in ?? 0) +
+              (trajectory.total_tokens_out ?? 0)} tokens
           {/if}
         </span>
       </span>
@@ -591,9 +650,26 @@
     border-color: #fed7aa;
   }
 
+  .verdict-gate {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    color: var(--ui-text-primary, #111827);
+    text-transform: uppercase;
+    letter-spacing: 0;
+  }
+
   .verdict-role {
     font-size: 0.75rem;
     color: var(--ui-text-secondary, #6b7280);
+  }
+
+  .verdict-target {
+    font-size: 0.6875rem;
+    color: var(--ui-text-secondary, #6b7280);
+    background: var(--ui-surface-secondary, #f3f4f6);
+    border: 1px solid var(--ui-border-subtle, #e5e7eb);
+    border-radius: 9999px;
+    padding: 0.0625rem 0.375rem;
   }
 
   .verdict-meta {

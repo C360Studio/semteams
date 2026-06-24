@@ -25,6 +25,7 @@ import (
 	"github.com/c360studio/semteams/cmd/semteams/sandboxruntime"
 	"github.com/c360studio/semteams/cmd/semteams/semsource"
 	"github.com/c360studio/semteams/cmd/semteams/tools/addsource"
+	"github.com/c360studio/semteams/cmd/semteams/tools/analyzeproof"
 	"github.com/c360studio/semteams/cmd/semteams/tools/chainbash"
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitartifact"
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitautoresearchartifact"
@@ -34,6 +35,7 @@ import (
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitdevviatestmeasurement"
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitdevviatestplan"
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitplan"
+	"github.com/c360studio/semteams/cmd/semteams/tools/projectspecplan"
 	"github.com/c360studio/semteams/cmd/semteams/tools/querysandboxattestation"
 	"github.com/c360studio/semteams/cmd/semteams/tools/renderopenspec"
 	"github.com/c360studio/semteams/cmd/semteams/tools/requestsandbox"
@@ -239,11 +241,11 @@ func registerDevViaTestTools(reg *agentictools.ExecutorRegistry, natsClient *nat
 	return nil
 }
 
-// registerCreateChangeTools wires the create_change pack's emit tool
-// (ADR-057 §D5). emit_change is the change.* analogue of
-// emit_dev_via_test_plan: the author role stamps a structured OpenSpec
-// change (change.<slug>.* triples) on the run entity for the reviewer
-// gate + the P4 dev-from-task hand-off.
+// registerCreateChangeTools wires the OpenSpec/spec-driven-development tool
+// cluster. emit_change stamps change.<slug>.*; render_openspec reads and
+// renders those change facts; analyze_proof_readiness projects proof.* into
+// formal_claims.* for deterministic routing; project_spec_tasks maps approved
+// change tasks to the plan.* contract Ralph + CBG already consume.
 //
 // Skipped when natsClient is nil: the tool needs the live publisher to
 // stamp triples. Mirrors the registerDevViaTestTools nil-NATS posture.
@@ -293,9 +295,19 @@ func registerCreateChangeTools(reg *agentictools.ExecutorRegistry, natsClient *n
 	if err := reg.RegisterTool(renderopenspec.ToolName, renderExecutor); err != nil {
 		return fmt.Errorf("register %s: %w", renderopenspec.ToolName, err)
 	}
+
+	analyzeExecutor := analyzeproof.NewExecutor(entityReader, triplePublisher, platform, logger)
+	if err := reg.RegisterTool(analyzeproof.ToolName, analyzeExecutor); err != nil {
+		return fmt.Errorf("register %s: %w", analyzeproof.ToolName, err)
+	}
+
+	projectExecutor := projectspecplan.NewExecutor(entityReader, triplePublisher, platform, logger)
+	if err := reg.RegisterTool(projectspecplan.ToolName, projectExecutor); err != nil {
+		return fmt.Errorf("register %s: %w", projectspecplan.ToolName, err)
+	}
 	logger.Info("Registered create-change product tools",
 		slog.String("category", "create-change"),
-		slog.Int("count", 2))
+		slog.Int("count", 4))
 	return nil
 }
 

@@ -1,5 +1,13 @@
 import "@testing-library/jest-dom/vitest";
 import { vi, beforeEach } from "vitest";
+import { mockLocalStorage } from "../test-utils/localStorage-mock";
+
+if (typeof globalThis.localStorage === "undefined") {
+  Object.defineProperty(globalThis, "localStorage", {
+    value: mockLocalStorage(),
+    configurable: true,
+  });
+}
 
 // graphology-layout-forceatlas2/worker uses Web Workers + URL.createObjectURL
 // which jsdom doesn't support. Mock the worker module globally.

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { deriveRunStatuses, runStatus } from "./runStatus.svelte";
 import { getTriples } from "$lib/services/runStatusApi";
 import type { RawTriple } from "$lib/services/runStatusApi";
+import { RUN_HEALTH_PREDICATES } from "$lib/utils/runHealth";
 
 vi.mock("$lib/services/runStatusApi");
 const mockGetTriples = vi.mocked(getTriples);
@@ -194,6 +195,52 @@ describe("deriveRunStatuses", () => {
     expect(result.get("run-clar")!.pause!.cause).toBe("clarification");
   });
 
+  it("attaches graph health facts for runs with lifecycle/proof triples", () => {
+    const health: RawTriple[] = [
+      {
+        subject: runEntity("run-health"),
+        predicate: "agent.run.phase",
+        object: "executing",
+      },
+      {
+        subject: runEntity("run-health"),
+        predicate: "proof_readiness.route",
+        object: "test_harness",
+      },
+    ];
+    const result = deriveRunStatuses([], [], [], health);
+
+    const status = result.get("run-health");
+    expect(status).toBeDefined();
+    expect(status!.pause).toBeNull();
+    expect(status!.healthFacts).toMatchObject({
+      phase: "executing",
+      proofReadinessRoute: "test_harness",
+    });
+  });
+
+  it("derives freshness from subject-scoped proof triples", () => {
+    const health: RawTriple[] = [
+      {
+        subject: runEntity("run-freshness"),
+        predicate: "agent.run.phase",
+        object: "executing",
+      },
+      {
+        subject: runEntity("run-freshness"),
+        predicate: "proof.readiness.sitl.status",
+        object: "stale",
+      },
+    ];
+    const result = deriveRunStatuses([], [], [], health);
+
+    expect(result.get("run-freshness")!.healthFacts).toMatchObject({
+      phase: "executing",
+      evidenceFreshness: "stale",
+      staleEvidenceCount: 1,
+    });
+  });
+
   // -------------------------------------------------------------------------
   // Bare-id extraction edge cases
   // -------------------------------------------------------------------------
@@ -273,9 +320,9 @@ describe("runStatus store — poll lifecycle", () => {
     const p1 = runStatus.pollOnce();
     const p2 = runStatus.pollOnce(); // must no-op while p1 is in flight
 
-    // Only the first poll's three predicate fetches were issued — the second
+    // Only the first poll's predicate fetches were issued — the second
     // call short-circuited on the guard.
-    expect(mockGetTriples).toHaveBeenCalledTimes(3);
+    expect(mockGetTriples).toHaveBeenCalledTimes(3 + RUN_HEALTH_PREDICATES.length);
 
     resolveFirst([]);
     await Promise.all([p1, p2]);
@@ -295,5 +342,34 @@ describe("runStatus store — poll lifecycle", () => {
     mockGetTriples.mockResolvedValue([]);
     await runStatus.pollOnce();
     expect(runStatus.lastError).toBeNull();
+  });
+
+  it("fetches full run-subject triples for dynamic proof evidence", async () => {
+    const run = runEntity("run-dynamic");
+    mockGetTriples.mockImplementation((params) => {
+      if (params.predicate === "agent.run.phase") {
+        return Promise.resolve([
+          { subject: run, predicate: "agent.run.phase", object: "executing" },
+        ]);
+      }
+      if (params.subject === run) {
+        return Promise.resolve([
+          { subject: run, predicate: "agent.run.phase", object: "executing" },
+          { subject: run, predicate: "proof.readiness.sitl.status", object: "stale" },
+        ]);
+      }
+      return Promise.resolve([]);
+    });
+
+    await runStatus.pollOnce();
+
+    expect(mockGetTriples).toHaveBeenCalledWith(
+      expect.objectContaining({ subject: run, limit: 500 }),
+    );
+    expect(runStatus.get("run-dynamic")?.healthFacts).toMatchObject({
+      phase: "executing",
+      evidenceFreshness: "stale",
+      staleEvidenceCount: 1,
+    });
   });
 });
