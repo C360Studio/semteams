@@ -75,6 +75,8 @@ type createChangeOnEnterJSON struct {
 //     decide + bash + scratchpad + read_loop_result.
 //  6. action_allowlist == [drafted, needs_clarification].
 //  7. tool_choice.mode = required (don't text-out of the strict emit).
+//  8. The coordinator's reason is copied onto the run entity so the
+//     reviewer can compare the emitted change against the original ask.
 func TestCreateChangePack_01_Spawn(t *testing.T) {
 	rule := loadCreateChangeRule(t, "01-coordinator-create-change-spawn.json")
 
@@ -123,6 +125,23 @@ func TestCreateChangePack_01_Spawn(t *testing.T) {
 		t.Error("rule 01 spawn missing tool_choice — the author may text-out of emit_change (semstreams#158 class)")
 	} else if mode, _ := spawn.ToolChoice["mode"].(string); mode != "required" {
 		t.Errorf("rule 01 tool_choice.mode = %q; want %q", mode, "required")
+	}
+
+	var askStamp *createChangeOnEnterJSON
+	for i := range rule.OnEnter {
+		if rule.OnEnter[i].Type == "add_triple" && rule.OnEnter[i].Predicate == "coordinator.decision.reason" {
+			askStamp = &rule.OnEnter[i]
+			break
+		}
+	}
+	if askStamp == nil {
+		t.Fatal("rule 01 does not copy coordinator.decision.reason onto the run entity — reviewer fidelity gate loses the original ask")
+	}
+	if askStamp.Subject != "$entity.org.$entity.platform.agent.chain.execution.$entity.instance" {
+		t.Errorf("rule 01 ask stamp subject = %q; want deterministic run entity literal", askStamp.Subject)
+	}
+	if obj, _ := askStamp.Object.(string); obj != "$entity.triple.coordinator.decision.reason" {
+		t.Errorf("rule 01 ask stamp object = %v; want coordinator.decision.reason", askStamp.Object)
 	}
 }
 

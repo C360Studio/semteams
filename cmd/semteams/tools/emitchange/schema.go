@@ -13,7 +13,11 @@ func (e *Executor) ListTools() []agentic.ToolDefinition {
 		return map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": desc}
 	}
 	obj := func(props map[string]any, required ...string) map[string]any {
-		return map[string]any{"type": "object", "additionalProperties": false, "properties": props, "required": required}
+		schema := map[string]any{"type": "object", "additionalProperties": false, "properties": props}
+		if len(required) > 0 {
+			schema["required"] = append([]string(nil), required...)
+		}
+		return schema
 	}
 
 	stepSchema := obj(map[string]any{

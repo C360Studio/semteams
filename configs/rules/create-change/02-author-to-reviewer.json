@@ -2,7 +2,7 @@
   "id": "create_change_author_to_reviewer",
   "type": "expression",
   "name": "author-create-change decide(drafted) → reviewer-create-change",
-  "description": "ADR-057 §D5 — the create-change forward edge. Fires when author-create-change terminates with decide(action=drafted) — the author has stamped change.<slug>.* on the run entity via emit_change. Spawns reviewer-create-change to gate the draft for gaps and clarity BEFORE it is delivered as the standalone deliverable.\n\nThe reviewer inherits agent.run.entity_id from the author (the author carries a bare agent.run from rule 01's run_scope=new dispatch, so the framework re-stamps the anchor on this spawn — graph_writer.go:535-539; same loop-spawn-chain inheritance research relies on). One query_entity on that run entity returns BOTH coordinator.decision.reason (the user's ask, carried on the run entity for run_scope=new dispatches) AND the change.<slug>.* the author emitted — the reviewer checks fidelity + completeness in a single read. related_loops['author'] lets it read_loop_result for the author's drafting narrative.",
+  "description": "ADR-057 §D5 — the create-change forward edge. Fires when author-create-change terminates with decide(action=drafted) — the author has stamped change.<slug>.* on the run entity via emit_change. Spawns reviewer-create-change to gate the draft for gaps and clarity BEFORE it is delivered as the standalone deliverable.\n\nThe reviewer inherits agent.run.entity_id from the author (the author carries a bare agent.run from rule 01's run_scope=new dispatch, so the framework re-stamps the anchor on this spawn — graph_writer.go:535-539; same loop-spawn-chain inheritance research relies on). One query_entity on that run entity returns BOTH coordinator.decision.reason (the user's ask, explicitly copied by rule 01) AND the change.<slug>.* the author emitted — the reviewer checks fidelity + completeness in a single read. related_loops['author'] lets it read_loop_result for the author's drafting narrative.",
   "enabled": true,
   "conditions": [
     {
@@ -51,7 +51,7 @@
     "pack": "create_change",
     "phase": "ADR-057 §D5 — reviewer gate dispatch",
     "adr": "docs/adr/057-openspec-graph-spec-model-and-create-change.md",
-    "one_query_gets_both": "The run entity (agent.chain.execution.<runID>) carries coordinator.decision.reason (the ask) AND the change.<slug>.* triples (emit_change stamps them there). So the reviewer reads ask + change in a single query_entity — same pattern as dev-via-test/02's plan-review gate.",
+    "one_query_gets_both": "The run entity (agent.chain.execution.<runID>) carries coordinator.decision.reason (copied by rule 01) AND the change.<slug>.* triples (emit_change stamps them there). So the reviewer reads ask + change in a single query_entity.",
     "anchor": "Reviewer inherits agent.run.entity_id via the loop-spawn chain (author carries bare agent.run from rule 01's run_scope=new). No explicit lineage thread needed — create-change has no run-entity-fired rule (unlike dev-via-test/02d). Mirrors research, which also relies on default-inherit.",
     "no_bash": "Review reads the change from the graph (query_entity), not the filesystem — emit_change stamps triples, it does not render a file. Rendering to OpenSpec markdown is on-demand (render_openspec), not part of the gate."
   }

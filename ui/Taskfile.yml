@@ -313,6 +313,58 @@ tasks:
           AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
       - npx playwright test e2e/agentic/create-change.spec.ts
 
+  test:e2e:agentic:create-change:gemini-smoke:
+    desc: Run the OpenSpec create_change real-LLM smoke on Gemini
+    summary: |
+      Real-LLM smoke for OpenSpec change 6.1. Derives a Gemini-only
+      bootstrap config from configs/flow-bootstrap.json, sends a small
+      spec-authoring prompt for POST /jobs Idempotency-Key support, and
+      lets Playwright poll the live stack until the create-change arc
+      settles:
+
+        Loop 0  coordinator (dispatch)      decide(action="create_change")
+        Loop A  author-create-change        emit_change + decide(drafted)
+        Loop B  reviewer-create-change      decide(approved)
+        Loop C  coordinator (wake-up)       render_openspec + respond_direct
+
+      The assertions stay structural to keep spend low: route to
+      create_change, emit a reviewed OpenSpec change, call render_openspec,
+      complete the run, and attach the e2e report with Gemini model
+      resolution plus artifact/tool evidence.
+
+      Invoke from the project root so `.env` is auto-loaded by the parent
+      Taskfile. GEMINI_API_KEY is required. The generated config removes
+      Anthropic endpoints/fallbacks so this cannot green by exercising a
+      non-Gemini fallback path.
+    vars:
+      AGENTIC_CONFIG: flow-bootstrap-gemini-smoke.gen.json
+      COMPOSE_PROFILES: ""
+    env:
+      AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
+      FIXTURE: ""
+    preconditions:
+      - sh: '[ -n "$GEMINI_API_KEY" ]'
+        msg: "GEMINI_API_KEY is unset. Add it to the project-root .env (auto-loaded when invoking from root) or export it before running the Gemini create-change smoke."
+    cmds:
+      - 'echo "▶︎  create-change Gemini smoke starting; evidence will land in Playwright test-results/"'
+      - 'echo "▶︎  pre-cleaning agentic stack volumes so stale graph/message state cannot satisfy smoke assertions"'
+      - npm run test:e2e:cleanup
+      - defer: { task: test:e2e:agentic:cleanup }
+      - defer: rm -f ../configs/flow-bootstrap-gemini-smoke.gen.json
+      - |
+        jq '
+          del(.model_registry.endpoints["claude-haiku"], .model_registry.endpoints["claude-sonnet"])
+          | .model_registry.capabilities |= with_entries(
+              .value.fallback = ((.value.fallback // []) | map(select(type == "string" and startswith("gemini"))))
+            )
+        ' ../configs/flow-bootstrap.json > ../configs/flow-bootstrap-gemini-smoke.gen.json
+      - task: test:e2e:agentic:stack:up
+        vars:
+          FIXTURE: ""
+          AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
+          COMPOSE_PROFILES: "{{.COMPOSE_PROFILES}}"
+      - npx playwright test e2e/agentic/create-change-gemini-smoke.spec.ts
+
   test:e2e:agentic:create-change-recovery:
     desc: Run the ADR-057 §D5 create_change REJECT-RECOVERY mock-LLM journey
     summary: |

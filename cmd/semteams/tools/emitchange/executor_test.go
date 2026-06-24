@@ -386,3 +386,39 @@ func TestEmitChange_SchemaShape(t *testing.T) {
 		}
 	}
 }
+
+func TestEmitChange_SchemaHasNoNullRequiredLists(t *testing.T) {
+	defs := (&Executor{}).ListTools()
+	if len(defs) != 1 {
+		t.Fatalf("want one tool, got %d", len(defs))
+	}
+
+	var decoded any
+	raw, err := json.Marshal(defs[0].Parameters)
+	if err != nil {
+		t.Fatalf("marshal schema: %v", err)
+	}
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		t.Fatalf("decode schema: %v", err)
+	}
+
+	assertNoNullRequired(t, "$", decoded)
+}
+
+func assertNoNullRequired(t *testing.T, path string, v any) {
+	t.Helper()
+	switch x := v.(type) {
+	case map[string]any:
+		for k, child := range x {
+			childPath := path + "." + k
+			if k == "required" && child == nil {
+				t.Fatalf("%s is null; Gemini's OpenAI-compatible endpoint rejects required:null", childPath)
+			}
+			assertNoNullRequired(t, childPath, child)
+		}
+	case []any:
+		for _, child := range x {
+			assertNoNullRequired(t, path+"[]", child)
+		}
+	}
+}

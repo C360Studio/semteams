@@ -125,7 +125,7 @@ func TestRootOpenSpecChange_Readable(t *testing.T) {
 		"- [x] 4.4 Add Prometheus metric freshness, component pressure, queue depth, latency, and error-rate evidence to run health.",
 		"- [x] 5.2 Produce or reject a reusable harness profile before feature code is released.",
 		"- [ ] 6.4 Add e2e coverage that autoresearch refuses vague/non-scalar goals and preserves metric guardrails.",
-		"- [ ] 6.1 Add a Gemini-backed real-LLM smoke path for model-dependent routing and prompt behavior.",
+		"- [x] 6.1 Add a Gemini-backed real-LLM smoke path for model-dependent routing and prompt behavior.",
 	} {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("rendered OpenSpec change missing %q\n--- rendered ---\n%s", want, rendered)
