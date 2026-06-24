@@ -120,9 +120,9 @@ describe("TaskStory — decide verdict surfacing", () => {
     expect(verdict).toHaveAttribute("data-verdict-tone", "approve");
     expect(
       within(verdict).getByTestId("cbg-final-gate-label"),
-    ).toHaveTextContent("CBG final gate");
+    ).toHaveTextContent("Final Review Gate");
     expect(
-      within(verdict).getByText("CBG final gate passed"),
+      within(verdict).getByText("Final Review Gate passed"),
     ).toBeInTheDocument();
     expect(within(verdict).getByTestId("verdict-reason")).toHaveTextContent(
       "Integration gate",
@@ -156,7 +156,7 @@ describe("TaskStory — decide verdict surfacing", () => {
       "Rejected retry",
     );
     expect(
-      within(verdict).getByText("CBG final gate requested retry"),
+      within(verdict).getByText("Final Review Gate requested retry"),
     ).toBeInTheDocument();
     expect(within(verdict).getByTestId("cbg-target-task")).toHaveTextContent(
       "Target task-2",

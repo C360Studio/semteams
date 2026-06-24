@@ -464,9 +464,9 @@ export function deriveRunHealth(input: DeriveRunHealthInput): RunHealth {
       label: "Waiting",
       runEntityId: graph.runEntityId,
       metrics: metrics ?? undefined,
-      currentGate: "Implementation request",
+      currentGate: "Implement Task request",
       nextAction: "Request implementation from the approved spec",
-      detail: "Proof readiness has released implementation, but no dev-from-task request is active.",
+      detail: "Readiness Gate has released implementation, but no Implement Task request is active.",
       evidenceFreshness: graph.evidenceFreshness,
       activeLoopCount: 0,
       signals,
@@ -621,14 +621,14 @@ function proofBlockerReason(
   if (!graph) return null;
   if (graph.proofPauseRequired || graph.proofReadinessRoute === "pause") {
     return {
-      gate: "Proof readiness",
+      gate: "Readiness Gate",
       nextAction: "Inspect proof findings and ask the operator for a waiver or revised proof model",
-      detail: "Proof readiness failed without a safe route.",
+      detail: "Readiness Gate failed without a safe route.",
     };
   }
   if (graph.proofTestHarnessRequired || graph.proofReadinessRoute === "test_harness") {
     return {
-      gate: "Test harness readiness",
+      gate: "Readiness Gate",
       nextAction: "Build or attach the required harness profile before implementation",
       detail: "Required proof dependencies are not ready.",
     };
@@ -642,14 +642,14 @@ function proofBlockerReason(
   }
   if (graph.formalClaimsStatus === "failed" && !graph.proofImplementationReady) {
     return {
-      gate: "Proof findings",
+      gate: "Claim Analysis",
       nextAction: "Resolve proof findings before implementation",
       detail: `${graph.formalClaimsFindingCount || "Some"} proof finding(s) block the run.`,
     };
   }
   if (graph.formalClaimsStatus === "ambiguous") {
     return {
-      gate: "Proof findings",
+      gate: "Claim Analysis",
       nextAction: "Model accepted claims and proof dependencies",
       detail: "The analyzer could not determine what must be proved.",
     };

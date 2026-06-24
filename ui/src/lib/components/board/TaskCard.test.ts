@@ -144,7 +144,7 @@ describe("TaskCard", () => {
           runHealth: {
             state: "blocked",
             label: "Blocked",
-            currentGate: "Test harness readiness",
+            currentGate: "Readiness Gate",
             nextAction: "Build the harness",
             detail: "Required proof dependencies are not ready.",
             evidenceFreshness: "unknown",
@@ -157,6 +157,6 @@ describe("TaskCard", () => {
 
     const badge = screen.getByTestId("run-health-badge");
     expect(badge).toHaveTextContent("Blocked");
-    expect(badge).toHaveTextContent("Test harness readiness");
+    expect(badge).toHaveTextContent("Readiness Gate");
   });
 });

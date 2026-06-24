@@ -82,9 +82,9 @@
     action: string | undefined,
   ): string {
     if (!isCBGFinalGate(step, action)) return `${roleLabel(step)} decided`;
-    if (action === "approved") return "CBG final gate passed";
-    if (action === "rejected_retry") return "CBG final gate requested retry";
-    return "CBG final gate rejected";
+    if (action === "approved") return "Final Review Gate passed";
+    if (action === "rejected_retry") return "Final Review Gate requested retry";
+    return "Final Review Gate rejected";
   }
 
   // A model_call carries free-form prose in `response`; render it as
@@ -294,7 +294,7 @@
               <div class="verdict-head">
                 {#if isCBGGate}
                   <span class="verdict-gate" data-testid="cbg-final-gate-label">
-                    CBG final gate
+                    Final Review Gate
                   </span>
                 {/if}
                 <span

@@ -78,6 +78,8 @@ describe("ProofReadinessCard", () => {
     render(ProofReadinessCard, { props: { result: proofResult() } });
 
     expect(screen.getByTestId("proof-readiness-card")).toBeInTheDocument();
+    expect(screen.getByText("Readiness Gate")).toBeInTheDocument();
+    expect(screen.getByText("Claim Analysis")).toBeInTheDocument();
     expect(screen.getByTestId("proof-status")).toHaveTextContent("failed");
     expect(screen.getByText("c360.ops.agent.chain.execution.run-123")).toBeInTheDocument();
     expect(screen.getByText("go-native-v1")).toBeInTheDocument();

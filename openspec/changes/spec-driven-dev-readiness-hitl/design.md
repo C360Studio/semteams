@@ -17,10 +17,17 @@ not the product control plane by itself. New behavior is introduced through conf
 component contracts, payload schemas, named ports/subjects, tool governance, and lifecycle facts. A design that only
 publishes or subscribes on NATS without declaring the SemStreams component/rule/payload boundary is incomplete.
 
-### Decision: Proof readiness gates implementation
+### Decision: The Readiness Gate gates implementation
 Implementation tasks are not released until required proof dependencies have readiness evidence or an explicit human
 waiver. Service-heavy targets such as MAVLink/PX4 SITL route to the test-harness team before feature code when proof
 infrastructure is missing.
+
+### Decision: Hard-scenario validation is mock-first
+The MAVLink hard scenario is the shape we must support, but it is not the cheapest proof mechanism for every assertion.
+The first vertical uses deterministic MAVLink-shaped proof facts and mock journeys to prove routing invariants:
+approved spec + implementation request + missing PX4/MAVSDK readiness still blocks at the Readiness Gate, and only a
+bounded human waiver or fresh readiness record releases implementation. Real Gemini and real PX4/MAVSDK runs are reserved
+for thin smoke checks after the invariant is already pinned.
 
 ### Decision: `dev_from_task` reuses the existing execution primitive
 An approved change projects execution-rich task facts into `plan.task.*` and dispatches one ready task at a time through
@@ -31,7 +38,7 @@ creates the chain-start git tag before Ralph mutates files.
 ### Decision: CBG verdicts are visible final gates
 The chain-end `reviewer-dev-via-test` loop remains the final implementation gate for spec-driven work. Its approved,
 rejected-retry, and rejected decisions stay on the existing dev-via-test rule rail, and the UI marks those decisions as
-the CBG final gate so rejected evidence is visible without expanding raw trajectory JSON.
+the Final Review Gate so rejected evidence is visible without expanding raw trajectory JSON.
 
 ### Decision: The definition of done has one authority stack
 For spec-driven implementation, "done" is not negotiated by every loop. The approved OpenSpec change owns the desired
@@ -247,8 +254,9 @@ execute directly and cannot grant tools outside the normal approval and governan
 
 ## Data Flow
 User prompt or existing OpenSpec -> `create_change` -> reviewed OpenSpec change and `change.<slug>.*` facts ->
-human review -> export, proof-readiness analyzer, or both. If SemTeams implements it, the run continues through
-test-harness or `dev_from_task` -> Ralph task execution -> CBG integration gate -> final response or PR-ready artifact.
+human review -> export, Readiness Gate analyzer, or both. If SemTeams implements it, the run continues through
+test-harness or Implement Task -> implementation-agent task execution -> Final Review Gate -> final response or
+PR-ready artifact.
 
 ## File Changes
 - `openspec/changes/spec-driven-dev-readiness-hitl/` (new)

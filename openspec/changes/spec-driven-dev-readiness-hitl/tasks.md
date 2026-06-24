@@ -26,9 +26,9 @@
 - [x] 4.4 Add Prometheus metric freshness, component pressure, queue depth, latency, and error-rate evidence to run health.
 
 ## 5. Hard-Scenario Vertical
-- [ ] 5.1 Use the MAVLink hard scenario to validate proof-first routing before implementation.
+- [x] 5.1 Use a deterministic MAVLink-shaped fixture to validate proof-first routing before implementation.
 - [ ] 5.2 Produce or reject a reusable harness profile before feature code is released.
-- [ ] 5.3 Demonstrate that missing PX4/MAVSDK readiness blocks implementation unless a human waiver is recorded.
+- [x] 5.3 Demonstrate that missing PX4/MAVSDK readiness blocks implementation unless a human waiver is recorded.
 
 ## 6. Real LLM And E2E Validation
 - [ ] 6.1 Add a Gemini-backed real-LLM smoke path for model-dependent routing and prompt behavior.

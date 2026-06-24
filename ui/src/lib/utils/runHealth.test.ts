@@ -116,7 +116,7 @@ describe("runHealth", () => {
     const health = deriveRunHealth({ runId: "run-1", loops: [], graph });
 
     expect(health.state).toBe("blocked");
-    expect(health.currentGate).toBe("Test harness readiness");
+    expect(health.currentGate).toBe("Readiness Gate");
     expect(health.nextAction).toContain("harness");
   });
 
@@ -130,7 +130,7 @@ describe("runHealth", () => {
     const health = deriveRunHealth({ runId: "run-1", loops: [], graph });
 
     expect(health.state).toBe("waiting");
-    expect(health.currentGate).toBe("Implementation request");
+    expect(health.currentGate).toBe("Implement Task request");
   });
 
   it("reports working for active loops", () => {

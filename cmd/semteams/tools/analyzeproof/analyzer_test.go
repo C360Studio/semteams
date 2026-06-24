@@ -99,6 +99,57 @@ func TestAnalyze_MissingDependencyBlocksToHarness(t *testing.T) {
 	}
 }
 
+func TestAnalyze_MavlinkHardFixtureBlocksImplementationUntilReadinessOrWaiver(t *testing.T) {
+	a := Analyze(mavlinkHardRequestedImplementationTriples(), fixedNow)
+
+	if a.Status != statusFailed {
+		t.Fatalf("status = %q, want %q: %#v", a.Status, statusFailed, a.Findings)
+	}
+	if len(a.Findings) != 2 {
+		t.Fatalf("findings = %#v, want PX4 and MAVSDK blockers", a.Findings)
+	}
+	for _, dependency := range []string{"px4_sitl.boots_headlessly", "mavsdk.server_reachable"} {
+		finding := findingByDependency(a.Findings, dependency)
+		if finding == nil {
+			t.Fatalf("missing finding for dependency %q: %#v", dependency, a.Findings)
+		}
+		if finding.Kind != "missing_proof_dependency" || finding.Route != routeTestHarness {
+			t.Fatalf("finding for %q = %+v, want missing_proof_dependency to test_harness", dependency, *finding)
+		}
+	}
+
+	routes := routeTriples(a)
+	if routes["formal_claims.route.test_harness"] != "present" {
+		t.Fatalf("routes = %#v, want test_harness present", routes)
+	}
+	if _, ok := routes["formal_claims.route.implementation"]; ok {
+		t.Fatalf("routes = %#v, implementation must not be present for missing hard-scenario readiness", routes)
+	}
+}
+
+func TestAnalyze_MavlinkHardFixtureWaiverReleasesImplementationRoute(t *testing.T) {
+	triples := mavlinkHardRequestedImplementationTriples()
+	triples["proof.waiver.operator-001.status"] = "active"
+	triples["proof.waiver.operator-001.approved_by"] = "coby"
+	triples["proof.waiver.operator-001.reason"] = "PX4/MAVSDK readiness unavailable in this mock environment"
+	triples["proof.waiver.operator-001.expires_at"] = fixedNow.Add(time.Hour).Format(time.RFC3339Nano)
+	triples["proof.waiver.operator-001.dependencies"] = `["px4_sitl.boots_headlessly","mavsdk.server_reachable"]`
+	triples["proof.waiver.operator-001.claims"] = `["mavlink.mission_upload.verifiable"]`
+
+	a := Analyze(triples, fixedNow)
+	if a.Status != statusPassed {
+		t.Fatalf("status = %q, want %q: %#v", a.Status, statusPassed, a.Findings)
+	}
+	if len(a.Findings) != 0 {
+		t.Fatalf("findings = %#v, want none with active bounded waiver", a.Findings)
+	}
+
+	routes := routeTriples(a)
+	if routes["formal_claims.route.implementation"] != "present" {
+		t.Fatalf("routes = %#v, want implementation present after active waiver", routes)
+	}
+}
+
 func TestAnalyze_ExpiredReadinessBlocksToHarness(t *testing.T) {
 	a := Analyze(map[string]any{
 		"proof.claim.mavlink.mission_upload.status":   "accepted",
@@ -295,4 +346,63 @@ func assertSingleFinding(t *testing.T, a Analysis, status, kind, route string) {
 	if got := a.Findings[0].Route; got != route {
 		t.Fatalf("route = %q, want %q", got, route)
 	}
+}
+
+func mavlinkHardRequestedImplementationTriples() map[string]any {
+	return map[string]any{
+		"agent.run.outcome": "success",
+
+		"change.mavlink-hard.status":             "approved",
+		"change.mavlink-hard.acceptance_command": "task harness:mavlink:accept",
+		"change.mavlink-hard.task.0.goal":        "Upload and verify a MAVLink mission through OSH/MAVSDK.",
+		"change.mavlink-hard.task.0.target_files": `[
+			"addons/mavsdk/src/main/java/**",
+			"addons/mavsdk/src/test/java/**"
+		]`,
+		"change.mavlink-hard.task.0.test_command": "task test:mavlink:mission-upload",
+
+		"dev_from_task.requested": "loop-operator-request",
+
+		"proof.claim.mavlink.mission_upload.verifiable.status": "accepted",
+		"proof.claim.mavlink.mission_upload.verifiable.statement": "" +
+			"The system SHALL upload a mission through MAVSDK and verify it against PX4 SITL.",
+		"proof.claim.mavlink.mission_upload.verifiable.requires": `[
+			"px4_sitl.boots_headlessly",
+			"mavsdk.server_reachable"
+		]`,
+		"proof.claim.mavlink.mission_upload.verifiable.task_refs": `["change.mavlink-hard.task.0"]`,
+
+		"proof.dependency.px4_sitl.boots_headlessly.kind":         "service",
+		"proof.dependency.px4_sitl.boots_headlessly.description":  "PX4 SITL boots headlessly",
+		"proof.dependency.px4_sitl.boots_headlessly.required_for": `["mavlink.mission_upload.verifiable"]`,
+		"proof.dependency.px4_sitl.boots_headlessly.status":       "missing",
+		"proof.dependency.px4_sitl.boots_headlessly.profile_ref":  "mavlink.px4-sitl.mavsdk@v1",
+		"proof.dependency.px4_sitl.boots_headlessly.next_route":   "test_harness",
+
+		"proof.dependency.mavsdk.server_reachable.kind":         "service",
+		"proof.dependency.mavsdk.server_reachable.description":  "MAVSDK server is reachable from the test harness",
+		"proof.dependency.mavsdk.server_reachable.required_for": `["mavlink.mission_upload.verifiable"]`,
+		"proof.dependency.mavsdk.server_reachable.status":       "missing",
+		"proof.dependency.mavsdk.server_reachable.profile_ref":  "mavlink.px4-sitl.mavsdk@v1",
+		"proof.dependency.mavsdk.server_reachable.next_route":   "test_harness",
+	}
+}
+
+func findingByDependency(findings []Finding, dependency string) *Finding {
+	for i := range findings {
+		if findings[i].Dependency == dependency {
+			return &findings[i]
+		}
+	}
+	return nil
+}
+
+func routeTriples(a Analysis) map[string]string {
+	routes := map[string]string{}
+	for _, tr := range a.Triples(testRunEntity, fixedNow) {
+		if strings.HasPrefix(tr.Predicate, "formal_claims.route.") {
+			routes[tr.Predicate] = stringValue(tr.Object)
+		}
+	}
+	return routes
 }

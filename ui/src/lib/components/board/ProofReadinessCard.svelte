@@ -142,8 +142,8 @@
 <article class="proof-readiness" data-testid="proof-readiness-card">
   <header class="proof-header">
     <div>
-      <p class="proof-eyebrow">Proof readiness</p>
-      <h4 class="proof-title">Formal claims gate</h4>
+      <p class="proof-eyebrow">Readiness Gate</p>
+      <h4 class="proof-title">Claim Analysis</h4>
     </div>
     <span
       class="proof-status"
@@ -336,7 +336,7 @@
       </section>
     {/if}
   {:else}
-    <p class="empty">Proof readiness result was not valid JSON.</p>
+    <p class="empty">Readiness Gate result was not valid JSON.</p>
   {/if}
 </article>
 
