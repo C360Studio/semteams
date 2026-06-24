@@ -45,6 +45,10 @@ var (
 		"smoke_status", "profile_ref", "completed_at", "started_at", "expires_at",
 		"evidence", "status",
 	}
+	harnessProfileFields = []string{
+		"claims_supported", "readiness_probes", "rejection_reason", "smoke_command",
+		"ttl_seconds", "dependencies", "artifacts", "renderer", "version", "status", "team",
+	}
 	evidenceFields = []string{
 		"created_at", "exit_code", "producer", "command", "digest", "covers", "kind", "uri",
 	}
@@ -93,6 +97,23 @@ type Readiness struct {
 	FailureSignature string
 }
 
+// HarnessProfile is the reusable proof-environment definition referenced by a
+// proof dependency.
+type HarnessProfile struct {
+	ID              string
+	Version         string
+	Team            string
+	Status          string
+	ClaimsSupported []string
+	Dependencies    []string
+	ReadinessProbes []string
+	SmokeCommand    string
+	Artifacts       []string
+	Renderer        string
+	TTLSeconds      string
+	RejectionReason string
+}
+
 // Evidence is the proof.evidence.<id>.* input record.
 type Evidence struct {
 	ID        string
@@ -123,6 +144,7 @@ type Waiver struct {
 type ProofFacts struct {
 	Claims       map[string]*Claim
 	Dependencies map[string]*Dependency
+	Profiles     map[string]*HarnessProfile
 	Readiness    map[string]*Readiness
 	Evidence     map[string]*Evidence
 	Waivers      map[string]*Waiver
@@ -156,6 +178,7 @@ func ParseProofFacts(triples map[string]any) ProofFacts {
 	f := ProofFacts{
 		Claims:       map[string]*Claim{},
 		Dependencies: map[string]*Dependency{},
+		Profiles:     map[string]*HarnessProfile{},
 		Readiness:    map[string]*Readiness{},
 		Evidence:     map[string]*Evidence{},
 		Waivers:      map[string]*Waiver{},
@@ -224,6 +247,34 @@ func ParseProofFacts(triples map[string]any) ProofFacts {
 				r.Evidence = stringList(obj)
 			case "failure_signature":
 				r.FailureSignature = stringValue(obj)
+			}
+			continue
+		}
+		if id, field, ok := splitProofPredicate(pred, "proof.harness_profile.", harnessProfileFields); ok {
+			p := ensureHarnessProfile(f.Profiles, id)
+			switch field {
+			case "version":
+				p.Version = stringValue(obj)
+			case "team":
+				p.Team = stringValue(obj)
+			case "status":
+				p.Status = normalizeStatus(stringValue(obj))
+			case "claims_supported":
+				p.ClaimsSupported = stringList(obj)
+			case "dependencies":
+				p.Dependencies = stringList(obj)
+			case "readiness_probes":
+				p.ReadinessProbes = stringList(obj)
+			case "smoke_command":
+				p.SmokeCommand = stringValue(obj)
+			case "artifacts":
+				p.Artifacts = stringList(obj)
+			case "renderer":
+				p.Renderer = stringValue(obj)
+			case "ttl_seconds":
+				p.TTLSeconds = stringValue(obj)
+			case "rejection_reason":
+				p.RejectionReason = stringValue(obj)
 			}
 			continue
 		}
@@ -458,6 +509,10 @@ func (a *Analysis) evaluateDependency(facts ProofFacts, claimID, depID string, n
 		if dep.ProfileRef == "" {
 			return
 		}
+		if finding, ok := profileFinding(facts, claimID, dep); ok {
+			a.addFinding(finding)
+			return
+		}
 		if finding, ok := readinessFinding(facts, claimID, dep, now); ok {
 			a.addFinding(finding)
 		}
@@ -520,6 +575,49 @@ func (a *Analysis) addFinding(f Finding) {
 		f.Severity = severityWarning
 	}
 	a.Findings = append(a.Findings, f)
+}
+
+func profileFinding(facts ProofFacts, claimID string, dep *Dependency) (Finding, bool) {
+	profile, ok := facts.Profiles[dep.ProfileRef]
+	if !ok {
+		return Finding{
+			Kind:       "missing_harness_profile",
+			Severity:   severityBlocker,
+			Route:      routeTestHarness,
+			Claim:      claimID,
+			Dependency: dep.ID,
+			Profile:    dep.ProfileRef,
+			Reason:     "dependency references a harness profile that has not been produced or rejected",
+		}, true
+	}
+	switch profile.Status {
+	case "", "ready", "passed", "accepted", "active":
+		return Finding{}, false
+	case "rejected", "revoked", "failed":
+		reason := "harness profile was rejected"
+		if profile.RejectionReason != "" {
+			reason = profile.RejectionReason
+		}
+		return Finding{
+			Kind:       "rejected_harness_profile",
+			Severity:   severityBlocker,
+			Route:      routeCoordinator,
+			Claim:      claimID,
+			Dependency: dep.ID,
+			Profile:    dep.ProfileRef,
+			Reason:     reason,
+		}, true
+	default:
+		return Finding{
+			Kind:       "incomplete_harness_profile",
+			Severity:   severityBlocker,
+			Route:      routeTestHarness,
+			Claim:      claimID,
+			Dependency: dep.ID,
+			Profile:    dep.ProfileRef,
+			Reason:     fmt.Sprintf("harness profile has unsupported status %q", profile.Status),
+		}, true
+	}
 }
 
 func readinessFinding(facts ProofFacts, claimID string, dep *Dependency, now time.Time) (Finding, bool) {
@@ -741,6 +839,15 @@ func ensureReadiness(m map[string]*Readiness, id string) *Readiness {
 	r := &Readiness{ID: id}
 	m[id] = r
 	return r
+}
+
+func ensureHarnessProfile(m map[string]*HarnessProfile, id string) *HarnessProfile {
+	if p, ok := m[id]; ok {
+		return p
+	}
+	p := &HarnessProfile{ID: id}
+	m[id] = p
+	return p
 }
 
 func ensureEvidence(m map[string]*Evidence, id string) *Evidence {

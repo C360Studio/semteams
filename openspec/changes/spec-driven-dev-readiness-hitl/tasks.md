@@ -27,7 +27,7 @@
 
 ## 5. Hard-Scenario Vertical
 - [x] 5.1 Use a deterministic MAVLink-shaped fixture to validate proof-first routing before implementation.
-- [ ] 5.2 Produce or reject a reusable harness profile before feature code is released.
+- [x] 5.2 Produce or reject a reusable harness profile before feature code is released.
 - [x] 5.3 Demonstrate that missing PX4/MAVSDK readiness blocks implementation unless a human waiver is recorded.
 
 ## 6. Real LLM And E2E Validation

@@ -78,6 +78,7 @@ func TestRootOpenSpecChange_Readable(t *testing.T) {
 		"The system SHALL export generated OpenSpec artifacts",
 		"The system SHALL provide contextual slash-command shortcuts",
 		"The system SHALL model claims, proof dependencies, harness profiles, readiness records, evidence, and waivers",
+		"Rejected harness profile blocks implementation",
 		"The system SHALL preserve a single authority stack for what \"done\" means",
 		"Approved spec owns done",
 		"Ralph converges but does not redefine done",
@@ -122,6 +123,7 @@ func TestRootOpenSpecChange_Readable(t *testing.T) {
 		"Metric gaps are visible",
 		"Prometheus metrics are operational evidence",
 		"- [x] 4.4 Add Prometheus metric freshness, component pressure, queue depth, latency, and error-rate evidence to run health.",
+		"- [x] 5.2 Produce or reject a reusable harness profile before feature code is released.",
 		"- [ ] 6.4 Add e2e coverage that autoresearch refuses vague/non-scalar goals and preserves metric guardrails.",
 		"- [ ] 6.1 Add a Gemini-backed real-LLM smoke path for model-dependent routing and prompt behavior.",
 	} {

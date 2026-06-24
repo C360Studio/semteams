@@ -38,6 +38,16 @@ function proofResult() {
           next_route: "test_harness",
         },
       ],
+      profiles: [
+        {
+          id: "mavlink.px4-sitl@v1",
+          version: "v1",
+          team: "test-harness",
+          status: "ready",
+          renderer: "compose",
+          smoke_command: "task harness:mavlink:smoke",
+        },
+      ],
       readiness: [
         {
           id: "smoke-001",
@@ -93,6 +103,11 @@ describe("ProofReadinessCard", () => {
     expect(within(dependencies).getByText("PX4 SITL boots headlessly")).toBeInTheDocument();
     expect(within(dependencies).getByText("mavlink.px4-sitl@v1")).toBeInTheDocument();
 
+    const profiles = screen.getByTestId("proof-profiles-card");
+    expect(within(profiles).getByText("mavlink.px4-sitl@v1")).toBeInTheDocument();
+    expect(within(profiles).getByText("compose")).toBeInTheDocument();
+    expect(within(profiles).getByText("task harness:mavlink:smoke")).toBeInTheDocument();
+
     const readiness = screen.getByTestId("proof-readiness-records-card");
     expect(within(readiness).getByText("smoke-001")).toBeInTheDocument();
     expect(within(readiness).getAllByText("stale").length).toBeGreaterThan(0);
@@ -140,6 +155,32 @@ describe("ProofReadinessCard", () => {
     ).toBeInTheDocument();
     expect(
       within(screen.getByTestId("proof-waivers-card")).getByText("operator-002"),
+    ).toBeInTheDocument();
+  });
+
+  it("falls back to profile finding references when profile summaries are absent", () => {
+    render(ProofReadinessCard, {
+      props: {
+        result: JSON.stringify({
+          status: "failed",
+          finding_count: 1,
+          findings: [
+            {
+              kind: "missing_harness_profile",
+              severity: "blocker",
+              route: "test_harness",
+              profile: "mavlink.px4-sitl.mavsdk@v1",
+              reason: "dependency references a harness profile that has not been produced or rejected",
+            },
+          ],
+        }),
+      },
+    });
+
+    expect(
+      within(screen.getByTestId("proof-profiles-card")).getByText(
+        "mavlink.px4-sitl.mavsdk@v1",
+      ),
     ).toBeInTheDocument();
   });
 });

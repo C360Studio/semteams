@@ -111,6 +111,7 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 func summarizeProofFacts(facts ProofFacts) map[string]any {
 	return map[string]any{
 		"dependencies": summarizeDependencies(facts.Dependencies),
+		"profiles":     summarizeProfiles(facts.Profiles),
 		"readiness":    summarizeReadiness(facts.Readiness),
 		"evidence":     summarizeEvidence(facts.Evidence),
 		"waivers":      summarizeWaivers(facts.Waivers),
@@ -129,6 +130,28 @@ func summarizeDependencies(deps map[string]*Dependency) []map[string]any {
 			"status":       d.Status,
 			"profile_ref":  d.ProfileRef,
 			"next_route":   d.NextRoute,
+		})
+	}
+	return out
+}
+
+func summarizeProfiles(profiles map[string]*HarnessProfile) []map[string]any {
+	out := make([]map[string]any, 0, len(profiles))
+	for _, id := range mapKeys(profiles) {
+		p := profiles[id]
+		out = append(out, map[string]any{
+			"id":               p.ID,
+			"version":          p.Version,
+			"team":             p.Team,
+			"status":           p.Status,
+			"claims_supported": p.ClaimsSupported,
+			"dependencies":     p.Dependencies,
+			"readiness_probes": p.ReadinessProbes,
+			"smoke_command":    p.SmokeCommand,
+			"artifacts":        p.Artifacts,
+			"renderer":         p.Renderer,
+			"ttl_seconds":      p.TTLSeconds,
+			"rejection_reason": p.RejectionReason,
 		})
 	}
 	return out

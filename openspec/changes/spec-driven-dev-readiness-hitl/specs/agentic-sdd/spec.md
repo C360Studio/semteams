@@ -90,9 +90,15 @@ graph facts before implementation routing is evaluated.
 #### Scenario: Harness profile defines reusable proof capability
 - GIVEN a proof dependency requires an external service, simulator, or integration environment
 - WHEN a harness profile is available or produced by the test-harness team
-- THEN the graph contains `proof.harness_profile.<id>.*` facts for profile ID, version, supported claims, probes,
-  smoke command, artifacts, renderer, and TTL
+- THEN the graph contains `proof.harness_profile.<id>.*` facts for profile ID, version, status, supported claims,
+  probes, smoke command, artifacts, renderer, TTL, and rejection reason when applicable
 - AND the profile is reusable across runs instead of being stored only as a one-off log or script
+
+#### Scenario: Rejected harness profile blocks implementation
+- GIVEN a ready proof dependency references a harness profile
+- WHEN that profile is missing or rejected
+- THEN the analyzer emits a blocker finding for the profile
+- AND implementation is not released until a produced profile, fresh readiness record, or bounded human waiver exists
 
 #### Scenario: Readiness and evidence prove current usability
 - GIVEN a harness profile has been instantiated for a run

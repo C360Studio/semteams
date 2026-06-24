@@ -30,6 +30,7 @@
     findings?: ProofFinding[];
     proof_facts?: {
       dependencies?: ProofRecord[];
+      profiles?: ProofRecord[];
       readiness?: ProofRecord[];
       evidence?: ProofRecord[];
       waivers?: ProofRecord[];
@@ -76,6 +77,7 @@
       case "failed":
       case "missing":
       case "expired":
+      case "rejected":
       case "revoked":
         return "bad";
       case "stale":
@@ -127,6 +129,10 @@
   const dependencies = $derived.by(() => {
     const explicit = recordList(facts.dependencies);
     return explicit.length > 0 ? explicit : findingFallback("dependency");
+  });
+  const profiles = $derived.by(() => {
+    const explicit = recordList(facts.profiles);
+    return explicit.length > 0 ? explicit : findingFallback("profile");
   });
   const readinessRecords = $derived.by(() => {
     const explicit = recordList(facts.readiness);
@@ -202,6 +208,43 @@
                   {/if}
                   {#if text(dependency.next_route) || text(dependency.route)}
                     <div><dt>Route</dt><dd>{text(dependency.next_route) || text(dependency.route)}</dd></div>
+                  {/if}
+                </dl>
+              </li>
+            {/each}
+          </ul>
+        {/if}
+      </section>
+
+      <section class="proof-section" data-testid="proof-profiles-card">
+        <h5>Harness Profiles</h5>
+        {#if profiles.length === 0}
+          <p class="empty">No harness profiles recorded.</p>
+        {:else}
+          <ul>
+            {#each profiles as profile, idx (text(profile.id, String(idx)))}
+              <li>
+                <div class="row-head">
+                  <span class="item-id">{text(profile.id, "profile")}</span>
+                  <span class="status-pill" data-tone={statusTone(text(profile.status))}>
+                    {text(profile.status, "unknown")}
+                  </span>
+                </div>
+                {#if text(profile.rejection_reason)}
+                  <p>{text(profile.rejection_reason)}</p>
+                {/if}
+                <dl class="mini-facts">
+                  {#if text(profile.version)}
+                    <div><dt>Version</dt><dd>{text(profile.version)}</dd></div>
+                  {/if}
+                  {#if text(profile.team)}
+                    <div><dt>Team</dt><dd>{text(profile.team)}</dd></div>
+                  {/if}
+                  {#if text(profile.renderer)}
+                    <div><dt>Renderer</dt><dd>{text(profile.renderer)}</dd></div>
+                  {/if}
+                  {#if text(profile.smoke_command)}
+                    <div><dt>Smoke</dt><dd>{text(profile.smoke_command)}</dd></div>
                   {/if}
                 </dl>
               </li>

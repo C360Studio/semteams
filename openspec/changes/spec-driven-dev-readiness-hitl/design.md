@@ -138,6 +138,7 @@ Harness profiles are reusable definitions owned by the test-harness team.
 ```text
 proof.harness_profile.<id>.version          = "v1"
 proof.harness_profile.<id>.team             = "test-harness"
+proof.harness_profile.<id>.status           = "ready" | "draft" | "rejected"
 proof.harness_profile.<id>.claims_supported = ["mavlink.mission_upload.verifiable"]
 proof.harness_profile.<id>.dependencies     = ["px4_sitl.boots_headlessly"]
 proof.harness_profile.<id>.readiness_probes = ["mavsdk_server_reachable"]
@@ -145,7 +146,13 @@ proof.harness_profile.<id>.smoke_command    = "task harness:mavlink:smoke"
 proof.harness_profile.<id>.artifacts        = ["px4.log", "smoke-results.json"]
 proof.harness_profile.<id>.renderer         = "compose" | "github_actions" | "act"
 proof.harness_profile.<id>.ttl_seconds      = 86400
+proof.harness_profile.<id>.rejection_reason = "PX4 image cannot run in this runner"
 ```
+
+If a ready proof dependency references `profile_ref`, the analyzer requires
+that profile to exist as `proof.harness_profile.*`. A produced profile can
+proceed to readiness checks; a rejected profile blocks implementation and
+routes back to the coordinator for waiver, rescope, or operator decision.
 
 ### Readiness Records
 Readiness records are run-scoped evidence that a harness profile is currently usable.

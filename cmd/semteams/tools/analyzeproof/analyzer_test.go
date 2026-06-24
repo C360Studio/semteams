@@ -66,17 +66,18 @@ func (f *fakePub) byPredicate() map[string]any {
 
 func TestAnalyze_PassesFreshReadyDependency(t *testing.T) {
 	a := Analyze(map[string]any{
-		"proof.claim.mavlink.mission_upload.status":      "accepted",
-		"proof.claim.mavlink.mission_upload.requires":    `["px4_sitl.boots"]`,
-		"proof.dependency.px4_sitl.boots.status":         "ready",
-		"proof.dependency.px4_sitl.boots.profile_ref":    "mavlink.px4-sitl@v1",
-		"proof.readiness.smoke-001.profile_ref":          "mavlink.px4-sitl@v1",
-		"proof.readiness.smoke-001.status":               "passed",
-		"proof.readiness.smoke-001.smoke_status":         "passed",
-		"proof.readiness.smoke-001.expires_at":           fixedNow.Add(time.Hour).Format(time.RFC3339Nano),
-		"proof.readiness.smoke-001.failure_signature":    "",
-		"proof.evidence.smoke-log.covers":                `["mavlink.mission_upload"]`,
-		"proof.harness_profile.mavlink.px4-sitl@v1.team": "test-harness",
+		"proof.claim.mavlink.mission_upload.status":        "accepted",
+		"proof.claim.mavlink.mission_upload.requires":      `["px4_sitl.boots"]`,
+		"proof.dependency.px4_sitl.boots.status":           "ready",
+		"proof.dependency.px4_sitl.boots.profile_ref":      "mavlink.px4-sitl@v1",
+		"proof.readiness.smoke-001.profile_ref":            "mavlink.px4-sitl@v1",
+		"proof.readiness.smoke-001.status":                 "passed",
+		"proof.readiness.smoke-001.smoke_status":           "passed",
+		"proof.readiness.smoke-001.expires_at":             fixedNow.Add(time.Hour).Format(time.RFC3339Nano),
+		"proof.readiness.smoke-001.failure_signature":      "",
+		"proof.evidence.smoke-log.covers":                  `["mavlink.mission_upload"]`,
+		"proof.harness_profile.mavlink.px4-sitl@v1.status": "ready",
+		"proof.harness_profile.mavlink.px4-sitl@v1.team":   "test-harness",
 	}, fixedNow)
 
 	if a.Status != statusPassed {
@@ -96,6 +97,58 @@ func TestAnalyze_MissingDependencyBlocksToHarness(t *testing.T) {
 	assertSingleFinding(t, a, statusFailed, "missing_proof_dependency", routeTestHarness)
 	if got := a.Findings[0].Dependency; got != "px4_sitl.boots" {
 		t.Fatalf("dependency = %q, want px4_sitl.boots", got)
+	}
+}
+
+func TestAnalyze_ReadyDependencyRequiresReusableHarnessProfile(t *testing.T) {
+	triples := mavlinkHardReadyTriples()
+	deleteMavlinkHarnessProfile(triples)
+
+	a := Analyze(triples, fixedNow)
+
+	if a.Status != statusFailed {
+		t.Fatalf("status = %q, want %q: %#v", a.Status, statusFailed, a.Findings)
+	}
+	if len(a.Findings) != 2 {
+		t.Fatalf("findings = %#v, want one missing-profile finding per dependency", a.Findings)
+	}
+	for _, finding := range a.Findings {
+		if finding.Kind != "missing_harness_profile" || finding.Route != routeTestHarness {
+			t.Fatalf("finding = %+v, want missing_harness_profile to test_harness", finding)
+		}
+		if finding.Profile != "mavlink.px4-sitl.mavsdk@v1" {
+			t.Fatalf("profile = %q, want mavlink.px4-sitl.mavsdk@v1", finding.Profile)
+		}
+	}
+	if _, ok := routeTriples(a)["formal_claims.route.implementation"]; ok {
+		t.Fatalf("implementation route emitted despite missing reusable harness profile: %#v", routeTriples(a))
+	}
+}
+
+func TestAnalyze_RejectedHarnessProfileBlocksImplementation(t *testing.T) {
+	triples := mavlinkHardReadyTriples()
+	triples["proof.harness_profile.mavlink.px4-sitl.mavsdk@v1.status"] = "rejected"
+	triples["proof.harness_profile.mavlink.px4-sitl.mavsdk@v1.rejection_reason"] =
+		"PX4 image and MAVSDK server cannot be made reproducible in the current runner"
+
+	a := Analyze(triples, fixedNow)
+
+	if a.Status != statusFailed {
+		t.Fatalf("status = %q, want %q: %#v", a.Status, statusFailed, a.Findings)
+	}
+	if len(a.Findings) != 2 {
+		t.Fatalf("findings = %#v, want one rejected-profile finding per dependency", a.Findings)
+	}
+	for _, finding := range a.Findings {
+		if finding.Kind != "rejected_harness_profile" || finding.Route != routeCoordinator {
+			t.Fatalf("finding = %+v, want rejected_harness_profile to coordinator", finding)
+		}
+		if finding.Profile != "mavlink.px4-sitl.mavsdk@v1" {
+			t.Fatalf("profile = %q, want mavlink.px4-sitl.mavsdk@v1", finding.Profile)
+		}
+	}
+	if _, ok := routeTriples(a)["formal_claims.route.implementation"]; ok {
+		t.Fatalf("implementation route emitted despite rejected harness profile: %#v", routeTriples(a))
 	}
 }
 
@@ -152,13 +205,14 @@ func TestAnalyze_MavlinkHardFixtureWaiverReleasesImplementationRoute(t *testing.
 
 func TestAnalyze_ExpiredReadinessBlocksToHarness(t *testing.T) {
 	a := Analyze(map[string]any{
-		"proof.claim.mavlink.mission_upload.status":   "accepted",
-		"proof.claim.mavlink.mission_upload.requires": `["px4_sitl.boots"]`,
-		"proof.dependency.px4_sitl.boots.status":      "ready",
-		"proof.dependency.px4_sitl.boots.profile_ref": "mavlink.px4-sitl@v1",
-		"proof.readiness.smoke-001.profile_ref":       "mavlink.px4-sitl@v1",
-		"proof.readiness.smoke-001.status":            "passed",
-		"proof.readiness.smoke-001.expires_at":        fixedNow.Add(-time.Second).Format(time.RFC3339Nano),
+		"proof.claim.mavlink.mission_upload.status":        "accepted",
+		"proof.claim.mavlink.mission_upload.requires":      `["px4_sitl.boots"]`,
+		"proof.dependency.px4_sitl.boots.status":           "ready",
+		"proof.dependency.px4_sitl.boots.profile_ref":      "mavlink.px4-sitl@v1",
+		"proof.harness_profile.mavlink.px4-sitl@v1.status": "ready",
+		"proof.readiness.smoke-001.profile_ref":            "mavlink.px4-sitl@v1",
+		"proof.readiness.smoke-001.status":                 "passed",
+		"proof.readiness.smoke-001.expires_at":             fixedNow.Add(-time.Second).Format(time.RFC3339Nano),
 	}, fixedNow)
 
 	assertSingleFinding(t, a, statusFailed, "stale_readiness_record", routeTestHarness)
@@ -223,22 +277,24 @@ func TestExecute_StampsFormalClaimTriples(t *testing.T) {
 	pub := &fakePub{}
 	ex := NewExecutor(
 		fakeReader{id: testRunEntity, triples: map[string]any{
-			"proof.claim.mavlink.mission_upload.status":   "accepted",
-			"proof.claim.mavlink.mission_upload.requires": `["px4_sitl.boots"]`,
-			"proof.dependency.px4_sitl.boots.status":      "missing",
-			"proof.dependency.px4_sitl.boots.kind":        "service",
-			"proof.dependency.px4_sitl.boots.description": "PX4 SITL boots headlessly",
-			"proof.dependency.px4_sitl.boots.profile_ref": "mavlink.px4-sitl@v1",
-			"proof.readiness.smoke-001.profile_ref":       "mavlink.px4-sitl@v1",
-			"proof.readiness.smoke-001.status":            "stale",
-			"proof.readiness.smoke-001.evidence":          `["smoke-log"]`,
-			"proof.evidence.smoke-log.kind":               "log",
-			"proof.evidence.smoke-log.created_at":         fixedNow.Add(-2 * time.Hour).Format(time.RFC3339Nano),
-			"proof.evidence.smoke-log.covers":             `["mavlink.mission_upload"]`,
-			"proof.waiver.operator-001.status":            "active",
-			"proof.waiver.operator-001.claims":            `["unrelated.claim"]`,
-			"proof.waiver.operator-001.reason":            "Different proof waiver",
-			"proof.waiver.operator-001.expires_at":        fixedNow.Add(time.Hour).Format(time.RFC3339Nano),
+			"proof.claim.mavlink.mission_upload.status":        "accepted",
+			"proof.claim.mavlink.mission_upload.requires":      `["px4_sitl.boots"]`,
+			"proof.dependency.px4_sitl.boots.status":           "missing",
+			"proof.dependency.px4_sitl.boots.kind":             "service",
+			"proof.dependency.px4_sitl.boots.description":      "PX4 SITL boots headlessly",
+			"proof.dependency.px4_sitl.boots.profile_ref":      "mavlink.px4-sitl@v1",
+			"proof.harness_profile.mavlink.px4-sitl@v1.status": "ready",
+			"proof.harness_profile.mavlink.px4-sitl@v1.team":   "test-harness",
+			"proof.readiness.smoke-001.profile_ref":            "mavlink.px4-sitl@v1",
+			"proof.readiness.smoke-001.status":                 "stale",
+			"proof.readiness.smoke-001.evidence":               `["smoke-log"]`,
+			"proof.evidence.smoke-log.kind":                    "log",
+			"proof.evidence.smoke-log.created_at":              fixedNow.Add(-2 * time.Hour).Format(time.RFC3339Nano),
+			"proof.evidence.smoke-log.covers":                  `["mavlink.mission_upload"]`,
+			"proof.waiver.operator-001.status":                 "active",
+			"proof.waiver.operator-001.claims":                 `["unrelated.claim"]`,
+			"proof.waiver.operator-001.reason":                 "Different proof waiver",
+			"proof.waiver.operator-001.expires_at":             fixedNow.Add(time.Hour).Format(time.RFC3339Nano),
 		}},
 		pub,
 		platform(),
@@ -259,6 +315,7 @@ func TestExecute_StampsFormalClaimTriples(t *testing.T) {
 		Findings     []Finding `json:"findings"`
 		ProofFacts   struct {
 			Dependencies []map[string]any `json:"dependencies"`
+			Profiles     []map[string]any `json:"profiles"`
 			Readiness    []map[string]any `json:"readiness"`
 			Evidence     []map[string]any `json:"evidence"`
 			Waivers      []map[string]any `json:"waivers"`
@@ -274,6 +331,11 @@ func TestExecute_StampsFormalClaimTriples(t *testing.T) {
 		body.ProofFacts.Dependencies[0]["id"] != "px4_sitl.boots" ||
 		body.ProofFacts.Dependencies[0]["status"] != "missing" {
 		t.Fatalf("dependency proof summary = %#v, want px4_sitl.boots missing", body.ProofFacts.Dependencies)
+	}
+	if len(body.ProofFacts.Profiles) != 1 ||
+		body.ProofFacts.Profiles[0]["id"] != "mavlink.px4-sitl@v1" ||
+		body.ProofFacts.Profiles[0]["status"] != "ready" {
+		t.Fatalf("profile proof summary = %#v, want mavlink.px4-sitl@v1 ready", body.ProofFacts.Profiles)
 	}
 	if len(body.ProofFacts.Readiness) != 1 ||
 		body.ProofFacts.Readiness[0]["id"] != "smoke-001" ||
@@ -372,6 +434,23 @@ func mavlinkHardRequestedImplementationTriples() map[string]any {
 		]`,
 		"proof.claim.mavlink.mission_upload.verifiable.task_refs": `["change.mavlink-hard.task.0"]`,
 
+		"proof.harness_profile.mavlink.px4-sitl.mavsdk@v1.status":           "ready",
+		"proof.harness_profile.mavlink.px4-sitl.mavsdk@v1.version":          "v1",
+		"proof.harness_profile.mavlink.px4-sitl.mavsdk@v1.team":             "test-harness",
+		"proof.harness_profile.mavlink.px4-sitl.mavsdk@v1.claims_supported": `["mavlink.mission_upload.verifiable"]`,
+		"proof.harness_profile.mavlink.px4-sitl.mavsdk@v1.dependencies": `[
+			"px4_sitl.boots_headlessly",
+			"mavsdk.server_reachable"
+		]`,
+		"proof.harness_profile.mavlink.px4-sitl.mavsdk@v1.readiness_probes": `[
+			"px4_ready_detectable",
+			"mavsdk_server_reachable"
+		]`,
+		"proof.harness_profile.mavlink.px4-sitl.mavsdk@v1.smoke_command": "task harness:mavlink:smoke",
+		"proof.harness_profile.mavlink.px4-sitl.mavsdk@v1.artifacts":     `["px4.log","mavsdk.log","smoke-results.json"]`,
+		"proof.harness_profile.mavlink.px4-sitl.mavsdk@v1.renderer":      "compose",
+		"proof.harness_profile.mavlink.px4-sitl.mavsdk@v1.ttl_seconds":   "86400",
+
 		"proof.dependency.px4_sitl.boots_headlessly.kind":         "service",
 		"proof.dependency.px4_sitl.boots_headlessly.description":  "PX4 SITL boots headlessly",
 		"proof.dependency.px4_sitl.boots_headlessly.required_for": `["mavlink.mission_upload.verifiable"]`,
@@ -385,6 +464,29 @@ func mavlinkHardRequestedImplementationTriples() map[string]any {
 		"proof.dependency.mavsdk.server_reachable.status":       "missing",
 		"proof.dependency.mavsdk.server_reachable.profile_ref":  "mavlink.px4-sitl.mavsdk@v1",
 		"proof.dependency.mavsdk.server_reachable.next_route":   "test_harness",
+	}
+}
+
+func mavlinkHardReadyTriples() map[string]any {
+	triples := mavlinkHardRequestedImplementationTriples()
+	triples["proof.dependency.px4_sitl.boots_headlessly.status"] = "ready"
+	triples["proof.dependency.mavsdk.server_reachable.status"] = "ready"
+	triples["proof.readiness.mavlink-smoke-001.profile_ref"] = "mavlink.px4-sitl.mavsdk@v1"
+	triples["proof.readiness.mavlink-smoke-001.status"] = "passed"
+	triples["proof.readiness.mavlink-smoke-001.smoke_status"] = "passed"
+	triples["proof.readiness.mavlink-smoke-001.expires_at"] = fixedNow.Add(time.Hour).Format(time.RFC3339Nano)
+	triples["proof.readiness.mavlink-smoke-001.evidence"] = `["mavlink-smoke-log"]`
+	triples["proof.evidence.mavlink-smoke-log.kind"] = "log"
+	triples["proof.evidence.mavlink-smoke-log.producer"] = "test-harness"
+	triples["proof.evidence.mavlink-smoke-log.covers"] = `["mavlink.mission_upload.verifiable"]`
+	return triples
+}
+
+func deleteMavlinkHarnessProfile(triples map[string]any) {
+	for key := range triples {
+		if strings.HasPrefix(key, "proof.harness_profile.mavlink.px4-sitl.mavsdk@v1.") {
+			delete(triples, key)
+		}
 	}
 }
 
