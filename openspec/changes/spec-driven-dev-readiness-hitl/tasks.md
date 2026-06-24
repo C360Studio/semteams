@@ -33,5 +33,5 @@
 ## 6. Real LLM And E2E Validation
 - [ ] 6.1 Add a Gemini-backed real-LLM smoke path for model-dependent routing and prompt behavior.
 - [x] 6.2 Add Playwright e2e coverage for spec review, export, run health, and approval/wait states.
-- [ ] 6.3 Capture model ID, provider, journey evidence, and artifact output in the e2e report.
+- [x] 6.3 Capture model ID, provider, journey evidence, and artifact output in the e2e report.
 - [ ] 6.4 Add e2e coverage that autoresearch refuses vague/non-scalar goals and preserves metric guardrails.

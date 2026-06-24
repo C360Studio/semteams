@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { attachJourneyEvidenceReport } from "./e2e_report";
 
 /**
  * Journey: ADR-057 §D5 create_change pack (author / reviewer) mock-LLM
@@ -62,7 +63,7 @@ test.describe("ADR-057 — create_change pack mock-LLM journey", () => {
   test("spec-authoring prompt → author emits change → reviewer approves → reply", async ({
     page,
     request,
-  }) => {
+  }, testInfo) => {
     await page.goto("/");
     await expect(page.getByTestId("connection-status")).toHaveAttribute(
       "data-summary",
@@ -313,19 +314,67 @@ test.describe("ADR-057 — create_change pack mock-LLM journey", () => {
 
     const docDownload = page.waitForEvent("download");
     await page.getByTestId("openspec-download").click();
-    expect((await docDownload).suggestedFilename()).toBe("add-mfa.md");
+    const doc = await docDownload;
+    expect(doc.suggestedFilename()).toBe("add-mfa.md");
     await expect(page.getByTestId("openspec-export-state")).toHaveText(
       "Document downloaded",
     );
 
     const folderDownload = page.waitForEvent("download");
     await page.getByTestId("openspec-download-folder").click();
-    expect((await folderDownload).suggestedFilename()).toBe(
-      "add-mfa.openspec-folder.json",
-    );
+    const folder = await folderDownload;
+    expect(folder.suggestedFilename()).toBe("add-mfa.openspec-folder.json");
     await expect(page.getByTestId("openspec-export-state")).toHaveText(
       "Folder manifest downloaded",
     );
+
+    const report = await attachJourneyEvidenceReport({
+      journeyName: "create-change",
+      fixture: "create-change.yaml",
+      config: "e2e-flow-bootstrap.json",
+      request,
+      testInfo,
+      runIds: [runId],
+      runEntityIds: [changeSubject],
+      observations: {
+        authorLoopId,
+        runPhases,
+        openspecReviewState: "approved",
+      },
+      artifactOutputs: [
+        {
+          name: doc.suggestedFilename(),
+          kind: "openspec-single-document",
+          contentType: "text/markdown",
+          path: await downloadPath(doc),
+          metadata: { slug: "add-mfa", source: "openspec-download" },
+        },
+        {
+          name: folder.suggestedFilename(),
+          kind: "openspec-folder-manifest",
+          contentType: "application/json",
+          path: await downloadPath(folder),
+          metadata: { slug: "add-mfa", source: "openspec-download-folder" },
+        },
+      ],
+    });
+    expect(
+      report.models.resolved.some((model) => model.provider && model.model),
+      "journey report must resolve provider + model id from the active config",
+    ).toBe(true);
+    expect(
+      report.artifacts.explicit_outputs.map((artifact) => artifact.kind),
+      "journey report must attach the exported OpenSpec document and folder manifest",
+    ).toEqual(
+      expect.arrayContaining([
+        "openspec-single-document",
+        "openspec-folder-manifest",
+      ]),
+    );
+    expect(
+      report.artifacts.tool_calls.some((call) => call.tool === "emit_change"),
+      "journey report must include the live emit_change artifact tool call",
+    ).toBe(true);
   });
 });
 
@@ -354,6 +403,16 @@ async function fetchTriples(
 function bareIdAfter(entityId: string, infix: string): string {
   const idx = entityId.indexOf(infix);
   return idx === -1 ? "" : entityId.slice(idx + infix.length);
+}
+
+async function downloadPath(
+  download: import("@playwright/test").Download,
+): Promise<string | null> {
+  try {
+    return await download.path();
+  } catch {
+    return null;
+  }
 }
 
 async function pollUntil<T>(

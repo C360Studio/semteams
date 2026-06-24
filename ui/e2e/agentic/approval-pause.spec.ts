@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { attachJourneyEvidenceReport } from "./e2e_report";
 
 const RUN_INFIX = ".agent.chain.execution.";
 
@@ -51,7 +52,7 @@ test.describe("ADR-053 Phase 4c — in-run tool-gate pauses the run (executing�
   test("recovery coordinator gated create_rule → run transitions executing→awaiting_approval", async ({
     page,
     request,
-  }) => {
+  }, testInfo) => {
     // -----------------------------------------------------------------
     // Step 1 — open the Board so the SSE stream connects.
     // -----------------------------------------------------------------
@@ -212,6 +213,35 @@ test.describe("ADR-053 Phase 4c — in-run tool-gate pauses the run (executing�
     await expect(healthPanel).toContainText(
       "Approve or reject the gated tool call",
     );
+
+    const report = await attachJourneyEvidenceReport({
+      journeyName: "approval-pause",
+      fixture: "approval-pause.yaml",
+      config: "e2e-flow-bootstrap.json",
+      request,
+      testInfo,
+      runIds: [pausedRunId],
+      runEntityIds: [pausedRunEntity],
+      observations: {
+        runPhases,
+        fromPhases,
+        approvalPendingSubject: approvalMarkers?.[0]?.subject,
+        approvalPendingObject: approvalMarkers?.[0]?.object,
+        waitingSurface: "tool approval",
+      },
+    });
+    expect(
+      report.models.resolved.some((model) => model.provider && model.model),
+      "journey report must resolve provider + model id from the active config",
+    ).toBe(true);
+    expect(
+      report.evidence.loops.states.executing,
+      "journey report should capture the approval-paused child loop as executing with pending_approval",
+    ).toBeGreaterThanOrEqual(1);
+    expect(
+      report.run.phases.some((phase) => phase.object === "awaiting_approval"),
+      "journey report must capture the run awaiting_approval phase",
+    ).toBe(true);
   });
 });
 
