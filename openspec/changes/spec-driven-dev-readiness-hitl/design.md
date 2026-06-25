@@ -84,6 +84,20 @@ Full product validation uses Playwright journeys that drive the UI, backend, art
 surfaces. Lower-level Go and component tests can prove contracts, but they do not replace a Playwright pass for HITL
 and artifact workflows.
 
+### Decision: Demo evidence has trust tiers
+The demo MVP evidence pack is black-box: it may drive public UI, dispatch HTTP, slash commands, approvals, exports, and
+documented task-runner surfaces, and it may read graph facts, trajectories, logs, downloads, and HTTP status for
+assertions. It must not write directly into NATS, graph storage, lifecycle state, proof facts, or private KV buckets to
+make a claim pass. Tests that seed proof inventory or other facts remain valuable bridge/adapter coverage, but reports
+must label them as fixture-seeded proof and exclude them from pure black-box claims.
+
+### Decision: MAVLink-hard MVP means spec production first
+The SemSpec MAVLink-hard prompt is the hard-domain artifact goal for the demo. The MVP claim is that SemTeams can route,
+author, review, edit, approve, and export a strong OpenSpec handoff that names the OSH/MAVSDK/Connected Systems API
+scope, PX4 SITL or equivalent proof dependencies, harness readiness requirements, implementation tasks, and acceptance
+commands. Developing from that spec remains a stretch goal until the required harness profile and fresh readiness records
+exist or an operator records a bounded waiver.
+
 ### Decision: UI answers "is this thing working?"
 The UI presents a run-level answer with health, current gate, evidence freshness, blocked dependencies, active loops,
 last material event, and next action. Raw trajectories and logs remain drill-down evidence.

@@ -30,12 +30,13 @@ import (
 // mock-LLM journey the mock CAN'T validate (a real tool executor running
 // on a hand-authored payload) gets a structural pre-check.
 func TestCreateChangeFixtureEmitChangeValid(t *testing.T) {
-	// Both create-change fixtures' emit_change payloads — the recovery fixture
+	// All create-change fixtures' emit_change payloads — the recovery fixture
 	// carries TWO (the initial draft + the tightened re-draft), so validate every
-	// emit_change call across both files.
+	// emit_change call across these files.
 	fixtures := []string{
 		"../fixtures/journeys/create-change.yaml",
 		"../fixtures/journeys/create-change-recovery.yaml",
+		"../fixtures/journeys/mavlink-hard-spec.yaml",
 	}
 	for _, path := range fixtures {
 		payloads := allFixtureToolCallArgs(t, path, emitchange.ToolName)
@@ -44,6 +45,10 @@ func TestCreateChangeFixtureEmitChangeValid(t *testing.T) {
 			continue
 		}
 		for i, args := range payloads {
+			slugValue, _ := args["slug"].(string)
+			if slugValue == "" {
+				t.Fatalf("%s emit_change[%d] has no slug", path, i)
+			}
 			call := agentic.ToolCall{
 				ID:        "preflight",
 				Name:      emitchange.ToolName,
@@ -69,18 +74,18 @@ func TestCreateChangeFixtureEmitChangeValid(t *testing.T) {
 			// The stamp must include the change content the journeys assert on.
 			var sawProposalIntent, sawDeltaOp bool
 			for _, tr := range pub.triples {
-				if strings.HasPrefix(tr.Predicate, "change.add-mfa.proposal.intent") {
+				if strings.HasPrefix(tr.Predicate, "change."+slugValue+".proposal.intent") {
 					sawProposalIntent = true
 				}
-				if strings.Contains(tr.Predicate, "change.add-mfa.delta.auth.") && strings.HasSuffix(tr.Predicate, ".op") {
+				if strings.Contains(tr.Predicate, "change."+slugValue+".delta.") && strings.HasSuffix(tr.Predicate, ".op") {
 					sawDeltaOp = true
 				}
 			}
 			if !sawProposalIntent {
-				t.Errorf("%s emit_change[%d] did not stamp change.add-mfa.proposal.intent", path, i)
+				t.Errorf("%s emit_change[%d] did not stamp change.%s.proposal.intent", path, i, slugValue)
 			}
 			if !sawDeltaOp {
-				t.Errorf("%s emit_change[%d] did not stamp a change.add-mfa.delta.auth.<rid>.op", path, i)
+				t.Errorf("%s emit_change[%d] did not stamp a change.%s.delta.<capability>.<rid>.op", path, i, slugValue)
 			}
 		}
 	}

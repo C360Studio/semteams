@@ -1,0 +1,252 @@
+name: mavlink-hard-spec
+description: |
+  Journey: black-box MAVLink-hard OpenSpec production. A SemSpec-style
+  hard prompt enters through the normal UI chat path, the coordinator routes
+  to create_change, the author emits a structured OpenSpec change through the
+  real emit_change executor, the reviewer approves it, and the UI review
+  surface exports the handoff.
+
+  This fixture intentionally does not seed NATS, graph storage, lifecycle
+  state, proof facts, or private KV buckets. The paired Playwright spec may
+  read graph facts, loop state, downloads, and UI state for assertions.
+
+  Chain:
+
+    Loop 0 - coordinator (dispatch)
+      1. decide(create_change)
+
+    Loop A - author-create-change
+      2. emit_change (slug=mavlink-hard-osh-mavsdk-csapi)
+      3. decide(drafted)
+
+    Loop B - reviewer-create-change
+      4. decide(approved)
+
+    Loop C - coordinator (wake-up)
+      5. decide(respond_direct)
+
+  Paired spec: ui/e2e/agentic/mavlink-hard-spec.spec.ts.
+  Required config: configs/e2e-flow-bootstrap.json.
+
+responses:
+  # ---------- Loop 0: coordinator (dispatch) ----------
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "create_change",
+          "reason": "The user is asking for a SemSpec mavlink-hard style handoff: produce an OpenSpec change for extending an OpenSensorHub MAVSDK addon so a PX4/MAVLink vehicle is exposed through OGC Connected Systems API. The deliverable is the reviewed spec, not immediate implementation."
+        }
+
+  # ---------- Loop A: author-create-change ----------
+
+  - tool_call:
+      name: emit_change
+      arguments_json: |
+        {
+          "slug": "mavlink-hard-osh-mavsdk-csapi",
+          "proposal": {
+            "intent": "Create a reviewed implementation handoff for the MAVLink-hard brownfield slice: extend the OSH MAVSDK addon so a PX4/MAVLink vehicle can be exposed through Connected Systems API with proof-first harness readiness.",
+            "scope_in": [
+              "OpenSensorHub MAVSDK sensor module and driver lifecycle",
+              "PX4 SITL or equivalent MAVSDK proof harness readiness",
+              "Connected Systems API system, datastream, observation, and control projection",
+              "Mission and command verification against a simulator-backed profile",
+              "Plugin coverage matrix and executable acceptance evidence"
+            ],
+            "scope_out": [
+              "Production flight-safety certification",
+              "Hardware-in-the-loop flight testing",
+              "Support for every MAVLink dialect beyond the PX4/MAVLink v2 baseline",
+              "Code implementation before harness readiness or a bounded human waiver exists"
+            ],
+            "approach": "Inventory the existing OSH, MAVSDK-Java, OSH core, and OGC CS API extension points; define a reusable PX4 SITL/MAVSDK harness profile; then implement driver lifecycle, telemetry projection, and mission/control mapping only after readiness evidence proves the harness can exercise the claims."
+          },
+          "design": {
+            "technical_approach": "Treat OpenSpec as the handoff and SemTeams graph facts as the authority. The first task inventories the brownfield source tree and dependency graph. The second produces or rejects a reusable proof harness profile. Implementation tasks remain blocked until the harness readiness gate passes or a human waiver records residual risk.",
+            "decisions": [
+              {
+                "name": "Proof before flight behavior",
+                "body": "Any task touching MAVLink mission or command behavior depends on a fresh PX4 SITL/MAVSDK readiness record. Missing readiness routes to the test-harness team instead of releasing implementation."
+              },
+              {
+                "name": "CS API projection is observable",
+                "body": "Telemetry and control work must produce Connected Systems API resources and datastream/control evidence that can be queried by acceptance tests."
+              }
+            ],
+            "data_flow": "PX4 SITL or MAVSDK endpoint -> OSH MAVSDK driver -> OSH process model -> Connected Systems API systems/datastreams/observations/controls -> acceptance evidence and proof records.",
+            "file_changes": [
+              {"path": "osh-addons/mavsdk/src/main/java/**", "kind": "modify"},
+              {"path": "osh-addons/mavsdk/src/test/**", "kind": "modify"},
+              {"path": "harness/mavlink/**", "kind": "create"},
+              {"path": "docs/mavlink/plugin-coverage.md", "kind": "create"}
+            ]
+          },
+          "deltas": [
+            {
+              "capability": "osh-mavsdk-csapi",
+              "added": [
+                {
+                  "name": "MAVSDK driver lifecycle",
+                  "statement": "The system SHALL start, configure, health-check, and stop an OpenSensorHub MAVSDK driver without breaking the OSH module lifecycle.",
+                  "scenarios": [
+                    {
+                      "name": "Driver connects to a ready MAVSDK endpoint",
+                      "steps": [
+                        {"kw": "GIVEN", "text": "a configured OSH MAVSDK module and a ready MAVSDK endpoint backed by PX4 SITL"},
+                        {"kw": "WHEN", "text": "the module starts"},
+                        {"kw": "THEN", "text": "the driver reports healthy connection state and registers the expected OSH procedures without lifecycle errors"}
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "name": "Connected Systems API telemetry projection",
+                  "statement": "The system SHALL expose vehicle telemetry from the MAVSDK driver as Connected Systems API system, datastream, and observation resources.",
+                  "scenarios": [
+                    {
+                      "name": "Vehicle telemetry appears in CS API reads",
+                      "steps": [
+                        {"kw": "GIVEN", "text": "a running OSH MAVSDK driver receiving PX4 telemetry"},
+                        {"kw": "WHEN", "text": "a client reads the Connected Systems API system, datastream, and observation endpoints"},
+                        {"kw": "THEN", "text": "the response includes current vehicle identity, position, attitude, and health evidence linked to the OSH procedure"}
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "name": "Mission command verification",
+                  "statement": "The system SHALL map mission upload and command operations through Connected Systems API controls with simulator-backed acceptance evidence.",
+                  "scenarios": [
+                    {
+                      "name": "Mission upload is verified or explicitly rejected",
+                      "steps": [
+                        {"kw": "GIVEN", "text": "a ready PX4 SITL/MAVSDK harness profile and a CS API control request for mission upload"},
+                        {"kw": "WHEN", "text": "the request is executed"},
+                        {"kw": "THEN", "text": "the system records a successful simulator-backed mission result or a typed rejection with evidence"}
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "name": "Harness readiness gate",
+                  "statement": "The system SHALL require fresh harness readiness evidence or a bounded human waiver before releasing MAVLink implementation tasks that affect flight behavior.",
+                  "scenarios": [
+                    {
+                      "name": "Missing PX4 readiness blocks implementation",
+                      "steps": [
+                        {"kw": "GIVEN", "text": "the approved MAVLink-hard spec requires PX4 SITL and MAVSDK readiness"},
+                        {"kw": "WHEN", "text": "no fresh readiness record or waiver exists"},
+                        {"kw": "THEN", "text": "SemTeams routes to the test-harness team and does not release implementation"}
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "tasks": [
+            {
+              "section": "1. Brownfield Inventory",
+              "number": "1.1",
+              "text": "Inventory OSH, MAVSDK-Java, OSH core, and OGC CS API extension points",
+              "goal": "Produce a dependency and plugin-lifecycle map for the existing OSH MAVSDK addon and the CS API surfaces it must satisfy.",
+              "target_files": ["docs/mavlink/brownfield-inventory.md", "docs/mavlink/plugin-coverage.md"],
+              "test_command": "task harness:mavlink:inventory",
+              "assumptions": ["The OSH addon, MAVSDK-Java, OSH core, and OGC CS API sources are available under the documented /sources layout"],
+              "non_goals": ["No driver implementation in the inventory task"],
+              "expected_outcome": "A reviewed inventory names source modules, lifecycle hooks, CS API mapping points, and missing harness dependencies.",
+              "requirement_ref": "osh-mavsdk-csapi/MAVSDK driver lifecycle"
+            },
+            {
+              "section": "2. Harness Readiness",
+              "number": "2.1",
+              "text": "Build or reject the reusable PX4 SITL and MAVSDK harness profile",
+              "goal": "Define proof.harness_profile.mavlink.px4-sitl.mavsdk and produce a smoke command that proves the simulator and MAVSDK endpoint are reachable.",
+              "target_files": ["harness/mavlink/compose.yaml", "harness/mavlink/smoke.sh", "docs/mavlink/harness-profile.md"],
+              "test_command": "task harness:mavlink:smoke",
+              "assumptions": ["Docker resources can run PX4 SITL in the target environment"],
+              "non_goals": ["No hardware-in-the-loop coverage"],
+              "expected_outcome": "A passed readiness record or a rejected profile with operator-visible residual risk.",
+              "requirement_ref": "osh-mavsdk-csapi/Harness readiness gate"
+            },
+            {
+              "section": "3. Driver And API Projection",
+              "number": "3.1",
+              "text": "Implement the OSH MAVSDK driver lifecycle around the proved harness profile",
+              "goal": "Wire OSH module start, stop, health, and procedure registration to a configured MAVSDK endpoint without breaking existing plugin lifecycle behavior.",
+              "target_files": ["osh-addons/mavsdk/src/main/java/org/sensorhub/impl/sensor/mavsdk/**", "osh-addons/mavsdk/src/test/**"],
+              "test_command": "./gradlew :osh-addons:mavsdk:test --tests '*Lifecycle*'",
+              "assumptions": ["Harness readiness passed or was explicitly waived"],
+              "non_goals": ["No mission upload implementation in this task"],
+              "expected_outcome": "Driver lifecycle tests pass against the harness profile and OSH module lifecycle remains compatible.",
+              "requirement_ref": "osh-mavsdk-csapi/MAVSDK driver lifecycle"
+            },
+            {
+              "section": "3. Driver And API Projection",
+              "number": "3.2",
+              "text": "Project MAVSDK telemetry into Connected Systems API resources",
+              "goal": "Expose vehicle identity, position, attitude, and health as CS API system, datastream, and observation resources linked to the OSH procedure.",
+              "target_files": ["osh-addons/mavsdk/src/main/java/org/sensorhub/impl/sensor/mavsdk/**", "osh-addons/mavsdk/src/test/**"],
+              "test_command": "./gradlew :osh-addons:mavsdk:test --tests '*ConnectedSystems*'",
+              "assumptions": ["Driver lifecycle task has passed against the harness profile"],
+              "non_goals": ["No command/control mapping in this task"],
+              "expected_outcome": "CS API reads expose current telemetry with verifiable OSH procedure links.",
+              "requirement_ref": "osh-mavsdk-csapi/Connected Systems API telemetry projection"
+            },
+            {
+              "section": "4. Commands And Acceptance",
+              "number": "4.1",
+              "text": "Map mission upload and command operations through CS API controls",
+              "goal": "Implement simulator-backed mission upload and command control paths that return success evidence or typed rejection evidence through CS API controls.",
+              "target_files": ["osh-addons/mavsdk/src/main/java/org/sensorhub/impl/sensor/mavsdk/**", "osh-addons/mavsdk/src/test/**"],
+              "test_command": "./gradlew :osh-addons:mavsdk:test --tests '*Mission*'",
+              "assumptions": ["PX4 SITL/MAVSDK readiness is fresh for command execution"],
+              "non_goals": ["No support for arbitrary autopilot dialects beyond the PX4/MAVLink v2 baseline"],
+              "expected_outcome": "Mission upload and command requests produce simulator-backed acceptance evidence or typed rejections.",
+              "requirement_ref": "osh-mavsdk-csapi/Mission command verification"
+            },
+            {
+              "section": "4. Commands And Acceptance",
+              "number": "4.2",
+              "text": "Publish the plugin coverage matrix and full acceptance gate",
+              "goal": "Document feature coverage, residual gaps, readiness evidence, and the chain-level command CBG must rerun before accepting the implementation.",
+              "target_files": ["docs/mavlink/plugin-coverage.md", "harness/mavlink/acceptance.sh"],
+              "test_command": "task harness:mavlink:smoke && ./gradlew :osh-addons:mavsdk:test",
+              "assumptions": ["All driver, telemetry, and mission tasks have passed"],
+              "non_goals": ["No production flight certification claim"],
+              "expected_outcome": "The exported spec and evidence pack are ready for SemTeams, Codex, Claude Code, or a human team to implement or review.",
+              "requirement_ref": "osh-mavsdk-csapi/Harness readiness gate"
+            }
+          ],
+          "acceptance_command": "task harness:mavlink:smoke && ./gradlew :osh-addons:mavsdk:test"
+        }
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "drafted",
+          "reason": "Change mavlink-hard-osh-mavsdk-csapi drafted: it covers OSH/MAVSDK lifecycle, Connected Systems API telemetry, mission/command verification, and a harness readiness gate before implementation. Routing to reviewer."
+        }
+
+  # ---------- Loop B: reviewer-create-change (gate) ----------
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "approved",
+          "reason": "The MAVLink-hard handoff is complete for MVP: every requirement has a SHALL statement and Given/When/Then scenario, tasks name target files and executable gates, and implementation stays blocked behind PX4/MAVSDK readiness or an explicit waiver."
+        }
+
+  # ---------- Loop C: coordinator (wake-up) ----------
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "respond_direct",
+          "reason": "The MAVLink-hard OpenSpec handoff is ready for review/export. It captures OSH/MAVSDK lifecycle, Connected Systems API telemetry, mission command verification, and the PX4 SITL/MAVSDK harness readiness gate before implementation."
+        }

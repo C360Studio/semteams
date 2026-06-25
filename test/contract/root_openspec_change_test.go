@@ -30,8 +30,8 @@ func TestRootOpenSpecChange_Readable(t *testing.T) {
 	if change.Design == nil {
 		t.Fatal("Design is nil")
 	}
-	if change.Tasks == nil || len(change.Tasks.Sections) != 6 {
-		t.Fatalf("Tasks sections = %d, want 6", len(change.Tasks.Sections))
+	if change.Tasks == nil || len(change.Tasks.Sections) != 7 {
+		t.Fatalf("Tasks sections = %d, want 7", len(change.Tasks.Sections))
 	}
 	if len(change.Deltas) != 1 {
 		t.Fatalf("Deltas = %d, want 1", len(change.Deltas))
@@ -41,8 +41,8 @@ func TestRootOpenSpecChange_Readable(t *testing.T) {
 	if delta.Capability != "agentic-sdd" {
 		t.Fatalf("Delta capability = %q, want agentic-sdd", delta.Capability)
 	}
-	if len(delta.Added) != 12 {
-		t.Fatalf("Added requirements = %d, want 12", len(delta.Added))
+	if len(delta.Added) != 13 {
+		t.Fatalf("Added requirements = %d, want 13", len(delta.Added))
 	}
 	for _, req := range delta.Added {
 		if req.Statement == "" {
@@ -124,10 +124,21 @@ func TestRootOpenSpecChange_Readable(t *testing.T) {
 		"Metric gaps are visible",
 		"Prometheus metrics are operational evidence",
 		"- [x] 4.4 Add Prometheus metric freshness, component pressure, queue depth, latency, and error-rate evidence to run health.",
+		"The system SHALL distinguish black-box demo evidence from fixture-seeded bridge tests",
+		"Black-box journeys avoid graph seeding",
+		"Fixture-seeded journeys are labeled",
+		"MAVLink-hard spec production is the MVP goal",
+		"A demo evidence pack that separates black-box product journeys from fixture-seeded bridge proof.",
+		"Counting direct NATS or graph seeding as black-box evidence for product behavior.",
+		"Demo evidence has trust tiers",
+		"MAVLink-hard MVP means spec production first",
 		"- [x] 5.2 Produce or reject a reusable harness profile before feature code is released.",
 		"- [x] 6.4 Add e2e coverage that autoresearch refuses vague/non-scalar goals and preserves metric guardrails.",
 		"- [x] 6.5 Add e2e coverage that non-ready sandbox admission fails closed before execution routing.",
 		"- [x] 6.1 Add a Gemini-backed real-LLM smoke path for model-dependent routing and prompt behavior.",
+		"- [x] 7.1 Publish demo MVP claims, non-claims, evidence tiers, and the no-cheat e2e rule.",
+		"- [x] 7.2 Add a black-box capstone task that excludes fixture-seeded graph and NATS writes.",
+		"- [x] 7.3 Add a MAVLink-hard spec-production journey as the hard-domain artifact goal.",
 	} {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("rendered OpenSpec change missing %q\n--- rendered ---\n%s", want, rendered)
