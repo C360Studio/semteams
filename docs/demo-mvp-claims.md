@@ -67,6 +67,9 @@ readiness records exist, or an operator records a bounded waiver with visible re
 
 ## OpenSpec Lifecycle
 
-The active OpenSpec change remains open while the demo evidence pack is still being added. After the evidence pack lands
-green on `main`, the change should be archived into baseline OpenSpec specs so future changes can build on it instead of
-continuing to mutate the seed proposal.
+The spec-driven development MVP change is archived at
+`openspec/changes/archive/spec-driven-dev-readiness-hitl/`. Its accepted requirements are baselined in
+`openspec/specs/agentic-sdd/spec.md` so future changes build on the living spec instead of mutating the seed proposal.
+
+The post-MVP repo-readiness initializer remains active at `openspec/changes/repo-readiness-init/` until its own
+proposal, implementation, and evidence tasks are complete.

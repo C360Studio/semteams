@@ -11,12 +11,12 @@ import (
 	"github.com/c360studio/semteams/cmd/semteams/openspec"
 )
 
-// TestRootOpenSpecChange_Readable pins the repo-root OpenSpec change as a real
-// artifact, not just prose docs. It is the seed brownfield fixture for the
-// future ingest path.
-func TestRootOpenSpecChange_Readable(t *testing.T) {
+// TestArchivedSpecDrivenDevOpenSpecChange_Readable pins the accepted
+// spec-driven development OpenSpec change as a real archived artifact, not just
+// prose docs. It remains the seed brownfield fixture for the future ingest path.
+func TestArchivedSpecDrivenDevOpenSpecChange_Readable(t *testing.T) {
 	change, err := openspec.ReadChange(filepath.Join(
-		"..", "..", "openspec", "changes", "spec-driven-dev-readiness-hitl",
+		"..", "..", "openspec", "changes", "archive", "spec-driven-dev-readiness-hitl",
 	))
 	if err != nil {
 		t.Fatalf("ReadChange: %v", err)
@@ -143,6 +143,81 @@ func TestRootOpenSpecChange_Readable(t *testing.T) {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("rendered OpenSpec change missing %q\n--- rendered ---\n%s", want, rendered)
 		}
+	}
+}
+
+// TestRootOpenSpecSpecs_Readable pins the accepted spec-driven development MVP
+// requirements as baseline living OpenSpec specs. Future changes should build
+// from this specs/ tree instead of mutating the archived seed proposal.
+func TestRootOpenSpecSpecs_Readable(t *testing.T) {
+	specs, err := openspec.ReadSpecs(filepath.Join("..", "..", "openspec", "specs"))
+	if err != nil {
+		t.Fatalf("ReadSpecs: %v", err)
+	}
+	if len(specs) != 1 {
+		t.Fatalf("Specs = %d, want 1", len(specs))
+	}
+
+	spec := specs[0]
+	if spec.Capability != "agentic-sdd" {
+		t.Fatalf("Spec capability = %q, want agentic-sdd", spec.Capability)
+	}
+	if spec.Title != "Agentic SDD Specification" {
+		t.Fatalf("Spec title = %q", spec.Title)
+	}
+	if len(spec.Requirements) != 13 {
+		t.Fatalf("Requirements = %d, want 13", len(spec.Requirements))
+	}
+	for _, req := range spec.Requirements {
+		if req.Statement == "" {
+			t.Fatalf("requirement %q has empty statement", req.Name)
+		}
+		if len(req.Scenarios) == 0 {
+			t.Fatalf("requirement %q has no scenarios", req.Name)
+		}
+	}
+
+	names := make([]string, 0, len(spec.Requirements))
+	for _, req := range spec.Requirements {
+		names = append(names, req.Name)
+	}
+	for _, want := range []string{
+		"OpenSpec Change Artifact",
+		"Human Spec Review",
+		"OpenSpec Artifact Export",
+		"Command Shortcut Surface",
+		"Proof Fact Model",
+		"Proof Readiness Gate",
+		"Dev From Task Dispatch",
+		"Definition Of Done Authority",
+		"Autoresearch Metric Guardrails",
+		"Governed State Instead Of Private Workflow Buckets",
+		"Run Health Surface",
+		"Demo MVP Evidence Pack",
+		"Real LLM And Playwright Validation",
+	} {
+		found := false
+		for _, got := range names {
+			if got == want {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("baseline spec missing requirement %q; got %v", want, names)
+		}
+	}
+
+	dst := filepath.Join(t.TempDir(), "specs")
+	if err := openspec.WriteSpecs(dst, specs); err != nil {
+		t.Fatalf("WriteSpecs: %v", err)
+	}
+	roundTripped, err := openspec.ReadSpecs(dst)
+	if err != nil {
+		t.Fatalf("re-ReadSpecs: %v", err)
+	}
+	if diff := cmp.Diff(specs, roundTripped, cmpopts.EquateEmpty()); diff != "" {
+		t.Fatalf("root OpenSpec specs round-trip mismatch (-want +got):\n%s", diff)
 	}
 }
 
