@@ -1,0 +1,122 @@
+name: coordinator-routing-matrix
+description: |
+  Routing-only proof for the SemTeams coordinator. The paired Playwright
+  journey posts representative prompts through /teams-dispatch/message and
+  asserts the first coordinator.decision.next_action triple for each prompt.
+
+  This fixture is intentionally role-keyed and coordinator-only. The Task
+  target derives a temporary e2e-flow-bootstrap-routing-only.gen.json config
+  that removes category-spawn rules and keeps only the coordinator ask/respond
+  delivery rules. That proves the coordinator's first action-token selection
+  without burning a full research/autoresearch/dev-via-test/create-change chain.
+
+  Prompts covered:
+    1. evidence/comparison ask -> research
+    2. OpenSpec/spec-authoring ask -> create_change
+    3. scalar metric optimization -> autoresearch, after sandbox readiness
+    4. build-with-tests ask -> dev_via_test, after sandbox readiness
+    5. vague optimization ask -> ask_user
+    6. simple taxonomy/meta ask -> respond_direct
+
+responses_by_role:
+  - match: "Delegation rules"
+    responses:
+      - tool_call:
+          name: decide
+          arguments_json: |
+            {
+              "action": "research",
+              "reason": "The user is asking for an evidence-backed MQTT vs NATS comparison. This should route to the research pack instead of implementation or optimization."
+            }
+
+      - tool_call:
+          name: decide
+          arguments_json: |
+            {
+              "action": "create_change",
+              "reason": "The user is asking to author an OpenSpec change for an API behavior. The deliverable is a spec artifact for review, not code execution."
+            }
+
+      - tool_call:
+          name: query_sandbox_attestation
+          arguments_json: |
+            {
+              "languages": ["go"],
+              "tools": ["task"],
+              "network": "restricted",
+              "verification": [
+                {"name": "go", "command": "go version"},
+                {"name": "task", "command": "task --version"}
+              ]
+            }
+
+      - tool_call:
+          name: request_sandbox
+          arguments_json: |
+            {
+              "languages": ["go"],
+              "tools": ["task"],
+              "network": "restricted",
+              "verification": [
+                {"name": "go", "command": "go version"},
+                {"name": "task", "command": "task --version"}
+              ]
+            }
+
+      - tool_call:
+          name: decide
+          arguments_json: |
+            {
+              "action": "autoresearch",
+              "reason": "The prompt has the required autoresearch shape: command `go test ./...`, scalar wallclock metric, lower-is-better direction, bounded surface `./...`, cap 2, and pass/fail guardrail."
+            }
+
+      - tool_call:
+          name: query_sandbox_attestation
+          arguments_json: |
+            {
+              "languages": ["go"],
+              "tools": ["task"],
+              "network": "restricted",
+              "verification": [
+                {"name": "go", "command": "go version"},
+                {"name": "task", "command": "task --version"}
+              ]
+            }
+
+      - tool_call:
+          name: request_sandbox
+          arguments_json: |
+            {
+              "languages": ["go"],
+              "tools": ["task"],
+              "network": "restricted",
+              "verification": [
+                {"name": "go", "command": "go version"},
+                {"name": "task", "command": "task --version"}
+              ]
+            }
+
+      - tool_call:
+          name: decide
+          arguments_json: |
+            {
+              "action": "dev_via_test",
+              "reason": "The prompt asks to build a Go MAVLink heartbeat endpoint with concrete tests. It is implementation work with a verifiable test command, so it belongs in dev_via_test."
+            }
+
+      - tool_call:
+          name: decide
+          arguments_json: |
+            {
+              "action": "ask_user",
+              "reason": "What concrete target, scalar metric or acceptance test, bounded edit surface, and success criteria should I use? The request is too vague to route into autoresearch or implementation safely."
+            }
+
+      - tool_call:
+          name: decide
+          arguments_json: |
+            {
+              "action": "respond_direct",
+              "reason": "The coordinator can currently choose research, autoresearch, dev_via_test, dev_via_test_finalize, create_change, dev_from_task, respond_direct, or ask_user. The right choice depends on whether the prompt asks for evidence, scalar optimization, implementation with tests, spec authoring, or clarification."
+            }
