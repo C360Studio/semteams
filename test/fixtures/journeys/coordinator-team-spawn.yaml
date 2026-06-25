@@ -1,0 +1,145 @@
+name: coordinator-team-spawn
+description: |
+  Handoff-only proof for the SemTeams coordinator. The paired Playwright
+  journey posts representative prompts through /teams-dispatch/message and
+  asserts that the selected category entrypoint rule spawns the expected
+  first role.
+
+  This fixture is role-keyed. The Task target derives a temporary
+  e2e-flow-bootstrap-team-spawn.gen.json config that keeps only the category
+  rule-01 entrypoints:
+    - research -> researcher-research-plan
+    - create_change -> author-create-change
+    - autoresearch -> autoresearch-baseline
+    - dev_via_test -> dev-via-test-plan
+
+  The first spawned role in each category immediately terminates with
+  needs_clarification. Downstream category rules are intentionally absent, so
+  the proof stays focused on coordinator action -> proper first team handoff.
+
+responses_by_role:
+  - match: "Delegation rules"
+    responses:
+      - tool_call:
+          name: decide
+          arguments_json: |
+            {
+              "action": "research",
+              "reason": "The user is asking for an evidence-backed comparison of MQTT and NATS for constrained IoT edge deployments. Route to the research category entrypoint."
+            }
+
+      - tool_call:
+          name: decide
+          arguments_json: |
+            {
+              "action": "create_change",
+              "reason": "The user is asking for an OpenSpec change around API idempotency. Route to the create_change category entrypoint."
+            }
+
+      - tool_call:
+          name: query_sandbox_attestation
+          arguments_json: |
+            {
+              "languages": ["go"],
+              "tools": ["task"],
+              "network": "restricted",
+              "verification": [
+                {"name": "go", "command": "go version"},
+                {"name": "task", "command": "task --version"}
+              ]
+            }
+
+      - tool_call:
+          name: request_sandbox
+          arguments_json: |
+            {
+              "languages": ["go"],
+              "tools": ["task"],
+              "network": "restricted",
+              "verification": [
+                {"name": "go", "command": "go version"},
+                {"name": "task", "command": "task --version"}
+              ]
+            }
+
+      - tool_call:
+          name: decide
+          arguments_json: |
+            {
+              "action": "autoresearch",
+              "reason": "The prompt has a bounded scalar optimization shape: command `go test ./...`, lower-is-better wallclock metric, surface `./...`, cap 2, and all-tests-pass guardrail. Route to the autoresearch category entrypoint."
+            }
+
+      - tool_call:
+          name: query_sandbox_attestation
+          arguments_json: |
+            {
+              "languages": ["go"],
+              "tools": ["task"],
+              "network": "restricted",
+              "verification": [
+                {"name": "go", "command": "go version"},
+                {"name": "task", "command": "task --version"}
+              ]
+            }
+
+      - tool_call:
+          name: request_sandbox
+          arguments_json: |
+            {
+              "languages": ["go"],
+              "tools": ["task"],
+              "network": "restricted",
+              "verification": [
+                {"name": "go", "command": "go version"},
+                {"name": "task", "command": "task --version"}
+              ]
+            }
+
+      - tool_call:
+          name: decide
+          arguments_json: |
+            {
+              "action": "dev_via_test",
+              "reason": "The prompt asks to build a Go MAVLink heartbeat endpoint with unit tests. Route to the dev_via_test category entrypoint."
+            }
+
+  - match: "Emit the typed plan"
+    responses:
+      - tool_call:
+          name: decide
+          arguments_json: |
+            {
+              "action": "needs_clarification",
+              "reason": "Handoff-only proof: researcher-research-plan spawned correctly; downstream research rules are intentionally disabled."
+            }
+
+  - match: "create-change category arc"
+    responses:
+      - tool_call:
+          name: decide
+          arguments_json: |
+            {
+              "action": "needs_clarification",
+              "reason": "Handoff-only proof: author-create-change spawned correctly; downstream create_change rules are intentionally disabled."
+            }
+
+  - match: "BASELINE phase"
+    responses:
+      - tool_call:
+          name: decide
+          arguments_json: |
+            {
+              "action": "needs_clarification",
+              "reason": "Handoff-only proof: autoresearch-baseline spawned correctly; downstream autoresearch rules are intentionally disabled."
+            }
+
+  - match: "dev-via-test category arc"
+    responses:
+      - tool_call:
+          name: decide
+          arguments_json: |
+            {
+              "action": "needs_clarification",
+              "reason": "Handoff-only proof: dev-via-test-plan spawned correctly; downstream dev_via_test rules are intentionally disabled."
+            }
