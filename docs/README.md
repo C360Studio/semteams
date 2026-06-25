@@ -18,9 +18,10 @@ tools, journeys) is documented here.
   + [`../cmd/semteams/tools/README.md`](../cmd/semteams/tools/README.md)
 - **writing a flow / persona / rule** →
   [`../configs/README.md`](../configs/README.md)
-  (note: that README is still upstream-shaped — see "Imports" below)
 - **writing a Playwright journey** →
   [`journeys/README.md`](journeys/README.md)
+- **checking the demo claim boundary** →
+  [`demo-mvp-claims.md`](demo-mvp-claims.md)
 - **looking for framework concepts** → upstream
   [semstreams docs](https://github.com/c360studio/semstreams/tree/main/docs)
 
@@ -33,8 +34,9 @@ that don't exist upstream.
 
 | Path | Purpose |
 |---|---|
-| [`architecture.md`](architecture.md) | What semteams DOES — the substrate-plus-overlays runtime (ADR-042) + the three live category packs (research, autoresearch, dev-via-test) + how a sandbox gets created |
+| [`architecture.md`](architecture.md) | What semteams DOES — the substrate-plus-overlays runtime (ADR-042), live category packs, and how a sandbox gets created |
 | [`getting-started.md`](getting-started.md) | New-dev quickstart + debugging recipes |
+| [`demo-mvp-claims.md`](demo-mvp-claims.md) | Supported demo claims, non-claims, black-box evidence rules, and MAVLink-hard scope |
 | [`product/vocabulary-map.md`](product/vocabulary-map.md) | Product vocabulary and UI label guidance |
 | [`adr/`](adr/) | Architectural Decision Records — every load-bearing product-shell decision |
 | [`proposals/`](proposals/) | Active design docs that precede / accompany an ADR. Currently: `agentic-superpowers.md` (shipped 2026-04-12; retained for framing). |
@@ -67,9 +69,12 @@ architecture.
 | [041](adr/041-mvp-role-compression-and-graph-as-substrate.md) | MVP role compression + graph-as-substrate. Direct precursor to ADR-042. |
 | [**042**](adr/042-coordinator-instantiated-flows-via-templates.md) | **Substrate-plus-overlays.** One product-shell flow, category-keyed rule packs + persona bundles. Current architecture as of MVP-7. |
 | [**043**](adr/043-devcontainer-as-sandbox-spec.md) | **Devcontainer-as-sandbox spec.** Per-tenant attestation + attestation-aware artifact routing. The killer feature autoresearch needed. |
-| [**044**](adr/044-dev-via-test-pack.md) | **Dev-via-test pack (Lisa / Ralph / CBG).** Third live category pack — decompose-and-dispatch software dev with a plan-fidelity gate + a chain-end integration gate, both bounded reject/retry/approve. |
+| [**044**](adr/044-dev-via-test-pack.md) | **Dev-via-test pack (Lisa / Ralph / CBG).** Decompose-and-dispatch software dev with a plan-fidelity gate + a chain-end integration gate, both bounded reject/retry/approve. |
+| [053](adr/053-adoption-plan.md) | Adoption plan for proof/readiness work |
 | [054](adr/054-test-harness-team-proof-environments-before-code.md) | Test-harness team for proof environments before code |
 | [055](adr/055-formal-claim-analysis-for-verification-gates.md) | Formal claim analysis for verification gates |
+| [**056**](adr/056-openspec-spec-driven-development-umbrella.md) | **OpenSpec-compatible, environment-gated spec-driven development umbrella** |
+| [**057**](adr/057-openspec-graph-spec-model-and-create-change.md) | **Graph-backed OpenSpec model and `create_change` pack** |
 
 ### Framework concepts — go upstream
 
@@ -87,10 +92,10 @@ of a single pointer at the canonical source:
 `docs/ROADMAP.md` was a similar carry-over (the upstream SemStreams
 roadmap) and now holds a SemTeams pointer instead.
 
-`../configs/README.md` is still upstream-shaped — it documents the
-framework's structural / statistical / semantic tiers (the graph
-component family), not the product's flow library. Treat it as
-upstream until it gets the same treatment.
+`../configs/README.md` documents the product flow config and live
+category-pack inventory. The legacy upstream-shaped graph-tier
+examples still present under `configs/` are called out there as
+non-product configs.
 
 ## Conventions
 

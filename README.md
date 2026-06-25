@@ -31,9 +31,9 @@ covers what SemTeams adds on top.
 |---|---|---|
 | Web UI | `ui/` | Svelte 5 + SvelteKit 2 chat / graph explorer / runtime monitor |
 | Bootstrap config | `configs/flow-bootstrap.json` | ADR-042 substrate-plus-overlays wiring (production); mock-LLM clone at `e2e-flow-bootstrap.json` |
-| Category packs | `configs/rules/<category>/` | Category-keyed rule packs. Live: `research/` (coordinator → plan → gather → synthesize → reviewer) and `autoresearch/` (Karpathy-style propose/execute iteration loop with empirical keep/revert per ADR-043 sandbox attestation). Plus `coordinator/` (router) and `ops/` (observer). New task classes add a pack — no new components. |
-| Personas | `configs/personas/fragments/<role>/*.md` | Role-specific prompt fragments. Live roles: coordinator, researcher-research-{plan,gather,synthesize}, reviewer-research, autoresearch-{baseline,propose,execute,synthesize}, reviewer-autoresearch, ops-{chain,progress}-observer, ops |
-| Product tools | `cmd/semteams/tools/` | Tool executors that don't belong upstream (source ingest, artifact emission, sandbox bootstrap, autoresearch baseline/measurement/artifact emitters) |
+| Category packs | `configs/rules/<category>/` | Category-keyed rule packs. Product-facing packs include `research/`, `autoresearch/`, `create-change/`, `proof-readiness/`, `dev-from-task/`, and `dev-via-test/`. Support packs include `coordinator/`, `agent-run/`, and `ops/`. New task classes add a pack — no new components. |
+| Personas | `configs/personas/fragments/<role>/*.md` | Role-specific prompt fragments loaded by the category packs. See [`configs/README.md`](configs/README.md) for the current inventory. |
+| Product tools | `cmd/semteams/tools/` | Tool executors that don't belong upstream: source ingest, artifact/spec emission, proof analysis/projection, sandbox bootstrap, and pack-specific measurement emitters. |
 | Product shell | `cmd/semteams/main.go` | ~600 LoC binary that wires the framework primitives per [ADR-029](docs/adr/029-product-shell-wiring.md) |
 
 Everything else — the `agentic-*` processors, the rule engine, the
@@ -46,19 +46,34 @@ graph, the NATS stream wiring — lives upstream in semstreams.
 ```bash
 go version          # 1.25+
 docker info         # daemon running
+node --version      # 22+ for UI / Playwright journeys
 task --version      # go install github.com/go-task/task/v3/cmd/task@latest
+caddy version       # required only for the live local UI path: task dev:research
 ```
 
-Copy `.env.example` to `.env` and set at least one LLM key
-(`ANTHROPIC_API_KEY` recommended — most configs default to
-`claude-haiku`):
+### First proof: no-key demo MVP
+
+```bash
+task ui:test:e2e:agentic:demo-mvp
+```
+
+That runs the black-box mock-LLM evidence pack for the current demo
+claims: coordinator routing, OpenSpec author/review/export,
+readiness fail-closed behavior, and the MAVLink-hard spec handoff.
+It uses the dockerized e2e stack and requires no LLM API keys or
+host Caddy install.
+
+### Live chat UI
+
+Copy `.env.example` to `.env` and set a live model key. The default
+production registry uses Gemini Flash, with Gemini Pro preferred for
+coordinator work and Anthropic endpoints available as fallbacks /
+alternatives:
 
 ```bash
 cp .env.example .env
-# edit .env, uncomment ANTHROPIC_API_KEY=sk-ant-...
+# edit .env, uncomment GEMINI_API_KEY=...
 ```
-
-### One command to a working chat UI
 
 ```bash
 task dev:research
@@ -68,10 +83,13 @@ That boots NATS, builds and starts `bin/semteams` against
 `configs/flow-bootstrap.json` (the ADR-042 production bootstrap),
 then starts the UI proxy. Open <http://localhost:3001> and type a
 prompt — the coordinator persona classifies it and routes it to one
-of the **three live category packs**:
+of the live category packs:
 
 - a **research** question (compare X vs Y, how does Z work) → the
   research arc;
+- a **spec authoring** ask (draft requirements for X, create an
+  OpenSpec handoff for Y) → the create-change / proof-readiness
+  path;
 - an **optimize-a-metric** ask (make this faster / smaller) → the
   autoresearch iteration loop, in a sandbox;
 - a **build-with-tests** ask (add an endpoint with unit tests) →
@@ -87,9 +105,12 @@ pack does and **how the sandbox is created**.
 
 | You want | Run | Notes |
 |---|---|---|
-| Production bootstrap (research category) | `task dev:research` | Needs `ANTHROPIC_API_KEY`; `BRAVE_SEARCH_API_KEY` recommended (web_search falls back to a stub without it). |
-| Mock-LLM research-category journey | `task ui:test:e2e:agentic:research-mvp` | Playwright + mock-llm + e2e-flow-bootstrap. No API keys. |
-| Real-LLM research-category smoke | `task ui:test:e2e:agentic:smoke6:run` | ~$0.30–$0.50 on claude-haiku. Captures trajectories to `/tmp/smoke6-<RUN_ID>/`. |
+| No-key demo claim proof | `task ui:test:e2e:agentic:demo-mvp` | Black-box Playwright + mock-LLM evidence pack. No API keys. |
+| Live chat UI | `task dev:research` | Needs `GEMINI_API_KEY` for the default model registry; `BRAVE_SEARCH_API_KEY` recommended for web search. |
+| OpenSpec author/review/export journey | `task ui:test:e2e:agentic:create-change` | Mock-LLM journey for producing a reviewed OpenSpec handoff. |
+| MAVLink-hard spec handoff | `task ui:test:e2e:agentic:mavlink-hard-spec` | Mock-LLM hard-domain OpenSpec handoff journey. |
+| Spec-to-dev bridge proof | `task ui:test:e2e:agentic:spec-to-dev-demo` | Fixture-seeded bridge proof; not counted as pure black-box MVP evidence. |
+| Paid Gemini OpenSpec smoke | `task ui:test:e2e:agentic:create-change:gemini-smoke` | Real LLM smoke for spec authoring. Captures trajectories under `/tmp/`. |
 
 `task --list` shows everything.
 
@@ -99,6 +120,10 @@ pack does and **how the sandbox is created**.
   [`docs/getting-started.md`](docs/getting-started.md). What the
   ports are, how to tail logs, how to inspect KV, how to abort a
   wedged loop.
+- **You want to know what the demo can honestly claim** →
+  [`docs/demo-mvp-claims.md`](docs/demo-mvp-claims.md). Supported
+  claims, non-claims, black-box evidence rules, and MAVLink-hard
+  scope.
 - **You want to know why something is built the way it is** →
   [`docs/adr/`](docs/adr/). Every product-shell decision lands as an
   ADR.
@@ -150,13 +175,22 @@ is **substrate-plus-overlays** per
 [ADR-042](docs/adr/042-coordinator-instantiated-flows-via-templates.md):
 a single product-shell flow wires substrate singletons, and task
 classes are added as category-keyed rule packs + named persona
-bundles rather than separate flow configs. Live packs:
+bundles rather than separate flow configs. Product-facing packs:
 
 - **research** — coordinator-routed prose research arc.
 - **autoresearch** — Karpathy-style propose/execute iteration loop
   with empirical keep/revert decisions, per
   [ADR-043](docs/adr/043-devcontainer-as-sandbox-spec.md)
   per-tenant devcontainer attestation. Shipped 2026-06-03.
+- **create-change / proof-readiness / dev-from-task** —
+  OpenSpec-compatible spec production, review, export, readiness
+  gating, and the approved-spec-to-task bridge. See
+  [ADR-056](docs/adr/056-openspec-spec-driven-development-umbrella.md),
+  [ADR-057](docs/adr/057-openspec-graph-spec-model-and-create-change.md),
+  and [`docs/demo-mvp-claims.md`](docs/demo-mvp-claims.md).
+- **dev-via-test** — Lisa / Ralph / CBG software-development loop
+  with plan and work gates, per
+  [ADR-044](docs/adr/044-dev-via-test-pack.md).
 
 ADR-031 (research-flow + dev-via-spec internal mode) is retained
 for archeology; the dev-via-spec arc it described was retired in

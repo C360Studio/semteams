@@ -59,10 +59,10 @@ tasks:
       - npm run dev
 
   dev:connect:
-    desc: Connect to any running SemStreams app (no Docker backend needed)
+    desc: Connect to any running SemTeams backend (no Docker backend needed)
     summary: |
       Starts Caddy + Vite dev server, proxying API requests to a running
-      SemStreams backend. No NATS, no Docker build — just point and go.
+      SemTeams backend. No NATS, no Docker build — just point and go.
 
       Examples:
         task dev:connect                                  # localhost:8080
@@ -83,7 +83,7 @@ tasks:
     cmds:
       - defer: { task: dev:connect:stop }
       - |
-        echo "Connecting to SemStreams backend at {{.BACKEND_HOST}}"
+        echo "Connecting to SemTeams backend at {{.BACKEND_HOST}}"
         echo "GraphQL gateway at {{.GRAPHQL_HOST}}"
         echo ""
         echo "UI will be at http://localhost:{{.DEV_UI_PORT}}"

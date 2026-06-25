@@ -25,9 +25,12 @@ design: the ADR sequence is the audit trail.
   [ADR-057 graph spec model + `create_change`](adr/057-openspec-graph-spec-model-and-create-change.md)
   (Proposed). Consistent with the ADR-as-audit-trail stance above: the
   roadmap lives *in* an ADR, not a separate forward-looking doc.
-- **Live category packs** — `research/` and `autoresearch/`. The
-  next pack is dropping in as a `configs/rules/<new-category>/`
-  directory + persona bundle, not a new flow config.
+- **Live category packs** — product-facing packs are `research/`,
+  `autoresearch/`, `create-change/`, `proof-readiness/`,
+  `dev-from-task/`, and `dev-via-test/`. Support packs are
+  `coordinator/`, `agent-run/`, and `ops/`. The extension rule
+  remains: add a `configs/rules/<new-category>/` directory +
+  persona bundle, not a new flow config.
 - **Open ADRs / proposals** — the
   [`proposals/`](proposals/) directory holds the few active design
   docs that survived the 2026-06-03 audit. ADRs that are filed but

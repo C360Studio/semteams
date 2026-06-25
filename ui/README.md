@@ -62,8 +62,11 @@ itself:
 ```bash
 npm install
 
-# Connect to a local backend
+# Connect to a local backend from the repo root
 task ui:dev:connect
+
+# Or, from ui/
+task dev:connect
 
 # Connect to a remote backend
 BACKEND_HOST=semteams.example.com:8080 task ui:dev:connect
@@ -77,14 +80,14 @@ From the semteams repo root:
 
 ```bash
 task build                    # Build the semteams binary
-./bin/semstreams serve        # Start the backend on :8080 (see configs/)
-cd ui && task dev:connect     # Start the UI pointing at :8080
+./bin/semteams --config configs/flow-bootstrap.json
+task ui:dev:connect           # Start the UI pointing at :8080
 ```
 
 Or use the dev composite (requires Docker):
 
 ```bash
-cd ui && task dev:full
+task dev:research             # NATS + semteams backend + UI
 ```
 
 ## Architecture
@@ -133,9 +136,9 @@ src/
 │   │                           #   agentStore (SSE-backed loop tracker)
 │   └── types/                  # TypeScript types (chat, graph, flow, agent)
 ├── routes/
-│   ├── +page.svelte            # Graph explorer homepage
-│   ├── flows/                  # Flow list + editor
-│   └── agents/                 # Agent monitoring page
+│   ├── +page.svelte            # Task Board homepage
+│   ├── graph/                  # Graph explorer
+│   └── admin/flows/            # Read-only flow inventory
 └── hooks.server.ts
 e2e/                            # Playwright E2E tests
 docs/                           # In-tree architecture docs
@@ -168,7 +171,8 @@ export const myStore = createMyStore();
 The chat assistant supports:
 
 - **Slash commands** — `/search`, `/flow`, `/explain`, `/debug`, `/health`,
-  `/query`, `/approve`, `/reject`, `/pause`, `/resume`
+  `/query`, `/approve`, `/reject`, `/pause`, `/resume`, `/export-spec`,
+  `/implement-spec`, `/run-status`, `/evidence`
 - **Context chips** — Pin entities or components to the chat context via
   "+Chat" buttons
 - **Page-aware tools** — Different tools available on flow-builder vs
@@ -176,7 +180,7 @@ The chat assistant supports:
 - **Attachment-based messages** — Rich responses: search results, entity
   details, health status, flow diffs, agent loop cards, approval prompts,
   tool call cards, rule diffs
-- **Multi-provider AI** — Anthropic (Claude) or OpenAI-compatible APIs
+- **Multi-provider AI** — Gemini, Anthropic (Claude), or OpenAI-compatible APIs
 
 ## Agentic Integration
 
