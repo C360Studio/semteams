@@ -202,6 +202,7 @@ tasks:
       - task: test:e2e:agentic:autoresearch
       - task: test:e2e:agentic:autoresearch-guardrails
       - task: test:e2e:agentic:coordinator-routing-matrix
+      - task: test:e2e:agentic:coordinator-team-spawn
       - task: test:e2e:agentic:sandbox-mvp
       - task: test:e2e:agentic:ops-agent
       - task: test:e2e:agentic:real-time-activity-stream
@@ -839,6 +840,46 @@ tasks:
           FIXTURE: "{{.FIXTURE}}"
           AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
       - npx playwright test e2e/agentic/coordinator-routing-matrix.spec.ts
+
+  test:e2e:agentic:coordinator-team-spawn:
+    desc: Run the coordinator handoff-only mock-LLM matrix
+    summary: |
+      Posts representative category prompts through the real
+      /teams-dispatch/message path and asserts that each coordinator action
+      token fires the expected category entrypoint rule:
+
+        research              -> researcher-research-plan
+        create_change         -> author-create-change
+        autoresearch          -> autoresearch-baseline
+        dev_via_test          -> dev-via-test-plan
+
+      To keep this first-handoff proof cheap, the task derives a temporary
+      config from e2e-flow-bootstrap.json that keeps only the four category
+      rule-01 entrypoints and removes downstream category rules. This proves
+      coordinator action-token selection reaches the proper first team role
+      without claiming full chain completion; the full pack journeys own the
+      full-chain proof.
+    vars:
+      FIXTURE: coordinator-team-spawn.yaml
+      AGENTIC_CONFIG: e2e-flow-bootstrap-team-spawn.gen.json
+    cmds:
+      - defer: { task: test:e2e:agentic:cleanup }
+      - defer: rm -f ../configs/e2e-flow-bootstrap-team-spawn.gen.json
+      - |
+        jq '
+          .components.rule.config.rules_files=[
+            "/app/configs/rules/research/01-coordinator-research-spawn.json",
+            "/app/configs/rules/create-change/01-coordinator-create-change-spawn.json",
+            "/app/configs/rules/autoresearch/01-coordinator-autoresearch-spawn.json",
+            "/app/configs/rules/dev-via-test/01-coordinator-dev-via-test-spawn.json"
+          ]
+          | .components.rule.config.inline_rules=[]
+        ' ../configs/e2e-flow-bootstrap.json > ../configs/e2e-flow-bootstrap-team-spawn.gen.json
+      - task: test:e2e:agentic:stack:up
+        vars:
+          FIXTURE: "{{.FIXTURE}}"
+          AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
+      - npx playwright test e2e/agentic/coordinator-team-spawn.spec.ts
 
   test:e2e:agentic:sandbox-mvp:
     desc: Run the ADR-043 PR 4.4 sandbox-tools mock-LLM journey
