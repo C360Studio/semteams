@@ -1,0 +1,195 @@
+name: autoresearch-guardrails
+description: |
+  Journey: OpenSpec 6.4 autoresearch routing + metric guardrails on mock-LLM.
+
+  This fixture serves two user prompts in one stack:
+
+  1. A vague "make the developer experience better" prompt. The
+     coordinator must refuse to start autoresearch because there is no
+     scalar metric, command, parser, cap, or bounded surface. It emits
+     ask_user and no autoresearch roles spawn.
+
+  2. A valid scalar optimization prompt. The run executes cap=2:
+     iteration 1 improves the metric and is kept; iteration 2 reports a
+     much lower numeric value but pass=false because the guardrail/pass
+     gate failed. The empirical reviewer must record outcome=crashed and
+     must NOT promote that lower value to autoresearch.best.value.
+
+  Paired spec: ui/e2e/agentic/autoresearch-guardrails.spec.ts.
+  Required config: configs/e2e-flow-bootstrap.json.
+  Required env: SEMTEAMS_SANDBOX_RUNNER=mock.
+
+responses:
+  # ---------- Prompt 1: vague/non-scalar objective ----------
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "ask_user",
+          "reason": "What scalar metric, measurement command, metric parser, iteration cap, and bounded edit surface should I optimize? \"Developer experience\" is too broad for autoresearch without a measurable target and guardrails."
+        }
+
+  # ---------- Prompt 2: scalar metric + guardrail preservation ----------
+
+  # Loop 0: coordinator (dispatch)
+
+  - tool_call:
+      name: query_sandbox_attestation
+      arguments_json: |
+        {}
+
+  - tool_call:
+      name: request_sandbox
+      arguments_json: |
+        {
+          "profile": "go-backend",
+          "reason": "Autoresearch will repeatedly run `go test ./...` and mutate only test helper files, so it needs an attested Go workspace."
+        }
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "autoresearch",
+          "reason": "Optimize the wallclock of `go test ./...` while preserving the pass gate. Command: go test ./...; surface: test/helpers/, internal/testutil/; cap: 2 iterations; metric_parser: parse the trailing ok-line seconds as a float. Lower is better. Guardrail: the command must exit 0 and all tests must still pass; a lower value with failing tests must be rejected."
+        }
+
+  # Loop A: autoresearch-baseline
+
+  - tool_call:
+      name: emit_autoresearch_baseline
+      arguments_json: |
+        {
+          "command": "go test ./...",
+          "surface": "test/helpers/, internal/testutil/",
+          "cap": 2,
+          "metric_parser": "parse the trailing ok-line seconds as a float",
+          "baseline_value": 1.20,
+          "baseline_pass": true,
+          "baseline_stdout_tail": "ok  example  1.20s"
+        }
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "propose",
+          "reason": "Baseline captured at 1.20s. Command=go test ./...; surface=test/helpers/, internal/testutil/; cap=2; metric_parser=parse trailing ok-line seconds; guardrail=tests must pass."
+        }
+
+  # Loop B: autoresearch-propose (iteration 1)
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "measure",
+          "reason": "Iteration 1 hypothesis: cache deterministic test fixture construction inside test/helpers/ to reduce setup wallclock while leaving assertions intact."
+        }
+
+  # Loop C: autoresearch-execute (iteration 1)
+
+  - tool_call:
+      name: emit_autoresearch_measurement
+      arguments_json: |
+        {
+          "value": 1.00,
+          "pass": true,
+          "stdout_tail": "ok  example  1.00s",
+          "stderr_tail": ""
+        }
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "measured",
+          "reason": "Iteration 1: value=1.00 pass=true outcome=kept - fixture cache reduced wallclock and all tests passed."
+        }
+
+  # Loop D: autoresearch-propose (iteration 2)
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "measure",
+          "reason": "Iteration 2 hypothesis: skip a slow integration-style helper path. This may lower wallclock but risks violating the pass/coverage guardrail."
+        }
+
+  # Loop E: autoresearch-execute (iteration 2)
+
+  - tool_call:
+      name: emit_autoresearch_measurement
+      arguments_json: |
+        {
+          "value": 0.10,
+          "pass": false,
+          "stdout_tail": "ok  example  0.10s",
+          "stderr_tail": "guardrail violation: go test ./... failed because TestJobsIdempotencyDifferentBody no longer ran; pass gate rejected the apparent speedup"
+        }
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "measured",
+          "reason": "Iteration 2: value=0.10 pass=false outcome=crashed - guardrail violation, apparent speedup rejected and reverted."
+        }
+
+  # Loop F: autoresearch-synthesize
+
+  - tool_call:
+      name: emit_autoresearch_artifact
+      arguments_json: |
+        {
+          "title": "go test ./... wallclock guarded optimization",
+          "command": "go test ./...",
+          "baseline_value": 1.20,
+          "best_value": 1.00,
+          "improvement_pct": 16.7,
+          "cap": 2,
+          "iterations_completed": 2,
+          "iterations_kept": 1,
+          "iterations_reverted": 0,
+          "iterations_crashed": 1,
+          "best_experiment_id": "iteration-1",
+          "best_diff_summary": "Cached deterministic test fixture construction inside test/helpers/.",
+          "journey": [
+            "iter1: fixture cache -> 1.00s kept; pass gate true",
+            "iter2: skipped slow helper path -> 0.10s crashed; guardrail violation, reverted"
+          ],
+          "open_opportunities": [
+            "Profile the remaining helper setup cost without skipping required assertions."
+          ],
+          "recommended_action": "Keep only the fixture-cache change; do not keep the failed guardrail-skipping speedup."
+        }
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "emit",
+          "reason": "Artifact emitted: 1.20s -> 1.00s best (16.7% faster); one kept iteration and one crashed guardrail violation. Routing to reviewer."
+        }
+
+  # Loop G: reviewer-autoresearch
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "approved",
+          "reason": "Rollup is structurally complete: scalar metric, baseline, cap, one kept improvement, one guardrail-failed crashed iteration, and best_value preserved at 1.00 rather than the failed 0.10 value. Approved."
+        }
+
+  # Loop H: coordinator (wake-up)
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "respond_direct",
+          "reason": "Autoresearch kept the passing fixture-cache improvement and improved `go test ./...` from 1.20s to 1.00s. A later 0.10s result was rejected because the pass/coverage guardrail failed, so it was recorded as crashed and not promoted as the best. Keep the passing change only."
+        }
