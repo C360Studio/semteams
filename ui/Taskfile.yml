@@ -201,6 +201,7 @@ tasks:
       - task: test:e2e:agentic:dev-via-test-replan
       - task: test:e2e:agentic:autoresearch
       - task: test:e2e:agentic:autoresearch-guardrails
+      - task: test:e2e:agentic:coordinator-routing-matrix
       - task: test:e2e:agentic:sandbox-mvp
       - task: test:e2e:agentic:ops-agent
       - task: test:e2e:agentic:real-time-activity-stream
@@ -798,6 +799,46 @@ tasks:
           FIXTURE: "{{.FIXTURE}}"
           AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
       - npx playwright test e2e/agentic/autoresearch-guardrails.spec.ts
+
+  test:e2e:agentic:coordinator-routing-matrix:
+    desc: Run the coordinator routing-only mock-LLM matrix
+    summary: |
+      Posts representative prompts through the real /teams-dispatch/message
+      path and asserts the coordinator's first next_action for each:
+
+        evidence/comparison           -> research
+        OpenSpec/spec authoring        -> create_change
+        scalar metric optimization     -> autoresearch
+        verifiable implementation      -> dev_via_test
+        vague ask                      -> ask_user
+        simple taxonomy/meta question  -> respond_direct
+
+      To keep this first-action proof cheap, the task derives a temporary config from
+      e2e-flow-bootstrap.json that removes downstream category-spawn rules and
+      keeps only coordinator ask/respond delivery rules. This proves the
+      coordinator's classification token without claiming downstream team-spawn
+      coverage. For sandbox-bound categories it asserts the coordinator
+      attempts the preflight tools; full pack journeys own ready-attestation
+      proof after a category spawn mints the run entity.
+    vars:
+      FIXTURE: coordinator-routing-matrix.yaml
+      AGENTIC_CONFIG: e2e-flow-bootstrap-routing-only.gen.json
+    cmds:
+      - defer: { task: test:e2e:agentic:cleanup }
+      - defer: rm -f ../configs/e2e-flow-bootstrap-routing-only.gen.json
+      - |
+        jq '
+          .components.rule.config.rules_files=[
+            "/app/configs/rules/coordinator/03b-respond-direct.json",
+            "/app/configs/rules/coordinator/03-ask-user.json"
+          ]
+          | .components.rule.config.inline_rules=[]
+        ' ../configs/e2e-flow-bootstrap.json > ../configs/e2e-flow-bootstrap-routing-only.gen.json
+      - task: test:e2e:agentic:stack:up
+        vars:
+          FIXTURE: "{{.FIXTURE}}"
+          AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
+      - npx playwright test e2e/agentic/coordinator-routing-matrix.spec.ts
 
   test:e2e:agentic:sandbox-mvp:
     desc: Run the ADR-043 PR 4.4 sandbox-tools mock-LLM journey
