@@ -385,6 +385,10 @@
     return reviewMode === "edit" ? editDraft : effectiveOpenSpecMarkdown;
   }
 
+  function implementationCommand(): string {
+    return `/implement-spec ${openSpecSlug || "change-slug"}`;
+  }
+
   async function copyOpenSpec() {
     exportStatus = null;
     const text = currentOpenSpecText();
@@ -393,6 +397,16 @@
       exportStatus = "Copied";
     } catch {
       exportStatus = "Copy failed";
+    }
+  }
+
+  async function copyImplementationCommand() {
+    exportStatus = null;
+    try {
+      await navigator.clipboard.writeText(implementationCommand());
+      exportStatus = "Implementation command copied";
+    } catch {
+      exportStatus = "Implementation command copy failed";
     }
   }
 
@@ -563,8 +577,41 @@
               : "Revision requested"}
         </p>
       {/if}
+      {#if reviewDecision === "approved"}
+        <div
+          class="openspec-handoff"
+          data-testid="openspec-implementation-handoff"
+          role="status"
+          aria-live="polite"
+        >
+          <div class="handoff-copy">
+            <p class="handoff-title">Approved spec handoff</p>
+            <code
+              class="handoff-command"
+              data-testid="openspec-implementation-command"
+            >
+              {implementationCommand()}
+            </code>
+          </div>
+          <button
+            type="button"
+            class="openspec-btn"
+            data-testid="openspec-copy-implementation"
+            onclick={copyImplementationCommand}
+            title="Copy implementation command"
+          >
+            <Icon src={ClipboardDocument} size="15" />
+            <span>Copy Command</span>
+          </button>
+        </div>
+      {/if}
       {#if exportStatus}
-        <p class="openspec-state" data-testid="openspec-export-state">
+        <p
+          class="openspec-state"
+          data-testid="openspec-export-state"
+          role="status"
+          aria-live="polite"
+        >
           {exportStatus}
         </p>
       {/if}
@@ -802,6 +849,42 @@
 
   .openspec-state[data-state="rejected"] {
     color: var(--ui-danger, #b91c1c);
+  }
+
+  .openspec-handoff {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    padding: 0.5rem;
+    border: 1px solid #bfdbfe;
+    border-radius: 4px;
+    background: #eff6ff;
+  }
+
+  .handoff-copy {
+    min-width: 0;
+  }
+
+  .handoff-title {
+    margin: 0 0 0.25rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #1d4ed8;
+  }
+
+  .handoff-command {
+    display: block;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    padding: 0.1875rem 0.3125rem;
+    border: 1px solid var(--ui-border-subtle, #e5e7eb);
+    border-radius: 4px;
+    background: var(--ui-surface-primary, #fff);
+    color: var(--ui-text-primary, #111827);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.6875rem;
   }
 
   .openspec-editor,

@@ -311,6 +311,12 @@ test.describe("ADR-057 — create_change pack mock-LLM journey", () => {
       "data-state",
       "approved",
     );
+    await expect(page.getByTestId("openspec-implementation-handoff")).toContainText(
+      "Approved spec handoff",
+    );
+    await expect(page.getByTestId("openspec-implementation-command")).toHaveText(
+      "/implement-spec add-mfa",
+    );
 
     const docDownload = page.waitForEvent("download");
     await page.getByTestId("openspec-download").click();

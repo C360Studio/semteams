@@ -161,6 +161,7 @@ describe("ChatBar — initial render", () => {
 
     expect(screen.getByText("/approve")).toBeInTheDocument();
     expect(screen.getByText("/reject")).toBeInTheDocument();
+    expect(screen.getByText("/implement-spec")).toBeInTheDocument();
   });
 });
 
@@ -305,6 +306,22 @@ describe("ChatBar — slash commands", () => {
     );
   });
 
+  it("/implement-spec routes to sendMessage with the selected run id", async () => {
+    mockSelectedTask.mockReturnValue(selectedTask({ id: "loop_spec" }));
+    const user = userEvent.setup();
+    render(ChatBar);
+
+    const input = screen.getByTestId("chat-input");
+    await user.type(input, "/implement-spec add-health-endpoint");
+    await user.click(screen.getByTestId("send-button"));
+
+    expect(agentApi.sendMessage).toHaveBeenCalledWith(
+      "/implement-spec add-health-endpoint",
+      { runId: "loop_spec" },
+    );
+    expect(agentApi.sendSignal).not.toHaveBeenCalled();
+  });
+
   it("slash command without selected task shows error", async () => {
     mockSelectedTask.mockReturnValue(undefined);
     const user = userEvent.setup();
@@ -314,6 +331,21 @@ describe("ChatBar — slash commands", () => {
     await user.type(input, "/approve");
     await user.click(screen.getByTestId("send-button"));
 
+    expect(agentApi.sendSignal).not.toHaveBeenCalled();
+    expect(screen.getByTestId("chat-error")).toBeInTheDocument();
+    expect(screen.getByText(/Select a task first/)).toBeInTheDocument();
+  });
+
+  it("/implement-spec without selected task shows error", async () => {
+    mockSelectedTask.mockReturnValue(undefined);
+    const user = userEvent.setup();
+    render(ChatBar);
+
+    const input = screen.getByTestId("chat-input");
+    await user.type(input, "/implement-spec add-health-endpoint");
+    await user.click(screen.getByTestId("send-button"));
+
+    expect(agentApi.sendMessage).not.toHaveBeenCalled();
     expect(agentApi.sendSignal).not.toHaveBeenCalled();
     expect(screen.getByTestId("chat-error")).toBeInTheDocument();
     expect(screen.getByText(/Select a task first/)).toBeInTheDocument();

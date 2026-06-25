@@ -82,6 +82,7 @@ describe("agentStore", () => {
 
   afterEach(() => {
     agentStore.reset();
+    vi.unstubAllGlobals();
     globalThis.EventSource = originalEventSource;
     vi.useRealTimers();
     vi.restoreAllMocks();
@@ -394,6 +395,68 @@ describe("agentStore", () => {
 
       expect(agentStore.loops.size).toBe(1);
       expect(agentStore.getLoop("loop-1")?.iterations).toBe(5);
+    });
+
+    it("refreshLoops reconciles loop snapshots from the dispatch API", async () => {
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => [
+          createMockLoop({
+            loop_id: "loop-1",
+            state: "complete",
+            outcome: "success",
+          }),
+        ],
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      agentStore.updateLoop(
+        createMockLoop({ loop_id: "loop-1", state: "exploring", prompt: "draft" }),
+      );
+
+      await agentStore.refreshLoops();
+
+      expect(fetchMock).toHaveBeenCalledWith("/teams-dispatch/loops");
+      expect(agentStore.getLoop("loop-1")?.state).toBe("complete");
+      expect(agentStore.getLoop("loop-1")?.outcome).toBe("success");
+      expect(agentStore.getLoop("loop-1")?.prompt).toBe("draft");
+    });
+
+    it("reconciles loop snapshots on a connected interval", async () => {
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => [
+          createMockLoop({
+            loop_id: "loop-interval",
+            state: "complete",
+            outcome: "success",
+          }),
+        ],
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      agentStore.connect();
+      MockEventSource.instances[0].simulateEvent("connected", {});
+      await vi.advanceTimersByTimeAsync(5_000);
+
+      expect(fetchMock).toHaveBeenCalledWith("/teams-dispatch/loops");
+      expect(agentStore.getLoop("loop-interval")?.state).toBe("complete");
+    });
+
+    it("does not surface snapshot refresh errors while SSE is connected", async () => {
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 503,
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      agentStore.connect();
+      MockEventSource.instances[0].simulateEvent("connected", {});
+
+      await agentStore.refreshLoops();
+
+      expect(fetchMock).toHaveBeenCalledWith("/teams-dispatch/loops");
+      expect(agentStore.connected).toBe(true);
+      expect(agentStore.error).toBeNull();
     });
 
     it("should remove a loop via removeLoop", () => {

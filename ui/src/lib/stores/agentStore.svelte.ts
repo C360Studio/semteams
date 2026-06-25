@@ -8,7 +8,7 @@
 //   :heartbeat <ts>     — keep-alive comment (ignored by EventSource)
 
 import { SvelteMap } from "svelte/reactivity";
-import type { AgentLoop, WireActivityEnvelope } from "$lib/types/agent";
+import type { AgentLoop, WireActivityEnvelope, WireLoop } from "$lib/types/agent";
 import {
   isActiveState,
   normalizeWireLoop,
@@ -16,8 +16,10 @@ import {
 } from "$lib/types/agent";
 
 const SSE_URL = "/teams-dispatch/activity";
+const LOOP_SNAPSHOT_URL = "/teams-dispatch/loops";
 const MAX_RECONNECT_ATTEMPTS = 5;
 const BASE_RECONNECT_DELAY = 1000;
+const SNAPSHOT_RECONCILE_INTERVAL_MS = 5_000;
 
 function createAgentStore() {
   let connected = $state(false);
@@ -26,6 +28,47 @@ function createAgentStore() {
   let eventSource: EventSource | null = null;
   let reconnectAttempts = 0;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  let snapshotTimer: ReturnType<typeof setInterval> | null = null;
+
+  function mergeLoop(loop: AgentLoop) {
+    const existing = loops.get(loop.loop_id);
+    loops.set(loop.loop_id, existing ? { ...existing, ...loop } : loop);
+  }
+
+  async function refreshLoops() {
+    try {
+      const response = await fetch(LOOP_SNAPSHOT_URL);
+      if (!response.ok) {
+        throw new Error(`loop snapshot request failed: ${response.status}`);
+      }
+      const snapshot = (await response.json()) as WireLoop[];
+      for (const item of snapshot) {
+        const loop = normalizeWireLoop({
+          type: "loop_snapshot",
+          loop_id: item.loop_id ?? item.id ?? "",
+          data: item,
+        });
+        if (loop) mergeLoop(loop);
+      }
+    } catch (err) {
+      if (!connected) {
+        error = err instanceof Error ? err.message : "Failed to refresh loop snapshot";
+      }
+    }
+  }
+
+  function startSnapshotReconcile() {
+    if (snapshotTimer) return;
+    snapshotTimer = setInterval(() => {
+      void refreshLoops();
+    }, SNAPSHOT_RECONCILE_INTERVAL_MS);
+  }
+
+  function stopSnapshotReconcile() {
+    if (!snapshotTimer) return;
+    clearInterval(snapshotTimer);
+    snapshotTimer = null;
+  }
 
   function handleActivity(event: MessageEvent) {
     try {
@@ -53,8 +96,7 @@ function createAgentStore() {
       if (!loop) return;
       // Preserve already-merged completion fields if a re-publish of the
       // main loop entry arrives after the COMPLETE patch.
-      const existing = loops.get(loop.loop_id);
-      loops.set(loop.loop_id, existing ? { ...existing, ...loop } : loop);
+      mergeLoop(loop);
     } catch {
       // Ignore malformed events
     }
@@ -64,6 +106,7 @@ function createAgentStore() {
     connected = true;
     error = null;
     reconnectAttempts = 0;
+    startSnapshotReconcile();
   }
 
   function handleSyncComplete() {
@@ -72,6 +115,7 @@ function createAgentStore() {
   }
 
   function scheduleReconnect() {
+    stopSnapshotReconcile();
     if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
       error = `Failed to connect after ${MAX_RECONNECT_ATTEMPTS} attempts`;
       return;
@@ -155,6 +199,7 @@ function createAgentStore() {
         clearTimeout(reconnectTimer);
         reconnectTimer = null;
       }
+      stopSnapshotReconcile();
       if (eventSource) {
         eventSource.close();
         eventSource = null;
@@ -164,12 +209,14 @@ function createAgentStore() {
     },
 
     updateLoop(loop: AgentLoop) {
-      loops.set(loop.loop_id, loop);
+      mergeLoop(loop);
     },
 
     removeLoop(id: string) {
       loops.delete(id);
     },
+
+    refreshLoops,
 
     reset() {
       this.disconnect();

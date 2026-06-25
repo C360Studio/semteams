@@ -133,6 +133,33 @@ describe("runHealth", () => {
     expect(health.currentGate).toBe("Implement Task request");
   });
 
+  it("treats dev-from-task request as a marker when deciding completion", () => {
+    const graph = deriveGraphRunHealthFacts([
+      triple("formal_claims.status", "passed"),
+      triple("proof_readiness.route", "implementation"),
+      triple("proof_readiness.implementation_ready", "true"),
+      triple("dev_from_task.requested", "implement-spec:msg-1"),
+    ]).get("run-1");
+
+    const health = deriveRunHealth({
+      runId: "run-1",
+      loops: [
+        loop({ state: "complete", outcome: "success" }),
+        loop({
+          loop_id: "loop-2",
+          state: "complete",
+          outcome: "success",
+          role: "reviewer-dev-via-test",
+        }),
+      ],
+      graph,
+    });
+
+    expect(graph?.devFromTaskRequested).toBe(true);
+    expect(health.state).toBe("complete");
+    expect(health.currentGate).toBe("Accepted");
+  });
+
   it("reports working for active loops", () => {
     const health = deriveRunHealth({
       runId: "run-1",
