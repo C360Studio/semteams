@@ -137,6 +137,13 @@ implementation tasks.
 - THEN the graph contains `proof_readiness.route=implementation`
 - AND the graph contains `proof_readiness.implementation_ready=true`
 
+#### Scenario: Sandbox admission blocks execution routing
+- GIVEN the coordinator is evaluating an execution category such as `autoresearch` or initial `dev_via_test`
+- AND `request_sandbox` returns `ready=false` with `admission_pending` or a terminal admission denial
+- WHEN the coordinator chooses its next action
+- THEN it emits a user-facing limitation or approval-needed response instead of the execution category action
+- AND no implementation or optimization team is spawned until a ready attestation or governed operator decision exists
+
 #### Scenario: Test-harness findings produce a governed handoff
 - GIVEN the analyzer emits `formal_claims.status=failed`
 - AND the graph contains `formal_claims.route.test_harness=present`

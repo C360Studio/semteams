@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/c360studio/semstreams/agentic"
+	"github.com/c360studio/semstreams/pkg/errs"
 	"github.com/c360studio/semstreams/types"
 
 	"github.com/c360studio/semteams/cmd/semteams/sandboxmanager"
@@ -132,10 +133,28 @@ func TestExecute_RunAnchorFallback_DerivesChainEntityFromMetadata(t *testing.T) 
 	}
 }
 
-func TestExecute_NoResolverAndNoRelated_Errors(t *testing.T) {
+func TestExecute_FrontDoorLoopIDFallback_DerivesExistingLoopEntity(t *testing.T) {
 	mgr := &fakeManager{att: happyAttestation()}
 	exec := NewExecutor(mgr, newPlatform(), nil)
+
 	call := makeCall(map[string]any{"languages": []any{"go"}}, nil, "loop-1")
+	res, err := exec.Execute(context.Background(), call)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if res.Error != "" {
+		t.Fatalf("expected no error, got %q", res.Error)
+	}
+	want := "c360.ops.agent.agentic-loop.execution.loop-1"
+	if mgr.lastChainEntityID != want {
+		t.Fatalf("chain entity ID wrong: got %q want %q", mgr.lastChainEntityID, want)
+	}
+}
+
+func TestExecute_NoResolverNoRelatedAndNoLoopID_Errors(t *testing.T) {
+	mgr := &fakeManager{att: happyAttestation()}
+	exec := NewExecutor(mgr, newPlatform(), nil)
+	call := makeCall(map[string]any{"languages": []any{"go"}}, nil, "")
 	res, _ := exec.Execute(context.Background(), call)
 	if res.Error == "" {
 		t.Fatalf("expected error when no chain entity is resolvable")
@@ -226,6 +245,27 @@ func TestExecute_ManagerErr_SurfacesAsNetwork(t *testing.T) {
 	res, _ := exec.Execute(context.Background(), call)
 	if res.Error == "" || res.ErrorKind != agentic.ToolErrorNetwork {
 		t.Fatalf("expected network error, got %q (%s)", res.Error, res.ErrorKind)
+	}
+}
+
+func TestExecute_ManagerInvalidErr_SurfacesAsInternal(t *testing.T) {
+	mgr := &fakeManager{
+		att: happyAttestation(),
+		err: errs.ClassifiedCode(
+			errs.ErrorInvalid,
+			"entity_not_found",
+			errors.New("entity not found"),
+		),
+	}
+	exec := NewExecutor(mgr, newPlatform(), nil)
+	call := makeCall(
+		map[string]any{"languages": []any{"go"}},
+		map[string]any{"chain-entity-id": "c360.ops.agent.chain.execution.c1"},
+		"loop-1",
+	)
+	res, _ := exec.Execute(context.Background(), call)
+	if res.Error == "" || res.ErrorKind != agentic.ToolErrorInternal {
+		t.Fatalf("expected internal error, got %q (%s)", res.Error, res.ErrorKind)
 	}
 }
 

@@ -202,6 +202,7 @@ tasks:
       - task: test:e2e:agentic:autoresearch
       - task: test:e2e:agentic:autoresearch-guardrails
       - task: test:e2e:agentic:coordinator-routing-matrix
+      - task: test:e2e:agentic:coordinator-readiness-gate
       - task: test:e2e:agentic:coordinator-team-spawn
       - task: test:e2e:agentic:sandbox-mvp
       - task: test:e2e:agentic:ops-agent
@@ -840,6 +841,31 @@ tasks:
           FIXTURE: "{{.FIXTURE}}"
           AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
       - npx playwright test e2e/agentic/coordinator-routing-matrix.spec.ts
+
+  test:e2e:agentic:coordinator-readiness-gate:
+    desc: Run the coordinator sandbox readiness fail-closed mock-LLM journey
+    summary: |
+      Posts execution-shaped prompts through the real /teams-dispatch/message
+      path using the full e2e-flow-bootstrap config and asserts non-ready
+      sandbox admission fails closed before execution routing:
+
+        public-network Svelte optimization -> admission_pending -> respond_direct
+        public-network Go implementation   -> denied            -> respond_direct
+
+      This proves the coordinator can call query_sandbox_attestation and
+      request_sandbox, route on the stamped sandbox.attestation.* graph facts,
+      and avoid spawning autoresearch/dev_via_test when the attestation is not
+      ready.
+    vars:
+      FIXTURE: coordinator-readiness-gate.yaml
+      AGENTIC_CONFIG: e2e-flow-bootstrap.json
+    cmds:
+      - defer: { task: test:e2e:agentic:cleanup }
+      - task: test:e2e:agentic:stack:up
+        vars:
+          FIXTURE: "{{.FIXTURE}}"
+          AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
+      - npx playwright test e2e/agentic/coordinator-readiness-gate.spec.ts
 
   test:e2e:agentic:coordinator-team-spawn:
     desc: Run the coordinator handoff-only mock-LLM matrix
