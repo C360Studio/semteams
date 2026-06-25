@@ -15,6 +15,7 @@ const originalRevokeObjectURLDescriptor = Object.getOwnPropertyDescriptor(
   URL,
   "revokeObjectURL",
 );
+const textDecoder = new TextDecoder();
 
 function restoreProperty(
   target: object,
@@ -99,6 +100,55 @@ function readBlobText(blob: Blob): Promise<string> {
     reader.addEventListener("error", () => reject(reader.error));
     reader.readAsText(blob);
   });
+}
+
+function readBlobBytes(blob: Blob): Promise<Uint8Array> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () =>
+      resolve(new Uint8Array(reader.result as ArrayBuffer)),
+    );
+    reader.addEventListener("error", () => reject(reader.error));
+    reader.readAsArrayBuffer(blob);
+  });
+}
+
+function readUint16(bytes: Uint8Array, offset: number): number {
+  return bytes[offset] | (bytes[offset + 1] << 8);
+}
+
+function readUint32(bytes: Uint8Array, offset: number): number {
+  return (
+    (bytes[offset] |
+      (bytes[offset + 1] << 8) |
+      (bytes[offset + 2] << 16) |
+      (bytes[offset + 3] << 24)) >>>
+    0
+  );
+}
+
+function parseStoredZip(bytes: Uint8Array): Record<string, string> {
+  const files: Record<string, string> = {};
+  let offset = 0;
+  while (readUint32(bytes, offset) === 0x04034b50) {
+    expect(readUint16(bytes, offset + 8)).toBe(0);
+    const compressedSize = readUint32(bytes, offset + 18);
+    const uncompressedSize = readUint32(bytes, offset + 22);
+    expect(compressedSize).toBe(uncompressedSize);
+    const nameLength = readUint16(bytes, offset + 26);
+    const extraLength = readUint16(bytes, offset + 28);
+    const nameStart = offset + 30;
+    const dataStart = nameStart + nameLength + extraLength;
+    const name = textDecoder.decode(
+      bytes.slice(nameStart, nameStart + nameLength),
+    );
+    files[name] = textDecoder.decode(
+      bytes.slice(dataStart, dataStart + uncompressedSize),
+    );
+    offset = dataStart + compressedSize;
+  }
+  expect(readUint32(bytes, offset)).toBe(0x02014b50);
+  return files;
 }
 
 afterEach(() => {
@@ -429,7 +479,7 @@ describe("ArtifactCard", () => {
     ).toHaveTextContent("Copied");
   });
 
-  it("downloads both the rendered document and folder manifest", async () => {
+  it("downloads both the rendered document and OpenSpec folder archive", async () => {
     const downloadedBlobs: Blob[] = [];
     const createObjectURL = vi.fn((blob: Blob) => {
       downloadedBlobs.push(blob);
@@ -466,26 +516,25 @@ describe("ArtifactCard", () => {
 
     await user.click(screen.getByTestId("openspec-download-folder"));
     expect(anchorClick).toHaveBeenCalledTimes(2);
-    const manifestBlob = downloadedBlobs[1];
-    const manifest = JSON.parse(await readBlobText(manifestBlob)) as {
-      kind: string;
-      slug: string;
-      files: Array<{ path: string; content: string }>;
-    };
-    expect(manifest.kind).toBe("openspec.change.folder");
-    expect(manifest.slug).toBe("add-mfa");
-    expect(manifest.files).toEqual(
+    const archiveBlob = downloadedBlobs[1];
+    expect(archiveBlob.type).toBe("application/zip");
+    const archive = parseStoredZip(await readBlobBytes(archiveBlob));
+    expect(Object.keys(archive)).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({
-          path: "openspec/changes/add-mfa/tasks.md",
-        }),
-        expect.objectContaining({
-          path: "openspec/changes/add-mfa/specs/auth/spec.md",
-        }),
+        "openspec/changes/add-mfa/proposal.md",
+        "openspec/changes/add-mfa/design.md",
+        "openspec/changes/add-mfa/tasks.md",
+        "openspec/changes/add-mfa/specs/auth/spec.md",
       ]),
     );
+    expect(archive["openspec/changes/add-mfa/specs/auth/spec.md"]).toContain(
+      "The system SHALL verify a valid TOTP code before login completes.",
+    );
+    expect(archive["openspec/changes/add-mfa/tasks.md"]).toContain(
+      "- [x] 1.1 Implement verified TOTP login.",
+    );
     expect(screen.getByTestId("openspec-export-state")).toHaveTextContent(
-      "Folder manifest downloaded",
+      "Folder archive downloaded",
     );
   });
 });
