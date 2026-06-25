@@ -200,6 +200,7 @@ tasks:
       - task: test:e2e:agentic:dev-via-test
       - task: test:e2e:agentic:dev-via-test-replan
       - task: test:e2e:agentic:autoresearch
+      - task: test:e2e:agentic:autoresearch-guardrails
       - task: test:e2e:agentic:sandbox-mvp
       - task: test:e2e:agentic:ops-agent
       - task: test:e2e:agentic:real-time-activity-stream
@@ -771,6 +772,32 @@ tasks:
           FIXTURE: "{{.FIXTURE}}"
           AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
       - npx playwright test e2e/agentic/autoresearch.spec.ts
+
+  test:e2e:agentic:autoresearch-guardrails:
+    desc: Run the autoresearch guardrail mock-LLM journey
+    summary: |
+      OpenSpec 6.4 coverage for the autoresearch preconditions and
+      empirical guardrails:
+
+        Prompt 1  vague/non-scalar objective -> coordinator ask_user,
+                  no autoresearch roles spawn.
+        Prompt 2  scalar metric + command + cap -> autoresearch cap=2:
+                  one kept improvement, one pass=false crashed iteration.
+
+      Validates that autoresearch refuses vague/non-scalar work, records
+      guardrail failures as measurement outcomes, and preserves
+      autoresearch.best.value at the passing result rather than promoting
+      a numerically better failed run. Sandbox is the MockRunner.
+    vars:
+      FIXTURE: autoresearch-guardrails.yaml
+      AGENTIC_CONFIG: e2e-flow-bootstrap.json
+    cmds:
+      - defer: { task: test:e2e:agentic:cleanup }
+      - task: test:e2e:agentic:stack:up
+        vars:
+          FIXTURE: "{{.FIXTURE}}"
+          AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
+      - npx playwright test e2e/agentic/autoresearch-guardrails.spec.ts
 
   test:e2e:agentic:sandbox-mvp:
     desc: Run the ADR-043 PR 4.4 sandbox-tools mock-LLM journey
