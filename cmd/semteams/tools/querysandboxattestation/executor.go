@@ -4,7 +4,8 @@
 // covers the request and return its shape plus a staleness flag.
 //
 // Coordinator persona calls this BEFORE request_sandbox to avoid
-// re-attesting when a recent attestation on the same chain
+// re-attesting when a recent attestation on the same chain, or on the
+// current coordinator loop before a chain exists,
 // (sandbox.attestation.signature == SignatureFor(profile,
 // requirements_hash)) is still fresh. Saves the
 // `devcontainer up + probe` cost when the answer hasn't changed.
@@ -118,8 +119,8 @@ func (e *Executor) ListTools() []agentic.ToolDefinition {
 	}}
 }
 
-// Execute parses → matches profile → computes signature → reads
-// chain entity → returns lookup result.
+// Execute parses → matches profile → computes signature → reads the
+// attestation target entity → returns lookup result.
 func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.ToolResult, error) {
 	if call.Name != ToolName {
 		return errResult(call, agentic.ToolErrorNotFound, "unknown tool: %s", call.Name), nil
@@ -202,9 +203,11 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 	}, nil
 }
 
-// chainEntityFromCall resolves the chain entity ID via runanchor.ChainEntityID:
-// related_loops["chain-entity-id"] first, else the dispatch-stamped run anchor on
-// ToolCall.Metadata (ADR-053 Phase 5 / semstreams#250 — no Resolver walk).
+// chainEntityFromCall resolves the attestation target via
+// runanchor.ChainEntityID: related_loops["chain-entity-id"] first, else the
+// dispatch-stamped run anchor on ToolCall.Metadata, else the front-door loop
+// entity before any run has been minted (ADR-053 Phase 5 / semstreams#250 —
+// no Resolver walk).
 func (e *Executor) chainEntityFromCall(call agentic.ToolCall) (string, error) {
 	entityID, err := runanchor.ChainEntityID(call, e.platform.Org, e.platform.Platform)
 	if err != nil {

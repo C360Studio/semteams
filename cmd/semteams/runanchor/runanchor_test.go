@@ -17,6 +17,12 @@ func wantEntity(runID string) string {
 	return testOrg + "." + testPlatform + ".agent.chain.execution." + runID
 }
 
+// wantLoopEntity is the 6-part loop entity ID agentic-loop births for a given
+// loopID under the test org/platform.
+func wantLoopEntity(loopID string) string {
+	return testOrg + "." + testPlatform + ".agent.agentic-loop.execution." + loopID
+}
+
 func TestAnchor(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -103,6 +109,14 @@ func TestChainEntityID(t *testing.T) {
 			want: pinned,
 		},
 		{
+			name: "related_loops string map takes precedence over loop fallback",
+			meta: map[string]any{
+				agentic.MetadataKeyRelatedLoops: map[string]string{ChainEntityRoleKey: pinned},
+				"loop_id":                       "loop-front-door",
+			},
+			want: pinned,
+		},
+		{
 			name: "falls back to run anchor entity when no pin",
 			meta: map[string]any{
 				agentic.MetadataKeyRunEntityID: "c360.ops.agent.chain.execution.from-anchor",
@@ -123,6 +137,37 @@ func TestChainEntityID(t *testing.T) {
 				agentic.MetadataKeyRunID:        "run-fallthrough",
 			},
 			want: wantEntity("run-fallthrough"),
+		},
+		{
+			name: "front-door loop_id metadata targets existing loop entity when no run anchor",
+			meta: map[string]any{
+				"loop_id": "loop-front-door",
+			},
+			want: wantLoopEntity("loop-front-door"),
+		},
+		{
+			name: "run anchor wins over front-door loop_id fallback",
+			meta: map[string]any{
+				agentic.MetadataKeyRunID: "run-wins",
+				"loop_id":                "loop-front-door",
+			},
+			want: wantEntity("run-wins"),
+		},
+		{
+			name: "invalid run anchor blocks front-door loop_id fallback",
+			meta: map[string]any{
+				agentic.MetadataKeyRunID: "bad.run.id",
+				"loop_id":                "loop-front-door",
+			},
+			wantErr: true,
+		},
+		{
+			name: "non-string run anchor blocks front-door loop_id fallback",
+			meta: map[string]any{
+				agentic.MetadataKeyRunID: 42,
+				"loop_id":                "loop-front-door",
+			},
+			wantErr: true,
 		},
 		{
 			name:    "no pin and no run anchor errors",
@@ -153,5 +198,16 @@ func TestChainEntityID(t *testing.T) {
 				t.Errorf("chain entity ID = %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestChainEntityID_UsesToolCallLoopIDFallback(t *testing.T) {
+	call := agentic.ToolCall{LoopID: "loop-field"}
+	got, err := ChainEntityID(call, testOrg, testPlatform)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != wantLoopEntity("loop-field") {
+		t.Errorf("chain entity ID = %q, want %q", got, wantLoopEntity("loop-field"))
 	}
 }

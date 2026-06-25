@@ -6,7 +6,7 @@
 // agent.loop.parent triples over graph.query.entity.
 //
 // It has zero cmd/semteams/chain dependency (reads agentic.ToolCall.Metadata +
-// agentic.TryChainExecutionEntityID) and lives in its own package so the tool
+// agentic entity-ID helpers) and lives in its own package so the tool
 // subpackages AND product_tools.go (package main) can share one copy.
 package runanchor
 
@@ -45,24 +45,77 @@ func Anchor(call agentic.ToolCall, org, platform string) (runID, runEntityID str
 	return runID, runEntityID
 }
 
-// ChainEntityID resolves the 6-part chain entity ID a tool call belongs to, in
+// FallbackLoopID returns the loop_id carried by front-door standalone tool
+// calls. beta.115 does not stamp agent.run_* metadata on a top-level
+// coordinator loop before it has selected a specialist run; those calls still
+// need a stable, already-born graph entity for preflight tools such as
+// request_sandbox.
+func FallbackLoopID(call agentic.ToolCall) string {
+	if call.LoopID != "" {
+		return call.LoopID
+	}
+	if call.Metadata == nil {
+		return ""
+	}
+	if loopID, ok := call.Metadata["loop_id"].(string); ok {
+		return loopID
+	}
+	return ""
+}
+
+// ChainEntityID resolves the attestation target graph entity ID, in
 // precedence order: (1) related_loops[ChainEntityRoleKey] — pinned by the spawn
 // rule, deterministic; (2) the dispatch-stamped run anchor (Anchor's
-// runEntityID). For a run-scope=new chain the run entity IS the chain entity, so
-// both sources converge. Returns an error when neither is present (a standalone
-// loop, or a pre-#250 framework with no related_loops pin) — the caller cannot
-// route to a chain entity and must fail soft.
+// runEntityID); (3) the tool call's loop_id as a front-door coordinator
+// fallback. For a run-scope=new chain the run entity IS the chain entity, so
+// the first two sources converge. The loop_id fallback intentionally targets
+// the existing agentic-loop execution entity because the coordinator may need
+// pre-routing facts before any chain entity has been minted.
+// Returns an error when none is present — the caller cannot route to a stable
+// graph entity and must fail soft.
 //
 // Replaces the retired chain.ResolveChainEntityID (ADR-053 Phase 5): the Resolver
 // ancestry-walk fallback is gone; the run anchor on ToolCall.Metadata is it.
 func ChainEntityID(call agentic.ToolCall, org, platform string) (string, error) {
-	if related, ok := call.Metadata[agentic.MetadataKeyRelatedLoops].(map[string]any); ok {
-		if v, ok := related[ChainEntityRoleKey].(string); ok && v != "" {
-			return v, nil
-		}
+	if v := relatedLoopChainEntityID(call.Metadata); v != "" {
+		return v, nil
 	}
-	if _, runEntityID := Anchor(call, org, platform); runEntityID != "" {
+	runID, runEntityID := Anchor(call, org, platform)
+	if runEntityID != "" {
 		return runEntityID, nil
 	}
-	return "", fmt.Errorf("runanchor.ChainEntityID: related_loops[%q] missing AND no run anchor on ToolCall.Metadata (not part of a run)", ChainEntityRoleKey)
+	if runID != "" || hasRunAnchorKey(call.Metadata) {
+		return "", fmt.Errorf("runanchor.ChainEntityID: run anchor present on ToolCall.Metadata but no usable chain entity resolved")
+	}
+	if loopID := FallbackLoopID(call); loopID != "" {
+		if id, err := agentic.TryLoopExecutionEntityID(org, platform, loopID); err == nil {
+			return id, nil
+		}
+	}
+	return "", fmt.Errorf("runanchor.ChainEntityID: related_loops[%q] missing, no run anchor on ToolCall.Metadata, and no usable loop_id fallback", ChainEntityRoleKey)
+}
+
+func relatedLoopChainEntityID(metadata map[string]any) string {
+	switch related := metadata[agentic.MetadataKeyRelatedLoops].(type) {
+	case map[string]any:
+		if v, ok := related[ChainEntityRoleKey].(string); ok {
+			return v
+		}
+	case map[string]string:
+		return related[ChainEntityRoleKey]
+	}
+	return ""
+}
+
+func hasRunAnchorKey(metadata map[string]any) bool {
+	if metadata == nil {
+		return false
+	}
+	if _, ok := metadata[agentic.MetadataKeyRunID]; ok {
+		return true
+	}
+	if _, ok := metadata[agentic.MetadataKeyRunEntityID]; ok {
+		return true
+	}
+	return false
 }

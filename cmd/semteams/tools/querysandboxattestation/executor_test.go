@@ -16,10 +16,12 @@ import (
 
 type fakeReader struct {
 	triples map[string]any
+	lastID  string
 	err     error
 }
 
-func (f *fakeReader) ReadEntity(_ context.Context, _ string) (map[string]any, error) {
+func (f *fakeReader) ReadEntity(_ context.Context, entityID string) (map[string]any, error) {
+	f.lastID = entityID
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -160,6 +162,25 @@ func TestExecute_MissEmptyEntity(t *testing.T) {
 	json.Unmarshal([]byte(res.Content), &resp)
 	if resp.Found {
 		t.Fatalf("expected found=false on empty entity")
+	}
+}
+
+func TestExecute_FrontDoorLoopIDFallback_ReadsExistingLoopEntity(t *testing.T) {
+	exec, reader := newExecutor(t, map[string]any{})
+	call := agentic.ToolCall{
+		ID:        "c1",
+		Name:      ToolName,
+		LoopID:    "loop-1",
+		Arguments: map[string]any{"languages": []any{"go"}},
+		Metadata:  map[string]any{},
+	}
+	res, _ := exec.Execute(context.Background(), call)
+	if res.Error != "" {
+		t.Fatalf("expected no error, got %q", res.Error)
+	}
+	want := "c360.ops.agent.agentic-loop.execution.loop-1"
+	if reader.lastID != want {
+		t.Fatalf("read entity ID wrong: got %q want %q", reader.lastID, want)
 	}
 }
 

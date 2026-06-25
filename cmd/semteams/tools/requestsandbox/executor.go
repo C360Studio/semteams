@@ -8,7 +8,8 @@
 // tool. The executor delegates to sandboxmanager.Manager.Request,
 // which matches → admits → materializes (devcontainer up) → probes
 // → attests → stamps `sandbox.attestation.*` triples on the chain
-// entity. The Attestation comes back as the tool result; the
+// entity, or on the current coordinator loop before a chain exists.
+// The Attestation comes back as the tool result; the
 // Coordinator then routes on attestation.ready / .degraded /
 // .terminal / .admission_outcome.
 //
@@ -19,7 +20,9 @@
 // resolves the run/chain entity at dispatch per semstreams#250; the
 // ancestry-walk chain.Resolver retired in ADR-053 Phase 5). This lets
 // the tool work both inside the rule-pack-wired chain and in isolated
-// invocations (smoke tests, manual coordinator calls).
+// invocations (smoke tests, manual coordinator calls). Before the
+// coordinator has released a specialist run, the fallback is the already-born
+// agentic-loop execution entity, not a fabricated chain execution entity.
 //
 // Discipline note (framework-alignment review per
 // cmd/semteams/tools/README.md): no upstream tool wraps a Go-side
@@ -34,10 +37,12 @@ package requestsandbox
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 
 	"github.com/c360studio/semstreams/agentic"
+	"github.com/c360studio/semstreams/pkg/errs"
 	"github.com/c360studio/semstreams/types"
 
 	"github.com/c360studio/semteams/cmd/semteams/runanchor"
@@ -169,10 +174,10 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 	att, err := e.manager.Request(ctx, chainEntityID, req)
 	if err != nil {
 		// Stamp failures: the attestation was rendered correctly but
-		// triple-publish failed. The Coordinator's chain-entity view
-		// will be behind; this is a network/internal class, not
-		// invalid_args.
-		return errResult(call, agentic.ToolErrorNetwork, "manager request: %v", err), nil
+		// triple-publish failed. Classify beta.115 graph errors so
+		// non-retryable invalid/fatal semantics do not look like
+		// transport failures.
+		return errResult(call, classifyManagerError(err), "manager request: %v", err), nil
 	}
 
 	body, marshalErr := json.Marshal(attestationToWire(att))
@@ -204,15 +209,27 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 	}, nil
 }
 
-// chainEntityFromCall resolves the chain entity ID via runanchor.ChainEntityID:
-// related_loops["chain-entity-id"] first, else the dispatch-stamped run anchor on
-// ToolCall.Metadata (ADR-053 Phase 5 / semstreams#250 — no Resolver walk).
+// chainEntityFromCall resolves the attestation target via
+// runanchor.ChainEntityID: related_loops["chain-entity-id"] first, else the
+// dispatch-stamped run anchor on ToolCall.Metadata, else the front-door loop
+// entity before any run has been minted (ADR-053 Phase 5 / semstreams#250 —
+// no Resolver walk).
 func (e *Executor) chainEntityFromCall(call agentic.ToolCall) (string, error) {
 	id, err := runanchor.ChainEntityID(call, e.platform.Org, e.platform.Platform)
 	if err != nil {
 		return "", fmt.Errorf("request_sandbox: %w", err)
 	}
 	return id, nil
+}
+
+func classifyManagerError(err error) agentic.ToolErrorKind {
+	if errors.Is(err, errs.ErrRevisionMismatch) {
+		return agentic.ToolErrorNetwork
+	}
+	if errs.IsInvalid(err) || errs.IsFatal(err) {
+		return agentic.ToolErrorInternal
+	}
+	return agentic.ToolErrorNetwork
 }
 
 // parseArgs delegates to sandboxmanager.ParseRequirements — the

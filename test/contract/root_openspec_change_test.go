@@ -101,6 +101,7 @@ func TestRootOpenSpecChange_Readable(t *testing.T) {
 		"formal_claims.route.test_harness",
 		"proof_readiness.implementation_ready=true",
 		"proof_readiness.test_harness_required=true",
+		"Sandbox admission blocks execution routing",
 		"The system SHALL validate model-dependent behavior with Gemini first",
 		"- [x] 1.1 Pin the `create_change` proposal, delta, task, and graph-only execution-field contracts.",
 		"- [x] 1.2 Add ingest and render round-trip coverage for a repo-root `openspec/` tree.",
@@ -125,6 +126,7 @@ func TestRootOpenSpecChange_Readable(t *testing.T) {
 		"- [x] 4.4 Add Prometheus metric freshness, component pressure, queue depth, latency, and error-rate evidence to run health.",
 		"- [x] 5.2 Produce or reject a reusable harness profile before feature code is released.",
 		"- [x] 6.4 Add e2e coverage that autoresearch refuses vague/non-scalar goals and preserves metric guardrails.",
+		"- [x] 6.5 Add e2e coverage that non-ready sandbox admission fails closed before execution routing.",
 		"- [x] 6.1 Add a Gemini-backed real-LLM smoke path for model-dependent routing and prompt behavior.",
 	} {
 		if !strings.Contains(rendered, want) {

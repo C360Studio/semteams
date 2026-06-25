@@ -1,0 +1,85 @@
+name: coordinator-readiness-gate
+description: |
+  Full-config fail-closed proof for execution-shaped coordinator routing.
+  The paired Playwright journey posts two prompts that require a sandbox but
+  cannot receive a ready attestation under the default e2e admission policy:
+
+    1. public-network Svelte optimization -> admission_pending
+    2. public-network Go implementation -> terminal denied
+
+  In both cases the coordinator must call query_sandbox_attestation and
+  request_sandbox, route on the non-ready Attestation, emit respond_direct,
+  and NOT release autoresearch or dev_via_test.
+
+responses_by_role:
+  - match: "Delegation rules"
+    responses:
+      - tool_call:
+          name: query_sandbox_attestation
+          arguments_json: |
+            {
+              "languages": ["node"],
+              "tools": ["npm", "playwright"],
+              "network": "public",
+              "verification": [
+                {"name": "node", "command": "node --version"},
+                {"name": "npm", "command": "npm --version"},
+                {"name": "playwright", "command": "npx playwright --version"}
+              ]
+            }
+
+      - tool_call:
+          name: request_sandbox
+          arguments_json: |
+            {
+              "languages": ["node"],
+              "tools": ["npm", "playwright"],
+              "network": "public",
+              "verification": [
+                {"name": "node", "command": "node --version"},
+                {"name": "npm", "command": "npm --version"},
+                {"name": "playwright", "command": "npx playwright --version"}
+              ]
+            }
+
+      - tool_call:
+          name: decide
+          arguments_json: |
+            {
+              "action": "respond_direct",
+              "reason": "This optimization needs a public-network sandbox, but admission is pending operator approval. I will not start autoresearch until that sandbox is admitted and ready."
+            }
+
+      - tool_call:
+          name: query_sandbox_attestation
+          arguments_json: |
+            {
+              "languages": ["go"],
+              "tools": ["task"],
+              "network": "public",
+              "verification": [
+                {"name": "go", "command": "go version"},
+                {"name": "task", "command": "task --version"}
+              ]
+            }
+
+      - tool_call:
+          name: request_sandbox
+          arguments_json: |
+            {
+              "languages": ["go"],
+              "tools": ["task"],
+              "network": "public",
+              "verification": [
+                {"name": "go", "command": "go version"},
+                {"name": "task", "command": "task --version"}
+              ]
+            }
+
+      - tool_call:
+          name: decide
+          arguments_json: |
+            {
+              "action": "respond_direct",
+              "reason": "The Go backend sandbox profile does not allow public network access, so this implementation request cannot be released to dev_via_test as written. Rescope to restricted network or add an approved profile before execution."
+            }
