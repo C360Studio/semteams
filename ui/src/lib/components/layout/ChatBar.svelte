@@ -16,6 +16,8 @@
     "/resume": "resume",
     "/cancel": "cancel",
   };
+  const RUN_MESSAGE_COMMANDS = new Set(["/implement-spec"]);
+  const SLASH_COMMANDS = [...Object.keys(TASK_COMMANDS), ...RUN_MESSAGE_COMMANDS];
 
   /**
    * Persona-shaped action chips. Clicking inserts the prefix into the
@@ -76,7 +78,7 @@
     // The guard must run before `sending = true` to avoid getting stuck
     // in the disabled state when the guard early-returns.
     const firstWord = text.split(/\s+/)[0].toLowerCase();
-    if (firstWord in TASK_COMMANDS) {
+    if (firstWord in TASK_COMMANDS || RUN_MESSAGE_COMMANDS.has(firstWord)) {
       if (!taskStore.selectedTask) {
         error = "Select a task first to use slash commands.";
         return;
@@ -91,6 +93,10 @@
         const signal = TASK_COMMANDS[firstWord];
         const reason = text.slice(firstWord.length).trim() || undefined;
         await agentApi.sendSignal(taskStore.selectedTask!.id, signal, reason);
+      } else if (RUN_MESSAGE_COMMANDS.has(firstWord)) {
+        // Slash command — dispatch as a run-attached message so the backend
+        // command sees the selected task as UserMessage.RunID.
+        await agentApi.sendMessage(text, { runId: taskStore.selectedTask!.id });
       } else {
         // Regular message — dispatch to create a new agent loop.
         await agentApi.sendMessage(text);
@@ -204,7 +210,7 @@
     <!-- Only show command hints when the user has actually typed "/"
          and there's a selected task to act on. Out of the way otherwise. -->
     <div class="slash-hints" aria-hidden="true">
-      {#each Object.keys(TASK_COMMANDS) as cmd (cmd)}
+      {#each SLASH_COMMANDS as cmd (cmd)}
         <span class="hint-chip">{cmd}</span>
       {/each}
     </div>

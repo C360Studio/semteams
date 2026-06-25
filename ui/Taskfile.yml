@@ -197,6 +197,7 @@ tasks:
       - task: test:e2e:agentic:research-mvp
       - task: test:e2e:agentic:create-change
       - task: test:e2e:agentic:create-change-recovery
+      - task: test:e2e:agentic:spec-to-dev-demo
       - task: test:e2e:agentic:dev-via-test
       - task: test:e2e:agentic:dev-via-test-replan
       - task: test:e2e:agentic:autoresearch
@@ -316,6 +317,38 @@ tasks:
           FIXTURE: "{{.FIXTURE}}"
           AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
       - npx playwright test e2e/agentic/create-change.spec.ts
+
+  test:e2e:agentic:spec-to-dev-demo:
+    desc: Run the approved OpenSpec -> proof gate -> Ralph/CBG mock-LLM journey
+    summary: |
+      Black-box demo-MVP proof for the OpenSpec-to-dev bridge:
+
+        Loop 0  coordinator (dispatch)       decide(action="create_change")
+        Loop A  author-create-change         emit_change + decide(drafted)
+        Loop B  reviewer-create-change       decide(approved)
+        Loop C  coordinator (wake-up)        decide(respond_direct)
+        UI      approve artifact + /implement-spec add-health-endpoint
+        Command analyze proof.* -> formal_claims.* + dev_from_task.requested
+        Rule    proof-readiness -> proof_readiness.implementation_ready
+        Loop D  dev-from-task coordinator    project_spec_tasks + decide(dev_via_test, subtopics=["task-0"])
+        Loop E  dev-via-test-execute (Ralph) emit_measurement + decide(measured)
+        Loop F  coordinator                  decide(dev_via_test_finalize)
+        Loop G  reviewer-dev-via-test (CBG)  decide(approved)
+        Loop H  coordinator                  decide(respond_direct)
+
+      The test seeds only external proof.* inventory. SemTeams must produce
+      formal_claims.*, proof_readiness.*, and dev_from_task.* through the live
+      command/rule flow. Sandbox is the MockRunner.
+    vars:
+      FIXTURE: spec-to-dev-demo.yaml
+      AGENTIC_CONFIG: e2e-flow-bootstrap.json
+    cmds:
+      - defer: { task: test:e2e:agentic:cleanup }
+      - task: test:e2e:agentic:stack:up
+        vars:
+          FIXTURE: "{{.FIXTURE}}"
+          AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
+      - npx playwright test e2e/agentic/spec-to-dev-demo.spec.ts
 
   test:e2e:agentic:create-change:gemini-smoke:
     desc: Run the OpenSpec create_change real-LLM smoke on Gemini

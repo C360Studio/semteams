@@ -456,6 +456,47 @@ describe("ArtifactCard", () => {
     );
   });
 
+  it("surfaces the implementation handoff command after approval", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+
+    render(ArtifactCard, {
+      props: { toolName: "emit_change", args: emitChangeArgs() },
+    });
+
+    expect(
+      screen.queryByTestId("openspec-implementation-handoff"),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId("openspec-approve"));
+
+    expect(
+      screen.getByTestId("openspec-implementation-handoff"),
+    ).toHaveTextContent("Approved spec handoff");
+    expect(screen.getByTestId("openspec-implementation-handoff")).toHaveAttribute(
+      "role",
+      "status",
+    );
+    expect(screen.getByTestId("openspec-implementation-command")).toHaveTextContent(
+      "/implement-spec add-mfa",
+    );
+
+    await user.click(screen.getByTestId("openspec-copy-implementation"));
+
+    expect(writeText).toHaveBeenCalledWith("/implement-spec add-mfa");
+    expect(screen.getByTestId("openspec-export-state")).toHaveTextContent(
+      "Implementation command copied",
+    );
+    expect(screen.getByTestId("openspec-export-state")).toHaveAttribute(
+      "aria-live",
+      "polite",
+    );
+  });
+
   it("exports a markdown handoff document via clipboard", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     const user = userEvent.setup();

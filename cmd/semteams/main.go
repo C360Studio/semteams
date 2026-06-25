@@ -158,6 +158,15 @@ func run() error {
 		return err
 	}
 
+	// 9h. Product-shell slash commands. Registered before
+	// configureAndCreateServices so agentic-dispatch loads them during
+	// component construction. Commands are power-user shortcuts over the same
+	// governed graph actions the UI exposes; they do not introduce a separate
+	// execution plane.
+	if err := registerProductCommands(platform, slog.Default()); err != nil {
+		return err
+	}
+
 	// 10. Create service dependencies, plumbing the shared registries so
 	// every component constructed by the service manager sees the same
 	// tool + payload registry instances.

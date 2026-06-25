@@ -1,0 +1,243 @@
+name: spec-to-dev-demo
+description: |
+  Journey: approved OpenSpec change → explicit implementation handoff →
+  dev-from-task bridge → Ralph → CBG.
+
+  This is intentionally tiny. The point is not to prove code-generation
+  skill on a hard domain; it proves the coordinator can reuse the reviewed
+  OpenSpec change as the planning authority and enter the existing
+  dev-via-test rail without spawning Lisa or inventing a second execution
+  state machine.
+
+  The paired Playwright test seeds only external proof.* inventory facts that
+  an operator/proof surface could have supplied before implementation:
+
+    proof.claim.health.endpoint.*
+    proof.dependency.go_health_endpoint_test.*
+    proof.harness_profile.go.unit-test@v1.*
+    proof.readiness.health_smoke.*
+    proof.evidence.health_endpoint_test_log.*
+
+  It then approves the artifact in the UI and sends:
+
+    /implement-spec add-health-endpoint
+
+  The backend command must run the deterministic proof analyzer, stamp
+  formal_claims.*, and record dev_from_task.requested only if the analysis
+  routes to implementation. proof-readiness rules own proof_readiness.*.
+
+  Chain:
+
+    Loop 0 — coordinator
+      1. decide(create_change)
+
+    Loop A — author-create-change
+      2. emit_change(slug=add-health-endpoint, one §D6 task)
+      3. decide(drafted)
+
+    Loop B — reviewer-create-change
+      4. decide(approved) → agent.run.outcome=success
+
+    Loop C — coordinator wake-up
+      5. decide(respond_direct)
+
+    Playwright seed — proof.* inventory only
+      → UI sends /implement-spec add-health-endpoint
+      → command stamps formal_claims.* + dev_from_task.requested
+      → proof-readiness rules stamp proof_readiness.implementation_ready=true
+      → dev-from-task/02 spawns a coordinator walker
+
+    Loop D — dev-from-task coordinator
+      6. project_spec_tasks() → stamps plan.* from change.add-health-endpoint.*
+      7. query_sandbox_attestation({})
+      8. request_sandbox(go-backend)
+      9. decide(dev_via_test, subtopics=["task-0"])
+         → dev-via-test/03 spawns Ralph directly (NO Lisa)
+
+    Loop E — Ralph
+      10. emit_dev_via_test_measurement(pass=true)
+      11. decide(measured)
+
+    Loop F — coordinator walker
+      12. decide(dev_via_test_finalize)
+
+    Loop G — CBG
+      13. decide(approved)
+
+    Loop H — final coordinator
+      14. decide(respond_direct)
+
+  Validates:
+    - OpenSpec review/export UI exposes the implementation command.
+    - /implement-spec proves the proof analyzer works in the flow.
+    - dev-from-task starts only after both HITL/proof gates exist.
+    - project_spec_tasks runs live and stamps plan.done_authority.*.
+    - Lisa is skipped; Ralph and CBG are reused.
+
+responses:
+  # ---------- Loop 0: coordinator (dispatch) ----------
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "create_change",
+          "reason": "Draft a small OpenSpec change for a Go service health endpoint. The deliverable is the reviewed spec change first; implementation happens only after the human approves the spec and requests handoff."
+        }
+
+  # ---------- Loop A: author-create-change ----------
+
+  - tool_call:
+      name: emit_change
+      arguments_json: |
+        {
+          "slug": "add-health-endpoint",
+          "proposal": {
+            "intent": "Expose a minimal service health check so operators can verify the process is alive.",
+            "scope_in": ["GET /health returns a JSON status payload"],
+            "scope_out": ["Dependency checks", "authentication", "liveness/readiness split"],
+            "approach": "Add a small HTTP handler and a focused unit test that exercises GET /health."
+          },
+          "deltas": [
+            {
+              "capability": "health",
+              "added": [
+                {
+                  "name": "Health endpoint",
+                  "statement": "The system SHALL expose GET /health returning HTTP 200 and a JSON body with status set to ok.",
+                  "scenarios": [
+                    {
+                      "name": "Healthy service response",
+                      "steps": [
+                        {"kw": "GIVEN", "text": "the service is running"},
+                        {"kw": "WHEN", "text": "an operator requests GET /health"},
+                        {"kw": "THEN", "text": "the response status is 200 and the JSON body contains status ok"}
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "tasks": [
+            {
+              "section": "1. Health endpoint",
+              "number": "1.1",
+              "text": "Implement GET /health and its unit test",
+              "goal": "GET /health returns HTTP 200 with JSON {\"status\":\"ok\"}.",
+              "target_files": ["internal/health/handler.go", "internal/health/handler_test.go"],
+              "test_command": "go test ./internal/health -run TestHealthEndpoint",
+              "assumptions": ["Existing router can mount an http.Handler"],
+              "non_goals": ["No dependency readiness checks"],
+              "expected_outcome": "The health handler returns a stable JSON status body and the focused test passes.",
+              "requirement_ref": "health/Health endpoint"
+            }
+          ],
+          "acceptance_command": "go test ./internal/health"
+        }
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "drafted",
+          "reason": "Change add-health-endpoint drafted with one SHALL requirement, one Given/When/Then scenario, and one execution-rich task. Routing to the reviewer gate."
+        }
+
+  # ---------- Loop B: reviewer-create-change ----------
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "approved",
+          "reason": "Change add-health-endpoint is specific, testable, and implementation-ready once proof readiness passes: the requirement is a SHALL statement, the scenario has WHEN and THEN, and task 1.1 has target files plus a focused go test command."
+        }
+
+  # ---------- Loop C: coordinator wake-up ----------
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "respond_direct",
+          "reason": "The reviewed OpenSpec change add-health-endpoint is ready for human review and export. It defines GET /health returning HTTP 200 with JSON status ok, plus one implementation task with a focused Go test command."
+        }
+
+  # ---------- Loop D: dev-from-task coordinator ----------
+
+  - tool_call:
+      name: project_spec_tasks
+      arguments_json: |
+        {}
+
+  - tool_call:
+      name: query_sandbox_attestation
+      arguments_json: |
+        {}
+
+  - tool_call:
+      name: request_sandbox
+      arguments_json: |
+        {
+          "profile": "go-backend",
+          "reason": "The approved OpenSpec task has a Go test command, so Ralph needs the standard Go backend sandbox before implementation."
+        }
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "dev_via_test",
+          "subtopics": ["task-0"],
+          "reason": "Projecting approved OpenSpec change add-health-endpoint; dispatching task-0 through the existing Ralph implementation rail."
+        }
+
+  # ---------- Loop E: Ralph ----------
+
+  - tool_call:
+      name: emit_dev_via_test_measurement
+      arguments_json: |
+        {
+          "pass": true,
+          "stdout_tail": "ok  example/internal/health  0.010s",
+          "stderr_tail": ""
+        }
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "measured",
+          "reason": "Implemented the health handler and its focused unit test; go test ./internal/health -run TestHealthEndpoint passes."
+        }
+
+  # ---------- Loop F: coordinator walker ----------
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "dev_via_test_finalize",
+          "reason": "All OpenSpec-projected tasks are complete. Dispatching CBG to run the chain-level acceptance command go test ./internal/health."
+        }
+
+  # ---------- Loop G: CBG work gate ----------
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "approved",
+          "reason": "CBG approves: the focused health endpoint test passes and the work matches the approved OpenSpec requirement for GET /health."
+        }
+
+  # ---------- Loop H: final coordinator ----------
+
+  - tool_call:
+      name: decide
+      arguments_json: |
+        {
+          "action": "respond_direct",
+          "reason": "Implementation handoff completed: SemTeams projected the approved add-health-endpoint OpenSpec task, skipped Lisa, ran Ralph for task-0, and CBG approved the result against go test ./internal/health."
+        }

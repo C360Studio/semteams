@@ -231,7 +231,7 @@ export function deriveGraphRunHealthFacts(
       proofTestHarnessRequired,
       proofRequiresClarification,
       proofPauseRequired,
-      devFromTaskRequested: truthy(valueOf(group, "dev_from_task.requested")),
+      devFromTaskRequested: valueOf(group, "dev_from_task.requested") !== "",
       cbgRetryPending,
       cbgRetryFinding,
       cbgRetryTargetTask,
