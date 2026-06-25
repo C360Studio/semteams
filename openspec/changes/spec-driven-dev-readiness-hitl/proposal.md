@@ -17,6 +17,8 @@ In scope:
 - Slash-command shortcuts for spec export, implementation, run status, evidence review, and approval control.
 - UI status surfaces that answer whether a run is working, waiting, blocked, failing, or complete.
 - Real-LLM validation that starts with Gemini through the model registry, plus Playwright for full e2e journeys.
+- A demo evidence pack that separates black-box product journeys from fixture-seeded bridge proof.
+- A MAVLink-hard spec-production journey that proves SemTeams can author a strong handoff before claiming implementation.
 
 Out of scope:
 - Porting SemSpec's `PLAN_STATES` / `EXECUTION_STATES` manager model.
@@ -27,6 +29,8 @@ Out of scope:
 - Requiring every organization to run spec-driven development fully unattended.
 - Treating slash commands as a separate workflow engine or control plane.
 - Turning SemTeams into a general DevOps platform or cluster scheduler.
+- Counting direct NATS or graph seeding as black-box evidence for product behavior.
+- Claiming MAVLink-hard implementation is sponsor-ready before the required harness profile and readiness records exist.
 
 ## Approach
 Model the workflow as governed graph facts plus category rule packs. A `create_change` journey produces a reviewable
@@ -36,6 +40,11 @@ risky steps to human review. NATS remains the reactive transport, but SemStreams
 tool-governance, and lifecycle contracts remain the control surface. The UI presents the current artifact, gate,
 evidence, and next action instead of asking operators to infer state from raw logs. Approved artifacts can be exported
 as standard OpenSpec files even when SemTeams does not perform the implementation itself.
+
+Black-box demo evidence must enter through public UI, dispatch, slash-command, approval, export, or documented task
+surfaces. Graphs, trajectories, logs, and downloads are valid read-side evidence, but direct writes into NATS, graph
+storage, lifecycle state, or proof facts are fixture seeding and must be labeled as bridge proof rather than black-box
+MVP evidence.
 
 ## Future Roadmap
 

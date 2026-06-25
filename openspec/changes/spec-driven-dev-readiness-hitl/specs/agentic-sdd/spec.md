@@ -291,3 +291,27 @@ journeys.
 - WHEN the full e2e gate runs
 - THEN Playwright drives the journey through the UI and backend
 - AND the report includes artifact output and evidence for the current run state
+
+### Requirement: Demo MVP Evidence Pack
+The system SHALL distinguish black-box demo evidence from fixture-seeded bridge tests when claiming MVP behavior.
+
+#### Scenario: Black-box journeys avoid graph seeding
+- GIVEN a journey is used as MVP black-box evidence
+- WHEN it drives the system
+- THEN it uses public UI, dispatch, slash-command, approval, export, or documented task-runner surfaces
+- AND it does not write directly to NATS, graph storage, lifecycle state, proof facts, or private KV buckets to satisfy
+  the claim
+
+#### Scenario: Fixture-seeded journeys are labeled
+- GIVEN a journey seeds proof inventory or other external facts
+- WHEN it is reported as evidence
+- THEN the report labels it as fixture-seeded bridge proof
+- AND it is not counted as pure black-box evidence
+
+#### Scenario: MAVLink-hard spec production is the MVP goal
+- GIVEN the SemSpec MAVLink-hard prompt is used
+- WHEN SemTeams creates a spec
+- THEN the spec names OSH, MAVSDK, Connected Systems API, PX4 SITL or equivalent proof dependencies, harness readiness,
+  implementation tasks, and acceptance commands
+- AND implementation remains a stretch goal until the required harness profile and readiness records exist or an operator
+  records a bounded waiver

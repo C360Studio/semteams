@@ -196,6 +196,7 @@ tasks:
     cmds:
       - task: test:e2e:agentic:research-mvp
       - task: test:e2e:agentic:create-change
+      - task: test:e2e:agentic:mavlink-hard-spec
       - task: test:e2e:agentic:create-change-recovery
       - task: test:e2e:agentic:spec-to-dev-demo
       - task: test:e2e:agentic:dev-via-test
@@ -219,6 +220,30 @@ tasks:
       - task: test:e2e:agentic:ask-user-pause
       - task: test:e2e:agentic:clarification-resume
       - task: test:e2e:agentic:clarification-autonomous
+
+  test:e2e:agentic:demo-mvp:
+    desc: Run the black-box demo MVP evidence pack
+    summary: |
+      Runs the black-box evidence pack for the demo claims in
+      docs/demo-mvp-claims.md:
+
+        - coordinator routing chooses the correct team for prompt classes
+        - create_change produces/reviews/exports an OpenSpec handoff
+        - coordinator readiness checks fail closed before execution routing
+        - MAVLink-hard produces/reviews/exports a hard-domain OpenSpec handoff
+
+      These journeys may read graph facts, trajectories, logs, downloads, and
+      HTTP status for assertions. They must not write directly into NATS, graph
+      storage, lifecycle state, proof facts, or private KV buckets to satisfy a
+      claim.
+
+      Deliberately excluded: test:e2e:agentic:spec-to-dev-demo. That journey is
+      fixture-seeded bridge proof because it preloads external proof inventory.
+    cmds:
+      - task: test:e2e:agentic:coordinator-routing-matrix
+      - task: test:e2e:agentic:create-change
+      - task: test:e2e:agentic:coordinator-readiness-gate
+      - task: test:e2e:agentic:mavlink-hard-spec
 
   test:e2e:agentic:real-time-activity-stream:
     desc: Run the real-time-activity-stream journey
@@ -318,10 +343,32 @@ tasks:
           AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
       - npx playwright test e2e/agentic/create-change.spec.ts
 
+  test:e2e:agentic:mavlink-hard-spec:
+    desc: Run the MAVLink-hard OpenSpec production black-box journey
+    summary: |
+      Drives a SemSpec mavlink-hard style prompt through the public UI chat
+      path and validates that SemTeams routes to create_change, emits a
+      schema-valid OpenSpec change, reviewer-approves it, shows run health, and
+      exports the reviewed handoff.
+
+      This is black-box demo evidence: the journey may read graph/UI/download
+      evidence, but it does not seed NATS, graph storage, lifecycle state,
+      proof facts, or private KV buckets.
+    vars:
+      FIXTURE: mavlink-hard-spec.yaml
+      AGENTIC_CONFIG: e2e-flow-bootstrap.json
+    cmds:
+      - defer: { task: test:e2e:agentic:cleanup }
+      - task: test:e2e:agentic:stack:up
+        vars:
+          FIXTURE: "{{.FIXTURE}}"
+          AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
+      - npx playwright test e2e/agentic/mavlink-hard-spec.spec.ts
+
   test:e2e:agentic:spec-to-dev-demo:
     desc: Run the approved OpenSpec -> proof gate -> Ralph/CBG mock-LLM journey
     summary: |
-      Black-box demo-MVP proof for the OpenSpec-to-dev bridge:
+      Fixture-seeded bridge proof for the OpenSpec-to-dev bridge:
 
         Loop 0  coordinator (dispatch)       decide(action="create_change")
         Loop A  author-create-change         emit_change + decide(drafted)
@@ -336,9 +383,12 @@ tasks:
         Loop G  reviewer-dev-via-test (CBG)  decide(approved)
         Loop H  coordinator                  decide(respond_direct)
 
-      The test seeds only external proof.* inventory. SemTeams must produce
-      formal_claims.*, proof_readiness.*, and dev_from_task.* through the live
-      command/rule flow. Sandbox is the MockRunner.
+      The test seeds external proof.* inventory to model evidence that the
+      product cannot yet produce through a governed UI/command surface. SemTeams
+      must produce formal_claims.*, proof_readiness.*, and dev_from_task.*
+      through the live command/rule flow after that seed. Because of the seed,
+      this task is bridge coverage, not black-box demo MVP evidence. Sandbox is
+      the MockRunner.
     vars:
       FIXTURE: spec-to-dev-demo.yaml
       AGENTIC_CONFIG: e2e-flow-bootstrap.json

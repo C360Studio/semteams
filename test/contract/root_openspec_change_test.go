@@ -30,8 +30,8 @@ func TestRootOpenSpecChange_Readable(t *testing.T) {
 	if change.Design == nil {
 		t.Fatal("Design is nil")
 	}
-	if change.Tasks == nil || len(change.Tasks.Sections) != 6 {
-		t.Fatalf("Tasks sections = %d, want 6", len(change.Tasks.Sections))
+	if change.Tasks == nil || len(change.Tasks.Sections) != 7 {
+		t.Fatalf("Tasks sections = %d, want 7", len(change.Tasks.Sections))
 	}
 	if len(change.Deltas) != 1 {
 		t.Fatalf("Deltas = %d, want 1", len(change.Deltas))
@@ -41,8 +41,8 @@ func TestRootOpenSpecChange_Readable(t *testing.T) {
 	if delta.Capability != "agentic-sdd" {
 		t.Fatalf("Delta capability = %q, want agentic-sdd", delta.Capability)
 	}
-	if len(delta.Added) != 12 {
-		t.Fatalf("Added requirements = %d, want 12", len(delta.Added))
+	if len(delta.Added) != 13 {
+		t.Fatalf("Added requirements = %d, want 13", len(delta.Added))
 	}
 	for _, req := range delta.Added {
 		if req.Statement == "" {
@@ -124,13 +124,99 @@ func TestRootOpenSpecChange_Readable(t *testing.T) {
 		"Metric gaps are visible",
 		"Prometheus metrics are operational evidence",
 		"- [x] 4.4 Add Prometheus metric freshness, component pressure, queue depth, latency, and error-rate evidence to run health.",
+		"The system SHALL distinguish black-box demo evidence from fixture-seeded bridge tests",
+		"Black-box journeys avoid graph seeding",
+		"Fixture-seeded journeys are labeled",
+		"MAVLink-hard spec production is the MVP goal",
+		"A demo evidence pack that separates black-box product journeys from fixture-seeded bridge proof.",
+		"Counting direct NATS or graph seeding as black-box evidence for product behavior.",
+		"Demo evidence has trust tiers",
+		"MAVLink-hard MVP means spec production first",
 		"- [x] 5.2 Produce or reject a reusable harness profile before feature code is released.",
 		"- [x] 6.4 Add e2e coverage that autoresearch refuses vague/non-scalar goals and preserves metric guardrails.",
 		"- [x] 6.5 Add e2e coverage that non-ready sandbox admission fails closed before execution routing.",
 		"- [x] 6.1 Add a Gemini-backed real-LLM smoke path for model-dependent routing and prompt behavior.",
+		"- [x] 7.1 Publish demo MVP claims, non-claims, evidence tiers, and the no-cheat e2e rule.",
+		"- [x] 7.2 Add a black-box capstone task that excludes fixture-seeded graph and NATS writes.",
+		"- [x] 7.3 Add a MAVLink-hard spec-production journey as the hard-domain artifact goal.",
 	} {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("rendered OpenSpec change missing %q\n--- rendered ---\n%s", want, rendered)
+		}
+	}
+}
+
+// TestRepoReadinessInitOpenSpecChange_Readable pins the post-MVP repo
+// readiness initializer as a real OpenSpec artifact. This keeps the idea
+// captured without adding it to the demo-MVP acceptance boundary.
+func TestRepoReadinessInitOpenSpecChange_Readable(t *testing.T) {
+	change, err := openspec.ReadChange(filepath.Join(
+		"..", "..", "openspec", "changes", "repo-readiness-init",
+	))
+	if err != nil {
+		t.Fatalf("ReadChange: %v", err)
+	}
+	if change.Slug != "repo-readiness-init" {
+		t.Fatalf("Slug = %q", change.Slug)
+	}
+	if change.Proposal == nil {
+		t.Fatal("Proposal is nil")
+	}
+	if change.Design == nil {
+		t.Fatal("Design is nil")
+	}
+	if change.Tasks == nil || len(change.Tasks.Sections) != 4 {
+		t.Fatalf("Tasks sections = %d, want 4", len(change.Tasks.Sections))
+	}
+	if len(change.Deltas) != 1 {
+		t.Fatalf("Deltas = %d, want 1", len(change.Deltas))
+	}
+
+	delta := change.Deltas[0]
+	if delta.Capability != "agentic-sdd" {
+		t.Fatalf("Delta capability = %q, want agentic-sdd", delta.Capability)
+	}
+	if len(delta.Added) != 4 {
+		t.Fatalf("Added requirements = %d, want 4", len(delta.Added))
+	}
+	for _, req := range delta.Added {
+		if req.Statement == "" {
+			t.Fatalf("requirement %q has empty statement", req.Name)
+		}
+		if len(req.Scenarios) == 0 {
+			t.Fatalf("requirement %q has no scenarios", req.Name)
+		}
+	}
+
+	dst := filepath.Join(t.TempDir(), change.Slug)
+	if err := openspec.WriteChange(dst, change); err != nil {
+		t.Fatalf("WriteChange: %v", err)
+	}
+	roundTripped, err := openspec.ReadChange(dst)
+	if err != nil {
+		t.Fatalf("re-ReadChange: %v", err)
+	}
+	if diff := cmp.Diff(change, roundTripped, cmpopts.EquateEmpty()); diff != "" {
+		t.Fatalf("repo-readiness OpenSpec change round-trip mismatch (-want +got):\n%s", diff)
+	}
+
+	rendered := openspec.RenderChangeFolder(change)
+	for _, want := range []string{
+		"# OpenSpec change: repo-readiness-init",
+		"Repo Readiness Initialization",
+		"`/init-repo <path>`",
+		"Generic `/init` is too broad for SemTeams",
+		"The system SHALL provide a repo-scoped initialization action",
+		"The system SHALL inventory the target repository or folder",
+		"The system SHALL produce a reviewed OpenSpec harness plan",
+		"The system SHALL use repo initialization output as proof-readiness input",
+		"OSH shaped repo is recognized",
+		"java.gradle.build",
+		"mavlink.px4-sitl.mavsdk",
+		"- [ ] 4.1 Run the initializer against an OSH-shaped repo/folder",
+	} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("rendered repo-readiness OpenSpec change missing %q\n--- rendered ---\n%s", want, rendered)
 		}
 	}
 }

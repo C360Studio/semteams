@@ -36,3 +36,10 @@
 - [x] 6.3 Capture model ID, provider, journey evidence, and artifact output in the e2e report.
 - [x] 6.4 Add e2e coverage that autoresearch refuses vague/non-scalar goals and preserves metric guardrails.
 - [x] 6.5 Add e2e coverage that non-ready sandbox admission fails closed before execution routing.
+
+## 7. Demo MVP Acceptance
+- [x] 7.1 Publish demo MVP claims, non-claims, evidence tiers, and the no-cheat e2e rule.
+- [x] 7.2 Add a black-box capstone task that excludes fixture-seeded graph and NATS writes.
+- [x] 7.3 Add a MAVLink-hard spec-production journey as the hard-domain artifact goal.
+- [x] 7.4 Decide archive timing: keep this change active until the demo evidence pack lands green on `main`, then archive
+  it into baseline OpenSpec specs.
