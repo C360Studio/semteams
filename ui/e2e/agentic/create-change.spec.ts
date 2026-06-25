@@ -323,9 +323,9 @@ test.describe("ADR-057 — create_change pack mock-LLM journey", () => {
     const folderDownload = page.waitForEvent("download");
     await page.getByTestId("openspec-download-folder").click();
     const folder = await folderDownload;
-    expect(folder.suggestedFilename()).toBe("add-mfa.openspec-folder.json");
+    expect(folder.suggestedFilename()).toBe("add-mfa.openspec.zip");
     await expect(page.getByTestId("openspec-export-state")).toHaveText(
-      "Folder manifest downloaded",
+      "Folder archive downloaded",
     );
 
     const report = await attachJourneyEvidenceReport({
@@ -351,8 +351,8 @@ test.describe("ADR-057 — create_change pack mock-LLM journey", () => {
         },
         {
           name: folder.suggestedFilename(),
-          kind: "openspec-folder-manifest",
-          contentType: "application/json",
+          kind: "openspec-folder-archive",
+          contentType: "application/zip",
           path: await downloadPath(folder),
           metadata: { slug: "add-mfa", source: "openspec-download-folder" },
         },
@@ -364,11 +364,11 @@ test.describe("ADR-057 — create_change pack mock-LLM journey", () => {
     ).toBe(true);
     expect(
       report.artifacts.explicit_outputs.map((artifact) => artifact.kind),
-      "journey report must attach the exported OpenSpec document and folder manifest",
+      "journey report must attach the exported OpenSpec document and folder archive",
     ).toEqual(
       expect.arrayContaining([
         "openspec-single-document",
-        "openspec-folder-manifest",
+        "openspec-folder-archive",
       ]),
     );
     expect(

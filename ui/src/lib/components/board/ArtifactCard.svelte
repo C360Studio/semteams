@@ -27,6 +27,7 @@
     ArrowPath,
   } from "svelte-hero-icons";
   import { renderMarkdown } from "$lib/utils/markdown";
+  import { createZipBlob } from "$lib/utils/zip";
 
   interface Props {
     toolName: string;
@@ -73,11 +74,6 @@
   );
   const effectiveOpenSpecMarkdown = $derived(
     editedOpenSpecMarkdown ?? openSpecMarkdown,
-  );
-  const openSpecFolderManifest = $derived(
-    isOpenSpecChange
-      ? renderOpenSpecFolderManifest(openSpecFiles, openSpecSlug)
-      : "",
   );
 
   // Everything except title + revision renders as a section. Stable
@@ -363,21 +359,6 @@
     return normalizeMarkdown(out);
   }
 
-  function renderOpenSpecFolderManifest(
-    files: OpenSpecFile[],
-    slug: string,
-  ): string {
-    return `${JSON.stringify(
-      {
-        kind: "openspec.change.folder",
-        slug,
-        files,
-      },
-      null,
-      2,
-    )}\n`;
-  }
-
   function startOpenSpecEdit() {
     editDraft = effectiveOpenSpecMarkdown;
     reviewMode = "edit";
@@ -415,18 +396,6 @@
     }
   }
 
-  function downloadTextFile(filename: string, text: string, mimeType: string) {
-    const blob = new Blob([text], { type: mimeType });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-  }
-
   function downloadOpenSpec() {
     exportStatus = null;
     downloadTextFile(
@@ -437,14 +406,35 @@
     exportStatus = "Document downloaded";
   }
 
-  function downloadOpenSpecManifest() {
+  function downloadOpenSpecArchive() {
     exportStatus = null;
-    downloadTextFile(
-      `${openSpecSlug || "openspec-change"}.openspec-folder.json`,
-      openSpecFolderManifest,
-      "application/json;charset=utf-8",
+    try {
+      downloadBlob(
+        `${openSpecSlug || "openspec-change"}.openspec.zip`,
+        createZipBlob(openSpecFiles),
+      );
+      exportStatus = "Folder archive downloaded";
+    } catch {
+      exportStatus = "Folder archive failed";
+    }
+  }
+
+  function downloadBlob(filename: string, blob: Blob) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function downloadTextFile(filename: string, text: string, mimeType: string) {
+    downloadBlob(
+      filename,
+      new Blob([text], { type: mimeType }),
     );
-    exportStatus = "Folder manifest downloaded";
   }
 </script>
 
@@ -552,8 +542,8 @@
           type="button"
           class="openspec-btn"
           data-testid="openspec-download-folder"
-          onclick={downloadOpenSpecManifest}
-          title="Download OpenSpec folder manifest"
+          onclick={downloadOpenSpecArchive}
+          title="Download OpenSpec folder archive"
         >
           <Icon src={ArrowDownTray} size="15" />
           <span>Download Folder</span>

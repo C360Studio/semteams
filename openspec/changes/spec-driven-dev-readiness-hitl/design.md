@@ -62,9 +62,9 @@ spec and proof gates. Tool approval alone is not enough because users need to un
 before expensive or risky work starts.
 
 ### Decision: Export is MVP, MCP handoff is optional
-Users may use SemTeams only to produce a reviewed spec and then implement it elsewhere. The MVP export surface writes
-or downloads the standard OpenSpec change folder and rendered single-document projection. MCP handoff can be a later
-adapter over the same export contract; it is not required for the first usable slice.
+Users may use SemTeams only to produce a reviewed spec and then implement it elsewhere. The MVP export surface downloads
+the standard OpenSpec change files as a `.openspec.zip` archive and also offers a rendered single-document projection.
+MCP handoff can be a later adapter over the same export contract; it is not required for the first usable slice.
 
 ### Decision: Slash commands are shortcuts, not a control plane
 Slash commands give power users keyboard access to contextual actions such as `/export-spec`, `/implement-spec`,
