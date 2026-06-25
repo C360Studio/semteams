@@ -13,7 +13,8 @@ payload registry), follow the upstream
 go version          # 1.25+
 docker info         # daemon running
 task --version      # go install github.com/go-task/task/v3/cmd/task@latest
-node --version      # 20+ if you'll touch the UI
+node --version      # 22+ for UI / Playwright journeys
+caddy version       # required only for the live local UI path
 ```
 
 ## What's actually running when SemTeams is up
@@ -62,15 +63,35 @@ personas, and rules.
 
 ## Boot
 
-### Fastest path (dev research with UI)
+### Fastest proof (no API keys)
 
 ```bash
-cp .env.example .env                     # add ANTHROPIC_API_KEY at minimum
+task ui:test:e2e:agentic:demo-mvp
+```
+
+This launches the dockerized e2e stack, drives SemTeams through
+public UI / HTTP surfaces, and asserts the current demo claims:
+coordinator routing, OpenSpec author/review/export, readiness
+fail-closed behavior, and the MAVLink-hard spec handoff. It uses
+mock LLM fixtures, so it is the best first run after cloning.
+
+During dockerized e2e runs the UI/backend are available through
+`localhost:3100`; the task tears the stack down when it finishes.
+This path uses a containerized proxy, so it does not need host Caddy.
+
+### Fastest live path (chat UI)
+
+```bash
+cp .env.example .env                     # add GEMINI_API_KEY for the default registry
 task dev:research                        # NATS + backend + UI
 # open http://localhost:3001
 ```
 
-`task dev:stop` kills it. Use a second terminal for everything below.
+`task dev:research` boots the full production bootstrap, not just
+the research pack. The task name is historical. `task dev:stop`
+kills it. This path uses the local Caddy + Vite proxy, so it needs
+host Caddy (`brew install caddy` on macOS). Use a second terminal
+for everything below.
 
 ### A specific config
 
@@ -85,7 +106,7 @@ Under ADR-042 §Phase 2 (substrate-plus-overlays, MVP-7) there is
 
 | Config | What it runs | Needs |
 |---|---|---|
-| `flow-bootstrap.json` | The single ADR-042 substrate (graph-ingest, graph-query, rule-processor, agentic-loop, agentic-dispatch, agentic-tools, agentic-model) plus the three live category rule packs (`research/`, `autoresearch/`, `dev-via-test/`) + `coordinator/` + `ops/`, and the persona corpus that drives them. Uses real LLMs. | `ANTHROPIC_API_KEY` / `GEMINI_API_KEY` (model registry; coordinator prefers `gemini-pro`); `BRAVE_SEARCH_API_KEY` for web_search |
+| `flow-bootstrap.json` | The single ADR-042 substrate (graph-ingest, graph-query, rule-processor, agentic-loop, agentic-dispatch, agentic-tools, agentic-model) plus the live category rule packs (`research/`, `autoresearch/`, `create-change/`, `proof-readiness/`, `dev-from-task/`, `dev-via-test/`) + support packs (`coordinator/`, `agent-run/`, `ops/`), and the persona corpus that drives them. Uses real LLMs. | `GEMINI_API_KEY` for the default `gemini-flash` endpoint; `ANTHROPIC_API_KEY` optional for Anthropic endpoints; `BRAVE_SEARCH_API_KEY` for web_search |
 | `e2e-flow-bootstrap.json` | Mock-LLM clone of the production bootstrap. Same packs + personas, points the model registry at the in-process mock LLM. Used by every Playwright journey under `ui/e2e/agentic/`. | nothing — mock-LLM |
 
 Adding a task class is a new **category pack**, not a new config:
@@ -95,15 +116,16 @@ coordinator-persona entry teaching the new `decide(action=<category>)`
 token. See ADR-042 §Phase 2 redesign for the rationale and the
 research / autoresearch / dev-via-test packs for working templates.
 
-### Running a pack that needs a sandbox (autoresearch, dev-via-test)
+### Running a pack that needs a sandbox
 
 The **research** pack runs anywhere — `task dev:research` is enough.
-But **autoresearch** and **dev-via-test** run their `bash` inside a
-per-tenant devcontainer (see [architecture.md](architecture.md)
-§"How a sandbox gets created"), which needs the sandbox sidecar +
-`@devcontainers/cli` + `SEMTEAMS_SANDBOX_RUNNER=api`. The dockerized
-smoke tasks wire all of that up for you — the simplest way to run
-one end-to-end locally is a real-LLM smoke with your own prompt:
+But **autoresearch**, **dev-via-test**, and governed implementation
+bridges run their `bash` inside a per-tenant devcontainer (see
+[architecture.md](architecture.md) §"How a sandbox gets created"),
+which needs the sandbox sidecar + `@devcontainers/cli` +
+`SEMTEAMS_SANDBOX_RUNNER=api`. The dockerized smoke tasks wire all
+of that up for you — the simplest way to run one end-to-end locally
+is a real-LLM smoke with your own prompt:
 
 ```bash
 # autoresearch or dev-via-test, real LLM, full sandbox lifecycle:
@@ -352,8 +374,10 @@ step time is wedged — abort, don't wait for the natural timeout.
   is the single most useful read.
 - **What runs end-to-end when I send a prompt?** —
   [`architecture.md`](architecture.md). The substrate-plus-overlays
-  runtime, the three live category packs (research, autoresearch,
-  dev-via-test), and **how a sandbox gets created**.
+  runtime, live category packs, and **how a sandbox gets created**.
+- **What exactly can the demo claim?** —
+  [`demo-mvp-claims.md`](demo-mvp-claims.md). Supported claims,
+  non-claims, black-box evidence rules, and MAVLink-hard scope.
 - **Why is it built this way (substrate-plus-overlays)?** —
   [`adr/042-coordinator-instantiated-flows-via-templates.md`](adr/042-coordinator-instantiated-flows-via-templates.md).
 - **How does the sandbox work?** —

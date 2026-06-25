@@ -60,13 +60,13 @@ addendum 2026-05-15.)
 │   coordinator persona  + decide-action contract                  │
 └──────────────────────────────────────────────────────────────────┘
                                   │
-                ┌─────────────────┼─────────────────┐
-                ▼                 ▼                 ▼
-     ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐
-     │ research/        │  │ autoresearch/    │  │ dev-via-test/    │
-     │ rule pack +      │  │ rule pack +      │  │ rule pack +      │
-     │ personas         │  │ personas         │  │ personas         │
-     └──────────────────┘  └──────────────────┘  └──────────────────┘
+	                ┌─────────────────┼─────────────────┐
+	                ▼                 ▼                 ▼
+	     ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐
+	     │ research/        │  │ OpenSpec packs   │  │ build/measure    │
+	     │ rule pack +      │  │ create-change +  │  │ autoresearch +   │
+	     │ personas         │  │ readiness bridge │  │ dev-via-test     │
+	     └──────────────────┘  └──────────────────┘  └──────────────────┘
 ```
 
 Substrate = the singleton components wired by `cmd/semteams/main.go`.
@@ -80,8 +80,17 @@ components, no new flow configs.**
 
 ## Live category packs
 
-Three packs ship today. Each terminates with a coordinator wake-up
-that reads the chain's artifact and replies to the user.
+The product-facing packs currently cover research, OpenSpec
+authoring / readiness, metric optimization, and build-with-tests
+work. Each terminal chain either wakes the coordinator to reply to
+the user or pauses behind a visible human decision.
+
+The fully expanded loop descriptions below focus on the original
+research, autoresearch, and dev-via-test packs. The OpenSpec MVP
+claim boundary lives in [`demo-mvp-claims.md`](demo-mvp-claims.md);
+the design record lives in
+[ADR-056](adr/056-openspec-spec-driven-development-umbrella.md)
+and [ADR-057](adr/057-openspec-graph-spec-model-and-create-change.md).
 
 ### research
 
