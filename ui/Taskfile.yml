@@ -214,6 +214,7 @@ tasks:
       - task: test:e2e:agentic:task-title-aliases
       - task: test:e2e:agentic:admin-flows-inventory
       - task: test:e2e:agentic:chain-drill-in
+      - task: test:e2e:agentic:artifact-context-handoff
       - task: test:e2e:agentic:run-failed
       - task: test:e2e:agentic:run-failed-coordinator
       - task: test:e2e:agentic:run-failed-coordinator-inherit
@@ -892,11 +893,16 @@ tasks:
       path and asserts the coordinator's first next_action for each:
 
         evidence/comparison           -> research
+        /research hint                -> research
         OpenSpec/spec authoring        -> create_change
+        /spec hint                    -> create_change
         scalar metric optimization     -> autoresearch
+        /optimize hint                -> autoresearch
         verifiable implementation      -> dev_via_test
+        /dev-via-test hint            -> dev_via_test
+        mis-shaped /optimize hint      -> ask_user
         vague ask                      -> ask_user
-        simple taxonomy/meta question  -> respond_direct
+        front-door product question    -> respond_direct
 
       To keep this first-action proof cheap, the task derives a temporary config from
       e2e-flow-bootstrap.json that removes downstream category-spawn rules and
@@ -1087,6 +1093,19 @@ tasks:
           FIXTURE: "{{.FIXTURE}}"
           AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
       - npx playwright test e2e/agentic/chain-drill-in.spec.ts
+
+  test:e2e:agentic:artifact-context-handoff:
+    desc: Run the artifact context handoff journey (research artifact -> editable coordinator-routed follow-up prompt)
+    vars:
+      FIXTURE: research-mvp.yaml
+      AGENTIC_CONFIG: e2e-flow-bootstrap.json
+    cmds:
+      - defer: { task: test:e2e:agentic:cleanup }
+      - task: test:e2e:agentic:stack:up
+        vars:
+          FIXTURE: "{{.FIXTURE}}"
+          AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
+      - npx playwright test e2e/agentic/artifact-context-handoff.spec.ts
 
   # === Interactive dev-mode scenario tasks ===
   #

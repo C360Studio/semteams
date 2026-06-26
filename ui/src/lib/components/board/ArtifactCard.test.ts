@@ -1,6 +1,7 @@
 import { afterEach, describe, it, expect, vi } from "vitest";
 import { fireEvent, render, screen, within } from "@testing-library/svelte";
 import userEvent from "@testing-library/user-event";
+import { chatHandoff } from "$lib/stores/chatHandoff.svelte";
 import ArtifactCard from "./ArtifactCard.svelte";
 
 const originalClipboardDescriptor = Object.getOwnPropertyDescriptor(
@@ -153,6 +154,7 @@ function parseStoredZip(bytes: Uint8Array): Record<string, string> {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  chatHandoff.clearAll();
   restoreProperty(navigator, "clipboard", originalClipboardDescriptor);
   restoreProperty(URL, "createObjectURL", originalCreateObjectURLDescriptor);
   restoreProperty(URL, "revokeObjectURL", originalRevokeObjectURLDescriptor);
@@ -371,6 +373,72 @@ describe("ArtifactCard", () => {
     ]);
   });
 
+  it("copies a generic emitted artifact as rendered markdown", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+
+    render(ArtifactCard, {
+      props: {
+        toolName: "emit_research_artifact",
+        args: {
+          revision: 1,
+          title: "MQTT vs NATS for IoT edge",
+          tasks: ["Choose MQTT for sub-ms latency"],
+        },
+      },
+    });
+
+    await user.click(screen.getByTestId("artifact-copy"));
+
+    expect(writeText).toHaveBeenCalledTimes(1);
+    const copied = writeText.mock.calls[0][0] as string;
+    expect(copied).toContain("# MQTT vs NATS for IoT edge");
+    expect(copied).toContain("Artifact tool: emit_research_artifact");
+    expect(copied).toContain("- Choose MQTT for sub-ms latency");
+    expect(screen.getByTestId("artifact-handoff-state")).toHaveTextContent(
+      "Copied",
+    );
+  });
+
+  it("stages a generic artifact for any public team handoff", async () => {
+    const user = userEvent.setup();
+    render(ArtifactCard, {
+      props: {
+        toolName: "emit_research_artifact",
+        args: {
+          revision: 1,
+          title: "MQTT vs NATS for IoT edge",
+          tasks: ["Choose MQTT for sub-ms latency"],
+        },
+      },
+    });
+
+    expect(screen.getByTestId("artifact-use-research")).toBeInTheDocument();
+    expect(screen.getByTestId("artifact-use-spec")).toBeInTheDocument();
+    expect(screen.getByTestId("artifact-use-optimize")).toBeInTheDocument();
+    expect(screen.getByTestId("artifact-use-build")).toBeInTheDocument();
+
+    await user.click(screen.getByTestId("artifact-use-spec"));
+
+    expect(chatHandoff.draft?.content).toBe(
+      "/create-change Use the attached artifact as context to ",
+    );
+    expect(chatHandoff.artifactContext).toMatchObject({
+      title: "MQTT vs NATS for IoT edge",
+      toolName: "emit_research_artifact",
+    });
+    expect(chatHandoff.artifactContext?.content).toContain(
+      "Choose MQTT for sub-ms latency",
+    );
+    expect(screen.getByTestId("artifact-handoff-state")).toHaveTextContent(
+      "Added to chat",
+    );
+  });
+
   it("renders emit_change as a reviewable OpenSpec artifact", () => {
     render(ArtifactCard, {
       props: { toolName: "emit_change", args: emitChangeArgs() },
@@ -477,13 +545,12 @@ describe("ArtifactCard", () => {
     expect(
       screen.getByTestId("openspec-implementation-handoff"),
     ).toHaveTextContent("Approved spec handoff");
-    expect(screen.getByTestId("openspec-implementation-handoff")).toHaveAttribute(
-      "role",
-      "status",
-    );
-    expect(screen.getByTestId("openspec-implementation-command")).toHaveTextContent(
-      "/implement-spec add-mfa",
-    );
+    expect(
+      screen.getByTestId("openspec-implementation-handoff"),
+    ).toHaveAttribute("role", "status");
+    expect(
+      screen.getByTestId("openspec-implementation-command"),
+    ).toHaveTextContent("/implement-spec add-mfa");
 
     await user.click(screen.getByTestId("openspec-copy-implementation"));
 

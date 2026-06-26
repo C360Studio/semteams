@@ -273,31 +273,46 @@ progress, blocked, or burning budget, surface it in Run Health.
 
 ## Slash Commands
 
-Slash commands are power-user shortcuts for existing UI actions. They must not
-become a second control plane or a hidden workflow language.
+Slash commands are power-user shortcuts for existing coordinator and UI actions.
+They must not become a second control plane or a hidden workflow language.
+Product-level team commands are intent hints carried to the coordinator; they do
+not bypass routing, sandbox checks, readiness, approvals, review, or
+clarification.
 
 MVP-shaped commands:
 
-- `/create-spec`: start the Spec Builder from the current prompt.
+- `/research`: ask the coordinator to validate and route an evidence or
+  comparison prompt.
+- `/create-change` or `/spec`: ask the coordinator to validate and route an
+  OpenSpec authoring prompt.
+- `/optimize`: ask the coordinator to validate and route a measurable
+  optimization prompt.
+- `/dev-via-test`: ask the coordinator to validate and route implementation with
+  tests.
+- `/implement-spec`: start governed implementation for an approved OpenSpec
+  change from the selected reviewed run.
 - `/export-spec`: render and download or copy the current OpenSpec artifact.
-- `/show-evidence`: open the Evidence view for the current run.
-- `/show-trace`: open the Trace view for the current run.
-- `/run-readiness`: run or refresh the Readiness Gate.
+- `/run-status`: show the current governed run status.
+- `/evidence`: open proof evidence for a run, claim, or dependency.
 - `/approve`: approve the currently selected human gate.
 - `/reject`: reject the currently selected human gate with a required reason.
 
-Avoid commands that merge planning and execution:
+Avoid commands that expose internal roles or merge planning and execution:
 
-- `/dev-via-spec`
+- `/lisa`
+- `/ralph`
+- `/cbg`
+- `/reviewer-dev-via-test`
 - `/do-everything`
 - `/auto-implement`
 
 Prefer separate, auditable actions:
 
+- chat with the coordinator to shape the idea
+- ask for a team with a public team command
 - create or edit the spec
 - approve the spec
-- run readiness
-- implement selected task
+- implement an approved spec or selected task
 - review evidence
 - export the spec
 

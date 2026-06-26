@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/svelte";
 import userEvent from "@testing-library/user-event";
+import { chatHandoff } from "$lib/stores/chatHandoff.svelte";
 import ChatBar from "./ChatBar.svelte";
 
 // ---------------------------------------------------------------------------
@@ -20,13 +21,17 @@ vi.mock("$lib/services/agentApi", () => ({
 // outer vars inside the factory hit the temporal dead zone. Use
 // vi.hoisted for all the controllable spies; getters in the factory
 // body are still safe (they run lazily on access).
-const { mockSelectedTask, mockNeedsYou, mockNeedsAttentionCount, mockSelectTask } =
-  vi.hoisted(() => ({
-    mockSelectedTask: vi.fn().mockReturnValue(undefined),
-    mockNeedsYou: vi.fn().mockReturnValue([]),
-    mockNeedsAttentionCount: vi.fn().mockReturnValue(0),
-    mockSelectTask: vi.fn(),
-  }));
+const {
+  mockSelectedTask,
+  mockNeedsYou,
+  mockNeedsAttentionCount,
+  mockSelectTask,
+} = vi.hoisted(() => ({
+  mockSelectedTask: vi.fn().mockReturnValue(undefined),
+  mockNeedsYou: vi.fn().mockReturnValue([]),
+  mockNeedsAttentionCount: vi.fn().mockReturnValue(0),
+  mockSelectTask: vi.fn(),
+}));
 
 vi.mock("$lib/stores/taskStore.svelte", () => ({
   taskStore: {
@@ -75,6 +80,7 @@ function selectedTask(overrides: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  chatHandoff.clearAll();
   mockSelectedTask.mockReturnValue(undefined);
   mockNeedsYou.mockReturnValue([]);
   mockNeedsAttentionCount.mockReturnValue(0);
@@ -137,6 +143,7 @@ describe("ChatBar — initial render", () => {
     mockSelectedTask.mockReturnValue(selectedTask());
     render(ChatBar);
 
+    expect(screen.queryByText("/research")).not.toBeInTheDocument();
     expect(screen.queryByText("/approve")).not.toBeInTheDocument();
     expect(screen.queryByText("/reject")).not.toBeInTheDocument();
   });
@@ -155,13 +162,33 @@ describe("ChatBar — initial render", () => {
     const user = userEvent.setup();
     render(ChatBar);
 
+    expect(screen.queryByText("/research")).not.toBeInTheDocument();
     expect(screen.queryByText("/approve")).not.toBeInTheDocument();
 
     await user.type(screen.getByTestId("chat-input"), "/");
 
+    expect(screen.getByText("/research")).toBeInTheDocument();
+    expect(screen.getByText("/create-change")).toBeInTheDocument();
+    expect(screen.getByText("/optimize")).toBeInTheDocument();
+    expect(screen.getByText("/dev-via-test")).toBeInTheDocument();
     expect(screen.getByText("/approve")).toBeInTheDocument();
     expect(screen.getByText("/reject")).toBeInTheDocument();
     expect(screen.getByText("/implement-spec")).toBeInTheDocument();
+  });
+
+  it("shows only front-door team slash hints without a selected task", async () => {
+    const user = userEvent.setup();
+    render(ChatBar);
+
+    await user.type(screen.getByTestId("chat-input"), "/");
+
+    expect(screen.getByText("/research")).toBeInTheDocument();
+    expect(screen.getByText("/create-change")).toBeInTheDocument();
+    expect(screen.getByText("/spec")).toBeInTheDocument();
+    expect(screen.getByText("/optimize")).toBeInTheDocument();
+    expect(screen.getByText("/dev-via-test")).toBeInTheDocument();
+    expect(screen.queryByText("/approve")).not.toBeInTheDocument();
+    expect(screen.queryByText("/implement-spec")).not.toBeInTheDocument();
   });
 });
 
@@ -252,9 +279,7 @@ describe("ChatBar — message dispatch", () => {
   });
 
   it("dismisses error on button click", async () => {
-    vi.mocked(agentApi.sendMessage).mockRejectedValueOnce(
-      new Error("Fail"),
-    );
+    vi.mocked(agentApi.sendMessage).mockRejectedValueOnce(new Error("Fail"));
     const user = userEvent.setup();
     render(ChatBar);
 
@@ -266,6 +291,59 @@ describe("ChatBar — message dispatch", () => {
     await user.click(screen.getByLabelText("Dismiss error"));
 
     expect(screen.queryByTestId("chat-error")).not.toBeInTheDocument();
+  });
+
+  it("sends attached artifact context with the coordinator message", async () => {
+    chatHandoff.attachArtifact({
+      id: "artifact-1",
+      title: "MQTT vs NATS",
+      toolName: "emit_research_artifact",
+      content: "# MQTT vs NATS\n\nUse MQTT for smaller edge devices.",
+    });
+    const user = userEvent.setup();
+    render(ChatBar);
+
+    expect(screen.getByTestId("artifact-context-chip")).toHaveTextContent(
+      "MQTT vs NATS",
+    );
+
+    await user.type(
+      screen.getByTestId("chat-input"),
+      "/create-change draft requirements",
+    );
+    await user.click(screen.getByTestId("send-button"));
+
+    expect(agentApi.sendMessage).toHaveBeenCalledWith(
+      expect.stringContaining("/create-change draft requirements"),
+    );
+    expect(agentApi.sendMessage).toHaveBeenCalledWith(
+      expect.stringContaining("Artifact context: MQTT vs NATS"),
+    );
+    expect(agentApi.sendMessage).toHaveBeenCalledWith(
+      expect.stringContaining("Use MQTT for smaller edge devices."),
+    );
+    expect(
+      screen.queryByTestId("artifact-context-chip"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("clears artifact context without clearing the typed prompt", async () => {
+    chatHandoff.attachArtifact({
+      id: "artifact-1",
+      title: "MQTT vs NATS",
+      toolName: "emit_research_artifact",
+      content: "# MQTT vs NATS",
+    });
+    const user = userEvent.setup();
+    render(ChatBar);
+
+    await user.type(screen.getByTestId("chat-input"), "/research follow up");
+    await user.click(screen.getByLabelText("Remove artifact context"));
+
+    expect(
+      screen.queryByTestId("artifact-context-chip"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("chat-input")).toHaveValue("/research follow up");
   });
 });
 
@@ -317,6 +395,40 @@ describe("ChatBar — slash commands", () => {
 
     expect(agentApi.sendMessage).toHaveBeenCalledWith(
       "/implement-spec add-health-endpoint",
+      { runId: "loop_spec" },
+    );
+    expect(agentApi.sendSignal).not.toHaveBeenCalled();
+  });
+
+  it("/research routes through coordinator chat without a selected task", async () => {
+    mockSelectedTask.mockReturnValue(undefined);
+    const user = userEvent.setup();
+    render(ChatBar);
+
+    const input = screen.getByTestId("chat-input");
+    await user.type(input, "/research compare MQTT and NATS");
+    await user.click(screen.getByTestId("send-button"));
+
+    expect(agentApi.sendMessage).toHaveBeenCalledWith(
+      "/research compare MQTT and NATS",
+    );
+    expect(agentApi.sendSignal).not.toHaveBeenCalled();
+  });
+
+  it("/dev-via-test remains a coordinator-routed team hint when a task is selected", async () => {
+    mockSelectedTask.mockReturnValue(selectedTask({ id: "loop_spec" }));
+    const user = userEvent.setup();
+    render(ChatBar);
+
+    const input = screen.getByTestId("chat-input");
+    await user.type(input, "/dev-via-test add GET /health with tests");
+    await user.click(screen.getByTestId("send-button"));
+
+    expect(agentApi.sendMessage).toHaveBeenCalledWith(
+      "/dev-via-test add GET /health with tests",
+    );
+    expect(agentApi.sendMessage).not.toHaveBeenCalledWith(
+      "/dev-via-test add GET /health with tests",
       { runId: "loop_spec" },
     );
     expect(agentApi.sendSignal).not.toHaveBeenCalled();
@@ -377,9 +489,7 @@ describe("ChatBar — slash commands", () => {
     await user.type(input, "/unknowncmd something");
     await user.click(screen.getByTestId("send-button"));
 
-    expect(agentApi.sendMessage).toHaveBeenCalledWith(
-      "/unknowncmd something",
-    );
+    expect(agentApi.sendMessage).toHaveBeenCalledWith("/unknowncmd something");
     expect(agentApi.sendSignal).not.toHaveBeenCalled();
   });
 });
@@ -389,11 +499,12 @@ describe("ChatBar — slash commands", () => {
 // ---------------------------------------------------------------------------
 
 describe("ChatBar — action chips", () => {
-  it("shows persona chips on the empty state", () => {
+  it("shows team chips on the empty state", () => {
     render(ChatBar);
     expect(screen.getByTestId("action-chip-research")).toBeInTheDocument();
-    expect(screen.getByTestId("action-chip-plan")).toBeInTheDocument();
-    expect(screen.getByTestId("action-chip-implement")).toBeInTheDocument();
+    expect(screen.getByTestId("action-chip-spec")).toBeInTheDocument();
+    expect(screen.getByTestId("action-chip-optimize")).toBeInTheDocument();
+    expect(screen.getByTestId("action-chip-build")).toBeInTheDocument();
   });
 
   it("hides action chips when a task is selected", () => {
@@ -411,32 +522,31 @@ describe("ChatBar — action chips", () => {
     expect(screen.queryByTestId("action-chips")).not.toBeInTheDocument();
   });
 
-  it("clicking a persona chip prefixes the input and focuses it", async () => {
+  it("clicking a team chip prefixes the input and focuses it", async () => {
     const user = userEvent.setup();
     render(ChatBar);
 
     await user.click(screen.getByTestId("action-chip-research"));
 
     const input = screen.getByTestId("chat-input") as HTMLInputElement;
-    expect(input.value).toBe("@research ");
+    expect(input.value).toBe("/research ");
     expect(document.activeElement).toBe(input);
   });
 
-  it("clicking a different persona chip replaces the existing prefix", async () => {
+  it("clicking a team chip replaces a legacy @team prefix", async () => {
     const user = userEvent.setup();
     render(ChatBar);
 
-    await user.click(screen.getByTestId("action-chip-research"));
-    await user.type(screen.getByTestId("chat-input"), "compare mqtt");
+    await user.type(screen.getByTestId("chat-input"), "@research compare mqtt");
 
     let input = screen.getByTestId("chat-input") as HTMLInputElement;
     expect(input.value).toBe("@research compare mqtt");
 
-    await user.click(screen.getByTestId("action-chip-plan"));
+    await user.click(screen.getByTestId("action-chip-spec"));
 
-    // Replaced @research with @plan, kept the user's typed body.
+    // Replaced @research with /create-change, kept the user's typed body.
     input = screen.getByTestId("chat-input") as HTMLInputElement;
-    expect(input.value).toBe("@plan compare mqtt");
+    expect(input.value).toBe("/create-change compare mqtt");
   });
 
   it("does not show 'Approve next' when no tasks need attention", () => {

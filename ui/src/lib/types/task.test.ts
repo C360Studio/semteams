@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import type { AgentLoop, AgentLoopState } from "./agent";
 import {
   loopStateToColumn,
+  collectDescendantLoops,
   deriveTaskInfo,
   resolveTaskMention,
   COLUMNS,
@@ -52,12 +53,9 @@ describe("loopStateToColumn", () => {
     ["cancelled", "failed"],
   ];
 
-  it.each(expectations)(
-    "maps %s → %s",
-    (state, expectedColumn) => {
-      expect(loopStateToColumn(state)).toBe(expectedColumn);
-    },
-  );
+  it.each(expectations)("maps %s → %s", (state, expectedColumn) => {
+    expect(loopStateToColumn(state)).toBe(expectedColumn);
+  });
 
   it("covers all 10 AgentLoopState values", () => {
     const allStates: AgentLoopState[] = [
@@ -76,6 +74,70 @@ describe("loopStateToColumn", () => {
       expect(loopStateToColumn(state)).toBeDefined();
     }
     expect(allStates).toHaveLength(10);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// collectDescendantLoops — flatten child trees for task detail panels
+// ---------------------------------------------------------------------------
+
+describe("collectDescendantLoops", () => {
+  it("returns all descendants in parent-before-child order", () => {
+    const parent = makeLoop({ loop_id: "parent" });
+    const plan = makeLoop({
+      loop_id: "plan",
+      parent_loop_id: "parent",
+      role: "researcher-research-plan",
+    });
+    const gather = makeLoop({
+      loop_id: "gather",
+      parent_loop_id: "plan",
+      role: "researcher-research-gather",
+    });
+    const synthesize = makeLoop({
+      loop_id: "synthesize",
+      parent_loop_id: "plan",
+      role: "researcher-research-synthesize",
+    });
+    const reviewer = makeLoop({
+      loop_id: "reviewer",
+      parent_loop_id: "synthesize",
+      role: "reviewer-research",
+    });
+    const unrelated = makeLoop({
+      loop_id: "unrelated",
+      parent_loop_id: "",
+    });
+
+    const descendants = collectDescendantLoops(parent.loop_id, [
+      parent,
+      plan,
+      gather,
+      synthesize,
+      reviewer,
+      unrelated,
+    ]);
+
+    expect(descendants.map((loop) => loop.loop_id)).toEqual([
+      "plan",
+      "gather",
+      "synthesize",
+      "reviewer",
+    ]);
+  });
+
+  it("does not loop forever if a malformed descendant cycle appears", () => {
+    const parent = makeLoop({ loop_id: "parent" });
+    const child = makeLoop({ loop_id: "child", parent_loop_id: "parent" });
+    const cycle = makeLoop({ loop_id: "parent", parent_loop_id: "child" });
+
+    const descendants = collectDescendantLoops(parent.loop_id, [
+      parent,
+      child,
+      cycle,
+    ]);
+
+    expect(descendants.map((loop) => loop.loop_id)).toEqual(["child"]);
   });
 });
 
@@ -384,7 +446,13 @@ describe("deriveTaskInfo", () => {
 
   it("runPause is passed through onto the TaskInfo", () => {
     const pause: RunPause = { cause: "tool_gate", gatedLoopId: "loop-gated" };
-    const t = deriveTaskInfo(makeLoop({ state: "complete" }), [], null, undefined, pause);
+    const t = deriveTaskInfo(
+      makeLoop({ state: "complete" }),
+      [],
+      null,
+      undefined,
+      pause,
+    );
     expect(t.runPause).toEqual(pause);
   });
 
@@ -404,14 +472,28 @@ describe("deriveTaskInfo", () => {
 
   it("runPause forces needs_you even when a done child would otherwise win", () => {
     const parent = makeLoop({ state: "complete", loop_id: "parent" });
-    const child = makeLoop({ state: "complete", loop_id: "child", parent_loop_id: "parent" });
-    const pause: RunPause = { cause: "clarification", askingLoopId: "loop-ask", question: "Q?" };
+    const child = makeLoop({
+      state: "complete",
+      loop_id: "child",
+      parent_loop_id: "parent",
+    });
+    const pause: RunPause = {
+      cause: "clarification",
+      askingLoopId: "loop-ask",
+      question: "Q?",
+    };
     const t = deriveTaskInfo(parent, [child], null, undefined, pause);
     expect(t.column).toBe("needs_you");
   });
 
   it("null runPause does not affect column derivation", () => {
-    const t = deriveTaskInfo(makeLoop({ state: "complete" }), [], null, undefined, null);
+    const t = deriveTaskInfo(
+      makeLoop({ state: "complete" }),
+      [],
+      null,
+      undefined,
+      null,
+    );
     expect(t.column).toBe("done");
   });
 });
@@ -491,10 +573,15 @@ describe("resolveTaskMention", () => {
     // alias "edge" → loop_b, even though "edge" is a substring of
     // "compare mqtt vs nats for iot edge" (loop_a's title).
     const tasksWithAlias = [
-      task({ id: "loop_a", shortRef: 1, title: "compare mqtt vs nats for iot edge" }),
+      task({
+        id: "loop_a",
+        shortRef: 1,
+        title: "compare mqtt vs nats for iot edge",
+      }),
       task({ id: "loop_b", shortRef: 2, title: "research rust" }),
     ];
-    const loopByAlias = (a: string) => (a.toLowerCase() === "edge" ? "loop_b" : null);
+    const loopByAlias = (a: string) =>
+      a.toLowerCase() === "edge" ? "loop_b" : null;
     expect(
       resolveTaskMention("@edge", tasksWithAlias, () => null, loopByAlias)?.id,
     ).toBe("loop_b");
@@ -502,8 +589,8 @@ describe("resolveTaskMention", () => {
 
   it("alias lookup falls through to fuzzy when no alias matches", () => {
     const loopByAlias = () => null;
-    expect(
-      resolveTaskMention("@mqtt", tasks, loopByRef, loopByAlias)?.id,
-    ).toBe("loop_a");
+    expect(resolveTaskMention("@mqtt", tasks, loopByRef, loopByAlias)?.id).toBe(
+      "loop_a",
+    );
   });
 });

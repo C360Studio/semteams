@@ -93,6 +93,12 @@ kills it. This path uses the local Caddy + Vite proxy, so it needs
 host Caddy (`brew install caddy` on macOS). Use a second terminal
 for everything below.
 
+The chat box is the coordinator front door. You can ask how SemTeams works,
+refine an idea before choosing a team, or send a ready task. Optional team
+prefixes such as `/research`, `/create-change` (`/spec`), `/optimize`, and
+`/dev-via-test` are intent hints; the coordinator still validates the prompt
+shape and keeps the normal sandbox, readiness, approval, and review gates.
+
 ### A specific config
 
 ```bash

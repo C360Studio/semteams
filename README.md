@@ -82,8 +82,10 @@ task dev:research
 That boots NATS, builds and starts `bin/semteams` against
 `configs/flow-bootstrap.json` (the ADR-042 production bootstrap),
 then starts the UI proxy. Open <http://localhost:3001> and type a
-prompt — the coordinator persona classifies it and routes it to one
-of the live category packs:
+prompt. You can chat with the coordinator first: ask what SemTeams can
+do, refine a rough idea, or ask which team fits. When the request is
+ready, the coordinator classifies it and routes it to one of the live
+category packs:
 
 - a **research** question (compare X vs Y, how does Z work) → the
   research arc;
@@ -95,6 +97,12 @@ of the live category packs:
 - a **build-with-tests** ask (add an endpoint with unit tests) →
   the dev-via-test pack (Lisa plans → CBG gates the plan → Ralph
   implements in a sandbox → CBG gates the work).
+
+Power users can prefix a prompt with `/research`, `/create-change`
+(`/spec` also works), `/optimize`, or `/dev-via-test`. Those are
+coordinator-routed hints, not bypasses; SemTeams still validates the
+prompt shape and keeps the usual sandbox, readiness, approval, and
+review gates.
 
 See [`docs/architecture.md`](docs/architecture.md) for what each
 pack does and **how the sandbox is created**.

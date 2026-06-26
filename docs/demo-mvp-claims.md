@@ -10,8 +10,9 @@ SemTeams can produce, review, edit, approve, and export an OpenSpec handoff.
 SemTeams can prove readiness before execution by modeling claims, proof dependencies, harness profiles, readiness
 records, evidence, and waivers before implementation work is released.
 
-SemTeams can route prompt classes to the right team: research, OpenSpec authoring, autoresearch, dev-via-test, direct
-response, or clarification.
+SemTeams can route prompt classes to the right team from the coordinator front door: plain chat/direct response,
+clarification, research, OpenSpec authoring, autoresearch, or dev-via-test. Product-level slash commands are supported
+as coordinator-routed hints, not bypasses.
 
 ## Non-Claims
 

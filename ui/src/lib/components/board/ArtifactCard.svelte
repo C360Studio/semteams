@@ -26,6 +26,7 @@
     XCircle,
     ArrowPath,
   } from "svelte-hero-icons";
+  import { chatHandoff } from "$lib/stores/chatHandoff.svelte";
   import { renderMarkdown } from "$lib/utils/markdown";
   import { createZipBlob } from "$lib/utils/zip";
 
@@ -47,6 +48,14 @@
   let editDraft = $state("");
   let editedOpenSpecMarkdown = $state<string | null>(null);
   let exportStatus = $state<string | null>(null);
+  let artifactStatus = $state<string | null>(null);
+
+  const HANDOFF_TEAMS = [
+    { id: "research", label: "Research", prefix: "/research" },
+    { id: "spec", label: "Spec", prefix: "/create-change" },
+    { id: "optimize", label: "Optimize", prefix: "/optimize" },
+    { id: "build", label: "Build", prefix: "/dev-via-test" },
+  ] as const;
 
   // Header lifts `title` + `revision` out of args. Both are conventions
   // across emit_* tools (emit_plan.title + emit_*.revision in the
@@ -62,6 +71,12 @@
   );
   const isOpenSpecChange = $derived(
     toolName === "emit_change" && isPlainObject(args),
+  );
+  const isReusableArtifact = $derived(
+    toolName.startsWith("emit_") && !isOpenSpecChange && isPlainObject(args),
+  );
+  const artifactTitle = $derived(
+    titleValue ?? labelForKey(toolName.replace(/^emit_/, "") || "artifact"),
   );
   const openSpecSlug = $derived(
     isOpenSpecChange ? stringField(args, "slug", "change") : "",
@@ -385,6 +400,80 @@
     return reviewMode === "edit" ? editDraft : effectiveOpenSpecMarkdown;
   }
 
+  function markdownForObject(obj: Record<string, unknown>): string[] {
+    const out: string[] = [];
+    for (const [key, value] of Object.entries(obj)) {
+      out.push(`- **${labelForKey(key)}:** ${formatScalar(value)}`);
+    }
+    return out;
+  }
+
+  function markdownForValue(value: unknown): string[] {
+    if (typeof value === "string") return [value.trim() || "_empty_"];
+    if (typeof value === "number" || typeof value === "boolean") {
+      return [String(value)];
+    }
+    if (isArrayOfScalars(value)) {
+      return value.length
+        ? value.map((item) => `- ${formatScalar(item)}`)
+        : ["_empty_"];
+    }
+    if (isArrayOfObjects(value)) {
+      if (value.length === 0) return ["_empty_"];
+      return value.flatMap((item, idx) => [
+        `### Item ${idx + 1}`,
+        ...markdownForObject(item),
+        "",
+      ]);
+    }
+    if (Array.isArray(value) && value.length === 0) return ["_empty_"];
+    if (isPlainObject(value)) return markdownForObject(value);
+    return [formatScalar(value)];
+  }
+
+  function genericArtifactMarkdown(): string {
+    if (!args) return `# ${artifactTitle}\n\nArtifact tool: ${toolName}\n`;
+    const out = [`# ${artifactTitle}`, "", `Artifact tool: ${toolName}`];
+    if (revisionValue !== null) out.push(`Revision: ${revisionValue}`);
+    for (const key of sectionKeys) {
+      out.push(
+        "",
+        `## ${labelForKey(key)}`,
+        "",
+        ...markdownForValue(args[key]),
+      );
+    }
+    return normalizeMarkdown(out);
+  }
+
+  function artifactContext() {
+    return {
+      id: `${toolName}:${artifactTitle}`,
+      title: artifactTitle,
+      toolName,
+      content: genericArtifactMarkdown(),
+    };
+  }
+
+  async function copyGenericArtifact() {
+    artifactStatus = null;
+    try {
+      await navigator.clipboard.writeText(genericArtifactMarkdown());
+      artifactStatus = "Copied";
+    } catch {
+      artifactStatus = "Copy failed";
+    }
+  }
+
+  function useArtifactWith(prefix: string) {
+    artifactStatus = null;
+    chatHandoff.stage({
+      content: `${prefix} Use the attached artifact as context to `,
+      artifact: artifactContext(),
+    });
+    artifactStatus = "Added to chat";
+  }
+
   function implementationCommand(): string {
     return `/implement-spec ${openSpecSlug || "change-slug"}`;
   }
@@ -445,10 +534,7 @@
   }
 
   function downloadTextFile(filename: string, text: string, mimeType: string) {
-    downloadBlob(
-      filename,
-      new Blob([text], { type: mimeType }),
-    );
+    downloadBlob(filename, new Blob([text], { type: mimeType }));
   }
 </script>
 
@@ -470,6 +556,54 @@
 
   {#if titleValue}
     <h4 class="artifact-title" data-testid="artifact-title">{titleValue}</h4>
+  {/if}
+
+  {#if isReusableArtifact}
+    <section
+      class="artifact-handoff"
+      data-testid="artifact-handoff-panel"
+      aria-label="Artifact handoff actions"
+    >
+      <div class="artifact-handoff-copy">
+        <p class="artifact-handoff-eyebrow">Use as context</p>
+        <p class="artifact-handoff-help">
+          Attach this artifact to a follow-up prompt for any team.
+        </p>
+      </div>
+      <div class="artifact-handoff-actions">
+        <button
+          type="button"
+          class="artifact-btn"
+          data-testid="artifact-copy"
+          onclick={copyGenericArtifact}
+          title="Copy rendered artifact"
+        >
+          <Icon src={ClipboardDocument} size="15" />
+          <span>Copy</span>
+        </button>
+        {#each HANDOFF_TEAMS as team (team.id)}
+          <button
+            type="button"
+            class="artifact-btn"
+            data-testid="artifact-use-{team.id}"
+            onclick={() => useArtifactWith(team.prefix)}
+            title="Use artifact with {team.label}"
+          >
+            {team.label}
+          </button>
+        {/each}
+      </div>
+      {#if artifactStatus}
+        <p
+          class="artifact-status"
+          data-testid="artifact-handoff-state"
+          role="status"
+          aria-live="polite"
+        >
+          {artifactStatus}
+        </p>
+      {/if}
+    </section>
   {/if}
 
   {#if isOpenSpecChange}
@@ -742,6 +876,65 @@
     color: var(--ui-text-tertiary, #9ca3af);
     font-style: italic;
     font-size: 0.75rem;
+  }
+
+  .artifact-handoff {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+    margin-bottom: 0.625rem;
+    padding: 0.5rem;
+    border: 1px solid var(--ui-border-subtle, #e5e7eb);
+    border-radius: 4px;
+    background: var(--ui-surface-primary, #fff);
+  }
+
+  .artifact-handoff-eyebrow {
+    margin: 0;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    color: var(--ui-text-primary, #111827);
+  }
+
+  .artifact-handoff-help {
+    margin: 0.125rem 0 0;
+    font-size: 0.75rem;
+    line-height: 1.35;
+    color: var(--ui-text-secondary, #6b7280);
+  }
+
+  .artifact-handoff-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+  }
+
+  .artifact-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem;
+    min-height: 1.75rem;
+    padding: 0.25rem 0.5rem;
+    border: 1px solid var(--ui-border-muted, #d1d5db);
+    border-radius: 4px;
+    background: var(--ui-surface-secondary, #f9fafb);
+    color: var(--ui-text-primary, #111827);
+    font: inherit;
+    font-size: 0.75rem;
+    line-height: 1.2;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .artifact-btn:hover {
+    background: var(--ui-surface-tertiary, #e5e7eb);
+  }
+
+  .artifact-status {
+    margin: 0;
+    font-size: 0.75rem;
+    color: var(--ui-text-secondary, #6b7280);
   }
 
   .openspec-review {

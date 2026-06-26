@@ -182,13 +182,18 @@ Add these to the client-side slash command registry (`slashCommands.ts`):
 
 | Command | Maps to | Page |
 |---------|---------|------|
+| `/research <prompt>` | Coordinator-routed research intent hint | both |
+| `/create-change <prompt>` / `/spec <prompt>` | Coordinator-routed OpenSpec authoring intent hint | both |
+| `/optimize <prompt>` | Coordinator-routed optimization intent hint | both |
+| `/dev-via-test <prompt>` | Coordinator-routed implementation-with-tests intent hint | both |
 | `/approve [loop_id]` | POST message with `/approve {loop_id}` | both |
 | `/reject [loop_id] [reason]` | POST message with `/reject {loop_id} {reason}` | both |
 | `/pause [loop_id]` | POST message with `/pause {loop_id}` | both |
 | `/resume [loop_id]` | POST message with `/resume {loop_id}` | both |
 
-These go through the normal message endpoint — the backend command registry
-handles routing to the signal system.
+Team intent commands go through the normal coordinator message path. Control
+commands resolve to the governed signal system and require the same selected
+run/task context as the visible controls.
 
 ## New Chat Attachment Types
 

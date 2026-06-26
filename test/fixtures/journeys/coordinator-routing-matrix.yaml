@@ -12,11 +12,16 @@ description: |
 
   Prompts covered:
     1. evidence/comparison ask -> research
-    2. OpenSpec/spec-authoring ask -> create_change
-    3. scalar metric optimization -> autoresearch, after sandbox readiness
-    4. build-with-tests ask -> dev_via_test, after sandbox readiness
-    5. vague optimization ask -> ask_user
-    6. simple taxonomy/meta ask -> respond_direct
+    2. /research hint -> research
+    3. OpenSpec/spec-authoring ask -> create_change
+    4. /spec hint -> create_change
+    5. scalar metric optimization -> autoresearch, after sandbox readiness
+    6. /optimize hint -> autoresearch, after sandbox readiness
+    7. build-with-tests ask -> dev_via_test, after sandbox readiness
+    8. /dev-via-test hint -> dev_via_test, after sandbox readiness
+    9. mis-shaped /optimize hint -> ask_user
+    10. vague optimization ask -> ask_user
+    11. front-door product question -> respond_direct
 
 responses_by_role:
   - match: "Delegation rules"
@@ -33,8 +38,24 @@ responses_by_role:
           name: decide
           arguments_json: |
             {
+              "action": "research",
+              "reason": "The /research prefix is a valid user hint and the body asks for an evidence-backed MQTT vs NATS comparison. The coordinator still owns routing, so this maps to the research pack."
+            }
+
+      - tool_call:
+          name: decide
+          arguments_json: |
+            {
               "action": "create_change",
               "reason": "The user is asking to author an OpenSpec change for an API behavior. The deliverable is a spec artifact for review, not code execution."
+            }
+
+      - tool_call:
+          name: decide
+          arguments_json: |
+            {
+              "action": "create_change",
+              "reason": "The /spec prefix is a valid create-change hint and the prompt asks for API requirements and acceptance criteria. The deliverable is a reviewed OpenSpec change."
             }
 
       - tool_call:
@@ -101,8 +122,84 @@ responses_by_role:
           name: decide
           arguments_json: |
             {
+              "action": "autoresearch",
+              "reason": "The /optimize prefix is a hint, and the prompt also provides command `go test ./...`, scalar wallclock metric, lower-is-better direction, bounded surface, cap, and guardrail. Sandbox preflight completed before routing."
+            }
+
+      - tool_call:
+          name: query_sandbox_attestation
+          arguments_json: |
+            {
+              "languages": ["go"],
+              "tools": ["task"],
+              "network": "restricted",
+              "verification": [
+                {"name": "go", "command": "go version"},
+                {"name": "task", "command": "task --version"}
+              ]
+            }
+
+      - tool_call:
+          name: request_sandbox
+          arguments_json: |
+            {
+              "languages": ["go"],
+              "tools": ["task"],
+              "network": "restricted",
+              "verification": [
+                {"name": "go", "command": "go version"},
+                {"name": "task", "command": "task --version"}
+              ]
+            }
+
+      - tool_call:
+          name: decide
+          arguments_json: |
+            {
               "action": "dev_via_test",
               "reason": "The prompt asks to build a Go MAVLink heartbeat endpoint with concrete tests. It is implementation work with a verifiable test command, so it belongs in dev_via_test."
+            }
+
+      - tool_call:
+          name: query_sandbox_attestation
+          arguments_json: |
+            {
+              "languages": ["go"],
+              "tools": ["task"],
+              "network": "restricted",
+              "verification": [
+                {"name": "go", "command": "go version"},
+                {"name": "task", "command": "task --version"}
+              ]
+            }
+
+      - tool_call:
+          name: request_sandbox
+          arguments_json: |
+            {
+              "languages": ["go"],
+              "tools": ["task"],
+              "network": "restricted",
+              "verification": [
+                {"name": "go", "command": "go version"},
+                {"name": "task", "command": "task --version"}
+              ]
+            }
+
+      - tool_call:
+          name: decide
+          arguments_json: |
+            {
+              "action": "dev_via_test",
+              "reason": "The /dev-via-test prefix is a hint, and the prompt asks for a Go MAVLink heartbeat endpoint with unit tests. Sandbox preflight completed before routing to implementation."
+            }
+
+      - tool_call:
+          name: decide
+          arguments_json: |
+            {
+              "action": "ask_user",
+              "reason": "What concrete target, metric or measurement command, bounded edit surface, and success criteria should I optimize? The /optimize hint is not enough by itself."
             }
 
       - tool_call:
@@ -118,5 +215,5 @@ responses_by_role:
           arguments_json: |
             {
               "action": "respond_direct",
-              "reason": "The coordinator can currently choose research, autoresearch, dev_via_test, dev_via_test_finalize, create_change, dev_from_task, respond_direct, or ask_user. The right choice depends on whether the prompt asks for evidence, scalar optimization, implementation with tests, spec authoring, or clarification."
+              "reason": "You can chat with SemTeams first, or ask for a specific team. Use research for evidence and comparisons, create-change for OpenSpec requirements, optimize for measurable performance/cost loops, and dev-via-test for implementation with tests. If the request is still fuzzy, I can help shape it before dispatching a team."
             }

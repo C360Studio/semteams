@@ -45,11 +45,36 @@ export interface ColumnDef {
 
 /** All columns in display order. */
 export const COLUMNS: ColumnDef[] = [
-  { id: "thinking", label: "Thinking", color: "var(--col-thinking, #3b82f6)", defaultVisible: true },
-  { id: "executing", label: "Executing", color: "var(--col-executing, #14b8a6)", defaultVisible: true },
-  { id: "needs_you", label: "Needs You", color: "var(--col-needs-you, #f97316)", defaultVisible: true },
-  { id: "done", label: "Done", color: "var(--col-done, #22c55e)", defaultVisible: true },
-  { id: "failed", label: "Failed", color: "var(--col-failed, #ef4444)", defaultVisible: false },
+  {
+    id: "thinking",
+    label: "Thinking",
+    color: "var(--col-thinking, #3b82f6)",
+    defaultVisible: true,
+  },
+  {
+    id: "executing",
+    label: "Executing",
+    color: "var(--col-executing, #14b8a6)",
+    defaultVisible: true,
+  },
+  {
+    id: "needs_you",
+    label: "Needs You",
+    color: "var(--col-needs-you, #f97316)",
+    defaultVisible: true,
+  },
+  {
+    id: "done",
+    label: "Done",
+    color: "var(--col-done, #22c55e)",
+    defaultVisible: true,
+  },
+  {
+    id: "failed",
+    label: "Failed",
+    color: "var(--col-failed, #ef4444)",
+    defaultVisible: false,
+  },
 ];
 
 /** Map an agent loop state to a kanban column. */
@@ -78,7 +103,10 @@ export function loopStateToColumn(state: AgentLoopState): TaskColumn {
       // Log the unknown state so we notice, but don't crash the reactive
       // graph — that poisons Svelte's batched flush and breaks unrelated
       // bindings (chat input was the load-bearing victim).
-      console.warn("[loopStateToColumn] unknown state, defaulting to thinking", state);
+      console.warn(
+        "[loopStateToColumn] unknown state, defaulting to thinking",
+        state,
+      );
       return "thinking";
     }
   }
@@ -87,7 +115,7 @@ export function loopStateToColumn(state: AgentLoopState): TaskColumn {
 /**
  * TaskInfo is the data model for a single kanban card.
  *
- * In Phase 1, this is derived from the top-level AgentLoop + any child
+ * In Phase 1, this is derived from the top-level AgentLoop + any descendant
  * loops. In Phase 2, it will be backed by a proper Task backend entity.
  */
 export interface TaskInfo {
@@ -137,7 +165,7 @@ export interface TaskInfo {
   /** The primary (top-level) loop. */
   primaryLoop: AgentLoop;
 
-  /** Child loops (parent_loop_id === this.id). */
+  /** Descendant loops under this task, flattened in parent-before-child order. */
   childLoops: AgentLoop[];
 
   /** True if any child loop is in a state that needs user attention. */
@@ -209,9 +237,44 @@ export interface TaskLabelData {
 }
 
 /**
- * Derive a TaskInfo from a top-level loop and its children.
+ * Return every descendant loop for a top-level task. The UI presents one
+ * visible task card per top-level coordinator run, but artifacts often live
+ * several rule-spawned loops below that parent. Flattening the descendants
+ * keeps those artifacts reachable from the human-facing task detail panel.
+ */
+export function collectDescendantLoops(
+  parentLoopID: string,
+  loops: AgentLoop[],
+): AgentLoop[] {
+  const childrenByParent: Record<string, AgentLoop[]> = {};
+  for (const loop of loops) {
+    if (!loop.parent_loop_id) continue;
+    (childrenByParent[loop.parent_loop_id] ??= []).push(loop);
+  }
+
+  const descendants: AgentLoop[] = [];
+  const seen = new Set<string>([parentLoopID]);
+  const stack = [...(childrenByParent[parentLoopID] ?? [])].reverse();
+
+  while (stack.length > 0) {
+    const loop = stack.pop()!;
+    if (seen.has(loop.loop_id)) continue;
+    seen.add(loop.loop_id);
+    descendants.push(loop);
+
+    const children = childrenByParent[loop.loop_id] ?? [];
+    for (let i = children.length - 1; i >= 0; i--) {
+      stack.push(children[i]);
+    }
+  }
+
+  return descendants;
+}
+
+/**
+ * Derive a TaskInfo from a top-level loop and its descendants.
  * The task's column is the most-urgent state across itself and all
- * children (needs_you > failed > executing > thinking > done).
+ * descendants (needs_you > failed > executing > thinking > done).
  *
  * When runPause is non-null the run is parked at the run level waiting
  * on the operator — the effective column is forced to "needs_you"
