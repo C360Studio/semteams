@@ -125,3 +125,50 @@ exercise.
   markers were re-authored here.
 - Upstream ADR-074 (canonical predicate contract) and the beta.147–159
   release arc in the semstreams repository.
+
+## Addendum 2026-08-07: what live verification caught that static gates could not
+
+The realignment shipped through four static gates (build, unit/contract
+tests, lint, config `--validate`) all green — and then live boots + mock
+journeys caught five more beta.159 semantics, each invisible to the
+compiler and to structural tests. Recorded here because the next bump will
+hit the same classes:
+
+1. **Vocabulary authoring gate.** Every predicate a rule (condition field
+   or action), projection contract, or ownership claim exposes must be
+   *declared* in the vocabulary registry at the composition root.
+   `cmd/semteams/vocab` is the product vocabulary; `run()` registers
+   upstream's `vocabulary/builtins` then ours, before config validation.
+   Runtime persistence stays syntax-only, so dynamic predicates
+   (`sandbox.attestation.verified-<probe>`) stay unregistered by design.
+   `rule.task.spawned` is engine-stamped but undeclared upstream —
+   declared in our vocab; candidate upstream ask.
+2. **`replace_owned` reconciles the whole group.** The action's wire form
+   removes every predicate in the selected group and adds the one desired
+   triple. Independent single-value stamps must therefore each own a
+   single-predicate group (`best-value`, `best-experiment-id`,
+   `run-status`, `iteration-pending`); the shared four-predicate group
+   would have wedged autoresearch after one iteration, silently. A
+   contract test pins the invariant.
+3. **A `config.streams` entry replaces the port-derived declaration.**
+   Declaring only bounds created the AGENT stream with the literal
+   subject `AGENT`; every `agent.task.*` publish then timed out. Stream
+   declarations must carry their canonical subjects explicitly
+   (`AGENT=agent.>`, `TOOL=tool.>`), matching upstream's reference
+   configs.
+4. **Dispatch swallows unknown slash messages.** beta.115 passed an
+   unregistered "/research …" through to the coordinator as chat;
+   beta.159 replies "Unknown command" and no loop spawns. Every public
+   team token — live and parked — is now a registered
+   `cmd/semteams/commands/teamhint` command that rewrites `/team rest` to
+   the `@team rest` hint form and republishes through the USER stream.
+   Routing policy stays with the coordinator persona; parked-team asks
+   still get their honest answer from it.
+5. **The optional-adapter components left the core registry.**
+   `oasf-generator`, `directory-bridge`, `a2a-adapter`, `otel-exporter`
+   now live in separate import roots; their config blocks (and the
+   DIRECTORY/OASF streams they implied) are gone from both bootstraps.
+
+Verification state at this addendum: coordinator-routing-matrix green
+end-to-end on the mock stack (11 cases, including parked-team honesty and
+sandbox preflight); remaining kept-lane journeys running in a batch.
