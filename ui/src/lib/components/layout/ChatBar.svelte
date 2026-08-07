@@ -133,7 +133,9 @@
         const signal = TASK_COMMANDS[firstWord];
         const reason = text.slice(firstWord.length).trim() || undefined;
         await agentApi.sendSignal(taskStore.selectedTask!.id, signal, reason);
-      } else if (RUN_MESSAGE_COMMANDS.has(firstWord)) {
+        // Unreachable while RUN_MESSAGE_COMMANDS is empty (dev packs parked,
+      // ADR-058) — kept so repopulating the Set re-activates run routing.
+    } else if (RUN_MESSAGE_COMMANDS.has(firstWord)) {
         // Slash command — dispatch as a run-attached message so the backend
         // command sees the selected task as UserMessage.RunID.
         await agentApi.sendMessage(message, {
