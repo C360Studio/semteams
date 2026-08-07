@@ -39,20 +39,9 @@ export const COMMANDS: SlashCommand[] = [
       params: { requestedTeam: "research", prompt: args },
     }),
   },
-  {
-    name: "create-change",
-    aliases: ["spec"],
-    description:
-      "Ask the coordinator to validate and route an OpenSpec authoring prompt",
-    usage: "/create-change <spec request>",
-    intent: "general",
-    availableOn: ["flow-builder", "data-view"],
-    parse: (args: string) => ({
-      intent: "general",
-      content: `/create-change ${args}`.trim(),
-      params: { requestedTeam: "create_change", prompt: args },
-    }),
-  },
+  // The create-change and dev-via-test team commands are parked with their
+  // category packs pending the canonical-predicate migration (ADR-058);
+  // restore them here when the packs are re-wired.
   {
     name: "optimize",
     aliases: ["autoresearch"],
@@ -65,20 +54,6 @@ export const COMMANDS: SlashCommand[] = [
       intent: "general",
       content: `/optimize ${args}`.trim(),
       params: { requestedTeam: "autoresearch", prompt: args },
-    }),
-  },
-  {
-    name: "dev-via-test",
-    aliases: ["build", "dev"],
-    description:
-      "Ask the coordinator to validate and route an implementation-with-tests prompt",
-    usage: "/dev-via-test <implementation request>",
-    intent: "general",
-    availableOn: ["flow-builder", "data-view"],
-    parse: (args: string) => ({
-      intent: "general",
-      content: `/dev-via-test ${args}`.trim(),
-      params: { requestedTeam: "dev_via_test", prompt: args },
     }),
   },
   {

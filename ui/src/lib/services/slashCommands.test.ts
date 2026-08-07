@@ -201,44 +201,27 @@ describe("parseSlashCommand — team intent shortcuts", () => {
     });
   });
 
-  it("/spec normalizes to the create-change team hint", () => {
-    const result = parseSlashCommand(
-      "/spec add idempotency-key requirements",
-      "data-view",
-    );
-    expect(result).not.toBeNull();
-    expect(result!.command.name).toBe("create-change");
-    expect(result!.result.content).toBe(
-      "/create-change add idempotency-key requirements",
-    );
-    expect(result!.result.params).toMatchObject({
-      requestedTeam: "create_change",
-    });
-  });
-
-  it("/optimize and /dev-via-test are available on both pages", () => {
+  it("/optimize is available on both pages", () => {
     expect(
       parseSlashCommand("/optimize go test ./...", "flow-builder"),
     ).not.toBeNull();
     expect(
       parseSlashCommand("/optimize go test ./...", "data-view"),
     ).not.toBeNull();
-    expect(
-      parseSlashCommand("/dev-via-test add GET /health", "flow-builder"),
-    ).not.toBeNull();
-    expect(
-      parseSlashCommand("/dev-via-test add GET /health", "data-view"),
-    ).not.toBeNull();
   });
 
-  it("/build resolves to dev-via-test as a compatibility shortcut", () => {
-    const result = parseSlashCommand("/build add GET /health", "flow-builder");
-    expect(result).not.toBeNull();
-    expect(result!.command.name).toBe("dev-via-test");
-    expect(result!.result.content).toBe("/dev-via-test add GET /health");
-    expect(result!.result.params).toMatchObject({
-      requestedTeam: "dev_via_test",
-    });
+  // The create-change and dev-via-test team commands are parked with
+  // their category packs (ADR-058); the registry must not resolve them
+  // until the packs are re-wired.
+  it("parked team commands do not resolve", () => {
+    expect(parseSlashCommand("/create-change add MFA", "data-view")).toBeNull();
+    expect(parseSlashCommand("/spec add MFA", "data-view")).toBeNull();
+    expect(
+      parseSlashCommand("/dev-via-test add GET /health", "flow-builder"),
+    ).toBeNull();
+    expect(
+      parseSlashCommand("/build add GET /health", "flow-builder"),
+    ).toBeNull();
   });
 });
 
@@ -435,9 +418,9 @@ describe("parseSlashCommand — page availability", () => {
 
 describe("getCommandsForPage — flow-builder", () => {
   // flow-builder excludes data-view-only /query, but includes governed spec shortcuts.
-  it("returns all 17 commands for flow-builder", () => {
+  it("returns all 15 commands for flow-builder", () => {
     const commands = getCommandsForPage("flow-builder");
-    expect(commands).toHaveLength(17);
+    expect(commands).toHaveLength(15);
   });
 
   it("includes search on flow-builder", () => {
@@ -475,9 +458,9 @@ describe("getCommandsForPage — flow-builder", () => {
 
 describe("getCommandsForPage — data-view", () => {
   // data-view excludes /flow and /debug, but includes /query plus governed spec shortcuts.
-  it("returns 16 commands for data-view (no /flow, no /debug)", () => {
+  it("returns 14 commands for data-view (no /flow, no /debug)", () => {
     const commands = getCommandsForPage("data-view");
-    expect(commands).toHaveLength(16);
+    expect(commands).toHaveLength(14);
   });
 
   it("includes search on data-view", () => {

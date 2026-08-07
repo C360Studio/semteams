@@ -17,14 +17,12 @@
     "/resume": "resume",
     "/cancel": "cancel",
   };
-  const TEAM_MESSAGE_COMMANDS = new Set([
-    "/research",
-    "/create-change",
-    "/spec",
-    "/optimize",
-    "/dev-via-test",
-  ]);
-  const RUN_MESSAGE_COMMANDS = new Set(["/implement-spec"]);
+  // The spec (/create-change, /spec), build (/dev-via-test), and
+  // /implement-spec commands are parked with their category packs pending
+  // the canonical-predicate migration (ADR-058); restore them when the
+  // packs are re-wired.
+  const TEAM_MESSAGE_COMMANDS = new Set(["/research", "/optimize"]);
+  const RUN_MESSAGE_COMMANDS = new Set<string>([]);
   const TASK_SLASH_COMMANDS = Object.keys(TASK_COMMANDS);
   const ALL_SLASH_COMMANDS = [
     ...TEAM_MESSAGE_COMMANDS,
@@ -38,9 +36,7 @@
    */
   const TEAM_CHIPS = [
     { id: "research", label: "Research", prefix: "/research " },
-    { id: "spec", label: "Spec", prefix: "/create-change " },
     { id: "optimize", label: "Optimize", prefix: "/optimize " },
-    { id: "build", label: "Build", prefix: "/dev-via-test " },
   ] as const;
 
   // Placeholder copy is human-shaped, not slash-command-shaped. Slash
@@ -62,7 +58,7 @@
     // If the user already started typing a different team prefix,
     // replace it; otherwise prepend to whatever's there.
     const stripped = input.replace(
-      /^(@\w+|\/(?:research|create-change|spec|optimize|autoresearch|dev-via-test|build|dev))\s*/i,
+      /^(@\w+|\/(?:research|optimize|autoresearch))\s*/i,
       "",
     );
     input = prefix + stripped;

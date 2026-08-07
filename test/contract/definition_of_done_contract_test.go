@@ -1,3 +1,9 @@
+//go:build parked_packs
+
+// The pack this file pins is parked (unwired from flow-bootstrap) pending the
+// canonical-predicate migration — see ADR-058. Drop this build tag when the
+// pack is re-authored and re-wired.
+
 package contract
 
 import (

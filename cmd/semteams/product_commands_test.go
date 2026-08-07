@@ -1,14 +1,17 @@
 package main
 
 import (
-	"strings"
 	"testing"
 
 	agenticdispatch "github.com/c360studio/semstreams/processor/agentic-dispatch"
 	"github.com/c360studio/semstreams/types"
 )
 
-func TestRegisterProductCommands_RegistersImplementSpec(t *testing.T) {
+// The /implement-spec command is parked with the dev-from-task pack
+// (ADR-058): registerProductCommands must register NOTHING until the pack
+// is re-wired. This pins the parked state so an accidental re-registration
+// shows up as a test failure rather than a silently advertised command.
+func TestRegisterProductCommands_RegistersNothingWhileParked(t *testing.T) {
 	agenticdispatch.ClearGlobalCommands()
 	t.Cleanup(agenticdispatch.ClearGlobalCommands)
 
@@ -16,22 +19,7 @@ func TestRegisterProductCommands_RegistersImplementSpec(t *testing.T) {
 	if err != nil {
 		t.Fatalf("registerProductCommands returned error: %v", err)
 	}
-	if _, ok := agenticdispatch.ListRegisteredCommands()["implement-spec"]; !ok {
-		t.Fatalf("implement-spec command was not registered")
-	}
-}
-
-func TestRegisterProductCommands_RejectsDuplicateImplementSpec(t *testing.T) {
-	agenticdispatch.ClearGlobalCommands()
-	t.Cleanup(agenticdispatch.ClearGlobalCommands)
-
-	platform := types.PlatformMeta{Org: "c360", Platform: "semteams"}
-	if err := registerProductCommands(platform, nil); err != nil {
-		t.Fatalf("first registerProductCommands returned error: %v", err)
-	}
-
-	err := registerProductCommands(platform, nil)
-	if err == nil || !strings.Contains(err.Error(), `command "implement-spec" already registered`) {
-		t.Fatalf("second registerProductCommands error = %v, want duplicate command error", err)
+	if cmds := agenticdispatch.ListRegisteredCommands(); len(cmds) != 0 {
+		t.Fatalf("expected no product commands while dev packs are parked, got %v", cmds)
 	}
 }

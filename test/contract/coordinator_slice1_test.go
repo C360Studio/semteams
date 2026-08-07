@@ -54,7 +54,11 @@ func TestMVPCoordinatorActionTaxonomy(t *testing.T) {
 	}
 	personaText := string(body)
 
-	personaActions := []string{"research", "autoresearch", "dev_via_test", "dev_via_test_finalize", "create_change", "dev_from_task", "respond_direct", "ask_user"}
+	// The dev-side actions (dev_via_test, dev_via_test_finalize,
+	// create_change, dev_from_task) were removed from the taxonomy when
+	// their packs were parked pending the canonical-predicate migration
+	// (ADR-058); re-add each token here when its pack is re-wired.
+	personaActions := []string{"research", "autoresearch", "respond_direct", "ask_user"}
 	for _, action := range personaActions {
 		// Persona must teach the action via its action-value table
 		// (backtick-wrapped token). The "don't invent" warning that
