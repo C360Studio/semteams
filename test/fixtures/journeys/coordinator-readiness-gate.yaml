@@ -5,11 +5,11 @@ description: |
   cannot receive a ready attestation under the default e2e admission policy:
 
     1. public-network Svelte optimization -> admission_pending
-    2. public-network Go implementation -> terminal denied
+    2. public-network Go optimization -> terminal denied
 
   In both cases the coordinator must call query_sandbox_attestation and
   request_sandbox, route on the non-ready Attestation, emit respond_direct,
-  and NOT release autoresearch or dev_via_test.
+  and NOT release autoresearch.
 
 responses_by_role:
   - match: "Delegation rules"
@@ -81,5 +81,5 @@ responses_by_role:
           arguments_json: |
             {
               "action": "respond_direct",
-              "reason": "The Go backend sandbox profile does not allow public network access, so this implementation request cannot be released to dev_via_test as written. Rescope to restricted network or add an approved profile before execution."
+              "reason": "The Go backend sandbox profile does not allow public network access, so this optimization cannot be released to autoresearch as written. Rescope to restricted network or add an approved profile before execution."
             }

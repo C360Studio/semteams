@@ -10,32 +10,42 @@ pack.
 
 ## Ready for MVP demo
 
-- **Coordinator front door** — humans can chat first, refine an idea, ask which
-  team fits, or send a ready task. Team slash commands are supported as
-  coordinator-routed hints.
-- **Research pack** — evidence-gathering research flow with planning, gather,
-  synthesis, review, artifact emission, and coordinator wake-up.
-- **Spec creation path** — OpenSpec-compatible authoring, review, export, and
-  readiness gating for governed handoff.
+The demo scope is the inner and outer loops
+([ADR-058](adr/058-beta159-realignment-and-demo-lane-focus.md)):
+
+- **Coordinator front door (outer loop)** — humans can chat first, refine an
+  idea, ask which team fits, or send a ready task. Team slash commands are
+  coordinator-routed hints. Asks for parked teams get an honest direct
+  response.
+- **Research pack (inner loop)** — evidence-gathering research flow with
+  planning, parallel gather fan-out, join, synthesis, review, artifact
+  emission with recoverable sources, and coordinator wake-up.
+- **Autoresearch pack** — metric optimization with empirical keep/revert
+  decisions in an attested per-tenant devcontainer.
 - **Artifact context handoff** — emitted artifacts can be copied or attached to
-  a new prompt so research, specs, optimization summaries, and implementation
-  evidence can inform the next team.
-- **Sandboxed build and optimization paths** — autoresearch and dev-via-test use
-  attested per-tenant devcontainers when run against the real sandbox runner.
+  a new prompt so research and optimization summaries can inform the next ask.
 - **Black-box demo evidence** — Playwright journeys prove the claim boundary
-  through public UI, dispatch, task-runner, approval, export, and documented
+  through public UI, dispatch, task-runner, approval, and documented
   observation surfaces.
+
+## Parked pending predicate re-authoring (ADR-058)
+
+The spec-authoring and software-implementation packs (create-change,
+proof-readiness, dev-from-task, dev-via-test) are parked in place: files stay
+in-repo, nothing is wired. Restoring one is a deliberate migration — re-author
+its predicates under the upstream canonical contract, re-wire the bootstrap,
+restore the taxonomy token, and un-park its tests and journeys.
 
 ## Near-term product direction
 
+- Prove the inner and outer loops on real LLMs as the standing demo, and keep
+  the mock journeys as the merge gate.
 - Make the run UI better at answering "what is happening now?" without asking
   users to inspect graph facts or loop internals.
 - Continue smoothing artifact reuse across teams, including clearer labels for
   what artifact is attached and how it will influence the next prompt.
-- Expand proof-readiness UX so blocked work explains the missing dependency,
-  available waiver path, and residual risk in plain language.
-- Tighten the spec-to-dev bridge until approved specs can move into governed
-  implementation with less fixture seeding and more live evidence.
+- Re-author and re-wire the parked packs, starting with the smallest
+  (create-change) once the demo lanes are proven on the new framework.
 - Keep capability packs as the extension unit: new job class means new rules,
   persona bundles, tool permissions, tests, and docs, not a new runtime.
 

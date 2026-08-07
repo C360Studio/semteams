@@ -22,7 +22,7 @@ LoC) independently wires every framework primitive per ADR-029.
 
 ## Bundled chains are illustrative configurations, not the product
 
-## Substrate-plus-overlays architecture (ADR-042 MVP-7, 2026-05-18)
+## Substrate-plus-overlays architecture (ADR-042; demo scope reset by ADR-058)
 
 The product shell runs **one** flow config — `configs/flow-bootstrap.json`
 — wiring substrate singletons (graph-ingest, graph-query, rule-processor,
@@ -30,15 +30,28 @@ agentic-loop, agentic-dispatch, agentic-tools, agentic-model). Task
 classes are added as **category-keyed rule packs** + named persona
 bundles loaded by the substrate, NOT as separate flow configs.
 
-Live task category in MVP-7:
+Live task categories (ADR-058, 2026-08-07):
 
 - **`research`** — coordinator routes prose research asks via
   `decide(action="research")`. The pack at `configs/rules/research/`
-  drives `researcher-research-plan → researcher-research-gather →
-  researcher-research-synthesize → reviewer-research → coordinator
-  wake-up`. Persona bundles live at
-  `configs/personas/fragments/researcher-research-{plan,gather,synthesize}/`
-  and `configs/personas/fragments/reviewer-research/`.
+  drives `researcher-research-plan → researcher-research-gather (×N
+  fan-out) → researcher-research-synthesize → reviewer-research →
+  coordinator wake-up`.
+- **`autoresearch`** — metric optimization with empirical keep/revert
+  in an attested devcontainer sandbox
+  (`configs/rules/autoresearch/`).
+
+**Parked (ADR-058):** the dev-side packs (`create-change`,
+`proof-readiness`, `dev-from-task`, `dev-via-test`) are on disk but
+UNWIRED — they predate the upstream canonical predicate contract
+(3-segment lower-kebab, fail-closed at persistence, NO alias mode).
+Their contract tests carry a `parked_packs` build tag; their journeys
+are `describe.skip`; the coordinator taxonomy is
+`research | autoresearch | respond_direct | ask_user`. Re-wiring one
+without re-authoring its predicates fails the CI fence
+(`test/contract/predicate_contract_test.go`). Read
+[ADR-058](docs/adr/058-beta159-realignment-and-demo-lane-focus.md)
+before touching any of this.
 
 Adding a new prompt class (e.g. web-research, dev-via-spec
 reintroduction) is a **new category pack**: rule files under
@@ -70,7 +83,7 @@ The `personas-describe-job-not-plumbing` memory captures the rule.
   `banner.go`, `logging.go`). Independently implements every
   framework-wiring pattern per ADR-029 — no imports from upstream
   `cmd/semstreams/`. See [ADR-029](docs/adr/029-product-shell-wiring.md).
-- Go module: `github.com/c360studio/semstreams` (currently `v1.0.0-beta.25`)
+- Go module: `github.com/c360studio/semstreams` (currently `v1.0.0-beta.159`; every bump is a first-class change — see ADR-058 for the beta.115→159 flag-day)
 - NATS JetStream (KV, ObjectStore), Prometheus, slog — via semstreams
 - Task (task runner) — run `task --list` for all commands
 - `ui/` — Svelte 5 + SvelteKit 2 + TypeScript frontend (subtree-imported

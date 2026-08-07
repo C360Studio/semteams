@@ -51,7 +51,10 @@ const TERMINAL = new Set([
   "truncated",
 ]);
 
-test.describe("ADR-057 — create_change reject-recovery mock-LLM journey", () => {
+// PARKED (ADR-058): this journey exercises a dev-side pack that is unwired
+// from the bootstrap pending the canonical-predicate migration. Re-enable by
+// restoring test.describe when the pack is re-authored and re-wired.
+test.describe.skip("ADR-057 — create_change reject-recovery mock-LLM journey", () => {
   test.beforeAll(async ({ request }) => {
     const health = await request.get("/health");
     expect(health.ok(), "Backend not healthy — stack not running?").toBe(true);

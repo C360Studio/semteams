@@ -50,17 +50,19 @@ const CASES = [
       "/research Compare MQTT and NATS for constrained IoT edge deployments. I need the practical tradeoffs and evidence, not code.",
     action: "research",
   },
+  // The spec-authoring team is parked (ADR-058): the ask must get an
+  // honest respond_direct, never a dead-end token.
   {
-    name: "OpenSpec authoring routes to create_change",
+    name: "OpenSpec authoring ask responds directly (team parked)",
     prompt:
       "Create an OpenSpec change for adding Idempotency-Key support to POST /jobs. Include acceptance criteria and affected API contracts.",
-    action: "create_change",
+    action: "respond_direct",
   },
   {
-    name: "slash spec hint routes to create_change",
+    name: "slash spec hint responds directly (team parked)",
     prompt:
       "/spec Add Idempotency-Key support to POST /jobs with acceptance criteria and affected API contracts.",
-    action: "create_change",
+    action: "respond_direct",
   },
   {
     name: "bounded scalar optimization routes to autoresearch",
@@ -76,19 +78,19 @@ const CASES = [
     action: "autoresearch",
     requiresSandbox: true,
   },
+  // The implementation team is parked (ADR-058): build asks must get an
+  // honest respond_direct with no sandbox preflight burned on the way.
   {
-    name: "verifiable implementation routes to dev_via_test",
+    name: "verifiable implementation ask responds directly (team parked)",
     prompt:
       "Build a Go HTTP service that decodes MAVLink HEARTBEAT frames with github.com/bluenviron/gomavlib and serves the latest at GET /heartbeat as JSON, with unit tests.",
-    action: "dev_via_test",
-    requiresSandbox: true,
+    action: "respond_direct",
   },
   {
-    name: "slash dev-via-test hint still requires sandbox preflight",
+    name: "slash dev-via-test hint responds directly (team parked)",
     prompt:
       "/dev-via-test Build a Go HTTP service that decodes MAVLink HEARTBEAT frames with github.com/bluenviron/gomavlib and serves the latest at GET /heartbeat as JSON, with unit tests.",
-    action: "dev_via_test",
-    requiresSandbox: true,
+    action: "respond_direct",
   },
   {
     name: "mis-shaped slash optimize asks the user",

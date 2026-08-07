@@ -31,7 +31,7 @@ covers what SemTeams adds on top.
 |---|---|---|
 | Web UI | `ui/` | Svelte 5 + SvelteKit 2 chat / graph explorer / runtime monitor |
 | Bootstrap config | `configs/flow-bootstrap.json` | Production substrate-plus-overlays wiring; mock-LLM clone at `e2e-flow-bootstrap.json` |
-| Category packs | `configs/rules/<category>/` | Category-keyed rule packs. Product-facing packs include `research/`, `autoresearch/`, `create-change/`, `proof-readiness/`, `dev-from-task/`, and `dev-via-test/`. Support packs include `coordinator/`, `agent-run/`, and `ops/`. New task classes add a pack — no new components. |
+| Category packs | `configs/rules/<category>/` | Category-keyed rule packs. Live product-facing packs: `research/` and `autoresearch/`. Support packs: `coordinator/`, `agent-run/`, and `ops/`. The dev-side packs (`create-change/`, `proof-readiness/`, `dev-from-task/`, `dev-via-test/`) are parked in place pending predicate re-authoring — see [ADR-058](docs/adr/058-beta159-realignment-and-demo-lane-focus.md). New task classes add a pack — no new components. |
 | Personas | `configs/personas/fragments/<role>/*.md` | Role-specific prompt fragments loaded by the category packs. See [`configs/README.md`](configs/README.md) for the current inventory. |
 | Product tools | `cmd/semteams/tools/` | Tool executors that don't belong upstream: source ingest, artifact/spec emission, proof analysis/projection, sandbox bootstrap, and pack-specific measurement emitters. |
 | Product shell | `cmd/semteams/main.go` | ~600 LoC binary that wires the framework primitives directly for this product shell |
@@ -191,18 +191,21 @@ Active development. Breaking changes expected. Current architecture
 is **substrate-plus-overlays**: a single product-shell flow wires
 substrate singletons, and task classes are added as category-keyed
 rule packs + named persona bundles rather than separate flow
-configs. Product-facing packs:
+configs. The demo scope is the inner and outer loops
+([ADR-058](docs/adr/058-beta159-realignment-and-demo-lane-focus.md)):
 
-- **research** — coordinator-routed prose research arc.
+- **research** — coordinator-routed prose research arc: plan →
+  parallel gather fan-out → join → synthesize → review → artifact
+  with recoverable sources.
 - **autoresearch** — Karpathy-style propose/execute iteration loop
   with empirical keep/revert decisions and per-tenant devcontainer
-  attestation. Shipped 2026-06-03.
-- **create-change / proof-readiness / dev-from-task** —
-  OpenSpec-compatible spec production, review, export, readiness
-  gating, and the approved-spec-to-task bridge. See
+  attestation.
+- **Parked** — the spec-authoring and software-implementation packs
+  (`create-change`, `proof-readiness`, `dev-from-task`,
+  `dev-via-test`) are unwired pending re-authoring under the
+  upstream canonical predicate contract. The coordinator answers
+  those asks honestly instead of routing them. See
   [`docs/demo-mvp-claims.md`](docs/demo-mvp-claims.md).
-- **dev-via-test** — Lisa / Ralph / CBG software-development loop
-  with plan and work gates.
 
 ## License
 
