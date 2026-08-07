@@ -30,11 +30,11 @@ covers what SemTeams adds on top.
 | Surface | Path | What it is |
 |---|---|---|
 | Web UI | `ui/` | Svelte 5 + SvelteKit 2 chat / graph explorer / runtime monitor |
-| Bootstrap config | `configs/flow-bootstrap.json` | ADR-042 substrate-plus-overlays wiring (production); mock-LLM clone at `e2e-flow-bootstrap.json` |
+| Bootstrap config | `configs/flow-bootstrap.json` | Production substrate-plus-overlays wiring; mock-LLM clone at `e2e-flow-bootstrap.json` |
 | Category packs | `configs/rules/<category>/` | Category-keyed rule packs. Product-facing packs include `research/`, `autoresearch/`, `create-change/`, `proof-readiness/`, `dev-from-task/`, and `dev-via-test/`. Support packs include `coordinator/`, `agent-run/`, and `ops/`. New task classes add a pack — no new components. |
 | Personas | `configs/personas/fragments/<role>/*.md` | Role-specific prompt fragments loaded by the category packs. See [`configs/README.md`](configs/README.md) for the current inventory. |
 | Product tools | `cmd/semteams/tools/` | Tool executors that don't belong upstream: source ingest, artifact/spec emission, proof analysis/projection, sandbox bootstrap, and pack-specific measurement emitters. |
-| Product shell | `cmd/semteams/main.go` | ~600 LoC binary that wires the framework primitives per [ADR-029](docs/adr/029-product-shell-wiring.md) |
+| Product shell | `cmd/semteams/main.go` | ~600 LoC binary that wires the framework primitives directly for this product shell |
 
 Everything else — the `agentic-*` processors, the rule engine, the
 graph, the NATS stream wiring — lives upstream in semstreams.
@@ -80,7 +80,7 @@ task dev:research
 ```
 
 That boots NATS, builds and starts `bin/semteams` against
-`configs/flow-bootstrap.json` (the ADR-042 production bootstrap),
+`configs/flow-bootstrap.json` (the production bootstrap),
 then starts the UI proxy. Open <http://localhost:3001> and type a
 prompt. You can chat with the coordinator first: ask what SemTeams can
 do, refine a rough idea, or ask which team fits. When the request is
@@ -103,6 +103,15 @@ Power users can prefix a prompt with `/research`, `/create-change`
 coordinator-routed hints, not bypasses; SemTeams still validates the
 prompt shape and keeps the usual sandbox, readiness, approval, and
 review gates.
+
+Artifacts are meant to travel between teams. When a run emits a
+research, spec, optimization, or implementation artifact, the UI
+surfaces it as an artifact card with copy and "use as context"
+actions. Attaching an artifact adds a visible, removable context chip
+to the chat bar, and the next prompt carries the artifact title,
+source tool, and content back through the coordinator. A research
+artifact can seed a spec prompt, a spec can inform implementation, or
+any artifact can simply anchor a follow-up question.
 
 See [`docs/architecture.md`](docs/architecture.md) for what each
 pack does and **how the sandbox is created**.
@@ -132,9 +141,9 @@ pack does and **how the sandbox is created**.
   [`docs/demo-mvp-claims.md`](docs/demo-mvp-claims.md). Supported
   claims, non-claims, black-box evidence rules, and MAVLink-hard
   scope.
-- **You want to know why something is built the way it is** →
-  [`docs/adr/`](docs/adr/). Every product-shell decision lands as an
-  ADR.
+- **You want to know how prompts move through teams** →
+  [`docs/architecture.md`](docs/architecture.md). Coordinator routing,
+  category packs, artifacts, gates, and sandbox handoff.
 - **You want to extend the product shell with a new tool, rule,
   persona, or KV bucket** → read
   [`cmd/semteams/tools/README.md`](cmd/semteams/tools/README.md)
@@ -179,30 +188,21 @@ layering, product-shell wiring map, mandatory protocols
 ## Status
 
 Active development. Breaking changes expected. Current architecture
-is **substrate-plus-overlays** per
-[ADR-042](docs/adr/042-coordinator-instantiated-flows-via-templates.md):
-a single product-shell flow wires substrate singletons, and task
-classes are added as category-keyed rule packs + named persona
-bundles rather than separate flow configs. Product-facing packs:
+is **substrate-plus-overlays**: a single product-shell flow wires
+substrate singletons, and task classes are added as category-keyed
+rule packs + named persona bundles rather than separate flow
+configs. Product-facing packs:
 
 - **research** — coordinator-routed prose research arc.
 - **autoresearch** — Karpathy-style propose/execute iteration loop
-  with empirical keep/revert decisions, per
-  [ADR-043](docs/adr/043-devcontainer-as-sandbox-spec.md)
-  per-tenant devcontainer attestation. Shipped 2026-06-03.
+  with empirical keep/revert decisions and per-tenant devcontainer
+  attestation. Shipped 2026-06-03.
 - **create-change / proof-readiness / dev-from-task** —
   OpenSpec-compatible spec production, review, export, readiness
   gating, and the approved-spec-to-task bridge. See
-  [ADR-056](docs/adr/056-openspec-spec-driven-development-umbrella.md),
-  [ADR-057](docs/adr/057-openspec-graph-spec-model-and-create-change.md),
-  and [`docs/demo-mvp-claims.md`](docs/demo-mvp-claims.md).
+  [`docs/demo-mvp-claims.md`](docs/demo-mvp-claims.md).
 - **dev-via-test** — Lisa / Ralph / CBG software-development loop
-  with plan and work gates, per
-  [ADR-044](docs/adr/044-dev-via-test-pack.md).
-
-ADR-031 (research-flow + dev-via-spec internal mode) is retained
-for archeology; the dev-via-spec arc it described was retired in
-ADR-042 MVP-7.
+  with plan and work gates.
 
 ## License
 

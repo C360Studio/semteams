@@ -1,10 +1,9 @@
 # Dev-via-test pack — MVP-1 smoke against `@mavlink-decode` (2026-06-04)
 
-ADR-044's chain-end gate caught a constraint violation that
-per-task tests couldn't. The substrate ran 4 slices of new
-machinery end-to-end on the first real-LLM run; CBG rejected the
-implementation with a substantive citation of the rule that
-broke.
+The chain-end gate caught a constraint violation that per-task
+tests couldn't. The substrate ran 4 slices of new machinery
+end-to-end on the first real-LLM run; CBG rejected the
+implementation with a substantive citation of the rule that broke.
 
 **Run cost:** ~$0.30 (~944K tokens, mostly gemini-flash + claude-haiku).
 **Wallclock:** ~5 minutes.
@@ -26,7 +25,7 @@ that semspec's BMAD-shaped pipeline has been working through:
 > Include unit tests that decode captured MAVLink HEARTBEAT frames
 > from testdata/ files and assert the parsed fields."
 
-The dev-via-test pack (per ADR-044) ran the chain end-to-end:
+The dev-via-test pack ran the chain end-to-end:
 
 | Loop | Role | Took | What happened |
 |---|---|---|---|
@@ -66,7 +65,7 @@ byte parsing. CBG's claim is factually correct.
 
 ## Why this is the result we wanted
 
-Per ADR-044's design rationale, CBG exists for exactly this:
+The pack's design rationale puts CBG here for exactly this:
 
 > "Per-task tests passed individually (that's what Ralph proved);
 > your job is to catch the contamination between tasks — Ralph
@@ -80,9 +79,10 @@ perspective, the chain "succeeded." CBG read the diff and
 noticed the rule the plan said could not be broken was broken
 anyway. **One run, immediate caught.**
 
-This is the deterministic-test-attestation property the ADR is
-selling: not "tests pass" (Ralph proved that), but "tests pass
-AND the work meets the stated constraints" (CBG verified that).
+This is the deterministic-test-attestation property the pack is
+meant to prove: not "tests pass" (Ralph proved that), but "tests
+pass AND the work meets the stated constraints" (CBG verified
+that).
 
 ## What works (mechanics — all green)
 
@@ -189,7 +189,7 @@ approved chain shapes.
 
 ## What this run does NOT prove yet
 
-- **5-run convergence rate** — ADR's acceptance bar is "≥4 of 5
+- **5-run convergence rate** — the pack's acceptance bar is "≥4 of 5
   runs converge inside framework `max_iter` ceiling with
   `go test ./...` green + `go vet` clean." This run mechanically
   satisfies the strict criterion (chain converged, tests green
@@ -219,7 +219,7 @@ approved chain shapes.
 
 ## Cross-links
 
-- [ADR-044](../../adr/044-dev-via-test-pack.md) — pack design
+- [dev-via-test design record](../../adr/044-dev-via-test-pack.md) — pack design
   + four §addendum entries documenting each slice's
   framework-alignment + reviewer-pass decisions.
 - [Lisa persona](../../../configs/personas/fragments/dev-via-test-plan/)

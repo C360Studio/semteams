@@ -3,13 +3,12 @@
 **Status**: Historical reference (as of 2026-06-03 doc audit). This
 doc maps the agentic-superpowers backend phases (1-4) to the
 2026-04-10 UI subtree import and the early Phase A.5 reframe. It
-predates the UI redesign (proposal shipped 2026-04-27, retired in the 2026-06-03 docs audit),
-ADR-042 substrate-plus-overlays, ADR-043 sandbox attestation, and
-the 2026-06-03 chain drill-in + ArtifactCard slice. The
-backend-concept → UI-component map below is still useful for
-finding load-bearing files; the *behavioural* surface has moved
-on. For current UI surfaces start at `ui/.claude/CLAUDE.md` and
-`docs/architecture.md`.
+predates the UI redesign, the substrate-plus-overlays runtime,
+sandbox attestation, and the 2026-06-03 chain drill-in +
+ArtifactCard slice. The backend-concept → UI-component map below
+is still useful for finding load-bearing files; the *behavioural*
+surface has moved on. For current UI surfaces start at
+`ui/.claude/CLAUDE.md` and `docs/architecture.md`.
 
 Reference for the agentic UI surface that lives at `ui/` in this repo. The
 backend (Phases 1-4) is complete, the UI was subtree-imported from
@@ -32,6 +31,8 @@ it describes are implemented in `ui/`. Use it as a map from backend concept
 | Approval prompt   | Loop state `awaiting_approval`       | `lib/components/chat/ApprovalPrompt.svelte`           |
 | Tool call card    | Loop trajectory events               | `lib/components/chat/ToolCallCard.svelte`             |
 | Rule diff         | `create_rule`/`update_rule` args     | `lib/components/chat/RuleDiffCard.svelte`             |
+| Artifact card     | Emitted artifact tool results         | `lib/components/board/ArtifactCard.svelte`            |
+| Artifact context  | Chat handoff store                    | `lib/stores/chatHandoff.svelte.ts` + `lib/components/layout/ChatBar.svelte` |
 | Monitoring page   | `GET /agentic-dispatch/loops`        | `routes/agents/+page.svelte`                          |
 | Trajectory replay | `GET /agentic-loop/trajectories/{id}`| `lib/components/agents/TrajectoryViewer.svelte`       |
 | Slash commands    | Command registry in dispatch         | `lib/services/slashCommands.ts` (`/approve`, etc.)    |
@@ -194,6 +195,22 @@ Add these to the client-side slash command registry (`slashCommands.ts`):
 Team intent commands go through the normal coordinator message path. Control
 commands resolve to the governed signal system and require the same selected
 run/task context as the visible controls.
+
+## Current Artifact Context Handoff
+
+Artifact reuse is handled in the UI, then submitted through the normal
+coordinator front door.
+
+| Step | UI behavior | Code |
+|------|-------------|------|
+| Artifact is visible | `ArtifactCard` renders emitted artifact content from a story step. | `lib/components/board/ArtifactCard.svelte` |
+| Human chooses next use | Artifact actions stage a draft such as `/create-change Use the attached artifact as context to ` and attach the artifact. | `chatHandoff.stage(...)` |
+| Chat bar shows context | `ChatBar` renders a removable artifact context chip above the input. | `lib/components/layout/ChatBar.svelte` |
+| Prompt is sent | Submitted content includes the user's prompt plus artifact title, source tool, and content. | `ChatBar` + `/teams-dispatch/message` |
+
+This is intentionally not research-specific. Any emitted artifact that can help
+the next question or team should be able to travel through the same handoff
+surface.
 
 ## New Chat Attachment Types
 

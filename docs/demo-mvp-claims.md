@@ -14,6 +14,11 @@ SemTeams can route prompt classes to the right team from the coordinator front d
 clarification, research, OpenSpec authoring, autoresearch, or dev-via-test. Product-level slash commands are supported
 as coordinator-routed hints, not bypasses.
 
+SemTeams can expose emitted artifacts to the human and let those artifacts seed
+a later coordinator-routed prompt. The artifact context handoff is general: a
+research artifact can inform spec creation, but the same UI pattern is intended
+for any emitted artifact that could help another team or follow-up question.
+
 ## Non-Claims
 
 SemTeams is not yet claiming sponsor-ready full brownfield implementation from an arbitrary approved OpenSpec change.
@@ -47,6 +52,7 @@ The black-box demo evidence pack is:
 - `task ui:test:e2e:agentic:create-change`
 - `task ui:test:e2e:agentic:coordinator-readiness-gate`
 - `task ui:test:e2e:agentic:mavlink-hard-spec`
+- `task ui:test:e2e:agentic:artifact-context-handoff`
 - `task ui:test:e2e:agentic:demo-mvp`
 
 The fixture-seeded bridge proof is:

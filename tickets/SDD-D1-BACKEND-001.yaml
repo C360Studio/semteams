@@ -1,0 +1,36 @@
+ticket: SDD-D1-BACKEND-001
+title: Implement and review the D1 Go and configuration surfaces
+owner: go-developer
+reviewer:
+  - go-reviewer
+status: blocked
+depends_on:
+  - TOOL-VALIDATE-001
+  - SDD-D1-CONTRACT-001
+blocks:
+  - SDD-D1-E2E-001
+  - SDD-D1-EVIDENCE-001
+summary: >-
+  Implement the approved P1-P4 backend, graph, rule, persona, and configuration
+  contracts needed for operator-initiated D1 on a local brownfield checkout.
+acceptance_criteria:
+  - The implementation conforms to the approved D1 and P4 contracts.
+  - >-
+    create_change, readiness gating, dev-from-task, CBG, and PR-or-archive
+    surfaces are reachable through documented public product boundaries.
+  - The graph remains canonical and the existing agent.run and lifecycle substrate is reused.
+  - Unit, contract, integration, concurrency, and failure-path tests cover critical behavior.
+  - Tests do not seed private graph, NATS, lifecycle, proof, or KV state as product evidence.
+  - task validate passes without modifying the developer's worktree.
+  - The go-reviewer formally approves the implementation and tests.
+non_goals:
+  - Svelte components or Playwright journey implementation.
+  - Autonomous issue polling or idempotency-protected GitHub writes.
+  - Product-local framework primitives that bypass the alignment review.
+source_references:
+  - "tickets/SDD-D1-CONTRACT-001.yaml"
+  - "docs/adr/056-openspec-spec-driven-development-umbrella.md#phasing-each-phase-independently-valuable"
+  - "docs/adr/057-openspec-graph-spec-model-and-create-change.md"
+  - "docs/adr/044-dev-via-test-pack.md"
+  - "docs/demo-mvp-claims.md#evidence-rule"
+blockers: []

@@ -3,10 +3,10 @@
 Status: product vocabulary guidance, proposed 2026-06-24.
 
 This document defines the public words SemTeams should use for the agentic-dev
-experience. It is not an ADR and it does not rename internal predicates,
-payloads, ports, or rule actions. The goal is simpler: make the UI and product
-docs sound like the agentic-dev world users are already learning, while keeping
-SemTeams' SemStreams-native architecture intact.
+experience. It does not rename internal predicates, payloads, ports, or rule
+actions. The goal is simpler: make the UI and product docs sound like the
+agentic-dev world users are already learning, while keeping SemTeams'
+SemStreams-native architecture intact.
 
 ## Why this exists
 
@@ -101,6 +101,10 @@ The front-door router and done-authority for a run. Internally this is the
 coordinator persona plus the closed `decide()` taxonomy. "Manager" and
 "supervisor" can explain it, but Coordinator is canonical.
 
+The Coordinator also supports ordinary chat. Users can ask how SemTeams works,
+refine an idea, or ask which team fits before starting a run. Slash commands
+are team hints to the Coordinator, not direct execution bypasses.
+
 ### Task
 
 A unit of implementation work with acceptance evidence. Internally this is a
@@ -130,6 +134,14 @@ proof or evidence decides progress.
 Artifacts or observations that justify a claim or status. Internally this is
 evidence triples, logs, files, metrics, and test output. Evidence is central to
 the "is this thing working?" UI.
+
+### Artifact Context
+
+An emitted artifact attached to a later chat prompt. Internally this is the
+artifact title, source tool, and content carried through the chat handoff store
+and submitted through the normal coordinator message path. Use this term for
+the visible chip in the chat bar and for docs that explain reuse between teams.
+Do not call it "research context" unless the artifact is specifically research.
 
 ### Trace
 
@@ -186,6 +198,9 @@ MVP-shaped; MCP export is later.
 - `dev_from_task` -> Implement Task.
   UI: Tasks / Run action. Avoid saying "dev-from-task". This is an execution
   action, not a planning method.
+- artifact handoff -> Artifact Context.
+  UI: Chat input / Artifact card. Avoid implying only research can seed later
+  work. The product behavior is "attach this artifact to my next prompt."
 - Ralph -> Implementation Agent.
   UI: Trace / Tasks. Avoid saying "Ralph loop". Keep Ralph in developer docs
   and lore.
@@ -254,6 +269,8 @@ Every run view should make these visible without digging:
 - Evidence health: tests, metrics, logs, proof dependencies, and waivers.
 - Cost/risk health: token budget, retry count, and autonomous-policy limit.
 - Export state: whether an OpenSpec artifact exists and when it was generated.
+- Artifact context: which emitted artifact, if any, is attached to the next
+  coordinator prompt.
 
 Recommended top-level UI nouns:
 

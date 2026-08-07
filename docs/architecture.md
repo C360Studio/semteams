@@ -1,12 +1,7 @@
 # SemTeams Architecture: substrate + category packs
 
 A new-user orientation to what happens when you send SemTeams a
-prompt, and the moving parts that make it happen. For *why* it is
-built this way read the ADRs — especially
-[ADR-042](adr/042-coordinator-instantiated-flows-via-templates.md)
-(substrate-plus-overlays) and
-[ADR-043](adr/043-devcontainer-as-sandbox-spec.md)
-(devcontainer-as-sandbox).
+prompt, and the moving parts that make it happen.
 
 Framework background: SemTeams is a reference/demo product on top
 of [semstreams](https://github.com/c360studio/semstreams). The
@@ -40,14 +35,27 @@ state lives in the graph (chain entity + attached triples) and in
 rendered artifacts on disk. **Chain agents do not read the graph
 directly** — they read the previous loop's terminal via
 `read_loop_result` and on-disk artifacts via `bash cat`. The graph
-is internal harness state. (ADR-041 §"graph as substrate"
-addendum 2026-05-15.)
+is internal harness state.
+
+The coordinator can also decide that no team should run yet. In
+that mode it answers directly, asks a clarifying question, or helps
+the human shape the request before routing. Slash commands such as
+`/research`, `/spec`, `/optimize`, and `/dev-via-test` are team
+hints carried through the same front door, not a bypass around the
+coordinator.
+
+Rendered artifacts are reusable context. The UI can attach an
+artifact to the next chat prompt, then the coordinator receives the
+artifact title, source tool, and content along with the user's new
+request. That means research can feed a spec, a spec can feed
+implementation, and any artifact can anchor a follow-up discussion
+before the next team is chosen.
 
 ## The substrate-plus-overlays architecture
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│ Substrate (one process, configs/flow-bootstrap.json, ADR-042)    │
+│ Substrate (one process, configs/flow-bootstrap.json)             │
 │                                                                  │
 │   agentic-dispatch  ── intake + default role + chat front-door   │
 │   agentic-loop      ── think/act state machine per loop          │
@@ -87,10 +95,7 @@ the user or pauses behind a visible human decision.
 
 The fully expanded loop descriptions below focus on the original
 research, autoresearch, and dev-via-test packs. The OpenSpec MVP
-claim boundary lives in [`demo-mvp-claims.md`](demo-mvp-claims.md);
-the design record lives in
-[ADR-056](adr/056-openspec-spec-driven-development-umbrella.md)
-and [ADR-057](adr/057-openspec-graph-spec-model-and-create-change.md).
+claim boundary lives in [`demo-mvp-claims.md`](demo-mvp-claims.md).
 
 ### research
 
@@ -192,7 +197,7 @@ Per-role contracts:
   hypothesis, edits files within `surface`, terminal
   `decide(measure)` carrying the hypothesis in `reason`.
 - **autoresearch-execute (×N)** — runs the measurement command in
-  the per-tenant devcontainer (ADR-043). Calls
+  the per-tenant devcontainer. Calls
   `emit_autoresearch_measurement`: the executor reads prior best,
   compares this iteration's value, stamps `kept` or `reverted` on
   the execute loop entity. If kept, the executor also upserts
@@ -203,8 +208,7 @@ Per-role contracts:
   per-iteration journey, running best, recommended action). The
   artifact is written **into the per-tenant devcontainer's
   workspace** via the sandbox `/exec` endpoint, so the reviewer's
-  `bash cat` resolves to the same path from both sides (ADR-043
-  attestation-aware routing, semteams#194).
+  `bash cat` resolves to the same path from both sides.
 - **reviewer-autoresearch** — reads the rendered artifact via
   `bash cat $entity.triple.autoresearch.artifact.path`. Grades
   the improvement narrative + checks that kept iterations actually
@@ -233,7 +237,7 @@ verifiable acceptance** ("add an endpoint that…", "implement a
 parser with tests"). One planner decomposes the ask into tasks;
 each task converges in the sandbox against its own test; **one
 reviewer (CBG) gates twice** — the *plan* at chain-start and the
-*work* at chain-end. (ADR-044.)
+*work* at chain-end.
 
 ```
 coordinator(dispatch) ──request_sandbox──▶ (per-tenant devcontainer; see §sandbox)
@@ -305,8 +309,8 @@ Per-role contracts:
   the user (`respond_direct` on approve, `ask_user` on a
   human-needed reject).
 
-**Both gates are bounded reject/retry/approve** (ADR-044 Slices 5
-+ 6). A `*_rejected_retry` routes back for a bounded fix — the work
+**Both gates are bounded reject/retry/approve**. A `*_rejected_retry`
+routes back for a bounded fix — the work
 gate re-dispatches **Ralph** with the finding (re-implement); the
 plan gate re-dispatches **Lisa** with the finding (re-plan, which
 *upserts* the plan in place). Each retry budget
@@ -324,7 +328,7 @@ isolated **per-tenant devcontainer** — autoresearch-execute edits +
 measures there, and Lisa / Ralph / CBG all share one. That
 container doesn't appear by magic; the coordinator provisions it
 *before* dispatching the pack, and the chain runs on the
-**attestation** of what it got. (ADR-043.)
+**attestation** of what it got.
 
 The sequence, for a build/optimize ask:
 
@@ -390,7 +394,7 @@ review:
 
 Diagnoses are stamped as `ops.diagnosis.*` triples and rendered in
 the chain-entity UI for the operator. Phase 2
-(ops-proposes-changes) is config-only per ADR-027 — `create_rule`
+(ops-proposes-changes) is config-only: `create_rule`
 / `manage_flow` would gate through the approval filter for human
 review.
 
@@ -405,7 +409,7 @@ when it genuinely cannot proceed. A rule fires on
 blocking question as context. The coordinator can ask the user a
 follow-up (`decide(ask_user)`) or terminate the chain. This routes
 chain-internal ambiguity to the human, not to a self-recovery
-loop. (ADR-039.)
+loop.
 
 ### Reviewer rejection → re-synthesize / re-propose
 
@@ -420,28 +424,28 @@ Each agentic loop has a `max_iterations` bound (default 8 for
 research roles, 20 for coordinator, configurable per role via
 persona). Hitting the cap without a terminal `decide` fails the
 loop with `outcome=failed`; the parent rule decides whether to
-recover or pause the chain (ADR-037 chain-pause).
+recover or pause the chain.
 
 ### Chain pause
 
 A loop failing with `outcome=failed` stamps `chain.paused` on the
 chain entity. The UI surfaces this as `awaiting_approval` on the
 parent task; the operator approves a resume, restarts a phase, or
-cancels the chain. (ADR-037 + ADR-039.)
+cancels the chain.
 
 ## The graph is internal harness state
 
-Per ADR-041 addendum 2026-05-15: **chain agents do not read the
-graph. The graph is internal harness state — audit, lineage,
-milestone stamping, evidence aggregation. Only ops agents read it.**
+**Chain agents do not read the graph. The graph is internal harness
+state — audit, lineage, milestone stamping, evidence aggregation.
+Only ops agents read it.**
 
 What each reader class has access to:
 
 | Reader | Reads |
 |---|---|
 | Chain agents (research, autoresearch, reviewers) | `read_loop_result` on prior loop terminals · `bash` on `/artifacts/<kind>/<slug>.md` · `web_search` external · per-tenant devcontainer filesystem (autoresearch) |
-| Ops agents (`ops-*`) | All graph-query tools (`query_entity`, `summarize_graph`, `read_loop_result`, etc.) — observing harness state IS their job per ADR-027 |
-| Operators (you, partners, auditors) | Rendered markdown in `/artifacts/`, ADRs, persona docs, chain-entity UI, ops diagnoses |
+| Ops agents (`ops-*`) | All graph-query tools (`query_entity`, `summarize_graph`, `read_loop_result`, etc.) — observing harness state IS their job |
+| Operators (you, partners, auditors) | Rendered markdown in `/artifacts/`, persona docs, chain-entity UI, ops diagnoses |
 
 The intuition: chain agents are *authors*. They write artifacts
 and chain-state triples. Ops agents are *auditors*. They read both
@@ -456,35 +460,29 @@ loops' output), and their own loop terminal. Nothing else.
 
 ## Where to read deeper
 
-- **Substrate-plus-overlays decision:**
-  [`adr/042-coordinator-instantiated-flows-via-templates.md`](adr/042-coordinator-instantiated-flows-via-templates.md)
-  — the load-bearing ADR for the current architecture. §Phase 2
-  redesign is what actually shipped.
-- **Sandbox + attestation:**
-  [`adr/043-devcontainer-as-sandbox-spec.md`](adr/043-devcontainer-as-sandbox-spec.md)
-  — per-tenant devcontainer attestation + attestation-aware
-  routing. The killer feature autoresearch needed.
+- **Current capability inventory:** `configs/README.md` — the
+  production bootstrap, live category packs, personas, and task
+  runner entry points.
+- **Demo claim boundary:** [`demo-mvp-claims.md`](demo-mvp-claims.md)
+  — what the MVP can honestly claim, what is still a non-claim,
+  and which journeys prove the boundary.
+- **Product vocabulary:** [`product/vocabulary-map.md`](product/vocabulary-map.md)
+  — public names for runs, specs, tasks, gates, artifacts, and
+  slash commands.
 - **Per-pack rule packs:** `configs/rules/research/README.md`,
   `configs/rules/autoresearch/README.md`,
   `configs/rules/dev-via-test/README.md` — every rule has a
   description block explaining the trigger conditions, actions,
   and the why (often including the upstream-framework workarounds
   being deployed). Worth reading for any pack work.
-- **dev-via-test pack design:**
-  [`adr/044-dev-via-test-pack.md`](adr/044-dev-via-test-pack.md) —
-  the Lisa/Ralph/CBG roles, plan-as-triples, Karpathy-as-schema,
-  and the per-slice §addenda (the two gates + bounded retries).
 - **Per-role personas:**
   `configs/personas/fragments/<role>/` — identity, output
   contract, iteration rules per role. Read like job descriptions.
 - **Product shell wiring:**
-  [`adr/029-product-shell-wiring.md`](adr/029-product-shell-wiring.md)
-  — how `cmd/semteams/main.go` boots the substrate on top of
+  `cmd/semteams/main.go` — how the binary boots the substrate on top of
   upstream semstreams primitives.
-- **Ops agent:** upstream
-  [`semstreams adr/027`](https://github.com/c360studio/semstreams/blob/main/docs/adr/027-ops-agent-meta-harness.md)
-  + this repo's `objectives/` directory + `ops-chain-observer` /
-  `ops-progress-observer` persona dirs.
+- **Ops agent:** this repo's `objectives/` directory +
+  `ops-chain-observer` / `ops-progress-observer` persona dirs.
 - **Sponsor packs:** `sponsor-packages/` — annotated trajectory
   walkthroughs of completed chains. First entry:
   `research-pack-fan-out-2026-05-29`.

@@ -1,0 +1,49 @@
+ticket: TOOL-VALIDATE-001
+title: Add an authoritative read-only repository validation task
+owner: go-developer
+reviewer:
+  - go-reviewer
+  - svelte-reviewer
+status: ready
+depends_on: []
+blocks:
+  - SDD-D1-BACKEND-001
+  - SDD-P5-ADR-001
+summary: >-
+  Add a standalone task validate command that provides one dirty-worktree-safe,
+  CI-equivalent validation entry point for repository tooling. Deliver this as
+  its own implementation and PR before P5 work.
+acceptance_criteria:
+  - >-
+    task validate performs a read-only Go format check, go vet, revive, race
+    unit tests, race integration tests, and a Go build whose output is written
+    outside tracked repository paths.
+  - >-
+    task validate runs generator tests, generates schemas and OpenAPI into
+    temporary storage, and compares that output with tracked schemas and the
+    tracked OpenAPI document.
+  - >-
+    task validate runs UI lint, Svelte/TypeScript check, unit tests, and the
+    production UI build.
+  - Missing prerequisites such as Go, Task, revive, Node/npm, or Docker fail explicitly.
+  - >-
+    A successful and a failing validation run both preserve all pre-existing
+    tracked, staged, unstaged, and untracked worktree content.
+  - The task never runs paid LLM calls or Playwright journeys.
+  - The task has focused tests for command composition, prerequisite failure, and parity failure.
+  - The go-reviewer and svelte-reviewer approve their respective validation surfaces.
+non_goals:
+  - Replacing focused developer tasks such as task check or task check:all.
+  - Running E2E, paid smoke, or Playwright journeys.
+  - Modifying generated files as part of validation.
+source_references:
+  - "docs/adr/056-openspec-spec-driven-development-umbrella.md\
+    #addendum-2026-07-30-d2p5-invariants-from-the-kody-pattern-comparison"
+  - "Taskfile.yml: check and check:all tasks"
+  - "taskfiles/test.yml"
+  - "taskfiles/lint.yml"
+  - "taskfiles/build.yml"
+  - "taskfiles/schema.yml"
+  - ".github/workflows/ci.yml"
+  - ".github/workflows/ui.yml"
+blockers: []

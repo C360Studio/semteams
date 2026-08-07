@@ -99,6 +99,14 @@ prefixes such as `/research`, `/create-change` (`/spec`), `/optimize`, and
 `/dev-via-test` are intent hints; the coordinator still validates the prompt
 shape and keeps the normal sandbox, readiness, approval, and review gates.
 
+When a team emits an artifact, open it from the task detail panel. The artifact
+card lets you copy the content or attach it to a new chat prompt. Attached
+artifact context shows as a removable chip above the chat input, and the next
+message includes the artifact title, source tool, and content for the
+coordinator to use. Treat this as a general handoff surface: research can feed
+a spec, a spec can feed implementation, and any artifact can anchor a follow-up
+question before you choose the next team.
+
 ### A specific config
 
 ```bash
@@ -107,20 +115,19 @@ go build -o bin/semteams ./cmd/semteams
 ./bin/semteams --config configs/flow-bootstrap.json
 ```
 
-Under ADR-042 §Phase 2 (substrate-plus-overlays, MVP-7) there is
-**one** product-shell flow config:
+The current runtime has **one** product-shell flow config:
 
 | Config | What it runs | Needs |
 |---|---|---|
-| `flow-bootstrap.json` | The single ADR-042 substrate (graph-ingest, graph-query, rule-processor, agentic-loop, agentic-dispatch, agentic-tools, agentic-model) plus the live category rule packs (`research/`, `autoresearch/`, `create-change/`, `proof-readiness/`, `dev-from-task/`, `dev-via-test/`) + support packs (`coordinator/`, `agent-run/`, `ops/`), and the persona corpus that drives them. Uses real LLMs. | `GEMINI_API_KEY` for the default `gemini-flash` endpoint; `ANTHROPIC_API_KEY` optional for Anthropic endpoints; `BRAVE_SEARCH_API_KEY` for web_search |
+| `flow-bootstrap.json` | The production substrate (graph-ingest, graph-query, rule-processor, agentic-loop, agentic-dispatch, agentic-tools, agentic-model) plus the live category rule packs (`research/`, `autoresearch/`, `create-change/`, `proof-readiness/`, `dev-from-task/`, `dev-via-test/`) + support packs (`coordinator/`, `agent-run/`, `ops/`), and the persona corpus that drives them. Uses real LLMs. | `GEMINI_API_KEY` for the default `gemini-flash` endpoint; `ANTHROPIC_API_KEY` optional for Anthropic endpoints; `BRAVE_SEARCH_API_KEY` for web_search |
 | `e2e-flow-bootstrap.json` | Mock-LLM clone of the production bootstrap. Same packs + personas, points the model registry at the in-process mock LLM. Used by every Playwright journey under `ui/e2e/agentic/`. | nothing — mock-LLM |
 
 Adding a task class is a new **category pack**, not a new config:
 rule files under `configs/rules/<category>/`, persona bundles under
 `configs/personas/fragments/<role>-<category>-<phase?>/`, plus a
 coordinator-persona entry teaching the new `decide(action=<category>)`
-token. See ADR-042 §Phase 2 redesign for the rationale and the
-research / autoresearch / dev-via-test packs for working templates.
+token. Use the research, autoresearch, and dev-via-test packs as
+working templates.
 
 ### Running a pack that needs a sandbox
 
@@ -149,9 +156,10 @@ actually building code.
 
 The legacy concrete configs (`agentic.json`, `agentic-claude.json`,
 `dev-research.json`, `onboarding.json`, `osh-demo.json`, plus all
-the `e2e-*` siblings) retired in ADR-042 MVP-7 (PR #178) alongside
-the `chain.mode` / `phasevalidator` / `chainstall` machinery they
-depended on. They live in git history if you need archeology.
+the `e2e-*` siblings) retired with the current substrate-plus-overlays
+runtime alongside the `chain.mode` / `phasevalidator` / `chainstall`
+machinery they depended on. They live in git history if you need
+archeology.
 
 `./bin/semteams --validate --config configs/<name>.json` validates a
 config without starting it.
@@ -215,9 +223,9 @@ This bites every time on e2e config iteration. (Memory:
 **Stop and read [`../cmd/semteams/tools/README.md`](../cmd/semteams/tools/README.md)
 first.** There is a mandatory framework-alignment review before
 landing any of those — survey upstream for an existing or
-roadmapped equivalent, document the alternatives ruled out in the
-relevant ADR addendum. The semspec accretion lesson is exactly
-this trap. (Memory:
+roadmapped equivalent, and document the alternatives ruled out in
+the design note for the change. The semspec accretion lesson is
+exactly this trap. (Memory:
 `feedback_framework_alignment_review`.)
 
 ## Debug
@@ -361,7 +369,7 @@ step time is wedged — abort, don't wait for the natural timeout.
 | `connect to NATS: ...` | NATS not running or wrong URL | `task dev:nats:start`, or set `SEMSTREAMS_NATS_URLS` |
 | `defaults.model "<x>" does not match any endpoint` | Config drift — `defaults.model` must reference an endpoint name | Match against `model_registry.endpoints` keys |
 | `"loading persona fragments" path=<empty>` | `--persona-fragments` flag unset and default path missing | Pass `--persona-fragments=configs/personas/fragments` or set `SEMSTREAMS_PERSONA_FRAGMENTS_PATH` |
-| `agentic-tools registered but executor missing` | Pattern-A/B tool wiring drifted | See [ADR-029](adr/029-product-shell-wiring.md) — `executors.RegisterBuiltins` must be called |
+| `agentic-tools registered but executor missing` | Pattern-A/B tool wiring drifted | Check `cmd/semteams/main.go` and `docs/architecture.md` — `executors.RegisterBuiltins` must be called |
 | Backend boots, UI shows "no flow" | UI auto-discovers the active flow via `/components/`; check `curl :8080/api/components` | Restart, or pick a flow under `/flows` |
 | Mock-LLM journey passes locally but flakes in CI | Stale `mock-llm` build (changes to mock fixtures don't trigger a rebuild on `compose restart`) | `docker compose ... build --no-cache mock-llm` (memory: `feedback_mock_llm_rebuild`) |
 | Orphan `semteams-ui-agentic-*` containers from interrupted runs | Compose project-name mismatch — cleanup uses `--project-name semteams-agentic`, orphans were created with the default | `docker rm -f $(docker ps -aq --filter name=semteams-ui-agentic-)` |
@@ -375,20 +383,18 @@ step time is wedged — abort, don't wait for the natural timeout.
 
 ## Where to go from here
 
-- **Why is the binary built this way?** —
-  [`adr/029-product-shell-wiring.md`](adr/029-product-shell-wiring.md)
-  is the single most useful read.
 - **What runs end-to-end when I send a prompt?** —
   [`architecture.md`](architecture.md). The substrate-plus-overlays
-  runtime, live category packs, and **how a sandbox gets created**.
+  runtime, coordinator front door, live category packs, artifact
+  handoff, and **how a sandbox gets created**.
 - **What exactly can the demo claim?** —
   [`demo-mvp-claims.md`](demo-mvp-claims.md). Supported claims,
   non-claims, black-box evidence rules, and MAVLink-hard scope.
-- **Why is it built this way (substrate-plus-overlays)?** —
-  [`adr/042-coordinator-instantiated-flows-via-templates.md`](adr/042-coordinator-instantiated-flows-via-templates.md).
-- **How does the sandbox work?** —
-  [`adr/043-devcontainer-as-sandbox-spec.md`](adr/043-devcontainer-as-sandbox-spec.md)
-  (current; ADR-032 was the precursor).
+- **How do I add or change a capability pack?** —
+  [`../configs/README.md`](../configs/README.md) plus the relevant
+  `configs/rules/<pack>/README.md`.
+- **How do I extend product-shell tools safely?** —
+  [`../cmd/semteams/tools/README.md`](../cmd/semteams/tools/README.md).
 - **How do I write a journey?** —
   [`journeys/README.md`](journeys/README.md). The journey IS the
   Playwright test under `ui/e2e/agentic/`.
