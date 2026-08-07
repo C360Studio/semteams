@@ -6,7 +6,7 @@ import (
 
 // TestResearchPack_SynthesizeJoinGuardsEmptyFanout pins the empty-fan-out guard
 // on research/03b. The synthesize JOIN fires on the planner entity when
-// research.gather.completed_subtopic length_eq coordinator.decision.subtopics.length.
+// research.gather.completed-subtopic length_eq coordinator.decision.subtopics.length.
 // Without a subtopics-present guard, a planner that terminates WITHOUT deciding
 // gather (a loop-failure, surfaced by the ADR-053 4a′ run-failed journey) leaves
 // BOTH fields absent and length_eq(absent, absent.length) evaluates 0==0 → a
@@ -24,7 +24,7 @@ func TestResearchPack_SynthesizeJoinGuardsEmptyFanout(t *testing.T) {
 			"(0==0 empty-fan-out). Removing the guard regresses the ADR-053 4a′ run-failed journey.")
 	}
 	// The join must still key on the dynamic counter==subtopics-length match.
-	if !r.hasConditionField("research.gather.completed_subtopic", "length_eq") {
-		t.Error("research/03b must still join on research.gather.completed_subtopic length_eq subtopics.length")
+	if !r.hasConditionField("research.gather.completed-subtopic", "length_eq") {
+		t.Error("research/03b must still join on research.gather.completed-subtopic length_eq subtopics.length")
 	}
 }

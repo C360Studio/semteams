@@ -124,7 +124,7 @@ func TestAttest_VerifiedTruncates(t *testing.T) {
 
 func TestAttest_TriplesSkipEmptyVerified(t *testing.T) {
 	// Per PR 4.1 finding M3: a probe that passes with empty stdout
-	// must NOT stamp a sandbox.attestation.verified.<name> triple,
+	// must NOT stamp a sandbox.attestation.verified-<name> triple,
 	// because Coordinator substitution would resolve to "" silently.
 	probes := []ProbeResult{
 		{Name: "silent", Stdout: "", ExitCode: 0},
@@ -385,7 +385,7 @@ func TestNonAdmittedPaths_NeverStampHostWorkspaceFolder(t *testing.T) {
 			}
 			for _, tr := range tc.a.Triples(subject) {
 				if tr.Predicate == PredicateAttestationHostWorkspaceFolder {
-					t.Fatalf("%s leaked sandbox.attestation.host_workspace_folder=%v — chain routing would substitute a stale path",
+					t.Fatalf("%s leaked sandbox.attestation.host-workspace-folder=%v — chain routing would substitute a stale path",
 						tc.name, tr.Object)
 				}
 			}

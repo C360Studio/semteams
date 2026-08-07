@@ -529,7 +529,7 @@ func registerAutoresearchTools(reg *agentictools.ExecutorRegistry, natsClient *n
 // emitautoresearchartifact.ChainAttestationReader by composing the run anchor on
 // ToolCall.Metadata (runanchor.Anchor — ADR-053 Phase 5 / semstreams#250, the
 // retired chain.Resolver walk) with chain.NATSEntityReader. Returns the
-// sandbox.attestation.host_workspace_folder triple when the chain has a ready
+// sandbox.attestation.host-workspace-folder triple when the chain has a ready
 // per-tenant devcontainer; empty string otherwise (no run anchor, no attestation,
 // not ready, or wsf empty — all "no per-tenant container available", which the
 // writer treats as local-fs fallback).
@@ -914,7 +914,7 @@ func registerChainBash(reg *agentictools.ExecutorRegistry, natsClient *natsclien
 	//   - SANDBOX_URL set, natsClient present → attestation-aware
 	//     mode. Wrap upstream's *runner.Client with
 	//     sandboxruntime.AttestationRunner so chains with a Phase-A-
-	//     stamped sandbox.attestation.host_workspace_folder route into
+	//     stamped sandbox.attestation.host-workspace-folder route into
 	//     their per-tenant devcontainer via `devcontainer exec`. Other
 	//     chains pass through unchanged.
 	mode, bashExec := buildBashExecutor(natsClient, platform, logger)

@@ -108,7 +108,7 @@ func roleValues(v any) []string {
 
 // TestAgentRunPack_HandoffMarker pins rule 01: it bridges the firing-entity gap
 // by firing on the coordinator loop (confirmed handoff) and stamping
-// agent.run.handoff on the run entity. The rule.spawned_task gate (not bare
+// agent.run.handoff on the run entity. The rule.task.spawned gate (not bare
 // mint) is Coby review P1a — publish-failure safety.
 func TestAgentRunPack_HandoffMarker(t *testing.T) {
 	r := loadRule(t, "../../configs/rules/agent-run/01-handoff-marker.json")
@@ -116,14 +116,14 @@ func TestAgentRunPack_HandoffMarker(t *testing.T) {
 	if !r.hasCondition("agent.loop.role", "eq", "coordinator") {
 		t.Error("handoff marker must fire on the coordinator loop (agent.loop.role==coordinator)")
 	}
-	// rule.spawned_task is the CONFIRMED-HANDOFF gate (post-publish-success),
+	// rule.task.spawned is the CONFIRMED-HANDOFF gate (post-publish-success),
 	// NOT bare mint — the load-bearing P1a invariant.
-	if !r.hasCondition("rule.spawned_task", "ne", "") {
-		t.Error("handoff marker must gate on rule.spawned_task != \"\" (confirmed handoff, Coby review P1a) — NOT on agent.run.phase==dispatched (bare mint, which survives a publish failure)")
+	if !r.hasCondition("rule.task.spawned", "ne", "") {
+		t.Error("handoff marker must gate on rule.task.spawned != \"\" (confirmed handoff, Coby review P1a) — NOT on agent.run.phase==dispatched (bare mint, which survives a publish failure)")
 	}
-	// agent.run.entity_id presence is the run-less-chat guard.
-	if !r.hasCondition("agent.run.entity_id", "ne", "") {
-		t.Error("handoff marker must gate on agent.run.entity_id != \"\" (run-less-chat guard)")
+	// agent.run.entity-id presence is the run-less-chat guard.
+	if !r.hasCondition("agent.run.entity-id", "ne", "") {
+		t.Error("handoff marker must gate on agent.run.entity-id != \"\" (run-less-chat guard)")
 	}
 	// Must NOT trigger on bare mint.
 	if r.hasCondition("agent.run.phase", "eq", "dispatched") {
@@ -134,8 +134,8 @@ func TestAgentRunPack_HandoffMarker(t *testing.T) {
 	for _, a := range r.OnEnter {
 		if a.Type == "add_triple" && a.Predicate == "agent.run.handoff" {
 			stampsHandoff = true
-			if a.Subject != "$entity.triple.agent.run.entity_id" {
-				t.Errorf("handoff stamp subject = %q, want $entity.triple.agent.run.entity_id (the mint-stamped run anchor on the coordinator)", a.Subject)
+			if a.Subject != "$entity.triple.agent.run.entity-id" {
+				t.Errorf("handoff stamp subject = %q, want $entity.triple.agent.run.entity-id (the mint-stamped run anchor on the coordinator)", a.Subject)
 			}
 		}
 	}
@@ -145,29 +145,29 @@ func TestAgentRunPack_HandoffMarker(t *testing.T) {
 	// Single-anchor guard: rule 01 handles the length_eq 1 case (front-door
 	// mint OR between-task inherit — both carry exactly one run anchor). The
 	// dual-anchor (recovery re-dispatch) case is rule 01b. The split keeps the
-	// ambiguous $entity.triple.agent.run.entity_id subject correct: with one
+	// ambiguous $entity.triple.agent.run.entity-id subject correct: with one
 	// anchor it resolves unambiguously.
 	// Pin the VALUE (1), not just the operator: the single/dual split is only
 	// sound at exactly length_eq 1 vs length_gt 1. length_eq 2 (or 01b at
 	// length_gt 0) would silently break the partition. JSON numbers decode to
 	// float64.
-	if !r.hasCondition("agent.run.entity_id", "length_eq", float64(1)) {
-		t.Error("rule 01 must gate on agent.run.entity_id length_eq 1 (exact value) — without it, it also fires on a dual-anchor recovery coordinator and stamps the handoff on the inherited (wrong) run; rule 01b owns that case")
+	if !r.hasCondition("agent.run.entity-id", "length_eq", float64(1)) {
+		t.Error("rule 01 must gate on agent.run.entity-id length_eq 1 (exact value) — without it, it also fires on a dual-anchor recovery coordinator and stamps the handoff on the inherited (wrong) run; rule 01b owns that case")
 	}
 }
 
 // TestAgentRunPack_HandoffMarkerRedispatch pins rule 01b: the dual-anchor
 // (recovery re-dispatch) handoff. A coordinator that inherited a prior run's
-// anchor AND minted a fresh one carries two agent.run.entity_id triples;
-// $entity.triple.agent.run.entity_id is first-written-wins → resolves to the
+// anchor AND minted a fresh one carries two agent.run.entity-id triples;
+// $entity.triple.agent.run.entity-id is first-written-wins → resolves to the
 // inherited (wrong) run. 01b targets the SELF-MINTED run by its literal id
 // (chain.execution.<own loop>) so the re-dispatched run advances
 // dispatched→executing→completed.
 //
-//  1. Fires on coordinator + rule.spawned_task + agent.run.entity_id length_gt 1.
+//  1. Fires on coordinator + rule.task.spawned + agent.run.entity-id length_gt 1.
 //  2. Stamps agent.run.handoff on the literal self-minted run subject
 //     ($entity.org.$entity.platform.agent.chain.execution.$entity.instance),
-//     NOT $entity.triple.agent.run.entity_id (which would resolve to the
+//     NOT $entity.triple.agent.run.entity-id (which would resolve to the
 //     inherited run).
 //  3. Mutually exclusive with rule 01 (length_eq 1 vs length_gt 1).
 func TestAgentRunPack_HandoffMarkerRedispatch(t *testing.T) {
@@ -176,14 +176,14 @@ func TestAgentRunPack_HandoffMarkerRedispatch(t *testing.T) {
 	if !r.hasCondition("agent.loop.role", "eq", "coordinator") {
 		t.Error("rule 01b must fire on the coordinator loop")
 	}
-	if !r.hasCondition("rule.spawned_task", "ne", "") {
-		t.Error("rule 01b must gate on rule.spawned_task != \"\" (confirmed handoff)")
+	if !r.hasCondition("rule.task.spawned", "ne", "") {
+		t.Error("rule 01b must gate on rule.task.spawned != \"\" (confirmed handoff)")
 	}
 	// Pin the value (1): length_gt 0 would make 01b fire on single-anchor
 	// dispatches too → double-handoff. The {1} vs {2,3,...} partition is only
 	// sound at length_gt 1.
-	if !r.hasCondition("agent.run.entity_id", "length_gt", float64(1)) {
-		t.Error("rule 01b must gate on agent.run.entity_id length_gt 1 (exact value — length_gt 0 would fire on single-anchor dispatches too, double-stamping the handoff; mutually exclusive with rule 01's length_eq 1)")
+	if !r.hasCondition("agent.run.entity-id", "length_gt", float64(1)) {
+		t.Error("rule 01b must gate on agent.run.entity-id length_gt 1 (exact value — length_gt 0 would fire on single-anchor dispatches too, double-stamping the handoff; mutually exclusive with rule 01's length_eq 1)")
 	}
 
 	const selfMintedSubject = "$entity.org.$entity.platform.agent.chain.execution.$entity.instance"
@@ -192,7 +192,7 @@ func TestAgentRunPack_HandoffMarkerRedispatch(t *testing.T) {
 		if a.Type == "add_triple" && a.Predicate == "agent.run.handoff" {
 			stampsHandoff = true
 			if a.Subject != selfMintedSubject {
-				t.Errorf("rule 01b handoff subject = %q, want %q (the self-minted run, NOT $entity.triple.agent.run.entity_id which resolves to the inherited run)", a.Subject, selfMintedSubject)
+				t.Errorf("rule 01b handoff subject = %q, want %q (the self-minted run, NOT $entity.triple.agent.run.entity-id which resolves to the inherited run)", a.Subject, selfMintedSubject)
 			}
 		}
 	}
@@ -215,10 +215,10 @@ func TestAgentRunPack_TransitionsPhaseGuardedTopLevel(t *testing.T) {
 		{"../../configs/rules/agent-run/02-dispatched-to-executing.json", "dispatched", "executing", "agent.run.handoff"},
 		{"../../configs/rules/agent-run/03-executing-to-completed.json", "executing", "completed", "agent.run.outcome"},
 		{"../../configs/rules/agent-run/04-executing-to-failed.json", "executing", "failed", "agent.run.outcome"},
-		{"../../configs/rules/agent-run/09-executing-to-awaiting-on-clarification.json", "executing", "awaiting_approval", "agent.run.clarification_pending"},
-		{"../../configs/rules/agent-run/11-resume-awaiting-to-executing.json", "awaiting_approval", "executing", "agent.run.clarification_resumed"},
-		{"../../configs/rules/agent-run/12-executing-to-awaiting-on-approval.json", "executing", "awaiting_approval", "agent.run.approval_pending"},
-		{"../../configs/rules/agent-run/13-resume-awaiting-to-executing-on-approval.json", "awaiting_approval", "executing", "agent.run.approval_resumed"},
+		{"../../configs/rules/agent-run/09-executing-to-awaiting-on-clarification.json", "executing", "awaiting_approval", "agent.run.clarification-pending"},
+		{"../../configs/rules/agent-run/11-resume-awaiting-to-executing.json", "awaiting_approval", "executing", "agent.run.clarification-resumed"},
+		{"../../configs/rules/agent-run/12-executing-to-awaiting-on-approval.json", "executing", "awaiting_approval", "agent.run.approval-pending"},
+		{"../../configs/rules/agent-run/13-resume-awaiting-to-executing-on-approval.json", "awaiting_approval", "executing", "agent.run.approval-resumed"},
 	}
 	for _, tc := range cases {
 		r := loadRule(t, tc.path)
@@ -263,17 +263,18 @@ func TestAgentRunPack_TransitionsPhaseGuardedTopLevel(t *testing.T) {
 
 // TestAgentRunPack_SuccessOutcomeStamps pins that the three reviewer/CBG-approved
 // terminal rules stamp agent.run.outcome=success on the run entity, each with the
-// per-pack run-anchor subject (research uses agent.run.entity_id; autoresearch +
+// per-pack run-anchor subject (research uses agent.run.entity-id; autoresearch +
 // dev-via-test descend through run-entity-fired rules so carry only
-// lineage.run-loop-entity-id). This is the §E per-pack-anchor correction.
+// agent.lineage.run-loop-entity-id). This is the §E per-pack-anchor correction.
 func TestAgentRunPack_SuccessOutcomeStamps(t *testing.T) {
 	cases := []struct {
 		path    string
 		subject string
 	}{
-		{"../../configs/rules/research/07-reviewer-approved-to-coordinator.json", "$entity.triple.agent.run.entity_id"},
-		{"../../configs/rules/autoresearch/08-reviewer-approved-to-coordinator.json", "$entity.triple.lineage.run-loop-entity-id"},
-		{"../../configs/rules/dev-via-test/07a-cbg-approved-to-coordinator.json", "$entity.triple.lineage.run-loop-entity-id"},
+		{"../../configs/rules/research/07-reviewer-approved-to-coordinator.json", "$entity.triple.agent.run.entity-id"},
+		{"../../configs/rules/autoresearch/08-reviewer-approved-to-coordinator.json", "$entity.triple.agent.lineage.run-loop-entity-id"},
+		// dev-via-test/07a is parked with its pack (ADR-058); re-add when
+		// the pack is re-authored and re-wired.
 	}
 	for _, tc := range cases {
 		r := loadRule(t, tc.path)
@@ -301,13 +302,13 @@ func TestAgentRunPack_SuccessOutcomeStamps(t *testing.T) {
 // SPAWNED the stamping loop threads <key> in its related_loops. Without it the
 // substitution leaves a literal token and the run never completes.
 //
-// go-reviewer C1/C2: autoresearch/08 stamped lineage.run-loop-entity-id, but its
+// go-reviewer C1/C2: autoresearch/08 stamped agent.lineage.run-loop-entity-id, but its
 // spawner autoresearch/07 threaded only autoresearch-run — so the subject resolved
 // to a garbage literal and every autoresearch run hung in `executing`. The
 // per-rule subject test passed green because it pinned the author's intent string,
 // not that the anchor resolves on the firing role. This test closes that gap.
 //
-// research/07 uses agent.run.entity_id (framework-inherited via the loop-spawn
+// research/07 uses agent.run.entity-id (framework-inherited via the loop-spawn
 // chain, NOT a related_loops thread), so it is not checked here.
 func TestAgentRunPack_SuccessStampAnchorThreaded(t *testing.T) {
 	cases := []struct {
@@ -316,7 +317,8 @@ func TestAgentRunPack_SuccessStampAnchorThreaded(t *testing.T) {
 		lineageKey string // the related_loops key the stamp's lineage.<key> subject reads
 	}{
 		{"autoresearch", "../../configs/rules/autoresearch/07-synthesize-to-reviewer.json", "run-loop-entity-id"},
-		{"dev-via-test", "../../configs/rules/dev-via-test/06-coordinator-dispatch-cbg.json", "run-loop-entity-id"},
+		// dev-via-test/06 is parked with its pack (ADR-058); re-add when
+		// the pack is re-authored and re-wired.
 	}
 	for _, tc := range cases {
 		r := loadRule(t, tc.spawnRule)
@@ -372,21 +374,21 @@ func TestAgentRunPack_WiredInBothConfigs(t *testing.T) {
 // failedStampRule pairs a per-pack/coordinator loop-failed run-outcome rule with
 // the run-anchor subject its agent.run.outcome=failed stamp must use. The anchor
 // differs by spawn path (ADR-053 4a′ §E, the same asymmetry as the success path):
-// agent.run.entity_id for loop-spawn-chain roles (research, baseline, first-pass
-// Lisa, loop-fired coordinators), lineage.run-loop-entity-id for run-entity-
+// agent.run.entity-id for loop-spawn-chain roles (research, baseline, first-pass
+// Lisa, loop-fired coordinators), agent.lineage.run-loop-entity-id for run-entity-
 // descended roles (autoresearch propose/synthesize/reviewer, re-plan Lisa, CBG,
 // run-entity-spawned coordinators).
 var failedStampRules = []struct {
 	path    string
 	subject string
 }{
-	{"../../configs/rules/research/09-loop-failed-run-outcome.json", "$entity.triple.agent.run.entity_id"},
-	{"../../configs/rules/autoresearch/12-baseline-loop-failed-run-outcome.json", "$entity.triple.agent.run.entity_id"},
-	{"../../configs/rules/autoresearch/13-loop-failed-run-outcome.json", "$entity.triple.lineage.run-loop-entity-id"},
-	{"../../configs/rules/dev-via-test/09-firstpass-loop-failed-run-outcome.json", "$entity.triple.agent.run.entity_id"},
-	{"../../configs/rules/dev-via-test/10-loop-failed-run-outcome.json", "$entity.triple.lineage.run-loop-entity-id"},
-	{"../../configs/rules/agent-run/05-coordinator-failed-run-anchor.json", "$entity.triple.agent.run.entity_id"},
-	{"../../configs/rules/agent-run/06-coordinator-failed-lineage-anchor.json", "$entity.triple.lineage.run-loop-entity-id"},
+	{"../../configs/rules/research/09-loop-failed-run-outcome.json", "$entity.triple.agent.run.entity-id"},
+	{"../../configs/rules/autoresearch/12-baseline-loop-failed-run-outcome.json", "$entity.triple.agent.run.entity-id"},
+	{"../../configs/rules/autoresearch/13-loop-failed-run-outcome.json", "$entity.triple.agent.lineage.run-loop-entity-id"},
+	// dev-via-test/09 + /10 are parked with their pack (ADR-058); re-add
+	// when the pack is re-authored and re-wired.
+	{"../../configs/rules/agent-run/05-coordinator-failed-run-anchor.json", "$entity.triple.agent.run.entity-id"},
+	{"../../configs/rules/agent-run/06-coordinator-failed-lineage-anchor.json", "$entity.triple.agent.lineage.run-loop-entity-id"},
 }
 
 // TestAgentRunPack_FailedOutcomeStamps is the failure-side mirror of
@@ -418,20 +420,20 @@ func TestAgentRunPack_FailedOutcomeStamps(t *testing.T) {
 // C1 class: a $entity.triple.<anchor> subject that resolves to an unset triple
 // becomes a literal token, the stamp lands on garbage, and the run hangs
 // `executing` forever. So every lineage-subject stamp MUST guard on
-// lineage.run-loop-entity-id PRESENCE (length_gt 0) and every agent.run.entity_id
-// subject stamp MUST guard on agent.run.entity_id != "". The two coordinator
+// agent.lineage.run-loop-entity-id PRESENCE (length_gt 0) and every agent.run.entity-id
+// subject stamp MUST guard on agent.run.entity-id != "". The two coordinator
 // rules additionally fence on lineage presence so they are mutually exclusive.
 func TestAgentRunPack_FailedStampAnchorGuarded(t *testing.T) {
 	for _, tc := range failedStampRules {
 		r := loadRule(t, tc.path)
 		switch tc.subject {
-		case "$entity.triple.lineage.run-loop-entity-id":
-			if !r.hasConditionField("lineage.run-loop-entity-id", "length_gt") {
-				t.Errorf("%s: a lineage.run-loop-entity-id failed-stamp must guard on `lineage.run-loop-entity-id length_gt 0` (C1 garbage-literal-subject defense)", tc.path)
+		case "$entity.triple.agent.lineage.run-loop-entity-id":
+			if !r.hasConditionField("agent.lineage.run-loop-entity-id", "length_gt") {
+				t.Errorf("%s: a agent.lineage.run-loop-entity-id failed-stamp must guard on `agent.lineage.run-loop-entity-id length_gt 0` (C1 garbage-literal-subject defense)", tc.path)
 			}
-		case "$entity.triple.agent.run.entity_id":
-			if !r.hasCondition("agent.run.entity_id", "ne", "") {
-				t.Errorf("%s: an agent.run.entity_id failed-stamp must guard on `agent.run.entity_id != \"\"` (anchor-present / run-less-chat guard)", tc.path)
+		case "$entity.triple.agent.run.entity-id":
+			if !r.hasCondition("agent.run.entity-id", "ne", "") {
+				t.Errorf("%s: an agent.run.entity-id failed-stamp must guard on `agent.run.entity-id != \"\"` (anchor-present / run-less-chat guard)", tc.path)
 			}
 		}
 	}
@@ -440,14 +442,14 @@ func TestAgentRunPack_FailedStampAnchorGuarded(t *testing.T) {
 	// presence (length_eq 0 vs length_gt 0), so a coordinator carrying both
 	// anchors routes to exactly one and is never double-stamped.
 	c05 := loadRule(t, "../../configs/rules/agent-run/05-coordinator-failed-run-anchor.json")
-	if !c05.hasConditionField("lineage.run-loop-entity-id", "length_eq") {
-		t.Error("agent-run/05 must fence on `lineage.run-loop-entity-id length_eq 0` (mutually exclusive with rule 06)")
+	if !c05.hasConditionField("agent.lineage.run-loop-entity-id", "length_eq") {
+		t.Error("agent-run/05 must fence on `agent.lineage.run-loop-entity-id length_eq 0` (mutually exclusive with rule 06)")
 	}
 }
 
 // TestAgentRunPack_AskUserPauseMarkers pins the 4b-2 interactive-pause marker
 // pair (07/08): each fires on a coordinator decide(ask_user) WITHIN a run and
-// stamps agent.run.clarification_pending on the run entity via the correct
+// stamps agent.run.clarification-pending on the run entity via the correct
 // per-anchor subject, fenced so the subject resolves and the pair is mutually
 // exclusive (same anchor discipline as the coordinator-failed pair 05/06). The
 // next_action==ask_user trigger is ALSO the autonomous-inertness gate: under
@@ -460,8 +462,8 @@ func TestAgentRunPack_AskUserPauseMarkers(t *testing.T) {
 		subject   string
 		lineageOp string // the lineage fence operator
 	}{
-		{"../../configs/rules/agent-run/07-ask-user-pause-run-anchor.json", "$entity.triple.agent.run.entity_id", "length_eq"},
-		{"../../configs/rules/agent-run/08-ask-user-pause-lineage-anchor.json", "$entity.triple.lineage.run-loop-entity-id", "length_gt"},
+		{"../../configs/rules/agent-run/07-ask-user-pause-run-anchor.json", "$entity.triple.agent.run.entity-id", "length_eq"},
+		{"../../configs/rules/agent-run/08-ask-user-pause-lineage-anchor.json", "$entity.triple.agent.lineage.run-loop-entity-id", "length_gt"},
 	}
 	for _, tc := range cases {
 		r := loadRule(t, tc.path)
@@ -469,13 +471,13 @@ func TestAgentRunPack_AskUserPauseMarkers(t *testing.T) {
 			t.Errorf("%s: must fire on agent.loop.role==coordinator", tc.path)
 		}
 		// The ask_user trigger — ALSO the autonomous-inertness gate.
-		if !r.hasCondition("coordinator.decision.next_action", "eq", "ask_user") {
-			t.Errorf("%s: must trigger on coordinator.decision.next_action==ask_user — the trigger AND the autonomous-inertness "+
+		if !r.hasCondition("coordinator.decision.next-action", "eq", "ask_user") {
+			t.Errorf("%s: must trigger on coordinator.decision.next-action==ask_user — the trigger AND the autonomous-inertness "+
 				"gate (decide(ask_user) is rejected pre-stamp under restricted_decide_actions, so this rule can't fire in autonomous mode)", tc.path)
 		}
 		var stamps bool
 		for _, a := range r.OnEnter {
-			if a.Type == "add_triple" && a.Predicate == "agent.run.clarification_pending" {
+			if a.Type == "add_triple" && a.Predicate == "agent.run.clarification-pending" {
 				stamps = true
 				if a.Subject != tc.subject {
 					t.Errorf("%s: clarification_pending subject = %q, want %q (per-anchor run subject)", tc.path, a.Subject, tc.subject)
@@ -483,18 +485,18 @@ func TestAgentRunPack_AskUserPauseMarkers(t *testing.T) {
 			}
 		}
 		if !stamps {
-			t.Errorf("%s: must add_triple agent.run.clarification_pending on the run entity (drives agent-run/09 executing→awaiting_approval)", tc.path)
+			t.Errorf("%s: must add_triple agent.run.clarification-pending on the run entity (drives agent-run/09 executing→awaiting_approval)", tc.path)
 		}
 		// Anchor fence so the subject resolves + the pair is mutually exclusive.
-		if !r.hasConditionField("lineage.run-loop-entity-id", tc.lineageOp) {
-			t.Errorf("%s: must fence on `lineage.run-loop-entity-id %s 0` (subject-resolves + mutual exclusion with the sibling — mirrors 05/06)", tc.path, tc.lineageOp)
+		if !r.hasConditionField("agent.lineage.run-loop-entity-id", tc.lineageOp) {
+			t.Errorf("%s: must fence on `agent.lineage.run-loop-entity-id %s 0` (subject-resolves + mutual exclusion with the sibling — mirrors 05/06)", tc.path, tc.lineageOp)
 		}
 	}
-	// Rule 07 (run-anchor) additionally guards agent.run.entity_id != "" — the
+	// Rule 07 (run-anchor) additionally guards agent.run.entity-id != "" — the
 	// run-less-chat guard (a front-door ask_user has no run to pause).
 	r07 := loadRule(t, "../../configs/rules/agent-run/07-ask-user-pause-run-anchor.json")
-	if !r07.hasCondition("agent.run.entity_id", "ne", "") {
-		t.Error("agent-run/07 must guard agent.run.entity_id != \"\" (run-less-chat guard — a front-door ask_user has no run to pause)")
+	if !r07.hasCondition("agent.run.entity-id", "ne", "") {
+		t.Error("agent-run/07 must guard agent.run.entity-id != \"\" (run-less-chat guard — a front-door ask_user has no run to pause)")
 	}
 }
 
@@ -503,7 +505,7 @@ func TestAgentRunPack_AskUserPauseMarkers(t *testing.T) {
 // autonomous mode. The mechanism is UPSTREAM ORDERING — under
 // agentic-tools.restricted_decide_actions=["ask_user"] the framework rejects
 // decide(ask_user) (ToolErrorInvalidArgs) BEFORE the
-// coordinator.decision.next_action=ask_user triple is published (semstreams
+// coordinator.decision.next-action=ask_user triple is published (semstreams
 // beta.104 decide.go:307-322 runs before the next_action stamp at :362-370). Both
 // pause markers gate on that triple, so neither can enter in autonomous mode — no
 // rule-level autonomous gate is needed. This test makes the named claim concrete
@@ -516,8 +518,8 @@ func TestAgentRunPack_AskUserPauseAutonomousInert(t *testing.T) {
 		"../../configs/rules/agent-run/08-ask-user-pause-lineage-anchor.json",
 	} {
 		r := loadRule(t, path)
-		if !r.hasCondition("coordinator.decision.next_action", "eq", "ask_user") {
-			t.Errorf("%s: must gate on coordinator.decision.next_action==ask_user — that triple is what makes the rule "+
+		if !r.hasCondition("coordinator.decision.next-action", "eq", "ask_user") {
+			t.Errorf("%s: must gate on coordinator.decision.next-action==ask_user — that triple is what makes the rule "+
 				"autonomous-inert (restricted_decide_actions rejects decide(ask_user) before the triple is stamped). Without "+
 				"this exact gate the inertness claim in the rule metadata + README would be false.", path)
 		}
@@ -526,10 +528,10 @@ func TestAgentRunPack_AskUserPauseAutonomousInert(t *testing.T) {
 
 // TestAgentRunPack_ClarificationResumeMarker pins the 4b-2 PR-2 resume marker
 // (rule 10): a coordinator loop re-entering as a clarification REPLY stamps
-// agent.run.clarification_resumed on the run entity via the run-anchor subject
+// agent.run.clarification-resumed on the run entity via the run-anchor subject
 // override. Single rule (no 07/08-style anchor split) because semstreams#256
 // threads the run anchor onto the reply, so the reply loop always carries
-// agent.run.entity_id. The reply discriminator (agent.loop.reply_to) is
+// agent.run.entity-id. The reply discriminator (agent.loop.reply-to) is
 // what distinguishes a reply from any other coordinator loop in the run.
 func TestAgentRunPack_ClarificationResumeMarker(t *testing.T) {
 	r := loadRule(t, "../../configs/rules/agent-run/10-clarification-reply-resume-marker.json")
@@ -537,28 +539,28 @@ func TestAgentRunPack_ClarificationResumeMarker(t *testing.T) {
 		t.Error("agent-run/10: must fire on agent.loop.role==coordinator")
 	}
 	// The run anchor (Thread 1) — semstreams#256 (beta.106) threads run_id onto
-	// the reply, so the reply loop carries agent.run.entity_id.
-	if !r.hasCondition("agent.run.entity_id", "ne", "") {
-		t.Error("agent-run/10: must require agent.run.entity_id != \"\" (the run anchor threaded by semstreams#256)")
+	// the reply, so the reply loop carries agent.run.entity-id.
+	if !r.hasCondition("agent.run.entity-id", "ne", "") {
+		t.Error("agent-run/10: must require agent.run.entity-id != \"\" (the run anchor threaded by semstreams#256)")
 	}
 	// The reply discriminator (Thread 2) — the loop-local signal that this is a
 	// clarification reply, not just any run coordinator. semstreams#256 shipped
-	// the TYPED shape in beta.106: in_reply_to → agent.loop.reply_to triple
+	// the TYPED shape in beta.106: in_reply_to → agent.loop.reply-to triple
 	// (agvocab.LoopReplyTo), NOT a lineage.* overload.
-	if !r.hasCondition("agent.loop.reply_to", "ne", "") {
-		t.Error("agent-run/10: must require agent.loop.reply_to != \"\" (the reply discriminator — without it the rule would fire on every run coordinator)")
+	if !r.hasCondition("agent.loop.reply-to", "ne", "") {
+		t.Error("agent-run/10: must require agent.loop.reply-to != \"\" (the reply discriminator — without it the rule would fire on every run coordinator)")
 	}
 	var stamps bool
 	for _, a := range r.OnEnter {
-		if a.Type == "add_triple" && a.Predicate == "agent.run.clarification_resumed" {
+		if a.Type == "add_triple" && a.Predicate == "agent.run.clarification-resumed" {
 			stamps = true
-			if a.Subject != "$entity.triple.agent.run.entity_id" {
-				t.Errorf("agent-run/10: clarification_resumed subject = %q, want $entity.triple.agent.run.entity_id (the run entity)", a.Subject)
+			if a.Subject != "$entity.triple.agent.run.entity-id" {
+				t.Errorf("agent-run/10: clarification_resumed subject = %q, want $entity.triple.agent.run.entity-id (the run entity)", a.Subject)
 			}
 		}
 	}
 	if !stamps {
-		t.Error("agent-run/10: must add_triple agent.run.clarification_resumed on the run entity (drives agent-run/11 awaiting_approval→executing)")
+		t.Error("agent-run/10: must add_triple agent.run.clarification-resumed on the run entity (drives agent-run/11 awaiting_approval→executing)")
 	}
 }
 
@@ -574,8 +576,8 @@ func TestAgentRunPack_ClarificationResumeMarker(t *testing.T) {
 // drops a remove re-introduces the infinite pause↔resume bounce.
 func TestAgentRunPack_ClarificationResumeTransition(t *testing.T) {
 	r := loadRule(t, "../../configs/rules/agent-run/11-resume-awaiting-to-executing.json")
-	if !r.hasCondition("agent.run.clarification_resumed", "ne", "") {
-		t.Error("agent-run/11: must trigger on agent.run.clarification_resumed != \"\"")
+	if !r.hasCondition("agent.run.clarification-resumed", "ne", "") {
+		t.Error("agent-run/11: must trigger on agent.run.clarification-resumed != \"\"")
 	}
 	if len(r.OnEnter) != 3 {
 		t.Fatalf("agent-run/11: want exactly 3 on_enter actions [transition, remove pending, remove resumed], got %d", len(r.OnEnter))
@@ -583,11 +585,11 @@ func TestAgentRunPack_ClarificationResumeTransition(t *testing.T) {
 	if r.OnEnter[0].Type != "lifecycle_transition" || r.OnEnter[0].Phase != "executing" {
 		t.Errorf("agent-run/11: on_enter[0] must be lifecycle_transition→executing, got type=%q phase=%q", r.OnEnter[0].Type, r.OnEnter[0].Phase)
 	}
-	if r.OnEnter[1].Type != "remove_triple" || r.OnEnter[1].Predicate != "agent.run.clarification_pending" {
-		t.Errorf("agent-run/11: on_enter[1] must remove agent.run.clarification_pending (BEFORE clarification_resumed — bounce-proof order), got type=%q predicate=%q", r.OnEnter[1].Type, r.OnEnter[1].Predicate)
+	if r.OnEnter[1].Type != "remove_triple" || r.OnEnter[1].Predicate != "agent.run.clarification-pending" {
+		t.Errorf("agent-run/11: on_enter[1] must remove agent.run.clarification-pending (BEFORE clarification_resumed — bounce-proof order), got type=%q predicate=%q", r.OnEnter[1].Type, r.OnEnter[1].Predicate)
 	}
-	if r.OnEnter[2].Type != "remove_triple" || r.OnEnter[2].Predicate != "agent.run.clarification_resumed" {
-		t.Errorf("agent-run/11: on_enter[2] must remove agent.run.clarification_resumed (AFTER clarification_pending), got type=%q predicate=%q", r.OnEnter[2].Type, r.OnEnter[2].Predicate)
+	if r.OnEnter[2].Type != "remove_triple" || r.OnEnter[2].Predicate != "agent.run.clarification-resumed" {
+		t.Errorf("agent-run/11: on_enter[2] must remove agent.run.clarification-resumed (AFTER clarification_pending), got type=%q predicate=%q", r.OnEnter[2].Type, r.OnEnter[2].Predicate)
 	}
 	// neither remove may carry a subject override — both must default to the
 	// firing entity (the run entity) so the run's own markers are cleared.
@@ -610,27 +612,27 @@ func TestAgentRunPack_ClarificationResumeTransition(t *testing.T) {
 
 // TestAgentRunPack_PauseResumeBounceGuard pins the structural mutual-exclusion
 // that makes the pause↔resume cycle bounce-proof: rule 09 (pause) must carry the
-// agent.run.clarification_resumed length_eq 0 guard, so the instant rule 10
+// agent.run.clarification-resumed length_eq 0 guard, so the instant rule 10
 // stamps clarification_resumed the pause rule is dead until rule 11 clears both
 // markers. Dropping this guard re-introduces the infinite bounce (rule 11's
 // transition back to executing would re-trip rule 09 while pending is still set).
 func TestAgentRunPack_PauseResumeBounceGuard(t *testing.T) {
 	r := loadRule(t, "../../configs/rules/agent-run/09-executing-to-awaiting-on-clarification.json")
-	if !r.hasConditionField("agent.run.clarification_resumed", "length_eq") {
-		t.Error("agent-run/09: must guard `agent.run.clarification_resumed length_eq 0` — the bounce-proof mutual-exclusion with the resume (rule 10/11). Without it, rule 11's awaiting_approval→executing re-trips rule 09 → infinite pause↔resume bounce.")
+	if !r.hasConditionField("agent.run.clarification-resumed", "length_eq") {
+		t.Error("agent-run/09: must guard `agent.run.clarification-resumed length_eq 0` — the bounce-proof mutual-exclusion with the resume (rule 10/11). Without it, rule 11's awaiting_approval→executing re-trips rule 09 → infinite pause↔resume bounce.")
 	}
 }
 
 // TestAgentRunPack_ApprovalPauseBounceGuard pins the 4c tool-gate pause rule 12 with
 // the SAME bounce-proof guard as rule 09: rule 12 must carry the
-// agent.run.approval_resumed length_eq 0 guard so the PR-2 resume (which stamps
+// agent.run.approval-resumed length_eq 0 guard so the PR-2 resume (which stamps
 // approval_resumed then transitions awaiting_approval→executing while approval_pending
 // is briefly still set) cannot re-trip the pause. Shipped on the pause rule in PR-1 so
 // PR-2 adds only the resume rules, never re-touches rule 12.
 func TestAgentRunPack_ApprovalPauseBounceGuard(t *testing.T) {
 	r := loadRule(t, "../../configs/rules/agent-run/12-executing-to-awaiting-on-approval.json")
-	if !r.hasConditionField("agent.run.approval_resumed", "length_eq") {
-		t.Error("agent-run/12: must guard `agent.run.approval_resumed length_eq 0` — the bounce-proof mutual-exclusion forward-compatible with the 4c PR-2 resume. Mirror of rule 09's clarification_resumed guard.")
+	if !r.hasConditionField("agent.run.approval-resumed", "length_eq") {
+		t.Error("agent-run/12: must guard `agent.run.approval-resumed length_eq 0` — the bounce-proof mutual-exclusion forward-compatible with the 4c PR-2 resume. Mirror of rule 09's clarification_resumed guard.")
 	}
 }
 
@@ -674,11 +676,11 @@ func TestAgentRunPack_ApprovalResumeTransition(t *testing.T) {
 	if r.OnEnter[0].Type != "lifecycle_transition" || r.OnEnter[0].Phase != "executing" {
 		t.Errorf("agent-run/13: on_enter[0] must be lifecycle_transition→executing, got type=%q phase=%q", r.OnEnter[0].Type, r.OnEnter[0].Phase)
 	}
-	if r.OnEnter[1].Type != "remove_triple" || r.OnEnter[1].Predicate != "agent.run.approval_pending" {
-		t.Errorf("agent-run/13: on_enter[1] must remove agent.run.approval_pending (BEFORE approval_resumed — bounce-proof order), got type=%q predicate=%q", r.OnEnter[1].Type, r.OnEnter[1].Predicate)
+	if r.OnEnter[1].Type != "remove_triple" || r.OnEnter[1].Predicate != "agent.run.approval-pending" {
+		t.Errorf("agent-run/13: on_enter[1] must remove agent.run.approval-pending (BEFORE approval_resumed — bounce-proof order), got type=%q predicate=%q", r.OnEnter[1].Type, r.OnEnter[1].Predicate)
 	}
-	if r.OnEnter[2].Type != "remove_triple" || r.OnEnter[2].Predicate != "agent.run.approval_resumed" {
-		t.Errorf("agent-run/13: on_enter[2] must remove agent.run.approval_resumed (AFTER approval_pending), got type=%q predicate=%q", r.OnEnter[2].Type, r.OnEnter[2].Predicate)
+	if r.OnEnter[2].Type != "remove_triple" || r.OnEnter[2].Predicate != "agent.run.approval-resumed" {
+		t.Errorf("agent-run/13: on_enter[2] must remove agent.run.approval-resumed (AFTER approval_pending), got type=%q predicate=%q", r.OnEnter[2].Type, r.OnEnter[2].Predicate)
 	}
 	// The remove_triple actions must NOT carry a subject override — they default to
 	// the firing entity (the run entity), clearing the run's own markers.
@@ -699,25 +701,25 @@ func TestAgentRunPack_PauseDisambiguation4bVs4c(t *testing.T) {
 	appr := loadRule(t, "../../configs/rules/agent-run/12-executing-to-awaiting-on-approval.json")
 
 	// 4b-2 pause (09) keys on clarification_pending ONLY — never approval_pending.
-	if !clar.hasCondition("agent.run.clarification_pending", "ne", "") {
-		t.Error("agent-run/09 must trigger on agent.run.clarification_pending")
+	if !clar.hasCondition("agent.run.clarification-pending", "ne", "") {
+		t.Error("agent-run/09 must trigger on agent.run.clarification-pending")
 	}
-	if clar.hasConditionField("agent.run.approval_pending", "ne") || clar.hasConditionField("agent.run.approval_pending", "length_gt") {
-		t.Error("agent-run/09 (4b-2 clarification) must NOT reference agent.run.approval_pending — the two pauses must stay disjoint")
+	if clar.hasConditionField("agent.run.approval-pending", "ne") || clar.hasConditionField("agent.run.approval-pending", "length_gt") {
+		t.Error("agent-run/09 (4b-2 clarification) must NOT reference agent.run.approval-pending — the two pauses must stay disjoint")
 	}
 	// 4c pause (12) keys on approval_pending ONLY — never clarification_pending.
-	if !appr.hasCondition("agent.run.approval_pending", "ne", "") {
-		t.Error("agent-run/12 must trigger on agent.run.approval_pending")
+	if !appr.hasCondition("agent.run.approval-pending", "ne", "") {
+		t.Error("agent-run/12 must trigger on agent.run.approval-pending")
 	}
-	if appr.hasConditionField("agent.run.clarification_pending", "ne") || appr.hasConditionField("agent.run.clarification_pending", "length_gt") {
-		t.Error("agent-run/12 (4c tool-gate) must NOT reference agent.run.clarification_pending — the two pauses must stay disjoint")
+	if appr.hasConditionField("agent.run.clarification-pending", "ne") || appr.hasConditionField("agent.run.clarification-pending", "length_gt") {
+		t.Error("agent-run/12 (4c tool-gate) must NOT reference agent.run.clarification-pending — the two pauses must stay disjoint")
 	}
 
 	// The 4b-2 resume (rule 11) must clear clarification markers ONLY — never an
 	// approval marker (else it would resume a 4c pause it didn't cause).
 	resume4b2 := loadRule(t, "../../configs/rules/agent-run/11-resume-awaiting-to-executing.json")
-	if !resume4b2.hasCondition("agent.run.clarification_resumed", "ne", "") {
-		t.Error("agent-run/11 must trigger on agent.run.clarification_resumed")
+	if !resume4b2.hasCondition("agent.run.clarification-resumed", "ne", "") {
+		t.Error("agent-run/11 must trigger on agent.run.clarification-resumed")
 	}
 	for _, a := range resume4b2.OnEnter {
 		if a.Type == "remove_triple" && strings.HasPrefix(a.Predicate, "agent.run.approval_") {
@@ -727,11 +729,11 @@ func TestAgentRunPack_PauseDisambiguation4bVs4c(t *testing.T) {
 	// The 4c resume (rule 13) is the mirror: triggers on approval_resumed, clears
 	// approval markers ONLY — never a clarification marker.
 	resume4c := loadRule(t, "../../configs/rules/agent-run/13-resume-awaiting-to-executing-on-approval.json")
-	if !resume4c.hasCondition("agent.run.approval_resumed", "ne", "") {
-		t.Error("agent-run/13 must trigger on agent.run.approval_resumed")
+	if !resume4c.hasCondition("agent.run.approval-resumed", "ne", "") {
+		t.Error("agent-run/13 must trigger on agent.run.approval-resumed")
 	}
-	if resume4c.hasConditionField("agent.run.clarification_resumed", "ne") {
-		t.Error("agent-run/13 (4c resume) must NOT trigger on agent.run.clarification_resumed — disjoint from 4b-2")
+	if resume4c.hasConditionField("agent.run.clarification-resumed", "ne") {
+		t.Error("agent-run/13 (4c resume) must NOT trigger on agent.run.clarification-resumed — disjoint from 4b-2")
 	}
 	for _, a := range resume4c.OnEnter {
 		if a.Type == "remove_triple" && strings.HasPrefix(a.Predicate, "agent.run.clarification_") {
@@ -795,8 +797,8 @@ func TestAgentRunPack_BudgetedRolesExcludedFromFailedStamp(t *testing.T) {
 // Coordinator-spawn-rule dispositions for the ADR-053 4a′ executing→failed
 // boundary. A coordinator that fails involuntarily WHILE the run is `executing`
 // must drive executing→failed (agent-run/04) via a marker stamped by the
-// coordinator-failed rules (agent-run/05 keyed on agent.run.entity_id; 06 keyed
-// on lineage.run-loop-entity-id). That only works if the woken coordinator
+// coordinator-failed rules (agent-run/05 keyed on agent.run.entity-id; 06 keyed
+// on agent.lineage.run-loop-entity-id). That only works if the woken coordinator
 // carries a run anchor those rules can read. The adversarial review (ADR-053
 // 4a′) showed some woken coordinators carry NEITHER → a silent executing-zombie.
 // This map + TestAgentRunPack_CoordinatorSpawnCoverage make the boundary
@@ -808,12 +810,12 @@ const (
 	// coordinator could fail — its failure is post-terminal, no coverage needed.
 	dispPostApproval = "post_approval"
 	// dispAnchorThreaded: the rule threads related_loops[run-loop-entity-id], so
-	// the woken coordinator carries lineage.run-loop-entity-id → failure routes
+	// the woken coordinator carries agent.lineage.run-loop-entity-id → failure routes
 	// to agent-run/06.
 	dispAnchorThreaded = "anchor_threaded"
 	// dispAnchorInherit: the rule fires only on loop-inherit-chain roles (the
 	// research pack has no run-entity-fired spawn), so the woken coordinator
-	// inherits agent.run.entity_id from its parent's bare agent.run → failure
+	// inherits agent.run.entity-id from its parent's bare agent.run → failure
 	// routes to agent-run/05.
 	dispAnchorInherit = "anchor_inherit"
 	// dispDeferred4b: the woken coordinator is a pure human-in-the-loop delivery
@@ -846,8 +848,8 @@ var coordinatorSpawnDisposition = map[string]string{
 	"dev_via_test_cbg_rejected_to_coordinator":                    dispAnchorThreaded, // dev-via-test/07b (4b-1a)
 	"dev_via_test_cbg_retry_missing_target":                       dispAnchorThreaded, // dev-via-test/07e (4b-1a)
 	"create_change_reviewer_approved_to_coordinator":              dispPostApproval,   // create-change/03 (stamps success first)
-	"create_change_reviewer_rejected_to_coordinator":              dispAnchorInherit,  // create-change/04 (spawned from reviewer; inherits agent.run.entity_id)
-	"create_change_needs_clarification_to_coordinator":            dispAnchorInherit,  // create-change/05 (spawned from pack role; inherits agent.run.entity_id)
+	"create_change_reviewer_rejected_to_coordinator":              dispAnchorInherit,  // create-change/04 (spawned from reviewer; inherits agent.run.entity-id)
+	"create_change_needs_clarification_to_coordinator":            dispAnchorInherit,  // create-change/05 (spawned from pack role; inherits agent.run.entity-id)
 }
 
 type coordSpawnInfo struct {
@@ -950,7 +952,7 @@ func TestAgentRunPack_CoordinatorSpawnCoverage(t *testing.T) {
 			}
 		case dispAnchorInherit:
 			// anchor_inherit relies on the firing role's bare agent.run
-			// propagating agent.run.entity_id to the woken coordinator (→
+			// propagating agent.run.entity-id to the woken coordinator (→
 			// agent-run/05, the length_eq 0 branch). If the rule ALSO threaded
 			// run-loop-entity-id the coordinator would carry lineage and route to
 			// agent-run/06 instead — so a threading anchor_inherit rule is
@@ -984,7 +986,7 @@ func TestAgentRunPack_CoordinatorSpawnCoverage(t *testing.T) {
 // that the UNFENCED run-loop-entity-id threads on rules 02e/07b/07e rely on: every
 // rule that SPAWNS a reviewer-dev-via-test (CBG) loop must thread
 // related_loops[run-loop-entity-id] onto it. 02e/07b/07e fire ON the CBG and thread
-// run-loop-entity-id from $entity.triple.lineage.run-loop-entity-id WITHOUT a
+// run-loop-entity-id from $entity.triple.agent.lineage.run-loop-entity-id WITHOUT a
 // length_gt 0 fence (they rely on the firing CBG always carrying it). A CBG-spawn
 // that omitted the thread would make those threads resolve to a garbage literal
 // (the go-reviewer C1 class) with no fence to no-op it. This makes the precondition

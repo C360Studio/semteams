@@ -11,7 +11,7 @@ description: |
 
   Substrate behavior this proves (the 4a′ merge gate):
     1. Loop 0 coordinator(dispatch) → decide(research) → research/01 spawns
-       the planner → rule.spawned_task → agent-run/01 handoff marker →
+       the planner → rule.task.spawned → agent-run/01 handoff marker →
        agent-run/02 dispatched→executing. The run is `executing` before the
        planner fails.
     2. Loop A researcher-research-plan → scratchpad ×8, never decides →
@@ -19,7 +19,7 @@ description: |
     3. research/08-loop-failed-pause stamps chain.paused.marker on the planner
        loop (operator surface).
     4. research/09-loop-failed-run-outcome stamps agent.run.outcome=failed on
-       the RUN entity (anchor agent.run.entity_id — the planner carries it via
+       the RUN entity (anchor agent.run.entity-id — the planner carries it via
        the loop-spawn inherit chain from research/01 run_scope=new).
     5. agent-run/04-executing-to-failed fires (agent.run.outcome==failed +
        agent.run.phase==executing) → executing→failed.
@@ -28,7 +28,7 @@ description: |
   reach (D3 fires only while phase==dispatched; here the dispatch coordinator
   completed successfully with a confirmed handoff, and the run is `executing`
   when the non-root planner loop fails). The spec asserts
-  agent.run.last_transition_from==executing to prove the transition came from
+  agent.run.last-transition-from==executing to prove the transition came from
   rule 04, not D3's dispatched→failed path.
 
   Two loops only: coordinator(dispatch) + planner(failed). No gather /

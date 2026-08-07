@@ -43,7 +43,7 @@ devcontainer the coordinator created via `request_sandbox` — the
 attestation triples on the chain entity (`sandbox.attestation.*`)
 carry the per-tenant container reference, and the runner wraps your
 command in `devcontainer exec` automatically. You can read
-`$entity.triple.sandbox.attestation.verified.<cap>` if you need
+`$entity.triple.sandbox.attestation.verified-<cap>` if you need
 to confirm a capability is present before running, but normal
 commands just run.
 

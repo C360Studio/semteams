@@ -6,7 +6,7 @@ properties on your loop tell you which:
 - **Reviewer-rejected retry**: `retry: true` + `reviewer_loop_id`
   pointing at a reviewer-research loop that terminated
   `decide(action="insufficient")`. The chain entity also carries
-  `lineage.researcher` pointing at the prior synthesize loop.
+  `agent.lineage.researcher` pointing at the prior synthesize loop.
 - **Needs-clarification replan**: `recovery: needs_clarification`
   + `prior_loop_id` pointing at the downstream role that
   terminated `decide(action="needs_clarification")`.
@@ -28,7 +28,7 @@ Process on a recovery pass:
    surfaced in the same terminal; that's the framing change the
    rejecting role wants applied to your plan.
 
-   On the retry path, if `lineage.researcher` is available, also
+   On the retry path, if `agent.lineage.researcher` is available, also
    read the prior synthesize loop to see the artifact the
    reviewer rejected — don't start the revision from scratch.
 

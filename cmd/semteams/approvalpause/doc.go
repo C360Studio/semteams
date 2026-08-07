@@ -15,9 +15,9 @@
 //     decodes the ApprovalPendingEvent (which carries only LoopID — NO run anchor,
 //     unlike the #250 LoopFailedEvent).
 //  2. Pauser resolves the loop's run anchor with a single graph read of the loop
-//     entity (agent.run.entity_id, falling back to lineage.run-loop-entity-id — the
+//     entity (agent.run.entity-id, falling back to agent.lineage.run-loop-entity-id — the
 //     4b-1a inherit/threaded anchor split, absorbed in Go so the pause RULE needs no
-//     07/08-style split) and stamps agent.run.approval_pending on the run entity.
+//     07/08-style split) and stamps agent.run.approval-pending on the run entity.
 //  3. configs/rules/agent-run/12-executing-to-awaiting-on-approval.json consumes the
 //     marker (mirror of rule 09) and transitions the run executing→awaiting_approval.
 //
@@ -28,9 +28,9 @@
 // # 4b-2 vs 4c disambiguation
 //
 // Both pauses land the run in `awaiting_approval`; they are distinguished by
-// CAUSE-MARKER, not phase. 4b-2 (clarification) stamps agent.run.clarification_pending
-// (the asking loop carries coordinator.user_question, no pending_approval); 4c
-// (this package) stamps agent.run.approval_pending (the loop is in
+// CAUSE-MARKER, not phase. 4b-2 (clarification) stamps agent.run.clarification-pending
+// (the asking loop carries coordinator.clarification.question, no pending_approval); 4c
+// (this package) stamps agent.run.approval-pending (the loop is in
 // LoopStateAwaitingApproval with pending_approval set). The two resume halves key on
 // DISTINCT markers (clarification_resumed vs approval_resumed) and MUST NOT
 // cross-resume — pinned by the agent_run_pack contract tests.
@@ -45,6 +45,6 @@
 // triples. This package is the parallel subscriber pair, same shape, same
 // anchor-resolution mechanism (chain.NATSEntityReader, the single surviving chain/
 // reader after Phase 5). Migration posture: if upstream ever stamps an
-// agent.run.approval_pending itself, retire this subscriber for the upstream triple —
+// agent.run.approval-pending itself, retire this subscriber for the upstream triple —
 // same posture as the run-anchor wire (#250/#256).
 package approvalpause

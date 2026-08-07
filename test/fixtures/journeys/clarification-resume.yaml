@@ -11,10 +11,10 @@ description: |
   Pause half (proves the run parks in awaiting_approval — PR-1):
     1. Loop 0 front-door coordinator → decide(dev_via_test) → run executing.
     2. Loop A first-pass Lisa → decide(needs_clarification) → rule 02f spawns the
-       inherit recovery coordinator (carries agent.run.entity_id).
+       inherit recovery coordinator (carries agent.run.entity-id).
     3. Loop R recovery coordinator → decide(ask_user) → coordinator/03-ask-user
-       stamps coordinator.user_question; agent-run/07 stamps
-       agent.run.clarification_pending on the run entity; agent-run/09 fires
+       stamps coordinator.clarification.question; agent-run/07 stamps
+       agent.run.clarification-pending on the run entity; agent-run/09 fires
        executing→awaiting_approval.
 
   Resume half (NEW — proves PR-2, ACTIVE on semstreams beta.106 / #256):
@@ -22,9 +22,9 @@ description: |
        run_id (the paused run's bare runID) + in_reply_to (Loop R's bare loop-id),
        read from the paused run's triples. semstreams#256 (beta.106) threads both
        onto the reply TaskMessage, so buildSpawnIdentityTriples stamps
-       agent.run.entity_id (from run_id) + agent.loop.reply_to (from in_reply_to)
+       agent.run.entity-id (from run_id) + agent.loop.reply-to (from in_reply_to)
        on the resumed coordinator loop AT SPAWN — before any LLM call. That fires:
-         agent-run/10-clarification-reply-resume-marker → agent.run.clarification_resumed
+         agent-run/10-clarification-reply-resume-marker → agent.run.clarification-resumed
          agent-run/11-resume-awaiting-to-executing      → awaiting_approval→executing
                                                            + clear BOTH markers
        The resumed coordinator then decides respond_direct (this fourth response) and
@@ -60,7 +60,7 @@ responses:
   # ---------- Loop A: first-pass Lisa → needs_clarification ----------
   # rule 01 allowlist = [planned, needs_clarification]; Lisa escalates on turn 1.
   # rule 02f (first-pass, lineage length_eq 0) spawns the INHERIT recovery
-  # coordinator (carries agent.run.entity_id).
+  # coordinator (carries agent.run.entity-id).
   - tool_call:
       name: decide
       arguments_json: |
@@ -83,7 +83,7 @@ responses:
 
   # ---------- Resumed coordinator: operator answered → respond_direct ----------
   # The spec POSTs the answer with run_id + in_reply_to. The reply re-enters as a
-  # front-door coordinator loop carrying agent.run.entity_id + agent.loop.reply_to
+  # front-door coordinator loop carrying agent.run.entity-id + agent.loop.reply-to
   # → rules 10/11 resume the run (awaiting_approval→executing + clear markers)
   # BEFORE this LLM call. This response then answers directly; the loop completes
   # and the run stays `executing` (a plain coordinator respond_direct stamps no

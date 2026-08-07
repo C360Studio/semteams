@@ -2,7 +2,7 @@ name: coordinator-routing-matrix
 description: |
   Routing-only proof for the SemTeams coordinator. The paired Playwright
   journey posts representative prompts through /teams-dispatch/message and
-  asserts the first coordinator.decision.next_action triple for each prompt.
+  asserts the first coordinator.decision.next-action triple for each prompt.
 
   This fixture is intentionally role-keyed and coordinator-only. The Task
   target derives a temporary e2e-flow-bootstrap-routing-only.gen.json config

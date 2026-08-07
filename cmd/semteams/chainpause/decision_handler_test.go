@@ -36,7 +36,7 @@ func (s *staticPauseDataReader) ReadPauseData(_ context.Context, _ string) (stri
 }
 
 // fakeEntityReader stubs the single-entity graph read the DecisionHandler does to
-// recover the failed loop's run anchor (agent.run.entity_id), replacing the
+// recover the failed loop's run anchor (agent.run.entity-id), replacing the
 // retired ancestry-walk Resolver (ADR-053 Phase 5 / semstreams#250). runEntityID
 // is returned under the agvocab.LoopRunEntityID key; an empty value models a loop
 // with no run anchor; err models a graph-read failure.
@@ -173,7 +173,7 @@ func TestDecisionHandler_Retry_WritesChainResumedTriple(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if _, ok := pub.byPredicate("chain.decision.resumed_task_id"); !ok {
+	if _, ok := pub.byPredicate("chain.decision.resumed-task-id"); !ok {
 		t.Error("expected chain.resumed triple to be written after retry")
 	}
 }
@@ -186,7 +186,7 @@ func TestDecisionHandler_Kill_WritesChainKilledTriple(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if _, ok := pub.byPredicate("chain.decision.killed_at"); !ok {
+	if _, ok := pub.byPredicate("chain.decision.killed-at"); !ok {
 		t.Error("expected chain.killed triple to be written after kill")
 	}
 	if len(tasks.calls) != 0 {
@@ -202,7 +202,7 @@ func TestDecisionHandler_Defer_WritesChainDeferredTriple(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if _, ok := pub.byPredicate("chain.decision.deferred_at"); !ok {
+	if _, ok := pub.byPredicate("chain.decision.deferred-at"); !ok {
 		t.Error("expected chain.deferred triple to be written after defer")
 	}
 	if len(tasks.calls) != 0 {
@@ -221,7 +221,7 @@ func TestDecisionHandler_DecisionTriples_WrittenForAllVerbs(t *testing.T) {
 				"chain.decision.verb",
 				"chain.decision.authority",
 				"chain.decision.actor",
-				"chain.decision.decided_at",
+				"chain.decision.decided-at",
 			}
 			for _, pred := range preds {
 				if _, ok := pub.byPredicate(pred); !ok {
@@ -301,7 +301,7 @@ func TestDecisionHandler_EntityReadError_ReturnsError(t *testing.T) {
 }
 
 // TestDecisionHandler_NoRunAnchor_ReturnsError verifies that a failed loop whose
-// entity carries no agent.run.entity_id (outside any run) is rejected rather than
+// entity carries no agent.run.entity-id (outside any run) is rejected rather than
 // writing decision triples to an empty subject (ADR-053 Phase 5).
 func TestDecisionHandler_NoRunAnchor_ReturnsError(t *testing.T) {
 	pauseData := &staticPauseDataReader{}

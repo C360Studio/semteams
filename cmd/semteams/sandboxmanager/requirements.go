@@ -97,7 +97,7 @@ const (
 // expected major; "task --list" exits 0; etc.
 //
 // Name is the capability identifier the attestation triples key on
-// (sandbox.attestation.verified.<name>). Must be an identifier-like
+// (sandbox.attestation.verified-<name>). Must be an identifier-like
 // token so it composes into the triple-predicate suffix without
 // quoting (per [[schema-shape-for-cross-field-constraints]]).
 //

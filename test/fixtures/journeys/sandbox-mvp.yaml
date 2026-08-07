@@ -16,7 +16,7 @@ description: |
            chain entity
       3. tool_call: decide(action="respond_direct", reason=<prose>)
          → rule coordinator/03b-respond-direct fires → publish prose
-         on user.response.* + stamp coordinator.user_reply. Terminal.
+         on user.response.* + stamp coordinator.clarification.reply. Terminal.
 
   Validates:
     - request_sandbox + query_sandbox_attestation are reachable from

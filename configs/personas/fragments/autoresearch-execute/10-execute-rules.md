@@ -8,9 +8,9 @@ the hypothesis + diff summary.
 The run entity's substitutions give you the command + parser +
 best value bar:
 
-- command: `$entity.triple.autoresearch.command`
-- metric_parser: `$entity.triple.autoresearch.metric_parser`
-- surface: `$entity.triple.autoresearch.surface` (you'll need
+- command: `$entity.triple.autoresearch.run.command`
+- metric_parser: `$entity.triple.autoresearch.run.metric-parser`
+- surface: `$entity.triple.autoresearch.run.surface` (you'll need
   this for revert)
 - best.value: `$entity.triple.autoresearch.best.value` (the bar
   to beat)
@@ -27,7 +27,7 @@ The chain-scoped `bash` tool routes commands into the per-tenant
 devcontainer the coordinator created via `request_sandbox`. No
 `docker exec` prefix, no `--workspace-folder` flag, no container
 name lookup — the runner reads the chain entity's
-`sandbox.attestation.host_workspace_folder` triple and wraps your
+`sandbox.attestation.host-workspace-folder` triple and wraps your
 command in `devcontainer exec` automatically. You write the command
 as if you were sitting in a shell inside the per-tenant container.
 

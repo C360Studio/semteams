@@ -1,8 +1,8 @@
 {
   "id": "agent_run_ask_user_pause_lineage_anchor",
   "type": "expression",
-  "name": "Coordinator decide(ask_user) in-run (lineage anchor) → stamp agent.run.clarification_pending",
-  "description": "ADR-053 Phase 4b-2 PR-1 — the interactive-pause marker, anchor branch 2 of 2 (loops carrying lineage.run-loop-entity-id). Sibling of rule 07. When a run-entity-descended recovery coordinator emits decide(action=ask_user), this stamps agent.run.clarification_pending on the RUN entity via the subject override $entity.triple.lineage.run-loop-entity-id; rule 09 consumes the marker and transitions executing→awaiting_approval.\n\nWHICH coordinators this covers: the THREADED recovery coordinators (4b-1a) that carry lineage.run-loop-entity-id and ask_user — autoresearch/10b, dev-via-test 02e, 02f-replan, 07b, 07e. They were spawned by run-entity-fired rules so carry NO bare agent.run; their anchor is the threaded lineage.run-loop-entity-id. The inherit-anchor recovery coordinators (research/06, autoresearch/10 baseline, dev-via-test/02f first-pass) carry agent.run.entity_id and are the sibling rule 07.\n\nANCHOR FENCE (lineage.run-loop-entity-id length_gt 0): mutually exclusive with rule 07 (length_eq 0), and the lineage PRESENCE is itself the run guard (a plain-chat coordinator has no lineage), so no separate run-less-chat condition is needed. The length_gt 0 guard also ensures the subject-override resolves (the go-reviewer C1 garbage-literal-subject defense).\n\nAUTONOMOUS-MODE INERTNESS (free): same as rule 07 — decide(ask_user) is rejected pre-stamp under restricted_decide_actions=[\"ask_user\"], so this rule cannot fire in autonomous mode.",
+  "name": "Coordinator decide(ask_user) in-run (lineage anchor) → stamp agent.run.clarification-pending",
+  "description": "ADR-053 Phase 4b-2 PR-1 — the interactive-pause marker, anchor branch 2 of 2 (loops carrying agent.lineage.run-loop-entity-id). Sibling of rule 07. When a run-entity-descended recovery coordinator emits decide(action=ask_user), this stamps agent.run.clarification-pending on the RUN entity via the subject override $entity.triple.agent.lineage.run-loop-entity-id; rule 09 consumes the marker and transitions executing→awaiting_approval.\n\nWHICH coordinators this covers: the THREADED recovery coordinators (4b-1a) that carry agent.lineage.run-loop-entity-id and ask_user — autoresearch/10b, dev-via-test 02e, 02f-replan, 07b, 07e. They were spawned by run-entity-fired rules so carry NO bare agent.run; their anchor is the threaded agent.lineage.run-loop-entity-id. The inherit-anchor recovery coordinators (research/06, autoresearch/10 baseline, dev-via-test/02f first-pass) carry agent.run.entity-id and are the sibling rule 07.\n\nANCHOR FENCE (agent.lineage.run-loop-entity-id length_gt 0): mutually exclusive with rule 07 (length_eq 0), and the lineage PRESENCE is itself the run guard (a plain-chat coordinator has no lineage), so no separate run-less-chat condition is needed. The length_gt 0 guard also ensures the subject-override resolves (the go-reviewer C1 garbage-literal-subject defense).\n\nAUTONOMOUS-MODE INERTNESS (free): same as rule 07 — decide(ask_user) is rejected pre-stamp under restricted_decide_actions=[\"ask_user\"], so this rule cannot fire in autonomous mode.",
   "enabled": true,
   "conditions": [
     {
@@ -12,13 +12,13 @@
       "required": true
     },
     {
-      "field": "coordinator.decision.next_action",
+      "field": "coordinator.decision.next-action",
       "operator": "eq",
       "value": "ask_user",
       "required": true
     },
     {
-      "field": "lineage.run-loop-entity-id",
+      "field": "agent.lineage.run-loop-entity-id",
       "operator": "length_gt",
       "value": 0,
       "required": true
@@ -28,8 +28,8 @@
   "on_enter": [
     {
       "type": "add_triple",
-      "subject": "$entity.triple.lineage.run-loop-entity-id",
-      "predicate": "agent.run.clarification_pending",
+      "subject": "$entity.triple.agent.lineage.run-loop-entity-id",
+      "predicate": "agent.run.clarification-pending",
       "object": "$entity.instance"
     }
   ],
@@ -38,10 +38,10 @@
     "pack": "agent-run",
     "phase": "ADR-053 Phase 4b-2 PR-1",
     "adr": "docs/adr/053-adoption-plan.md",
-    "role": "interactive-pause marker (executing→awaiting_approval, anchor branch 2: lineage.run-loop-entity-id)",
-    "joins_with": "09-executing-to-awaiting-on-clarification.json (consumes the marker) + 07-ask-user-pause-run-anchor.json (the agent.run.entity_id sibling).",
+    "role": "interactive-pause marker (executing→awaiting_approval, anchor branch 2: agent.lineage.run-loop-entity-id)",
+    "joins_with": "09-executing-to-awaiting-on-clarification.json (consumes the marker) + 07-ask-user-pause-run-anchor.json (the agent.run.entity-id sibling).",
     "marker_object": "$entity.instance records WHICH loop asked — forward-compatible with PR-2's resume correlation.",
-    "anchor_fence": "lineage.run-loop-entity-id length_gt 0 — mutually exclusive with rule 07 (length_eq 0); the lineage presence is itself the run-less-chat guard and guarantees the subject-override resolves (C1 defense).",
+    "anchor_fence": "agent.lineage.run-loop-entity-id length_gt 0 — mutually exclusive with rule 07 (length_eq 0); the lineage presence is itself the run-less-chat guard and guarantees the subject-override resolves (C1 defense).",
     "autonomous_inertness": "decide(ask_user) is rejected pre-stamp under restricted_decide_actions=[\"ask_user\"], so this rule cannot fire in autonomous mode. Pinned by TestAgentRunPack_AskUserPauseAutonomousInert."
   }
 }

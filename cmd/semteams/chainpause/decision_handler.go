@@ -72,7 +72,7 @@ type TaskPublisher interface {
 // Phase 3 — pre-Phase-3 the triples lived on the failed loop's entity).
 //
 // The production implementation makes a graph.query.entity NATS request and
-// reads chain.paused.role + chain.paused.original_model from the returned
+// reads chain.paused.role + chain.paused.original-model from the returned
 // EntityState. Tests inject a static in-memory implementation.
 //
 // Returns ("", "", nil) when the entity is not found — callers fall back to
@@ -87,9 +87,9 @@ type PauseDataReader interface {
 //
 // ADR-038 PR B Phase 3: chain.decision.* / chain.resumed / chain.killed /
 // chain.deferred all land on the canonical chain entity, read from the
-// failed loop entity's agent.run.entity_id triple (ADR-053 Phase 5 — the
+// failed loop entity's agent.run.entity-id triple (ADR-053 Phase 5 — the
 // ancestry-walk Resolver is retired). PauseDataReader reads chain.paused.role
-// and chain.paused.original_model from the same chain entity at retry
+// and chain.paused.original-model from the same chain entity at retry
 // time, so the role+model used for the retry spawn match what the
 // Pauser stamped at pause time.
 type DecisionHandler struct {
@@ -102,7 +102,7 @@ type DecisionHandler struct {
 }
 
 // EntityReader reads a single graph entity's predicate→object map. The
-// DecisionHandler uses it to read the failed loop entity's agent.run.entity_id
+// DecisionHandler uses it to read the failed loop entity's agent.run.entity-id
 // triple — the chain/run entity the §D5 writes + PauseDataReader queries target.
 type EntityReader interface {
 	ReadEntity(ctx context.Context, entityID string) (map[string]any, error)
@@ -111,7 +111,7 @@ type EntityReader interface {
 // NewDecisionHandler constructs a DecisionHandler. Unlike the Pauser (which reads
 // the run anchor off the failure EVENT), the operator-decision path has only the
 // HTTP-body failed_loop_id — no event, no ToolCall — so it reads the failed loop
-// entity's agent.run.entity_id triple via a single graph read (entities) rather
+// entity's agent.run.entity-id triple via a single graph read (entities) rather
 // than the retired ancestry-walk Resolver (ADR-053 Phase 5 / semstreams#250).
 func NewDecisionHandler(pub TriplePublisher, tasks TaskPublisher, pauseData PauseDataReader, entities EntityReader, platform types.PlatformMeta, logger *slog.Logger) *DecisionHandler {
 	if logger == nil {
@@ -143,7 +143,7 @@ func (h *DecisionHandler) HandleDecision(ctx context.Context, req DecisionReques
 	}
 
 	reason := sanitiseReason(req.Reason)
-	// Read the failed loop entity's run anchor (agent.run.entity_id, stamped at
+	// Read the failed loop entity's run anchor (agent.run.entity-id, stamped at
 	// spawn) — the chain/run entity the §D5 writes + pause-data query target.
 	// Single graph read, not the retired ancestry walk (semstreams#250).
 	//
@@ -191,7 +191,7 @@ func (h *DecisionHandler) HandleDecision(ctx context.Context, req DecisionReques
 // the prior_loop_id pointer. Per ADR-037 §D7: no state replay; new loop ID.
 //
 // Role and model are read from the §D5 triple set stamped at pause time
-// (chain.paused.role, chain.paused.original_model) so the retry faithfully
+// (chain.paused.role, chain.paused.original-model) so the retry faithfully
 // re-spawns the original spawn shape. A "dispatch" / "claude-haiku" fallback
 // is used only when the pause data reader cannot resolve the entity.
 //
@@ -250,7 +250,7 @@ func (h *DecisionHandler) retry(ctx context.Context, entityID, failedLoopID stri
 	// Write chain.resumed triple with the new task ID as the value.
 	return h.publisher.AddTriple(ctx, message.Triple{
 		Subject:    entityID,
-		Predicate:  "chain.decision.resumed_task_id",
+		Predicate:  "chain.decision.resumed-task-id",
 		Object:     task.TaskID,
 		Source:     "chainpause",
 		Timestamp:  now,
@@ -263,7 +263,7 @@ func (h *DecisionHandler) retry(ctx context.Context, entityID, failedLoopID stri
 func (h *DecisionHandler) kill(ctx context.Context, entityID string, now time.Time) error {
 	return h.publisher.AddTriple(ctx, message.Triple{
 		Subject:    entityID,
-		Predicate:  "chain.decision.killed_at",
+		Predicate:  "chain.decision.killed-at",
 		Object:     now.Format(time.RFC3339),
 		Source:     "chainpause",
 		Timestamp:  now,
@@ -276,7 +276,7 @@ func (h *DecisionHandler) kill(ctx context.Context, entityID string, now time.Ti
 func (h *DecisionHandler) deferChain(ctx context.Context, entityID string, now time.Time) error {
 	return h.publisher.AddTriple(ctx, message.Triple{
 		Subject:    entityID,
-		Predicate:  "chain.decision.deferred_at",
+		Predicate:  "chain.decision.deferred-at",
 		Object:     now.Format(time.RFC3339),
 		Source:     "chainpause",
 		Timestamp:  now,
@@ -292,7 +292,7 @@ func (h *DecisionHandler) writeDecisionTriples(ctx context.Context, entityID, ve
 		{Subject: entityID, Predicate: "chain.decision.authority", Object: "operator"},
 		{Subject: entityID, Predicate: "chain.decision.actor", Object: actor},
 		{Subject: entityID, Predicate: "chain.decision.reason", Object: reason},
-		{Subject: entityID, Predicate: "chain.decision.decided_at", Object: now.Format(time.RFC3339)},
+		{Subject: entityID, Predicate: "chain.decision.decided-at", Object: now.Format(time.RFC3339)},
 	}
 	var firstErr error
 	for i := range triples {
@@ -347,9 +347,9 @@ func (p *NATSTaskPublisher) PublishTask(ctx context.Context, subject string, tas
 
 // NATSPauseDataReader reads role + model from the §D5 triple set on the chain
 // entity via a graph.query.entity NATS request (ADR-037 §D7, ADR-038 PR B
-// Phase 3). The triples chain.paused.role and chain.paused.original_model are
+// Phase 3). The triples chain.paused.role and chain.paused.original-model are
 // written at pause time by the Pauser; the DecisionHandler resolves the chain
-// entity ID for retry-time reads from the failed loop's agent.run.entity_id
+// entity ID for retry-time reads from the failed loop's agent.run.entity-id
 // triple (a single graph read; the chain.Resolver walk is retired, ADR-053 Phase 5).
 //
 // Returns ("", "", nil) when the entity is not found in the graph; callers fall
@@ -380,7 +380,7 @@ func NewNATSPauseDataReader(client *natsclient.Client, subject string) *NATSPaus
 }
 
 // ReadPauseData queries graph.query.entity for the entity and extracts
-// chain.paused.role and chain.paused.original_model from the response triples.
+// chain.paused.role and chain.paused.original-model from the response triples.
 //
 // Uses natsclient.RequestClassified (beta.87+) so the handler-side
 // "not found: <id>" failure surfaces as a typed errs.IsInvalid error
@@ -444,7 +444,7 @@ func (r *NATSPauseDataReader) ReadPauseData(ctx context.Context, entityID string
 			if s, ok := t.Object.(string); ok {
 				role = s
 			}
-		case "chain.paused.original_model":
+		case "chain.paused.original-model":
 			if s, ok := t.Object.(string); ok {
 				model = s
 			}

@@ -18,7 +18,9 @@
     "USER": {
       "subjects": ["user.>"],
       "storage": "file",
-      "max_age": "1h"
+      "max_age": "1h",
+      "max_bytes": 67108864,
+      "discard": "old"
     }
   },
   "model_registry": {
@@ -163,9 +165,9 @@
       "name": "rule-processor",
       "enabled": true,
       "config": {
-        "entity_watch_patterns": [
-          "c360.>"
-        ],
+        "entity_watch_buckets": {
+          "ENTITY_STATES": ["c360.*.*.*.*.*"]
+        },
         "ports": {
           "inputs": [
             {
@@ -173,7 +175,7 @@
               "subject": "ENTITY_STATES.>",
               "type": "kv-watch",
               "bucket": "ENTITY_STATES",
-              "description": "Entity state changes drive rule evaluation. Rule conditions resolve against entity facts (agent.loop.role, coordinator.decision.next_action, etc.), not raw NATS messages — the message-path evaluator can't bind entity-typed predicates."
+              "description": "Entity state changes drive rule evaluation. Rule conditions resolve against entity facts (agent.loop.role, coordinator.decision.next-action, etc.), not raw NATS messages — the message-path evaluator can't bind entity-typed predicates."
             }
           ],
           "outputs": [
@@ -200,28 +202,13 @@
             "entity_pattern": "*.*.agent.chain.execution.*",
             "groups": [
               {
+                "name": "run-state",
                 "mode": "replace-owned",
                 "predicates": [
                   "autoresearch.best.value",
-                  "autoresearch.best.experiment_id",
+                  "autoresearch.best.experiment-id",
                   "autoresearch.run.status",
                   "autoresearch.iteration.pending"
-                ]
-              }
-            ]
-          },
-          {
-            "name": "dev-via-test.retry-projection",
-            "entity_pattern": "*.*.agent.chain.execution.*",
-            "groups": [
-              {
-                "mode": "replace-owned",
-                "predicates": [
-                  "dev_via_test.plan.retry.pending",
-                  "dev_via_test.plan.retry.finding",
-                  "dev_via_test.cbg.retry.pending",
-                  "dev_via_test.cbg.retry.finding",
-                  "dev_via_test.cbg.retry.target_task"
                 ]
               }
             ]

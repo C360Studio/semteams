@@ -28,7 +28,7 @@
 //     resolve their conditions correctly.
 //
 //  4. On outcome=kept, ALSO updates autoresearch.best.value +
-//     autoresearch.best.experiment_id on the run entity so the next
+//     autoresearch.best.experiment-id on the run entity so the next
 //     propose iteration compares against the new best.
 //
 // See configs/rules/autoresearch/03-propose-to-execute.json
@@ -87,16 +87,16 @@ const (
 	predicateMeasurementPass       = "autoresearch.measurement.pass"
 	predicateMeasurementOutcome    = "autoresearch.measurement.outcome"
 	predicateMeasurementDelta      = "autoresearch.measurement.delta"
-	predicateMeasurementStdoutTail = "autoresearch.measurement.stdout_tail"
-	predicateMeasurementStderrTail = "autoresearch.measurement.stderr_tail"
-	predicateMeasurementStampedAt  = "autoresearch.measurement.stamped_at"
-	predicateMeasurementBestRefVal = "autoresearch.measurement.best_at_comparison"
+	predicateMeasurementStdoutTail = "autoresearch.measurement.stdout-tail"
+	predicateMeasurementStderrTail = "autoresearch.measurement.stderr-tail"
+	predicateMeasurementStampedAt  = "autoresearch.measurement.stamped-at"
+	predicateMeasurementBestRefVal = "autoresearch.measurement.best-at-comparison"
 )
 
 // Predicates on the run entity (updated on outcome=kept).
 const (
 	runPredicateBestValue        = "autoresearch.best.value"
-	runPredicateBestExperimentID = "autoresearch.best.experiment_id"
+	runPredicateBestExperimentID = "autoresearch.best.experiment-id"
 )
 
 // BestValueReader reads the current autoresearch.best.value from

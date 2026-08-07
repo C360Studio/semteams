@@ -20,7 +20,7 @@ do not anticipate downstream construction work.
 
 Your terminal is `decide`. The phase you hand off to is carried in
 the `action` arg (the spawn rule fires on
-`coordinator.decision.next_action`). The allow-list for this phase,
+`coordinator.decision.next-action`). The allow-list for this phase,
 enforced at the rule pre-filter layer:
 
 - `decide(action="gather", subtopics=[...], reason=...)` — the

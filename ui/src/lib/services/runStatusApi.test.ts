@@ -34,10 +34,10 @@ describe("runStatusApi.getTriples", () => {
   it("omits absent params from the querystring", async () => {
     mockFetch.mockResolvedValueOnce({ ok: true, json: async () => [] });
 
-    await getTriples({ predicate: "agent.run.approval_pending" });
+    await getTriples({ predicate: "agent.run.approval-pending" });
 
     const [url] = mockFetch.mock.calls[0];
-    expect(url).toBe("/graph/triples?predicate=agent.run.approval_pending");
+    expect(url).toBe("/graph/triples?predicate=agent.run.approval-pending");
     expect(url).not.toContain("subject=");
     expect(url).not.toContain("object=");
     expect(url).not.toContain("limit=");

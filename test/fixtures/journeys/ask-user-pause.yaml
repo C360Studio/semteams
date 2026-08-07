@@ -6,11 +6,11 @@ description: |
   by default, so ask_user is permitted).
 
   A first-pass Lisa escalates needs_clarification (rule 01 allowlist), so rule 02f
-  spawns a recovery coordinator that carries the run anchor as agent.run.entity_id
+  spawns a recovery coordinator that carries the run anchor as agent.run.entity-id
   (inherit — first-pass Lisa was spawned run_scope=new). That recovery coordinator
   emits decide(ask_user) — and because it belongs to a run, the 4b-2 pause fires:
-    - agent-run/07-ask-user-pause-run-anchor stamps agent.run.clarification_pending
-      on the RUN entity (via $entity.triple.agent.run.entity_id).
+    - agent-run/07-ask-user-pause-run-anchor stamps agent.run.clarification-pending
+      on the RUN entity (via $entity.triple.agent.run.entity-id).
     - agent-run/09-executing-to-awaiting-on-clarification (clarification_pending +
       phase==executing) transitions the run executing→awaiting_approval.
   The run is honestly PAUSED on a human reply. PR-1 has no resume yet — the run
@@ -21,10 +21,10 @@ description: |
     1. Loop 0 coordinator(dispatch) → decide(dev_via_test) → rule 01 run_scope=new
        → handoff → run executing.
     2. Loop A first-pass Lisa → decide(needs_clarification) → rule 02f spawns the
-       inherit recovery coordinator (carries agent.run.entity_id).
+       inherit recovery coordinator (carries agent.run.entity-id).
     3. Loop R recovery coordinator → decide(ask_user) → coordinator/03-ask-user
-       stamps coordinator.user_question; agent-run/07 stamps
-       agent.run.clarification_pending on the run entity.
+       stamps coordinator.clarification.question; agent-run/07 stamps
+       agent.run.clarification-pending on the run entity.
     4. agent-run/09 fires → executing→awaiting_approval.
 
   Exercises rule 07 (run-anchor branch). Rule 08 (the lineage-anchor sibling) is
@@ -33,7 +33,7 @@ description: |
   This is an EXECUTING-phase pause, NOT a terminal — the run reaches
   awaiting_approval and does NOT complete or fail (no reviewer approved; the
   coordinator asked rather than answered). The spec asserts
-  agent.run.last_transition_from==executing to prove rule 09 drove it.
+  agent.run.last-transition-from==executing to prove rule 09 drove it.
 
   Mock serves responses in GLOBAL ORDER. No sandbox requested (the chain pauses
   before any plan/Ralph). Paired spec: ui/e2e/agentic/ask-user-pause.spec.ts.
@@ -52,7 +52,7 @@ responses:
   # ---------- Loop A: first-pass Lisa → needs_clarification ----------
   # rule 01 allowlist = [planned, needs_clarification]; Lisa escalates on turn 1.
   # rule 02f (first-pass, lineage length_eq 0) spawns the INHERIT recovery
-  # coordinator (carries agent.run.entity_id).
+  # coordinator (carries agent.run.entity-id).
   - tool_call:
       name: decide
       arguments_json: |

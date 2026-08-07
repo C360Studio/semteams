@@ -158,7 +158,7 @@ func TestExecutor_KeptStampsOutcomeButLeavesRunBestToRule04c(t *testing.T) {
 	if v, found := pub.findOn(runEntity, "autoresearch.best.value"); found {
 		t.Errorf("run entity best.value stamped by executor (%v); must be delegated to rule 04c update_triple — see executor.go fix-comment 2026-06-03", v)
 	}
-	if v, found := pub.findOn(runEntity, "autoresearch.best.experiment_id"); found {
+	if v, found := pub.findOn(runEntity, "autoresearch.best.experiment-id"); found {
 		t.Errorf("run entity best.experiment_id stamped by executor (%v); must be delegated to rule 04c update_triple", v)
 	}
 }

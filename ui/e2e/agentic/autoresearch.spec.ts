@@ -95,7 +95,7 @@ test.describe("autoresearch — propose/execute iteration mock-LLM journey", () 
         // delivered — reviewer going terminal precedes the final
         // respond_direct by a beat.
         const acts = await fetchTriples(request, {
-          predicate: "coordinator.decision.next_action",
+          predicate: "coordinator.decision.next-action",
           limit: 50,
         });
         if (acts.some((t) => String(t.object ?? "") === "respond_direct")) {
@@ -130,7 +130,7 @@ test.describe("autoresearch — propose/execute iteration mock-LLM journey", () 
 
     // The chain flowed through every stage's terminal token.
     const actionTriples = await fetchTriples(request, {
-      predicate: "coordinator.decision.next_action",
+      predicate: "coordinator.decision.next-action",
       limit: 50,
     });
     const actions = new Set(actionTriples.map((t) => String(t.object ?? "")));
@@ -145,7 +145,7 @@ test.describe("autoresearch — propose/execute iteration mock-LLM journey", () 
     ]) {
       expect(
         actions.has(want),
-        `expected coordinator.decision.next_action=${want} — saw: ${[...actions].sort().join(", ")}`,
+        `expected coordinator.decision.next-action=${want} — saw: ${[...actions].sort().join(", ")}`,
       ).toBe(true);
     }
 
@@ -185,7 +185,7 @@ test.describe("autoresearch — propose/execute iteration mock-LLM journey", () 
     // `executing`. This is the direct agent.run.phase assertion the design spike
     // names as the merge gate (§D/§H): mock's fast coordinator is the POSITIVE D3-
     // race detector. It is also the regression guard for go-reviewer C1 — the
-    // autoresearch success stamp (rule 08, subject lineage.run-loop-entity-id)
+    // autoresearch success stamp (rule 08, subject agent.lineage.run-loop-entity-id)
     // only resolves because rule 07 threads run-loop-entity-id to the reviewer;
     // without it the run hangs in `executing` and this assertion goes red.
     const runPhases = await pollUntil(async () => {
@@ -214,7 +214,7 @@ test.describe("autoresearch — propose/execute iteration mock-LLM journey", () 
     ).not.toContain("failed");
 
     // BORN-FIRST gate (ADR-055/056 must-exist flip, semteams#222). rule 04c
-    // upserts autoresearch.best.value onto the run anchor (lineage.run-loop-entity-id
+    // upserts autoresearch.best.value onto the run anchor (agent.lineage.run-loop-entity-id
     // → agent.chain.execution.*). Prove that anchor was BORN-FIRST by the lifecycle
     // Manager (carries agent.run.phase), not auto-vivified by the best.value marker.
     // Fails under simulated auto-vivify (a stub would carry only best.value).

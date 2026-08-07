@@ -3,7 +3,7 @@ import { test, expect } from "@playwright/test";
 /**
  * Journey: ADR-053 Phase 4b-1a — an INHERIT-anchor recovery coordinator that
  * fails while executing drives the run executing→failed via rule 05 (the
- * agent.run.entity_id branch).
+ * agent.run.entity-id branch).
  *
  * The anchor_inherit sibling of run-failed-coordinator.spec.ts (which exercises
  * the THREADED branch → rule 06). It closes the empirical gap the 4b-1a review
@@ -19,7 +19,7 @@ import { test, expect } from "@playwright/test";
  *                            decides)
  *
  * Because rule 02f does NOT thread run-loop-entity-id, the recovery coordinator
- * carries the INHERITED agent.run.entity_id but NO lineage.run-loop-entity-id —
+ * carries the INHERITED agent.run.entity-id but NO agent.lineage.run-loop-entity-id —
  * so only agent-run/05 (length_eq 0) can fire (agent-run/06 needs length_gt 0).
  * agent-run/04-executing-to-failed then drives the transition.
  *
@@ -90,7 +90,7 @@ test.describe("ADR-053 Phase 4b-1a — inherit-anchor recovery coordinator fails
     ).toBeTruthy();
     expect(
       runPhases,
-      "run must reach failed (ADR-053 4b-1a inherit branch: the recovery coordinator inherits agent.run.entity_id → agent-run/05 stamps agent.run.outcome=failed → agent-run/04 executing→failed). Got: " +
+      "run must reach failed (ADR-053 4b-1a inherit branch: the recovery coordinator inherits agent.run.entity-id → agent-run/05 stamps agent.run.outcome=failed → agent-run/04 executing→failed). Got: " +
         JSON.stringify(runPhases),
     ).toContain("failed");
     expect(
@@ -100,11 +100,11 @@ test.describe("ADR-053 Phase 4b-1a — inherit-anchor recovery coordinator fails
 
     // -----------------------------------------------------------------
     // Step 4 — DECISIVE: the transition is executing→failed (rule 04 driven by
-    // rule 05's agent.run.entity_id stamp), NOT D3's dispatched→failed.
+    // rule 05's agent.run.entity-id stamp), NOT D3's dispatched→failed.
     // -----------------------------------------------------------------
     const fromPhases = await pollUntil(async () => {
       const triples = await fetchTriples(request, {
-        predicate: "agent.run.last_transition_from",
+        predicate: "agent.run.last-transition-from",
         limit: 20,
       });
       const objs = triples
@@ -114,11 +114,11 @@ test.describe("ADR-053 Phase 4b-1a — inherit-anchor recovery coordinator fails
     }, { timeoutMs: 15_000 });
     expect(
       fromPhases,
-      "agent.run.last_transition_from missing on the run entity",
+      "agent.run.last-transition-from missing on the run entity",
     ).toBeTruthy();
     expect(
       fromPhases,
-      "the failed transition must come FROM executing (agent-run/04 driven by agent-run/05's agent.run.entity_id stamp) — a from-phase of 'dispatched' would mean the D3 zombie guard fired instead. Got: " +
+      "the failed transition must come FROM executing (agent-run/04 driven by agent-run/05's agent.run.entity-id stamp) — a from-phase of 'dispatched' would mean the D3 zombie guard fired instead. Got: " +
         JSON.stringify(fromPhases),
     ).toContain("executing");
 

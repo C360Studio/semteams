@@ -50,7 +50,7 @@ func TestHandlePendingMsg_ApprovalPending(t *testing.T) {
 }
 
 // TestHandleResponseMsg_ApprovalResponse decodes a real ApprovalResponse envelope and
-// drives the resume half — stamps agent.run.approval_resumed (4c PR-2).
+// drives the resume half — stamps agent.run.approval-resumed (4c PR-2).
 func TestHandleResponseMsg_ApprovalResponse(t *testing.T) {
 	const runEntity = "c360.ops.agent.chain.execution.run-88"
 	reader := &fakeReader{triples: map[string]any{agvocab.LoopRunEntityID: runEntity}}

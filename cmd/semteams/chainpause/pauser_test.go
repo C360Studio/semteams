@@ -84,12 +84,12 @@ func TestPauser_HandleFailed_ManagedRoleWritesTriplesD5(t *testing.T) {
 		"chain.paused.cause",
 		"chain.paused.classification",
 		"chain.paused.role",
-		"chain.paused.original_model",
-		"chain.paused.error_shape",
-		"chain.paused.prior_attempts",
-		"chain.paused.failed_loop_id",
-		"chain.paused.spawn_loop_id",
-		"chain.paused.observed_at",
+		"chain.paused.original-model",
+		"chain.paused.error-shape",
+		"chain.paused.prior-attempts",
+		"chain.paused.failed-loop-id",
+		"chain.paused.spawn-loop-id",
+		"chain.paused.observed-at",
 	}
 	for _, pred := range predicates {
 		if _, ok := pub.byPredicate(pred); !ok {
@@ -269,9 +269,9 @@ func TestPauser_HandleFailed_ObservedAtIsRFC3339(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	t2, ok := pub.byPredicate("chain.paused.observed_at")
+	t2, ok := pub.byPredicate("chain.paused.observed-at")
 	if !ok {
-		t.Fatal("chain.paused.observed_at triple missing")
+		t.Fatal("chain.paused.observed-at triple missing")
 	}
 	ts, ok := t2.Object.(string)
 	if !ok {
@@ -282,7 +282,7 @@ func TestPauser_HandleFailed_ObservedAtIsRFC3339(t *testing.T) {
 	}
 }
 
-// TestPauser_HandleFailed_CapturesOriginalModel verifies that chain.paused.original_model
+// TestPauser_HandleFailed_CapturesOriginalModel verifies that chain.paused.original-model
 // is written from LoopFailedEvent.Model so the retry path can re-spawn with the
 // correct model without a live graph query (ADR-037 §D7).
 func TestPauser_HandleFailed_CapturesOriginalModel(t *testing.T) {
@@ -303,16 +303,16 @@ func TestPauser_HandleFailed_CapturesOriginalModel(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	t2, ok := pub.byPredicate("chain.paused.original_model")
+	t2, ok := pub.byPredicate("chain.paused.original-model")
 	if !ok {
-		t.Fatal("chain.paused.original_model triple missing")
+		t.Fatal("chain.paused.original-model triple missing")
 	}
 	obj, ok := t2.Object.(string)
 	if !ok {
-		t.Fatalf("chain.paused.original_model Object not string: %T", t2.Object)
+		t.Fatalf("chain.paused.original-model Object not string: %T", t2.Object)
 	}
 	if obj != "claude-opus-4-5" {
-		t.Errorf("chain.paused.original_model = %q, want claude-opus-4-5", obj)
+		t.Errorf("chain.paused.original-model = %q, want claude-opus-4-5", obj)
 	}
 }
 

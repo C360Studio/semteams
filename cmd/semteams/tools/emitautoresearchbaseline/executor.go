@@ -15,10 +15,10 @@
 // derived from the run loop id threaded in related_loops["autoresearch-run"]
 // (ADR-053 Phase 3a — same derivation run_scope=new uses to mint the run):
 //
-//   - autoresearch.command, .surface, .cap, .metric_parser
+//   - autoresearch.run.command, .surface, .cap, .metric_parser
 //   - autoresearch.baseline.value, .baseline.pass, .baseline.stdout_tail
 //   - autoresearch.best.value (= baseline.value initially)
-//   - autoresearch.best.experiment_id (= "baseline" initially)
+//   - autoresearch.best.experiment-id (= "baseline" initially)
 //   - autoresearch.run.status="active" + .iteration.pending="initial"
 //     (the run-lifecycle markers; ADR-053 Phase 3a moved these here from
 //     rule 01 so the iteration driver — rule 05, now firing on the run
@@ -59,16 +59,16 @@ const runLoopIDRoleKey = "autoresearch-run"
 // Predicate constants on the run entity. Rules 05/06 (continue/stop)
 // and emit_autoresearch_measurement's compare key off these.
 const (
-	predicateCommand            = "autoresearch.command"
-	predicateSurface            = "autoresearch.surface"
-	predicateCap                = "autoresearch.cap"
-	predicateMetricParser       = "autoresearch.metric_parser"
+	predicateCommand            = "autoresearch.run.command"
+	predicateSurface            = "autoresearch.run.surface"
+	predicateCap                = "autoresearch.run.cap"
+	predicateMetricParser       = "autoresearch.run.metric-parser"
 	predicateBaselineValue      = "autoresearch.baseline.value"
 	predicateBaselinePass       = "autoresearch.baseline.pass"
-	predicateBaselineStdoutTail = "autoresearch.baseline.stdout_tail"
+	predicateBaselineStdoutTail = "autoresearch.baseline.stdout-tail"
 	predicateBestValue          = "autoresearch.best.value"
-	predicateBestExperimentID   = "autoresearch.best.experiment_id"
-	predicateBaselineStampedAt  = "autoresearch.baseline.stamped_at"
+	predicateBestExperimentID   = "autoresearch.best.experiment-id"
+	predicateBaselineStampedAt  = "autoresearch.baseline.stamped-at"
 	// ADR-053 Phase 3a: the run-lifecycle markers move here from rule 01's
 	// add_triple (which seeded the coordinator loop). emit_baseline now seeds
 	// them on the RUN entity, in the same batch as cap/best.value, so rule 05's

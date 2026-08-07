@@ -175,7 +175,7 @@ async function waitForLoopWithDecision(
     const [loops, actions] = await Promise.all([
       fetchLoops(request),
       fetchTriples(request, {
-        predicate: "coordinator.decision.next_action",
+        predicate: "coordinator.decision.next-action",
         limit: 500,
       }),
     ]);

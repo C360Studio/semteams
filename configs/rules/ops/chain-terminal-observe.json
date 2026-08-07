@@ -28,7 +28,7 @@
       "tools": ["query_entity", "query_entities", "query_relationships", "read_loop_result", "emit_diagnosis", "submit_work"],
       "related_loops": {
         "qa_reviewer": "$entity.instance",
-        "researcher": "$entity.triple.lineage.researcher"
+        "researcher": "$entity.triple.agent.lineage.researcher"
       },
       "prompt": "The reviewer-qa loop at $entity.instance just completed. Walk this chain end-to-end per your `10-chain-walk.md` (start from the researcher loop_id in your task properties, walk agent.loop.parent up to the chain root, then read each milestone's loop_result — including the reviewer-qa's own loop for the verdict and decision_reason; sample step triples only when a specific signal warrants). Emit findings via emit_diagnosis per your `20-diagnosis-rules.md`. When done, call submit_work."
     }

@@ -135,16 +135,17 @@ func TestFlowBootstrapShape(t *testing.T) {
 	// rule-processor must ship with empty rules_files + inline_rules.
 	// Category rule packs land in follow-up phases via the rule KV
 	// or via additional rules_files entries (TBD per MVP-2 design).
-	// entity_watch_patterns stays broad ("c360.>") — that's substrate
-	// (the framework's pattern-driven rule firing); chain-specific
+	// entity_watch_buckets stays broad (beta.159: the six-position
+	// org-scoped pattern on ENTITY_STATES) — that's substrate (the
+	// framework's typed EntityState evaluator); chain-specific
 	// patterns belong inside individual rule definitions, not on the
 	// processor.
 	rule, ok := cfg.Components["rule"]
 	require.True(t, ok)
 	var ruleCfg struct {
-		RulesFiles          []string          `json:"rules_files"`
-		InlineRules         []json.RawMessage `json:"inline_rules"`
-		EntityWatchPatterns []string          `json:"entity_watch_patterns"`
+		RulesFiles         []string            `json:"rules_files"`
+		InlineRules        []json.RawMessage   `json:"inline_rules"`
+		EntityWatchBuckets map[string][]string `json:"entity_watch_buckets"`
 	}
 	require.NoError(t, json.Unmarshal(rule.Config, &ruleCfg))
 	allowedFiles := make(map[string]bool, len(flowBootstrapAllowedSharedRuleFiles))
@@ -168,8 +169,8 @@ func TestFlowBootstrapShape(t *testing.T) {
 	}
 	require.Empty(t, ruleCfg.InlineRules,
 		"rule-processor.inline_rules must be empty — no chain-specific rules baked into substrate")
-	require.Equal(t, []string{"c360.>"}, ruleCfg.EntityWatchPatterns,
-		"rule-processor.entity_watch_patterns must stay broad — chain-specific patterns belong inside individual rule definitions")
+	require.Equal(t, map[string][]string{"ENTITY_STATES": {"c360.*.*.*.*.*"}}, ruleCfg.EntityWatchBuckets,
+		"rule-processor.entity_watch_buckets must stay broad (six-position org scope on ENTITY_STATES) — chain-specific patterns belong inside individual rule definitions")
 
 	// The coordinator persona dir MUST exist on disk. agentic-dispatch's
 	// default_role of "coordinator" is load-bearing — if the persona

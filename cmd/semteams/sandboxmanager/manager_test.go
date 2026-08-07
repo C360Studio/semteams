@@ -295,7 +295,7 @@ func TestManagerRequest_NormalizesBeforeProbe(t *testing.T) {
 	// Per PR 4.1 finding C3: probe Command/Name must be normalized
 	// (trimmed, lowercased) before being executed and stamped on
 	// attestation. Otherwise Coordinator substitution
-	// $entity.triple.sandbox.attestation.verified.<name> drifts from
+	// $entity.triple.sandbox.attestation.verified-<name> drifts from
 	// the form the rule pack expects.
 	var seenCommand string
 	runner := &fakeRunner{

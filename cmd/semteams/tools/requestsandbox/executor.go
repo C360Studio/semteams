@@ -134,7 +134,7 @@ func (e *Executor) ListTools() []agentic.ToolDefinition {
 				},
 				"verification": map[string]any{
 					"type":        "array",
-					"description": "Preflight probes the manager runs inside the container after devcontainer up. Each probe.name becomes a sandbox.attestation.verified.<name> triple the Coordinator can route on. Probes that fail produce Degraded=true (not Ready) and DegradedReasons.",
+					"description": "Preflight probes the manager runs inside the container after devcontainer up. Each probe.name becomes a sandbox.attestation.verified-<name> triple the Coordinator can route on. Probes that fail produce Degraded=true (not Ready) and DegradedReasons.",
 					"items": map[string]any{
 						"type": "object",
 						"properties": map[string]any{

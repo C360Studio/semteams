@@ -7,20 +7,20 @@ import { test, expect } from "@playwright/test";
  *   (pause half — identical to approval-pause)
  *   recovery coordinator → tool_call(create_rule)  loop parks in awaiting_approval;
  *                                                   approvalpause stamps
- *                                                   agent.run.approval_pending;
+ *                                                   agent.run.approval-pending;
  *                                                   agent-run/12 → run awaiting_approval
  *
  *   (resume half — this journey)
  *   POST /teams-dispatch/loops/{id}/approval {decision:"approve"}
  *      → dispatch publishes agent.approval_response.<id>
  *      → teams-loop (agent.approval_response input port) un-parks the loop
- *      → approvalpause stamps agent.run.approval_resumed
+ *      → approvalpause stamps agent.run.approval-resumed
  *      → agent-run/13 → run awaiting_approval→executing + clears BOTH markers
  *
  * DECISIVE assertions:
- *   - agent.run.approval_pending is CLEARED on the run entity (rule 13 ran),
+ *   - agent.run.approval-pending is CLEARED on the run entity (rule 13 ran),
  *   - run is `executing`, NOT awaiting_approval (and not completed/failed),
- *   - agent.run.approval_resumed is CLEARED too (removed last),
+ *   - agent.run.approval-resumed is CLEARED too (removed last),
  *   - after a settle window the run has NOT bounced back to awaiting_approval
  *     (exercises rule 12's approval_resumed length_eq 0 guard live).
  *
@@ -83,10 +83,10 @@ test.describe("ADR-053 Phase 4c — approval resumes the run (awaiting_approval�
       "run never reached awaiting_approval — the gated create_rule did not pause the run (PR-1). Cannot test resume.",
     ).toBeTruthy();
 
-    const pendingBefore = await runEntityTriples(request, "agent.run.approval_pending");
+    const pendingBefore = await runEntityTriples(request, "agent.run.approval-pending");
     expect(
       pendingBefore.length,
-      "expected agent.run.approval_pending on the run entity before the approval (the 4c pause marker).",
+      "expected agent.run.approval-pending on the run entity before the approval (the 4c pause marker).",
     ).toBeGreaterThanOrEqual(1);
 
     // -----------------------------------------------------------------
@@ -139,12 +139,12 @@ test.describe("ADR-053 Phase 4c — approval resumes the run (awaiting_approval�
     // keeps pending set forever; a bounce re-sets it.
     // -----------------------------------------------------------------
     const resumed = await pollUntil(async () => {
-      const pending = await runEntityTriples(request, "agent.run.approval_pending");
+      const pending = await runEntityTriples(request, "agent.run.approval-pending");
       return pending.length === 0 ? true : null;
     }, { timeoutMs: 60_000 });
     expect(
       resumed,
-      "agent.run.approval_pending was never cleared after the approval — the resume (approvalpause → agent-run/13) did not fire. Run still parked. Current phases: " +
+      "agent.run.approval-pending was never cleared after the approval — the resume (approvalpause → agent-run/13) did not fire. Run still parked. Current phases: " +
         JSON.stringify((await runEntityTriples(request, "agent.run.phase")).map((t) => t.object)),
     ).toBeTruthy();
 
@@ -169,10 +169,10 @@ test.describe("ADR-053 Phase 4c — approval resumes the run (awaiting_approval�
     // Step 8 — rule 13 also cleared approval_resumed (removed last). Required so a
     // FUTURE tool-gate on this run can pause again (rule 12's guard).
     // -----------------------------------------------------------------
-    const resumedMarker = await runEntityTriples(request, "agent.run.approval_resumed");
+    const resumedMarker = await runEntityTriples(request, "agent.run.approval-resumed");
     expect(
       resumedMarker.length,
-      "agent.run.approval_resumed must be CLEARED after resume (agent-run/13 removes it last). Still present → a second tool-gate could never pause.",
+      "agent.run.approval-resumed must be CLEARED after resume (agent-run/13 removes it last). Still present → a second tool-gate could never pause.",
     ).toBe(0);
 
     // -----------------------------------------------------------------
@@ -191,10 +191,10 @@ test.describe("ADR-053 Phase 4c — approval resumes the run (awaiting_approval�
       "run must remain `executing` after the settle window (no re-pause). Got: " +
         JSON.stringify(settledPhases),
     ).toContain("executing");
-    const pendingSettled = await runEntityTriples(request, "agent.run.approval_pending");
+    const pendingSettled = await runEntityTriples(request, "agent.run.approval-pending");
     expect(
       pendingSettled.length,
-      "agent.run.approval_pending re-appeared after resume — pause↔resume bounce.",
+      "agent.run.approval-pending re-appeared after resume — pause↔resume bounce.",
     ).toBe(0);
   });
 });

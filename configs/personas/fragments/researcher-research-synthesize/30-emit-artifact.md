@@ -59,7 +59,7 @@ pass them.
 The `decide` call is your terminal — the framework records it as
 the loop's result and the pack's
 `04-synthesize-to-reviewer.json` rule fires on
-`coordinator.decision.next_action="emit"` to spawn
+`coordinator.decision.next-action="emit"` to spawn
 reviewer-research. The emit-tool call is additive audit: it
 mints the structured payload + marker triples; the
 `decide.reason` is what reviewer-research reads via

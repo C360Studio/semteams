@@ -85,7 +85,7 @@ test.describe("ADR-043 PR 4.4 — Sandbox tools mock-LLM journey", () => {
     // respond_direct decide. NOTE: per 03b-respond-direct.json's
     // publish_properties_omission_note, the publish is SUBJECT-ONLY
     // — the user-facing prose is NOT in the publish payload. The
-    // prose lives on the loop entity as coordinator.user_reply
+    // prose lives on the loop entity as coordinator.clarification.reply
     // (asserted below via /graph/triples).
     const respResp = await request.get(
       "/message-logger/entries?subject_prefix=dispatch.user.response&limit=10",
@@ -138,21 +138,21 @@ test.describe("ADR-043 PR 4.4 — Sandbox tools mock-LLM journey", () => {
     ).toBe("go-backend@v1");
 
     // The user-facing prose lives on the dispatch coordinator loop
-    // entity as coordinator.user_reply (the audit triple the rule
+    // entity as coordinator.clarification.reply (the audit triple the rule
     // stamps from $entity.triple.coordinator.decision.reason).
     // Substring-check it carries the readiness signal.
     const replyTriples = await fetchTriples(request, {
-      predicate: "coordinator.user_reply",
+      predicate: "coordinator.clarification.reply",
       limit: 10,
     });
     expect(
       replyTriples.length,
-      "expected coordinator.user_reply triple (audit of respond_direct prose)",
+      "expected coordinator.clarification.reply triple (audit of respond_direct prose)",
     ).toBeGreaterThanOrEqual(1);
     const replyObj = String(replyTriples[0]?.object ?? "").toLowerCase();
     expect(
       replyObj,
-      "expected coordinator.user_reply prose to mention readiness",
+      "expected coordinator.clarification.reply prose to mention readiness",
     ).toContain("ready");
   });
 });

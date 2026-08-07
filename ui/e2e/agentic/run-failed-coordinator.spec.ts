@@ -6,7 +6,7 @@ import { test, expect } from "@playwright/test";
  *
  * The merge gate for the 4b-1a anchor-threading work. This is the
  * coordinator-failure sibling of run-failed.spec.ts (which wedges a research
- * ROLE → rule 04 via the agent.run.entity_id branch). Here:
+ * ROLE → rule 04 via the agent.run.entity-id branch). Here:
  *
  *   coordinator(dispatch) → decide(dev_via_test)        run becomes `executing`
  *   first-pass Lisa       → emit_plan + decide(planned)  rule 02 spawns CBG
@@ -20,7 +20,7 @@ import { test, expect } from "@playwright/test";
  *                            decides)
  *
  *   agent-run/06 (role==coordinator + outcome in [failed,truncated] +
- *                 lineage.run-loop-entity-id length_gt 0)
+ *                 agent.lineage.run-loop-entity-id length_gt 0)
  *     → agent.run.outcome=failed on the run entity (via the THREADED lineage
  *       anchor — the empirical proof it resolves, not a garbage literal)
  *   agent-run/04-executing-to-failed → executing→failed
@@ -29,7 +29,7 @@ import { test, expect } from "@playwright/test";
  * while phase==dispatched. Here the dispatch coordinator completed with a
  * confirmed handoff (the run is `executing`), and a later-spawned recovery
  * coordinator is what fails. The decisive assertion is
- * agent.run.last_transition_from == "executing".
+ * agent.run.last-transition-from == "executing".
  *
  * Required fixture: test/fixtures/journeys/run-failed-coordinator.yaml
  * Required config: configs/e2e-flow-bootstrap.json (rules 02e + agent-run/06)
@@ -105,12 +105,12 @@ test.describe("ADR-053 Phase 4b-1a — threaded recovery coordinator fails → e
     // -----------------------------------------------------------------
     // Step 4 — DECISIVE: the transition is executing→failed (rule 04 driven by
     // rule 06's lineage-anchor stamp), NOT D3's dispatched→failed.
-    // agent.run.last_transition_from records the from-phase (beta.103 REPLACEs
+    // agent.run.last-transition-from records the from-phase (beta.103 REPLACEs
     // it). A from-phase of "dispatched" would mean D3 fired instead.
     // -----------------------------------------------------------------
     const fromPhases = await pollUntil(async () => {
       const triples = await fetchTriples(request, {
-        predicate: "agent.run.last_transition_from",
+        predicate: "agent.run.last-transition-from",
         limit: 20,
       });
       const objs = triples
@@ -120,7 +120,7 @@ test.describe("ADR-053 Phase 4b-1a — threaded recovery coordinator fails → e
     }, { timeoutMs: 15_000 });
     expect(
       fromPhases,
-      "agent.run.last_transition_from missing on the run entity",
+      "agent.run.last-transition-from missing on the run entity",
     ).toBeTruthy();
     expect(
       fromPhases,

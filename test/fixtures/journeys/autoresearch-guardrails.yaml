@@ -64,7 +64,7 @@ responses:
           "command": "go test ./...",
           "surface": "test/helpers/, internal/testutil/",
           "cap": 2,
-          "metric_parser": "parse the trailing ok-line seconds as a float",
+          "metric-parser": "parse the trailing ok-line seconds as a float",
           "baseline_value": 1.20,
           "baseline_pass": true,
           "baseline_stdout_tail": "ok  example  1.20s"

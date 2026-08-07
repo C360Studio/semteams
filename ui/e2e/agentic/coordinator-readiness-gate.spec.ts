@@ -259,7 +259,7 @@ async function expectCoordinatorAction(
 ): Promise<void> {
   const found = await pollUntil(async () => {
     const actions = await fetchTriples(request, {
-      predicate: "coordinator.decision.next_action",
+      predicate: "coordinator.decision.next-action",
       limit: 500,
     });
     return (
@@ -273,7 +273,7 @@ async function expectCoordinatorAction(
 
   expect(
     found,
-    `${caseName}: expected coordinator.decision.next_action=${action}`,
+    `${caseName}: expected coordinator.decision.next-action=${action}`,
   ).toBeTruthy();
 }
 
@@ -284,7 +284,7 @@ async function expectCoordinatorActionAbsent(
   caseName: string,
 ): Promise<void> {
   const actions = await fetchTriples(request, {
-    predicate: "coordinator.decision.next_action",
+    predicate: "coordinator.decision.next-action",
     limit: 500,
   });
   const scopedActions = actions

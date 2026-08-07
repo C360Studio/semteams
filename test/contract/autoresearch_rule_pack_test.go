@@ -80,9 +80,9 @@ type autoresearchOnEnterJSON struct {
 //     (empty object) — ordering matters: clearing the marker before the
 //     spawn actions is what produces the Exited transition.
 //  3. A publish_agent for autoresearch-propose exists with a `when`
-//     clause `$state.iteration <= $entity.triple.autoresearch.cap`.
+//     clause `$state.iteration <= $entity.triple.autoresearch.run.cap`.
 //  4. A publish_agent for autoresearch-synthesize exists with a
-//     `when` clause `$state.iteration > $entity.triple.autoresearch.cap`
+//     `when` clause `$state.iteration > $entity.triple.autoresearch.run.cap`
 //     — the cap-exhaust branch.
 //  5. A replace_owned (NOT add_triple) for autoresearch.run.status
 //     = "stopped" with the same cap-exhaust when clause. replace_owned
@@ -125,7 +125,7 @@ func TestAutoresearchPack_05_IterationDispatch_PatternA(t *testing.T) {
 
 	// Invariant 3 + 4: propose and synthesize publish_agent actions
 	// with matching when clauses on $state.iteration vs cap.
-	wantCap := "$entity.triple.autoresearch.cap"
+	wantCap := "$entity.triple.autoresearch.run.cap"
 	var foundProposeWhen, foundSynthesizeWhen bool
 	for _, a := range rule.OnEnter {
 		if a.Type != "publish_agent" {
@@ -249,7 +249,7 @@ func TestAutoresearchPack_04a_04b_OutcomeCoverage(t *testing.T) {
 	}
 
 	// Both rules must stamp experiment.completed via add_triple on
-	// $entity.triple.lineage.run-loop-entity-id. This is the cap-
+	// $entity.triple.agent.lineage.run-loop-entity-id. This is the cap-
 	// budget counter; without both rules stamping it, failed
 	// executes don't count.
 	if !stampsExperimentCompleted(rule04a) {
@@ -262,8 +262,8 @@ func TestAutoresearchPack_04a_04b_OutcomeCoverage(t *testing.T) {
 	// Rule 04b additionally stamps experiment.loop_failed so the
 	// SYNTHESIZE rollup can distinguish clean iterations from
 	// loop-failed ones in the journey rendering.
-	if !stampsPredicateOnRun(rule04b, "autoresearch.experiment.loop_failed") {
-		t.Error("rule 04b does not stamp autoresearch.experiment.loop_failed — SYNTHESIZE cannot distinguish loop-failed iterations from cleanly-measured ones")
+	if !stampsPredicateOnRun(rule04b, "autoresearch.experiment.loop-failed") {
+		t.Error("rule 04b does not stamp autoresearch.experiment.loop-failed — SYNTHESIZE cannot distinguish loop-failed iterations from cleanly-measured ones")
 	}
 
 	// Pattern A (semstreams#204 marker-based iteration loop): both
@@ -407,7 +407,7 @@ func stampsExperimentCompleted(r *autoresearchRuleJSON) bool {
 func stampsPredicateOnRun(r *autoresearchRuleJSON, predicate string) bool {
 	for _, a := range r.OnEnter {
 		if (a.Type == "add_triple" || a.Type == "replace_owned") && a.Predicate == predicate &&
-			strings.Contains(a.Subject, "lineage.run-loop-entity-id") {
+			strings.Contains(a.Subject, "agent.lineage.run-loop-entity-id") {
 			return true
 		}
 	}

@@ -5,7 +5,7 @@ description: |
   anchor). End-to-end on mock-LLM against configs/e2e-flow-bootstrap.json.
 
   This is the coordinator-failure sibling of run-failed.yaml (which wedges a
-  RESEARCH ROLE, exercising rule 04 via research/09 — the agent.run.entity_id
+  RESEARCH ROLE, exercising rule 04 via research/09 — the agent.run.entity-id
   branch). Here a recovery COORDINATOR is wedged, exercising the 4b-1a anchor
   threading: rule 02e spawns the recovery coordinator with
   related_loops[run-loop-entity-id] threaded off the CBG's lineage, so when
@@ -16,20 +16,20 @@ description: |
 
   Substrate behavior this proves:
     1. Loop 0 coordinator(dispatch) → decide(dev_via_test) → rule 01 spawns
-       first-pass Lisa with run_scope=new → rule.spawned_task → agent-run/01
+       first-pass Lisa with run_scope=new → rule.task.spawned → agent-run/01
        handoff marker → agent-run/02 dispatched→executing. Run is `executing`.
     2. Loop A Lisa → emit_dev_via_test_plan + decide(planned) → rule 02
        (first-pass plan-review, threads run-loop-entity-id onto CBG) spawns CBG.
     3. Loop B CBG plan-review → decide(plan_rejected) → rule 02e spawns the
        recovery coordinator (allow-list respond_direct/ask_user), threading
-       run-loop-entity-id from $entity.triple.lineage.run-loop-entity-id (CBG's
-       lineage). The recovery coordinator now carries lineage.run-loop-entity-id.
+       run-loop-entity-id from $entity.triple.agent.lineage.run-loop-entity-id (CBG's
+       lineage). The recovery coordinator now carries agent.lineage.run-loop-entity-id.
     4. Loop R recovery coordinator → WEDGED: its bucket serves a single
        non-terminal read_loop_result that repeats on exhaustion (the coordinator
        has tools [read_loop_result, decide] — no scratchpad), so it never emits a
        decide() and hits the loop's max_iterations → OutcomeFailed.
     5. agent-run/06 (role==coordinator + outcome in [failed,truncated] +
-       lineage.run-loop-entity-id length_gt 0) stamps agent.run.outcome=failed on
+       agent.lineage.run-loop-entity-id length_gt 0) stamps agent.run.outcome=failed on
        the RUN entity via the lineage anchor. agent-run/05 (length_eq 0) is
        mutually exclusive and does NOT fire (the coordinator carries lineage).
     6. agent-run/04-executing-to-failed fires → executing→failed.
@@ -38,7 +38,7 @@ description: |
   CANNOT reach (D3 fires only while phase==dispatched; here the dispatch
   coordinator completed with a confirmed handoff, the run is `executing`, and a
   later-spawned recovery coordinator is what fails). The spec asserts
-  agent.run.last_transition_from==executing to prove rule 04 drove it (the
+  agent.run.last-transition-from==executing to prove rule 04 drove it (the
   lineage anchor branch), NOT D3's dispatched→failed path.
 
   Mock serves responses in GLOBAL ORDER (last repeats once exhausted). The chain

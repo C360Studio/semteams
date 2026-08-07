@@ -12,7 +12,7 @@ const RUN_INFIX = ".agent.chain.execution.";
  *   first-pass Lisa       → decide(needs_clarification)  rule 02f spawns the
  *                                                        recovery coordinator
  *                                                        (inherit anchor:
- *                                                         agent.run.entity_id)
+ *                                                         agent.run.entity-id)
  *   recovery coordinator  → tool_call(create_rule)       create_rule ∈
  *                                                        approval_required → the
  *                                                        loop parks in
@@ -20,16 +20,16 @@ const RUN_INFIX = ".agent.chain.execution.";
  *                                                        agent.approval_pending.<id>;
  *                                                        the approvalpause subscriber
  *                                                        stamps
- *                                                        agent.run.approval_pending
+ *                                                        agent.run.approval-pending
  *                                                        on the run entity
  *   agent-run/12 (approval_pending + phase==executing) → awaiting_approval
  *
  * The run is honestly PAUSED on a human approval. PR-1 has no resume — the run parks
  * in awaiting_approval (resume is PR-2). The decisive assertions:
  *   - agent.run.phase reaches awaiting_approval (NOT completed/failed),
- *   - agent.run.approval_pending is set on the run entity (the 4c marker),
- *   - agent.run.clarification_pending is NOT (proves rule 12 drove it, not 4b-2's 09),
- *   - agent.run.last_transition_from == "executing" (rule 12 drove it).
+ *   - agent.run.approval-pending is set on the run entity (the 4c marker),
+ *   - agent.run.clarification-pending is NOT (proves rule 12 drove it, not 4b-2's 09),
+ *   - agent.run.last-transition-from == "executing" (rule 12 drove it).
  *
  * NOTE (per the upstream-fragility flag): the approval path — gateForApproval's
  * agent.approval_pending publish, the ApprovalFilter, BeginAwaitingApproval — has
@@ -116,11 +116,11 @@ test.describe("ADR-053 Phase 4c — in-run tool-gate pauses the run (executing�
 
     // -----------------------------------------------------------------
     // Step 4 — DECISIVE: the transition is executing→awaiting_approval (rule 12),
-    // not dispatched→X. agent.run.last_transition_from records the from-phase.
+    // not dispatched→X. agent.run.last-transition-from records the from-phase.
     // -----------------------------------------------------------------
     const fromPhases = await pollUntil(async () => {
       const triples = await fetchTriples(request, {
-        predicate: "agent.run.last_transition_from",
+        predicate: "agent.run.last-transition-from",
         limit: 20,
       });
       const objs = triples
@@ -130,7 +130,7 @@ test.describe("ADR-053 Phase 4c — in-run tool-gate pauses the run (executing�
     }, { timeoutMs: 15_000 });
     expect(
       fromPhases,
-      "agent.run.last_transition_from missing on the run entity",
+      "agent.run.last-transition-from missing on the run entity",
     ).toBeTruthy();
     expect(
       fromPhases,
@@ -139,13 +139,13 @@ test.describe("ADR-053 Phase 4c — in-run tool-gate pauses the run (executing�
     ).toContain("executing");
 
     // -----------------------------------------------------------------
-    // Step 5 — 4c marker present: agent.run.approval_pending on the run entity
+    // Step 5 — 4c marker present: agent.run.approval-pending on the run entity
     // (stamped by the approvalpause subscriber). This is what distinguishes a 4c
     // tool-gate pause from a 4b-2 clarification pause.
     // -----------------------------------------------------------------
     const approvalMarkers = await pollUntil(async () => {
       const triples = await fetchTriples(request, {
-        predicate: "agent.run.approval_pending",
+        predicate: "agent.run.approval-pending",
         limit: 20,
       });
       const onRun = triples.filter((t) =>
@@ -155,23 +155,23 @@ test.describe("ADR-053 Phase 4c — in-run tool-gate pauses the run (executing�
     }, { timeoutMs: 15_000 });
     expect(
       approvalMarkers,
-      "expected agent.run.approval_pending on the run entity (approvalpause subscriber) — the marker that drives agent-run/12 and distinguishes a 4c tool-gate from a 4b-2 clarification pause.",
+      "expected agent.run.approval-pending on the run entity (approvalpause subscriber) — the marker that drives agent-run/12 and distinguishes a 4c tool-gate from a 4b-2 clarification pause.",
     ).toBeTruthy();
 
     // -----------------------------------------------------------------
     // Step 6 — NEGATIVE: this is NOT a 4b-2 clarification pause. No
-    // agent.run.clarification_pending should appear on the run entity (the
+    // agent.run.clarification-pending should appear on the run entity (the
     // recovery coordinator called a gated tool, it did not decide(ask_user)).
     // -----------------------------------------------------------------
     const clarificationMarkers = await fetchTriples(request, {
-      predicate: "agent.run.clarification_pending",
+      predicate: "agent.run.clarification-pending",
       limit: 20,
     });
     expect(
       clarificationMarkers.filter((t) =>
         String(t.subject ?? "").includes("agent.chain.execution."),
       ).length,
-      "agent.run.clarification_pending must be ABSENT — a 4c tool-gate pause must not be mistaken for (or cross-resumed with) a 4b-2 clarification pause.",
+      "agent.run.clarification-pending must be ABSENT — a 4c tool-gate pause must not be mistaken for (or cross-resumed with) a 4b-2 clarification pause.",
     ).toBe(0);
 
     // -----------------------------------------------------------------

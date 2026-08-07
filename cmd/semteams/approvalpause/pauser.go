@@ -20,26 +20,26 @@ const (
 	// Rule 12 (agent-run/12-executing-to-awaiting-on-approval.json) consumes it
 	// and transitions the run executing→awaiting_approval.
 	//
-	// DISTINCT from the 4b-2 clarification marker (agent.run.clarification_pending):
+	// DISTINCT from the 4b-2 clarification marker (agent.run.clarification-pending):
 	// both pauses land in awaiting_approval, but the two are kept on separate
 	// predicates so their resume halves never cross-resume (ADR-053 §4c).
-	MarkerApprovalPending = "agent.run.approval_pending"
+	MarkerApprovalPending = "agent.run.approval-pending"
 
 	// MarkerApprovalResumed is the resume marker the PR-2 half will stamp on the
-	// run (the 4c twin of agent.run.clarification_resumed). It is declared here in
+	// run (the 4c twin of agent.run.clarification-resumed). It is declared here in
 	// PR-1 so the pause rule's bounce-proof guard and the disambiguation contract
 	// tests reference a single source of truth; PR-1 never stamps it.
-	MarkerApprovalResumed = "agent.run.approval_resumed"
+	MarkerApprovalResumed = "agent.run.approval-resumed"
 )
 
 // lineageRunAnchor is the related_loops-threaded run anchor a run-entity-descended
-// loop carries when it lacks a bare agent.run.entity_id (the 4b-1a inherit/threaded
+// loop carries when it lacks a bare agent.run.entity-id (the 4b-1a inherit/threaded
 // anchor split — see rules 05/06 and 07/08). The Pauser tries the inherit anchor
-// (agent.run.entity_id) first, then falls back to this — absorbing IN GO the
+// (agent.run.entity-id) first, then falls back to this — absorbing IN GO the
 // precedence that the clarification pause had to express as two mutually-exclusive
 // rule files (07 run-anchor / 08 lineage-anchor). Because the subscriber reads the
 // loop entity directly and can branch in code, the 4c pause RULE needs no such split.
-const lineageRunAnchor = "lineage.run-loop-entity-id"
+const lineageRunAnchor = "agent.lineage.run-loop-entity-id"
 
 // EntityTripleReader reads a flat predicate→object map for a single graph entity.
 // chain.NATSEntityReader satisfies it structurally; a fake satisfies it in tests.
@@ -64,7 +64,7 @@ type PauseResult struct {
 }
 
 // ResumeResult reports what HandleResponse did (the 4c PR-2 resume half).
-// Stamped is true only when a run anchor resolved AND the agent.run.approval_resumed
+// Stamped is true only when a run anchor resolved AND the agent.run.approval-resumed
 // write succeeded. Decision is the human's approve/reject/modify decision — carried
 // for logging; the run resumes regardless of decision (any response means the loop
 // is no longer parked in awaiting_approval).
@@ -76,8 +76,8 @@ type ResumeResult struct {
 }
 
 // Pauser resolves the run anchor of an approval-gated loop and stamps the run-phase
-// approval markers on the run entity — agent.run.approval_pending when the loop
-// PAUSES (HandlePending), agent.run.approval_resumed when the human responds
+// approval markers on the run entity — agent.run.approval-pending when the loop
+// PAUSES (HandlePending), agent.run.approval-resumed when the human responds
 // (HandleResponse, PR-2). Both halves share one anchor-resolution path. Fail-soft:
 // a malformed loop id, a graph-read error, or a run-less loop never panics — a
 // runtime subscriber must not crash the dispatch goroutine, and the wire events are
@@ -98,7 +98,7 @@ func NewPauser(reader EntityTripleReader, pub TriplePublisher, org, platform str
 
 // HandlePending is the subscription entry point for agent.approval_pending.* events.
 // It reconstructs the loop entity, reads its run anchor, and (when the loop belongs
-// to a run) stamps agent.run.approval_pending on the run entity so rule 12 can
+// to a run) stamps agent.run.approval-pending on the run entity so rule 12 can
 // transition the run executing→awaiting_approval.
 //
 // Returns the PauseResult for caller logging. A run-less loop returns a
@@ -117,7 +117,7 @@ func (p *Pauser) HandlePending(ctx context.Context, ev *agentic.ApprovalPendingE
 // events (4c PR-2). The human's approve/reject/modify decision moves the gated loop
 // out of LoopStateAwaitingApproval (the framework re-injects the result and the loop
 // continues), so the RUN should resume executing. This stamps
-// agent.run.approval_resumed on the run entity; rule agent-run/13 consumes it and
+// agent.run.approval-resumed on the run entity; rule agent-run/13 consumes it and
 // transitions the run awaiting_approval→executing, clearing both approval markers.
 //
 // The marker is stamped regardless of decision — approve, reject, AND modify all
@@ -177,9 +177,9 @@ func (p *Pauser) stampRunMarker(ctx context.Context, loopID, predicate string) (
 }
 
 // resolveRunAnchor returns the run entity a gated loop belongs to, in precedence
-// order: (1) agent.run.entity_id (the inherit anchor stamped at spawn by
+// order: (1) agent.run.entity-id (the inherit anchor stamped at spawn by
 // buildSpawnIdentityTriples when the loop carries a RunID); (2)
-// lineage.run-loop-entity-id (the threaded anchor a run-entity-descended loop
+// agent.lineage.run-loop-entity-id (the threaded anchor a run-entity-descended loop
 // carries via related_loops). Returns "" when neither is present (a run-less loop).
 func resolveRunAnchor(triples map[string]any) string {
 	if v, ok := triples[agvocab.LoopRunEntityID].(string); ok && v != "" {

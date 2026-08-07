@@ -14,9 +14,9 @@ import { test, expect } from "@playwright/test";
  * re-picks — then decide(respond_direct), answering autonomously.
  *
  * Asserts the OUTCOME of the policy, not the mechanism:
- *   - coordinator.user_reply IS stamped  → the coordinator ANSWERED
+ *   - coordinator.clarification.reply IS stamped  → the coordinator ANSWERED
  *     (03b-respond-direct fired) — it resolved without deferring to the user.
- *   - coordinator.user_question is ABSENT → 03-ask-user never fired — the
+ *   - coordinator.clarification.question is ABSENT → 03-ask-user never fired — the
  *     ask_user decide was blocked, not delivered.
  *
  * Config: derived at run time from configs/e2e-flow-bootstrap.json.
@@ -58,34 +58,34 @@ test.describe("ADR-053 Phase 4b — clarification policy (autonomous mode)", () 
     await page.getByTestId("send-button").click();
 
     // -----------------------------------------------------------------
-    // Step 3 — the coordinator ANSWERED: poll for a coordinator.user_reply
+    // Step 3 — the coordinator ANSWERED: poll for a coordinator.clarification.reply
     // triple (stamped by 03b-respond-direct). Its presence proves the loop
     // re-picked respond_direct after the ask_user rejection and delivered.
     // -----------------------------------------------------------------
     const replies = await pollUntil(async () => {
       const t = await fetchTriples(request, {
-        predicate: "coordinator.user_reply",
+        predicate: "coordinator.clarification.reply",
         limit: 20,
       });
       return t.length > 0 ? t : null;
     }, { timeoutMs: 60_000 });
     expect(
       replies,
-      "no coordinator.user_reply triple — the coordinator never answered via respond_direct. Either the ask_user gate dead-ended the loop (regression: an off-policy decide must re-pick, not hang), or the wiring didn't apply restricted_decide_actions.",
+      "no coordinator.clarification.reply triple — the coordinator never answered via respond_direct. Either the ask_user gate dead-ended the loop (regression: an off-policy decide must re-pick, not hang), or the wiring didn't apply restricted_decide_actions.",
     ).toBeTruthy();
 
     // -----------------------------------------------------------------
     // Step 4 — ask_user was BLOCKED, not delivered: there must be NO
-    // coordinator.user_question triple (03-ask-user fires only on a SUCCESSFUL
+    // coordinator.clarification.question triple (03-ask-user fires only on a SUCCESSFUL
     // decide(ask_user); the gate rejects before any decision triple is stamped).
     // -----------------------------------------------------------------
     const questions = await fetchTriples(request, {
-      predicate: "coordinator.user_question",
+      predicate: "coordinator.clarification.question",
       limit: 20,
     });
     expect(
       questions.length,
-      `expected ZERO coordinator.user_question triples in autonomous mode (ask_user barred by restricted_decide_actions), got ${questions.length}: ${JSON.stringify(
+      `expected ZERO coordinator.clarification.question triples in autonomous mode (ask_user barred by restricted_decide_actions), got ${questions.length}: ${JSON.stringify(
         questions.map((q) => q.object),
       )}. A question triple means the front-door ask_user gate did NOT fire — the #239 front-door coverage is not wired.`,
     ).toBe(0);

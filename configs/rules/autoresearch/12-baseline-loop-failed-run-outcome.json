@@ -2,7 +2,7 @@
   "id": "autoresearch_baseline_loop_failed_run_outcome",
   "type": "expression",
   "name": "Autoresearch baseline failed → stamp agent.run.outcome=failed (run-anchor)",
-  "description": "ADR-053 Phase 4a′ — autoresearch run-failed mapping, anchor branch 1 of 2 (the baseline). The baseline runs once at the start of an autoresearch run to establish the measurement; if it fails involuntarily (agent.loop.outcome in [failed, truncated]) the run cannot proceed and must fail, not hang `executing`.\n\nWHY baseline is split from the other autoresearch roles (the §E anchor asymmetry): autoresearch-baseline is spawned by rule 01 with run_scope=new, so it carries agent.run.entity_id (framework-stamped from RunID, graph_writer.go:535-539) but NO lineage.run-loop-entity-id. The propose/synthesize/reviewer roles are spawned by the RUN-entity-fired iteration driver (rule 05) and so carry lineage.run-loop-entity-id but NOT agent.run.entity_id — they are handled by the sibling rule 13. Stamping a single lineage-subject across the mixed role list would write the baseline's failed marker to an unresolved literal token and the run would never fail (the go-reviewer C1 garbage-subject class). So baseline uses its own anchor here.\n\nCompanion to autoresearch/11-loop-failed-pause (operator chain.paused.marker, untouched). autoresearch-execute stays EXCLUDED from both — a loop-failed execute is a budgeted iteration routed through rule 04b (counter increments, chain continues); it must NOT fail the run.",
+  "description": "ADR-053 Phase 4a′ — autoresearch run-failed mapping, anchor branch 1 of 2 (the baseline). The baseline runs once at the start of an autoresearch run to establish the measurement; if it fails involuntarily (agent.loop.outcome in [failed, truncated]) the run cannot proceed and must fail, not hang `executing`.\n\nWHY baseline is split from the other autoresearch roles (the §E anchor asymmetry): autoresearch-baseline is spawned by rule 01 with run_scope=new, so it carries agent.run.entity-id (framework-stamped from RunID, graph_writer.go:535-539) but NO agent.lineage.run-loop-entity-id. The propose/synthesize/reviewer roles are spawned by the RUN-entity-fired iteration driver (rule 05) and so carry agent.lineage.run-loop-entity-id but NOT agent.run.entity-id — they are handled by the sibling rule 13. Stamping a single lineage-subject across the mixed role list would write the baseline's failed marker to an unresolved literal token and the run would never fail (the go-reviewer C1 garbage-subject class). So baseline uses its own anchor here.\n\nCompanion to autoresearch/11-loop-failed-pause (operator chain.paused.marker, untouched). autoresearch-execute stays EXCLUDED from both — a loop-failed execute is a budgeted iteration routed through rule 04b (counter increments, chain continues); it must NOT fail the run.",
   "enabled": true,
   "conditions": [
     {
@@ -18,7 +18,7 @@
       "required": true
     },
     {
-      "field": "agent.run.entity_id",
+      "field": "agent.run.entity-id",
       "operator": "ne",
       "value": "",
       "required": true
@@ -28,7 +28,7 @@
   "on_enter": [
     {
       "type": "add_triple",
-      "subject": "$entity.triple.agent.run.entity_id",
+      "subject": "$entity.triple.agent.run.entity-id",
       "predicate": "agent.run.outcome",
       "object": "failed"
     }
@@ -38,10 +38,10 @@
     "pack": "autoresearch",
     "phase": "ADR-053 Phase 4a′",
     "adr": "docs/adr/053-adoption-plan.md",
-    "role": "autoresearch baseline run-failed mapping (anchor branch 1: agent.run.entity_id)",
+    "role": "autoresearch baseline run-failed mapping (anchor branch 1: agent.run.entity-id)",
     "companion_to": "11-loop-failed-pause.json (operator chain.paused.marker, untouched).",
-    "split_rationale": "baseline (run_scope=new, rule 01) carries agent.run.entity_id; propose/synthesize/reviewer (run-entity-fired, rule 05) carry lineage.run-loop-entity-id → rule 13. Same anchor asymmetry as the success path and as dev-via-test 02 vs 02g.",
-    "anchor_guard": "agent.run.entity_id != \"\" ensures the stamp subject resolves (defends the C1 garbage-literal-subject class).",
+    "split_rationale": "baseline (run_scope=new, rule 01) carries agent.run.entity-id; propose/synthesize/reviewer (run-entity-fired, rule 05) carry agent.lineage.run-loop-entity-id → rule 13. Same anchor asymmetry as the success path and as dev-via-test 02 vs 02g.",
+    "anchor_guard": "agent.run.entity-id != \"\" ensures the stamp subject resolves (defends the C1 garbage-literal-subject class).",
     "budgeted_exclusion": "autoresearch-execute is NOT here — budgeted loop-failure via rule 04b keeps the run executing.",
     "consumed_by": "agent-run/04-executing-to-failed.json."
   }

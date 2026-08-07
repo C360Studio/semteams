@@ -2,7 +2,7 @@
   "id": "research_gather_stamp_completion",
   "type": "expression",
   "name": "Gather completion → stamp counter on PLAN loop",
-  "description": "ADR-046 Phase 1 JOIN — stamp half. Fires when a researcher-research-gather loop completes successfully (outcome=success) with decide(action=synthesize). Writes a research.gather.completed_subtopic triple onto the PARENT plan loop entity via the beta.83 #148 subject override. The triple's Object is THIS gather's own loop id ($entity.id) so the predicate-set accumulates one triple per distinct gatherer (graph-ingest's per-(subject,predicate,object) set semantics dedup if this rule fires twice for the same gather, e.g. on transient redelivery). Rule 03b reads the accumulated triples on the plan loop, compares length against the planner's subtopics list length via #149 .length substitution, and spawns SYNTHESIZE when all N have stamped. Choosing the loop id (not task id) as Object is so rule 03b's synthesize spawn can pass the list of gather loop ids straight into SYNTHESIZE's properties for read_loop_result calls — no graph walk needed. The subject references $entity.triple.lineage.researcher-plan-entity (stamped at SPAWN by rule 02's related_loops) rather than $entity.triple.agent.loop.parent (stamped at completion). This sidesteps the upstream race documented in semstreams#159: agent.loop.outcome and agent.loop.parent are both stamped at completion but the rule engine processes them as separate EntityState UPDATED events; matching on outcome=success can fire before parent lands, causing $entity.triple.agent.loop.parent to be unresolved at substitution time. The lineage triple is stamped during spawn and is stable for the entire loop lifetime — no race. Retires the workaround when #159 closes (atomic completion-triple batch OR parent-stamped-at-spawn upstream).",
+  "description": "ADR-046 Phase 1 JOIN — stamp half. Fires when a researcher-research-gather loop completes successfully (outcome=success) with decide(action=synthesize). Writes a research.gather.completed-subtopic triple onto the PARENT plan loop entity via the beta.83 #148 subject override. The triple's Object is THIS gather's own loop id ($entity.id) so the predicate-set accumulates one triple per distinct gatherer (graph-ingest's per-(subject,predicate,object) set semantics dedup if this rule fires twice for the same gather, e.g. on transient redelivery). Rule 03b reads the accumulated triples on the plan loop, compares length against the planner's subtopics list length via #149 .length substitution, and spawns SYNTHESIZE when all N have stamped. Choosing the loop id (not task id) as Object is so rule 03b's synthesize spawn can pass the list of gather loop ids straight into SYNTHESIZE's properties for read_loop_result calls — no graph walk needed. The subject references $entity.triple.agent.lineage.researcher-plan-entity (stamped at SPAWN by rule 02's related_loops) rather than $entity.triple.agent.loop.parent (stamped at completion). This sidesteps the upstream race documented in semstreams#159: agent.loop.outcome and agent.loop.parent are both stamped at completion but the rule engine processes them as separate EntityState UPDATED events; matching on outcome=success can fire before parent lands, causing $entity.triple.agent.loop.parent to be unresolved at substitution time. The lineage triple is stamped during spawn and is stable for the entire loop lifetime — no race. Retires the workaround when #159 closes (atomic completion-triple batch OR parent-stamped-at-spawn upstream).",
   "enabled": true,
   "conditions": [
     {
@@ -18,7 +18,7 @@
       "required": true
     },
     {
-      "field": "coordinator.decision.next_action",
+      "field": "coordinator.decision.next-action",
       "operator": "eq",
       "value": "synthesize",
       "required": true
@@ -28,8 +28,8 @@
   "on_enter": [
     {
       "type": "add_triple",
-      "subject": "$entity.triple.lineage.plan-loop-entity-id",
-      "predicate": "research.gather.completed_subtopic",
+      "subject": "$entity.triple.agent.lineage.plan-loop-entity-id",
+      "predicate": "research.gather.completed-subtopic",
       "object": "$entity.id"
     }
   ],
@@ -42,6 +42,6 @@
     "joins_with": "03b-synthesize-when-all-gathers-complete.json",
     "subject_override_requires": "semstreams beta.83 (#148) — add_triple subject override.",
     "framework_dedup_note": "Object = $entity.id (the gather's own loop id) — naturally unique per gather. graph-ingest treats triples as a set keyed by (subject, predicate, object); if this rule fires twice for the same gather, the second add_triple is idempotent (same key), counter stays accurate.",
-    "race_workaround": "Subject uses lineage.plan-loop-entity-id (spawn-stamped by rule 02 via related_loops) instead of agent.loop.parent (completion-stamped) to dodge the semstreams#159 race between agent.loop.outcome and agent.loop.parent. The lineage key intentionally does NOT prefix-overlap with the sibling lineage.researcher-plan triple — substitution does ReplaceAll per-predicate in map-iteration order, so prefix-overlapping predicates can swallow each other depending on Go map randomization (filed as semstreams#160). Retires when #159 closes."
+    "race_workaround": "Subject uses agent.lineage.plan-loop-entity-id (spawn-stamped by rule 02 via related_loops) instead of agent.loop.parent (completion-stamped) to dodge the semstreams#159 race between agent.loop.outcome and agent.loop.parent. The lineage key intentionally does NOT prefix-overlap with the sibling agent.lineage.researcher-plan triple — substitution does ReplaceAll per-predicate in map-iteration order, so prefix-overlapping predicates can swallow each other depending on Go map randomization (filed as semstreams#160). Retires when #159 closes."
   }
 }

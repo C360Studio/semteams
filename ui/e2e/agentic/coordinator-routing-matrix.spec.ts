@@ -153,7 +153,7 @@ test.describe("coordinator routing matrix", () => {
       const action = await pollUntil(
         async () => {
           const actions = await fetchTriples(request, {
-            predicate: "coordinator.decision.next_action",
+            predicate: "coordinator.decision.next-action",
             limit: 500,
           });
           return (
@@ -169,7 +169,7 @@ test.describe("coordinator routing matrix", () => {
 
       expect(
         action,
-        `${c.name}: expected coordinator.decision.next_action=${c.action} on loop ${newLoop!.loop_id}`,
+        `${c.name}: expected coordinator.decision.next-action=${c.action} on loop ${newLoop!.loop_id}`,
       ).toBeTruthy();
 
       if (c.requiresSandbox) {

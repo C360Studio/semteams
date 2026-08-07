@@ -13,7 +13,7 @@ description: |
        teams-loop for 4c PR-2) → handleApprovalResponseMessage → ResolveApprovalIfPending
        un-parks the loop, re-dispatches create_rule with ApprovedBy set (the
        ApprovalFilter bypasses the gate on a pre-approved call), and the loop continues.
-    2. The product-shell approvalpause subscriber → stamps agent.run.approval_resumed
+    2. The product-shell approvalpause subscriber → stamps agent.run.approval-resumed
        on the run entity → agent-run/13 transitions the run awaiting_approval→executing
        and clears BOTH approval markers.
 
@@ -64,7 +64,7 @@ responses:
           "name": "heartbeat-stale-alert",
           "description": "Alert when no MAVLink HEARTBEAT frame has been decoded within the staleness window",
           "condition": {
-            "predicate": "mavlink.heartbeat.last_seen_age_seconds",
+            "predicate": "mavlink.heartbeat.last-seen-age-seconds",
             "operator": ">",
             "value": 5
           },

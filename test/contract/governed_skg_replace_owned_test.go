@@ -2,9 +2,7 @@ package contract
 
 import (
 	"encoding/json"
-	"io/fs"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -144,16 +142,13 @@ func TestReplaceOwned_FlowConfigsDeclarePackContract(t *testing.T) {
 	wantPredicates := []string{
 		// PR #219 — autoresearch single-valued scalar replaces.
 		"autoresearch.best.value",
-		"autoresearch.best.experiment_id",
+		"autoresearch.best.experiment-id",
 		"autoresearch.run.status",
 		// Fast-follow — autoresearch iteration presence marker.
 		"autoresearch.iteration.pending",
-		// Fast-follow — dev-via-test retry/iteration coordination gates.
-		"dev_via_test.plan.retry.pending",
-		"dev_via_test.plan.retry.finding",
-		"dev_via_test.cbg.retry.pending",
-		"dev_via_test.cbg.retry.finding",
-		"dev_via_test.cbg.retry.target_task",
+		// The dev-via-test retry/iteration gates left the envelope when the
+		// dev packs were parked (ADR-058); re-add them (in canonical
+		// three-segment form) when the pack is re-authored and re-wired.
 	}
 
 	for _, flowPath := range []string{flowBootstrapPath, e2eFlowBootstrapPath} {
@@ -185,22 +180,18 @@ func TestReplaceOwned_FlowConfigsDeclarePackContract(t *testing.T) {
 }
 
 // TestReplaceOwned_RuleActionsWithinDeclaredEnvelope reproduces the framework's
-// boot-time envelope check across every committed rule file: every replace_owned
-// action's predicate MUST be a literal (no `$` substitution) AND fall inside the
-// production config's declared replace-owned predicate set. A failure here is a
-// boot-abort in production — catch it in CI.
+// boot-time envelope check across every BOOTSTRAP-WIRED rule file: every
+// replace_owned action's predicate MUST be a literal (no `$` substitution) AND
+// fall inside the production config's declared replace-owned predicate set. A
+// failure here is a boot-abort in production — catch it in CI. Parked packs
+// (unwired from flow-bootstrap, ADR-058) are out of scope: their files stay on
+// disk in the pre-migration dialect and never reach the boot-time check.
 func TestReplaceOwned_RuleActionsWithinDeclaredEnvelope(t *testing.T) {
 	declared := declaredReplaceOwnedPredicates(loadRuleProcessorOwnership(t, flowBootstrapPath))
 	require.NotEmpty(t, declared, "production config declares no replace-owned predicates — envelope check is vacuous")
 
 	var scanned int
-	err := filepath.WalkDir(rulesRootDir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() || !strings.HasSuffix(path, ".json") {
-			return nil
-		}
+	for _, path := range bootstrapLoadedRules(t) {
 		raw, readErr := os.ReadFile(path) //nolint:gosec // test-controlled config path
 		require.NoError(t, readErr, "read rule file %s", path)
 
@@ -222,10 +213,8 @@ func TestReplaceOwned_RuleActionsWithinDeclaredEnvelope(t *testing.T) {
 					"(and e2e-flow-bootstrap.json), or use add_triple/update_triple.",
 				path, a.ID, a.Predicate, keysOf(declared))
 		}
-		return nil
-	})
-	require.NoError(t, err, "walk rules root")
-	require.Positivef(t, scanned, "no replace_owned actions found under %s — the migration regressed to update_triple/add_triple", rulesRootDir)
+	}
+	require.Positive(t, scanned, "no replace_owned actions found in bootstrap-wired rules — the migration regressed to update_triple/add_triple")
 }
 
 // TestReplaceOwned_MigratedRulesUseOwnedLane is the regression pin against a
@@ -241,7 +230,7 @@ func TestReplaceOwned_MigratedRulesUseOwnedLane(t *testing.T) {
 	targets := []target{
 		// PR #219 — autoresearch single-valued scalar replaces.
 		{"../../configs/rules/autoresearch/04c-execute-promote-best-on-kept.json", "autoresearch.best.value"},
-		{"../../configs/rules/autoresearch/04c-execute-promote-best-on-kept.json", "autoresearch.best.experiment_id"},
+		{"../../configs/rules/autoresearch/04c-execute-promote-best-on-kept.json", "autoresearch.best.experiment-id"},
 		{"../../configs/rules/autoresearch/05-iteration-dispatch.json", "autoresearch.run.status"},
 		// Fast-follow — autoresearch iteration presence marker (set 04a/04b, clear 05).
 		{"../../configs/rules/autoresearch/04a-execute-stamp-completion.json", "autoresearch.iteration.pending"},

@@ -12,7 +12,7 @@
       "required": true
     },
     {
-      "field": "coordinator.decision.next_action",
+      "field": "coordinator.decision.next-action",
       "operator": "eq",
       "value": "approved",
       "required": true
@@ -22,7 +22,7 @@
   "on_enter": [
     {
       "type": "add_triple",
-      "subject": "$entity.triple.lineage.run-loop-entity-id",
+      "subject": "$entity.triple.agent.lineage.run-loop-entity-id",
       "predicate": "agent.run.outcome",
       "object": "success"
     },
@@ -40,7 +40,7 @@
       },
       "related_loops": {
         "terminal": "$entity.instance",
-        "autoresearch-run": "$entity.triple.lineage.autoresearch-run"
+        "autoresearch-run": "$entity.triple.agent.lineage.autoresearch-run"
       },
       "prompt": "The autoresearch chain you dispatched has reached its terminal. Reviewer-autoresearch at loop $entity.instance evaluated the autoresearch artifact and approved it.\n\nYour job now is to deliver the result to the user. You are not classifying or delegating — the chain has already done the work.\n\nIteration 1 — call read_loop_result(loop_id=$entity.instance) to read the reviewer's structured verdict. The reviewer's reason summarises the run shape: iterations completed, baseline vs best, improvement percentage. If the reviewer's loop entity carries autoresearch.artifact.path, the structured artifact lives at that path — you may `bash cat $entity.triple.autoresearch.artifact.path` to read the full rollup (journey, kept diffs, open opportunities) if the reviewer's prose is too terse for a user-facing reply.\n\nIteration 2 — call decide(action=\"respond_direct\", reason=\"<your synthesised user-facing answer>\"). The respond_direct rule publishes your reason on the user-response bus.\n\nWrite the reason as plain prose addressing the user directly. The user asked for an optimization run; tell them what happened: did the metric improve, by how much, what the best change was, whether the run plateaued or hit the cap, what's left to try. Don't dump the full journey — pick the substantive headline. 3-6 sentences is usually right.",
       "tool_choice": { "mode": "required" }

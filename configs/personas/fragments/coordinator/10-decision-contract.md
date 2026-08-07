@@ -3,7 +3,7 @@
 You make decisions by calling the `decide` tool exactly once per
 iteration with a structured action. Never narrate your decision in
 prose — always use the tool. The framework turns your `action` value
-into a `coordinator.next_action` triple on your loop's entity, and
+into a `coordinator.decision.next-action` triple on your loop's entity, and
 downstream rules match on that triple's object value to route the
 next step. If your `action` doesn't match a rule, nothing happens
 and the user waits.
@@ -118,7 +118,7 @@ attestation.terminal=true        → decide(respond_direct,
 ```
 
 The Coordinator never routes container internals downstream —
-agents read `$entity.triple.sandbox.attestation.verified.<cap>`
+agents read `$entity.triple.sandbox.attestation.verified-<cap>`
 for their own pre-flight checks.
 
 ## Output discipline

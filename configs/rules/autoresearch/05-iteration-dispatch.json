@@ -12,7 +12,7 @@
       "required": true
     },
     {
-      "field": "autoresearch.cap",
+      "field": "autoresearch.run.cap",
       "operator": "gt",
       "value": 0,
       "required": true
@@ -29,6 +29,8 @@
     {
       "id": "clear_pending_marker",
       "type": "replace_owned",
+      "projection_contract": "autoresearch.run-projection",
+      "projection_group": "run-state",
       "predicate": "autoresearch.iteration.pending"
     },
     {
@@ -48,18 +50,18 @@
       "related_loops": {
         "autoresearch-run": "$entity.instance",
         "run-loop-entity-id": "$entity.id",
-        "command": "$entity.triple.autoresearch.command",
-        "surface": "$entity.triple.autoresearch.surface",
-        "metric_parser": "$entity.triple.autoresearch.metric_parser"
+        "command": "$entity.triple.autoresearch.run.command",
+        "surface": "$entity.triple.autoresearch.run.surface",
+        "metric-parser": "$entity.triple.autoresearch.run.metric-parser"
       },
       "when": [
         {
           "field": "$state.iteration",
           "operator": "lte",
-          "value": "$entity.triple.autoresearch.cap"
+          "value": "$entity.triple.autoresearch.run.cap"
         }
       ],
-      "prompt": "AUTORESEARCH PROPOSE — iteration $state.iteration of $entity.triple.autoresearch.cap.\n\nThe run entity at $entity.instance carries the full state: command, surface, cap, metric_parser, baseline.value, best.value, best.experiment_id, and one autoresearch.experiment.completed triple per iteration completed so far. Your prior-iteration context arrives inlined via the .triples substitution:\n\n```\n$entity.triple.autoresearch.experiment.completed.triples\n```\n\nThat token resolves to a JSON-encoded array of execute loop IDs for every iteration completed so far. Parse the array; for each ID, call read_loop_result to read that iteration's reason field (hypothesis, value, pass, outcome). Use that journal to:\n\n1. Avoid re-proposing changes that already reverted in a prior iteration.\n2. Build on changes that were kept (which became the new running-best — best.value is $entity.triple.autoresearch.best.value).\n3. Identify directions the journal suggests have headroom.\n\nIteration 1 — read the journal as described above. Also read the run entity's current state via the substitutions in your prompt: command is $entity.triple.autoresearch.command; surface is $entity.triple.autoresearch.surface; best.value is $entity.triple.autoresearch.best.value.\n\nIteration 2 — write your hypothesis to scratchpad. Concrete (file + change pattern + prediction). Within surface. Single-axis. Will not break the pass gate.\n\nIteration 3 — bash: apply the diff. Verify with `git diff --stat` that changes are scoped within surface.\n\nIteration 4 — decide(action=\"measure\", reason=\"<hypothesis + diff summary>\"). Rule 03 spawns execute next.\n\nIf the journal shows the metric has plateaued (last 3+ iterations all reverted with no kept) AND you have no novel hypothesis to try, decide(action=\"needs_clarification\", reason=\"plateau observed after $entity.triple.autoresearch.experiment.completed.length iterations; running best=$entity.triple.autoresearch.best.value vs baseline=$entity.triple.autoresearch.baseline.value; no new hypothesis viable\"). The recovery rule routes to coordinator, which can call respond_direct with the run's current state — soft stop because v1 substrate does not implement plateau-N as a hard stop condition."
+      "prompt": "AUTORESEARCH PROPOSE — iteration $state.iteration of $entity.triple.autoresearch.run.cap.\n\nThe run entity at $entity.instance carries the full state: command, surface, cap, metric_parser, baseline.value, best.value, best.experiment_id, and one autoresearch.experiment.completed triple per iteration completed so far. Your prior-iteration context arrives inlined via the .triples substitution:\n\n```\n$entity.triple.autoresearch.experiment.completed.triples\n```\n\nThat token resolves to a JSON-encoded array of execute loop IDs for every iteration completed so far. Parse the array; for each ID, call read_loop_result to read that iteration's reason field (hypothesis, value, pass, outcome). Use that journal to:\n\n1. Avoid re-proposing changes that already reverted in a prior iteration.\n2. Build on changes that were kept (which became the new running-best — best.value is $entity.triple.autoresearch.best.value).\n3. Identify directions the journal suggests have headroom.\n\nIteration 1 — read the journal as described above. Also read the run entity's current state via the substitutions in your prompt: command is $entity.triple.autoresearch.run.command; surface is $entity.triple.autoresearch.run.surface; best.value is $entity.triple.autoresearch.best.value.\n\nIteration 2 — write your hypothesis to scratchpad. Concrete (file + change pattern + prediction). Within surface. Single-axis. Will not break the pass gate.\n\nIteration 3 — bash: apply the diff. Verify with `git diff --stat` that changes are scoped within surface.\n\nIteration 4 — decide(action=\"measure\", reason=\"<hypothesis + diff summary>\"). Rule 03 spawns execute next.\n\nIf the journal shows the metric has plateaued (last 3+ iterations all reverted with no kept) AND you have no novel hypothesis to try, decide(action=\"needs_clarification\", reason=\"plateau observed after $entity.triple.autoresearch.experiment.completed.length iterations; running best=$entity.triple.autoresearch.best.value vs baseline=$entity.triple.autoresearch.baseline.value; no new hypothesis viable\"). The recovery rule routes to coordinator, which can call respond_direct with the run's current state — soft stop because v1 substrate does not implement plateau-N as a hard stop condition."
     },
     {
       "id": "spawn_synthesize_at_cap_exhaust",
@@ -79,29 +81,31 @@
       "related_loops": {
         "autoresearch-run": "$entity.instance",
         "run-loop-entity-id": "$entity.id",
-        "command": "$entity.triple.autoresearch.command",
-        "surface": "$entity.triple.autoresearch.surface",
-        "metric_parser": "$entity.triple.autoresearch.metric_parser"
+        "command": "$entity.triple.autoresearch.run.command",
+        "surface": "$entity.triple.autoresearch.run.surface",
+        "metric-parser": "$entity.triple.autoresearch.run.metric-parser"
       },
       "when": [
         {
           "field": "$state.iteration",
           "operator": "gt",
-          "value": "$entity.triple.autoresearch.cap"
+          "value": "$entity.triple.autoresearch.run.cap"
         }
       ],
-      "prompt": "AUTORESEARCH SYNTHESIZE — final rollup.\n\nThe iteration loop has terminated: $entity.triple.autoresearch.experiment.completed.length iterations completed against cap $entity.triple.autoresearch.cap. Stop reason: cap reached.\n\nYour job is to produce ONE artifact summarising the run: the baseline, the running-best, the kept improvements (with their diffs), the journey, and any open opportunities the journal suggests.\n\nIteration 1 — read the run entity context via prompt substitutions:\n\n- command: $entity.triple.autoresearch.command\n- surface: $entity.triple.autoresearch.surface\n- baseline.value: $entity.triple.autoresearch.baseline.value\n- best.value: $entity.triple.autoresearch.best.value\n- best.experiment_id: $entity.triple.autoresearch.best.experiment_id\n\nIteration 2 — read the per-iteration journal. The JSON array of completed execute loop IDs is inlined as $entity.triple.autoresearch.experiment.completed.triples. Parse the array; for each ID, call read_loop_result to read that iteration's terminal reason (hypothesis, value, pass, outcome). Build a chronological narrative: which hypotheses were kept, which reverted, which crashed.\n\nIteration 3 — read the best experiment's diff if best.experiment_id is not 'baseline'. bash: `git diff` against the workspace to see the cumulative kept diff.\n\nIteration 4 — call emit_autoresearch_artifact with the structured rollup (title, command, baseline_value, best_value, improvement_pct, cap, iterations_completed, iterations_kept, iterations_reverted, iterations_crashed, best_diff_summary, journey[], open_opportunities). Then decide(action=\"emit\", reason=\"<one-line summary referencing the artifact slug + the improvement percentage>\"). Rule 07 fires on this and spawns reviewer-autoresearch.\n\nIf the run produced no kept iterations (best.value == baseline.value), still emit the artifact — the negative-result rollup is the deliverable, with open_opportunities carrying the substance of why the surface was not productive. Reviewer-autoresearch grades structural completeness, not improvement magnitude."
+      "prompt": "AUTORESEARCH SYNTHESIZE — final rollup.\n\nThe iteration loop has terminated: $entity.triple.autoresearch.experiment.completed.length iterations completed against cap $entity.triple.autoresearch.run.cap. Stop reason: cap reached.\n\nYour job is to produce ONE artifact summarising the run: the baseline, the running-best, the kept improvements (with their diffs), the journey, and any open opportunities the journal suggests.\n\nIteration 1 — read the run entity context via prompt substitutions:\n\n- command: $entity.triple.autoresearch.run.command\n- surface: $entity.triple.autoresearch.run.surface\n- baseline.value: $entity.triple.autoresearch.baseline.value\n- best.value: $entity.triple.autoresearch.best.value\n- best.experiment_id: $entity.triple.autoresearch.best.experiment-id\n\nIteration 2 — read the per-iteration journal. The JSON array of completed execute loop IDs is inlined as $entity.triple.autoresearch.experiment.completed.triples. Parse the array; for each ID, call read_loop_result to read that iteration's terminal reason (hypothesis, value, pass, outcome). Build a chronological narrative: which hypotheses were kept, which reverted, which crashed.\n\nIteration 3 — read the best experiment's diff if best.experiment_id is not 'baseline'. bash: `git diff` against the workspace to see the cumulative kept diff.\n\nIteration 4 — call emit_autoresearch_artifact with the structured rollup (title, command, baseline_value, best_value, improvement_pct, cap, iterations_completed, iterations_kept, iterations_reverted, iterations_crashed, best_diff_summary, journey[], open_opportunities). Then decide(action=\"emit\", reason=\"<one-line summary referencing the artifact slug + the improvement percentage>\"). Rule 07 fires on this and spawns reviewer-autoresearch.\n\nIf the run produced no kept iterations (best.value == baseline.value), still emit the artifact — the negative-result rollup is the deliverable, with open_opportunities carrying the substance of why the surface was not productive. Reviewer-autoresearch grades structural completeness, not improvement magnitude."
     },
     {
       "id": "flip_run_status_at_cap_exhaust",
       "type": "replace_owned",
+      "projection_contract": "autoresearch.run-projection",
+      "projection_group": "run-state",
       "predicate": "autoresearch.run.status",
       "object": "stopped",
       "when": [
         {
           "field": "$state.iteration",
           "operator": "gt",
-          "value": "$entity.triple.autoresearch.cap"
+          "value": "$entity.triple.autoresearch.run.cap"
         }
       ]
     }
@@ -115,6 +119,6 @@
     "replaces": "rules 02 (baseline→propose) + 05 (length_lt cap) + 06 (length_eq cap) — single rule now handles iter 1, iters 2..cap, and cap-exhaust synthesize",
     "upstream_thread": "semstreams#204 — root-cause analysis of the prior in_flight toggle attempts. Diagnosed the monotonic-condition trap and prescribed the marker pattern as the canonical fix.",
     "remove_triple_first_rationale": "remove_triple iteration.pending fires before the publish_agent actions because action order matters for transition detection: clearing the marker flips the rule's conditions false, which is what produces TransitionExited and resets wasMatching for the next iteration's Entered transition. If we put publish_agent first, the propose loop might race against the marker still being present and trigger a stale evaluation.",
-    "when_clause_substitution_requires": "semstreams beta.86+ (SubstituteConditionValues from #149) — value: \"$entity.triple.autoresearch.cap\" is substituted at evaluation time."
+    "when_clause_substitution_requires": "semstreams beta.86+ (SubstituteConditionValues from #149) — value: \"$entity.triple.autoresearch.run.cap\" is substituted at evaluation time."
   }
 }

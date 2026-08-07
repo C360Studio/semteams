@@ -78,7 +78,7 @@ phase's only read path is `read_loop_result` on your loop, which
 returns the `decide.reason` text — keep the substance there so the
 next phase has something to act on.
 
-The rule pack gates on `coordinator.decision.next_action="gather"`
+The rule pack gates on `coordinator.decision.next-action="gather"`
 to spawn the GATHER phase — the `emit_plan` call is additive.
 
 ## When NOT to emit

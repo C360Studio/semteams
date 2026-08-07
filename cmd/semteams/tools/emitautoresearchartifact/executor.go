@@ -74,12 +74,12 @@ const (
 	predicateTitle            = "autoresearch.artifact.title"
 	predicatePath             = "autoresearch.artifact.path"
 	predicateRevision         = "autoresearch.artifact.revision"
-	predicateProducedAt       = "autoresearch.artifact.produced_at"
-	predicateImprovementPct   = "autoresearch.artifact.improvement_pct"
-	predicateIterationsKept   = "autoresearch.artifact.iterations_kept"
-	predicateIterationsTotal  = "autoresearch.artifact.iterations_completed"
+	predicateProducedAt       = "autoresearch.artifact.produced-at"
+	predicateImprovementPct   = "autoresearch.artifact.improvement-pct"
+	predicateIterationsKept   = "autoresearch.artifact.iterations-kept"
+	predicateIterationsTotal  = "autoresearch.artifact.iterations-completed"
 	predicateCap              = "autoresearch.artifact.cap"
-	predicateBestExperimentID = "autoresearch.artifact.best_experiment_id"
+	predicateBestExperimentID = "autoresearch.artifact.best-experiment-id"
 )
 
 // ChainAttestationReader resolves the per-tenant devcontainer's host
@@ -168,12 +168,12 @@ func (e *Executor) ListTools() []agentic.ToolDefinition {
 				"baseline_value":       map[string]any{"type": "number", "description": "Baseline measurement."},
 				"best_value":           map[string]any{"type": "number", "description": "Best measurement reached during the run."},
 				"improvement_pct":      map[string]any{"type": "number", "description": "(baseline - best) / baseline * 100. Can be negative."},
-				"cap":                  map[string]any{"type": "integer", "minimum": 1, "description": "Iteration cap from the run entity (autoresearch.cap). Required for the reviewer's consistency check."},
+				"cap":                  map[string]any{"type": "integer", "minimum": 1, "description": "Iteration cap from the run entity (autoresearch.run.cap). Required for the reviewer's consistency check."},
 				"iterations_completed": map[string]any{"type": "integer", "description": "Total iterations (matches cap or the early-stop count)."},
 				"iterations_kept":      map[string]any{"type": "integer", "description": "Iterations whose diff improved the metric and was kept."},
 				"iterations_reverted":  map[string]any{"type": "integer", "description": "Iterations reverted (no improvement)."},
 				"iterations_crashed":   map[string]any{"type": "integer", "description": "Iterations whose measurement command failed."},
-				"best_experiment_id":   map[string]any{"type": "string", "description": "The experiment_id that achieved best_value (autoresearch.best.experiment_id from the run entity). Use literal 'baseline' when iterations_kept == 0. Required for the reviewer's consistency check that best.experiment_id resolves to a kept journey entry."},
+				"best_experiment_id":   map[string]any{"type": "string", "description": "The experiment_id that achieved best_value (autoresearch.best.experiment-id from the run entity). Use literal 'baseline' when iterations_kept == 0. Required for the reviewer's consistency check that best.experiment_id resolves to a kept journey entry."},
 				"best_diff_summary":    map[string]any{"type": "string", "description": "Prose summary of the diff that won (referencing files + change pattern)."},
 				"journey":              map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "One entry per iteration: '<iter>: hypothesis → value (outcome)'."},
 				"open_opportunities":   map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Hypotheses worth exploring in a follow-up run."},

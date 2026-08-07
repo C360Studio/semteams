@@ -39,7 +39,7 @@ import (
 // persona action has a backing rule (no LLM token that dead-ends).
 //
 // Slice 1c wake-up rules (rules that gate on `agent.loop.role ==
-// "<reviewer role>"` AND `coordinator.decision.next_action ==
+// "<reviewer role>"` AND `coordinator.decision.next-action ==
 // <reviewer terminal>`) are coordinator-related but fire on reviewer
 // loops, so their action values come from reviewer personas, not the
 // coordinator persona. The taxonomy check scopes to rules whose
@@ -139,7 +139,7 @@ func bootstrapLoadedRules(t *testing.T) []string {
 // collectCoordinatorRoleActionsFromFiles scans the given rule files
 // for rules whose firing role is "coordinator" and returns a map of
 // action-value → rule file basename for every
-// coordinator.decision.next_action condition found. Handles both
+// coordinator.decision.next-action condition found. Handles both
 // `eq` (single value) and `in` (array of values) operators so that
 // transitional rules accepting more than one action value surface
 // each accepted value.
@@ -185,7 +185,7 @@ func collectCoordinatorRoleActionsFromFiles(t *testing.T, ruleFiles []string) ma
 			continue
 		}
 		for _, cond := range rule.Conditions {
-			if cond.Field != "coordinator.decision.next_action" {
+			if cond.Field != "coordinator.decision.next-action" {
 				continue
 			}
 			switch cond.Operator {
@@ -220,7 +220,7 @@ func collectCoordinatorRoleActionsFromFiles(t *testing.T, ruleFiles []string) ma
 
 // TestCoordinatorSlice1cWakeUpRules locks in the Slice 1c wake-up rule
 // shape: a rule firing on `agent.loop.role == "<reviewer role>"` AND
-// `coordinator.decision.next_action == "<approval token>"` spawns a
+// `coordinator.decision.next-action == "<approval token>"` spawns a
 // coordinator-role loop via publish_agent. Pinning the role→token
 // pair here keeps the rule set in sync with
 // cmd/semteams/chain/terminal.go's roleToApprovalAction map; adding a
@@ -277,7 +277,7 @@ func TestCoordinatorSlice1cWakeUpRules(t *testing.T) {
 						firingRole = s
 					}
 				}
-				if cond.Field == "coordinator.decision.next_action" && cond.Operator == "eq" {
+				if cond.Field == "coordinator.decision.next-action" && cond.Operator == "eq" {
 					if s, ok := cond.Value.(string); ok {
 						action = s
 					}

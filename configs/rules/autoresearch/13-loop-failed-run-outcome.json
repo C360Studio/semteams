@@ -2,7 +2,7 @@
   "id": "autoresearch_loop_failed_run_outcome",
   "type": "expression",
   "name": "Autoresearch propose/synthesize/reviewer failed → stamp agent.run.outcome=failed (lineage anchor)",
-  "description": "ADR-053 Phase 4a′ — autoresearch run-failed mapping, anchor branch 2 of 2 (the run-entity-descended roles). Fires when autoresearch-propose, autoresearch-synthesize, or reviewer-autoresearch terminates with an involuntary failure (agent.loop.outcome in [failed, truncated]). Stamps agent.run.outcome=failed on the RUN entity so agent-run/04 transitions executing→failed; otherwise the failed loop wedges the chain (a failed propose/synthesize/reviewer has no in-arc recovery) and the run hangs `executing`.\n\nANCHOR (lineage.run-loop-entity-id): these roles descend through the RUN-entity-fired iteration driver (rule 05), which threads run-loop-entity-id into propose/synthesize related_loops; rule 07 carries it to reviewer-autoresearch. They carry NO agent.run.entity_id (the run entity has no bare agent.run for the inherit path). This mirrors autoresearch/08's success-stamp anchor. The baseline (which carries agent.run.entity_id, not lineage) is the sibling rule 12. The lineage.run-loop-entity-id length_gt 0 guard ensures the stamp subject resolves (defends the C1 garbage-literal-subject class — the same bug that hung autoresearch in 4a when the success stamp's anchor wasn't threaded).\n\nCompanion to autoresearch/11-loop-failed-pause (operator chain.paused.marker, untouched). autoresearch-execute stays EXCLUDED — budgeted loop-failure via rule 04b keeps the run executing.",
+  "description": "ADR-053 Phase 4a′ — autoresearch run-failed mapping, anchor branch 2 of 2 (the run-entity-descended roles). Fires when autoresearch-propose, autoresearch-synthesize, or reviewer-autoresearch terminates with an involuntary failure (agent.loop.outcome in [failed, truncated]). Stamps agent.run.outcome=failed on the RUN entity so agent-run/04 transitions executing→failed; otherwise the failed loop wedges the chain (a failed propose/synthesize/reviewer has no in-arc recovery) and the run hangs `executing`.\n\nANCHOR (agent.lineage.run-loop-entity-id): these roles descend through the RUN-entity-fired iteration driver (rule 05), which threads run-loop-entity-id into propose/synthesize related_loops; rule 07 carries it to reviewer-autoresearch. They carry NO agent.run.entity-id (the run entity has no bare agent.run for the inherit path). This mirrors autoresearch/08's success-stamp anchor. The baseline (which carries agent.run.entity-id, not lineage) is the sibling rule 12. The agent.lineage.run-loop-entity-id length_gt 0 guard ensures the stamp subject resolves (defends the C1 garbage-literal-subject class — the same bug that hung autoresearch in 4a when the success stamp's anchor wasn't threaded).\n\nCompanion to autoresearch/11-loop-failed-pause (operator chain.paused.marker, untouched). autoresearch-execute stays EXCLUDED — budgeted loop-failure via rule 04b keeps the run executing.",
   "enabled": true,
   "conditions": [
     {
@@ -22,7 +22,7 @@
       "required": true
     },
     {
-      "field": "lineage.run-loop-entity-id",
+      "field": "agent.lineage.run-loop-entity-id",
       "operator": "length_gt",
       "value": 0,
       "required": true
@@ -32,7 +32,7 @@
   "on_enter": [
     {
       "type": "add_triple",
-      "subject": "$entity.triple.lineage.run-loop-entity-id",
+      "subject": "$entity.triple.agent.lineage.run-loop-entity-id",
       "predicate": "agent.run.outcome",
       "object": "failed"
     }
@@ -42,10 +42,10 @@
     "pack": "autoresearch",
     "phase": "ADR-053 Phase 4a′",
     "adr": "docs/adr/053-adoption-plan.md",
-    "role": "autoresearch run-failed mapping (anchor branch 2: lineage.run-loop-entity-id)",
+    "role": "autoresearch run-failed mapping (anchor branch 2: agent.lineage.run-loop-entity-id)",
     "companion_to": "11-loop-failed-pause.json (operator chain.paused.marker, untouched).",
-    "anchor": "lineage.run-loop-entity-id — threaded by rule 05 (propose/synthesize) + rule 07 (reviewer). Mirrors autoresearch/08's success-stamp anchor. Baseline is the sibling rule 12 (agent.run.entity_id).",
-    "anchor_guard": "lineage.run-loop-entity-id length_gt 0 ensures the stamp subject resolves (C1 garbage-literal-subject defense).",
+    "anchor": "agent.lineage.run-loop-entity-id — threaded by rule 05 (propose/synthesize) + rule 07 (reviewer). Mirrors autoresearch/08's success-stamp anchor. Baseline is the sibling rule 12 (agent.run.entity-id).",
+    "anchor_guard": "agent.lineage.run-loop-entity-id length_gt 0 ensures the stamp subject resolves (C1 garbage-literal-subject defense).",
     "budgeted_exclusion": "autoresearch-execute is NOT here — budgeted loop-failure via rule 04b keeps the run executing.",
     "consumed_by": "agent-run/04-executing-to-failed.json."
   }

@@ -200,21 +200,21 @@ func run() error {
 		return err
 	}
 
-	// 11b. ADR-056 #278 — bind the substrate rule pack's projection contracts AND
-	// mint the rule-pack.semteams OwnerToken. Done HERE — after
-	// configureAndCreateServices constructs the rule processor (so
-	// manager.ProjectionBinders() sees it) and BEFORE StartAll — never from the
-	// hot-reload path (re-binding would self-overlap the pack's own claims). This
-	// is the load-bearing compliance step now that enforce_owner_lease is ON: it
-	// stamps the rule processor's executor with "rule-pack.semteams#<incarnation>"
-	// minted from the SAME ownerReg that WireOwnership registered the lease under,
-	// so every replace_owned write presents a token that MATCHES the live lease
-	// (a stale/superseded incarnation's cached token then fails the graph-ingest
-	// check — the fence that protects our owned writes). Self-guards on a nil
-	// ownerReg (bucket bootstrap failed → no-op), so the call is unconditional.
-	// Uses ctx (not hbCtx): the bind is boot-synchronous, completing before any
-	// shutdown could cancel hbCtx — equivalent to upstream §11b (ADR-029).
-	service.BindRulePackContracts(ctx, manager, substrate.ownerReg, substrate.staticOwnerHB, logger)
+	// 11b. ADR-056 #278 — bind the substrate rule pack's projection contracts and
+	// inject the pack's contract-bound mutation client into the rule processor.
+	// Done HERE — after configureAndCreateServices constructs the rule processor
+	// (so manager.ProjectionBinders() sees it) and BEFORE StartAll — never from
+	// the hot-reload path (re-binding would self-overlap the pack's own claims).
+	// beta.159: the bind is FAIL-CLOSED and a boot gate, matching upstream —
+	// every composition, overlap, ownership/liveness bind, and mutation-client
+	// injection error aborts boot. A silently-failed bind would boot green with
+	// the replace_owned lane never injected, and every owned write (e.g.
+	// autoresearch/04c best-value upsert) would then fail at runtime under
+	// enforce_owner_lease. Uses the heartbeat ctx, same as upstream §11b
+	// (ADR-029).
+	if err := service.BindRulePackContracts(substrate.hbCtx, manager, substrate.ownerReg, substrate.staticOwnerHB, logger); err != nil {
+		return fmt.Errorf("validate rule-pack composition: %w", err)
+	}
 
 	// 12. Register product HTTP middleware. Per beta.23: must run before
 	// StartAll, since the framework reads the chain at server boot. The
@@ -921,7 +921,7 @@ func wireAgentRunSubstrate(ctx context.Context, manager *service.Manager, natsCl
 	// configureAndCreateServices). Mirrors upstream cmd/semstreams/main.go §9
 	// (ADR-029).
 	hbCtx, ownershipShutdown := service.WireOwnershipShutdown(ctx, mgr)
-	substrate := agentRunSubstrate{lifecycle: mgr, shutdown: ownershipShutdown}
+	substrate := agentRunSubstrate{lifecycle: mgr, hbCtx: hbCtx, shutdown: ownershipShutdown}
 	ownerReg, staticOwnerHB, mutationClient, err := service.WireOwnership(hbCtx, natsClient, mgr, logger,
 		builtinProjectionContracts()...)
 	if err != nil {
@@ -963,7 +963,11 @@ type agentRunSubstrate struct {
 	ownerReg      *ownership.Registry
 	staticOwnerHB *ownership.Heartbeater
 	mutation      *projection.MutationClient
-	shutdown      func()
+	// hbCtx is the shutdown-cancellable heartbeat context WireOwnership bound
+	// the Phase-A heartbeater to; §11b's BindRulePackContracts uses it so the
+	// bind matches upstream's call shape exactly.
+	hbCtx    context.Context
+	shutdown func()
 }
 
 // builtinProjectionContracts declares the ADR-056 Decision-6 graph projection

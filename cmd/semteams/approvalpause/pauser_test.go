@@ -54,7 +54,7 @@ func newEvent(loopID string) *agentic.ApprovalPendingEvent {
 }
 
 // TestHandlePending_InheritAnchor: a loop carrying agent.run.entity-id (the inherit
-// anchor) gets agent.run.approval_pending stamped on that run entity, with the loop
+// anchor) gets agent.run.approval-pending stamped on that run entity, with the loop
 // entity as the navigable object.
 func TestHandlePending_InheritAnchor(t *testing.T) {
 	const runEntity = "c360.ops.agent.chain.execution.run-123"
@@ -96,11 +96,11 @@ func TestHandlePending_InheritAnchor(t *testing.T) {
 }
 
 // TestHandlePending_LineageFallback: a threaded loop carrying ONLY
-// lineage.run-loop-entity-id (no bare agent.run.entity-id) resolves via the Go-side
+// agent.lineage.run-loop-entity-id (no bare agent.run.entity-id) resolves via the Go-side
 // fallback — the precedence that rules 07/08 split across two files.
 func TestHandlePending_LineageFallback(t *testing.T) {
 	const runEntity = "c360.ops.agent.chain.execution.run-xyz"
-	reader := &fakeReader{triples: map[string]any{"lineage.run-loop-entity-id": runEntity}}
+	reader := &fakeReader{triples: map[string]any{"agent.lineage.run-loop-entity-id": runEntity}}
 	pub := &fakePublisher{}
 	p := NewPauser(reader, pub, testOrg, testPlatform)
 
@@ -119,8 +119,8 @@ func TestHandlePending_AnchorPrecedence(t *testing.T) {
 	const inherit = "c360.ops.agent.chain.execution.inherit-run"
 	const lineage = "c360.ops.agent.chain.execution.lineage-run"
 	reader := &fakeReader{triples: map[string]any{
-		agvocab.LoopRunEntityID:      inherit,
-		"lineage.run-loop-entity-id": lineage,
+		agvocab.LoopRunEntityID:            inherit,
+		"agent.lineage.run-loop-entity-id": lineage,
 	}}
 	pub := &fakePublisher{}
 	p := NewPauser(reader, pub, testOrg, testPlatform)
@@ -202,7 +202,7 @@ func TestHandlePending_ReaderError(t *testing.T) {
 }
 
 // TestHandleResponse_StampsResumed: an approval response on a run-anchored loop
-// stamps agent.run.approval_resumed on the run entity (4c PR-2). Approve, reject, and
+// stamps agent.run.approval-resumed on the run entity (4c PR-2). Approve, reject, and
 // modify all resume — the marker is decision-independent.
 func TestHandleResponse_StampsResumed(t *testing.T) {
 	const runEntity = "c360.ops.agent.chain.execution.run-r1"

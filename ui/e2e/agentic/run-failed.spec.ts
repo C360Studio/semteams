@@ -12,14 +12,14 @@ import { assertAnchorBornFirst, RUN_ANCHOR } from "./born_first";
  *
  *   research/08-loop-failed-pause   → chain.paused.marker on the planner loop
  *   research/09-loop-failed-run-outcome → agent.run.outcome=failed on the run
- *                                          entity (anchor agent.run.entity_id)
+ *                                          entity (anchor agent.run.entity-id)
  *   agent-run/04-executing-to-failed → executing→failed
  *
  * Why this proves rule 04 and NOT the upstream D3 zombie guard: D3 fires only
  * when the dispatch ROOT terminates while the run is still `dispatched`. Here
  * the dispatch coordinator completed successfully with a confirmed handoff
  * (the run is `executing`), and the NON-root planner loop is what fails. The
- * decisive assertion is agent.run.last_transition_from == "executing" — D3's
+ * decisive assertion is agent.run.last-transition-from == "executing" — D3's
  * path would record a from-phase of "dispatched".
  *
  * Required fixture: test/fixtures/journeys/run-failed.yaml
@@ -93,12 +93,12 @@ test.describe("ADR-053 Phase 4a′ — executing→failed run transition", () =>
 
     // -----------------------------------------------------------------
     // Step 4 — DECISIVE: the transition is executing→failed (rule 04), NOT
-    // D3's dispatched→failed. agent.run.last_transition_from records the
+    // D3's dispatched→failed. agent.run.last-transition-from records the
     // from-phase of the most recent transition (beta.103 REPLACEs it).
     // -----------------------------------------------------------------
     const fromPhases = await pollUntil(async () => {
       const triples = await fetchTriples(request, {
-        predicate: "agent.run.last_transition_from",
+        predicate: "agent.run.last-transition-from",
         limit: 20,
       });
       const objs = triples
@@ -108,7 +108,7 @@ test.describe("ADR-053 Phase 4a′ — executing→failed run transition", () =>
     }, { timeoutMs: 15_000 });
     expect(
       fromPhases,
-      "agent.run.last_transition_from missing on the run entity",
+      "agent.run.last-transition-from missing on the run entity",
     ).toBeTruthy();
     expect(
       fromPhases,
@@ -119,7 +119,7 @@ test.describe("ADR-053 Phase 4a′ — executing→failed run transition", () =>
     // -----------------------------------------------------------------
     // Step 4b — BORN-FIRST gate (ADR-055/056 must-exist flip, semteams#222).
     // research/09 stamps agent.run.outcome onto the run anchor via the
-    // agent.run.entity_id anchor. Prove that anchor was BORN-FIRST (by the
+    // agent.run.entity-id anchor. Prove that anchor was BORN-FIRST (by the
     // lifecycle Manager) and not auto-vivified by the marker: the same entity
     // must carry agent.run.phase. Fails under simulated auto-vivify (a stub
     // would carry only agent.run.outcome).

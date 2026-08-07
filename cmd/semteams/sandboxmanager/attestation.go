@@ -28,21 +28,26 @@ import (
 // the read side. Native typed-object triples avoid that class.
 const (
 	PredicateAttestationProfile             = "sandbox.attestation.profile"
-	PredicateAttestationImageDigest         = "sandbox.attestation.image_digest"
-	PredicateAttestationHostWorkspaceFolder = "sandbox.attestation.host_workspace_folder"
+	PredicateAttestationImageDigest         = "sandbox.attestation.image-digest"
+	PredicateAttestationHostWorkspaceFolder = "sandbox.attestation.host-workspace-folder"
 	PredicateAttestationReady               = "sandbox.attestation.ready"
-	PredicateAttestationAttestedAt          = "sandbox.attestation.attested_at"
+	PredicateAttestationAttestedAt          = "sandbox.attestation.attested-at"
 	PredicateAttestationDegraded            = "sandbox.attestation.degraded"
-	PredicateAttestationDegradedReasons     = "sandbox.attestation.degraded_reasons"
-	PredicateAttestationFailedProbes        = "sandbox.attestation.failed_probes"
-	PredicateAttestationVerifiedPrefix      = "sandbox.attestation.verified."
-	PredicateAttestationAdmission           = "sandbox.attestation.admission"
-	PredicateAttestationAdmissionReasons    = "sandbox.attestation.admission_reasons"
-	PredicateAttestationTerminal            = "sandbox.attestation.terminal"
-	PredicateAttestationTerminalReason      = "sandbox.attestation.terminal_reason"
-	PredicateAttestationRequirementsHash    = "sandbox.attestation.requirements_hash"
-	PredicateAttestationSignature           = "sandbox.attestation.signature"
-	PredicateAttestationTTL                 = "sandbox.attestation.ttl_seconds"
+	PredicateAttestationDegradedReasons     = "sandbox.attestation.degraded-reasons"
+	PredicateAttestationFailedProbes        = "sandbox.attestation.failed-probes"
+	// PredicateAttestationVerifiedPrefix + <kebab probe name> forms the
+	// per-capability predicate. The name rides in the THIRD segment
+	// (hyphen-joined, not dot-joined) so the stored predicate stays exactly
+	// three segments under the canonical predicate contract; probe names are
+	// sanitized to lower-kebab at stamp time (see kebabProbeName).
+	PredicateAttestationVerifiedPrefix   = "sandbox.attestation.verified-"
+	PredicateAttestationAdmission        = "sandbox.attestation.admission"
+	PredicateAttestationAdmissionReasons = "sandbox.attestation.admission-reasons"
+	PredicateAttestationTerminal         = "sandbox.attestation.terminal"
+	PredicateAttestationTerminalReason   = "sandbox.attestation.terminal-reason"
+	PredicateAttestationRequirementsHash = "sandbox.attestation.requirements-hash"
+	PredicateAttestationSignature        = "sandbox.attestation.signature"
+	PredicateAttestationTTL              = "sandbox.attestation.ttl-seconds"
 )
 
 // AttestationSource tags triples this package publishes. Distinct
@@ -94,7 +99,7 @@ type Attestation struct {
 	// HostWorkspaceFolder is the host-side path the manager invoked
 	// `devcontainer up --workspace-folder` with — the bind-mount root
 	// the materialized per-tenant container reads from. Stamped on the
-	// chain entity (`sandbox.attestation.host_workspace_folder`)
+	// chain entity (`sandbox.attestation.host-workspace-folder`)
 	// intended to be consumed by a forthcoming chain-scoped runner
 	// that routes subsequent bash commands INTO that container via
 	// `devcontainer exec --workspace-folder <wsf>`. Empty when
@@ -301,9 +306,9 @@ func AttestTerminalError(profile Profile, req SandboxRequirements, reason string
 // Triples renders the Attestation into graph triples stamped on
 // subjectEntityID. Returns an empty slice when subjectEntityID is
 // empty (manager has no chain entity to stamp on — e.g. in unit
-// tests). Verified.<name> entries become one triple each so
-// Coordinator can substitute `$entity.triple.sandbox.attestation.
-// verified.<name>` for the value.
+// tests). Verified[<name>] entries become one triple each so
+// Coordinator can substitute
+// `$entity.triple.sandbox.attestation.verified-<name>` for the value.
 func (a Attestation) Triples(subjectEntityID string) []message.Triple {
 	if subjectEntityID == "" {
 		return nil
@@ -353,7 +358,7 @@ func (a Attestation) Triples(subjectEntityID string) []message.Triple {
 	// Per-capability verified triples: sorted by name for stable
 	// graph order, which helps audit diffs. Skip entries with empty
 	// values — Coordinator substitution routes on
-	// $entity.triple.sandbox.attestation.verified.<name>; a
+	// $entity.triple.sandbox.attestation.verified-<name>; a
 	// silently-empty triple looks "present" to a presence check but
 	// resolves to "" in the spawn prompt (smoke #12 lesson — the
 	// substitution-silently-empty failure shape is the one to
@@ -368,7 +373,7 @@ func (a Attestation) Triples(subjectEntityID string) []message.Triple {
 		if v == "" {
 			continue
 		}
-		out = append(out, baseAttTriple(subjectEntityID, PredicateAttestationVerifiedPrefix+k, v, now))
+		out = append(out, baseAttTriple(subjectEntityID, PredicateAttestationVerifiedPrefix+kebabProbeName(k), v, now))
 	}
 	return out
 }
@@ -403,4 +408,30 @@ func failureReason(p ProbeResult) string {
 		return p.Err.Error()
 	}
 	return fmt.Sprintf("exit %d", p.ExitCode)
+}
+
+// kebabProbeName sanitizes a probe name into the lower-kebab charset the
+// canonical predicate contract requires for the third predicate segment:
+// lowercase, [a-z0-9-] only, no leading/trailing/doubled hyphens. Probe
+// names are operator-authored config, so this is a normalization, not a
+// validation — "Go_Toolchain" and "go-toolchain" stamp the same predicate.
+func kebabProbeName(name string) string {
+	var b []byte
+	for _, r := range strings.ToLower(name) {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+			b = append(b, byte(r))
+		default:
+			if len(b) > 0 && b[len(b)-1] != '-' {
+				b = append(b, '-')
+			}
+		}
+	}
+	for len(b) > 0 && b[len(b)-1] == '-' {
+		b = b[:len(b)-1]
+	}
+	if len(b) == 0 {
+		return "probe"
+	}
+	return string(b)
 }
