@@ -3,6 +3,7 @@ package approvalpause
 import (
 	"context"
 	"encoding/json"
+	agvocab "github.com/c360studio/semstreams/vocabulary/agentic"
 	"testing"
 	"time"
 
@@ -30,7 +31,7 @@ func newSubscriber(reader EntityTripleReader, pub TriplePublisher) *Subscriber {
 // category gate + payload unmarshal against the upstream marshaller.
 func TestHandlePendingMsg_ApprovalPending(t *testing.T) {
 	const runEntity = "c360.ops.agent.chain.execution.run-77"
-	reader := &fakeReader{triples: map[string]any{"agent.run.entity_id": runEntity}}
+	reader := &fakeReader{triples: map[string]any{agvocab.LoopRunEntityID: runEntity}}
 	pub := &fakePublisher{}
 	sub := newSubscriber(reader, pub)
 
@@ -52,7 +53,7 @@ func TestHandlePendingMsg_ApprovalPending(t *testing.T) {
 // drives the resume half — stamps agent.run.approval_resumed (4c PR-2).
 func TestHandleResponseMsg_ApprovalResponse(t *testing.T) {
 	const runEntity = "c360.ops.agent.chain.execution.run-88"
-	reader := &fakeReader{triples: map[string]any{"agent.run.entity_id": runEntity}}
+	reader := &fakeReader{triples: map[string]any{agvocab.LoopRunEntityID: runEntity}}
 	pub := &fakePublisher{}
 	sub := newSubscriber(reader, pub)
 
@@ -76,7 +77,7 @@ func TestHandleResponseMsg_ApprovalResponse(t *testing.T) {
 // pending wildcard is ignored (no read, no write). Cross-channel guard — the
 // response category must NOT trigger the pending handler.
 func TestHandlePendingMsg_SkipsOtherCategory(t *testing.T) {
-	reader := &fakeReader{triples: map[string]any{"agent.run.entity_id": "x"}}
+	reader := &fakeReader{triples: map[string]any{agvocab.LoopRunEntityID: "x"}}
 	pub := &fakePublisher{}
 	sub := newSubscriber(reader, pub)
 
@@ -94,7 +95,7 @@ func TestHandlePendingMsg_SkipsOtherCategory(t *testing.T) {
 // TestHandleResponseMsg_SkipsOtherCategory: the response handler ignores a
 // pending-category envelope (the reverse cross-channel guard).
 func TestHandleResponseMsg_SkipsOtherCategory(t *testing.T) {
-	reader := &fakeReader{triples: map[string]any{"agent.run.entity_id": "x"}}
+	reader := &fakeReader{triples: map[string]any{agvocab.LoopRunEntityID: "x"}}
 	pub := &fakePublisher{}
 	sub := newSubscriber(reader, pub)
 

@@ -100,3 +100,8 @@ func TestEmitResearchArtifactExecutorImplementsToolExecutor(t *testing.T) {
 	t.Parallel()
 	var _ agentictools.ToolExecutor = (*emitartifact.Executor)(nil)
 }
+
+// CreateEntityWithTriples satisfies beta.159's widened TriplePublisher.
+func (nopTriplePublisher) CreateEntityWithTriples(context.Context, string, message.Type, []message.Triple) error {
+	return nil
+}

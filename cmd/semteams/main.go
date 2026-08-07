@@ -149,11 +149,28 @@ func run() error {
 	// on first call. Both managers thread into the tool/preprocessor wiring.
 	personaMgr, flowTemplateMgr := seedKVCorpora(ctx, natsClient, cliCfg.PersonaFragmentsPath, cliCfg.PersonaOverlayPath, cliCfg.FlowTemplatesPath)
 
-	// 9c–9f. Build + register tool executors, start the evidence preprocessor
+	// 9c. Wire the agent-run substrate: the shared Lifecycle harness Manager +
+	// agent-run workflow (ADR-053 Phase 1) + the MilestoneSubscriber (Phase 4a D3
+	// terminal authority), all under the ADR-058 ownership substrate (Phase-A
+	// WireOwnership + Phase-B OwnershipService/MilestoneService). Runs BEFORE
+	// setupToolsAndPreprocessor because beta.159's WireOwnership returns the
+	// static projection MutationClient that executors.RegisterBuiltins threads
+	// into the builtin graph-writing tools — same order as upstream
+	// cmd/semstreams/main.go (ADR-029). The shutdown func is deferred BEFORE the
+	// error check so a failed boot still cancels+joins the Phase-A heartbeater;
+	// LIFO places it before natsClient.Close (gh#279) — load-bearing for the
+	// owner-token write-lease fence (ADR-056). See the helper.
+	substrate, err := wireAgentRunSubstrate(ctx, manager, natsClient, platform, metricsRegistry, logger)
+	defer substrate.shutdown()
+	if err != nil {
+		return err
+	}
+
+	// 9d–9g. Build + register tool executors, start the evidence preprocessor
 	// (ADR-036 §Phase 2), and start the chain-pause subscriber (ADR-037 v1).
 	// Extracted to keep run() under revive's function-length threshold while
 	// keeping the ordering invariant: tools before svcDeps, preprocessors after.
-	toolRegistry, chainPauseHTTP, err := setupToolsAndPreprocessor(ctx, cfg, natsClient, platform, configManager, componentRegistry, personaMgr, flowTemplateMgr, metricsRegistry, slog.Default())
+	toolRegistry, chainPauseHTTP, err := setupToolsAndPreprocessor(ctx, cfg, natsClient, platform, configManager, componentRegistry, personaMgr, flowTemplateMgr, metricsRegistry, substrate.mutation, slog.Default())
 	if err != nil {
 		return err
 	}
@@ -173,20 +190,10 @@ func run() error {
 	svcDeps := createServiceDependencies(natsClient, metricsRegistry, logger, platform, configManager, componentRegistry)
 	svcDeps.ToolRegistry = toolRegistry
 	svcDeps.PayloadRegistry = payloadReg
-
-	// 10a. Wire the agent-run substrate: the shared Lifecycle harness Manager +
-	// agent-run workflow (ADR-053 Phase 1) + the MilestoneSubscriber (Phase 4a D3
-	// terminal authority), all under the ADR-058 ownership substrate (Phase-A
-	// WireOwnership + Phase-B OwnershipService/MilestoneService). Must run before
-	// configureAndCreateServices so the rule processor factory installs the manager
-	// via SetLifecycleManager. ownershipShutdown is deferred so its cancel+join
-	// releases OWNER_PRESENCE before natsClient.Close (LIFO, gh#279) — load-bearing
-	// for the owner-token write-lease fence (ADR-056). See the helper.
-	ownerReg, staticOwnerHB, ownershipShutdown, err := wireAgentRunSubstrate(ctx, svcDeps, manager, natsClient, platform, metricsRegistry, logger)
-	if err != nil {
-		return err
-	}
-	defer ownershipShutdown()
+	// The Lifecycle harness Manager was built in 9c (wireAgentRunSubstrate);
+	// thread it here so the rule processor factory installs it via
+	// SetLifecycleManager during configureAndCreateServices.
+	svcDeps.LifecycleManager = substrate.lifecycle
 
 	// 11. Configure and create services
 	if err := configureAndCreateServices(cfg, manager, svcDeps); err != nil {
@@ -207,7 +214,7 @@ func run() error {
 	// ownerReg (bucket bootstrap failed → no-op), so the call is unconditional.
 	// Uses ctx (not hbCtx): the bind is boot-synchronous, completing before any
 	// shutdown could cancel hbCtx — equivalent to upstream §11b (ADR-029).
-	service.BindRulePackContracts(ctx, manager, ownerReg, staticOwnerHB, logger)
+	service.BindRulePackContracts(ctx, manager, substrate.ownerReg, substrate.staticOwnerHB, logger)
 
 	// 12. Register product HTTP middleware. Per beta.23: must run before
 	// StartAll, since the framework reads the chain at server boot. The
@@ -244,6 +251,7 @@ func setupToolsAndPreprocessor(
 	personaMgr *persona.Manager,
 	flowTemplateMgr *flowtemplate.Manager,
 	metricsRegistry *metric.MetricsRegistry,
+	mutationClient *projection.MutationClient,
 	logger *slog.Logger,
 ) (*agentictools.ExecutorRegistry, *chainpause.HTTPHandler, error) {
 	// 9c. First-party tool executors. Pattern-B tools (create_rule, etc.)
@@ -267,6 +275,7 @@ func setupToolsAndPreprocessor(
 	toolRegistry := agentictools.NewExecutorRegistry()
 	if err := executors.RegisterBuiltins(ctx, toolRegistry, executors.ToolDependencies{
 		NATSClient:              natsClient,
+		MutationClient:          mutationClient,
 		Platform:                platform,
 		Logger:                  logger,
 		RuleManager:             buildRuleManager(ctx, natsClient, configManager, logger),
@@ -891,34 +900,40 @@ func seedKVCorpora(ctx context.Context, natsClient *natsclient.Client, personaRo
 // writes; graph-ingest's enforce_owner_lease gate then protects the rule-pack
 // producer from a stale/superseded incarnation (its cached token fails the
 // live-lease check). The clean cancel+join is load-bearing for that fence — hence
-// the returned ownershipShutdown func, which run() MUST defer so (by LIFO) it
-// releases OWNER_PRESENCE before natsClient.Close (gh#279).
+// the returned shutdown func, which run() MUST defer (BEFORE checking err, so a
+// failed boot still joins the Phase-A heartbeater) so (by LIFO) it releases
+// OWNER_PRESENCE before natsClient.Close (gh#279).
 //
-// Returns the ownership Registry + static-owner Heartbeater (for the §11b
-// rule-pack bind; both nil when bucket bootstrap fails — bind is then a no-op)
-// + the ownership shutdown func (always non-nil; run() defers it).
-func wireAgentRunSubstrate(ctx context.Context, svcDeps *service.Dependencies, manager *service.Manager, natsClient *natsclient.Client, platform types.PlatformMeta, metricsRegistry *metric.MetricsRegistry, logger *slog.Logger) (*ownership.Registry, *ownership.Heartbeater, func(), error) {
+// beta.159: WireOwnership is FAIL-CLOSED — it returns an error (aborting boot)
+// instead of the old nil,nil best-effort degrade, and additionally returns the
+// static projection MutationClient that executors.RegisterBuiltins threads into
+// the builtin graph-writing tools. Mirrors upstream cmd/semstreams/main.go.
+//
+// The returned substrate's shutdown func is always non-nil, even on error.
+func wireAgentRunSubstrate(ctx context.Context, manager *service.Manager, natsClient *natsclient.Client, platform types.PlatformMeta, metricsRegistry *metric.MetricsRegistry, logger *slog.Logger) (agentRunSubstrate, error) {
 	mgr := lifecycle.NewManager(natsClient, logger)
-	svcDeps.LifecycleManager = mgr
 
-	// ADR-058 Phase A — ownership buckets + Registry + the static loop-execution
-	// projection contract + the Manager-internal heartbeater, all under a
-	// shutdown-cancellable hbCtx. WireOwnershipShutdown returns the cancel+join the
-	// caller defers (LIFO → before natsClient.Close, gh#279); WireOwnership returns
-	// nil,nil on bucket-bootstrap failure (ownership disabled this boot —
-	// best-effort, never a boot gate). EnsureBuckets is EAGER inside WireOwnership,
-	// not in graph-ingest (which boots after configureAndCreateServices below).
-	// Mirrors upstream cmd/semstreams/main.go §10b (ADR-029).
+	// ADR-058 Phase A — ownership buckets + Registry + the static builtin
+	// projection contracts + the Manager-internal heartbeater, all under a
+	// shutdown-cancellable hbCtx. WireOwnershipShutdown returns the cancel+join
+	// the caller defers (LIFO → before natsClient.Close, gh#279). EnsureBuckets is
+	// EAGER inside WireOwnership, not in graph-ingest (which boots after
+	// configureAndCreateServices). Mirrors upstream cmd/semstreams/main.go §9
+	// (ADR-029).
 	hbCtx, ownershipShutdown := service.WireOwnershipShutdown(ctx, mgr)
-	ownerReg, staticOwnerHB := service.WireOwnership(hbCtx, natsClient, mgr, logger,
-		loopExecutionProjectionContract())
+	substrate := agentRunSubstrate{lifecycle: mgr, shutdown: ownershipShutdown}
+	ownerReg, staticOwnerHB, mutationClient, err := service.WireOwnership(hbCtx, natsClient, mgr, logger,
+		builtinProjectionContracts()...)
+	if err != nil {
+		return substrate, fmt.Errorf("wire ownership: %w", err)
+	}
+	substrate.ownerReg, substrate.staticOwnerHB, substrate.mutation = ownerReg, staticOwnerHB, mutationClient
 	// ADR-058 Phase B — the static loop-execution heartbeater goroutine runs under
-	// the ServiceManager's ordered shutdown. NewOwnershipService is nil-safe: a nil
-	// registry (ownership disabled this boot) runs idle.
+	// the ServiceManager's ordered shutdown.
 	manager.RegisterInstance("ownership", service.NewOwnershipService(ownerReg, staticOwnerHB, metricsRegistry, logger))
 
 	if err := agentrun.Register(mgr); err != nil {
-		return ownerReg, staticOwnerHB, ownershipShutdown, fmt.Errorf("register agent-run workflow: %w", err)
+		return substrate, fmt.Errorf("register agent-run workflow: %w", err)
 	}
 
 	// ADR-053 Phase 4a / ADR-058 Phase B — the agent-run MilestoneSubscriber (D3
@@ -934,26 +949,39 @@ func wireAgentRunSubstrate(ctx context.Context, svcDeps *service.Dependencies, m
 	manager.RegisterInstance("milestone", service.NewMilestoneService(sub, natsClient,
 		agentrun.StartConfig{StreamName: agentrun.AgentStreamName}, logger))
 
-	return ownerReg, staticOwnerHB, ownershipShutdown, nil
+	return substrate, nil
 }
 
-// loopExecutionProjectionContract declares the ADR-056 Decision-6 graph
-// projection contract for the loop-execution entity: the agentic-loop graph
-// writer owns the spawn-identity origin predicates on every loop-execution
-// entity (replace-owned mode). Registered through pkg/projection so the claim
-// DERIVES from the contract rather than a hand-maintained ownership slice
-// (Decision 6). Observe-only on this tag — the claim surfaces overlaps but does
-// not yet gate writes. Mirrors upstream cmd/semstreams/main.go
-// loopExecutionProjectionContract verbatim (ADR-029); a reader diffing against
-// upstream should treat it as the same declaration.
-func loopExecutionProjectionContract() projection.Contract {
-	return projection.Contract{
-		Name:          "agentic.loop-execution",
-		MessageType:   agentic.LoopExecutionMessageType().Key(),
-		EntityPattern: "*.*.agent.agentic-loop.execution.*",
-		Groups: []projection.PredicateGroup{{
-			Mode: ownership.ModeReplaceOwned,
-			Predicates: []string{
+// agentRunSubstrate bundles what wireAgentRunSubstrate hands back to run():
+// the Lifecycle harness Manager (threaded into svcDeps at §10), the ownership
+// Registry + static-owner Heartbeater (for the §11b rule-pack bind), the static
+// projection MutationClient (threaded into executors.RegisterBuiltins at §9d),
+// and the ownership shutdown func (always non-nil; run() defers it before the
+// error check).
+type agentRunSubstrate struct {
+	lifecycle     *lifecycle.Manager
+	ownerReg      *ownership.Registry
+	staticOwnerHB *ownership.Heartbeater
+	mutation      *projection.MutationClient
+	shutdown      func()
+}
+
+// builtinProjectionContracts declares the ADR-056 Decision-6 graph projection
+// contracts for the built-in agentic writers: spawn-identity origin predicates
+// are BirthPredicates on the loop-execution entity, the write_todos projection
+// is the replace-owned "todos" group, and the lesson-record contract covers the
+// agentic lesson writer. Registered through pkg/projection so the claim DERIVES
+// from the contract rather than a hand-maintained ownership slice (Decision 6).
+// Mirrors upstream internal/builtinprojection.Contracts() verbatim (the package
+// is internal, so per ADR-029 the product shell carries its own copy); a reader
+// diffing against upstream should treat it as the same declaration.
+func builtinProjectionContracts() []projection.Contract {
+	return []projection.Contract{
+		{
+			Name:          "agentic.loop-execution",
+			MessageType:   agentic.LoopExecutionMessageType().Key(),
+			EntityPattern: "*.*.agent.agentic-loop.execution.*",
+			BirthPredicates: []string{
 				agvocab.LoopRole,
 				agvocab.LoopTask,
 				agvocab.LoopParent,
@@ -965,7 +993,45 @@ func loopExecutionProjectionContract() projection.Contract {
 				agvocab.LoopUser,
 				agvocab.LoopDescription,
 			},
-		}},
+			Groups: []projection.PredicateGroup{{
+				Name: "todos",
+				Mode: ownership.ModeReplaceOwned,
+				Predicates: []string{
+					agvocab.TodoID,
+					agvocab.TodoContent,
+					agvocab.TodoStatus,
+					agvocab.TodoPosition,
+					agvocab.TodoUpdatedAt,
+				},
+			}},
+		},
+		{
+			Name:          "agentic.lesson-record",
+			MessageType:   agentic.AgentLessonMessageType().Key(),
+			EntityPattern: "*.*.agent.lesson.record.*",
+			BirthPredicates: []string{
+				agvocab.LessonCategory,
+				agvocab.LessonPolarity,
+				agvocab.LessonSeverity,
+				agvocab.LessonCreatedAt,
+				agvocab.LessonSummary,
+				agvocab.LessonDetail,
+				agvocab.LessonInjectionForm,
+				agvocab.LessonEvidence,
+				agvocab.LessonAppliesTo,
+				agvocab.LessonObservedRole,
+				agvocab.ActionExecutedBy,
+			},
+			Groups: []projection.PredicateGroup{{
+				Name: "lesson-lifecycle",
+				Mode: ownership.ModeReplaceOwned,
+				Predicates: []string{
+					agvocab.LessonStatus,
+					agvocab.LessonSupersededBy,
+					agvocab.LessonRetiredAt,
+				},
+			}},
+		},
 	}
 }
 

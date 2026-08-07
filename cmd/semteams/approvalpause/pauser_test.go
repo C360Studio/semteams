@@ -3,6 +3,7 @@ package approvalpause
 import (
 	"context"
 	"errors"
+	agvocab "github.com/c360studio/semstreams/vocabulary/agentic"
 	"testing"
 
 	"github.com/c360studio/semstreams/agentic"
@@ -52,12 +53,12 @@ func newEvent(loopID string) *agentic.ApprovalPendingEvent {
 	}
 }
 
-// TestHandlePending_InheritAnchor: a loop carrying agent.run.entity_id (the inherit
+// TestHandlePending_InheritAnchor: a loop carrying agent.run.entity-id (the inherit
 // anchor) gets agent.run.approval_pending stamped on that run entity, with the loop
 // entity as the navigable object.
 func TestHandlePending_InheritAnchor(t *testing.T) {
 	const runEntity = "c360.ops.agent.chain.execution.run-123"
-	reader := &fakeReader{triples: map[string]any{"agent.run.entity_id": runEntity}}
+	reader := &fakeReader{triples: map[string]any{agvocab.LoopRunEntityID: runEntity}}
 	pub := &fakePublisher{}
 	p := NewPauser(reader, pub, testOrg, testPlatform)
 
@@ -95,7 +96,7 @@ func TestHandlePending_InheritAnchor(t *testing.T) {
 }
 
 // TestHandlePending_LineageFallback: a threaded loop carrying ONLY
-// lineage.run-loop-entity-id (no bare agent.run.entity_id) resolves via the Go-side
+// lineage.run-loop-entity-id (no bare agent.run.entity-id) resolves via the Go-side
 // fallback — the precedence that rules 07/08 split across two files.
 func TestHandlePending_LineageFallback(t *testing.T) {
 	const runEntity = "c360.ops.agent.chain.execution.run-xyz"
@@ -113,12 +114,12 @@ func TestHandlePending_LineageFallback(t *testing.T) {
 }
 
 // TestHandlePending_AnchorPrecedence: when BOTH anchors are present the inherit
-// anchor (agent.run.entity_id) wins — same precedence as runanchor.ChainEntityID.
+// anchor (agent.run.entity-id) wins — same precedence as runanchor.ChainEntityID.
 func TestHandlePending_AnchorPrecedence(t *testing.T) {
 	const inherit = "c360.ops.agent.chain.execution.inherit-run"
 	const lineage = "c360.ops.agent.chain.execution.lineage-run"
 	reader := &fakeReader{triples: map[string]any{
-		"agent.run.entity_id":        inherit,
+		agvocab.LoopRunEntityID:      inherit,
 		"lineage.run-loop-entity-id": lineage,
 	}}
 	pub := &fakePublisher{}
@@ -210,7 +211,7 @@ func TestHandleResponse_StampsResumed(t *testing.T) {
 		agentic.ApprovalDecisionReject,
 		agentic.ApprovalDecisionModify,
 	} {
-		reader := &fakeReader{triples: map[string]any{"agent.run.entity_id": runEntity}}
+		reader := &fakeReader{triples: map[string]any{agvocab.LoopRunEntityID: runEntity}}
 		pub := &fakePublisher{}
 		p := NewPauser(reader, pub, testOrg, testPlatform)
 
@@ -293,7 +294,7 @@ func TestHandleResponse_ReaderError(t *testing.T) {
 // TestHandlePending_PublisherError: a triple-write failure surfaces as a wrapped
 // error with Stamped=false.
 func TestHandlePending_PublisherError(t *testing.T) {
-	reader := &fakeReader{triples: map[string]any{"agent.run.entity_id": "c360.ops.agent.chain.execution.run-1"}}
+	reader := &fakeReader{triples: map[string]any{agvocab.LoopRunEntityID: "c360.ops.agent.chain.execution.run-1"}}
 	pub := &fakePublisher{err: errors.New("nats down")}
 	p := NewPauser(reader, pub, testOrg, testPlatform)
 

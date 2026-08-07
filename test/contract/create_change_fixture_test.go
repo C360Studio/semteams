@@ -143,3 +143,9 @@ func allFixtureToolCallArgs(t *testing.T, path, toolName string) []map[string]an
 	}
 	return out
 }
+
+// CreateEntityWithTriples satisfies beta.159's widened TriplePublisher;
+// the fake delegates to AddTriplesBatch so recording semantics are identical.
+func (p *recordingPublisher) CreateEntityWithTriples(ctx context.Context, _ string, _ message.Type, triples []message.Triple) error {
+	return p.AddTriplesBatch(ctx, triples)
+}

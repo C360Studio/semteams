@@ -147,3 +147,9 @@ func TestExecutor_CapMinimum(t *testing.T) {
 		t.Errorf("expected error when cap < 1")
 	}
 }
+
+// CreateEntityWithTriples satisfies beta.159's widened TriplePublisher;
+// the fake delegates to AddTriplesBatch so recording semantics are identical.
+func (f *fakePub) CreateEntityWithTriples(ctx context.Context, _ string, _ message.Type, triples []message.Triple) error {
+	return f.AddTriplesBatch(ctx, triples)
+}

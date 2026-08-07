@@ -338,3 +338,9 @@ func TestManagerSecretEnv_NamesOnly(t *testing.T) {
 		t.Fatalf("expected empty sentinel value (Runner resolves at exec), got %q", env["OPENAI_API_KEY"])
 	}
 }
+
+// CreateEntityWithTriples satisfies beta.159's widened TriplePublisher;
+// the fake delegates to AddTriplesBatch so recording semantics are identical.
+func (p *fakePublisher) CreateEntityWithTriples(ctx context.Context, _ string, _ message.Type, triples []message.Triple) error {
+	return p.AddTriplesBatch(ctx, triples)
+}

@@ -25,22 +25,24 @@
     },
     "enable_graph_integration": {
       "type": "boolean",
-      "description": "Enable graph entity creation from rules",
-      "default": true,
+      "description": "Enable graph entity creation from rules; every rule processor requires an explicit pack_id",
+      "default": false,
       "category": "basic"
     },
     "entity_watch_buckets": {
       "type": "object",
-      "description": "Map of bucket names to watch patterns for multi-bucket observability",
-      "category": "advanced"
-    },
-    "entity_watch_patterns": {
-      "type": "array",
-      "description": "NATS KV patterns to watch for entity changes (e.g. 'telemetry.robotics.\u003e')",
-      "items": {
-        "type": "string"
-      },
-      "category": "advanced"
+      "description": "ENTITY_STATES watch patterns for the rule processor's typed EntityState evaluator.",
+      "category": "advanced",
+      "properties": {
+        "ENTITY_STATES": {
+          "type": "array",
+          "description": "Exact six-position entity ID patterns.",
+          "items": {
+            "type": "string",
+            "description": "Exact six-position entity ID pattern; each position is a canonical literal segment or *."
+          }
+        }
+      }
     },
     "inline_rules": {
       "type": "array",
@@ -65,6 +67,10 @@
                   "type": "string",
                   "description": "bucket"
                 },
+                "filesystem_policy": {
+                  "type": "string",
+                  "description": "filesystem_policy"
+                },
                 "for_each": {
                   "type": "string",
                   "description": "for_each"
@@ -80,6 +86,10 @@
                 "key": {
                   "type": "string",
                   "description": "key"
+                },
+                "loop_max_iterations": {
+                  "type": "string",
+                  "description": "Iteration budget for the SPAWNED LOOP (agentic-loop's per-iteration cap on the agent this action spawns) — distinct from the action-level firing cap 'max_iterations' above, which bounds how many times this action itself fires. Supports variable substitution (literal or $entity.triple.* reference); must resolve to a positive integer or the action fails."
                 },
                 "max_iterations": {
                   "type": "number",
@@ -108,6 +118,14 @@
                 "predicate": {
                   "type": "string",
                   "description": "predicate"
+                },
+                "projection_contract": {
+                  "type": "string",
+                  "description": "projection_contract"
+                },
+                "projection_group": {
+                  "type": "string",
+                  "description": "projection_group"
                 },
                 "prompt": {
                   "type": "string",
@@ -154,6 +172,13 @@
                 "run_scope": {
                   "type": "string",
                   "description": "run_scope"
+                },
+                "scratch_paths": {
+                  "type": "array",
+                  "description": "scratch_paths",
+                  "items": {
+                    "type": "string"
+                  }
                 },
                 "set": {
                   "type": "object",
@@ -283,16 +308,22 @@
             "properties": {
               "pattern": {
                 "type": "string",
-                "description": "pattern"
+                "description": "Exact six-position entity ID pattern; each position is a canonical literal segment or *."
               },
               "watch_buckets": {
                 "type": "array",
-                "description": "watch_buckets",
+                "description": "Typed state buckets consumed by this EntityState evaluator; only ENTITY_STATES is supported.",
                 "items": {
-                  "type": "string"
+                  "type": "string",
+                  "enum": [
+                    "ENTITY_STATES"
+                  ]
                 }
               }
-            }
+            },
+            "required": [
+              "pattern"
+            ]
           },
           "fire_every_n_events": {
             "type": "number",
@@ -335,6 +366,10 @@
                   "type": "string",
                   "description": "bucket"
                 },
+                "filesystem_policy": {
+                  "type": "string",
+                  "description": "filesystem_policy"
+                },
                 "for_each": {
                   "type": "string",
                   "description": "for_each"
@@ -350,6 +385,10 @@
                 "key": {
                   "type": "string",
                   "description": "key"
+                },
+                "loop_max_iterations": {
+                  "type": "string",
+                  "description": "Iteration budget for the SPAWNED LOOP (agentic-loop's per-iteration cap on the agent this action spawns) — distinct from the action-level firing cap 'max_iterations' above, which bounds how many times this action itself fires. Supports variable substitution (literal or $entity.triple.* reference); must resolve to a positive integer or the action fails."
                 },
                 "max_iterations": {
                   "type": "number",
@@ -378,6 +417,14 @@
                 "predicate": {
                   "type": "string",
                   "description": "predicate"
+                },
+                "projection_contract": {
+                  "type": "string",
+                  "description": "projection_contract"
+                },
+                "projection_group": {
+                  "type": "string",
+                  "description": "projection_group"
                 },
                 "prompt": {
                   "type": "string",
@@ -424,6 +471,13 @@
                 "run_scope": {
                   "type": "string",
                   "description": "run_scope"
+                },
+                "scratch_paths": {
+                  "type": "array",
+                  "description": "scratch_paths",
+                  "items": {
+                    "type": "string"
+                  }
                 },
                 "set": {
                   "type": "object",
@@ -523,6 +577,10 @@
                   "type": "string",
                   "description": "bucket"
                 },
+                "filesystem_policy": {
+                  "type": "string",
+                  "description": "filesystem_policy"
+                },
                 "for_each": {
                   "type": "string",
                   "description": "for_each"
@@ -538,6 +596,10 @@
                 "key": {
                   "type": "string",
                   "description": "key"
+                },
+                "loop_max_iterations": {
+                  "type": "string",
+                  "description": "Iteration budget for the SPAWNED LOOP (agentic-loop's per-iteration cap on the agent this action spawns) — distinct from the action-level firing cap 'max_iterations' above, which bounds how many times this action itself fires. Supports variable substitution (literal or $entity.triple.* reference); must resolve to a positive integer or the action fails."
                 },
                 "max_iterations": {
                   "type": "number",
@@ -566,6 +628,14 @@
                 "predicate": {
                   "type": "string",
                   "description": "predicate"
+                },
+                "projection_contract": {
+                  "type": "string",
+                  "description": "projection_contract"
+                },
+                "projection_group": {
+                  "type": "string",
+                  "description": "projection_group"
                 },
                 "prompt": {
                   "type": "string",
@@ -612,6 +682,13 @@
                 "run_scope": {
                   "type": "string",
                   "description": "run_scope"
+                },
+                "scratch_paths": {
+                  "type": "array",
+                  "description": "scratch_paths",
+                  "items": {
+                    "type": "string"
+                  }
                 },
                 "set": {
                   "type": "object",
@@ -711,6 +788,10 @@
                   "type": "string",
                   "description": "bucket"
                 },
+                "filesystem_policy": {
+                  "type": "string",
+                  "description": "filesystem_policy"
+                },
                 "for_each": {
                   "type": "string",
                   "description": "for_each"
@@ -726,6 +807,10 @@
                 "key": {
                   "type": "string",
                   "description": "key"
+                },
+                "loop_max_iterations": {
+                  "type": "string",
+                  "description": "Iteration budget for the SPAWNED LOOP (agentic-loop's per-iteration cap on the agent this action spawns) — distinct from the action-level firing cap 'max_iterations' above, which bounds how many times this action itself fires. Supports variable substitution (literal or $entity.triple.* reference); must resolve to a positive integer or the action fails."
                 },
                 "max_iterations": {
                   "type": "number",
@@ -754,6 +839,14 @@
                 "predicate": {
                   "type": "string",
                   "description": "predicate"
+                },
+                "projection_contract": {
+                  "type": "string",
+                  "description": "projection_contract"
+                },
+                "projection_group": {
+                  "type": "string",
+                  "description": "projection_group"
                 },
                 "prompt": {
                   "type": "string",
@@ -800,6 +893,13 @@
                 "run_scope": {
                   "type": "string",
                   "description": "run_scope"
+                },
+                "scratch_paths": {
+                  "type": "array",
+                  "description": "scratch_paths",
+                  "items": {
+                    "type": "string"
+                  }
                 },
                 "set": {
                   "type": "object",
@@ -918,6 +1018,10 @@
                   "type": "string",
                   "description": "bucket"
                 },
+                "filesystem_policy": {
+                  "type": "string",
+                  "description": "filesystem_policy"
+                },
                 "for_each": {
                   "type": "string",
                   "description": "for_each"
@@ -933,6 +1037,10 @@
                 "key": {
                   "type": "string",
                   "description": "key"
+                },
+                "loop_max_iterations": {
+                  "type": "string",
+                  "description": "Iteration budget for the SPAWNED LOOP (agentic-loop's per-iteration cap on the agent this action spawns) — distinct from the action-level firing cap 'max_iterations' above, which bounds how many times this action itself fires. Supports variable substitution (literal or $entity.triple.* reference); must resolve to a positive integer or the action fails."
                 },
                 "max_iterations": {
                   "type": "number",
@@ -961,6 +1069,14 @@
                 "predicate": {
                   "type": "string",
                   "description": "predicate"
+                },
+                "projection_contract": {
+                  "type": "string",
+                  "description": "projection_contract"
+                },
+                "projection_group": {
+                  "type": "string",
+                  "description": "projection_group"
                 },
                 "prompt": {
                   "type": "string",
@@ -1007,6 +1123,13 @@
                 "run_scope": {
                   "type": "string",
                   "description": "run_scope"
+                },
+                "scratch_paths": {
+                  "type": "array",
+                  "description": "scratch_paths",
+                  "items": {
+                    "type": "string"
+                  }
                 },
                 "set": {
                   "type": "object",
@@ -1095,20 +1218,27 @@
     },
     "pack_id": {
       "type": "string",
-      "description": "owner = rule-pack.\u003cpack_id\u003e",
-      "category": "advanced"
+      "description": "Required stable rule-pack projection owner and graph-event producer identity",
+      "category": "basic"
     },
     "ports": {
       "type": "string",
-      "description": "Port configuration for inputs (KV watch: ENTITY_STATES PREDICATE_INDEX) and outputs (NATS: control commands)",
+      "description": "Port configuration for ENTITY_STATES and message inputs plus action outputs",
       "category": "basic"
     },
     "projection_contracts": {
       "type": "array",
-      "description": "projection_contracts",
+      "description": "Optional explicit projection authorization superset; omit to derive minimal replace-owned groups and statically provable entity scope from initial actions. Birth predicates foreign edges indexing profile and message type are explicit-only",
       "items": {
         "type": "object",
         "properties": {
+          "birth_predicates": {
+            "type": "array",
+            "description": "birth_predicates",
+            "items": {
+              "type": "string"
+            }
+          },
           "entity_pattern": {
             "type": "string",
             "description": "entity_pattern"
@@ -1143,6 +1273,10 @@
                 "mode": {
                   "type": "string",
                   "description": "mode"
+                },
+                "name": {
+                  "type": "string",
+                  "description": "name"
                 },
                 "predicates": {
                   "type": "array",
@@ -1186,9 +1320,21 @@
         "type": "string"
       },
       "category": "basic"
+    },
+    "startup_attempts": {
+      "type": "number",
+      "description": "Max attempts to wait for ENTITY_STATES at startup",
+      "category": "advanced"
+    },
+    "startup_interval_ms": {
+      "type": "number",
+      "description": "Interval between startup attempts in milliseconds",
+      "category": "advanced"
     }
   },
-  "required": [],
+  "required": [
+    "pack_id"
+  ],
   "x-component-metadata": {
     "name": "rule-processor",
     "type": "processor",

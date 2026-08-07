@@ -466,6 +466,11 @@ paths:
                   description: 'Maximum number of entries to return (default: 100, max: 1000)'
                   schema:
                     type: integer
+                - name: status
+                  in: query
+                  description: 'Opt-in filter: keep only records whose top-level JSON ''status'' equals this (e.g. ''failed'' over EMBEDDING_INDEX for per-entity failure forensics). Empty (default) returns all records.'
+                  schema:
+                    type: string
             responses:
                 "200":
                     description: KV bucket entries
@@ -1299,16 +1304,14 @@ components:
                 schema:
                     description: Component configuration schema
                     oneOf:
-                        - $ref: ../schemas/a2a-adapter.v1.json
                         - $ref: ../schemas/agentic-dispatch.v1.json
                         - $ref: ../schemas/agentic-governance.v1.json
                         - $ref: ../schemas/agentic-loop.v1.json
                         - $ref: ../schemas/agentic-model.v1.json
                         - $ref: ../schemas/agentic-tools.v1.json
-                        - $ref: ../schemas/directory-bridge.v1.json
                         - $ref: ../schemas/file.v1.json
                         - $ref: ../schemas/file_input.v1.json
-                        - $ref: ../schemas/github_webhook.v1.json
+                        - $ref: ../schemas/gated-dag.v1.json
                         - $ref: ../schemas/graph-clustering.v1.json
                         - $ref: ../schemas/graph-embedding.v1.json
                         - $ref: ../schemas/graph-gateway.v1.json
@@ -1323,16 +1326,8 @@ components:
                         - $ref: ../schemas/json_generic.v1.json
                         - $ref: ../schemas/json_map.v1.json
                         - $ref: ../schemas/lifecycle-gateway.v1.json
-                        - $ref: ../schemas/oasf-generator.v1.json
                         - $ref: ../schemas/objectstore.v1.json
-                        - $ref: ../schemas/otel-exporter.v1.json
-                        - $ref: ../schemas/research-graph-assess.v1.json
-                        - $ref: ../schemas/research-graph-classify.v1.json
-                        - $ref: ../schemas/research-graph-execute.v1.json
-                        - $ref: ../schemas/research-graph-route.v1.json
-                        - $ref: ../schemas/research-graph-synthesize.v1.json
                         - $ref: ../schemas/rule-processor.v1.json
-                        - $ref: ../schemas/slim-bridge.v1.json
                         - $ref: ../schemas/udp.v1.json
                         - $ref: ../schemas/websocket.v1.json
                         - $ref: ../schemas/websocket_input.v1.json
@@ -2264,6 +2259,10 @@ components:
                                 type: string
                             tool_status:
                                 type: string
+                            url_fetched:
+                                items:
+                                    type: string
+                                type: array
                             utilization:
                                 type: number
                         required:
@@ -2514,6 +2513,10 @@ components:
                     type: string
                 tool_status:
                     type: string
+                url_fetched:
+                    items:
+                        type: string
+                    type: array
                 utilization:
                     type: number
             required:
