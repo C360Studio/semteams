@@ -38,11 +38,13 @@ import (
 	"github.com/c360studio/semstreams/service"
 	"github.com/c360studio/semstreams/types"
 	agvocab "github.com/c360studio/semstreams/vocabulary/agentic"
+	vocabbuiltins "github.com/c360studio/semstreams/vocabulary/builtins"
 	"github.com/c360studio/semteams/cmd/semteams/approvalpause"
 	"github.com/c360studio/semteams/cmd/semteams/chain"
 	"github.com/c360studio/semteams/cmd/semteams/chainpause"
 	"github.com/c360studio/semteams/cmd/semteams/flowtemplates"
 	"github.com/c360studio/semteams/cmd/semteams/portresolver"
+	"github.com/c360studio/semteams/cmd/semteams/vocab"
 )
 
 // Build information constants
@@ -71,6 +73,15 @@ func main() {
 }
 
 func run() error {
+	// 0. Register semantic vocabularies before config/rule validation —
+	// beta.159 validates every authored predicate (rule fields/actions,
+	// projection contracts, ownership claims) against the vocabulary
+	// registry, and import side effects are not an authoring contract.
+	// Upstream first (mirrors cmd/semstreams/main.go run(), ADR-029), then
+	// the SemTeams-local vocabulary (cmd/semteams/vocab).
+	vocabbuiltins.Register()
+	vocab.Register()
+
 	// 1. Print banner
 	printBanner()
 
@@ -311,7 +322,7 @@ func setupToolsAndPreprocessor(
 	}
 
 	// 9f. Approval-pause subscriber (ADR-053 §4c PR-1). Subscribes to
-	// agent.approval_pending.> and stamps agent.run.approval_pending on the run
+	// agent.approval_pending.> and stamps agent.run.approval-pending on the run
 	// entity when an in-run loop's gated tool call pauses the loop, so rule
 	// agent-run/12 can transition the run executing→awaiting_approval (the
 	// run-phase reflection of the loop-level approval_required gate). No HTTP
@@ -356,7 +367,7 @@ func startChainPauseSubscriber(ctx context.Context, cfg *config.Config, natsClie
 	// chain entity. ADR-053 Phase 5 (semstreams#250): the Pauser reads the run
 	// anchor straight off the LoopFailedEvent (event.RunEntityID); the
 	// DecisionHandler — which only has an HTTP-body failed_loop_id, no event —
-	// reads the failed loop entity's agent.run.entity_id via a single graph read.
+	// reads the failed loop entity's agent.run.entity-id via a single graph read.
 	// No more ancestry-walk Resolver.
 	pauser := chainpause.NewPauser(triplePublisher)
 	sub := chainpause.NewSubscriber(pauser, loopFailedSubject, logger)
@@ -378,7 +389,7 @@ func startChainPauseSubscriber(ctx context.Context, cfg *config.Config, natsClie
 // it subscribes to agent.approval_pending.> (the loop-level tool-gate event, which
 // carries only the loop id — NO run anchor, unlike the #250 LoopFailedEvent), reads
 // the gated loop's run anchor via a single graph entity read, and stamps
-// agent.run.approval_pending on the run entity so rule agent-run/12 transitions the
+// agent.run.approval-pending on the run entity so rule agent-run/12 transitions the
 // run executing→awaiting_approval. Mirrors startChainPauseSubscriber's wiring.
 //
 // SUBSCRIBE-side (agent.approval_pending wildcard): config-derived via portresolver.
@@ -881,7 +892,7 @@ func seedKVCorpora(ctx context.Context, natsClient *natsclient.Client, personaRo
 // MilestoneSubscriber as a Phase-B Service. It plumbs the Manager onto
 // svcDeps.LifecycleManager so the rule processor factory installs it (its Setup
 // calls SetLifecycleManager when deps.LifecycleManager is non-nil); with that,
-// lifecycle_* rule actions and $entity.triple.agent.run.entity_id resolve at
+// lifecycle_* rule actions and $entity.triple.agent.run.entity-id resolve at
 // evaluation time instead of failing closed.
 //
 // ADR-058 boot refactor (beta.112): the ownership buckets/Registry/static

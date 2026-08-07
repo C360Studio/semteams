@@ -16,7 +16,7 @@ import (
 // out per profile TTL and live on the calling chain entity.
 //
 // Coordinator persona prose substitutes
-// `$entity.triple.sandbox.attestation.{ready,profile,verified.*}`
+// `$entity.triple.sandbox.attestation.{ready,profile}` and `verified-<probe>`
 // when routing on a request_sandbox result. Adding a new predicate
 // is a contract-widening change: declare here, reference in rule +
 // persona, update the docs cross-link.
@@ -412,10 +412,13 @@ func failureReason(p ProbeResult) string {
 
 // kebabProbeName sanitizes a probe name into the lower-kebab charset the
 // canonical predicate contract requires for the third predicate segment:
-// lowercase, [a-z0-9-] only, no leading/trailing/doubled hyphens. Probe
-// names are operator-authored config, so this is a normalization, not a
-// validation — "Go_Toolchain" and "go-toolchain" stamp the same predicate.
+// lowercase, [a-z0-9-] only, no leading/trailing/doubled hyphens, bounded
+// so "verified-" + name stays inside the 64-byte segment cap (a too-long
+// name would otherwise reject the whole attestation batch at persistence).
+// Probe names are operator-authored config, so this is a normalization, not
+// a validation — "Go_Toolchain" and "go-toolchain" stamp the same predicate.
 func kebabProbeName(name string) string {
+	const maxLen = 64 - len("verified-")
 	var b []byte
 	for _, r := range strings.ToLower(name) {
 		switch {
@@ -426,6 +429,9 @@ func kebabProbeName(name string) string {
 				b = append(b, '-')
 			}
 		}
+	}
+	if len(b) > maxLen {
+		b = b[:maxLen]
 	}
 	for len(b) > 0 && b[len(b)-1] == '-' {
 		b = b[:len(b)-1]

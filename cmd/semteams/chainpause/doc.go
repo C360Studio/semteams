@@ -1,7 +1,7 @@
 // Package chainpause implements the v1 chain-pause primitive from ADR-037.
 //
 // When any agentic loop in a managed arc (dev-via-spec-*, research-arc,
-// dispatch researcher) fails before emitting its coordinator.next_action triple,
+// dispatch researcher) fails before emitting its coordinator.decision.next-action triple,
 // no downstream rule fires and the chain dies silently. This package closes that
 // gap by:
 //

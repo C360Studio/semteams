@@ -27,7 +27,7 @@
 //     so rules 04a + 04b (clean-completion / loop-failed counters)
 //     resolve their conditions correctly.
 //
-//  4. On outcome=kept, ALSO updates autoresearch.best.value +
+//  4. On outcome=kept, rule 04c promotes autoresearch.best.value +
 //     autoresearch.best.experiment-id on the run entity so the next
 //     propose iteration compares against the new best.
 //
@@ -133,7 +133,7 @@ func NewExecutor(publisher agentictools.TriplePublisher, reader BestValueReader,
 func (e *Executor) ListTools() []agentic.ToolDefinition {
 	return []agentic.ToolDefinition{{
 		Name:        ToolName,
-		Description: "Stamp the measurement value + pass on the execute loop entity. The tool's Go executor reads autoresearch.best.value from the run entity, compares numerically (lower-is-better), and stamps outcome=kept|reverted|crashed. On kept, ALSO updates autoresearch.best.value + best.experiment_id on the run entity. The persona does NOT decide keep/revert; the tool does. The post-call revert/keep bash branch keys off the stamped outcome.",
+		Description: "Stamp the measurement value + pass on the execute loop entity. The tool's Go executor reads autoresearch.best.value from the run entity, compares numerically (lower-is-better), and stamps outcome=kept|reverted|crashed. On kept, the rule pack (autoresearch/04c) promotes autoresearch.best.value + best.experiment-id on the run entity. The persona does NOT decide keep/revert; the tool does. The post-call revert/keep bash branch keys off the stamped outcome.",
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{

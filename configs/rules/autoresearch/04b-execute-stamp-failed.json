@@ -35,7 +35,7 @@
     {
       "type": "replace_owned",
       "projection_contract": "autoresearch.run-projection",
-      "projection_group": "run-state",
+      "projection_group": "iteration-pending",
       "subject": "$entity.triple.agent.lineage.run-loop-entity-id",
       "predicate": "autoresearch.iteration.pending",
       "object": "$entity.id"

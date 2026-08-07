@@ -247,14 +247,24 @@
             "entity_pattern": "*.*.agent.chain.execution.*",
             "groups": [
               {
-                "name": "run-state",
+                "name": "best-value",
                 "mode": "replace-owned",
-                "predicates": [
-                  "autoresearch.best.value",
-                  "autoresearch.best.experiment-id",
-                  "autoresearch.run.status",
-                  "autoresearch.iteration.pending"
-                ]
+                "predicates": ["autoresearch.best.value"]
+              },
+              {
+                "name": "best-experiment-id",
+                "mode": "replace-owned",
+                "predicates": ["autoresearch.best.experiment-id"]
+              },
+              {
+                "name": "run-status",
+                "mode": "replace-owned",
+                "predicates": ["autoresearch.run.status"]
+              },
+              {
+                "name": "iteration-pending",
+                "mode": "replace-owned",
+                "predicates": ["autoresearch.iteration.pending"]
               }
             ]
           }

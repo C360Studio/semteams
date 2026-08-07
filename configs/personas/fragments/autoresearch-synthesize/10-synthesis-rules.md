@@ -10,7 +10,6 @@ Substitutions from the run entity:
 - best.value: `$entity.triple.autoresearch.best.value`
 - best.experiment_id: `$entity.triple.autoresearch.best.experiment-id`
 - cap: `$entity.triple.autoresearch.run.cap`
-- stop.reason: `$entity.triple.autoresearch.stop.reason`
   (cap | plateau | budget — v1 only stamps "cap")
 
 ## Step 2 — Read the per-iteration journal

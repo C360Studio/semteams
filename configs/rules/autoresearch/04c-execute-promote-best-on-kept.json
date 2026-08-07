@@ -24,7 +24,7 @@
       "id": "promote_best_value",
       "type": "replace_owned",
       "projection_contract": "autoresearch.run-projection",
-      "projection_group": "run-state",
+      "projection_group": "best-value",
       "subject": "$entity.triple.agent.lineage.run-loop-entity-id",
       "predicate": "autoresearch.best.value",
       "object": "$entity.triple.autoresearch.measurement.value"
@@ -33,7 +33,7 @@
       "id": "promote_best_experiment_id",
       "type": "replace_owned",
       "projection_contract": "autoresearch.run-projection",
-      "projection_group": "run-state",
+      "projection_group": "best-experiment-id",
       "subject": "$entity.triple.agent.lineage.run-loop-entity-id",
       "predicate": "autoresearch.best.experiment-id",
       "object": "$entity.id"

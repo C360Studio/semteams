@@ -169,3 +169,194 @@ func TestProjectionContractPredicatesAreCanonical(t *testing.T) {
 		}
 	}
 }
+
+// TestWiredReplaceOwnedGroupsAreSinglePredicate pins the beta.159 semantics
+// flip that wedged autoresearch (go-reviewer C1): ReplaceOwned reconciles the
+// WHOLE selected group (RemoveTriples = every group predicate), so a group
+// shared by independent single-predicate stamps is a mutual-destruction lane.
+// Every wired replace_owned action's selected group must contain exactly the
+// action's own predicate; a deliberate multi-predicate reconcile group would
+// need one action authoring ALL of its triples, which the rule action shape
+// cannot express today.
+func TestWiredReplaceOwnedGroupsAreSinglePredicate(t *testing.T) {
+	cfg := loadRuleProcessorOwnership(t, flowBootstrapPath)
+	groups := map[string][]string{}
+	for _, c := range cfg.ProjectionContracts {
+		for _, g := range c.Groups {
+			groups[c.Name+"/"+g.Name] = g.Predicates
+		}
+	}
+	for _, path := range bootstrapLoadedRules(t) {
+		raw, err := os.ReadFile(path) //nolint:gosec // test-controlled config path
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		var rule struct {
+			OnEnter []struct {
+				Type               string `json:"type"`
+				Predicate          string `json:"predicate"`
+				ProjectionContract string `json:"projection_contract"`
+				ProjectionGroup    string `json:"projection_group"`
+			} `json:"on_enter"`
+		}
+		if json.Unmarshal(raw, &rule) != nil {
+			continue
+		}
+		for _, a := range rule.OnEnter {
+			if a.Type != "replace_owned" {
+				continue
+			}
+			key := a.ProjectionContract + "/" + a.ProjectionGroup
+			preds, ok := groups[key]
+			if !ok {
+				t.Errorf("%s: replace_owned selects undeclared group %q", path, key)
+				continue
+			}
+			if len(preds) != 1 || preds[0] != a.Predicate {
+				t.Errorf("%s: replace_owned on %q selects group %q holding %v — beta.159 reconciles the whole group, so this action would erase its siblings",
+					path, a.Predicate, key, preds)
+			}
+		}
+	}
+}
+
+// TestBootstrapRuleListsMatch pins that the mock-LLM clone loads exactly the
+// production rule set — a pack wired in one but not the other would pass mock
+// journeys yet diverge in production (or vice versa).
+func TestBootstrapRuleListsMatch(t *testing.T) {
+	load := func(path string) map[string]bool {
+		raw, err := os.ReadFile(path) //nolint:gosec // test-controlled config path
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		var cfg struct {
+			Components map[string]struct {
+				Config struct {
+					RulesFiles []string `json:"rules_files"`
+				} `json:"config"`
+			} `json:"components"`
+		}
+		if err := json.Unmarshal(raw, &cfg); err != nil {
+			t.Fatalf("unmarshal %s: %v", path, err)
+		}
+		out := map[string]bool{}
+		for _, f := range cfg.Components["rule"].Config.RulesFiles {
+			out[f] = true
+		}
+		return out
+	}
+	prod, e2e := load(flowBootstrapPath), load(e2eFlowBootstrapPath)
+	for f := range prod {
+		if !e2e[f] {
+			t.Errorf("rule %s wired in flow-bootstrap but missing from e2e-flow-bootstrap", f)
+		}
+	}
+	for f := range e2e {
+		if !prod[f] {
+			t.Errorf("rule %s wired in e2e-flow-bootstrap but missing from flow-bootstrap", f)
+		}
+	}
+}
+
+// keptEmitterFiles are the kept-lane Go writers whose predicate constants the
+// canonical contract must hold for (go-reviewer C2 was emit_plan escaping the
+// sweep). Parked-lane emitters are intentionally absent — see ADR-058.
+var keptEmitterFiles = []string{
+	"../../cmd/semteams/tools/emitartifact/executor.go",
+	"../../cmd/semteams/tools/emitautoresearchbaseline/executor.go",
+	"../../cmd/semteams/tools/emitautoresearchmeasurement/executor.go",
+	"../../cmd/semteams/tools/emitautoresearchartifact/executor.go",
+	"../../cmd/semteams/tools/emitplan/executor.go",
+	"../../cmd/semteams/sandboxmanager/attestation.go",
+	"../../cmd/semteams/approvalpause/pauser.go",
+	"../../cmd/semteams/chainpause/pauser.go",
+	"../../cmd/semteams/chainpause/decision_handler.go",
+}
+
+// emitterNonPredicates are predicate-shaped strings in the audited files that
+// are deliberately NOT graph predicates (NATS subjects, payload type keys).
+var emitterNonPredicates = map[string]bool{
+	"dev_via_spec.plan.v1": true, // payload type key (wire namespace, not a predicate)
+	"research.artifact.v1": true, // payload type key
+	"graph.query.entity":   true, // NATS request subject
+}
+
+var goPredicateShapedRe = regexp.MustCompile(`"([a-z][a-z0-9_-]*\.[a-z0-9_-]+\.[a-z0-9_.-]+?)"`)
+
+// TestKeptEmitterPredicatesAreCanonical audits the kept-lane Go writers'
+// string literals: anything shaped like a stored predicate must satisfy the
+// canonical grammar. Runtime persistence is fail-closed on shape (not
+// registration), so a stale constant here means silently rejected writes.
+func TestKeptEmitterPredicatesAreCanonical(t *testing.T) {
+	for _, path := range keptEmitterFiles {
+		raw, err := os.ReadFile(path) //nolint:gosec // test-controlled path
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		for _, m := range goPredicateShapedRe.FindAllStringSubmatch(string(raw), -1) {
+			lit := m[1]
+			if emitterNonPredicates[lit] || strings.Contains(lit, "..") {
+				continue
+			}
+			if strings.HasSuffix(lit, "-") || strings.HasSuffix(lit, ".") {
+				// dynamic prefix constant (e.g. sandbox.attestation.verified-):
+				// validate with a probe suffix
+				validateCanonicalPredicate(t, path+" (prefix constant)", lit+"probe")
+				continue
+			}
+			validateCanonicalPredicate(t, path, lit)
+		}
+	}
+}
+
+// wiredPersonaDirs are the persona fragment directories loaded for live roles.
+var wiredPersonaDirs = []string{
+	"../../configs/personas/fragments/coordinator",
+	"../../configs/personas/fragments/researcher-research-plan",
+	"../../configs/personas/fragments/researcher-research-gather",
+	"../../configs/personas/fragments/researcher-research-synthesize",
+	"../../configs/personas/fragments/reviewer-research",
+	"../../configs/personas/fragments/reviewer-autoresearch",
+	"../../configs/personas/fragments/autoresearch-baseline",
+	"../../configs/personas/fragments/autoresearch-propose",
+	"../../configs/personas/fragments/autoresearch-execute",
+	"../../configs/personas/fragments/autoresearch-synthesize",
+	"../../configs/personas/fragments-autonomous/coordinator",
+}
+
+// TestWiredPersonaTripleTokensAreCanonical audits $entity.triple.* tokens in
+// live persona prose — the LLM echoes these into tool calls and reads, so a
+// stale token is a silent behavioral bug the rule audit cannot see.
+func TestWiredPersonaTripleTokensAreCanonical(t *testing.T) {
+	for _, dir := range wiredPersonaDirs {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			t.Fatalf("read dir %s: %v", dir, err)
+		}
+		for _, e := range entries {
+			if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
+				continue
+			}
+			path := dir + "/" + e.Name()
+			raw, err := os.ReadFile(path) //nolint:gosec // test-controlled path
+			if err != nil {
+				t.Fatalf("read %s: %v", path, err)
+			}
+			for _, m := range entityTripleTokenRe.FindAllStringSubmatch(string(raw), -1) {
+				token := strings.TrimSuffix(strings.TrimSuffix(m[1], "."), "*")
+				token = strings.TrimSuffix(token, ".")
+				// placeholder forms (<cap>, {a,b}) are prose, not literals
+				if strings.ContainsAny(token, "{<") || token == "" {
+					continue
+				}
+				// dynamic-prefix prose (…verified-<probe>): the capture stops
+				// at '<', leaving a trailing hyphen — validate with a probe
+				if strings.HasSuffix(token, "-") {
+					validateTripleToken(t, path+" (dynamic prefix)", token+"probe")
+					continue
+				}
+				validateTripleToken(t, path, token)
+			}
+		}
+	}
+}

@@ -10,7 +10,7 @@ patterns most worth surfacing:
 needs human review:
 
 - qa-reviewer terminated `needs_clarification` — name the
-  specific gap from `coordinator.decision_reason`
+  specific gap from `coordinator.decision.reason`
 - qa-reviewer terminated `reject` — name what failed and the
   retry hint, if present
 - builder failed (chain.paused with `cause=max_iterations` or

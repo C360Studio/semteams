@@ -316,11 +316,15 @@ func validateProbes(in []VerifyProbe) error {
 		if !tokenPattern.MatchString(strings.ToLower(name)) {
 			return fmt.Errorf("verification[%d].name=%q: must match [a-z0-9][a-z0-9._-]* (composes into attestation predicate)", i, name)
 		}
-		lc := strings.ToLower(name)
-		if _, ok := seen[lc]; ok {
-			return fmt.Errorf("verification[%d].name=%q: duplicate (post-lowercase)", i, name)
+		// Dedupe on the kebab form the attestation actually stamps —
+		// "go.toolchain" and "go_toolchain" both become the predicate
+		// segment "go-toolchain", and two probes stamping the same
+		// predicate would leave which value wins to map order.
+		kb := kebabProbeName(name)
+		if _, ok := seen[kb]; ok {
+			return fmt.Errorf("verification[%d].name=%q: duplicate (normalizes to the same attestation predicate %q)", i, name, kb)
 		}
-		seen[lc] = struct{}{}
+		seen[kb] = struct{}{}
 		cmd := strings.TrimSpace(p.Command)
 		if cmd == "" {
 			return fmt.Errorf("verification[%d].command: must not be empty", i)

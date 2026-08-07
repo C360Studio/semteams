@@ -48,6 +48,7 @@ type ruleProcessorOwnershipConfig struct {
 		Name          string `json:"name"`
 		EntityPattern string `json:"entity_pattern"`
 		Groups        []struct {
+			Name       string   `json:"name"`
 			Mode       string   `json:"mode"`
 			Predicates []string `json:"predicates"`
 		} `json:"groups"`
