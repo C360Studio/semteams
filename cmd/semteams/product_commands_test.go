@@ -7,12 +7,12 @@ import (
 	"github.com/c360studio/semstreams/types"
 )
 
-// The live product-command set is the team-hint trio; /implement-spec is
-// parked with the dev-from-task pack (ADR-058) and must NOT be registered
-// until that pack is re-wired. beta.159's dispatch rejects unknown slash
-// messages, so a missing hint command means "/research …" dead-ends with
-// "Unknown command" instead of reaching the coordinator — this pins both
-// sides of that boundary.
+// Every public team token — live AND parked — must be a registered hint
+// command: beta.159's dispatch rejects unknown slash messages, so a missing
+// hint means "/research …" (or "/spec …") dead-ends with "Unknown command"
+// instead of reaching the coordinator, which is what answers parked asks
+// honestly. The bridge SEMANTICS of /implement-spec stay parked (ADR-058);
+// only its hint routing is live.
 func TestRegisterProductCommands_TeamHintsOnly(t *testing.T) {
 	agenticdispatch.ClearGlobalCommands()
 	t.Cleanup(agenticdispatch.ClearGlobalCommands)
@@ -22,15 +22,16 @@ func TestRegisterProductCommands_TeamHintsOnly(t *testing.T) {
 		t.Fatalf("registerProductCommands returned error: %v", err)
 	}
 	cmds := agenticdispatch.ListRegisteredCommands()
-	for _, want := range []string{"research", "optimize", "autoresearch"} {
-		if _, ok := cmds[want]; !ok {
-			t.Errorf("team-hint command %q not registered — beta.159 dispatch would reject /%s as Unknown command", want, want)
+	want := []string{
+		"research", "optimize", "autoresearch",
+		"spec", "create-change", "dev-via-test", "build", "dev", "implement-spec",
+	}
+	for _, name := range want {
+		if _, ok := cmds[name]; !ok {
+			t.Errorf("team-hint command %q not registered — beta.159 dispatch would reject /%s as Unknown command", name, name)
 		}
 	}
-	if _, ok := cmds["implement-spec"]; ok {
-		t.Error("implement-spec is parked with the dev-from-task pack (ADR-058) and must not be registered")
-	}
-	if len(cmds) != 3 {
-		t.Errorf("expected exactly the 3 team-hint commands, got %v", cmds)
+	if len(cmds) != len(want) {
+		t.Errorf("expected exactly the %d team-hint commands, got %v", len(want), cmds)
 	}
 }
