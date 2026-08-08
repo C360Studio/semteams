@@ -13,9 +13,9 @@ ARG GO_FULL_VERSION=1.26.3
 FROM golang:${GO_VERSION}-alpine AS builder
 WORKDIR /build
 COPY go.mod go.sum ./
-RUN go mod download
+RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked go mod download
 COPY cmd/semteams/sandbox/ cmd/semteams/sandbox/
-RUN CGO_ENABLED=0 go build -ldflags="-w -s" -o /sandbox ./cmd/semteams/sandbox/
+RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked CGO_ENABLED=0 go build -ldflags="-w -s" -o /sandbox ./cmd/semteams/sandbox/
 
 # protoc-gen-go (Go protobuf plugin). Pinned to v1.34.2.
 RUN GOBIN=/out go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.34.2

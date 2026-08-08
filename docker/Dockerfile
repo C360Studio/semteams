@@ -30,7 +30,7 @@ WORKDIR /build
 COPY go.mod go.sum ./
 
 # Download dependencies (cached layer)
-RUN go mod download
+RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked go mod download
 
 # Copy source code
 COPY . .
@@ -43,7 +43,7 @@ ARG TARGETOS
 ARG TARGETARCH
 
 # Build main binary with version information
-RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
+RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
     -ldflags="-w -s \
       -X main.version=${VERSION} \
       -X main.commit=${COMMIT_SHA} \
