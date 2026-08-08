@@ -4,6 +4,9 @@
   "name": "Run success outcome → executing→completed",
   "description": "ADR-053 Phase 4a — the terminal-success transition. Fires on the RUN entity when a success outcome (agent.run.outcome=success) has been stamped there AND the run is `executing`. Advances the run to `completed` via lifecycle_transition.\n\nWHY outcome-driven, not respond_direct-driven (Coby review P1b): coordinator/03b-respond-direct fires on EVERY respond_direct — including the limitation path ('the request cannot be served': research/06, autoresearch/10 plateau/environment-failure), whose recovery coordinators DO carry a run anchor and would otherwise mis-complete a failed run. Instead, the three reviewer/CBG-APPROVED rules (research/07, autoresearch/08, dev-via-test/07a — the unambiguous success terminals, carrying wakeup_mode=chain_terminal_*) stamp agent.run.outcome=success on the run entity. This decouples completion from respond_direct entirely: 03b stays purely reply-delivery, and the limitation/front-door respond_direct paths never stamp success → never complete (their failed/cancelled outcomes are Phase 4a′/4b).\n\nThe success marker is DURABLE on the run entity, so the early-marker race (success stamped while still `dispatched`) is benign: this rule is simply not-matching (phase guard is a top-level condition) until dispatched→executing writes the later KV revision, on which the processor re-evaluates every rule (message_handler.go:245) and this rule enters exactly once (stale-replay guard). Per-pack note: the success-stamp SUBJECT differs by pack (research uses agent.run.entity-id; autoresearch + dev-via-test use agent.lineage.run-loop-entity-id) because their chains descend through different spawn paths — but all resolve to the same run entity, so this rule's run-entity-side condition is uniform.",
   "enabled": true,
+  "entity": {
+    "pattern": "*.*.*.*.*.*"
+  },
   "conditions": [
     {
       "field": "agent.run.outcome",

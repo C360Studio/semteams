@@ -4,6 +4,9 @@
   "name": "reviewer-research decide(insufficient) → researcher-research-plan (retry)",
   "description": "ADR-042 §Phase 2 redesign MVP-2 research pack recovery rule. Fires when reviewer-research terminates with decide(action=insufficient). Spawns researcher-research-plan with the reviewer's reason; the new researcher re-enters the chain at plan and re-runs through gather/synthesize addressing the gap. Bounded by rule max_iterations=3 (informational under the per-entity rule-state caveat — each reviewer loop is a distinct entity, so the cap is not a chain-wide hard ceiling under the current rule engine). Replaces the legacy research-mode-transition/02-reviewer-rejected-retry-research.json's chain.recovery.proceed-gated retry; the recoverycounter chain-ancestry-walk machinery retires in MVP-7.",
   "enabled": true,
+  "entity": {
+    "pattern": "*.*.*.*.*.*"
+  },
   "conditions": [
     {
       "field": "agent.loop.role",

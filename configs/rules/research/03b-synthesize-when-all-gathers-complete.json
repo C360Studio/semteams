@@ -4,6 +4,9 @@
   "name": "All gatherers complete → researcher-research-synthesize (join)",
   "description": "ADR-046 Phase 1 JOIN — synthesize half. Fires on the PLAN loop entity (where rule 03a accumulates research.gather.completed-subtopic triples) when the counter length matches the planner's coordinator.decision.subtopics list length. Uses beta.84 #149 .length substitution so the join is dynamic — N=1 prompts (single subtopic, single gatherer) and N=many prompts both work without per-width forking. cooldown=5s guards against double-fire if two gatherers stamp within the same evaluation window. The spawned synthesizer receives plan_loop_id in its properties AND the JSON-encoded list of gather loop ids inlined into its prompt via beta.86's $entity.triple.<predicate>.triples substitution (ADR-048 PR 4 / #155, closes semstreams#151) — no graph-query tool needed, persona prose teaches the JSON-parse-the-array pattern.\n\nEMPTY-FAN-OUT GUARD (coordinator.decision.subtopics length_gt 0): without it, a planner that terminates WITHOUT deciding gather (a loop-failure, or any terminal that skips the gather decide) leaves both research.gather.completed-subtopic AND coordinator.decision.subtopics absent — and length_eq(absent, absent.length) evaluates 0==0 → this rule fires a SPURIOUS synthesize join over zero gatherers. The happy path is shielded only by cooldown=5s + the planner deciding within ~1s; a slow/failing planner that sits in the no-subtopics state past the cooldown trips it (surfaced by the ADR-053 4a′ run-failed journey, where the wedged planner failed at max_iterations). The length_gt 0 guard requires a real subtopics list before the join can fire; a zero-subtopics planner termination now correctly drives executing→failed (research/09 + agent-run/04) with NO orphan synthesize.",
   "enabled": true,
+  "entity": {
+    "pattern": "*.*.*.*.*.*"
+  },
   "cooldown": "5s",
   "conditions": [
     {

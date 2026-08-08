@@ -360,3 +360,32 @@ func TestWiredPersonaTripleTokensAreCanonical(t *testing.T) {
 		}
 	}
 }
+
+// TestWiredRulesDeclareEntityPattern pins the beta.159 silent-skip class the
+// research journey caught live: evaluateRulesForEntityState SKIPS any rule
+// whose definition lacks entity.pattern (beta.115 evaluated pattern-less
+// rules against every entity update). A wired rule without a pattern loads
+// green, seeds green, and simply never fires — the user waits forever.
+func TestWiredRulesDeclareEntityPattern(t *testing.T) {
+	for _, path := range bootstrapLoadedRules(t) {
+		raw, err := os.ReadFile(path) //nolint:gosec // test-controlled config path
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		var rule struct {
+			Type   string `json:"type"`
+			Entity struct {
+				Pattern string `json:"pattern"`
+			} `json:"entity"`
+		}
+		if err := json.Unmarshal(raw, &rule); err != nil {
+			t.Fatalf("unmarshal %s: %v", path, err)
+		}
+		if rule.Type == "cron" {
+			continue
+		}
+		if rule.Entity.Pattern == "" {
+			t.Errorf("%s: expression rule missing entity.pattern — the beta.159 EntityState evaluator silently skips it", path)
+		}
+	}
+}

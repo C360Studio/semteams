@@ -4,6 +4,9 @@
   "name": "researcher-research-synthesize → reviewer-research",
   "description": "ADR-042 §Phase 2 redesign MVP-2 research pack. Fires when the synthesize-phase researcher terminates with decide(action=emit) — the research category's terminal forward edge. Spawns reviewer-research, which reads the structured research artifact and grades it against the reviewer checklist. Approved terminates the chain (07-reviewer-approved-to-coordinator.json wakes the coordinator for user reply); insufficient triggers 05-reviewer-rejected-retry.json (max_iterations-bounded replan).",
   "enabled": true,
+  "entity": {
+    "pattern": "*.*.*.*.*.*"
+  },
   "conditions": [
     {
       "field": "agent.loop.role",

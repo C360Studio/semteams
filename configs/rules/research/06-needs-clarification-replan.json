@@ -4,6 +4,9 @@
   "name": "Any research-pack role decide(needs_clarification) → coordinator",
   "description": "ADR-042 §Phase 2 redesign MVP-2 research pack generic recovery rule. Fires when any chain role within the research pack terminates with decide(action=needs_clarification) — the canonical signal that the current contract cannot complete from available information. Spawns the coordinator (the senior thinker that owns framing) with the rejecting role's reason; the coordinator judges whether to re-dispatch research with tightened framing, ask the user for clarification, or respond_direct that the request cannot be served. This rule USED to respawn researcher-research-plan (the resolved 'plan_phase_loop_todo' MVP-4 follow-on); routing to the coordinator instead breaks the plan→gather→synthesize→needs_clarification→plan thrash pattern observed under small-LLM substrate (smoke6-pr184-validation-gemini-2 2026-05-21). Recovery shape A per ADR-039 (supersession-via-new-spawn; prior loop entities remain immutable in the graph).",
   "enabled": true,
+  "entity": {
+    "pattern": "*.*.*.*.*.*"
+  },
   "conditions": [
     {
       "field": "agent.loop.role",

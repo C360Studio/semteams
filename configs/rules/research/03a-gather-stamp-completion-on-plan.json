@@ -4,6 +4,9 @@
   "name": "Gather completion → stamp counter on PLAN loop",
   "description": "ADR-046 Phase 1 JOIN — stamp half. Fires when a researcher-research-gather loop completes successfully (outcome=success) with decide(action=synthesize). Writes a research.gather.completed-subtopic triple onto the PARENT plan loop entity via the beta.83 #148 subject override. The triple's Object is THIS gather's own loop id ($entity.id) so the predicate-set accumulates one triple per distinct gatherer (graph-ingest's per-(subject,predicate,object) set semantics dedup if this rule fires twice for the same gather, e.g. on transient redelivery). Rule 03b reads the accumulated triples on the plan loop, compares length against the planner's subtopics list length via #149 .length substitution, and spawns SYNTHESIZE when all N have stamped. Choosing the loop id (not task id) as Object is so rule 03b's synthesize spawn can pass the list of gather loop ids straight into SYNTHESIZE's properties for read_loop_result calls — no graph walk needed. The subject references $entity.triple.agent.lineage.researcher-plan-entity (stamped at SPAWN by rule 02's related_loops) rather than $entity.triple.agent.loop.parent (stamped at completion). This sidesteps the upstream race documented in semstreams#159: agent.loop.outcome and agent.loop.parent are both stamped at completion but the rule engine processes them as separate EntityState UPDATED events; matching on outcome=success can fire before parent lands, causing $entity.triple.agent.loop.parent to be unresolved at substitution time. The lineage triple is stamped during spawn and is stable for the entire loop lifetime — no race. Retires the workaround when #159 closes (atomic completion-triple batch OR parent-stamped-at-spawn upstream).",
   "enabled": true,
+  "entity": {
+    "pattern": "*.*.*.*.*.*"
+  },
   "conditions": [
     {
       "field": "agent.loop.role",

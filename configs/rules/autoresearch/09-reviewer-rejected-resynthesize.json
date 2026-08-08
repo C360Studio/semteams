@@ -4,6 +4,9 @@
   "name": "reviewer-autoresearch decide(insufficient) → autoresearch-synthesize (re-rollup)",
   "description": "ADR-042 §Phase 2 redesign autoresearch pack recovery rule. Fires when reviewer-autoresearch rejects the rollup as structurally insufficient. Re-spawns autoresearch-synthesize with the reviewer's gaps; the new synthesize re-rolls up the SAME journal (iteration spend is already done — the rule does NOT re-iterate experiments).\n\nThis is a critical contract distinction from research's 05-reviewer-rejected-retry.json: in research the retry re-runs the plan-gather-synthesize arc to fill in gaps in the artifact. In autoresearch, the inner iteration loop has already consumed the budget; a structural-completeness gap in the synthesize artifact is fixed by re-synthesising from the same journal, NOT by re-iterating. Bounded by rule max_iterations=2 — cap exhaustion routes to chain.paused.marker via the failure path.",
   "enabled": true,
+  "entity": {
+    "pattern": "*.*.*.*.*.*"
+  },
   "conditions": [
     {
       "field": "agent.loop.role",

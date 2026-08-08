@@ -4,6 +4,9 @@
   "name": "reviewer-research decide(approved) → coordinator wake-up",
   "description": "ADR-042 §Phase 2 redesign MVP-2 research pack terminal handler. Fires when reviewer-research terminates with decide(action=approved) — the research category's chain terminal. Spawns a fresh coordinator loop with the terminal reviewer's loop_id in related_loops so the coordinator can read_loop_result and synthesize a user-facing reply via decide(action=respond_direct). The respond_direct rule (configs/rules/coordinator/03b-respond-direct.json) then publishes the reply prose on the user-response bus.\n\nMirrors configs/rules/coordinator/04a-research-terminal-to-coordinator.json (the legacy chain.mode-keyed version) but scoped to the research pack only. Both rules co-exist during MVP-2 through MVP-6; the legacy 04a retires alongside chain.mode in MVP-7.",
   "enabled": true,
+  "entity": {
+    "pattern": "*.*.*.*.*.*"
+  },
   "conditions": [
     {
       "field": "agent.loop.role",

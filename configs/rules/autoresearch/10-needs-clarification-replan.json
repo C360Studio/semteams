@@ -4,6 +4,9 @@
   "name": "autoresearch-baseline decide(needs_clarification) → coordinator (inherit anchor)",
   "description": "ADR-042 §Phase 2 redesign autoresearch pack recovery rule — BASELINE branch (ADR-053 Phase 4b-1a anchor split). Fires when autoresearch-baseline terminates with decide(action=needs_clarification) — parameter parse failed / sandbox unreachable / baseline command crashed. Spawns a fresh coordinator (allow-list respond_direct / ask_user) to deliver the situation to the user.\n\nWHY split from the other autoresearch roles (the §E anchor asymmetry, mirrors run-failed rules 12/13): baseline is spawned by rule 01 with run_scope=new, so it carries a bare agent.run triple (graph_writer.go:535-539) — the coordinator this rule spawns therefore INHERITS agent.run.entity-id down the loop-spawn chain (actions.go default-inherit copies the firing loop's bare agent.run into the child RunID). So if that woken coordinator fails involuntarily while the run is executing, agent-run/05 (the agent.run.entity-id branch) drives executing→failed — anchor_inherit, no threading needed. The run-entity-descended roles (propose/execute/synthesize/reviewer) carry NO bare agent.run (spawned by the run-entity-fired rules 03/05/07), so their coordinator inherits nothing and must thread the anchor explicitly — sibling rule 10b.\n\nMirrors research pack's 06-needs-clarification-replan.json (also anchor_inherit), scoped to autoresearch-baseline.",
   "enabled": true,
+  "entity": {
+    "pattern": "*.*.*.*.*.*"
+  },
   "conditions": [
     {
       "field": "agent.loop.role",
