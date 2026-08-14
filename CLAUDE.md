@@ -83,7 +83,7 @@ The `personas-describe-job-not-plumbing` memory captures the rule.
   `banner.go`, `logging.go`). Independently implements every
   framework-wiring pattern per ADR-029 — no imports from upstream
   `cmd/semstreams/`. See [ADR-029](docs/adr/029-product-shell-wiring.md).
-- Go module: `github.com/c360studio/semstreams` (currently `v1.0.0-beta.159`; every bump is a first-class change — see ADR-058 for the beta.115→159 flag-day)
+- Go module: `github.com/c360studio/semstreams` (currently `v1.0.0-beta.160`; every bump is a first-class change — see ADR-058 for the beta.115→159 flag-day and ADR-059 for the beta.160 graph-foundation cutover; fresh NATS storage + NATS server 2.14.4 mandatory across the 159→160 boundary)
 - NATS JetStream (KV, ObjectStore), Prometheus, slog — via semstreams
 - Task (task runner) — run `task --list` for all commands
 - `ui/` — Svelte 5 + SvelteKit 2 + TypeScript frontend (subtree-imported
@@ -177,9 +177,10 @@ deploy it.)
   `10-objective-grounding.md`, `20-diagnostic-rules.md` — persona
   fragments layered above upstream's `ops/00-identity.md` via the
   beta.9 file-loader (digit-prefix ordering).
-- `configs/rules/ops/*.json` — observe + diagnose rules. Wired
-  into `configs/flow-bootstrap.json` alongside the research-pack
-  rules.
+- `configs/rules/ops/*.json` — observe + diagnose rules. NOT wired:
+  they left the bootstraps' `rules_files` when MVP-7 deleted the
+  legacy configs (discovered in the beta.160 sweep — the ops-agent
+  journey is parked until an explicit re-wiring decision).
 - `docs/objectives/README.md` — objective-spec schema.
 
 The ops agent emits findings via the `emit_diagnosis` tool (not raw
