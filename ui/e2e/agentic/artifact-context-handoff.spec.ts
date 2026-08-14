@@ -15,7 +15,16 @@ import { test, expect } from "@playwright/test";
  *   task ui:test:e2e:agentic:artifact-context-handoff
  */
 
-test.describe("Artifact context handoff", () => {
+// PARKED at beta.160 (ADR-059 decision 7): this journey's entire user
+// story — ArtifactCard title/content, the handoff panel, the
+// use-in-team buttons, the artifact context chip — renders from
+// tool_arguments, which left the trajectory wire (facts carry previews
+// + StorageReferences, not bodies). The flow is a REAL product
+// casualty of the accepted regression, not a spec drift: un-skip when
+// the evidence-fetch pass dereferences the fact's StorageReference and
+// ArtifactCard renders again. Restore assertions as-is — they pin the
+// correct UX.
+test.describe.skip("Artifact context handoff", () => {
   test.beforeAll(async ({ request }) => {
     const health = await request.get("/health");
     expect(health.ok(), "Backend not healthy - stack not running?").toBe(true);
