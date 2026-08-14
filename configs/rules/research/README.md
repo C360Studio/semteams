@@ -55,7 +55,7 @@ machinery.
 |---|---|---|
 | `01-coordinator-research-spawn.json` | coordinator decide(research) | researcher-research-plan |
 | `02-plan-to-gather.json` | researcher-research-plan decide(gather, subtopics=[…]) | **N parallel researcher-research-gather** (ADR-046 for_each) |
-| `03a-gather-stamp-completion-on-plan.json` | researcher-research-gather decide(synthesize) | (stamp `research.gather.completed_subtopic` on PLAN loop — counter half of the JOIN) |
+| `03a-gather-stamp-completion-on-plan.json` | researcher-research-gather decide(synthesize) | (stamp `research.gather.completed-subtopic` on PLAN loop — counter half of the JOIN) |
 | `03b-synthesize-when-all-gathers-complete.json` | PLAN loop's stamp counter `length_eq` PLAN's subtopics.length | researcher-research-synthesize (aggregates N gather siblings) |
 | `04-synthesize-to-reviewer.json` | researcher-research-synthesize decide(emit) | reviewer-research |
 | `05-reviewer-rejected-retry.json` | reviewer-research decide(insufficient) | researcher-research-plan (max_iterations=3) |
@@ -67,7 +67,7 @@ machinery.
 
 The planner emits `decide(action="gather", subtopics=[…])`. The `subtopics` list is the planner's epic decomposition, one-to-one. Rule 02's `for_each` over `coordinator.decision.subtopics` spawns one researcher-research-gather per item in parallel, each carrying `$subtopic` as its scope.
 
-Each gatherer's `decide(action="synthesize")` triggers rule 03a, which uses the beta.83 `subject` override to stamp `research.gather.completed_subtopic` on the PLAN loop entity (Object = the gather's own loop id, so the predicate-set deduplicates naturally).
+Each gatherer's `decide(action="synthesize")` triggers rule 03a, which uses the beta.83 `subject` override to stamp `research.gather.completed-subtopic` on the PLAN loop entity (Object = the gather's own loop id, so the predicate-set deduplicates naturally).
 
 Rule 03b fires on the PLAN loop entity whenever its triples change, matching when the counter's `length_eq` equals the planner's subtopics list length (resolved dynamically via beta.84's `.length` substitution — `$entity.triple.coordinator.decision.subtopics.length`). It spawns ONE researcher-research-synthesize, passing `gather_loop_ids` (the accumulated counter list) so synthesize can `read_loop_result` on each sibling without graph-query tools.
 

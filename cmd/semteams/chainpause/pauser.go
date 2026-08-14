@@ -88,11 +88,11 @@ func (p *Pauser) HandleFailed(ctx context.Context, ev *agentic.LoopFailedEvent) 
 	// Write §D5 triple set — errors are collected but do not abort.
 	// Callers log the multi-error if any writes fail.
 	//
-	// chain.paused.original_model captures the model name from the failed loop
+	// chain.paused.original-model captures the model name from the failed loop
 	// so the retry path can re-publish with the same model without needing a
 	// live graph query. ADR-037 §D7 "preserve role and model".
 	//
-	// chain.paused.prior_attempts is hardcoded to "1" in v1. Counting prior
+	// chain.paused.prior-attempts is hardcoded to "1" in v1. Counting prior
 	// pauses per (chain, role) pair earns its slot when a real cycle surfaces
 	// in smoke evidence — until then, looking-implemented-but-fixed is worse
 	// than obviously-deferred. (ADR-037 Open Question OQ2.)
@@ -101,12 +101,12 @@ func (p *Pauser) HandleFailed(ctx context.Context, ev *agentic.LoopFailedEvent) 
 		{Subject: entityID, Predicate: "chain.paused.cause", Object: cause},
 		{Subject: entityID, Predicate: "chain.paused.classification", Object: classification},
 		{Subject: entityID, Predicate: "chain.paused.role", Object: ev.Role},
-		{Subject: entityID, Predicate: "chain.paused.original_model", Object: ev.Model},
-		{Subject: entityID, Predicate: "chain.paused.error_shape", Object: sanitiseErrorShape(ev.Error)},
-		{Subject: entityID, Predicate: "chain.paused.prior_attempts", Object: "1"},
-		{Subject: entityID, Predicate: "chain.paused.failed_loop_id", Object: ev.LoopID},
-		{Subject: entityID, Predicate: "chain.paused.spawn_loop_id", Object: ""}, // v1: derived from prior_loop_id at query time (ADR-037 OQ1)
-		{Subject: entityID, Predicate: "chain.paused.observed_at", Object: now.Format(time.RFC3339)},
+		{Subject: entityID, Predicate: "chain.paused.original-model", Object: ev.Model},
+		{Subject: entityID, Predicate: "chain.paused.error-shape", Object: sanitiseErrorShape(ev.Error)},
+		{Subject: entityID, Predicate: "chain.paused.prior-attempts", Object: "1"},
+		{Subject: entityID, Predicate: "chain.paused.failed-loop-id", Object: ev.LoopID},
+		{Subject: entityID, Predicate: "chain.paused.spawn-loop-id", Object: ""}, // v1: derived from prior_loop_id at query time (ADR-037 OQ1)
+		{Subject: entityID, Predicate: "chain.paused.observed-at", Object: now.Format(time.RFC3339)},
 	}
 	for i := range triples {
 		triples[i].Source = "chainpause"

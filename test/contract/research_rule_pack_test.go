@@ -87,7 +87,7 @@ func TestResearchRulePack_NoChainMachinery(t *testing.T) {
 			for _, c := range rule.Conditions {
 				for _, forbidden := range researchPackForbiddenConditionFields {
 					if strings.HasPrefix(c.Field, forbidden) {
-						t.Errorf("condition field %q starts with forbidden prefix %q — ADR-042 §Phase 2 redesign retires this gate; rewrite the rule to match on role + coordinator.decision.next_action instead",
+						t.Errorf("condition field %q starts with forbidden prefix %q — ADR-042 §Phase 2 redesign retires this gate; rewrite the rule to match on role + coordinator.decision.next-action instead",
 							c.Field, forbidden)
 					}
 				}

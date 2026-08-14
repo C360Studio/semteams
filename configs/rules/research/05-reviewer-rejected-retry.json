@@ -4,6 +4,9 @@
   "name": "reviewer-research decide(insufficient) → researcher-research-plan (retry)",
   "description": "ADR-042 §Phase 2 redesign MVP-2 research pack recovery rule. Fires when reviewer-research terminates with decide(action=insufficient). Spawns researcher-research-plan with the reviewer's reason; the new researcher re-enters the chain at plan and re-runs through gather/synthesize addressing the gap. Bounded by rule max_iterations=3 (informational under the per-entity rule-state caveat — each reviewer loop is a distinct entity, so the cap is not a chain-wide hard ceiling under the current rule engine). Replaces the legacy research-mode-transition/02-reviewer-rejected-retry-research.json's chain.recovery.proceed-gated retry; the recoverycounter chain-ancestry-walk machinery retires in MVP-7.",
   "enabled": true,
+  "entity": {
+    "pattern": "*.*.*.*.*.*"
+  },
   "conditions": [
     {
       "field": "agent.loop.role",
@@ -12,7 +15,7 @@
       "required": true
     },
     {
-      "field": "coordinator.decision.next_action",
+      "field": "coordinator.decision.next-action",
       "operator": "eq",
       "value": "insufficient",
       "required": true
@@ -36,9 +39,9 @@
         "retry": true
       },
       "related_loops": {
-        "researcher": "$entity.triple.lineage.researcher"
+        "researcher": "$entity.triple.agent.lineage.researcher"
       },
-      "prompt": "The reviewer-research at loop $entity.instance rejected the prior research arc with decide(action=insufficient).\n\nIteration 1 — call read_loop_result on $entity.instance to read the reviewer's structured terminal (decision_reason naming the gaps). Then call read_loop_result on the prior researcher's loop ($entity.triple.lineage.researcher) if available, to read the prior research artifact verbatim. Your job is to RE-PLAN the research arc with the reviewer's gaps addressed, not start from scratch.\n\nIteration 2+ — emit a revised plan per researcher-research-plan/10-plan-rules.md. Carry forward what's correct; tighten scope or extend epics only where the reviewer's reason demands. Terminal: decide(action=\"gather\") to forward into the gather phase. The retry property + reviewer_loop_id are stamped on this loop for downstream phases to thread back through."
+      "prompt": "The reviewer-research at loop $entity.instance rejected the prior research arc with decide(action=insufficient).\n\nIteration 1 — call read_loop_result on $entity.instance to read the reviewer's structured terminal (decision_reason naming the gaps). Then call read_loop_result on the prior researcher's loop ($entity.triple.agent.lineage.researcher) if available, to read the prior research artifact verbatim. Your job is to RE-PLAN the research arc with the reviewer's gaps addressed, not start from scratch.\n\nIteration 2+ — emit a revised plan per researcher-research-plan/10-plan-rules.md. Carry forward what's correct; tighten scope or extend epics only where the reviewer's reason demands. Terminal: decide(action=\"gather\") to forward into the gather phase. The retry property + reviewer_loop_id are stamped on this loop for downstream phases to thread back through."
     }
   ],
   "on_exit": [],

@@ -20,8 +20,8 @@ description: |
 
   This proves the autonomous policy END-TO-END: ask_user is barred even on the
   front door (no allowlist), and the loop re-picks with no dead-end. The paired
-  spec asserts a coordinator.user_reply triple (the coordinator ANSWERED via
-  03b-respond-direct) AND the ABSENCE of a coordinator.user_question triple
+  spec asserts a coordinator.clarification.reply triple (the coordinator ANSWERED via
+  03b-respond-direct) AND the ABSENCE of a coordinator.clarification.question triple
   (03-ask-user never fired — the ask was blocked, not delivered).
 
   Bucket fingerprint:

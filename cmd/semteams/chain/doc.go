@@ -29,6 +29,6 @@
 //     map. The one consumer that cannot recover its run anchor from the wire is
 //     the operator-decision path (chainpause.DecisionHandler): it has only an
 //     HTTP-body failed_loop_id, so it reads the failed loop entity's
-//     agent.run.entity_id via this reader. DefaultGraphQueryEntitySubject is the
+//     agent.run.entity-id via this reader. DefaultGraphQueryEntitySubject is the
 //     fallback RPC subject (operators override via the graph-query port config).
 package chain

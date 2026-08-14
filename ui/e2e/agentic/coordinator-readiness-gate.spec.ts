@@ -48,15 +48,18 @@ const CASES = [
     forbiddenAction: "autoresearch",
     forbiddenRole: "autoresearch-baseline",
   },
+  // Reshaped when the implementation team was parked (ADR-058): the
+  // terminal-denial branch now rides an optimization ask, which is the
+  // remaining sandbox-bound category.
   {
-    name: "Go public-network implementation surfaces terminal admission denial",
+    name: "Go public-network optimization surfaces terminal admission denial",
     prompt:
-      "Build a Go service that fetches a live public API during its acceptance test, prove it with `task test`, and use public network access.",
+      "Optimize the wallclock of a Go acceptance test that fetches a live public API. Metric: seconds, lower is better. Command: `task test`. Surface: `./...`. Cap: 2 iterations. This requires public network access.",
     expectedAdmission: "denied",
     expectedReady: false,
     expectedTerminal: true,
-    forbiddenAction: "dev_via_test",
-    forbiddenRole: "dev-via-test-plan",
+    forbiddenAction: "autoresearch",
+    forbiddenRole: "autoresearch-baseline",
   },
 ];
 
@@ -259,7 +262,7 @@ async function expectCoordinatorAction(
 ): Promise<void> {
   const found = await pollUntil(async () => {
     const actions = await fetchTriples(request, {
-      predicate: "coordinator.decision.next_action",
+      predicate: "coordinator.decision.next-action",
       limit: 500,
     });
     return (
@@ -273,7 +276,7 @@ async function expectCoordinatorAction(
 
   expect(
     found,
-    `${caseName}: expected coordinator.decision.next_action=${action}`,
+    `${caseName}: expected coordinator.decision.next-action=${action}`,
   ).toBeTruthy();
 }
 
@@ -284,7 +287,7 @@ async function expectCoordinatorActionAbsent(
   caseName: string,
 ): Promise<void> {
   const actions = await fetchTriples(request, {
-    predicate: "coordinator.decision.next_action",
+    predicate: "coordinator.decision.next-action",
     limit: 500,
   });
   const scopedActions = actions

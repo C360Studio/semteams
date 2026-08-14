@@ -65,8 +65,8 @@ Per-milestone artifact metadata is NO LONGER projected onto the run
 entity (the hand-rolled chain milestone stampers were retired in ADR-053).
 Read it from the producing LOOP entities instead, reached via lineage:
 the researcher/synthesize loop carries `research.artifact.{path,
-test_harness, actors_count, tasks_count}`; reach it via `lineage.researcher`
-on the reviewer loop (related_loops), not a `chain.research_artifact.*`
+test-harness, actors-count, tasks-count}`; reach it via `agent.lineage.researcher`
+on the reviewer loop (related_loops), not a `chain.research-artifact.*`
 triple on the run entity.
 
 ## Step 3 — read each milestone's loop_result
@@ -78,12 +78,12 @@ context):
 read_loop_result(loop_id="<qa_reviewer_from_related_loops>")
 ```
 
-This gives you the qa-reviewer's verdict: `coordinator.next_action`
-(accept | reject | needs_clarification) and `coordinator.decision_reason`.
+This gives you the qa-reviewer's verdict: `coordinator.decision.next-action`
+(accept | reject | needs_clarification) and `coordinator.decision.reason`.
 
 Then read each milestone loop's result:
 
-- `read_loop_result(loop_id=<lineage.researcher on the reviewer loop>)` — researcher's terminal
+- `read_loop_result(loop_id=<agent.lineage.researcher on the reviewer loop>)` — researcher's terminal
 - `read_loop_result(loop_id=<chain.plan_loop>)` — planner's terminal (legacy; ADR-041 MVP collapses planner into researcher-plan)
 - `read_loop_result(loop_id=<chain.plan_reviewer_loop>)` — reviewer's terminal (legacy; same reason)
 - `read_loop_result(loop_id=<chain.spec_artifact_loop>)` — researcher-architect's terminal
@@ -100,7 +100,7 @@ If a finding warrants it (slow loop, high token burn, repeated
 tool failures), query the loop's step entities:
 
 ```
-query_relationships(from="<loop_entity_id>", relation="agent.loop.has_step")
+query_relationships(from="<loop_entity_id>", relation="agent.loop.has-step")
 ```
 
 This returns the step entity IDs. Read them with

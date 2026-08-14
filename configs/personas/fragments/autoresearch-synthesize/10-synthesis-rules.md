@@ -4,13 +4,12 @@
 
 Substitutions from the run entity:
 
-- command: `$entity.triple.autoresearch.command`
-- surface: `$entity.triple.autoresearch.surface`
+- command: `$entity.triple.autoresearch.run.command`
+- surface: `$entity.triple.autoresearch.run.surface`
 - baseline.value: `$entity.triple.autoresearch.baseline.value`
 - best.value: `$entity.triple.autoresearch.best.value`
-- best.experiment_id: `$entity.triple.autoresearch.best.experiment_id`
-- cap: `$entity.triple.autoresearch.cap`
-- stop.reason: `$entity.triple.autoresearch.stop.reason`
+- best.experiment_id: `$entity.triple.autoresearch.best.experiment-id`
+- cap: `$entity.triple.autoresearch.run.cap`
   (cap | plateau | budget — v1 only stamps "cap")
 
 ## Step 2 — Read the per-iteration journal
@@ -27,7 +26,7 @@ Each iteration's reason carries:
 - The pass bool
 - The outcome (kept | reverted | crashed)
 
-Also check `$entity.triple.autoresearch.experiment.loop_failed.triples`
+Also check `$entity.triple.autoresearch.experiment.loop-failed.triples`
 for any execute loops that crashed mid-iteration (rule 04b
 stamps this). Those iterations consumed budget but produced no
 measurement; the journey should mark them "loop-failed (no
@@ -85,7 +84,7 @@ emit_autoresearch_artifact(
   iterations_kept=<count>,
   iterations_reverted=<count>,
   iterations_crashed=<count>,
-  best_experiment_id="<from run entity — autoresearch.best.experiment_id; use literal 'baseline' when iterations_kept == 0>",
+  best_experiment_id="<from run entity — autoresearch.best.experiment-id; use literal 'baseline' when iterations_kept == 0>",
   best_diff_summary="<from step 4>",
   journey=[<ordered list of {iteration, hypothesis, value, outcome}>],
   open_opportunities="<from step 4>"

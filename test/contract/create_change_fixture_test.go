@@ -1,3 +1,9 @@
+//go:build parked_packs
+
+// The pack this file pins is parked (unwired from flow-bootstrap) pending the
+// canonical-predicate migration — see ADR-058. Drop this build tag when the
+// pack is re-authored and re-wired.
+
 package contract
 
 import (
@@ -142,4 +148,10 @@ func allFixtureToolCallArgs(t *testing.T, path, toolName string) []map[string]an
 		out = append(out, args)
 	}
 	return out
+}
+
+// CreateEntityWithTriples satisfies beta.159's widened TriplePublisher;
+// the fake delegates to AddTriplesBatch so recording semantics are identical.
+func (p *recordingPublisher) CreateEntityWithTriples(ctx context.Context, _ string, _ message.Type, triples []message.Triple) error {
+	return p.AddTriplesBatch(ctx, triples)
 }

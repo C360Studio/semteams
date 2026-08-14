@@ -295,7 +295,7 @@ func TestManagerRequest_NormalizesBeforeProbe(t *testing.T) {
 	// Per PR 4.1 finding C3: probe Command/Name must be normalized
 	// (trimmed, lowercased) before being executed and stamped on
 	// attestation. Otherwise Coordinator substitution
-	// $entity.triple.sandbox.attestation.verified.<name> drifts from
+	// $entity.triple.sandbox.attestation.verified-<name> drifts from
 	// the form the rule pack expects.
 	var seenCommand string
 	runner := &fakeRunner{
@@ -337,4 +337,10 @@ func TestManagerSecretEnv_NamesOnly(t *testing.T) {
 	if env["OPENAI_API_KEY"] != "" {
 		t.Fatalf("expected empty sentinel value (Runner resolves at exec), got %q", env["OPENAI_API_KEY"])
 	}
+}
+
+// CreateEntityWithTriples satisfies beta.159's widened TriplePublisher;
+// the fake delegates to AddTriplesBatch so recording semantics are identical.
+func (p *fakePublisher) CreateEntityWithTriples(ctx context.Context, _ string, _ message.Type, triples []message.Triple) error {
+	return p.AddTriplesBatch(ctx, triples)
 }

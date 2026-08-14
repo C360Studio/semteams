@@ -10,7 +10,7 @@ patterns most worth surfacing:
 needs human review:
 
 - qa-reviewer terminated `needs_clarification` — name the
-  specific gap from `coordinator.decision_reason`
+  specific gap from `coordinator.decision.reason`
 - qa-reviewer terminated `reject` — name what failed and the
   retry hint, if present
 - builder failed (chain.paused with `cause=max_iterations` or
@@ -39,7 +39,7 @@ gap a human should notice:
   (verification.Check.Validate enforces ≥1 rule per check at the
   tool layer; if you observe this gap, the validator has been
   bypassed or a new path emits checks without going through it)
-- chain.evidence.summary_ready=false at terminal — the evidence
+- chain.evidence.summary-ready=false at terminal — the evidence
   preprocessor never ran or failed silently
 
 ## Findings NOT worth emitting

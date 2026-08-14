@@ -20,11 +20,11 @@ import { test, expect } from "@playwright/test";
  * Resume half (NEW — ACTIVE on semstreams beta.106 / #256):
  *
  *   POST /teams-dispatch/message { content, run_id, in_reply_to }
- *        run_id      = the paused run's bare runID    (re-attaches → agent.run.entity_id)
- *        in_reply_to = the asking loop's bare loop-id (marks reply → agent.loop.reply_to)
+ *        run_id      = the paused run's bare runID    (re-attaches → agent.run.entity-id)
+ *        in_reply_to = the asking loop's bare loop-id (marks reply → agent.loop.reply-to)
  *   → buildSpawnIdentityTriples stamps BOTH on the resumed coordinator loop at
  *     spawn (before any LLM call) →
- *        agent-run/10 → agent.run.clarification_resumed
+ *        agent-run/10 → agent.run.clarification-resumed
  *        agent-run/11 → awaiting_approval→executing + clear BOTH markers
  *   → resumed coordinator decide(respond_direct) answers directly (the loop
  *     completes; the run stays `executing`).
@@ -105,7 +105,7 @@ test.describe("ADR-053 Phase 4b-2 PR-2 — operator reply resumes a paused run (
     // -----------------------------------------------------------------
     // Step 4 — derive the reply anchors from the paused run's triples.
     //   run_id      = bare runID from the run entity ID.
-    //   in_reply_to = bare loop-id of the loop carrying coordinator.user_question
+    //   in_reply_to = bare loop-id of the loop carrying coordinator.clarification.question
     //                 (the recovery coordinator that asked).
     // -----------------------------------------------------------------
     // [0] is safe ONLY because this journey runs exactly one run — every
@@ -117,12 +117,12 @@ test.describe("ADR-053 Phase 4b-2 PR-2 — operator reply resumes a paused run (
     expect(runId, `could not extract bare runID from ${runEntityId}`).toBeTruthy();
 
     const questions = await fetchTriples(request, {
-      predicate: "coordinator.user_question",
+      predicate: "coordinator.clarification.question",
       limit: 20,
     });
     expect(
       questions.length,
-      "expected a coordinator.user_question triple (the asking loop). Zero → ask_user never fired.",
+      "expected a coordinator.clarification.question triple (the asking loop). Zero → ask_user never fired.",
     ).toBeGreaterThanOrEqual(1);
     const askingLoopEntity = String(questions[0].subject ?? "");
     const askingLoopId = bareIdAfter(askingLoopEntity, LOOP_PREFIX);
@@ -132,10 +132,10 @@ test.describe("ADR-053 Phase 4b-2 PR-2 — operator reply resumes a paused run (
     ).toBeTruthy();
 
     // Pause is genuine: clarification_pending is set on the run entity.
-    const pendingBefore = await runEntityTriples(request, "agent.run.clarification_pending");
+    const pendingBefore = await runEntityTriples(request, "agent.run.clarification-pending");
     expect(
       pendingBefore.length,
-      "expected agent.run.clarification_pending on the run entity before the reply (the pause marker).",
+      "expected agent.run.clarification-pending on the run entity before the reply (the pause marker).",
     ).toBeGreaterThanOrEqual(1);
 
     // -----------------------------------------------------------------
@@ -143,8 +143,8 @@ test.describe("ADR-053 Phase 4b-2 PR-2 — operator reply resumes a paused run (
     // path with the resumable-reply anchors (semstreams#256 / beta.106).
     // No reply_to → a fresh coordinator loop re-attached to the run via run_id
     // and marked as a reply via in_reply_to (NOT a re-entry of the completed
-    // asking loop). No triple seeding — the wire stamps agent.run.entity_id +
-    // agent.loop.reply_to at spawn.
+    // asking loop). No triple seeding — the wire stamps agent.run.entity-id +
+    // agent.loop.reply-to at spawn.
     // -----------------------------------------------------------------
     const reply = await request.post("/teams-dispatch/message", {
       data: {
@@ -166,12 +166,12 @@ test.describe("ADR-053 Phase 4b-2 PR-2 — operator reply resumes a paused run (
     // never-resumed run keeps pending set forever; a bounce re-sets it.
     // -----------------------------------------------------------------
     const resumed = await pollUntil(async () => {
-      const pending = await runEntityTriples(request, "agent.run.clarification_pending");
+      const pending = await runEntityTriples(request, "agent.run.clarification-pending");
       return pending.length === 0 ? true : null;
     }, { timeoutMs: 60_000 });
     expect(
       resumed,
-      "agent.run.clarification_pending was never cleared after the reply — the resume (agent-run/10→11) did not fire. Run still parked. Current phases: " +
+      "agent.run.clarification-pending was never cleared after the reply — the resume (agent-run/10→11) did not fire. Run still parked. Current phases: " +
         JSON.stringify((await runPhaseTriples(request)).map((t) => t.object)),
     ).toBeTruthy();
 
@@ -193,24 +193,24 @@ test.describe("ADR-053 Phase 4b-2 PR-2 — operator reply resumes a paused run (
     ).not.toContain("awaiting_approval");
 
     // -----------------------------------------------------------------
-    // Step 8 — the reply loop carried the real wire anchor: agent.loop.reply_to
+    // Step 8 — the reply loop carried the real wire anchor: agent.loop.reply-to
     // was stamped (proves beta.106 threaded in_reply_to → buildSpawnIdentityTriples),
     // AND it points at the asking loop's entity (proves the reply referenced the
     // RIGHT loop, not just that some reply triple exists). buildSpawnIdentityTriples
     // reconstructs the object as LoopExecutionEntityID(in_reply_to), which equals
-    // the asking loop's entity ID (the coordinator.user_question subject).
+    // the asking loop's entity ID (the coordinator.clarification.question subject).
     // -----------------------------------------------------------------
     const replyTo = await fetchTriples(request, {
-      predicate: "agent.loop.reply_to",
+      predicate: "agent.loop.reply-to",
       limit: 20,
     });
     expect(
       replyTo.length,
-      "expected an agent.loop.reply_to triple on the resumed loop (semstreams#256 / beta.106 typed reply identity). Zero → the reply path did not thread in_reply_to.",
+      "expected an agent.loop.reply-to triple on the resumed loop (semstreams#256 / beta.106 typed reply identity). Zero → the reply path did not thread in_reply_to.",
     ).toBeGreaterThanOrEqual(1);
     expect(
       replyTo.map((t) => String(t.object)),
-      "agent.loop.reply_to must point at the asking loop's entity (" +
+      "agent.loop.reply-to must point at the asking loop's entity (" +
         askingLoopEntity +
         ") — proves the reply referenced the loop that asked, not an arbitrary loop. Got: " +
         JSON.stringify(replyTo.map((t) => t.object)),
@@ -220,10 +220,10 @@ test.describe("ADR-053 Phase 4b-2 PR-2 — operator reply resumes a paused run (
     // Step 9 — rule 11 also cleared clarification_resumed (removed last). Required
     // so a FUTURE clarification on this run can pause again (rule 09's guard).
     // -----------------------------------------------------------------
-    const resumedMarker = await runEntityTriples(request, "agent.run.clarification_resumed");
+    const resumedMarker = await runEntityTriples(request, "agent.run.clarification-resumed");
     expect(
       resumedMarker.length,
-      "agent.run.clarification_resumed must be CLEARED after resume (agent-run/11 removes it last). Still present → marker-clear incomplete; a second clarification could never pause.",
+      "agent.run.clarification-resumed must be CLEARED after resume (agent-run/11 removes it last). Still present → marker-clear incomplete; a second clarification could never pause.",
     ).toBe(0);
 
     // -----------------------------------------------------------------
@@ -243,10 +243,10 @@ test.describe("ADR-053 Phase 4b-2 PR-2 — operator reply resumes a paused run (
       "run must remain `executing` after the settle window (no re-pause). Got: " +
         JSON.stringify(settledPhases),
     ).toContain("executing");
-    const pendingSettled = await runEntityTriples(request, "agent.run.clarification_pending");
+    const pendingSettled = await runEntityTriples(request, "agent.run.clarification-pending");
     expect(
       pendingSettled.length,
-      "agent.run.clarification_pending re-appeared after resume — pause↔resume bounce.",
+      "agent.run.clarification-pending re-appeared after resume — pause↔resume bounce.",
     ).toBe(0);
   });
 });

@@ -4,6 +4,9 @@
   "name": "Execute loop-failed → stamp counter on RUN loop (per-C1 fix)",
   "description": "ADR-042 §Phase 2 redesign autoresearch pack — iteration JOIN counter, loop-failed half. Fires when an autoresearch-execute loop terminates with outcome=failed — the loop itself crashed BEFORE emitting decide(action=measured). Causes: sandbox bash dispatch timed out, agentic-loop hit max_iterations without decide, container OOM mid-bash, NATS transient failure dropped the loop, panic in the LLM completion path.\n\nWrites the same autoresearch.experiment.completed triple onto the RUN loop entity that rule 04a writes. Together 04a + 04b implement the README's 'honest accounting of the iteration budget' claim: every execute consumes one budget slot regardless of whether the measurement completed cleanly OR the loop crashed mid-iteration. Failed executes still cost an iteration; the chain still makes forward progress against the cap.\n\nReview-fix rationale (2026-05-29): the original single rule 04 conditioned on outcome=success+decide=measured. A failed execute would NOT increment the counter; rule 11 (loop-failed-pause) would stamp chain.paused.marker and the chain would wedge silently while the counter showed N-1 rather than N. The fix routes loop-failed executes through this rule (counter increments, chain continues) and removes autoresearch-execute from rule 11's role list (no more pause-on-execute-fail).\n\nFor propose / synthesize / baseline / reviewer-autoresearch failures, rule 11 still pauses the chain — those failures DO need operator intervention; only execute failures are budgeted-and-continue.",
   "enabled": true,
+  "entity": {
+    "pattern": "*.*.*.*.*.*"
+  },
   "conditions": [
     {
       "field": "agent.loop.role",
@@ -22,19 +25,21 @@
   "on_enter": [
     {
       "type": "add_triple",
-      "subject": "$entity.triple.lineage.run-loop-entity-id",
+      "subject": "$entity.triple.agent.lineage.run-loop-entity-id",
       "predicate": "autoresearch.experiment.completed",
       "object": "$entity.id"
     },
     {
       "type": "add_triple",
-      "subject": "$entity.triple.lineage.run-loop-entity-id",
-      "predicate": "autoresearch.experiment.loop_failed",
+      "subject": "$entity.triple.agent.lineage.run-loop-entity-id",
+      "predicate": "autoresearch.experiment.loop-failed",
       "object": "$entity.id"
     },
     {
       "type": "replace_owned",
-      "subject": "$entity.triple.lineage.run-loop-entity-id",
+      "projection_contract": "autoresearch.run-projection",
+      "projection_group": "iteration-pending",
+      "subject": "$entity.triple.agent.lineage.run-loop-entity-id",
       "predicate": "autoresearch.iteration.pending",
       "object": "$entity.id"
     }
@@ -46,7 +51,7 @@
     "adr": "docs/adr/042-coordinator-instantiated-flows-via-templates.md",
     "join_role": "stamp_failed",
     "paired_with": "04a-execute-stamp-completion.json — clean completion counter half",
-    "two_triples_rationale": "Stamps both autoresearch.experiment.completed (for the cap counter — same predicate as 04a's stamp, dedup-safe via the per-(subject,predicate,object) set semantics) AND autoresearch.experiment.loop_failed (for the SYNTHESIZE rollup to distinguish loop-failed iterations from cleanly-measured ones — the former are budget-consumed but evidence-empty; reviewer-autoresearch grades the journey including any loop-failures as 'iterations that consumed budget without producing measurement data').",
+    "two_triples_rationale": "Stamps both autoresearch.experiment.completed (for the cap counter — same predicate as 04a's stamp, dedup-safe via the per-(subject,predicate,object) set semantics) AND autoresearch.experiment.loop-failed (for the SYNTHESIZE rollup to distinguish loop-failed iterations from cleanly-measured ones — the former are budget-consumed but evidence-empty; reviewer-autoresearch grades the journey including any loop-failures as 'iterations that consumed budget without producing measurement data').",
     "no_outcome_triple_caveat": "A loop-failed execute has NOT called emit_autoresearch_measurement. There is no autoresearch.measurement.value, .pass, .outcome on the failed execute's loop entity. SYNTHESIZE iterates the journal via $entity.triple.autoresearch.experiment.completed.triples and read_loop_result on each; for loop-failed entries, read_loop_result returns an empty/partial result. The synthesize persona MUST handle this gracefully — count the iteration but mark it 'loop-failed (no measurement)' in the journey. The reviewer-autoresearch persona's checklist includes 'all loop-failed iterations are accounted for in the journey'.",
     "review_fix_origin": "Per reviewer C1 (2026-05-29). Without this rule, a failed execute would silently wedge the chain (rule 11 pause + counter stuck at N-1). With this rule + the rule 11 autoresearch-execute removal, the cap budget honestly bounds iterations including failures."
   }

@@ -36,7 +36,7 @@ Your terminal is `decide`. Your allow-list:
   interpretable.
 - **A diff within the authorised surface.** The surface globs are
   on the run entity (substituted into your prompt as
-  `$entity.triple.autoresearch.surface`). Stay inside them. The
+  `$entity.triple.autoresearch.run.surface`). Stay inside them. The
   rule pre-filter does NOT enforce surface; the synthesize-phase
   reviewer will catch out-of-surface changes and reject the run.
 
@@ -70,9 +70,9 @@ measurement + outcome. Use the journal to:
    reverted.
 2. **Build on changes** that were kept (the running best —
    `$entity.triple.autoresearch.best.value` and
-   `$entity.triple.autoresearch.best.experiment_id`).
+   `$entity.triple.autoresearch.best.experiment-id`).
 3. **Identify directions** the journal suggests have headroom.
 
-You are iteration N of `$entity.triple.autoresearch.cap`. Calibrate
+You are iteration N of `$entity.triple.autoresearch.run.cap`. Calibrate
 hypothesis ambition to remaining budget: early iterations can be
 exploratory; late iterations should consolidate.

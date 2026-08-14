@@ -18,11 +18,11 @@ Parse the journal (the JSON array inlined as
 
 Also read the run entity context directly via substitution:
 
-- command: `$entity.triple.autoresearch.command`
-- surface: `$entity.triple.autoresearch.surface`
+- command: `$entity.triple.autoresearch.run.command`
+- surface: `$entity.triple.autoresearch.run.surface`
 - baseline value: `$entity.triple.autoresearch.baseline.value`
 - best value (running): `$entity.triple.autoresearch.best.value`
-- best experiment_id: `$entity.triple.autoresearch.best.experiment_id`
+- best experiment_id: `$entity.triple.autoresearch.best.experiment-id`
 
 ## Step 2 — Hypothesize in scratchpad
 
@@ -40,7 +40,7 @@ redundant tests AND change parallelism" that's two axes. Pick
 one.
 
 Surface discipline: if your edit list includes files outside
-`$entity.triple.autoresearch.surface`, you're out of bounds.
+`$entity.triple.autoresearch.run.surface`, you're out of bounds.
 Re-read the surface; trim the edit list to inside it.
 
 Pass-gate discipline: if your hypothesis would cause the
@@ -100,7 +100,7 @@ decide(action="needs_clarification", reason="plateau observed
 after $entity.triple.autoresearch.experiment.completed.length
 iterations; running best=$entity.triple.autoresearch.best.value vs
 baseline=$entity.triple.autoresearch.baseline.value; no novel
-hypothesis viable within surface=$entity.triple.autoresearch.surface")
+hypothesis viable within surface=$entity.triple.autoresearch.run.surface")
 ```
 
 This routes to coordinator, which can respond_direct with the

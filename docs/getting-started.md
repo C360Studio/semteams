@@ -95,9 +95,10 @@ for everything below.
 
 The chat box is the coordinator front door. You can ask how SemTeams works,
 refine an idea before choosing a team, or send a ready task. Optional team
-prefixes such as `/research`, `/create-change` (`/spec`), `/optimize`, and
-`/dev-via-test` are intent hints; the coordinator still validates the prompt
-shape and keeps the normal sandbox, readiness, approval, and review gates.
+prefixes such as `/research` and `/optimize` are intent hints; the coordinator
+still validates the prompt shape and keeps the normal sandbox, readiness,
+approval, and review gates. (The spec and build team commands are parked with
+their packs — see ADR-058; the coordinator answers those asks directly.)
 
 When a team emits an artifact, open it from the task detail panel. The artifact
 card lets you copy the content or attach it to a new chat prompt. Attached
@@ -119,20 +120,21 @@ The current runtime has **one** product-shell flow config:
 
 | Config | What it runs | Needs |
 |---|---|---|
-| `flow-bootstrap.json` | The production substrate (graph-ingest, graph-query, rule-processor, agentic-loop, agentic-dispatch, agentic-tools, agentic-model) plus the live category rule packs (`research/`, `autoresearch/`, `create-change/`, `proof-readiness/`, `dev-from-task/`, `dev-via-test/`) + support packs (`coordinator/`, `agent-run/`, `ops/`), and the persona corpus that drives them. Uses real LLMs. | `GEMINI_API_KEY` for the default `gemini-flash` endpoint; `ANTHROPIC_API_KEY` optional for Anthropic endpoints; `BRAVE_SEARCH_API_KEY` for web_search |
+| `flow-bootstrap.json` | The production substrate (graph-ingest, graph-query, rule-processor, agentic-loop, agentic-dispatch, agentic-tools, agentic-model) plus the live category rule packs (`research/`, `autoresearch/`) + support packs (`coordinator/`, `agent-run/`, `ops/`), and the persona corpus that drives them. Uses real LLMs. | `GEMINI_API_KEY` for the default `gemini-flash` endpoint; `ANTHROPIC_API_KEY` optional for Anthropic endpoints; `BRAVE_SEARCH_API_KEY` for web_search |
 | `e2e-flow-bootstrap.json` | Mock-LLM clone of the production bootstrap. Same packs + personas, points the model registry at the in-process mock LLM. Used by every Playwright journey under `ui/e2e/agentic/`. | nothing — mock-LLM |
 
 Adding a task class is a new **category pack**, not a new config:
 rule files under `configs/rules/<category>/`, persona bundles under
 `configs/personas/fragments/<role>-<category>-<phase?>/`, plus a
 coordinator-persona entry teaching the new `decide(action=<category>)`
-token. Use the research, autoresearch, and dev-via-test packs as
-working templates.
+token. Use the research and autoresearch packs as working templates.
+(The dev-side packs are parked in place per ADR-058 — they are on-disk
+references but are NOT wired into the bootstrap.)
 
 ### Running a pack that needs a sandbox
 
 The **research** pack runs anywhere — `task dev:research` is enough.
-But **autoresearch**, **dev-via-test**, and governed implementation
+But **autoresearch** and other sandbox-bound
 bridges run their `bash` inside a per-tenant devcontainer (see
 [architecture.md](architecture.md) §"How a sandbox gets created"),
 which needs the sandbox sidecar + `@devcontainers/cli` +
@@ -141,7 +143,7 @@ of that up for you — the simplest way to run one end-to-end locally
 is a real-LLM smoke with your own prompt:
 
 ```bash
-# autoresearch or dev-via-test, real LLM, full sandbox lifecycle:
+# autoresearch, real LLM, full sandbox lifecycle:
 PROMPT="Add a Go HTTP service that … with unit tests." \
   DEBUG=1 KEEP_STACK_UP=1 RUN_ID=my-run \
   task ui:test:e2e:agentic:smoke13:run

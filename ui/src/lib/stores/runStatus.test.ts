@@ -27,7 +27,7 @@ function loopEntity(loopId: string): string {
 function approvalTriple(runId: string, gatedLoopId: string): RawTriple {
   return {
     subject: runEntity(runId),
-    predicate: "agent.run.approval_pending",
+    predicate: "agent.run.approval-pending",
     object: loopEntity(gatedLoopId),
   };
 }
@@ -40,7 +40,7 @@ function approvalTriple(runId: string, gatedLoopId: string): RawTriple {
 function clarTriple(runId: string, askingLoopId: string): RawTriple {
   return {
     subject: runEntity(runId),
-    predicate: "agent.run.clarification_pending",
+    predicate: "agent.run.clarification-pending",
     object: askingLoopId,
   };
 }
@@ -48,7 +48,7 @@ function clarTriple(runId: string, askingLoopId: string): RawTriple {
 function questionTriple(askingLoopId: string, question: string): RawTriple {
   return {
     subject: loopEntity(askingLoopId),
-    predicate: "coordinator.user_question",
+    predicate: "coordinator.clarification.question",
     object: question,
   };
 }
@@ -95,7 +95,7 @@ describe("deriveRunStatuses", () => {
   });
 
   // -------------------------------------------------------------------------
-  // clarification (clarification_pending + coordinator.user_question)
+  // clarification (clarification_pending + coordinator.clarification.question)
   // -------------------------------------------------------------------------
 
   it("classifies clarification_pending as clarification pause with question", () => {
@@ -173,7 +173,7 @@ describe("deriveRunStatuses", () => {
     // A triple that happens to carry approval_pending but on a NON-run entity
     const badTriple: RawTriple = {
       subject: `${ORG}.agent.agentic-loop.execution.some-loop`,
-      predicate: "agent.run.approval_pending",
+      predicate: "agent.run.approval-pending",
       object: loopEntity("gate-99"),
     };
     const result = deriveRunStatuses([badTriple], [], []);
@@ -249,7 +249,7 @@ describe("deriveRunStatuses", () => {
     // Subject ends right at the infix (nothing after it)
     const badRunEntity: RawTriple = {
       subject: `${ORG}.agent.chain.execution.`,
-      predicate: "agent.run.approval_pending",
+      predicate: "agent.run.approval-pending",
       object: loopEntity("loop-x"),
     };
     const result = deriveRunStatuses([badRunEntity], [], []);
@@ -284,7 +284,7 @@ describe("deriveRunStatuses", () => {
     // toBareLoopId still recovers the bare id and the question still joins.
     const clarFullRef: RawTriple = {
       subject: runEntity("run-fwd"),
-      predicate: "agent.run.clarification_pending",
+      predicate: "agent.run.clarification-pending",
       object: loopEntity("loop-fwd-1"), // FULL ref (hypothetical future shape)
     };
     const questions = [questionTriple("loop-fwd-1", "Proceed?")];

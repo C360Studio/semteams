@@ -18,7 +18,21 @@
     "USER": {
       "subjects": ["user.>"],
       "storage": "file",
-      "max_age": "1h"
+      "max_age": "1h",
+      "max_bytes": 67108864,
+      "discard": "old"
+    },
+    "AGENT": {
+      "subjects": ["agent.>"],
+      "max_age": "24h",
+      "max_bytes": 268435456,
+      "discard": "old"
+    },
+    "TOOL": {
+      "subjects": ["tool.>"],
+      "max_age": "24h",
+      "max_bytes": 268435456,
+      "discard": "old"
     }
   },
   "model_registry": {
@@ -163,9 +177,9 @@
       "name": "rule-processor",
       "enabled": true,
       "config": {
-        "entity_watch_patterns": [
-          "c360.>"
-        ],
+        "entity_watch_buckets": {
+          "ENTITY_STATES": ["c360.*.*.*.*.*"]
+        },
         "ports": {
           "inputs": [
             {
@@ -173,7 +187,7 @@
               "subject": "ENTITY_STATES.>",
               "type": "kv-watch",
               "bucket": "ENTITY_STATES",
-              "description": "Entity state changes drive rule evaluation. Rule conditions resolve against entity facts (agent.loop.role, coordinator.decision.next_action, etc.), not raw NATS messages — the message-path evaluator can't bind entity-typed predicates."
+              "description": "Entity state changes drive rule evaluation. Rule conditions resolve against entity facts (agent.loop.role, coordinator.decision.next-action, etc.), not raw NATS messages — the message-path evaluator can't bind entity-typed predicates."
             }
           ],
           "outputs": [
@@ -200,29 +214,24 @@
             "entity_pattern": "*.*.agent.chain.execution.*",
             "groups": [
               {
+                "name": "best-value",
                 "mode": "replace-owned",
-                "predicates": [
-                  "autoresearch.best.value",
-                  "autoresearch.best.experiment_id",
-                  "autoresearch.run.status",
-                  "autoresearch.iteration.pending"
-                ]
-              }
-            ]
-          },
-          {
-            "name": "dev-via-test.retry-projection",
-            "entity_pattern": "*.*.agent.chain.execution.*",
-            "groups": [
+                "predicates": ["autoresearch.best.value"]
+              },
               {
+                "name": "best-experiment-id",
                 "mode": "replace-owned",
-                "predicates": [
-                  "dev_via_test.plan.retry.pending",
-                  "dev_via_test.plan.retry.finding",
-                  "dev_via_test.cbg.retry.pending",
-                  "dev_via_test.cbg.retry.finding",
-                  "dev_via_test.cbg.retry.target_task"
-                ]
+                "predicates": ["autoresearch.best.experiment-id"]
+              },
+              {
+                "name": "run-status",
+                "mode": "replace-owned",
+                "predicates": ["autoresearch.run.status"]
+              },
+              {
+                "name": "iteration-pending",
+                "mode": "replace-owned",
+                "predicates": ["autoresearch.iteration.pending"]
               }
             ]
           }
@@ -238,42 +247,6 @@
           "/app/configs/rules/research/07-reviewer-approved-to-coordinator.json",
           "/app/configs/rules/research/08-loop-failed-pause.json",
           "/app/configs/rules/research/09-loop-failed-run-outcome.json",
-          "/app/configs/rules/dev-via-test/01-coordinator-dev-via-test-spawn.json",
-          "/app/configs/rules/dev-via-test/02-lisa-terminal-to-plan-review.json",
-          "/app/configs/rules/dev-via-test/02b-plan-approved-to-coordinator.json",
-          "/app/configs/rules/dev-via-test/02c-plan-retry-stamp.json",
-          "/app/configs/rules/dev-via-test/02d-plan-retry-driver.json",
-          "/app/configs/rules/dev-via-test/02e-plan-rejected-to-coordinator.json",
-          "/app/configs/rules/dev-via-test/02f-lisa-needs-clarification-to-coordinator.json",
-          "/app/configs/rules/dev-via-test/02f-replan-lisa-needs-clarification-to-coordinator.json",
-          "/app/configs/rules/dev-via-test/02g-replan-lisa-terminal-to-plan-review.json",
-          "/app/configs/rules/dev-via-test/03-coordinator-dispatch-ralph.json",
-          "/app/configs/rules/dev-via-test/04a-execute-stamp-converged.json",
-          "/app/configs/rules/dev-via-test/04b-execute-stamp-failed.json",
-          "/app/configs/rules/dev-via-test/05-ralph-terminal-to-coordinator.json",
-          "/app/configs/rules/dev-via-test/06-coordinator-dispatch-cbg.json",
-          "/app/configs/rules/dev-via-test/07a-cbg-approved-to-coordinator.json",
-          "/app/configs/rules/dev-via-test/07b-cbg-rejected-to-coordinator.json",
-          "/app/configs/rules/dev-via-test/07c-cbg-retry-stamp.json",
-          "/app/configs/rules/dev-via-test/07d-cbg-retry-driver.json",
-          "/app/configs/rules/dev-via-test/07e-cbg-retry-missing-target.json",
-          "/app/configs/rules/dev-via-test/08-loop-failed-pause.json",
-          "/app/configs/rules/dev-via-test/09-firstpass-loop-failed-run-outcome.json",
-          "/app/configs/rules/dev-via-test/10-loop-failed-run-outcome.json",
-          "/app/configs/rules/create-change/01-coordinator-create-change-spawn.json",
-          "/app/configs/rules/create-change/02-author-to-reviewer.json",
-          "/app/configs/rules/create-change/03-reviewer-approved-to-coordinator.json",
-          "/app/configs/rules/create-change/04-reviewer-rejected-to-coordinator.json",
-          "/app/configs/rules/create-change/05-needs-clarification-to-coordinator.json",
-          "/app/configs/rules/create-change/06-loop-failed-pause.json",
-          "/app/configs/rules/create-change/07-loop-failed-run-outcome.json",
-          "/app/configs/rules/proof-readiness/01-passed-to-implementation-ready.json",
-          "/app/configs/rules/proof-readiness/02-test-harness-handoff.json",
-          "/app/configs/rules/proof-readiness/03-ambiguous-to-coordinator.json",
-          "/app/configs/rules/proof-readiness/04-failed-no-route-pause.json",
-          "/app/configs/rules/dev-from-task/01a-coordinator-request-run-anchor.json",
-          "/app/configs/rules/dev-from-task/01b-coordinator-request-lineage.json",
-          "/app/configs/rules/dev-from-task/02-ready-request-to-coordinator.json",
           "/app/configs/rules/autoresearch/01-coordinator-autoresearch-spawn.json",
           "/app/configs/rules/autoresearch/03-propose-to-execute.json",
           "/app/configs/rules/autoresearch/04a-execute-stamp-completion.json",
@@ -490,144 +463,6 @@
               "description": "Entity state KV for graph queries"
             }
           ]
-        }
-      }
-    },
-    "oasf-generator": {
-      "type": "processor",
-      "name": "oasf-generator",
-      "enabled": true,
-      "config": {
-        "entity_kv_bucket": "ENTITY_STATES",
-        "oasf_kv_bucket": "OASF_RECORDS",
-        "watch_pattern": ">",
-        "generation_debounce": "500ms",
-        "default_agent_version": "1.0.0",
-        "default_authors": [
-          "SemStreams"
-        ],
-        "include_extensions": true,
-        "ports": {
-          "inputs": [
-            {
-              "name": "entity_changes",
-              "subject": "entity.state.>",
-              "type": "kv-watch",
-              "required": true,
-              "description": "Watch for agent entity state changes"
-            }
-          ],
-          "outputs": [
-            {
-              "name": "oasf_records",
-              "subject": "oasf.record.generated.*",
-              "type": "jetstream",
-              "stream_name": "OASF",
-              "required": true,
-              "description": "Generated OASF records"
-            }
-          ],
-          "kv_write": [
-            {
-              "name": "oasf_kv",
-              "type": "kv-write",
-              "bucket": "OASF_RECORDS",
-              "description": "OASF record storage"
-            }
-          ]
-        }
-      }
-    },
-    "directory-bridge": {
-      "type": "output",
-      "name": "directory-bridge",
-      "enabled": true,
-      "config": {
-        "directory_url": "http://localhost:8081",
-        "heartbeat_interval": "30s",
-        "registration_ttl": "5m",
-        "identity_provider": "local",
-        "oasf_kv_bucket": "OASF_RECORDS",
-        "retry_count": 3,
-        "retry_delay": "1s",
-        "ports": {
-          "inputs": [
-            {
-              "name": "oasf_records",
-              "subject": "oasf.record.generated.>",
-              "type": "kv-watch",
-              "required": true,
-              "description": "Watch for generated OASF records"
-            }
-          ],
-          "outputs": [
-            {
-              "name": "registration_events",
-              "subject": "directory.registration.*",
-              "type": "jetstream",
-              "stream_name": "DIRECTORY",
-              "required": false,
-              "description": "Registration events"
-            }
-          ]
-        }
-      }
-    },
-    "a2a-adapter": {
-      "type": "input",
-      "name": "a2a-adapter",
-      "enabled": true,
-      "config": {
-        "transport": "http",
-        "listen_address": ":8282",
-        "agent_card_path": "/.well-known/agent.json",
-        "request_timeout": "30s",
-        "max_concurrent_tasks": 10,
-        "enable_authentication": false,
-        "oasf_bucket": "OASF_RECORDS",
-        "ports": {
-          "inputs": [],
-          "outputs": [
-            {
-              "name": "task_messages",
-              "subject": "agent.task.a2a.*",
-              "type": "jetstream",
-              "stream_name": "AGENT",
-              "required": true,
-              "description": "Task messages to agent dispatch"
-            }
-          ]
-        }
-      }
-    },
-    "otel-exporter": {
-      "type": "output",
-      "name": "otel-exporter",
-      "enabled": true,
-      "config": {
-        "endpoint": "http://localhost:4318",
-        "protocol": "http",
-        "service_name": "semstreams-agentic",
-        "service_version": "1.0.0",
-        "export_traces": true,
-        "export_metrics": true,
-        "export_logs": false,
-        "batch_timeout": "2s",
-        "max_batch_size": 100,
-        "insecure": true,
-        "sampling_rate": 1.0,
-        "ports": {
-          "inputs": [
-            {
-              "name": "agent_events",
-              "subject": "agent.>",
-              "type": "jetstream",
-              "stream_name": "AGENT",
-              "required": true,
-              "description": "Agent lifecycle events for span collection"
-            }
-          ],
-          "outputs": []
         }
       }
     },

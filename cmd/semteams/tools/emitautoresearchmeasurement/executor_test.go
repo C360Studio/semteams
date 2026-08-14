@@ -158,7 +158,7 @@ func TestExecutor_KeptStampsOutcomeButLeavesRunBestToRule04c(t *testing.T) {
 	if v, found := pub.findOn(runEntity, "autoresearch.best.value"); found {
 		t.Errorf("run entity best.value stamped by executor (%v); must be delegated to rule 04c update_triple — see executor.go fix-comment 2026-06-03", v)
 	}
-	if v, found := pub.findOn(runEntity, "autoresearch.best.experiment_id"); found {
+	if v, found := pub.findOn(runEntity, "autoresearch.best.experiment-id"); found {
 		t.Errorf("run entity best.experiment_id stamped by executor (%v); must be delegated to rule 04c update_triple", v)
 	}
 }
@@ -289,4 +289,10 @@ func TestExecutor_MissingLoopIDErrors(t *testing.T) {
 	if res.Error == "" {
 		t.Errorf("expected error without loop_id")
 	}
+}
+
+// CreateEntityWithTriples satisfies beta.159's widened TriplePublisher;
+// the fake delegates to AddTriplesBatch so recording semantics are identical.
+func (f *fakePub) CreateEntityWithTriples(ctx context.Context, _ string, _ message.Type, triples []message.Triple) error {
+	return f.AddTriplesBatch(ctx, triples)
 }

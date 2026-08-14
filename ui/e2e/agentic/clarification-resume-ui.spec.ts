@@ -20,9 +20,9 @@ import { test, expect } from "@playwright/test";
  *      and task.RunID = firingLoopID), so the pause lands on the right card.
  *
  *   2. WIRE-SHAPE (the load-bearing assertion): the question prose rendered in
- *      the panel proves deriveRunStatuses joined coordinator.user_question to
+ *      the panel proves deriveRunStatuses joined coordinator.clarification.question to
  *      the run via the BARE asking-loop id. The first UI draft ran bareIdAfter()
- *      on agent.run.clarification_pending.object — but that object is the BARE
+ *      on agent.run.clarification-pending.object — but that object is the BARE
  *      loop UUID ($entity.instance), not a full entity ref, so the join MISSED
  *      and the in_reply_to anchor was "". The unit tests masked this by assuming
  *      full entity ids for both markers; only a real-backend journey catches it.
@@ -32,7 +32,7 @@ import { test, expect } from "@playwright/test";
  *   3. RESUME via UI: clicking Send posts the operator's answer through
  *      agentApi.sendMessage(content, { runId, inReplyTo }) where inReplyTo is
  *      the bare asking-loop id taken from the runStatus pause. beta.106 stamps
- *      agent.run.entity_id + agent.loop.reply_to at spawn → agent-run/10→11
+ *      agent.run.entity-id + agent.loop.reply-to at spawn → agent-run/10→11
  *      resume the run (awaiting_approval→executing + clear both markers). The
  *      affordance then unmounts on the next poll.
  *
@@ -129,7 +129,7 @@ test.describe("ADR-053 Phase 4b-2 — operator resumes a paused run THROUGH the 
     ).toBeVisible({ timeout: 30_000 });
 
     // WIRE-SHAPE PROOF: the real question prose rendered → deriveRunStatuses
-    // joined coordinator.user_question to the run via the bare asking-loop id.
+    // joined coordinator.clarification.question to the run via the bare asking-loop id.
     // The fixture question contains "MAVLink dialect"; the fallback copy does
     // not. A miss here means the bare/full marker normalization regressed.
     await expect(
@@ -160,12 +160,12 @@ test.describe("ADR-053 Phase 4b-2 — operator resumes a paused run THROUGH the 
     // working reply clears it.
     // -----------------------------------------------------------------
     const resumed = await pollUntil(async () => {
-      const pending = await runEntityTriples(request, "agent.run.clarification_pending");
+      const pending = await runEntityTriples(request, "agent.run.clarification-pending");
       return pending.length === 0 ? true : null;
     }, { timeoutMs: 60_000 });
     expect(
       resumed,
-      "agent.run.clarification_pending was never cleared after the UI reply — the resume did not fire. The reply likely carried an empty in_reply_to (bare/full asking-loop id regression). Current phases: " +
+      "agent.run.clarification-pending was never cleared after the UI reply — the resume did not fire. The reply likely carried an empty in_reply_to (bare/full asking-loop id regression). Current phases: " +
         JSON.stringify((await runPhaseTriples(request)).map((t) => t.object)),
     ).toBeTruthy();
 

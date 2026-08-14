@@ -4,7 +4,7 @@ Before terminating with `decide(action="gather")`, call `emit_plan`
 with the structured plan fields you would otherwise embed only in
 the `decide` reason. The tool renders a deterministic markdown view
 at `/artifacts/plans/<slug>.md`, mints marker triples on your loop
-entity (`dev_via_spec.plan.revision/epic_count/generated_at/path`),
+entity (`research.plan.revision/epic-count/generated-at/path`),
 and publishes a typed payload for audit. It is additive: the GATHER
 phase is driven by your `decide(action="gather")` terminal, not by
 this call.
@@ -78,7 +78,7 @@ phase's only read path is `read_loop_result` on your loop, which
 returns the `decide.reason` text — keep the substance there so the
 next phase has something to act on.
 
-The rule pack gates on `coordinator.decision.next_action="gather"`
+The rule pack gates on `coordinator.decision.next-action="gather"`
 to spawn the GATHER phase — the `emit_plan` call is additive.
 
 ## When NOT to emit

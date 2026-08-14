@@ -35,7 +35,7 @@ func TestNATSPauseDataReader_LiveSubject(t *testing.T) {
 		"id": "` + failedLoopEntityID + `",
 		"triples": [
 			{"predicate": "chain.paused.role", "object": "builder"},
-			{"predicate": "chain.paused.original_model", "object": "claude-sonnet"},
+			{"predicate": "chain.paused.original-model", "object": "claude-sonnet"},
 			{"predicate": "chain.paused.cause", "object": "max_iterations"}
 		]
 	}`)

@@ -4,6 +4,9 @@
   "name": "reviewer-autoresearch decide(insufficient) → autoresearch-synthesize (re-rollup)",
   "description": "ADR-042 §Phase 2 redesign autoresearch pack recovery rule. Fires when reviewer-autoresearch rejects the rollup as structurally insufficient. Re-spawns autoresearch-synthesize with the reviewer's gaps; the new synthesize re-rolls up the SAME journal (iteration spend is already done — the rule does NOT re-iterate experiments).\n\nThis is a critical contract distinction from research's 05-reviewer-rejected-retry.json: in research the retry re-runs the plan-gather-synthesize arc to fill in gaps in the artifact. In autoresearch, the inner iteration loop has already consumed the budget; a structural-completeness gap in the synthesize artifact is fixed by re-synthesising from the same journal, NOT by re-iterating. Bounded by rule max_iterations=2 — cap exhaustion routes to chain.paused.marker via the failure path.",
   "enabled": true,
+  "entity": {
+    "pattern": "*.*.*.*.*.*"
+  },
   "conditions": [
     {
       "field": "agent.loop.role",
@@ -12,7 +15,7 @@
       "required": true
     },
     {
-      "field": "coordinator.decision.next_action",
+      "field": "coordinator.decision.next-action",
       "operator": "eq",
       "value": "insufficient",
       "required": true
@@ -31,17 +34,17 @@
       "action_allowlist": ["emit", "needs_clarification"],
       "properties": {
         "reviewer_loop_id": "$entity.instance",
-        "run_loop_id": "$entity.triple.lineage.autoresearch-run",
+        "run_loop_id": "$entity.triple.agent.lineage.autoresearch-run",
         "category": "autoresearch",
         "phase": "synthesize",
         "retry": true
       },
       "related_loops": {
-        "autoresearch-run": "$entity.triple.lineage.autoresearch-run",
-        "run-loop-entity-id": "$entity.triple.lineage.run-loop-entity-id",
+        "autoresearch-run": "$entity.triple.agent.lineage.autoresearch-run",
+        "run-loop-entity-id": "$entity.triple.agent.lineage.run-loop-entity-id",
         "reviewer": "$entity.instance"
       },
-      "prompt": "AUTORESEARCH SYNTHESIZE — re-rollup pass.\n\nThe reviewer-autoresearch at loop $entity.instance rejected the prior synthesize artifact as structurally insufficient (decide.reason names the gaps). The iteration loop already ran; you do NOT re-iterate. Your job is to fix the artifact's structural gaps and re-emit.\n\nIteration 1 — call read_loop_result on $entity.instance for the reviewer's gap bullets. Then call read_loop_result on the prior synthesize loop (your retry property points at this reviewer; the reviewer's related_loops carries autoresearch-synthesize → prior synth loop ID) to read the artifact draft that was rejected. Then `bash cat <prior artifact path>` to read the rejected rendered markdown.\n\nIteration 2 — read the run entity context the same way the original synthesize did:\n\n- command, surface, baseline.value, best.value, best.experiment_id via $entity.triple.autoresearch.<predicate> substitutions\n- per-iteration journal via $entity.triple.autoresearch.experiment.completed.triples (JSON array of execute loop IDs), each read_loop_result'd for its terminal reason.\n\nIteration 3 — compose the corrected artifact. Carry forward what was correct in the prior emit; tighten / add only what the reviewer's gaps demand. Increment revision (read prior_revision from the rejected artifact, set revision = prior_revision + 1).\n\nIteration 4 — call emit_autoresearch_artifact with the corrected fields (full shape per 06-experiment-stop-cap.json's emit instructions). The tool overwrites at the same slug; revision is the audit ledger.\n\nIteration 5 — decide(action=\"emit\", reason=\"<one-line: revision <N>, addressed gaps: <reviewer's bullets>>\"). Rule 07 re-spawns reviewer-autoresearch.\n\nThe rule layer's max_iterations=2 bounds reviewer-rejection retries at this layer. Cap exhaustion fails the chain — operator intervention or coordinator re-plan is required. The iteration budget (cap) is already spent; do NOT re-iterate experiments under this recovery path."
+      "prompt": "AUTORESEARCH SYNTHESIZE — re-rollup pass.\n\nThe reviewer-autoresearch at loop $entity.instance rejected the prior synthesize artifact as structurally insufficient (decide.reason names the gaps). The iteration loop already ran; you do NOT re-iterate. Your job is to fix the artifact's structural gaps and re-emit.\n\nIteration 1 — call read_loop_result on $entity.instance for the reviewer's gap bullets. Then call read_loop_result on the prior synthesize loop (your retry property points at this reviewer; the reviewer's related_loops carries autoresearch-synthesize → prior synth loop ID) to read the artifact draft that was rejected. Then `bash cat <prior artifact path>` to read the rejected rendered markdown.\n\nIteration 2 — read the run entity context the same way the original synthesize did:\n\n- command, surface, baseline.value, best.value, best.experiment-id via the run's autoresearch.* triples (e.g. $entity.triple.autoresearch.best.value)\n- per-iteration journal via $entity.triple.autoresearch.experiment.completed.triples (JSON array of execute loop IDs), each read_loop_result'd for its terminal reason.\n\nIteration 3 — compose the corrected artifact. Carry forward what was correct in the prior emit; tighten / add only what the reviewer's gaps demand. Increment revision (read prior_revision from the rejected artifact, set revision = prior_revision + 1).\n\nIteration 4 — call emit_autoresearch_artifact with the corrected fields (full shape per 06-experiment-stop-cap.json's emit instructions). The tool overwrites at the same slug; revision is the audit ledger.\n\nIteration 5 — decide(action=\"emit\", reason=\"<one-line: revision <N>, addressed gaps: <reviewer's bullets>>\"). Rule 07 re-spawns reviewer-autoresearch.\n\nThe rule layer's max_iterations=2 bounds reviewer-rejection retries at this layer. Cap exhaustion fails the chain — operator intervention or coordinator re-plan is required. The iteration budget (cap) is already spent; do NOT re-iterate experiments under this recovery path."
     }
   ],
   "on_exit": [],

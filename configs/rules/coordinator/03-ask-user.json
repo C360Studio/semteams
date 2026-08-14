@@ -2,8 +2,11 @@
   "id": "coordinator_ask_user",
   "type": "expression",
   "name": "Coordinator Asks User a Clarifying Question",
-  "description": "Fires when a coordinator loop calls decide(action=ask_user, reason=<user-facing prose>). The persona contract overloads `reason` for this action: it carries the prose to deliver to the user, NOT an internal log. This rule publishes that prose on the user-response bus (user.response.<coordinator_loop_id>) and stamps a coordinator.user_question triple for audit. Downstream channel routers (UI, email, SMS) subscribe to user.response.> and adapt for their wire format. Coordinator stays channel-agnostic. ADR-029 + coordinator-redesign Slice 1.\n\nLong-term: the `reason`-as-prose overload is a stepping stone. Upstream PR target: add a structured `user_question` field to the decide tool so the prose and the internal-log reason can coexist without overload. Until then, persona prose disambiguates per-action.",
+  "description": "Fires when a coordinator loop calls decide(action=ask_user, reason=<user-facing prose>). The persona contract overloads `reason` for this action: it carries the prose to deliver to the user, NOT an internal log. This rule publishes that prose on the user-response bus (user.response.<coordinator_loop_id>) and stamps a coordinator.clarification.question triple for audit. Downstream channel routers (UI, email, SMS) subscribe to user.response.> and adapt for their wire format. Coordinator stays channel-agnostic. ADR-029 + coordinator-redesign Slice 1.\n\nLong-term: the `reason`-as-prose overload is a stepping stone. Upstream PR target: add a structured `user_question` field to the decide tool so the prose and the internal-log reason can coexist without overload. Until then, persona prose disambiguates per-action.",
   "enabled": true,
+  "entity": {
+    "pattern": "*.*.*.*.*.*"
+  },
   "conditions": [
     {
       "field": "agent.loop.role",
@@ -12,7 +15,7 @@
       "required": true
     },
     {
-      "field": "coordinator.decision.next_action",
+      "field": "coordinator.decision.next-action",
       "operator": "eq",
       "value": "ask_user",
       "required": true
@@ -22,7 +25,7 @@
   "on_enter": [
     {
       "type": "add_triple",
-      "predicate": "coordinator.user_question",
+      "predicate": "coordinator.clarification.question",
       "object": "$entity.triple.coordinator.decision.reason"
     },
     {
@@ -36,7 +39,7 @@
     "phase": "coordinator-redesign Slice 1",
     "channel_agnostic": "The user.response.<loop_id> subject is the framework's user-response bus. UI, email, SMS, and any future input-channel routers subscribe to this subject independently. Coordinator emits a wakeup signal; channel adapters graph-query the audit triple for the prose and render channel-appropriately.",
     "reason_overload_note": "Persona contract (10-decision-contract.md) overloads `reason` for action=ask_user — it carries user-facing prose. Other action values keep `reason` as the internal log convention. Upstream PR target: structured `user_question` field on decide tool.",
-    "publish_properties_omission_note": "The `publish` action carries NO `properties` block intentionally. Upstream executePublish (semstreams beta.64 processor/rule/actions.go executePublish) substitutes Subject but passes Properties through to JSON marshal unchanged — variable substitution does NOT recurse into the properties map. The wakeup signal is therefore subject-only; subscribers receive the published envelope (entity_id, subject, timestamp) and graph-query the audit triple `coordinator.user_question` for the prose. Inlining `$entity.triple.*` in properties would publish the literal string. Migration target: upstream PR to call substitutePayloadVariables on Properties inside executePublish (the helper already exists for executeUpdateKV). go-reviewer caught this on Slice 1 pre-commit.",
+    "publish_properties_omission_note": "The `publish` action carries NO `properties` block intentionally. Upstream executePublish (semstreams beta.64 processor/rule/actions.go executePublish) substitutes Subject but passes Properties through to JSON marshal unchanged — variable substitution does NOT recurse into the properties map. The wakeup signal is therefore subject-only; subscribers receive the published envelope (entity_id, subject, timestamp) and graph-query the audit triple `coordinator.clarification.question` for the prose. Inlining `$entity.triple.*` in properties would publish the literal string. Migration target: upstream PR to call substitutePayloadVariables on Properties inside executePublish (the helper already exists for executeUpdateKV). go-reviewer caught this on Slice 1 pre-commit.",
     "open_followup": "No UI consumer exists today. v1 ships the wakeup signal + audit triple; UI hookup follows in a separate slice. Operators can `nats sub 'user.response.>'` to manually verify the wakeup, then `nats kv get ENTITY_STATES <loop_entity_id>` to read the audit triple."
   }
 }

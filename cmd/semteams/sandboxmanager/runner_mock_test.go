@@ -117,3 +117,8 @@ func TestMockRunner_ManagerRoundTrip_StableSignature(t *testing.T) {
 		t.Fatalf("Verified[go] missing on round-trip: %+v", a.Verified)
 	}
 }
+
+// CreateEntityWithTriples satisfies beta.159's widened TriplePublisher.
+func (noopPublisher) CreateEntityWithTriples(context.Context, string, message.Type, []message.Triple) error {
+	return nil
+}

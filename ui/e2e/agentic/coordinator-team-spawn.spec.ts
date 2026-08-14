@@ -39,26 +39,14 @@ const CASES = [
     action: "research",
     role: "researcher-research-plan",
   },
-  {
-    name: "OpenSpec prompt spawns the change author",
-    prompt:
-      "Create an OpenSpec change for adding Idempotency-Key support to POST /jobs. Include acceptance criteria and affected API contracts.",
-    action: "create_change",
-    role: "author-create-change",
-  },
+  // The create_change and dev_via_test handoffs are parked with their
+  // packs (ADR-058); re-add their cases when the packs are re-wired.
   {
     name: "bounded optimization prompt spawns autoresearch baseline",
     prompt:
       "Optimize `go test ./...` wallclock. Metric: trailing ok-line seconds, lower is better. Command: `go test ./...`. Surface: `./...`. Cap: 2 iterations. Guardrail: all tests must keep passing.",
     action: "autoresearch",
     role: "autoresearch-baseline",
-  },
-  {
-    name: "build-with-tests prompt spawns Lisa",
-    prompt:
-      "Build a Go HTTP service that decodes MAVLink HEARTBEAT frames with github.com/bluenviron/gomavlib and serves the latest at GET /heartbeat as JSON, with unit tests.",
-    action: "dev_via_test",
-    role: "dev-via-test-plan",
   },
 ];
 
@@ -175,7 +163,7 @@ async function waitForLoopWithDecision(
     const [loops, actions] = await Promise.all([
       fetchLoops(request),
       fetchTriples(request, {
-        predicate: "coordinator.decision.next_action",
+        predicate: "coordinator.decision.next-action",
         limit: 500,
       }),
     ]);

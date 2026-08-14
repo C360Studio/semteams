@@ -68,10 +68,10 @@ const envOutputDir = "SEMTEAMS_PLAN_DIR"
 // phase that consumes the plan reads it via lineage triples
 // (lineage.researcher-plan), not chain.plan.path.
 const (
-	predicateRevision    = "dev_via_spec.plan.revision"
-	predicateEpicCount   = "dev_via_spec.plan.epic_count"
-	predicateGeneratedAt = "dev_via_spec.plan.generated_at"
-	predicatePath        = "dev_via_spec.plan.path"
+	predicateRevision    = "research.plan.revision"
+	predicateEpicCount   = "research.plan.epic-count"
+	predicateGeneratedAt = "research.plan.generated-at"
+	predicatePath        = "research.plan.path"
 )
 
 // PayloadPublisher is the narrow surface the executor uses to

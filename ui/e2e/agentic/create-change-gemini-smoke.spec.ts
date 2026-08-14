@@ -28,7 +28,10 @@ Requirements:
 
 The output should be an OpenSpec change with requirements, Given/When/Then scenarios, implementation tasks, target files, and Go test commands.`;
 
-test.describe("ADR-057 / OpenSpec 6.1 — create_change Gemini smoke", () => {
+// PARKED (ADR-058): this journey exercises a dev-side pack that is unwired
+// from the bootstrap pending the canonical-predicate migration. Re-enable by
+// restoring test.describe when the pack is re-authored and re-wired.
+test.describe.skip("ADR-057 / OpenSpec 6.1 — create_change Gemini smoke", () => {
   test.beforeAll(async ({ request }) => {
     const health = await request.get("/health");
     expect(health.ok(), "Backend not healthy -- stack not running?").toBe(true);

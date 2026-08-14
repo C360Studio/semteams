@@ -2,8 +2,8 @@
 // Polls /graph/triples for run-level pause markers (ADR-053 Phase 4b-2 / 4c).
 //
 // A "run" parks in `awaiting_approval` when:
-//   - a gated tool call fires (4c tool-gate):      agent.run.approval_pending
-//   - a recovery coordinator calls ask_user (4b-2): agent.run.clarification_pending
+//   - a gated tool call fires (4c tool-gate):      agent.run.approval-pending
+//   - a recovery coordinator calls ask_user (4b-2): agent.run.clarification-pending
 //
 // The front-door coordinator's loop (the kanban card) is typically already
 // `complete` when this happens — so agentStore's SSE stream does not surface
@@ -16,9 +16,9 @@
 // at all.
 //
 // MARKER OBJECT FORMS ARE ASYMMETRIC (verified against semstreams beta.106):
-//   - agent.run.approval_pending.object  = the FULL 6-part loop entity ref
+//   - agent.run.approval-pending.object  = the FULL 6-part loop entity ref
 //     (cmd/semteams/approvalpause/pauser.go stamps TryLoopExecutionEntityID).
-//   - agent.run.clarification_pending.object = the BARE loop UUID
+//   - agent.run.clarification-pending.object = the BARE loop UUID
 //     (configs/rules/agent-run/07,08 stamp `$entity.instance`, which
 //     execution_context.go documents as "the bare loop UUID").
 // Both are audit-only to the backend (rules key on predicate PRESENCE, not the
@@ -27,7 +27,7 @@
 // anchor) must normalize. `toBareLoopId` accepts either form. This asymmetry is
 // a backend-cleanup candidate (normalize 07/08 to `$entity.id`); tracked for the
 // consumer-tester feedback pass. The clarification-resume e2e proves the correct
-// anchor is the BARE loop id (in_reply_to), extracted from coordinator.user_question.
+// anchor is the BARE loop id (in_reply_to), extracted from coordinator.clarification.question.
 //
 // Poll interval: 2500ms by default. An AbortController + in-flight guard prevent
 // concurrent and orphaned fetches (mirrors systemStatus). Errors are captured in
@@ -102,11 +102,11 @@ function dedupeTriples(triples: RawTriple[]): RawTriple[] {
  * Pure helper: derive the run-status map from three triple arrays.
  * Exported so tests can drive the parse logic without timers or fetch mocks.
  *
- * @param approvalTriples   - triples with predicate `agent.run.approval_pending`
+ * @param approvalTriples   - triples with predicate `agent.run.approval-pending`
  *                            (object = full loop entity ref)
- * @param clarTriples       - triples with predicate `agent.run.clarification_pending`
+ * @param clarTriples       - triples with predicate `agent.run.clarification-pending`
  *                            (object = bare loop UUID)
- * @param questionTriples   - triples with predicate `coordinator.user_question`
+ * @param questionTriples   - triples with predicate `coordinator.clarification.question`
  *                            (subject = full asking-loop entity ref, object = prose)
  * @returns SvelteMap<bare runId, RunStatus>. Callers ITERATE this map (copy its
  *          contents into reactive state); they must NOT bind to it directly.
@@ -141,7 +141,7 @@ export function deriveRunStatuses(
     }
   }
 
-  // Map from BARE asking-loop id → question prose. The coordinator.user_question
+  // Map from BARE asking-loop id → question prose. The coordinator.clarification.question
   // subject is the FULL asking-loop entity ref, so we key by its bare id to join
   // against the clarification marker's bare object. (Matches the extraction the
   // clarification-resume e2e spec performs against the real backend.)
@@ -220,9 +220,9 @@ function createRunStatusStore() {
     currentAbort = ctrl;
     try {
       const [approvalTriples, clarTriples, questionTriples, ...healthBatches] = await Promise.all([
-        getTriples({ predicate: "agent.run.approval_pending", limit: 100, signal: ctrl.signal }),
-        getTriples({ predicate: "agent.run.clarification_pending", limit: 100, signal: ctrl.signal }),
-        getTriples({ predicate: "coordinator.user_question", limit: 100, signal: ctrl.signal }),
+        getTriples({ predicate: "agent.run.approval-pending", limit: 100, signal: ctrl.signal }),
+        getTriples({ predicate: "agent.run.clarification-pending", limit: 100, signal: ctrl.signal }),
+        getTriples({ predicate: "coordinator.clarification.question", limit: 100, signal: ctrl.signal }),
         ...RUN_HEALTH_PREDICATES.map((predicate) =>
           getTriples({ predicate, limit: 100, signal: ctrl.signal }),
         ),

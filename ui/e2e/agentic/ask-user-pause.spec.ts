@@ -8,17 +8,17 @@ import { test, expect } from "@playwright/test";
  *   first-pass Lisa       → decide(needs_clarification)  rule 02f spawns the
  *                                                        recovery coordinator
  *                                                        (inherit anchor:
- *                                                         agent.run.entity_id)
+ *                                                         agent.run.entity-id)
  *   recovery coordinator  → decide(ask_user)             coordinator/03-ask-user
  *                                                        stamps user_question;
  *                                                        agent-run/07 stamps
- *                                                        agent.run.clarification_pending
+ *                                                        agent.run.clarification-pending
  *                                                        on the run entity
  *   agent-run/09 (clarification_pending + phase==executing) → awaiting_approval
  *
  * The run is honestly PAUSED on a human reply. PR-1 has no resume — the run parks
  * in awaiting_approval (resume is PR-2). The decisive assertion is
- * agent.run.last_transition_from == "executing" (rule 09 drove it).
+ * agent.run.last-transition-from == "executing" (rule 09 drove it).
  *
  * Required fixture: test/fixtures/journeys/ask-user-pause.yaml
  * Required config: configs/e2e-flow-bootstrap.json (interactive mode; rules 07+09)
@@ -99,11 +99,11 @@ test.describe("ADR-053 Phase 4b-2 — in-run ask_user pauses the run (executing�
 
     // -----------------------------------------------------------------
     // Step 4 — DECISIVE: the transition is executing→awaiting_approval (rule 09),
-    // not dispatched→X. agent.run.last_transition_from records the from-phase.
+    // not dispatched→X. agent.run.last-transition-from records the from-phase.
     // -----------------------------------------------------------------
     const fromPhases = await pollUntil(async () => {
       const triples = await fetchTriples(request, {
-        predicate: "agent.run.last_transition_from",
+        predicate: "agent.run.last-transition-from",
         limit: 20,
       });
       const objs = triples
@@ -113,7 +113,7 @@ test.describe("ADR-053 Phase 4b-2 — in-run ask_user pauses the run (executing�
     }, { timeoutMs: 15_000 });
     expect(
       fromPhases,
-      "agent.run.last_transition_from missing on the run entity",
+      "agent.run.last-transition-from missing on the run entity",
     ).toBeTruthy();
     expect(
       fromPhases,
@@ -123,27 +123,27 @@ test.describe("ADR-053 Phase 4b-2 — in-run ask_user pauses the run (executing�
 
     // -----------------------------------------------------------------
     // Step 5 — evidence the pause was caused by ask_user (not a 4c tool-gate):
-    // the recovery coordinator stamped coordinator.user_question (03-ask-user),
-    // and agent-run/07 stamped agent.run.clarification_pending on the run entity.
+    // the recovery coordinator stamped coordinator.clarification.question (03-ask-user),
+    // and agent-run/07 stamped agent.run.clarification-pending on the run entity.
     // -----------------------------------------------------------------
     const questions = await fetchTriples(request, {
-      predicate: "coordinator.user_question",
+      predicate: "coordinator.clarification.question",
       limit: 20,
     });
     expect(
       questions.length,
-      "expected a coordinator.user_question triple (the recovery coordinator's ask_user prose). Zero → ask_user never fired.",
+      "expected a coordinator.clarification.question triple (the recovery coordinator's ask_user prose). Zero → ask_user never fired.",
     ).toBeGreaterThanOrEqual(1);
 
     const pendingMarkers = await fetchTriples(request, {
-      predicate: "agent.run.clarification_pending",
+      predicate: "agent.run.clarification-pending",
       limit: 20,
     });
     expect(
       pendingMarkers.filter((t) =>
         String(t.subject ?? "").includes("agent.chain.execution."),
       ).length,
-      "expected agent.run.clarification_pending on the run entity (agent-run/07) — the marker that distinguishes a 4b-2 clarification pause from a 4c tool-gate.",
+      "expected agent.run.clarification-pending on the run entity (agent-run/07) — the marker that distinguishes a 4b-2 clarification pause from a 4c tool-gate.",
     ).toBeGreaterThanOrEqual(1);
   });
 });

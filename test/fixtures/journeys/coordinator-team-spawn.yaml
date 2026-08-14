@@ -9,9 +9,10 @@ description: |
   e2e-flow-bootstrap-team-spawn.gen.json config that keeps only the category
   rule-01 entrypoints:
     - research -> researcher-research-plan
-    - create_change -> author-create-change
     - autoresearch -> autoresearch-baseline
-    - dev_via_test -> dev-via-test-plan
+
+  The spec-authoring and implementation entrypoints are parked (ADR-058)
+  and out of the matrix until their packs are re-authored and re-wired.
 
   The first spawned role in each category immediately terminates with
   needs_clarification. Downstream category rules are intentionally absent, so
@@ -26,14 +27,6 @@ responses_by_role:
             {
               "action": "research",
               "reason": "The user is asking for an evidence-backed comparison of MQTT and NATS for constrained IoT edge deployments. Route to the research category entrypoint."
-            }
-
-      - tool_call:
-          name: decide
-          arguments_json: |
-            {
-              "action": "create_change",
-              "reason": "The user is asking for an OpenSpec change around API idempotency. Route to the create_change category entrypoint."
             }
 
       - tool_call:
@@ -68,40 +61,6 @@ responses_by_role:
             {
               "action": "autoresearch",
               "reason": "The prompt has a bounded scalar optimization shape: command `go test ./...`, lower-is-better wallclock metric, surface `./...`, cap 2, and all-tests-pass guardrail. Route to the autoresearch category entrypoint."
-            }
-
-      - tool_call:
-          name: query_sandbox_attestation
-          arguments_json: |
-            {
-              "languages": ["go"],
-              "tools": ["task"],
-              "network": "restricted",
-              "verification": [
-                {"name": "go", "command": "go version"},
-                {"name": "task", "command": "task --version"}
-              ]
-            }
-
-      - tool_call:
-          name: request_sandbox
-          arguments_json: |
-            {
-              "languages": ["go"],
-              "tools": ["task"],
-              "network": "restricted",
-              "verification": [
-                {"name": "go", "command": "go version"},
-                {"name": "task", "command": "task --version"}
-              ]
-            }
-
-      - tool_call:
-          name: decide
-          arguments_json: |
-            {
-              "action": "dev_via_test",
-              "reason": "The prompt asks to build a Go MAVLink heartbeat endpoint with unit tests. Route to the dev_via_test category entrypoint."
             }
 
   - match: "Emit the typed plan"

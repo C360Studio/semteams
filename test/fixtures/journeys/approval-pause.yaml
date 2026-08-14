@@ -7,21 +7,21 @@ description: |
   reflection of the existing loop-level approval gate (ADR-030).
 
   Why the dev-via-test scaffold (mirrors the ask-user-pause 4b-2 journey): we need
-  an IN-RUN loop — one carrying agent.run.entity_id — to call the gated tool. A
+  an IN-RUN loop — one carrying agent.run.entity-id — to call the gated tool. A
   front-door coordinator answering plain chat mints no run, so its gated tool call
   would be a benign no-op (the same run-anchor guard as front-door ask_user). So:
 
     1. Loop 0 front-door coordinator → decide(dev_via_test) → rule 01 run_scope=new
        spawns first-pass Lisa + the handoff marker → run becomes `executing`.
     2. Loop A first-pass Lisa → decide(needs_clarification) → rule 02f spawns the
-       recovery coordinator that INHERITS the run anchor (agent.run.entity_id).
+       recovery coordinator that INHERITS the run anchor (agent.run.entity-id).
     3. Loop R recovery coordinator → tool_call(create_rule). create_rule is in
        e2e-flow-bootstrap.json's agentic-tools.approval_required, so the upstream
        ApprovalFilter rejects it with the approval_required: prefix and the loop
        transitions to LoopStateAwaitingApproval, emitting
        agent.approval_pending.<loopID>.
     4. The product-shell approvalpause subscriber reads loop R's run anchor
-       (agent.run.entity_id) and stamps agent.run.approval_pending on the run entity.
+       (agent.run.entity-id) and stamps agent.run.approval-pending on the run entity.
     5. agent-run/12 (approval_pending + phase==executing) transitions the run
        executing→awaiting_approval.
 
@@ -30,8 +30,8 @@ description: |
   tool). Resume (awaiting_approval→executing) is PR-2.
 
   DISAMBIGUATION (4c vs 4b-2): both pauses land in awaiting_approval. The spec
-  asserts the run carries agent.run.approval_pending (the 4c marker) and does NOT
-  carry agent.run.clarification_pending (the 4b-2 marker) — proving rule 12 drove
+  asserts the run carries agent.run.approval-pending (the 4c marker) and does NOT
+  carry agent.run.clarification-pending (the 4b-2 marker) — proving rule 12 drove
   the pause, not rule 09. Also asserts last_transition_from==executing.
 
   This is an EXECUTING-phase pause, NOT a terminal — the run reaches
@@ -55,7 +55,7 @@ responses:
   # ---------- Loop A: first-pass Lisa → needs_clarification ----------
   # rule 01 allowlist = [planned, needs_clarification]; Lisa escalates on turn 1.
   # rule 02f (first-pass, lineage length_eq 0) spawns the INHERIT recovery
-  # coordinator (carries agent.run.entity_id).
+  # coordinator (carries agent.run.entity-id).
   - tool_call:
       name: decide
       arguments_json: |
@@ -68,7 +68,7 @@ responses:
   # create_rule is in agentic-tools.approval_required, so the ApprovalFilter rejects
   # it (approval_required: prefix) and the loop parks in awaiting_approval, emitting
   # agent.approval_pending.<loopID>. The approvalpause subscriber stamps
-  # agent.run.approval_pending on the run entity → agent-run/12 transitions
+  # agent.run.approval-pending on the run entity → agent-run/12 transitions
   # executing→awaiting_approval. No further response is consumed — the loop is paused
   # (PR-1 has no resume).
   - tool_call:
@@ -78,7 +78,7 @@ responses:
           "name": "heartbeat-stale-alert",
           "description": "Alert when no MAVLink HEARTBEAT frame has been decoded within the staleness window",
           "condition": {
-            "predicate": "mavlink.heartbeat.last_seen_age_seconds",
+            "predicate": "mavlink.heartbeat.last-seen-age-seconds",
             "operator": ">",
             "value": 5
           },

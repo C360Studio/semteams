@@ -168,12 +168,13 @@ describe("ChatBar — initial render", () => {
     await user.type(screen.getByTestId("chat-input"), "/");
 
     expect(screen.getByText("/research")).toBeInTheDocument();
-    expect(screen.getByText("/create-change")).toBeInTheDocument();
     expect(screen.getByText("/optimize")).toBeInTheDocument();
-    expect(screen.getByText("/dev-via-test")).toBeInTheDocument();
     expect(screen.getByText("/approve")).toBeInTheDocument();
     expect(screen.getByText("/reject")).toBeInTheDocument();
-    expect(screen.getByText("/implement-spec")).toBeInTheDocument();
+    // Parked with their category packs (ADR-058).
+    expect(screen.queryByText("/create-change")).not.toBeInTheDocument();
+    expect(screen.queryByText("/dev-via-test")).not.toBeInTheDocument();
+    expect(screen.queryByText("/implement-spec")).not.toBeInTheDocument();
   });
 
   it("shows only front-door team slash hints without a selected task", async () => {
@@ -183,10 +184,9 @@ describe("ChatBar — initial render", () => {
     await user.type(screen.getByTestId("chat-input"), "/");
 
     expect(screen.getByText("/research")).toBeInTheDocument();
-    expect(screen.getByText("/create-change")).toBeInTheDocument();
-    expect(screen.getByText("/spec")).toBeInTheDocument();
     expect(screen.getByText("/optimize")).toBeInTheDocument();
-    expect(screen.getByText("/dev-via-test")).toBeInTheDocument();
+    expect(screen.queryByText("/create-change")).not.toBeInTheDocument();
+    expect(screen.queryByText("/dev-via-test")).not.toBeInTheDocument();
     expect(screen.queryByText("/approve")).not.toBeInTheDocument();
     expect(screen.queryByText("/implement-spec")).not.toBeInTheDocument();
   });
@@ -309,12 +309,12 @@ describe("ChatBar — message dispatch", () => {
 
     await user.type(
       screen.getByTestId("chat-input"),
-      "/create-change draft requirements",
+      "/research draft requirements",
     );
     await user.click(screen.getByTestId("send-button"));
 
     expect(agentApi.sendMessage).toHaveBeenCalledWith(
-      expect.stringContaining("/create-change draft requirements"),
+      expect.stringContaining("/research draft requirements"),
     );
     expect(agentApi.sendMessage).toHaveBeenCalledWith(
       expect.stringContaining("Artifact context: MQTT vs NATS"),
@@ -384,22 +384,6 @@ describe("ChatBar — slash commands", () => {
     );
   });
 
-  it("/implement-spec routes to sendMessage with the selected run id", async () => {
-    mockSelectedTask.mockReturnValue(selectedTask({ id: "loop_spec" }));
-    const user = userEvent.setup();
-    render(ChatBar);
-
-    const input = screen.getByTestId("chat-input");
-    await user.type(input, "/implement-spec add-health-endpoint");
-    await user.click(screen.getByTestId("send-button"));
-
-    expect(agentApi.sendMessage).toHaveBeenCalledWith(
-      "/implement-spec add-health-endpoint",
-      { runId: "loop_spec" },
-    );
-    expect(agentApi.sendSignal).not.toHaveBeenCalled();
-  });
-
   it("/research routes through coordinator chat without a selected task", async () => {
     mockSelectedTask.mockReturnValue(undefined);
     const user = userEvent.setup();
@@ -411,25 +395,6 @@ describe("ChatBar — slash commands", () => {
 
     expect(agentApi.sendMessage).toHaveBeenCalledWith(
       "/research compare MQTT and NATS",
-    );
-    expect(agentApi.sendSignal).not.toHaveBeenCalled();
-  });
-
-  it("/dev-via-test remains a coordinator-routed team hint when a task is selected", async () => {
-    mockSelectedTask.mockReturnValue(selectedTask({ id: "loop_spec" }));
-    const user = userEvent.setup();
-    render(ChatBar);
-
-    const input = screen.getByTestId("chat-input");
-    await user.type(input, "/dev-via-test add GET /health with tests");
-    await user.click(screen.getByTestId("send-button"));
-
-    expect(agentApi.sendMessage).toHaveBeenCalledWith(
-      "/dev-via-test add GET /health with tests",
-    );
-    expect(agentApi.sendMessage).not.toHaveBeenCalledWith(
-      "/dev-via-test add GET /health with tests",
-      { runId: "loop_spec" },
     );
     expect(agentApi.sendSignal).not.toHaveBeenCalled();
   });
@@ -448,7 +413,11 @@ describe("ChatBar — slash commands", () => {
     expect(screen.getByText(/Select a task first/)).toBeInTheDocument();
   });
 
-  it("/implement-spec without selected task shows error", async () => {
+  it("/implement-spec is parked — it sends as ordinary coordinator chat", async () => {
+    // The run-scoped /implement-spec command is parked with the
+    // dev-from-task pack (ADR-058). The text still reaches the
+    // coordinator as plain content, which answers honestly that the
+    // capability is not wired in this deployment.
     mockSelectedTask.mockReturnValue(undefined);
     const user = userEvent.setup();
     render(ChatBar);
@@ -457,10 +426,11 @@ describe("ChatBar — slash commands", () => {
     await user.type(input, "/implement-spec add-health-endpoint");
     await user.click(screen.getByTestId("send-button"));
 
-    expect(agentApi.sendMessage).not.toHaveBeenCalled();
+    expect(agentApi.sendMessage).toHaveBeenCalledWith(
+      "/implement-spec add-health-endpoint",
+    );
     expect(agentApi.sendSignal).not.toHaveBeenCalled();
-    expect(screen.getByTestId("chat-error")).toBeInTheDocument();
-    expect(screen.getByText(/Select a task first/)).toBeInTheDocument();
+    expect(screen.queryByTestId("chat-error")).not.toBeInTheDocument();
   });
 
   it("slash command error does NOT leave input disabled (regression)", async () => {
@@ -502,9 +472,10 @@ describe("ChatBar — action chips", () => {
   it("shows team chips on the empty state", () => {
     render(ChatBar);
     expect(screen.getByTestId("action-chip-research")).toBeInTheDocument();
-    expect(screen.getByTestId("action-chip-spec")).toBeInTheDocument();
     expect(screen.getByTestId("action-chip-optimize")).toBeInTheDocument();
-    expect(screen.getByTestId("action-chip-build")).toBeInTheDocument();
+    // Spec and Build chips are parked with their category packs (ADR-058).
+    expect(screen.queryByTestId("action-chip-spec")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("action-chip-build")).not.toBeInTheDocument();
   });
 
   it("hides action chips when a task is selected", () => {
@@ -542,11 +513,11 @@ describe("ChatBar — action chips", () => {
     let input = screen.getByTestId("chat-input") as HTMLInputElement;
     expect(input.value).toBe("@research compare mqtt");
 
-    await user.click(screen.getByTestId("action-chip-spec"));
+    await user.click(screen.getByTestId("action-chip-optimize"));
 
-    // Replaced @research with /create-change, kept the user's typed body.
+    // Replaced @research with /optimize, kept the user's typed body.
     input = screen.getByTestId("chat-input") as HTMLInputElement;
-    expect(input.value).toBe("/create-change compare mqtt");
+    expect(input.value).toBe("/optimize compare mqtt");
   });
 
   it("does not show 'Approve next' when no tasks need attention", () => {

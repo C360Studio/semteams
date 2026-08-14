@@ -40,16 +40,15 @@ is internal harness state.
 The coordinator can also decide that no team should run yet. In
 that mode it answers directly, asks a clarifying question, or helps
 the human shape the request before routing. Slash commands such as
-`/research`, `/spec`, `/optimize`, and `/dev-via-test` are team
-hints carried through the same front door, not a bypass around the
-coordinator.
+`/research` and `/optimize` are team hints carried through the same
+front door, not a bypass around the coordinator. Asks for the parked
+spec/build teams (ADR-058) get an honest direct answer.
 
 Rendered artifacts are reusable context. The UI can attach an
 artifact to the next chat prompt, then the coordinator receives the
 artifact title, source tool, and content along with the user's new
-request. That means research can feed a spec, a spec can feed
-implementation, and any artifact can anchor a follow-up discussion
-before the next team is chosen.
+request. Any artifact can anchor a follow-up discussion before the
+next team is chosen.
 
 ## The substrate-plus-overlays architecture
 
@@ -68,13 +67,16 @@ before the next team is chosen.
 │   coordinator persona  + decide-action contract                  │
 └──────────────────────────────────────────────────────────────────┘
                                   │
-	                ┌─────────────────┼─────────────────┐
-	                ▼                 ▼                 ▼
-	     ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐
-	     │ research/        │  │ OpenSpec packs   │  │ build/measure    │
-	     │ rule pack +      │  │ create-change +  │  │ autoresearch +   │
-	     │ personas         │  │ readiness bridge │  │ dev-via-test     │
-	     └──────────────────┘  └──────────────────┘  └──────────────────┘
+	                     ┌────────────┴────────────┐
+	                     ▼                         ▼
+	          ┌──────────────────┐      ┌──────────────────┐
+	          │ research/        │      │ autoresearch/    │
+	          │ rule pack +      │      │ rule pack +      │
+	          │ personas         │      │ personas         │
+	          └──────────────────┘      └──────────────────┘
+
+	  (parked, on disk but unwired — ADR-058: create-change,
+	   proof-readiness, dev-from-task, dev-via-test)
 ```
 
 Substrate = the singleton components wired by `cmd/semteams/main.go`.
@@ -88,14 +90,14 @@ components, no new flow configs.**
 
 ## Live category packs
 
-The product-facing packs currently cover research, OpenSpec
-authoring / readiness, metric optimization, and build-with-tests
-work. Each terminal chain either wakes the coordinator to reply to
-the user or pauses behind a visible human decision.
+The live product-facing packs are **research** (the inner-loop
+fan-out arc) and **autoresearch** (metric optimization). Each
+terminal chain either wakes the coordinator to reply to the user or
+pauses behind a visible human decision. The demo claim boundary
+lives in [`demo-mvp-claims.md`](demo-mvp-claims.md).
 
-The fully expanded loop descriptions below focus on the original
-research, autoresearch, and dev-via-test packs. The OpenSpec MVP
-claim boundary lives in [`demo-mvp-claims.md`](demo-mvp-claims.md).
+The dev-via-test description below is retained as reference for the
+parked pack (ADR-058) — it is on disk but unwired.
 
 ### research
 
@@ -229,7 +231,7 @@ the propose-spawn gate flips false and the synthesize-spawn action
 fires instead. See the rule's prose description for the full
 mechanic.
 
-### dev-via-test
+### dev-via-test (PARKED — ADR-058)
 
 Decompose-and-dispatch software development. The coordinator
 dispatches when the user asks to **build or change code against a

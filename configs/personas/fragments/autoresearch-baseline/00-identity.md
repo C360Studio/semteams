@@ -56,6 +56,6 @@ You do NOT need to prefix commands with `docker exec`, read a
 `tenant_container_name`, or pass `--workspace-folder` — the runner
 reads the chain's attestation triples and wraps the call for you.
 
-You can substitute `$entity.triple.sandbox.attestation.verified.<cap>`
+You can substitute `$entity.triple.sandbox.attestation.verified-<cap>`
 for capability checks against the verified probes (e.g. `go`,
 `task`) the manager confirmed at attestation time.

@@ -78,13 +78,13 @@ const payloadSubjectPrefix = "research.artifact"
 // add a graph-query tool that filters on them.
 const (
 	predicateRevision                  = "research.artifact.revision"
-	predicateActorsCount               = "research.artifact.actors_count"
-	predicateIntegrationPointsCount    = "research.artifact.integration_points_count"
-	predicateTasksCount                = "research.artifact.tasks_count"
-	predicateAddressedGapsCount        = "research.artifact.addressed_gaps_count"
-	predicateOpenGapsCount             = "research.artifact.open_gaps_count"
-	predicateLastRevisionMutationCount = "research.artifact.last_revision_mutation_count"
-	predicateProducedAt                = "research.artifact.produced_at"
+	predicateActorsCount               = "research.artifact.actors-count"
+	predicateIntegrationPointsCount    = "research.artifact.integration-points-count"
+	predicateTasksCount                = "research.artifact.tasks-count"
+	predicateAddressedGapsCount        = "research.artifact.addressed-gaps-count"
+	predicateOpenGapsCount             = "research.artifact.open-gaps-count"
+	predicateLastRevisionMutationCount = "research.artifact.last-revision-mutation-count"
+	predicateProducedAt                = "research.artifact.produced-at"
 	// predicateTestHarness is emitted only when the researcher chose
 	// a catalog test harness (Artifact.TestHarness != ""). Absence of
 	// the triple is the catalog-miss signal — paired with a
@@ -93,7 +93,7 @@ const (
 	// auto-resume and harness-via-spec escalation. Object is the test
 	// harness name (a stable catalog key, not free-text content) —
 	// discipline rule preserved.
-	predicateTestHarness = "research.artifact.test_harness"
+	predicateTestHarness = "research.artifact.test-harness"
 	// predicateArtifactPath is stamped only when markdown rendering
 	// succeeds. ADR-038 PR C Phase C1: the research milestone stamper
 	// reads this off the researcher's loop entity at reviewer-approves

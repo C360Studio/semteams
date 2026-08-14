@@ -10,11 +10,6 @@
       "description": "Batch size for embedding generation",
       "category": "advanced"
     },
-    "cache_ttl": {
-      "type": "string",
-      "description": "Cache TTL for embeddings (e.g. 15m or 1h)",
-      "category": "advanced"
-    },
     "coalesce_ms": {
       "type": "number",
       "description": "Debounce window for entity updates in ms. 0=immediate processing",
@@ -24,6 +19,13 @@
       "type": "string",
       "description": "Embedder type (bm25 or http). HTTP requires model registry with embedding capability",
       "category": "basic"
+    },
+    "max_text_len": {
+      "type": "number",
+      "description": "Max characters of source text embedded per entity; text beyond is truncated at a word boundary. 0 uses a per-embedder default (4000 bm25 / 8000 neural)",
+      "minimum": 0,
+      "maximum": 1000000,
+      "category": "advanced"
     },
     "ports": {
       "type": "string",
@@ -46,6 +48,11 @@
       "items": {
         "type": "string"
       },
+      "category": "advanced"
+    },
+    "workers": {
+      "type": "number",
+      "description": "Number of concurrent embedding worker goroutines",
       "category": "advanced"
     }
   },

@@ -5,6 +5,11 @@
   "title": "graph-clustering Configuration",
   "description": "Graph community detection and clustering processor",
   "properties": {
+    "allow_ungated_reads": {
+      "type": "boolean",
+      "description": "Allow detection when graph-index readiness is unknown (standalone only; never during cutover)",
+      "category": "advanced"
+    },
     "anomaly_config": {
       "type": "object",
       "description": "Configuration for anomaly detection",
@@ -154,10 +159,6 @@
           "type": "object",
           "description": "storage",
           "properties": {
-            "bucket_name": {
-              "type": "string",
-              "description": "bucket_name"
-            },
             "cleanup_interval": {
               "type": "number",
               "description": "cleanup_interval"
@@ -271,6 +272,29 @@
       "description": "Number of parallel workers for LLM enhancement (default 5)",
       "category": "advanced"
     },
+    "entity_id_edges": {
+      "type": "object",
+      "description": "EntityID virtual-edge synthesis for community detection; omit to keep defaults (siblings + system-peers on)",
+      "category": "advanced",
+      "properties": {
+        "include_siblings": {
+          "type": "boolean",
+          "description": "Synthesize sibling edges between entities sharing the 5-part type prefix (default true); set false to run detection on explicit topology alone"
+        },
+        "include_system_peers": {
+          "type": "boolean",
+          "description": "Synthesize system-peer edges between entities sharing the same system (default true)"
+        },
+        "max_siblings": {
+          "type": "number",
+          "description": "Max sibling neighbors synthesized per entity (default 10)"
+        },
+        "max_system_peers": {
+          "type": "number",
+          "description": "Max system-peer neighbors synthesized per entity (default 15)"
+        }
+      }
+    },
     "max_hop_distance": {
       "type": "number",
       "description": "Maximum BFS traversal depth (default 10)",
@@ -295,6 +319,21 @@
       "type": "string",
       "description": "Port configuration",
       "category": "basic"
+    },
+    "semantic_edges": {
+      "type": "object",
+      "description": "Semantic co-location virtual-edge synthesis (mutual-kNN); omit to keep OFF (default)",
+      "category": "advanced",
+      "properties": {
+        "enable_semantic_edges": {
+          "type": "boolean",
+          "description": "Enable semantic co-location (mutual-kNN) virtual edges in community detection (default false; enabling also rebalances the structural edge caps so the tier competes)"
+        },
+        "semantic_max_neighbors": {
+          "type": "number",
+          "description": "Mutual-kNN k — per-direction top-k candidate set size; bounds per-entity semantic degree (starting value 8)"
+        }
+      }
     },
     "startup_attempts": {
       "type": "number",

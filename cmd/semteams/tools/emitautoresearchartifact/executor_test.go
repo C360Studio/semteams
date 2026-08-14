@@ -216,7 +216,7 @@ func TestExecutor_StampsCapAndBestExperimentID(t *testing.T) {
 		t.Errorf("cap triple = %v, want 10", capAny)
 	}
 
-	bestAny, ok := pub.find("autoresearch.artifact.best_experiment_id")
+	bestAny, ok := pub.find("autoresearch.artifact.best-experiment-id")
 	if !ok {
 		t.Fatalf("best_experiment_id triple missing")
 	}
@@ -252,7 +252,7 @@ func TestExecutor_ComputesImprovementPctWhenMissing(t *testing.T) {
 	if res.Error != "" {
 		t.Fatalf("unexpected error: %s", res.Error)
 	}
-	pct, ok := pub.find("autoresearch.artifact.improvement_pct")
+	pct, ok := pub.find("autoresearch.artifact.improvement-pct")
 	if !ok {
 		t.Fatalf("improvement_pct triple missing")
 	}
@@ -469,4 +469,10 @@ func TestExecutor_AttestationWriterError(t *testing.T) {
 	if !strings.Contains(res.Error, "tenant workspace") {
 		t.Errorf("error message should reference tenant workspace; got %q", res.Error)
 	}
+}
+
+// CreateEntityWithTriples satisfies beta.159's widened TriplePublisher;
+// the fake delegates to AddTriplesBatch so recording semantics are identical.
+func (f *fakePub) CreateEntityWithTriples(ctx context.Context, _ string, _ message.Type, triples []message.Triple) error {
+	return f.AddTriplesBatch(ctx, triples)
 }

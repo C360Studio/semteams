@@ -5,7 +5,7 @@
   "description": "Fires every fire_every_n_events=5 completed non-terminal loops (researcher-* / reviewer-spec / builder) to wake an ops-progress-observer that assesses whether an in-flight chain is making forward progress or spinning. Complements configs/rules/ops/chain-terminal-observe.json (which fires only at reviewer-qa terminal — purely retrospective). Smoke #25c (2026-05-14) motivated this: a 12-minute builder stall surfaced no graph-level signal until the run hit the watcher timeout; an in-flight observer would have had three opportunities to flag the pattern before the operator did manually. Phase 1 read-only contract per ADR-027 — emits findings via emit_diagnosis only.",
   "enabled": true,
   "entity": {
-    "pattern": "agent.complete.>"
+    "pattern": "*.*.*.*.*.*"
   },
   "conditions": [
     {

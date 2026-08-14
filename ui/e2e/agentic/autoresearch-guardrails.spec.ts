@@ -56,7 +56,7 @@ test.describe("OpenSpec 6.4 - autoresearch metric guardrails", () => {
     expect(refusalLoops, "vague prompt should settle as one coordinator loop").toBeTruthy();
 
     let actions = await fetchTriples(request, {
-      predicate: "coordinator.decision.next_action",
+      predicate: "coordinator.decision.next-action",
       limit: 50,
     });
     expect(values(actions), "vague prompt should ask for scalar framing").toContain(
@@ -88,7 +88,7 @@ test.describe("OpenSpec 6.4 - autoresearch metric guardrails", () => {
         allTerminal
       ) {
         const actionTriples = await fetchTriples(request, {
-          predicate: "coordinator.decision.next_action",
+          predicate: "coordinator.decision.next-action",
           limit: 100,
         });
         if (values(actionTriples).includes("respond_direct")) return loops;
@@ -118,7 +118,7 @@ test.describe("OpenSpec 6.4 - autoresearch metric guardrails", () => {
     expect(countRole("reviewer-autoresearch"), "exactly one reviewer").toBe(1);
 
     actions = await fetchTriples(request, {
-      predicate: "coordinator.decision.next_action",
+      predicate: "coordinator.decision.next-action",
       limit: 100,
     });
     expect(values(actions)).toEqual(
@@ -174,17 +174,17 @@ test.describe("OpenSpec 6.4 - autoresearch metric guardrails", () => {
     expect(Number(best[0]?.object)).not.toBeCloseTo(0.1, 5);
 
     const completedArtifact = await fetchTriples(request, {
-      predicate: "autoresearch.artifact.iterations_completed",
+      predicate: "autoresearch.artifact.iterations-completed",
       limit: 10,
     });
     expect(values(completedArtifact)).toContain("2");
     const keptArtifact = await fetchTriples(request, {
-      predicate: "autoresearch.artifact.iterations_kept",
+      predicate: "autoresearch.artifact.iterations-kept",
       limit: 10,
     });
     expect(values(keptArtifact)).toContain("1");
     const bestExperimentArtifact = await fetchTriples(request, {
-      predicate: "autoresearch.artifact.best_experiment_id",
+      predicate: "autoresearch.artifact.best-experiment-id",
       limit: 10,
     });
     expect(values(bestExperimentArtifact)).toContain("iteration-1");
@@ -260,7 +260,7 @@ async function measurementByOutcome(
     subject: match.subject,
     value: byPredicate.get("autoresearch.measurement.value"),
     pass: byPredicate.get("autoresearch.measurement.pass"),
-    stderrTail: byPredicate.get("autoresearch.measurement.stderr_tail"),
+    stderrTail: byPredicate.get("autoresearch.measurement.stderr-tail"),
   };
 }
 

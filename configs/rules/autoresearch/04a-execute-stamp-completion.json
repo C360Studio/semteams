@@ -4,6 +4,9 @@
   "name": "Execute clean completion → stamp counter on RUN loop",
   "description": "ADR-042 §Phase 2 redesign autoresearch pack — iteration JOIN counter, clean-completion half. Fires when an autoresearch-execute loop terminates cleanly with outcome=success AND decide(action=measured) — the empirical compare ran, outcome (kept|reverted|crashed) is stamped on the execute loop entity by emit_autoresearch_measurement. Writes an autoresearch.experiment.completed triple onto the RUN loop entity via beta.83 #148 subject override.\n\nPaired with rule 04b (loop-failed-stamp), which fires the same add_triple when the execute loop itself crashed (outcome=failed, no decide). Together 04a + 04b implement 'honest accounting of the iteration budget' (README §'Empirical reviewer'): every execute consumes one budget slot regardless of whether the measurement completed cleanly OR the loop crashed mid-iteration. Rule 11 explicitly does NOT match autoresearch-execute role for this reason — loop-failed executes are counted by 04b, not paused by 11.\n\nThe triple's Object is THIS execute's own loop id ($entity.id) so the predicate-set accumulates one triple per distinct execute completion (graph-ingest's per-(subject, predicate, object) set semantics dedup on redelivery). Rules 05 (continue) and 06 (stop-cap) fire on the RUN entity in response to the counter change. Mirrors research pack's 03a-gather-stamp-completion-on-plan.json — same subject-override + lineage-based-subject pattern that sidesteps the semstreams#159 race between agent.loop.outcome and agent.loop.parent.\n\nNOT counted: needs_clarification terminals (from execute or upstream propose). Those route via rule 10 to the coordinator — visible failure surface, not silent budget consumption. The cap budget measures 'execute attempts'; structural failures upstream of execute (propose's revert step crashed, propose persona could not form a hypothesis) bypass the budget and route to the user.",
   "enabled": true,
+  "entity": {
+    "pattern": "*.*.*.*.*.*"
+  },
   "conditions": [
     {
       "field": "agent.loop.role",
@@ -18,7 +21,7 @@
       "required": true
     },
     {
-      "field": "coordinator.decision.next_action",
+      "field": "coordinator.decision.next-action",
       "operator": "eq",
       "value": "measured",
       "required": true
@@ -28,13 +31,15 @@
   "on_enter": [
     {
       "type": "add_triple",
-      "subject": "$entity.triple.lineage.run-loop-entity-id",
+      "subject": "$entity.triple.agent.lineage.run-loop-entity-id",
       "predicate": "autoresearch.experiment.completed",
       "object": "$entity.id"
     },
     {
       "type": "replace_owned",
-      "subject": "$entity.triple.lineage.run-loop-entity-id",
+      "projection_contract": "autoresearch.run-projection",
+      "projection_group": "iteration-pending",
+      "subject": "$entity.triple.agent.lineage.run-loop-entity-id",
       "predicate": "autoresearch.iteration.pending",
       "object": "$entity.id"
     }
@@ -50,7 +55,7 @@
     "subject_override_requires": "semstreams beta.83 (#148) — add_triple subject override.",
     "iteration_pending_lane": "autoresearch.iteration.pending is the iteration-loop presence marker (re-armed here, cleared by rule 05). Migrated to replace_owned (ADR-056 #278 / beta.110) — owned by rule-pack.semteams (autoresearch.run-projection contract). experiment.completed stays add_triple (write-once append-evidence, multi-valued per iteration).",
     "framework_dedup_note": "Object = $entity.id (the execute's own loop id) — naturally unique per execute. graph-ingest treats triples as a set keyed by (subject, predicate, object); if this rule fires twice for the same execute (e.g. transient redelivery), the second add_triple is idempotent (same key), counter stays accurate.",
-    "race_workaround": "Subject uses lineage.run-loop-entity-id (spawn-stamped by rule 01's related_loops → propagated through 02 and 03's related_loops chain) instead of agent.loop.parent (completion-stamped). The lineage triple is spawn-time stable and immune to the semstreams#159 race documented in the research pack's 03a. Mirrors the research-pack pattern exactly.",
+    "race_workaround": "Subject uses agent.lineage.run-loop-entity-id (spawn-stamped by rule 01's related_loops → propagated through 02 and 03's related_loops chain) instead of agent.loop.parent (completion-stamped). The lineage triple is spawn-time stable and immune to the semstreams#159 race documented in the research pack's 03a. Mirrors the research-pack pattern exactly.",
     "review_fix_origin": "Per reviewer C1 (2026-05-29): original rule 04 condition outcome=success+decide=measured meant loop-failed executes never incremented the counter, breaking the cap budget when an execute crashed. Fix split into 04a (clean) + 04b (loop-failed) and removed autoresearch-execute from rule 11's role list (loop-failures no longer pause; they're counted)."
   }
 }

@@ -106,7 +106,7 @@ You can read:
 - Loop trajectories via `read_loop_result` — gives each loop's
   `decide()` terminal reason and structured payload.
 - The chain entity itself for milestone triples
-  (`chain.research_artifact.*`, `chain.spec_artifact.*`,
+  (`chain.research-artifact.*`, `chain.spec-artifact.*`,
   `chain.recovery.count`, etc.).
 
 Your finding's `evidence` field MUST cite at least one specific

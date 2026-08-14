@@ -137,24 +137,16 @@ const RUN_INFIX = ".agent.chain.execution.";
 const DEFAULT_EVIDENCE_STALE_AFTER_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_METRICS_STALE_AFTER_MS = 60 * 1000;
 
+// Only predicates a LIVE rule pack can stamp are polled. The proof/CBG
+// predicates (formal_claims.*, proof_readiness.*, dev_from_task.*,
+// dev_via_test.*) belong to packs parked by ADR-058 — polling them was 15
+// permanently-empty /graph/triples calls per cycle per client. Re-add each
+// family (in its re-authored canonical form) when its pack is re-wired;
+// deriveGraphRunHealthFacts below still understands the old shapes and
+// degrades to defaults while they are absent.
 export const RUN_HEALTH_PREDICATES = [
   "agent.run.phase",
   "agent.run.outcome",
-  "formal_claims.status",
-  "formal_claims.finding_count",
-  "formal_claims.route.test_harness",
-  "formal_claims.route.coordinator",
-  "formal_claims.route.implementation",
-  "proof_readiness.route",
-  "proof_readiness.implementation_ready",
-  "proof_readiness.test_harness_required",
-  "proof_readiness.requires_clarification",
-  "proof_readiness.pause_required",
-  "dev_from_task.requested",
-  "dev_via_test.run.status",
-  "dev_via_test.cbg.retry.pending",
-  "dev_via_test.cbg.retry.finding",
-  "dev_via_test.cbg.retry.target_task",
 ] as const;
 
 export function runIdFromEntity(subject: string): string {

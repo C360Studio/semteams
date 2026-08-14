@@ -1,9 +1,12 @@
 {
   "id": "agent_run_ask_user_pause_run_anchor",
   "type": "expression",
-  "name": "Coordinator decide(ask_user) in-run (run-anchor) → stamp agent.run.clarification_pending",
-  "description": "ADR-053 Phase 4b-2 PR-1 — the interactive-pause marker, anchor branch 1 of 2 (loops carrying agent.run.entity_id). When a coordinator that belongs to a run emits decide(action=ask_user), the run should PAUSE (executing→awaiting_approval) until the user replies, instead of misleadingly staying `executing` while blocked on a human. This rule is the 2-step-marker first half: it stamps agent.run.clarification_pending on the RUN entity via the subject override $entity.triple.agent.run.entity_id; rule 09 consumes the marker and transitions.\n\nWHICH coordinators this covers: the RECOVERY coordinators (4b-1a anchor-covered) that carry ask_user in their action_allowlist and emit it WITHIN a run — research/06 (needs_clarification recovery), autoresearch/10 (baseline recovery), dev-via-test/02f (first-pass Lisa needs_clarification). These descend the loop-inherit chain so carry agent.run.entity_id (NOT lineage). The threaded recovery coordinators (autoresearch/10b, dev-via-test 02e/02f-replan/07b/07e) carry lineage.run-loop-entity-id and are the sibling rule 08.\n\nRUN-LESS-CHAT GUARD (agent.run.entity_id != \"\"): the FRONT-DOOR coordinator answering an ambiguous first turn with ask_user has NO run minted (it never dispatched a category, so no run_scope=new fired) — there is no run to pause, and this rule is a no-op for it. The pause is for in-flight runs that need clarification, not the first turn.\n\nANCHOR FENCE (lineage.run-loop-entity-id length_eq 0): mutually exclusive with rule 08 (length_gt 0). Same corruption-to-no-op discipline as the coordinator-failed pair 05/06 (a coordinator carrying both anchors routes to 08 via the fence and is never double-stamped).\n\nAUTONOMOUS-MODE INERTNESS (free): under agentic-tools.restricted_decide_actions=[\"ask_user\"] the framework rejects decide(ask_user) BEFORE coordinator.decision.next_action=ask_user is stamped (decide.go), so this rule's trigger never holds in autonomous mode. 4b-2 is interactive-only by construction; no rule-level gate needed.",
+  "name": "Coordinator decide(ask_user) in-run (run-anchor) → stamp agent.run.clarification-pending",
+  "description": "ADR-053 Phase 4b-2 PR-1 — the interactive-pause marker, anchor branch 1 of 2 (loops carrying agent.run.entity-id). When a coordinator that belongs to a run emits decide(action=ask_user), the run should PAUSE (executing→awaiting_approval) until the user replies, instead of misleadingly staying `executing` while blocked on a human. This rule is the 2-step-marker first half: it stamps agent.run.clarification-pending on the RUN entity via the subject override $entity.triple.agent.run.entity-id; rule 09 consumes the marker and transitions.\n\nWHICH coordinators this covers: the RECOVERY coordinators (4b-1a anchor-covered) that carry ask_user in their action_allowlist and emit it WITHIN a run — research/06 (needs_clarification recovery), autoresearch/10 (baseline recovery), dev-via-test/02f (first-pass Lisa needs_clarification). These descend the loop-inherit chain so carry agent.run.entity-id (NOT lineage). The threaded recovery coordinators (autoresearch/10b, dev-via-test 02e/02f-replan/07b/07e) carry agent.lineage.run-loop-entity-id and are the sibling rule 08.\n\nRUN-LESS-CHAT GUARD (agent.run.entity-id != \"\"): the FRONT-DOOR coordinator answering an ambiguous first turn with ask_user has NO run minted (it never dispatched a category, so no run_scope=new fired) — there is no run to pause, and this rule is a no-op for it. The pause is for in-flight runs that need clarification, not the first turn.\n\nANCHOR FENCE (agent.lineage.run-loop-entity-id length_eq 0): mutually exclusive with rule 08 (length_gt 0). Same corruption-to-no-op discipline as the coordinator-failed pair 05/06 (a coordinator carrying both anchors routes to 08 via the fence and is never double-stamped).\n\nAUTONOMOUS-MODE INERTNESS (free): under agentic-tools.restricted_decide_actions=[\"ask_user\"] the framework rejects decide(ask_user) BEFORE coordinator.decision.next-action=ask_user is stamped (decide.go), so this rule's trigger never holds in autonomous mode. 4b-2 is interactive-only by construction; no rule-level gate needed.",
   "enabled": true,
+  "entity": {
+    "pattern": "*.*.*.*.*.*"
+  },
   "conditions": [
     {
       "field": "agent.loop.role",
@@ -12,19 +15,19 @@
       "required": true
     },
     {
-      "field": "coordinator.decision.next_action",
+      "field": "coordinator.decision.next-action",
       "operator": "eq",
       "value": "ask_user",
       "required": true
     },
     {
-      "field": "agent.run.entity_id",
+      "field": "agent.run.entity-id",
       "operator": "ne",
       "value": "",
       "required": true
     },
     {
-      "field": "lineage.run-loop-entity-id",
+      "field": "agent.lineage.run-loop-entity-id",
       "operator": "length_eq",
       "value": 0,
       "required": true
@@ -34,8 +37,8 @@
   "on_enter": [
     {
       "type": "add_triple",
-      "subject": "$entity.triple.agent.run.entity_id",
-      "predicate": "agent.run.clarification_pending",
+      "subject": "$entity.triple.agent.run.entity-id",
+      "predicate": "agent.run.clarification-pending",
       "object": "$entity.instance"
     }
   ],
@@ -44,11 +47,11 @@
     "pack": "agent-run",
     "phase": "ADR-053 Phase 4b-2 PR-1",
     "adr": "docs/adr/053-adoption-plan.md",
-    "role": "interactive-pause marker (executing→awaiting_approval, anchor branch 1: agent.run.entity_id)",
+    "role": "interactive-pause marker (executing→awaiting_approval, anchor branch 1: agent.run.entity-id)",
     "joins_with": "09-executing-to-awaiting-on-clarification.json (consumes the marker) + 08-ask-user-pause-lineage-anchor.json (the lineage-anchor sibling).",
     "marker_object": "$entity.instance records WHICH loop asked — forward-compatible with PR-2's resume correlation (the reply re-anchors to this run and clears the marker).",
-    "anchor_fence": "lineage.run-loop-entity-id length_eq 0 — mutually exclusive with rule 08 (length_gt 0). Mirrors the coordinator-failed pair 05 vs 06.",
-    "run_less_chat_guard": "agent.run.entity_id != \"\" — a front-door coordinator's ask_user has no run to pause; no-op.",
+    "anchor_fence": "agent.lineage.run-loop-entity-id length_eq 0 — mutually exclusive with rule 08 (length_gt 0). Mirrors the coordinator-failed pair 05 vs 06.",
+    "run_less_chat_guard": "agent.run.entity-id != \"\" — a front-door coordinator's ask_user has no run to pause; no-op.",
     "autonomous_inertness": "decide(ask_user) is rejected pre-stamp under restricted_decide_actions=[\"ask_user\"], so this rule cannot fire in autonomous mode. Pinned by TestAgentRunPack_AskUserPauseAutonomousInert."
   }
 }

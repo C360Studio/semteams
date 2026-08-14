@@ -4,6 +4,9 @@
   "name": "Any research-pack role decide(needs_clarification) → coordinator",
   "description": "ADR-042 §Phase 2 redesign MVP-2 research pack generic recovery rule. Fires when any chain role within the research pack terminates with decide(action=needs_clarification) — the canonical signal that the current contract cannot complete from available information. Spawns the coordinator (the senior thinker that owns framing) with the rejecting role's reason; the coordinator judges whether to re-dispatch research with tightened framing, ask the user for clarification, or respond_direct that the request cannot be served. This rule USED to respawn researcher-research-plan (the resolved 'plan_phase_loop_todo' MVP-4 follow-on); routing to the coordinator instead breaks the plan→gather→synthesize→needs_clarification→plan thrash pattern observed under small-LLM substrate (smoke6-pr184-validation-gemini-2 2026-05-21). Recovery shape A per ADR-039 (supersession-via-new-spawn; prior loop entities remain immutable in the graph).",
   "enabled": true,
+  "entity": {
+    "pattern": "*.*.*.*.*.*"
+  },
   "conditions": [
     {
       "field": "agent.loop.role",
@@ -17,7 +20,7 @@
       "required": true
     },
     {
-      "field": "coordinator.decision.next_action",
+      "field": "coordinator.decision.next-action",
       "operator": "eq",
       "value": "needs_clarification",
       "required": true
@@ -39,7 +42,7 @@
         "phase": "needs_clarification_recovery",
         "recovery": "needs_clarification"
       },
-      "prompt": "Research-chain recovery. The chain role $entity.triple.agent.loop.role at loop $entity.instance terminated with decide(action=needs_clarification) — the prior arc could not complete from available information. You are the senior thinker; resolve the framing.\n\nIteration 1 — call read_loop_result on $entity.instance to read the full structured terminal. The reason field names the gap; the retry_hint field (if present) names the framing change the rejecting role wants. If the loop entity carries lineage.researcher (set on roles spawned after the plan phase), also read that loop for the prior research artifact / scratchpad context. Walk the chain via lineage links as needed.\n\nIteration 2 — judge what to do:\n\n- decide(action=\"research\", reason=...) if the user's original request is recoverable with tightened framing. Your reason MUST carry the framing fix — be specific about which gap to address and what scope to add/remove. The chain will respawn from the plan phase with the corrected framing.\n- decide(action=\"ask_user\", reason=..., question=...) if a specific clarification from the user would unblock the chain. Ask one focused question; don't make the user re-prompt the whole request.\n- decide(action=\"respond_direct\", reason=...) if the request genuinely cannot be served (out-of-scope, fundamentally underspecified, or the gap is information that doesn't exist). Be honest about the limitation in your reason.\n\nThis recovery routes through you because you carry the strongest reasoning model in the registry; the per-phase roles below you run on smaller models and can't resolve framing ambiguity. If you find the gap is a small-LLM weakness (the rejecting role gave up on something a stronger researcher would handle), name that in your reason — that's signal for ops-feedback."
+      "prompt": "Research-chain recovery. The chain role $entity.triple.agent.loop.role at loop $entity.instance terminated with decide(action=needs_clarification) — the prior arc could not complete from available information. You are the senior thinker; resolve the framing.\n\nIteration 1 — call read_loop_result on $entity.instance to read the full structured terminal. The reason field names the gap; the retry_hint field (if present) names the framing change the rejecting role wants. If the loop entity carries agent.lineage.researcher (set on roles spawned after the plan phase), also read that loop for the prior research artifact / scratchpad context. Walk the chain via lineage links as needed.\n\nIteration 2 — judge what to do:\n\n- decide(action=\"research\", reason=...) if the user's original request is recoverable with tightened framing. Your reason MUST carry the framing fix — be specific about which gap to address and what scope to add/remove. The chain will respawn from the plan phase with the corrected framing.\n- decide(action=\"ask_user\", reason=..., question=...) if a specific clarification from the user would unblock the chain. Ask one focused question; don't make the user re-prompt the whole request.\n- decide(action=\"respond_direct\", reason=...) if the request genuinely cannot be served (out-of-scope, fundamentally underspecified, or the gap is information that doesn't exist). Be honest about the limitation in your reason.\n\nThis recovery routes through you because you carry the strongest reasoning model in the registry; the per-phase roles below you run on smaller models and can't resolve framing ambiguity. If you find the gap is a small-LLM weakness (the rejecting role gave up on something a stronger researcher would handle), name that in your reason — that's signal for ops-feedback."
     }
   ],
   "on_exit": [],

@@ -195,12 +195,6 @@ tasks:
       tearing down the docker stack between runs.
     cmds:
       - task: test:e2e:agentic:research-mvp
-      - task: test:e2e:agentic:create-change
-      - task: test:e2e:agentic:mavlink-hard-spec
-      - task: test:e2e:agentic:create-change-recovery
-      - task: test:e2e:agentic:spec-to-dev-demo
-      - task: test:e2e:agentic:dev-via-test
-      - task: test:e2e:agentic:dev-via-test-replan
       - task: test:e2e:agentic:autoresearch
       - task: test:e2e:agentic:autoresearch-guardrails
       - task: test:e2e:agentic:coordinator-routing-matrix
@@ -229,22 +223,25 @@ tasks:
       docs/demo-mvp-claims.md:
 
         - coordinator routing chooses the correct team for prompt classes
-        - create_change produces/reviews/exports an OpenSpec handoff
+          (parked-team asks get an honest respond_direct, ADR-058)
+        - the research arc fans out, joins, synthesizes, and delivers an
+          artifact whose sources are recoverable
         - coordinator readiness checks fail closed before execution routing
-        - MAVLink-hard produces/reviews/exports a hard-domain OpenSpec handoff
+        - autoresearch converges with empirical keep/revert decisions
 
       These journeys may read graph facts, trajectories, logs, downloads, and
       HTTP status for assertions. They must not write directly into NATS, graph
       storage, lifecycle state, proof facts, or private KV buckets to satisfy a
       claim.
 
-      Deliberately excluded: test:e2e:agentic:spec-to-dev-demo. That journey is
-      fixture-seeded bridge proof because it preloads external proof inventory.
+      The spec-authoring / implementation journeys (create-change,
+      mavlink-hard-spec, spec-to-dev-demo, dev-via-test*) are parked with
+      their packs (ADR-058).
     cmds:
       - task: test:e2e:agentic:coordinator-routing-matrix
-      - task: test:e2e:agentic:create-change
+      - task: test:e2e:agentic:research-mvp
       - task: test:e2e:agentic:coordinator-readiness-gate
-      - task: test:e2e:agentic:mavlink-hard-spec
+      - task: test:e2e:agentic:autoresearch
 
   test:e2e:agentic:real-time-activity-stream:
     desc: Run the real-time-activity-stream journey
@@ -312,7 +309,7 @@ tasks:
       - npx playwright test e2e/agentic/research-mvp.spec.ts
 
   test:e2e:agentic:create-change:
-    desc: Run the ADR-057 §D5 create_change-category mock-LLM journey
+    desc: PARKED (ADR-058, spec is describe.skip) — Run the ADR-057 §D5 create_change-category mock-LLM journey
     summary: |
       One spec-authoring prompt drives the full create-change arc
       end-to-end against the e2e substrate:
@@ -345,7 +342,7 @@ tasks:
       - npx playwright test e2e/agentic/create-change.spec.ts
 
   test:e2e:agentic:mavlink-hard-spec:
-    desc: Run the MAVLink-hard OpenSpec production black-box journey
+    desc: PARKED (ADR-058, spec is describe.skip) — Run the MAVLink-hard OpenSpec production black-box journey
     summary: |
       Drives a SemSpec mavlink-hard style prompt through the public UI chat
       path and validates that SemTeams routes to create_change, emits a
@@ -367,7 +364,7 @@ tasks:
       - npx playwright test e2e/agentic/mavlink-hard-spec.spec.ts
 
   test:e2e:agentic:spec-to-dev-demo:
-    desc: Run the approved OpenSpec -> proof gate -> Ralph/CBG mock-LLM journey
+    desc: PARKED (ADR-058, spec is describe.skip) — Run the approved OpenSpec -> proof gate -> Ralph/CBG mock-LLM journey
     summary: |
       Fixture-seeded bridge proof for the OpenSpec-to-dev bridge:
 
@@ -402,7 +399,7 @@ tasks:
       - npx playwright test e2e/agentic/spec-to-dev-demo.spec.ts
 
   test:e2e:agentic:create-change:gemini-smoke:
-    desc: Run the OpenSpec create_change real-LLM smoke on Gemini
+    desc: PARKED (ADR-058, spec is describe.skip) — Run the OpenSpec create_change real-LLM smoke on Gemini
     summary: |
       Real-LLM smoke for OpenSpec change 6.1. Derives a Gemini-only
       bootstrap config from configs/flow-bootstrap.json, sends a small
@@ -454,7 +451,7 @@ tasks:
       - npx playwright test e2e/agentic/create-change-gemini-smoke.spec.ts
 
   test:e2e:agentic:create-change-recovery:
-    desc: Run the ADR-057 §D5 create_change REJECT-RECOVERY mock-LLM journey
+    desc: PARKED (ADR-058, spec is describe.skip) — Run the ADR-057 §D5 create_change REJECT-RECOVERY mock-LLM journey
     summary: |
       The companion to create-change (the happy approve path): drives the
       reviewer→coordinator recovery path (rule 04) that the happy path never
@@ -772,7 +769,7 @@ tasks:
       - npx playwright test e2e/agentic/approval-resume.spec.ts
 
   test:e2e:agentic:dev-via-test:
-    desc: Run the ADR-044 dev-via-test pack (Lisa/Ralph/CBG) mock-LLM journey
+    desc: PARKED (ADR-058, spec is describe.skip) — Run the ADR-044 dev-via-test pack (Lisa/Ralph/CBG) mock-LLM journey
     summary: |
       One build-with-tests prompt drives the full dev-via-test arc
       end-to-end against the e2e substrate:
@@ -803,7 +800,7 @@ tasks:
       - npx playwright test e2e/agentic/dev-via-test.spec.ts
 
   test:e2e:agentic:dev-via-test-replan:
-    desc: Run the dev-via-test PLAN-RETRY (re-plan) mock-LLM journey (ADR-053 Phase 3b rule 02g)
+    desc: PARKED (ADR-058, spec is describe.skip) — Run the dev-via-test PLAN-RETRY (re-plan) mock-LLM journey (ADR-053 Phase 3b rule 02g)
     summary: |
       Drives ONE plan_rejected_retry so the chain flows through the
       re-plan loop the happy-path journey never exercises:
@@ -894,12 +891,12 @@ tasks:
 
         evidence/comparison           -> research
         /research hint                -> research
-        OpenSpec/spec authoring        -> create_change
-        /spec hint                    -> create_change
+        OpenSpec/spec authoring        -> respond_direct (team parked, ADR-058)
+        /spec hint                    -> respond_direct (team parked)
         scalar metric optimization     -> autoresearch
         /optimize hint                -> autoresearch
-        verifiable implementation      -> dev_via_test
-        /dev-via-test hint            -> dev_via_test
+        verifiable implementation      -> respond_direct (team parked)
+        /dev-via-test hint            -> respond_direct (team parked)
         mis-shaped /optimize hint      -> ask_user
         vague ask                      -> ask_user
         front-door product question    -> respond_direct
@@ -939,12 +936,11 @@ tasks:
       sandbox admission fails closed before execution routing:
 
         public-network Svelte optimization -> admission_pending -> respond_direct
-        public-network Go implementation   -> denied            -> respond_direct
+        public-network Go optimization     -> denied            -> respond_direct
 
       This proves the coordinator can call query_sandbox_attestation and
       request_sandbox, route on the stamped sandbox.attestation.* graph facts,
-      and avoid spawning autoresearch/dev_via_test when the attestation is not
-      ready.
+      and avoid spawning autoresearch when the attestation is not ready.
     vars:
       FIXTURE: coordinator-readiness-gate.yaml
       AGENTIC_CONFIG: e2e-flow-bootstrap.json
@@ -964,13 +960,12 @@ tasks:
       token fires the expected category entrypoint rule:
 
         research              -> researcher-research-plan
-        create_change         -> author-create-change
         autoresearch          -> autoresearch-baseline
-        dev_via_test          -> dev-via-test-plan
 
-      To keep this first-handoff proof cheap, the task derives a temporary
-      config from e2e-flow-bootstrap.json that keeps only the four category
-      rule-01 entrypoints and removes downstream category rules. This proves
+      (The create_change and dev_via_test entrypoints are parked with their
+      packs, ADR-058.) To keep this first-handoff proof cheap, the task
+      derives a temporary config from e2e-flow-bootstrap.json that keeps only
+      the category rule-01 entrypoints and removes downstream category rules. This proves
       coordinator action-token selection reaches the proper first team role
       without claiming full chain completion; the full pack journeys own the
       full-chain proof.
@@ -984,9 +979,7 @@ tasks:
         jq '
           .components.rule.config.rules_files=[
             "/app/configs/rules/research/01-coordinator-research-spawn.json",
-            "/app/configs/rules/create-change/01-coordinator-create-change-spawn.json",
-            "/app/configs/rules/autoresearch/01-coordinator-autoresearch-spawn.json",
-            "/app/configs/rules/dev-via-test/01-coordinator-dev-via-test-spawn.json"
+            "/app/configs/rules/autoresearch/01-coordinator-autoresearch-spawn.json"
           ]
           | .components.rule.config.inline_rules=[]
         ' ../configs/e2e-flow-bootstrap.json > ../configs/e2e-flow-bootstrap-team-spawn.gen.json

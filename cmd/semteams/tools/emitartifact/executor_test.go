@@ -765,3 +765,9 @@ func readFileContent(t *testing.T, path string) (string, error) {
 	}
 	return string(data), nil
 }
+
+// CreateEntityWithTriples satisfies beta.159's widened TriplePublisher;
+// the fake delegates to AddTriplesBatch so recording semantics are identical.
+func (f *fakeTriplePublisher) CreateEntityWithTriples(ctx context.Context, _ string, _ message.Type, triples []message.Triple) error {
+	return f.AddTriplesBatch(ctx, triples)
+}

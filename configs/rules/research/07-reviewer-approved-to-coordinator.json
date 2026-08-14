@@ -4,6 +4,9 @@
   "name": "reviewer-research decide(approved) → coordinator wake-up",
   "description": "ADR-042 §Phase 2 redesign MVP-2 research pack terminal handler. Fires when reviewer-research terminates with decide(action=approved) — the research category's chain terminal. Spawns a fresh coordinator loop with the terminal reviewer's loop_id in related_loops so the coordinator can read_loop_result and synthesize a user-facing reply via decide(action=respond_direct). The respond_direct rule (configs/rules/coordinator/03b-respond-direct.json) then publishes the reply prose on the user-response bus.\n\nMirrors configs/rules/coordinator/04a-research-terminal-to-coordinator.json (the legacy chain.mode-keyed version) but scoped to the research pack only. Both rules co-exist during MVP-2 through MVP-6; the legacy 04a retires alongside chain.mode in MVP-7.",
   "enabled": true,
+  "entity": {
+    "pattern": "*.*.*.*.*.*"
+  },
   "conditions": [
     {
       "field": "agent.loop.role",
@@ -12,7 +15,7 @@
       "required": true
     },
     {
-      "field": "coordinator.decision.next_action",
+      "field": "coordinator.decision.next-action",
       "operator": "eq",
       "value": "approved",
       "required": true
@@ -22,7 +25,7 @@
   "on_enter": [
     {
       "type": "add_triple",
-      "subject": "$entity.triple.agent.run.entity_id",
+      "subject": "$entity.triple.agent.run.entity-id",
       "predicate": "agent.run.outcome",
       "object": "success"
     },
@@ -41,7 +44,7 @@
       "related_loops": {
         "terminal": "$entity.instance"
       },
-      "prompt": "The research chain you dispatched has reached its terminal. Reviewer-research at loop $entity.instance evaluated the research artifact and approved it.\n\nYour job now is to deliver the answer to the user. You are not classifying or delegating — the chain has already done the work.\n\nIteration 1 — call read_loop_result(loop_id=$entity.instance) to read the reviewer's structured verdict. The reviewer's `reason` field summarises why the artifact was approved. If the reviewer's loop entity carries research.artifact.path or lineage.researcher, the structured artifact itself lives in the graph upstream — you may bash cat the path if read_loop_result's prose is too terse for a user-facing reply.\n\nIteration 2 — call decide(action=\"respond_direct\", reason=\"<your synthesised user-facing answer drawn from the reviewer's verdict + the research artifact>\"). The respond_direct rule (03b) publishes your `reason` on the user-response bus.\n\nWrite the `reason` field as plain prose addressing the user directly. Do not embed channel-specific markup (markdown links, buttons); channel routers add affordances downstream. Aim for a complete answer in 2-6 sentences — concise but standalone, since the user does not see the research artifact itself."
+      "prompt": "The research chain you dispatched has reached its terminal. Reviewer-research at loop $entity.instance evaluated the research artifact and approved it.\n\nYour job now is to deliver the answer to the user. You are not classifying or delegating — the chain has already done the work.\n\nIteration 1 — call read_loop_result(loop_id=$entity.instance) to read the reviewer's structured verdict. The reviewer's `reason` field summarises why the artifact was approved. If the reviewer's loop entity carries research.artifact.path or agent.lineage.researcher, the structured artifact itself lives in the graph upstream — you may bash cat the path if read_loop_result's prose is too terse for a user-facing reply.\n\nIteration 2 — call decide(action=\"respond_direct\", reason=\"<your synthesised user-facing answer drawn from the reviewer's verdict + the research artifact>\"). The respond_direct rule (03b) publishes your `reason` on the user-response bus.\n\nWrite the `reason` field as plain prose addressing the user directly. Do not embed channel-specific markup (markdown links, buttons); channel routers add affordances downstream. Aim for a complete answer in 2-6 sentences — concise but standalone, since the user does not see the research artifact itself."
     }
   ],
   "on_exit": [],

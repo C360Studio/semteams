@@ -100,11 +100,11 @@ func TestExecutor_Happy(t *testing.T) {
 	if bv != float64(123.4) {
 		t.Errorf("best.value = %v, want 123.4", bv)
 	}
-	exp, _ := pub.find("autoresearch.best.experiment_id")
+	exp, _ := pub.find("autoresearch.best.experiment-id")
 	if exp != "baseline" {
 		t.Errorf("best.experiment_id = %v, want baseline", exp)
 	}
-	gotCap, _ := pub.find("autoresearch.cap")
+	gotCap, _ := pub.find("autoresearch.run.cap")
 	if gotCap != 10 {
 		t.Errorf("cap = %v, want 10", gotCap)
 	}
@@ -146,4 +146,10 @@ func TestExecutor_CapMinimum(t *testing.T) {
 	if res.Error == "" {
 		t.Errorf("expected error when cap < 1")
 	}
+}
+
+// CreateEntityWithTriples satisfies beta.159's widened TriplePublisher;
+// the fake delegates to AddTriplesBatch so recording semantics are identical.
+func (f *fakePub) CreateEntityWithTriples(ctx context.Context, _ string, _ message.Type, triples []message.Triple) error {
+	return f.AddTriplesBatch(ctx, triples)
 }

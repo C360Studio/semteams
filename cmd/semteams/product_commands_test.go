@@ -1,14 +1,19 @@
 package main
 
 import (
-	"strings"
 	"testing"
 
 	agenticdispatch "github.com/c360studio/semstreams/processor/agentic-dispatch"
 	"github.com/c360studio/semstreams/types"
 )
 
-func TestRegisterProductCommands_RegistersImplementSpec(t *testing.T) {
+// Every public team token — live AND parked — must be a registered hint
+// command: beta.159's dispatch rejects unknown slash messages, so a missing
+// hint means "/research …" (or "/spec …") dead-ends with "Unknown command"
+// instead of reaching the coordinator, which is what answers parked asks
+// honestly. The bridge SEMANTICS of /implement-spec stay parked (ADR-058);
+// only its hint routing is live.
+func TestRegisterProductCommands_TeamHintsOnly(t *testing.T) {
 	agenticdispatch.ClearGlobalCommands()
 	t.Cleanup(agenticdispatch.ClearGlobalCommands)
 
@@ -16,22 +21,17 @@ func TestRegisterProductCommands_RegistersImplementSpec(t *testing.T) {
 	if err != nil {
 		t.Fatalf("registerProductCommands returned error: %v", err)
 	}
-	if _, ok := agenticdispatch.ListRegisteredCommands()["implement-spec"]; !ok {
-		t.Fatalf("implement-spec command was not registered")
+	cmds := agenticdispatch.ListRegisteredCommands()
+	want := []string{
+		"research", "optimize", "autoresearch",
+		"spec", "create-change", "dev-via-test", "build", "dev", "implement-spec",
 	}
-}
-
-func TestRegisterProductCommands_RejectsDuplicateImplementSpec(t *testing.T) {
-	agenticdispatch.ClearGlobalCommands()
-	t.Cleanup(agenticdispatch.ClearGlobalCommands)
-
-	platform := types.PlatformMeta{Org: "c360", Platform: "semteams"}
-	if err := registerProductCommands(platform, nil); err != nil {
-		t.Fatalf("first registerProductCommands returned error: %v", err)
+	for _, name := range want {
+		if _, ok := cmds[name]; !ok {
+			t.Errorf("team-hint command %q not registered — beta.159 dispatch would reject /%s as Unknown command", name, name)
+		}
 	}
-
-	err := registerProductCommands(platform, nil)
-	if err == nil || !strings.Contains(err.Error(), `command "implement-spec" already registered`) {
-		t.Fatalf("second registerProductCommands error = %v, want duplicate command error", err)
+	if len(cmds) != len(want) {
+		t.Errorf("expected exactly the %d team-hint commands, got %v", len(want), cmds)
 	}
 }

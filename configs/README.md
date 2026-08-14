@@ -9,7 +9,7 @@ persona bundles, not as new flow configs.
 
 | Config | Purpose | Model |
 |---|---|---|
-| [`flow-bootstrap.json`](flow-bootstrap.json) | Production substrate (ADR-042 MVP). Wires the singleton agentic stack (graph-ingest, graph-query, rule-processor, agentic-loop, agentic-dispatch, agentic-tools, agentic-model) + the live product-facing rule packs (research, autoresearch, create-change, proof-readiness, dev-from-task, dev-via-test) + support packs (coordinator, agent-run, ops) + the persona corpus that drives them. | gemini-flash (default); coordinator capability prefers gemini-pro with gemini-flash / claude-haiku fallback |
+| [`flow-bootstrap.json`](flow-bootstrap.json) | Production substrate (ADR-042 MVP). Wires the singleton agentic stack (graph-ingest, graph-query, rule-processor, agentic-loop, agentic-dispatch, agentic-tools, agentic-model) + the live product-facing rule packs (research, autoresearch) + support packs (coordinator, agent-run, ops); the dev-side packs are parked on disk per ADR-058 + the persona corpus that drives them. | gemini-flash (default); coordinator capability prefers gemini-pro with gemini-flash / claude-haiku fallback |
 | [`e2e-flow-bootstrap.json`](e2e-flow-bootstrap.json) | Mock-LLM clone of flow-bootstrap. Same packs + personas; model registry points at the in-process mock LLM. Used by every Playwright journey under `ui/e2e/agentic/`. | mock-llm |
 
 `task ui:test:e2e:agentic:demo-mvp` runs the black-box demo
@@ -27,10 +27,10 @@ configs/
 │   ├── coordinator/             ← chat front-door rules
 │   ├── research/                ← prose research arc
 │   ├── autoresearch/            ← Karpathy-style iteration loop
-│   ├── create-change/           ← OpenSpec author / review / export
-│   ├── proof-readiness/         ← proof dependency + readiness gates
-│   ├── dev-from-task/           ← approved-spec task bridge
-│   ├── dev-via-test/            ← Lisa / Ralph / CBG implementation loop
+│   ├── create-change/           ← PARKED (ADR-058): OpenSpec author / review / export
+│   ├── proof-readiness/         ← PARKED (ADR-058): proof dependency + readiness gates
+│   ├── dev-from-task/           ← PARKED (ADR-058): approved-spec task bridge
+│   ├── dev-via-test/            ← PARKED (ADR-058): Lisa / Ralph / CBG implementation loop
 │   ├── agent-run/               ← shared run lifecycle support
 │   └── ops/                     ← parallel observability track
 └── personas/fragments/
@@ -39,10 +39,10 @@ configs/
     ├── reviewer-research/
     ├── autoresearch-*/          ← baseline / propose / execute / synthesize
     ├── reviewer-autoresearch/
-    ├── author-create-change/    ← OpenSpec author
-    ├── reviewer-create-change/  ← OpenSpec reviewer
-    ├── dev-via-test-*/          ← Lisa / Ralph
-    ├── reviewer-dev-via-test/   ← CBG plan + work gate
+    ├── author-create-change/    ← PARKED (ADR-058): OpenSpec author
+    ├── reviewer-create-change/  ← PARKED (ADR-058): OpenSpec reviewer
+    ├── dev-via-test-*/          ← PARKED (ADR-058): Lisa / Ralph
+    ├── reviewer-dev-via-test/   ← PARKED (ADR-058): CBG plan + work gate
     ├── ops/                     ← read-only diagnostic agent
     ├── ops-chain-observer/
     └── ops-progress-observer/

@@ -41,7 +41,7 @@ specific substrate claims under test:
    chain-scoped `bash` tool wraps every command in `devcontainer exec
    --workspace-folder <wsf> bash -lc <cmd>` automatically via
    `sandboxruntime.AttestationRunner` — readers consume the
-   `sandbox.attestation.host_workspace_folder` triple stamped at
+   `sandbox.attestation.host-workspace-folder` triple stamped at
    attestation time. Iterations mutate files that survive between
    propose loops (the runner keeps the same workspace across the
    chain's lifetime). The research pack does not use a tenant
@@ -77,8 +77,8 @@ A single rule (`05-iteration-dispatch.json`) handles iter 1 through cap-exhaust 
 Rule 05's first action is `remove_triple iteration.pending` — this flips the trigger condition false (Exited transition), resetting `wasMatching` so the next marker stamp produces a fresh Entered. Without the remove-then-add pattern, the rule's conditions would stay monotonic (count<cap stays true) and Entered would never re-fire — chain stalls after iter 1. See semstreams#204 (and the reverted in-flight-toggle attempts at semteams 7c82b95 / edf2c5b / cd094727 / 2be0e9f) for why scalar-toggle workarounds don't work in the current rule engine.
 
 Per-iteration when clauses on the publish_agent actions select between two paths:
-- `$state.iteration <= autoresearch.cap` → spawn the next autoresearch-propose.
-- `$state.iteration > autoresearch.cap` → spawn autoresearch-synthesize AND `update_triple run.status="stopped"` (the update_triple — NOT add_triple — wipes the prior `active` value so this rule's run.status=active condition fails on any belated execute completion that lands after synthesize already spawned).
+- `$state.iteration <= autoresearch.run.cap` → spawn the next autoresearch-propose.
+- `$state.iteration > autoresearch.run.cap` → spawn autoresearch-synthesize AND `update_triple run.status="stopped"` (the update_triple — NOT add_triple — wipes the prior `active` value so this rule's run.status=active condition fails on any belated execute completion that lands after synthesize already spawned).
 
 This retires the old rule 02 (baseline→propose) and rule 06 (length_eq cap stop): rule 05 covers all three roles (iter 1 spawn, iter 2..cap spawn, cap-exhaust synthesize).
 
@@ -89,13 +89,13 @@ This retires the old rule 02 (baseline→propose) and rule 06 (length_eq cap sto
 | `01-coordinator-autoresearch-spawn.json` | coordinator decide(autoresearch) | autoresearch-baseline + stamp `autoresearch.run.status=active`, `iteration.pending="initial"` on coordinator (run) entity |
 | `03-propose-to-execute.json` | autoresearch-propose decide(measure) | autoresearch-execute |
 | `04a-execute-stamp-completion.json` | autoresearch-execute decide(measured) + outcome=success | stamp `autoresearch.experiment.completed` + `iteration.pending=<entity.id>` on run entity (the new pending marker re-triggers rule 05) |
-| `04b-execute-stamp-failed.json` | autoresearch-execute outcome=failed (no decide; loop crashed) | stamp `autoresearch.experiment.completed` + `autoresearch.experiment.loop_failed` + `iteration.pending=<entity.id>` on run entity |
+| `04b-execute-stamp-failed.json` | autoresearch-execute outcome=failed (no decide; loop crashed) | stamp `autoresearch.experiment.completed` + `autoresearch.experiment.loop-failed` + `iteration.pending=<entity.id>` on run entity |
 | `04c-execute-promote-best-on-kept.json` | autoresearch-execute + `autoresearch.measurement.outcome=kept` (stamped by emit_autoresearch_measurement) | **update_triple** (true scalar upsert) `autoresearch.best.value` + `best.experiment_id` on run entity. The executor cannot do this directly because TriplePublisher has no upsert; AddTriple-stamped best.values pile up and GetFieldValue's first-wins read returns the stale baseline forever. Fixed 2026-06-03 after Pattern A smoke surfaced the bug. |
 | `05-iteration-dispatch.json` | run entity's `iteration.pending ne ""` (marker presence) + `cap > 0` + `run.status=active` | (1) remove_triple iteration.pending; (2) publish_agent autoresearch-propose when `$state.iteration <= cap`; (3) publish_agent autoresearch-synthesize + update_triple run.status="stopped" when `$state.iteration > cap` |
 | `07-synthesize-to-reviewer.json` | autoresearch-synthesize decide(emit) | reviewer-autoresearch |
 | `08-reviewer-approved-to-coordinator.json` | reviewer-autoresearch decide(approved) | coordinator (wake-up for respond_direct) |
 | `09-reviewer-rejected-resynthesize.json` | reviewer-autoresearch decide(insufficient) | autoresearch-synthesize (max_iterations=2 — budget already spent on iteration loops, so this re-rolls the rollup but does NOT re-iterate experiments) |
-| `10-needs-clarification-replan.json` | **autoresearch-baseline** decide(needs_clarification) | coordinator (max_iterations=3; **anchor_inherit** — baseline carries a bare agent.run from rule 01 run_scope=new, so the woken coordinator inherits agent.run.entity_id → a failure routes to agent-run/05) |
+| `10-needs-clarification-replan.json` | **autoresearch-baseline** decide(needs_clarification) | coordinator (max_iterations=3; **anchor_inherit** — baseline carries a bare agent.run from rule 01 run_scope=new, so the woken coordinator inherits agent.run.entity-id → a failure routes to agent-run/05) |
 | `10b-descended-needs-clarification-replan.json` | **autoresearch-propose/execute/synthesize/reviewer** decide(needs_clarification) | coordinator (max_iterations=3; **anchor_threaded** — these run-entity-descended roles carry no bare agent.run, so the rule threads run-loop-entity-id onto the coordinator → a failure routes to agent-run/06). Split from rule 10 because the two carry the run anchor on different triples (ADR-053 Phase 4b-1a, same baseline-vs-descended asymmetry as rules 12/13). |
 | `11-loop-failed-pause.json` | any pack role EXCEPT autoresearch-execute terminates with outcome=failed | stamp `chain.paused.marker` (autoresearch-execute loop-failures route through 04b instead — counted toward cap, chain continues) |
 
@@ -152,7 +152,7 @@ Rules 05 and 06 are mutually exclusive on the run entity:
   `autoresearch-synthesize` + stamp `autoresearch.stop.reason=cap`.
   Fires once when the Nth completion lands.
 
-The `cap` value is `$entity.triple.autoresearch.cap` (substituted from
+The `cap` value is `$entity.triple.autoresearch.run.cap` (substituted from
 rule 01's stamp), so the iteration ceiling is data-driven rather than
 hard-coded in the rule.
 
@@ -219,7 +219,7 @@ Every autoresearch role runs inside **the per-tenant devcontainer the
 coordinator provisioned** via `request_sandbox`. The chain-scoped
 `bash` tool routes commands there automatically:
 `sandboxruntime.AttestationRunner` reads the chain entity's
-`sandbox.attestation.host_workspace_folder` triple (stamped at
+`sandbox.attestation.host-workspace-folder` triple (stamped at
 attestation time) and wraps every command in `devcontainer exec
 --workspace-folder <wsf> bash -lc <cmd>` before delegating. No
 `docker exec` prefix, no tenant-container-name plumbing.
@@ -253,7 +253,7 @@ to route to.
 When the coordinator pre-provisioned a profile via `request_sandbox`,
 the attestation triples land on the chain entity
 (`sandbox.attestation.*` namespace). Personas can read
-`$entity.triple.sandbox.attestation.verified.<cap>` for capability
+`$entity.triple.sandbox.attestation.verified-<cap>` for capability
 checks before running commands, but the bash tool already wraps the
 command into the right container so most commands just run.
 

@@ -39,7 +39,7 @@ import { assertAnchorBornFirst, RUN_ANCHOR, LOOP_ANCHOR } from "./born_first";
  *
  *   Loop E: coordinator (wake-up) → read_loop_result on Loop D →
  *           decide(respond_direct) → rule 03b fires → publish on
- *           user.response.* + stamp coordinator.user_reply triple.
+ *           user.response.* + stamp coordinator.clarification.reply triple.
  *           Terminal — no further rules fire.
  *
  * Validates:
@@ -246,7 +246,7 @@ test.describe("ADR-042 MVP-5 — Research category mock-LLM journey", () => {
     // Step 8 — ADR-053 Phase 4a: the run reached `completed`. Direct
     // agent.run.phase assertion on the run entity (the design spike's
     // merge gate §D/§H). Research is the loop-spawned-chain path: its
-    // reviewer carries agent.run.entity_id, rule 07 stamps
+    // reviewer carries agent.run.entity-id, rule 07 stamps
     // agent.run.outcome=success, and rule 03 transitions executing→
     // completed. `failed` here would mean the D3 zombie guard raced the
     // dispatched→executing transition.
@@ -285,13 +285,13 @@ test.describe("ADR-042 MVP-5 — Research category mock-LLM journey", () => {
       anchorSubstr: RUN_ANCHOR.substr,
       label: "research/07 run-outcome marker (run anchor)",
     });
-    // (2) Plan-loop anchor: research/03a stamps research.gather.completed_subtopic
-    //     onto the PLANNER's loop entity (lineage.plan-loop-entity-id →
+    // (2) Plan-loop anchor: research/03a stamps research.gather.completed-subtopic
+    //     onto the PLANNER's loop entity (agent.lineage.plan-loop-entity-id →
     //     agent.agentic-loop.execution.*); prove that loop was born by the
     //     agentic-loop graph writer (carries agent.loop.role spawn-identity), not
     //     auto-vivified by the gather marker.
     await assertAnchorBornFirst(request, {
-      markerPredicate: "research.gather.completed_subtopic",
+      markerPredicate: "research.gather.completed-subtopic",
       envelopePredicate: LOOP_ANCHOR.envelope,
       anchorSubstr: LOOP_ANCHOR.substr,
       label: "research/03a gather.completed_subtopic (plan-loop anchor)",

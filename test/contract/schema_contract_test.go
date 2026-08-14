@@ -356,6 +356,25 @@ func loadCommittedSchemas(schemasDir string) (map[string]map[string]interface{},
 	return schemas, nil
 }
 
+// normalizeSchemaDefault converts Go-typed schema defaults to the types JSON
+// unmarshal produces so committed and generated schemas compare equal.
+func normalizeSchemaDefault(def any) any {
+	switch v := def.(type) {
+	case int:
+		return float64(v)
+	case int64:
+		return float64(v)
+	case []string:
+		anySlice := make([]any, len(v))
+		for i, s := range v {
+			anySlice[i] = s
+		}
+		return anySlice
+	default:
+		return def
+	}
+}
+
 func extractSchemaFromRegistration(name string, reg *component.Registration) map[string]interface{} {
 	schema := make(map[string]interface{})
 
@@ -373,20 +392,7 @@ func extractSchemaFromRegistration(name string, reg *component.Registration) map
 		prop["description"] = propSchema.Description
 
 		if propSchema.Default != nil {
-			// Normalize types since JSON unmarshal produces different types
-			switch v := propSchema.Default.(type) {
-			case int:
-				prop["default"] = float64(v)
-			case []string:
-				// Convert []string to []any for JSON comparison compatibility
-				anySlice := make([]any, len(v))
-				for i, s := range v {
-					anySlice[i] = s
-				}
-				prop["default"] = anySlice
-			default:
-				prop["default"] = propSchema.Default
-			}
+			prop["default"] = normalizeSchemaDefault(propSchema.Default)
 		}
 		if propSchema.Minimum != nil {
 			// Convert int to float64 for JSON comparison compatibility

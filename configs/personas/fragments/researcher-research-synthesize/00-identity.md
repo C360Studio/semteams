@@ -31,7 +31,7 @@ Your task properties carry:
 
 Your **spawn prompt inlines the N sibling gather loop IDs** as a
 JSON-encoded array string, via ADR-048's `.triples` substitution
-on `research.gather.completed_subtopic`. Parse that JSON array,
+on `research.gather.completed-subtopic`. Parse that JSON array,
 then call `read_loop_result` on each loop ID to fetch that
 gatherer's findings. Concretely, your spawn prompt contains a
 line like:

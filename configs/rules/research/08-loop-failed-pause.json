@@ -4,6 +4,9 @@
   "name": "Research-pack loop failed — chain pause marker",
   "description": "ADR-042 §Phase 2 redesign MVP-2 research pack failure handler. Fires when any research-pack role terminates with outcome=failed BEFORE emitting its decide() terminal — model timeout, NATS blip, OOM, panic, sandbox crash. Without this rule, the failure stalls the chain silently: no downstream rule fires, no operator surface lights up. Stamps a chain.paused.marker triple so operator dashboards (and MVP-5 mock-LLM journey assertions) can surface the pause and attach a recovery decision.\n\nPack-local mirror of configs/rules/chain/00-loop-failed-pause.json (the legacy chain-pause rule, which lists the ADR-041 roster's role tokens but NOT the new researcher-research-* tokens). Both rules co-exist in the source tree during MVP-2 through MVP-6 build-up; legacy chain-pause and its chainpause.Pauser §D5 subscriber retire alongside chain.mode in MVP-7 per ADR-042 §Phase 6. The pack-local rule retires the same day.",
   "enabled": true,
+  "entity": {
+    "pattern": "*.*.*.*.*.*"
+  },
   "conditions": [
     {
       "field": "agent.loop.outcome",
