@@ -129,7 +129,7 @@ func declaredReplaceOwnedPredicates(cfg ruleProcessorOwnershipConfig) map[string
 	set := map[string]struct{}{}
 	for _, c := range cfg.ProjectionContracts {
 		for _, g := range c.Groups {
-			if g.Mode != "replace-owned" {
+			if g.Mode != "reconcile" {
 				continue
 			}
 			for _, p := range g.Predicates {
@@ -140,13 +140,13 @@ func declaredReplaceOwnedPredicates(cfg ruleProcessorOwnershipConfig) map[string
 	return set
 }
 
-// TestReplaceOwned_FlowConfigsDeclarePackContract pins that BOTH the production
+// TestReconcile_FlowConfigsDeclarePackContract pins that BOTH the production
 // and e2e flow configs declare the rule-pack projection ownership identically:
 // pack_id "semteams" + an autoresearch replace-owned contract on the run-anchor
 // entity pattern carrying the three migrated single-valued predicates. The e2e
 // config is a mock-LLM clone of production (CLAUDE.md), so the ownership shape
 // must match or the mock journey would validate a different envelope than ships.
-func TestReplaceOwned_FlowConfigsDeclarePackContract(t *testing.T) {
+func TestReconcile_FlowConfigsDeclarePackContract(t *testing.T) {
 	wantPredicates := []string{
 		// PR #219 — autoresearch single-valued scalar replaces.
 		"autoresearch.best.value",
@@ -187,14 +187,14 @@ func TestReplaceOwned_FlowConfigsDeclarePackContract(t *testing.T) {
 	}
 }
 
-// TestReplaceOwned_RuleActionsWithinDeclaredEnvelope reproduces the framework's
+// TestReconcile_RuleActionsWithinDeclaredEnvelope reproduces the framework's
 // boot-time envelope check across every BOOTSTRAP-WIRED rule file: every
 // replace_owned action's predicate MUST be a literal (no `$` substitution) AND
 // fall inside the production config's declared replace-owned predicate set. A
 // failure here is a boot-abort in production — catch it in CI. Parked packs
 // (unwired from flow-bootstrap, ADR-058) are out of scope: their files stay on
 // disk in the pre-migration dialect and never reach the boot-time check.
-func TestReplaceOwned_RuleActionsWithinDeclaredEnvelope(t *testing.T) {
+func TestReconcile_RuleActionsWithinDeclaredEnvelope(t *testing.T) {
 	declared := declaredReplaceOwnedPredicates(loadRuleProcessorOwnership(t, flowBootstrapPath))
 	require.NotEmpty(t, declared, "production config declares no replace-owned predicates — envelope check is vacuous")
 
@@ -207,7 +207,7 @@ func TestReplaceOwned_RuleActionsWithinDeclaredEnvelope(t *testing.T) {
 		require.NoErrorf(t, json.Unmarshal(raw, &rule), "unmarshal rule file %s", path)
 
 		for _, a := range rule.allActions() {
-			if a.Type != "replace_owned" {
+			if a.Type != "reconcile_predicates" {
 				continue
 			}
 			scanned++
@@ -225,12 +225,12 @@ func TestReplaceOwned_RuleActionsWithinDeclaredEnvelope(t *testing.T) {
 	require.Positive(t, scanned, "no replace_owned actions found in bootstrap-wired rules — the migration regressed to update_triple/add_triple")
 }
 
-// TestReplaceOwned_MigratedRulesUseOwnedLane is the regression pin against a
+// TestReconcile_MigratedRulesUseOwnedLane is the regression pin against a
 // silent revert: the three autoresearch scalar-replace predicates MUST be
 // written by a replace_owned action (not the non-atomic update_triple they used
 // 2026-06-03..2026-06-14, nor an appending add_triple). Keyed by (file,
 // predicate) so a reorder of actions within a rule does not flake the test.
-func TestReplaceOwned_MigratedRulesUseOwnedLane(t *testing.T) {
+func TestReconcile_MigratedRulesUseOwnedLane(t *testing.T) {
 	type target struct {
 		file      string
 		predicate string
@@ -244,12 +244,10 @@ func TestReplaceOwned_MigratedRulesUseOwnedLane(t *testing.T) {
 		{"../../configs/rules/autoresearch/04a-execute-stamp-completion.json", "autoresearch.iteration.pending"},
 		{"../../configs/rules/autoresearch/04b-execute-stamp-failed.json", "autoresearch.iteration.pending"},
 		{"../../configs/rules/autoresearch/05-iteration-dispatch.json", "autoresearch.iteration.pending"},
-		// Fast-follow — dev-via-test retry coordination gates.
-		{"../../configs/rules/dev-via-test/02c-plan-retry-stamp.json", "dev_via_test.plan.retry.finding"},
-		{"../../configs/rules/dev-via-test/02c-plan-retry-stamp.json", "dev_via_test.plan.retry.pending"},
-		{"../../configs/rules/dev-via-test/07c-cbg-retry-stamp.json", "dev_via_test.cbg.retry.target_task"},
-		{"../../configs/rules/dev-via-test/07c-cbg-retry-stamp.json", "dev_via_test.cbg.retry.finding"},
-		{"../../configs/rules/dev-via-test/07c-cbg-retry-stamp.json", "dev_via_test.cbg.retry.pending"},
+		// The dev-via-test retry gates left this pin when the pack was PARKED
+		// (ADR-058) — those files stay on disk in the pre-beta.160 dialect
+		// (replace_owned) and are deliberately NOT audited. Re-add their rows
+		// (re-authored onto reconcile_predicates) when the pack is re-wired.
 	}
 
 	for _, tg := range targets {
@@ -270,14 +268,14 @@ func TestReplaceOwned_MigratedRulesUseOwnedLane(t *testing.T) {
 		}
 		require.NotEmptyf(t, lanes, "%s: predicate %q has no triple action — migration regressed", tg.file, tg.predicate)
 		for _, lane := range lanes {
-			require.Equalf(t, "replace_owned", lane,
+			require.Equalf(t, "reconcile_predicates", lane,
 				"%s: predicate %q must be written ONLY by replace_owned actions (atomic owned replace, ADR-056 Decision 3), got %q among %v",
 				tg.file, tg.predicate, lane, lanes)
 		}
 	}
 }
 
-// TestReplaceOwned_ResolvedTargetsWithinContractScope mirrors the framework's
+// TestReconcile_ResolvedTargetsWithinContractScope mirrors the framework's
 // boot-time obligation validation (semstreams
 // processor/rule/projection_derivation.go validateDeclaredProjectionSuperset)
 // for every wired replace_owned action:
@@ -308,7 +306,7 @@ func TestReplaceOwned_MigratedRulesUseOwnedLane(t *testing.T) {
 // Auditing bootstrapLoadedRules (production's rules_files) against BOTH flow
 // configs' contracts is sound because TestBootstrapRuleListsMatch pins the two
 // rules_files lists identical.
-func TestReplaceOwned_ResolvedTargetsWithinContractScope(t *testing.T) {
+func TestReconcile_ResolvedTargetsWithinContractScope(t *testing.T) {
 	type groupDecl struct {
 		mode       string
 		predicates []string
@@ -340,7 +338,7 @@ func TestReplaceOwned_ResolvedTargetsWithinContractScope(t *testing.T) {
 			require.NoErrorf(t, json.Unmarshal(raw, &rule), "unmarshal rule file %s", path)
 
 			for _, a := range rule.allActions() {
-				if a.Type != "replace_owned" {
+				if a.Type != "reconcile_predicates" {
 					continue
 				}
 				// Step 1 — contract/group/mode/predicate: EVERY obligation,
@@ -353,7 +351,7 @@ func TestReplaceOwned_ResolvedTargetsWithinContractScope(t *testing.T) {
 				require.Truef(t, ok,
 					"%s action %q: contract %q does not cover projection group %q in %s — boot-abort",
 					path, a.ID, a.ProjectionContract, a.ProjectionGroup, flowPath)
-				require.Equalf(t, "replace-owned", g.mode,
+				require.Equalf(t, "reconcile", g.mode,
 					"%s action %q: contract %q group %q uses mode %q, want replace-owned — boot-abort",
 					path, a.ID, a.ProjectionContract, a.ProjectionGroup, g.mode)
 				require.Containsf(t, g.predicates, a.Predicate,

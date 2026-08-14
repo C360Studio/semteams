@@ -203,7 +203,7 @@ func TestWiredReplaceOwnedGroupsAreSinglePredicate(t *testing.T) {
 			continue
 		}
 		for _, a := range rule.OnEnter {
-			if a.Type != "replace_owned" {
+			if a.Type != "reconcile_predicates" {
 				continue
 			}
 			key := a.ProjectionContract + "/" + a.ProjectionGroup

@@ -8,15 +8,33 @@ import (
 	"testing"
 )
 
-// portDef is the subset of the canonical component port definition
-// this test consumes. Mirrors the shape used by other contract tests
-// in this package; intentionally minimal to keep parse failures
-// localised.
+// portDef is the subset of the canonical beta.160 component port
+// envelope this test consumes ({name, config:{kind,...}}). Mirrors the
+// shape used by other contract tests in this package; intentionally
+// minimal to keep parse failures localised.
 type portDef struct {
-	Name       string `json:"name"`
-	Type       string `json:"type"`
-	Subject    string `json:"subject"`
-	StreamName string `json:"stream_name"`
+	Name   string `json:"name"`
+	Config struct {
+		Kind       string   `json:"kind"`
+		Subject    string   `json:"subject"`
+		StreamName string   `json:"stream_name"`
+		Subjects   []string `json:"subjects"`
+	} `json:"config"`
+}
+
+// wireSubjects returns every wire subject a port declares: jetstream
+// ports carry a subjects array, nats/nats-request a single subject.
+// KV/store kinds carry buckets, not subjects — empty.
+func (p portDef) wireSubjects() []string {
+	switch p.Config.Kind {
+	case "jetstream":
+		return p.Config.Subjects
+	case "nats", "nats-request":
+		if p.Config.Subject != "" {
+			return []string{p.Config.Subject}
+		}
+	}
+	return nil
 }
 
 type portsBlock struct {
@@ -31,25 +49,22 @@ type portsBlock struct {
 //
 // Failure mode this catches (the MVP-1 → MVP-5 wedge):
 //
-//	port.stream_name = "AGENT" + port.subject = "tool.execute.*"
+//	stream_name = "AGENT" + subjects = ["tool.execute.*"]
 //
-// The streams manager (config.streams.go EnsureStreams) derives
-// subjects from the FIRST stream_name encountered per stream — so a
-// stream named AGENT ends up with subjects=["agent.>"], and
-// subsequent ports declaring stream_name=AGENT with subject
-// "tool.execute.*" silently fail to route at runtime ("nats: no
-// response from stream"). The contract: subject prefix must match
-// the canonical stream for that family.
+// A subject published into a stream whose declared filter doesn't
+// cover it silently fails to route at runtime ("nats: no response
+// from stream"). The contract: subject prefix must match the
+// canonical stream for that family.
 //
 //	agent.>  → AGENT
 //	tool.>   → TOOL
-//	user.>   → USER  (or type="nats" for fire-and-forget)
-//	graph.>  → GRAPH (or type="nats" for fire-and-forget)
+//	user.>   → USER  (or kind="nats" for fire-and-forget)
+//	graph.>  → (no stream; nats/nats-request request-reply at beta.160)
 //
 // This test only enforces the agent/tool/user split because those
-// are the streams the MVP roster exercises. Graph subjects can route
-// via either nats (fire-and-forget, no stream) or jetstream; both
-// shapes are accepted.
+// are the streams the roster exercises. discovery.* subjects are
+// deliberately NOT stream-captured at beta.160 (tool discovery is
+// request-reply on discovery.tool.list) — they carry no mapping here.
 func TestFlowBootstrapStreamWiring(t *testing.T) {
 	for _, configPath := range []string{
 		"../../configs/flow-bootstrap.json",
@@ -103,29 +118,31 @@ func TestFlowBootstrapStreamWiring(t *testing.T) {
 // an empty string when the wiring is canonical or a violation
 // description when it isn't.
 //
-// Only enforces the rule when port.type == "jetstream" — nats-typed
-// ports are fire-and-forget and don't trigger stream derivation.
+// Only enforces the rule when kind == "jetstream" — nats/nats-request
+// ports are streamless and don't trigger stream derivation.
 func checkPortStreamWiring(p portDef) string {
-	if p.Type != "jetstream" {
+	if p.Config.Kind != "jetstream" {
 		return ""
 	}
-	want := canonicalStreamFor(p.Subject)
-	if want == "" {
-		// Subject doesn't carry a canonical mapping (entity-watch
-		// patterns, internal subjects, etc.) — skip.
-		return ""
-	}
-	if p.StreamName != want {
-		return fmt.Sprintf("subject %q routes to stream_name=%q, want %q (mismatch causes silent nats: no response from stream at runtime)",
-			p.Subject, p.StreamName, want)
+	for _, subject := range p.Config.Subjects {
+		want := canonicalStreamFor(subject)
+		if want == "" {
+			// Subject doesn't carry a canonical mapping (entity-watch
+			// patterns, internal subjects, etc.) — skip.
+			continue
+		}
+		if p.Config.StreamName != want {
+			return fmt.Sprintf("subject %q routes to stream_name=%q, want %q (mismatch causes silent nats: no response from stream at runtime)",
+				subject, p.Config.StreamName, want)
+		}
 	}
 	return ""
 }
 
 // canonicalStreamFor returns the canonical stream name for the given
 // subject, or "" if no canonical mapping applies. Matches the prefix
-// against the canonical stream-family roots that
-// streams.DeriveStreamSubjects honors.
+// against the canonical stream-family roots the configured streams
+// declare.
 func canonicalStreamFor(subject string) string {
 	switch {
 	case strings.HasPrefix(subject, "agent."):
@@ -149,8 +166,10 @@ func canonicalStreamFor(subject string) string {
 //     wake-up coordinator path when chains terminate.
 //   - agent.task.* JetStream output (AGENT stream) — spawns initial
 //     and rule-driven loops.
-//   - user.response.* NATS output — fire-and-forget reply prose for
-//     channel routers to deliver.
+//   - user.response.> JetStream output (USER stream) — reply prose for
+//     channel routers to deliver. (nats fire-and-forget through
+//     beta.159; beta.160's dispatch default is jetstream/USER and a
+//     kind-mismatch override is a boot error.)
 //
 // The bug class this catches: the MVP-1 bootstrap declared a
 // self-loop input (subject equal to its own output, reading from
@@ -159,6 +178,11 @@ func canonicalStreamFor(subject string) string {
 // would silently break a different rule path (no wake-up reply, no
 // terminal publish, etc.) without surfacing a startup error.
 func TestFlowBootstrapDispatchShape(t *testing.T) {
+	type wantPort struct {
+		subject    string
+		streamName string
+		kind       string
+	}
 	for _, configPath := range []string{
 		"../../configs/flow-bootstrap.json",
 		"../../configs/e2e-flow-bootstrap.json",
@@ -187,27 +211,20 @@ func TestFlowBootstrapDispatchShape(t *testing.T) {
 				t.Fatalf("unmarshal dispatch ports: %v", err)
 			}
 
-			// Track required port shapes by name.
-			requiredInputs := map[string]struct {
-				subject    string
-				streamName string
-				portType   string
-			}{
+			requiredInputs := map[string]wantPort{
 				"user.message":   {"user.message.>", "USER", "jetstream"},
 				"agent.complete": {"agent.complete.*", "AGENT", "jetstream"},
 			}
-			requiredOutputs := map[string]struct {
-				subject    string
-				streamName string
-				portType   string
-			}{
+			requiredOutputs := map[string]wantPort{
 				"agent.task":    {"agent.task.*", "AGENT", "jetstream"},
-				"user.response": {"user.response.*", "", "nats"},
+				"user.response": {"user.response.>", "USER", "jetstream"},
 			}
 
-			outputSubjects := make(map[string]bool, len(dispatchCfg.Ports.Outputs))
+			outputSubjects := map[string]bool{}
 			for _, p := range dispatchCfg.Ports.Outputs {
-				outputSubjects[p.Subject] = true
+				for _, s := range p.wireSubjects() {
+					outputSubjects[s] = true
+				}
 			}
 
 			// Self-loop input check: no input port may share a subject
@@ -215,65 +232,44 @@ func TestFlowBootstrapDispatchShape(t *testing.T) {
 			// dispatch reading from agent.task.* on AGENT (its own
 			// output stream), which silently routed nothing.
 			for _, in := range dispatchCfg.Ports.Inputs {
-				if outputSubjects[in.Subject] {
-					t.Errorf("dispatch input port %q subject %q matches one of dispatch's own outputs — self-loop dispatch is the MVP-1 wedge class",
-						in.Name, in.Subject)
+				for _, s := range in.wireSubjects() {
+					if outputSubjects[s] {
+						t.Errorf("dispatch input port %q subject %q matches one of dispatch's own outputs — self-loop dispatch is the MVP-1 wedge class",
+							in.Name, s)
+					}
 				}
 			}
 
-			// Required-input presence.
-			for portName, want := range requiredInputs {
-				found := false
-				for _, in := range dispatchCfg.Ports.Inputs {
-					if in.Name != portName {
-						continue
+			checkLane := func(lane []portDef, required map[string]wantPort, laneName string) {
+				for portName, want := range required {
+					found := false
+					for _, p := range lane {
+						if p.Name != portName {
+							continue
+						}
+						found = true
+						subjects := p.wireSubjects()
+						if len(subjects) != 1 || subjects[0] != want.subject {
+							t.Errorf("dispatch %s %q subjects=%v, want [%q]",
+								laneName, portName, subjects, want.subject)
+						}
+						if p.Config.StreamName != want.streamName {
+							t.Errorf("dispatch %s %q stream_name=%q, want %q",
+								laneName, portName, p.Config.StreamName, want.streamName)
+						}
+						if p.Config.Kind != want.kind {
+							t.Errorf("dispatch %s %q kind=%q, want %q",
+								laneName, portName, p.Config.Kind, want.kind)
+						}
 					}
-					found = true
-					if in.Subject != want.subject {
-						t.Errorf("dispatch input %q subject=%q, want %q",
-							portName, in.Subject, want.subject)
+					if !found {
+						t.Errorf("dispatch missing required %s port %q (subject %q kind %q)",
+							laneName, portName, want.subject, want.kind)
 					}
-					if in.StreamName != want.streamName {
-						t.Errorf("dispatch input %q stream_name=%q, want %q",
-							portName, in.StreamName, want.streamName)
-					}
-					if in.Type != want.portType {
-						t.Errorf("dispatch input %q type=%q, want %q",
-							portName, in.Type, want.portType)
-					}
-				}
-				if !found {
-					t.Errorf("dispatch missing required input port %q (subject %q on stream %q)",
-						portName, want.subject, want.streamName)
 				}
 			}
-
-			// Required-output presence.
-			for portName, want := range requiredOutputs {
-				found := false
-				for _, out := range dispatchCfg.Ports.Outputs {
-					if out.Name != portName {
-						continue
-					}
-					found = true
-					if out.Subject != want.subject {
-						t.Errorf("dispatch output %q subject=%q, want %q",
-							portName, out.Subject, want.subject)
-					}
-					if out.StreamName != want.streamName {
-						t.Errorf("dispatch output %q stream_name=%q, want %q",
-							portName, out.StreamName, want.streamName)
-					}
-					if out.Type != want.portType {
-						t.Errorf("dispatch output %q type=%q, want %q",
-							portName, out.Type, want.portType)
-					}
-				}
-				if !found {
-					t.Errorf("dispatch missing required output port %q (subject %q type %q)",
-						portName, want.subject, want.portType)
-				}
-			}
+			checkLane(dispatchCfg.Ports.Inputs, requiredInputs, "input")
+			checkLane(dispatchCfg.Ports.Outputs, requiredOutputs, "output")
 		})
 	}
 }

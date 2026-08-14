@@ -25,7 +25,7 @@
   "on_enter": [
     {
       "id": "promote_best_value",
-      "type": "replace_owned",
+      "type": "reconcile_predicates",
       "projection_contract": "autoresearch.run-projection",
       "projection_group": "best-value",
       "subject": "$entity.triple.agent.lineage.run-loop-entity-id",
@@ -34,7 +34,7 @@
     },
     {
       "id": "promote_best_experiment_id",
-      "type": "replace_owned",
+      "type": "reconcile_predicates",
       "projection_contract": "autoresearch.run-projection",
       "projection_group": "best-experiment-id",
       "subject": "$entity.triple.agent.lineage.run-loop-entity-id",

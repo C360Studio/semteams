@@ -36,7 +36,7 @@
       "object": "$entity.id"
     },
     {
-      "type": "replace_owned",
+      "type": "reconcile_predicates",
       "projection_contract": "autoresearch.run-projection",
       "projection_group": "iteration-pending",
       "subject": "$entity.triple.agent.lineage.run-loop-entity-id",
