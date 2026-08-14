@@ -93,7 +93,7 @@ responses:
           "command": "go test ./...",
           "surface": "./...",
           "cap": 2,
-          "metric-parser": "real seconds from the go test summary line",
+          "metric_parser": "real seconds from the go test summary line",
           "baseline_value": 1.20,
           "baseline_pass": true,
           "baseline_stdout_tail": "ok  example  1.20s"

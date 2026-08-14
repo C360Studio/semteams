@@ -424,21 +424,25 @@ func (r *NATSPauseDataReader) ReadPauseData(ctx context.Context, entityID string
 		return "", "", fmt.Errorf("graph entity query: %w", err)
 	}
 
-	// The response is a JSON object that may be an EntityState directly or
-	// wrapped in a QueryResponse envelope. Try EntityState first (simpler path
-	// used by graph-ingest direct queries), then the envelope shape.
-	var entity struct {
-		ID      string `json:"id"`
-		Triples []struct {
-			Predicate string `json:"predicate"`
-			Object    any    `json:"object"`
-		} `json:"triples"`
+	// beta.160 exact-read envelope: the graph.query.entity responder
+	// returns ExactEntity {entity:{id,triples}, kvRevision}; the bare
+	// {id,triples} decode yields zero triples silently (same drift class
+	// that starved the autoresearch empirical compare, 2026-08-14).
+	var resp struct {
+		Entity struct {
+			ID      string `json:"id"`
+			Triples []struct {
+				Predicate string `json:"predicate"`
+				Object    any    `json:"object"`
+			} `json:"triples"`
+		} `json:"entity"`
+		KVRevision uint64 `json:"kvRevision"`
 	}
-	if err := json.Unmarshal(respData, &entity); err != nil {
+	if err := json.Unmarshal(respData, &resp); err != nil {
 		return "", "", fmt.Errorf("decode entity response: %w", err)
 	}
 
-	for _, t := range entity.Triples {
+	for _, t := range resp.Entity.Triples {
 		switch t.Predicate {
 		case "chain.paused.role":
 			if s, ok := t.Object.(string); ok {
