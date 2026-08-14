@@ -248,40 +248,40 @@ func (h *DecisionHandler) retry(ctx context.Context, entityID, failedLoopID stri
 	}
 
 	// Write chain.resumed triple with the new task ID as the value.
-	return h.publisher.AddTriple(ctx, message.Triple{
+	return h.publisher.Append(ctx, []message.Triple{{
 		Subject:    entityID,
 		Predicate:  "chain.decision.resumed-task-id",
 		Object:     task.TaskID,
 		Source:     "chainpause",
 		Timestamp:  now,
 		Confidence: 1.0,
-	})
+	}})
 }
 
 // kill terminates the chain cleanly. Writes chain.killed audit triple;
 // no further rules fire on the failed lineage (per ADR-037 §D7).
 func (h *DecisionHandler) kill(ctx context.Context, entityID string, now time.Time) error {
-	return h.publisher.AddTriple(ctx, message.Triple{
+	return h.publisher.Append(ctx, []message.Triple{{
 		Subject:    entityID,
 		Predicate:  "chain.decision.killed-at",
 		Object:     now.Format(time.RFC3339),
 		Source:     "chainpause",
 		Timestamp:  now,
 		Confidence: 1.0,
-	})
+	}})
 }
 
 // deferChain preserves chain state for later. The operator re-issues a retry
 // decision via the same endpoint to resume.
 func (h *DecisionHandler) deferChain(ctx context.Context, entityID string, now time.Time) error {
-	return h.publisher.AddTriple(ctx, message.Triple{
+	return h.publisher.Append(ctx, []message.Triple{{
 		Subject:    entityID,
 		Predicate:  "chain.decision.deferred-at",
 		Object:     now.Format(time.RFC3339),
 		Source:     "chainpause",
 		Timestamp:  now,
 		Confidence: 1.0,
-	})
+	}})
 }
 
 // writeDecisionTriples writes the §D5 chain.decision.* audit trail.
@@ -299,7 +299,7 @@ func (h *DecisionHandler) writeDecisionTriples(ctx context.Context, entityID, ve
 		triples[i].Source = "chainpause"
 		triples[i].Timestamp = now
 		triples[i].Confidence = 1.0
-		if err := h.publisher.AddTriple(ctx, triples[i]); err != nil && firstErr == nil {
+		if err := h.publisher.Append(ctx, triples[i:i+1]); err != nil && firstErr == nil {
 			firstErr = err
 		}
 	}

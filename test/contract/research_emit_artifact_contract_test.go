@@ -16,10 +16,7 @@ import (
 // never invokes it — it's here purely to satisfy the constructor.
 type nopTriplePublisher struct{}
 
-func (nopTriplePublisher) AddTriple(context.Context, message.Triple) error { return nil }
-func (nopTriplePublisher) AddTriplesBatch(context.Context, []message.Triple) error {
-	return nil
-}
+func (nopTriplePublisher) Append(context.Context, []message.Triple) error { return nil }
 
 // nopNATSPublisher is the minimum emitartifact.Publisher needed to
 // construct an Executor for schema inspection. ListTools never invokes
@@ -101,7 +98,7 @@ func TestEmitResearchArtifactExecutorImplementsToolExecutor(t *testing.T) {
 	var _ agentictools.ToolExecutor = (*emitartifact.Executor)(nil)
 }
 
-// CreateEntityWithTriples satisfies beta.159's widened TriplePublisher.
-func (nopTriplePublisher) CreateEntityWithTriples(context.Context, string, message.Type, []message.Triple) error {
+// Create satisfies beta.160's TriplePublisher.
+func (nopTriplePublisher) Create(context.Context, string, message.Type, []message.Triple) error {
 	return nil
 }

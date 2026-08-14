@@ -327,7 +327,7 @@ func (m *Manager) stamp(ctx context.Context, chainEntityID string, att Attestati
 	if len(triples) == 0 {
 		return nil
 	}
-	if err := m.publisher.AddTriplesBatch(ctx, triples); err != nil {
+	if err := m.publisher.Append(ctx, triples); err != nil {
 		m.logger.Error("sandbox attestation stamp failed",
 			slog.String("chain_entity", chainEntityID),
 			slog.Any("error", err))

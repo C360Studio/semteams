@@ -279,7 +279,7 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 		}
 	}
 
-	if err := e.publisher.AddTriplesBatch(ctx, triples); err != nil {
+	if err := e.publisher.Append(ctx, triples); err != nil {
 		return errResult(call, agentic.ToolErrorNetwork, "stamp plan triples on %s: %v", runEntityID, err)
 	}
 

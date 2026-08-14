@@ -61,7 +61,7 @@ func TestSubject_NoPortsBlock(t *testing.T) {
 
 func TestSubject_OutputPortFound(t *testing.T) {
 	cfg := makeConfig(t, "teams-loop", "agentic-loop", true,
-		`{"outputs":[{"name":"agent.complete","subject":"agent.complete.*","type":"jetstream"}]}`)
+		`{"outputs":[{"name":"agent.complete","config":{"kind":"jetstream","subjects":["agent.complete.*"]}}]}`)
 	if got := portresolver.Subject(cfg, "teams-loop", "agent.complete"); got != "agent.complete.*" {
 		t.Errorf("output port: got %q, want %q", got, "agent.complete.*")
 	}
@@ -69,23 +69,30 @@ func TestSubject_OutputPortFound(t *testing.T) {
 
 func TestSubject_InputPortFound(t *testing.T) {
 	cfg := makeConfig(t, "graph-query", "graph-query", true,
-		`{"inputs":[{"name":"query_requests","subject":"graph.query.>","type":"nats-request"}]}`)
+		`{"inputs":[{"name":"query_requests","config":{"kind":"nats-request","subject":"graph.query.>"}}]}`)
 	if got := portresolver.Subject(cfg, "graph-query", "query_requests"); got != "graph.query.>" {
 		t.Errorf("input port: got %q, want %q", got, "graph.query.>")
 	}
 }
 
-func TestSubject_KVWritePortFound(t *testing.T) {
+// TestSubject_KVWriteReturnsEmpty pins the beta.160 KV/store carve-out
+// documented on Subject: kv-write ports carry a bucket identifier, not a
+// wire subject, so portableSubject's type switch deliberately has no case
+// for component.KVWritePort and falls through to "". The kv_write top-level
+// lane itself is also retired (only inputs/outputs remain post-cutover), so
+// a well-formed kv-write port now lives in the outputs lane — it still must
+// not resolve to its bucket name.
+func TestSubject_KVWriteReturnsEmpty(t *testing.T) {
 	cfg := makeConfig(t, "graph-ingest", "graph-ingest", true,
-		`{"kv_write":[{"name":"entity_states","subject":"ENTITY_STATES","type":"kv-write"}]}`)
-	if got := portresolver.Subject(cfg, "graph-ingest", "entity_states"); got != "ENTITY_STATES" {
-		t.Errorf("kv_write port: got %q, want %q", got, "ENTITY_STATES")
+		`{"outputs":[{"name":"entity_states","config":{"kind":"kv-write","bucket":"ENTITY_STATES"}}]}`)
+	if got := portresolver.Subject(cfg, "graph-ingest", "entity_states"); got != "" {
+		t.Errorf("kv-write port: got %q, want empty (KV ports carry a bucket, not a wire subject)", got)
 	}
 }
 
 func TestSubject_PortNameNotFound(t *testing.T) {
 	cfg := makeConfig(t, "teams-loop", "agentic-loop", true,
-		`{"outputs":[{"name":"agent.complete","subject":"agent.complete.*"}]}`)
+		`{"outputs":[{"name":"agent.complete","config":{"kind":"nats","subject":"agent.complete.*"}}]}`)
 	if got := portresolver.Subject(cfg, "teams-loop", "missing-port"); got != "" {
 		t.Errorf("port name not found: got %q, want empty", got)
 	}
@@ -96,7 +103,7 @@ func TestSubject_PrefersInputsOverOutputs(t *testing.T) {
 	// ordering. Real configs don't typically duplicate names; this is a
 	// defensive contract test.
 	cfg := makeConfig(t, "weird", "weird-comp", true,
-		`{"inputs":[{"name":"shared","subject":"in.subject"}],"outputs":[{"name":"shared","subject":"out.subject"}]}`)
+		`{"inputs":[{"name":"shared","config":{"kind":"nats","subject":"in.subject"}}],"outputs":[{"name":"shared","config":{"kind":"nats","subject":"out.subject"}}]}`)
 	if got := portresolver.Subject(cfg, "weird", "shared"); got != "in.subject" {
 		t.Errorf("inputs/outputs collision: got %q, want %q (Inputs wins)", got, "in.subject")
 	}
@@ -125,7 +132,7 @@ func TestSubjectOrDefault_FallsBackWhenEmpty(t *testing.T) {
 
 func TestSubjectOrDefault_PrefersConfigSubject(t *testing.T) {
 	cfg := makeConfig(t, "teams-loop", "agentic-loop", true,
-		`{"outputs":[{"name":"agent.complete","subject":"custom.subject.>"}]}`)
+		`{"outputs":[{"name":"agent.complete","config":{"kind":"nats","subject":"custom.subject.>"}}]}`)
 	const fallback = "agent.complete.>"
 	if got := portresolver.SubjectOrDefault(cfg, "teams-loop", "agent.complete", fallback); got != "custom.subject.>" {
 		t.Errorf("config-defined subject: got %q, want %q (config wins over default)", got, "custom.subject.>")

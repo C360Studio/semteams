@@ -232,7 +232,7 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 	}
 
 	triples := args.triples(loopEntityID, relPath, now)
-	if err := e.publisher.AddTriplesBatch(ctx, triples); err != nil {
+	if err := e.publisher.Append(ctx, triples); err != nil {
 		return errResult(call, agentic.ToolErrorNetwork, "stamp artifact triples on %s: %v", loopEntityID, err)
 	}
 

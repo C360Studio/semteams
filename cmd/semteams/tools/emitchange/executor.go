@@ -131,7 +131,7 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 	now := time.Now().UTC()
 	triples := p.triples(runEntityID, now)
 
-	if err := e.publisher.AddTriplesBatch(ctx, triples); err != nil {
+	if err := e.publisher.Append(ctx, triples); err != nil {
 		return errResult(call, agentic.ToolErrorNetwork, "stamp change triples on %s: %v", runEntityID, err)
 	}
 

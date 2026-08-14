@@ -14,7 +14,7 @@ import (
 // TriplePublisher is the narrow write surface the pauser needs.
 // agentictools.NATSTriplePublisher satisfies it structurally.
 type TriplePublisher interface {
-	AddTriple(ctx context.Context, triple message.Triple) error
+	Append(ctx context.Context, triples []message.Triple) error
 }
 
 // PauseResult holds the classification output of a pause-write.
@@ -112,7 +112,7 @@ func (p *Pauser) HandleFailed(ctx context.Context, ev *agentic.LoopFailedEvent) 
 		triples[i].Source = "chainpause"
 		triples[i].Timestamp = now
 		triples[i].Confidence = 1.0
-		if err := p.publisher.AddTriple(ctx, triples[i]); err != nil && firstErr == nil {
+		if err := p.publisher.Append(ctx, triples[i:i+1]); err != nil && firstErr == nil {
 			firstErr = err
 		}
 	}

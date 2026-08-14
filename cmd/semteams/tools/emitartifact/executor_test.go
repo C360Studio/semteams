@@ -19,7 +19,7 @@ import (
 // Fakes
 // ---------------------------------------------------------------------
 
-// fakeTriplePublisher records every AddTriple call. By default, returns
+// fakeTriplePublisher records every Append/Create call. By default, returns
 // nil; tests that exercise the failure path set err.
 type fakeTriplePublisher struct {
 	mu      sync.Mutex
@@ -27,7 +27,7 @@ type fakeTriplePublisher struct {
 	err     error
 }
 
-func (f *fakeTriplePublisher) AddTriple(_ context.Context, triple message.Triple) error {
+func (f *fakeTriplePublisher) addTriple(_ context.Context, triple message.Triple) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.err != nil {
@@ -37,9 +37,9 @@ func (f *fakeTriplePublisher) AddTriple(_ context.Context, triple message.Triple
 	return nil
 }
 
-func (f *fakeTriplePublisher) AddTriplesBatch(ctx context.Context, triples []message.Triple) error {
+func (f *fakeTriplePublisher) Append(ctx context.Context, triples []message.Triple) error {
 	for _, t := range triples {
-		if err := f.AddTriple(ctx, t); err != nil {
+		if err := f.addTriple(ctx, t); err != nil {
 			return err
 		}
 	}
@@ -766,8 +766,8 @@ func readFileContent(t *testing.T, path string) (string, error) {
 	return string(data), nil
 }
 
-// CreateEntityWithTriples satisfies beta.159's widened TriplePublisher;
-// the fake delegates to AddTriplesBatch so recording semantics are identical.
-func (f *fakeTriplePublisher) CreateEntityWithTriples(ctx context.Context, _ string, _ message.Type, triples []message.Triple) error {
-	return f.AddTriplesBatch(ctx, triples)
+// Create satisfies beta.160's TriplePublisher; the fake delegates to
+// Append so recording semantics are identical.
+func (f *fakeTriplePublisher) Create(ctx context.Context, _ string, _ message.Type, triples []message.Triple) error {
+	return f.Append(ctx, triples)
 }

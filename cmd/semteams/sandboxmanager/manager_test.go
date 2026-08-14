@@ -35,14 +35,7 @@ type fakePublisher struct {
 	err     error
 }
 
-func (p *fakePublisher) AddTriple(_ context.Context, t message.Triple) error {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.batches = append(p.batches, []message.Triple{t})
-	return p.err
-}
-
-func (p *fakePublisher) AddTriplesBatch(_ context.Context, ts []message.Triple) error {
+func (p *fakePublisher) Append(_ context.Context, ts []message.Triple) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.err != nil {
@@ -339,8 +332,8 @@ func TestManagerSecretEnv_NamesOnly(t *testing.T) {
 	}
 }
 
-// CreateEntityWithTriples satisfies beta.159's widened TriplePublisher;
-// the fake delegates to AddTriplesBatch so recording semantics are identical.
-func (p *fakePublisher) CreateEntityWithTriples(ctx context.Context, _ string, _ message.Type, triples []message.Triple) error {
-	return p.AddTriplesBatch(ctx, triples)
+// Create satisfies beta.160's TriplePublisher; the fake delegates to
+// Append so recording semantics are identical.
+func (p *fakePublisher) Create(ctx context.Context, _ string, _ message.Type, triples []message.Triple) error {
+	return p.Append(ctx, triples)
 }

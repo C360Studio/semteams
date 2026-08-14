@@ -14,7 +14,7 @@ import (
 	"github.com/c360studio/semstreams/types"
 )
 
-// fakeTriplePublisher records every AddTriple call. Mirrors the same
+// fakeTriplePublisher records every Append/Create call. Mirrors the same
 // shape as emitartifact / emitspecartifact test fakes — kept duplicated
 // because each tool package sets its own narrow interface.
 type fakeTriplePublisher struct {
@@ -23,7 +23,7 @@ type fakeTriplePublisher struct {
 	err     error
 }
 
-func (f *fakeTriplePublisher) AddTriple(_ context.Context, t message.Triple) error {
+func (f *fakeTriplePublisher) addTriple(_ context.Context, t message.Triple) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.err != nil {
@@ -33,9 +33,9 @@ func (f *fakeTriplePublisher) AddTriple(_ context.Context, t message.Triple) err
 	return nil
 }
 
-func (f *fakeTriplePublisher) AddTriplesBatch(ctx context.Context, triples []message.Triple) error {
+func (f *fakeTriplePublisher) Append(ctx context.Context, triples []message.Triple) error {
 	for _, t := range triples {
-		if err := f.AddTriple(ctx, t); err != nil {
+		if err := f.addTriple(ctx, t); err != nil {
 			return err
 		}
 	}
@@ -393,8 +393,8 @@ func TestExecute_DependsOnRendersFromLLMArgs(t *testing.T) {
 	}
 }
 
-// CreateEntityWithTriples satisfies beta.159's widened TriplePublisher;
-// the fake delegates to AddTriplesBatch so recording semantics are identical.
-func (f *fakeTriplePublisher) CreateEntityWithTriples(ctx context.Context, _ string, _ message.Type, triples []message.Triple) error {
-	return f.AddTriplesBatch(ctx, triples)
+// Create satisfies beta.160's TriplePublisher; the fake delegates to
+// Append so recording semantics are identical.
+func (f *fakeTriplePublisher) Create(ctx context.Context, _ string, _ message.Type, triples []message.Triple) error {
+	return f.Append(ctx, triples)
 }

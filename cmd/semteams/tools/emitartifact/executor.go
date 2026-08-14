@@ -303,7 +303,7 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 	// triple predicates are last-wins on the loop entity, so the next
 	// successful pass overwrites any half-emitted set.
 	for _, triple := range triples {
-		if err := e.publisher.AddTriple(ctx, triple); err != nil {
+		if err := e.publisher.Append(ctx, []message.Triple{triple}); err != nil {
 			return agentic.ToolResult{
 				CallID:    call.ID,
 				Name:      call.Name,

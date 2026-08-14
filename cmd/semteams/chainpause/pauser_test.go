@@ -12,20 +12,20 @@ import (
 	"github.com/c360studio/semstreams/types"
 )
 
-// recordingPublisher records AddTriple calls for assertion.
+// recordingPublisher records Append calls for assertion.
 type recordingPublisher struct {
 	mu      sync.Mutex
 	triples []message.Triple
 	err     error // if non-nil, returned on every call
 }
 
-func (r *recordingPublisher) AddTriple(_ context.Context, t message.Triple) error {
+func (r *recordingPublisher) Append(_ context.Context, triples []message.Triple) error {
 	if r.err != nil {
 		return r.err
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.triples = append(r.triples, t)
+	r.triples = append(r.triples, triples...)
 	return nil
 }
 

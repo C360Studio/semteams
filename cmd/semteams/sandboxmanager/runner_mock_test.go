@@ -68,8 +68,7 @@ func TestMockRunner_AttestationFlow(t *testing.T) {
 // Signature/ImageDigest/Ready, not what the publisher receives.
 type noopPublisher struct{}
 
-func (noopPublisher) AddTriple(_ context.Context, _ message.Triple) error { return nil }
-func (noopPublisher) AddTriplesBatch(_ context.Context, _ []message.Triple) error {
+func (noopPublisher) Append(_ context.Context, _ []message.Triple) error {
 	return nil
 }
 
@@ -118,7 +117,7 @@ func TestMockRunner_ManagerRoundTrip_StableSignature(t *testing.T) {
 	}
 }
 
-// CreateEntityWithTriples satisfies beta.159's widened TriplePublisher.
-func (noopPublisher) CreateEntityWithTriples(context.Context, string, message.Type, []message.Triple) error {
+// Create satisfies beta.160's TriplePublisher.
+func (noopPublisher) Create(context.Context, string, message.Type, []message.Triple) error {
 	return nil
 }
