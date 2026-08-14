@@ -273,3 +273,46 @@ func TestFlowBootstrapDispatchShape(t *testing.T) {
 		})
 	}
 }
+
+// TestDurationConfigFieldsAreNanosecondNumbers pins the JSON dialect of
+// raw time.Duration config fields: they unmarshal as NUMBERS of
+// nanoseconds, not duration strings. The upstream graph-query README
+// shows "5s" — which fails the actual struct decode, and (worse) a
+// component that fails to create does NOT fail the stack: the first
+// beta.160 confirmation cycle ran research-mvp GREEN with graph-query
+// silently absent. This pin makes the dialect a CI failure instead.
+func TestDurationConfigFieldsAreNanosecondNumbers(t *testing.T) {
+	targets := map[string]string{
+		"graph-query":   "query_timeout",
+		"graph-gateway": "query_timeout",
+	}
+	for _, configPath := range []string{
+		"../../configs/flow-bootstrap.json",
+		"../../configs/e2e-flow-bootstrap.json",
+	} {
+		data, err := os.ReadFile(configPath)
+		if err != nil {
+			t.Fatalf("read %s: %v", configPath, err)
+		}
+		var cfg struct {
+			Components map[string]struct {
+				Config map[string]json.RawMessage `json:"config"`
+			} `json:"components"`
+		}
+		if err := json.Unmarshal(data, &cfg); err != nil {
+			t.Fatalf("unmarshal %s: %v", configPath, err)
+		}
+		for comp, field := range targets {
+			raw, ok := cfg.Components[comp].Config[field]
+			if !ok {
+				continue // field omitted → component default applies; fine
+			}
+			var n float64
+			if err := json.Unmarshal(raw, &n); err != nil {
+				t.Errorf("%s: %s.%s = %s — time.Duration fields take a NUMBER of nanoseconds; "+
+					"a duration string fails component decode, and component-create failures do NOT fail the stack",
+					configPath, comp, field, string(raw))
+			}
+		}
+	}
+}
