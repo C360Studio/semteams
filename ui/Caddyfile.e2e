@@ -56,8 +56,11 @@
 		reverse_proxy backend:9090
 	}
 
-	# GraphQL gateway (graph-gateway component, served by the ServiceManager HTTP surface on 8080 at beta.160)
+	# GraphQL gateway: the graph-gateway component mounts under its
+	# instance prefix on the ServiceManager HTTP surface (beta.160),
+	# so /graphql rewrites to /graph-gateway/graphql.
 	handle /graphql {
+		rewrite * /graph-gateway/graphql
 		reverse_proxy backend:8080
 	}
 

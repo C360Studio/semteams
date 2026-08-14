@@ -46,8 +46,11 @@
 		reverse_proxy {$BACKEND_HOST:backend:8080}
 	}
 
-	# GraphQL gateway (may be on a different port)
+	# GraphQL gateway: the graph-gateway component mounts under its
+	# instance prefix on the ServiceManager HTTP surface (beta.160),
+	# so /graphql rewrites to /graph-gateway/graphql.
 	handle /graphql {
+		rewrite * /graph-gateway/graphql
 		reverse_proxy {$GRAPHQL_HOST:{$BACKEND_HOST:backend:8080}}
 	}
 

@@ -113,7 +113,7 @@ test.describe("Ops Agent Baseline", () => {
           );
           if (!resp.ok()) return null;
           const body = (await resp.json()) as { state?: string };
-          return body.state && ["success", "failure", "timeout"].includes(body.state) ? body : null;
+          return body.state && ["complete", "failed", "error", "cancelled", "truncated", "timeout"].includes(body.state) ? body : null;
         },
         { timeoutMs: RESEARCH_TIMEOUT_MS },
       );
@@ -163,7 +163,7 @@ test.describe("Ops Agent Baseline", () => {
           result?: string;
           outcome?: string;
         };
-        return body.state && ["success", "failure", "timeout"].includes(body.state) ? body : null;
+        return body.state && ["complete", "failed", "error", "cancelled", "truncated", "timeout"].includes(body.state) ? body : null;
       },
       { timeoutMs: OPS_TIMEOUT_MS },
     );
