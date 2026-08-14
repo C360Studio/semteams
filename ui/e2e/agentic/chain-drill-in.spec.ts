@@ -200,53 +200,45 @@ test.describe("Chain drill-in + emit_* artifact rendering", () => {
     ).toBeVisible({ timeout: 15_000 });
 
     // -----------------------------------------------------------------
-    // Step 9 — expand the step. Before Slice A the expanded payload
-    // was a <pre>JSON</pre> blob; with ArtifactCard it should be a
-    // structured-field card.
+    // Step 9 — expand the step. beta.160 (ADR-059 decision 7): the
+    // trajectory wire carries fact previews + storage references, NOT
+    // tool arguments — ArtifactCard and the decide-verdict rows lost
+    // their data source and are intentionally parked until the
+    // evidence-fetch pass dereferences the fact's StorageReference.
+    // The CURRENT contract: expanding a step shows the fact's own
+    // metadata JSON in the story-step-payload <pre>. When the
+    // evidence-fetch pass lands, restore the ArtifactCard assertions
+    // from git history (this block, pre-ADR-059).
     // -----------------------------------------------------------------
     await emitPlanStep.click();
 
-    const artifactCard = page.getByTestId("artifact-card");
+    const payload = page.getByTestId("story-step-payload");
     await expect(
-      artifactCard,
-      "expected ArtifactCard inside the expanded emit_plan payload — TaskStory should route tool_name starting with `emit_` through ArtifactCard. If the raw <pre> appears instead, the conditional in TaskStory.svelte regressed.",
+      payload,
+      "expected the expanded emit_plan step to show the fact metadata payload — the beta.160 fact-based contract (ADR-059). If nothing expands, the TaskStory expand affordance regressed.",
     ).toBeVisible({ timeout: 5_000 });
-
-    await expect(page.getByTestId("artifact-tool-name")).toHaveText("emit_plan");
     await expect(
-      page.getByTestId("artifact-field").first(),
-      "expected at least one structured artifact-field; ArtifactCard's args walk produced no sections. Check emit_plan's fixture wire still carries goal/epics/scope_in style fields.",
-    ).toBeVisible();
-
-    // Regression guard: raw <pre> payload must NOT render alongside
-    // ArtifactCard. The conditional in TaskStory.svelte is supposed
-    // to be a mutually-exclusive swap.
-    await expect(
-      page.locator(
-        "[data-testid='story-step-payload'] pre.step-payload",
-      ),
-      "raw <pre> payload appeared alongside ArtifactCard — TaskStory.svelte should swap pre for ArtifactCard when tool_name starts with `emit_`, never render both",
-    ).not.toBeVisible();
+      payload,
+      "expected the fact payload to identify the tool via tool_preview — check the trajectory fact wire shape",
+    ).toContainText("emit_plan");
 
     // -----------------------------------------------------------------
-    // Step 9b — the decide verdict surfaces on the loop (Thread #2).
-    // The plan loop ends with decide(action="gather") per
-    // research-mvp.yaml Loop A. TaskStory renders it as a standalone
-    // verdict row (chip + always-visible reason), NOT a generic
-    // expandable tool-call step. This proves the verdict reads off the
-    // live trajectory wire shape (tool_arguments.action/reason), the
-    // same shape ArtifactCard consumes above.
+    // Step 9b — decide renders as a generic tool row at beta.160 (the
+    // verdict chip's tool_arguments source is gone — same ADR-059
+    // register entry as ArtifactCard above). Assert the row exists so
+    // the decide call remains narratively visible.
     // -----------------------------------------------------------------
-    const verdict = page.getByTestId("story-verdict").first();
+    // The decide completion fact ships with an EMPTY tool_preview at
+    // beta.160 (upstream omits it on the terminal decide), so the row
+    // reads "used a tool"; match both in case upstream adds the preview.
+    const decideStep = page
+      .getByTestId("story-step")
+      .filter({ hasText: /used (decide|a tool)/ })
+      .first();
     await expect(
-      verdict,
-      "expected a decide verdict row in the plan loop's story. If only generic `used decide` steps render, the isDecideTool branch in TaskStory.svelte regressed.",
+      decideStep,
+      "expected the plan loop's terminal decide to render as a tool row (generic at beta.160; verdict chips return with the evidence-fetch pass — ADR-059).",
     ).toBeVisible({ timeout: 10_000 });
-    // The plan loop's verdict is a routing decision (gather) → route tone.
-    await expect(verdict).toHaveAttribute("data-verdict-tone", "route");
-    await expect(verdict.getByTestId("verdict-chip")).toHaveText("Gather");
-    // The rationale renders (markdown, always visible — no expand needed).
-    await expect(verdict.getByTestId("verdict-reason")).not.toBeEmpty();
 
     // -----------------------------------------------------------------
     // Step 10 — back-button returns focus to the coordinator. The
