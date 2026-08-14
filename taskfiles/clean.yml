@@ -9,7 +9,7 @@ tasks:
       - echo "[OK] Local binaries removed"
 
   docker:
-    desc: Clean Docker build cache and SemStreams images
+    desc: Clean Docker build cache and semstreams-named images
     cmds:
       - echo "[CLEAN] Cleaning Docker build cache and images..."
       - docker compose -f docker/compose/services.yml down -v --timeout 15 2>/dev/null || true

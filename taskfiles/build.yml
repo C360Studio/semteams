@@ -2,7 +2,7 @@ version: '3'
 
 tasks:
   default:
-    desc: Build SemStreams binary
+    desc: Build SemTeams binary
     cmds:
       - go build -o bin/semteams ./cmd/semteams
       - echo "Built bin/semteams"

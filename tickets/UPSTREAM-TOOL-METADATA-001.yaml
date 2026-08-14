@@ -1,0 +1,37 @@
+ticket: UPSTREAM-TOOL-METADATA-001
+title: Propose effect and retry-safety metadata upstream
+owner: architect
+reviewer:
+  - go-reviewer
+status: ready
+depends_on: []
+blocks: []
+summary: >-
+  Propose two separate, backward-compatible ToolDefinition metadata fields
+  upstream so registries, governance, and operators can reason about external
+  effects and retry safety without inferring either from tool names.
+acceptance_criteria:
+  - >-
+    The proposal defines effect and retry_safety as separate fields with
+    independent default-unknown values.
+  - >-
+    The compatibility design explains how existing registrations, serialized
+    definitions, and callers retain source and behavior compatibility.
+  - >-
+    The proposal specifies registry, governance, discovery, and operator-policy
+    exposure without implementing those changes in SemTeams.
+  - >-
+    A concrete upstream test plan covers omitted fields, explicit values,
+    serialization, registry exposure, governance, and policy handling.
+  - The upstream issue or proposal is linked from this ticket when filed.
+  - The proposal is explicitly nonblocking for D2.
+non_goals:
+  - Implementing SemTeams-local metadata fields.
+  - Making effect imply retry safety, or retry safety imply effect.
+  - Blocking D1 or D2 while the proposal is reviewed.
+source_references:
+  - "docs/adr/056-openspec-spec-driven-development-umbrella.md\
+    #addendum-2026-07-30-d2p5-invariants-from-the-kody-pattern-comparison"
+  - "go.mod: semstreams v1.0.0-beta.115"
+  - "semstreams@v1.0.0-beta.115/agentic/tools.go: ToolDefinition"
+blockers: []

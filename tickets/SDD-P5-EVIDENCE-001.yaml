@@ -1,0 +1,39 @@
+ticket: SDD-P5-EVIDENCE-001
+title: Publish reviewed P5 evidence, claims, and operator documentation
+owner: technical-writer
+reviewer:
+  - architect
+status: blocked
+depends_on:
+  - SDD-P5-AUTOMATION-001
+blocks: []
+summary: >-
+  Package the reviewed P5 implementation evidence and update product claims
+  and operator documentation without overstating demo-grade D2 safety.
+acceptance_criteria:
+  - The go-reviewer approval for P5 implementation and tests is linked.
+  - >-
+    Evidence records operation identity and hash, agent.run ID, claim outcome,
+    GitHub node ID, CBG result, task validate result, and final PR URL.
+  - >-
+    The injected accepted-but-response-lost test is documented with evidence
+    that reconciliation found the existing PR and no duplicate PR was created.
+  - >-
+    The concurrent black-box result demonstrates exactly one claim, one run,
+    and one PR for duplicate deliveries.
+  - Secret-scanning evidence covers arguments, graph, trajectories, artifacts, PRs, and logs.
+  - >-
+    Demo claims and operator docs describe D2 as one-repository and demo-grade
+    until D3 provides an unattended operator channel.
+  - The architect approves the evidence-to-claim mapping and non-goal boundary.
+non_goals:
+  - Implementing or repairing P5 behavior.
+  - Claiming unattended production safety before D3.
+  - Documenting multi-repo, issue creation, notifications, roll-ups, or publishing as shipped.
+source_references:
+  - "tickets/SDD-P5-ADR-001.yaml"
+  - "tickets/SDD-P5-AUTOMATION-001.yaml"
+  - "docs/adr/056-openspec-spec-driven-development-umbrella.md\
+    #addendum-2026-07-30-d2p5-invariants-from-the-kody-pattern-comparison"
+  - "docs/demo-mvp-claims.md"
+blockers: []

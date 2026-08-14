@@ -1,0 +1,41 @@
+ticket: SDD-D1-E2E-001
+title: Implement and review the D1 UI and black-box journey
+owner: svelte-developer
+reviewer:
+  - svelte-reviewer
+status: blocked
+depends_on:
+  - SDD-D1-CONTRACT-001
+  - SDD-D1-BACKEND-001
+blocks:
+  - SDD-D1-EVIDENCE-001
+summary: >-
+  Implement any UI surface required by the approved D1 contract and the
+  black-box E2E journey over the reviewed backend surfaces.
+acceptance_criteria:
+  - >-
+    Required Svelte surfaces use Svelte 5 conventions, strict TypeScript, and
+    accessible interactions; if no UI change is required, the reviewed audit
+    records why.
+  - >-
+    The D1 journey enters only through public UI, dispatch HTTP, slash-command,
+    approval, export, or documented task-runner surfaces.
+  - >-
+    Assertions may read graph facts, trajectories, logs, downloads, and HTTP
+    status, but setup never writes private NATS, graph, lifecycle, proof, or KV state.
+  - >-
+    The journey exercises a local brownfield checkout through create_change,
+    readiness, dev-from-task, CBG, and PR-or-archive.
+  - Failure and recovery paths expose honest user-visible outcomes.
+  - task validate and the focused black-box journey pass.
+  - The svelte-reviewer formally approves UI, accessibility, and E2E behavior.
+non_goals:
+  - Reimplementing backend orchestration in the UI.
+  - Counting fixture-seeded bridge proof as D1 proof.
+  - Starting P5 autonomous polling or external writes.
+source_references:
+  - "tickets/SDD-D1-CONTRACT-001.yaml"
+  - "tickets/SDD-D1-BACKEND-001.yaml"
+  - "docs/demo-mvp-claims.md#evidence-rule"
+  - "docs/adr/056-openspec-spec-driven-development-umbrella.md#north-star-deployment-roadmap"
+blockers: []

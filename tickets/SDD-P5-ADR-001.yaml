@@ -1,0 +1,69 @@
+ticket: SDD-P5-ADR-001
+title: Approve the P5 external-operation and atomic-claim design
+owner: architect
+reviewer:
+  - go-reviewer
+status: blocked
+depends_on:
+  - TOOL-VALIDATE-001
+  - SDD-D1-EVIDENCE-001
+blocks:
+  - SDD-P5-AUTOMATION-001
+summary: >-
+  Author the just-in-time P5 ADR and run an atomic-claim spike before any
+  autonomous issue-to-PR implementation. Reuse SemTeams and semstreams
+  substrate primitives and escalate any missing atomic seam upstream.
+acceptance_criteria:
+  - >-
+    The ADR uses cron rules for polling configuration and does not design a
+    new scheduler.
+  - >-
+    The ADR defines the server-derived identity
+    github:<host>:<repo-node-id>:issue:<issue-node-id>:issue-to-pr and a request
+    hash over the semantic operation envelope.
+  - >-
+    The contract defines started, running, completed_replayed, and mismatch,
+    while failed and cancelled require an explicit new generation.
+  - The operation exposes a durable, pollable run ID.
+  - >-
+    Current binding uses owned graph state plus atomic claim/CAS; agent.run is
+    execution truth; append evidence and lifecycle retain history.
+  - >-
+    A fake-external-sink spike and concurrent test prove that duplicate
+    deliveries produce exactly one claim, one run initiation, and one sink call.
+  - >-
+    The spike never creates a real branch, commit, issue comment, or PR; real
+    GitHub black-box proof is reserved for implementation.
+  - >-
+    The ADR defines deterministic remote natural keys, including canonical
+    head, base, and an operation marker, for every GitHub write.
+  - >-
+    Every confirmed or reconciled PR records its GitHub node ID; an ambiguous
+    response is reconciled by canonical head/base/operation marker before retry.
+  - >-
+    Reconciliation either binds the existing remote object or reports mismatch;
+    it never blindly repeats a write after an ambiguous response.
+  - >-
+    If current surfaces cannot atomically claim and initiate agent.run, the ADR
+    records the upstream blocker and implementation does not begin.
+  - >-
+    Credentials are server-side and nonretrievable, with a testable prohibition
+    on tokens in arguments, graph, trajectories, artifacts, PRs, and logs.
+  - >-
+    The ADR designs deterministic post-CBG, post-validation impact recap
+    classification from actual diff and existing authorities.
+  - The ADR is approved before implementation starts.
+non_goals:
+  - Kody runtime or a SemTeams pivot.
+  - primitives.yaml, a new manifest authority, or generic search/execute.
+  - A new lifecycle, durable object, KV bucket, credential vault, or long-memory state.
+  - Multi-repo operation, issue creation, notifications, roll-ups, or publishing.
+source_references:
+  - "docs/adr/056-openspec-spec-driven-development-umbrella.md\
+    #addendum-2026-07-30-d2p5-invariants-from-the-kody-pattern-comparison"
+  - "docs/adr/029-product-shell-wiring.md"
+  - "docs/adr/042-coordinator-instantiated-flows-via-templates.md"
+  - "docs/adr/053-adoption-plan.md"
+  - "go.mod: semstreams v1.0.0-beta.115"
+  - "semstreams@v1.0.0-beta.115/docs/adr/031-time-trigger-primitive.md"
+blockers: []

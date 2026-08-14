@@ -49,29 +49,23 @@ tasks:
 
   # Combined Development Workflow
   start:
-    desc: Start NATS + SemStreams with hello-world config
+    desc: Start NATS + SemTeams backend with the production bootstrap config
     deps:
       - nats:start
     cmds:
-      - go build -o bin/semteams ./cmd/semteams
+      - task build
       - |
         echo ""
-        echo "[DEV] Starting SemStreams with hello-world config..."
+        echo "[DEV] Starting SemTeams with configs/flow-bootstrap.json..."
         echo ""
         echo "============================================"
-        echo "  SemStreams Hello World"
+        echo "  SemTeams Backend"
         echo "============================================"
         echo ""
-        echo "  UDP Input:    localhost:14550"
-        echo "  GraphQL:      http://localhost:8084/graphql"
         echo "  Health:       http://localhost:8080/readyz"
+        echo "  Components:   http://localhost:8080/api/components"
+        echo "  Messages:     http://localhost:8080/message-logger/entries?limit=20"
         echo "  Metrics:      http://localhost:9090/metrics"
-        echo ""
-        echo "  Send test data:"
-        echo '    task dev:send'
-        echo ""
-        echo "  Query the graph:"
-        echo '    curl -s http://localhost:8084/graphql -H "Content-Type: application/json" -d '"'"'{"query":"{ entitiesByPrefix(prefix: \"demo\", limit: 10) { entityIds } }"}'"'"' | jq'
         echo ""
         echo "  Debug commands:"
         echo '    task dev:messages   # View recent messages'
@@ -81,14 +75,13 @@ tasks:
         echo "  Press Ctrl+C to stop"
         echo "============================================"
         echo ""
-      - ./bin/semteams --config configs/hello-world.json
+      - ./bin/semteams --config configs/flow-bootstrap.json
 
   stop:
-    desc: Stop SemStreams and NATS
+    desc: Stop SemTeams and NATS
     cmds:
       - |
-        echo "[DEV] Stopping SemStreams..."
-        pkill -f 'semstreams.*hello-world' 2>/dev/null || true
+        echo "[DEV] Stopping SemTeams..."
         pkill -f 'bin/semteams' 2>/dev/null || true
       - task: nats:stop
       - echo "[OK] All stopped"
@@ -110,16 +103,30 @@ tasks:
         echo "Task:"
         task --version || (echo "  [FAIL] Task not found. Install with: go install github.com/go-task/task/v3/cmd/task@latest" && exit 1)
         echo ""
+        echo "Node:"
+        node --version || (echo "  [FAIL] Node not found. Install Node.js 22+ for UI and Playwright journeys." && exit 1)
+        echo ""
+        echo "Caddy:"
+        if caddy version > /dev/null 2>&1; then
+          caddy version
+        else
+          echo "  [WARN] Caddy not found. Required for the live local UI path (task dev:research)."
+          echo "         Install on macOS with: brew install caddy"
+        fi
+        echo ""
         echo "============================================"
         echo "  All prerequisites OK!"
-        echo "  Run 'task dev:start' to begin"
+        echo "  Run 'task ui:test:e2e:agentic:demo-mvp' for a no-key proof"
+        echo "  Run 'task dev:research' for the live chat UI"
         echo "============================================"
 
   # Quick test data sender
   send:
-    desc: Send a test sensor reading to the running instance
+    desc: Send a legacy graph-tier sensor reading (not used by flow-bootstrap)
     cmds:
       - |
+        echo "[LEGACY] This helper targets the retired hello-world graph-tier example."
+        echo "         It is not part of the SemTeams bootstrap or demo MVP path."
         echo '{"device_id":"sensor-001","type":"temperature","reading":23.5,"unit":"celsius","location":"warehouse-7","zone_type":"cold-storage"}' | nc -u localhost 14550
         echo "[OK] Sent test sensor reading"
         echo '     Query with: curl -s http://localhost:8084/graphql -H "Content-Type: application/json" -d '"'"'{"query":"{ entitiesByPrefix(prefix: \"demo\", limit: 10) { entityIds } }"}'"'"''
@@ -130,14 +137,14 @@ tasks:
     cmds:
       - |
         echo "=== Recent Messages ==="
-        curl -s "http://localhost:8080/message-logger/entries?limit=20" | jq '.[] | {timestamp: .timestamp, subject: .subject, type: .message_type, trace: .trace_id}' 2>/dev/null || echo "SemStreams not running. Start with: task dev:start"
+        curl -s "http://localhost:8080/message-logger/entries?limit=20" | jq '.[] | {timestamp: .timestamp, subject: .subject, type: .message_type, trace: .trace_id}' 2>/dev/null || echo "SemTeams not running. Start with: task dev:start or task dev:research"
 
   stats:
     desc: View message flow statistics
     cmds:
       - |
         echo "=== Message Statistics ==="
-        curl -s "http://localhost:8080/message-logger/stats" | jq . 2>/dev/null || echo "SemStreams not running"
+        curl -s "http://localhost:8080/message-logger/stats" | jq . 2>/dev/null || echo "SemTeams not running"
         echo ""
         echo "=== JetStream Streams ==="
         curl -s "http://localhost:8222/jsz?streams=1" | jq '[.account_details[0].stream_detail[] | {name, messages: .state.messages}]' 2>/dev/null || echo "NATS not running"
@@ -162,7 +169,7 @@ tasks:
     cmds:
       - |
         echo "Watching ENTITY_STATES bucket for changes... (Ctrl+C to stop)"
-        curl -N "http://localhost:8080/message-logger/kv/ENTITY_STATES/watch" 2>/dev/null || echo "SemStreams not running"
+        curl -N "http://localhost:8080/message-logger/kv/ENTITY_STATES/watch" 2>/dev/null || echo "SemTeams not running"
 
   kv:
     desc: Query a KV bucket (use BUCKET and PATTERN env vars)
@@ -171,32 +178,39 @@ tasks:
         BUCKET=${BUCKET:-ENTITY_STATES}
         PATTERN=${PATTERN:-*}
         echo "=== KV Bucket: $BUCKET (pattern: $PATTERN) ==="
-        curl -s "http://localhost:8080/message-logger/kv/$BUCKET?pattern=$PATTERN&limit=20" | jq '.entries[] | {key: .key, revision: .revision}' 2>/dev/null || echo "SemStreams not running"
+        curl -s "http://localhost:8080/message-logger/kv/$BUCKET?pattern=$PATTERN&limit=20" | jq '.entries[] | {key: .key, revision: .revision}' 2>/dev/null || echo "SemTeams not running"
 
   research:
     desc: Start semteams against the production bootstrap config (real LLM — requires .env with API keys)
     summary: |
       Boots the full stack against the ADR-042 production bootstrap:
       NATS + semteams backend (configs/flow-bootstrap.json) + UI.
-      The bootstrap config wires the substrate singletons + research-
-      category rule pack + coordinator persona; the coordinator routes
-      prose research asks via decide(action="research"). The backend
-      uses claude-haiku by default. API keys are loaded from .env via
-      the Taskfile dotenv directive.
+      The bootstrap config wires the substrate singletons + live
+      category rule packs + coordinator persona; the coordinator routes
+      prose asks via decide(action=...). The default endpoint is
+      gemini-flash. API keys are loaded from .env via the Taskfile
+      dotenv directive.
 
       Usage:
         task dev:research
         # Open http://localhost:3001
         # Type a research question in the chat bar
-    deps: [nats:start]
+    preconditions:
+      - sh: command -v node
+        msg: "Node.js 22+ is required for the live UI path. Install Node, then retry task dev:research."
+      - sh: command -v npm
+        msg: "npm is required for the live UI path. Install Node.js 22+, then retry task dev:research."
+      - sh: command -v caddy
+        msg: "Caddy is required for the live local UI proxy. Install with: brew install caddy"
     cmds:
-      - task: build:default
+      - task: nats:start
+      - task build
       - defer: { task: stop }
       - |
         echo ""
         echo "Starting semteams against the production bootstrap..."
         echo "Config: configs/flow-bootstrap.json"
-        echo "Default model: claude-haiku"
+        echo "Default model endpoint: gemini-flash"
         echo ""
         ./bin/semteams --config configs/flow-bootstrap.json &
         SEMTEAMS_PID=$!

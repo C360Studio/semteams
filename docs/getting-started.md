@@ -13,7 +13,8 @@ payload registry), follow the upstream
 go version          # 1.25+
 docker info         # daemon running
 task --version      # go install github.com/go-task/task/v3/cmd/task@latest
-node --version      # 20+ if you'll touch the UI
+node --version      # 22+ for UI / Playwright journeys
+caddy version       # required only for the live local UI path
 ```
 
 ## What's actually running when SemTeams is up
@@ -62,15 +63,49 @@ personas, and rules.
 
 ## Boot
 
-### Fastest path (dev research with UI)
+### Fastest proof (no API keys)
 
 ```bash
-cp .env.example .env                     # add ANTHROPIC_API_KEY at minimum
+task ui:test:e2e:agentic:demo-mvp
+```
+
+This launches the dockerized e2e stack, drives SemTeams through
+public UI / HTTP surfaces, and asserts the current demo claims:
+coordinator routing, OpenSpec author/review/export, readiness
+fail-closed behavior, and the MAVLink-hard spec handoff. It uses
+mock LLM fixtures, so it is the best first run after cloning.
+
+During dockerized e2e runs the UI/backend are available through
+`localhost:3100`; the task tears the stack down when it finishes.
+This path uses a containerized proxy, so it does not need host Caddy.
+
+### Fastest live path (chat UI)
+
+```bash
+cp .env.example .env                     # add GEMINI_API_KEY for the default registry
 task dev:research                        # NATS + backend + UI
 # open http://localhost:3001
 ```
 
-`task dev:stop` kills it. Use a second terminal for everything below.
+`task dev:research` boots the full production bootstrap, not just
+the research pack. The task name is historical. `task dev:stop`
+kills it. This path uses the local Caddy + Vite proxy, so it needs
+host Caddy (`brew install caddy` on macOS). Use a second terminal
+for everything below.
+
+The chat box is the coordinator front door. You can ask how SemTeams works,
+refine an idea before choosing a team, or send a ready task. Optional team
+prefixes such as `/research`, `/create-change` (`/spec`), `/optimize`, and
+`/dev-via-test` are intent hints; the coordinator still validates the prompt
+shape and keeps the normal sandbox, readiness, approval, and review gates.
+
+When a team emits an artifact, open it from the task detail panel. The artifact
+card lets you copy the content or attach it to a new chat prompt. Attached
+artifact context shows as a removable chip above the chat input, and the next
+message includes the artifact title, source tool, and content for the
+coordinator to use. Treat this as a general handoff surface: research can feed
+a spec, a spec can feed implementation, and any artifact can anchor a follow-up
+question before you choose the next team.
 
 ### A specific config
 
@@ -80,30 +115,30 @@ go build -o bin/semteams ./cmd/semteams
 ./bin/semteams --config configs/flow-bootstrap.json
 ```
 
-Under ADR-042 §Phase 2 (substrate-plus-overlays, MVP-7) there is
-**one** product-shell flow config:
+The current runtime has **one** product-shell flow config:
 
 | Config | What it runs | Needs |
 |---|---|---|
-| `flow-bootstrap.json` | The single ADR-042 substrate (graph-ingest, graph-query, rule-processor, agentic-loop, agentic-dispatch, agentic-tools, agentic-model) plus the three live category rule packs (`research/`, `autoresearch/`, `dev-via-test/`) + `coordinator/` + `ops/`, and the persona corpus that drives them. Uses real LLMs. | `ANTHROPIC_API_KEY` / `GEMINI_API_KEY` (model registry; coordinator prefers `gemini-pro`); `BRAVE_SEARCH_API_KEY` for web_search |
+| `flow-bootstrap.json` | The production substrate (graph-ingest, graph-query, rule-processor, agentic-loop, agentic-dispatch, agentic-tools, agentic-model) plus the live category rule packs (`research/`, `autoresearch/`, `create-change/`, `proof-readiness/`, `dev-from-task/`, `dev-via-test/`) + support packs (`coordinator/`, `agent-run/`, `ops/`), and the persona corpus that drives them. Uses real LLMs. | `GEMINI_API_KEY` for the default `gemini-flash` endpoint; `ANTHROPIC_API_KEY` optional for Anthropic endpoints; `BRAVE_SEARCH_API_KEY` for web_search |
 | `e2e-flow-bootstrap.json` | Mock-LLM clone of the production bootstrap. Same packs + personas, points the model registry at the in-process mock LLM. Used by every Playwright journey under `ui/e2e/agentic/`. | nothing — mock-LLM |
 
 Adding a task class is a new **category pack**, not a new config:
 rule files under `configs/rules/<category>/`, persona bundles under
 `configs/personas/fragments/<role>-<category>-<phase?>/`, plus a
 coordinator-persona entry teaching the new `decide(action=<category>)`
-token. See ADR-042 §Phase 2 redesign for the rationale and the
-research / autoresearch / dev-via-test packs for working templates.
+token. Use the research, autoresearch, and dev-via-test packs as
+working templates.
 
-### Running a pack that needs a sandbox (autoresearch, dev-via-test)
+### Running a pack that needs a sandbox
 
 The **research** pack runs anywhere — `task dev:research` is enough.
-But **autoresearch** and **dev-via-test** run their `bash` inside a
-per-tenant devcontainer (see [architecture.md](architecture.md)
-§"How a sandbox gets created"), which needs the sandbox sidecar +
-`@devcontainers/cli` + `SEMTEAMS_SANDBOX_RUNNER=api`. The dockerized
-smoke tasks wire all of that up for you — the simplest way to run
-one end-to-end locally is a real-LLM smoke with your own prompt:
+But **autoresearch**, **dev-via-test**, and governed implementation
+bridges run their `bash` inside a per-tenant devcontainer (see
+[architecture.md](architecture.md) §"How a sandbox gets created"),
+which needs the sandbox sidecar + `@devcontainers/cli` +
+`SEMTEAMS_SANDBOX_RUNNER=api`. The dockerized smoke tasks wire all
+of that up for you — the simplest way to run one end-to-end locally
+is a real-LLM smoke with your own prompt:
 
 ```bash
 # autoresearch or dev-via-test, real LLM, full sandbox lifecycle:
@@ -121,9 +156,10 @@ actually building code.
 
 The legacy concrete configs (`agentic.json`, `agentic-claude.json`,
 `dev-research.json`, `onboarding.json`, `osh-demo.json`, plus all
-the `e2e-*` siblings) retired in ADR-042 MVP-7 (PR #178) alongside
-the `chain.mode` / `phasevalidator` / `chainstall` machinery they
-depended on. They live in git history if you need archeology.
+the `e2e-*` siblings) retired with the current substrate-plus-overlays
+runtime alongside the `chain.mode` / `phasevalidator` / `chainstall`
+machinery they depended on. They live in git history if you need
+archeology.
 
 `./bin/semteams --validate --config configs/<name>.json` validates a
 config without starting it.
@@ -187,9 +223,9 @@ This bites every time on e2e config iteration. (Memory:
 **Stop and read [`../cmd/semteams/tools/README.md`](../cmd/semteams/tools/README.md)
 first.** There is a mandatory framework-alignment review before
 landing any of those — survey upstream for an existing or
-roadmapped equivalent, document the alternatives ruled out in the
-relevant ADR addendum. The semspec accretion lesson is exactly
-this trap. (Memory:
+roadmapped equivalent, and document the alternatives ruled out in
+the design note for the change. The semspec accretion lesson is
+exactly this trap. (Memory:
 `feedback_framework_alignment_review`.)
 
 ## Debug
@@ -333,7 +369,7 @@ step time is wedged — abort, don't wait for the natural timeout.
 | `connect to NATS: ...` | NATS not running or wrong URL | `task dev:nats:start`, or set `SEMSTREAMS_NATS_URLS` |
 | `defaults.model "<x>" does not match any endpoint` | Config drift — `defaults.model` must reference an endpoint name | Match against `model_registry.endpoints` keys |
 | `"loading persona fragments" path=<empty>` | `--persona-fragments` flag unset and default path missing | Pass `--persona-fragments=configs/personas/fragments` or set `SEMSTREAMS_PERSONA_FRAGMENTS_PATH` |
-| `agentic-tools registered but executor missing` | Pattern-A/B tool wiring drifted | See [ADR-029](adr/029-product-shell-wiring.md) — `executors.RegisterBuiltins` must be called |
+| `agentic-tools registered but executor missing` | Pattern-A/B tool wiring drifted | Check `cmd/semteams/main.go` and `docs/architecture.md` — `executors.RegisterBuiltins` must be called |
 | Backend boots, UI shows "no flow" | UI auto-discovers the active flow via `/components/`; check `curl :8080/api/components` | Restart, or pick a flow under `/flows` |
 | Mock-LLM journey passes locally but flakes in CI | Stale `mock-llm` build (changes to mock fixtures don't trigger a rebuild on `compose restart`) | `docker compose ... build --no-cache mock-llm` (memory: `feedback_mock_llm_rebuild`) |
 | Orphan `semteams-ui-agentic-*` containers from interrupted runs | Compose project-name mismatch — cleanup uses `--project-name semteams-agentic`, orphans were created with the default | `docker rm -f $(docker ps -aq --filter name=semteams-ui-agentic-)` |
@@ -347,18 +383,18 @@ step time is wedged — abort, don't wait for the natural timeout.
 
 ## Where to go from here
 
-- **Why is the binary built this way?** —
-  [`adr/029-product-shell-wiring.md`](adr/029-product-shell-wiring.md)
-  is the single most useful read.
 - **What runs end-to-end when I send a prompt?** —
   [`architecture.md`](architecture.md). The substrate-plus-overlays
-  runtime, the three live category packs (research, autoresearch,
-  dev-via-test), and **how a sandbox gets created**.
-- **Why is it built this way (substrate-plus-overlays)?** —
-  [`adr/042-coordinator-instantiated-flows-via-templates.md`](adr/042-coordinator-instantiated-flows-via-templates.md).
-- **How does the sandbox work?** —
-  [`adr/043-devcontainer-as-sandbox-spec.md`](adr/043-devcontainer-as-sandbox-spec.md)
-  (current; ADR-032 was the precursor).
+  runtime, coordinator front door, live category packs, artifact
+  handoff, and **how a sandbox gets created**.
+- **What exactly can the demo claim?** —
+  [`demo-mvp-claims.md`](demo-mvp-claims.md). Supported claims,
+  non-claims, black-box evidence rules, and MAVLink-hard scope.
+- **How do I add or change a capability pack?** —
+  [`../configs/README.md`](../configs/README.md) plus the relevant
+  `configs/rules/<pack>/README.md`.
+- **How do I extend product-shell tools safely?** —
+  [`../cmd/semteams/tools/README.md`](../cmd/semteams/tools/README.md).
 - **How do I write a journey?** —
   [`journeys/README.md`](journeys/README.md). The journey IS the
   Playwright test under `ui/e2e/agentic/`.

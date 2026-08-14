@@ -1,0 +1,37 @@
+ticket: SDD-D1-EVIDENCE-001
+title: Publish the reviewed D1 evidence and demo-claim handoff
+owner: technical-writer
+reviewer:
+  - architect
+status: blocked
+depends_on:
+  - SDD-D1-BACKEND-001
+  - SDD-D1-E2E-001
+blocks:
+  - SDD-P5-ADR-001
+summary: >-
+  Assemble the reviewed implementation evidence, update demo claims, and hand
+  the honestly proven D1 surface to the P5 design phase.
+acceptance_criteria:
+  - Formal go-reviewer and svelte-reviewer approvals are linked in the evidence pack.
+  - >-
+    The evidence pack records repository revisions, commands, run IDs, outcomes,
+    CBG verdict, task validate result, and retained artifacts.
+  - >-
+    Evidence demonstrates public-surface setup and read-only observation under
+    the docs/demo-mvp-claims.md evidence rule.
+  - Fixture-seeded bridge evidence remains clearly labeled and is not promoted.
+  - >-
+    docs/demo-mvp-claims.md is updated to claim only the D1 behavior supported
+    by the reviewed black-box evidence.
+  - The architect approves the evidence-to-claim mapping and P5 handoff.
+non_goals:
+  - Implementing or repairing backend, UI, or E2E behavior.
+  - Weakening the evidence rule to promote D1.
+  - Claiming D2 autonomous issue-to-PR behavior.
+source_references:
+  - "tickets/SDD-D1-BACKEND-001.yaml"
+  - "tickets/SDD-D1-E2E-001.yaml"
+  - "docs/demo-mvp-claims.md"
+  - "docs/adr/056-openspec-spec-driven-development-umbrella.md#north-star-deployment-roadmap"
+blockers: []

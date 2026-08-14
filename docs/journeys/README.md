@@ -22,7 +22,7 @@ The "what we claim to support" claim lives in the test file itself:
 
 - `test.describe('…', () => { ... })` — the journey name
 - JSDoc at the top — the goal, preconditions, wire-shape
-  assumptions, citations to relevant ADRs
+  assumptions, and citations to relevant design or architecture notes
 - `test('…', async ({ page, request }) => { ... })` — each step
 - Assertions inside the test — backend state (via
   `request.get('/teams-dispatch/loops/{id}')`) AND UI state (via

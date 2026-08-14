@@ -289,3 +289,82 @@ phase that needs them):
   [`docs/proposals/openspec-spec-driven-dev.md`](../proposals/openspec-spec-driven-dev.md).
 - Governed-SKG (beta.113 `replace_owned` + owner-lease) — ownership model
   for living-spec current-state evolving via archived deltas.
+
+## Addendum 2026-07-30: D2/P5 invariants from the Kody-pattern comparison
+
+The approved comparison does **not** port Kody or pivot SemTeams toward a
+Kody runtime. D2/P5 remains a substrate-plus-overlays addition that reuses
+`agent.run`, lifecycle, the graph, OpenSpec, registries, rules, and
+personas. It does not introduce `primitives.yaml` or a second authority.
+The full design belongs in a new P5 ADR when implementation starts; this
+addendum locks only the roadmap invariants below.
+
+The earlier D2 wording that calls scheduling net-new is stale. SemTeams now
+depends on semstreams beta.115, which already ships cron rules. P5 needs a
+cron-driven, label-filtered polling configuration plus durable deduplication,
+not another scheduler.
+
+Before P5, the repository needs a standalone, read-only `task validate`
+tooling slice. It must be CI-equivalent across Go and UI checks, generate
+schema/OpenAPI output into temporary storage for parity comparison, fail
+explicitly when prerequisites are absent, and preserve a dirty worktree. It
+must exclude paid and Playwright journeys. The current `check`/`check:all`
+tasks omit race, integration, Go build, and schema parity, while
+`schema:validate` is still a placeholder.
+
+P5's external-effect contract must provide:
+
+- a server-derived stable operation identity, shaped like
+  `github:<host>:<repo-node-id>:issue:<issue-node-id>:issue-to-pr`;
+- a request hash over the semantic operation envelope;
+- `started`, `running`, `completed_replayed`, and `mismatch` outcomes;
+- an explicit new generation before a `failed` or `cancelled` operation can
+  be retried;
+- a durable, pollable run ID; and
+- a concurrent test proving that duplicate deliveries produce exactly one
+  claim, one run, and one PR.
+
+Owned graph state holds the current binding through an atomic claim/CAS;
+`agent.run` remains execution truth; append evidence and lifecycle retain
+history. P5 must not add a parallel lifecycle, KV bucket, or durable object.
+If the existing graph/lifecycle surfaces cannot atomically claim and begin
+an external run, that missing seam is an upstream blocker, not permission
+for a product-local workaround.
+
+Credentials remain server-side and nonretrievable. Tokens must never appear
+in tool arguments, graph facts, trajectories, artifacts, PR content, or
+logs. P5 does not add a credential vault.
+
+After CBG and `task validate` pass, but before PR creation, P5 derives a
+deterministic impact recap from the actual diff and the existing
+authoritative registries, OpenSpec, rules, personas, and category packs.
+The recap classifies only evidenced `composes`, `extends`, and `adds`
+relationships and cites files or declarations. Unsupported relationships
+remain unclassified. An LLM does not author the claims, and no new manifest
+becomes authoritative.
+
+In parallel, SemTeams should ask upstream to add separate `effect` and
+`retry_safety` fields to `ToolDefinition`. Both default to `unknown` for
+backward compatibility and are exposed to registries, governance, and
+operator policy. This metadata request is not a D2 blocker. Any absent
+atomic claim/external-run initiation seam is a separate upstream ask and is
+a blocker.
+
+The delivery order is:
+
+1. Land `task validate`; pursue the upstream metadata proposal in parallel.
+2. Finish P1-P4 and prove D1 through the black-box surfaces allowed by
+   `docs/demo-mvp-claims.md`.
+3. Author and approve the P5 ADR, including an atomic-claim spike.
+4. Add poll/read/claim, then run the D1 arc under `agent.run`.
+5. Run CBG and `task validate`, derive the recap, and only then perform
+   idempotency-protected GitHub writes.
+
+D1 is not yet honestly proved under the current demo claims. P5 also remains
+blocked on `task validate` and a proven atomic-claim mechanism. D2 remains
+demo-grade until D3 supplies an operator channel for unattended work.
+
+P5 explicitly excludes a Kody runtime, generic search/execute, packages or
+workflows, long memory as operational state, a new lifecycle/durable
+object/KV bucket, a credential vault, multi-repo operation, issue creation,
+notifications, roll-ups, and publishing.

@@ -45,15 +45,34 @@ const CASES = [
     action: "research",
   },
   {
+    name: "slash research hint still routes through coordinator",
+    prompt:
+      "/research Compare MQTT and NATS for constrained IoT edge deployments. I need the practical tradeoffs and evidence, not code.",
+    action: "research",
+  },
+  {
     name: "OpenSpec authoring routes to create_change",
     prompt:
       "Create an OpenSpec change for adding Idempotency-Key support to POST /jobs. Include acceptance criteria and affected API contracts.",
     action: "create_change",
   },
   {
+    name: "slash spec hint routes to create_change",
+    prompt:
+      "/spec Add Idempotency-Key support to POST /jobs with acceptance criteria and affected API contracts.",
+    action: "create_change",
+  },
+  {
     name: "bounded scalar optimization routes to autoresearch",
     prompt:
       "Optimize `go test ./...` wallclock. Metric: trailing ok-line seconds, lower is better. Command: `go test ./...`. Surface: `./...`. Cap: 2 iterations. Guardrail: all tests must keep passing.",
+    action: "autoresearch",
+    requiresSandbox: true,
+  },
+  {
+    name: "slash optimize hint still requires sandbox preflight",
+    prompt:
+      "/optimize `go test ./...` wallclock. Metric: trailing ok-line seconds, lower is better. Command: `go test ./...`. Surface: `./...`. Cap: 2 iterations. Guardrail: all tests must keep passing.",
     action: "autoresearch",
     requiresSandbox: true,
   },
@@ -65,13 +84,26 @@ const CASES = [
     requiresSandbox: true,
   },
   {
+    name: "slash dev-via-test hint still requires sandbox preflight",
+    prompt:
+      "/dev-via-test Build a Go HTTP service that decodes MAVLink HEARTBEAT frames with github.com/bluenviron/gomavlib and serves the latest at GET /heartbeat as JSON, with unit tests.",
+    action: "dev_via_test",
+    requiresSandbox: true,
+  },
+  {
+    name: "mis-shaped slash optimize asks the user",
+    prompt: "/optimize Make this faster.",
+    action: "ask_user",
+  },
+  {
     name: "vague optimization asks the user",
     prompt: "Make this project faster and better.",
     action: "ask_user",
   },
   {
-    name: "simple taxonomy question responds directly",
-    prompt: "What coordinator routing actions are available? Answer briefly.",
+    name: "front-door product question responds directly",
+    prompt:
+      "What can SemTeams help me do before I pick a team? Answer briefly.",
     action: "respond_direct",
   },
 ];
@@ -82,7 +114,7 @@ test.describe("coordinator routing matrix", () => {
     expect(health.ok(), "Backend not healthy - stack not running?").toBe(true);
   });
 
-  test.setTimeout(90_000);
+  test.setTimeout(150_000);
 
   test("representative prompts choose the expected coordinator action", async ({
     request,
@@ -100,9 +132,15 @@ test.describe("coordinator routing matrix", () => {
       ).toBe(true);
 
       const newLoop = await waitForNewLoop(request, beforeLoopIds);
-      expect(newLoop, `${c.name}: expected a new coordinator loop`).toBeTruthy();
+      expect(
+        newLoop,
+        `${c.name}: expected a new coordinator loop`,
+      ).toBeTruthy();
 
-      const terminal = await waitForLoopTerminal(request, String(newLoop!.loop_id));
+      const terminal = await waitForLoopTerminal(
+        request,
+        String(newLoop!.loop_id),
+      );
       expect(
         terminal,
         `${c.name}: coordinator loop ${newLoop!.loop_id} did not reach a terminal state`,
@@ -112,19 +150,22 @@ test.describe("coordinator routing matrix", () => {
         `${c.name}: coordinator loop failed with state ${terminal!.state}`,
       ).toBe(false);
 
-      const action = await pollUntil(async () => {
-        const actions = await fetchTriples(request, {
-          predicate: "coordinator.decision.next_action",
-          limit: 500,
-        });
-        return (
-          actions.find(
-            (triple) =>
-              subjectIncludesLoop(triple, String(newLoop!.loop_id)) &&
-              String(triple.object ?? "") === c.action,
-          ) ?? null
-        );
-      }, { timeoutMs: 10_000 });
+      const action = await pollUntil(
+        async () => {
+          const actions = await fetchTriples(request, {
+            predicate: "coordinator.decision.next_action",
+            limit: 500,
+          });
+          return (
+            actions.find(
+              (triple) =>
+                subjectIncludesLoop(triple, String(newLoop!.loop_id)) &&
+                String(triple.object ?? "") === c.action,
+            ) ?? null
+          );
+        },
+        { timeoutMs: 10_000 },
+      );
 
       expect(
         action,
@@ -154,7 +195,9 @@ async function fetchLoops(
 ): Promise<Loop[]> {
   const resp = await request.get("/teams-dispatch/loops");
   if (!resp.ok()) {
-    throw new Error(`/teams-dispatch/loops returned ${resp.status()}: ${await resp.text()}`);
+    throw new Error(
+      `/teams-dispatch/loops returned ${resp.status()}: ${await resp.text()}`,
+    );
   }
   return (await resp.json()) as Loop[];
 }
@@ -181,22 +224,28 @@ async function waitForNewLoop(
   request: import("@playwright/test").APIRequestContext,
   beforeLoopIds: Set<string | undefined>,
 ): Promise<Loop | null> {
-  return pollUntil(async () => {
-    const loops = await fetchLoops(request);
-    return loops.find((loop) => !beforeLoopIds.has(loop.loop_id)) ?? null;
-  }, { timeoutMs: 20_000 });
+  return pollUntil(
+    async () => {
+      const loops = await fetchLoops(request);
+      return loops.find((loop) => !beforeLoopIds.has(loop.loop_id)) ?? null;
+    },
+    { timeoutMs: 20_000 },
+  );
 }
 
 async function waitForLoopTerminal(
   request: import("@playwright/test").APIRequestContext,
   loopId: string,
 ): Promise<{ state?: string } | null> {
-  return pollUntil(async () => {
-    const resp = await request.get(`/teams-dispatch/loops/${loopId}`);
-    if (!resp.ok()) return null;
-    const body = (await resp.json()) as { state?: string };
-    return LOOP_TERMINAL.has(body.state ?? "") ? body : null;
-  }, { timeoutMs: 20_000 });
+  return pollUntil(
+    async () => {
+      const resp = await request.get(`/teams-dispatch/loops/${loopId}`);
+      if (!resp.ok()) return null;
+      const body = (await resp.json()) as { state?: string };
+      return LOOP_TERMINAL.has(body.state ?? "") ? body : null;
+    },
+    { timeoutMs: 20_000 },
+  );
 }
 
 async function expectOnlyOneLoopSpawned(
@@ -220,21 +269,24 @@ async function expectSandboxPreflightAttempted(
   loopId: string,
   caseName: string,
 ): Promise<void> {
-  const loopCalls = await pollUntil(async () => {
-    const entries = await fetchMessageEntries(request, "tool.execute.", 500);
-    const calls = entries
-      .filter((entry) => entryBelongsToLoop(entry, loopId))
-      .map(toolNameFromEntry)
-      .filter((toolName): toolName is string => Boolean(toolName));
+  const loopCalls = await pollUntil(
+    async () => {
+      const entries = await fetchMessageEntries(request, "tool.execute.", 500);
+      const calls = entries
+        .filter((entry) => entryBelongsToLoop(entry, loopId))
+        .map(toolNameFromEntry)
+        .filter((toolName): toolName is string => Boolean(toolName));
 
-    if (
-      calls.includes("query_sandbox_attestation") &&
-      calls.includes("request_sandbox")
-    ) {
-      return calls;
-    }
-    return null;
-  }, { timeoutMs: 10_000 });
+      if (
+        calls.includes("query_sandbox_attestation") &&
+        calls.includes("request_sandbox")
+      ) {
+        return calls;
+      }
+      return null;
+    },
+    { timeoutMs: 10_000 },
+  );
 
   expect(
     loopCalls ?? [],
@@ -299,7 +351,9 @@ function toolNameFromEntry(entry: MessageEntry): string | undefined {
   return undefined;
 }
 
-function entryPayload(entry: MessageEntry): Record<string, unknown> | undefined {
+function entryPayload(
+  entry: MessageEntry,
+): Record<string, unknown> | undefined {
   const rawPayload = asRecord(asRecord(entry.raw_data)?.payload);
   return rawPayload ?? asRecord(entry.payload);
 }

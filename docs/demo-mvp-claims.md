@@ -10,8 +10,14 @@ SemTeams can produce, review, edit, approve, and export an OpenSpec handoff.
 SemTeams can prove readiness before execution by modeling claims, proof dependencies, harness profiles, readiness
 records, evidence, and waivers before implementation work is released.
 
-SemTeams can route prompt classes to the right team: research, OpenSpec authoring, autoresearch, dev-via-test, direct
-response, or clarification.
+SemTeams can route prompt classes to the right team from the coordinator front door: plain chat/direct response,
+clarification, research, OpenSpec authoring, autoresearch, or dev-via-test. Product-level slash commands are supported
+as coordinator-routed hints, not bypasses.
+
+SemTeams can expose emitted artifacts to the human and let those artifacts seed
+a later coordinator-routed prompt. The artifact context handoff is general: a
+research artifact can inform spec creation, but the same UI pattern is intended
+for any emitted artifact that could help another team or follow-up question.
 
 ## Non-Claims
 
@@ -46,6 +52,7 @@ The black-box demo evidence pack is:
 - `task ui:test:e2e:agentic:create-change`
 - `task ui:test:e2e:agentic:coordinator-readiness-gate`
 - `task ui:test:e2e:agentic:mavlink-hard-spec`
+- `task ui:test:e2e:agentic:artifact-context-handoff`
 - `task ui:test:e2e:agentic:demo-mvp`
 
 The fixture-seeded bridge proof is:
@@ -67,6 +74,9 @@ readiness records exist, or an operator records a bounded waiver with visible re
 
 ## OpenSpec Lifecycle
 
-The active OpenSpec change remains open while the demo evidence pack is still being added. After the evidence pack lands
-green on `main`, the change should be archived into baseline OpenSpec specs so future changes can build on it instead of
-continuing to mutate the seed proposal.
+The spec-driven development MVP change is archived at
+`openspec/changes/archive/spec-driven-dev-readiness-hitl/`. Its accepted requirements are baselined in
+`openspec/specs/agentic-sdd/spec.md` so future changes build on the living spec instead of mutating the seed proposal.
+
+The post-MVP repo-readiness initializer remains active at `openspec/changes/repo-readiness-init/` until its own
+proposal, implementation, and evidence tasks are complete.

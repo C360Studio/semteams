@@ -9,12 +9,13 @@ persona bundles, not as new flow configs.
 
 | Config | Purpose | Model |
 |---|---|---|
-| [`flow-bootstrap.json`](flow-bootstrap.json) | Production substrate (ADR-042 MVP). Wires the singleton agentic stack (graph-ingest, graph-query, rule-processor, agentic-loop, agentic-dispatch, agentic-tools, agentic-model) + the live category rule packs (research, autoresearch, coordinator, ops) + the persona corpus that drives them. | claude-haiku (default); gemini-flash / claude-sonnet selectable per role |
+| [`flow-bootstrap.json`](flow-bootstrap.json) | Production substrate (ADR-042 MVP). Wires the singleton agentic stack (graph-ingest, graph-query, rule-processor, agentic-loop, agentic-dispatch, agentic-tools, agentic-model) + the live product-facing rule packs (research, autoresearch, create-change, proof-readiness, dev-from-task, dev-via-test) + support packs (coordinator, agent-run, ops) + the persona corpus that drives them. | gemini-flash (default); coordinator capability prefers gemini-pro with gemini-flash / claude-haiku fallback |
 | [`e2e-flow-bootstrap.json`](e2e-flow-bootstrap.json) | Mock-LLM clone of flow-bootstrap. Same packs + personas; model registry points at the in-process mock LLM. Used by every Playwright journey under `ui/e2e/agentic/`. | mock-llm |
 
-`task ui:test:e2e:agentic:research-mvp` runs the e2e config end to
-end against the mock LLM (no API keys); `task dev:research` runs
-the production config (needs `ANTHROPIC_API_KEY` at minimum).
+`task ui:test:e2e:agentic:demo-mvp` runs the black-box demo
+evidence pack against the mock LLM (no API keys); `task
+dev:research` runs the production config (default registry needs
+`GEMINI_API_KEY`).
 
 ## What lives where
 
@@ -26,6 +27,11 @@ configs/
 │   ├── coordinator/             ← chat front-door rules
 │   ├── research/                ← prose research arc
 │   ├── autoresearch/            ← Karpathy-style iteration loop
+│   ├── create-change/           ← OpenSpec author / review / export
+│   ├── proof-readiness/         ← proof dependency + readiness gates
+│   ├── dev-from-task/           ← approved-spec task bridge
+│   ├── dev-via-test/            ← Lisa / Ralph / CBG implementation loop
+│   ├── agent-run/               ← shared run lifecycle support
 │   └── ops/                     ← parallel observability track
 └── personas/fragments/
     ├── coordinator/             ← domain-neutral router persona
@@ -33,6 +39,10 @@ configs/
     ├── reviewer-research/
     ├── autoresearch-*/          ← baseline / propose / execute / synthesize
     ├── reviewer-autoresearch/
+    ├── author-create-change/    ← OpenSpec author
+    ├── reviewer-create-change/  ← OpenSpec reviewer
+    ├── dev-via-test-*/          ← Lisa / Ralph
+    ├── reviewer-dev-via-test/   ← CBG plan + work gate
     ├── ops/                     ← read-only diagnostic agent
     ├── ops-chain-observer/
     └── ops-progress-observer/

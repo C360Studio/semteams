@@ -3,10 +3,10 @@
 Status: product vocabulary guidance, proposed 2026-06-24.
 
 This document defines the public words SemTeams should use for the agentic-dev
-experience. It is not an ADR and it does not rename internal predicates,
-payloads, ports, or rule actions. The goal is simpler: make the UI and product
-docs sound like the agentic-dev world users are already learning, while keeping
-SemTeams' SemStreams-native architecture intact.
+experience. It does not rename internal predicates, payloads, ports, or rule
+actions. The goal is simpler: make the UI and product docs sound like the
+agentic-dev world users are already learning, while keeping SemTeams'
+SemStreams-native architecture intact.
 
 ## Why this exists
 
@@ -101,6 +101,10 @@ The front-door router and done-authority for a run. Internally this is the
 coordinator persona plus the closed `decide()` taxonomy. "Manager" and
 "supervisor" can explain it, but Coordinator is canonical.
 
+The Coordinator also supports ordinary chat. Users can ask how SemTeams works,
+refine an idea, or ask which team fits before starting a run. Slash commands
+are team hints to the Coordinator, not direct execution bypasses.
+
 ### Task
 
 A unit of implementation work with acceptance evidence. Internally this is a
@@ -130,6 +134,14 @@ proof or evidence decides progress.
 Artifacts or observations that justify a claim or status. Internally this is
 evidence triples, logs, files, metrics, and test output. Evidence is central to
 the "is this thing working?" UI.
+
+### Artifact Context
+
+An emitted artifact attached to a later chat prompt. Internally this is the
+artifact title, source tool, and content carried through the chat handoff store
+and submitted through the normal coordinator message path. Use this term for
+the visible chip in the chat bar and for docs that explain reuse between teams.
+Do not call it "research context" unless the artifact is specifically research.
 
 ### Trace
 
@@ -186,6 +198,9 @@ MVP-shaped; MCP export is later.
 - `dev_from_task` -> Implement Task.
   UI: Tasks / Run action. Avoid saying "dev-from-task". This is an execution
   action, not a planning method.
+- artifact handoff -> Artifact Context.
+  UI: Chat input / Artifact card. Avoid implying only research can seed later
+  work. The product behavior is "attach this artifact to my next prompt."
 - Ralph -> Implementation Agent.
   UI: Trace / Tasks. Avoid saying "Ralph loop". Keep Ralph in developer docs
   and lore.
@@ -254,6 +269,8 @@ Every run view should make these visible without digging:
 - Evidence health: tests, metrics, logs, proof dependencies, and waivers.
 - Cost/risk health: token budget, retry count, and autonomous-policy limit.
 - Export state: whether an OpenSpec artifact exists and when it was generated.
+- Artifact context: which emitted artifact, if any, is attached to the next
+  coordinator prompt.
 
 Recommended top-level UI nouns:
 
@@ -273,31 +290,46 @@ progress, blocked, or burning budget, surface it in Run Health.
 
 ## Slash Commands
 
-Slash commands are power-user shortcuts for existing UI actions. They must not
-become a second control plane or a hidden workflow language.
+Slash commands are power-user shortcuts for existing coordinator and UI actions.
+They must not become a second control plane or a hidden workflow language.
+Product-level team commands are intent hints carried to the coordinator; they do
+not bypass routing, sandbox checks, readiness, approvals, review, or
+clarification.
 
 MVP-shaped commands:
 
-- `/create-spec`: start the Spec Builder from the current prompt.
+- `/research`: ask the coordinator to validate and route an evidence or
+  comparison prompt.
+- `/create-change` or `/spec`: ask the coordinator to validate and route an
+  OpenSpec authoring prompt.
+- `/optimize`: ask the coordinator to validate and route a measurable
+  optimization prompt.
+- `/dev-via-test`: ask the coordinator to validate and route implementation with
+  tests.
+- `/implement-spec`: start governed implementation for an approved OpenSpec
+  change from the selected reviewed run.
 - `/export-spec`: render and download or copy the current OpenSpec artifact.
-- `/show-evidence`: open the Evidence view for the current run.
-- `/show-trace`: open the Trace view for the current run.
-- `/run-readiness`: run or refresh the Readiness Gate.
+- `/run-status`: show the current governed run status.
+- `/evidence`: open proof evidence for a run, claim, or dependency.
 - `/approve`: approve the currently selected human gate.
 - `/reject`: reject the currently selected human gate with a required reason.
 
-Avoid commands that merge planning and execution:
+Avoid commands that expose internal roles or merge planning and execution:
 
-- `/dev-via-spec`
+- `/lisa`
+- `/ralph`
+- `/cbg`
+- `/reviewer-dev-via-test`
 - `/do-everything`
 - `/auto-implement`
 
 Prefer separate, auditable actions:
 
+- chat with the coordinator to shape the idea
+- ask for a team with a public team command
 - create or edit the spec
 - approve the spec
-- run readiness
-- implement selected task
+- implement an approved spec or selected task
 - review evidence
 - export the spec
 

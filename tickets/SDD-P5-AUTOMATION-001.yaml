@@ -1,0 +1,56 @@
+ticket: SDD-P5-AUTOMATION-001
+title: Implement idempotent one-repo issue-to-PR automation and impact recap
+owner: go-developer
+reviewer:
+  - go-reviewer
+status: blocked
+depends_on:
+  - SDD-P5-ADR-001
+blocks:
+  - SDD-P5-EVIDENCE-001
+summary: >-
+  Implement the approved P5 design as a cron-driven, label-filtered,
+  one-repository issue-to-PR flow that runs the proven D1 arc under agent.run,
+  validates the result, derives an evidenced impact recap, and protects every
+  GitHub write with the external-operation contract.
+acceptance_criteria:
+  - Poll, read, and atomic claim occur before an agent.run is started.
+  - The implementation reuses OpenSpec, registries, rules, personas, and category packs.
+  - The proven D1 arc executes under a durable, pollable agent.run.
+  - CBG and task validate pass before recap derivation or PR creation.
+  - >-
+    The recap is deterministically derived from the actual diff and authoritative
+    registries, OpenSpec, rules, personas, and packs.
+  - >-
+    Each composes, extends, or adds classification cites file or declaration
+    evidence; unsupported relationships remain unclassified.
+  - No LLM-authored impact claim or new authoritative manifest is introduced.
+  - >-
+    GitHub branch, commit, and PR writes honor stable identity, request-hash
+    mismatch, completed replay, and explicit retry-generation semantics.
+  - >-
+    Deterministic remote natural keys use canonical head, base, and operation
+    marker; every confirmed or reconciled PR records its GitHub node ID.
+  - >-
+    Before retry after an ambiguous response, reconciliation always queries by
+    canonical head/base/operation marker and uses a recorded node ID when available.
+  - >-
+    An injected black-box test makes GitHub accept the PR while the client
+    observes a timeout; retry reconciles the accepted PR and creates no second PR.
+  - A concurrent black-box test proves exactly one claim, one run, and one PR.
+  - Secret-scanning tests prove credentials are absent from all prohibited surfaces.
+  - Cost and consecutive-failure breakers stop a provably wedged or over-budget run.
+  - D2 documentation labels the result demo-grade until D3 exists.
+non_goals:
+  - Kody runtime, generic search/execute, packages, or workflows.
+  - New lifecycle, durable object, KV bucket, credential vault, or memory-backed state.
+  - Multi-repo operation, issue creation, notifications, roll-ups, or publishing.
+  - Claiming unattended production safety before D3.
+source_references:
+  - "docs/adr/056-openspec-spec-driven-development-umbrella.md\
+    #addendum-2026-07-30-d2p5-invariants-from-the-kody-pattern-comparison"
+  - "docs/adr/056-openspec-spec-driven-development-umbrella.md#north-star-deployment-roadmap"
+  - "docs/demo-mvp-claims.md"
+  - "configs/rules/agent-run/"
+  - "docs/adr/029-product-shell-wiring.md"
+blockers: []

@@ -27,6 +27,61 @@ function argsAfterFirst(args: string): string | undefined {
 
 export const COMMANDS: SlashCommand[] = [
   {
+    name: "research",
+    aliases: [],
+    description: "Ask the coordinator to validate and route a research prompt",
+    usage: "/research <question>",
+    intent: "general",
+    availableOn: ["flow-builder", "data-view"],
+    parse: (args: string) => ({
+      intent: "general",
+      content: `/research ${args}`.trim(),
+      params: { requestedTeam: "research", prompt: args },
+    }),
+  },
+  {
+    name: "create-change",
+    aliases: ["spec"],
+    description:
+      "Ask the coordinator to validate and route an OpenSpec authoring prompt",
+    usage: "/create-change <spec request>",
+    intent: "general",
+    availableOn: ["flow-builder", "data-view"],
+    parse: (args: string) => ({
+      intent: "general",
+      content: `/create-change ${args}`.trim(),
+      params: { requestedTeam: "create_change", prompt: args },
+    }),
+  },
+  {
+    name: "optimize",
+    aliases: ["autoresearch"],
+    description:
+      "Ask the coordinator to validate and route a metric optimization prompt",
+    usage: "/optimize <metric target>",
+    intent: "general",
+    availableOn: ["flow-builder", "data-view"],
+    parse: (args: string) => ({
+      intent: "general",
+      content: `/optimize ${args}`.trim(),
+      params: { requestedTeam: "autoresearch", prompt: args },
+    }),
+  },
+  {
+    name: "dev-via-test",
+    aliases: ["build", "dev"],
+    description:
+      "Ask the coordinator to validate and route an implementation-with-tests prompt",
+    usage: "/dev-via-test <implementation request>",
+    intent: "general",
+    availableOn: ["flow-builder", "data-view"],
+    parse: (args: string) => ({
+      intent: "general",
+      content: `/dev-via-test ${args}`.trim(),
+      params: { requestedTeam: "dev_via_test", prompt: args },
+    }),
+  },
+  {
     name: "search",
     aliases: ["s", "find"],
     description: "Search the knowledge graph",
@@ -190,7 +245,8 @@ export const COMMANDS: SlashCommand[] = [
   {
     name: "implement-spec",
     aliases: ["dev-via-spec"],
-    description: "Start governed implementation for an approved OpenSpec change",
+    description:
+      "Start governed implementation for an approved OpenSpec change",
     usage: "/implement-spec <change-slug>",
     intent: "agent-control",
     availableOn: ["flow-builder", "data-view"],

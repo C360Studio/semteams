@@ -20,6 +20,7 @@ import {
   type TaskInfo,
   type TaskColumn,
   COLUMNS,
+  collectDescendantLoops,
   deriveTaskInfo,
   resolveTaskMention,
 } from "$lib/types/task";
@@ -51,7 +52,7 @@ function createTaskStore() {
   }
 
   // Derive tasks from agentStore. Top-level loops (no parent_loop_id)
-  // become tasks; their children are grouped under them.
+  // become tasks; their descendants are grouped under them.
   let tasks = $derived.by(() => {
     const allLoops = agentStore.loopsList;
     const metricsEvidence = deriveMetricsEvidence({
@@ -63,23 +64,14 @@ function createTaskStore() {
       now: runtimeStore.metricsNow,
     });
 
-    // Separate top-level loops from children. Uses a plain object (not
-    // Map) to avoid the svelte/prefer-svelte-reactivity lint rule — this
-    // is a local grouping variable, not reactive state.
-    // Top-level loops have an empty or absent parent_loop_id. The Go
-    // struct uses `omitempty`, so the field is omitted from JSON when
-    // empty — treat both "" and undefined/missing as top-level.
+    // Separate top-level loops from descendants. Top-level loops have an
+    // empty or absent parent_loop_id. The Go struct uses `omitempty`, so
+    // the field is omitted from JSON when empty — treat both "" and
+    // undefined/missing as top-level.
     const topLevel = allLoops.filter((l) => !l.parent_loop_id);
-    const childrenByParent: Record<string, typeof allLoops> = {};
-
-    for (const loop of allLoops) {
-      if (loop.parent_loop_id) {
-        (childrenByParent[loop.parent_loop_id] ??= []).push(loop);
-      }
-    }
 
     return topLevel.map((loop) => {
-      const childLoops = childrenByParent[loop.loop_id] ?? [];
+      const childLoops = collectDescendantLoops(loop.loop_id, allLoops);
       const status = runStatus.get(loop.loop_id);
       const pause = status?.pause ?? null;
       const runHealth = deriveRunHealth({

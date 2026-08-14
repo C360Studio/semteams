@@ -1,5 +1,6 @@
 <script lang="ts">
   import { agentApi } from "$lib/services/agentApi";
+  import { chatHandoff } from "$lib/stores/chatHandoff.svelte";
   import { taskStore } from "$lib/stores/taskStore.svelte";
   import type { ControlSignal } from "$lib/types/agent";
 
@@ -16,20 +17,30 @@
     "/resume": "resume",
     "/cancel": "cancel",
   };
+  const TEAM_MESSAGE_COMMANDS = new Set([
+    "/research",
+    "/create-change",
+    "/spec",
+    "/optimize",
+    "/dev-via-test",
+  ]);
   const RUN_MESSAGE_COMMANDS = new Set(["/implement-spec"]);
-  const SLASH_COMMANDS = [...Object.keys(TASK_COMMANDS), ...RUN_MESSAGE_COMMANDS];
+  const TASK_SLASH_COMMANDS = Object.keys(TASK_COMMANDS);
+  const ALL_SLASH_COMMANDS = [
+    ...TEAM_MESSAGE_COMMANDS,
+    ...RUN_MESSAGE_COMMANDS,
+    ...TASK_SLASH_COMMANDS,
+  ];
 
   /**
-   * Persona-shaped action chips. Clicking inserts the prefix into the
-   * input (so the user sees what's about to be sent) and focuses the
-   * input. Today the coordinator interprets the prefix via its decide
-   * tool; when role-routing on the wire arrives, these become real
-   * per-message overrides without UI churn.
+   * Public team shortcuts. They are coordinator-routed hints, not
+   * direct role overrides; the coordinator still validates the prompt.
    */
-  const PERSONA_CHIPS = [
-    { id: "research", label: "Research", prefix: "@research " },
-    { id: "plan", label: "Plan", prefix: "@plan " },
-    { id: "implement", label: "Implement", prefix: "@implement " },
+  const TEAM_CHIPS = [
+    { id: "research", label: "Research", prefix: "/research " },
+    { id: "spec", label: "Spec", prefix: "/create-change " },
+    { id: "optimize", label: "Optimize", prefix: "/optimize " },
+    { id: "build", label: "Build", prefix: "/dev-via-test " },
   ] as const;
 
   // Placeholder copy is human-shaped, not slash-command-shaped. Slash
@@ -43,15 +54,21 @@
   // Surface the slash-command hints only when the user is actively
   // typing a slash command. Default state stays clean.
   let showingSlash = $derived(input.trimStart().startsWith("/"));
+  let visibleSlashCommands = $derived(
+    taskStore.selectedTask ? ALL_SLASH_COMMANDS : [...TEAM_MESSAGE_COMMANDS],
+  );
 
-  function applyPersona(prefix: string) {
-    // If the user already started typing a different persona prefix,
+  function applyTeamHint(prefix: string) {
+    // If the user already started typing a different team prefix,
     // replace it; otherwise prepend to whatever's there.
-    const stripped = input.replace(/^@\w+\s*/, "");
+    const stripped = input.replace(
+      /^(@\w+|\/(?:research|create-change|spec|optimize|autoresearch|dev-via-test|build|dev))\s*/i,
+      "",
+    );
     input = prefix + stripped;
     inputEl?.focus();
     // Move the caret to the end so the user starts typing after the
-    // persona prefix, not in the middle of it.
+    // team prefix, not in the middle of it.
     queueMicrotask(() => {
       if (inputEl) inputEl.setSelectionRange(input.length, input.length);
     });
@@ -68,9 +85,36 @@
     if (next) taskStore.selectTask(next.id);
   }
 
+  $effect(() => {
+    const draft = chatHandoff.draft;
+    if (!draft) return;
+    input = draft.content;
+    error = null;
+    chatHandoff.consumeDraft(draft.id);
+    inputEl?.focus();
+    queueMicrotask(() => {
+      if (inputEl) inputEl.setSelectionRange(input.length, input.length);
+    });
+  });
+
+  function outboundMessage(text: string): string {
+    const artifact = chatHandoff.artifactContext;
+    if (!artifact) return text;
+    return [
+      text,
+      "",
+      "---",
+      `Artifact context: ${artifact.title}`,
+      `Artifact tool: ${artifact.toolName}`,
+      "",
+      artifact.content,
+    ].join("\n");
+  }
+
   async function handleSubmit() {
     const text = input.trim();
     if (!text || sending) return;
+    const message = outboundMessage(text);
 
     error = null;
 
@@ -96,12 +140,19 @@
       } else if (RUN_MESSAGE_COMMANDS.has(firstWord)) {
         // Slash command — dispatch as a run-attached message so the backend
         // command sees the selected task as UserMessage.RunID.
-        await agentApi.sendMessage(text, { runId: taskStore.selectedTask!.id });
+        await agentApi.sendMessage(message, {
+          runId: taskStore.selectedTask!.id,
+        });
+      } else if (TEAM_MESSAGE_COMMANDS.has(firstWord)) {
+        // Team shortcuts are front-door messages. The coordinator receives
+        // the hint and validates the prompt before routing.
+        await agentApi.sendMessage(message);
       } else {
         // Regular message — dispatch to create a new agent loop.
-        await agentApi.sendMessage(text);
+        await agentApi.sendMessage(message);
       }
       input = "";
+      chatHandoff.clearArtifact();
     } catch (err) {
       error = err instanceof Error ? err.message : "Failed to send message";
     } finally {
@@ -125,8 +176,8 @@
         class="error-dismiss"
         type="button"
         onclick={() => (error = null)}
-        aria-label="Dismiss error"
-      >×</button>
+        aria-label="Dismiss error">×</button
+      >
     </div>
   {/if}
 
@@ -138,16 +189,33 @@
     <div class="chat-context" data-testid="chat-context">
       <span class="context-chip" title={taskStore.selectedTask.title}>
         {#if taskStore.selectedTask.shortRef !== null}
-          <span class="context-chip-ref">#{taskStore.selectedTask.shortRef}</span>
+          <span class="context-chip-ref"
+            >#{taskStore.selectedTask.shortRef}</span
+          >
         {/if}
         <span class="context-chip-title">{taskStore.selectedTask.title}</span>
         <button
           class="context-clear"
           type="button"
           onclick={() => taskStore.deselectTask()}
-          aria-label="Clear task selection"
-        >×</button>
+          aria-label="Clear task selection">×</button
+        >
       </span>
+    </div>
+  {/if}
+
+  {#if chatHandoff.artifactContext}
+    <div class="artifact-context" data-testid="artifact-context-chip">
+      <span class="artifact-context-copy">
+        Using artifact:
+        <strong>{chatHandoff.artifactContext.title}</strong>
+      </span>
+      <button
+        class="artifact-context-clear"
+        type="button"
+        onclick={() => chatHandoff.clearArtifact()}
+        aria-label="Remove artifact context">×</button
+      >
     </div>
   {/if}
 
@@ -176,17 +244,17 @@
   </div>
 
   {#if !taskStore.selectedTask && !showingSlash}
-    <!-- Persona action chips. Only on empty state — when a task is
+    <!-- Team action chips. Only on empty state — when a task is
          selected, those affordances live in the right-rail drilldown.
          The "Approve next" chip is colored and surfaces only when
          tasks are actually waiting on the user. -->
     <div class="action-chips" data-testid="action-chips">
-      {#each PERSONA_CHIPS as chip (chip.id)}
+      {#each TEAM_CHIPS as chip (chip.id)}
         <button
           type="button"
           class="action-chip"
           data-testid="action-chip-{chip.id}"
-          onclick={() => applyPersona(chip.prefix)}
+          onclick={() => applyTeamHint(chip.prefix)}
         >
           {chip.label}
         </button>
@@ -206,11 +274,11 @@
     </div>
   {/if}
 
-  {#if showingSlash && taskStore.selectedTask}
-    <!-- Only show command hints when the user has actually typed "/"
-         and there's a selected task to act on. Out of the way otherwise. -->
+  {#if showingSlash}
+    <!-- Only show command hints when the user has actually typed "/".
+         Task-scoped commands appear only when a task/run is selected. -->
     <div class="slash-hints" aria-hidden="true">
-      {#each SLASH_COMMANDS as cmd (cmd)}
+      {#each visibleSlashCommands as cmd (cmd)}
         <span class="hint-chip">{cmd}</span>
       {/each}
     </div>
@@ -262,6 +330,46 @@
     align-items: center;
     gap: 0.375rem;
     margin-bottom: 0.4rem;
+  }
+
+  .artifact-context {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-bottom: 0.4rem;
+    padding: 0.375rem 0.5rem;
+    border: 1px solid var(--ui-border-subtle, #d1d5db);
+    border-radius: 4px;
+    background: var(--ui-surface-primary, #fff);
+    font-size: 0.75rem;
+    color: var(--ui-text-secondary, #4b5563);
+  }
+
+  .artifact-context-copy {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .artifact-context-copy strong {
+    color: var(--ui-text-primary, #111827);
+    font-weight: 700;
+  }
+
+  .artifact-context-clear {
+    all: unset;
+    cursor: pointer;
+    flex-shrink: 0;
+    padding: 0 0.25rem;
+    color: var(--ui-text-tertiary, #9ca3af);
+    font-size: 1rem;
+    line-height: 1;
+  }
+
+  .artifact-context-clear:hover {
+    color: var(--ui-text-primary, #374151);
   }
 
   .context-chip {
@@ -395,7 +503,10 @@
     font-size: 0.75rem;
     font-weight: 500;
     color: var(--ui-text-secondary, #6b7280);
-    transition: border-color 0.15s, color 0.15s, background 0.15s;
+    transition:
+      border-color 0.15s,
+      color 0.15s,
+      background 0.15s;
   }
 
   .action-chip:hover {

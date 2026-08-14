@@ -1,0 +1,45 @@
+ticket: SDD-D1-CONTRACT-001
+title: Audit and approve the D1 contracts and readiness boundary
+owner: architect
+reviewer:
+  - go-reviewer
+  - svelte-reviewer
+status: ready
+depends_on: []
+blocks:
+  - SDD-D1-BACKEND-001
+  - SDD-D1-E2E-001
+summary: >-
+  Audit the P1-P4 design and readiness contracts before implementation. Confirm
+  that ADR-057 and the P4 design are sufficiently approved and precise, or
+  author and approve the missing P4 contract first.
+acceptance_criteria:
+  - >-
+    The audit maps every D1 step from create_change through dev-from-task and
+    PR-or-archive to an approved contract and authoritative owner.
+  - >-
+    ADR-057 status and acceptance coverage are recorded; any unresolved design
+    decision required by development is settled before handoff.
+  - >-
+    A P4 contract is authored and approved before development if existing
+    ADR-044/ADR-057 material does not fully specify task mapping, routing,
+    readiness, lifecycle, CBG, and terminal behavior.
+  - >-
+    Backend API, graph predicates, rule/persona boundaries, readiness gates,
+    and public black-box entry and observation surfaces are explicit.
+  - >-
+    The contract preserves the graph as authority, reuses the shipped execution
+    substrate, and does not weaken docs/demo-mvp-claims.md.
+  - The go-reviewer formally approves backend and graph contracts.
+  - The svelte-reviewer formally approves UI, accessibility, and E2E contracts.
+non_goals:
+  - Implementing Go, config, Svelte, or E2E changes.
+  - Treating fixture-seeded bridge evidence as black-box D1 proof.
+  - Designing P5 polling or GitHub external-write behavior.
+source_references:
+  - "docs/adr/056-openspec-spec-driven-development-umbrella.md#phasing-each-phase-independently-valuable"
+  - "docs/adr/056-openspec-spec-driven-development-umbrella.md#north-star-deployment-roadmap"
+  - "docs/adr/057-openspec-graph-spec-model-and-create-change.md"
+  - "docs/adr/044-dev-via-test-pack.md"
+  - "docs/demo-mvp-claims.md#evidence-rule"
+blockers: []
