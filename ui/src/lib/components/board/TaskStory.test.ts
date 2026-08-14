@@ -3,20 +3,69 @@ import { render, screen, waitFor, within } from "@testing-library/svelte";
 import userEvent from "@testing-library/user-event";
 import TaskStory from "./TaskStory.svelte";
 import { agentApi } from "$lib/services/agentApi";
-import type { LoopTrajectory } from "$lib/types/agent";
+import type { LoopTrajectory, TrajectoryFact } from "$lib/types/agent";
 
 vi.mock("$lib/services/agentApi", () => ({
   agentApi: {
     getLoopTrajectory: vi.fn(),
-    getTrajectory: vi.fn().mockResolvedValue([]),
+    getTrajectory: vi.fn(),
   },
 }));
 
-function trajectory(steps: LoopTrajectory["steps"]): LoopTrajectory {
+function trajectory(
+  facts: TrajectoryFact[],
+  overrides: Partial<LoopTrajectory> = {},
+): LoopTrajectory {
   return {
+    schema_version: "v1",
     loop_id: "loop-1",
-    start_time: "2026-06-06T00:00:00Z",
-    steps,
+    coverage: "observed",
+    terminal_observed: false,
+    observed_totals: {
+      facts: facts.length,
+      tokens_in: 0,
+      tokens_out: 0,
+      elapsed_ms: 0,
+      message_count: 0,
+      tool_count: 0,
+      url_count: 0,
+      model_requests: 0,
+      model_completions: 0,
+      tool_requests: 0,
+      tool_completions: 0,
+      context_compactions: 0,
+      terminal_observations: 0,
+      requested_observations: 0,
+      completed_observations: 0,
+      failed_observations: 0,
+      cancelled_observations: 0,
+    },
+    facts,
+    ...overrides,
+  };
+}
+
+function toolFact(overrides: Partial<TrajectoryFact> = {}): TrajectoryFact {
+  return {
+    kind: "tool.completed",
+    causal_iteration: 1,
+    causal_phase: "tool_result",
+    causal_ordinal: 0,
+    status: "completed",
+    capability_preview: "coordinator",
+    ...overrides,
+  };
+}
+
+function modelFact(overrides: Partial<TrajectoryFact> = {}): TrajectoryFact {
+  return {
+    kind: "model.completed",
+    causal_iteration: 1,
+    causal_phase: "model_result",
+    causal_ordinal: 0,
+    status: "completed",
+    capability_preview: "researcher",
+    ...overrides,
   };
 }
 
@@ -24,227 +73,48 @@ beforeEach(() => {
   vi.mocked(agentApi.getLoopTrajectory).mockReset();
 });
 
-describe("TaskStory — decide verdict surfacing", () => {
-  it("renders a decide step as a verdict chip + visible reason", async () => {
+describe("TaskStory — tool call narrative (no verdict content)", () => {
+  it("renders a decide tool call generically — no action/reason content available", async () => {
+    // beta.160: the trajectory fact log carries only tool_preview (the
+    // tool name), never tool_arguments — so `decide` gets no special
+    // verdict-chip treatment any more. This is a documented product
+    // regression (see TaskStory.svelte's header comment).
     vi.mocked(agentApi.getLoopTrajectory).mockResolvedValue(
       trajectory([
-        {
-          step_type: "tool_call",
-          timestamp: "2026-06-06T00:00:01Z",
-          tool_name: "decide",
-          tool_arguments: {
-            action: "propose",
-            reason: "Baseline captured at 1.20s. Beginning the iteration loop.",
-          },
-          capability: "coordinator",
-        },
+        toolFact({ tool_preview: "decide", capability_preview: "coordinator" }),
       ]),
     );
 
     render(TaskStory, { props: { loopId: "loop-1" } });
 
-    const verdict = await screen.findByTestId("story-verdict");
-    expect(verdict).toHaveAttribute("data-verdict-tone", "route");
-    expect(within(verdict).getByTestId("verdict-chip").textContent).toBe(
-      "Propose",
-    );
-    expect(within(verdict).getByTestId("verdict-reason").textContent).toContain(
-      "Baseline captured at 1.20s",
-    );
-    // The reason is always visible — not behind an expand toggle.
-    expect(within(verdict).queryByRole("button")).toBeNull();
-  });
-
-  it("tones an approval verdict green (approve)", async () => {
-    vi.mocked(agentApi.getLoopTrajectory).mockResolvedValue(
-      trajectory([
-        {
-          step_type: "tool_call",
-          timestamp: "2026-06-06T00:00:01Z",
-          tool_name: "decide",
-          tool_arguments: { action: "approved", reason: "Checklist met." },
-          capability: "reviewer",
-        },
-      ]),
-    );
-
-    render(TaskStory, { props: { loopId: "loop-1" } });
-
-    const verdict = await screen.findByTestId("story-verdict");
-    expect(verdict).toHaveAttribute("data-verdict-tone", "approve");
-    expect(within(verdict).getByTestId("verdict-chip").textContent).toBe(
-      "Approved",
-    );
-  });
-
-  it("tones a rejection verdict red (reject)", async () => {
-    vi.mocked(agentApi.getLoopTrajectory).mockResolvedValue(
-      trajectory([
-        {
-          step_type: "tool_call",
-          timestamp: "2026-06-06T00:00:01Z",
-          tool_name: "decide",
-          tool_arguments: { action: "rejected", reason: "Missing evidence." },
-          capability: "reviewer",
-        },
-      ]),
-    );
-
-    render(TaskStory, { props: { loopId: "loop-1" } });
-
-    const verdict = await screen.findByTestId("story-verdict");
-    expect(verdict).toHaveAttribute("data-verdict-tone", "reject");
-  });
-
-  it("surfaces CBG approved as the final gate", async () => {
-    vi.mocked(agentApi.getLoopTrajectory).mockResolvedValue(
-      trajectory([
-        {
-          step_type: "tool_call",
-          timestamp: "2026-06-06T00:00:01Z",
-          tool_name: "decide",
-          tool_arguments: {
-            action: "approved",
-            reason:
-              "Integration gate `task test` passed and diff stayed in scope.",
-          },
-          capability: "reviewer-dev-via-test",
-        },
-      ]),
-    );
-
-    render(TaskStory, { props: { loopId: "loop-1" } });
-
-    const verdict = await screen.findByTestId("story-verdict");
-    expect(verdict).toHaveAttribute("data-gate", "cbg-final");
-    expect(verdict).toHaveAttribute("data-verdict-tone", "approve");
-    expect(
-      within(verdict).getByTestId("cbg-final-gate-label"),
-    ).toHaveTextContent("Final Review Gate");
-    expect(
-      within(verdict).getByText("Final Review Gate passed"),
-    ).toBeInTheDocument();
-    expect(within(verdict).getByTestId("verdict-reason")).toHaveTextContent(
-      "Integration gate",
-    );
-  });
-
-  it("surfaces CBG rejected retry with target task and visible evidence", async () => {
-    vi.mocked(agentApi.getLoopTrajectory).mockResolvedValue(
-      trajectory([
-        {
-          step_type: "tool_call",
-          timestamp: "2026-06-06T00:00:01Z",
-          tool_name: "decide",
-          tool_arguments: {
-            action: "rejected_retry",
-            subtopics: ["task-2"],
-            reason:
-              "Diff violates target scope; move the parser fix back under `mavlink/`.",
-          },
-          capability: "reviewer-dev-via-test",
-        },
-      ]),
-    );
-
-    render(TaskStory, { props: { loopId: "loop-1" } });
-
-    const verdict = await screen.findByTestId("story-verdict");
-    expect(verdict).toHaveAttribute("data-gate", "cbg-final");
-    expect(verdict).toHaveAttribute("data-verdict-tone", "reject");
-    expect(within(verdict).getByTestId("verdict-chip")).toHaveTextContent(
-      "Rejected retry",
-    );
-    expect(
-      within(verdict).getByText("Final Review Gate requested retry"),
-    ).toBeInTheDocument();
-    expect(within(verdict).getByTestId("cbg-target-task")).toHaveTextContent(
-      "Target task-2",
-    );
-    expect(within(verdict).getByTestId("verdict-reason")).toHaveTextContent(
-      "Diff violates target scope",
-    );
-  });
-
-  it("renders markdown inside a verdict reason", async () => {
-    vi.mocked(agentApi.getLoopTrajectory).mockResolvedValue(
-      trajectory([
-        {
-          step_type: "tool_call",
-          timestamp: "2026-06-06T00:00:01Z",
-          tool_name: "decide",
-          tool_arguments: {
-            action: "respond_direct",
-            reason: "Optimized `go test` by **29%**.",
-          },
-          capability: "coordinator",
-        },
-      ]),
-    );
-
-    render(TaskStory, { props: { loopId: "loop-1" } });
-
-    const reason = await screen.findByTestId("verdict-reason");
-    expect(reason.querySelector("code")?.textContent).toBe("go test");
-    expect(reason.querySelector("strong")?.textContent).toBe("29%");
-  });
-
-  it("does not render an empty reason block when reason is absent", async () => {
-    vi.mocked(agentApi.getLoopTrajectory).mockResolvedValue(
-      trajectory([
-        {
-          step_type: "tool_call",
-          timestamp: "2026-06-06T00:00:01Z",
-          tool_name: "decide",
-          tool_arguments: { action: "gather" },
-          capability: "coordinator",
-        },
-      ]),
-    );
-
-    render(TaskStory, { props: { loopId: "loop-1" } });
-
-    await screen.findByTestId("story-verdict");
-    expect(screen.queryByTestId("verdict-reason")).toBeNull();
-  });
-});
-
-describe("TaskStory — model prose markdown", () => {
-  it("renders an expanded model response as markdown", async () => {
-    vi.mocked(agentApi.getLoopTrajectory).mockResolvedValue(
-      trajectory([
-        {
-          step_type: "model_call",
-          timestamp: "2026-06-06T00:00:01Z",
-          request_id: "req-1",
-          response: "## Summary\n\nDone with `bash` and a **kept** change.",
-          capability: "researcher",
-        },
-      ]),
-    );
-
-    render(TaskStory, { props: { loopId: "loop-1" } });
-
-    // Expand the step to reveal its payload.
     const step = await screen.findByTestId("story-step");
-    await userEvent.click(within(step).getByRole("button"));
-
-    const payload = await screen.findByTestId("story-step-payload");
-    expect(payload.querySelector("h4.md-h")?.textContent).toBe("Summary");
-    expect(payload.querySelector("code")?.textContent).toBe("bash");
-    expect(payload.querySelector("strong")?.textContent).toBe("kept");
+    expect(step).toHaveTextContent("Coordinator used decide");
+    expect(screen.queryByTestId("story-verdict")).toBeNull();
   });
 
-  it("escapes HTML in a model response (no raw markup)", async () => {
+  it("renders a failed tool call with the failed headline and error preview", async () => {
     vi.mocked(agentApi.getLoopTrajectory).mockResolvedValue(
       trajectory([
-        {
-          step_type: "model_call",
-          timestamp: "2026-06-06T00:00:01Z",
-          request_id: "req-1",
-          response: "<script>alert(1)</script>",
-          capability: "researcher",
-        },
+        toolFact({
+          tool_preview: "bash",
+          status: "failed",
+          error_category: "tool",
+          capability_preview: "researcher",
+        }),
+      ]),
+    );
+
+    render(TaskStory, { props: { loopId: "loop-1" } });
+
+    const step = await screen.findByTestId("story-step");
+    expect(step).toHaveTextContent("Researcher tried bash — failed");
+    expect(step).toHaveTextContent("error: tool");
+  });
+
+  it("expanding a step shows the fact's metadata as JSON, not fabricated content", async () => {
+    vi.mocked(agentApi.getLoopTrajectory).mockResolvedValue(
+      trajectory([
+        toolFact({ tool_preview: "bash", attempt_id: "attempt-1" }),
       ]),
     );
 
@@ -254,87 +124,250 @@ describe("TaskStory — model prose markdown", () => {
     await userEvent.click(within(step).getByRole("button"));
 
     const payload = await screen.findByTestId("story-step-payload");
-    expect(payload.querySelector("script")).toBeNull();
-    expect(payload.textContent).toContain("<script>alert(1)</script>");
+    expect(payload.textContent).toContain('"tool_preview": "bash"');
+    expect(payload.textContent).toContain('"attempt_id": "attempt-1"');
   });
 });
 
-describe("TaskStory — non-decide tool calls keep generic rendering", () => {
-  it("renders a non-decide tool call as an expandable step, not a verdict", async () => {
+describe("TaskStory — model call narrative", () => {
+  it("renders 'replied' when the model call issued no tool calls", async () => {
+    vi.mocked(agentApi.getLoopTrajectory).mockResolvedValue(
+      trajectory([
+        modelFact({
+          tool_count: 0,
+          model_preview: "gemini-2.5-flash",
+          provider_preview: "google",
+        }),
+      ]),
+    );
+
+    render(TaskStory, { props: { loopId: "loop-1" } });
+
+    const step = await screen.findByTestId("story-step");
+    expect(step).toHaveTextContent("Researcher replied");
+    expect(step).toHaveTextContent("gemini-2.5-flash · google");
+  });
+
+  it("renders 'reasoned' when the model call issued tool calls", async () => {
+    vi.mocked(agentApi.getLoopTrajectory).mockResolvedValue(
+      trajectory([modelFact({ tool_count: 2 })]),
+    );
+
+    render(TaskStory, { props: { loopId: "loop-1" } });
+
+    const step = await screen.findByTestId("story-step");
+    expect(step).toHaveTextContent("Researcher reasoned");
+  });
+
+  it("renders a failed model call distinctly", async () => {
+    vi.mocked(agentApi.getLoopTrajectory).mockResolvedValue(
+      trajectory([modelFact({ status: "failed", error_category: "model" })]),
+    );
+
+    render(TaskStory, { props: { loopId: "loop-1" } });
+
+    const step = await screen.findByTestId("story-step");
+    expect(step).toHaveTextContent("Researcher model call failed");
+  });
+
+  it("shows duration and token meta on a step", async () => {
+    vi.mocked(agentApi.getLoopTrajectory).mockResolvedValue(
+      trajectory([modelFact({ elapsed_ms: 842, tokens_in: 120, tokens_out: 40 })]),
+    );
+
+    render(TaskStory, { props: { loopId: "loop-1" } });
+
+    const step = await screen.findByTestId("story-step");
+    expect(step).toHaveTextContent("842ms");
+    expect(step).toHaveTextContent("160 tokens");
+  });
+});
+
+describe("TaskStory — context compaction", () => {
+  it("renders a context-compacted marker", async () => {
     vi.mocked(agentApi.getLoopTrajectory).mockResolvedValue(
       trajectory([
         {
-          step_type: "tool_call",
-          timestamp: "2026-06-06T00:00:01Z",
-          tool_name: "bash",
-          tool_arguments: { command: "go test ./..." },
-          tool_status: "success",
-          capability: "researcher",
+          kind: "context.compacted",
+          causal_iteration: 2,
+          causal_phase: "compaction",
+          causal_ordinal: 0,
         },
       ]),
     );
+
+    render(TaskStory, { props: { loopId: "loop-1" } });
+
+    const step = await screen.findByTestId("story-step");
+    expect(step).toHaveTextContent("Context compacted");
+  });
+});
+
+describe("TaskStory — facts that don't get a narrative row", () => {
+  it("does not render loop.started, *.requested, or loop.terminal as list rows", async () => {
+    vi.mocked(agentApi.getLoopTrajectory).mockResolvedValue(
+      trajectory(
+        [
+          {
+            kind: "loop.started",
+            causal_iteration: 0,
+            causal_phase: "loop_start",
+            causal_ordinal: 0,
+            capability_preview: "coordinator",
+          },
+          {
+            kind: "model.requested",
+            causal_iteration: 1,
+            causal_phase: "model_request",
+            causal_ordinal: 0,
+          },
+          toolFact({ tool_preview: "bash" }),
+          {
+            kind: "loop.terminal",
+            causal_iteration: 1,
+            causal_phase: "terminal",
+            causal_ordinal: 0,
+            status: "completed",
+            elapsed_ms: 900,
+          },
+        ],
+        { terminal_observed: true },
+      ),
+    );
+
+    render(TaskStory, { props: { loopId: "loop-1" } });
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId("story-step")).toHaveLength(1);
+    });
+    expect(screen.getByTestId("story-step")).toHaveTextContent("used bash");
+  });
+});
+
+describe("TaskStory — empty and error states", () => {
+  it("shows 'No steps recorded yet' when there are no narrative facts", async () => {
+    vi.mocked(agentApi.getLoopTrajectory).mockResolvedValue(trajectory([]));
 
     render(TaskStory, { props: { loopId: "loop-1" } });
 
     await waitFor(() =>
-      expect(screen.getByTestId("story-step")).toBeInTheDocument(),
+      expect(screen.getByText("No steps recorded yet.")).toBeInTheDocument(),
     );
-    expect(screen.queryByTestId("story-verdict")).toBeNull();
   });
-});
 
-describe("TaskStory — proof-readiness artifacts", () => {
-  it("renders analyze_proof_readiness as structured proof cards", async () => {
-    vi.mocked(agentApi.getLoopTrajectory).mockResolvedValue(
-      trajectory([
-        {
-          step_type: "tool_call",
-          timestamp: "2026-06-06T00:00:01Z",
-          tool_name: "analyze_proof_readiness",
-          tool_arguments: {},
-          tool_result: JSON.stringify({
-            status: "failed",
-            finding_count: 1,
-            findings: [
-              {
-                kind: "missing_proof_dependency",
-                route: "test_harness",
-                dependency: "px4_sitl.boots",
-                reason: "required proof dependency is not ready",
-              },
-            ],
-            proof_facts: {
-              dependencies: [
-                {
-                  id: "px4_sitl.boots",
-                  status: "missing",
-                  description: "PX4 SITL boots headlessly",
-                },
-              ],
-              readiness: [],
-              evidence: [],
-              waivers: [],
-            },
-          }),
-          tool_status: "success",
-          capability: "coordinator",
-        },
-      ]),
+  it("shows an error banner when the fetch genuinely fails", async () => {
+    vi.mocked(agentApi.getLoopTrajectory).mockRejectedValue(
+      new Error("Network error"),
     );
 
     render(TaskStory, { props: { loopId: "loop-1" } });
 
-    const step = await screen.findByTestId("story-step");
-    await userEvent.click(within(step).getByRole("button"));
+    const error = await screen.findByTestId("story-error");
+    expect(error).toHaveTextContent("Network error");
+  });
+});
 
-    expect(
-      await screen.findByTestId("proof-readiness-card"),
-    ).toBeInTheDocument();
-    expect(screen.getByTestId("proof-dependencies-card")).toHaveTextContent(
-      "px4_sitl.boots",
+describe("TaskStory — closing banner", () => {
+  it("renders the outcome, duration, and total tokens once the loop.terminal fact is observed", async () => {
+    vi.mocked(agentApi.getLoopTrajectory).mockResolvedValue(
+      trajectory(
+        [
+          toolFact({ tool_preview: "bash" }),
+          {
+            kind: "loop.terminal",
+            causal_iteration: 3,
+            causal_phase: "terminal",
+            causal_ordinal: 0,
+            status: "completed",
+            elapsed_ms: 5230,
+          },
+        ],
+        {
+          terminal_observed: true,
+          observed_totals: {
+            facts: 2,
+            tokens_in: 300,
+            tokens_out: 100,
+            elapsed_ms: 5230,
+            message_count: 0,
+            tool_count: 1,
+            url_count: 0,
+            model_requests: 0,
+            model_completions: 0,
+            tool_requests: 1,
+            tool_completions: 1,
+            context_compactions: 0,
+            terminal_observations: 1,
+            requested_observations: 0,
+            completed_observations: 2,
+            failed_observations: 0,
+            cancelled_observations: 0,
+          },
+        },
+      ),
     );
-    expect(screen.getByTestId("proof-dependencies-card")).toHaveTextContent(
-      "PX4 SITL boots headlessly",
+
+    render(TaskStory, { props: { loopId: "loop-1" } });
+
+    const done = await screen.findByTestId("story-line-done");
+    expect(done).toHaveTextContent("Done");
+    expect(done).toHaveTextContent("5.23s");
+    expect(done).toHaveTextContent("400 tokens");
+  });
+
+  it("does not render the closing banner before the terminal fact is observed", async () => {
+    vi.mocked(agentApi.getLoopTrajectory).mockResolvedValue(
+      trajectory([toolFact({ tool_preview: "bash" })]),
     );
+
+    render(TaskStory, { props: { loopId: "loop-1" } });
+
+    await screen.findByTestId("story-step");
+    expect(screen.queryByTestId("story-line-done")).toBeNull();
+  });
+
+  it("labels a failed terminal outcome", async () => {
+    vi.mocked(agentApi.getLoopTrajectory).mockResolvedValue(
+      trajectory(
+        [
+          {
+            kind: "loop.terminal",
+            causal_iteration: 1,
+            causal_phase: "terminal",
+            causal_ordinal: 0,
+            status: "failed",
+            elapsed_ms: 100,
+          },
+        ],
+        { terminal_observed: true },
+      ),
+    );
+
+    render(TaskStory, { props: { loopId: "loop-1" } });
+
+    const done = await screen.findByTestId("story-line-done");
+    expect(done).toHaveTextContent("Failed");
+  });
+});
+
+describe("TaskStory — 'You asked' line", () => {
+  it("renders the prompt when provided", async () => {
+    vi.mocked(agentApi.getLoopTrajectory).mockResolvedValue(trajectory([]));
+
+    render(TaskStory, { props: { loopId: "loop-1", prompt: "compare mqtt vs nats" } });
+
+    const asked = await screen.findByTestId("story-line-asked");
+    expect(asked).toHaveTextContent("compare mqtt vs nats");
+  });
+
+  it("does not render the line when prompt is absent", async () => {
+    vi.mocked(agentApi.getLoopTrajectory).mockResolvedValue(trajectory([]));
+
+    render(TaskStory, { props: { loopId: "loop-1" } });
+
+    await waitFor(() =>
+      expect(screen.getByTestId("task-story")).toBeInTheDocument(),
+    );
+    expect(screen.queryByTestId("story-line-asked")).toBeNull();
   });
 });

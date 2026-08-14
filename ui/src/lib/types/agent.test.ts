@@ -11,8 +11,8 @@ import {
   type LoopUpdateEvent,
   type SignalRequest,
   type SignalResponse,
-  type TrajectoryEntry,
-  type TrajectoryToolCall,
+  type LoopTrajectory,
+  type TrajectoryFact,
   type WireActivityEnvelope,
 } from "$lib/types/agent";
 
@@ -184,60 +184,116 @@ describe("SignalResponse", () => {
 });
 
 // ---------------------------------------------------------------------------
-// TrajectoryEntry / TrajectoryToolCall
+// LoopTrajectory / TrajectoryFact — the beta.160 GraphQL trajectory shape.
+// Field list verified against gateway/graph-gateway/component.go
+// (trajectoryTypeDef / trajectoryFactTypeDef) at v1.0.0-beta.160.
 // ---------------------------------------------------------------------------
 
-describe("TrajectoryEntry", () => {
-  it("has required fields", () => {
-    const entry: TrajectoryEntry = {
-      loop_id: "loop-1",
-      role: "architect",
-      iterations: 3,
-      outcome: "success",
-      duration_ms: 1500,
+function makeObservedTotals(): LoopTrajectory["observed_totals"] {
+  return {
+    facts: 2,
+    tokens_in: 100,
+    tokens_out: 50,
+    elapsed_ms: 1200,
+    message_count: 3,
+    tool_count: 1,
+    url_count: 0,
+    model_requests: 1,
+    model_completions: 1,
+    tool_requests: 1,
+    tool_completions: 1,
+    context_compactions: 0,
+    terminal_observations: 0,
+    requested_observations: 2,
+    completed_observations: 2,
+    failed_observations: 0,
+    cancelled_observations: 0,
+  };
+}
+
+describe("TrajectoryFact", () => {
+  it("has the required fact fields", () => {
+    const fact: TrajectoryFact = {
+      kind: "tool.completed",
+      causal_iteration: 1,
+      causal_phase: "tool_result",
+      causal_ordinal: 0,
+      status: "completed",
+      tool_preview: "decide",
+      capability_preview: "coordinator",
     };
 
-    expect(entry.loop_id).toBe("loop-1");
-    expect(entry.role).toBe("architect");
-    expect(entry.iterations).toBe(3);
-    expect(entry.outcome).toBe("success");
-    expect(entry.duration_ms).toBe(1500);
+    expect(fact.kind).toBe("tool.completed");
+    expect(fact.causal_iteration).toBe(1);
+    expect(fact.causal_phase).toBe("tool_result");
+    expect(fact.status).toBe("completed");
+    expect(fact.tool_preview).toBe("decide");
+    expect(fact.capability_preview).toBe("coordinator");
   });
 
-  it("token_usage is optional", () => {
-    const entry: TrajectoryEntry = {
-      loop_id: "loop-1",
-      role: "executor",
-      iterations: 1,
-      outcome: "complete",
-      duration_ms: 500,
-      token_usage: { input_tokens: 1000, output_tokens: 200 },
+  it("carries only a StorageReference pointer for evidence, never a body", () => {
+    const fact: TrajectoryFact = {
+      kind: "model.completed",
+      causal_iteration: 1,
+      causal_phase: "model_result",
+      causal_ordinal: 0,
+      evidence_capture: "stored",
+      evidence_size: 4096,
+      evidence: {
+        storage_instance: "message-store",
+        key: "2026/08/14/loop-1/req-1",
+        content_type: "application/json",
+        size: 4096,
+      },
     };
 
-    expect(entry.token_usage?.input_tokens).toBe(1000);
-    expect(entry.token_usage?.output_tokens).toBe(200);
+    expect(fact.evidence?.key).toBe("2026/08/14/loop-1/req-1");
+    expect(fact.evidence_capture).toBe("stored");
+    // No `response`/`arguments`/`result` field exists on TrajectoryFact —
+    // this is a type-level guarantee, verified by the fact that the object
+    // above type-checks without one.
+  });
+});
+
+describe("LoopTrajectory", () => {
+  it("has the required page fields", () => {
+    const trajectory: LoopTrajectory = {
+      schema_version: "v1",
+      loop_id: "loop-1",
+      coverage: "observed",
+      terminal_observed: true,
+      observed_totals: makeObservedTotals(),
+      facts: [
+        {
+          kind: "loop.terminal",
+          causal_iteration: 3,
+          causal_phase: "terminal",
+          causal_ordinal: 0,
+          status: "completed",
+          elapsed_ms: 5000,
+        },
+      ],
+    };
+
+    expect(trajectory.loop_id).toBe("loop-1");
+    expect(trajectory.coverage).toBe("observed");
+    expect(trajectory.terminal_observed).toBe(true);
+    expect(trajectory.observed_totals.tokens_in).toBe(100);
+    expect(trajectory.facts).toHaveLength(1);
+    expect(trajectory.facts[0].kind).toBe("loop.terminal");
   });
 
-  it("tool_calls is optional", () => {
-    const toolCall: TrajectoryToolCall = {
-      name: "graph_search",
-      args: { query: "drones" },
-      result: "found 5 entities",
-      duration_ms: 120,
-    };
-
-    const entry: TrajectoryEntry = {
+  it("next_cursor is optional — absent once fully drained", () => {
+    const trajectory: LoopTrajectory = {
+      schema_version: "v1",
       loop_id: "loop-1",
-      role: "executor",
-      iterations: 2,
-      outcome: "success",
-      duration_ms: 800,
-      tool_calls: [toolCall],
+      coverage: "observed",
+      terminal_observed: false,
+      observed_totals: makeObservedTotals(),
+      facts: [],
     };
 
-    expect(entry.tool_calls).toHaveLength(1);
-    expect(entry.tool_calls![0].name).toBe("graph_search");
-    expect(entry.tool_calls![0].result).toBe("found 5 entities");
+    expect(trajectory.next_cursor).toBeUndefined();
   });
 });
 
@@ -430,44 +486,5 @@ describe("extractCompletionPatch", () => {
     // that the main loop entry already has.
     expect(out?.patch).toEqual({ prompt: "hi" });
     expect(Object.keys(out?.patch ?? {})).toEqual(["prompt"]);
-  });
-});
-
-describe("TrajectoryToolCall", () => {
-  it("has required name and args", () => {
-    const tc: TrajectoryToolCall = {
-      name: "entity_lookup",
-      args: { id: "entity:person:alice:1" },
-    };
-
-    expect(tc.name).toBe("entity_lookup");
-    expect(tc.args).toEqual({ id: "entity:person:alice:1" });
-  });
-
-  it("result and error are optional", () => {
-    const success: TrajectoryToolCall = {
-      name: "graph_search",
-      args: {},
-      result: "ok",
-    };
-    expect(success.result).toBe("ok");
-    expect(success.error).toBeUndefined();
-
-    const failure: TrajectoryToolCall = {
-      name: "graph_search",
-      args: {},
-      error: "timeout",
-    };
-    expect(failure.error).toBe("timeout");
-    expect(failure.result).toBeUndefined();
-  });
-
-  it("duration_ms is optional", () => {
-    const tc: TrajectoryToolCall = {
-      name: "health_check",
-      args: {},
-      duration_ms: 50,
-    };
-    expect(tc.duration_ms).toBe(50);
   });
 });

@@ -188,17 +188,23 @@ describe("graphApi", () => {
 
   describe("getEntity", () => {
     it("should fetch single entity by ID", async () => {
+      // beta.160: entity(id:) returns ExactEntity { entity, kvRevision } —
+      // the revision-bearing exact read. getEntity unwraps the nested
+      // entity and drops kvRevision (the UI never does CAS reconciles).
       const mockResponse = {
         data: {
           entity: {
-            id: "c360.ops.robotics.gcs.drone.001",
-            triples: [
-              {
-                subject: "c360.ops.robotics.gcs.drone.001",
-                predicate: "core.property.name",
-                object: "Drone 001",
-              },
-            ],
+            entity: {
+              id: "c360.ops.robotics.gcs.drone.001",
+              triples: [
+                {
+                  subject: "c360.ops.robotics.gcs.drone.001",
+                  predicate: "core.property.name",
+                  object: "Drone 001",
+                },
+              ],
+            },
+            kvRevision: 7,
           },
         },
       };
@@ -225,13 +231,13 @@ describe("graphApi", () => {
         id: "c360.ops.robotics.gcs.drone.001",
       });
 
-      expect(result).toEqual(mockResponse.data.entity);
+      expect(result).toEqual(mockResponse.data.entity.entity);
     });
 
     it("should throw GraphApiError when entity not found", async () => {
       const mockResponse = {
         data: {
-          entity: null,
+          entity: { entity: null, kvRevision: 0 },
         },
       };
 
@@ -248,6 +254,22 @@ describe("graphApi", () => {
         expect((error as GraphApiError).message).toContain("not found");
         expect((error as GraphApiError).statusCode).toBe(404);
       }
+    });
+
+    it("should throw GraphApiError when entity is absent from the response entirely", async () => {
+      const mockResponse = { data: { entity: null } };
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockResponse,
+      });
+
+      await expect(
+        graphApi.getEntity("nonexistent.entity.id"),
+      ).rejects.toMatchObject({
+        name: "GraphApiError",
+        statusCode: 404,
+      });
     });
 
     it("should throw GraphApiError on network failure", async () => {
@@ -278,18 +300,24 @@ describe("graphApi", () => {
 
   describe("getEntitiesByPrefix", () => {
     it("should fetch entities matching prefix with limit", async () => {
+      // beta.160: entitiesByPrefix returns EntityPage { entities,
+      // next_cursor }. getEntitiesByPrefix fetches one page (`limit`
+      // matches — pre-160 behavior) and returns just the entities.
       const mockResponse = {
         data: {
-          entitiesByPrefix: [
-            {
-              id: "c360.ops.robotics.gcs.drone.001",
-              triples: [],
-            },
-            {
-              id: "c360.ops.robotics.gcs.drone.002",
-              triples: [],
-            },
-          ],
+          entitiesByPrefix: {
+            entities: [
+              {
+                id: "c360.ops.robotics.gcs.drone.001",
+                triples: [],
+              },
+              {
+                id: "c360.ops.robotics.gcs.drone.002",
+                triples: [],
+              },
+            ],
+            next_cursor: "",
+          },
         },
       };
 
@@ -317,13 +345,13 @@ describe("graphApi", () => {
         limit: 10,
       });
 
-      expect(result).toEqual(mockResponse.data.entitiesByPrefix);
+      expect(result).toEqual(mockResponse.data.entitiesByPrefix.entities);
     });
 
     it("should use default limit if not provided", async () => {
       const mockResponse = {
         data: {
-          entitiesByPrefix: [],
+          entitiesByPrefix: { entities: [], next_cursor: "" },
         },
       };
 
@@ -344,7 +372,24 @@ describe("graphApi", () => {
     it("should handle empty results", async () => {
       const mockResponse = {
         data: {
-          entitiesByPrefix: [],
+          entitiesByPrefix: { entities: [], next_cursor: "" },
+        },
+      };
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockResponse,
+      });
+
+      const result = await graphApi.getEntitiesByPrefix("nonexistent.prefix");
+
+      expect(result).toEqual([]);
+    });
+
+    it("should handle an absent entities array", async () => {
+      const mockResponse = {
+        data: {
+          entitiesByPrefix: { next_cursor: "" },
         },
       };
 

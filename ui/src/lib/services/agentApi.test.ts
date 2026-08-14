@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { agentApi, AgentApiError } from "./agentApi";
-import type { AgentLoop, TrajectoryEntry } from "$lib/types/agent";
+import type { AgentLoop, LoopTrajectory } from "$lib/types/agent";
 
 describe("agentApi", () => {
   const mockFetch = vi.fn();
@@ -32,16 +32,43 @@ describe("agentApi", () => {
     ...overrides,
   });
 
-  // Helper to create a mock TrajectoryEntry
-  const createMockTrajectory = (
-    overrides?: Partial<TrajectoryEntry>,
-  ): TrajectoryEntry => ({
+  // Helper to build a GraphQL trajectory page response body, matching the
+  // beta.160 wire shape (agentic.TrajectoryPage / the GraphQL Trajectory
+  // type). observed_totals defaults to zeros — tests override what they
+  // need.
+  const createMockTrajectoryPage = (
+    overrides?: Partial<LoopTrajectory>,
+  ): LoopTrajectory => ({
+    schema_version: "v1",
     loop_id: "loop-1",
-    role: "architect",
-    iterations: 5,
-    outcome: "success",
-    duration_ms: 12000,
+    coverage: "observed",
+    terminal_observed: false,
+    observed_totals: {
+      facts: 0,
+      tokens_in: 0,
+      tokens_out: 0,
+      elapsed_ms: 0,
+      message_count: 0,
+      tool_count: 0,
+      url_count: 0,
+      model_requests: 0,
+      model_completions: 0,
+      tool_requests: 0,
+      tool_completions: 0,
+      context_compactions: 0,
+      terminal_observations: 0,
+      requested_observations: 0,
+      completed_observations: 0,
+      failed_observations: 0,
+      cancelled_observations: 0,
+    },
+    facts: [],
     ...overrides,
+  });
+
+  const graphqlOk = (trajectory: LoopTrajectory) => ({
+    ok: true,
+    json: async () => ({ data: { trajectory } }),
   });
 
   // =========================================================================
@@ -503,82 +530,198 @@ describe("agentApi", () => {
   });
 
   // =========================================================================
-  // getTrajectories
+  // getTrajectory / getLoopTrajectory — GraphQL trajectory(loopId, limit,
+  // cursor) on graph-gateway (semstreams beta.160). Both names share the
+  // same underlying fetch/pagination path (fetchFullTrajectory).
   // =========================================================================
 
-  describe("getTrajectories", () => {
-    it("should GET /teams-loop/trajectories", async () => {
-      const trajectories = [
-        createMockTrajectory(),
-        createMockTrajectory({ loop_id: "loop-2" }),
-      ];
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => trajectories,
+  describe.each(["getTrajectory", "getLoopTrajectory"] as const)(
+    "%s",
+    (method) => {
+      it("POSTs a GraphQL trajectory query to /graphql", async () => {
+        const page = createMockTrajectoryPage({
+          facts: [
+            {
+              kind: "tool.completed",
+              causal_iteration: 1,
+              causal_phase: "tool_result",
+              causal_ordinal: 0,
+              status: "completed",
+              tool_preview: "decide",
+              capability_preview: "coordinator",
+            },
+          ],
+        });
+        mockFetch.mockResolvedValueOnce(graphqlOk(page));
+
+        const result = await agentApi[method]("loop-1");
+
+        expect(mockFetch).toHaveBeenCalledTimes(1);
+        const [url, init] = mockFetch.mock.calls[0];
+        expect(url).toBe("/graphql");
+        expect(init.method).toBe("POST");
+        expect(init.headers["Content-Type"]).toBe("application/json");
+        const body = JSON.parse(init.body);
+        expect(body.query).toContain("trajectory(loopId: $loopId");
+        expect(body.variables).toEqual({ loopId: "loop-1", limit: 100 });
+        expect(result).toEqual(page);
       });
 
-      const result = await agentApi.getTrajectories();
+      it("throws AgentApiError on a non-2xx HTTP response", async () => {
+        mockFetch.mockResolvedValueOnce({
+          ok: false,
+          status: 500,
+          statusText: "Internal Server Error",
+        });
 
-      expect(mockFetch).toHaveBeenCalledWith("/teams-loop/trajectories");
-      expect(result).toEqual(trajectories);
-    });
-
-    it("should throw AgentApiError on failure", async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        status: 500,
-        statusText: "Internal Server Error",
+        await expect(agentApi[method]("loop-1")).rejects.toMatchObject({
+          name: "AgentApiError",
+          statusCode: 500,
+        });
       });
 
-      try {
-        await agentApi.getTrajectories();
-        expect.fail("Should have thrown AgentApiError");
-      } catch (error) {
-        expect(error).toBeInstanceOf(AgentApiError);
-        expect((error as AgentApiError).statusCode).toBe(500);
-        expect((error as AgentApiError).message).toContain(
-          "Failed to get trajectories",
-        );
-      }
-    });
-  });
+      it("throws AgentApiError on a GraphQL errors[] envelope", async () => {
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            errors: [{ message: "boom: something went wrong" }],
+          }),
+        });
 
-  // =========================================================================
-  // getTrajectory
-  // =========================================================================
-
-  describe("getTrajectory", () => {
-    it("should GET /teams-loop/trajectories/:loopId", async () => {
-      const trajectory = createMockTrajectory();
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => trajectory,
+        await expect(agentApi[method]("loop-1")).rejects.toMatchObject({
+          name: "AgentApiError",
+          message: "boom: something went wrong",
+        });
       });
 
-      const result = await agentApi.getTrajectory("loop-1");
+      it("treats a 'trajectory not found' GraphQL error as an empty page, not a thrown error", async () => {
+        // The backend classifies "no facts recorded yet" as an
+        // invalid-request error (errTrajectoryNotFound), not an empty
+        // page. Surfacing that as an error banner would regress the
+        // common "task just started" case that the old REST endpoint
+        // handled by returning 200 with an empty step list.
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            errors: [
+              { message: "trajectory not found: trajectory not found" },
+            ],
+          }),
+        });
 
-      expect(mockFetch).toHaveBeenCalledWith(
-        "/teams-loop/trajectories/loop-1",
-      );
-      expect(result).toEqual(trajectory);
-    });
+        const result = await agentApi[method]("loop-fresh");
 
-    it("should throw AgentApiError on 404", async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        status: 404,
-        statusText: "Not Found",
+        expect(result.loop_id).toBe("loop-fresh");
+        expect(result.facts).toEqual([]);
+        expect(result.terminal_observed).toBe(false);
       });
 
-      try {
-        await agentApi.getTrajectory("nonexistent");
-        expect.fail("Should have thrown AgentApiError");
-      } catch (error) {
-        expect(error).toBeInstanceOf(AgentApiError);
-        expect((error as AgentApiError).statusCode).toBe(404);
-      }
-    });
-  });
+      it("walks next_cursor until the backend signals exhaustion", async () => {
+        const page1 = createMockTrajectoryPage({
+          facts: [
+            {
+              kind: "tool.completed",
+              causal_iteration: 1,
+              causal_phase: "tool_result",
+              causal_ordinal: 0,
+              tool_preview: "bash",
+            },
+          ],
+          observed_totals: {
+            ...createMockTrajectoryPage().observed_totals,
+            facts: 1,
+            tokens_in: 10,
+          },
+          next_cursor: "cursor-1",
+        });
+        const page2 = createMockTrajectoryPage({
+          facts: [
+            {
+              kind: "loop.terminal",
+              causal_iteration: 2,
+              causal_phase: "terminal",
+              causal_ordinal: 0,
+              status: "completed",
+            },
+          ],
+          terminal_observed: true,
+          observed_totals: {
+            ...createMockTrajectoryPage().observed_totals,
+            facts: 1,
+            tokens_in: 5,
+            terminal_observations: 1,
+          },
+        });
+        mockFetch
+          .mockResolvedValueOnce(graphqlOk(page1))
+          .mockResolvedValueOnce(graphqlOk(page2));
+
+        const result = await agentApi[method]("loop-1");
+
+        expect(mockFetch).toHaveBeenCalledTimes(2);
+        const secondBody = JSON.parse(mockFetch.mock.calls[1][1].body);
+        expect(secondBody.variables).toEqual({
+          loopId: "loop-1",
+          limit: 100,
+          cursor: "cursor-1",
+        });
+        expect(result.facts).toHaveLength(2);
+        expect(result.terminal_observed).toBe(true);
+        // observed_totals is page-scoped on the wire — merged totals sum
+        // both pages.
+        expect(result.observed_totals.tokens_in).toBe(15);
+        expect(result.next_cursor).toBeUndefined();
+      });
+
+      it("stops paginating and leaves next_cursor set if a cursor repeats", async () => {
+        const looping = createMockTrajectoryPage({
+          facts: [
+            {
+              kind: "tool.completed",
+              causal_iteration: 1,
+              causal_phase: "tool_result",
+              causal_ordinal: 0,
+            },
+          ],
+          next_cursor: "cursor-loop",
+        });
+        mockFetch
+          .mockResolvedValueOnce(graphqlOk(looping))
+          .mockResolvedValueOnce(graphqlOk(looping));
+
+        const result = await agentApi[method]("loop-1");
+
+        // First page fetched with no cursor, second with "cursor-loop";
+        // that page also claims next_cursor "cursor-loop" again — the
+        // cycle guard must stop instead of looping forever.
+        expect(mockFetch).toHaveBeenCalledTimes(2);
+        expect(result.facts).toHaveLength(2);
+        expect(result.next_cursor).toBe("cursor-loop");
+      });
+
+      it("stops paginating once the fact cap is reached, leaving next_cursor set", async () => {
+        // TRAJECTORY_FACT_CAP is 500 — a single page already at that size
+        // (with more available) must not trigger a second fetch.
+        const bigFact: LoopTrajectory["facts"][number] = {
+          kind: "tool.completed",
+          causal_iteration: 1,
+          causal_phase: "tool_result",
+          causal_ordinal: 0,
+        };
+        const cappedPage = createMockTrajectoryPage({
+          facts: Array.from({ length: 500 }, () => bigFact),
+          next_cursor: "cursor-more",
+        });
+        mockFetch.mockResolvedValueOnce(graphqlOk(cappedPage));
+
+        const result = await agentApi[method]("loop-1");
+
+        expect(mockFetch).toHaveBeenCalledTimes(1);
+        expect(result.facts).toHaveLength(500);
+        expect(result.next_cursor).toBe("cursor-more");
+      });
+    },
+  );
 
   // =========================================================================
   // AgentApiError class

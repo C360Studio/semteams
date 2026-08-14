@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { agentApi } from '$lib/services/agentApi';
-	import type { TrajectoryEntry } from '$lib/types/agent';
+	import type { LoopTrajectory, TrajectoryFact } from '$lib/types/agent';
 
 	interface Props {
 		loopId: string;
@@ -8,7 +8,7 @@
 
 	let { loopId }: Props = $props();
 
-	let trajectory = $state<TrajectoryEntry | null>(null);
+	let trajectory = $state<LoopTrajectory | null>(null);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 
@@ -27,6 +27,34 @@
 			loading = false;
 		}
 	}
+
+	// The loop's role isn't a top-level Trajectory field on the beta.160
+	// fact-log wire shape — it rides along on every completed fact's
+	// capability_preview. loop.started is recorded before any iteration,
+	// so it's the most reliable single source.
+	function deriveRole(facts: TrajectoryFact[]): string {
+		const started = facts.find((f) => f.kind === 'loop.started');
+		if (started?.capability_preview) return started.capability_preview;
+		const anyCompleted = facts.find((f) => f.capability_preview);
+		return anyCompleted?.capability_preview ?? '';
+	}
+
+	function terminalFact(facts: TrajectoryFact[]): TrajectoryFact | undefined {
+		return facts.find((f) => f.kind === 'loop.terminal');
+	}
+
+	const role = $derived(trajectory ? deriveRole(trajectory.facts) : '');
+	const terminal = $derived(trajectory ? terminalFact(trajectory.facts) : undefined);
+	const outcome = $derived(terminal?.status ?? '');
+	const durationMs = $derived(terminal?.elapsed_ms ?? 0);
+	const iterations = $derived(terminal?.causal_iteration ?? 0);
+	// Tool call arguments and results are not part of the trajectory fact
+	// log (privacy-bounded metadata only) — only the tool name preview,
+	// timing, and status survive. See ui/.claude regression notes on the
+	// beta.160 trajectory migration for what this component used to show.
+	const toolFacts = $derived(
+		trajectory ? trajectory.facts.filter((f) => f.kind === 'tool.completed') : [],
+	);
 </script>
 
 <div data-testid="trajectory-viewer" class="trajectory-viewer">
@@ -36,44 +64,36 @@
 		<div class="error" data-testid="trajectory-error">{error}</div>
 	{:else if trajectory}
 		<div class="trajectory-header">
-			<h3>{trajectory.role}</h3>
+			<h3>{role || 'agent'}</h3>
 			<div class="trajectory-meta">
-				<span class="outcome" data-testid="trajectory-outcome">{trajectory.outcome}</span>
-				<span class="duration">{trajectory.duration_ms}ms</span>
-				<span class="iterations">{trajectory.iterations} iterations</span>
+				<span class="outcome" data-testid="trajectory-outcome">{outcome || 'in progress'}</span>
+				<span class="duration">{durationMs}ms</span>
+				<span class="iterations">{iterations} iterations</span>
 			</div>
 		</div>
 
-		{#if trajectory.token_usage}
+		{#if trajectory.observed_totals.tokens_in > 0 || trajectory.observed_totals.tokens_out > 0}
 			<div class="token-usage" data-testid="token-usage">
-				<span>Input: {trajectory.token_usage.input_tokens.toLocaleString()} tokens</span>
-				<span>Output: {trajectory.token_usage.output_tokens.toLocaleString()} tokens</span>
+				<span>Input: {trajectory.observed_totals.tokens_in.toLocaleString()} tokens</span>
+				<span>Output: {trajectory.observed_totals.tokens_out.toLocaleString()} tokens</span>
 			</div>
 		{/if}
 
-		{#if trajectory.tool_calls && trajectory.tool_calls.length > 0}
+		{#if toolFacts.length > 0}
 			<div class="tool-calls" data-testid="tool-calls">
-				<h4>Tool Calls ({trajectory.tool_calls.length})</h4>
-				{#each trajectory.tool_calls as call, i (i)}
+				<h4>Tool Calls ({toolFacts.length})</h4>
+				{#each toolFacts as fact, i (fact.attempt_id ?? i)}
 					<div class="tool-call-entry" data-testid="tool-call-entry">
 						<div class="tool-call-header">
-							<span class="tool-name">{call.name}</span>
-							{#if call.duration_ms != null}
-								<span class="tool-duration">{call.duration_ms}ms</span>
+							<span class="tool-name">{fact.tool_preview ?? 'tool'}</span>
+							{#if fact.elapsed_ms != null}
+								<span class="tool-duration">{fact.elapsed_ms}ms</span>
 							{/if}
 						</div>
-						<details>
-							<summary>Arguments</summary>
-							<pre>{JSON.stringify(call.args, null, 2)}</pre>
-						</details>
-						{#if call.result}
-							<details>
-								<summary>Result</summary>
-								<pre>{call.result}</pre>
-							</details>
-						{/if}
-						{#if call.error}
-							<div class="tool-error" data-testid="tool-call-error">{call.error}</div>
+						{#if fact.status && fact.status !== 'completed'}
+							<div class="tool-error" data-testid="tool-call-error">
+								{fact.error_category ? `${fact.status} (${fact.error_category})` : fact.status}
+							</div>
 						{/if}
 					</div>
 				{/each}
@@ -188,33 +208,6 @@
 		color: var(--ui-text-tertiary);
 	}
 
-	details {
-		margin-top: 0.25rem;
-	}
-
-	summary {
-		font-size: 0.75rem;
-		color: var(--ui-text-tertiary);
-		cursor: pointer;
-		user-select: none;
-	}
-
-	summary:hover {
-		color: var(--ui-text-secondary);
-	}
-
-	pre {
-		margin: 0.25rem 0 0 0;
-		padding: 0.5rem;
-		background: var(--ui-surface-primary);
-		border-radius: 4px;
-		font-size: 0.75rem;
-		color: var(--ui-text-secondary);
-		overflow-x: auto;
-		white-space: pre-wrap;
-		word-break: break-word;
-	}
-
 	.tool-error {
 		margin-top: 0.25rem;
 		padding: 0.25rem 0.5rem;
@@ -222,5 +215,6 @@
 		color: var(--status-error, #ef4444);
 		background: var(--status-error-container, rgba(239, 68, 68, 0.15));
 		border-radius: 4px;
+		text-transform: capitalize;
 	}
 </style>
