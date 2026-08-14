@@ -101,6 +101,13 @@ func run() error {
 		return fmt.Errorf("load config: %w", err)
 	}
 
+	// Deliberate divergence from upstream cmd/semstreams/main.go step 3
+	// (ADR-029 mirror note): upstream additionally runs
+	// rulepackcap.ValidateConfig + graphresearch.ValidateConfig here.
+	// SemTeams composes its packs in component config (rules_files +
+	// projection_contracts) and wires no capability blocks, so both are
+	// structural no-ops — omitted rather than mirrored. Revisit if a
+	// capability block ever lands in a bootstrap.
 	if err := cfg.Validate(); err != nil {
 		return fmt.Errorf("invalid configuration: %w", err)
 	}
@@ -819,10 +826,11 @@ func ensureServiceManagerConfig(cfg *config.Config) {
 func ensureMetricsConfig(cfg *config.Config) {
 	if _, exists := cfg.Services["metrics"]; !exists {
 		slog.Debug("Adding default metrics config")
+		// beta.160 metrics service config is strict-decoded: port + path
+		// only (include_go_metrics retired).
 		defaultConfig := map[string]any{
-			"port":               9090,
-			"path":               "/metrics",
-			"include_go_metrics": true,
+			"port": 9090,
+			"path": "/metrics",
 		}
 		defaultConfigJSON, _ := json.Marshal(defaultConfig)
 		cfg.Services["metrics"] = types.ServiceConfig{
@@ -946,12 +954,13 @@ type agentRunSubstrate struct {
 	mutation  *projection.MutationClient
 }
 
-// builtinProjectionContracts declares the ADR-056 Decision-6 graph projection
-// contracts for the built-in agentic writers: spawn-identity origin predicates
-// are BirthPredicates on the loop-execution entity, the write_todos projection
-// is the replace-owned "todos" group, and the lesson-record contract covers the
-// agentic lesson writer. Registered through pkg/projection so the claim DERIVES
-// from the contract rather than a hand-maintained ownership slice (Decision 6).
+// builtinProjectionContracts declares the graph projection contracts for the
+// built-in agentic writers: spawn-identity origin predicates are
+// BirthPredicates on the loop-execution entity, the write_todos projection is
+// the reconcile-mode "todos" group (one agent.todo.record literal at
+// beta.160), and the lesson-record contract covers the agentic lesson writer.
+// (Historically ADR-056 Decision-6 ownership claims; beta.160 replaced
+// ownership with per-mutation projection-contract validation.)
 // Mirrors upstream internal/builtinprojection.Contracts() verbatim (the package
 // is internal, so per ADR-029 the product shell carries its own copy); a reader
 // diffing against upstream should treat it as the same declaration.
@@ -1025,46 +1034,10 @@ func configureAndCreateServices(
 		return fmt.Errorf("configure service manager: %w", err)
 	}
 
-	slog.Debug("Creating services from config", "count", len(cfg.Services))
-	for name, svcConfig := range cfg.Services {
-		if name == "service-manager" {
-			slog.Debug("Skipping service-manager (configured directly)")
-			continue
-		}
-
-		if err := createServiceIfEnabled(manager, name, svcConfig, svcDeps); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// createServiceIfEnabled creates a service if it's enabled and registered
-func createServiceIfEnabled(
-	manager *service.Manager,
-	name string,
-	svcConfig types.ServiceConfig,
-	svcDeps *service.Dependencies,
-) error {
-	slog.Debug("Processing service config", "key", name, "enabled", svcConfig.Enabled)
-
-	if !svcConfig.Enabled {
-		slog.Info("Service disabled in config", "name", name)
-		return nil
-	}
-
-	if !manager.HasConstructor(name) {
-		slog.Warn("Service configured but not registered", "key", name, "available_constructors", manager.ListConstructors())
-		return nil
-	}
-
-	slog.Debug("Creating service", "name", name, "has_constructor", true)
-	if _, err := manager.CreateService(name, svcConfig.Config, svcDeps); err != nil {
-		return fmt.Errorf("create service %s: %w", name, err)
-	}
-
-	slog.Info("Created service", "name", name)
+	// beta.160: ConfigureFromServices creates every enabled configured
+	// service itself — a second per-service CreateService loop (the
+	// pre-160 shape) double-registers and aborts boot. Mirrors upstream
+	// cmd/semstreams/main.go configureAndCreateServices (ADR-029).
 	return nil
 }
 

@@ -52,6 +52,6 @@
     "covers": "executing-flow coordinators carrying agent.run.entity-id via the loop-inherit chain (the anchor_inherit class): research recovery (research/06) + the autoresearch-baseline recovery branch (autoresearch/10) + the dev-via-test first-pass-Lisa needs_clarification recovery branch (dev-via-test/02f). NOT the post-approval wake-ups (research/07, autoresearch/08, dev-via-test/07a — those complete via rule 03 first). The lineage-anchor coordinators are rule 06's. ADR-053 4b-1a closed the former deferral — the run-entity-descended recovery coordinators now thread lineage and route to rule 06. Boundary pinned by TestAgentRunPack_CoordinatorSpawnCoverage.",
     "anchor_fence": "agent.lineage.run-loop-entity-id length_eq 0 makes this mutually exclusive with rule 06 (length_gt 0), so a coordinator carrying both anchors (dev-via-test 02b/05 wake-ups) routes to 06 and is never double-stamped. Same fence as dev-via-test 02 vs 02g.",
     "run_less_chat_guard": "agent.run.entity-id != \"\" — a plain-chat coordinator has no run anchor and must not stamp a phantom failed marker.",
-    "d3_boundary": "D3 (upstream MilestoneSubscriber) owns dispatched-phase root failures; this rule owns executing-phase coordinator failures. Disjoint by phase — no double-fire."
+    "d3_boundary": "Rule 04b (dispatched->failed, the product-owned replacement for the beta.160-deleted upstream D3 guard) consumes this rule's stamp for dispatched-phase root failures; rule 04 consumes it for executing-phase failures. Disjoint by phase — no double-fire."
   }
 }

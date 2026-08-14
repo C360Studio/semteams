@@ -12,19 +12,30 @@
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 
+	// Request-race guard (same pattern as TaskStory/RunEvidencePanel): a
+	// stale in-flight response for a previous loopId must not overwrite
+	// the currently requested loop's data under out-of-order resolution.
+	let requestSeq = 0;
+
 	$effect(() => {
 		loadTrajectory(loopId);
 	});
 
 	async function loadTrajectory(id: string) {
+		const requestId = ++requestSeq;
 		loading = true;
 		error = null;
 		try {
-			trajectory = await agentApi.getTrajectory(id);
+			const next = await agentApi.getTrajectory(id);
+			if (requestId !== requestSeq || id !== loopId) return;
+			trajectory = next;
 		} catch (e) {
+			if (requestId !== requestSeq || id !== loopId) return;
 			error = e instanceof Error ? e.message : 'Failed to load trajectory';
 		} finally {
-			loading = false;
+			if (requestId === requestSeq) {
+				loading = false;
+			}
 		}
 	}
 

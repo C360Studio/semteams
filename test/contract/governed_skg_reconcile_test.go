@@ -10,19 +10,21 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Governed-SKG replace_owned migration (ADR-056 #278 / semstreams beta.110).
+// Rule-pack projection reconcile fences (beta.160 dialect; historically the
+// ADR-056 #278 replace_owned lane through beta.159).
 //
-// These pins guard the rule-pack projection-ownership adoption: the substrate
-// rule processor declares pack_id "semteams" + a replace-owned projection
+// These pins guard the rule-pack projection adoption: the substrate rule
+// processor declares pack_id "semteams" + a reconcile-mode projection
 // contract, and the autoresearch single-valued scalar-replace rules
-// (best.value / best.experiment_id / run.status) write via the owned
-// `replace_owned` lane whose predicate set falls INSIDE that contract.
+// (best.value / best.experiment_id / run.status) write via the
+// `reconcile_predicates` lane whose predicate set falls INSIDE that contract.
 //
-// Why this is a structural gate and not a comment: the framework's rule loader
-// (processor/rule/rule_loader.go validateRuleReplaceOwnedActions) HARD-FAILS
-// boot when a replace_owned action names a predicate outside the pack's declared
-// ModeReplaceOwned groups — a misconfigured envelope is a boot-abort, not a
-// degraded run. This test reproduces that envelope check over the committed
+// Why this is a structural gate and not a comment: the framework's boot-time
+// projection derivation (processor/rule/projection_derivation.go
+// validateProjectionActionSelectors + validateDeclaredProjectionSuperset)
+// HARD-FAILS boot when a reconcile_predicates action names a predicate outside
+// the pack's declared reconcile groups — a misconfigured envelope is a
+// boot-abort, not a degraded run. This test reproduces that envelope check over the committed
 // config so the drift surfaces in CI (and in a code review) rather than at
 // container start. It also reproduces the "predicate must be a literal" rule:
 // a `$`-bearing replace_owned predicate is rejected at load.

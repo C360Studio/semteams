@@ -56,20 +56,37 @@
 
   let trajectory = $state<LoopTrajectory | null>(null);
   let lastError = $state<string | null>(null);
-  let inFlight = false;
   let expanded = new SvelteSet<number>();
   let showRaw = $state(false);
 
+  // Request-race guard (same pattern as RunEvidencePanel): TaskDetailPanel
+  // switches focusedLoopId without remounting this component, so a slow
+  // response for the previous loop must never overwrite the current loop's
+  // story, and a loop switch must never be dropped behind an in-flight fetch.
+  let requestSeq = 0;
+  let displayedLoopId: string | null = null;
+
   async function refresh() {
-    if (inFlight) return;
-    inFlight = true;
+    const requestedLoopId = loopId;
+    const requestId = ++requestSeq;
+    if (displayedLoopId !== requestedLoopId) {
+      trajectory = null;
+      lastError = null;
+      expanded.clear();
+      displayedLoopId = requestedLoopId;
+    }
     try {
-      trajectory = await agentApi.getLoopTrajectory(loopId);
+      const next = await agentApi.getLoopTrajectory(requestedLoopId);
+      if (requestId !== requestSeq || requestedLoopId !== loopId) {
+        return;
+      }
+      trajectory = next;
       lastError = null;
     } catch (err) {
+      if (requestId !== requestSeq || requestedLoopId !== loopId) {
+        return;
+      }
       lastError = err instanceof Error ? err.message : String(err);
-    } finally {
-      inFlight = false;
     }
   }
 

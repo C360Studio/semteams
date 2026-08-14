@@ -45,6 +45,6 @@
     "joins_with": "04-executing-to-failed.json (consumes the marker) + 05-coordinator-failed-run-anchor.json (the agent.run.entity-id sibling).",
     "covers": "the lineage-threading coordinators: (1) the dev-via-test intermediate/escalate coordinators 02b + 05 (carry both anchors, routed here by the length_gt 0 fence) and 02d/07d (spawned FROM the run entity, carry only lineage); (2) the run-entity-descended ask_user/needs_clarification recovery coordinators that ADR-053 4b-1a wired to thread agent.lineage.run-loop-entity-id — autoresearch/10b and dev-via-test 02e, 02f-replan, 07b, 07e (the former deferred_4b set). The anchor_inherit recovery coordinators (research/06, autoresearch/10 baseline, dev-via-test/02f first-pass) route to sibling rule 05. Boundary pinned by TestAgentRunPack_CoordinatorSpawnCoverage.",
     "anchor_fence": "agent.lineage.run-loop-entity-id length_gt 0 — mutually exclusive with rule 05 (length_eq 0). The lineage presence is itself the run-less-chat guard.",
-    "d3_boundary": "Same as rule 05: D3 owns dispatched-phase root failures; this owns executing-phase coordinator failures. Disjoint by phase."
+    "d3_boundary": "Same as rule 05: this rule stamps the failed marker; rules 04 (executing) and 04b (dispatched — beta.160 D3-guard replacement) consume it, disjoint by phase guard."
   }
 }

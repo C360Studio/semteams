@@ -168,6 +168,9 @@ func TestRunScopeMintPointsAndLifecycleTransitions(t *testing.T) {
 		"configs/rules/agent-run/02-dispatched-to-executing.json",
 		"configs/rules/agent-run/03-executing-to-completed.json",
 		"configs/rules/agent-run/04-executing-to-failed.json",
+		// beta.160: dispatched→failed — the product-owned replacement for
+		// the deleted upstream D3 zombie guard (observe-only subscriber).
+		"configs/rules/agent-run/04b-dispatched-to-failed.json",
 		"configs/rules/agent-run/09-executing-to-awaiting-on-clarification.json",
 		"configs/rules/agent-run/11-resume-awaiting-to-executing.json",
 		"configs/rules/agent-run/12-executing-to-awaiting-on-approval.json",

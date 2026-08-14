@@ -23,11 +23,11 @@ matches the marker and transitions.
 
 | File | Fires on | Does |
 |---|---|---|
-| `01-handoff-marker.json` | dispatch coordinator loop | On **confirmed handoff** (`rule.task.spawned` present — post-publish-success, NOT bare mint) stamps `agent.run.handoff` on the run entity. Publish-failure-safe: no handoff marker → run stays `dispatched` → D3 fails it. |
+| `01-handoff-marker.json` | dispatch coordinator loop | On **confirmed handoff** (`rule.task.spawned` present — post-publish-success, NOT bare mint) stamps `agent.run.handoff` on the run entity. Publish-failure-safe: no handoff marker → run stays `dispatched` → rules 05/06 stamp failed + rule 04b fails it (beta.160: the upstream D3 subscriber guard is deleted; the subscriber is observe-only). |
 | `02-dispatched-to-executing.json` | run entity | `agent.run.handoff` + `phase==dispatched` → `executing`. |
 | `03-executing-to-completed.json` | run entity | `agent.run.outcome==success` + `phase==executing` → `completed`. |
 | `04-executing-to-failed.json` | run entity | `agent.run.outcome==failed` + `phase==executing` → `failed`. The symmetric twin of `03`. (Phase 4a′.) |
-| `05-coordinator-failed-run-anchor.json` | coordinator loop | A coordinator that fails (`outcome in [failed,truncated]`) **while executing** and carries `agent.run.entity-id` (lineage absent) stamps `agent.run.outcome=failed` on the run entity. The zombie D3 can't catch (D3 fires only while `dispatched`). (Phase 4a′.) |
+| `05-coordinator-failed-run-anchor.json` | coordinator loop | A coordinator that fails (`outcome in [failed,truncated]`) **while executing** and carries `agent.run.entity-id` (lineage absent) stamps `agent.run.outcome=failed` on the run entity. The executing-phase zombie class (rule 04 consumes the stamp; dispatched-phase goes to rule 04b). (Phase 4a′.) |
 | `06-coordinator-failed-lineage-anchor.json` | coordinator loop | Same, for coordinators carrying `agent.lineage.run-loop-entity-id` (dev-via-test 02b/02d/05/07d + the 4b-1a threaded recovery coordinators autoresearch/10b, dev-via-test 02e/02f-replan/07b/07e) — fenced on `length_gt 0`, stamps via the lineage anchor. Mutually exclusive with `05`. (Phase 4a′ + 4b-1a.) |
 | `07-ask-user-pause-run-anchor.json` | coordinator loop | An in-run coordinator emitting `decide(ask_user)` and carrying `agent.run.entity-id` (lineage absent) stamps `agent.run.clarification-pending=$entity.instance` on the run entity. The interactive-pause marker, anchor branch 1. (Phase 4b-2.) |
 | `08-ask-user-pause-lineage-anchor.json` | coordinator loop | Same, for `decide(ask_user)` coordinators carrying `agent.lineage.run-loop-entity-id` (`length_gt 0`) — stamps via the lineage anchor. Mutually exclusive with `07`. (Phase 4b-2.) |

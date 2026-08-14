@@ -163,8 +163,7 @@
       "enabled": true,
       "config": {
         "port": 9090,
-        "path": "/metrics",
-        "include_go_metrics": true
+        "path": "/metrics"
       }
     },
     "message-logger": {
@@ -177,8 +176,7 @@
           "user.>",
           "graph.mutation.>",
           "discovery.>"
-        ],
-        "enable_kv_query": true
+        ]
       }
     },
     "log-forwarder": {
@@ -230,8 +228,7 @@
             }
           ]
         },
-        "enable_hierarchy": true,
-        "enforce_owner_lease": true
+        "enable_hierarchy": true
       }
     },
     "graph-query": {
@@ -256,9 +253,8 @@
           ],
           "outputs": []
         },
-        "request_timeout": "30s",
-        "max_traversal_depth": 5,
-        "max_traversal_nodes": 100
+        "query_timeout": "30s",
+        "max_depth": 5
       }
     },
     "rule": {
@@ -379,6 +375,7 @@
           "/app/configs/rules/agent-run/02-dispatched-to-executing.json",
           "/app/configs/rules/agent-run/03-executing-to-completed.json",
           "/app/configs/rules/agent-run/04-executing-to-failed.json",
+          "/app/configs/rules/agent-run/04b-dispatched-to-failed.json",
           "/app/configs/rules/agent-run/05-coordinator-failed-run-anchor.json",
           "/app/configs/rules/agent-run/06-coordinator-failed-lineage-anchor.json",
           "/app/configs/rules/agent-run/07-ask-user-pause-run-anchor.json",
@@ -742,6 +739,14 @@
         "mcp_path": "/mcp",
         "enable_playground": false,
         "query_timeout": 60000000000
+      }
+    },
+    "objectstore": {
+      "type": "storage",
+      "name": "objectstore",
+      "enabled": true,
+      "config": {
+        "bucket_name": "AGENT_CONTENT"
       }
     }
   }

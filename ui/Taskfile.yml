@@ -1202,10 +1202,15 @@ tasks:
           ls -la "${OUT_DIR}/" 2>/dev/null
           exit 0
         fi
-        # Per-loop trajectories. Best-effort: a single 404 doesn't abort the others.
+        # Per-loop trajectories via the GraphQL trajectory field (beta.160:
+        # the /teams-loop/trajectories HTTP endpoints are deleted; graph-gateway
+        # serves the sole public trajectory API). Best-effort: a single failure
+        # doesn't abort the others. Single page (limit 500) — evidence capture,
+        # not pagination-complete replay.
         jq -r '.[].loop_id' "${OUT_DIR}/loops.json" 2>/dev/null | while read -r LOOP_ID; do
           [ -n "$LOOP_ID" ] || continue
-          curl -sf "http://localhost:${PORT}/teams-loop/trajectories/${LOOP_ID}" \
+          jq -n --arg id "$LOOP_ID" '{query:"query($id:String!){trajectory(loopId:$id,limit:500){schema_version loop_id coverage terminal_observed observed_totals{facts tokens_in tokens_out} facts{kind causal_iteration causal_phase status tokens_in tokens_out model_preview tool_preview error_category observed_at} next_cursor}}",variables:{id:$id}}' \
+            | curl -sf -X POST -H 'Content-Type: application/json' -d @- "http://localhost:${PORT}/graphql" \
             > "${OUT_DIR}/trajectory-${LOOP_ID}.json" \
             || echo "warn: trajectory fetch failed for ${LOOP_ID}" >&2
         done
