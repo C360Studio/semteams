@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	semtypes "github.com/c360studio/semstreams/pkg/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -63,8 +64,11 @@ type ruleProcessorOwnershipConfig struct {
 // those blocks slip past CI and hard-fail boot in production — the exact failure
 // this test exists to prevent.
 type ownershipRuleJSON struct {
-	ID         string                `json:"id"`
-	Type       string                `json:"type"`
+	ID     string `json:"id"`
+	Type   string `json:"type"`
+	Entity struct {
+		Pattern string `json:"pattern"`
+	} `json:"entity"`
 	OnEnter    []ownershipActionJSON `json:"on_enter"`
 	OnExit     []ownershipActionJSON `json:"on_exit"`
 	WhileTrue  []ownershipActionJSON `json:"while_true"`
@@ -73,9 +77,12 @@ type ownershipRuleJSON struct {
 }
 
 type ownershipActionJSON struct {
-	ID        string `json:"id"`
-	Type      string `json:"type"`
-	Predicate string `json:"predicate"`
+	ID                 string `json:"id"`
+	Type               string `json:"type"`
+	Predicate          string `json:"predicate"`
+	Subject            string `json:"subject"`
+	ProjectionContract string `json:"projection_contract"`
+	ProjectionGroup    string `json:"projection_group"`
 }
 
 func (r ownershipRuleJSON) allActions() []ownershipActionJSON {
@@ -268,6 +275,142 @@ func TestReplaceOwned_MigratedRulesUseOwnedLane(t *testing.T) {
 				tg.file, tg.predicate, lane, lanes)
 		}
 	}
+}
+
+// TestReplaceOwned_ResolvedTargetsWithinContractScope mirrors the framework's
+// boot-time obligation validation (semstreams
+// processor/rule/projection_derivation.go validateDeclaredProjectionSuperset)
+// for every wired replace_owned action:
+//
+//  1. The named contract must be declared, hold the named group in
+//     replace-owned mode, and cover the action's predicate — upstream checks
+//     these for EVERY obligation, including dynamic-subject ones (go-reviewer
+//     C1: a projection_contract typo in 04a/b/c was CI-green, boot-dead).
+//  2. For statically resolved targets — subject ""/"$entity.id" (the firing
+//     entity, i.e. the rule's entity.pattern) or a literal entity ID — the
+//     contract's entity_pattern must CONTAIN the resolved target pattern.
+//     Dynamic $-template subjects (e.g. $entity.triple.agent.lineage.<key>)
+//     are unresolved at boot and exempt from containment ONLY, exactly as
+//     upstream's `if obligation.unresolved { continue }` skips just that step.
+//
+// The entity.pattern blanket sweep tripped step 2 live (2026-08-14): rule 05
+// fires on the run entity but declared *.*.*.*.*.*, which the contract scope
+// *.*.agent.chain.execution.* cannot contain — a boot-abort the structural
+// entity.pattern fence could not see. This is the go-test-speed pin for the
+// class.
+//
+// Intentional divergence from upstream: a firing-entity target on a
+// pattern-less rule is "unresolved" (containment-exempt) upstream, but here it
+// fails — TestWiredRulesDeclareEntityPattern already outlaws pattern-less
+// wired rules (the beta.159 silent-skip class), so the strictness is aligned;
+// do not "fix" this back to upstream's exemption.
+//
+// Auditing bootstrapLoadedRules (production's rules_files) against BOTH flow
+// configs' contracts is sound because TestBootstrapRuleListsMatch pins the two
+// rules_files lists identical.
+func TestReplaceOwned_ResolvedTargetsWithinContractScope(t *testing.T) {
+	type groupDecl struct {
+		mode       string
+		predicates []string
+	}
+	type contractDecl struct {
+		pattern string
+		groups  map[string]groupDecl
+	}
+	for _, flowPath := range []string{flowBootstrapPath, e2eFlowBootstrapPath} {
+		cfg := loadRuleProcessorOwnership(t, flowPath)
+		contracts := map[string]contractDecl{}
+		for _, c := range cfg.ProjectionContracts {
+			// Upstream hard-fails duplicate contract names before any
+			// containment runs; last-write-wins here would mask that.
+			_, dup := contracts[c.Name]
+			require.Falsef(t, dup,
+				"%s: duplicate projection contract %q — upstream boot-aborts on duplicates", flowPath, c.Name)
+			decl := contractDecl{pattern: c.EntityPattern, groups: map[string]groupDecl{}}
+			for _, g := range c.Groups {
+				decl.groups[g.Name] = groupDecl{mode: g.Mode, predicates: g.Predicates}
+			}
+			contracts[c.Name] = decl
+		}
+		var checked int
+		for _, path := range bootstrapLoadedRules(t) {
+			raw, err := os.ReadFile(path) //nolint:gosec // test-controlled config path
+			require.NoError(t, err, "read rule file %s", path)
+			var rule ownershipRuleJSON
+			require.NoErrorf(t, json.Unmarshal(raw, &rule), "unmarshal rule file %s", path)
+
+			for _, a := range rule.allActions() {
+				if a.Type != "replace_owned" {
+					continue
+				}
+				// Step 1 — contract/group/mode/predicate: EVERY obligation,
+				// dynamic subjects included (upstream lines 255-296).
+				c, ok := contracts[a.ProjectionContract]
+				require.Truef(t, ok,
+					"%s action %q: replace_owned references undeclared projection contract %q in %s — boot-abort",
+					path, a.ID, a.ProjectionContract, flowPath)
+				g, ok := c.groups[a.ProjectionGroup]
+				require.Truef(t, ok,
+					"%s action %q: contract %q does not cover projection group %q in %s — boot-abort",
+					path, a.ID, a.ProjectionContract, a.ProjectionGroup, flowPath)
+				require.Equalf(t, "replace-owned", g.mode,
+					"%s action %q: contract %q group %q uses mode %q, want replace-owned — boot-abort",
+					path, a.ID, a.ProjectionContract, a.ProjectionGroup, g.mode)
+				require.Containsf(t, g.predicates, a.Predicate,
+					"%s action %q: contract %q group %q does not cover predicate %q — boot-abort",
+					path, a.ID, a.ProjectionContract, a.ProjectionGroup, a.Predicate)
+
+				// Step 2 — containment for statically resolved targets only
+				// (upstream inferProjectionActionPattern + the containment
+				// check; dynamic $-subjects are exempt from THIS step only).
+				target := rule.Entity.Pattern
+				switch {
+				case a.Subject == "" || a.Subject == "$entity.id":
+					// firing entity — the rule's declared pattern
+				case strings.Contains(a.Subject, "$"):
+					continue
+				default:
+					// Literal subjects must be canonical entity IDs upstream
+					// (ValidateEntityID — no wildcards) before containment.
+					require.NoErrorf(t, semtypes.ValidateEntityID(a.Subject),
+						"%s action %q: literal replace_owned subject %q is not a canonical entity ID — boot-abort",
+						path, a.ID, a.Subject)
+					target = a.Subject
+				}
+				checked++
+				// Upstream validates both sides via ValidateEntityIDPattern
+				// (six canonical positions) before comparing — use the real
+				// validators, not a hand mirror.
+				require.NoErrorf(t, semtypes.ValidateEntityIDPattern(c.pattern),
+					"%s: contract %q entity_pattern %q is not a valid entity-ID pattern", flowPath, a.ProjectionContract, c.pattern)
+				require.NoErrorf(t, semtypes.ValidateEntityIDPattern(target),
+					"%s action %q: resolved target pattern %q is not a valid entity-ID pattern", path, a.ID, target)
+				require.Truef(t, patternContains(c.pattern, target),
+					"%s action %q: contract %q entity_pattern %q does not contain the resolved target pattern %q — "+
+						"this hard-fails rule load at boot. Narrow the rule's entity.pattern to the contract scope "+
+						"(or widen the contract).",
+					path, a.ID, a.ProjectionContract, c.pattern, target)
+			}
+		}
+		require.Positivef(t, checked,
+			"%s: no resolved-target replace_owned actions checked — fence is vacuous", flowPath)
+	}
+}
+
+// patternContains mirrors the segment comparison in semstreams
+// projectionPatternContains; both inputs are pre-validated with
+// semtypes.ValidateEntityIDPattern above, matching upstream's order.
+func patternContains(declared, derived string) bool {
+	dp, vp := strings.Split(declared, "."), strings.Split(derived, ".")
+	if len(dp) != len(vp) {
+		return false
+	}
+	for i := range dp {
+		if dp[i] != "*" && dp[i] != vp[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func keysOf(m map[string]struct{}) []string {
