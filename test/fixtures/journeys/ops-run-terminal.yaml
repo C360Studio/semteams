@@ -1,0 +1,174 @@
+name: ops-run-terminal
+description: |
+  Journey: ADR-027 ops agent, re-wired. One research chain runs to a
+  terminal run phase; the ops rule
+  (configs/rules/ops/01-run-terminal-observe.json) fires on the RUN
+  entity and spawns exactly one ops-chain-observer, which emits
+  diagnoses and terminates with decide(action="observed").
+
+  ROLE-KEYED fixture. The research portion is research-mvp's, unchanged
+  — this journey is about what happens AFTER the chain settles, so the
+  chain itself should be the known-good one.
+
+  The ops bucket differs from the one every other journey carries: those
+  serve a single decide(observed) because they only need the observer to
+  terminate cleanly and get out of the way. Here it emits two diagnoses
+  first, because the point is to prove emit_diagnosis actually mints
+  entities. That path was silently emitting nothing before upstream
+  gh#390 (it appended to an entity that was never born), and this is the
+  only place that failure class is visible.
+
+  Required config: configs/e2e-flow-bootstrap.json (ops rule wired).
+
+responses_by_role:
+
+  # ---------- coordinator (dispatch → research, then wake-up → respond_direct) ----------
+  - match: "Delegation rules"
+    responses:
+      - tool_call:
+          name: decide
+          arguments_json: |
+            {
+              "action": "research",
+              "reason": "The user is asking for a comparison of MQTT vs NATS for IoT edge deployments — a comparison-of-named-products question that benefits from evidence gathering rather than a small-talk reply. Routing to the research category so the research-pack arc can scope the synthesis."
+            }
+      - tool_call:
+          name: decide
+          arguments_json: |
+            {
+              "action": "respond_direct",
+              "reason": "For IoT edge deployments on constrained ARM devices, MQTT has the edge on raw latency and footprint (Mosquitto runs under 2MB resident; QoS 0 publishes complete in well under a millisecond on Raspberry Pi-class hardware). NATS wins when you need both pub/sub AND request-reply in the same broker — its subject hierarchy is more expressive and JetStream gives you persistence — but it costs ~30MB of resident memory which matters on the tightest devices. Pick MQTT if pub/sub alone is sufficient and memory is tight; pick NATS when the workload needs request-reply or you have >256MB RAM to spare. The full research artifact (actors, integration points, decision criteria) is captured in the chain entity for follow-up."
+            }
+
+  # ---------- researcher-research-plan (emit_plan → decide gather, N=1 subtopics) ----------
+  - match: "Emit the typed plan"
+    responses:
+      - tool_call:
+          name: emit_plan
+          arguments_json: |
+            {
+              "revision": 1,
+              "title": "MQTT vs NATS for IoT edge — research plan",
+              "goal": "Compare MQTT and NATS for IoT edge deployments — latency, footprint, and reliability characteristics on constrained ARM devices.",
+              "context": "Initial planning pass. N=1: a single gather probe covers the latency + footprint axes the synthesize pass needs to compose an answer the wake-up coordinator can deliver.",
+              "scope_in": [
+                "MQTT broker family (Mosquitto, EMQ X, HiveMQ) — protocol surface + QoS levels",
+                "NATS server family (NATS Core, JetStream) — subject hierarchy + persistence story",
+                "ARM-device benchmarks for both"
+              ],
+              "scope_out": [
+                "MQTT/NATS bridge implementations — out of scope for the comparison question",
+                "Cloud-only deployment patterns — user asked about edge"
+              ],
+              "epics": [
+                "E1 — Protocol surface: pub/sub vs request/reply, QoS levels, retained messages",
+                "E2 — Footprint: memory + binary size on constrained ARM (Raspberry Pi class)",
+                "E3 — Latency: round-trip benchmarks on constrained hardware"
+              ]
+            }
+      - tool_call:
+          name: decide
+          arguments_json: |
+            {
+              "action": "gather",
+              "subtopics": [
+                "MQTT vs NATS — latency + memory footprint on constrained ARM (Raspberry Pi class) edge devices"
+              ],
+              "reason": "Plan emitted. One gather probe covers the comparison's load-bearing axes (latency + footprint on constrained ARM); SYNTHESIZE will compose the answer the wake-up coordinator delivers to the user."
+            }
+
+  # ---------- researcher-research-gather (×1 from for_each) → decide synthesize ----------
+  - match: "You do NOT emit a research"
+    responses:
+      - tool_call:
+          name: decide
+          arguments_json: |
+            {
+              "action": "synthesize",
+              "reason": "Subtopic: MQTT vs NATS — latency + memory footprint on constrained ARM (Raspberry Pi class) edge devices\n\nEvidence gathered: MQTT (Mosquitto) runs under 2MB resident on Raspberry Pi-class hardware; QoS 0 publishes complete in well under a millisecond. NATS server binary ~10MB, runtime ~30MB resident, but offers subject-hierarchy pub/sub PLUS request-reply in one broker; JetStream adds persistence. Forwarding to SYNTHESIZE to compose the comparison — actors (MQTT brokers, NATS servers, ARM hardware class) and integration points (broker → edge sensor)."
+            }
+
+  # ---------- researcher-research-synthesize (emit_research_artifact → decide emit) ----------
+  - match: "synthesis pass"
+    responses:
+      - tool_call:
+          name: emit_research_artifact
+          arguments_json: |
+            {
+              "revision": 1,
+              "title": "MQTT vs NATS for IoT edge",
+              "actors": [
+                {"name": "MQTT broker", "role": "TCP-based pub/sub broker with three QoS levels (0/1/2); reference implementation Mosquitto runs in <2MB resident on constrained ARM"},
+                {"name": "NATS server", "role": "Subject-hierarchy pub/sub plus request-reply; JetStream variant adds persistence; binary ~10MB on ARM, runtime memory ~30MB"},
+                {"name": "Constrained ARM device", "role": "Raspberry Pi-class hardware (1GHz CPU, 256MB-1GB RAM) hosting the edge agent"}
+              ],
+              "integration_points": [
+                {"from": "MQTT broker", "to": "Constrained ARM device", "data": "QoS-tagged pub/sub messages over TCP", "direction": "read"},
+                {"from": "NATS server", "to": "Constrained ARM device", "data": "subject-hierarchy pub/sub + request-reply over TCP", "direction": "read"}
+              ],
+              "tasks": [
+                "Choose MQTT for sub-millisecond latency budgets on minimal-footprint hardware where pub/sub alone is sufficient",
+                "Choose NATS when the workload mixes pub/sub + request-reply, and edge hardware has >256MB RAM"
+              ],
+              "addressed_gaps": [
+                "Question scope (latency + footprint on ARM) is answered with concrete published numbers — no further gather pass needed"
+              ],
+              "open_gaps": [
+                "needs_test_harness: not applicable — informational comparison research, no external integration target to verify against"
+              ],
+              "substrate_mutations": []
+            }
+      - tool_call:
+          name: decide
+          arguments_json: |
+            {
+              "action": "emit",
+              "reason": "Artifact rev 1 emitted. Three actors (MQTT broker, NATS server, constrained ARM device); two integration points (broker → edge); two task-shaped recommendations (when to choose which). Reviewer should approve and the wake-up coordinator can deliver the synthesised comparison directly."
+            }
+
+  # ---------- reviewer-research (decide approved) ----------
+  - match: "Reviewer — RESEARCH phase"
+    responses:
+      - tool_call:
+          name: decide
+          arguments_json: |
+            {
+              "action": "approved",
+              "reason": "Checklist satisfied: three actors with role text, two integration points with direction, two decomposable task-shaped recommendations, all artifact fields well-formed. open_gaps carries the test_harness path (not applicable — informational research). Substrate untouched. Research arc terminates here — rule 07 will spawn the wake-up coordinator to deliver the answer."
+            }
+
+  # ---------- ops-chain-observer (the subject of this journey) ----------
+  # The evidence IDs are literals: emit_diagnosis validates only that the list
+  # is non-empty and never dereferences the entries, so a mock persona cannot
+  # cite the real run ID (it does not know it at fixture-authoring time). The
+  # spec asserts evidence COUNT, not resolvability — asserting resolvability
+  # would be asserting a property the system does not have.
+  - match: "operations analyst"
+    responses:
+      - tool_call:
+          name: emit_diagnosis
+          arguments_json: |
+            {
+              "finding": "The gather phase ran a single subtopic, so the synthesis rests on one evidence sweep rather than the plan's stated breadth.",
+              "recommendation": "If comparison questions routinely decompose to one subtopic, check whether the planner's subtopic extraction is under-splitting before tuning anything downstream.",
+              "confidence": 0.72,
+              "evidence": ["c360.semteams.agent.chain.execution.run-under-observation"],
+              "severity": "warn"
+            }
+      - tool_call:
+          name: emit_diagnosis
+          arguments_json: |
+            {
+              "finding": "The run reached its terminal phase with every loop completing on first attempt and no recovery rule firing.",
+              "recommendation": "No action. Recording the clean baseline so a later regression in loop-retry behaviour has something to compare against.",
+              "confidence": 0.95,
+              "evidence": ["c360.semteams.agent.chain.execution.run-under-observation"],
+              "severity": "info"
+            }
+      - tool_call:
+          name: decide
+          arguments_json: |
+            {
+              "action": "observed",
+              "reason": "Read the run entity and the coordinator loop result. Emitted two findings: one gather-breadth signal at 0.72, one clean-baseline note."
+            }
