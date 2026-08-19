@@ -25,6 +25,7 @@ var flowBootstrapAllowedRulePackPrefixes = []string{
 	"/app/configs/rules/proof-readiness/", // OpenSpec SDD 2.3 proof gate routes formal_claims.* to downstream markers.
 	"/app/configs/rules/dev-from-task/",   // OpenSpec SDD 3.2 bridge from approved OpenSpec tasks to Ralph/CBG.
 	"/app/configs/rules/agent-run/",       // ADR-053 Phase 4a substrate pack: run-phase transitions (dispatched→executing, executing→completed) firing on the run entity. Substrate-level (like coordinator), NOT a category pack.
+	"/app/configs/rules/ops/",             // ADR-027 Phase 1 ops pack: observes any run reaching a terminal phase. Substrate-level and category-agnostic by construction — it triggers on the run entity, so it covers every present and future category without re-authoring.
 	// Sandbox provisioning is synchronous via the request_sandbox
 	// tool under ADR-043; no rule pack — the prefix was removed
 	// alongside the configs/rules/sandbox-bootstrap/ directory in

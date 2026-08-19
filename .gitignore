@@ -58,6 +58,9 @@ ui/test-results/
 # Claude Code project-local memory/state
 .claude/projects/
 .claude/scheduled_tasks.lock
+# Agent worktrees are nested git repos; unignored they get swept into `git add -A`
+# and committed as a bare gitlink.
+.claude/worktrees/
 
 # Agent-emitted artifacts (research/plan/spec markdown rendered by
 # emit_* tools). In Docker e2e/smoke runs these land in the

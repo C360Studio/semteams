@@ -302,7 +302,7 @@ func TestCoordinatorSlice1cWakeUpRules(t *testing.T) {
 			// agentic-dispatch subscribes on `agent.task.*` (single-token
 			// wildcard). Subjects with more segments silently drop into
 			// the void (smoke #8 run-11 lesson; see
-			// configs/rules/ops/chain-terminal-observe.json
+			// configs/rules/ops/01-run-terminal-observe.json
 			// subject_shape_note for the canonical reference).
 			spawnsCoordinator := false
 			for _, a := range rule.OnEnter {

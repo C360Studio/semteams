@@ -61,3 +61,20 @@ responses_by_role:
           name: scratchpad
           arguments_json: |
             {"text": "Decomposing the plan... still thinking through subtopics. (4a′ wedge: this scratchpad call is the only response in the planner bucket, so the mock repeats it every iteration. The planner never reaches a decide() terminal and trips max_iterations → OutcomeFailed, driving the run to executing→failed via research/09 + agent-run/04.)"}
+
+  # ---------- ops-chain-observer (ADR-027) ----------
+  # The ops rule fires on every run reaching a terminal phase, so EVERY
+  # journey whose run terminates now spawns one observer loop. Without a
+  # bucket the mock falls back to bucket 0's last response (a coordinator
+  # decide), whose action is off the observer's ["observed"] allowlist —
+  # rejected, re-picked, and ground to max_iterations as truncated.
+  # One clean terminal keeps the journey honest and cheap.
+  - match: "operations analyst"
+    responses:
+      - tool_call:
+          name: decide
+          arguments_json: |
+            {
+              "action": "observed",
+              "reason": "Read the run entity and the coordinator loop result. Run reached its terminal phase with no operator-actionable pattern; emitting no findings."
+            }

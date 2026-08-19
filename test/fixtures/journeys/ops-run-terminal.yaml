@@ -1,42 +1,24 @@
-name: research-mvp
+name: ops-run-terminal
 description: |
-  Journey: ADR-042 MVP-5 — coordinator front-door → research-category
-  arc → coordinator return path, end-to-end on mock-LLM against
-  configs/e2e-flow-bootstrap.json.
+  Journey: ADR-027 ops agent, re-wired. One research chain runs to a
+  terminal run phase; the ops rule
+  (configs/rules/ops/01-run-terminal-observe.json) fires on the RUN
+  entity and spawns exactly one ops-chain-observer, which emits
+  diagnoses and terminates with decide(action="observed").
 
-  ROLE-KEYED fixture (responses_by_role). The research pack is a
-  for_each fan-out + join (rule 02 fans out gather; rule 03b joins to
-  spawn synthesize), so gather and synthesize loops run interleaved /
-  out of global order — a flat sequential fixture cannot serve them
-  (it desyncs the moment loops spawn out of linear order, and a
-  rejected decide cascades into retry storms). Each role gets its own
-  response queue, matched on a system-prompt fingerprint; per-bucket
-  cursors advance independently and the last entry repeats on
-  exhaustion (so a role that runs extra iterations still gets a valid
-  terminal action). This is what lets the mock prove the fan-out
-  plumbing without real tokens. (The strictly-linear autoresearch /
-  dev-via-test journeys still use the flat `responses:` form — they
-  never spawn out of order.)
+  ROLE-KEYED fixture. The research portion is research-mvp's, unchanged
+  — this journey is about what happens AFTER the chain settles, so the
+  chain itself should be the known-good one.
 
-  N=1 for_each: the plan emits a single-subtopic list, so rule 02
-  spawns ONE gatherer. Real multi-subtopic fan-out (N>1, truly
-  parallel gatherers) is exercised by real-LLM smoke.
+  The ops bucket differs from the one every other journey carries: those
+  serve a single decide(observed) because they only need the observer to
+  terminate cleanly and get out of the way. Here it emits two diagnoses
+  first, because the point is to prove emit_diagnosis actually mints
+  entities. That path was silently emitting nothing before upstream
+  gh#390 (it appended to an entity that was never born), and this is the
+  only place that failure class is visible.
 
-  Arc (6 loops): coordinator(dispatch) → researcher-research-plan
-  → researcher-research-gather (×1) → researcher-research-synthesize
-  → reviewer-research → coordinator(wake-up). Rules: research/01, 02,
-  03a (stamp), 03b (join), 04, 07; coordinator/03b-respond-direct.
-
-  Bucket fingerprints (substrings unique to each persona's system
-  prompt):
-    - "Delegation rules"               → coordinator (dispatch + wake-up)
-    - "Emit the typed plan"             → researcher-research-plan
-    - "You do NOT emit a research"      → researcher-research-gather
-    - "synthesis pass"                  → researcher-research-synthesize
-    - "Reviewer — RESEARCH phase"       → reviewer-research
-
-  Paired spec: ui/e2e/agentic/research-mvp.spec.ts.
-  Config: configs/e2e-flow-bootstrap.json.
+  Required config: configs/e2e-flow-bootstrap.json (ops rule wired).
 
 responses_by_role:
 
@@ -155,19 +137,38 @@ responses_by_role:
               "reason": "Checklist satisfied: three actors with role text, two integration points with direction, two decomposable task-shaped recommendations, all artifact fields well-formed. open_gaps carries the test_harness path (not applicable — informational research). Substrate untouched. Research arc terminates here — rule 07 will spawn the wake-up coordinator to deliver the answer."
             }
 
-  # ---------- ops-chain-observer (ADR-027) ----------
-  # The ops rule fires on every run reaching a terminal phase, so EVERY
-  # journey whose run terminates now spawns one observer loop. Without a
-  # bucket the mock falls back to bucket 0's last response (a coordinator
-  # decide), whose action is off the observer's ["observed"] allowlist —
-  # rejected, re-picked, and ground to max_iterations as truncated.
-  # One clean terminal keeps the journey honest and cheap.
+  # ---------- ops-chain-observer (the subject of this journey) ----------
+  # The evidence IDs are literals: emit_diagnosis validates only that the list
+  # is non-empty and never dereferences the entries, so a mock persona cannot
+  # cite the real run ID (it does not know it at fixture-authoring time). The
+  # spec asserts evidence COUNT, not resolvability — asserting resolvability
+  # would be asserting a property the system does not have.
   - match: "operations analyst"
     responses:
+      - tool_call:
+          name: emit_diagnosis
+          arguments_json: |
+            {
+              "finding": "The gather phase ran a single subtopic, so the synthesis rests on one evidence sweep rather than the plan's stated breadth.",
+              "recommendation": "If comparison questions routinely decompose to one subtopic, check whether the planner's subtopic extraction is under-splitting before tuning anything downstream.",
+              "confidence": 0.72,
+              "evidence": ["c360.semteams.agent.chain.execution.run-under-observation"],
+              "severity": "warn"
+            }
+      - tool_call:
+          name: emit_diagnosis
+          arguments_json: |
+            {
+              "finding": "The run reached its terminal phase with every loop completing on first attempt and no recovery rule firing.",
+              "recommendation": "No action. Recording the clean baseline so a later regression in loop-retry behaviour has something to compare against.",
+              "confidence": 0.95,
+              "evidence": ["c360.semteams.agent.chain.execution.run-under-observation"],
+              "severity": "info"
+            }
       - tool_call:
           name: decide
           arguments_json: |
             {
               "action": "observed",
-              "reason": "Read the run entity and the coordinator loop result. Run reached its terminal phase with no operator-actionable pattern; emitting no findings."
+              "reason": "Read the run entity and the coordinator loop result. Emitted two findings: one gather-breadth signal at 0.72, one clean-baseline note."
             }

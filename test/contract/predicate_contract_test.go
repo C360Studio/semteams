@@ -325,7 +325,66 @@ var wiredPersonaDirs = []string{
 	"../../configs/personas/fragments/autoresearch-propose",
 	"../../configs/personas/fragments/autoresearch-execute",
 	"../../configs/personas/fragments/autoresearch-synthesize",
+	"../../configs/personas/fragments/ops-chain-observer",
 	"../../configs/personas/fragments-autonomous/coordinator",
+}
+
+// TestLoopFamilyRulesGateOnRole fences the structural property that keeps the
+// ops observer from observing itself, replacing the denylist the ops pack used
+// to carry (which had already rotted — it named two roles that no longer
+// existed).
+//
+// The ops observer fires on the RUN family and spawns a loop-family entity. It
+// is safe from self-observation only because every wired loop-family rule
+// gates on an explicit agent.loop.role naming a non-ops role. A future rule
+// keyed on, say, agent.loop.outcome alone would silently capture ops loops —
+// and since the ops loop's own decide stamps a loop-family entity, that is a
+// spawn cycle: observer terminal fires observer.
+//
+// Nothing else catches this. TestWiredRulesNarrowEntityPattern covers the
+// diagnosis-entity half (an ops.diagnosis.* prefix is unclassifiable and so
+// must be recorded explicitly), but not this one.
+func TestLoopFamilyRulesGateOnRole(t *testing.T) {
+	for _, path := range bootstrapLoadedRules(t) {
+		raw, err := os.ReadFile(path) //nolint:gosec // test-controlled config path
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		var rule struct {
+			Type   string `json:"type"`
+			Entity struct {
+				Pattern string `json:"pattern"`
+			} `json:"entity"`
+			Conditions []struct {
+				Field string `json:"field"`
+				Value any    `json:"value"`
+			} `json:"conditions"`
+		}
+		if err := json.Unmarshal(raw, &rule); err != nil {
+			t.Fatalf("unmarshal %s: %v", path, err)
+		}
+		if rule.Type == "cron" || rule.Entity.Pattern != loopEntityPattern {
+			continue
+		}
+
+		var gated bool
+		for _, c := range rule.Conditions {
+			if c.Field != "agent.loop.role" {
+				continue
+			}
+			gated = true
+			for _, v := range roleValues(c.Value) {
+				if strings.HasPrefix(v, "ops-") {
+					t.Errorf("%s: loop-family rule names ops role %q — an ops loop's own terminal "+
+						"would re-trigger observation, spawning loops without bound", path, v)
+				}
+			}
+		}
+		if !gated {
+			t.Errorf("%s: loop-family rule has no agent.loop.role condition, so it evaluates against "+
+				"EVERY loop including ops observers. Add an explicit role gate", path)
+		}
+	}
 }
 
 // TestWiredPersonaTripleTokensAreCanonical audits $entity.triple.* tokens in

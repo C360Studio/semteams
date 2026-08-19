@@ -153,35 +153,53 @@ The legacy concrete configs (`osh-demo.json`, `dev-research.json`,
 (PR #178) alongside the `chain.mode` / `phasevalidator` / `chainstall`
 machinery they depended on.
 
-### Ops Agent Phase 1 (ADR-027, accepted)
+### Ops Agent Phase 1 (ADR-027, accepted) — WIRED
 
-Read-only diagnostic agent grounded in per-flow objective specs.
-Status accepted upstream 2026-04-18 (ADR-027 Proposed → Accepted).
-Framework support landed in semstreams `v1.0.0-beta.9`:
-`fire_every_n_events` rule field, persona file-loader,
-`emit_diagnosis` tool, `GET /graph/triples` endpoint. ADR lives at
+Read-only diagnostic agent. One role, one rule, triggered on the
+**run entity** reaching a terminal phase. ADR lives at
 `../semstreams/docs/adr/027-ops-agent-meta-harness.md`.
 
 Single-process deployment: the ops agent runs in the same backend as
-the flow it observes. The observe rule fires `publish_agent` with
-`role: ops-analyst`, and the existing `agentic-loop` consumes it
-without a second dispatch. (Upstream ships
+the chains it observes. The rule fires `publish_agent` with
+`role: ops-chain-observer`, and the existing `agentic-loop` consumes
+it without a second dispatch. (Upstream ships
 `../semstreams/configs/flows/ops-agent.json` as a reference for
 operators who prefer a standalone ops binary; SemTeams does not
 deploy it.)
 
-- `configs/personas/ops.json` — persona definition. Read-only tool
-  allowlist: `query_entities`, `query_relationships`,
-  `read_loop_result`, `emit_diagnosis`, `submit_work`.
-- `configs/personas/fragments/ops/05-semteams-identity.md`,
-  `10-objective-grounding.md`, `20-diagnostic-rules.md` — persona
-  fragments layered above upstream's `ops/00-identity.md` via the
-  beta.9 file-loader (digit-prefix ordering).
-- `configs/rules/ops/*.json` — observe + diagnose rules. NOT wired:
-  they left the bootstraps' `rules_files` when MVP-7 deleted the
-  legacy configs (discovered in the beta.160 sweep — the ops-agent
-  journey is parked until an explicit re-wiring decision).
-- `docs/objectives/README.md` — objective-spec schema.
+- `configs/rules/ops/01-run-terminal-observe.json` — the only ops
+  rule. Fires once per run on `agent.run.phase in [completed, failed,
+  cancelled]`. Triggering on the run entity rather than on a reviewer
+  role is what makes it category-agnostic: it covers research,
+  autoresearch, and every future pack without re-authoring, and it
+  covers failed/cancelled runs, which a reviewer-completion trigger
+  structurally misses.
+- `configs/personas/fragments/ops-chain-observer/` — the only ops
+  persona corpus.
+
+**Cadence is set by trigger scope, not by a throttle.** Exactly one
+ops loop per run. Do not reach for `fire_every_n_events`: it does NOT
+gate `publish_agent` (upstream's `shouldFireAction` is only reached
+from `fireRuleActions`, while `on_enter` runs through the stateful
+evaluator, which never reads the counter — semstreams#1007). Do not
+reach for `cooldown` either: it is per rule *instance*, not per
+entity, and its suppression path fires `on_exit`.
+
+**Retired in the same pass** (all dead, none re-wireable as written):
+the `ops-analyst` role and its `configs/personas/fragments/ops/`
+corpus (no rule spawned it); `observe-chain-progress.json` and
+`ops-progress-observer/` (its throttle was inert, and a
+completion-triggered rule structurally cannot observe a *stalled*
+chain — that needs a cron primitive with an idle-cost gate that does
+not exist yet); the flat `configs/personas/*.json` files (never read
+— `LoadFromDirectory` keys personas by fragment directory); and
+`docs/objectives/` (consumed only by the deleted corpus).
+
+`submit_work` does not exist upstream — no executor, no registration,
+only a category-map entry and comments (semstreams#1007). Unknown
+tool names are logged and dropped, so the old personas instructed a
+tool the model never received. Ops terminates with
+`decide(action="observed")`, gated by `action_allowlist`.
 
 The ops agent emits findings via the `emit_diagnosis` tool (not raw
 triples). Each call requires `finding`, `recommendation`, `confidence`

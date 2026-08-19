@@ -257,16 +257,22 @@ tasks:
       - npx playwright test e2e/agentic/real-time-activity-stream.spec.ts
 
   test:e2e:agentic:ops-agent:
-    desc: Run the ops-agent baseline journey (ADR-027 Phase 1 — 20 researcher loops + ops diagnostic)
+    desc: Run the ops run-terminal observation journey (ADR-027, re-wired)
     summary: |
-      Drives 20 serial researcher loops against the mock LLM, then
-      validates that the ops_observe_complete_loops rule spawns an
-      ops-analyst loop whose completion cites docs/objectives/dev-research.md.
+      Drives ONE research chain to a terminal run phase, then validates
+      that the ops rule fires on the RUN entity and spawns exactly one
+      ops-chain-observer which mints ops.diagnosis.* entities.
 
-      Long-running: 20 mock researcher loops take ~100s. Set a generous
-      timeout when running under CI.
+      Replaces the old 20-researcher-loop baseline, which had been a
+      standing red: it required a config MVP-7 deleted, expected a role
+      with no persona, and drove 20 serial prompts to reach an event
+      count that no longer meant anything (fire_every_n_events does not
+      gate publish_agent — semstreams#1007).
+
+      Task id kept as :ops-agent so the test:e2e chain ordering is
+      unchanged.
     vars:
-      FIXTURE: ops-agent-baseline.yaml
+      FIXTURE: ops-run-terminal.yaml
       AGENTIC_CONFIG: e2e-flow-bootstrap.json
     cmds:
       - defer: { task: test:e2e:agentic:cleanup }
@@ -274,7 +280,7 @@ tasks:
         vars:
           FIXTURE: "{{.FIXTURE}}"
           AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
-      - npx playwright test e2e/agentic/ops-agent-baseline.spec.ts
+      - npx playwright test e2e/agentic/ops-run-terminal.spec.ts
 
   test:e2e:agentic:research-mvp:
     desc: Run the ADR-042 MVP-5 research-category mock-LLM journey
@@ -1110,11 +1116,11 @@ tasks:
   # Tear down any scenario with: task test:e2e:agentic:cleanup
 
   test:e2e:agentic:dev:ops-agent:
-    desc: Boot stack for the ops-agent scenario (researcher + ops observer). No playwright.
+    desc: Boot stack for the ops run-terminal scenario (research chain + ops observer). No playwright.
     cmds:
       - task: test:e2e:agentic:dev:_boot
         vars:
-          FIXTURE: ops-agent-baseline.yaml
+          FIXTURE: ops-run-terminal.yaml
           AGENTIC_CONFIG: e2e-flow-bootstrap.json
           SCENARIO: ops-agent
 
@@ -1633,7 +1639,7 @@ tasks:
       Run a playwright spec against the already-running stack (booted
       via test:e2e:agentic:dev). Pass the spec path as the first CLI arg.
       Example:
-        task test:e2e:agentic:run-spec -- e2e/agentic/ops-agent-baseline.spec.ts
+        task test:e2e:agentic:run-spec -- e2e/agentic/ops-run-terminal.spec.ts
     cmds:
       - npx playwright test {{.CLI_ARGS}}
 
