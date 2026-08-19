@@ -154,3 +154,20 @@ responses_by_role:
               "action": "approved",
               "reason": "Checklist satisfied: three actors with role text, two integration points with direction, two decomposable task-shaped recommendations, all artifact fields well-formed. open_gaps carries the test_harness path (not applicable — informational research). Substrate untouched. Research arc terminates here — rule 07 will spawn the wake-up coordinator to deliver the answer."
             }
+
+  # ---------- ops-chain-observer (ADR-027) ----------
+  # The ops rule fires on every run reaching a terminal phase, so EVERY
+  # journey whose run terminates now spawns one observer loop. Without a
+  # bucket the mock falls back to bucket 0's last response (a coordinator
+  # decide), whose action is off the observer's ["observed"] allowlist —
+  # rejected, re-picked, and ground to max_iterations as truncated.
+  # One clean terminal keeps the journey honest and cheap.
+  - match: "operations analyst"
+    responses:
+      - tool_call:
+          name: decide
+          arguments_json: |
+            {
+              "action": "observed",
+              "reason": "Read the run entity and the coordinator loop result. Run reached its terminal phase with no operator-actionable pattern; emitting no findings."
+            }

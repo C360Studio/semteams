@@ -122,7 +122,10 @@ test.describe("ADR-042 MVP-5 — Research category mock-LLM journey", () => {
       const resp = await request.get("/teams-dispatch/loops");
       if (!resp.ok()) return null;
       const list = (await resp.json()) as Array<{ state: string }>;
-      if (list.length !== 6) return null;
+      // 6 chain loops + 1 ops-chain-observer. The ops rule (ADR-027) fires on
+      // the RUN entity reaching a terminal phase, so it spawns after the chain
+      // settles and rides in the same loop list.
+      if (list.length !== 7) return null;
       return list.every((l) => l.state === "complete") ? list : null;
     }, { timeoutMs: 120_000 });
 
@@ -220,8 +223,23 @@ test.describe("ADR-042 MVP-5 — Research category mock-LLM journey", () => {
       .then((r) => r.json()) as unknown[];
     expect(
       settledList.length,
-      "no seventh loop should appear — rule 07 must not re-fire on the wake-up coordinator's terminal, and rule 05 must not fire on approved (only on insufficient)",
-    ).toBe(6);
+      "no eighth loop should appear — rule 07 must not re-fire on the wake-up coordinator's terminal, rule 05 must not fire on approved (only on insufficient), and the ops observer must fire exactly once per run rather than once per terminal loop",
+    ).toBe(7);
+
+    // The ops observer must be present and clean. A truncated one means the
+    // mock served it an off-allowlist decide (its fixture bucket is missing or
+    // its match fingerprint drifted), which would also mean it burned its full
+    // iteration budget on every journey in the suite.
+    const opsLoops = (settledList as Array<{ role?: string; state?: string }>)
+      .filter((l) => l.role === "ops-chain-observer");
+    expect(
+      opsLoops.length,
+      "expected exactly one ops-chain-observer loop — the ops rule fires once per run, on the run entity's terminal phase",
+    ).toBe(1);
+    expect(
+      opsLoops[0]?.state,
+      "ops-chain-observer must reach complete; truncated means it never got a valid `observed` terminal from its fixture bucket",
+    ).toBe("complete");
 
     // -----------------------------------------------------------------
     // Step 7 — user-response publish proof. Loop-count assertions
