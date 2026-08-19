@@ -5,7 +5,7 @@
   "description": "ADR-042 §Phase 2 redesign + ADR-046 Phase 1 fan-out. Fires when the plan-phase researcher terminates with decide(action=gather, subtopics=[...]). The decide tool stamps coordinator.decision.subtopics as a JSON-encoded list triple on the planner's loop entity; this rule uses for_each over that list to spawn ONE researcher-research-gather per subtopic, in parallel (the agentic-loop's JetStream consumer parallelism gives N concurrent loops for free). Each spawned gatherer carries $subtopic in its prompt and properties as its scope. The join half lives in rule 03a (stamp completion on parent) + rule 03b (synthesize when all complete). N=1 (non-decomposable prompt) degenerates to a single sequential gatherer — first-class case, not a special path.",
   "enabled": true,
   "entity": {
-    "pattern": "*.*.*.*.*.*"
+    "pattern": "*.*.agent.agentic-loop.execution.*"
   },
   "conditions": [
     {

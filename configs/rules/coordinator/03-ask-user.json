@@ -5,7 +5,7 @@
   "description": "Fires when a coordinator loop calls decide(action=ask_user, reason=<user-facing prose>). The persona contract overloads `reason` for this action: it carries the prose to deliver to the user, NOT an internal log. This rule publishes that prose on the user-response bus (user.response.<coordinator_loop_id>) and stamps a coordinator.clarification.question triple for audit. Downstream channel routers (UI, email, SMS) subscribe to user.response.> and adapt for their wire format. Coordinator stays channel-agnostic. ADR-029 + coordinator-redesign Slice 1.\n\nLong-term: the `reason`-as-prose overload is a stepping stone. Upstream PR target: add a structured `user_question` field to the decide tool so the prose and the internal-log reason can coexist without overload. Until then, persona prose disambiguates per-action.",
   "enabled": true,
   "entity": {
-    "pattern": "*.*.*.*.*.*"
+    "pattern": "*.*.agent.agentic-loop.execution.*"
   },
   "conditions": [
     {

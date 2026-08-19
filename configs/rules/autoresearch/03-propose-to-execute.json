@@ -5,7 +5,7 @@
   "description": "ADR-042 §Phase 2 redesign autoresearch pack. Fires when an autoresearch-propose loop terminates with decide(action=measure) — the propose phase has written a hypothesis to scratchpad, applied a diff via bash within the surface, and is handing off to execute. Spawns autoresearch-execute, which runs the measurement command in the sandbox and calls emit_autoresearch_measurement to stamp the result + compute outcome empirically.",
   "enabled": true,
   "entity": {
-    "pattern": "*.*.*.*.*.*"
+    "pattern": "*.*.agent.agentic-loop.execution.*"
   },
   "conditions": [
     {

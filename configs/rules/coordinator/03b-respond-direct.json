@@ -5,7 +5,7 @@
   "description": "Fires when a coordinator loop calls decide(action=respond_direct, reason=<user-facing prose>). The persona contract overloads `reason` for this action: it carries the prose to deliver to the user, NOT an internal log — same overload pattern as ask_user (see 03-ask-user.json). This rule publishes that prose on the user-response bus (user.response.<coordinator_loop_id>) and stamps a coordinator.clarification.reply triple for audit. Downstream channel routers (UI, email, SMS) subscribe to user.response.> and adapt for their wire format.\n\nFires for BOTH the front-door respond_direct case (small-talk, meta question, simple-answer routing per 20-delegation-rules.md §4) AND the chain-terminal wake-up case (coordinator spawned by 04a-/04b- rules after a chain reaches its terminal, synthesising the chain result into a user-facing reply). The rule shape is identical for both — the wake-up coordinator's `reason` is the synthesised answer.\n\nCoordinator-redesign Slice 1c. Mirror of 03-ask-user.json's shape; the only difference is the action-value gate and the audit-triple predicate name.",
   "enabled": true,
   "entity": {
-    "pattern": "*.*.*.*.*.*"
+    "pattern": "*.*.agent.agentic-loop.execution.*"
   },
   "conditions": [
     {
