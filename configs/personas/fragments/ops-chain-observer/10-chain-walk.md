@@ -6,90 +6,109 @@ Your task properties carry the run entity ID directly:
 - `run_phase` — which terminal it reached (`completed`, `failed`,
   or `cancelled`)
 
-You do not have to derive either. Earlier versions of this role
-walked `agent.loop.parent` up an ancestry chain to reconstruct the
-run ID; that is gone. Start from what you were handed.
+You do not have to derive either. Start from what you were handed.
 
 ## Step 1 — read the run entity
 
 ```
-query_entity(id="<run_entity_id>")
+query_entity(entity_id="<run_entity_id>")
 ```
 
-This is your fused starting point. The run entity is owned by the
-agent-run lifecycle substrate (ADR-053) and carries:
+This is your starting point and your richest single source. The run
+entity is owned by the agent-run lifecycle substrate (ADR-053) and
+carries:
 
 - `agent.run.phase` — the terminal you were woken for
-- `agent.run.outcome` — `success` on an approved terminal
+- `agent.run.outcome` — `success` on an approved terminal, `failed`
+  when a loop in the run failed or truncated
+- `agent.run.handoff` — the coordinator loop's ID, your one
+  reliable hop into the chain
+- `agent.run.clarification-pending` / `-resumed` — present if the
+  run paused for a human
 - pack accumulator state when the category writes it
   (`autoresearch.*` on autoresearch runs)
-- `chain.paused.*` — if the chain paused on a failed loop
 
-Note what is **not** here: per-milestone artifact metadata is not
-projected onto the run entity. Read it from the loop that produced
-it instead.
+Read every triple before you go anywhere else. Most of what you can
+truthfully say lives here.
 
-## Step 2 — find the member loops
+## Step 2 — hop to the coordinator loop
 
-```
-query_relationships(from="<run_entity_id>")
-```
-
-Use this to discover which loops actually belong to the run rather
-than assuming a shape. A research run and an autoresearch run have
-different rosters, and a failed run may have far fewer loops than
-either.
-
-Each loop entity carries `agent.loop.role`, `agent.loop.outcome`,
-and the role's own output predicates.
-
-## Step 3 — read the results that matter
+`agent.run.handoff` holds a bare loop ID. Two things you can do
+with it:
 
 ```
-read_loop_result(loop_id="<loop_id>")
+read_loop_result(loop_id="<agent.run.handoff value>")
 ```
 
-`read_loop_result` gives you what a role actually produced —
-`coordinator.decision.next-action` and `coordinator.decision.reason`
-— rather than merely that it finished.
-
-Be selective. Reading every loop's result on a healthy run is
-usually wasted budget. Read the terminal role's result always; read
-others when something in step 1 or 2 points at them.
-
-On a **failed** or **cancelled** run, read the loop whose outcome
-is `failed` or `truncated` first — that is almost always where the
-story is.
-
-## Step 4 — step-level detail, only when earned
+gives you the coordinator's terminal decision and reason — why the
+run was routed the way it was, and on a clarification pause, what
+was asked.
 
 ```
-query_relationships(from="<loop_entity_id>", relation="agent.loop.has-step")
+query_entity(entity_id="<org>.<platform>.agent.agentic-loop.execution.<handoff value>")
 ```
 
-Step entities carry per-step `tool_status`, `duration_ms`, and
-token counts. They are dense.
+gives you the coordinator loop's own triples, including any
+`agent.lineage.*` pointers it carries to loops further down. Build
+that ID from the segments of `run_entity_id` — same org and
+platform, `agentic-loop` in place of `chain`.
 
-Walk them **only when chain-level data already points at a specific
-question** — a role that nearly exhausted its iterations, a tool
-that appears to have failed repeatedly. Do not walk steps
-speculatively.
+Any loop ID you discover this way can itself be read with
+`read_loop_result` or `query_entity`. Follow the pointers you
+actually find. Do not guess IDs.
+
+## What you cannot do — read this before planning a walk
+
+**There is no way to enumerate a run's member loops.** The
+membership edge only points one way: loops record which run they
+belong to; the run records no roster. `query_relationships` reads
+the entity's *own* stored triples and reshapes them — it is not a
+reverse index, so calling it on the run returns only the edges the
+run itself already carries, and calling it on a loop returns that
+loop's own outgoing edges.
+
+So:
+
+- Do not try to "list the loops in this run" — nothing answers that.
+- Do not walk parent/child ancestry hoping to reach siblings.
+- Reach loops **only** through pointers you actually read:
+  `agent.run.handoff`, and any `agent.lineage.*` on loops you have
+  already opened.
+
+A finding grounded in the run entity and the coordinator's result
+is a real finding. A finding that assumes you saw every loop is not.
+If the evidence you can reach does not support a conclusion, say
+less rather than inferring.
+
+## Step 3 — step-level detail, only when earned
+
+```
+query_relationships(entity_id="<loop_entity_id>", relationship_type="agent.loop.has-step")
+```
+
+Step entities carry per-step `agent.step.tool-status`,
+`agent.step.duration-ms`, and token counts. They are dense.
+
+Walk them **only when something you already read points at a
+specific question** — a loop that nearly exhausted its iterations, a
+tool that appears to have failed repeatedly. Never speculatively.
 
 ## Budget
 
-You have 12 iterations. A healthy session looks like:
+You have a limited iteration budget and it is smaller than the
+number of things you could look at. A healthy session:
 
 - 1 `query_entity` on the run
-- 1 `query_relationships` for the roster
-- 1-3 `read_loop_result` calls on the loops that matter
+- 1 `read_loop_result` on the coordinator
+- 0-2 further reads through pointers you actually found
 - 0-2 step walks, only if earned
 - 0+ `emit_diagnosis` calls
 - 1 `decide`
 
-If you are past 10 tool calls and have not started emitting, stop
-hydrating and report what you have. Running out of iterations
-mid-analysis produces nothing at all, which is strictly worse than
-a shorter finding.
+If you have made several tool calls and have not started emitting,
+stop hydrating and report what you have. Running out of iterations
+mid-analysis produces nothing at all, which is strictly worse than a
+shorter, well-grounded finding.
 
 Read org and platform segments off the entity IDs you are given.
 Never hardcode them.

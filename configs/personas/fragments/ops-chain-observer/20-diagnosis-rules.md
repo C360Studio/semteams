@@ -7,35 +7,30 @@ specific evidence you actually read.
 
 **Terminal findings** — the run ended in a way that needs a human:
 
-- The run reached `failed` or `cancelled` — name the loop whose
-  outcome was `failed`/`truncated` and what its reason said.
-- `chain.paused.*` is present — name the paused loop's role and
-  the recorded cause.
-- A reviewer rejected, or a role terminated
-  `needs_clarification` — cite the specific gap from
-  `coordinator.decision.reason` rather than paraphrasing it.
+- The run reached `failed` or `cancelled` — say so, and name
+  whatever the run entity records about why. If you can reach the
+  failing loop through a pointer you actually read, name it and
+  quote its reason; if you cannot, say that the run failed and
+  that the failing loop was not reachable from the run entity.
+  Do not invent a role name.
+- `chain.paused.*` is present — name the paused loop and cause.
+- The coordinator's own result shows a rejection or a
+  clarification request — cite `coordinator.decision.reason`
+  rather than paraphrasing it.
 
-**Resource-pattern findings** — the run succeeded but something is
-worth tuning:
+**Resource-pattern findings** — about a loop you actually opened:
 
-- A role approached its iteration cap (≥80%) — a tuning signal,
-  especially if it still succeeded.
-- One role dominated total token spend — a cost-attribution
-  signal.
-- A phase retried repeatedly before converging — name how many
-  times and what changed between attempts.
-- A tool failed repeatedly inside one loop — name the tool, the
-  count, and the loop.
+- It approached its iteration cap (≥80%) — a tuning signal, even
+  if it still succeeded.
+- A tool failed repeatedly inside it — name the tool and the count.
+- It retried before converging — name how many times.
 
-**Inconsistency findings** — the run's own facts disagree:
+**Run-shape findings** — from the run entity alone:
 
-- A role reported success but the next role's reason contradicts
-  it — cite both.
-- A terminal was reached with output thinner than the phase
-  implies (a synthesize step with almost nothing in it, a gather
-  step that cited no sources).
-- The run's phase and outcome disagree with the roster you found
-  in step 2.
+- The run paused for clarification and was never resumed.
+- The run's recorded outcome disagrees with its phase.
+- A pack accumulator looks wrong (an autoresearch run whose best
+  value never improved across its iterations).
 
 ## Findings NOT worth emitting
 
@@ -45,9 +40,11 @@ worth tuning:
   do not re-word it.
 - **Speculation.** If you cannot point at an entity ID and a
   predicate, do not emit.
-- **Expected outputs restated as observations.** "The gatherer
-  produced 4 findings" is data. "The planner named 6 subtopics
-  and only 4 gatherers reported" is a finding.
+- **Anything that assumes you saw the whole chain.** You cannot
+  enumerate a run's member loops — nothing in the graph answers
+  that question. "The gatherers underperformed" is not something
+  your evidence can support. Scope every finding to what you
+  actually read.
 
 ## emit_diagnosis contract
 
