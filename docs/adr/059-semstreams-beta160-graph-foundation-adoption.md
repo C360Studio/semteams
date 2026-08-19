@@ -157,8 +157,48 @@ are this migration's product proof and run once, here.
   beta.160 equivalent. semstreams#313 (HITL owned-write lane) should be
   re-evaluated against the new mutation port before any HITL work.
 - Per-rule `entity.pattern` narrowing (the blanket `*.*.*.*.*.*` from
-  ADR-058 finding 6/9) is scheduled against these configs — narrow each
-  wired rule to its firing-entity class, validated by the journey
-  sweep.
+  ADR-058 finding 6/9) is **done**. Every wired rule fires on one of two
+  entity families, and which one is derivable from the rule's own
+  conditions rather than a hand-maintained list: `agent.loop.*` /
+  `coordinator.decision.*` / `agent.lineage.*` facts live on the loop
+  entity (`*.*.agent.agentic-loop.execution.*`, 32 rules), `agent.run.*`
+  facts live on the run entity (`*.*.agent.chain.execution.*`, 8 rules).
+  `autoresearch/05` was already narrow. The change is behaviourally
+  inert: non-array operators return false on a missing predicate, so
+  narrowing only skips evaluations guaranteed not to fire.
+  - **Hazard for the next rule author**: *array* operators do NOT behave
+    that way. A missing predicate is given an EMPTY LIST, so
+    `length_eq 0` returns **true** on an entity lacking the field
+    entirely. Rules agent-run/05, 07, 09 and 12 depend on `length_eq 0`
+    and are safe only because each is AND-composed with a family-pinning
+    `eq`. A rule whose conditions were all array operators would match
+    every entity the watcher delivers.
+  - Fenced by `TestWiredRulesNarrowEntityPattern`: blanket pattern, wrong
+    family for the conditions, a pattern unreachable under either
+    bootstrap's `entity_watch_buckets`, and unclassifiable conditions.
+    The firing-entity containment rule that ADR-058 finding 9 hit is
+    fenced separately and pre-existing, by
+    `TestReconcile_ResolvedTargetsWithinContractScope`.
+  - The unwired `configs/rules/ops/` pack deliberately keeps the blanket:
+    the fence covers bootstrap-wired rules only, so re-wiring ops trips
+    it and forces the narrowing decision at that point.
+  - Component-level `entity_watch_buckets` stays broad, per the existing
+    decision pinned in `test/contract/flow_bootstrap_test.go`.
+  - Journey verdict: 15 green / 5 parked (`describe.skip`) / 1 red —
+    identical to the pre-change beta.160 baseline. The red is
+    `ops-agent`, which cannot pass because its rules were never wired
+    into either bootstrap (its spec header still cites
+    `configs/e2e-ops-observer.json`, deleted in ADR-042 MVP-7). The
+    load-bearing evidence is `run-failed`: it asserts on `agent.run.phase`
+    triples reaching terminal `failed` via `research/09` (loop family)
+    stamping `agent.run.outcome` which `agent-run/04` (run family) then
+    consumes — so both narrowed families and the handoff between them are
+    confirmed empirically, not merely by static argument.
+  - **Residual**: agent-run rules 09/11/12/13 (clarification and approval
+    pause/resume) get no journey coverage — `ask-user-pause` and
+    `clarification-resume` are parked, and the approval pair is not in
+    the `test:e2e` chain. Their pattern is the same run-family string
+    proven by 02/03/04/04b, so what is unexercised is those rules'
+    conditions, not the narrowing.
 - The evidence-fetch UI pass (decision 7) is the gate for restoring
   rich trajectory rendering.
