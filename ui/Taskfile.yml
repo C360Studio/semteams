@@ -1371,24 +1371,28 @@ tasks:
     desc: Run smoke #6 (ADR-042 MVP-6 — research-category real-LLM) end-to-end with cleanup
     summary: |
       Real-LLM smoke for ADR-042 MVP-6. Boots the bootstrap config
-      (configs/flow-bootstrap.json — real Anthropic claude-haiku for
-      coordinator + research + reviewing capabilities), sends the
-      canonical MVP-5 research prompt, runs the auto-approve watcher
-      (no gates expected in the research category — watcher just polls
-      until all loops terminate), captures trajectories + message log
-      to /tmp/smoke6-<RUN_ID>/, then tears the stack down.
+      (configs/flow-bootstrap.json — real GEMINI for every capability:
+      coordinator → gemini-3.1-pro-preview, research/reviewing/general
+      → gemini-3-flash-preview), sends the canonical MVP-5 research
+      prompt, runs the auto-approve watcher (no gates expected in the
+      research category — watcher just polls until all loops
+      terminate), captures trajectories + message log to
+      /tmp/smoke6-<RUN_ID>/, then tears the stack down.
 
       Sibling task to smoke7 but scoped to the MVP roster — no
       sandbox/semsource profiles, no chainmode/phasevalidator
       machinery, just the substrate + research-pack rules. Expected
-      chain shape: six loops total — coordinator dispatch +
+      chain shape: SEVEN loops — coordinator dispatch +
       researcher-research-{plan,gather,synthesize} + reviewer-research
-      (approved) + wake-up coordinator (respond_direct). Matches the
-      mock-LLM journey from MVP-5 (#176).
+      (approved) + wake-up coordinator (respond_direct), plus ONE
+      ops-chain-observer. The observer is the ADR-027 ops rule firing
+      on the run entity reaching its terminal phase; it runs off the
+      chain (run_scope none) and terminates with decide(observed).
+      Matches the mock-LLM research-mvp journey.
 
-      Real Anthropic spend (~$0.30-$0.50 per run on claude-haiku-4-5
-      across six loops, roughly 13 model calls). ANTHROPIC_API_KEY
-      required: invoke from the project root so the parent Taskfile's
+      Real Gemini spend across seven loops (~14 model calls: the
+      observer adds one flash-tier loop). GEMINI_API_KEY required:
+      invoke from the project root so the parent Taskfile's
       `dotenv: ['.env']` loads it, or export it manually before
       invoking from this directory.
 
@@ -1413,8 +1417,8 @@ tasks:
       HOST_BRAVE_KEY:
         sh: printf '%s' "${BRAVE_SEARCH_API_KEY:-}"
     preconditions:
-      - sh: '[ -n "$ANTHROPIC_API_KEY" ]'
-        msg: "ANTHROPIC_API_KEY is unset. Add it to the project-root .env (auto-loaded when invoking from project root) or export it in your shell. Smoke #6 routes the research arc to claude-haiku-4-5; without a key the run cannot start."
+      - sh: '[ -n "$GEMINI_API_KEY" ]'
+        msg: "GEMINI_API_KEY is unset. Add it to the project-root .env (auto-loaded when invoking from project root) or export it in your shell. flow-bootstrap.json routes EVERY capability to Gemini (coordinator → gemini-3.1-pro-preview, research/reviewing/general → gemini-3-flash-preview); an ANTHROPIC_API_KEY does not help. This precondition previously checked ANTHROPIC_API_KEY, which passed on hosts that had one and then failed at the first model call."
       - sh: '[ -n "$BRAVE_SEARCH_API_KEY" ]'
         msg: "BRAVE_SEARCH_API_KEY is unset. Add it to the project-root .env. Without it the framework registers the web_search stub, gather can't ground claims, and the chain wedges in needs_clarification recovery (smoke #6 Finding 1)."
     cmds:
