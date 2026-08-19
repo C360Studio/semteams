@@ -5,7 +5,7 @@
   "description": "ADR-042 §Phase 2 redesign MVP-2. First rule of the research category pack. Fires when a coordinator loop terminates with decide(action=research) — the category classification token MVP-4 teaches the coordinator persona to emit. Spawns researcher-research-plan, the pack's plan-phase entry role. Replaces configs/rules/coordinator/01-delegate-research.json (whose decide(action=delegate_research) token spawns the legacy chain.mode-gated researcher-plan role); both rules co-exist during MVP-2 through MVP-6 build-up, the legacy delegate-research retires alongside chain.mode in MVP-7.",
   "enabled": true,
   "entity": {
-    "pattern": "*.*.*.*.*.*"
+    "pattern": "*.*.agent.agentic-loop.execution.*"
   },
   "conditions": [
     {

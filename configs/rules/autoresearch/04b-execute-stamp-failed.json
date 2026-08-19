@@ -5,7 +5,7 @@
   "description": "ADR-042 §Phase 2 redesign autoresearch pack — iteration JOIN counter, loop-failed half. Fires when an autoresearch-execute loop terminates with outcome=failed — the loop itself crashed BEFORE emitting decide(action=measured). Causes: sandbox bash dispatch timed out, agentic-loop hit max_iterations without decide, container OOM mid-bash, NATS transient failure dropped the loop, panic in the LLM completion path.\n\nWrites the same autoresearch.experiment.completed triple onto the RUN loop entity that rule 04a writes. Together 04a + 04b implement the README's 'honest accounting of the iteration budget' claim: every execute consumes one budget slot regardless of whether the measurement completed cleanly OR the loop crashed mid-iteration. Failed executes still cost an iteration; the chain still makes forward progress against the cap.\n\nReview-fix rationale (2026-05-29): the original single rule 04 conditioned on outcome=success+decide=measured. A failed execute would NOT increment the counter; rule 11 (loop-failed-pause) would stamp chain.paused.marker and the chain would wedge silently while the counter showed N-1 rather than N. The fix routes loop-failed executes through this rule (counter increments, chain continues) and removes autoresearch-execute from rule 11's role list (no more pause-on-execute-fail).\n\nFor propose / synthesize / baseline / reviewer-autoresearch failures, rule 11 still pauses the chain — those failures DO need operator intervention; only execute failures are budgeted-and-continue.",
   "enabled": true,
   "entity": {
-    "pattern": "*.*.*.*.*.*"
+    "pattern": "*.*.agent.agentic-loop.execution.*"
   },
   "conditions": [
     {

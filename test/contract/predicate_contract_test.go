@@ -389,3 +389,140 @@ func TestWiredRulesDeclareEntityPattern(t *testing.T) {
 		}
 	}
 }
+
+// The two entity families every wired rule fires on. Loop entities carry the
+// agent.loop.* / coordinator.decision.* facts; run entities carry agent.run.*.
+const (
+	loopEntityPattern = "*.*.agent.agentic-loop.execution.*"
+	runEntityPattern  = "*.*.agent.chain.execution.*"
+)
+
+// TestWiredRulesNarrowEntityPattern pins the successor to the blanket
+// `*.*.*.*.*.*` that ADR-058 finding 6 introduced as a stopgap. The blanket
+// made every wired rule evaluate its full condition set against every entity
+// snapshot the ENTITY_STATES watcher delivers, and it is outright illegal for
+// any rule whose reconcile_predicates targets the firing entity — boot-time
+// containment (upstream processor/rule/projection_derivation.go
+// validateDeclaredProjectionSuperset) demands contract entity_pattern ⊇ rule
+// entity.pattern and fail-closes at load. Finding 9 already hit that live.
+//
+// The pattern is derivable from the rule's own conditions, so this asserts the
+// coupling rather than a hand-maintained list: a rule reading agent.loop.* /
+// coordinator.decision.* / agent.lineage.* fires on the loop entity; one
+// reading only agent.run.* fires on the run entity.
+//
+// entity_watch_buckets containment is checked here too — a rule pattern the
+// component's watch patterns do not cover never receives a snapshot, which is
+// the same silent-never-fires failure as a missing pattern.
+func TestWiredRulesNarrowEntityPattern(t *testing.T) {
+	watchPatterns := ruleWatchPatterns(t)
+	for _, path := range bootstrapLoadedRules(t) {
+		raw, err := os.ReadFile(path) //nolint:gosec // test-controlled config path
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		var rule struct {
+			Type   string `json:"type"`
+			Entity struct {
+				Pattern string `json:"pattern"`
+			} `json:"entity"`
+			Conditions []struct {
+				Field string `json:"field"`
+			} `json:"conditions"`
+		}
+		if err := json.Unmarshal(raw, &rule); err != nil {
+			t.Fatalf("unmarshal %s: %v", path, err)
+		}
+		if rule.Type == "cron" {
+			continue
+		}
+		pattern := rule.Entity.Pattern
+		if pattern == "*.*.*.*.*.*" {
+			t.Errorf("%s: entity.pattern is the blanket *.*.*.*.*.* — narrow it to the entity family "+
+				"the rule's conditions read (%s or %s). The blanket evaluates the rule against every "+
+				"entity update and fail-closes rule load when a reconcile_predicates action targets the "+
+				"firing entity", path, loopEntityPattern, runEntityPattern)
+			continue
+		}
+
+		var readsLoop, readsRun bool
+		for _, c := range rule.Conditions {
+			switch {
+			case strings.HasPrefix(c.Field, "agent.loop."),
+				strings.HasPrefix(c.Field, "coordinator.decision."),
+				strings.HasPrefix(c.Field, "agent.lineage."):
+				readsLoop = true
+			case strings.HasPrefix(c.Field, "agent.run."):
+				readsRun = true
+			}
+		}
+		switch {
+		case readsLoop && pattern != loopEntityPattern:
+			t.Errorf("%s: conditions read loop-entity facts but entity.pattern is %q, want %q",
+				path, pattern, loopEntityPattern)
+		case !readsLoop && readsRun && pattern != runEntityPattern:
+			t.Errorf("%s: conditions read only run-entity facts but entity.pattern is %q, want %q",
+				path, pattern, runEntityPattern)
+		}
+
+		if !anyWatchPatternReaches(watchPatterns, pattern) {
+			t.Errorf("%s: entity.pattern %q cannot be reached by any rule-processor entity_watch_buckets "+
+				"pattern %v — the watcher never delivers a matching snapshot and the rule never fires",
+				path, pattern, watchPatterns)
+		}
+	}
+}
+
+// ruleWatchPatterns returns the rule processor's configured ENTITY_STATES
+// watch patterns from flow-bootstrap.json.
+func ruleWatchPatterns(t *testing.T) []string {
+	t.Helper()
+	data, err := os.ReadFile("../../configs/flow-bootstrap.json")
+	if err != nil {
+		t.Fatalf("read flow-bootstrap.json: %v", err)
+	}
+	var bootstrap struct {
+		Components map[string]struct {
+			Config struct {
+				EntityWatchBuckets map[string][]string `json:"entity_watch_buckets"`
+			} `json:"config"`
+		} `json:"components"`
+	}
+	if err := json.Unmarshal(data, &bootstrap); err != nil {
+		t.Fatalf("unmarshal flow-bootstrap.json: %v", err)
+	}
+	patterns := bootstrap.Components["rule"].Config.EntityWatchBuckets["ENTITY_STATES"]
+	if len(patterns) == 0 {
+		t.Fatal("rule-processor entity_watch_buckets.ENTITY_STATES is empty — no rule can ever fire")
+	}
+	return patterns
+}
+
+// anyWatchPatternReaches reports whether some watch pattern can deliver an
+// entity the rule pattern matches. Both are six-position dotted globs, and the
+// relation that matters is INTERSECTION, not containment: rule patterns leave
+// the org/platform positions as `*` (upstream's own convention — see
+// internal/builtinprojection contracts) while the watch pattern pins the
+// deployment org, so a containment test would demand a literal org in all 41
+// rule files for no benefit. What this catches is the reachability failure —
+// a rule naming an entity family whose literal segments the watcher excludes.
+func anyWatchPatternReaches(watchPatterns []string, rulePattern string) bool {
+	ruleParts := strings.Split(rulePattern, ".")
+	for _, watch := range watchPatterns {
+		watchParts := strings.Split(watch, ".")
+		if len(watchParts) != len(ruleParts) {
+			continue
+		}
+		reachable := true
+		for i := range watchParts {
+			if watchParts[i] != "*" && ruleParts[i] != "*" && watchParts[i] != ruleParts[i] {
+				reachable = false
+				break
+			}
+		}
+		if reachable {
+			return true
+		}
+	}
+	return false
+}

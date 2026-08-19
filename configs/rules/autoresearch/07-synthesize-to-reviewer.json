@@ -5,7 +5,7 @@
   "description": "ADR-042 §Phase 2 redesign autoresearch pack terminal forward edge. Fires when autoresearch-synthesize terminates with decide(action=emit) — the synthesize phase has emitted the structured artifact via emit_autoresearch_artifact. Spawns reviewer-autoresearch, which grades the artifact's structural completeness against the autoresearch-specific checklist.\n\nReviewer-autoresearch is a SEPARATE persona from reviewer-research because the artifact shape differs (baseline/best/journey/open_opportunities vs actors/integration_points/tasks). The role token follows the reviewer-<category> convention.",
   "enabled": true,
   "entity": {
-    "pattern": "*.*.*.*.*.*"
+    "pattern": "*.*.agent.agentic-loop.execution.*"
   },
   "conditions": [
     {

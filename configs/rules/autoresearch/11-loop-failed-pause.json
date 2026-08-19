@@ -5,7 +5,7 @@
   "description": "ADR-042 §Phase 2 redesign autoresearch pack failure handler. Fires when an autoresearch-pack role (EXCEPT autoresearch-execute) terminates with outcome=failed BEFORE emitting its decide() terminal — model timeout, NATS blip, OOM, panic, max_iterations hit without terminal decide. Without this rule, the failure stalls the chain silently. Stamps a chain.paused.marker triple so operator dashboards (and mock-LLM journey assertions) can surface the pause.\n\nautoresearch-execute is INTENTIONALLY excluded from the role list — per the reviewer C1 fix (2026-05-29), execute loop-failures route through rule 04b (which stamps experiment.completed + experiment.loop_failed) so they count toward the cap budget rather than pausing the chain. A loop-failed execute is a budgeted-but-evidence-empty iteration; the chain continues to the next propose. Loop-failed baseline / propose / synthesize / reviewer DO need operator intervention (no way to recover without intervention), so they still pause here.",
   "enabled": true,
   "entity": {
-    "pattern": "*.*.*.*.*.*"
+    "pattern": "*.*.agent.agentic-loop.execution.*"
   },
   "conditions": [
     {
