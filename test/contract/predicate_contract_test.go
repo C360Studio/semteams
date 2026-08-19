@@ -4,9 +4,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/c360studio/semstreams/agentic/agentrun"
+	agvocab "github.com/c360studio/semstreams/vocabulary/agentic"
 )
 
 // Canonical predicate contract audit (upstream ADR-074, enforced fail-closed
@@ -392,10 +396,27 @@ func TestWiredRulesDeclareEntityPattern(t *testing.T) {
 
 // The two entity families every wired rule fires on. Loop entities carry the
 // agent.loop.* / coordinator.decision.* facts; run entities carry agent.run.*.
-const (
-	loopEntityPattern = "*.*.agent.agentic-loop.execution.*"
-	runEntityPattern  = "*.*.agent.chain.execution.*"
-)
+//
+// The run pattern comes from upstream so a family rename breaks compilation
+// instead of silently diverging. The loop pattern has no exported equivalent
+// (its source of truth, semstreams internal/builtinprojection/contracts.go,
+// is an internal package), so it stays a literal.
+const loopEntityPattern = "*.*.agent.agentic-loop.execution.*"
+
+var runEntityPattern = agentrun.EntityIDPattern
+
+// Wired rules whose conditions read no predicate the family classifier
+// recognizes, mapped to the fence that covers their entity.pattern instead.
+// Keep this as small as the classifier allows — an entry is an admission that
+// this test cannot check the file.
+var unclassifiedRuleFamilies = map[string]string{
+	// Conditions are autoresearch.run.* / autoresearch.iteration.*. Its
+	// reconcile_predicates actions omit `subject`, so the firing family flows
+	// into upstream's boot-time containment check — mirrored by
+	// TestReconcile_ResolvedTargetsWithinContractScope, which fails loudly if
+	// this pattern moves off the run family.
+	"05-iteration-dispatch.json": "TestReconcile_ResolvedTargetsWithinContractScope",
+}
 
 // TestWiredRulesNarrowEntityPattern pins the successor to the blanket
 // `*.*.*.*.*.*` that ADR-058 finding 6 introduced as a stopgap. The blanket
@@ -448,6 +469,15 @@ func TestWiredRulesNarrowEntityPattern(t *testing.T) {
 		var readsLoop, readsRun bool
 		for _, c := range rule.Conditions {
 			switch {
+			// agent.run.entity-id is a LOOP-entity predicate despite the
+			// agent.run.* prefix: it is the pointer triple the rule engine
+			// stamps on the FIRING loop (upstream actions.go stampRun), and
+			// upstream declares it among the loop predicates. Classifying it
+			// by prefix would force a rule that reads only this field onto
+			// the run pattern, where it could never fire. Sibling
+			// agent.run.* fields really are run-side, so do not widen this.
+			case c.Field == agvocab.LoopRunEntityID:
+				readsLoop = true
 			case strings.HasPrefix(c.Field, "agent.loop."),
 				strings.HasPrefix(c.Field, "coordinator.decision."),
 				strings.HasPrefix(c.Field, "agent.lineage."):
@@ -463,39 +493,66 @@ func TestWiredRulesNarrowEntityPattern(t *testing.T) {
 		case !readsLoop && readsRun && pattern != runEntityPattern:
 			t.Errorf("%s: conditions read only run-entity facts but entity.pattern is %q, want %q",
 				path, pattern, runEntityPattern)
+		case !readsLoop && !readsRun:
+			// Abstaining here is how a future category pack (ops.diagnosis.*,
+			// a new pack's namespace) would sail through unchecked. Make the
+			// unrecognized prefix a decision point instead. autoresearch/05
+			// is the live example: its firing family is pinned by
+			// TestReconcile_ResolvedTargetsWithinContractScope, which mirrors
+			// the boot-time containment check, so name it here explicitly.
+			if _, known := unclassifiedRuleFamilies[filepath.Base(path)]; !known {
+				t.Errorf("%s: conditions read no known entity-family predicate, so this test cannot "+
+					"verify entity.pattern %q names the family the rule actually fires on. Add the "+
+					"predicate prefix to the classifier, or record the file in "+
+					"unclassifiedRuleFamilies with the fence that covers it", path, pattern)
+			}
 		}
 
-		if !anyWatchPatternReaches(watchPatterns, pattern) {
-			t.Errorf("%s: entity.pattern %q cannot be reached by any rule-processor entity_watch_buckets "+
-				"pattern %v — the watcher never delivers a matching snapshot and the rule never fires",
-				path, pattern, watchPatterns)
+		// Reachability must hold under EVERY bootstrap, not merely one of
+		// them — the journeys run the e2e config, production runs the other.
+		for configPath, patterns := range watchPatterns {
+			if !anyWatchPatternReaches(patterns, pattern) {
+				t.Errorf("%s: entity.pattern %q cannot be reached by any %s entity_watch_buckets "+
+					"pattern %v — the watcher never delivers a matching snapshot and the rule never fires",
+					path, pattern, configPath, patterns)
+			}
 		}
 	}
 }
 
 // ruleWatchPatterns returns the rule processor's configured ENTITY_STATES
-// watch patterns from flow-bootstrap.json.
-func ruleWatchPatterns(t *testing.T) []string {
+// watch patterns. Both bootstraps are read and their patterns unioned: the
+// journeys run against e2e-flow-bootstrap.json, and TestBootstrapRuleListsMatch
+// pins rules_files across the two but not entity_watch_buckets, so a rule
+// reachable in production could be unreachable under the e2e config.
+func ruleWatchPatterns(t *testing.T) map[string][]string {
 	t.Helper()
-	data, err := os.ReadFile("../../configs/flow-bootstrap.json")
-	if err != nil {
-		t.Fatalf("read flow-bootstrap.json: %v", err)
+	all := map[string][]string{}
+	for _, path := range []string{
+		"../../configs/flow-bootstrap.json",
+		"../../configs/e2e-flow-bootstrap.json",
+	} {
+		data, err := os.ReadFile(path) //nolint:gosec // test-controlled config path
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		var bootstrap struct {
+			Components map[string]struct {
+				Config struct {
+					EntityWatchBuckets map[string][]string `json:"entity_watch_buckets"`
+				} `json:"config"`
+			} `json:"components"`
+		}
+		if err := json.Unmarshal(data, &bootstrap); err != nil {
+			t.Fatalf("unmarshal %s: %v", path, err)
+		}
+		patterns := bootstrap.Components["rule"].Config.EntityWatchBuckets["ENTITY_STATES"]
+		if len(patterns) == 0 {
+			t.Fatalf("%s: rule-processor entity_watch_buckets.ENTITY_STATES is empty — no rule can ever fire", path)
+		}
+		all[path] = patterns
 	}
-	var bootstrap struct {
-		Components map[string]struct {
-			Config struct {
-				EntityWatchBuckets map[string][]string `json:"entity_watch_buckets"`
-			} `json:"config"`
-		} `json:"components"`
-	}
-	if err := json.Unmarshal(data, &bootstrap); err != nil {
-		t.Fatalf("unmarshal flow-bootstrap.json: %v", err)
-	}
-	patterns := bootstrap.Components["rule"].Config.EntityWatchBuckets["ENTITY_STATES"]
-	if len(patterns) == 0 {
-		t.Fatal("rule-processor entity_watch_buckets.ENTITY_STATES is empty — no rule can ever fire")
-	}
-	return patterns
+	return all
 }
 
 // anyWatchPatternReaches reports whether some watch pattern can deliver an
@@ -511,6 +568,10 @@ func anyWatchPatternReaches(watchPatterns []string, rulePattern string) bool {
 	for _, watch := range watchPatterns {
 		watchParts := strings.Split(watch, ".")
 		if len(watchParts) != len(ruleParts) {
+			// Different segment counts can never describe the same ID, so
+			// this watch pattern cannot reach the rule. Skipping is the
+			// answer, not an omission: if every watch pattern mismatches,
+			// the loop ends and reports unreachable.
 			continue
 		}
 		reachable := true
