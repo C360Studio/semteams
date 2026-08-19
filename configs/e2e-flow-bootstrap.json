@@ -353,7 +353,8 @@
           "/app/configs/rules/agent-run/10-clarification-reply-resume-marker.json",
           "/app/configs/rules/agent-run/11-resume-awaiting-to-executing.json",
           "/app/configs/rules/agent-run/12-executing-to-awaiting-on-approval.json",
-          "/app/configs/rules/agent-run/13-resume-awaiting-to-executing-on-approval.json"
+          "/app/configs/rules/agent-run/13-resume-awaiting-to-executing-on-approval.json",
+          "/app/configs/rules/ops/01-run-terminal-observe.json"
         ],
         "inline_rules": []
       }

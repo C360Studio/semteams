@@ -1,95 +1,91 @@
 # What to emit, what not to emit
 
+A finding describes an operator-actionable pattern grounded in
+specific evidence you actually read.
+
 ## Findings worth emitting
 
-A finding describes an operator-actionable pattern grounded in
-specific evidence. For per-chain detail observation, the
-patterns most worth surfacing:
+**Terminal findings** — the run ended in a way that needs a human:
 
-**Chain-shape findings** — the chain executed but the verdict
-needs human review:
+- The run reached `failed` or `cancelled` — name the loop whose
+  outcome was `failed`/`truncated` and what its reason said.
+- `chain.paused.*` is present — name the paused loop's role and
+  the recorded cause.
+- A reviewer rejected, or a role terminated
+  `needs_clarification` — cite the specific gap from
+  `coordinator.decision.reason` rather than paraphrasing it.
 
-- qa-reviewer terminated `needs_clarification` — name the
-  specific gap from `coordinator.decision.reason`
-- qa-reviewer terminated `reject` — name what failed and the
-  retry hint, if present
-- builder failed (chain.paused with `cause=max_iterations` or
-  `cause=execution_error`) — name the failed loop's role and
-  the pause cause
+**Resource-pattern findings** — the run succeeded but something is
+worth tuning:
 
-**Resource-pattern findings** — the chain succeeded but a metric
-is worth flagging:
+- A role approached its iteration cap (≥80%) — a tuning signal,
+  especially if it still succeeded.
+- One role dominated total token spend — a cost-attribution
+  signal.
+- A phase retried repeatedly before converging — name how many
+  times and what changed between attempts.
+- A tool failed repeatedly inside one loop — name the tool, the
+  count, and the loop.
 
-- Builder iterations approached the cap (≥80% of max_iterations) —
-  surface as a tuning signal
-- A single role consumed >70% of total tokens — surface as a
-  cost-attribution signal
-- Research arc iterated 5+ times before approval — surface as a
-  research-coverage gap signal
-- Per-tool failure_count nonzero — name which tool, how many
-  times, in which loop
+**Inconsistency findings** — the run's own facts disagree:
 
-**Cross-arc inconsistency findings** — the chain has a structural
-gap a human should notice:
-
-- Builder reported tests_passing but qa-reviewer rejected —
-  name the qa-reviewer's specific complaint
-- Architect emitted N checks but only M had evidence rules —
-  surface as a regression of the architect's own contract
-  (verification.Check.Validate enforces ≥1 rule per check at the
-  tool layer; if you observe this gap, the validator has been
-  bypassed or a new path emits checks without going through it)
-- chain.evidence.summary-ready=false at terminal — the evidence
-  preprocessor never ran or failed silently
+- A role reported success but the next role's reason contradicts
+  it — cite both.
+- A terminal was reached with output thinner than the phase
+  implies (a synthesize step with almost nothing in it, a gather
+  step that cited no sources).
+- The run's phase and outcome disagree with the roster you found
+  in step 2.
 
 ## Findings NOT worth emitting
 
-- **Restating the chain shape itself.** "The chain ran research,
-  plan, consensus, spec, builder, qa-reviewer" is not a finding —
-  it's the documented shape.
-- **Persona-prose paraphrases.** Don't summarise the
-  decision_reason in your own words; cite it.
-- **Speculation without evidence.** If you can't point at a
-  specific entity ID and predicate, don't emit.
-- **Findings about a single chain's expected outputs.** "The
-  builder produced 14 tests" is data, not a finding. "The
-  builder produced 14 tests but the planner's outcome list
-  enumerated 17" is a finding (gap between plan and execution).
+- **Restating the shape.** "The run executed plan, gather,
+  synthesize, review" is the documented shape, not a finding.
+- **Paraphrasing prose.** Cite `coordinator.decision.reason`;
+  do not re-word it.
+- **Speculation.** If you cannot point at an entity ID and a
+  predicate, do not emit.
+- **Expected outputs restated as observations.** "The gatherer
+  produced 4 findings" is data. "The planner named 6 subtopics
+  and only 4 gatherers reported" is a finding.
 
-## emit_diagnosis discipline
+## emit_diagnosis contract
 
-Each call writes one finding. The required fields are:
+One call, one finding. Required fields:
 
-- `finding` — what's wrong / worth attention (one sentence)
+- `finding` — what is wrong or worth attention (one sentence)
 - `recommendation` — what an operator should do (one sentence)
-- `confidence` — 0.0 to 1.0; <0.5 should be rare
-- `evidence` — at least one graph entity ID; the chain entity
-  itself qualifies, plus loop entities if your finding cites
-  specific roles
-- `severity` — `info`, `warn`, or `error`. Default `warn` when
-  unclear
+- `confidence` — 0.0 to 1.0
+- `evidence` — at least one graph entity ID you actually read;
+  the run entity qualifies, plus any loop entities your finding
+  cites
+- `severity` — **exactly one of `info`, `warn`, `critical`**
 
-The emit_diagnosis tool mints
-`{org}.{platform}.ops.diagnosis.finding.{uuid}` entities — those
-become the audit trail an operator reads.
+The tool mints `{org}.{platform}.ops.diagnosis.finding.{uuid}`
+entities. Those are the audit trail an operator reads.
+
+### Severity is a closed set
+
+`info`, `warn`, `critical` — nothing else. **Any other value is
+silently clamped to `info`**, so writing `error` or `high` does
+not fail loudly, it quietly downgrades your most serious finding
+to the least serious level. Use the three words exactly.
+
+- `info` — a noteworthy data point implying no action
+- `warn` — a pattern an operator should investigate or tune
+- `critical` — a structural gap or regression needing a fix
+
+A failed or paused run is normally `critical`. A tuning signal on
+a healthy run is `warn`. Use `info` sparingly — a finding nobody
+needs to act on is usually a finding not worth emitting.
 
 ## Confidence calibration
 
-- **0.9+**: structural evidence (a triple says X; you cite the
-  triple)
-- **0.7-0.9**: pattern evidence across multiple loops in the
-  chain
-- **0.5-0.7**: indirect evidence requiring inference (e.g.
-  "iteration count high → likely struggling")
-- **Below 0.5**: don't emit
+- **0.9+** — structural: a triple says it and you cite the triple
+- **0.7-0.9** — pattern evidence across several loops
+- **0.5-0.7** — indirect, requiring inference
+- **Below 0.5** — do not emit
 
-## Severity calibration
-
-- `info` — a noteworthy data point with no operator action implied
-- `warn` — a pattern an operator should investigate or tune
-- `error` — a structural gap or regression operator must fix
-
-For per-chain observation: `info` when the chain succeeded
-cleanly, `warn` for tuning signals or qa-reviewer
-needs_clarification, `error` for structural gaps (chain.paused,
-evidence preprocessor missed, etc.).
+Confidence is also how downstream consumers rank urgency, since
+severity is only three levels. An honest 0.6 is more useful than
+a reflexive 0.9.

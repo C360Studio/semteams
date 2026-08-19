@@ -107,10 +107,12 @@ func TestChainAgentsCannotReadGraph(t *testing.T) {
 // `00-identity.md`, because upstream's ops persona layers on top).
 func TestOpsPersonaDirsExist(t *testing.T) {
 	root := "../../configs/personas/fragments"
+	// ops-chain-observer is the only ops role. The `ops` (ops-analyst) and
+	// `ops-progress-observer` corpora were deleted when the pack was re-wired
+	// into MVP: no rule spawned either, and both were written against roles
+	// and predicates that ADR-041/042/058 retired.
 	for _, dir := range []string{
-		"ops",
 		"ops-chain-observer",
-		"ops-progress-observer",
 	} {
 		dirPath := filepath.Join(root, dir)
 		entries, err := os.ReadDir(dirPath)

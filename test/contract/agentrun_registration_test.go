@@ -93,6 +93,22 @@ var mintPointSuffixes = []string{
 	"configs/rules/create-change/01-coordinator-create-change-spawn.json",
 }
 
+// runScopeNoneSuffixes are the rules allowed to declare run_scope="none" — the
+// documented opt-OUT (upstream: "do NOT propagate RunID"), which is the
+// opposite of a mint and must not be confused with one.
+//
+// Only the ops observer qualifies. It fires on the RUN entity after that run
+// reaches a terminal phase, and it must not become a member of the run it
+// observes — otherwise its own terminal re-enters the run family and the
+// observer observes itself. Omitting the field would be equivalent at runtime
+// today (upstream: a non-loop trigger with no agent.loop.run triple inherits
+// nothing), but only by accident of the run entity not carrying a loop
+// predicate. Stating it keeps the isolation a property of the config rather
+// than of a coincidence.
+var runScopeNoneSuffixes = []string{
+	"configs/rules/ops/01-run-terminal-observe.json",
+}
+
 // TestRunScopeMintPointsAndLifecycleTransitions is the ADR-053 run-topology
 // guard (Phase 2 mint points + Phase 4a transition scoping).
 //
@@ -258,8 +274,15 @@ func scanRunTokens(v any, file string, runScopeFiles map[string]bool, badValues,
 	switch node := v.(type) {
 	case map[string]any:
 		if rs, ok := node["run_scope"]; ok {
-			runScopeFiles[file] = true
-			if s, _ := rs.(string); s != "new" {
+			s, _ := rs.(string)
+			switch {
+			case s == "new":
+				runScopeFiles[file] = true
+			case s == "none" && matchesAnySuffix(file, runScopeNoneSuffixes):
+				// Deliberate opt-OUT of run association, not a mint. Tracked
+				// separately from runScopeFiles so the mint-point invariant
+				// below stays exactly as strict as it was.
+			default:
 				*badValues = append(*badValues, fmt.Sprintf("%s: run_scope=%v", file, rs))
 			}
 		}
