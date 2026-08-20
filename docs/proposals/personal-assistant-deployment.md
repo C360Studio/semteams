@@ -56,6 +56,24 @@ scope**. `cron_substitution.go` supplies only `$schedule.id`,
 state-awareness must come from the spawned loop reading the graph — which is
 why the seen-set (Phase 1 below) gates everything else.
 
+The scheduler ships **four dispatch gates** (`cron_scheduler.go:370-445`):
+existence, `FireEveryN`, `cooldown` (wallclock, since the previous fire), and
+an **inflight** CAS guard that skips a tick when the previous fire is still
+running. The last one matters most here: it is exactly the "a wedged chain
+must not stack fires" protection Phase 0 needs, and it is free. Its
+`inflight_skipped` metric is deliberately distinct from `cooldown_skipped`
+because the operator response differs — the former means actions are slower
+than the schedule.
+
+> **Do not carry the semstreams#1007 caveat across to cron rules.**
+> `CLAUDE.md` warns that `fire_every_n_events` does not gate `publish_agent`
+> and that `cooldown` is per rule *instance* with an `on_exit`-firing
+> suppression path. Both findings are about the **expression-rule** path,
+> where `on_enter` runs through the stateful evaluator and never reads the
+> counter. Cron rules dispatch through `CronScheduler.fire` instead, which
+> consults all four gates directly. Per-instance cooldown is also the
+> correct semantics for a heartbeat, which has exactly one instance.
+
 ### C2. The upstream `github_*` tools were removed by design
 
 ADR-056's GitHub-integration note (verified at beta.113) says D2's GitHub
@@ -162,10 +180,24 @@ semteams#248 (no endpoint declares pricing, so `agent.loop.cost-usd` has
 never been written in this deployment). ADR-056 named the *"autonomous
 cost/failure breaker"* as net-new D2 surface and was right.
 
-**G5 — Ops pack unwired.** `configs/rules/ops/*.json` left the bootstraps'
-`rules_files` during MVP-7. For an unattended box this is the only thing that
-notices a chain spinning. Promoted here from a nice-to-have to a Phase 0
-prerequisite.
+**G5 — Ops pack unwired — being resolved in flight.** As of `origin/main`
+today the ops rules (`chain-terminal-observe.json`,
+`observe-chain-progress.json`) are still out of the bootstraps'
+`rules_files`, where MVP-7 left them. A rewiring is in flight on the
+beta.160 branch (PR #247, not yet merged): one rule,
+`configs/rules/ops/01-run-terminal-observe.json`, triggered on the **run
+entity** reaching a terminal phase, with a single `ops-chain-observer` role.
+Triggering on the run rather than on a reviewer role is what makes it
+category-agnostic and lets it cover failed and cancelled runs.
+
+Treat G5 as closed once that lands, with one caveat that lands squarely on
+this proposal: a completion-triggered rule **structurally cannot observe a
+stalled chain**. The rewiring notes this and calls for "a cron primitive with
+an idle-cost gate that does not exist yet". Half of that now exists — per C1
+the cron primitive ships. What is missing is only the idle-cost gate, and a
+stall detector is a natural second consumer of the Phase 0 heartbeat: a
+scheduled loop that queries for runs with no forward progress, rather than a
+rule waiting for a terminal event that a wedged chain never emits.
 
 **G6 — Use case 2 is a build project.** `c360studio.github.io` is
 hand-written HTML. Standing up Starlight/Astro is ordinary dev work; SemTeams'
@@ -180,12 +212,12 @@ One cron rule firing a daily coordinator loop; `output.httppost` on
 repos and the docs site.
 
 Ship the containment budget in the *same* phase, before the first tick:
-conservative `max_iterations` on every role; cron `cooldown` so a wedged
-chain cannot stack fires; a hard fan-out ceiling in both the planner persona
-and the schema (schema is load-bearing, prose is hopeful); **G5 rewired**;
-and a kill switch verified by actually flipping the cron rule's
-`enabled: false` through the Pattern-B rule manager and confirming the
-heartbeat stops without a restart.
+conservative `max_iterations` on every role; a cron `cooldown` backed by the
+scheduler's inflight guard so a wedged chain cannot stack fires (C1); a hard
+fan-out ceiling in both the planner persona and the schema (schema is
+load-bearing, prose is hopeful); **G5 landed**; and a kill switch verified by
+actually flipping the cron rule's `enabled: false` through the Pattern-B rule
+manager and confirming the heartbeat stops without a restart.
 
 Steady-state cost is not the risk. The canonical research arc runs ~8 loops
 in ~2 minutes for ~$0.30 on `gemini-flash`; a daily docs sweep plus a daily
