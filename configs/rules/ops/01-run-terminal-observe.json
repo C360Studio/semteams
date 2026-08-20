@@ -11,7 +11,11 @@
     {
       "field": "agent.run.phase",
       "operator": "in",
-      "value": ["completed", "failed", "cancelled"],
+      "value": [
+        "completed",
+        "failed",
+        "cancelled"
+      ],
       "required": true
     }
   ],
@@ -32,15 +36,18 @@
         "emit_diagnosis",
         "decide"
       ],
-      "action_allowlist": ["observed"],
+      "action_allowlist": [
+        "observed"
+      ],
       "related_loops": {
         "root": "$entity.instance"
       },
       "properties": {
         "run_entity_id": "$entity.id",
-        "run_phase": "$entity.triple.agent.run.phase"
+        "run_phase": "$entity.triple.agent.run.phase",
+        "coordinator_loop_id": "$entity.triple.agent.run.handoff"
       },
-      "prompt": "A run has reached a terminal phase. Diagnose the chain that just finished.\n\n**Run entity:** $entity.id\n**Terminal phase:** $entity.triple.agent.run.phase\n\nStart with query_entity on the run entity above — it carries the run's own facts. Walk to the member loops with query_relationships, and use read_loop_result on individual loops when you need what a role actually produced rather than that it finished.\n\nYou are looking for things an operator would want to know and cannot see from a green tick: a role that burned most of its iteration budget, a retry that succeeded but shouldn't have been needed, a phase that completed with thin output, a failure whose stated cause does not match its evidence. Ground every finding in graph entities you actually read.\n\nCall emit_diagnosis once per finding, with evidence citing the entity IDs the finding rests on. **Finding nothing is the expected outcome on a healthy run** — do not manufacture a diagnosis to look useful. A clean run with zero emit_diagnosis calls is a correct and valuable observation.\n\nTerminate with decide(action=\"observed\", reason=\"<one line: what you examined and what you concluded>\")."
+      "prompt": "A run has reached a terminal phase. Diagnose the chain that just finished.\n\n**Run entity:** $entity.id\n**Terminal phase:** $entity.triple.agent.run.phase\n**Coordinator loop:** $entity.triple.agent.run.handoff\n\nStart with query_entity on the run entity above — it carries the run's own facts. Walk to the member loops with query_relationships, and use read_loop_result on individual loops when you need what a role actually produced rather than that it finished.\n\nYou are looking for things an operator would want to know and cannot see from a green tick: a role that burned most of its iteration budget, a retry that succeeded but shouldn't have been needed, a phase that completed with thin output, a failure whose stated cause does not match its evidence. Ground every finding in graph entities you actually read.\n\nCall emit_diagnosis once per finding, with evidence citing the entity IDs the finding rests on. **Finding nothing is the expected outcome on a healthy run** — do not manufacture a diagnosis to look useful. A clean run with zero emit_diagnosis calls is a correct and valuable observation.\n\nTerminate with decide(action=\"observed\", reason=\"<one line: what you examined and what you concluded>\")."
     }
   ],
   "on_exit": [],
@@ -54,6 +61,7 @@
     "feedback_loop_safety": "Four independent structural facts, no denylist to maintain: (1) run_scope none — the ops loop carries no RunID so it never joins the run it observes; (2) this rule fires on the run family while ops loops are loop-family entities; (3) all 32 wired loop-family rules gate on agent.loop.role and none names an ops role; (4) emit_diagnosis mints ops.diagnosis.finding entities that no wired rule's entity.pattern matches. Fact (4) is only true because of the ADR-059 narrowing — under the old blanket pattern every rule evaluated its conditions against every finding.",
     "replay_note": "Unlike agent-run/03, this condition stays true forever once a run terminates, so transition detection rests entirely on persisted MatchState. Clearing that KV while ENTITY_STATES survived would re-fire every historical run on boot. The standard `down -v` across the whole NATS store makes this unreachable; an operator doing selective bucket maintenance on long-lived NATS should switch to the `transition` operator (one target value per condition, so three terminals costs three rules).",
     "subject_shape_note": "Subject MUST be exactly two segments after `agent.task.` — agentic-dispatch subscribes on `agent.task.*`, a NATS single-token wildcard. Deeper subjects (e.g. `agent.task.ops.terminal_observe`) drop into the void: the rule fires, the action publishes, and no consumer subscribes. Smoke #8 run-11 surfaced this the hard way.",
-    "no_submit_work": "The retired rules granted `submit_work`, which does not exist upstream — no executor, no registration, only a category-map entry and comments (semstreams#1007). Unknown tool names are logged and dropped, so the personas were instructing a tool the model never received. Terminal is decide(action=observed), gated by action_allowlist."
+    "no_submit_work": "The retired rules granted `submit_work`, which does not exist upstream — no executor, no registration, only a category-map entry and comments (semstreams#1007). Unknown tool names are logged and dropped, so the personas were instructing a tool the model never received. Terminal is decide(action=observed), gated by action_allowlist.",
+    "handoff_passthrough_note": "coordinator_loop_id is threaded at spawn from agent.run.handoff rather than left for the observer to derive. agent.run.handoff is a BARE loop id (e.g. loop_7b3b867e), and an earlier persona told the model to build a 6-part loop entity ID from it by string surgery — exactly the hallucination source the lineage-passthrough pattern exists to remove. Hand it the id; never ask a small model to assemble an entity ID."
   }
 }

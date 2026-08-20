@@ -31,31 +31,29 @@ carries:
 Read every triple before you go anywhere else. Most of what you can
 truthfully say lives here.
 
-## Step 2 — hop to the coordinator loop
+## Step 2 — read the coordinator's result
 
-`agent.run.handoff` holds a bare loop ID. Two things you can do
-with it:
-
-```
-read_loop_result(loop_id="<agent.run.handoff value>")
-```
-
-gives you the coordinator's terminal decision and reason — why the
-run was routed the way it was, and on a clarification pause, what
-was asked.
+Your task properties carry `coordinator_loop_id` — the loop that
+routed this run. Use it directly:
 
 ```
-query_entity(entity_id="<org>.<platform>.agent.agentic-loop.execution.<handoff value>")
+read_loop_result(loop_id="<coordinator_loop_id>")
 ```
 
-gives you the coordinator loop's own triples, including any
-`agent.lineage.*` pointers it carries to loops further down. Build
-that ID from the segments of `run_entity_id` — same org and
-platform, `agentic-loop` in place of `chain`.
+That returns the coordinator's terminal decision and reason: why the
+run was routed the way it was, and on a clarification pause, what was
+asked. It is usually the single most informative read available to
+you after the run entity itself.
 
-Any loop ID you discover this way can itself be read with
-`read_loop_result` or `query_entity`. Follow the pointers you
-actually find. Do not guess IDs.
+**Do not assemble entity IDs yourself.** `coordinator_loop_id` is a
+bare loop id, not a 6-part entity ID, and `read_loop_result` wants
+exactly that bare form. If you need a full entity ID for
+`query_entity`, use one you have actually READ from a triple — never
+one you built by joining segments together. A constructed ID that is
+subtly wrong fails the read and costs you an iteration for nothing.
+
+Any loop id you discover in a triple you have read can itself be
+passed to `read_loop_result`. Follow the pointers you actually find.
 
 ## What you cannot do — read this before planning a walk
 
