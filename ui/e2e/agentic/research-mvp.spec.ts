@@ -238,7 +238,7 @@ test.describe("ADR-042 MVP-5 — Research category mock-LLM journey", () => {
     ).toBe(1);
     expect(
       opsLoops[0]?.state,
-      "ops-chain-observer must reach complete; truncated means it never got a valid `observed` terminal from its fixture bucket",
+      "ops-chain-observer must reach complete. `failed` with reason=max_iterations means it never called decide and burned its whole budget hydrating — that is how the framework surfaces exhaustion (NOT `truncated`), and it is what the real-LLM smoke on 2026-08-20 hit",
     ).toBe("complete");
 
     // -----------------------------------------------------------------

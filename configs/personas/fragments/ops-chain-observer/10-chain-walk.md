@@ -91,22 +91,34 @@ Walk them **only when something you already read points at a
 specific question** — a loop that nearly exhausted its iterations, a
 tool that appears to have failed repeatedly. Never speculatively.
 
-## Budget
+## Budget — this is a hard rule, not advice
 
-You have a limited iteration budget and it is smaller than the
-number of things you could look at. A healthy session:
+**Your fourth tool call must be `emit_diagnosis` or `decide`.**
 
-- 1 `query_entity` on the run
-- 1 `read_loop_result` on the coordinator
-- 0-2 further reads through pointers you actually found
-- 0-2 step walks, only if earned
-- 0+ `emit_diagnosis` calls
-- 1 `decide`
+You have a small iteration budget and hydration is the only way to
+spend it. Running out mid-analysis produces *nothing at all* — no
+findings, no decision, a failed loop — which is strictly worse than a
+short, well-grounded finding. That is the failure mode to avoid, and
+it is easy to walk into because there is always one more thing you
+could read.
 
-If you have made several tool calls and have not started emitting,
-stop hydrating and report what you have. Running out of iterations
-mid-analysis produces nothing at all, which is strictly worse than a
-shorter, well-grounded finding.
+The shape that works:
+
+1. `query_entity` on the run entity.
+2. `read_loop_result` on `coordinator_loop_id`.
+3. *Optional* — ONE more read, only if steps 1-2 pointed at a
+   specific question.
+4. `emit_diagnosis` (zero or more times), then `decide`.
+
+Do not re-read something you already read. Do not go looking for a
+loop you have no pointer to. Do not keep hydrating because the
+picture feels incomplete — **the picture is supposed to be
+incomplete**; you are working from the run entity and the coordinator
+result by design, and a finding scoped to that is a real finding.
+
+If you are ever unsure whether to read one more thing or stop: stop,
+and call `decide`. A short honest observation always beats a failed
+loop.
 
 Read org and platform segments off the entity IDs you are given.
 Never hardcode them.

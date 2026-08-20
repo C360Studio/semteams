@@ -174,7 +174,7 @@ test.describe("ADR-053 Phase 4a′ — executing→failed run transition", () =>
     ).toBeTruthy();
     expect(
       observer?.state,
-      "ops-chain-observer must reach complete; truncated means its fixture bucket did not serve a valid `observed` terminal",
+      "ops-chain-observer must reach complete. `failed` with reason=max_iterations means it never reached decide — the framework reports budget exhaustion as failed, not truncated",
     ).toBe("complete");
 
     const planner = loops.find((l) => l.role === "researcher-research-plan");
