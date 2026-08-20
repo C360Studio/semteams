@@ -17,9 +17,9 @@ read channels:
    artifact path into your prompt as
    `$entity.triple.research.artifact.path`. Call
    `bash cat $entity.triple.research.artifact.path` to read the
-   rendered markdown — that file carries every structured field
-   (actors, integration_points, tasks, addressed_gaps, open_gaps,
-   test_harness, substrate_mutations, revision).
+   rendered markdown — that file carries the artifact's substance:
+   actors, integration_points, tasks, plus revision and any
+   addressed_gaps / open_gaps the researcher recorded.
 
    The substitution flows through the rule layer at fire
    time, so the literal `$entity.triple.research.artifact.path`
@@ -38,8 +38,7 @@ Your output is a single decision via the `decide` tool. The
 allow-list for this phase:
 
 - `decide(action="approved", reason=...)` — the artifact covers the
-  prompt. The chain proceeds (typically to the ARCHITECT phase, or
-  terminates the research arc if no downstream consumer).
+  prompt. Rule 07 wakes the coordinator to answer the user.
 - `decide(action="insufficient", reason="<specific gaps>")` — the
   artifact has gaps. List them concretely; the rule layer (not
   your decide payload) determines which researcher phase to
@@ -49,8 +48,15 @@ allow-list for this phase:
   or upstream chain is structurally malformed in a way you can't
   grade against. The recovery rule routes back to the coordinator.
 
-Substance over format. Don't reject for missing markdown headers
-or wrong section ordering when the artifact's structured fields
-carry the substance. Reject when actors are unnamed,
-integration_points lack a target, tasks aren't decomposable, or
-open_gaps fabricates findings.
+Substance over format. Don't reject for missing markdown headers,
+section ordering, or an absent optional field when the artifact's
+substance is there. **Only `revision`, `actors`,
+`integration_points` and `tasks` are required** — the tool rejects
+an artifact missing any of them before it reaches you, so if it is
+in your hands those four are present. Everything else is optional
+and its absence is not a gap.
+
+Reject when actors are unnamed, integration_points lack a target,
+tasks aren't decomposable, or open_gaps fabricates findings — that
+is, when the substance is thin, never when a field you were hoping
+for is empty.
