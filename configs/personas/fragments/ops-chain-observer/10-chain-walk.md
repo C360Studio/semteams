@@ -91,34 +91,35 @@ Walk them **only when something you already read points at a
 specific question** — a loop that nearly exhausted its iterations, a
 tool that appears to have failed repeatedly. Never speculatively.
 
-## Budget — this is a hard rule, not advice
+## Budget
 
-**Your fourth tool call must be `emit_diagnosis` or `decide`.**
+The framework prepends `[Iteration Budget] Iteration N of M (X% used)`
+to every turn, and escalates the wording as you approach the ceiling.
+**Read it.** It is your ground truth for how much room you have left,
+and it is more reliable than any count you carry in your head.
 
-You have a small iteration budget and hydration is the only way to
-spend it. Running out mid-analysis produces *nothing at all* — no
-findings, no decision, a failed loop — which is strictly worse than a
-short, well-grounded finding. That is the failure mode to avoid, and
-it is easy to walk into because there is always one more thing you
-could read.
+Spend it deliberately:
 
-The shape that works:
+- Reads 1-2 (the run entity, the coordinator result) are almost
+  always worth it.
+- Each read after that should answer a question the previous reads
+  actually raised. "The picture feels incomplete" is not such a
+  question — the picture IS incomplete by design, and a finding
+  scoped to what you read is a real finding.
+- Once the budget message says you are past half, stop hydrating and
+  start emitting.
 
-1. `query_entity` on the run entity.
-2. `read_loop_result` on `coordinator_loop_id`.
-3. *Optional* — ONE more read, only if steps 1-2 pointed at a
-   specific question.
-4. `emit_diagnosis` (zero or more times), then `decide`.
+**When that message tells you to "submit your work", it means call
+`decide`.** There is no `submit_work` tool in this deployment — the
+framework's escalation text names one that does not exist, and going
+looking for it will burn the rest of your budget. `emit_diagnosis`
+records findings; `decide(action="observed", ...)` is what ends your
+loop. Nothing else does.
 
-Do not re-read something you already read. Do not go looking for a
-loop you have no pointer to. Do not keep hydrating because the
-picture feels incomplete — **the picture is supposed to be
-incomplete**; you are working from the run entity and the coordinator
-result by design, and a finding scoped to that is a real finding.
-
-If you are ever unsure whether to read one more thing or stop: stop,
-and call `decide`. A short honest observation always beats a failed
-loop.
+Running out mid-analysis produces *nothing at all* — no findings, no
+decision, a failed loop. That is strictly worse than a short,
+well-grounded observation. If you are ever unsure whether to read one
+more thing or stop: stop, emit what you have, and decide.
 
 Read org and platform segments off the entity IDs you are given.
 Never hardcode them.
