@@ -44,7 +44,8 @@ recorded through the shared graph substrate.
 - Archive a completed change in the landing pull request's final content commit so the change move and living-spec sync
   are reviewed with the implementation.
 - Remove abandoned or parked changes from the active queue without archive or spec promotion. Preserve the resume gate
-  in a GitHub issue, as #258 does for `repo-readiness-init`.
+  in a GitHub issue. Issue #258 owns the `repo-readiness-init` retirement in this baseline; #260 owns any future
+  reintroduction and freshly reconciled change.
 - `docs/adr/` records durable reasons and cross-repository decisions. GitHub issues own wanted work, decisions,
   blockers, and holds; draft pull requests own claims and stop-points.
 

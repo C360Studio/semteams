@@ -1,29 +1,37 @@
 # Design: Conversational Front Door
 
-## Decision: Coordinator remains the only front door
-Do not add a chat agent above the coordinator. A second agent would duplicate classification, split audit ownership, and
-create ambiguous authority over `respond_direct`, `ask_user`, and category dispatch. The existing ADR-042 shape already
-has one front-door role plus category packs; this change makes that role more chat-capable.
+## Context
 
-## Decision: Team commands are intent hints
-Power-user commands are sent through the same `/teams-dispatch/message` path as any other user prompt. The command prefix
-does not call a team directly. It tells the coordinator what the user intends, and the coordinator still enforces the
-target team's contract.
+ADR-042 gives the coordinator sole front-door authority. ADR-058 narrows the live category taxonomy to research and
+autoresearch while leaving the spec/dev packs on disk but unwired. The living spec already owns shortcut behavior; this
+change adds the conversational decision that occurs before any live category dispatch.
+
+## Decisions
+
+### Decision: The coordinator remains the only front door
+
+Do not add a chat agent above the coordinator. A second classifier would split audit ownership and duplicate
+`respond_direct`, `ask_user`, and category dispatch. Plain chat and team-hinted chat use the same coordinator path.
+
+### Decision: Conversation may resolve or refine before dispatch
+
+The coordinator may answer product questions through `respond_direct` or ask one concrete question through `ask_user`.
+It dispatches only after the message satisfies the selected live category's contract: research asks need evidence, and
+autoresearch asks name a scalar metric, measurement command, direction, bounded surface, and sandbox target.
 
 Examples:
-- `/research MQTT vs NATS for IoT edge` is a strong hint toward `decide(action="research")`.
-- `/optimize make this faster` is not enough for autoresearch because it lacks a metric, command, and bounded surface; the
-  coordinator should ask for the missing facts.
-- `/dev-via-test write a blog intro` is the wrong team; the coordinator should respond directly or suggest create-change
-  or research, depending on the ask.
 
-## Decision: Product-level commands only
-Expose category commands, not internal phase roles. Users should learn workflows such as research, spec authoring,
-optimization, and implementation-with-tests. They should not need to know Lisa, Ralph, CBG, reviewer role names, or rule
-pack internals.
+- `/research MQTT vs NATS for IoT edge` may route to `decide(action="research")`.
+- `/optimize make this faster` lacks a measurable contract, so the coordinator asks one concrete question.
+
+### Decision: Parked-team asks fail honestly at the front door
+
+Spec-authoring and implementation tokens are not visible team shortcuts. If a user types `/create-change`, `/spec`,
+`/dev-via-test`, `/build`, `/dev`, or `/implement-spec`, the message still reaches the coordinator as ordinary intent.
+The coordinator emits `respond_direct`, names the unavailable capability, and offers a live alternative where useful.
+It never emits a parked category token.
 
 ## Evidence
-The routing matrix is the first proof point: command-hinted prompts still produce coordinator decisions, and vague or
-meta prompts remain `ask_user` / `respond_direct` rather than spawning teams blindly. A later UI transcript slice should
-make `coordinator.user_reply` feel like ordinary chat, but the dispatch contract in this change is independent of that UI
-projection.
+
+The coordinator routing matrix proves direct answers, one-question clarification, valid research routing, guarded
+autoresearch routing, and honest parked-team responses.

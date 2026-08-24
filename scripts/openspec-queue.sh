@@ -22,11 +22,22 @@ set -uo pipefail
 
 STRICT=0
 STALE_DAYS=7
+MAX_STALE_DAYS=36500
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --strict) STRICT=1; shift ;;
-    --stale-days) STALE_DAYS="${2:-7}"; shift 2 ;;
+    --stale-days)
+      if [ $# -lt 2 ] \
+        || ! printf '%s\n' "$2" | grep -qE '^[1-9][0-9]*$' \
+        || [ "${#2}" -gt "${#MAX_STALE_DAYS}" ] \
+        || [ "$2" -gt "$MAX_STALE_DAYS" ]; then
+        echo "--stale-days requires an integer from 1 to $MAX_STALE_DAYS" >&2
+        exit 2
+      fi
+      STALE_DAYS=$2
+      shift 2
+      ;;
     -h|--help) sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
@@ -59,28 +70,63 @@ label_for() {
 now_epoch=$(date -u +%s)
 found_any=0
 change_count=0
+input_error=0
 
 printf '\n%s\n' "openspec queue — why each in-flight change is still open"
 printf '%s\n\n' "-------------------------------------------------------"
 
-json=$(openspec list --json 2>/dev/null)
+if ! json=$(openspec list --json); then
+  echo "openspec list --json failed" >&2
+  exit 2
+fi
 
 # Parse with python3 so a missing jq does not silently degrade this report
 # to nothing.
-rows=$(printf '%s' "$json" | python3 -c '
-import json,sys
+if ! rows=$(printf '%s' "$json" | python3 -c '
+import json,re,sys
+
+def invalid(message):
+    print(f"invalid openspec JSON: {message}", file=sys.stderr)
+    sys.exit(2)
+
 try:
     d = json.load(sys.stdin)
-except Exception:
-    sys.exit(0)
-for c in d.get("changes", []):
+except Exception as error:
+    invalid(str(error))
+
+if not isinstance(d, dict):
+    invalid("root must be an object")
+if "changes" not in d:
+    invalid("root is missing required changes field")
+if not isinstance(d["changes"], list):
+    invalid("changes must be a list")
+
+for index, c in enumerate(d["changes"]):
+    if not isinstance(c, dict):
+        invalid(f"changes[{index}] must be an object")
+
+    name = c.get("name")
+    if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", name):
+        invalid(f"changes[{index}].name must be a nonempty safe path component")
+
+    for field in ("completedTasks", "totalTasks"):
+        if field not in c:
+            invalid(f"changes[{index}] is missing required {field} field")
+        if type(c[field]) is not int or c[field] < 0:
+            invalid(f"changes[{index}].{field} must be a nonnegative integer")
+    if c["completedTasks"] > c["totalTasks"]:
+        invalid(f"changes[{index}].completedTasks exceeds totalTasks")
+
     print("\t".join([
-        str(c.get("name","")),
-        str(c.get("completedTasks","?")),
-        str(c.get("totalTasks","?")),
+        name,
+        str(c["completedTasks"]),
+        str(c["totalTasks"]),
         str(c.get("lastModified","")),
     ]))
-' 2>/dev/null)
+'); then
+  echo "could not parse openspec list output" >&2
+  exit 2
+fi
 
 if [ -z "$rows" ]; then
   printf '  (queue is empty)\n\n'
@@ -111,7 +157,8 @@ except Exception:
 
   tasks_file="$CHANGES_DIR/$name/tasks.md"
   if [ ! -f "$tasks_file" ]; then
-    printf '      (no tasks.md)\n\n'
+    printf '      ERROR    no tasks.md\n\n'
+    input_error=1
     continue
   fi
 
@@ -151,6 +198,9 @@ if [ "$found_any" -eq 1 ]; then
 fi
 printf '\n'
 
+if [ "$input_error" -eq 1 ]; then
+  exit 2
+fi
 if [ "$STRICT" -eq 1 ] && [ "$found_any" -eq 1 ]; then
   exit 1
 fi

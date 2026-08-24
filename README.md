@@ -104,14 +104,13 @@ instead of dispatching `create-change`, `proof-readiness`,
 re-authoring under the canonical predicate contract; see
 [ADR-058](docs/adr/058-beta159-realignment-and-demo-lane-focus.md).
 
-Artifacts are meant to travel between teams. When a run emits a
-research, spec, optimization, or implementation artifact, the UI
-surfaces it as an artifact card with copy and "use as context"
-actions. Attaching an artifact adds a visible, removable context chip
-to the chat bar, and the next prompt carries the artifact title,
-source tool, and content back through the coordinator. A research
-artifact can seed a spec prompt, a spec can inform implementation, or
-any artifact can simply anchor a follow-up question.
+Research results retain recoverable source evidence, but beta.160 does
+not currently render the evidence bodies needed by `ArtifactCard` or
+artifact-context handoff. GraphQL exposes trajectory previews and
+`StorageReference` values; an authorized evidence-fetch pass must land
+before copy, attach, context-chip, or cross-team artifact reuse can be
+claimed live. ADR-059 records this accepted regression; issue
+[#261](https://github.com/C360Studio/semteams/issues/261) owns restoration.
 
 See [`docs/architecture.md`](docs/architecture.md) for what each
 pack does and **how the sandbox is created**.

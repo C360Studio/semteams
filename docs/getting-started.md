@@ -71,9 +71,9 @@ task ui:test:e2e:agentic:demo-mvp
 
 This launches the dockerized e2e stack, drives SemTeams through
 public UI / HTTP surfaces, and asserts the current demo claims:
-coordinator routing, OpenSpec author/review/export, readiness
-fail-closed behavior, and the MAVLink-hard spec handoff. It uses
-mock LLM fixtures, so it is the best first run after cloning.
+coordinator routing, the reviewed research arc, fail-closed readiness
+before execution routing, and empirical autoresearch. It uses mock LLM
+fixtures, so it is the best first run after cloning.
 
 During dockerized e2e runs the UI/backend are available through
 `localhost:3100`; the task tears the stack down when it finishes.
@@ -96,17 +96,17 @@ for everything below.
 The chat box is the coordinator front door. You can ask how SemTeams works,
 refine an idea before choosing a team, or send a ready task. Optional team
 prefixes such as `/research` and `/optimize` are intent hints; the coordinator
-still validates the prompt shape and keeps the normal sandbox, readiness,
-approval, and review gates. (The spec and build team commands are parked with
-their packs — see ADR-058; the coordinator answers those asks directly.)
+still validates the prompt shape and keeps the normal sandbox and review gates.
+The spec and build team commands are parked with their packs (ADR-058); the
+coordinator answers those asks directly.
 
-When a team emits an artifact, open it from the task detail panel. The artifact
-card lets you copy the content or attach it to a new chat prompt. Attached
-artifact context shows as a removable chip above the chat input, and the next
-message includes the artifact title, source tool, and content for the
-coordinator to use. Treat this as a general handoff surface: research can feed
-a spec, a spec can feed implementation, and any artifact can anchor a follow-up
-question before you choose the next team.
+Research source evidence remains recoverable from graph and trajectory storage,
+but beta.160 exposes only previews and `StorageReference` values through the UI
+query. `ArtifactCard` content and artifact-context handoff are therefore parked
+regressions under ADR-059. A new issue-owned OpenSpec change must define an
+authorized evidence-fetch path before copy, attach, or context-chip behavior is
+restored; issue [#261](https://github.com/C360Studio/semteams/issues/261) owns
+that follow-up.
 
 ### A specific config
 
@@ -298,53 +298,15 @@ What to look at:
   the flow's default role. (Memory:
   `feedback_loopinfo_role_omitempty`.)
 
-### Debugging a dev-via-test chain + its sandbox
+### Historical dev-via-test debugging (parked)
 
-The dev-via-test pack (Lisa → CBG plan-gate → Ralph → CBG work-gate)
-leaves its whole state as triples on the run entity, and its work
-on a real filesystem. Read both with the graph-triples endpoint
-(predicate-filtered) and a `docker exec`. dev-via-test runs on the
-**dockerized stack**, so these use `:3100` (see "Which port?").
-
-```bash
-# Where is the chain / which verdict did a gate emit? The decision
-# tokens tell the story: plan_approved | plan_rejected_retry |
-# plan_rejected (plan gate) vs approved | rejected_retry | rejected
-# (work gate).
-curl -s "http://localhost:3100/graph/triples?predicate=coordinator.decision.next_action&limit=30" \
-  | jq -r 'sort_by(.timestamp)[] | "\(.timestamp[11:19])  \(.object)"'
-
-# The plan Lisa actually emitted (the fidelity the plan gate checks):
-for p in plan.goal plan.integration_test_command plan.revision; do
-  curl -s "http://localhost:3100/graph/triples?predicate=$p&limit=5" \
-    | jq -r --arg p "$p" 'sort_by(.timestamp)[-1] | "\($p) = \(.object)"'
-done
-
-# Did a retry fire? (Slice 5/6) — presence of these = a bounce happened:
-curl -s "http://localhost:3100/graph/triples?predicate=dev_via_test.plan.retry.finding" | jq -r '.[].object'
-curl -s "http://localhost:3100/graph/triples?predicate=dev_via_test.cbg.retry.finding"  | jq -r '.[].object'
-```
-
-The sandbox itself:
-
-```bash
-# Did the sandbox provision + attest? (request_sandbox → devcontainer up)
-curl -s "http://localhost:3100/graph/triples?predicate=sandbox.attestation.ready" | jq -r '.[].object'
-curl -s "http://localhost:3100/graph/triples?predicate=sandbox.attestation.profile" | jq -r '.[].object'
-
-# Ralph's ACTUAL output (what CBG's integration test + git diff see):
-#   - on the dockerized stack, the per-tenant workspace is bind-mounted
-#     to the host under ui/.tenant-workspaces/<tenant>/
-ls ui/.tenant-workspaces/*/                         # the workspaces
-#   - or exec into the sandbox sidecar to poke the live container:
-docker exec -it semteams-ui-agentic-sandbox bash
-```
-
-If the chain stalled right after `request_sandbox`, check the
-backend log for `devcontainer up` errors (`context deadline
-exceeded` on a cold first pull is the usual culprit) and that
-`SEMTEAMS_SANDBOX_RUNNER=api` is set — a `mock` runner never makes
-a real container.
+The former Lisa → CBG → Ralph → CBG debugging recipe is not current
+onboarding. ADR-058 parks `dev-via-test`, and ADR-059 leaves its rules
+in the pre-beta.160 mutation dialect. Its old predicate queries and
+Docker workflow remain in Git history for migration archaeology; do
+not use them against the live bootstrap. Reintroducing the pack
+requires a claimed issue, canonical-predicate and graph-mutation
+re-authoring, bootstrap/taxonomy wiring, and a fresh debugging guide.
 
 ### Active monitoring during a journey
 
@@ -387,8 +349,8 @@ step time is wedged — abort, don't wait for the natural timeout.
 
 - **What runs end-to-end when I send a prompt?** —
   [`architecture.md`](architecture.md). The substrate-plus-overlays
-  runtime, coordinator front door, live category packs, artifact
-  handoff, and **how a sandbox gets created**.
+  runtime, coordinator front door, live category packs, the beta.160
+  artifact-handoff regression, and **how a sandbox gets created**.
 - **What exactly can the demo claim?** —
   [`demo-mvp-claims.md`](demo-mvp-claims.md). Supported claims,
   non-claims, black-box evidence rules, and MAVLink-hard scope.

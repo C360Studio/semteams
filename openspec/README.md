@@ -20,8 +20,9 @@ the beta.160 live/parked product posture.
 
 An active change without a claimed pull request is ambiguous state. Discovery, sequencing, holds, and future campaigns
 belong in issues; do not keep them as 0/N-task changes. Issue
-[#258](https://github.com/C360Studio/semteams/issues/258) preserves the resume gate for the removed, unimplemented
-`repo-readiness-init` proposal without promoting its delta into current truth.
+[#258](https://github.com/C360Studio/semteams/issues/258) owns this PR's retirement of the unimplemented
+`repo-readiness-init` proposal without promoting its delta into current truth. Issue
+[#260](https://github.com/C360Studio/semteams/issues/260) owns any future reintroduction and freshly reconciled change.
 
 ## Layout
 
@@ -44,6 +45,9 @@ belong in issues; do not keep them as 0/N-task changes. Issue
 5. Implement and reconcile the change whenever reality changes its target or scope.
 6. After implementation and reviewer approval, archive in the landing pull request's **final content commit**. The
    archive moves the change and promotes its durable requirements into the living specs for review with the code.
+7. Run a mandatory **read-only reviewer pass after archive**. The reviewer checks the archive move, promoted living
+   specs, task truth, and strict validation without editing. If it finds a defect, fold the correction into the archive
+   commit and repeat the read-only pass. No content commit may follow the accepted archive commit.
 
 When a change is abandoned or deliberately parked, remove it from the active queue without running `openspec archive`.
 Git history preserves its artifacts; a GitHub issue owns any resume decision and requires a freshly reconciled change.
@@ -57,13 +61,18 @@ openspec show <change-id>
 openspec archive <change-id>
 ```
 
-Use `task openspec:queue` for the repository's claim/hold-aware queue once the process tooling is present. CI validation
+Use `task openspec:queue` for the repository's hold-aware queue. CI validation
 and the future main-branch ruleset are owned by
 [#254](https://github.com/C360Studio/semteams/issues/254); workflow presence alone is not proof of a trustworthy
 required-check contract.
 
-Do not archive `artifact-context-handoff` or `conversational-front-door` early. They are complete, but their archive and
-living-spec sync are the landing pull request's final reviewed content commit.
+Do not archive `conversational-front-door` early. Its archive and living-spec sync are the landing pull request's final
+content commit before the mandatory read-only reviewer pass.
+
+The completed pre-beta.160 `artifact-context-handoff` change was removed from the active queue without archive or spec
+promotion because ADR-059 removed the evidence bodies its UI requires. Git history preserves it. Resumption requires a
+freshly reconciled OpenSpec change after the UI can dereference trajectory `StorageReference` values; issue
+[#261](https://github.com/C360Studio/semteams/issues/261) owns that authorized evidence-fetch follow-up.
 
 ## Relationship to Documentation
 

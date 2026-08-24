@@ -1,6 +1,6 @@
 # SemTeams Vocabulary Map
 
-Status: product vocabulary guidance, proposed 2026-06-24.
+Status: product vocabulary guidance, reconciled to beta.160 on 2026-08-24.
 
 This document defines the public words SemTeams should use for the agentic-dev
 experience. It does not rename internal predicates, payloads, ports, or rule
@@ -61,7 +61,7 @@ Keep implementation nouns in technical docs:
 - port
 - lifecycle fact
 - NATS stream
-- ownership registry
+- projection contract
 - SemStreams component
 
 Do not rename graph predicates or payload fields just to improve product copy.
@@ -79,9 +79,10 @@ component.
 
 ### Workflow / Flow
 
-A user-visible job path, such as create spec, research, or implement task.
-Internally this is a category rule pack plus persona bundles. Avoid exposing
-"flow config" unless discussing SemStreams internals.
+A user-visible job path. The live beta.160 examples are research and
+autoresearch; spec authoring and implementation remain parked. Internally this
+is a category rule pack plus persona bundles. Avoid exposing "flow config"
+unless discussing SemStreams internals.
 
 ### Run
 
@@ -107,9 +108,9 @@ are team hints to the Coordinator, not direct execution bypasses.
 
 ### Task
 
-A unit of implementation work with acceptance evidence. Internally this is a
-`plan.task.*` fact or OpenSpec `tasks.md` entry. This is the execution atom for
-dev-from-task.
+A unit of work with acceptance evidence. The current live packs use run and
+loop state; `plan.task.*` and dev-from-task are parked implementation
+vocabulary, not a live beta.160 route.
 
 ### Plan / Task Graph
 
@@ -137,11 +138,13 @@ the "is this thing working?" UI.
 
 ### Artifact Context
 
-An emitted artifact attached to a later chat prompt. Internally this is the
-artifact title, source tool, and content carried through the chat handoff store
-and submitted through the normal coordinator message path. Use this term for
-the visible chip in the chat bar and for docs that explain reuse between teams.
-Do not call it "research context" unless the artifact is specifically research.
+An emitted artifact attached to a later chat prompt. This remains the preferred
+label for the intended feature, but it is **not live on beta.160**: GraphQL
+trajectory facts expose previews and `StorageReference` values, not the
+evidence bodies `ArtifactCard` and the context chip require. Restore the label
+to product UI only after issue
+[#261](https://github.com/C360Studio/semteams/issues/261) lands its authorized
+evidence-fetch change.
 
 ### Trace
 
@@ -172,13 +175,16 @@ A human decision required before progress continues. Internally this is HITL
 approval state and approval-required tools. The UI should show what will happen
 if the human approves.
 
-### Export
+### Export (parked)
 
-A portable artifact generated from SemTeams state. Internally this is the
-OpenSpec renderer, artifacts, and future MCP/export surfaces. OpenSpec export is
-MVP-shaped; MCP export is later.
+A portable artifact generated from SemTeams state. The OpenSpec renderer and
+spec-export surface remain on disk with the parked spec/dev packs and are not a
+live beta.160 front-door capability. MCP export remains future work.
 
-## Existing Term Map
+## Parked Spec/Dev Term Map
+
+The following labels describe retained, unwired surfaces. They are migration
+vocabulary, not the current command or capability inventory.
 
 - `create_change` -> Spec Builder.
   UI: Specs / New Spec. Avoid saying `create_change` in product UI. The user
@@ -198,9 +204,9 @@ MVP-shaped; MCP export is later.
 - `dev_from_task` -> Implement Task.
   UI: Tasks / Run action. Avoid saying "dev-from-task". This is an execution
   action, not a planning method.
-- artifact handoff -> Artifact Context.
-  UI: Chat input / Artifact card. Avoid implying only research can seed later
-  work. The product behavior is "attach this artifact to my next prompt."
+- artifact handoff -> Artifact Context (beta.160 regression).
+  Future UI: Chat input / Artifact card. Do not show it as live until an
+  authorized evidence-fetch path restores evidence bodies.
 - Ralph -> Implementation Agent.
   UI: Trace / Tasks. Avoid saying "Ralph loop". Keep Ralph in developer docs
   and lore.
@@ -268,9 +274,6 @@ Every run view should make these visible without digging:
 - Next action: what SemTeams will do next or what the human must decide.
 - Evidence health: tests, metrics, logs, proof dependencies, and waivers.
 - Cost/risk health: token budget, retry count, and autonomous-policy limit.
-- Export state: whether an OpenSpec artifact exists and when it was generated.
-- Artifact context: which emitted artifact, if any, is attached to the next
-  coordinator prompt.
 
 Recommended top-level UI nouns:
 
@@ -296,23 +299,29 @@ Product-level team commands are intent hints carried to the coordinator; they do
 not bypass routing, sandbox checks, readiness, approvals, review, or
 clarification.
 
-MVP-shaped commands:
+The current ChatBar inventory is deliberately smaller than the retained
+`slashCommands.ts` registry.
+
+Live front-door team hints (no task selected):
 
 - `/research`: ask the coordinator to validate and route an evidence or
   comparison prompt.
-- `/create-change` or `/spec`: ask the coordinator to validate and route an
-  OpenSpec authoring prompt.
-- `/optimize`: ask the coordinator to validate and route a measurable
-  optimization prompt.
-- `/dev-via-test`: ask the coordinator to validate and route implementation with
-  tests.
-- `/implement-spec`: start governed implementation for an approved OpenSpec
-  change from the selected reviewed run.
-- `/export-spec`: render and download or copy the current OpenSpec artifact.
-- `/run-status`: show the current governed run status.
-- `/evidence`: open proof evidence for a run, claim, or dependency.
-- `/approve`: approve the currently selected human gate.
-- `/reject`: reject the currently selected human gate with a required reason.
+- `/optimize` (registry alias `/autoresearch`): ask the coordinator to validate
+  a measurable optimization prompt and sandbox target.
+
+Governed controls when a task is selected:
+
+- `/approve`
+- `/reject`
+- `/pause`
+- `/resume`
+- `/cancel`
+
+Parked or non-surfaced commands are not current product claims. This includes
+`/create-change`, `/spec`, `/dev-via-test`, `/implement-spec`, `/export-spec`,
+`/run-status`, and `/evidence`. Some definitions remain in the broader command
+registry or backend command bridge for compatibility and future migration, but
+the ChatBar does not advertise them as live teams or run actions.
 
 Avoid commands that expose internal roles or merge planning and execution:
 
@@ -323,7 +332,7 @@ Avoid commands that expose internal roles or merge planning and execution:
 - `/do-everything`
 - `/auto-implement`
 
-Prefer separate, auditable actions:
+Future spec/dev restoration should still prefer separate, auditable actions:
 
 - chat with the coordinator to shape the idea
 - ask for a team with a public team command
@@ -358,11 +367,11 @@ pack, but the running system is still graph, rules, tools, ports, and evidence.
 
 ## OpenSpec Export Language
 
-OpenSpec artifacts are portable deliverables. Some users will use SemTeams only
-to produce a reviewed spec, then hand that spec to Codex, Claude Code, or another
-implementation harness.
+OpenSpec artifacts are intended to be portable deliverables, but their
+author/review/export route is parked on beta.160 with the spec/dev packs.
 
-Use "Export Spec" for the MVP UI action.
+Reserve "Export Spec" for the restored UI action; do not present it as a live
+command or MVP capability today.
 
 Keep MCP export as a future integration path. It could be useful when another
 agent wants to pull the current approved spec directly, but it is not required

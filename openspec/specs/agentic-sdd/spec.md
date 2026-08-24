@@ -2,323 +2,219 @@
 
 ## Purpose
 
-Define SemTeams' product-level contract for graph-backed spec-driven development: reviewable OpenSpec artifacts,
-proof/readiness gates, governed execution, and inspectable evidence. Under ADR-058 and ADR-059, the `create-change`,
-`proof-readiness`, `dev-from-task`, and `dev-via-test` packs remain implemented but unwired pending canonical-predicate
-re-authoring; their requirements are the accepted capability baseline, not current live demo claims.
+Define the behavior SemTeams actually exposes on the beta.160 bootstrap, including explicit negative contracts for the
+spec/dev surfaces that remain implemented on disk but unwired. Current live behavior is one conversational coordinator,
+research and autoresearch categories, graph-backed run state, and a four-journey black-box demo evidence pack.
 
 ## Requirements
 
 ### Requirement: OpenSpec Change Artifact
-The system SHALL create and persist reviewable OpenSpec changes as graph-backed artifacts before spec-driven
-implementation begins.
 
-#### Scenario: Create change from prompt
-- GIVEN a user asks SemTeams to plan a spec-driven development change
-- WHEN the coordinator routes the request to `create_change`
-- THEN the system emits `change.<slug>.*` graph facts
-- AND renders `proposal.md`, capability delta specs, and `tasks.md` as an OpenSpec change
+The system SHALL treat graph-backed OpenSpec authoring as a parked capability, not a live beta.160 coordinator route.
 
-#### Scenario: Ingest brownfield OpenSpec
-- GIVEN a target repository already contains an `openspec/` tree
-- WHEN SemTeams inventories the repository for spec context
-- THEN the system maps existing OpenSpec specs and changes into graph facts
-- AND keeps the graph as the authority for subsequent routing and execution
+#### Scenario: Spec-authoring ask does not create a change
+
+- GIVEN a user asks SemTeams to create or ingest an OpenSpec change
+- WHEN the live coordinator evaluates the request
+- THEN it emits `respond_direct` explaining that spec authoring is not wired in this deployment
+- AND it does not spawn `create_change` or emit new `change.<slug>.*` facts
 
 ### Requirement: Human Spec Review
-The system SHALL allow an operator to review, edit, approve, reject, or request revision of a proposed OpenSpec change
-before implementation release.
 
-#### Scenario: Review and edit proposed spec
-- GIVEN `create_change` has produced a proposed OpenSpec change
-- WHEN an operator opens the review surface
-- THEN the UI shows the proposal, delta requirements, tasks, proof implications, and acceptance command
-- AND the operator can edit the artifact or request a revision before approval
+The system SHALL NOT advertise the retained spec review components as a live workflow while `create-change` is parked.
 
-#### Scenario: Approval gates implementation
-- GIVEN a proposed OpenSpec change has not been approved
-- WHEN implementation routing is evaluated
-- THEN `dev_from_task` is not released
-- AND the UI shows the run as waiting on spec approval
+#### Scenario: Parked review UI is not a live claim
+
+- GIVEN no live create-change run can produce a proposed spec
+- WHEN product capabilities are presented to the user
+- THEN spec review, edit, approval, and revision are identified as parked
+- AND their retained code and tests are treated as migration inventory rather than demo evidence
 
 ### Requirement: OpenSpec Artifact Export
-The system SHALL export generated OpenSpec artifacts so a user can implement the approved spec outside SemTeams.
 
-#### Scenario: Export reviewed change folder
-- GIVEN an OpenSpec change has been created or approved
-- WHEN an operator requests export
-- THEN the system provides the standard `openspec/changes/<slug>/` files
-- AND the export includes `proposal.md`, `tasks.md`, and every capability delta `spec.md`
+The system SHALL NOT advertise OpenSpec export as a live front-door capability while its producing category is parked.
 
-#### Scenario: Export rendered handoff document
-- GIVEN an OpenSpec change exists as graph facts
-- WHEN an operator requests a single-file handoff
-- THEN the system renders a complete OpenSpec document with file markers
-- AND the document can be handed to Codex, Claude Code, or a human implementer without running SemTeams implementation
+#### Scenario: Export command is absent from the live ChatBar inventory
 
-#### Scenario: MCP handoff remains an adapter
-- GIVEN an MCP-based external tool handoff is available
-- WHEN an operator chooses that handoff
-- THEN the handoff uses the same exported OpenSpec artifact contract
-- AND SemTeams does not require MCP to produce or download the spec artifact
+- GIVEN the user opens the beta.160 ChatBar command hints
+- WHEN no task is selected
+- THEN `/export-spec` is not shown as a live team or run action
+- AND retained renderer or command-registry code does not establish a live export claim
 
 ### Requirement: Command Shortcut Surface
-The system SHALL provide contextual slash-command shortcuts for spec export, implementation dispatch, run status,
-evidence review, and approval control without creating a separate workflow control plane.
 
-#### Scenario: Command mirrors visible action
-- GIVEN a visible UI action exists for exporting a spec, approving a gate, or showing run status
-- WHEN an operator invokes the equivalent slash command
-- THEN the system routes through the same UI action handler, coordinator intent, or governed API
-- AND the command result is indistinguishable from using the visible control
+The system SHALL expose only live product-team shortcuts as coordinator-routed hints under a closed
+`research | autoresearch | respond_direct | ask_user` taxonomy.
 
-#### Scenario: Implementation command preserves concept boundaries
-- GIVEN an approved OpenSpec change is ready for implementation routing
-- WHEN an operator invokes `/implement-spec <slug>`
-- THEN the system starts proof-readiness and task dispatch for that approved spec
-- AND `/dev-via-spec` is treated only as a compatibility alias or rejected with guidance to use `/implement-spec`
+#### Scenario: Live team hints use the coordinator path
 
-#### Scenario: Unknown or unsafe command does not bypass governance
-- GIVEN an operator enters an unknown command or a mutating command that requires approval
-- WHEN the command is parsed
-- THEN the system either rejects the command with a clear message or opens the normal approval path
-- AND no slash command can directly mutate workflow state outside the coordinator, rule, or approval surfaces
+- GIVEN a user enters `/research` or `/optimize`
+- WHEN the ChatBar sends the prompt
+- THEN the full editable prompt reaches the coordinator through the ordinary message path
+- AND the prefix does not directly invoke a team or bypass validation
+
+#### Scenario: Parked team hints are absent
+
+- GIVEN no task is selected and the user opens ChatBar hints
+- WHEN the UI lists product teams
+- THEN it shows research and optimize only
+- AND it does not show create-change, spec, dev-via-test, or implement-spec
+
+#### Scenario: Parked ask receives an honest response
+
+- GIVEN a user types a spec-authoring or implementation request, with or without a historical slash token
+- WHEN the coordinator evaluates the message
+- THEN it emits `respond_direct` with the deployment limitation
+- AND it does not emit `create_change`, `proof_readiness`, `dev_from_task`, or `dev_via_test`
 
 ### Requirement: Proof Fact Model
-The system SHALL model claims, proof dependencies, harness profiles, readiness records, evidence, and waivers as typed
-graph facts before implementation routing is evaluated.
 
-#### Scenario: Claims declare proof dependencies
-- GIVEN an approved OpenSpec change contains testable scenarios
-- WHEN proof readiness is modeled for the run
-- THEN the run graph contains `proof.claim.<id>.*` facts for each verifiable claim
-- AND each claim records its source requirement, statement, proof dependencies, conflicts, and routeable status
+The system SHALL treat the retained `proof.*` spec/dev model as parked and SHALL NOT use it as live routing authority.
 
-#### Scenario: Harness profile defines reusable proof capability
-- GIVEN a proof dependency requires an external service, simulator, or integration environment
-- WHEN a harness profile is available or produced by the test-harness team
-- THEN the graph contains `proof.harness_profile.<id>.*` facts for profile ID, version, status, supported claims,
-  probes, smoke command, artifacts, renderer, TTL, and rejection reason when applicable
-- AND the profile is reusable across runs instead of being stored only as a one-off log or script
+#### Scenario: Retained proof tooling does not imply live proof routing
 
-#### Scenario: Rejected harness profile blocks implementation
-- GIVEN a ready proof dependency references a harness profile
-- WHEN that profile is missing or rejected
-- THEN the analyzer emits a blocker finding for the profile
-- AND implementation is not released until a produced profile, fresh readiness record, or bounded human waiver exists
-
-#### Scenario: Readiness and evidence prove current usability
-- GIVEN a harness profile has been instantiated for a run
-- WHEN probes and smoke commands complete
-- THEN the graph contains `proof.readiness.<id>.*` facts for profile version, status, timestamps, expiry,
-  probe results, smoke result, attestation reference, and evidence IDs
-- AND each attached `proof.evidence.<id>.*` record includes kind, URI or object reference, digest when available,
-  producer, command, timestamps, and covered claims
-
-#### Scenario: Waivers are explicit and bounded
-- GIVEN an operator waives a missing dependency or stale readiness record
-- WHEN the implementation gate is evaluated
-- THEN the graph contains `proof.waiver.<id>.*` facts for reason, approver, approved time, expiry, covered claims,
-  covered dependencies, and residual risk
-- AND the affected claim remains visible as waived rather than fully proved
+- GIVEN proof-related tools, components, fixtures, or graph vocabulary remain in the repository
+- WHEN the beta.160 bootstrap loads its rule packs
+- THEN no `proof-readiness` category pack is wired
+- AND retained proof surfaces are not counted as current demo behavior
 
 ### Requirement: Proof Readiness Gate
-The system SHALL determine required proof dependencies and readiness evidence before releasing service-heavy
-implementation tasks.
 
-#### Scenario: Missing proof dependency routes to test harness
-- GIVEN an approved change requires PX4 SITL and MAVSDK readiness
-- WHEN no fresh readiness record proves those dependencies
-- THEN the system routes to the test-harness team
-- AND blocks implementation until readiness evidence or a waiver exists
+The system SHALL fail closed at sandbox admission for the live autoresearch category without claiming the parked
+proof-readiness workflow.
 
-#### Scenario: Analyzer emits routeable formal-claims envelope
-- GIVEN `proof.*` facts exist on the run entity
-- WHEN the deterministic analyzer evaluates the run
-- THEN the graph contains `formal_claims.status`, `formal_claims.analyzer.version`, and finding count facts
-- AND each blocker finding includes kind, route, severity, reason, and affected claim or dependency when available
+#### Scenario: Non-ready sandbox prevents autoresearch dispatch
 
-#### Scenario: Passed readiness releases implementation marker
-- GIVEN the analyzer emits `formal_claims.status=passed`
-- WHEN the proof-readiness rule pack evaluates the run entity
-- THEN the graph contains `proof_readiness.route=implementation`
-- AND the graph contains `proof_readiness.implementation_ready=true`
+- GIVEN a complete autoresearch request
+- WHEN `request_sandbox` returns pending, denied, or terminal non-ready admission
+- THEN the coordinator reports the limitation or required operator action
+- AND autoresearch is not spawned until admission is ready
 
-#### Scenario: Sandbox admission blocks execution routing
-- GIVEN the coordinator is evaluating an execution category such as `autoresearch` or initial `dev_via_test`
-- AND `request_sandbox` returns `ready=false` with `admission_pending` or a terminal admission denial
-- WHEN the coordinator chooses its next action
-- THEN it emits a user-facing limitation or approval-needed response instead of the execution category action
-- AND no implementation or optimization team is spawned until a ready attestation or governed operator decision exists
+#### Scenario: Incomplete optimization contract asks before admission
 
-#### Scenario: Test-harness findings produce a governed handoff
-- GIVEN the analyzer emits `formal_claims.status=failed`
-- AND the graph contains `formal_claims.route.test_harness=present`
-- WHEN the proof-readiness rule pack evaluates the run entity
-- THEN the graph contains `proof_readiness.route=test_harness`
-- AND the graph contains `proof_readiness.test_harness_required=true`
-
-#### Scenario: Waiver preserves overclaim visibility
-- GIVEN an operator waives a missing proof dependency
-- WHEN the implementation gate is evaluated
-- THEN the system records the waiver reason, expiry, affected claims, and remaining unproved surface
-- AND the UI shows the run as proceeding with a waiver rather than fully proved
+- GIVEN an optimization ask lacks a scalar metric, measurement command, direction, bounded surface, or target
+- WHEN the coordinator evaluates it
+- THEN it uses `ask_user` for one missing fact or `respond_direct` with the requirements
+- AND it does not dispatch autoresearch
 
 ### Requirement: Dev From Task Dispatch
-The system SHALL execute approved OpenSpec tasks through the existing dev-via-test execution primitive without
-re-deriving the spec.
 
-#### Scenario: Project approved task into execution state
-- GIVEN an approved OpenSpec change contains execution-rich task facts
-- WHEN proof readiness has passed or been waived
-- THEN the system projects ready tasks into `plan.task.*`
-- AND dispatches the selected task through Ralph
+The system SHALL treat spec-to-task implementation dispatch as parked and SHALL NOT spawn implementation roles.
 
-#### Scenario: CBG remains the final work gate
-- GIVEN all projected tasks have converged
-- WHEN the coordinator finalizes the run
-- THEN CBG runs the chain-level acceptance command
-- AND rejected gates return to the coordinator and UI with evidence
+#### Scenario: Build request does not dispatch Ralph or CBG
+
+- GIVEN a user requests implementation from a prompt or retained OpenSpec artifact
+- WHEN the live coordinator evaluates the request
+- THEN it emits `respond_direct` explaining that implementation teams are not wired
+- AND no `dev_from_task` or `dev_via_test` run is created
 
 ### Requirement: Definition Of Done Authority
-The system SHALL preserve a single authority stack for what "done" means in spec-driven implementation runs.
 
-#### Scenario: Approved spec owns done
-- GIVEN an OpenSpec change has been approved by reviewer and operator gates
-- WHEN implementation routing starts
-- THEN no planner or executor redefines the approved requirements, scenarios, task goals, test commands, target files, or
-  chain acceptance command
-- AND `project_spec_tasks` either projects those approved facts losslessly into `plan.*` or refuses the run
+The system SHALL NOT claim the parked spec/dev done-authority stack as a current execution contract.
 
-#### Scenario: Ralph converges but does not redefine done
-- GIVEN a task has been projected from an approved OpenSpec change
-- WHEN Ralph executes the task
-- THEN Ralph may iterate until the task test command passes or request clarification
-- AND Ralph cannot replace task goals, broaden target files, weaken the test command, or mark the task done by prose
-  judgment alone
+#### Scenario: Retained gates are not live acceptance authority
 
-#### Scenario: CBG judges final done
-- GIVEN all projected tasks have converged
-- WHEN CBG evaluates the run
-- THEN CBG runs the chain-level acceptance command and reviews cumulative diff scope against the approved spec
-- AND CBG's approved, rejected-retry, or rejected verdict is the final implementation acceptance gate surfaced to the
-  coordinator and UI
+- GIVEN Lisa, Ralph, CBG, and approved-spec projection code remain on disk
+- WHEN current product behavior is documented or demonstrated
+- THEN those roles are identified as parked migration inventory
+- AND their retained state cannot mark a live beta.160 implementation run complete because no such run is dispatched
 
 ### Requirement: Autoresearch Metric Guardrails
-The system SHALL route to autoresearch only when the objective has a specific scalar metric, a repeatable measurement
-command, and anti-Goodhart constraints that prevent the model from judging its own success.
 
-#### Scenario: Non-scalar objective is not autoresearch
-- GIVEN a user asks to "make this better" or optimize a vague outcome
-- WHEN the coordinator cannot identify a scalar metric, measurement command, metric parser, direction, cap, and bounded
-  mutation surface
-- THEN the coordinator does not route to autoresearch
-- AND the run asks for clarification, routes to create-change, or selects a different implementation method
+The system SHALL use deterministic measurement and guardrails, rather than model prose, to decide whether an
+autoresearch change is kept.
 
-#### Scenario: Measurement, not prose, decides kept work
-- GIVEN autoresearch proposes a bounded change
-- WHEN the measurement command runs
-- THEN the system extracts one numeric metric and compares it against the current best value deterministically
-- AND the LLM cannot keep a change because it claims the change is better without numeric evidence
+#### Scenario: Measurement decides kept work
 
-#### Scenario: Guardrails constrain optimization pressure
-- GIVEN autoresearch has an active scalar objective
-- WHEN a proposed change improves the metric by narrowing coverage, bypassing tests, mutating the measurement command,
-  leaving the declared surface, or invalidating the pass gate
-- THEN the change is rejected or reverted even if the scalar metric appears improved
-- AND the run records the guardrail violation as evidence for the coordinator, reviewer, and UI
+- GIVEN autoresearch proposes and executes a bounded change in an admitted sandbox
+- WHEN the measurement command completes
+- THEN the system extracts one numeric metric and compares it with the current best value
+- AND model judgment alone cannot keep the change
+
+#### Scenario: Guardrail violation rejects apparent improvement
+
+- GIVEN a change appears to improve the scalar metric
+- WHEN it narrows coverage, bypasses tests, mutates the measurement command, leaves the bounded surface, or fails the pass
+  gate
+- THEN the change is rejected or reverted
+- AND the violation is retained as run evidence
 
 ### Requirement: Governed State Instead Of Private Workflow Buckets
-The system SHALL represent spec-driven planning and execution progress as SemStreams flow-native graph facts, component
-contracts, payload schemas, ports, category rule packs, and lifecycle rules rather than product-local private workflow
-buckets or ad hoc NATS-only subscriptions.
 
-#### Scenario: State is queryable by rules and UI
-- GIVEN a spec-driven development run is in progress
-- WHEN rules, graph queries, or UI status models inspect the run
-- THEN they read current state from graph facts and lifecycle phase
-- AND no SemSpec-style private planning or execution bucket is required for routing
+The system SHALL represent live routing and category progress through SemStreams graph facts, lifecycle, component
+ports, rules, and registered payload contracts rather than a product-local workflow bucket.
 
-#### Scenario: NATS transport does not bypass flow contracts
-- GIVEN a spec-driven feature needs a new reactive behavior
-- WHEN the implementation publishes or subscribes to NATS subjects
-- THEN the design also declares the owning SemStreams flow, component or tool boundary, payload schema, port or subject,
-  and rule transition that consumes the behavior
-- AND no product slice treats a raw NATS subscription as a replacement for SemStreams routing, governance, or lifecycle
-  facts
+#### Scenario: Research rules fan out and join through governed state
+
+- GIVEN the coordinator emits `research`
+- WHEN the research pack plans and gathers evidence
+- THEN bounded gatherer loops may fan out and synthesis waits for their required completion facts
+- AND approved synthesis returns to the coordinator with recoverable source evidence
+
+#### Scenario: Rules and UI share run authority
+
+- GIVEN a research or autoresearch run is active
+- WHEN rules or UI status models inspect it
+- THEN they read current graph and lifecycle facts
+- AND no private SemTeams planning bucket becomes a second authority
 
 ### Requirement: Run Health Surface
-The system SHALL present run health in the UI as working, waiting, blocked, failing, or complete with current evidence
-and next action.
 
-#### Scenario: Operator asks whether the run is working
-- GIVEN a run has active loops, proof findings, approval gates, or terminal evidence
-- WHEN the operator opens the run view
-- THEN the UI shows the current health label, current gate, last material event, evidence freshness, and next action
-- AND raw logs and trajectories are available as drill-down evidence
+The system SHALL describe run and trajectory evidence according to the beta.160 GraphQL surface actually available.
 
-#### Scenario: Blocked run explains the blocker
-- GIVEN a run cannot proceed because proof dependencies are missing
-- WHEN the UI renders the run summary
-- THEN it names the missing dependencies and responsible next team
-- AND it does not present the run as merely idle or still working
+#### Scenario: Trajectory facts omit evidence bodies
 
-#### Scenario: Prometheus metrics supplement run health
-- GIVEN Prometheus metrics are available for SemStreams components, NATS, model calls, tools, or rule execution
-- WHEN the UI renders run health
-- THEN it shows metric freshness and relevant operational signals such as scrape age, queue depth, error rate, latency,
-  and component saturation
-- AND it treats metrics as observability evidence rather than the authority for routing, task completion, or CBG
-  acceptance
+- GIVEN the UI reads a beta.160 trajectory
+- WHEN GraphQL returns its facts
+- THEN the UI receives previews and `StorageReference` values rather than tool-argument evidence bodies
+- AND ArtifactCard content, artifact-context handoff, rich model prose, and proof-card rendering are not claimed live
 
-#### Scenario: Metric gaps are visible
-- GIVEN Prometheus metrics are stale, unavailable, or missing required labels for run or component correlation
-- WHEN the UI renders run health
-- THEN it shows the metrics signal as unavailable or stale
-- AND it does not infer that the run is healthy simply because no metric has fired
+#### Scenario: Terminal lifecycle remains visible
+
+- GIVEN a live research or autoresearch run completes or fails
+- WHEN the UI and rules inspect its graph state
+- THEN the run outcome and lifecycle phase remain observable
+- AND absence of an evidence body is not interpreted as successful artifact rendering
 
 ### Requirement: Real LLM And Playwright Validation
-The system SHALL validate model-dependent behavior with Gemini first and full product behavior with Playwright e2e
-journeys.
 
-#### Scenario: Gemini starts paid smoke validation
-- GIVEN a feature depends on real model routing, planning, or prompt-following behavior
-- WHEN a paid real-LLM smoke is selected
-- THEN the default starter provider is Gemini through the model registry
-- AND the smoke records the provider, model ID, prompt class, and observed result
+The system SHALL separate optional paid model evidence from deterministic mock-LLM product wiring evidence.
 
-#### Scenario: Provider choice remains configurable
-- GIVEN an operator configures a different model provider
-- WHEN the same journey is executed
-- THEN the model registry selects the configured provider
-- AND no implementation code assumes Gemini-specific request or response shapes
+#### Scenario: Production model selection remains configurable
 
-#### Scenario: Playwright validates full e2e behavior
-- GIVEN a spec-driven workflow includes UI review, artifact export, approvals, waits, or run health
-- WHEN the full e2e gate runs
-- THEN Playwright drives the journey through the UI and backend
-- AND the report includes artifact output and evidence for the current run state
+- GIVEN the production bootstrap starts without an explicit endpoint override
+- WHEN the model registry resolves its default
+- THEN it selects the `gemini-flash` endpoint
+- AND configured fallback endpoints remain provider-neutral product configuration
+
+#### Scenario: Mock journeys do not prove model judgment
+
+- GIVEN a Playwright journey uses `e2e-flow-bootstrap.json` and mock fixtures
+- WHEN it passes
+- THEN it proves the declared wiring and delivery assertions
+- AND model routing quality still requires an explicitly identified real-LLM smoke
 
 ### Requirement: Demo MVP Evidence Pack
-The system SHALL distinguish black-box demo evidence from fixture-seeded bridge tests when claiming MVP behavior.
 
-#### Scenario: Black-box journeys avoid graph seeding
+The system SHALL make only claims proven by the four black-box journeys in the `demo-mvp` aggregate.
+
+#### Scenario: Aggregate contains the declared journeys
+
+- GIVEN `task ui:test:e2e:agentic:demo-mvp` is invoked
+- WHEN the aggregate expands
+- THEN it runs coordinator-routing-matrix, research-mvp, coordinator-readiness-gate, and autoresearch
+- AND no skipped or additional journey is represented as an aggregate member
+
+#### Scenario: Black-box journeys avoid direct state seeding
+
 - GIVEN a journey is used as MVP black-box evidence
-- WHEN it drives the system
-- THEN it uses public UI, dispatch, slash-command, approval, export, or documented task-runner surfaces
-- AND it does not write directly to NATS, graph storage, lifecycle state, proof facts, or private KV buckets to satisfy
-  the claim
+- WHEN it drives SemTeams
+- THEN it uses public UI, dispatch, slash-command, or documented task-runner surfaces
+- AND it does not write directly to NATS, graph storage, lifecycle state, proof facts, or private KV to satisfy the claim
 
-#### Scenario: Fixture-seeded journeys are labeled
-- GIVEN a journey seeds proof inventory or other external facts
-- WHEN it is reported as evidence
-- THEN the report labels it as fixture-seeded bridge proof
-- AND it is not counted as pure black-box evidence
+#### Scenario: Narrow journeys do not broaden aggregate claims
 
-#### Scenario: MAVLink-hard spec production is the MVP goal
-- GIVEN the SemSpec MAVLink-hard prompt is used
-- WHEN SemTeams creates a spec
-- THEN the spec names OSH, MAVSDK, Connected Systems API, PX4 SITL or equivalent proof dependencies, harness readiness,
-  implementation tasks, and acceptance commands
-- AND implementation remains a stretch goal until the required harness profile and readiness records exist or an operator
-  records a bounded waiver
+- GIVEN another journey exercises a non-aggregate behavior
+- WHEN evidence is reported
+- THEN that journey proves only its own assertions
+- AND fixture-seeded or skipped journeys are not counted as black-box MVP evidence

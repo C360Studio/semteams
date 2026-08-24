@@ -21,9 +21,6 @@ attested sandbox, keep only empirically better results, and deliver a reviewed r
 SemTeams can prove sandbox readiness fails closed: execution-bound routing waits on, or honestly surfaces, a
 non-ready/denied sandbox attestation instead of dispatching work into an unprepared environment.
 
-SemTeams can pause and resume runs across human boundaries: clarification questions and gated tool approvals park the
-run with visible markers and resume it when the human replies or approves.
-
 ## Parked Claims (ADR-058)
 
 The following previously supported claims are parked with the dev-side packs. Their configs, journeys, and tests stay
@@ -39,8 +36,9 @@ in-repo but are unwired; the claims return when the packs are re-authored under 
 
 Artifact context handoff is not a live beta.160 claim. ADR-059 decision 7 removed the trajectory evidence bodies that
 fed `ArtifactCard`, the handoff panel, team buttons, and context chip. The
-`artifact-context-handoff.spec.ts` journey is deliberately `describe.skip`; it returns when the evidence-fetch UI pass
-dereferences each fact's `StorageReference` and restores artifact rendering.
+`artifact-context-handoff.spec.ts` journey is deliberately `describe.skip`. Git history preserves the removed OpenSpec
+change. Issue [#261](https://github.com/C360Studio/semteams/issues/261) owns the authorized evidence-fetch UI contract
+and freshly reconciled change required to dereference each fact's `StorageReference` and restore artifact rendering.
 
 ## Non-Claims
 
@@ -54,9 +52,9 @@ on real prompts?) require the real-LLM smoke.
 
 ## Evidence Rule
 
-Black-box demo journeys may drive SemTeams only through public UI, dispatch HTTP, slash-command, approval, export, and
-documented task-runner surfaces. They may read graph facts, trajectories, logs, downloads, and HTTP status for
-assertions and evidence.
+Black-box demo journeys may drive SemTeams only through public UI, dispatch HTTP, slash-command, and documented
+task-runner surfaces. They may read graph facts, trajectories, logs, downloads, and HTTP status for assertions and
+evidence.
 
 Black-box demo journeys must not write directly to NATS, graph storage, lifecycle state, proof facts, or private KV
 buckets to make the claimed behavior pass.
@@ -86,6 +84,7 @@ The spec-driven development MVP change is archived at
 `openspec/changes/archive/spec-driven-dev-readiness-hitl/`. Its accepted requirements are baselined in
 `openspec/specs/agentic-sdd/spec.md` so future changes build on the living spec instead of mutating the seed proposal.
 The unimplemented post-MVP repo-readiness initializer was removed from the active OpenSpec queue without promoting its
-delta into current truth. Git history preserves the proposal; issue
-[#258](https://github.com/C360Studio/semteams/issues/258) owns its resume gates and requires a freshly reconciled change
-after spec-driven development is deliberately re-authored and re-wired.
+delta into current truth. Git history preserves the proposal. Issue
+[#258](https://github.com/C360Studio/semteams/issues/258) owns that retirement deliverable; issue
+[#260](https://github.com/C360Studio/semteams/issues/260) owns any future reintroduction and requires a freshly
+reconciled change after spec-driven development is deliberately re-authored and re-wired.

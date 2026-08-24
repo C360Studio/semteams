@@ -22,11 +22,18 @@ The demo scope is the inner and outer loops
   emission with recoverable sources, and coordinator wake-up.
 - **Autoresearch pack** — metric optimization with empirical keep/revert
   decisions in an attested per-tenant devcontainer.
-- **Artifact context handoff** — emitted artifacts can be copied or attached to
-  a new prompt so research and optimization summaries can inform the next ask.
 - **Black-box demo evidence** — Playwright journeys prove the claim boundary
-  through public UI, dispatch, task-runner, approval, and documented
+  through public UI, dispatch, task-runner, and documented
   observation surfaces.
+
+## Parked beta.160 regression (ADR-059)
+
+Artifact-card content and artifact-context handoff lost their evidence-body
+source when the UI moved to the beta.160 GraphQL trajectory surface. The
+pre-cutover OpenSpec change is retained in Git history, not the active queue.
+Issue [#261](https://github.com/C360Studio/semteams/issues/261) owns an
+authorized `StorageReference` evidence-fetch contract and the freshly
+reconciled OpenSpec change required for resumption.
 
 ## Parked pending predicate re-authoring (ADR-058)
 
@@ -42,8 +49,8 @@ restore the taxonomy token, and un-park its tests and journeys.
   the mock journeys as the merge gate.
 - Make the run UI better at answering "what is happening now?" without asking
   users to inspect graph facts or loop internals.
-- Continue smoothing artifact reuse across teams, including clearer labels for
-  what artifact is attached and how it will influence the next prompt.
+- Restore evidence-backed artifact rendering and context handoff only after the
+  #261 authorized evidence-fetch contract is approved.
 - Re-author and re-wire the parked packs, starting with the smallest
   (create-change) once the demo lanes are proven on the new framework.
 - Keep capability packs as the extension unit: new job class means new rules,

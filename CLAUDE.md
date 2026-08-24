@@ -181,8 +181,8 @@ task ui:build           # Production build
 
 | Config | Purpose | Model |
 |--------|---------|-------|
-| `flow-bootstrap.json` | Production substrate (ADR-042 MVP). Wires the singleton agentic stack + research category rule pack + coordinator + ops persona corpus. | claude-haiku |
-| `e2e-flow-bootstrap.json` | Mock-LLM clone of flow-bootstrap for Playwright journeys. Same wiring, mock-llm endpoint, disabled compaction. | mock-llm |
+| `flow-bootstrap.json` | Production substrate. Wires research + autoresearch product packs and coordinator + agent-run + ops support packs. | `gemini-flash` default; registry fallbacks remain configurable |
+| `e2e-flow-bootstrap.json` | Mock-LLM clone with the same live/support packs and disabled compaction. | `mock-llm` |
 
 UI Playwright journey tasks (in `ui/Taskfile.yml`) manage the Docker stack
 lifecycle — Playwright does NOT auto-start the stack. Each task: start →
