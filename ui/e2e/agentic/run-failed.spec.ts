@@ -147,18 +147,35 @@ test.describe("ADR-053 Phase 4a′ — executing→failed run transition", () =>
     ).toBeGreaterThanOrEqual(1);
 
     // -----------------------------------------------------------------
-    // Step 6 — exactly two loops: coordinator(dispatch, complete) + planner
-    // (failed). No gather/synthesize/reviewer — the planner never decided
-    // gather, so research/02 never fired.
+    // Step 6 — exactly three loops: coordinator(dispatch, complete) +
+    // planner (failed) + ops-chain-observer. No gather/synthesize/reviewer —
+    // the planner never decided gather, so research/02 never fired.
+    //
+    // The observer is the ADR-027 ops rule firing on the run entity reaching
+    // `failed`. A failed run is precisely the case it exists for, so its
+    // presence here is a feature assertion, not incidental noise.
     // -----------------------------------------------------------------
     const loops = (await request
       .get("/teams-dispatch/loops")
       .then((r) => r.json())) as Array<{ role: string; state: string }>;
     expect(
       loops.length,
-      "expected exactly 2 loops (coordinator dispatch + wedged planner); a third loop means the planner spawned downstream despite failing. Got: " +
+      "expected exactly 3 loops (coordinator dispatch + wedged planner + ops observer); a fourth means the planner spawned downstream despite failing. Got: " +
         JSON.stringify(loops.map((l) => ({ role: l.role || "(dispatch)", state: l.state }))),
-    ).toBe(2);
+    ).toBe(3);
+
+    // The ops observer fires on the run's FAILED terminal, not only on success.
+    // That is the whole reason the rule triggers on the run entity rather than
+    // on a reviewer role — a reviewer-completion trigger never sees this run.
+    const observer = loops.find((l) => l.role === "ops-chain-observer");
+    expect(
+      observer,
+      "expected an ops-chain-observer loop after the run reached failed — the ops rule (configs/rules/ops/01-run-terminal-observe.json) matches phase in [completed, failed, cancelled]",
+    ).toBeTruthy();
+    expect(
+      observer?.state,
+      "ops-chain-observer must reach complete. `failed` with reason=max_iterations means it never reached decide — the framework reports budget exhaustion as failed, not truncated",
+    ).toBe("complete");
 
     const planner = loops.find((l) => l.role === "researcher-research-plan");
     expect(

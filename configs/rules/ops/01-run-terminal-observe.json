@@ -1,0 +1,68 @@
+{
+  "id": "ops_run_terminal_observe",
+  "type": "expression",
+  "name": "run terminal → ops-chain-observer",
+  "description": "ADR-027 Phase 1, re-wired for the substrate-plus-overlays world. Fires once when a run reaches an absorbing phase and spawns one ops-chain-observer to diagnose the completed chain. Triggering on the RUN entity rather than on a reviewer role is what makes this category-agnostic: it covers research, autoresearch, and every future pack without re-authoring, and it covers failed and cancelled runs — the ones ops has the most to say about — which a reviewer-completion trigger structurally misses. Replaces chain-terminal-observe.json, whose `agent.loop.role eq reviewer-qa` trigger became dead config when ADR-041/042 retired that role.",
+  "enabled": true,
+  "entity": {
+    "pattern": "*.*.agent.chain.execution.*"
+  },
+  "conditions": [
+    {
+      "field": "agent.run.phase",
+      "operator": "in",
+      "value": [
+        "completed",
+        "failed",
+        "cancelled"
+      ],
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "publish_agent",
+      "subject": "agent.task.ops-chain-observer",
+      "role": "ops-chain-observer",
+      "model": "general",
+      "run_scope": "none",
+      "loop_max_iterations": "12",
+      "tools": [
+        "query_entity",
+        "query_entities",
+        "query_relationships",
+        "read_loop_result",
+        "emit_diagnosis",
+        "decide"
+      ],
+      "action_allowlist": [
+        "observed"
+      ],
+      "related_loops": {
+        "root": "$entity.instance"
+      },
+      "properties": {
+        "run_entity_id": "$entity.id",
+        "run_phase": "$entity.triple.agent.run.phase",
+        "coordinator_loop_id": "$entity.triple.agent.run.handoff"
+      },
+      "prompt": "A run has reached a terminal phase. Diagnose the chain that just finished.\n\n**Run entity:** $entity.id\n**Terminal phase:** $entity.triple.agent.run.phase\n**Coordinator loop:** $entity.triple.agent.run.handoff\n\nStart with query_entity on the run entity above — it carries the run's own facts. Walk to the member loops with query_relationships, and use read_loop_result on individual loops when you need what a role actually produced rather than that it finished.\n\nYou are looking for things an operator would want to know and cannot see from a green tick: a role that burned most of its iteration budget, a retry that succeeded but shouldn't have been needed, a phase that completed with thin output, a failure whose stated cause does not match its evidence. Ground every finding in graph entities you actually read.\n\nCall emit_diagnosis once per finding, with evidence citing the entity IDs the finding rests on. **Finding nothing is the expected outcome on a healthy run** — do not manufacture a diagnosis to look useful. A clean run with zero emit_diagnosis calls is a correct and valuable observation.\n\nTerminate with decide(action=\"observed\", reason=\"<one line: what you examined and what you concluded>\")."
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "pack": "ops",
+    "phase": "ops-agent-phase-1",
+    "adr": "docs/adr/027-ops-agent-meta-harness.md",
+    "supersedes": "configs/rules/ops/chain-terminal-observe.json (agent.loop.role eq reviewer-qa — role retired by ADR-041/042, so the rule could never fire) and configs/rules/ops/observe-chain-progress.json (see cadence_note).",
+    "cadence_note": "Exactly one ops loop per run, set by trigger scope rather than by a throttle. `fire_every_n_events` does NOT gate publish_agent — upstream's shouldFireAction is only reached from fireRuleActions, while on_enter runs through the stateful evaluator, which never reads the counter (semstreams#1007). The retired observe-chain-progress.json declared `fire_every_n_events: 5` and would in fact have spawned one LLM loop per worker-loop completion.",
+    "cooldown_warning": "Do NOT reach for `cooldown` as a per-entity throttle. It is per rule INSTANCE, so one entity's fire suppresses every other entity's, and suppression returns false from Evaluate — which the stateful evaluator reads as TransitionExited and therefore fires on_exit. Filed as part of semstreams#1007.",
+    "feedback_loop_safety": "Four independent structural facts, no denylist to maintain: (1) run_scope none — the ops loop carries no RunID so it never joins the run it observes; (2) this rule fires on the run family while ops loops are loop-family entities; (3) all 32 wired loop-family rules gate on agent.loop.role and none names an ops role; (4) emit_diagnosis mints ops.diagnosis.finding entities that no wired rule's entity.pattern matches. Fact (4) is only true because of the ADR-059 narrowing — under the old blanket pattern every rule evaluated its conditions against every finding.",
+    "replay_note": "Unlike agent-run/03, this condition stays true forever once a run terminates, so transition detection rests entirely on persisted MatchState. Clearing that KV while ENTITY_STATES survived would re-fire every historical run on boot. The standard `down -v` across the whole NATS store makes this unreachable; an operator doing selective bucket maintenance on long-lived NATS should switch to the `transition` operator (one target value per condition, so three terminals costs three rules).",
+    "subject_shape_note": "Subject MUST be exactly two segments after `agent.task.` — agentic-dispatch subscribes on `agent.task.*`, a NATS single-token wildcard. Deeper subjects (e.g. `agent.task.ops.terminal_observe`) drop into the void: the rule fires, the action publishes, and no consumer subscribes. Smoke #8 run-11 surfaced this the hard way.",
+    "no_submit_work": "The retired rules granted `submit_work`, which does not exist upstream — no executor, no registration, only a category-map entry and comments (semstreams#1007). Unknown tool names are logged and dropped, so the personas were instructing a tool the model never received. Terminal is decide(action=observed), gated by action_allowlist.",
+    "handoff_passthrough_note": "coordinator_loop_id is threaded at spawn from agent.run.handoff rather than left for the observer to derive. agent.run.handoff is a BARE loop id (e.g. loop_7b3b867e), and an earlier persona told the model to build a 6-part loop entity ID from it by string surgery — exactly the hallucination source the lineage-passthrough pattern exists to remove. Hand it the id; never ask a small model to assemble an entity ID.",
+    "iteration_budget_note": "loop_max_iterations 12 is the observer's ceiling, and the framework — not this rule and not the persona — applies the pressure: BuildIterationBudgetMessage (upstream handlers.go:769) prepends '[Iteration Budget] Iteration N of M (X% used)' to EVERY turn and escalates past 50% and 75%. The persona points at that signal rather than imposing a call-count rule of its own; a hard cap gets gamed (the model satisfies the counter instead of judging when it has enough) and it duplicates a live signal that is strictly better informed. The first real-LLM run (2026-08-20) died at 12/12 with every tool result has_error=false: the tools worked, but the framework's escalation says 'submit your work' and its system prompt says 'call the submit_work tool' — a semspec product-shell tool this deployment does not have (semstreams#1007). The persona now states that 'submit your work' means call decide. Budget exhaustion surfaces as state=failed reason=max_iterations, NOT truncated. Under e2e the component ceiling clamps 12 to 8, so nothing may depend on knowing the exact number."
+  }
+}

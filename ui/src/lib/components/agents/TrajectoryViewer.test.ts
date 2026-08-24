@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/svelte";
-import type { TrajectoryEntry } from "$lib/types/agent";
+import type { LoopTrajectory, TrajectoryFact } from "$lib/types/agent";
 
 // Mock agentApi — must be before component import
 const mockGetTrajectory = vi.fn();
@@ -13,18 +13,61 @@ vi.mock("$lib/services/agentApi", () => ({
 import TrajectoryViewer from "./TrajectoryViewer.svelte";
 
 // ---------------------------------------------------------------------------
-// Test data factory
+// Test data factory — the beta.160 GraphQL trajectory(loopId) fact-log
+// shape. See ui/src/lib/types/agent.ts for the full field contract.
 // ---------------------------------------------------------------------------
 
 function makeTrajectory(
-  overrides: Partial<TrajectoryEntry> = {},
-): TrajectoryEntry {
+  facts: TrajectoryFact[],
+  overrides: Partial<LoopTrajectory> = {},
+): LoopTrajectory {
   return {
+    schema_version: "v1",
     loop_id: "loop-abc123",
-    role: "architect",
-    iterations: 5,
-    outcome: "complete",
-    duration_ms: 12345,
+    coverage: "observed",
+    terminal_observed: false,
+    observed_totals: {
+      facts: facts.length,
+      tokens_in: 0,
+      tokens_out: 0,
+      elapsed_ms: 0,
+      message_count: 0,
+      tool_count: 0,
+      url_count: 0,
+      model_requests: 0,
+      model_completions: 0,
+      tool_requests: 0,
+      tool_completions: 0,
+      context_compactions: 0,
+      terminal_observations: 0,
+      requested_observations: 0,
+      completed_observations: 0,
+      failed_observations: 0,
+      cancelled_observations: 0,
+    },
+    facts,
+    ...overrides,
+  };
+}
+
+function startedFact(role: string): TrajectoryFact {
+  return {
+    kind: "loop.started",
+    causal_iteration: 0,
+    causal_phase: "loop_start",
+    causal_ordinal: 0,
+    capability_preview: role,
+  };
+}
+
+function terminalFact(overrides: Partial<TrajectoryFact> = {}): TrajectoryFact {
+  return {
+    kind: "loop.terminal",
+    causal_iteration: 5,
+    causal_phase: "terminal",
+    causal_ordinal: 0,
+    status: "completed",
+    elapsed_ms: 12345,
     ...overrides,
   };
 }
@@ -39,7 +82,7 @@ beforeEach(() => {
 
 describe("TrajectoryViewer — structure", () => {
   it("renders with data-testid='trajectory-viewer'", async () => {
-    mockGetTrajectory.mockResolvedValue(makeTrajectory());
+    mockGetTrajectory.mockResolvedValue(makeTrajectory([]));
     render(TrajectoryViewer, { props: { loopId: "loop-abc123" } });
     expect(screen.getByTestId("trajectory-viewer")).toBeInTheDocument();
   });
@@ -66,8 +109,12 @@ describe("TrajectoryViewer — loading state", () => {
 // ---------------------------------------------------------------------------
 
 describe("TrajectoryViewer — data display", () => {
-  it("shows trajectory role after load", async () => {
-    mockGetTrajectory.mockResolvedValue(makeTrajectory({ role: "builder" }));
+  it("shows the role from the loop.started fact after load", async () => {
+    mockGetTrajectory.mockResolvedValue(
+      makeTrajectory([startedFact("builder"), terminalFact()], {
+        terminal_observed: true,
+      }),
+    );
     render(TrajectoryViewer, { props: { loopId: "loop-abc123" } });
 
     await waitFor(() => {
@@ -77,21 +124,27 @@ describe("TrajectoryViewer — data display", () => {
     });
   });
 
-  it("shows trajectory outcome", async () => {
+  it("shows the terminal fact's status as the outcome", async () => {
     mockGetTrajectory.mockResolvedValue(
-      makeTrajectory({ outcome: "complete" }),
+      makeTrajectory([terminalFact({ status: "completed" })], {
+        terminal_observed: true,
+      }),
     );
     render(TrajectoryViewer, { props: { loopId: "loop-abc123" } });
 
     await waitFor(() => {
       expect(screen.getByTestId("trajectory-outcome")).toHaveTextContent(
-        "complete",
+        "completed",
       );
     });
   });
 
-  it("shows trajectory duration", async () => {
-    mockGetTrajectory.mockResolvedValue(makeTrajectory({ duration_ms: 9876 }));
+  it("shows the terminal fact's elapsed_ms as the duration", async () => {
+    mockGetTrajectory.mockResolvedValue(
+      makeTrajectory([terminalFact({ elapsed_ms: 9876 })], {
+        terminal_observed: true,
+      }),
+    );
     render(TrajectoryViewer, { props: { loopId: "loop-abc123" } });
 
     await waitFor(() => {
@@ -101,8 +154,12 @@ describe("TrajectoryViewer — data display", () => {
     });
   });
 
-  it("shows trajectory iterations", async () => {
-    mockGetTrajectory.mockResolvedValue(makeTrajectory({ iterations: 7 }));
+  it("shows the terminal fact's causal_iteration as the iteration count", async () => {
+    mockGetTrajectory.mockResolvedValue(
+      makeTrajectory([terminalFact({ causal_iteration: 7 })], {
+        terminal_observed: true,
+      }),
+    );
     render(TrajectoryViewer, { props: { loopId: "loop-abc123" } });
 
     await waitFor(() => {
@@ -111,6 +168,20 @@ describe("TrajectoryViewer — data display", () => {
       );
     });
   });
+
+  it("shows 'in progress' and 0 iterations before a terminal fact is observed", async () => {
+    mockGetTrajectory.mockResolvedValue(makeTrajectory([startedFact("builder")]));
+    render(TrajectoryViewer, { props: { loopId: "loop-abc123" } });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("trajectory-outcome")).toHaveTextContent(
+        "in progress",
+      );
+    });
+    expect(screen.getByTestId("trajectory-viewer")).toHaveTextContent(
+      "0 iterations",
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -118,10 +189,29 @@ describe("TrajectoryViewer — data display", () => {
 // ---------------------------------------------------------------------------
 
 describe("TrajectoryViewer — token usage", () => {
-  it("shows token usage when present", async () => {
+  it("shows token usage when present in observed_totals", async () => {
     mockGetTrajectory.mockResolvedValue(
-      makeTrajectory({
-        token_usage: { input_tokens: 1500, output_tokens: 800 },
+      makeTrajectory([terminalFact()], {
+        terminal_observed: true,
+        observed_totals: {
+          facts: 1,
+          tokens_in: 1500,
+          tokens_out: 800,
+          elapsed_ms: 0,
+          message_count: 0,
+          tool_count: 0,
+          url_count: 0,
+          model_requests: 0,
+          model_completions: 0,
+          tool_requests: 0,
+          tool_completions: 0,
+          context_compactions: 0,
+          terminal_observations: 1,
+          requested_observations: 0,
+          completed_observations: 1,
+          failed_observations: 0,
+          cancelled_observations: 0,
+        },
       }),
     );
     render(TrajectoryViewer, { props: { loopId: "loop-abc123" } });
@@ -133,9 +223,9 @@ describe("TrajectoryViewer — token usage", () => {
     });
   });
 
-  it("does not show token usage when absent", async () => {
+  it("does not show token usage when observed_totals has zero tokens", async () => {
     mockGetTrajectory.mockResolvedValue(
-      makeTrajectory({ token_usage: undefined }),
+      makeTrajectory([terminalFact()], { terminal_observed: true }),
     );
     render(TrajectoryViewer, { props: { loopId: "loop-abc123" } });
 
@@ -151,14 +241,23 @@ describe("TrajectoryViewer — token usage", () => {
 // ---------------------------------------------------------------------------
 
 describe("TrajectoryViewer — tool calls", () => {
+  function toolFact(overrides: Partial<TrajectoryFact> = {}): TrajectoryFact {
+    return {
+      kind: "tool.completed",
+      causal_iteration: 1,
+      causal_phase: "tool_result",
+      causal_ordinal: 0,
+      status: "completed",
+      ...overrides,
+    };
+  }
+
   it("shows tool calls list with count", async () => {
     mockGetTrajectory.mockResolvedValue(
-      makeTrajectory({
-        tool_calls: [
-          { name: "search", args: { query: "test" } },
-          { name: "lookup", args: { id: "123" } },
-        ],
-      }),
+      makeTrajectory([
+        toolFact({ attempt_id: "a1", tool_preview: "search" }),
+        toolFact({ attempt_id: "a2", tool_preview: "lookup" }),
+      ]),
     );
     render(TrajectoryViewer, { props: { loopId: "loop-abc123" } });
 
@@ -168,11 +267,9 @@ describe("TrajectoryViewer — tool calls", () => {
     });
   });
 
-  it("shows tool call name", async () => {
+  it("shows tool call name from tool_preview", async () => {
     mockGetTrajectory.mockResolvedValue(
-      makeTrajectory({
-        tool_calls: [{ name: "graph_search", args: { query: "foo" } }],
-      }),
+      makeTrajectory([toolFact({ tool_preview: "graph_search" })]),
     );
     render(TrajectoryViewer, { props: { loopId: "loop-abc123" } });
 
@@ -182,73 +279,41 @@ describe("TrajectoryViewer — tool calls", () => {
     });
   });
 
-  it("shows tool call arguments in details", async () => {
+  it("does not show tool call arguments or results — only the wire allows", async () => {
+    // beta.160: tool.completed carries no arguments/result content, only
+    // metadata — this is a documented product-behavior change, not a bug.
     mockGetTrajectory.mockResolvedValue(
-      makeTrajectory({
-        tool_calls: [
-          { name: "search", args: { query: "test query", limit: 10 } },
-        ],
-      }),
+      makeTrajectory([toolFact({ tool_preview: "search" })]),
     );
     render(TrajectoryViewer, { props: { loopId: "loop-abc123" } });
 
-    await waitFor(() => {
-      const entry = screen.getByTestId("tool-call-entry");
-      expect(entry).toHaveTextContent("test query");
-    });
+    await screen.findByTestId("tool-call-entry");
+    expect(screen.queryByText("Arguments")).not.toBeInTheDocument();
+    expect(screen.queryByText("Result")).not.toBeInTheDocument();
   });
 
-  it("shows tool call result when present", async () => {
+  it("shows tool call failure status and error_category when present", async () => {
     mockGetTrajectory.mockResolvedValue(
-      makeTrajectory({
-        tool_calls: [
-          {
-            name: "search",
-            args: {},
-            result: "Found 3 matches",
-          },
-        ],
-      }),
-    );
-    render(TrajectoryViewer, { props: { loopId: "loop-abc123" } });
-
-    await waitFor(() => {
-      const entry = screen.getByTestId("tool-call-entry");
-      expect(entry).toHaveTextContent("Found 3 matches");
-    });
-  });
-
-  it("shows tool call error when present", async () => {
-    mockGetTrajectory.mockResolvedValue(
-      makeTrajectory({
-        tool_calls: [
-          {
-            name: "search",
-            args: {},
-            error: "Connection refused",
-          },
-        ],
-      }),
+      makeTrajectory([
+        toolFact({
+          tool_preview: "search",
+          status: "failed",
+          error_category: "timeout",
+        }),
+      ]),
     );
     render(TrajectoryViewer, { props: { loopId: "loop-abc123" } });
 
     await waitFor(() => {
       const errorEl = screen.getByTestId("tool-call-error");
-      expect(errorEl).toHaveTextContent("Connection refused");
+      expect(errorEl).toHaveTextContent("failed");
+      expect(errorEl).toHaveTextContent("timeout");
     });
   });
 
   it("shows tool call duration when present", async () => {
     mockGetTrajectory.mockResolvedValue(
-      makeTrajectory({
-        tool_calls: [
-          {
-            name: "search",
-            args: {},
-            duration_ms: 250,
-          },
-        ],
-      }),
+      makeTrajectory([toolFact({ tool_preview: "search", elapsed_ms: 250 })]),
     );
     render(TrajectoryViewer, { props: { loopId: "loop-abc123" } });
 
@@ -258,20 +323,8 @@ describe("TrajectoryViewer — tool calls", () => {
     });
   });
 
-  it("does not show tool calls section when no tool calls", async () => {
-    mockGetTrajectory.mockResolvedValue(
-      makeTrajectory({ tool_calls: undefined }),
-    );
-    render(TrajectoryViewer, { props: { loopId: "loop-abc123" } });
-
-    await waitFor(() => {
-      expect(screen.getByTestId("trajectory-outcome")).toBeInTheDocument();
-    });
-    expect(screen.queryByTestId("tool-calls")).not.toBeInTheDocument();
-  });
-
-  it("does not show tool calls section when tool calls array is empty", async () => {
-    mockGetTrajectory.mockResolvedValue(makeTrajectory({ tool_calls: [] }));
+  it("does not show the tool calls section when there are no tool.completed facts", async () => {
+    mockGetTrajectory.mockResolvedValue(makeTrajectory([startedFact("builder")]));
     render(TrajectoryViewer, { props: { loopId: "loop-abc123" } });
 
     await waitFor(() => {
@@ -315,7 +368,7 @@ describe("TrajectoryViewer — error state", () => {
 
 describe("TrajectoryViewer — API calls", () => {
   it("fetches trajectory using the provided loopId", async () => {
-    mockGetTrajectory.mockResolvedValue(makeTrajectory());
+    mockGetTrajectory.mockResolvedValue(makeTrajectory([]));
     render(TrajectoryViewer, { props: { loopId: "my-loop-id-999" } });
 
     await waitFor(() => {
@@ -324,7 +377,7 @@ describe("TrajectoryViewer — API calls", () => {
   });
 
   it("re-fetches when loopId prop changes", async () => {
-    mockGetTrajectory.mockResolvedValue(makeTrajectory());
+    mockGetTrajectory.mockResolvedValue(makeTrajectory([]));
     const { rerender } = render(TrajectoryViewer, {
       props: { loopId: "loop-1" },
     });

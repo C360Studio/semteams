@@ -132,7 +132,7 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 
 	now := e.now().UTC()
 	out := proj.triples(runEntityID, now)
-	if err := e.publisher.AddTriplesBatch(ctx, out); err != nil {
+	if err := e.publisher.Append(ctx, out); err != nil {
 		return errResult(call, agentic.ToolErrorNetwork, "stamp projected plan triples on %s: %v", runEntityID, err)
 	}
 

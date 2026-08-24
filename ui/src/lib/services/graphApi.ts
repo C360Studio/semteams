@@ -210,32 +210,37 @@ export const graphApi = {
    * Get a single entity by ID.
    */
   async getEntity(id: string): Promise<BackendEntity> {
+    // beta.160 graph-query contract closure: entity(id:) returns
+    // ExactEntity { entity, kvRevision } — the revision-bearing exact
+    // read. We surface only the entity; kvRevision matters to writers
+    // doing CAS reconciles, which the UI never does.
     const query = `
       query GetEntity($id: String!) {
         entity(id: $id) {
-          id
-          triples {
-            subject
-            predicate
-            object
+          entity {
+            id
+            triples {
+              subject
+              predicate
+              object
+            }
           }
+          kvRevision
         }
       }
     `;
 
     const variables = { id };
 
-    const data = await executeQuery<{ entity: BackendEntity | null }>(
-      query,
-      variables,
-      "getEntity",
-    );
+    const data = await executeQuery<{
+      entity: { entity: BackendEntity | null; kvRevision: number } | null;
+    }>(query, variables, "getEntity");
 
-    if (!data.entity) {
+    if (!data.entity?.entity) {
       throw new GraphApiError(`Entity ${id} not found`, 404);
     }
 
-    return data.entity;
+    return data.entity.entity;
   },
 
   /**
@@ -245,28 +250,33 @@ export const graphApi = {
     prefix: string,
     limit: number = 50,
   ): Promise<BackendEntity[]> {
+    // beta.160 graph-query contract closure: entitiesByPrefix returns
+    // EntityPage { entities, next_cursor } with an opaque cursor. One
+    // page of `limit` matches the pre-160 single-request behavior;
+    // callers wanting deeper pages thread next_cursor themselves.
     const query = `
       query GetEntitiesByPrefix($prefix: String!, $limit: Int!) {
         entitiesByPrefix(prefix: $prefix, limit: $limit) {
-          id
-          triples {
-            subject
-            predicate
-            object
+          entities {
+            id
+            triples {
+              subject
+              predicate
+              object
+            }
           }
+          next_cursor
         }
       }
     `;
 
     const variables = { prefix, limit };
 
-    const data = await executeQuery<{ entitiesByPrefix: BackendEntity[] }>(
-      query,
-      variables,
-      "getEntitiesByPrefix",
-    );
+    const data = await executeQuery<{
+      entitiesByPrefix: { entities: BackendEntity[]; next_cursor: string };
+    }>(query, variables, "getEntitiesByPrefix");
 
-    return data.entitiesByPrefix;
+    return data.entitiesByPrefix.entities ?? [];
   },
 
   /**

@@ -8,6 +8,55 @@ import {
   entryMentionsLoop,
   messageLoggerApi,
 } from "$lib/services/messageLoggerApi";
+import type { LoopTrajectory, TrajectoryFact } from "$lib/types/agent";
+
+// beta.160: the trajectory wire shape moved from a `steps[]` array to an
+// immutable `facts[]` fact log (GraphQL trajectory(loopId) on
+// graph-gateway) — see ui/src/lib/types/agent.ts.
+function makeTrajectory(
+  overrides: Partial<LoopTrajectory> = {},
+): LoopTrajectory {
+  const facts = overrides.facts ?? [];
+  return {
+    schema_version: "v1",
+    loop_id: "loop-1",
+    coverage: "observed",
+    terminal_observed: false,
+    observed_totals: {
+      facts: facts.length,
+      tokens_in: 0,
+      tokens_out: 0,
+      elapsed_ms: 0,
+      message_count: 0,
+      tool_count: 0,
+      url_count: 0,
+      model_requests: 0,
+      model_completions: 0,
+      tool_requests: 0,
+      tool_completions: 0,
+      context_compactions: 0,
+      terminal_observations: 0,
+      requested_observations: 0,
+      completed_observations: 0,
+      failed_observations: 0,
+      cancelled_observations: 0,
+    },
+    facts,
+    ...overrides,
+  };
+}
+
+function decideFact(overrides: Partial<TrajectoryFact> = {}): TrajectoryFact {
+  return {
+    kind: "tool.completed",
+    causal_iteration: 1,
+    causal_phase: "tool_result",
+    causal_ordinal: 0,
+    status: "completed",
+    tool_preview: "decide",
+    ...overrides,
+  };
+}
 
 vi.mock("$lib/services/agentApi", () => ({
   agentApi: {
@@ -43,25 +92,22 @@ beforeEach(() => {
   vi.mocked(messageLoggerApi.fetchEntries).mockReset();
   vi.mocked(entryMentionsLoop).mockReset();
   vi.mocked(classifyEntry).mockReset();
-  vi.mocked(agentApi.getLoopTrajectory).mockResolvedValue({
-    loop_id: "loop-1",
-    start_time: "2026-06-24T00:00:00Z",
-    steps: [
-      {
-        step_type: "model_call",
-        timestamp: "2026-06-24T00:00:01Z",
-        request_id: "req-1",
-        response: "Thinking",
-      },
-      {
-        step_type: "tool_call",
-        timestamp: "2026-06-24T00:00:02Z",
-        tool_name: "decide",
-        tool_arguments: { action: "approved" },
-      },
-    ],
-    outcome: "success",
-  });
+  vi.mocked(agentApi.getLoopTrajectory).mockResolvedValue(
+    makeTrajectory({
+      terminal_observed: true,
+      facts: [
+        {
+          kind: "model.completed",
+          causal_iteration: 1,
+          causal_phase: "model_result",
+          causal_ordinal: 0,
+          status: "completed",
+          model_preview: "gemini-2.5-flash",
+        },
+        decideFact({ status: "completed" }),
+      ],
+    }),
+  );
   vi.mocked(getTriples).mockResolvedValue([
     {
       subject: "c360.semteams.agent.chain.execution.run-1",
@@ -116,7 +162,7 @@ describe("RunEvidencePanel", () => {
     });
 
     const counts = screen.getByTestId("run-evidence-counts");
-    expect(counts).toHaveTextContent("2 steps");
+    expect(counts).toHaveTextContent("2 facts");
     expect(counts).toHaveTextContent("2");
     expect(screen.getByTestId("run-evidence-trajectory")).toHaveTextContent('"loop_id": "loop-1"');
 
@@ -148,12 +194,7 @@ describe("RunEvidencePanel", () => {
 
     vi.mocked(agentApi.getLoopTrajectory).mockImplementation((loopId: string) => {
       if (loopId === "loop-old") return oldTrajectory;
-      return Promise.resolve({
-        loop_id: loopId,
-        start_time: "2026-06-24T00:01:00Z",
-        steps: [],
-        outcome: "success",
-      });
+      return Promise.resolve(makeTrajectory({ loop_id: loopId, facts: [] }));
     });
     vi.mocked(getTriples).mockImplementation((params) => {
       if (params.subject?.endsWith("run-old")) return oldTriples;
@@ -183,12 +224,7 @@ describe("RunEvidencePanel", () => {
       expect(screen.getByTestId("run-evidence-triples")).toHaveTextContent("implementation");
     });
 
-    resolveOldTrajectory({
-      loop_id: "loop-old",
-      start_time: "2026-06-24T00:00:00Z",
-      steps: [],
-      outcome: "success",
-    });
+    resolveOldTrajectory(makeTrajectory({ loop_id: "loop-old", facts: [] }));
     resolveOldTriples([
       {
         subject: "c360.semteams.agent.chain.execution.run-old",

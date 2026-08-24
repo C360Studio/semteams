@@ -60,158 +60,189 @@ description: |
   Required config: configs/e2e-flow-bootstrap.json (autoresearch rules wired).
   Required env: SEMTEAMS_SANDBOX_RUNNER=mock.
 
-responses:
-  # ---------- Loop 0: coordinator (dispatch) ----------
+responses_by_role:
 
-  - tool_call:
-      name: query_sandbox_attestation
-      arguments_json: |
-        {}
+  # ---------- coordinator (dispatch + wake-up) ----------
+  - match: "You are the SemTeams coordinator"
+    responses:
 
-  - tool_call:
-      name: request_sandbox
-      arguments_json: |
-        {
-          "profile": "go-backend",
-          "reason": "Optimizing a Go test command's wallclock needs a prepared environment to run the measurement repeatedly."
-        }
+      - tool_call:
+          name: query_sandbox_attestation
+          arguments_json: |
+            {}
 
-  - tool_call:
-      name: decide
-      arguments_json: |
-        {
-          "action": "autoresearch",
-          "reason": "Optimize the wallclock of `go test ./...`. Command: go test ./...; surface: ./...; cap: 2 iterations; metric: real seconds parsed from the test output. Lower is better."
-        }
+      - tool_call:
+          name: request_sandbox
+          arguments_json: |
+            {
+              "profile": "go-backend",
+              "reason": "Optimizing a Go test command's wallclock needs a prepared environment to run the measurement repeatedly."
+            }
 
-  # ---------- Loop A: autoresearch-baseline ----------
+      - tool_call:
+          name: decide
+          arguments_json: |
+            {
+              "action": "autoresearch",
+              "reason": "Optimize the wallclock of `go test ./...`. Command: go test ./...; surface: ./...; cap: 2 iterations; metric: real seconds parsed from the test output. Lower is better."
+            }
 
-  - tool_call:
-      name: emit_autoresearch_baseline
-      arguments_json: |
-        {
-          "command": "go test ./...",
-          "surface": "./...",
-          "cap": 2,
-          "metric-parser": "real seconds from the go test summary line",
-          "baseline_value": 1.20,
-          "baseline_pass": true,
-          "baseline_stdout_tail": "ok  example  1.20s"
-        }
 
-  - tool_call:
-      name: decide
-      arguments_json: |
-        {
-          "action": "propose",
-          "reason": "Baseline captured at 1.20s. Beginning the iteration loop (cap 2) — propose single-axis changes and keep the ones that lower the wallclock."
-        }
+      - tool_call:
+          name: decide
+          arguments_json: |
+            {
+              "action": "respond_direct",
+              "reason": "Optimized `go test ./...` from 1.20s to 0.85s (about 29% faster) across two kept iterations: parallelizing independent suites and dropping a redundant fixture rebuild. Both changes keep the tests passing."
+            }
 
-  # ---------- Loop B: autoresearch-propose (iteration 1) ----------
+  # ---------- autoresearch-baseline ----------
+  - match: "**BASELINE phase**"
+    responses:
 
-  - tool_call:
-      name: decide
-      arguments_json: |
-        {
-          "action": "measure",
-          "reason": "Iteration 1 hypothesis: enable test caching / parallelism (t.Parallel on the independent suites) — should cut wallclock without changing behavior."
-        }
+      - tool_call:
+          name: emit_autoresearch_baseline
+          arguments_json: |
+            {
+              "command": "go test ./...",
+              "surface": "./...",
+              "cap": 2,
+              "metric_parser": "real seconds from the go test summary line",
+              "baseline_value": 1.20,
+              "baseline_pass": true,
+              "baseline_stdout_tail": "ok  example  1.20s"
+            }
 
-  # ---------- Loop C: autoresearch-execute (iteration 1) ----------
+      - tool_call:
+          name: decide
+          arguments_json: |
+            {
+              "action": "propose",
+              "reason": "Baseline captured at 1.20s. Beginning the iteration loop (cap 2) — propose single-axis changes and keep the ones that lower the wallclock."
+            }
 
-  - tool_call:
-      name: emit_autoresearch_measurement
-      arguments_json: |
-        {
-          "value": 1.00,
-          "pass": true,
-          "stdout_tail": "ok  example  1.00s",
-          "stderr_tail": ""
-        }
 
-  - tool_call:
-      name: decide
-      arguments_json: |
-        {
-          "action": "measured",
-          "reason": "Iteration 1: 1.20s → 1.00s, tests still pass — kept."
-        }
+  # ---------- autoresearch-propose (all iterations) ----------
+  - match: "**PROPOSE phase**"
+    responses:
 
-  # ---------- Loop D: autoresearch-propose (iteration 2) ----------
+      - tool_call:
+          name: decide
+          arguments_json: |
+            {
+              "action": "measure",
+              "reason": "Iteration 1 hypothesis: enable test caching / parallelism (t.Parallel on the independent suites) — should cut wallclock without changing behavior."
+            }
 
-  - tool_call:
-      name: decide
-      arguments_json: |
-        {
-          "action": "measure",
-          "reason": "Iteration 2 hypothesis: drop a redundant fixture rebuild in TestMain — further reduces setup time."
-        }
 
-  # ---------- Loop E: autoresearch-execute (iteration 2) ----------
+      - tool_call:
+          name: decide
+          arguments_json: |
+            {
+              "action": "measure",
+              "reason": "Iteration 2 hypothesis: drop a redundant fixture rebuild in TestMain — further reduces setup time."
+            }
 
-  - tool_call:
-      name: emit_autoresearch_measurement
-      arguments_json: |
-        {
-          "value": 0.85,
-          "pass": true,
-          "stdout_tail": "ok  example  0.85s",
-          "stderr_tail": ""
-        }
 
-  - tool_call:
-      name: decide
-      arguments_json: |
-        {
-          "action": "measured",
-          "reason": "Iteration 2: 1.00s → 0.85s, tests still pass — kept. Cap reached."
-        }
+  # ---------- autoresearch-execute (all iterations) ----------
+  - match: "**EXECUTE phase**"
+    responses:
 
-  # ---------- Loop F: autoresearch-synthesize ----------
+      - tool_call:
+          name: emit_autoresearch_measurement
+          arguments_json: |
+            {
+              "value": 1.00,
+              "pass": true,
+              "stdout_tail": "ok  example  1.00s",
+              "stderr_tail": ""
+            }
 
-  - tool_call:
-      name: emit_autoresearch_artifact
-      arguments_json: |
-        {
-          "title": "go test ./... wallclock optimization",
-          "command": "go test ./...",
-          "baseline_value": 1.20,
-          "best_value": 0.85,
-          "improvement_pct": 29.2,
-          "cap": 2,
-          "iterations_completed": 2,
-          "iterations_kept": 2,
-          "iterations_reverted": 0,
-          "iterations_crashed": 0,
-          "best_diff_summary": "t.Parallel on independent suites + dropped a redundant TestMain fixture rebuild",
-          "journey": ["iter1: t.Parallel → 1.00s kept", "iter2: drop fixture rebuild → 0.85s kept"],
-          "open_opportunities": ["profile the remaining 0.85s for I/O waits"]
-        }
+      - tool_call:
+          name: decide
+          arguments_json: |
+            {
+              "action": "measured",
+              "reason": "Iteration 1: 1.20s → 1.00s, tests still pass — kept."
+            }
 
-  - tool_call:
-      name: decide
-      arguments_json: |
-        {
-          "action": "emit",
-          "reason": "Artifact emitted: 1.20s → 0.85s (29% faster), both iterations kept. Routing to the reviewer."
-        }
 
-  # ---------- Loop G: reviewer-autoresearch ----------
+      - tool_call:
+          name: emit_autoresearch_measurement
+          arguments_json: |
+            {
+              "value": 0.85,
+              "pass": true,
+              "stdout_tail": "ok  example  0.85s",
+              "stderr_tail": ""
+            }
 
-  - tool_call:
-      name: decide
-      arguments_json: |
-        {
-          "action": "approved",
-          "reason": "Rollup is structurally complete: baseline, per-iteration journey, running best, and kept changes all present; the kept iterations genuinely moved the metric (1.20 → 0.85). Approved."
-        }
+      - tool_call:
+          name: decide
+          arguments_json: |
+            {
+              "action": "measured",
+              "reason": "Iteration 2: 1.00s → 0.85s, tests still pass — kept. Cap reached."
+            }
 
-  # ---------- Loop H: coordinator (wake-up) ----------
 
-  - tool_call:
-      name: decide
-      arguments_json: |
-        {
-          "action": "respond_direct",
-          "reason": "Optimized `go test ./...` from 1.20s to 0.85s (about 29% faster) across two kept iterations: parallelizing independent suites and dropping a redundant fixture rebuild. Both changes keep the tests passing."
-        }
+  # ---------- autoresearch-synthesize ----------
+  - match: "**SYNTHESIZE phase**"
+    responses:
+
+      - tool_call:
+          name: emit_autoresearch_artifact
+          arguments_json: |
+            {
+              "title": "go test ./... wallclock optimization",
+              "command": "go test ./...",
+              "baseline_value": 1.20,
+              "best_value": 0.85,
+              "improvement_pct": 29.2,
+              "cap": 2,
+              "iterations_completed": 2,
+              "iterations_kept": 2,
+              "iterations_reverted": 0,
+              "iterations_crashed": 0,
+              "best_diff_summary": "t.Parallel on independent suites + dropped a redundant TestMain fixture rebuild",
+              "journey": ["iter1: t.Parallel → 1.00s kept", "iter2: drop fixture rebuild → 0.85s kept"],
+              "open_opportunities": ["profile the remaining 0.85s for I/O waits"]
+            }
+
+      - tool_call:
+          name: decide
+          arguments_json: |
+            {
+              "action": "emit",
+              "reason": "Artifact emitted: 1.20s → 0.85s (29% faster), both iterations kept. Routing to the reviewer."
+            }
+
+
+  # ---------- reviewer-autoresearch ----------
+  - match: "**AUTORESEARCH phase**"
+    responses:
+
+      - tool_call:
+          name: decide
+          arguments_json: |
+            {
+              "action": "approved",
+              "reason": "Rollup is structurally complete: baseline, per-iteration journey, running best, and kept changes all present; the kept iterations genuinely moved the metric (1.20 → 0.85). Approved."
+            }
+
+
+  # ---------- ops-chain-observer (ADR-027) ----------
+  # The ops rule fires on every run reaching a terminal phase, so this journey
+  # now spawns one observer loop after its run terminates. Without a bucket the
+  # mock repeats the exhausted tail, whose decide action is off the observer's
+  # ["observed"] allowlist -- rejected, re-picked, ground to max_iterations and
+  # surfaced as a truncated loop. One clean terminal instead.
+  - match: "operations analyst"
+    responses:
+      - tool_call:
+          name: decide
+          arguments_json: |
+            {
+              "action": "observed",
+              "reason": "Read the run entity and the coordinator loop result. Run reached its terminal phase with no operator-actionable pattern; emitting no findings."
+            }

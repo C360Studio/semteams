@@ -50,7 +50,7 @@ type EntityTripleReader interface {
 // TriplePublisher is the narrow write surface the Pauser needs.
 // agentictools.NATSTriplePublisher satisfies it structurally.
 type TriplePublisher interface {
-	AddTriple(ctx context.Context, triple message.Triple) error
+	Append(ctx context.Context, triples []message.Triple) error
 }
 
 // PauseResult reports what HandlePending did, for caller logging and test
@@ -170,7 +170,7 @@ func (p *Pauser) stampRunMarker(ctx context.Context, loopID, predicate string) (
 		Timestamp:  now,
 		Confidence: 1.0,
 	}
-	if err := p.publisher.AddTriple(ctx, triple); err != nil {
+	if err := p.publisher.Append(ctx, []message.Triple{triple}); err != nil {
 		return runEntityID, false, fmt.Errorf("approvalpause: stamp %s on %q: %w", predicate, runEntityID, err)
 	}
 	return runEntityID, true, nil

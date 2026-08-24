@@ -380,19 +380,36 @@ on the chain entity, and addressed by every chain role through the
 same wrapper. Nothing in the chain invents an environment — it
 inherits an attested one.
 
-## Ops roles (parallel observability track)
+## Ops role (parallel observability track)
 
-Two ops roles operate *off* the chain on a parallel track. They
-read the graph (chain agents do not) and emit diagnoses for human
-review:
+One ops role operates *off* the chain on a parallel track. It
+reads the graph (chain agents do not) and emits diagnoses for
+human review:
 
-- **ops-chain-observer** — wakes once at the chain's terminal
-  (reviewer's `approved` or coordinator's `respond_direct`),
-  walks the completed chain end-to-end, emits diagnoses about
-  role coverage, evidence completeness, and recovery cycles.
-- **ops-progress-observer** — wakes every 5 non-terminal
-  completions, checks whether the in-flight chain is making
-  forward progress or spinning.
+- **ops-chain-observer** — wakes once per run, when the run entity
+  reaches `completed`, `failed`, or `cancelled`. Triggering on the
+  run rather than on a reviewer role makes it category-agnostic
+  (research, autoresearch, and future packs are covered without
+  re-authoring) and lets it see failed and cancelled runs, which a
+  reviewer-completion trigger structurally misses.
+
+It carries no run association (`run_scope: "none"`), so it never
+becomes a member of the run it observes.
+
+**Known limitation.** The observer cannot enumerate a run's member
+loops: membership points one way (loops record their run; the run
+records no roster) and `query_relationships` reshapes an entity's
+own triples rather than serving a reverse index. It works from the
+run entity's own facts plus the coordinator loop reached via
+`agent.run.handoff`, following only pointers it actually reads.
+Widening this needs either an upstream reverse-index read or a
+member-roster predicate on the run entity.
+
+A second role, `ops-progress-observer`, was retired when the pack
+was re-wired: its `fire_every_n_events` throttle does not gate
+`publish_agent` at all (semstreams#1007), and a completion-triggered
+rule structurally cannot observe a *stalled* chain — the case it
+existed for. That needs a cron primitive with an idle-cost gate.
 
 Diagnoses are stamped as `ops.diagnosis.*` triples and rendered in
 the chain-entity UI for the operator. Phase 2
@@ -483,8 +500,8 @@ loops' output), and their own loop terminal. Nothing else.
 - **Product shell wiring:**
   `cmd/semteams/main.go` — how the binary boots the substrate on top of
   upstream semstreams primitives.
-- **Ops agent:** this repo's `objectives/` directory +
-  `ops-chain-observer` / `ops-progress-observer` persona dirs.
+- **Ops agent:** `configs/rules/ops/` + the `ops-chain-observer`
+  persona dir.
 - **Sponsor packs:** `sponsor-packages/` — annotated trajectory
   walkthroughs of completed chains. First entry:
   `research-pack-fan-out-2026-05-29`.

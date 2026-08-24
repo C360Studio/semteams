@@ -241,73 +241,137 @@ export interface ApprovalAcceptResponse {
   timestamp: string;
 }
 
-export interface TrajectoryEntry {
-  loop_id: string;
-  role: string;
-  iterations: number;
-  outcome: string;
-  duration_ms: number;
-  token_usage?: {
-    input_tokens: number;
-    output_tokens: number;
-  };
-  tool_calls?: TrajectoryToolCall[];
-}
-
-export interface TrajectoryToolCall {
-  name: string;
-  args: Record<string, unknown>;
-  result?: string;
-  error?: string;
-  duration_ms?: number;
-}
-
 // ---------------------------------------------------------------------------
-// Loop trajectory — what /teams-loop/trajectories/<loop_id> actually returns.
-// The "narrative" data source for the story view in TaskDetailPanel.
-// Shape verified against the running e2e-coordinator stack 2026-04-27.
+// Loop trajectory — the GraphQL `trajectory(loopId, limit, cursor)` field on
+// graph-gateway (semstreams beta.160). Replaces the deleted REST
+// /teams-loop/trajectories[/{loopId}] endpoints, which this app no longer
+// calls. Every fact is bounded, privacy-scrubbed metadata reconstructed from
+// an immutable fact log: NO response text, NO tool arguments, NO tool
+// results ride along — only kind/status/timing/token counts and short
+// previews (model name, tool name, provider). A `StorageReference` in
+// `evidence` points at the full body when one was captured, but this app
+// does not fetch evidence stores (out of scope — see agentApi.ts comments).
+//
+// Field list verified against
+// `gateway/graph-gateway/component.go` (trajectoryTypeDef /
+// trajectoryTotalsTypeDef / trajectoryFactTypeDef) and the wire structs in
+// `agentic/trajectory_fact.go` + `agentic/trajectory_query.go` at
+// v1.0.0-beta.160.
 // ---------------------------------------------------------------------------
 
-export type TrajectoryStepType = "model_call" | "tool_call";
+// TrajectoryFactKind is the closed v1 observation vocabulary (see
+// agentic.TrajectoryKind upstream). Typed as a union for authoring
+// ergonomics in narrative-building code — the field itself widens
+// gracefully at runtime since this is a compile-time-only guarantee.
+export type TrajectoryFactKind =
+  | "loop.started"
+  | "model.requested"
+  | "model.completed"
+  | "tool.requested"
+  | "tool.completed"
+  | "context.compacted"
+  | "loop.terminal";
 
-export interface ModelCallStep {
-  step_type: "model_call";
-  timestamp: string;
-  request_id: string;
-  /** Populated only after the response arrives. */
-  response?: string;
+export type TrajectoryFactPhase =
+  | "loop_start"
+  | "model_request"
+  | "model_result"
+  | "tool_request"
+  | "tool_result"
+  | "compaction"
+  | "terminal";
+
+// TrajectoryStatus is bounded *display* metadata upstream — not loop
+// authority. "requested" facts precede their paired "completed" fact;
+// "failed"/"cancelled" mark a completed observation that did not succeed.
+export type TrajectoryFactStatus =
+  | "requested"
+  | "completed"
+  | "failed"
+  | "cancelled";
+
+// TrajectoryStorageReference mirrors upstream message.StorageReference —
+// a pointer into evidence storage, never the body itself.
+export interface TrajectoryStorageReference {
+  storage_instance?: string;
+  key?: string;
+  content_type?: string;
+  /** Byte size hint; 0/absent means unknown. */
+  size?: number;
+}
+
+export interface TrajectoryFact {
+  schema_version?: string;
+  loop_digest?: string;
+  attempt_id?: string;
+  attempt_ordinal?: number;
+  kind: TrajectoryFactKind;
+  source_kind?: string;
+  source_correlation?: string;
+  /** 0 for facts recorded before the first iteration (e.g. loop.started). */
+  causal_iteration: number;
+  causal_phase: TrajectoryFactPhase;
+  causal_ordinal: number;
+  /** RFC3339 timestamp. */
+  observed_at?: string;
+  elapsed_ms?: number;
+  status?: TrajectoryFactStatus;
   tokens_in?: number;
   tokens_out?: number;
-  /** Duration in milliseconds. */
-  duration?: number;
-  model?: string;
-  provider?: string;
-  /** Capability the model was called with — "coordinator", "researcher", … */
-  capability?: string;
+  message_count?: number;
+  tool_count?: number;
+  url_count?: number;
+  /** Model name preview, e.g. "gemini-2.5-flash" — not response content. */
+  model_preview?: string;
+  provider_preview?: string;
+  /** Tool name preview, e.g. "decide" — not call arguments or result. */
+  tool_preview?: string;
+  /** The loop's role at observation time, e.g. "coordinator". */
+  capability_preview?: string;
+  error_category?: string;
+  evidence_digest?: string;
+  evidence_size?: number;
+  /** Present only when `evidence_capture === "stored"`. */
+  evidence?: TrajectoryStorageReference;
+  evidence_capture?: "none" | "stored" | "missing";
+  evidence_failure?: string;
 }
 
-export interface ToolCallStep {
-  step_type: "tool_call";
-  timestamp: string;
-  tool_name: string;
-  tool_arguments?: Record<string, unknown>;
-  tool_result?: string;
-  tool_status?: string;
-  duration?: number;
-  provider?: string;
-  capability?: string;
+// TrajectoryObservedTotals summarizes only the facts returned in ONE page —
+// it is not a running total across the whole loop. agentApi.ts sums pages
+// together when it walks next_cursor so the merged trajectory's totals
+// describe every fact it fetched.
+export interface TrajectoryObservedTotals {
+  facts: number;
+  tokens_in: number;
+  tokens_out: number;
+  elapsed_ms: number;
+  message_count: number;
+  tool_count: number;
+  url_count: number;
+  model_requests: number;
+  model_completions: number;
+  tool_requests: number;
+  tool_completions: number;
+  context_compactions: number;
+  terminal_observations: number;
+  requested_observations: number;
+  completed_observations: number;
+  failed_observations: number;
+  cancelled_observations: number;
 }
 
-export type TrajectoryStep = ModelCallStep | ToolCallStep;
-
+// LoopTrajectory mirrors the GraphQL `Trajectory` type / upstream
+// agentic.TrajectoryPage. `next_cursor` is only meaningful on a single raw
+// page fetch; agentApi.ts's public getTrajectory/getLoopTrajectory walk
+// cursors internally and return the merged result (next_cursor present only
+// if pagination stopped early via the fact cap or a cursor-repeat guard).
 export interface LoopTrajectory {
+  schema_version: string;
   loop_id: string;
-  start_time: string;
-  end_time?: string;
-  steps: TrajectoryStep[];
-  outcome?: string;
-  total_tokens_in?: number;
-  total_tokens_out?: number;
-  /** Total duration in milliseconds. Populated once the loop completes. */
-  duration?: number;
+  coverage: string;
+  observed_totals: TrajectoryObservedTotals;
+  terminal_observed: boolean;
+  facts: TrajectoryFact[];
+  next_cursor?: string;
 }

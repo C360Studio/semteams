@@ -5,7 +5,7 @@
   "description": "ADR-042 §Phase 2 redesign autoresearch pack recovery rule — RUN-ENTITY-DESCENDED branch (ADR-053 Phase 4b-1a anchor split, sibling of rule 10). Fires when autoresearch-propose (no viable hypothesis / plateau soft-stop), autoresearch-execute (sandbox catastrophic failure), autoresearch-synthesize (run state structurally inconsistent), or reviewer-autoresearch (artifact structurally malformed) terminates with decide(action=needs_clarification). Spawns a fresh coordinator (allow-list respond_direct / ask_user) to deliver the situation to the user.\n\nANCHOR (agent.lineage.run-loop-entity-id, threaded → agent-run/06): these roles descend through the run-entity-fired iteration driver (rule 05 threads run-loop-entity-id into propose/synthesize; rule 03 carries it to execute; rule 07 to reviewer). They carry NO bare agent.run (the run entity has none for the inherit path), so the coordinator this rule spawns would inherit NO run anchor — leaving a silent executing-zombie if it failed. So we THREAD related_loops[run-loop-entity-id] = $entity.triple.agent.lineage.run-loop-entity-id onto the coordinator; a failure then routes to agent-run/06 (the lineage branch). The length_gt 0 fence guarantees the thread source resolves (defends the go-reviewer C1 garbage-literal-subject class) and makes this mutually exclusive with rule 10 (baseline, agent.run.entity-id).\n\nMirrors run-failed rule 13 (the descended-roles run-failed branch), scoped to the recovery-coordinator spawn instead of the run-outcome stamp.",
   "enabled": true,
   "entity": {
-    "pattern": "*.*.*.*.*.*"
+    "pattern": "*.*.agent.agentic-loop.execution.*"
   },
   "conditions": [
     {

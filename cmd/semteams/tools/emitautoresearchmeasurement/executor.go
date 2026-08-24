@@ -190,7 +190,7 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 
 	now := time.Now().UTC()
 	executeTriples := args.executeTriples(executeEntityID, outcome, delta, best, now)
-	if err := e.publisher.AddTriplesBatch(ctx, executeTriples); err != nil {
+	if err := e.publisher.Append(ctx, executeTriples); err != nil {
 		return errResult(call, agentic.ToolErrorNetwork, "stamp measurement triples on %s: %v", executeEntityID, err)
 	}
 

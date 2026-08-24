@@ -66,7 +66,9 @@
     void refresh();
   });
 
-  const trajectoryStepCount = $derived(trajectory?.steps.length ?? 0);
+  // beta.160: the trajectory wire shape moved from a `steps[]` array to an
+  // immutable `facts[]` fact log — see ui/src/lib/types/agent.ts.
+  const trajectoryFactCount = $derived(trajectory?.facts.length ?? 0);
 </script>
 
 <section class="evidence-panel" data-testid="run-evidence-panel">
@@ -96,7 +98,7 @@
   <dl class="evidence-grid" data-testid="run-evidence-counts">
     <div>
       <dt>Trajectory</dt>
-      <dd>{trajectoryStepCount} step{trajectoryStepCount === 1 ? "" : "s"}</dd>
+      <dd>{trajectoryFactCount} fact{trajectoryFactCount === 1 ? "" : "s"}</dd>
     </div>
     <div>
       <dt>Graph triples</dt>

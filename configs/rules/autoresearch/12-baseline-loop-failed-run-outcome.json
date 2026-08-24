@@ -5,7 +5,7 @@
   "description": "ADR-053 Phase 4a′ — autoresearch run-failed mapping, anchor branch 1 of 2 (the baseline). The baseline runs once at the start of an autoresearch run to establish the measurement; if it fails involuntarily (agent.loop.outcome in [failed, truncated]) the run cannot proceed and must fail, not hang `executing`.\n\nWHY baseline is split from the other autoresearch roles (the §E anchor asymmetry): autoresearch-baseline is spawned by rule 01 with run_scope=new, so it carries agent.run.entity-id (framework-stamped from RunID, graph_writer.go:535-539) but NO agent.lineage.run-loop-entity-id. The propose/synthesize/reviewer roles are spawned by the RUN-entity-fired iteration driver (rule 05) and so carry agent.lineage.run-loop-entity-id but NOT agent.run.entity-id — they are handled by the sibling rule 13. Stamping a single lineage-subject across the mixed role list would write the baseline's failed marker to an unresolved literal token and the run would never fail (the go-reviewer C1 garbage-subject class). So baseline uses its own anchor here.\n\nCompanion to autoresearch/11-loop-failed-pause (operator chain.paused.marker, untouched). autoresearch-execute stays EXCLUDED from both — a loop-failed execute is a budgeted iteration routed through rule 04b (counter increments, chain continues); it must NOT fail the run.",
   "enabled": true,
   "entity": {
-    "pattern": "*.*.*.*.*.*"
+    "pattern": "*.*.agent.agentic-loop.execution.*"
   },
   "conditions": [
     {

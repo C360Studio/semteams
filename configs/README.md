@@ -43,9 +43,7 @@ configs/
     ├── reviewer-create-change/  ← PARKED (ADR-058): OpenSpec reviewer
     ├── dev-via-test-*/          ← PARKED (ADR-058): Lisa / Ralph
     ├── reviewer-dev-via-test/   ← PARKED (ADR-058): CBG plan + work gate
-    ├── ops/                     ← read-only diagnostic agent
-    ├── ops-chain-observer/
-    └── ops-progress-observer/
+    └── ops-chain-observer/     ← read-only diagnostic agent (ADR-027)
 ```
 
 Adding a new task class is a new overlay: drop a rule pack

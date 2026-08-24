@@ -63,7 +63,7 @@ type autoresearchOnEnterJSON struct {
 // stay true across iterations 2..N, so `wasMatching` stays true and
 // the next iteration's marker stamp would otherwise produce
 // `TransitionNone` (empty WhileTrue, action_count=0, chain stalls).
-// The replace_owned (empty-object) clear in this rule's first on_enter
+// The reconcile_predicates (empty-object) clear in this rule's first on_enter
 // action flips the trigger condition false (Exited), resetting wasMatching
 // for the next Entered cycle (migrated from remove_triple, ADR-056 #278).
 //
@@ -76,7 +76,7 @@ type autoresearchOnEnterJSON struct {
 //  1. Rule conditions include a presence marker on
 //     `autoresearch.iteration.pending ne ""` — without it the
 //     remove-then-add cycle has nothing to remove.
-//  2. The first on_enter action clears the marker via `replace_owned`
+//  2. The first on_enter action clears the marker via `reconcile_predicates`
 //     (empty object) — ordering matters: clearing the marker before the
 //     spawn actions is what produces the Exited transition.
 //  3. A publish_agent for autoresearch-propose exists with a `when`
@@ -84,7 +84,7 @@ type autoresearchOnEnterJSON struct {
 //  4. A publish_agent for autoresearch-synthesize exists with a
 //     `when` clause `$state.iteration > $entity.triple.autoresearch.run.cap`
 //     — the cap-exhaust branch.
-//  5. A replace_owned (NOT add_triple) for autoresearch.run.status
+//  5. A reconcile_predicates (NOT add_triple) for autoresearch.run.status
 //     = "stopped" with the same cap-exhaust when clause. replace_owned
 //     atomically wipes the prior "active" value; add_triple would leave both,
 //     and GetFieldValue's first-wins read would still find "active",
@@ -117,9 +117,9 @@ func TestAutoresearchPack_05_IterationDispatch_PatternA(t *testing.T) {
 	// Entered. If a spawn fires first, the propose loop could race against
 	// the marker still being present. The atomic single-revision clear is
 	// equivalent to the prior remove_triple for the presence-marker re-entry.
-	if len(rule.OnEnter) == 0 || rule.OnEnter[0].Type != "replace_owned" ||
+	if len(rule.OnEnter) == 0 || rule.OnEnter[0].Type != "reconcile_predicates" ||
 		rule.OnEnter[0].Predicate != "autoresearch.iteration.pending" {
-		t.Errorf("rule 05 first on_enter action = %+v; want replace_owned (clear) of autoresearch.iteration.pending so the Exited transition fires before spawn actions",
+		t.Errorf("rule 05 first on_enter action = %+v; want reconcile_predicates (clear) of autoresearch.iteration.pending so the Exited transition fires before spawn actions",
 			ifFirstOnEnter(rule))
 	}
 
@@ -151,7 +151,7 @@ func TestAutoresearchPack_05_IterationDispatch_PatternA(t *testing.T) {
 		t.Error("rule 05 missing publish_agent for autoresearch-synthesize with the cap-exhaust when clause — chain would loop past cap forever")
 	}
 
-	// Invariant 5: replace_owned (NOT add_triple) for the run.status
+	// Invariant 5: reconcile_predicates (NOT add_triple) for the run.status
 	// stop flip, gated by the same cap-exhaust when clause. Migrated from
 	// update_triple to the atomic owned lane in the ADR-056 #278 adoption
 	// (semstreams beta.110); run.status is owned by the rule-pack.semteams
@@ -159,11 +159,11 @@ func TestAutoresearchPack_05_IterationDispatch_PatternA(t *testing.T) {
 	// envelope pin.
 	var foundStopFlip bool
 	for _, a := range rule.OnEnter {
-		if a.Type != "replace_owned" || a.Predicate != "autoresearch.run.status" {
+		if a.Type != "reconcile_predicates" || a.Predicate != "autoresearch.run.status" {
 			continue
 		}
 		if obj, ok := a.Object.(string); !ok || obj != "stopped" {
-			t.Errorf("rule 05 run.status replace_owned object = %v; want %q so the status condition correctly fails on belated state changes",
+			t.Errorf("rule 05 run.status reconcile_predicates object = %v; want %q so the status condition correctly fails on belated state changes",
 				a.Object, "stopped")
 		}
 		if !whenIterationCap(a.When, "gt", wantCap) {
@@ -172,7 +172,7 @@ func TestAutoresearchPack_05_IterationDispatch_PatternA(t *testing.T) {
 		foundStopFlip = true
 	}
 	if !foundStopFlip {
-		t.Error("rule 05 missing replace_owned for autoresearch.run.status='stopped' at cap-exhaust — without it, a belated execute finishing after synthesize spawned would re-trigger the rule and spawn a duplicate synthesize")
+		t.Error("rule 05 missing reconcile_predicates for autoresearch.run.status='stopped' at cap-exhaust — without it, a belated execute finishing after synthesize spawned would re-trigger the rule and spawn a duplicate synthesize")
 	}
 
 	// add_triple on run.status would be a regression: append-only
@@ -406,7 +406,7 @@ func stampsExperimentCompleted(r *autoresearchRuleJSON) bool {
 // run entity," independent of which write lane.
 func stampsPredicateOnRun(r *autoresearchRuleJSON, predicate string) bool {
 	for _, a := range r.OnEnter {
-		if (a.Type == "add_triple" || a.Type == "replace_owned") && a.Predicate == predicate &&
+		if (a.Type == "add_triple" || a.Type == "reconcile_predicates") && a.Predicate == predicate &&
 			strings.Contains(a.Subject, "agent.lineage.run-loop-entity-id") {
 			return true
 		}

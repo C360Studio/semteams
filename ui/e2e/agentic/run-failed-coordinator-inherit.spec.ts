@@ -32,7 +32,14 @@ import { test, expect } from "@playwright/test";
  * Required config: configs/e2e-flow-bootstrap.json (rule 02f + agent-run/05)
  */
 
-test.describe("ADR-053 Phase 4b-1a — inherit-anchor recovery coordinator fails → executing→failed", () => {
+// PARKED (ADR-058): this journey drives the rule-06 recovery lane VIA the
+// parked dev-via-test pack (fixture scripts decide(dev_via_test) — not in
+// the live 4-action taxonomy, so the coordinator honestly respond_directs
+// and no chain ever spawns). Escaped the ADR-058 describe.skip sweep
+// because the run-failed* trio was never rerun on beta.159. Un-skip when
+// the dev pack is re-authored + re-wired, or re-point the fixture at a
+// live pack's recovery path.
+test.describe.skip("ADR-053 Phase 4b-1a — inherit-anchor recovery coordinator fails → executing→failed", () => {
   test.beforeAll(async ({ request }) => {
     const health = await request.get("/health");
     expect(health.ok(), "Backend not healthy — stack not running?").toBe(true);

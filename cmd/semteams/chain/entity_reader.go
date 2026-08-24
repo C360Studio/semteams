@@ -114,19 +114,38 @@ func (r *NATSEntityReader) ReadEntity(ctx context.Context, entityID string) (map
 		return nil, fmt.Errorf("graph entity query for %q: %w", entityID, err)
 	}
 
-	var entity struct {
-		ID      string `json:"id"`
-		Triples []struct {
-			Predicate string `json:"predicate"`
-			Object    any    `json:"object"`
-		} `json:"triples"`
-	}
-	if err := json.Unmarshal(respData, &entity); err != nil {
+	triples, err := DecodeExactEntityTriples(respData)
+	if err != nil {
 		return nil, fmt.Errorf("decode entity response for %q: %w", entityID, err)
 	}
+	return triples, nil
+}
 
-	out := make(map[string]any, len(entity.Triples))
-	for _, t := range entity.Triples {
+// DecodeExactEntityTriples decodes the beta.160 exact-read envelope the
+// graph.query.entity responder returns: ExactEntity {entity:{id,triples},
+// kvRevision}. The pre-160 bare {id,triples} shape decodes to ZERO triples
+// silently — that exact drift starved autoresearch's empirical compare
+// (journey-caught 2026-08-14) because every unit test mocks at the
+// EntityReader interface, never the wire bytes. entity_reader_test.go pins
+// this decode against upstream's literal fixture. kvRevision is surfaced
+// for CAS writers; read-only callers ignore it.
+func DecodeExactEntityTriples(respData []byte) (map[string]any, error) {
+	var resp struct {
+		Entity struct {
+			ID      string `json:"id"`
+			Triples []struct {
+				Predicate string `json:"predicate"`
+				Object    any    `json:"object"`
+			} `json:"triples"`
+		} `json:"entity"`
+		KVRevision uint64 `json:"kvRevision"`
+	}
+	if err := json.Unmarshal(respData, &resp); err != nil {
+		return nil, err
+	}
+
+	out := make(map[string]any, len(resp.Entity.Triples))
+	for _, t := range resp.Entity.Triples {
 		// Last-wins semantics: if a predicate appears twice the most
 		// recent one wins, matching graph-ingest's stamping policy.
 		out[t.Predicate] = t.Object

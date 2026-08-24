@@ -5,7 +5,7 @@
   "description": "ADR-042 §Phase 2 redesign — second category pack. First rule of the autoresearch category. Fires when a coordinator loop terminates with decide(action=autoresearch, reason=<user's autoresearch intent prose>). Spawns autoresearch-baseline with the coordinator loop ID as the RUN ENTITY (mirrors research pack's PLAN-loop-as-run-entity pattern). Baseline is responsible for parsing the four autoresearch parameters (command, surface, cap, metric_parser) out of the coordinator's reason text via its own LLM iteration, then stamping them onto the run entity via emit_autoresearch_baseline. The structured-params soft contract lives in the coordinator persona (10-decision-contract.md autoresearch entry) and autoresearch-baseline persona, NOT in the rule wire format — the wire stays the canonical decide(action, reason, subtopics, retry_hint) shape, no per-category schema branching.",
   "enabled": true,
   "entity": {
-    "pattern": "*.*.*.*.*.*"
+    "pattern": "*.*.agent.agentic-loop.execution.*"
   },
   "conditions": [
     {

@@ -40,14 +40,7 @@ type fakePub struct {
 	triples []message.Triple
 }
 
-func (f *fakePub) AddTriple(_ context.Context, t message.Triple) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.triples = append(f.triples, t)
-	return nil
-}
-
-func (f *fakePub) AddTriplesBatch(_ context.Context, ts []message.Triple) error {
+func (f *fakePub) Append(_ context.Context, ts []message.Triple) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.triples = append(f.triples, ts...)
@@ -509,8 +502,8 @@ func routeTriples(a Analysis) map[string]string {
 	return routes
 }
 
-// CreateEntityWithTriples satisfies beta.159's widened TriplePublisher;
-// the fake delegates to AddTriplesBatch so recording semantics are identical.
-func (f *fakePub) CreateEntityWithTriples(ctx context.Context, _ string, _ message.Type, triples []message.Triple) error {
-	return f.AddTriplesBatch(ctx, triples)
+// Create satisfies beta.160's TriplePublisher; the fake delegates to
+// Append so recording semantics are identical.
+func (f *fakePub) Create(ctx context.Context, _ string, _ message.Type, triples []message.Triple) error {
+	return f.Append(ctx, triples)
 }

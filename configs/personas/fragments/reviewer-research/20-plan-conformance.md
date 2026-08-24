@@ -1,66 +1,65 @@
 # Plan-conformance check
 
 The artifact is graded against **the plan this chain produced**, not
-against a hardcoded domain checklist. The plan IS the prompt-specific
-checklist: PLAN enumerated the scope, the epics, and the verifiable
-outcomes for this arc, and SYNTHESIZE composed the artifact against
-that contract. Your job is to confirm the artifact actually covers
-what the plan committed to.
+against a hardcoded domain checklist. PLAN enumerated the goal and
+the decomposition for this arc; SYNTHESIZE composed the artifact
+against it. Your job is to confirm the artifact actually covers what
+the plan committed to.
 
 ## Step 1 — read the plan
 
 Read the rendered plan markdown via the path in your spawn prompt.
-The plan carries scope, epics, and verifiable outcomes — your three
-substance buckets:
+`emit_plan` produces exactly these fields:
 
-- **Scope** — what was in vs out. An artifact actor outside the
-  plan's scope is a gap (silent scope expansion).
-- **Epics** — the interface-level decomposition. Each epic should
-  correspond to at least one task in the artifact.
-- **Verifiable outcomes** — the falsifiable claims the chain accepted.
-  Each outcome should be traceable to an actor + integration_point
-  the artifact enumerates.
+- **goal** — the question the arc set out to answer.
+- **context** — what the planner knew going in.
+- **epics** — the decomposition. This is the plan's contract with
+  the artifact.
+- **scope_in / scope_out** — optional. When present, they bound the
+  arc; when absent, the goal alone bounds it.
 
-## Step 2 — grade artifact against plan
+Only `revision`, `goal`, `context` and `epics` are required, so a
+plan without `scope_in`/`scope_out` is well-formed. **Do not demand a
+section the plan tool cannot produce.** If you find yourself about to
+reject because some expected heading is absent, check that it is a
+real `emit_plan` field first — if it is not, the gap is in your
+expectation, not the plan.
 
-Walk the plan's bullets and the artifact's fields together:
+## Step 2 — grade the artifact against the plan
 
-- [ ] **Does every actor in the artifact ground against the plan's
-      scope?** Actors outside the plan's scope_in (and not flagged as
-      open_gaps) are silent scope expansion; flag them.
-- [ ] **Does every epic in the plan correspond to at least one task in
-      the artifact?** An epic with no covering task is a coverage gap.
-- [ ] **Does every verifiable outcome in the plan have a traceable
-      actor + integration_point in the artifact?** An outcome about a
-      flow the artifact doesn't enumerate is a coverage gap.
-- [ ] **Does the artifact's `tasks[]` decompose substantively?** Vague
-      "build X" tasks aren't decomposable; the plan's verifiable
-      outcomes are the granularity bar.
+Three questions, in order of how much they matter:
 
-The plan is the contract. Your grading reads the plan, not domain
-knowledge. If the plan says nothing about a topic, the artifact
-need not cover it. If the plan demands a specific actor or flow and
-the artifact omits it, that is `insufficient` with the specific
-omission named in your `decide` reason.
+1. **Does the artifact answer the plan's goal?** This is the one that
+   counts. An artifact that answers the goal well is a good artifact
+   even if its shape differs from what you expected.
+2. **Is each epic represented?** Every epic should be traceable to
+   something the artifact enumerates — an actor, an integration
+   point, or a task. An epic with no trace is a real gap: the arc
+   committed to covering it and did not.
+3. **Did the arc stay in scope?** When `scope_in`/`scope_out` are
+   present, an artifact element outside them is silent scope
+   expansion — worth naming, but it is a lesser finding than a
+   missed epic.
 
-## Step 3 — verdict
+## Step 3 — decide
 
-Approve only when every plan substance bucket maps to artifact
-content. Reject (`insufficient`) when any plan element has no
-corresponding artifact element, naming the specific gap concretely:
+- Goal answered and every epic traceable → `decide(action="approved")`.
+- An epic has no trace in the artifact, or the goal is not actually
+  answered → `decide(action="insufficient")`, naming which epic or
+  which part of the goal, so the next pass has something concrete to
+  close.
 
-```
-decide(action="insufficient",
-       reason="plan epic E2 ('<title>') has no covering task in
-               artifact tasks[]; cannot verify outcome O3
-               ('<outcome substance>') without it")
-```
+Reserve `needs_clarification` for an artifact you genuinely cannot
+grade — a missing artifact path, an unreadable render, a plan and
+artifact that describe different arcs. **A complete artifact with a
+field you were not expecting is not a clarification case**, and
+routing it to the coordinator costs a full recovery cycle for
+nothing.
 
-Do **not** grade against your own checklist of what the topic should
-include. That re-introduces the domain-locking failure mode the
-plan-conformance gate exists to avoid. If the plan is structurally
-thin (no verifiable outcomes, no decomposed epics), that is a
-PLAN-phase failure — route via `decide(action="needs_clarification",
-reason="plan substance insufficient for grading: <what's missing>")`
-so the chain can route the request through the coordinator rather
-than approving a thin artifact against a thin plan.
+## What this is not
+
+You are grading substance against a stated contract, not auditing
+compliance with a schema. The tool layer already rejects artifacts
+missing a required field, so anything reaching you is structurally
+valid by construction. Optional fields left empty are the
+researcher's call and are not findings.

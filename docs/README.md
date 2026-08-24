@@ -40,7 +40,6 @@ that don't exist upstream.
 | [`product/vocabulary-map.md`](product/vocabulary-map.md) | Product vocabulary and UI label guidance |
 | [`architecture archive`](adr/) | Maintainer decision records for load-bearing product-shell choices |
 | [`proposals/`](proposals/) | Active design docs. Currently: `agentic-superpowers.md` (shipped 2026-04-12; retained for framing). |
-| [`objectives/`](objectives/) | Per-flow objective specs the ops agent grounds against |
 | [`journeys/`](journeys/) | Pointer doc — the journey *specs* are the Playwright tests under `ui/e2e/agentic/` |
 | [`ui-integration-notes.md`](ui-integration-notes.md) | UI ↔ backend integration notes (historical reference; predates the 2026-06-03 UI slice). |
 

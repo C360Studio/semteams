@@ -38,13 +38,16 @@ import (
 )
 
 // Subject extracts the NATS subject for a named port on a named
-// component instance. Walks the Inputs, Outputs, and KVWrite slices of
-// the component's port config (within that single component, in that
-// order). Returns the empty string when:
+// component instance. Walks the Inputs then Outputs slices of the
+// component's port config (within that single component, in that
+// order; the beta.160 port cutover deleted the kv_write side lane).
+// Returns the empty string when:
 //
 //   - the component instance is not present in the config map, OR
 //   - the component is disabled (Enabled=false), OR
 //   - the component config does not declare a `ports` block, OR
+//   - the ports block is not in the canonical beta.160 envelope
+//     (strict decode fails; the caller falls back to its default), OR
 //   - the named port does not appear in any direction.
 //
 // Returning empty rather than erroring is deliberate — the caller has
@@ -69,13 +72,16 @@ import (
 //
 // Port names are unique within a single component by convention; if
 // the same name appears in two directions the first match (Inputs >
-// Outputs > KVWrite) wins. That ordering matches how component
-// definitions are usually read (request flows are inputs first).
+// Outputs) wins. That ordering matches how component definitions are
+// usually read (request flows are inputs first).
 //
-// KVWrite ports carry a NATS bucket identifier in the Subject field,
-// not a wire subject. Callers resolving a KVWrite port should treat
-// the returned string as a bucket name. (No current caller in
-// cmd/semteams/ resolves a KVWrite port via this helper.)
+// beta.160 envelope: each PortDefinition carries a typed Config
+// (Portable). Wire subjects live on nats/nats-request configs
+// (Subject) and jetstream configs (Subjects — the FIRST entry is
+// returned, matching the single-subject entries every semteams config
+// declares). KV and store port kinds carry bucket identifiers, not
+// wire subjects — no cmd/semteams caller resolves those, so they
+// return "" here.
 func Subject(cfg *config.Config, componentInstance, portName string) string {
 	if cfg == nil {
 		return ""
@@ -90,19 +96,28 @@ func Subject(cfg *config.Config, componentInstance, portName string) string {
 	if err := json.Unmarshal(cc.Config, &wrapped); err != nil || wrapped.Ports == nil {
 		return ""
 	}
-	for _, p := range wrapped.Ports.Inputs {
-		if p.Name == portName {
-			return p.Subject
+	for _, lane := range [][]component.PortDefinition{wrapped.Ports.Inputs, wrapped.Ports.Outputs} {
+		for _, p := range lane {
+			if p.Name == portName {
+				return portableSubject(p.Config)
+			}
 		}
 	}
-	for _, p := range wrapped.Ports.Outputs {
-		if p.Name == portName {
-			return p.Subject
-		}
-	}
-	for _, p := range wrapped.Ports.KVWrite {
-		if p.Name == portName {
-			return p.Subject
+	return ""
+}
+
+// portableSubject extracts the wire subject from a typed port config.
+// decodePortable yields value types (component/port_codec.go), so the
+// switch uses value cases.
+func portableSubject(pc component.Portable) string {
+	switch c := pc.(type) {
+	case component.NATSPort:
+		return c.Subject
+	case component.NATSRequestPort:
+		return c.Subject
+	case component.JetStreamPort:
+		if len(c.Subjects) > 0 {
+			return c.Subjects[0]
 		}
 	}
 	return ""

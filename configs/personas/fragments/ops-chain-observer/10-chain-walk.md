@@ -1,131 +1,125 @@
-# Walking the chain
+# Hydrating the run
 
-Your task properties carry one or more loop IDs in
-`agent.related_loops`:
+Your task properties carry the run entity ID directly:
 
-- `qa_reviewer` — the loop that just reached terminal (your trigger)
-- `researcher` — a completed-ancestor loop in the chain (always
-  set by every dev-via-spec spawn rule; the chain entity's
-  canonical anchor)
+- `run_entity_id` — the run that just terminated
+- `run_phase` — which terminal it reached (`completed`, `failed`,
+  or `cancelled`)
 
-These are hydration handles. Use them to walk the chain.
+You do not have to derive either. Start from what you were handed.
 
-## Step 1 — find the chain entity by walking parent ancestry
-
-The chain entity ID is `c360.<platform>.agent.chain.execution.<root_loop_id>`,
-but you don't know `root_loop_id` directly. Walk
-`agent.loop.parent` from the `researcher` loop_id (in your task
-properties) up to the root, then construct the chain entity ID
-from the root loop_id and the platform/org segments.
-
-The walk:
+## Step 1 — read the run entity
 
 ```
-query_entity(id="c360.<platform>.agent.agentic-loop.execution.<researcher_loop_id>")
+query_entity(entity_id="<run_entity_id>")
 ```
 
-…returns the researcher's loop entity triples. Inspect the
-`agent.loop.parent` predicate value — it's the parent loop's
-full 6-part entity ID, or absent if the researcher IS the root
-(rare in dev-via-spec; common in pure research arcs).
+This is your starting point and your richest single source. The run
+entity is owned by the agent-run lifecycle substrate (ADR-053) and
+carries:
 
-If `agent.loop.parent` is set, recurse: take the parent entity
-ID's last segment as the parent loop_id, query that, repeat
-until `agent.loop.parent` is absent. The terminal loop_id is
-the chain root. Construct the chain entity ID by replacing
-`agentic-loop` → `chain` and `execution.<loop_id>` →
-`execution.<root_loop_id>` in the segment positions.
+- `agent.run.phase` — the terminal you were woken for
+- `agent.run.outcome` — `success` on an approved terminal, `failed`
+  when a loop in the run failed or truncated
+- `agent.run.handoff` — the coordinator loop's ID, your one
+  reliable hop into the chain
+- `agent.run.clarification-pending` / `-resumed` — present if the
+  run paused for a human
+- pack accumulator state when the category writes it
+  (`autoresearch.*` on autoresearch runs)
 
-In dev-via-spec chains this walk is typically 1-3 hops from the
-researcher (researcher → research-reviewer → dispatch root, or
-researcher itself IS spawned from dispatch). Budget 3-5 query
-calls for the walk.
+Read every triple before you go anywhere else. Most of what you can
+truthfully say lives here.
 
-The org/platform segments come from the entity IDs you read
-during the walk — every loop entity carries the same prefix.
-Don't hardcode platform values; read them.
+## Step 2 — read the coordinator's result
 
-## Step 2 — read the chain entity's full triple set
-
-```
-query_entity(id="<chain_entity_id_from_step_1>")
-```
-
-This is your fused starting point. The run entity
-(`agent.chain.execution.<run_id>`) is owned by the agent-run lifecycle
-substrate (ADR-053) and carries:
-
-- `agent.run.phase` — the run's lifecycle phase (`dispatched` →
-  `executing` → `completed` / `failed` / `cancelled`)
-- `agent.run.outcome` — `success` on a reviewer/CBG-approved terminal
-- pack accumulator state when present (`autoresearch.*`, `dev_via_test.*`)
-- `chain.paused.*` — if the chain paused (failed-loop ancestry)
-
-Per-milestone artifact metadata is NO LONGER projected onto the run
-entity (the hand-rolled chain milestone stampers were retired in ADR-053).
-Read it from the producing LOOP entities instead, reached via lineage:
-the researcher/synthesize loop carries `research.artifact.{path,
-test-harness, actors-count, tasks-count}`; reach it via `agent.lineage.researcher`
-on the reviewer loop (related_loops), not a `chain.research-artifact.*`
-triple on the run entity.
-
-## Step 3 — read each milestone's loop_result
-
-Read the qa_reviewer's loop_result first (that's your trigger
-context):
+Your task properties carry `coordinator_loop_id` — the loop that
+routed this run. Use it directly:
 
 ```
-read_loop_result(loop_id="<qa_reviewer_from_related_loops>")
+read_loop_result(loop_id="<coordinator_loop_id>")
 ```
 
-This gives you the qa-reviewer's verdict: `coordinator.decision.next-action`
-(accept | reject | needs_clarification) and `coordinator.decision.reason`.
+That returns the coordinator's terminal decision and reason: why the
+run was routed the way it was, and on a clarification pause, what was
+asked. It is usually the single most informative read available to
+you after the run entity itself.
 
-Then read each milestone loop's result:
+**Do not assemble entity IDs yourself.** `coordinator_loop_id` is a
+bare loop id, not a 6-part entity ID, and `read_loop_result` wants
+exactly that bare form. If you need a full entity ID for
+`query_entity`, use one you have actually READ from a triple — never
+one you built by joining segments together. A constructed ID that is
+subtly wrong fails the read and costs you an iteration for nothing.
 
-- `read_loop_result(loop_id=<agent.lineage.researcher on the reviewer loop>)` — researcher's terminal
-- `read_loop_result(loop_id=<chain.plan_loop>)` — planner's terminal (legacy; ADR-041 MVP collapses planner into researcher-plan)
-- `read_loop_result(loop_id=<chain.plan_reviewer_loop>)` — reviewer's terminal (legacy; same reason)
-- `read_loop_result(loop_id=<chain.spec_artifact_loop>)` — researcher-architect's terminal
+Any loop id you discover in a triple you have read can itself be
+passed to `read_loop_result`. Follow the pointers you actually find.
 
-You now have:
+## What you cannot do — read this before planning a walk
 
-- The chain shape (which arcs ran, which milestones landed)
-- Each role's terminal verdict + reason
-- The qa-reviewer's final verdict + reason
+**There is no way to enumerate a run's member loops.** The
+membership edge only points one way: loops record which run they
+belong to; the run records no roster. `query_relationships` reads
+the entity's *own* stored triples and reshapes them — it is not a
+reverse index, so calling it on the run returns only the edges the
+run itself already carries, and calling it on a loop returns that
+loop's own outgoing edges.
 
-## Step 4 — sample step triples for resource patterns
+So:
 
-If a finding warrants it (slow loop, high token burn, repeated
-tool failures), query the loop's step entities:
+- Do not try to "list the loops in this run" — nothing answers that.
+- Do not walk parent/child ancestry hoping to reach siblings.
+- Reach loops **only** through pointers you actually read:
+  `agent.run.handoff`, and any `agent.lineage.*` on loops you have
+  already opened.
+
+A finding grounded in the run entity and the coordinator's result
+is a real finding. A finding that assumes you saw every loop is not.
+If the evidence you can reach does not support a conclusion, say
+less rather than inferring.
+
+## Step 3 — step-level detail, only when earned
 
 ```
-query_relationships(from="<loop_entity_id>", relation="agent.loop.has-step")
+query_relationships(entity_id="<loop_entity_id>", relationship_type="agent.loop.has-step")
 ```
 
-This returns the step entity IDs. Read them with
-`query_entity` to inspect tool_status, duration_ms, tokens_in/out
-per step.
+Step entities carry per-step `agent.step.tool-status`,
+`agent.step.duration-ms`, and token counts. They are dense.
 
-**Don't always do step-level walking.** Step triples are dense.
-Walk them only when the chain-level data points at a specific
-pattern (e.g. builder iteration count is high → walk builder's
-steps to see which tool calls dominated). Otherwise stay at the
-chain + loop level.
+Walk them **only when something you already read points at a
+specific question** — a loop that nearly exhausted its iterations, a
+tool that appears to have failed repeatedly. Never speculatively.
 
-## Hydration discipline
+## Budget
 
-Each query is a hydration cost (tokens for the response). The
-ideal session shape is:
+The framework prepends `[Iteration Budget] Iteration N of M (X% used)`
+to every turn, and escalates the wording as you approach the ceiling.
+**Read it.** It is your ground truth for how much room you have left,
+and it is more reliable than any count you carry in your head.
 
-- 1-3 query_entity calls for the parent walk to find chain root
-- 1 query_entity for the chain entity triples
-- 5-7 read_loop_result calls (one for qa_reviewer + one per
-  `chain.*_loop` milestone predicate)
-- 0-2 step-level walks if a specific signal warrants it
-- 1+ `emit_diagnosis` calls
-- 1 `submit_work` call
+Spend it deliberately:
 
-Roughly 10-15 tool calls total per session. If you find yourself
-exceeding 30, stop and re-evaluate — you're probably walking
-something that doesn't pay rent.
+- Reads 1-2 (the run entity, the coordinator result) are almost
+  always worth it.
+- Each read after that should answer a question the previous reads
+  actually raised. "The picture feels incomplete" is not such a
+  question — the picture IS incomplete by design, and a finding
+  scoped to what you read is a real finding.
+- Once the budget message says you are past half, stop hydrating and
+  start emitting.
+
+**When that message tells you to "submit your work", it means call
+`decide`.** There is no `submit_work` tool in this deployment — the
+framework's escalation text names one that does not exist, and going
+looking for it will burn the rest of your budget. `emit_diagnosis`
+records findings; `decide(action="observed", ...)` is what ends your
+loop. Nothing else does.
+
+Running out mid-analysis produces *nothing at all* — no findings, no
+decision, a failed loop. That is strictly worse than a short,
+well-grounded observation. If you are ever unsure whether to read one
+more thing or stop: stop, emit what you have, and decide.
+
+Read org and platform segments off the entity IDs you are given.
+Never hardcode them.

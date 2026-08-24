@@ -257,16 +257,22 @@ tasks:
       - npx playwright test e2e/agentic/real-time-activity-stream.spec.ts
 
   test:e2e:agentic:ops-agent:
-    desc: Run the ops-agent baseline journey (ADR-027 Phase 1 — 20 researcher loops + ops diagnostic)
+    desc: Run the ops run-terminal observation journey (ADR-027, re-wired)
     summary: |
-      Drives 20 serial researcher loops against the mock LLM, then
-      validates that the ops_observe_complete_loops rule spawns an
-      ops-analyst loop whose completion cites docs/objectives/dev-research.md.
+      Drives ONE research chain to a terminal run phase, then validates
+      that the ops rule fires on the RUN entity and spawns exactly one
+      ops-chain-observer which mints ops.diagnosis.* entities.
 
-      Long-running: 20 mock researcher loops take ~100s. Set a generous
-      timeout when running under CI.
+      Replaces the old 20-researcher-loop baseline, which had been a
+      standing red: it required a config MVP-7 deleted, expected a role
+      with no persona, and drove 20 serial prompts to reach an event
+      count that no longer meant anything (fire_every_n_events does not
+      gate publish_agent — semstreams#1007).
+
+      Task id kept as :ops-agent so the test:e2e chain ordering is
+      unchanged.
     vars:
-      FIXTURE: ops-agent-baseline.yaml
+      FIXTURE: ops-run-terminal.yaml
       AGENTIC_CONFIG: e2e-flow-bootstrap.json
     cmds:
       - defer: { task: test:e2e:agentic:cleanup }
@@ -274,7 +280,7 @@ tasks:
         vars:
           FIXTURE: "{{.FIXTURE}}"
           AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
-      - npx playwright test e2e/agentic/ops-agent-baseline.spec.ts
+      - npx playwright test e2e/agentic/ops-run-terminal.spec.ts
 
   test:e2e:agentic:research-mvp:
     desc: Run the ADR-042 MVP-5 research-category mock-LLM journey
@@ -1110,11 +1116,11 @@ tasks:
   # Tear down any scenario with: task test:e2e:agentic:cleanup
 
   test:e2e:agentic:dev:ops-agent:
-    desc: Boot stack for the ops-agent scenario (researcher + ops observer). No playwright.
+    desc: Boot stack for the ops run-terminal scenario (research chain + ops observer). No playwright.
     cmds:
       - task: test:e2e:agentic:dev:_boot
         vars:
-          FIXTURE: ops-agent-baseline.yaml
+          FIXTURE: ops-run-terminal.yaml
           AGENTIC_CONFIG: e2e-flow-bootstrap.json
           SCENARIO: ops-agent
 
@@ -1202,10 +1208,15 @@ tasks:
           ls -la "${OUT_DIR}/" 2>/dev/null
           exit 0
         fi
-        # Per-loop trajectories. Best-effort: a single 404 doesn't abort the others.
+        # Per-loop trajectories via the GraphQL trajectory field (beta.160:
+        # the /teams-loop/trajectories HTTP endpoints are deleted; graph-gateway
+        # serves the sole public trajectory API). Best-effort: a single failure
+        # doesn't abort the others. Single page (limit 500) — evidence capture,
+        # not pagination-complete replay.
         jq -r '.[].loop_id' "${OUT_DIR}/loops.json" 2>/dev/null | while read -r LOOP_ID; do
           [ -n "$LOOP_ID" ] || continue
-          curl -sf "http://localhost:${PORT}/teams-loop/trajectories/${LOOP_ID}" \
+          jq -n --arg id "$LOOP_ID" '{query:"query($id:String!){trajectory(loopId:$id,limit:500){schema_version loop_id coverage terminal_observed observed_totals{facts tokens_in tokens_out} facts{kind causal_iteration causal_phase status tokens_in tokens_out model_preview tool_preview error_category observed_at} next_cursor}}",variables:{id:$id}}' \
+            | curl -sf -X POST -H 'Content-Type: application/json' -d @- "http://localhost:${PORT}/graphql" \
             > "${OUT_DIR}/trajectory-${LOOP_ID}.json" \
             || echo "warn: trajectory fetch failed for ${LOOP_ID}" >&2
         done
@@ -1360,24 +1371,28 @@ tasks:
     desc: Run smoke #6 (ADR-042 MVP-6 — research-category real-LLM) end-to-end with cleanup
     summary: |
       Real-LLM smoke for ADR-042 MVP-6. Boots the bootstrap config
-      (configs/flow-bootstrap.json — real Anthropic claude-haiku for
-      coordinator + research + reviewing capabilities), sends the
-      canonical MVP-5 research prompt, runs the auto-approve watcher
-      (no gates expected in the research category — watcher just polls
-      until all loops terminate), captures trajectories + message log
-      to /tmp/smoke6-<RUN_ID>/, then tears the stack down.
+      (configs/flow-bootstrap.json — real GEMINI for every capability:
+      coordinator → gemini-3.1-pro-preview, research/reviewing/general
+      → gemini-3-flash-preview), sends the canonical MVP-5 research
+      prompt, runs the auto-approve watcher (no gates expected in the
+      research category — watcher just polls until all loops
+      terminate), captures trajectories + message log to
+      /tmp/smoke6-<RUN_ID>/, then tears the stack down.
 
       Sibling task to smoke7 but scoped to the MVP roster — no
       sandbox/semsource profiles, no chainmode/phasevalidator
       machinery, just the substrate + research-pack rules. Expected
-      chain shape: six loops total — coordinator dispatch +
+      chain shape: SEVEN loops — coordinator dispatch +
       researcher-research-{plan,gather,synthesize} + reviewer-research
-      (approved) + wake-up coordinator (respond_direct). Matches the
-      mock-LLM journey from MVP-5 (#176).
+      (approved) + wake-up coordinator (respond_direct), plus ONE
+      ops-chain-observer. The observer is the ADR-027 ops rule firing
+      on the run entity reaching its terminal phase; it runs off the
+      chain (run_scope none) and terminates with decide(observed).
+      Matches the mock-LLM research-mvp journey.
 
-      Real Anthropic spend (~$0.30-$0.50 per run on claude-haiku-4-5
-      across six loops, roughly 13 model calls). ANTHROPIC_API_KEY
-      required: invoke from the project root so the parent Taskfile's
+      Real Gemini spend across seven loops (~14 model calls: the
+      observer adds one flash-tier loop). GEMINI_API_KEY required:
+      invoke from the project root so the parent Taskfile's
       `dotenv: ['.env']` loads it, or export it manually before
       invoking from this directory.
 
@@ -1402,8 +1417,8 @@ tasks:
       HOST_BRAVE_KEY:
         sh: printf '%s' "${BRAVE_SEARCH_API_KEY:-}"
     preconditions:
-      - sh: '[ -n "$ANTHROPIC_API_KEY" ]'
-        msg: "ANTHROPIC_API_KEY is unset. Add it to the project-root .env (auto-loaded when invoking from project root) or export it in your shell. Smoke #6 routes the research arc to claude-haiku-4-5; without a key the run cannot start."
+      - sh: '[ -n "$GEMINI_API_KEY" ]'
+        msg: "GEMINI_API_KEY is unset. Add it to the project-root .env (auto-loaded when invoking from project root) or export it in your shell. flow-bootstrap.json routes EVERY capability to Gemini (coordinator → gemini-3.1-pro-preview, research/reviewing/general → gemini-3-flash-preview); an ANTHROPIC_API_KEY does not help. This precondition previously checked ANTHROPIC_API_KEY, which passed on hosts that had one and then failed at the first model call."
       - sh: '[ -n "$BRAVE_SEARCH_API_KEY" ]'
         msg: "BRAVE_SEARCH_API_KEY is unset. Add it to the project-root .env. Without it the framework registers the web_search stub, gather can't ground claims, and the chain wedges in needs_clarification recovery (smoke #6 Finding 1)."
     cmds:
@@ -1628,7 +1643,7 @@ tasks:
       Run a playwright spec against the already-running stack (booted
       via test:e2e:agentic:dev). Pass the spec path as the first CLI arg.
       Example:
-        task test:e2e:agentic:run-spec -- e2e/agentic/ops-agent-baseline.spec.ts
+        task test:e2e:agentic:run-spec -- e2e/agentic/ops-run-terminal.spec.ts
     cmds:
       - npx playwright test {{.CLI_ARGS}}
 

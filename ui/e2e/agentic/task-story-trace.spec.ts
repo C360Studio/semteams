@@ -13,7 +13,7 @@ import { test, expect } from "@playwright/test";
  *   - Activity tab is the default (per recent merge of Trace into
  *     Activity, see commit 1026ad5).
  *   - TaskStory renders one row per trajectory step (model_call +
- *     tool_call), pulled from /teams-loop/trajectories/<loop_id>.
+ *     tool_call), pulled via the GraphQL trajectory field at /graphql (beta.160 — the /teams-loop/trajectories HTTP endpoints are deleted).
  *   - The "Show raw activity" disclosure opens TaskTrace, which polls
  *     /message-logger/entries and renders rows mentioning the loop_id.
  *

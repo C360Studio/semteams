@@ -5,7 +5,7 @@
   "description": "ADR-053 Phase 4a′ — the coordinator zombie-hole closer, anchor branch 2 of 2 (loops carrying agent.lineage.run-loop-entity-id). Sibling of rule 05. A coordinator spawned by a rule firing ON the run entity (dev-via-test/02d plan-retry escalate, dev-via-test/07d cbg-retry re-dispatch + escalate) carries agent.lineage.run-loop-entity-id=$entity.id=chain.execution (threaded by those drivers) but NOT agent.run.entity-id — because the run entity has no bare agent.run triple for the inherit path to copy into RunID, so the spawn-identity writer never stamps agent.run.entity-id (verified graph_writer.go:535-539; same asymmetry as re-plan Lisa, dev-via-test 02g). The dev-via-test intermediate wake-ups (02b, 05) carry BOTH anchors and are routed HERE by the fence so they stamp via lineage.\n\nFIRING-ENTITY BRIDGE: same 2-step marker as rule 05 — stamps agent.run.outcome=failed on the run entity via $entity.triple.agent.lineage.run-loop-entity-id; rule 04 consumes it.\n\nANCHOR FENCE (length_gt 0): mutually exclusive with rule 05 (length_eq 0). agent.lineage.run-loop-entity-id PRESENCE is itself the run guard (a plain-chat coordinator has no lineage), so no separate run-less-chat condition is needed.\n\nTRIGGER SHAPE: agent.loop.outcome IN [failed, truncated] — the involuntary terminal-failure class. A coordinator that successfully decides terminates outcome=success and never matches. cancelled is OUT of scope (Phase 4b).",
   "enabled": true,
   "entity": {
-    "pattern": "*.*.*.*.*.*"
+    "pattern": "*.*.agent.agentic-loop.execution.*"
   },
   "conditions": [
     {
@@ -45,6 +45,6 @@
     "joins_with": "04-executing-to-failed.json (consumes the marker) + 05-coordinator-failed-run-anchor.json (the agent.run.entity-id sibling).",
     "covers": "the lineage-threading coordinators: (1) the dev-via-test intermediate/escalate coordinators 02b + 05 (carry both anchors, routed here by the length_gt 0 fence) and 02d/07d (spawned FROM the run entity, carry only lineage); (2) the run-entity-descended ask_user/needs_clarification recovery coordinators that ADR-053 4b-1a wired to thread agent.lineage.run-loop-entity-id — autoresearch/10b and dev-via-test 02e, 02f-replan, 07b, 07e (the former deferred_4b set). The anchor_inherit recovery coordinators (research/06, autoresearch/10 baseline, dev-via-test/02f first-pass) route to sibling rule 05. Boundary pinned by TestAgentRunPack_CoordinatorSpawnCoverage.",
     "anchor_fence": "agent.lineage.run-loop-entity-id length_gt 0 — mutually exclusive with rule 05 (length_eq 0). The lineage presence is itself the run-less-chat guard.",
-    "d3_boundary": "Same as rule 05: D3 owns dispatched-phase root failures; this owns executing-phase coordinator failures. Disjoint by phase."
+    "d3_boundary": "Same as rule 05: this rule stamps the failed marker; rules 04 (executing) and 04b (dispatched — beta.160 D3-guard replacement) consume it, disjoint by phase guard."
   }
 }

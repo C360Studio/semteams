@@ -323,7 +323,7 @@ type recordingPublisher struct {
 	triples []message.Triple
 }
 
-func (p *recordingPublisher) AddTriplesBatch(_ context.Context, triples []message.Triple) error {
+func (p *recordingPublisher) Append(_ context.Context, triples []message.Triple) error {
 	p.triples = append(p.triples, triples...)
 	return nil
 }

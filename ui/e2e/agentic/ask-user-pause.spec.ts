@@ -24,7 +24,14 @@ import { test, expect } from "@playwright/test";
  * Required config: configs/e2e-flow-bootstrap.json (interactive mode; rules 07+09)
  */
 
-test.describe("ADR-053 Phase 4b-2 — in-run ask_user pauses the run (executing→awaiting_approval)", () => {
+// PARKED (ADR-058): the fixture drives the run via decide(dev_via_test) —
+// a parked-pack token the live coordinator honestly respond_directs, so no
+// run reaches executing and the pause lane under test is unreachable.
+// Escaped the ADR-058 skip sweep (never rerun at beta.159). The agent-run
+// pause/resume rules themselves stay covered by clarification-autonomous
+// (live-taxonomy fixture); re-point this fixture at a live pack's
+// in-run recovery path or un-skip with the dev pack re-wiring.
+test.describe.skip("ADR-053 Phase 4b-2 — in-run ask_user pauses the run (executing→awaiting_approval)", () => {
   test.beforeAll(async ({ request }) => {
     const health = await request.get("/health");
     expect(health.ok(), "Backend not healthy — stack not running?").toBe(true);

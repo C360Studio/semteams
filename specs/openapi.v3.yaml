@@ -492,7 +492,7 @@ paths:
                 - name: bucket
                   in: path
                   required: true
-                  description: KV bucket name (e.g., ENTITY_STATES, CONTEXT_INDEX)
+                  description: KV bucket name (e.g., ENTITY_STATES, INCOMING_INDEX)
                   schema:
                     type: string
                 - name: pattern
@@ -788,93 +788,6 @@ paths:
                                 type: object
                 "400":
                     description: Invalid trace ID format
-    /trajectories:
-        get:
-            summary: List trajectory summaries with optional filters
-            description: Returns paginated trajectory summaries. Filters by outcome, role, workflow, time, and metadata.
-            tags:
-                - Trajectories
-            parameters:
-                - name: limit
-                  in: query
-                  description: Max items (default 20, max 100)
-                  schema:
-                    type: integer
-                - name: offset
-                  in: query
-                  description: Pagination offset
-                  schema:
-                    type: integer
-                - name: outcome
-                  in: query
-                  description: 'Filter: success, failed, cancelled'
-                  schema:
-                    type: string
-                - name: role
-                  in: query
-                  description: Filter by agent role
-                  schema:
-                    type: string
-                - name: workflow_slug
-                  in: query
-                  description: Filter by workflow
-                  schema:
-                    type: string
-                - name: since
-                  in: query
-                  description: 'Filter: RFC3339 timestamp'
-                  schema:
-                    type: string
-                - name: metadata_key
-                  in: query
-                  description: Filter by metadata key
-                  schema:
-                    type: string
-                - name: metadata_value
-                  in: query
-                  description: Filter by metadata value (requires metadata_key)
-                  schema:
-                    type: string
-            responses:
-                "200":
-                    description: Paginated list of trajectory summaries
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/TrajectoryListResponse'
-                "400":
-                    description: Invalid filter parameters
-                "503":
-                    description: Loop storage not available
-    /trajectories/{loopId}:
-        get:
-            summary: Get full trajectory with steps
-            description: Returns the complete trajectory including all steps for a specific loop.
-            tags:
-                - Trajectories
-            parameters:
-                - name: loopId
-                  in: path
-                  required: true
-                  description: Loop ID
-                  schema:
-                    type: string
-                - name: limit
-                  in: query
-                  description: Max steps to return
-                  schema:
-                    type: integer
-            responses:
-                "200":
-                    description: Full trajectory with steps
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Trajectory'
-                "400":
-                    description: Missing loopId
-                "404":
-                    description: Trajectory not found
     /types:
         get:
             summary: List available component types
@@ -996,7 +909,42 @@ paths:
                 "404":
                     description: Workflow type not registered
                 "405":
-                    description: Method not allowed (GET only)
+                    description: Method not allowed (GET or POST only)
+        post:
+            summary: Create a workflow instance
+            description: 'Creates a new instance of the registered workflow from an operator-supplied initial state through the lifecycle Manager and canonical graph mutation port. This is the BIRTH lane and the only route carrying a full initial-state envelope — the must-exist lanes (state patch, transition) stay envelope-free and require an existing entity; nothing auto-vivifies. Create-or-fail: a duplicate entity ID returns 409 and never overwrites, so there is no upsert lane on the operator surface. The body is the workflow''s registered state struct, and must include the entity ID and an initial phase declared in the workflow''s transitions table. Responds 201 with the committed state projected from the causal mutation response, not the submitted body echoed. If delivery occurred without a valid mutation response, responds 503 with code `commit_unknown`; callers must inspect authoritative state before deciding whether another mutation is safe.'
+            tags:
+                - Lifecycle
+            parameters:
+                - name: type
+                  in: path
+                  required: true
+                  description: Workflow type identifier (matches Participant.Workflow())
+                  schema:
+                    type: string
+            requestBody:
+                description: Initial state, shaped as the workflow's registered Participant struct
+                required: true
+                content:
+                    application/json:
+                        schema: {}
+            responses:
+                "201":
+                    description: Created — authoritative committed instance state
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                "400":
+                    description: Malformed initial state, missing entity ID, an entity ID outside the workflow's declared pattern, or an initial phase not declared in the transitions table
+                "404":
+                    description: Workflow type not registered
+                "409":
+                    description: An instance with that entity ID is already lifecycle-managed, including a concurrent lifecycle attachment
+                "413":
+                    description: Body exceeds max_body_bytes
+                "503":
+                    description: Mutation service unavailable or commit outcome unknown; inspect authoritative state before deciding whether another mutation is safe
     /workflows/{type}/{id}:
         get:
             summary: Get instance state
@@ -1058,7 +1006,7 @@ paths:
     /workflows/{type}/{id}/history:
         get:
             summary: List phase-transition history
-            description: Returns the phase-transition history derived from KV revision replay. Each entry includes from/to phases, wallclock timestamp, the TransitionSource (rule/operator/component/framework), and any operator-supplied note.
+            description: Returns the fixed recent operator window of phase-transition records retained in the participant entity. Each entry includes from/to phases, wallclock timestamp, the TransitionSource (rule/operator/component/framework), and any supplied note. This is not an unbounded audit log.
             tags:
                 - Lifecycle
             parameters:
@@ -1128,6 +1076,8 @@ paths:
                     description: Optimistic-concurrency retries exhausted
                 "413":
                     description: Request body exceeds max_body_bytes
+                "503":
+                    description: Mutation service unavailable or commit outcome unknown; inspect authoritative state before deciding whether another mutation is safe
     /workflows/{type}/{id}/transition:
         post:
             summary: Operator-initiated phase transition
@@ -1167,8 +1117,12 @@ paths:
                     description: Workflow or entity not found
                 "405":
                     description: Method not allowed (POST only)
+                "409":
+                    description: Authority revision mismatch
                 "413":
                     description: Request body exceeds max_body_bytes
+                "503":
+                    description: Mutation service unavailable or commit outcome unknown; inspect authoritative state before deciding whether another mutation is safe
 components:
     schemas:
         ActivityEvent:
@@ -2114,416 +2068,6 @@ components:
             required:
                 - command
             type: object
-        Trajectory:
-            properties:
-                duration:
-                    type: integer
-                end_time:
-                    anyOf:
-                        - format: date-time
-                          type: string
-                        - type: "null"
-                loop_id:
-                    type: string
-                outcome:
-                    type: string
-                start_time:
-                    format: date-time
-                    type: string
-                steps:
-                    items:
-                        properties:
-                            capability:
-                                type: string
-                            duration:
-                                type: integer
-                            error_category:
-                                type: string
-                            error_message:
-                                type: string
-                            messages:
-                                items:
-                                    properties:
-                                        content:
-                                            type: string
-                                        is_error:
-                                            type: boolean
-                                        name:
-                                            type: string
-                                        reasoning_content:
-                                            type: string
-                                        reasoning_records:
-                                            items:
-                                                properties:
-                                                    carrier_kind:
-                                                        type: string
-                                                    item_id:
-                                                        type: string
-                                                    opaque:
-                                                        format: byte
-                                                        type: string
-                                                    provider:
-                                                        type: string
-                                                    summary_text:
-                                                        type: string
-                                                    tool_call_id:
-                                                        type: string
-                                                required:
-                                                    - provider
-                                                    - carrier_kind
-                                                type: object
-                                            type: array
-                                        role:
-                                            type: string
-                                        tool_call_id:
-                                            type: string
-                                        tool_calls:
-                                            items:
-                                                properties:
-                                                    approved_by:
-                                                        type: string
-                                                    arguments:
-                                                        additionalProperties: {}
-                                                        type: object
-                                                    id:
-                                                        type: string
-                                                    loop_id:
-                                                        type: string
-                                                    metadata:
-                                                        additionalProperties: {}
-                                                        type: object
-                                                    name:
-                                                        type: string
-                                                    trace_id:
-                                                        type: string
-                                                required:
-                                                    - id
-                                                    - name
-                                                type: object
-                                            type: array
-                                    required:
-                                        - role
-                                    type: object
-                                type: array
-                            model:
-                                type: string
-                            prompt:
-                                type: string
-                            provider:
-                                type: string
-                            request_id:
-                                type: string
-                            response:
-                                type: string
-                            retry_count:
-                                type: integer
-                            step_type:
-                                type: string
-                            timestamp:
-                                format: date-time
-                                type: string
-                            tokens_in:
-                                type: integer
-                            tokens_out:
-                                type: integer
-                            tool_arguments:
-                                additionalProperties: {}
-                                type: object
-                            tool_calls:
-                                items:
-                                    properties:
-                                        approved_by:
-                                            type: string
-                                        arguments:
-                                            additionalProperties: {}
-                                            type: object
-                                        id:
-                                            type: string
-                                        loop_id:
-                                            type: string
-                                        metadata:
-                                            additionalProperties: {}
-                                            type: object
-                                        name:
-                                            type: string
-                                        trace_id:
-                                            type: string
-                                    required:
-                                        - id
-                                        - name
-                                    type: object
-                                type: array
-                            tool_name:
-                                type: string
-                            tool_result:
-                                type: string
-                            tool_status:
-                                type: string
-                            url_fetched:
-                                items:
-                                    type: string
-                                type: array
-                            utilization:
-                                type: number
-                        required:
-                            - timestamp
-                            - step_type
-                            - duration
-                        type: object
-                    type: array
-                total_tokens_in:
-                    type: integer
-                total_tokens_out:
-                    type: integer
-            required:
-                - loop_id
-                - start_time
-                - steps
-                - total_tokens_in
-                - total_tokens_out
-                - duration
-            type: object
-        TrajectoryListItem:
-            properties:
-                duration:
-                    type: integer
-                end_time:
-                    anyOf:
-                        - format: date-time
-                          type: string
-                        - type: "null"
-                iterations:
-                    type: integer
-                loop_id:
-                    type: string
-                metadata:
-                    additionalProperties: {}
-                    type: object
-                model:
-                    type: string
-                outcome:
-                    type: string
-                role:
-                    type: string
-                start_time:
-                    format: date-time
-                    type: string
-                task_id:
-                    type: string
-                total_tokens_in:
-                    type: integer
-                total_tokens_out:
-                    type: integer
-                workflow_slug:
-                    type: string
-                workflow_step:
-                    type: string
-            required:
-                - loop_id
-                - task_id
-                - role
-                - model
-                - iterations
-                - total_tokens_in
-                - total_tokens_out
-                - duration
-                - start_time
-            type: object
-        TrajectoryListResponse:
-            properties:
-                total:
-                    type: integer
-                trajectories:
-                    items:
-                        properties:
-                            duration:
-                                type: integer
-                            end_time:
-                                anyOf:
-                                    - format: date-time
-                                      type: string
-                                    - type: "null"
-                            iterations:
-                                type: integer
-                            loop_id:
-                                type: string
-                            metadata:
-                                additionalProperties: {}
-                                type: object
-                            model:
-                                type: string
-                            outcome:
-                                type: string
-                            role:
-                                type: string
-                            start_time:
-                                format: date-time
-                                type: string
-                            task_id:
-                                type: string
-                            total_tokens_in:
-                                type: integer
-                            total_tokens_out:
-                                type: integer
-                            workflow_slug:
-                                type: string
-                            workflow_step:
-                                type: string
-                        required:
-                            - loop_id
-                            - task_id
-                            - role
-                            - model
-                            - iterations
-                            - total_tokens_in
-                            - total_tokens_out
-                            - duration
-                            - start_time
-                        type: object
-                    type: array
-            required:
-                - trajectories
-                - total
-            type: object
-        TrajectoryStep:
-            properties:
-                capability:
-                    type: string
-                duration:
-                    type: integer
-                error_category:
-                    type: string
-                error_message:
-                    type: string
-                messages:
-                    items:
-                        properties:
-                            content:
-                                type: string
-                            is_error:
-                                type: boolean
-                            name:
-                                type: string
-                            reasoning_content:
-                                type: string
-                            reasoning_records:
-                                items:
-                                    properties:
-                                        carrier_kind:
-                                            type: string
-                                        item_id:
-                                            type: string
-                                        opaque:
-                                            format: byte
-                                            type: string
-                                        provider:
-                                            type: string
-                                        summary_text:
-                                            type: string
-                                        tool_call_id:
-                                            type: string
-                                    required:
-                                        - provider
-                                        - carrier_kind
-                                    type: object
-                                type: array
-                            role:
-                                type: string
-                            tool_call_id:
-                                type: string
-                            tool_calls:
-                                items:
-                                    properties:
-                                        approved_by:
-                                            type: string
-                                        arguments:
-                                            additionalProperties: {}
-                                            type: object
-                                        id:
-                                            type: string
-                                        loop_id:
-                                            type: string
-                                        metadata:
-                                            additionalProperties: {}
-                                            type: object
-                                        name:
-                                            type: string
-                                        trace_id:
-                                            type: string
-                                    required:
-                                        - id
-                                        - name
-                                    type: object
-                                type: array
-                        required:
-                            - role
-                        type: object
-                    type: array
-                model:
-                    type: string
-                prompt:
-                    type: string
-                provider:
-                    type: string
-                request_id:
-                    type: string
-                response:
-                    type: string
-                retry_count:
-                    type: integer
-                step_type:
-                    type: string
-                timestamp:
-                    format: date-time
-                    type: string
-                tokens_in:
-                    type: integer
-                tokens_out:
-                    type: integer
-                tool_arguments:
-                    additionalProperties: {}
-                    type: object
-                tool_calls:
-                    items:
-                        properties:
-                            approved_by:
-                                type: string
-                            arguments:
-                                additionalProperties: {}
-                                type: object
-                            id:
-                                type: string
-                            loop_id:
-                                type: string
-                            metadata:
-                                additionalProperties: {}
-                                type: object
-                            name:
-                                type: string
-                            trace_id:
-                                type: string
-                        required:
-                            - id
-                            - name
-                        type: object
-                    type: array
-                tool_name:
-                    type: string
-                tool_result:
-                    type: string
-                tool_status:
-                    type: string
-                url_fetched:
-                    items:
-                        type: string
-                    type: array
-                utilization:
-                    type: number
-            required:
-                - timestamp
-                - step_type
-                - duration
-            type: object
         TransitionRequest:
             properties:
                 note:
@@ -2558,5 +2102,3 @@ tags:
       description: Runtime metrics and observability
     - name: Status
       description: Real-time status updates
-    - name: Trajectories
-      description: Agentic loop trajectory listing and detail

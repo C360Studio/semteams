@@ -205,7 +205,7 @@ func (e *Executor) ListTools() []agentic.ToolDefinition {
 	}
 	return []agentic.ToolDefinition{{
 		Name:        ToolName,
-		Description: "Emit a research artifact snapshot for this loop. Writes marker triples on the loop entity (revision, counts, last-revision mutation count) so downstream rules can gate the dev-via-spec mode transition, and publishes the typed research.artifact.v1 payload on a stable subject for audit. Call once per researcher pass before submit_work; revision must monotonically increase across passes within the same research arc.",
+		Description: "Emit a research artifact snapshot for this loop. Writes marker triples on the loop entity (revision, counts, last-revision mutation count) so downstream rules can gate the dev-via-spec mode transition, and publishes the typed research.artifact.v1 payload on a stable subject for audit. Call once per researcher pass before terminating; revision must monotonically increase across passes within the same research arc.",
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -303,7 +303,7 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 	// triple predicates are last-wins on the loop entity, so the next
 	// successful pass overwrites any half-emitted set.
 	for _, triple := range triples {
-		if err := e.publisher.AddTriple(ctx, triple); err != nil {
+		if err := e.publisher.Append(ctx, []message.Triple{triple}); err != nil {
 			return agentic.ToolResult{
 				CallID:    call.ID,
 				Name:      call.Name,

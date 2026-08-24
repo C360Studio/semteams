@@ -31,13 +31,19 @@ func TestNATSPauseDataReader_LiveSubject(t *testing.T) {
 	defer cancel()
 
 	const failedLoopEntityID = "c360.test.agent.agentic-loop.execution.failed-loop-id"
+	// beta.160 exact-read envelope (see chain.DecodeExactEntityTriples):
+	// {entity: {id, triples}, kvRevision} — the bare shape decodes to
+	// zero triples silently.
 	stubResponse := []byte(`{
-		"id": "` + failedLoopEntityID + `",
-		"triples": [
-			{"predicate": "chain.paused.role", "object": "builder"},
-			{"predicate": "chain.paused.original-model", "object": "claude-sonnet"},
-			{"predicate": "chain.paused.cause", "object": "max_iterations"}
-		]
+		"entity": {
+			"id": "` + failedLoopEntityID + `",
+			"triples": [
+				{"predicate": "chain.paused.role", "object": "builder"},
+				{"predicate": "chain.paused.original-model", "object": "claude-sonnet"},
+				{"predicate": "chain.paused.cause", "object": "max_iterations"}
+			]
+		},
+		"kvRevision": 7
 	}`)
 
 	var lastRequest map[string]string

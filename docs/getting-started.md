@@ -400,7 +400,5 @@ step time is wedged — abort, don't wait for the natural timeout.
 - **How do I write a journey?** —
   [`journeys/README.md`](journeys/README.md). The journey IS the
   Playwright test under `ui/e2e/agentic/`.
-- **How do I add a flow objective spec for the ops agent?** —
-  [`objectives/README.md`](objectives/README.md).
 - **Framework concepts I'm missing** — upstream
   [semstreams docs](https://github.com/c360studio/semstreams/tree/main/docs).

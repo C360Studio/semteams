@@ -1,0 +1,43 @@
+{
+  "id": "agent_run_dispatched_to_failed",
+  "type": "expression",
+  "name": "Run failure outcome → dispatched→failed (D3 zombie-guard replacement)",
+  "description": "beta.160 flag-day — the product-owned replacement for the upstream D3 zombie guard. Through beta.159 the framework MilestoneSubscriber failed a dispatched root run whose loop terminated without a confirmed handoff; beta.160 made the subscriber observe-only (no TriplePublisher, no lifecycle write capability), so a failure that lands while the run is still `dispatched` — a spawn-publish failure, or a dispatch coordinator that dies before stamping rule.task.spawned — would wedge the run in `dispatched` forever with no rule matching (rule 04's phase guard requires `executing`).\n\nThis rule closes that hole with the same marker economy as rule 04: it consumes the durable agent.run.outcome=failed stamp (written by agent-run/05+06 on any involuntary coordinator terminal — those rules key on the run ANCHOR, not on phase or handoff, so the stamp lands for pre-handoff deaths too) and advances dispatched→failed via lifecycle_transition. dispatched→failed is a legal edge in the AgentRun phase machine at beta.160 (agentrun.go:47).\n\nDisjointness with rule 04 is BY PHASE GUARD, exactly as the old D3/rule-04 split was: whichever phase the run is in when the failed marker's KV revision evaluates, exactly one of the two rules matches. The rule-02 race (handoff marker and failed marker both landing while dispatched) is the same narrow window the upstream guard had: the first transition wins and the loser's phase guard goes false on the re-evaluation; a lost lifecycle_transition against a terminal phase is rejected by the machine as an invalid edge (audit-visible, not corrupting).",
+  "enabled": true,
+  "entity": {
+    "pattern": "*.*.agent.chain.execution.*"
+  },
+  "conditions": [
+    {
+      "field": "agent.run.outcome",
+      "operator": "eq",
+      "value": "failed",
+      "required": true
+    },
+    {
+      "field": "agent.run.phase",
+      "operator": "eq",
+      "value": "dispatched",
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "lifecycle_transition",
+      "workflow": "agent-run",
+      "phase": "failed",
+      "reason": "the dispatch coordinator failed before a confirmed handoff — dispatched root run failed (beta.160 product-owned D3 zombie-guard replacement)"
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "pack": "agent-run",
+    "phase": "beta.160 flag-day (ADR-053 Phase 4a′ family)",
+    "adr": "docs/adr/053-adoption-plan.md",
+    "role": "dispatched→failed (run-entity transition)",
+    "twin_of": "04-executing-to-failed.json — identical shape, phase guard dispatched instead of executing. Together the pair covers every involuntary-failure phase; the pre-160 split was rule 04 + the framework D3 guard.",
+    "stamped_by": "agent-run/05+06 add_triple agent.run.outcome=failed on the run anchor — they fire on ANY involuntary coordinator terminal (failed/truncated) with a run anchor, handoff or not, so the marker reaches dispatched-phase runs.",
+    "supersedes": "Upstream MilestoneSubscriber D3 zombie guard (agentrun.go dispatched-root fallback, deleted at beta.160 — the subscriber is observe-only)."
+  }
+}

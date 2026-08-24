@@ -43,7 +43,7 @@ type EntityReader interface {
 
 // TriplePublisher writes co-located graph triples atomically.
 type TriplePublisher interface {
-	AddTriplesBatch(ctx context.Context, triples []message.Triple) error
+	Append(ctx context.Context, triples []message.Triple) error
 }
 
 // Dependencies groups the live graph read/write surfaces the command needs.
@@ -169,7 +169,7 @@ func (c *Command) Execute(
 	if ready {
 		out = append(out, requestTriples(runEntityID, msg, changeSlug, reason, now)...)
 	}
-	if err := deps.Publisher.AddTriplesBatch(ctx, out); err != nil {
+	if err := deps.Publisher.Append(ctx, out); err != nil {
 		return agentic.UserResponse{}, fmt.Errorf("write implementation handoff facts for %s: %w", runEntityID, err)
 	}
 

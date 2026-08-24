@@ -5,7 +5,7 @@
   "description": "ADR-042 §Phase 2 redesign autoresearch pack terminal handler. Fires when reviewer-autoresearch terminates with decide(action=approved) — the autoresearch category's chain terminal. Spawns a fresh coordinator loop with the terminal reviewer's loop_id so the coordinator can read_loop_result and synthesize a user-facing reply via decide(action=respond_direct). The respond_direct rule (configs/rules/coordinator/03b-respond-direct.json) publishes the reply on the user-response bus.\n\nMirrors research pack's 07-reviewer-approved-to-coordinator.json exactly — same wake-up shape, scoped to the autoresearch pack.",
   "enabled": true,
   "entity": {
-    "pattern": "*.*.*.*.*.*"
+    "pattern": "*.*.agent.agentic-loop.execution.*"
   },
   "conditions": [
     {

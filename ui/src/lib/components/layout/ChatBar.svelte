@@ -48,8 +48,12 @@
   );
 
   // Surface the slash-command hints only when the user is actively
-  // typing a slash command. Default state stays clean.
-  let showingSlash = $derived(input.trimStart().startsWith("/"));
+  // typing a slash command — "/" followed by no whitespace yet. Once a
+  // space lands ("/research survey…") the user is composing a hinted
+  // message: the hints dropdown closes and the team chips return, so
+  // clicking another chip can REPLACE the prefix (the applyTeamHint
+  // flow the action-chips journey exercises). Default state stays clean.
+  let showingSlash = $derived(/^\/\S*$/.test(input.trimStart()));
   let visibleSlashCommands = $derived(
     taskStore.selectedTask ? ALL_SLASH_COMMANDS : [...TEAM_MESSAGE_COMMANDS],
   );

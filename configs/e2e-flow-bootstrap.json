@@ -1,5 +1,5 @@
 {
-  "version": "1.1.0",
+  "version": "2.0.0",
   "platform": {
     "org": "c360",
     "id": "semteams-bootstrap-e2e",
@@ -16,20 +16,27 @@
   },
   "streams": {
     "USER": {
-      "subjects": ["user.>"],
+      "subjects": [
+        "user.>"
+      ],
       "storage": "file",
       "max_age": "1h",
       "max_bytes": 67108864,
       "discard": "old"
     },
     "AGENT": {
-      "subjects": ["agent.>"],
+      "subjects": [
+        "agent.>"
+      ],
       "max_age": "24h",
       "max_bytes": 268435456,
       "discard": "old"
     },
     "TOOL": {
-      "subjects": ["tool.>"],
+      "subjects": [
+        "tool.execute.>",
+        "tool.result.>"
+      ],
       "max_age": "24h",
       "max_bytes": 268435456,
       "discard": "old"
@@ -60,16 +67,52 @@
       "model": "general"
     },
     "capabilities": {
-      "coordinator": { "preferred": ["general"], "requires_tools": true },
-      "research": { "preferred": ["general"], "fallback": ["fast"], "requires_tools": true },
-      "reviewing": { "preferred": ["general"], "fallback": ["fast"], "requires_tools": true },
-      "general": { "preferred": ["general"], "fallback": ["fast"], "requires_tools": true },
-      "claude-haiku": { "preferred": ["general"], "fallback": ["fast"], "requires_tools": true }
+      "coordinator": {
+        "preferred": [
+          "general"
+        ],
+        "requires_tools": true
+      },
+      "research": {
+        "preferred": [
+          "general"
+        ],
+        "fallback": [
+          "fast"
+        ],
+        "requires_tools": true
+      },
+      "reviewing": {
+        "preferred": [
+          "general"
+        ],
+        "fallback": [
+          "fast"
+        ],
+        "requires_tools": true
+      },
+      "general": {
+        "preferred": [
+          "general"
+        ],
+        "fallback": [
+          "fast"
+        ],
+        "requires_tools": true
+      },
+      "claude-haiku": {
+        "preferred": [
+          "general"
+        ],
+        "fallback": [
+          "fast"
+        ],
+        "requires_tools": true
+      }
     }
   },
   "services": {
     "service-manager": {
-      "name": "service-manager",
       "enabled": true,
       "config": {
         "http_port": 8080,
@@ -82,21 +125,17 @@
       }
     },
     "component-manager": {
-      "name": "component-manager",
       "enabled": true,
       "config": {}
     },
     "metrics": {
-      "name": "metrics",
       "enabled": true,
       "config": {
         "port": 9090,
-        "path": "/metrics",
-        "include_go_metrics": true
+        "path": "/metrics"
       }
     },
     "message-logger": {
-      "name": "message-logger",
       "enabled": true,
       "config": {
         "max_entries": 10000,
@@ -104,14 +143,12 @@
           "agent.>",
           "tool.>",
           "user.>",
-          "graph.mutation.>"
-        ],
-        "enable_kv_query": true,
-        "log_level": "INFO"
+          "graph.mutation.>",
+          "discovery.>"
+        ]
       }
     },
     "log-forwarder": {
-      "name": "log-forwarder",
       "enabled": true,
       "config": {
         "min_level": "DEBUG",
@@ -119,7 +156,6 @@
       }
     },
     "metrics-forwarder": {
-      "name": "metrics-forwarder",
       "enabled": true,
       "config": {
         "push_interval": "5s",
@@ -138,22 +174,30 @@
           "inputs": [
             {
               "name": "graph_mutations",
-              "subject": "graph.mutation.>",
-              "type": "nats",
-              "description": "Triple add/remove mutations from agent emit tools, rules, and operator-side subscribers"
+              "config": {
+                "kind": "nats-request",
+                "subject": "graph.mutation.>",
+                "interface": {
+                  "type": "semstreams.graph.mutation",
+                  "version": "v1"
+                }
+              },
+              "description": "Triple add/remove mutations from agent emit tools, rules, and operator-side subscribers",
+              "required": true
             }
           ],
           "outputs": [
             {
               "name": "entity_states",
-              "subject": "ENTITY_STATES",
-              "type": "kv-write",
+              "config": {
+                "kind": "kv-write",
+                "bucket": "ENTITY_STATES"
+              },
               "description": "Entity state KV bucket"
             }
           ]
         },
-        "enable_hierarchy": true,
-        "enforce_owner_lease": true
+        "enable_hierarchy": true
       }
     },
     "graph-query": {
@@ -163,13 +207,23 @@
       "config": {
         "ports": {
           "inputs": [
-            {"name": "query_requests", "subject": "graph.query.>", "type": "nats-request"}
+            {
+              "name": "graph_queries",
+              "config": {
+                "kind": "nats-request",
+                "subject": "graph.query.*",
+                "interface": {
+                  "type": "graph.query",
+                  "version": "v1"
+                }
+              },
+              "required": true
+            }
           ],
           "outputs": []
         },
-        "request_timeout": "30s",
-        "max_traversal_depth": 5,
-        "max_traversal_nodes": 100
+        "query_timeout": 30000000000,
+        "max_depth": 5
       }
     },
     "rule": {
@@ -178,31 +232,45 @@
       "enabled": true,
       "config": {
         "entity_watch_buckets": {
-          "ENTITY_STATES": ["c360.*.*.*.*.*"]
+          "ENTITY_STATES": [
+            "c360.*.*.*.*.*"
+          ]
         },
         "ports": {
           "inputs": [
             {
               "name": "entity_states",
-              "subject": "ENTITY_STATES.>",
-              "type": "kv-watch",
-              "bucket": "ENTITY_STATES",
+              "config": {
+                "kind": "kv-watch",
+                "bucket": "ENTITY_STATES"
+              },
               "description": "Entity state changes drive rule evaluation. Rule conditions resolve against entity facts (agent.loop.role, coordinator.decision.next-action, etc.), not raw NATS messages — the message-path evaluator can't bind entity-typed predicates."
             }
           ],
           "outputs": [
             {
               "name": "agent_task",
-              "subject": "agent.task.*",
-              "type": "jetstream",
-              "stream_name": "AGENT",
+              "config": {
+                "kind": "jetstream",
+                "stream_name": "AGENT",
+                "subjects": [
+                  "agent.task.*"
+                ]
+              },
               "description": "Agent task triggers from rules"
             },
             {
-              "name": "graph_mutation",
-              "subject": "graph.mutation.*",
-              "type": "nats",
-              "description": "Graph triple mutations from rule add_triple actions"
+              "name": "graph_mutations",
+              "config": {
+                "kind": "nats-request",
+                "subject": "graph.mutation.>",
+                "interface": {
+                  "type": "semstreams.graph.mutation",
+                  "version": "v1"
+                }
+              },
+              "description": "Typed graph mutations from rule actions (beta.160 canonical mutation port)",
+              "required": true
             }
           ]
         },
@@ -215,23 +283,31 @@
             "groups": [
               {
                 "name": "best-value",
-                "mode": "replace-owned",
-                "predicates": ["autoresearch.best.value"]
+                "mode": "reconcile",
+                "predicates": [
+                  "autoresearch.best.value"
+                ]
               },
               {
                 "name": "best-experiment-id",
-                "mode": "replace-owned",
-                "predicates": ["autoresearch.best.experiment-id"]
+                "mode": "reconcile",
+                "predicates": [
+                  "autoresearch.best.experiment-id"
+                ]
               },
               {
                 "name": "run-status",
-                "mode": "replace-owned",
-                "predicates": ["autoresearch.run.status"]
+                "mode": "reconcile",
+                "predicates": [
+                  "autoresearch.run.status"
+                ]
               },
               {
                 "name": "iteration-pending",
-                "mode": "replace-owned",
-                "predicates": ["autoresearch.iteration.pending"]
+                "mode": "reconcile",
+                "predicates": [
+                  "autoresearch.iteration.pending"
+                ]
               }
             ]
           }
@@ -268,6 +344,7 @@
           "/app/configs/rules/agent-run/02-dispatched-to-executing.json",
           "/app/configs/rules/agent-run/03-executing-to-completed.json",
           "/app/configs/rules/agent-run/04-executing-to-failed.json",
+          "/app/configs/rules/agent-run/04b-dispatched-to-failed.json",
           "/app/configs/rules/agent-run/05-coordinator-failed-run-anchor.json",
           "/app/configs/rules/agent-run/06-coordinator-failed-lineage-anchor.json",
           "/app/configs/rules/agent-run/07-ask-user-pause-run-anchor.json",
@@ -276,7 +353,8 @@
           "/app/configs/rules/agent-run/10-clarification-reply-resume-marker.json",
           "/app/configs/rules/agent-run/11-resume-awaiting-to-executing.json",
           "/app/configs/rules/agent-run/12-executing-to-awaiting-on-approval.json",
-          "/app/configs/rules/agent-run/13-resume-awaiting-to-executing-on-approval.json"
+          "/app/configs/rules/agent-run/13-resume-awaiting-to-executing-on-approval.json",
+          "/app/configs/rules/ops/01-run-terminal-observe.json"
         ],
         "inline_rules": []
       }
@@ -304,85 +382,107 @@
           "inputs": [
             {
               "name": "agent.task",
-              "type": "jetstream",
-              "subject": "agent.task.*",
-              "stream_name": "AGENT",
               "required": true,
+              "config": {
+                "kind": "jetstream",
+                "stream_name": "AGENT",
+                "subjects": [
+                  "agent.task.*"
+                ]
+              },
               "description": "Agent task requests"
             },
             {
               "name": "agent.response",
-              "type": "jetstream",
-              "subject": "agent.response.>",
-              "stream_name": "AGENT",
               "required": true,
+              "config": {
+                "kind": "jetstream",
+                "stream_name": "AGENT",
+                "subjects": [
+                  "agent.response.>"
+                ]
+              },
               "description": "Model responses"
             },
             {
               "name": "tool.result",
-              "type": "jetstream",
-              "subject": "tool.result.>",
-              "stream_name": "TOOL",
               "required": true,
+              "config": {
+                "kind": "jetstream",
+                "stream_name": "TOOL",
+                "subjects": [
+                  "tool.result.>"
+                ]
+              },
               "description": "Tool execution results"
             },
             {
               "name": "agent.approval_response",
-              "type": "jetstream",
-              "subject": "agent.approval_response.*",
-              "stream_name": "AGENT",
+              "config": {
+                "kind": "jetstream",
+                "stream_name": "AGENT",
+                "subjects": [
+                  "agent.approval_response.*"
+                ]
+              },
               "description": "Human approve/reject/modify decisions (ADR-053 §4c PR-2). The loop's setupSubscriptions routes this port to handleApprovalResponseMessage → ResolveApprovalIfPending, which un-parks the gated loop. WITHOUT this declared input the loop never subscribes and can NEVER resume from an approval gate. Also drives the approvalpause subscriber's run-phase resume marker."
             }
           ],
           "outputs": [
             {
               "name": "agent.request",
-              "type": "jetstream",
-              "subject": "agent.request.*",
-              "stream_name": "AGENT",
+              "config": {
+                "kind": "jetstream",
+                "stream_name": "AGENT",
+                "subjects": [
+                  "agent.request.*"
+                ]
+              },
               "description": "Model requests"
             },
             {
               "name": "tool.execute",
-              "type": "jetstream",
-              "subject": "tool.execute.*",
-              "stream_name": "TOOL",
+              "config": {
+                "kind": "jetstream",
+                "stream_name": "TOOL",
+                "subjects": [
+                  "tool.execute.*"
+                ]
+              },
               "description": "Tool execution requests"
             },
             {
               "name": "agent.complete",
-              "type": "jetstream",
-              "subject": "agent.complete.*",
-              "stream_name": "AGENT",
+              "config": {
+                "kind": "jetstream",
+                "stream_name": "AGENT",
+                "subjects": [
+                  "agent.complete.*"
+                ]
+              },
               "description": "Task completions"
             },
             {
               "name": "agent.failed",
-              "type": "jetstream",
-              "subject": "agent.failed.*",
-              "stream_name": "AGENT",
+              "config": {
+                "kind": "jetstream",
+                "stream_name": "AGENT",
+                "subjects": [
+                  "agent.failed.*"
+                ]
+              },
               "description": "Loop failures — drives the chainpause subscriber (ADR-037 §D5 audit triples). Retires alongside chainpause in ADR-042 §Phase 6 migration cut; until then, declaring the port keeps the bootstrap canonical."
             },
             {
               "name": "agent.approval_pending",
-              "type": "jetstream",
-              "subject": "agent.approval_pending.*",
-              "stream_name": "AGENT",
+              "config": {
+                "kind": "jetstream",
+                "stream_name": "AGENT",
+                "subjects": [
+                  "agent.approval_pending.*"
+                ]
+              },
               "description": "Tool-gate approval-pending events — drives the approvalpause subscriber (ADR-053 §4c: run-phase reflection of the loop-level approval_required gate). Declaring the port keeps the subject covered by the AGENT stream so PublishToStream succeeds and lets portresolver resolve the subscribe subject."
-            }
-          ],
-          "kv_write": [
-            {
-              "name": "loops",
-              "type": "kv-write",
-              "bucket": "AGENT_LOOPS",
-              "description": "Loop state storage"
-            },
-            {
-              "name": "trajectories",
-              "type": "kv-write",
-              "bucket": "AGENT_TRAJECTORIES",
-              "description": "Trajectory storage"
             }
           ]
         }
@@ -404,20 +504,28 @@
           "inputs": [
             {
               "name": "agent.request",
-              "type": "jetstream",
-              "subject": "agent.request.>",
-              "stream_name": "AGENT",
               "required": true,
+              "config": {
+                "kind": "jetstream",
+                "stream_name": "AGENT",
+                "subjects": [
+                  "agent.request.>"
+                ]
+              },
               "description": "Agent request input"
             }
           ],
           "outputs": [
             {
               "name": "agent.response",
-              "type": "jetstream",
-              "subject": "agent.response.*",
-              "stream_name": "AGENT",
               "required": true,
+              "config": {
+                "kind": "jetstream",
+                "stream_name": "AGENT",
+                "subjects": [
+                  "agent.response.*"
+                ]
+              },
               "description": "Agent response output"
             }
           ]
@@ -433,34 +541,44 @@
         "timeout": "10s",
         "allowed_tools": null,
         "restricted_decide_actions": [],
-        "approval_required": ["create_rule"],
+        "approval_required": [
+          "create_rule"
+        ],
         "ports": {
           "inputs": [
             {
               "name": "tool.execute",
-              "type": "jetstream",
-              "subject": "tool.execute.>",
-              "stream_name": "TOOL",
               "required": true,
+              "config": {
+                "kind": "jetstream",
+                "stream_name": "TOOL",
+                "subjects": [
+                  "tool.execute.>"
+                ]
+              },
               "description": "Tool execution requests"
+            },
+            {
+              "name": "entity_states",
+              "config": {
+                "kind": "kv-read",
+                "bucket": "ENTITY_STATES"
+              },
+              "description": "Entity state KV for graph queries"
             }
           ],
           "outputs": [
             {
               "name": "tool.result",
-              "type": "jetstream",
-              "subject": "tool.result.*",
-              "stream_name": "TOOL",
               "required": true,
+              "config": {
+                "kind": "jetstream",
+                "stream_name": "TOOL",
+                "subjects": [
+                  "tool.result.*"
+                ]
+              },
               "description": "Tool execution results"
-            }
-          ],
-          "kv_read": [
-            {
-              "name": "entity_states",
-              "type": "kv-read",
-              "bucket": "ENTITY_STATES",
-              "description": "Entity state KV for graph queries"
             }
           ]
         }
@@ -473,46 +591,73 @@
       "config": {
         "default_role": "coordinator",
         "auto_continue": true,
-        "default_tools": ["decide", "read_loop_result", "scratchpad", "query_sandbox_attestation", "request_sandbox"],
+        "default_tools": [
+          "decide",
+          "read_loop_result",
+          "scratchpad",
+          "query_sandbox_attestation",
+          "request_sandbox"
+        ],
         "stream_name": "USER",
         "ports": {
           "inputs": [
             {
               "name": "user.message",
-              "type": "jetstream",
-              "subject": "user.message.>",
-              "stream_name": "USER",
               "required": true,
+              "config": {
+                "kind": "jetstream",
+                "stream_name": "USER",
+                "subjects": [
+                  "user.message.>"
+                ]
+              },
               "description": "User messages from any channel"
             },
             {
               "name": "agent.complete",
-              "type": "jetstream",
-              "subject": "agent.complete.*",
-              "stream_name": "AGENT",
               "required": true,
+              "config": {
+                "kind": "jetstream",
+                "stream_name": "AGENT",
+                "subjects": [
+                  "agent.complete.*"
+                ]
+              },
               "description": "Loop completions — drives the coordinator's wake-up reply path"
             }
           ],
           "outputs": [
             {
               "name": "agent.task",
-              "type": "jetstream",
-              "subject": "agent.task.*",
-              "stream_name": "AGENT",
+              "config": {
+                "kind": "jetstream",
+                "stream_name": "AGENT",
+                "subjects": [
+                  "agent.task.*"
+                ]
+              },
               "description": "Task messages to agent loops"
             },
             {
               "name": "user.response",
-              "type": "nats",
-              "subject": "user.response.*",
+              "config": {
+                "kind": "jetstream",
+                "stream_name": "USER",
+                "subjects": [
+                  "user.response.>"
+                ]
+              },
               "description": "Responses back to users (fire-and-forget; channel routers fan out to UI/email/SMS)"
             },
             {
               "name": "agent.approval_response",
-              "type": "jetstream",
-              "subject": "agent.approval_response.*",
-              "stream_name": "AGENT",
+              "config": {
+                "kind": "jetstream",
+                "stream_name": "AGENT",
+                "subjects": [
+                  "agent.approval_response.*"
+                ]
+              },
               "description": "Approve/reject/modify decisions published by POST /teams-dispatch/loops/{id}/approval (ADR-053 §4c PR-2). Declared so PublishToStream is AGENT-stream-covered, ResolveSubject resolves the subject, and the AGENT stream carries agent.approval_response.* for the teams-loop consumer + the approvalpause resume subscriber."
             }
           ]
@@ -530,6 +675,61 @@
             "*"
           ]
         }
+      }
+    },
+    "graph-gateway": {
+      "type": "gateway",
+      "name": "graph-gateway",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "outputs": [
+            {
+              "name": "graph_queries",
+              "required": true,
+              "config": {
+                "kind": "nats-request",
+                "subject": "graph.query.*",
+                "interface": {
+                  "type": "graph.query",
+                  "version": "v1"
+                }
+              }
+            },
+            {
+              "name": "graph_index_queries",
+              "required": true,
+              "config": {
+                "kind": "nats-request",
+                "subject": "graph.index.query.*"
+              }
+            },
+            {
+              "name": "agentic_queries",
+              "required": true,
+              "config": {
+                "kind": "nats-request",
+                "subject": "agentic.query.*",
+                "interface": {
+                  "type": "agentic.query",
+                  "version": "v1"
+                }
+              }
+            }
+          ]
+        },
+        "graphql_path": "/graphql",
+        "mcp_path": "/mcp",
+        "enable_playground": false,
+        "query_timeout": 60000000000
+      }
+    },
+    "objectstore": {
+      "type": "storage",
+      "name": "objectstore",
+      "enabled": true,
+      "config": {
+        "bucket_name": "AGENT_CONTENT"
       }
     }
   }

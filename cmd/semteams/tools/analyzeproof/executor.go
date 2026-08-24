@@ -79,7 +79,7 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 	facts := ParseProofFacts(triples)
 	analysis := AnalyzeFacts(facts, now)
 	out := analysis.Triples(runEntityID, now)
-	if err := e.publisher.AddTriplesBatch(ctx, out); err != nil {
+	if err := e.publisher.Append(ctx, out); err != nil {
 		return errResult(call, agentic.ToolErrorNetwork, "stamp formal_claims triples on %s: %v", runEntityID, err)
 	}
 

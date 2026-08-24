@@ -248,40 +248,40 @@ func (h *DecisionHandler) retry(ctx context.Context, entityID, failedLoopID stri
 	}
 
 	// Write chain.resumed triple with the new task ID as the value.
-	return h.publisher.AddTriple(ctx, message.Triple{
+	return h.publisher.Append(ctx, []message.Triple{{
 		Subject:    entityID,
 		Predicate:  "chain.decision.resumed-task-id",
 		Object:     task.TaskID,
 		Source:     "chainpause",
 		Timestamp:  now,
 		Confidence: 1.0,
-	})
+	}})
 }
 
 // kill terminates the chain cleanly. Writes chain.killed audit triple;
 // no further rules fire on the failed lineage (per ADR-037 §D7).
 func (h *DecisionHandler) kill(ctx context.Context, entityID string, now time.Time) error {
-	return h.publisher.AddTriple(ctx, message.Triple{
+	return h.publisher.Append(ctx, []message.Triple{{
 		Subject:    entityID,
 		Predicate:  "chain.decision.killed-at",
 		Object:     now.Format(time.RFC3339),
 		Source:     "chainpause",
 		Timestamp:  now,
 		Confidence: 1.0,
-	})
+	}})
 }
 
 // deferChain preserves chain state for later. The operator re-issues a retry
 // decision via the same endpoint to resume.
 func (h *DecisionHandler) deferChain(ctx context.Context, entityID string, now time.Time) error {
-	return h.publisher.AddTriple(ctx, message.Triple{
+	return h.publisher.Append(ctx, []message.Triple{{
 		Subject:    entityID,
 		Predicate:  "chain.decision.deferred-at",
 		Object:     now.Format(time.RFC3339),
 		Source:     "chainpause",
 		Timestamp:  now,
 		Confidence: 1.0,
-	})
+	}})
 }
 
 // writeDecisionTriples writes the §D5 chain.decision.* audit trail.
@@ -299,7 +299,7 @@ func (h *DecisionHandler) writeDecisionTriples(ctx context.Context, entityID, ve
 		triples[i].Source = "chainpause"
 		triples[i].Timestamp = now
 		triples[i].Confidence = 1.0
-		if err := h.publisher.AddTriple(ctx, triples[i]); err != nil && firstErr == nil {
+		if err := h.publisher.Append(ctx, triples[i:i+1]); err != nil && firstErr == nil {
 			firstErr = err
 		}
 	}
@@ -424,21 +424,25 @@ func (r *NATSPauseDataReader) ReadPauseData(ctx context.Context, entityID string
 		return "", "", fmt.Errorf("graph entity query: %w", err)
 	}
 
-	// The response is a JSON object that may be an EntityState directly or
-	// wrapped in a QueryResponse envelope. Try EntityState first (simpler path
-	// used by graph-ingest direct queries), then the envelope shape.
-	var entity struct {
-		ID      string `json:"id"`
-		Triples []struct {
-			Predicate string `json:"predicate"`
-			Object    any    `json:"object"`
-		} `json:"triples"`
+	// beta.160 exact-read envelope: the graph.query.entity responder
+	// returns ExactEntity {entity:{id,triples}, kvRevision}; the bare
+	// {id,triples} decode yields zero triples silently (same drift class
+	// that starved the autoresearch empirical compare, 2026-08-14).
+	var resp struct {
+		Entity struct {
+			ID      string `json:"id"`
+			Triples []struct {
+				Predicate string `json:"predicate"`
+				Object    any    `json:"object"`
+			} `json:"triples"`
+		} `json:"entity"`
+		KVRevision uint64 `json:"kvRevision"`
 	}
-	if err := json.Unmarshal(respData, &entity); err != nil {
+	if err := json.Unmarshal(respData, &resp); err != nil {
 		return "", "", fmt.Errorf("decode entity response: %w", err)
 	}
 
-	for _, t := range entity.Triples {
+	for _, t := range resp.Entity.Triples {
 		switch t.Predicate {
 		case "chain.paused.role":
 			if s, ok := t.Object.(string); ok {

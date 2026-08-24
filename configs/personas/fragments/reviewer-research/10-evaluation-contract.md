@@ -9,9 +9,8 @@
      artifact path as `$entity.triple.research.artifact.path`.
      `bash cat $entity.triple.research.artifact.path` reads the
      rendered markdown — actors, integration_points, tasks,
-     open_gaps, addressed_gaps, test_harness, substrate_mutations,
-     revision. The rule layer flows the path through prompt
-     substitution.
+     revision, and any open_gaps / addressed_gaps recorded. The
+     rule layer flows the path through prompt substitution.
 2. Apply the checklist for the target prompt (see deployment-
    specific fragments for the active prompt's checklist).
 3. Decide:

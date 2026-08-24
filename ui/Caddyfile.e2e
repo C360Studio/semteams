@@ -56,9 +56,12 @@
 		reverse_proxy backend:9090
 	}
 
-	# GraphQL gateway (graph-gateway on port 8082)
+	# GraphQL gateway: the graph-gateway component mounts under its
+	# instance prefix on the ServiceManager HTTP surface (beta.160),
+	# so /graphql rewrites to /graph-gateway/graphql.
 	handle /graphql {
-		reverse_proxy backend:8082
+		rewrite * /graph-gateway/graphql
+		reverse_proxy backend:8080
 	}
 
 	# Vite dev server handles everything else (UI, HMR, /api/ai/*)

@@ -37,11 +37,11 @@ type fakePublisher struct {
 	err     error
 }
 
-func (f *fakePublisher) AddTriple(_ context.Context, t message.Triple) error {
+func (f *fakePublisher) Append(_ context.Context, triples []message.Triple) error {
 	if f.err != nil {
 		return f.err
 	}
-	f.written = append(f.written, t)
+	f.written = append(f.written, triples...)
 	return nil
 }
 

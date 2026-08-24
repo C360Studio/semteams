@@ -39,19 +39,24 @@ func TestNATSEntityReader_LiveSubject(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// Stub responder mirroring upstream graph-query's response shape:
-	// {id, triples: [{predicate, object}]}. Asserts the reader sent
-	// the right request shape (`{"id": "..."}`) before returning canned
-	// data the reader's decoder must handle.
+	// Stub responder mirroring upstream graph-query's response shape at
+	// beta.160: the exact-read envelope {entity: {id, triples}, kvRevision}
+	// (the pre-160 bare {id, triples} shape decodes to zero triples —
+	// see entity_reader_test.go). Asserts the reader sent the right
+	// request shape (`{"id": "..."}`) before returning canned data the
+	// reader's decoder must handle.
 	const stubEntityID = "c360.test.agent.agentic-loop.execution.test-loop-id"
 	stubResponse := []byte(`{
-		"id": "` + stubEntityID + `",
-		"triples": [
-			{"predicate": "agent.loop.role", "object": "research-reviewer"},
-			{"predicate": "coordinator.decision.next-action", "object": "approved"},
-			{"predicate": "lineage.researcher", "object": "researcher-loop-id"},
-			{"predicate": "agent.loop.iterations", "object": 3}
-		]
+		"entity": {
+			"id": "` + stubEntityID + `",
+			"triples": [
+				{"predicate": "agent.loop.role", "object": "research-reviewer"},
+				{"predicate": "coordinator.decision.next-action", "object": "approved"},
+				{"predicate": "lineage.researcher", "object": "researcher-loop-id"},
+				{"predicate": "agent.loop.iterations", "object": 3}
+			]
+		},
+		"kvRevision": 7
 	}`)
 
 	var lastRequest map[string]string

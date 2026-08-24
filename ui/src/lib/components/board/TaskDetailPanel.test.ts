@@ -3,11 +3,43 @@ import { render, screen } from "@testing-library/svelte";
 import userEvent from "@testing-library/user-event";
 import TaskDetailPanel from "./TaskDetailPanel.svelte";
 import type { TaskInfo } from "$lib/types/task";
-import type { AgentLoop } from "$lib/types/agent";
+import type { AgentLoop, LoopTrajectory } from "$lib/types/agent";
+
+// Function declarations are hoisted, so this is safely callable from the
+// vi.mock factory below (which Vitest hoists above the imports, but only
+// executes lazily on first import of the mocked module).
+function makeEmptyTrajectory(loopId: string): LoopTrajectory {
+  return {
+    schema_version: "v1",
+    loop_id: loopId,
+    coverage: "observed",
+    terminal_observed: false,
+    observed_totals: {
+      facts: 0,
+      tokens_in: 0,
+      tokens_out: 0,
+      elapsed_ms: 0,
+      message_count: 0,
+      tool_count: 0,
+      url_count: 0,
+      model_requests: 0,
+      model_completions: 0,
+      tool_requests: 0,
+      tool_completions: 0,
+      context_compactions: 0,
+      terminal_observations: 0,
+      requested_observations: 0,
+      completed_observations: 0,
+      failed_observations: 0,
+      cancelled_observations: 0,
+    },
+    facts: [],
+  };
+}
 
 // Mock agentApi — covers TaskDetailPanel's sendSignal calls,
-// PendingApprovalSection's submitApproval calls, and TrajectoryViewer's
-// getTrajectory/getTrajectories calls.
+// PendingApprovalSection's submitApproval calls, and TaskStory /
+// RunEvidencePanel's getLoopTrajectory calls.
 vi.mock("$lib/services/agentApi", () => ({
   agentApi: {
     sendMessage: vi.fn().mockResolvedValue({ content: "ok" }),
@@ -22,23 +54,11 @@ vi.mock("$lib/services/agentApi", () => ({
       accepted: true,
       timestamp: "2026-04-29T11:00:00Z",
     }),
-    getTrajectory: vi.fn().mockResolvedValue({
-      loop_id: "",
-      role: "",
-      iterations: 0,
-      outcome: "",
-      duration_ms: 0,
-    }),
-    getTrajectories: vi.fn().mockResolvedValue([]),
-    // TaskStory polls /teams-loop/trajectories/<loop_id>; record the
-    // arg so the focused-loop tests can assert which loop's story is
-    // being shown.
+    // TaskStory/RunEvidencePanel poll the GraphQL trajectory(loopId)
+    // field (semstreams beta.160); record the arg so the focused-loop
+    // tests can assert which loop's story is being shown.
     getLoopTrajectory: vi.fn().mockImplementation((loopId: string) =>
-      Promise.resolve({
-        loop_id: loopId,
-        start_time: "2026-06-03T00:00:00Z",
-        steps: [],
-      }),
+      Promise.resolve(makeEmptyTrajectory(loopId)),
     ),
   },
   AgentApiError: class AgentApiError extends Error {
@@ -124,20 +144,8 @@ beforeEach(() => {
     accepted: true,
     timestamp: "2026-04-29T11:00:00Z",
   });
-  vi.mocked(agentApi.getTrajectory).mockResolvedValue({
-    loop_id: "",
-    role: "",
-    iterations: 0,
-    outcome: "",
-    duration_ms: 0,
-  });
-  vi.mocked(agentApi.getTrajectories).mockResolvedValue([]);
   vi.mocked(agentApi.getLoopTrajectory).mockImplementation((loopId: string) =>
-    Promise.resolve({
-      loop_id: loopId,
-      start_time: "2026-06-03T00:00:00Z",
-      steps: [],
-    }),
+    Promise.resolve(makeEmptyTrajectory(loopId)),
   );
   vi.mocked(getTriples).mockResolvedValue([]);
   vi.mocked(messageLoggerApi.fetchEntries).mockResolvedValue([]);

@@ -194,7 +194,7 @@ points:
 | `ToolCallCard`       | Loop trajectory events                          |
 | `RuleDiffCard`       | `create_rule` / `update_rule` tool args         |
 | `/agents` page       | `GET /teams-dispatch/loops` + activity SSE    |
-| `TrajectoryViewer`   | `GET /teams-loop/trajectories/{loopId}`       |
+| `TrajectoryViewer`   | GraphQL `trajectory(loopId:)` via `/graphql`  |
 
 See `docs/ui-integration-notes.md` at the semteams repo root for the full
 backend API reference, signal types, and attachment shape definitions.

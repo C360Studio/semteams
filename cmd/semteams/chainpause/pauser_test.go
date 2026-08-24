@@ -2,7 +2,9 @@ package chainpause
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -12,20 +14,20 @@ import (
 	"github.com/c360studio/semstreams/types"
 )
 
-// recordingPublisher records AddTriple calls for assertion.
+// recordingPublisher records Append calls for assertion.
 type recordingPublisher struct {
 	mu      sync.Mutex
 	triples []message.Triple
 	err     error // if non-nil, returned on every call
 }
 
-func (r *recordingPublisher) AddTriple(_ context.Context, t message.Triple) error {
+func (r *recordingPublisher) Append(_ context.Context, triples []message.Triple) error {
 	if r.err != nil {
 		return r.err
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.triples = append(r.triples, t)
+	r.triples = append(r.triples, triples...)
 	return nil
 }
 
@@ -59,7 +61,7 @@ func TestPauser_HandleFailed_ManagedRoleWritesTriplesD5(t *testing.T) {
 		LoopID:      "abc123",
 		TaskID:      "task-1",
 		Outcome:     agentic.OutcomeFailed,
-		Role:        "reviewer-spec",
+		Role:        "reviewer-research",
 		RunEntityID: testChainEntityID("abc123"),
 		Error:       "Anthropic API: overloaded",
 	}
@@ -236,7 +238,7 @@ func TestPauser_HandleFailed_PartialWriteReturnsFirstErr(t *testing.T) {
 		LoopID:      "loop-err",
 		TaskID:      "task-3",
 		Outcome:     agentic.OutcomeFailed,
-		Role:        "researcher-plan",
+		Role:        "researcher-research-plan",
 		RunEntityID: testChainEntityID("loop-err"),
 		Error:       "some error",
 	}
@@ -259,7 +261,7 @@ func TestPauser_HandleFailed_ObservedAtIsRFC3339(t *testing.T) {
 		LoopID:      "loop-ts",
 		TaskID:      "task-4",
 		Outcome:     agentic.OutcomeFailed,
-		Role:        "researcher-plan",
+		Role:        "researcher-research-plan",
 		RunEntityID: testChainEntityID("loop-ts"),
 		Error:       "timeout",
 	}
@@ -293,7 +295,7 @@ func TestPauser_HandleFailed_CapturesOriginalModel(t *testing.T) {
 		LoopID:      "loop-model",
 		TaskID:      "task-model-1",
 		Outcome:     agentic.OutcomeFailed,
-		Role:        "researcher-plan",
+		Role:        "researcher-research-plan",
 		Model:       "claude-opus-4-5",
 		RunEntityID: testChainEntityID("loop-model"),
 		Error:       "overloaded",
@@ -333,7 +335,7 @@ func TestPauser_HandleFailed_SubjectIsChainEntity(t *testing.T) {
 		LoopID:       "researcher_gather_8",
 		TaskID:       "task-gather-8",
 		Outcome:      agentic.OutcomeFailed,
-		Role:         "researcher-gather",
+		Role:         "researcher-research-gather",
 		ParentLoopID: "researcher_plan_7",
 		RunEntityID:  testChainEntityID("dispatch_root"),
 		Error:        "max iterations reached",
@@ -367,7 +369,7 @@ func TestPauser_HandleFailed_NoRunAnchorSkips(t *testing.T) {
 		LoopID:  "loop-no-run",
 		TaskID:  "task-x",
 		Outcome: agentic.OutcomeFailed,
-		Role:    "builder",
+		Role:    "autoresearch-propose",
 		Error:   "executor panic",
 		// RunEntityID intentionally empty — loop not part of a run.
 	}
@@ -386,18 +388,17 @@ func TestPauser_HandleFailed_NoRunAnchorSkips(t *testing.T) {
 
 func TestIsManagedRole(t *testing.T) {
 	managed := []string{
-		"researcher-plan",
-		"researcher-gather",
-		"researcher-synthesize",
-		"researcher-architect",
+		// research pack
+		"researcher-research-plan",
+		"researcher-research-gather",
+		"researcher-research-synthesize",
 		"reviewer-research",
-		"reviewer-spec",
-		"reviewer-qa",
-		"builder",
+		// autoresearch pack
+		"autoresearch-baseline",
+		"autoresearch-propose",
+		"autoresearch-synthesize",
+		"reviewer-autoresearch",
 		"dispatch",
-		// Legacy roles retained for research-iterative configs.
-		"researcher",
-		"research-reviewer",
 	}
 	for _, role := range managed {
 		if !isManagedRole(role) {
@@ -410,7 +411,16 @@ func TestIsManagedRole(t *testing.T) {
 	// adopt. Mixes retired legacy roles (dev-via-spec-*) with adjacent
 	// system roles (ops-*, coordinator) so the closed set's edges stay
 	// inspectable in the test diff.
-	unmanaged := []string{"general", "ops-analyst", "coordinator", "dev-via-spec-builder", "dev-via-spec-planner", "source-curator", ""}
+	// ops-chain-observer must stay unmanaged: it runs outside any run
+	// (run_scope none), so pausing a chain on its failure would stamp
+	// chain.paused.* onto a run the observer was only looking at.
+	// reviewer-qa/builder/researcher-plan are the retired names the list
+	// used to carry — kept here so their removal is asserted, not assumed.
+	unmanaged := []string{
+		"general", "coordinator", "source-curator", "",
+		"ops-chain-observer", "ops-analyst",
+		"reviewer-qa", "builder", "researcher-plan", "researcher-architect", "reviewer-spec",
+	}
 	for _, role := range unmanaged {
 		if isManagedRole(role) {
 			t.Errorf("expected %q to be unmanaged, but isManagedRole returned true", role)
@@ -418,25 +428,61 @@ func TestIsManagedRole(t *testing.T) {
 	}
 }
 
-// Ensure each managed role in isManagedRole matches the rule's "in" condition list.
-// A mismatch between the two would cause the rule to fire but the subscriber to skip.
+// chainPauseRuleFiles are the wired rules that pause a chain on a failed loop.
+// managedRoles must cover every role they name, or the rule fires and the
+// subscriber silently drops it.
+var chainPauseRuleFiles = []string{
+	"../../../configs/rules/research/08-loop-failed-pause.json",
+	"../../../configs/rules/autoresearch/11-loop-failed-pause.json",
+}
+
+// TestManagedRoleListMirrorRule derives the expected roles from the pause
+// rules themselves rather than restating them.
+//
+// The previous version hardcoded the same list it was checking, so it was
+// tautological: it passed while managedRoles named eight roles that no longer
+// existed (reviewer-qa, builder, researcher-architect, …) and covered only one
+// of the ten live ones. The effect was that a failed loop in nearly every live
+// role wrote no chain.paused.* triples at all — invisible, because the only
+// test that could have caught it was asserting against the stale list.
 func TestManagedRoleListMirrorRule(t *testing.T) {
-	ruleRoles := []string{
-		"researcher-plan",
-		"researcher-gather",
-		"researcher-synthesize",
-		"researcher-architect",
-		"reviewer-research",
-		"reviewer-spec",
-		"reviewer-qa",
-		"builder",
-		"dispatch",
-		"researcher",
-		"research-reviewer",
-	}
-	for _, role := range ruleRoles {
-		if !isManagedRole(role) {
-			t.Errorf("rule role %q not in isManagedRole — rule fires but subscriber skips; update isManagedRole", role)
+	seen := 0
+	for _, path := range chainPauseRuleFiles {
+		raw, err := os.ReadFile(path) //nolint:gosec // test-controlled config path
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
 		}
+		var rule struct {
+			Conditions []struct {
+				Field string `json:"field"`
+				Value any    `json:"value"`
+			} `json:"conditions"`
+		}
+		if err := json.Unmarshal(raw, &rule); err != nil {
+			t.Fatalf("unmarshal %s: %v", path, err)
+		}
+		for _, c := range rule.Conditions {
+			if c.Field != "agent.loop.role" {
+				continue
+			}
+			values, ok := c.Value.([]any)
+			if !ok {
+				t.Fatalf("%s: agent.loop.role condition value is %T, want a list", path, c.Value)
+			}
+			for _, v := range values {
+				role, ok := v.(string)
+				if !ok {
+					continue
+				}
+				seen++
+				if !isManagedRole(role) {
+					t.Errorf("%s names role %q but isManagedRole rejects it — the rule fires and the "+
+						"subscriber skips, so the chain pauses with no chain.paused.* triples", path, role)
+				}
+			}
+		}
+	}
+	if seen == 0 {
+		t.Fatal("no agent.loop.role values found in the pause rules — the parity check would pass vacuously")
 	}
 }
