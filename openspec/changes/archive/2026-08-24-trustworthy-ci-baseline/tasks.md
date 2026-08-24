@@ -13,6 +13,6 @@
   and release workflows are unchanged under #259 and cannot be triggered by `Repository CI`.
 - [x] 8. Run every new job command locally, validate the workflow with actionlint, then reconcile documentation that
   describes the retired workflows or stale Go runtime.
-- [ ] 9. After PR #257 merges and PR #262 is retargeted to `main`, observe one green hosted `CI Status Check` on
-  PR #262 and record its run URL.
-- [ ] 10. Reconcile task and reviewer evidence, then archive this change as the final content commit.
+- [x] 9. After PR #257 merges and PR #262 is retargeted to `main`, observe one green hosted `CI Status Check` on
+  PR #262 and record its run URL: https://github.com/C360Studio/semteams/actions/runs/32772948008.
+- [x] 10. Reconcile task and reviewer evidence, then archive this change as the final content commit.
