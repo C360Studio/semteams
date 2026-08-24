@@ -166,8 +166,8 @@ func TestRootOpenSpecSpecs_Readable(t *testing.T) {
 	if spec.Title != "Agentic SDD Specification" {
 		t.Fatalf("Spec title = %q", spec.Title)
 	}
-	if len(spec.Requirements) != 13 {
-		t.Fatalf("Requirements = %d, want 13", len(spec.Requirements))
+	if len(spec.Requirements) != 14 {
+		t.Fatalf("Requirements = %d, want 14", len(spec.Requirements))
 	}
 	for _, req := range spec.Requirements {
 		if req.Statement == "" {
@@ -196,6 +196,7 @@ func TestRootOpenSpecSpecs_Readable(t *testing.T) {
 		"Run Health Surface",
 		"Demo MVP Evidence Pack",
 		"Real LLM And Playwright Validation",
+		"Conversational Front Door",
 	} {
 		found := false
 		for _, got := range names {
@@ -224,7 +225,8 @@ func TestRootOpenSpecSpecs_Readable(t *testing.T) {
 
 // TestRepoReadinessInitOpenSpecChange_Retired keeps the unimplemented
 // repo-readiness proposal out of the active OpenSpec queue. Issue #258 owns
-// any future resumption, which must begin as a fresh claimed change.
+// the retirement; issue #260 owns any future resumption, which must begin as
+// a fresh claimed change.
 func TestRepoReadinessInitOpenSpecChange_Retired(t *testing.T) {
 	path := filepath.Join("..", "..", "openspec", "changes", "repo-readiness-init")
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
