@@ -1,0 +1,34 @@
+schema: spec-driven
+
+# Concise context shown during artifact creation. The human-readable source is
+# openspec/project.md; CLAUDE.md and AGENTS.md own the shared work rituals.
+context: |
+  SemTeams is a configurable multi-agent product harness on SemStreams
+  v1.0.0-beta.160 (Go 1.25; Svelte 5/SvelteKit 2/TypeScript; NATS
+  JetStream; Task runner). It owns product composition and semantics, not
+  framework processors or contracts. Read openspec/project.md before scope.
+
+  Live product categories are research and autoresearch. Coordinator,
+  agent-run, and ops are support packs. The create-change,
+  proof-readiness, dev-from-task, and dev-via-test packs are implemented but
+  unwired under ADR-058 pending canonical-predicate and beta.160 graph-mutation
+  re-authoring. Do not describe them as current live demo routes.
+
+  Authority split: GitHub issues own wanted work, decisions, blockers, and
+  holds; milestones own release membership; draft PRs own claims and
+  stop-points; OpenSpec changes own target state and branch-checkable tasks;
+  living specs own accepted behavior; ADRs own durable architectural reasons.
+
+  Role split: architect -> go-developer/go-reviewer and/or
+  svelte-developer/svelte-reviewer -> technical-writer. Cross-stack changes
+  require both reviewer lanes.
+
+rules:
+  proposal:
+    - Include a "## Non-goals" section that protects the product/framework boundary.
+    - Name the GitHub issue and the claimed pull request that own the work.
+    - Distinguish live product behavior from implemented-but-parked surfaces.
+  spec:
+    - Describe accepted behavior verified against code and current wiring, not aspirations.
+    - Use Requirement plus GIVEN/WHEN/THEN scenarios and name approval or fail-closed boundaries.
+    - Keep framework mechanics upstream unless SemTeams composition changes their product behavior.

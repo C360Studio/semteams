@@ -4,6 +4,13 @@ This index is for maintainers working on architecture or product-shell changes.
 The records are listed roughly in build order; the bold ones are the
 load-bearing reads for understanding the current architecture.
 
+ADRs answer **why**: they record durable architecture choices and
+cross-repository contracts. They do not own wanted-work status,
+implementation checklists, or current behavioral mechanics. GitHub issues
+own work and owner rulings; OpenSpec living specs own current behavior;
+OpenSpec changes own a claimed PR's target state and task truth. See
+[`../../openspec/README.md`](../../openspec/README.md).
+
 | ADR | What it decides |
 |---|---|
 | [023](023-provider-adapters-and-tool-choice.md) | LLM provider adapters and tool-choice handling |
@@ -29,6 +36,7 @@ load-bearing reads for understanding the current architecture.
 | [056](056-openspec-spec-driven-development-umbrella.md) | OpenSpec-compatible, environment-gated spec-driven development umbrella. Its packs are parked by 058 pending predicate migration. |
 | [057](057-openspec-graph-spec-model-and-create-change.md) | Graph-backed OpenSpec model and `create_change` pack. Parked by 058. |
 | [**058**](058-beta159-realignment-and-demo-lane-focus.md) | **Realign to semstreams v1.0.0-beta.159 + canonical predicates; demo scope = front door + research/autoresearch; dev-side packs parked in place.** Current architecture posture. |
+| [**059**](059-semstreams-beta160-graph-foundation-adoption.md) | **Adopt semstreams v1.0.0-beta.160's typed graph-mutation, strict-port, service-composition, trajectory, and fresh-storage contracts while retaining ADR-058's live/parked boundary.** Current framework baseline. |
 
 ## Conventions
 

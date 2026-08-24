@@ -21,6 +21,8 @@ includes:
   dev:
     taskfile: ./taskfiles/dev.yml
     aliases: [d]
+  openspec:
+    taskfile: ./taskfiles/openspec.yml
 
   # Frontend (Svelte 5 + SvelteKit) — see ui/Taskfile.yml for full surface.
   ui:

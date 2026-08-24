@@ -1,5 +1,12 @@
 # Agentic SDD Specification
 
+## Purpose
+
+Define SemTeams' product-level contract for graph-backed spec-driven development: reviewable OpenSpec artifacts,
+proof/readiness gates, governed execution, and inspectable evidence. Under ADR-058 and ADR-059, the `create-change`,
+`proof-readiness`, `dev-from-task`, and `dev-via-test` packs remain implemented but unwired pending canonical-predicate
+re-authoring; their requirements are the accepted capability baseline, not current live demo claims.
+
 ## Requirements
 
 ### Requirement: OpenSpec Change Artifact
