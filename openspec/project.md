@@ -34,6 +34,8 @@ recorded through the shared graph substrate.
   journeys and relevant tests remain parked and are not live demo evidence.
 - The coordinator's live taxonomy is `research | autoresearch | respond_direct | ask_user`; parked-team requests receive
   an honest direct response.
+- `Repository CI` runs Go, UI, and Governance/OpenSpec jobs for every pull request to `main`; the jobs feed one stable
+  `CI Status Check` aggregate. Required mock E2E and a main-branch ruleset remain future work.
 
 ## How We Spec
 
@@ -60,7 +62,7 @@ recorded through the shared graph substrate.
 
 ## Standing Conventions
 
-- Go 1.25; Svelte 5, SvelteKit 2, and strict TypeScript; NATS JetStream KV/ObjectStore; Prometheus and `slog`; Task as
+- Go 1.26.3; Svelte 5, SvelteKit 2, and strict TypeScript; NATS JetStream KV/ObjectStore; Prometheus and `slog`; Task as
   the task runner.
 - SemTeams-local persisted predicates follow the canonical three-segment lower-kebab grammar. Parked legacy dialect is
   not precedent.

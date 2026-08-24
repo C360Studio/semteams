@@ -14,9 +14,15 @@ tasks:
       - echo "Schema validation not yet implemented"
 
   check-changes:
-    desc: Check for uncommitted schema changes
+    desc: Check for modified or untracked generated schemas
     cmds:
-      - git diff --exit-code schemas/ specs/openapi.v3.yaml || (echo "Schema/OpenAPI files changed! Run 'task schema:generate' and commit."; exit 1)
+      - |
+        schema_status=$(git status --porcelain --untracked-files=all -- schemas specs/openapi.v3.yaml)
+        if [ -n "$schema_status" ]; then
+          echo "Schema/OpenAPI files changed! Run 'task schema:generate' and commit:"
+          echo "$schema_status"
+          exit 1
+        fi
 
   docs:
     desc: Serve OpenAPI docs at http://localhost:8081

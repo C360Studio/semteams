@@ -155,28 +155,14 @@ func TestRootOpenSpecSpecs_Readable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadSpecs: %v", err)
 	}
-	if len(specs) != 1 {
-		t.Fatalf("Specs = %d, want 1", len(specs))
-	}
-
-	spec := specs[0]
-	if spec.Capability != "agentic-sdd" {
-		t.Fatalf("Spec capability = %q, want agentic-sdd", spec.Capability)
-	}
+	spec := findOpenSpecByCapability(t, specs, "agentic-sdd")
 	if spec.Title != "Agentic SDD Specification" {
 		t.Fatalf("Spec title = %q", spec.Title)
 	}
 	if len(spec.Requirements) != 14 {
 		t.Fatalf("Requirements = %d, want 14", len(spec.Requirements))
 	}
-	for _, req := range spec.Requirements {
-		if req.Statement == "" {
-			t.Fatalf("requirement %q has empty statement", req.Name)
-		}
-		if len(req.Scenarios) == 0 {
-			t.Fatalf("requirement %q has no scenarios", req.Name)
-		}
-	}
+	assertOpenSpecReadable(t, spec)
 
 	names := make([]string, 0, len(spec.Requirements))
 	for _, req := range spec.Requirements {
@@ -210,6 +196,9 @@ func TestRootOpenSpecSpecs_Readable(t *testing.T) {
 		}
 	}
 
+	governance := findOpenSpecByCapability(t, specs, "repository-governance")
+	assertOpenSpecReadable(t, governance)
+
 	dst := filepath.Join(t.TempDir(), "specs")
 	if err := openspec.WriteSpecs(dst, specs); err != nil {
 		t.Fatalf("WriteSpecs: %v", err)
@@ -220,6 +209,33 @@ func TestRootOpenSpecSpecs_Readable(t *testing.T) {
 	}
 	if diff := cmp.Diff(specs, roundTripped, cmpopts.EquateEmpty()); diff != "" {
 		t.Fatalf("root OpenSpec specs round-trip mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func findOpenSpecByCapability(t *testing.T, specs []openspec.Spec, capability string) openspec.Spec {
+	t.Helper()
+	for _, spec := range specs {
+		if spec.Capability == capability {
+			return spec
+		}
+	}
+	t.Fatalf("living OpenSpec capability %q not found", capability)
+	return openspec.Spec{}
+}
+
+func assertOpenSpecReadable(t *testing.T, spec openspec.Spec) {
+	t.Helper()
+	if spec.Title == "" || spec.Purpose == "" || len(spec.Requirements) == 0 {
+		t.Fatalf("spec %q is incomplete: title=%q purpose=%q requirements=%d",
+			spec.Capability, spec.Title, spec.Purpose, len(spec.Requirements))
+	}
+	for _, req := range spec.Requirements {
+		if req.Statement == "" {
+			t.Fatalf("spec %q requirement %q has empty statement", spec.Capability, req.Name)
+		}
+		if len(req.Scenarios) == 0 {
+			t.Fatalf("spec %q requirement %q has no scenarios", spec.Capability, req.Name)
+		}
 	}
 }
 

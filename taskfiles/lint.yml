@@ -2,8 +2,14 @@ version: '3'
 
 tasks:
   default:
-    desc: Run Go linters (vet, fmt, revive)
+    desc: Run Go vet and formatting checks; report revive warnings
     cmds:
       - go vet ./...
-      - go fmt ./...
+      - |
+        unformatted=$(gofmt -l cmd test)
+        if [ -n "$unformatted" ]; then
+          echo "The following Go files need formatting:"
+          echo "$unformatted"
+          exit 1
+        fi
       - revive -config revive.toml -formatter friendly ./...
