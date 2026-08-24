@@ -44,11 +44,14 @@ the human shape the request before routing. Slash commands such as
 front door, not a bypass around the coordinator. Asks for the parked
 spec/build teams (ADR-058) get an honest direct answer.
 
-Rendered artifacts are reusable context. The UI can attach an
-artifact to the next chat prompt, then the coordinator receives the
-artifact title, source tool, and content along with the user's new
-request. Any artifact can anchor a follow-up discussion before the
-next team is chosen.
+Research and autoresearch still write rendered artifacts and retain
+recoverable evidence, but beta.160's GraphQL trajectory surface gives
+the UI previews and `StorageReference` values, not evidence bodies.
+`ArtifactCard` content and artifact-context handoff are therefore
+parked regressions under ADR-059, not current UI capabilities. Issue
+[#261](https://github.com/C360Studio/semteams/issues/261) owns the
+authorized evidence-fetch contract and fresh OpenSpec change required
+before copy, attach, context-chip, or cross-team reuse can return.
 
 ## The substrate-plus-overlays architecture
 

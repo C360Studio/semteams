@@ -58,8 +58,8 @@ task ui:test:e2e:agentic:demo-mvp
 ```
 
 That runs the black-box mock-LLM evidence pack for the current demo
-claims: coordinator routing, OpenSpec author/review/export,
-readiness fail-closed behavior, and the MAVLink-hard spec handoff.
+claims: coordinator routing, the reviewed research arc, fail-closed
+readiness before execution routing, and empirical autoresearch.
 It uses the dockerized e2e stack and requires no LLM API keys or
 host Caddy install.
 
@@ -89,29 +89,28 @@ category packs:
 
 - a **research** question (compare X vs Y, how does Z work) → the
   research arc;
-- a **spec authoring** ask (draft requirements for X, create an
-  OpenSpec handoff for Y) → the create-change / proof-readiness
-  path;
 - an **optimize-a-metric** ask (make this faster / smaller) → the
-  autoresearch iteration loop, in a sandbox;
-- a **build-with-tests** ask (add an endpoint with unit tests) →
-  the dev-via-test pack (Lisa plans → CBG gates the plan → Ralph
-  implements in a sandbox → CBG gates the work).
+  autoresearch iteration loop, in a sandbox.
 
-Power users can prefix a prompt with `/research`, `/create-change`
-(`/spec` also works), `/optimize`, or `/dev-via-test`. Those are
-coordinator-routed hints, not bypasses; SemTeams still validates the
-prompt shape and keeps the usual sandbox, readiness, approval, and
-review gates.
+Power users can prefix a prompt with `/research` or `/optimize`.
+Those are coordinator-routed hints, not bypasses; SemTeams still
+validates the prompt shape and keeps the usual sandbox and review
+gates.
 
-Artifacts are meant to travel between teams. When a run emits a
-research, spec, optimization, or implementation artifact, the UI
-surfaces it as an artifact card with copy and "use as context"
-actions. Attaching an artifact adds a visible, removable context chip
-to the chat bar, and the next prompt carries the artifact title,
-source tool, and content back through the coordinator. A research
-artifact can seed a spec prompt, a spec can inform implementation, or
-any artifact can simply anchor a follow-up question.
+Spec-authoring and software-implementation asks are currently
+**parked**, not live routes. The coordinator answers them honestly
+instead of dispatching `create-change`, `proof-readiness`,
+`dev-from-task`, or `dev-via-test`. Those packs remain on disk for
+re-authoring under the canonical predicate contract; see
+[ADR-058](docs/adr/058-beta159-realignment-and-demo-lane-focus.md).
+
+Research results retain recoverable source evidence, but beta.160 does
+not currently render the evidence bodies needed by `ArtifactCard` or
+artifact-context handoff. GraphQL exposes trajectory previews and
+`StorageReference` values; an authorized evidence-fetch pass must land
+before copy, attach, context-chip, or cross-team artifact reuse can be
+claimed live. ADR-059 records this accepted regression; issue
+[#261](https://github.com/C360Studio/semteams/issues/261) owns restoration.
 
 See [`docs/architecture.md`](docs/architecture.md) for what each
 pack does and **how the sandbox is created**.
@@ -124,10 +123,9 @@ pack does and **how the sandbox is created**.
 |---|---|---|
 | No-key demo claim proof | `task ui:test:e2e:agentic:demo-mvp` | Black-box Playwright + mock-LLM evidence pack. No API keys. |
 | Live chat UI | `task dev:research` | Needs `GEMINI_API_KEY` for the default model registry; `BRAVE_SEARCH_API_KEY` recommended for web search. |
-| OpenSpec author/review/export journey | `task ui:test:e2e:agentic:create-change` | Mock-LLM journey for producing a reviewed OpenSpec handoff. |
-| MAVLink-hard spec handoff | `task ui:test:e2e:agentic:mavlink-hard-spec` | Mock-LLM hard-domain OpenSpec handoff journey. |
-| Spec-to-dev bridge proof | `task ui:test:e2e:agentic:spec-to-dev-demo` | Fixture-seeded bridge proof; not counted as pure black-box MVP evidence. |
-| Paid Gemini OpenSpec smoke | `task ui:test:e2e:agentic:create-change:gemini-smoke` | Real LLM smoke for spec authoring. Captures trajectories under `/tmp/`. |
+| Research arc proof | `task ui:test:e2e:agentic:research-mvp` | Mock-LLM plan/fan-out/join/synthesize/review journey. |
+| Autoresearch proof | `task ui:test:e2e:agentic:autoresearch` | Mock-LLM metric iteration with sandbox admission and keep/revert evidence. |
+| Coordinator routing proof | `task ui:test:e2e:agentic:coordinator-routing-matrix` | Includes honest responses for parked team asks. |
 
 `task --list` shows everything.
 
@@ -169,8 +167,12 @@ task ui:test:e2e        # Playwright E2E (auto-manages Docker stack)
 task schema:generate    # Regenerate schemas/ + specs/openapi.v3.yaml
 ```
 
-CI runs `ci.yml` (Go lint/test/build/schema) and `ui.yml` (UI
-lint/check/test/build, path-filtered). Both must pass.
+The repository currently has separate Go and path-filtered UI
+workflows. Issue [#254](https://github.com/C360Studio/semteams/issues/254)
+owns proving or replacing that baseline before any check is treated as
+an always-reported required gate or encoded in a main-branch ruleset.
+Until then, run the applicable local gates and inspect every hosted
+workflow result; a green rerun over a known flake is not proof.
 
 Before pushing:
 

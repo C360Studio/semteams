@@ -22,7 +22,7 @@ LoC) independently wires every framework primitive per ADR-029.
 
 ## Bundled chains are illustrative configurations, not the product
 
-## Substrate-plus-overlays architecture (ADR-042 MVP-7, 2026-05-18)
+## Substrate-plus-overlays architecture (ADR-042; demo scope reset by ADR-058)
 
 The product shell runs **one** flow config — `configs/flow-bootstrap.json`
 — wiring substrate singletons (graph-ingest, graph-query, rule-processor,
@@ -30,15 +30,28 @@ agentic-loop, agentic-dispatch, agentic-tools, agentic-model). Task
 classes are added as **category-keyed rule packs** + named persona
 bundles loaded by the substrate, NOT as separate flow configs.
 
-Live task category in MVP-7:
+Live task categories (ADR-058, 2026-08-07):
 
 - **`research`** — coordinator routes prose research asks via
   `decide(action="research")`. The pack at `configs/rules/research/`
-  drives `researcher-research-plan → researcher-research-gather →
-  researcher-research-synthesize → reviewer-research → coordinator
-  wake-up`. Persona bundles live at
-  `configs/personas/fragments/researcher-research-{plan,gather,synthesize}/`
-  and `configs/personas/fragments/reviewer-research/`.
+  drives `researcher-research-plan → researcher-research-gather (×N
+  fan-out) → researcher-research-synthesize → reviewer-research →
+  coordinator wake-up`.
+- **`autoresearch`** — metric optimization with empirical keep/revert
+  in an attested devcontainer sandbox
+  (`configs/rules/autoresearch/`).
+
+**Parked (ADR-058):** the dev-side packs (`create-change`,
+`proof-readiness`, `dev-from-task`, `dev-via-test`) are on disk but
+UNWIRED — they predate the upstream canonical predicate contract
+(3-segment lower-kebab, fail-closed at persistence, NO alias mode).
+Their contract tests carry a `parked_packs` build tag; their journeys
+are `describe.skip`; the coordinator taxonomy is
+`research | autoresearch | respond_direct | ask_user`. Re-wiring one
+without re-authoring its predicates fails the CI fence
+(`test/contract/predicate_contract_test.go`). Read
+[ADR-058](docs/adr/058-beta159-realignment-and-demo-lane-focus.md)
+before touching any of this.
 
 Adding a new prompt class (e.g. web-research, dev-via-spec
 reintroduction) is a **new category pack**: rule files under
@@ -64,13 +77,54 @@ The `personas-describe-job-not-plumbing` memory captures the rule.
 > (wiring) and `docs/adr/042-coordinator-instantiated-flows-via-templates.md`
 > (substrate-plus-overlays) are the load-bearing ADRs.
 
+## Shared work protocol (Claude and Codex)
+
+State that both agents must see lives in the repository's tools, never in an agent's private memory or a separate
+program-status document. Each question has one authoritative home, and each home is discoverable with `gh`, `task`, or
+`openspec`.
+
+SemTeams routes design and implementation through its project roles: `architect` owns API and integration contracts;
+`go-developer` implements backend work and `go-reviewer` reviews it; `svelte-developer` implements UI work and
+`svelte-reviewer` reviews it; cross-stack changes use both reviewer lanes; and `technical-writer` owns durable docs and
+conservative OpenSpec task truth.
+
+| Question | Home | Rule |
+|---|---|---|
+| What is wanted, what kind, is it decided | GitHub issue + labels (`type:` / `area:` / `class:` / `status:` / `horizon:`) | `status:needs-decision` is the owner's docket; a ruling is posted as an issue comment and the label removed. `status:blocked` names its blocker in a comment. |
+| What gates the next tag | GitHub milestone named for the intended version | Membership is the gate: in or out; an unruled item is out. `horizon:pre-v1` means before v1.0.0, not before the next tag. |
+| An epic | A tracking issue labeled `type:epic` whose body carries a task list of `#n` children | GitHub renders the progress; there is no separate epic document. |
+| Who has claimed what | A **draft PR** opened at the start of the work, with `Closes #n` in its body; the branch prefix names the agent (`claude/...`, `codex/...`) | No draft PR, no claim. Design work claims the same way: its OpenSpec proposal is the first content commit. Put the current stop-point in the PR description. |
+| Target state and task truth | The OpenSpec change inside that PR; `task openspec:queue` reads its holds | Archive (`openspec archive <id>` plus spec sync) as the landing PR's final content commit, reviewed with the implementation. No task may assert a post-merge fact such as "CI green" or "merge-ready". |
+| Why | An ADR, or the owner's ruling comment on the issue | ADRs record durable architectural decisions, not work status or implementation checklists. |
+
+Rituals:
+
+- **Start:** query the milestone's open issues, draft PR claims, `task openspec:queue`, recent `main` runs, and
+  `status:needs-decision` issues before choosing work.
+- **Take work:** an unclaimed milestone issue → a dedicated worktree and agent-prefixed branch → push → draft PR with
+  `Closes #n` → then implementation. While concurrent agents have claimed work, each claimed PR has exactly one
+  dedicated worktree and the primary checkout is discovery-only. Verify the worktree path and branch before every edit,
+  commit, push, or PR mutation; never share a worktree between claimed PRs.
+- **Land:** undraft → the appropriate SemTeams reviewer lane (`go-reviewer`, `svelte-reviewer`, or both), plus the
+  owner-run cross-agent round when requested → all applicable local and hosted gates green, with no known unfixed flake
+  in a required job → squash merge closes the issue. A fresh green over a known flake is rerun-to-green: fix it, or file
+  it and obtain an explicit owner waiver in a PR comment. State `implemented-by: <persona>` in the PR body (Codex uses
+  `Sol`).
+- **Close:** no issue closes without the owner's explicit `CONFIRM-CLOSE`.
+- **CI baseline:** issue #254 owns proving which Go/UI checks are trustworthy and always reported. Do not enable or cite
+  a main-branch ruleset as proof until that contract lands.
+
+OpenSpec changes are contract deltas, not backlogs. Sequencing, discovery, holds, and future work belong in GitHub
+issues. There is no separate program baton document, and `/tickets` is legacy state pending issue-by-issue
+reconciliation.
+
 ## Tech Stack
 
 - Go 1.25 — `cmd/semteams/` binary (~600 LoC across `main.go`, `flags.go`,
   `banner.go`, `logging.go`). Independently implements every
   framework-wiring pattern per ADR-029 — no imports from upstream
   `cmd/semstreams/`. See [ADR-029](docs/adr/029-product-shell-wiring.md).
-- Go module: `github.com/c360studio/semstreams` (currently `v1.0.0-beta.25`)
+- Go module: `github.com/c360studio/semstreams` (currently `v1.0.0-beta.160`; every bump is a first-class change — see ADR-058 for the beta.115→159 flag-day and ADR-059 for the beta.160 graph-foundation cutover; fresh NATS storage + NATS server 2.14.4 mandatory across the 159→160 boundary)
 - NATS JetStream (KV, ObjectStore), Prometheus, slog — via semstreams
 - Task (task runner) — run `task --list` for all commands
 - `ui/` — Svelte 5 + SvelteKit 2 + TypeScript frontend (subtree-imported
@@ -127,8 +181,8 @@ task ui:build           # Production build
 
 | Config | Purpose | Model |
 |--------|---------|-------|
-| `flow-bootstrap.json` | Production substrate (ADR-042 MVP). Wires the singleton agentic stack + research category rule pack + coordinator + ops persona corpus. | claude-haiku |
-| `e2e-flow-bootstrap.json` | Mock-LLM clone of flow-bootstrap for Playwright journeys. Same wiring, mock-llm endpoint, disabled compaction. | mock-llm |
+| `flow-bootstrap.json` | Production substrate. Wires research + autoresearch product packs and coordinator + agent-run + ops support packs. | `gemini-flash` default; registry fallbacks remain configurable |
+| `e2e-flow-bootstrap.json` | Mock-LLM clone with the same live/support packs and disabled compaction. | `mock-llm` |
 
 UI Playwright journey tasks (in `ui/Taskfile.yml`) manage the Docker stack
 lifecycle — Playwright does NOT auto-start the stack. Each task: start →
@@ -261,6 +315,38 @@ These upstream config fields default `false`; enable per config as needed:
   autonomous; future category packs may add per-tool gates).
 - `agentic-tools.enable_categories` — tool category filtering for
   role-based access
+- `agentic-tools.restricted_decide_actions` — the run-level **clarification
+  policy** (ADR-053 Phase 4b / semstreams#239, beta.104). A list of `decide`
+  action names barred for EVERY coordinator task — front-door AND rule-spawned
+  — taking precedence over per-task `action_allowlist`. `[]` (default) =
+  **interactive** (`ask_user` available); `["ask_user"]` = **autonomous** (the
+  coordinator must resolve without deferring to a human; an off-policy
+  `decide(ask_user)` is rejected → the loop re-picks `respond_direct`/
+  re-dispatch, no dead-end). Threaded via `extractRestrictedDecideActions` →
+  `RegisterBuiltins` in `cmd/semteams/main.go` (ADR-029).
+  - **Autonomous persona overlay (ADR-053 §4b polish).** An autonomous
+    deployment SHOULD also load the autonomous coordinator persona overlay so
+    the coordinator skips the otherwise-rejected `ask_user` attempt entirely
+    (the LLM resolves ambiguity via `respond_direct` upfront — upstream
+    `decide.go:312` says "fix the persona prompt rather than loosening the
+    policy"). Set `-persona-overlay`/`SEMSTREAMS_PERSONA_OVERLAY_PATH` to
+    `configs/personas/fragments-autonomous`; `loadPersonaFragments` loads it
+    AFTER the base tree, and `LoadFromDirectory`'s `<role>/<id>` upsert
+    overwrites/adds same-id fragments (here it ADDS
+    `coordinator/12-autonomous-clarification-policy.md`). The base
+    `coordinator/10-decision-contract.md` stays the interactive default and
+    handles a stray rejection gracefully even WITHOUT the overlay. The e2e
+    `clarification-autonomous` journey wires the overlay via the Taskfile
+    `PERSONA_OVERLAY` var; the behavioral skip is a real-LLM-smoke concern
+    (the mock serves fixtures regardless of persona). The gate
+    (`restricted_decide_actions`) and the overlay are **intentionally
+    decoupled**: the gate is ENFORCEMENT (barred actions are rejected
+    regardless of persona); the overlay is an OPTIMIZATION (skip the wasted
+    iteration). A deployment that sets the gate but forgets the overlay still
+    recovers — the base `10-decision-contract.md` tells the coordinator to
+    `respond_direct` with an assumption on an off-policy rejection rather than
+    wedge. `loadPersonaFragments` guards a non-resolving overlay path with a
+    loud WARN (a typo'd path boots base-only, not silently).
 - `agentic-governance.enable_tool_governance` — pre-execution governance
   filtering
 
@@ -355,22 +441,16 @@ block in foreground.
 4. Abort early if stuck in loops or burning tokens on retries
 5. Report with evidence — quote log lines, never guess at root cause
 
-## CI Requirements
+## Current CI Inventory (Baseline Pending)
 
-Two workflows run:
-
-**`.github/workflows/ci.yml`** (Go):
-1. Lint — `go vet`, `go fmt` (must be clean), `revive` (warnings = failure)
-2. Test — Unit tests with `-race`
-3. Build — Cross-compile Linux binary
-4. Schema Validation — `task schema:generate`, check for uncommitted
-   changes
-
-**`.github/workflows/ui.yml`** (Svelte, path-filtered to `ui/**`):
-1. Lint — `npm run lint`
-2. Type Check — `npm run check`
-3. Unit Tests — `npm run test:unit`
-4. Build — `npm run build`
+The repository currently has `.github/workflows/ci.yml` for Go and a
+path-filtered `.github/workflows/ui.yml` for Svelte. They are useful
+signals, but they are **not yet a proven required-check contract**:
+their path filters mean one status can be absent, and the integration,
+toolchain-pinning, retry, and deterministic mock-E2E boundaries need
+reconciliation. Issue #254 owns that work and any main-branch ruleset.
+Do not infer that workflow presence, or a green rerun over a known
+flake, proves merge safety.
 
 Before pushing:
 
@@ -380,6 +460,7 @@ go test -race ./...
 task schema:generate
 git diff schemas/ specs/
 go test ./test/contract/...
+task openspec:validate
 ```
 
 ## Related Repos

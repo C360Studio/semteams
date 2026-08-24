@@ -1,6 +1,7 @@
 package contract
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -165,8 +166,8 @@ func TestRootOpenSpecSpecs_Readable(t *testing.T) {
 	if spec.Title != "Agentic SDD Specification" {
 		t.Fatalf("Spec title = %q", spec.Title)
 	}
-	if len(spec.Requirements) != 13 {
-		t.Fatalf("Requirements = %d, want 13", len(spec.Requirements))
+	if len(spec.Requirements) != 14 {
+		t.Fatalf("Requirements = %d, want 14", len(spec.Requirements))
 	}
 	for _, req := range spec.Requirements {
 		if req.Statement == "" {
@@ -195,6 +196,7 @@ func TestRootOpenSpecSpecs_Readable(t *testing.T) {
 		"Run Health Surface",
 		"Demo MVP Evidence Pack",
 		"Real LLM And Playwright Validation",
+		"Conversational Front Door",
 	} {
 		found := false
 		for _, got := range names {
@@ -221,77 +223,13 @@ func TestRootOpenSpecSpecs_Readable(t *testing.T) {
 	}
 }
 
-// TestRepoReadinessInitOpenSpecChange_Readable pins the post-MVP repo
-// readiness initializer as a real OpenSpec artifact. This keeps the idea
-// captured without adding it to the demo-MVP acceptance boundary.
-func TestRepoReadinessInitOpenSpecChange_Readable(t *testing.T) {
-	change, err := openspec.ReadChange(filepath.Join(
-		"..", "..", "openspec", "changes", "repo-readiness-init",
-	))
-	if err != nil {
-		t.Fatalf("ReadChange: %v", err)
-	}
-	if change.Slug != "repo-readiness-init" {
-		t.Fatalf("Slug = %q", change.Slug)
-	}
-	if change.Proposal == nil {
-		t.Fatal("Proposal is nil")
-	}
-	if change.Design == nil {
-		t.Fatal("Design is nil")
-	}
-	if change.Tasks == nil || len(change.Tasks.Sections) != 4 {
-		t.Fatalf("Tasks sections = %d, want 4", len(change.Tasks.Sections))
-	}
-	if len(change.Deltas) != 1 {
-		t.Fatalf("Deltas = %d, want 1", len(change.Deltas))
-	}
-
-	delta := change.Deltas[0]
-	if delta.Capability != "agentic-sdd" {
-		t.Fatalf("Delta capability = %q, want agentic-sdd", delta.Capability)
-	}
-	if len(delta.Added) != 4 {
-		t.Fatalf("Added requirements = %d, want 4", len(delta.Added))
-	}
-	for _, req := range delta.Added {
-		if req.Statement == "" {
-			t.Fatalf("requirement %q has empty statement", req.Name)
-		}
-		if len(req.Scenarios) == 0 {
-			t.Fatalf("requirement %q has no scenarios", req.Name)
-		}
-	}
-
-	dst := filepath.Join(t.TempDir(), change.Slug)
-	if err := openspec.WriteChange(dst, change); err != nil {
-		t.Fatalf("WriteChange: %v", err)
-	}
-	roundTripped, err := openspec.ReadChange(dst)
-	if err != nil {
-		t.Fatalf("re-ReadChange: %v", err)
-	}
-	if diff := cmp.Diff(change, roundTripped, cmpopts.EquateEmpty()); diff != "" {
-		t.Fatalf("repo-readiness OpenSpec change round-trip mismatch (-want +got):\n%s", diff)
-	}
-
-	rendered := openspec.RenderChangeFolder(change)
-	for _, want := range []string{
-		"# OpenSpec change: repo-readiness-init",
-		"Repo Readiness Initialization",
-		"`/init-repo <path>`",
-		"Generic `/init` is too broad for SemTeams",
-		"The system SHALL provide a repo-scoped initialization action",
-		"The system SHALL inventory the target repository or folder",
-		"The system SHALL produce a reviewed OpenSpec harness plan",
-		"The system SHALL use repo initialization output as proof-readiness input",
-		"OSH shaped repo is recognized",
-		"java.gradle.build",
-		"mavlink.px4-sitl.mavsdk",
-		"- [ ] 4.1 Run the initializer against an OSH-shaped repo/folder",
-	} {
-		if !strings.Contains(rendered, want) {
-			t.Fatalf("rendered repo-readiness OpenSpec change missing %q\n--- rendered ---\n%s", want, rendered)
-		}
+// TestRepoReadinessInitOpenSpecChange_Retired keeps the unimplemented
+// repo-readiness proposal out of the active OpenSpec queue. Issue #258 owns
+// the retirement; issue #260 owns any future resumption, which must begin as
+// a fresh claimed change.
+func TestRepoReadinessInitOpenSpecChange_Retired(t *testing.T) {
+	path := filepath.Join("..", "..", "openspec", "changes", "repo-readiness-init")
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("retired OpenSpec change still exists at %s (stat error: %v)", path, err)
 	}
 }

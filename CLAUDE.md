@@ -77,6 +77,47 @@ The `personas-describe-job-not-plumbing` memory captures the rule.
 > (wiring) and `docs/adr/042-coordinator-instantiated-flows-via-templates.md`
 > (substrate-plus-overlays) are the load-bearing ADRs.
 
+## Shared work protocol (Claude and Codex)
+
+State that both agents must see lives in the repository's tools, never in an agent's private memory or a separate
+program-status document. Each question has one authoritative home, and each home is discoverable with `gh`, `task`, or
+`openspec`.
+
+SemTeams routes design and implementation through its project roles: `architect` owns API and integration contracts;
+`go-developer` implements backend work and `go-reviewer` reviews it; `svelte-developer` implements UI work and
+`svelte-reviewer` reviews it; cross-stack changes use both reviewer lanes; and `technical-writer` owns durable docs and
+conservative OpenSpec task truth.
+
+| Question | Home | Rule |
+|---|---|---|
+| What is wanted, what kind, is it decided | GitHub issue + labels (`type:` / `area:` / `class:` / `status:` / `horizon:`) | `status:needs-decision` is the owner's docket; a ruling is posted as an issue comment and the label removed. `status:blocked` names its blocker in a comment. |
+| What gates the next tag | GitHub milestone named for the intended version | Membership is the gate: in or out; an unruled item is out. `horizon:pre-v1` means before v1.0.0, not before the next tag. |
+| An epic | A tracking issue labeled `type:epic` whose body carries a task list of `#n` children | GitHub renders the progress; there is no separate epic document. |
+| Who has claimed what | A **draft PR** opened at the start of the work, with `Closes #n` in its body; the branch prefix names the agent (`claude/...`, `codex/...`) | No draft PR, no claim. Design work claims the same way: its OpenSpec proposal is the first content commit. Put the current stop-point in the PR description. |
+| Target state and task truth | The OpenSpec change inside that PR; `task openspec:queue` reads its holds | Archive (`openspec archive <id>` plus spec sync) as the landing PR's final content commit, reviewed with the implementation. No task may assert a post-merge fact such as "CI green" or "merge-ready". |
+| Why | An ADR, or the owner's ruling comment on the issue | ADRs record durable architectural decisions, not work status or implementation checklists. |
+
+Rituals:
+
+- **Start:** query the milestone's open issues, draft PR claims, `task openspec:queue`, recent `main` runs, and
+  `status:needs-decision` issues before choosing work.
+- **Take work:** an unclaimed milestone issue → a dedicated worktree and agent-prefixed branch → push → draft PR with
+  `Closes #n` → then implementation. While concurrent agents have claimed work, each claimed PR has exactly one
+  dedicated worktree and the primary checkout is discovery-only. Verify the worktree path and branch before every edit,
+  commit, push, or PR mutation; never share a worktree between claimed PRs.
+- **Land:** undraft → the appropriate SemTeams reviewer lane (`go-reviewer`, `svelte-reviewer`, or both), plus the
+  owner-run cross-agent round when requested → all applicable local and hosted gates green, with no known unfixed flake
+  in a required job → squash merge closes the issue. A fresh green over a known flake is rerun-to-green: fix it, or file
+  it and obtain an explicit owner waiver in a PR comment. State `implemented-by: <persona>` in the PR body (Codex uses
+  `Sol`).
+- **Close:** no issue closes without the owner's explicit `CONFIRM-CLOSE`.
+- **CI baseline:** issue #254 owns proving which Go/UI checks are trustworthy and always reported. Do not enable or cite
+  a main-branch ruleset as proof until that contract lands.
+
+OpenSpec changes are contract deltas, not backlogs. Sequencing, discovery, holds, and future work belong in GitHub
+issues. There is no separate program baton document, and `/tickets` is legacy state pending issue-by-issue
+reconciliation.
+
 ## Tech Stack
 
 - Go 1.25 — `cmd/semteams/` binary (~600 LoC across `main.go`, `flags.go`,
@@ -140,8 +181,8 @@ task ui:build           # Production build
 
 | Config | Purpose | Model |
 |--------|---------|-------|
-| `flow-bootstrap.json` | Production substrate (ADR-042 MVP). Wires the singleton agentic stack + research category rule pack + coordinator + ops persona corpus. | claude-haiku |
-| `e2e-flow-bootstrap.json` | Mock-LLM clone of flow-bootstrap for Playwright journeys. Same wiring, mock-llm endpoint, disabled compaction. | mock-llm |
+| `flow-bootstrap.json` | Production substrate. Wires research + autoresearch product packs and coordinator + agent-run + ops support packs. | `gemini-flash` default; registry fallbacks remain configurable |
+| `e2e-flow-bootstrap.json` | Mock-LLM clone with the same live/support packs and disabled compaction. | `mock-llm` |
 
 UI Playwright journey tasks (in `ui/Taskfile.yml`) manage the Docker stack
 lifecycle — Playwright does NOT auto-start the stack. Each task: start →
@@ -400,22 +441,16 @@ block in foreground.
 4. Abort early if stuck in loops or burning tokens on retries
 5. Report with evidence — quote log lines, never guess at root cause
 
-## CI Requirements
+## Current CI Inventory (Baseline Pending)
 
-Two workflows run:
-
-**`.github/workflows/ci.yml`** (Go):
-1. Lint — `go vet`, `go fmt` (must be clean), `revive` (warnings = failure)
-2. Test — Unit tests with `-race`
-3. Build — Cross-compile Linux binary
-4. Schema Validation — `task schema:generate`, check for uncommitted
-   changes
-
-**`.github/workflows/ui.yml`** (Svelte, path-filtered to `ui/**`):
-1. Lint — `npm run lint`
-2. Type Check — `npm run check`
-3. Unit Tests — `npm run test:unit`
-4. Build — `npm run build`
+The repository currently has `.github/workflows/ci.yml` for Go and a
+path-filtered `.github/workflows/ui.yml` for Svelte. They are useful
+signals, but they are **not yet a proven required-check contract**:
+their path filters mean one status can be absent, and the integration,
+toolchain-pinning, retry, and deterministic mock-E2E boundaries need
+reconciliation. Issue #254 owns that work and any main-branch ruleset.
+Do not infer that workflow presence, or a green rerun over a known
+flake, proves merge safety.
 
 Before pushing:
 
@@ -425,6 +460,7 @@ go test -race ./...
 task schema:generate
 git diff schemas/ specs/
 go test ./test/contract/...
+task openspec:validate
 ```
 
 ## Related Repos

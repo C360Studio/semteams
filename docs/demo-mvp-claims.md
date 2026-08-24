@@ -21,12 +21,6 @@ attested sandbox, keep only empirically better results, and deliver a reviewed r
 SemTeams can prove sandbox readiness fails closed: execution-bound routing waits on, or honestly surfaces, a
 non-ready/denied sandbox attestation instead of dispatching work into an unprepared environment.
 
-SemTeams can expose emitted artifacts to the human and let those artifacts seed a later coordinator-routed prompt. The
-artifact context handoff is general: any emitted artifact can anchor a follow-up question or inform the next team.
-
-SemTeams can pause and resume runs across human boundaries: clarification questions and gated tool approvals park the
-run with visible markers and resume it when the human replies or approves.
-
 ## Parked Claims (ADR-058)
 
 The following previously supported claims are parked with the dev-side packs. Their configs, journeys, and tests stay
@@ -37,6 +31,14 @@ in-repo but are unwired; the claims return when the packs are re-authored under 
   waivers (proof-readiness pack).
 - Implement from an approved spec or a build-with-tests prompt through plan/execute/integration gates (dev-from-task +
   dev-via-test packs), including the MAVLink-hard goal.
+
+## Parked Regression (ADR-059)
+
+Artifact context handoff is not a live beta.160 claim. ADR-059 decision 7 removed the trajectory evidence bodies that
+fed `ArtifactCard`, the handoff panel, team buttons, and context chip. The
+`artifact-context-handoff.spec.ts` journey is deliberately `describe.skip`. Git history preserves the removed OpenSpec
+change. Issue [#261](https://github.com/C360Studio/semteams/issues/261) owns the authorized evidence-fetch UI contract
+and freshly reconciled change required to dereference each fact's `StorageReference` and restore artifact rendering.
 
 ## Non-Claims
 
@@ -50,9 +52,9 @@ on real prompts?) require the real-LLM smoke.
 
 ## Evidence Rule
 
-Black-box demo journeys may drive SemTeams only through public UI, dispatch HTTP, slash-command, approval, export, and
-documented task-runner surfaces. They may read graph facts, trajectories, logs, downloads, and HTTP status for
-assertions and evidence.
+Black-box demo journeys may drive SemTeams only through public UI, dispatch HTTP, slash-command, and documented
+task-runner surfaces. They may read graph facts, trajectories, logs, downloads, and HTTP status for assertions and
+evidence.
 
 Black-box demo journeys must not write directly to NATS, graph storage, lifecycle state, proof facts, or private KV
 buckets to make the claimed behavior pass.
@@ -66,15 +68,12 @@ The black-box demo evidence pack is:
 
 - `task ui:test:e2e:agentic:demo-mvp` — the aggregate: routing matrix, research arc, readiness gate, autoresearch arc
 - `task ui:test:e2e:agentic:coordinator-routing-matrix`
-- `task ui:test:e2e:agentic:coordinator-team-spawn`
 - `task ui:test:e2e:agentic:research-mvp`
 - `task ui:test:e2e:agentic:autoresearch`
-- `task ui:test:e2e:agentic:autoresearch-guardrails`
 - `task ui:test:e2e:agentic:coordinator-readiness-gate`
-- `task ui:test:e2e:agentic:sandbox-mvp`
-- `task ui:test:e2e:agentic:artifact-context-handoff`
-- `task ui:test:e2e:agentic:ask-user-pause` + `clarification-resume` + `clarification-autonomous`
-- `task ui:test:e2e:agentic:run-failed` (+ coordinator variants)
+
+Other journeys exercise narrower or additional behavior, but they are not members of the `demo-mvp` aggregate and are
+not evidence for claims beyond their own assertions.
 
 The paid optional smoke is the real-LLM research fan-out run (see ADR-058; the create-change Gemini smoke is parked with
 its pack).
@@ -84,5 +83,8 @@ its pack).
 The spec-driven development MVP change is archived at
 `openspec/changes/archive/spec-driven-dev-readiness-hitl/`. Its accepted requirements are baselined in
 `openspec/specs/agentic-sdd/spec.md` so future changes build on the living spec instead of mutating the seed proposal.
-The post-MVP repo-readiness initializer at `openspec/changes/repo-readiness-init/` is parked along with the dev-side
-packs (ADR-058); it resumes when spec-driven development is re-wired.
+The unimplemented post-MVP repo-readiness initializer was removed from the active OpenSpec queue without promoting its
+delta into current truth. Git history preserves the proposal. Issue
+[#258](https://github.com/C360Studio/semteams/issues/258) owns that retirement deliverable; issue
+[#260](https://github.com/C360Studio/semteams/issues/260) owns any future reintroduction and requires a freshly
+reconciled change after spec-driven development is deliberately re-authored and re-wired.

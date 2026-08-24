@@ -22,6 +22,8 @@ tools, journeys) is documented here.
   [`journeys/README.md`](journeys/README.md)
 - **checking the demo claim boundary** →
   [`demo-mvp-claims.md`](demo-mvp-claims.md)
+- **proposing or implementing a governed change** →
+  [`../openspec/README.md`](../openspec/README.md)
 - **looking for framework concepts** → upstream
   [semstreams docs](https://github.com/c360studio/semstreams/tree/main/docs)
 
@@ -72,3 +74,10 @@ non-product configs.
 - Comments and docs explain the *why*, not the *what*.
 - Maintainer decision records live in the architecture archive and
   follow the standard format documented there.
+
+Work status does not live in `docs/`. GitHub issues own wanted work,
+labels and decisions; milestones own release membership; draft pull
+requests own claims and stop-points; OpenSpec changes own behavioral
+target state and task truth; ADRs own durable architectural reasons.
+See [`../openspec/README.md`](../openspec/README.md) and the shared
+protocol in [`../CLAUDE.md`](../CLAUDE.md).

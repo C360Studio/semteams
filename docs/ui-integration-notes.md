@@ -32,7 +32,7 @@ it describes are implemented in `ui/`. Use it as a map from backend concept
 | Tool call card    | Loop trajectory events               | `lib/components/chat/ToolCallCard.svelte`             |
 | Rule diff         | `create_rule`/`update_rule` args     | `lib/components/chat/RuleDiffCard.svelte`             |
 | Artifact card     | Emitted artifact tool results         | `lib/components/board/ArtifactCard.svelte`            |
-| Artifact context  | Chat handoff store                    | `lib/stores/chatHandoff.svelte.ts` + `lib/components/layout/ChatBar.svelte` |
+| Artifact context (parked at beta.160) | Chat handoff store | `lib/stores/chatHandoff.svelte.ts` + `lib/components/layout/ChatBar.svelte` |
 | Monitoring page   | `GET /agentic-dispatch/loops`        | `routes/agents/+page.svelte`                          |
 | Trajectory replay | `GET /agentic-loop/trajectories/{id}`| `lib/components/agents/TrajectoryViewer.svelte`       |
 | Slash commands    | Command registry in dispatch         | `lib/services/slashCommands.ts` (`/approve`, etc.)    |
@@ -196,10 +196,12 @@ Team intent commands go through the normal coordinator message path. Control
 commands resolve to the governed signal system and require the same selected
 run/task context as the visible controls.
 
-## Current Artifact Context Handoff
+## Parked Artifact Context Handoff (ADR-059)
 
-Artifact reuse is handled in the UI, then submitted through the normal
-coordinator front door.
+The following retained components describe the pre-beta.160 behavior; they are
+code-location and migration references, not a current UI capability. GraphQL
+trajectory facts now expose previews and `StorageReference` values rather than
+the evidence bodies `ArtifactCard` needs, so the journey is `describe.skip`.
 
 | Step | UI behavior | Code |
 |------|-------------|------|
@@ -208,9 +210,10 @@ coordinator front door.
 | Chat bar shows context | `ChatBar` renders a removable artifact context chip above the input. | `lib/components/layout/ChatBar.svelte` |
 | Prompt is sent | Submitted content includes the user's prompt plus artifact title, source tool, and content. | `ChatBar` + `/teams-dispatch/message` |
 
-This is intentionally not research-specific. Any emitted artifact that can help
-the next question or team should be able to travel through the same handoff
-surface.
+Issue [#261](https://github.com/C360Studio/semteams/issues/261) owns the
+authorized evidence-fetch contract and fresh OpenSpec change required to make
+these retained controls reachable again. The intended restored behavior remains
+artifact-generic rather than research-specific.
 
 ## New Chat Attachment Types
 
