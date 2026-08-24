@@ -4,12 +4,12 @@ tasks:
   default:
     desc: Run all unit tests
     cmds:
-      - go test ./...
+      - go test -count=1 ./...
 
   race:
     desc: Run tests with race detector
     cmds:
-      - go test -race ./...
+      - go test -race -count=1 ./...
 
   integration:
     desc: Run integration tests (uses testcontainers for Docker infra)
@@ -26,9 +26,7 @@ tasks:
       # slower than native Linux Docker on CI runners; running packages in
       # parallel can saturate Docker Desktop and cause timeout-sensitive
       # tests (CAS retries, service lifecycle stress) to fail under load.
-      # CI uses its own invocation from .github/workflows/ci.yml (without
-      # -p 1) because Ubuntu runners handle the parallelism fine.
-      - go test -race -tags=integration -p 1 ./...
+      - go test -race -count=1 -tags=integration -p 1 ./...
       - echo "[OK] Integration tests complete"
 
   integration:iot:

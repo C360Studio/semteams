@@ -203,11 +203,11 @@ describe.skipIf(!existsSync(OPENAPI_SPEC_PATH))(
       }
 
       const requiredPaths = [
-        "/components/types",
-        "/components/types/{id}",
-        "/components/status/{name}",
-        "/components/flowgraph",
-        "/components/validate",
+        "/types",
+        "/types/{id}",
+        "/status/{name}",
+        "/flowgraph",
+        "/validate",
       ];
 
       for (const path of requiredPaths) {
@@ -215,13 +215,13 @@ describe.skipIf(!existsSync(OPENAPI_SPEC_PATH))(
       }
     });
 
-    it("should have GET method for /components/types", () => {
+    it("should have GET method for /types", () => {
       openapiSpec = loadOpenAPISpec();
       if (!openapiSpec) {
         throw new Error("openapiSpec is null");
       }
 
-      const typesPath = openapiSpec.paths["/components/types"];
+      const typesPath = openapiSpec.paths["/types"];
       expect(typesPath).toBeDefined();
       expect(typesPath?.get).toBeDefined();
       expect(typesPath?.get?.responses["200"]).toBeDefined();

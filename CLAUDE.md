@@ -111,8 +111,8 @@ Rituals:
   it and obtain an explicit owner waiver in a PR comment. State `implemented-by: <persona>` in the PR body (Codex uses
   `Sol`).
 - **Close:** no issue closes without the owner's explicit `CONFIRM-CLOSE`.
-- **CI baseline:** issue #254 owns proving which Go/UI checks are trustworthy and always reported. Do not enable or cite
-  a main-branch ruleset as proof until that contract lands.
+- **CI baseline:** `Repository CI` runs the Go, UI, and Governance/OpenSpec jobs for every pull request to `main`; all
+  three feed the stable `CI Status Check` aggregate. Required mock E2E and a main-branch ruleset remain future work.
 
 OpenSpec changes are contract deltas, not backlogs. Sequencing, discovery, holds, and future work belong in GitHub
 issues. There is no separate program baton document, and `/tickets` is legacy state pending issue-by-issue
@@ -120,7 +120,7 @@ reconciliation.
 
 ## Tech Stack
 
-- Go 1.25 — `cmd/semteams/` binary (~600 LoC across `main.go`, `flags.go`,
+- Go 1.26.3 — `cmd/semteams/` binary (~600 LoC across `main.go`, `flags.go`,
   `banner.go`, `logging.go`). Independently implements every
   framework-wiring pattern per ADR-029 — no imports from upstream
   `cmd/semstreams/`. See [ADR-029](docs/adr/029-product-shell-wiring.md).
@@ -441,26 +441,26 @@ block in foreground.
 4. Abort early if stuck in loops or burning tokens on retries
 5. Report with evidence — quote log lines, never guess at root cause
 
-## Current CI Inventory (Baseline Pending)
+## CI Baseline
 
-The repository currently has `.github/workflows/ci.yml` for Go and a
-path-filtered `.github/workflows/ui.yml` for Svelte. They are useful
-signals, but they are **not yet a proven required-check contract**:
-their path filters mean one status can be absent, and the integration,
-toolchain-pinning, retry, and deterministic mock-E2E boundaries need
-reconciliation. Issue #254 owns that work and any main-branch ruleset.
-Do not infer that workflow presence, or a green rerun over a known
-flake, proves merge safety.
+`.github/workflows/ci.yml` defines one unconditional `Repository CI`
+workflow for pull requests to `main`. Its Go, UI, and
+Governance/OpenSpec jobs feed the always-reported `CI Status Check`
+aggregate. Validation tools and runtimes are pinned where their
+versions define semantics; official GitHub Actions use reviewed major
+tags. Required mock E2E and a main-branch ruleset remain future work.
 
 Before pushing:
 
 ```bash
 task lint
-go test -race ./...
+task test:race
+task test:integration
+go build ./...
 task schema:generate
-git diff schemas/ specs/
-go test ./test/contract/...
+task schema:check-changes
 task openspec:validate
+task openspec:queue-test
 ```
 
 ## Related Repos

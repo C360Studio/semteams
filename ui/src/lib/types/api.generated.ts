@@ -13,7 +13,7 @@ export interface paths {
         };
         /**
          * Real-time activity events (SSE)
-         * @description Server-Sent Events stream of loop activity. Events include loop_created, loop_updated, loop_deleted. Connect with EventSource or curl -N.
+         * @description Server-Sent Events stream of loop activity. Event types: loop_created, loop_updated, loop_deleted, loop_completed. loop_completed fires when a COMPLETE_<id> KV key is written; the envelope loop_id is the bare id (prefix stripped) matching data.loop_id — use event.type=="loop_completed" to detect terminal entries. When type is loop_completed, data.outcome carries the verdict ("success", "failed", or "cancelled"); data.state is NOT populated on terminal events. Each event's data field is an ActivityEvent whose data field is a Loop (see #/components/schemas/Loop and #/components/schemas/ActivityEvent). Connect with EventSource or curl -N. Note: OpenAPI 3.0 cannot express per-event SSE JSON schema; consult the ActivityEvent and Loop component schemas.
          */
         get: {
             parameters: {
@@ -24,7 +24,7 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description SSE event stream */
+                /** @description SSE event stream of ActivityEvent objects. Each event's data field is a Loop (see #/components/schemas/ActivityEvent and #/components/schemas/Loop). */
                 200: {
                     headers: {
                         [name: string]: unknown;
@@ -1096,6 +1096,8 @@ export interface paths {
                     pattern?: string;
                     /** @description Maximum number of entries to return (default: 100, max: 1000) */
                     limit?: number;
+                    /** @description Opt-in filter: keep only records whose top-level JSON 'status' equals this (e.g. 'failed' over EMBEDDING_INDEX for per-entity failure forensics). Empty (default) returns all records. */
+                    status?: string;
                 };
                 header?: never;
                 path: {
@@ -1158,7 +1160,7 @@ export interface paths {
                 };
                 header?: never;
                 path: {
-                    /** @description KV bucket name (e.g., ENTITY_STATES, CONTEXT_INDEX) */
+                    /** @description KV bucket name (e.g., ENTITY_STATES, INCOMING_INDEX) */
                     bucket: string;
                 };
                 cookie?: never;
@@ -1266,7 +1268,7 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": Record<string, never>;
+                        "application/json": components["schemas"]["Loop"][];
                     };
                 };
             };
@@ -1308,7 +1310,7 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": Record<string, never>;
+                        "application/json": components["schemas"]["Loop"];
                     };
                 };
                 /** @description Loop not found */
@@ -1322,6 +1324,81 @@ export interface paths {
         };
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/loops/{id}/approval": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submit human approval response for a gated tool call
+         * @description Drives the beta.19 approval flow over HTTP. The loop must be awaiting approval (see config.approval_required). Decision is one of approve, reject, modify; modified_arguments substitutes for the original tool call arguments when decision=modify. Identity comes from X-User-Id-aware middleware via ctx (preferred) or the body user_id field (fallback), defaulting to http-user.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Loop ID */
+                    id: unknown;
+                };
+                cookie?: never;
+            };
+            /** @description Approval decision and optional modifications */
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ApprovalRequest"];
+                };
+            };
+            responses: {
+                /** @description Approval submitted */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": Record<string, never>;
+                    };
+                };
+                /** @description Invalid request body or decision value */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Loop not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Loop exists but is not awaiting approval */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Failed to publish approval (NATS error) */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -1767,135 +1844,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/trajectories": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List trajectory summaries with optional filters
-         * @description Returns paginated trajectory summaries. Filters by outcome, role, workflow, time, and metadata.
-         */
-        get: {
-            parameters: {
-                query?: {
-                    /** @description Max items (default 20, max 100) */
-                    limit?: number;
-                    /** @description Pagination offset */
-                    offset?: number;
-                    /** @description Filter: success, failed, cancelled */
-                    outcome?: string;
-                    /** @description Filter by agent role */
-                    role?: string;
-                    /** @description Filter by workflow */
-                    workflow_slug?: string;
-                    /** @description Filter: RFC3339 timestamp */
-                    since?: string;
-                    /** @description Filter by metadata key */
-                    metadata_key?: string;
-                    /** @description Filter by metadata value (requires metadata_key) */
-                    metadata_value?: string;
-                };
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Paginated list of trajectory summaries */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["TrajectoryListResponse"];
-                    };
-                };
-                /** @description Invalid filter parameters */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-                /** @description Loop storage not available */
-                503: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/trajectories/{loopId}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get full trajectory with steps
-         * @description Returns the complete trajectory including all steps for a specific loop.
-         */
-        get: {
-            parameters: {
-                query?: {
-                    /** @description Max steps to return */
-                    limit?: number;
-                };
-                header?: never;
-                path: {
-                    /** @description Loop ID */
-                    loopId: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Full trajectory with steps */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["Trajectory"];
-                    };
-                };
-                /** @description Missing loopId */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-                /** @description Trajectory not found */
-                404: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/types": {
         parameters: {
             query?: never;
@@ -2023,17 +1971,604 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/workflows": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List registered workflow types
+         * @description Returns the workflow types registered with the Manager + per-phase instance counts. Per-workflow List errors surface as a `counts_error` field on the failing entry so partial degradation is visible without breaking the whole response.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Workflow types with instance counts */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": Record<string, never>;
+                    };
+                };
+                /** @description Method not allowed (GET only) */
+                405: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workflows/{type}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List instances of a workflow type
+         * @description Lists Participant instances for the given workflow type with filter + pagination query parameters. When ?stream=true is set, the connection is upgraded to a WebSocket that streams bootstrap + live updates from Manager.Watch.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Filter to instances in this phase */
+                    phase?: string;
+                    /** @description Filter to non-terminal instances when true */
+                    active?: boolean;
+                    /** @description Maximum results returned (default unlimited) */
+                    limit?: number;
+                    /** @description Skip the first N matching results for pagination */
+                    offset?: number;
+                    /** @description Field-equality filter (any number; one query param per field) */
+                    "match.<field>"?: string;
+                    /** @description Set to 'true' to upgrade to a WebSocket carrying Manager.Watch updates */
+                    stream?: string;
+                };
+                header?: never;
+                path: {
+                    /** @description Workflow type identifier (matches Participant.Workflow()) */
+                    type: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Instance array (or WebSocket frames when ?stream=true) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": Record<string, never>;
+                    };
+                };
+                /** @description Invalid query parameter */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description WebSocket streaming disabled (enable_websocket=false) */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Workflow type not registered */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Method not allowed (GET or POST only) */
+                405: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        /**
+         * Create a workflow instance
+         * @description Creates a new instance of the registered workflow from an operator-supplied initial state through the lifecycle Manager and canonical graph mutation port. This is the BIRTH lane and the only route carrying a full initial-state envelope — the must-exist lanes (state patch, transition) stay envelope-free and require an existing entity; nothing auto-vivifies. Create-or-fail: a duplicate entity ID returns 409 and never overwrites, so there is no upsert lane on the operator surface. The body is the workflow's registered state struct, and must include the entity ID and an initial phase declared in the workflow's transitions table. Responds 201 with the committed state projected from the causal mutation response, not the submitted body echoed. If delivery occurred without a valid mutation response, responds 503 with code `commit_unknown`; callers must inspect authoritative state before deciding whether another mutation is safe.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Workflow type identifier (matches Participant.Workflow()) */
+                    type: string;
+                };
+                cookie?: never;
+            };
+            /** @description Initial state, shaped as the workflow's registered Participant struct */
+            requestBody: {
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            responses: {
+                /** @description Created — authoritative committed instance state */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": Record<string, never>;
+                    };
+                };
+                /** @description Malformed initial state, missing entity ID, an entity ID outside the workflow's declared pattern, or an initial phase not declared in the transitions table */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Workflow type not registered */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description An instance with that entity ID is already lifecycle-managed, including a concurrent lifecycle attachment */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Body exceeds max_body_bytes */
+                413: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Mutation service unavailable or commit outcome unknown; inspect authoritative state before deciding whether another mutation is safe */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workflows/{type}/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get instance state
+         * @description Returns the full Participant state for the given workflow type + entity ID.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Workflow type identifier */
+                    type: string;
+                    /** @description Entity ID (Participant.EntityID()) */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Participant state */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": Record<string, never>;
+                    };
+                };
+                /** @description Workflow or entity not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Method not allowed (GET only) */
+                405: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workflows/{type}/{id}/children": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List child instances
+         * @description Returns Participants whose ParentEntityID matches the given entity, across all registered workflows. The {type} segment is required for routing symmetry with the other endpoints; the underlying Manager.Children call scans cross-workflow.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Workflow type identifier (routing-only; cross-workflow scan ignores it) */
+                    type: string;
+                    /** @description Parent entity ID */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Child Participant array */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": Record<string, never>;
+                    };
+                };
+                /** @description Method not allowed (GET only) */
+                405: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workflows/{type}/{id}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List phase-transition history
+         * @description Returns the fixed recent operator window of phase-transition records retained in the participant entity. Each entry includes from/to phases, wallclock timestamp, the TransitionSource (rule/operator/component/framework), and any supplied note. This is not an unbounded audit log.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Workflow type identifier */
+                    type: string;
+                    /** @description Entity ID */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description TransitionEvent array */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": Record<string, never>;
+                    };
+                };
+                /** @description Workflow or entity not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Method not allowed (GET only) */
+                405: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workflows/{type}/{id}/state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Operator patch (state mutation)
+         * @description Applies a JSON-body patch to the Participant. The body is a `{<field>: <value>}` map; every field MUST be tagged `lifecycle:"operator_writable"` on the registered state struct. Identity (`lifecycle:"id"`) and phase fields are protected by the same default-deny gate the rule layer enforces (ADR-047 § AssertRuleWritable).
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Workflow type identifier */
+                    type: string;
+                    /** @description Entity ID */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            /** @description Field-name → value patch map */
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["StatePatchRequest"];
+                };
+            };
+            responses: {
+                /** @description Patch applied */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": Record<string, never>;
+                    };
+                };
+                /** @description Invalid body OR field is not operator_writable OR type mismatch */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Workflow or entity not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Method not allowed (POST only) */
+                405: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Optimistic-concurrency retries exhausted */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Request body exceeds max_body_bytes */
+                413: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Mutation service unavailable or commit outcome unknown; inspect authoritative state before deciding whether another mutation is safe */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workflows/{type}/{id}/transition": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Operator-initiated phase transition
+         * @description Transitions the Participant to the requested phase via Manager.Transition with TransitionSourceOperator. Phase must be declared in the workflow's Transitions table; current → target must be a declared edge; current must not be terminal.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Workflow type identifier */
+                    type: string;
+                    /** @description Entity ID */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            /** @description Target phase + optional operator note for the audit trail */
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["TransitionRequest"];
+                };
+            };
+            responses: {
+                /** @description Transition applied */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": Record<string, never>;
+                    };
+                };
+                /** @description Invalid body OR target phase undeclared OR edge undeclared OR current phase terminal */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Workflow or entity not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Method not allowed (POST only) */
+                405: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Authority revision mismatch */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Request body exceeds max_body_bytes */
+                413: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Mutation service unavailable or commit outcome unknown; inspect authoritative state before deciding whether another mutation is safe */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         ActivityEvent: {
-            /** Format: byte */
-            data?: string;
+            data?: {
+                channel_type?: string;
+                error?: string;
+                iterations?: number;
+                loop_id: string;
+                max_iterations?: number;
+                outcome?: string;
+                parent_loop_id?: string;
+                pending_approval?: {
+                    arguments?: {
+                        [key: string]: unknown;
+                    };
+                    call_id: string;
+                    reason?: string;
+                    /** Format: date-time */
+                    requested_at: string;
+                    tool_name: string;
+                    trace_id?: string;
+                } | null;
+                prompt?: string;
+                result?: string;
+                role?: string;
+                run_entity_id?: string;
+                run_id?: string;
+                state?: string;
+                task_id?: string;
+                tokens_in?: number;
+                tokens_out?: number;
+                user_id?: string;
+            } | null;
             loop_id: string;
             /** Format: date-time */
             timestamp: string;
             type: string;
+        };
+        ApprovalAcceptResponse: {
+            accepted: boolean;
+            decision: string;
+            loop_id: string;
+            message?: string;
+            timestamp: string;
+        };
+        ApprovalRequest: {
+            decision: string;
+            modified_arguments?: {
+                [key: string]: unknown;
+            };
+            reason?: string;
+            user_id?: string;
         };
         ComponentType: {
             /** @description Component category */
@@ -2049,7 +2584,7 @@ export interface components {
             /** @description Technical protocol (udp, tcp, etc.) */
             protocol?: string;
             /** @description Component configuration schema */
-            schema?: components["schemas"]["a2a-adapter.v1"] | components["schemas"]["agentic-dispatch.v1"] | components["schemas"]["agentic-governance.v1"] | components["schemas"]["agentic-loop.v1"] | components["schemas"]["agentic-model.v1"] | components["schemas"]["agentic-tools.v1"] | components["schemas"]["directory-bridge.v1"] | components["schemas"]["file.v1"] | components["schemas"]["file_input.v1"] | components["schemas"]["github_webhook.v1"] | components["schemas"]["graph-clustering.v1"] | components["schemas"]["graph-embedding.v1"] | components["schemas"]["graph-gateway.v1"] | components["schemas"]["graph-index-spatial.v1"] | components["schemas"]["graph-index-temporal.v1"] | components["schemas"]["graph-index.v1"] | components["schemas"]["graph-ingest.v1"] | components["schemas"]["graph-query.v1"] | components["schemas"]["http.v1"] | components["schemas"]["httppost.v1"] | components["schemas"]["json_filter.v1"] | components["schemas"]["json_generic.v1"] | components["schemas"]["json_map.v1"] | components["schemas"]["oasf-generator.v1"] | components["schemas"]["objectstore.v1"] | components["schemas"]["otel-exporter.v1"] | components["schemas"]["rule-processor.v1"] | components["schemas"]["slim-bridge.v1"] | components["schemas"]["udp.v1"] | components["schemas"]["websocket.v1"] | components["schemas"]["websocket_input.v1"];
+            schema?: components["schemas"]["agentic-dispatch.v1"] | components["schemas"]["agentic-governance.v1"] | components["schemas"]["agentic-loop.v1"] | components["schemas"]["agentic-model.v1"] | components["schemas"]["agentic-tools.v1"] | components["schemas"]["file.v1"] | components["schemas"]["file_input.v1"] | components["schemas"]["gated-dag.v1"] | components["schemas"]["graph-clustering.v1"] | components["schemas"]["graph-embedding.v1"] | components["schemas"]["graph-gateway.v1"] | components["schemas"]["graph-index-spatial.v1"] | components["schemas"]["graph-index-temporal.v1"] | components["schemas"]["graph-index.v1"] | components["schemas"]["graph-ingest.v1"] | components["schemas"]["graph-query.v1"] | components["schemas"]["http.v1"] | components["schemas"]["httppost.v1"] | components["schemas"]["json_filter.v1"] | components["schemas"]["json_generic.v1"] | components["schemas"]["json_map.v1"] | components["schemas"]["lifecycle-gateway.v1"] | components["schemas"]["objectstore.v1"] | components["schemas"]["rule-processor.v1"] | components["schemas"]["udp.v1"] | components["schemas"]["websocket.v1"] | components["schemas"]["websocket_input.v1"];
             /** @description Component type (input/processor/output/storage) */
             type: string;
             /** @description Component version */
@@ -2108,10 +2643,12 @@ export interface components {
             channel_id?: string;
             channel_type?: string;
             content: string;
+            in_reply_to?: string;
             metadata?: {
                 [key: string]: string;
             };
             reply_to?: string;
+            run_id?: string;
             user_id?: string;
         };
         HTTPMessageResponse: {
@@ -2130,6 +2667,36 @@ export interface components {
             message: string;
             source: string;
         };
+        Loop: {
+            channel_type?: string;
+            error?: string;
+            iterations?: number;
+            loop_id: string;
+            max_iterations?: number;
+            outcome?: string;
+            parent_loop_id?: string;
+            pending_approval?: {
+                arguments?: {
+                    [key: string]: unknown;
+                };
+                call_id: string;
+                reason?: string;
+                /** Format: date-time */
+                requested_at: string;
+                tool_name: string;
+                trace_id?: string;
+            } | null;
+            prompt?: string;
+            result?: string;
+            role?: string;
+            run_entity_id?: string;
+            run_id?: string;
+            state?: string;
+            task_id?: string;
+            tokens_in?: number;
+            tokens_out?: number;
+            user_id?: string;
+        };
         LoopInfo: {
             channel_id: string;
             channel_type: string;
@@ -2146,7 +2713,19 @@ export interface components {
                 [key: string]: unknown;
             };
             outcome?: string;
+            pending_approval?: {
+                arguments?: {
+                    [key: string]: unknown;
+                };
+                call_id: string;
+                reason?: string;
+                /** Format: date-time */
+                requested_at: string;
+                tool_name: string;
+                trace_id?: string;
+            } | null;
             result?: string;
+            role?: string;
             state: string;
             task_id: string;
             user_id: string;
@@ -2263,6 +2842,9 @@ export interface components {
             signal: string;
             timestamp: string;
         };
+        StatePatchRequest: {
+            [key: string]: unknown;
+        };
         StatsResponse: {
             applied: number;
             human_approved: number;
@@ -2328,215 +2910,9 @@ export interface components {
             message_types?: string[];
             sources?: string[];
         };
-        Trajectory: {
-            duration: number;
-            end_time?: string | null;
-            loop_id: string;
-            outcome?: string;
-            /** Format: date-time */
-            start_time: string;
-            steps: {
-                capability?: string;
-                duration: number;
-                error_category?: string;
-                error_message?: string;
-                messages?: {
-                    content?: string;
-                    is_error?: boolean;
-                    name?: string;
-                    reasoning_content?: string;
-                    role: string;
-                    tool_call_id?: string;
-                    tool_calls?: {
-                        arguments?: {
-                            [key: string]: unknown;
-                        };
-                        id: string;
-                        loop_id?: string;
-                        metadata?: {
-                            [key: string]: unknown;
-                        };
-                        name: string;
-                        trace_id?: string;
-                    }[];
-                }[];
-                model?: string;
-                prompt?: string;
-                provider?: string;
-                request_id?: string;
-                response?: string;
-                retry_count?: number;
-                step_type: string;
-                /** Format: date-time */
-                timestamp: string;
-                tokens_in?: number;
-                tokens_out?: number;
-                tool_arguments?: {
-                    [key: string]: unknown;
-                };
-                tool_calls?: {
-                    arguments?: {
-                        [key: string]: unknown;
-                    };
-                    id: string;
-                    loop_id?: string;
-                    metadata?: {
-                        [key: string]: unknown;
-                    };
-                    name: string;
-                    trace_id?: string;
-                }[];
-                tool_name?: string;
-                tool_result?: string;
-                tool_status?: string;
-                utilization?: number;
-            }[];
-            total_tokens_in: number;
-            total_tokens_out: number;
-        };
-        TrajectoryListItem: {
-            duration: number;
-            end_time?: string | null;
-            iterations: number;
-            loop_id: string;
-            metadata?: {
-                [key: string]: unknown;
-            };
-            model: string;
-            outcome?: string;
-            role: string;
-            /** Format: date-time */
-            start_time: string;
-            task_id: string;
-            total_tokens_in: number;
-            total_tokens_out: number;
-            workflow_slug?: string;
-            workflow_step?: string;
-        };
-        TrajectoryListResponse: {
-            total: number;
-            trajectories: {
-                duration: number;
-                end_time?: string | null;
-                iterations: number;
-                loop_id: string;
-                metadata?: {
-                    [key: string]: unknown;
-                };
-                model: string;
-                outcome?: string;
-                role: string;
-                /** Format: date-time */
-                start_time: string;
-                task_id: string;
-                total_tokens_in: number;
-                total_tokens_out: number;
-                workflow_slug?: string;
-                workflow_step?: string;
-            }[];
-        };
-        TrajectoryStep: {
-            capability?: string;
-            duration: number;
-            error_category?: string;
-            error_message?: string;
-            messages?: {
-                content?: string;
-                is_error?: boolean;
-                name?: string;
-                reasoning_content?: string;
-                role: string;
-                tool_call_id?: string;
-                tool_calls?: {
-                    arguments?: {
-                        [key: string]: unknown;
-                    };
-                    id: string;
-                    loop_id?: string;
-                    metadata?: {
-                        [key: string]: unknown;
-                    };
-                    name: string;
-                    trace_id?: string;
-                }[];
-            }[];
-            model?: string;
-            prompt?: string;
-            provider?: string;
-            request_id?: string;
-            response?: string;
-            retry_count?: number;
-            step_type: string;
-            /** Format: date-time */
-            timestamp: string;
-            tokens_in?: number;
-            tokens_out?: number;
-            tool_arguments?: {
-                [key: string]: unknown;
-            };
-            tool_calls?: {
-                arguments?: {
-                    [key: string]: unknown;
-                };
-                id: string;
-                loop_id?: string;
-                metadata?: {
-                    [key: string]: unknown;
-                };
-                name: string;
-                trace_id?: string;
-            }[];
-            tool_name?: string;
-            tool_result?: string;
-            tool_status?: string;
-            utilization?: number;
-        };
-        /**
-         * a2a-adapter Configuration
-         * @description Receives A2A task requests from external agents
-         */
-        "a2a-adapter.v1": {
-            /**
-             * @description Path for agent card endpoint
-             * @default /.well-known/agent.json
-             */
-            agent_card_path: string;
-            /** @description Suffix for consumer names */
-            consumer_name_suffix?: string;
-            /**
-             * @description Delete consumers on Stop
-             * @default false
-             */
-            delete_consumer_on_stop: boolean;
-            /**
-             * @description HTTP listen address
-             * @default :8080
-             */
-            listen_address: string;
-            /**
-             * @description Maximum concurrent tasks
-             * @default 10
-             */
-            max_concurrent_tasks: number;
-            /**
-             * @description OASF records KV bucket
-             * @default OASF_RECORDS
-             */
-            oasf_bucket: string;
-            /** @description Port configuration */
-            ports?: string;
-            /**
-             * @description Request processing timeout
-             * @default 30s
-             */
-            request_timeout: string;
-            /** @description SLIM group for A2A */
-            slim_group_id?: string;
-            /**
-             * @description A2A transport type
-             * @default http
-             */
-            transport: string;
+        TransitionRequest: {
+            note?: string;
+            phase: string;
         };
         /**
          * agentic-dispatch Configuration
@@ -2555,11 +2931,18 @@ export interface components {
              * @default general
              */
             default_role: string;
+            /** @description Tool names granted to initial user-message tasks (resolved at dispatch; nil/empty falls back to global discovery) */
+            default_tools?: string[];
             /**
              * @description Delete durable consumers on Stop (use for tests only)
              * @default false
              */
             delete_consumer_on_stop: boolean;
+            /**
+             * @description Enable LLM-assisted intent classification for ambiguous messages
+             * @default false
+             */
+            enable_intent_classification: boolean;
             /** @description Permission configuration */
             permissions?: {
                 /** @description approve */
@@ -2588,10 +2971,37 @@ export interface components {
         "agentic-governance.v1": {
             /** @description Consumer name suffix for uniqueness */
             consumer_name_suffix?: string;
+            /**
+             * @description Enable pre-execution governance filtering for tool calls
+             * @default false
+             */
+            enable_tool_governance: boolean;
             /** @description Filter chain configuration */
             filter_chain?: {
                 /** @description Ordered list of filters to apply */
                 filters?: {
+                    /** @description Embedding classifier configuration (ADR-043 Phase 2) */
+                    classifier_config?: {
+                        /** @description Corpus files to load */
+                        corpus_sources?: {
+                            /** @description Tag identifying this corpus */
+                            domain?: string;
+                            /** @description JSONL file path */
+                            path?: string;
+                            /** @description Corpus revision */
+                            version?: string;
+                        }[];
+                        /**
+                         * @description Emit verdict but never block (calibration mode)
+                         * @default true
+                         */
+                        shadow_mode: boolean;
+                        /**
+                         * @description Cosine-similarity floor for a positive match (0.0-1.0)
+                         * @default 0.7
+                         */
+                        threshold: number;
+                    };
                     /** @description Content filter configuration */
                     content_config?: {
                         /**
@@ -2662,7 +3072,7 @@ export interface components {
                             severity: string;
                         }[];
                     };
-                    /** @description Filter name (pii_redaction injection_detection content_moderation rate_limiting) */
+                    /** @description Filter name (pii_redaction injection_detection injection_classifier content_moderation rate_limiting tool_call_governance) */
                     name?: string;
                     /** @description PII filter configuration */
                     pii_config?: {
@@ -2757,6 +3167,13 @@ export interface components {
                             type: string;
                         };
                     };
+                    /** @description Tool call governance filter configuration */
+                    tool_call_config?: {
+                        /** @description Substrings appended to the default bash command blocklist */
+                        blocked_command_patterns?: string[];
+                        /** @description Substrings appended to the default http_request URL blocklist */
+                        blocked_url_patterns?: string[];
+                    };
                 }[];
                 /**
                  * @description Violation handling policy (fail_fast continue log_only)
@@ -2802,16 +3219,8 @@ export interface components {
          * @description Orchestrates agentic loops with tool calls, state management, and trajectory tracking
          */
         "agentic-loop.v1": {
-            /**
-             * @description Enable Boid-style agent coordination (position tracking and steering signals)
-             * @default false
-             */
-            boid_enabled: boolean;
-            /**
-             * @description TTL for Boid steering signals before expiration (e.g. 30s or 1m)
-             * @default 30s
-             */
-            boid_signal_ttl: string;
+            /** @description Auto-reject pending approvals after this duration (e.g. 5m or 1h). Empty means wait indefinitely */
+            approval_timeout?: string;
             /** @description JetStream consumer tuning for long-running ports (agent.task/agent.response/tool.result) */
             consumer?: {
                 /**
@@ -2832,11 +3241,6 @@ export interface components {
             };
             /** @description Suffix for consumer names */
             consumer_name_suffix?: string;
-            /**
-             * @description NATS ObjectStore bucket for trajectory step content (tool results and model responses)
-             * @default AGENT_CONTENT
-             */
-            content_bucket: string;
             /** @description Context window management. Model limits are resolved from the model registry */
             context?: {
                 /** @description Utilization threshold (0.01-1.0) that triggers context compaction */
@@ -2874,30 +3278,43 @@ export interface components {
             /** @description Port configuration for inputs and outputs */
             ports?: string;
             /**
-             * @description NATS KV bucket name for boid agent positions
-             * @default AGENT_POSITIONS
-             */
-            positions_bucket: string;
-            /**
              * @description JetStream stream name
              * @default AGENT
              */
             stream_name: string;
             /**
+             * @description Synthesize decide(needs_clarification) when a loop completes without a terminal tool call (#133). Belt-and-suspenders recovery for cheap-model substrates where models occasionally return text-only at completion despite persona prose
+             * @default false
+             */
+            synthesize_terminal_on_completion: boolean;
+            /**
              * @description Timeout duration for loop execution (e.g. 120s or 5m)
              * @default 120s
              */
             timeout: string;
+            /** @description Subject-mode tool-call governance (ADR-039). Default mode=disabled is no-op (no governance gate) */
+            tool_call_governance?: {
+                /**
+                 * @description Governance mode (disabled|audit|enforce). Default disabled means no governance gate
+                 * @default disabled
+                 */
+                mode: string;
+                /**
+                 * @description Per-call verdict wait window in enforce mode (e.g. 500ms or 2s). Default 1s
+                 * @default 1s
+                 */
+                timeout: string;
+            };
             /**
-             * @description TTL for trajectory cache (e.g. 4h or 30m). Trajectories older than this are only available via graph queries
-             * @default 4h
+             * @description Maximum bytes for tool result content before truncation. 0 means no limit
+             * @default 32768
              */
-            trajectory_cache_ttl: string;
+            tool_result_max_bytes: number;
             /**
-             * @description Trajectory detail level: summary (default) or full
-             * @default summary
+             * @description Logical registered storage instance for full trajectory evidence
+             * @default objectstore
              */
-            trajectory_detail: string;
+            trajectory_evidence_storage_instance: string;
         };
         /**
          * agentic-model Configuration
@@ -2948,13 +3365,8 @@ export interface components {
                 rate_limit_delay: string;
             };
             /**
-             * @description JetStream stream name for agentic messages
-             * @default AGENT
-             */
-            stream_name: string;
-            /**
-             * @description Request timeout
-             * @default 120s
+             * @description Per-request LLM call timeout. Sized 10s below the agentic-model JetStream consumer AckWait (120s) so the LLM context.Done propagates and the call closes cleanly before NATS would otherwise redeliver. Operators raising this past ~115s should also raise the consumer AckWait in lockstep.
+             * @default 110s
              */
             timeout: string;
         };
@@ -2965,6 +3377,8 @@ export interface components {
         "agentic-tools.v1": {
             /** @description List of allowed tools (nil/empty allows all) */
             allowed_tools?: string[];
+            /** @description Tool names requiring human approval before execution */
+            approval_required?: string[];
             /** @description Suffix appended to consumer names for uniqueness */
             consumer_name_suffix?: string;
             /**
@@ -2972,8 +3386,20 @@ export interface components {
              * @default false
              */
             delete_consumer_on_stop: boolean;
+            /**
+             * @description Enable tool category filtering for role-based access
+             * @default false
+             */
+            enable_categories: boolean;
+            /**
+             * @description NATS KV bucket name holding agent loop state (for read_loop_result)
+             * @default AGENT_LOOPS
+             */
+            loops_bucket: string;
             /** @description Port configuration */
             ports?: string;
+            /** @description Decide-action names barred for every coordinator task (front-door and rule-spawned) — composes with and takes precedence over per-task action_allowlist; vocabulary-agnostic run/deployment clarification policy; empty means permissive default */
+            restricted_decide_actions?: string[];
             /**
              * @description JetStream stream name for agentic messages
              * @default AGENT
@@ -2984,53 +3410,8 @@ export interface components {
              * @default 60s
              */
             timeout: string;
-        };
-        /**
-         * directory-bridge Configuration
-         * @description Registers agents with AGNTCY directories using OASF records
-         */
-        "directory-bridge.v1": {
-            /** @description Suffix for consumer names */
-            consumer_name_suffix?: string;
-            /**
-             * @description Delete consumers on Stop
-             * @default false
-             */
-            delete_consumer_on_stop: boolean;
-            /** @description AGNTCY directory service URL */
-            directory_url?: string;
-            /**
-             * @description Heartbeat interval
-             * @default 30s
-             */
-            heartbeat_interval: string;
-            /**
-             * @description Identity provider type
-             * @default local
-             */
-            identity_provider: string;
-            /**
-             * @description KV bucket for OASF records
-             * @default OASF_RECORDS
-             */
-            oasf_kv_bucket: string;
-            /** @description Port configuration */
-            ports?: string;
-            /**
-             * @description Registration time-to-live
-             * @default 5m
-             */
-            registration_ttl: string;
-            /**
-             * @description Number of registration retries
-             * @default 3
-             */
-            retry_count: number;
-            /**
-             * @description Initial retry delay
-             * @default 1s
-             */
-            retry_delay: string;
+            /** @description Per-tool retry policy keyed by tool name (opt-in; tools without an entry do not retry) */
+            tool_retries?: Record<string, never>;
         };
         /**
          * file Configuration
@@ -3072,32 +3453,124 @@ export interface components {
             ports?: string;
         };
         /**
-         * github_webhook Configuration
-         * @description GitHub webhook receiver for issue and PR events
+         * gated-dag Configuration
+         * @description Gated-DAG dispatch executor (ADR-046 Phase 2): dispatches DAG units in dependency order with restart recovery, failure isolation, and stall detection.
          */
-        "github_webhook.v1": {
-            /** @description GitHub event types to accept (issues;pull_request;pull_request_review;issue_comment) */
-            event_filter?: string[];
+        "gated-dag.v1": {
             /**
-             * @description HTTP port for webhook receiver
-             * @default 8090
+             * @description Period of the unconditional re-eval tick that closes the missed-watch-event hole and surfaces stalls.
+             * @default 30s
              */
-            http_port: number;
+            backstop_interval: string;
             /**
-             * @description Webhook endpoint path
-             * @default /github/webhook
+             * @description Triple predicate carrying the durable in-flight claim (the dedup record committed before dispatch).
+             * @default gateddag.unit.claim
              */
-            path: string;
-            /** @description Port configuration */
-            ports?: string;
-            /** @description Repositories to process (owner/repo format) */
-            repo_allowlist?: string[];
+            claim_predicate: string;
+            /**
+             * @description Triple predicate marking a unit complete.
+             * @default gateddag.unit.completed
+             */
+            completed_predicate: string;
+            /**
+             * @description Triple predicate carrying a unit's prerequisite unit IDs (multi-valued; one triple per edge).
+             * @default gateddag.unit.depends-on
+             */
+            depends_on_predicate: string;
+            /**
+             * @description Triple predicate marking a unit reset/dirtied (re-derives Ready over any stale terminal marker).
+             * @default gateddag.unit.dirtied
+             */
+            dirtied_predicate: string;
+            /**
+             * @description Server-side duplicate-detection window (Nats-Msg-Id=unitID). Must be >= backstop_interval; makes the claim-rollback safe against an ack-timeout-after-persist (ADR-070 B1).
+             * @default 2m
+             */
+            dispatch_dedupe_window: string;
+            /**
+             * @description JetStream stream the executor ensures at Start and publishes dispatches into (ADR-070). Use a distinct name per distinct dispatch_subject.
+             * @default GATEDDAG_DISPATCH
+             */
+            dispatch_stream: string;
+            /**
+             * @description Behavior at the size ceiling: 'new' refuses the newest dispatch (default; the executor rolls the claim back and the unit re-selects), 'old' evicts the oldest (which silently strands whichever unit's dispatch is dropped). Only safe as 'new' when dispatch_stream_retention deletes on ack; 'limits' + 'new' is rejected.
+             * @default new
+             * @enum {string}
+             */
+            dispatch_stream_discard: "new" | "old";
+            /**
+             * @description Retention window for the dispatch stream; an unconsumed dispatch older than this is dropped.
+             * @default 24h
+             */
+            dispatch_stream_max_age: string;
+            /**
+             * @description Size ceiling for the dispatch stream, in bytes. Must be > 0: 0 and -1 both mean unlimited to JetStream, and an unbounded work stream exhausts the account's whole storage tier rather than only itself.
+             * @default 268435456
+             */
+            dispatch_stream_max_bytes: number;
+            /**
+             * @description Retention policy for the dispatch stream: 'workqueue' (default) deletes each dispatch once it is acked, so dispatch_stream_max_bytes is reached by genuine backlog; 'limits' retains processed dispatches until max_age, so the ceiling fills with acked history. Choose 'limits' only when several independent consumers read the same dispatch subject, and pair it with discard 'old'. Cannot be changed on an existing stream.
+             * @default workqueue
+             * @enum {string}
+             */
+            dispatch_stream_retention: "workqueue" | "limits";
+            /** @description Subject published with the unit entity ID reference when a unit is dispatchable. The consumer wires its handler here. Required. */
+            dispatch_subject: string;
+            /**
+             * @description Triple predicate marking a unit failed.
+             * @default gateddag.unit.failed
+             */
+            failed_predicate: string;
+            /**
+             * @description How a failed unit affects new dispatch.
+             * @default continue_others
+             * @enum {string}
+             */
+            failure_policy: "continue_others" | "stop_on_first_failure";
+            /** @description Optional canonical six-part literal entity ID, at most 256 bytes, of the FanOut lifecycle instance to own: created in 'dispatching' on Start, auto-transitioned to 'completed' when every unit is Done. Empty or omitted means no instance lifecycle is owned. */
+            fan_out_instance_id?: string;
+            /**
+             * @description lifecycle.Workflow.Name watched for re-eval triggers. Defaults to the framework FanOut workflow (self-registered).
+             * @default gateddag-fanout
+             */
+            fan_out_workflow: string;
+            /**
+             * @description Cap on the authoritative whole-set read; a larger fan-out logs a truncation warning.
+             * @default 1000
+             */
+            max_units: number;
+            /**
+             * @description Timeout bounding each authoritative graph.query.prefix read.
+             * @default 30s
+             */
+            query_timeout: string;
+            /**
+             * @description Dispatch submit-queue bound.
+             * @default 256
+             */
+            queue_size: number;
+            /** @description Optional subject for an edge-triggered StallEvent on the 0→non-zero stall transition (the gated_dag_stalled_units gauge + WARN log are always emitted). */
+            stall_subject?: string;
+            /**
+             * @description Age past which a claimed non-terminal unit surfaces as a stall alert instead of counting as in-flight (ADR-070). Set above max unit runtime; '0' disables. Alert-only.
+             * @default 0
+             */
+            stranded_after: string;
+            /** @description Required canonical literal entity-ID query prefix with one to six dot-separated tokens and at most 256 bytes; wildcards are not accepted. This is the graph.query.prefix scope read authoritatively each evaluation — the blast radius of one fan-out. */
+            unit_entity_prefix: string;
+            /**
+             * @description Bounded dispatch concurrency.
+             * @default 4
+             */
+            workers: number;
         };
         /**
          * graph-clustering Configuration
          * @description Graph community detection and clustering processor
          */
         "graph-clustering.v1": {
+            /** @description Allow detection when graph-index readiness is unknown (standalone only; never during cutover) */
+            allow_ungated_reads?: boolean;
             /** @description Configuration for anomaly detection */
             anomaly_config?: {
                 /** @description core_anomaly */
@@ -3172,8 +3645,6 @@ export interface components {
                 };
                 /** @description storage */
                 storage?: {
-                    /** @description bucket_name */
-                    bucket_name?: string;
                     /** @description cleanup_interval */
                     cleanup_interval?: number;
                     /** @description retention_days */
@@ -3222,20 +3693,32 @@ export interface components {
             enable_anomaly_detection?: boolean;
             /** @description Enable LLM-based community summarization (requires model registry with community_summary capability) */
             enable_llm?: boolean;
-            /** @description Enable structural index computation (k-core and pivot distance) */
-            enable_structural?: boolean;
             /** @description Number of parallel workers for LLM enhancement (default 5) */
             enhancement_workers?: number;
-            /** @description Maximum BFS traversal depth (default 10) */
-            max_hop_distance?: number;
+            /** @description EntityID virtual-edge synthesis for community detection; omit to keep defaults (siblings + system-peers on) */
+            entity_id_edges?: {
+                /** @description Synthesize sibling edges between entities sharing the 5-part type prefix (default true); set false to run detection on explicit topology alone */
+                include_siblings?: boolean;
+                /** @description Synthesize system-peer edges between entities sharing the same system (default true) */
+                include_system_peers?: boolean;
+                /** @description Max sibling neighbors synthesized per entity (default 10) */
+                max_siblings?: number;
+                /** @description Max system-peer neighbors synthesized per entity (default 15) */
+                max_system_peers?: number;
+            };
             /** @description Maximum iterations for LPA algorithm */
             max_iterations?: number;
             /** @description Minimum number of entities to form a community */
             min_community_size?: number;
-            /** @description Number of pivot nodes for distance indexing (default 16) */
-            pivot_count?: number;
             /** @description Port configuration */
             ports?: string;
+            /** @description Semantic co-location virtual-edge synthesis (mutual-kNN); omit to keep OFF (default) */
+            semantic_edges?: {
+                /** @description Enable semantic co-location (mutual-kNN) virtual edges in community detection (default false; enabling also rebalances the structural edge caps so the tier competes) */
+                enable_semantic_edges?: boolean;
+                /** @description Mutual-kNN k — per-direction top-k candidate set size; bounds per-entity semantic degree (starting value 8) */
+                semantic_max_neighbors?: number;
+            };
             /** @description Max attempts to wait for dependencies at startup */
             startup_attempts?: number;
             /** @description Interval between startup attempts in milliseconds */
@@ -3248,12 +3731,12 @@ export interface components {
         "graph-embedding.v1": {
             /** @description Batch size for embedding generation */
             batch_size?: number;
-            /** @description Cache TTL for embeddings (e.g. 15m or 1h) */
-            cache_ttl?: string;
             /** @description Debounce window for entity updates in ms. 0=immediate processing */
             coalesce_ms?: number;
             /** @description Embedder type (bm25 or http). HTTP requires model registry with embedding capability */
             embedder_type?: string;
+            /** @description Max characters of source text embedded per entity; text beyond is truncated at a word boundary. 0 uses a per-embedder default (4000 bm25 / 8000 neural) */
+            max_text_len?: number;
             /** @description Port configuration */
             ports?: string;
             /** @description Max attempts to wait for dependencies at startup */
@@ -3262,6 +3745,8 @@ export interface components {
             startup_interval_ms?: number;
             /** @description Predicate suffixes to extract for embedding (e.g. .source_code .signature). Defaults to common text predicates */
             text_suffixes?: string[];
+            /** @description Number of concurrent embedding worker goroutines */
+            workers?: number;
         };
         /**
          * graph-gateway Configuration
@@ -3280,6 +3765,10 @@ export interface components {
             mcp_path?: string;
             /** @description Port configuration */
             ports?: string;
+            /** @description GRAPH_STATUS producer keys to expose on the read-only readiness surface (empty disables it) */
+            readiness_keys?: string[];
+            /** @description Path for the read-only readiness surface */
+            readiness_path?: string;
             /** @description Create a standalone HTTP server (for tests/development). When false ServiceManager provides HTTP serving */
             standalone_server?: boolean;
         };
@@ -3349,6 +3838,11 @@ export interface components {
             enable_hierarchy: boolean;
             /** @description Enable sibling edges between same-type entities (default true when hierarchy enabled) */
             enable_type_siblings?: boolean;
+            /**
+             * @description Keyed-concurrent ingest lane count (same entity ID → one lane → ordered; 1 = serial)
+             * @default 8
+             */
+            ingest_lanes: number;
             /** @description Port configuration */
             ports?: string;
         };
@@ -3449,56 +3943,20 @@ export interface components {
             remove_fields?: string[];
         };
         /**
-         * oasf-generator Configuration
-         * @description Generates OASF records from agent entity capabilities for AGNTCY directory registration
+         * lifecycle-gateway Configuration
+         * @description Operator HTTP + WebSocket gateway over pkg/lifecycle.Manager (ADR-047)
          */
-        "oasf-generator.v1": {
-            /** @description Suffix for consumer names */
-            consumer_name_suffix?: string;
-            /**
-             * @description Default agent version for OASF records
-             * @default 1.0.0
-             */
-            default_agent_version: string;
-            /** @description Default authors for OASF records */
-            default_authors?: string[];
-            /**
-             * @description Delete consumers on Stop
-             * @default false
-             */
-            delete_consumer_on_stop: boolean;
-            /**
-             * @description KV bucket for entity states
-             * @default ENTITY_STATES
-             */
-            entity_kv_bucket: string;
-            /**
-             * @description Debounce duration for generation
-             * @default 1s
-             */
-            generation_debounce: string;
-            /**
-             * @description Include SemStreams extensions
-             * @default true
-             */
-            include_extensions: boolean;
-            /**
-             * @description KV bucket for OASF records
-             * @default OASF_RECORDS
-             */
-            oasf_kv_bucket: string;
-            /** @description Port configuration */
+        "lifecycle-gateway.v1": {
+            /** @description WebSocket upgrade Origin allowlist as exact-match strings. Empty list permits all origins and logs a Warn at Start; set explicitly to restrict cross-origin upgrades. */
+            allowed_origins?: string[];
+            /** @description Enable WebSocket streaming on GET {prefix}/{type}?stream=true via Manager.Watch. Default true when omitted. Set to false to disable live-update streaming and keep the gateway poll-only. */
+            enable_websocket?: boolean;
+            /** @description Maximum bytes accepted in create / state-patch / transition request bodies (POST lanes). Default 1048576 (1 MiB). Zero or negative means use default. NOTE - no commas: ParseSchemaTag splits this tag on commas and silently drops the whole field on a parse error. */
+            max_body_bytes?: number;
+            /** @description URL path prefix mounted under the parent component prefix (e.g. "workflows" → /lifecycle-gateway/workflows). Default "workflows". Must be non-empty after stripping leading/trailing slashes. */
+            path_prefix?: string;
+            /** @description Component port configuration. The canonical required graph mutation request output is supplied when omitted. */
             ports?: string;
-            /**
-             * @description JetStream stream name for entity events
-             * @default ENTITY
-             */
-            stream_name: string;
-            /**
-             * @description Key pattern to watch for entity changes
-             * @default >
-             */
-            watch_pattern: string;
         };
         /**
          * objectstore Configuration
@@ -3512,85 +3970,6 @@ export interface components {
             bucket_name: string;
             /** @description Port configuration for inputs and outputs */
             ports?: string;
-        };
-        /**
-         * otel-exporter Configuration
-         * @description Exports agent telemetry to OpenTelemetry collectors
-         */
-        "otel-exporter.v1": {
-            /**
-             * @description Batch export timeout
-             * @default 5s
-             */
-            batch_timeout: string;
-            /** @description Suffix for consumer names */
-            consumer_name_suffix?: string;
-            /**
-             * @description Delete consumers on Stop
-             * @default false
-             */
-            delete_consumer_on_stop: boolean;
-            /**
-             * @description OTEL collector endpoint
-             * @default localhost:4317
-             */
-            endpoint: string;
-            /**
-             * @description Enable log export
-             * @default false
-             */
-            export_logs: boolean;
-            /**
-             * @description Enable metric export
-             * @default true
-             */
-            export_metrics: boolean;
-            /**
-             * @description Export operation timeout
-             * @default 30s
-             */
-            export_timeout: string;
-            /**
-             * @description Enable trace export
-             * @default true
-             */
-            export_traces: boolean;
-            /** @description Additional export headers */
-            headers?: Record<string, never>;
-            /**
-             * @description Maximum batch size
-             * @default 512
-             */
-            max_batch_size: number;
-            /**
-             * @description Max export batch size
-             * @default 512
-             */
-            max_export_batch_size: number;
-            /** @description Port configuration */
-            ports?: string;
-            /**
-             * @description Export protocol
-             * @default grpc
-             */
-            protocol: string;
-            /** @description Resource attributes */
-            resource_attributes?: Record<string, never>;
-            /**
-             * @description Trace sampling rate
-             * @default 1
-             */
-            sampling_rate: number;
-            /**
-             * @description Service name for traces
-             * @default semstreams
-             */
-            service_name: string;
-            /**
-             * @description Service version
-             * @default 1.0.0
-             */
-            service_version: string;
         };
         /**
          * rule-processor Configuration
@@ -3613,16 +3992,115 @@ export interface components {
              */
             debounce_delay_ms: number;
             /**
-             * @description Enable graph entity creation from rules
-             * @default true
+             * @description Enable graph entity creation from rules; every rule processor requires an explicit pack_id
+             * @default false
              */
             enable_graph_integration: boolean;
-            /** @description Map of bucket names to watch patterns for multi-bucket observability */
-            entity_watch_buckets?: Record<string, never>;
-            /** @description NATS KV patterns to watch for entity changes (e.g. 'telemetry.robotics.>') */
-            entity_watch_patterns?: string[];
+            /** @description ENTITY_STATES watch patterns for the rule processor's typed EntityState evaluator. */
+            entity_watch_buckets?: {
+                /** @description Exact six-position entity ID patterns. */
+                ENTITY_STATES?: string[];
+            };
             /** @description Inline rule definitions (alternative to files) */
             inline_rules?: {
+                /** @description actions */
+                actions?: {
+                    /** @description action_allowlist */
+                    action_allowlist?: string[];
+                    /** @description bucket */
+                    bucket?: string;
+                    /** @description filesystem_policy */
+                    filesystem_policy?: string;
+                    /** @description for_each */
+                    for_each?: string;
+                    /** @description for_each_var */
+                    for_each_var?: string;
+                    /** @description id */
+                    id?: string;
+                    /** @description key */
+                    key?: string;
+                    /** @description Iteration budget for the SPAWNED LOOP (agentic-loop's per-iteration cap on the agent this action spawns) — distinct from the action-level firing cap 'max_iterations' above, which bounds how many times this action itself fires. Supports variable substitution (literal or $entity.triple.* reference); must resolve to a positive integer or the action fails. */
+                    loop_max_iterations?: string;
+                    /** @description max_iterations */
+                    max_iterations?: number;
+                    /** @description merge */
+                    merge?: boolean;
+                    /** @description model */
+                    model?: string;
+                    /** @description object */
+                    object?: string;
+                    /** @description payload */
+                    payload?: Record<string, never>;
+                    /** @description phase */
+                    phase?: string;
+                    /** @description predicate */
+                    predicate?: string;
+                    /** @description projection_contract */
+                    projection_contract?: string;
+                    /** @description projection_group */
+                    projection_group?: string;
+                    /** @description prompt */
+                    prompt?: string;
+                    /** @description properties */
+                    properties?: Record<string, never>;
+                    /** @description reason */
+                    reason?: string;
+                    /** @description related_loops */
+                    related_loops?: Record<string, never>;
+                    /** @description response_format */
+                    response_format?: {
+                        /** @description name */
+                        name?: string;
+                        /** @description schema */
+                        schema?: Record<string, never>;
+                        /** @description strict */
+                        strict?: boolean;
+                        /** @description type */
+                        type?: string;
+                    };
+                    /** @description role */
+                    role?: string;
+                    /** @description run_scope */
+                    run_scope?: string;
+                    /** @description scratch_paths */
+                    scratch_paths?: string[];
+                    /** @description set */
+                    set?: Record<string, never>;
+                    /** @description subject */
+                    subject?: string;
+                    /** @description tool_choice */
+                    tool_choice?: {
+                        /** @description function_name */
+                        function_name?: string;
+                        /** @description mode */
+                        mode?: string;
+                    };
+                    /** @description tools */
+                    tools?: string[];
+                    /** @description ttl */
+                    ttl?: string;
+                    /** @description type */
+                    type?: string;
+                    /** @description when */
+                    when?: {
+                        /** @description field */
+                        field?: string;
+                        /** @description from */
+                        from?: string;
+                        /** @description operator */
+                        operator?: string;
+                        /** @description required */
+                        required?: boolean;
+                        /** @description value */
+                        value?: string;
+                    }[];
+                    /** @description workflow */
+                    workflow?: string;
+                    /** @description workflow_slug */
+                    workflow_slug?: string;
+                    /** @description workflow_step */
+                    workflow_step?: string;
+                }[];
                 /** @description conditions */
                 conditions?: {
                     /** @description field */
@@ -3644,11 +4122,13 @@ export interface components {
                 enabled?: boolean;
                 /** @description entity */
                 entity?: {
-                    /** @description pattern */
-                    pattern?: string;
-                    /** @description watch_buckets */
-                    watch_buckets?: string[];
+                    /** @description Exact six-position entity ID pattern; each position is a canonical literal segment or *. */
+                    pattern: string;
+                    /** @description Typed state buckets consumed by this EntityState evaluator; only ENTITY_STATES is supported. */
+                    watch_buckets?: "ENTITY_STATES"[];
                 };
+                /** @description fire_every_n_events */
+                fire_every_n_events?: number;
                 /** @description id */
                 id?: string;
                 /** @description logic */
@@ -3661,16 +4141,24 @@ export interface components {
                 name?: string;
                 /** @description on_enter */
                 on_enter?: {
-                    /** @description boid_signal_type */
-                    boid_signal_type?: string;
-                    /** @description boid_strength */
-                    boid_strength?: number;
+                    /** @description action_allowlist */
+                    action_allowlist?: string[];
                     /** @description bucket */
                     bucket?: string;
-                    /** @description context_data */
-                    context_data?: Record<string, never>;
+                    /** @description filesystem_policy */
+                    filesystem_policy?: string;
+                    /** @description for_each */
+                    for_each?: string;
+                    /** @description for_each_var */
+                    for_each_var?: string;
+                    /** @description id */
+                    id?: string;
                     /** @description key */
                     key?: string;
+                    /** @description Iteration budget for the SPAWNED LOOP (agentic-loop's per-iteration cap on the agent this action spawns) — distinct from the action-level firing cap 'max_iterations' above, which bounds how many times this action itself fires. Supports variable substitution (literal or $entity.triple.* reference); must resolve to a positive integer or the action fails. */
+                    loop_max_iterations?: string;
+                    /** @description max_iterations */
+                    max_iterations?: number;
                     /** @description merge */
                     merge?: boolean;
                     /** @description model */
@@ -3679,16 +4167,52 @@ export interface components {
                     object?: string;
                     /** @description payload */
                     payload?: Record<string, never>;
+                    /** @description phase */
+                    phase?: string;
                     /** @description predicate */
                     predicate?: string;
+                    /** @description projection_contract */
+                    projection_contract?: string;
+                    /** @description projection_group */
+                    projection_group?: string;
                     /** @description prompt */
                     prompt?: string;
                     /** @description properties */
                     properties?: Record<string, never>;
+                    /** @description reason */
+                    reason?: string;
+                    /** @description related_loops */
+                    related_loops?: Record<string, never>;
+                    /** @description response_format */
+                    response_format?: {
+                        /** @description name */
+                        name?: string;
+                        /** @description schema */
+                        schema?: Record<string, never>;
+                        /** @description strict */
+                        strict?: boolean;
+                        /** @description type */
+                        type?: string;
+                    };
                     /** @description role */
                     role?: string;
+                    /** @description run_scope */
+                    run_scope?: string;
+                    /** @description scratch_paths */
+                    scratch_paths?: string[];
+                    /** @description set */
+                    set?: Record<string, never>;
                     /** @description subject */
                     subject?: string;
+                    /** @description tool_choice */
+                    tool_choice?: {
+                        /** @description function_name */
+                        function_name?: string;
+                        /** @description mode */
+                        mode?: string;
+                    };
+                    /** @description tools */
+                    tools?: string[];
                     /** @description ttl */
                     ttl?: string;
                     /** @description type */
@@ -3706,8 +4230,8 @@ export interface components {
                         /** @description value */
                         value?: string;
                     }[];
-                    /** @description workflow_id */
-                    workflow_id?: string;
+                    /** @description workflow */
+                    workflow?: string;
                     /** @description workflow_slug */
                     workflow_slug?: string;
                     /** @description workflow_step */
@@ -3715,16 +4239,24 @@ export interface components {
                 }[];
                 /** @description on_exit */
                 on_exit?: {
-                    /** @description boid_signal_type */
-                    boid_signal_type?: string;
-                    /** @description boid_strength */
-                    boid_strength?: number;
+                    /** @description action_allowlist */
+                    action_allowlist?: string[];
                     /** @description bucket */
                     bucket?: string;
-                    /** @description context_data */
-                    context_data?: Record<string, never>;
+                    /** @description filesystem_policy */
+                    filesystem_policy?: string;
+                    /** @description for_each */
+                    for_each?: string;
+                    /** @description for_each_var */
+                    for_each_var?: string;
+                    /** @description id */
+                    id?: string;
                     /** @description key */
                     key?: string;
+                    /** @description Iteration budget for the SPAWNED LOOP (agentic-loop's per-iteration cap on the agent this action spawns) — distinct from the action-level firing cap 'max_iterations' above, which bounds how many times this action itself fires. Supports variable substitution (literal or $entity.triple.* reference); must resolve to a positive integer or the action fails. */
+                    loop_max_iterations?: string;
+                    /** @description max_iterations */
+                    max_iterations?: number;
                     /** @description merge */
                     merge?: boolean;
                     /** @description model */
@@ -3733,16 +4265,52 @@ export interface components {
                     object?: string;
                     /** @description payload */
                     payload?: Record<string, never>;
+                    /** @description phase */
+                    phase?: string;
                     /** @description predicate */
                     predicate?: string;
+                    /** @description projection_contract */
+                    projection_contract?: string;
+                    /** @description projection_group */
+                    projection_group?: string;
                     /** @description prompt */
                     prompt?: string;
                     /** @description properties */
                     properties?: Record<string, never>;
+                    /** @description reason */
+                    reason?: string;
+                    /** @description related_loops */
+                    related_loops?: Record<string, never>;
+                    /** @description response_format */
+                    response_format?: {
+                        /** @description name */
+                        name?: string;
+                        /** @description schema */
+                        schema?: Record<string, never>;
+                        /** @description strict */
+                        strict?: boolean;
+                        /** @description type */
+                        type?: string;
+                    };
                     /** @description role */
                     role?: string;
+                    /** @description run_scope */
+                    run_scope?: string;
+                    /** @description scratch_paths */
+                    scratch_paths?: string[];
+                    /** @description set */
+                    set?: Record<string, never>;
                     /** @description subject */
                     subject?: string;
+                    /** @description tool_choice */
+                    tool_choice?: {
+                        /** @description function_name */
+                        function_name?: string;
+                        /** @description mode */
+                        mode?: string;
+                    };
+                    /** @description tools */
+                    tools?: string[];
                     /** @description ttl */
                     ttl?: string;
                     /** @description type */
@@ -3760,8 +4328,106 @@ export interface components {
                         /** @description value */
                         value?: string;
                     }[];
-                    /** @description workflow_id */
-                    workflow_id?: string;
+                    /** @description workflow */
+                    workflow?: string;
+                    /** @description workflow_slug */
+                    workflow_slug?: string;
+                    /** @description workflow_step */
+                    workflow_step?: string;
+                }[];
+                /** @description on_recovery */
+                on_recovery?: {
+                    /** @description action_allowlist */
+                    action_allowlist?: string[];
+                    /** @description bucket */
+                    bucket?: string;
+                    /** @description filesystem_policy */
+                    filesystem_policy?: string;
+                    /** @description for_each */
+                    for_each?: string;
+                    /** @description for_each_var */
+                    for_each_var?: string;
+                    /** @description id */
+                    id?: string;
+                    /** @description key */
+                    key?: string;
+                    /** @description Iteration budget for the SPAWNED LOOP (agentic-loop's per-iteration cap on the agent this action spawns) — distinct from the action-level firing cap 'max_iterations' above, which bounds how many times this action itself fires. Supports variable substitution (literal or $entity.triple.* reference); must resolve to a positive integer or the action fails. */
+                    loop_max_iterations?: string;
+                    /** @description max_iterations */
+                    max_iterations?: number;
+                    /** @description merge */
+                    merge?: boolean;
+                    /** @description model */
+                    model?: string;
+                    /** @description object */
+                    object?: string;
+                    /** @description payload */
+                    payload?: Record<string, never>;
+                    /** @description phase */
+                    phase?: string;
+                    /** @description predicate */
+                    predicate?: string;
+                    /** @description projection_contract */
+                    projection_contract?: string;
+                    /** @description projection_group */
+                    projection_group?: string;
+                    /** @description prompt */
+                    prompt?: string;
+                    /** @description properties */
+                    properties?: Record<string, never>;
+                    /** @description reason */
+                    reason?: string;
+                    /** @description related_loops */
+                    related_loops?: Record<string, never>;
+                    /** @description response_format */
+                    response_format?: {
+                        /** @description name */
+                        name?: string;
+                        /** @description schema */
+                        schema?: Record<string, never>;
+                        /** @description strict */
+                        strict?: boolean;
+                        /** @description type */
+                        type?: string;
+                    };
+                    /** @description role */
+                    role?: string;
+                    /** @description run_scope */
+                    run_scope?: string;
+                    /** @description scratch_paths */
+                    scratch_paths?: string[];
+                    /** @description set */
+                    set?: Record<string, never>;
+                    /** @description subject */
+                    subject?: string;
+                    /** @description tool_choice */
+                    tool_choice?: {
+                        /** @description function_name */
+                        function_name?: string;
+                        /** @description mode */
+                        mode?: string;
+                    };
+                    /** @description tools */
+                    tools?: string[];
+                    /** @description ttl */
+                    ttl?: string;
+                    /** @description type */
+                    type?: string;
+                    /** @description when */
+                    when?: {
+                        /** @description field */
+                        field?: string;
+                        /** @description from */
+                        from?: string;
+                        /** @description operator */
+                        operator?: string;
+                        /** @description required */
+                        required?: boolean;
+                        /** @description value */
+                        value?: string;
+                    }[];
+                    /** @description workflow */
+                    workflow?: string;
                     /** @description workflow_slug */
                     workflow_slug?: string;
                     /** @description workflow_step */
@@ -3769,20 +4435,32 @@ export interface components {
                 }[];
                 /** @description related_patterns */
                 related_patterns?: string[];
+                /** @description rerun_on_recovery */
+                rerun_on_recovery?: boolean;
+                /** @description schedule */
+                schedule?: string;
                 /** @description type */
                 type?: string;
                 /** @description while_true */
                 while_true?: {
-                    /** @description boid_signal_type */
-                    boid_signal_type?: string;
-                    /** @description boid_strength */
-                    boid_strength?: number;
+                    /** @description action_allowlist */
+                    action_allowlist?: string[];
                     /** @description bucket */
                     bucket?: string;
-                    /** @description context_data */
-                    context_data?: Record<string, never>;
+                    /** @description filesystem_policy */
+                    filesystem_policy?: string;
+                    /** @description for_each */
+                    for_each?: string;
+                    /** @description for_each_var */
+                    for_each_var?: string;
+                    /** @description id */
+                    id?: string;
                     /** @description key */
                     key?: string;
+                    /** @description Iteration budget for the SPAWNED LOOP (agentic-loop's per-iteration cap on the agent this action spawns) — distinct from the action-level firing cap 'max_iterations' above, which bounds how many times this action itself fires. Supports variable substitution (literal or $entity.triple.* reference); must resolve to a positive integer or the action fails. */
+                    loop_max_iterations?: string;
+                    /** @description max_iterations */
+                    max_iterations?: number;
                     /** @description merge */
                     merge?: boolean;
                     /** @description model */
@@ -3791,16 +4469,52 @@ export interface components {
                     object?: string;
                     /** @description payload */
                     payload?: Record<string, never>;
+                    /** @description phase */
+                    phase?: string;
                     /** @description predicate */
                     predicate?: string;
+                    /** @description projection_contract */
+                    projection_contract?: string;
+                    /** @description projection_group */
+                    projection_group?: string;
                     /** @description prompt */
                     prompt?: string;
                     /** @description properties */
                     properties?: Record<string, never>;
+                    /** @description reason */
+                    reason?: string;
+                    /** @description related_loops */
+                    related_loops?: Record<string, never>;
+                    /** @description response_format */
+                    response_format?: {
+                        /** @description name */
+                        name?: string;
+                        /** @description schema */
+                        schema?: Record<string, never>;
+                        /** @description strict */
+                        strict?: boolean;
+                        /** @description type */
+                        type?: string;
+                    };
                     /** @description role */
                     role?: string;
+                    /** @description run_scope */
+                    run_scope?: string;
+                    /** @description scratch_paths */
+                    scratch_paths?: string[];
+                    /** @description set */
+                    set?: Record<string, never>;
                     /** @description subject */
                     subject?: string;
+                    /** @description tool_choice */
+                    tool_choice?: {
+                        /** @description function_name */
+                        function_name?: string;
+                        /** @description mode */
+                        mode?: string;
+                    };
+                    /** @description tools */
+                    tools?: string[];
                     /** @description ttl */
                     ttl?: string;
                     /** @description type */
@@ -3818,16 +4532,40 @@ export interface components {
                         /** @description value */
                         value?: string;
                     }[];
-                    /** @description workflow_id */
-                    workflow_id?: string;
+                    /** @description workflow */
+                    workflow?: string;
                     /** @description workflow_slug */
                     workflow_slug?: string;
                     /** @description workflow_step */
                     workflow_step?: string;
                 }[];
             }[];
-            /** @description Port configuration for inputs (KV watch: ENTITY_STATES PREDICATE_INDEX) and outputs (NATS: control commands) */
+            /** @description Required stable rule-pack projection and graph-event producer identity */
+            pack_id: string;
+            /** @description Port configuration for ENTITY_STATES and message inputs plus action outputs */
             ports?: string;
+            /** @description Optional explicit local projection contract; omit to derive minimal reconcile groups and statically provable entity scope from initial actions. Birth predicates indexing profile and message type are explicit-only */
+            projection_contracts?: {
+                /** @description birth_predicates */
+                birth_predicates?: string[];
+                /** @description entity_pattern */
+                entity_pattern?: string;
+                /** @description groups */
+                groups?: {
+                    /** @description mode */
+                    mode?: string;
+                    /** @description name */
+                    name?: string;
+                    /** @description predicates */
+                    predicates?: string[];
+                }[];
+                /** @description indexing_profile */
+                indexing_profile?: string;
+                /** @description message_type */
+                message_type?: string;
+                /** @description name */
+                name?: string;
+            }[];
             /**
              * @description Dynamic rule definitions (rules.{rule_id} pattern)
              * @default {}
@@ -3840,50 +4578,10 @@ export interface components {
              *     ]
              */
             rules_files: string[];
-        };
-        /**
-         * slim-bridge Configuration
-         * @description Receives messages from SLIM groups using MLS encryption
-         */
-        "slim-bridge.v1": {
-            /** @description Suffix for consumer names */
-            consumer_name_suffix?: string;
-            /**
-             * @description Delete consumers on Stop
-             * @default false
-             */
-            delete_consumer_on_stop: boolean;
-            /** @description SLIM group IDs to join */
-            group_ids?: string[];
-            /**
-             * @description Identity provider type
-             * @default local
-             */
-            identity_provider: string;
-            /**
-             * @description MLS key ratchet interval
-             * @default 1h
-             */
-            key_ratchet_interval: string;
-            /**
-             * @description Maximum reconnection attempts
-             * @default 10
-             */
-            max_reconnect_attempts: number;
-            /**
-             * @description Message buffer size
-             * @default 1000
-             */
-            message_buffer_size: number;
-            /** @description Port configuration */
-            ports?: string;
-            /**
-             * @description Reconnection interval
-             * @default 5s
-             */
-            reconnect_interval: string;
-            /** @description SLIM service endpoint URL */
-            slim_endpoint?: string;
+            /** @description Max attempts to wait for ENTITY_STATES at startup */
+            startup_attempts?: number;
+            /** @description Interval between startup attempts in milliseconds */
+            startup_interval_ms?: number;
         };
         /**
          * udp Configuration
@@ -3902,6 +4600,11 @@ export interface components {
             ack_timeout?: string;
             /** @description Delivery reliability mode */
             delivery_mode?: string;
+            /**
+             * @description Broadcast pre-validated JSON unchanged (producer owns envelope; no timestamp/subject injection)
+             * @default false
+             */
+            passthrough: boolean;
             /** @description Port configuration */
             ports?: string;
         };

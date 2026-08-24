@@ -57,7 +57,7 @@ obsolete validation workflows.
 #### Scenario: Workflow name cannot match the publisher listener
 
 - GIVEN the existing container workflow listens for a completed workflow named `CI`
-- WHEN the workflow contract compares that listener with `Repository CI`
+- WHEN the new workflow is named `Repository CI`
 - THEN the names do not match
 - AND successful `Repository CI` completion cannot start container publication
 

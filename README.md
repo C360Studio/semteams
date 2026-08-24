@@ -44,10 +44,10 @@ graph, the NATS stream wiring — lives upstream in semstreams.
 ### Prereqs
 
 ```bash
-go version          # 1.25+
+go version          # 1.26.3
 docker info         # daemon running
-node --version      # 22+ for UI / Playwright journeys
-task --version      # go install github.com/go-task/task/v3/cmd/task@latest
+node --version      # 22.20.0 for UI / Playwright journeys
+task --version      # go install github.com/go-task/task/v3/cmd/task@v3.51.1
 caddy version       # required only for the live local UI path: task dev:research
 ```
 
@@ -167,20 +167,23 @@ task ui:test:e2e        # Playwright E2E (auto-manages Docker stack)
 task schema:generate    # Regenerate schemas/ + specs/openapi.v3.yaml
 ```
 
-The repository currently has separate Go and path-filtered UI
-workflows. Issue [#254](https://github.com/C360Studio/semteams/issues/254)
-owns proving or replacing that baseline before any check is treated as
-an always-reported required gate or encoded in a main-branch ruleset.
-Until then, run the applicable local gates and inspect every hosted
-workflow result; a green rerun over a known flake is not proof.
+The single `Repository CI` workflow runs on every pull request to
+`main`. Its Go, UI, and Governance jobs feed the always-reported
+`CI Status Check` aggregate. The Governance job strictly validates
+OpenSpec and its queue reporter. Required mock E2E and a main-branch
+ruleset remain future work; workflow presence alone is not branch
+protection.
 
 Before pushing:
 
 ```bash
 task lint
-go test -race ./...
-task schema:generate && git diff schemas/ specs/   # must be clean
-go test ./test/contract/...
+task test:race
+task test:integration
+go build ./...
+task schema:generate && task schema:check-changes
+task openspec:validate
+task openspec:queue-test
 ```
 
 See [CLAUDE.md](CLAUDE.md) for the deeper project context — config

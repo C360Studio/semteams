@@ -1,148 +1,125 @@
-name: CI
+name: Repository CI
 
 on:
   push:
-    branches: [main, develop]
-    paths-ignore:
-      - "ui/**"
-      - ".github/workflows/ui.yml"
+    branches: [main]
   pull_request:
-    branches: [main, develop]
-    paths-ignore:
-      - "ui/**"
-      - ".github/workflows/ui.yml"
-
-env:
-  GO_VERSION: "1.26"
+    branches: [main]
 
 jobs:
-  lint:
-    name: Lint
+  go:
+    name: Go
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v5
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version-file: go.mod
           cache: true
 
-      - name: Install revive
-        run: go install github.com/mgechev/revive@latest
-
-      - name: Run go vet
-        run: go vet ./...
-
-      - name: Run go fmt
+      - name: Install pinned Go tools
         run: |
-          fmt_output=$(go fmt ./...)
-          if [ -n "$fmt_output" ]; then
-            echo "The following files need formatting:"
-            echo "$fmt_output"
-            exit 1
-          fi
+          go install github.com/go-task/task/v3/cmd/task@v3.51.1
+          go install github.com/mgechev/revive@v1.15.0
 
-      - name: Run revive
-        run: revive -config revive.toml -formatter friendly ./...
+      - name: Lint
+        run: task lint
 
-  test:
-    name: Test
+      - name: Unit tests
+        run: task test:race
+
+      - name: Integration tests
+        run: task test:integration
+
+      - name: Build
+        run: go build ./...
+
+      - name: Generate schemas and verify no drift
+        run: |
+          task schema:generate
+          task schema:check-changes
+
+  ui:
+    name: UI
+    runs-on: ubuntu-latest
+    env:
+      OPENAPI_SPEC_PATH: ../specs/openapi.v3.yaml
+      SCHEMAS_DIR: ../schemas
+    defaults:
+      run:
+        working-directory: ui
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.20.0
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type-check
+        run: npm run check
+
+      - name: Unit tests
+        run: npm run test:unit -- --run
+
+      - name: Check generated types
+        run: npm run generate-types:check
+
+      - name: Build
+        run: npm run build
+
+  governance:
+    name: Governance
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v5
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version-file: go.mod
           cache: true
 
-      - name: Pull NATS image
-        run: docker pull nats:latest
-
-      - name: Run unit tests
-        run: go test -v -race ./...
-
-      - name: Run integration tests
-        run: go test -tags=integration -v -race ./...
-
-  build:
-    name: Build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
+          node-version: 22.20.0
 
-      - name: Build binary
+      - name: Install pinned governance tools
         run: |
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
-            -ldflags="-w -s -X main.version=${{ github.sha }}" \
-            -o semteams-linux-amd64 \
-            ./cmd/semteams
+          go install github.com/go-task/task/v3/cmd/task@v3.51.1
+          npm install --global @fission-ai/openspec@1.7.0
 
-      - name: Test binary execution
-        run: |
-          ./semteams-linux-amd64 --version || true
-          echo "Build successful"
+      - name: Validate OpenSpec
+        run: task openspec:validate
 
-  schema-validation:
-    name: Schema Validation
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
-
-      - name: Install task
-        run: |
-          sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
-
-      - name: Generate schemas and OpenAPI spec
-        run: task schema:generate
-
-      - name: Run OpenAPI generator tests
-        run: go test -v ./cmd/openapi-generator
-
-      - name: Check for uncommitted schema changes
-        run: |
-          if ! git diff --exit-code schemas/ specs/openapi.v3.yaml; then
-            echo "❌ Schema or OpenAPI files have uncommitted changes!"
-            echo ""
-            echo "The following files changed after running 'task schema:generate':"
-            git diff --name-only schemas/ specs/openapi.v3.yaml
-            echo ""
-            echo "Please run 'task schema:generate' locally and commit the changes."
-            exit 1
-          fi
-          echo "✅ All schemas and OpenAPI spec are up to date"
+      - name: Test OpenSpec queue reporter
+        run: task openspec:queue-test
 
   status-check:
     name: CI Status Check
     runs-on: ubuntu-latest
-    needs: [lint, test, build, schema-validation]
-    if: always()
+    needs: [go, ui, governance]
+    if: ${{ always() }}
     steps:
-      - name: Check if all jobs succeeded
+      - name: Require every CI lane to pass
         run: |
-          if [[ "${{ needs.lint.result }}" != "success" ]] || \
-             [[ "${{ needs.test.result }}" != "success" ]] || \
-             [[ "${{ needs.build.result }}" != "success" ]] || \
-             [[ "${{ needs.schema-validation.result }}" != "success" ]]; then
-            echo "One or more CI jobs failed"
+          if [[ "${{ needs.go.result }}" != "success" ]] || \
+             [[ "${{ needs.ui.result }}" != "success" ]] || \
+             [[ "${{ needs.governance.result }}" != "success" ]]; then
+            echo "One or more required CI jobs failed"
             exit 1
           fi
-          echo "All CI jobs passed successfully"
