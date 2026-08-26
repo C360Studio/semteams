@@ -91,8 +91,8 @@ test.describe("ADR-053 Phase 4b — clarification policy (autonomous mode)", () 
     ).toBe(0);
 
     // -----------------------------------------------------------------
-    // Step 5 — the reply was actually delivered on the user-response bus
-    // (03b-respond-direct → dispatch user.response output port).
+    // Step 5 — agentic-dispatch delivered the typed user response; rule 03b
+    // separately retains the audit triple asserted above.
     // -----------------------------------------------------------------
     const resp = await request.get(
       "/message-logger/entries?limit=500&subject=user.response.*",

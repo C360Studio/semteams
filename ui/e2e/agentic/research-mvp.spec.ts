@@ -38,8 +38,8 @@ import { assertAnchorBornFirst, RUN_ANCHOR, LOOP_ANCHOR } from "./born_first";
  *           → rule 07 fires → spawn coordinator (wake-up)
  *
  *   Loop E: coordinator (wake-up) → read_loop_result on Loop D →
- *           decide(respond_direct) → rule 03b fires → publish on
- *           user.response.* + stamp coordinator.clarification.reply triple.
+ *           decide(respond_direct) → typed dispatch on user.response.*
+ *           + rule 03b stamps coordinator.clarification.reply triple.
  *           Terminal — no further rules fire.
  *
  * Validates:
@@ -114,7 +114,7 @@ test.describe("ADR-042 MVP-5 — Research category mock-LLM journey", () => {
     //   03 (gather → synthesize)
     //   04 (synthesize → reviewer-research)
     //   07 (reviewer-research approved → wake-up coordinator)
-    //   03b (wake-up coordinator respond_direct → publish prose; no spawn)
+    //   03b (wake-up coordinator respond_direct → audit prose; no spawn)
     // Recovery rules 05 + 06 are loaded but do not fire (reviewer
     // approves rev 1 directly).
     // -----------------------------------------------------------------
@@ -242,13 +242,11 @@ test.describe("ADR-042 MVP-5 — Research category mock-LLM journey", () => {
     ).toBe("complete");
 
     // -----------------------------------------------------------------
-    // Step 7 — user-response publish proof. Loop-count assertions
-    // alone would silently pass a regression where rule 03b fails to
-    // fire (or dispatch's user.response output port is misconfigured)
-    // — the chain still terminates with 6 loops, but the user never
-    // sees a reply. message-logger captures the canonical
-    // user.response.<channel_type>.<channel_id> publish; assert at
-    // least one entry matches.
+    // Step 7 — typed user-response publish proof. Loop-count assertions
+    // alone would silently pass a regression where dispatch's typed
+    // user.response output is misconfigured — the chain still terminates
+    // with 6 loops, but the user never sees a reply. message-logger captures
+    // the canonical user.response.<channel_type>.<channel_id> publish.
     // -----------------------------------------------------------------
     const respResp = await request.get(
       "/message-logger/entries?limit=500&subject=user.response.*",
@@ -257,7 +255,7 @@ test.describe("ADR-042 MVP-5 — Research category mock-LLM journey", () => {
     const respPayloads = (await respResp.json()) as Array<{ subject: string }>;
     expect(
       respPayloads.length,
-      "expected at least one user.response.* publish (rule 03b → dispatch.user.response). Zero entries → either rule 03b did not fire, or dispatch's user.response output port is misconfigured.",
+      "expected at least one typed dispatch.user.response publish. Zero entries means dispatch's typed user.response output is misconfigured.",
     ).toBeGreaterThanOrEqual(1);
 
     // -----------------------------------------------------------------

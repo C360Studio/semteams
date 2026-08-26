@@ -170,7 +170,7 @@ test.describe("autoresearch — propose/execute iteration mock-LLM journey", () 
       `expected best.value (${bestVal}) promoted below the 1.20 baseline`,
     ).toBeLessThan(1.2);
 
-    // Terminal user reply published.
+    // Terminal typed user reply published by agentic-dispatch.
     const resp = await request.get(
       "/message-logger/entries?subject_prefix=dispatch.user.response&limit=10",
     );
@@ -178,7 +178,7 @@ test.describe("autoresearch — propose/execute iteration mock-LLM journey", () 
     const payloads = (await resp.json()) as Array<{ subject: string }>;
     expect(
       payloads.length,
-      "expected a user.response.* publish (coordinator respond_direct)",
+      "expected a typed user.response.* publish for coordinator respond_direct",
     ).toBeGreaterThanOrEqual(1);
 
     // ADR-053 Phase 4a — the run reached `completed`, NOT `failed`/`dispatched`/

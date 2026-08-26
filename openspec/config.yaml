@@ -4,7 +4,7 @@ schema: spec-driven
 # openspec/project.md; CLAUDE.md and AGENTS.md own the shared work rituals.
 context: |
   SemTeams is a configurable multi-agent product harness on SemStreams
-  v1.0.0-beta.160 (Go 1.26.3; Svelte 5/SvelteKit 2/TypeScript; NATS
+  v1.0.0-beta.161 (Go 1.26.3; Svelte 5/SvelteKit 2/TypeScript; NATS
   JetStream; Task runner). It owns product composition and semantics, not
   framework processors or contracts. Read openspec/project.md before scope.
 

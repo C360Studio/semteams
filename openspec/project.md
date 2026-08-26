@@ -25,8 +25,8 @@ recorded through the shared graph substrate.
 
 ## Current Product State
 
-- The Go module is pinned to SemStreams `v1.0.0-beta.160`. Crossing the beta.159-to-beta.160 boundary requires fresh
-  NATS storage and NATS server 2.14.4; there is no compatibility or in-place data migration.
+- The Go module is pinned to SemStreams `v1.0.0-beta.161`. Crossing either the beta.159-to-beta.160 or
+  beta.160-to-beta.161 boundary requires fresh NATS storage; there is no compatibility or in-place data migration.
 - The live product-facing categories are `research` and `autoresearch`. `coordinator`, `agent-run`, and `ops` are
   support packs in the bootstrap.
 - `create-change`, `proof-readiness`, `dev-from-task`, and `dev-via-test` remain on disk but are unwired under ADR-058.

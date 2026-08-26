@@ -15,8 +15,8 @@ import { test, expect } from "@playwright/test";
  *          Ready attestation; sandbox.attestation.* triples stamped
  *          on the chain entity
  *     3. tool_call: decide(action="respond_direct")
- *        → rule coordinator/03b-respond-direct fires → publish prose
- *          on user.response.*. Terminal.
+ *        → agentic-dispatch publishes typed prose on user.response.*;
+ *          rule coordinator/03b-respond-direct audits it. Terminal.
  *
  * Validates:
  *   - Both new tools reachable from the dispatch coordinator's
@@ -81,12 +81,9 @@ test.describe("ADR-043 PR 4.4 — Sandbox tools mock-LLM journey", () => {
       "expected exactly 1 coordinator loop in terminal complete state",
     ).toBeTruthy();
 
-    // user.response.* publish proves rule 03b fired on the
-    // respond_direct decide. NOTE: per 03b-respond-direct.json's
-    // publish_properties_omission_note, the publish is SUBJECT-ONLY
-    // — the user-facing prose is NOT in the publish payload. The
-    // prose lives on the loop entity as coordinator.clarification.reply
-    // (asserted below via /graph/triples).
+    // user.response.* proves agentic-dispatch delivered the typed
+    // respond_direct response. The prose is also retained on the loop
+    // entity as coordinator.clarification.reply (asserted below).
     const respResp = await request.get(
       "/message-logger/entries?subject_prefix=dispatch.user.response&limit=10",
     );
@@ -94,7 +91,7 @@ test.describe("ADR-043 PR 4.4 — Sandbox tools mock-LLM journey", () => {
     const respPayloads = (await respResp.json()) as Array<{ subject: string }>;
     expect(
       respPayloads.length,
-      "expected at least one user.response.* publish (rule 03b → respond_direct)",
+      "expected at least one typed user.response.* publish for respond_direct",
     ).toBeGreaterThanOrEqual(1);
 
     // Per PR 4.4 finding M1: verify the structural attestation
