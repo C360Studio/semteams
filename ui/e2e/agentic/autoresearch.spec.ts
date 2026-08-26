@@ -34,6 +34,7 @@ interface Loop {
   loop_id?: string;
   role?: string | null;
   state?: string;
+  result?: string;
 }
 interface Triple {
   subject?: string;
@@ -170,29 +171,50 @@ test.describe("autoresearch — propose/execute iteration mock-LLM journey", () 
       `expected best.value (${bestVal}) promoted below the 1.20 baseline`,
     ).toBeLessThan(1.2);
 
-    // Terminal typed user reply published by agentic-dispatch.
-    const resp = await request.get(
-      "/message-logger/entries?subject=user.response.*&limit=10",
+    // Terminal typed user reply published by agentic-dispatch. Correlation to
+    // this final loop is the semstreams#1094 regression fence. The limit must
+    // cover the full journey: message-logger applies the subject filter after
+    // limiting the newest entries, and autoresearch emits >200 messages.
+    const terminalCoordinator = settled.find(
+      (loop) => loop.role === "coordinator" && loop.result?.includes('"action":"respond_direct"'),
     );
-    expect(resp.ok(), "/message-logger/entries non-OK").toBe(true);
-    const payloads = (await resp.json()) as Array<{
+    expect(
+      terminalCoordinator?.loop_id,
+      "expected the terminal respond_direct coordinator loop",
+    ).toBeTruthy();
+    type UserResponseEntry = {
       subject: string;
       message_type: string;
-      raw_data?: { payload?: { content?: string } };
-    }>;
+      raw_data?: { payload?: { content?: string; in_reply_to?: string; type?: string } };
+    };
+    const payloads = await pollUntil(async () => {
+      const resp = await request.get(
+        "/message-logger/entries?limit=500&subject=user.response.*",
+      );
+      expect(resp.ok(), "/message-logger/entries non-OK").toBe(true);
+      const entries = (await resp.json()) as UserResponseEntry[];
+      return entries.some(
+        (entry) => entry.raw_data?.payload?.in_reply_to === terminalCoordinator?.loop_id,
+      ) ? entries : null;
+    }, { timeoutMs: 10_000 });
     expect(
-      payloads.length,
+      payloads,
       "expected a typed user.response.* publish for coordinator respond_direct",
-    ).toBeGreaterThanOrEqual(1);
-    expect(payloads.every((entry) => entry.subject.startsWith("user.response."))).toBe(true);
-    expect(payloads.every((entry) => entry.message_type === "agentic.user_response.v1")).toBe(true);
+    ).toBeTruthy();
+    const delivered = payloads!;
+    expect(delivered.every((entry) => entry.subject.startsWith("user.response."))).toBe(true);
+    expect(delivered.every((entry) => entry.message_type === "agentic.user_response.v1")).toBe(true);
+    const results = delivered.filter((entry) => entry.raw_data?.payload?.type === "result");
     expect(
-      payloads.some((entry) => {
-        const content = entry.raw_data?.payload?.content;
-        return typeof content === "string" && content.includes('"action":"respond_direct"');
-      }),
-      "beta.161 carries the structured decide result in UserResponse.Content; semstreams#1090 tracks channel-ready reason extraction",
-    ).toBe(true);
+      results,
+      "only the terminal coordinator may produce a result; submission status remains separate",
+    ).toHaveLength(1);
+    const terminalReply = results[0];
+    expect(terminalReply?.raw_data?.payload?.in_reply_to).toBe(terminalCoordinator?.loop_id);
+    expect(
+      terminalReply?.raw_data?.payload?.content,
+      "the response correlated to the terminal coordinator must carry its user-facing result",
+    ).toContain("Optimized `go test ./...` from 1.20s to 0.85s");
 
     // ADR-053 Phase 4a — the run reached `completed`, NOT `failed`/`dispatched`/
     // `executing`. This is the direct agent.run.phase assertion the design spike

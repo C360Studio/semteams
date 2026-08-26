@@ -155,8 +155,10 @@ test.describe("ADR-042 MVP-5 — Research category mock-LLM journey", () => {
     const finalLoops = await request
       .get("/teams-dispatch/loops")
       .then((r) => r.json()) as Array<{
+        loop_id: string;
         role: string;
         state: string;
+        result?: string;
         pending_approval?: { tool_name?: string } | null;
       }>;
 
@@ -247,22 +249,49 @@ test.describe("ADR-042 MVP-5 — Research category mock-LLM journey", () => {
     // user.response output is misconfigured — the chain still terminates
     // with 6 loops, but no typed response is published. message-logger
     // captures the canonical user.response.<channel_type>.<channel_id>
-    // publish; semstreams#1090 tracks channel-ready delivery.
+    // publish. semstreams#1094 tracks workflow reply correlation;
+    // semstreams#1090 tracks channel-ready rendering after delivery.
     // -----------------------------------------------------------------
-    const respResp = await request.get(
-      "/message-logger/entries?limit=500&subject=user.response.*",
+    const terminalCoordinator = finalLoops.find(
+      (loop) => loop.role === "coordinator" && loop.result?.includes('"action":"respond_direct"'),
     );
-    expect(respResp.ok(), "/message-logger/entries returned non-OK").toBe(true);
-    const respPayloads = (await respResp.json()) as Array<{
+    expect(
+      terminalCoordinator?.loop_id,
+      "expected the terminal respond_direct coordinator loop",
+    ).toBeTruthy();
+    type UserResponseEntry = {
       subject: string;
       message_type: string;
-    }>;
+      raw_data?: { payload?: { content?: string; in_reply_to?: string; type?: string } };
+    };
+    const respPayloads = await pollUntil(async () => {
+      const respResp = await request.get(
+        "/message-logger/entries?limit=500&subject=user.response.*",
+      );
+      expect(respResp.ok(), "/message-logger/entries returned non-OK").toBe(true);
+      const entries = (await respResp.json()) as UserResponseEntry[];
+      return entries.some(
+        (entry) => entry.raw_data?.payload?.in_reply_to === terminalCoordinator?.loop_id,
+      ) ? entries : null;
+    }, { timeoutMs: 10_000 });
     expect(
-      respPayloads.length,
+      respPayloads,
       "expected at least one typed dispatch.user.response publish. Zero entries means dispatch's typed user.response output is misconfigured.",
-    ).toBeGreaterThanOrEqual(1);
-    expect(respPayloads.every((entry) => entry.subject.startsWith("user.response."))).toBe(true);
-    expect(respPayloads.every((entry) => entry.message_type === "agentic.user_response.v1")).toBe(true);
+    ).toBeTruthy();
+    const delivered = respPayloads!;
+    expect(delivered.every((entry) => entry.subject.startsWith("user.response."))).toBe(true);
+    expect(delivered.every((entry) => entry.message_type === "agentic.user_response.v1")).toBe(true);
+    const results = delivered.filter((entry) => entry.raw_data?.payload?.type === "result");
+    expect(
+      results,
+      "only the terminal coordinator may produce a result; submission status remains separate",
+    ).toHaveLength(1);
+    const terminalReply = results[0];
+    expect(terminalReply?.raw_data?.payload?.in_reply_to).toBe(terminalCoordinator?.loop_id);
+    expect(
+      terminalReply?.raw_data?.payload?.content,
+      "the response correlated to the terminal coordinator must carry its user-facing result",
+    ).toContain("For IoT edge deployments");
 
     // -----------------------------------------------------------------
     // Step 8 — ADR-053 Phase 4a: the run reached `completed`. Direct

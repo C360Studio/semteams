@@ -2,6 +2,9 @@
 
 **Status:** Accepted (2026-08-26)
 
+**Implementation:** Blocked on
+[SemStreams #1094](https://github.com/C360Studio/semstreams/issues/1094) (2026-08-26)
+
 ## Context
 
 SemStreams published `v1.0.0-beta.161` on 2026-08-16 as the post-beta.160 reliability and lifecycle-control release.
@@ -45,24 +48,28 @@ Adopt `github.com/c360studio/semstreams v1.0.0-beta.161` as one clean cut before
 SemTeams does not select the upstream graph-research capability; its live `research` category is a product pack.
 Beta.161's removal of phantom graph-research registration therefore requires no replacement wiring here.
 
-Beta.161 copies a successful loop's terminal result verbatim into `UserResponse.Content`. Because `decide` terminates
-with its full argument object, coordinator responses currently carry structured JSON such as
-`{"action":"respond_direct","reason":"..."}` rather than bare `reason` prose. SemTeams accepts that truthful wire
-shape for this dependency adoption and does not add a product-shell adapter. SemStreams
-[issue #1090](https://github.com/C360Studio/semstreams/issues/1090) owns channel-ready decision rendering before
-Program Pulse may claim human-readable delivery.
+Black-box validation found a second, blocking framework gap. Beta.161 publishes the directly submitted root
+coordinator's intermediate handoff (`research` or `autoresearch`) because that loop owns the user route. The actual
+terminal `respond_direct` coordinator is rule-spawned, owns no channel route, and is settled without publication.
+[SemStreams #1094](https://github.com/C360Studio/semstreams/issues/1094) owns workflow-terminal selection and durable
+reply correlation. SemTeams will not restore a flat rule writer or add a product-shell routing adapter while it waits.
+
+After the correct workflow terminal is routable, beta.161 still copies the successful loop result verbatim into
+`UserResponse.Content`. Because `decide` terminates with its full argument object, the response carries structured JSON
+such as `{"action":"respond_direct","reason":"..."}` rather than bare `reason` prose.
+[SemStreams #1090](https://github.com/C360Studio/semstreams/issues/1090) owns channel-ready decision rendering.
 
 ## Consequences
 
 - Every beta.160-to-beta.161 stack cycle uses newly provisioned NATS storage. Long-lived retained state requires a new
   owner decision rather than an automated adoption step.
-- Existing user-response E2E observations keep the same typed dispatch subject family, but no longer attribute the
-  message to coordinator rule publication. They assert the registered payload type and the current structured terminal
-  content explicitly.
+- User-response journeys correlate the typed response to the final coordinator loop. Counting the submission status or
+  root handoff response is a false positive. Those journeys remain red until semstreams#1094 supplies workflow reply
+  correlation.
 - The coordinator audit facts remain queryable even though the unconsumed wake-up envelopes are gone.
 - WebSocket deployments may now select a path explicitly; SemTeams retains the upstream `/ws` default.
-- Program Pulse work starts from beta.161 terminal-settlement and lifecycle guarantees rather than carrying a planned
-  migration behind it. Report generation may proceed, but human-facing delivery remains gated by semstreams#1090.
+- Program Pulse report generation may proceed independently, but human-facing delivery is gated first by
+  semstreams#1094 (correct terminal routing), then semstreams#1090 (channel-ready rendering).
 
 ## Alternatives
 
@@ -79,4 +86,5 @@ Program Pulse may claim human-readable delivery.
 - [ADR-059](059-semstreams-beta160-graph-foundation-adoption.md)
 - [Program Pulse MVP epic](https://github.com/C360Studio/semteams/issues/269)
 - [Adoption issue #266](https://github.com/C360Studio/semteams/issues/266)
+- [SemStreams workflow terminal routing #1094](https://github.com/C360Studio/semstreams/issues/1094)
 - [SemStreams typed decision rendering #1090](https://github.com/C360Studio/semstreams/issues/1090)
