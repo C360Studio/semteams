@@ -1059,7 +1059,7 @@ func runWithSignalHandling(ctx context.Context, manager *service.Manager, shutdo
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer shutdownCancel()
 
-	if err := shutdown(shutdownCtx, manager, shutdownTimeout); err != nil {
+	if err := shutdown(shutdownCtx, manager); err != nil {
 		return fmt.Errorf("graceful shutdown failed: %w", err)
 	}
 
@@ -1068,15 +1068,8 @@ func runWithSignalHandling(ctx context.Context, manager *service.Manager, shutdo
 }
 
 // shutdown performs graceful shutdown of all services
-func shutdown(ctx context.Context, manager *service.Manager, timeout time.Duration) error {
-	if deadline, ok := ctx.Deadline(); ok {
-		remaining := time.Until(deadline)
-		if remaining < timeout {
-			timeout = remaining
-		}
-	}
-
-	if err := manager.StopAll(timeout); err != nil {
+func shutdown(ctx context.Context, manager *service.Manager) error {
+	if err := manager.StopAll(ctx); err != nil {
 		slog.Error("Error stopping services", "error", err)
 		return err
 	}
