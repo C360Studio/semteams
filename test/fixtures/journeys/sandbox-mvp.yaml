@@ -15,7 +15,7 @@ description: |
            populated, sandbox.attestation.* triples stamped on the
            chain entity
       3. tool_call: decide(action="respond_direct", reason=<prose>)
-         → agentic-dispatch publishes typed prose on user.response.*;
+         → agentic-dispatch publishes the typed structured decision on user.response.*;
          coordinator/03b-respond-direct stamps coordinator.clarification.reply. Terminal.
 
   Validates:

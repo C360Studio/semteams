@@ -245,18 +245,24 @@ test.describe("ADR-042 MVP-5 — Research category mock-LLM journey", () => {
     // Step 7 — typed user-response publish proof. Loop-count assertions
     // alone would silently pass a regression where dispatch's typed
     // user.response output is misconfigured — the chain still terminates
-    // with 6 loops, but the user never sees a reply. message-logger captures
-    // the canonical user.response.<channel_type>.<channel_id> publish.
+    // with 6 loops, but no typed response is published. message-logger
+    // captures the canonical user.response.<channel_type>.<channel_id>
+    // publish; semstreams#1090 tracks channel-ready delivery.
     // -----------------------------------------------------------------
     const respResp = await request.get(
       "/message-logger/entries?limit=500&subject=user.response.*",
     );
     expect(respResp.ok(), "/message-logger/entries returned non-OK").toBe(true);
-    const respPayloads = (await respResp.json()) as Array<{ subject: string }>;
+    const respPayloads = (await respResp.json()) as Array<{
+      subject: string;
+      message_type: string;
+    }>;
     expect(
       respPayloads.length,
       "expected at least one typed dispatch.user.response publish. Zero entries means dispatch's typed user.response output is misconfigured.",
     ).toBeGreaterThanOrEqual(1);
+    expect(respPayloads.every((entry) => entry.subject.startsWith("user.response."))).toBe(true);
+    expect(respPayloads.every((entry) => entry.message_type === "agentic.user_response.v1")).toBe(true);
 
     // -----------------------------------------------------------------
     // Step 8 — ADR-053 Phase 4a: the run reached `completed`. Direct

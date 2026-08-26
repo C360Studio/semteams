@@ -45,16 +45,24 @@ Adopt `github.com/c360studio/semstreams v1.0.0-beta.161` as one clean cut before
 SemTeams does not select the upstream graph-research capability; its live `research` category is a product pack.
 Beta.161's removal of phantom graph-research registration therefore requires no replacement wiring here.
 
+Beta.161 copies a successful loop's terminal result verbatim into `UserResponse.Content`. Because `decide` terminates
+with its full argument object, coordinator responses currently carry structured JSON such as
+`{"action":"respond_direct","reason":"..."}` rather than bare `reason` prose. SemTeams accepts that truthful wire
+shape for this dependency adoption and does not add a product-shell adapter. SemStreams
+[issue #1090](https://github.com/C360Studio/semstreams/issues/1090) owns channel-ready decision rendering before
+Program Pulse may claim human-readable delivery.
+
 ## Consequences
 
 - Every beta.160-to-beta.161 stack cycle uses newly provisioned NATS storage. Long-lived retained state requires a new
   owner decision rather than an automated adoption step.
 - Existing user-response E2E observations keep the same typed dispatch subject family, but no longer attribute the
-  message to coordinator rule publication.
+  message to coordinator rule publication. They assert the registered payload type and the current structured terminal
+  content explicitly.
 - The coordinator audit facts remain queryable even though the unconsumed wake-up envelopes are gone.
 - WebSocket deployments may now select a path explicitly; SemTeams retains the upstream `/ws` default.
 - Program Pulse work starts from beta.161 terminal-settlement and lifecycle guarantees rather than carrying a planned
-  migration behind it.
+  migration behind it. Report generation may proceed, but human-facing delivery remains gated by semstreams#1090.
 
 ## Alternatives
 
@@ -71,3 +79,4 @@ Beta.161's removal of phantom graph-research registration therefore requires no 
 - [ADR-059](059-semstreams-beta160-graph-foundation-adoption.md)
 - [Program Pulse MVP epic](https://github.com/C360Studio/semteams/issues/269)
 - [Adoption issue #266](https://github.com/C360Studio/semteams/issues/266)
+- [SemStreams typed decision rendering #1090](https://github.com/C360Studio/semstreams/issues/1090)

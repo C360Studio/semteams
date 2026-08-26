@@ -91,18 +91,24 @@ test.describe("ADR-053 Phase 4b — clarification policy (autonomous mode)", () 
     ).toBe(0);
 
     // -----------------------------------------------------------------
-    // Step 5 — agentic-dispatch delivered the typed user response; rule 03b
-    // separately retains the audit triple asserted above.
+    // Step 5 — agentic-dispatch published the typed user response and the
+    // message logger observed it; rule 03b separately retains the audit
+    // triple asserted above. semstreams#1090 tracks channel-ready delivery.
     // -----------------------------------------------------------------
     const resp = await request.get(
       "/message-logger/entries?limit=500&subject=user.response.*",
     );
     expect(resp.ok(), "/message-logger/entries returned non-OK").toBe(true);
-    const payloads = (await resp.json()) as Array<{ subject: string }>;
+    const payloads = (await resp.json()) as Array<{
+      subject: string;
+      message_type: string;
+    }>;
     expect(
       payloads.length,
       "expected at least one user.response.* publish (the autonomous answer)",
     ).toBeGreaterThanOrEqual(1);
+    expect(payloads.every((entry) => entry.subject.startsWith("user.response."))).toBe(true);
+    expect(payloads.every((entry) => entry.message_type === "agentic.user_response.v1")).toBe(true);
   });
 });
 

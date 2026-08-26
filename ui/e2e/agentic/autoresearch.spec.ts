@@ -172,14 +172,27 @@ test.describe("autoresearch — propose/execute iteration mock-LLM journey", () 
 
     // Terminal typed user reply published by agentic-dispatch.
     const resp = await request.get(
-      "/message-logger/entries?subject_prefix=dispatch.user.response&limit=10",
+      "/message-logger/entries?subject=user.response.*&limit=10",
     );
     expect(resp.ok(), "/message-logger/entries non-OK").toBe(true);
-    const payloads = (await resp.json()) as Array<{ subject: string }>;
+    const payloads = (await resp.json()) as Array<{
+      subject: string;
+      message_type: string;
+      raw_data?: { payload?: { content?: string } };
+    }>;
     expect(
       payloads.length,
       "expected a typed user.response.* publish for coordinator respond_direct",
     ).toBeGreaterThanOrEqual(1);
+    expect(payloads.every((entry) => entry.subject.startsWith("user.response."))).toBe(true);
+    expect(payloads.every((entry) => entry.message_type === "agentic.user_response.v1")).toBe(true);
+    expect(
+      payloads.some((entry) => {
+        const content = entry.raw_data?.payload?.content;
+        return typeof content === "string" && content.includes('"action":"respond_direct"');
+      }),
+      "beta.161 carries the structured decide result in UserResponse.Content; semstreams#1090 tracks channel-ready reason extraction",
+    ).toBe(true);
 
     // ADR-053 Phase 4a — the run reached `completed`, NOT `failed`/`dispatched`/
     // `executing`. This is the direct agent.run.phase assertion the design spike
