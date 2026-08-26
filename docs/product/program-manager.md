@@ -28,6 +28,26 @@ SemTeams uses four distinct levels:
 The operator owns this mapping. SemTeams may recommend changes to it later, but it must not silently infer program or
 project membership from repository activity.
 
+## Target team topology
+
+The long-term SemTeams organization is a governed team of managers: one program manager coordinates a project manager
+for each configured project.
+
+- The **program manager** owns portfolio outcomes, cross-project dependencies, priorities, risks, and the operator's
+  program-level report.
+- Each **project manager** owns project context, status, investigation, plans, recommendations, and the preparation of
+  project actions for approval.
+- **Research, planning, design, and review specialists** are shared capabilities invoked by the program or project
+  managers when the work requires them.
+- The **human operator** retains authority over consequential actions and can drill from the program view into any
+  project manager's evidence and recommendations.
+
+These are logical responsibilities, not a requirement that every manager immediately be a separate long-lived process.
+The MVP uses one program-manager journey to construct project views from the configured portfolio. Later, project
+managers may gain durable context, cadence, and delegated work; the program manager then coordinates their reports
+instead of reprocessing every repository directly. A project manager is assigned to a project, not automatically to
+each repository.
+
 ## The program-management loop
 
 SemTeams grows through one coherent loop:
@@ -68,7 +88,8 @@ story unless a concrete program-management journey requires metric optimization.
 
 ## MVP boundary
 
-The MVP proves read-only program awareness before autonomous project action.
+The MVP proves the program-manager view before introducing durable delegated project managers or autonomous project
+action.
 
 It must:
 

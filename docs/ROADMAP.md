@@ -76,6 +76,9 @@ This stage is read-only. It does not file issues or review pull requests.
 
 ### 4. Standing program management
 
+- Give configured projects durable project-manager context and cadence.
+- Have the program manager coordinate project-manager reports, dependencies,
+  and escalations rather than reprocess every repository directly.
 - Monitor the outcomes of approved actions.
 - Add operator-selected notification and cadence policies.
 - Retain project-local lessons and export eligible cross-product lessons to

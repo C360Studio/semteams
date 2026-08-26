@@ -20,7 +20,9 @@ The owner-approved product direction lives in
 planning, and design are capabilities used in support of programs and projects;
 the first target MVP is a read-only, evidence-backed program pulse. The live
 runtime still exposes only the research and autoresearch product-facing packs,
-so do not describe the target MVP as shipped behavior.
+so do not describe the target MVP as shipped behavior. The long-term topology
+is one program manager coordinating durable project managers; the MVP proves
+that view through one program-manager journey with project drill-down.
 
 **There are no custom Go components in SemTeams.** Every processor
 comes from semstreams via the `github.com/c360studio/semstreams`
