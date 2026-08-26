@@ -645,9 +645,13 @@
                 "stream_name": "USER",
                 "subjects": [
                   "user.response.>"
-                ]
+                ],
+                "interface": {
+                  "type": "agentic.user_response",
+                  "version": "v1"
+                }
               },
-              "description": "Responses back to users (fire-and-forget; channel routers fan out to UI/email/SMS)"
+              "description": "Typed responses back to users; channel routers fan out to UI/email/SMS"
             },
             {
               "name": "agent.approval_response",

@@ -38,8 +38,8 @@ import { assertAnchorBornFirst, RUN_ANCHOR, LOOP_ANCHOR } from "./born_first";
  *           → rule 07 fires → spawn coordinator (wake-up)
  *
  *   Loop E: coordinator (wake-up) → read_loop_result on Loop D →
- *           decide(respond_direct) → rule 03b fires → publish on
- *           user.response.* + stamp coordinator.clarification.reply triple.
+ *           decide(respond_direct) → typed dispatch on user.response.*
+ *           + rule 03b stamps coordinator.clarification.reply triple.
  *           Terminal — no further rules fire.
  *
  * Validates:
@@ -114,7 +114,7 @@ test.describe("ADR-042 MVP-5 — Research category mock-LLM journey", () => {
     //   03 (gather → synthesize)
     //   04 (synthesize → reviewer-research)
     //   07 (reviewer-research approved → wake-up coordinator)
-    //   03b (wake-up coordinator respond_direct → publish prose; no spawn)
+    //   03b (wake-up coordinator respond_direct → audit prose; no spawn)
     // Recovery rules 05 + 06 are loaded but do not fire (reviewer
     // approves rev 1 directly).
     // -----------------------------------------------------------------
@@ -155,8 +155,10 @@ test.describe("ADR-042 MVP-5 — Research category mock-LLM journey", () => {
     const finalLoops = await request
       .get("/teams-dispatch/loops")
       .then((r) => r.json()) as Array<{
+        loop_id: string;
         role: string;
         state: string;
+        result?: string;
         pending_approval?: { tool_name?: string } | null;
       }>;
 
@@ -242,23 +244,54 @@ test.describe("ADR-042 MVP-5 — Research category mock-LLM journey", () => {
     ).toBe("complete");
 
     // -----------------------------------------------------------------
-    // Step 7 — user-response publish proof. Loop-count assertions
-    // alone would silently pass a regression where rule 03b fails to
-    // fire (or dispatch's user.response output port is misconfigured)
-    // — the chain still terminates with 6 loops, but the user never
-    // sees a reply. message-logger captures the canonical
-    // user.response.<channel_type>.<channel_id> publish; assert at
-    // least one entry matches.
+    // Step 7 — typed user-response publish proof. Loop-count assertions
+    // alone would silently pass a regression where dispatch's typed
+    // user.response output is misconfigured — the chain still terminates
+    // with 6 loops, but no typed response is published. message-logger
+    // captures the canonical user.response.<channel_type>.<channel_id>
+    // publish. semstreams#1094 tracks workflow reply correlation;
+    // semstreams#1090 tracks channel-ready rendering after delivery.
     // -----------------------------------------------------------------
-    const respResp = await request.get(
-      "/message-logger/entries?limit=500&subject=user.response.*",
+    const terminalCoordinator = finalLoops.find(
+      (loop) => loop.role === "coordinator" && loop.result?.includes('"action":"respond_direct"'),
     );
-    expect(respResp.ok(), "/message-logger/entries returned non-OK").toBe(true);
-    const respPayloads = (await respResp.json()) as Array<{ subject: string }>;
     expect(
-      respPayloads.length,
-      "expected at least one user.response.* publish (rule 03b → dispatch.user.response). Zero entries → either rule 03b did not fire, or dispatch's user.response output port is misconfigured.",
-    ).toBeGreaterThanOrEqual(1);
+      terminalCoordinator?.loop_id,
+      "expected the terminal respond_direct coordinator loop",
+    ).toBeTruthy();
+    type UserResponseEntry = {
+      subject: string;
+      message_type: string;
+      raw_data?: { payload?: { content?: string; in_reply_to?: string; type?: string } };
+    };
+    const respPayloads = await pollUntil(async () => {
+      const respResp = await request.get(
+        "/message-logger/entries?limit=500&subject=user.response.*",
+      );
+      expect(respResp.ok(), "/message-logger/entries returned non-OK").toBe(true);
+      const entries = (await respResp.json()) as UserResponseEntry[];
+      return entries.some(
+        (entry) => entry.raw_data?.payload?.in_reply_to === terminalCoordinator?.loop_id,
+      ) ? entries : null;
+    }, { timeoutMs: 10_000 });
+    expect(
+      respPayloads,
+      "expected at least one typed dispatch.user.response publish. Zero entries means dispatch's typed user.response output is misconfigured.",
+    ).toBeTruthy();
+    const delivered = respPayloads!;
+    expect(delivered.every((entry) => entry.subject.startsWith("user.response."))).toBe(true);
+    expect(delivered.every((entry) => entry.message_type === "agentic.user_response.v1")).toBe(true);
+    const results = delivered.filter((entry) => entry.raw_data?.payload?.type === "result");
+    expect(
+      results,
+      "only the terminal coordinator may produce a result; submission status remains separate",
+    ).toHaveLength(1);
+    const terminalReply = results[0];
+    expect(terminalReply?.raw_data?.payload?.in_reply_to).toBe(terminalCoordinator?.loop_id);
+    expect(
+      terminalReply?.raw_data?.payload?.content,
+      "the response correlated to the terminal coordinator must carry its user-facing result",
+    ).toContain("For IoT edge deployments");
 
     // -----------------------------------------------------------------
     // Step 8 — ADR-053 Phase 4a: the run reached `completed`. Direct

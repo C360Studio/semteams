@@ -3198,11 +3198,6 @@ export interface components {
                 /** @description Severity levels that trigger admin alerts */
                 notify_admin_severity?: string[];
                 /**
-                 * @description Send error messages to users
-                 * @default true
-                 */
-                notify_user: boolean;
-                /**
                  * @description Violation retention in days
                  * @default 90
                  */
@@ -4605,6 +4600,11 @@ export interface components {
              * @default false
              */
             passthrough: boolean;
+            /**
+             * @description WebSocket upgrade path-only ServeMux pattern
+             * @default /ws
+             */
+            path: string;
             /** @description Port configuration */
             ports?: string;
         };

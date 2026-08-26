@@ -124,7 +124,7 @@ reconciliation.
   `banner.go`, `logging.go`). Independently implements every
   framework-wiring pattern per ADR-029 — no imports from upstream
   `cmd/semstreams/`. See [ADR-029](docs/adr/029-product-shell-wiring.md).
-- Go module: `github.com/c360studio/semstreams` (currently `v1.0.0-beta.160`; every bump is a first-class change — see ADR-058 for the beta.115→159 flag-day and ADR-059 for the beta.160 graph-foundation cutover; fresh NATS storage + NATS server 2.14.4 mandatory across the 159→160 boundary)
+- Go module: `github.com/c360studio/semstreams` (currently `v1.0.0-beta.161`; every bump is a first-class change — see ADR-059 for the beta.160 graph-foundation cutover and ADR-060 for beta.161 lifecycle reliability; fresh NATS storage is mandatory across both breaking boundaries)
 - NATS JetStream (KV, ObjectStore), Prometheus, slog — via semstreams
 - Task (task runner) — run `task --list` for all commands
 - `ui/` — Svelte 5 + SvelteKit 2 + TypeScript frontend (subtree-imported

@@ -37,6 +37,7 @@ OpenSpec changes own a claimed PR's target state and task truth. See
 | [057](057-openspec-graph-spec-model-and-create-change.md) | Graph-backed OpenSpec model and `create_change` pack. Parked by 058. |
 | [**058**](058-beta159-realignment-and-demo-lane-focus.md) | **Realign to semstreams v1.0.0-beta.159 + canonical predicates; demo scope = front door + research/autoresearch; dev-side packs parked in place.** Current architecture posture. |
 | [**059**](059-semstreams-beta160-graph-foundation-adoption.md) | **Adopt semstreams v1.0.0-beta.160's typed graph-mutation, strict-port, service-composition, trajectory, and fresh-storage contracts while retaining ADR-058's live/parked boundary.** Current framework baseline. |
+| [**060**](060-semstreams-beta161-lifecycle-reliability-adoption.md) | **Adopt semstreams v1.0.0-beta.161's caller-owned lifecycle, typed user-response, terminal-settlement, and fresh-storage contracts before Program Pulse.** Current framework baseline. |
 
 ## Conventions
 

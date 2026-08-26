@@ -181,7 +181,8 @@ test.describe.skip("ADR-057 — create_change pack mock-LLM journey", () => {
       "change.* must land on the run entity, not a loop entity",
     ).not.toContain("agent.loop.");
 
-    // Terminal: rule 03b published the user reply on respond_direct.
+    // Terminal: agentic-dispatch published the typed respond_direct reply;
+    // rule 03b retained its audit triple.
     const resp = await request.get(
       "/message-logger/entries?subject_prefix=dispatch.user.response&limit=10",
     );

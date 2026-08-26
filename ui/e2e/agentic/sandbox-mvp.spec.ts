@@ -15,8 +15,8 @@ import { test, expect } from "@playwright/test";
  *          Ready attestation; sandbox.attestation.* triples stamped
  *          on the chain entity
  *     3. tool_call: decide(action="respond_direct")
- *        → rule coordinator/03b-respond-direct fires → publish prose
- *          on user.response.*. Terminal.
+ *        → agentic-dispatch publishes the typed decision on user.response.*;
+ *          rule coordinator/03b-respond-direct audits it. Terminal.
  *
  * Validates:
  *   - Both new tools reachable from the dispatch coordinator's
@@ -24,7 +24,7 @@ import { test, expect } from "@playwright/test";
  *   - MockRunner end-to-end Ready path
  *   - Single coordinator loop terminates with respond_direct;
  *     NO rule pack arc spawned (PR 4.2 retire validated)
- *   - user.response.* publish carries the coordinator's prose
+ *   - user.response.* carries a registered agentic.user_response.v1 payload
  *
  * Required fixture: test/fixtures/journeys/sandbox-mvp.yaml
  * Required config: configs/e2e-flow-bootstrap.json.
@@ -81,21 +81,32 @@ test.describe("ADR-043 PR 4.4 — Sandbox tools mock-LLM journey", () => {
       "expected exactly 1 coordinator loop in terminal complete state",
     ).toBeTruthy();
 
-    // user.response.* publish proves rule 03b fired on the
-    // respond_direct decide. NOTE: per 03b-respond-direct.json's
-    // publish_properties_omission_note, the publish is SUBJECT-ONLY
-    // — the user-facing prose is NOT in the publish payload. The
-    // prose lives on the loop entity as coordinator.clarification.reply
-    // (asserted below via /graph/triples).
+    // user.response.* proves agentic-dispatch published the typed
+    // respond_direct response and message-logger observed it. The prose is
+    // also retained on the loop entity as coordinator.clarification.reply
+    // (asserted below); semstreams#1090 tracks channel-ready delivery.
     const respResp = await request.get(
-      "/message-logger/entries?subject_prefix=dispatch.user.response&limit=10",
+      "/message-logger/entries?subject=user.response.*&limit=10",
     );
     expect(respResp.ok(), "/message-logger/entries returned non-OK").toBe(true);
-    const respPayloads = (await respResp.json()) as Array<{ subject: string }>;
+    const respPayloads = (await respResp.json()) as Array<{
+      subject: string;
+      message_type: string;
+      raw_data?: { payload?: { content?: string } };
+    }>;
     expect(
       respPayloads.length,
-      "expected at least one user.response.* publish (rule 03b → respond_direct)",
+      "expected at least one typed user.response.* publish for respond_direct",
     ).toBeGreaterThanOrEqual(1);
+    expect(respPayloads.every((entry) => entry.subject.startsWith("user.response."))).toBe(true);
+    expect(respPayloads.every((entry) => entry.message_type === "agentic.user_response.v1")).toBe(true);
+    expect(
+      respPayloads.some((entry) => {
+        const content = entry.raw_data?.payload?.content;
+        return typeof content === "string" && content.includes('"action":"respond_direct"');
+      }),
+      "beta.161 carries the structured decide result in UserResponse.Content; semstreams#1090 tracks channel-ready reason extraction",
+    ).toBe(true);
 
     // Per PR 4.4 finding M1: verify the structural attestation
     // triples were stamped. Absent triples mean the tool errored
