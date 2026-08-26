@@ -1,6 +1,6 @@
 # SemTeams Documentation
 
-SemTeams is a reference/demo product on top of the
+SemTeams is an early program-manager product shell on top of the
 [semstreams](https://github.com/c360studio/semstreams) framework.
 Anything *framework-shaped* (components, graph, rule engine, NATS
 streams, payload registry) is documented upstream. Anything
@@ -10,6 +10,8 @@ tools, journeys) is documented here.
 ## If you are…
 
 - **new to SemTeams (what does it DO?)** →
+  [`product/program-manager.md`](product/program-manager.md) — the target product and MVP boundary
+- **understanding the runtime that exists today** →
   [`architecture.md`](architecture.md) — the substrate-plus-overlays runtime in plain English
 - **new to SemTeams (how do I run it?)** →
   [`getting-started.md`](getting-started.md)
@@ -36,12 +38,13 @@ that don't exist upstream.
 
 | Path | Purpose |
 |---|---|
+| [`product/program-manager.md`](product/program-manager.md) | Product direction, operating model, capability boundaries, and MVP |
 | [`architecture.md`](architecture.md) | What semteams DOES — the substrate-plus-overlays runtime, live category packs, and how a sandbox gets created |
 | [`getting-started.md`](getting-started.md) | New-dev quickstart + debugging recipes |
 | [`demo-mvp-claims.md`](demo-mvp-claims.md) | Supported demo claims, non-claims, black-box evidence rules, and MAVLink-hard scope |
 | [`product/vocabulary-map.md`](product/vocabulary-map.md) | Product vocabulary and UI label guidance |
 | [`architecture archive`](adr/) | Maintainer decision records for load-bearing product-shell choices |
-| [`proposals/`](proposals/) | Active design docs. Currently: `agentic-superpowers.md` (shipped 2026-04-12; retained for framing). |
+| [`proposals/`](proposals/) | Research and design notes that inform decisions but are not themselves product commitments. |
 | [`journeys/`](journeys/) | Pointer doc — the journey *specs* are the Playwright tests under `ui/e2e/agentic/` |
 | [`ui-integration-notes.md`](ui-integration-notes.md) | UI ↔ backend integration notes (historical reference; predates the 2026-06-03 UI slice). |
 

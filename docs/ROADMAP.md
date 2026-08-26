@@ -1,30 +1,29 @@
 # SemTeams Roadmap
 
-SemTeams is moving toward a governed agentic-development harness: a
-coordinator front door, reusable capability packs, visible artifacts, proof
-gates, sandboxed execution, and auditable runs.
+SemTeams is moving from a configurable agent-team demonstration toward an
+always-on program manager for a configurable portfolio. The canonical product
+direction and MVP boundary live in
+[SemTeams Program Manager](product/program-manager.md).
 
-This page is product-facing direction, not an exhaustive issue tracker. The
-current runnable truth is still the shipped configs, journeys, and demo evidence
-pack.
+This page describes the delivery sequence, not an exhaustive issue tracker.
+GitHub issues own work sequencing, and milestones own release membership. The
+current runnable truth remains the shipped configs, journeys, and
+[demo evidence](demo-mvp-claims.md).
 
-## Ready for MVP demo
+## Foundation available today
 
-The demo scope is the inner and outer loops
-([ADR-058](adr/058-beta159-realignment-and-demo-lane-focus.md)):
-
-- **Coordinator front door (outer loop)** — humans can chat first, refine an
-  idea, ask which team fits, or send a ready task. Team slash commands are
-  coordinator-routed hints. Asks for parked teams get an honest direct
-  response.
-- **Research pack (inner loop)** — evidence-gathering research flow with
-  planning, parallel gather fan-out, join, synthesis, review, artifact
-  emission with recoverable sources, and coordinator wake-up.
-- **Autoresearch pack** — metric optimization with empirical keep/revert
-  decisions in an attested per-tenant devcontainer.
-- **Black-box demo evidence** — Playwright journeys prove the claim boundary
-  through public UI, dispatch, task-runner, and documented
-  observation surfaces.
+- **Coordinator front door** — conversational intake and explicit routing to
+  live capabilities.
+- **Research pack** — planning, parallel evidence gathering, synthesis,
+  review, artifact emission, and coordinator wake-up.
+- **Autoresearch pack** — metric optimization with empirical keep/revert in an
+  attested per-tenant devcontainer. It remains a useful framework proof, but
+  it is not the initial program-manager story.
+- **Governed repository workflow** — issues, OpenSpec changes where behavior
+  changes, draft PR claims, explicit closure authority, and a readable
+  Repository CI baseline.
+- **Substrate-plus-overlays runtime** — one SemStreams-backed substrate with
+  bounded category packs rather than a bespoke runtime per job.
 
 ## Parked beta.160 regression (ADR-059)
 
@@ -35,26 +34,61 @@ Issue [#261](https://github.com/C360Studio/semteams/issues/261) owns an
 authorized `StorageReference` evidence-fetch contract and the freshly
 reconciled OpenSpec change required for resumption.
 
-## Parked pending predicate re-authoring (ADR-058)
+## Parked development packs (ADR-058)
 
 The spec-authoring and software-implementation packs (create-change,
-proof-readiness, dev-from-task, dev-via-test) are parked in place: files stay
-in-repo, nothing is wired. Restoring one is a deliberate migration — re-author
-its predicates under the upstream canonical contract, re-wire the bootstrap,
-restore the taxonomy token, and un-park its tests and journeys.
+proof-readiness, dev-from-task, dev-via-test) are parked in place as donor
+material: files stay in-repo, nothing is wired. SemDev owns the issue-to-PR
+implementation journey. SemTeams should integrate through GitHub issues and
+pull requests rather than restore a competing maker workflow.
 
-## Near-term product direction
+## Delivery sequence
 
-- Prove the inner and outer loops on real LLMs as the standing demo, and keep
-  the mock journeys as the merge gate.
-- Make the run UI better at answering "what is happening now?" without asking
-  users to inspect graph facts or loop internals.
-- Restore evidence-backed artifact rendering and context handoff only after the
-  #261 authorized evidence-fetch contract is approved.
-- Re-author and re-wire the parked packs, starting with the smallest
-  (create-change) once the demo lanes are proven on the new framework.
-- Keep capability packs as the extension unit: new job class means new rules,
-  persona bundles, tool permissions, tests, and docs, not a new runtime.
+### 1. Program pulse MVP
+
+- Load an operator-authored program → project → repository mapping.
+- Observe configured GitHub repositories through a deterministic,
+  product-owned read adapter.
+- Produce scheduled and on-demand, evidence-backed program reports.
+- Classify completed, in-progress, waiting, and at-risk work.
+- Recommend which projects need attention and support project drill-down.
+- Preserve human-requested research as an available supporting capability.
+
+This stage is read-only. It does not file issues or review pull requests.
+
+### 2. Project intelligence
+
+- Use research when repository facts do not fully explain a program finding.
+- Enrich project analysis with SemSource code, documentation, and change
+  evidence through supported service interfaces.
+- Add recommendation classes such as documentation drift, dependency risk,
+  and missing delivery evidence.
+- Restore artifact evidence fetch and context handoff through the contract
+  owned by [#261](https://github.com/C360Studio/semteams/issues/261).
+
+### 3. Planning and governed action
+
+- Add project planning and design-review journeys with program context.
+- Propose issue-shaped work before requesting authority to file it.
+- Add human-approved GitHub issue creation for work that SemDev can consume.
+- Add independent pull-request review and operator recommendations without
+  duplicating SemDev's maker-side quality gates.
+
+### 4. Standing program management
+
+- Monitor the outcomes of approved actions.
+- Add operator-selected notification and cadence policies.
+- Retain project-local lessons and export eligible cross-product lessons to
+  SemMem.
+- Add generic MCP consumption when the governed client primitive exists in
+  SemStreams; keep SemSource-specific integration product-local.
+
+## Release alignment
+
+SemTeams intends to match SemStreams' pace and reach product v1 alongside
+SemStreams v1. During beta, SemTeams should normally stay no more than one
+released SemStreams beta behind. Each bump remains a first-class compatibility
+change, especially across storage or lifecycle boundaries.
 
 ## Framework boundary
 
@@ -66,4 +100,4 @@ workflows.
 
 When a new feature looks framework-shaped, first check whether it belongs
 upstream. Product-local additions should stay narrow, documented, and tied to a
-SemTeams user journey.
+SemTeams program-management journey.

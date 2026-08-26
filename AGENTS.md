@@ -4,7 +4,7 @@ This file provides guidance to Codex (codex.ai) when working with code in this r
 
 # SemTeams Project Context
 
-SemTeams is a **configurable agentic harness** built on the
+SemTeams is an **always-on program manager for a configurable portfolio** built on the
 [semstreams](https://github.com/c360studio/semstreams) framework
 — the infrastructure that wraps an LLM with tools, memory,
 triggers, context, and channels so the model can *operate* rather
@@ -14,6 +14,13 @@ than answer one-shot prompts. SemStreams owns the components
 gateways, NATS clients). SemTeams owns the product-shell wiring,
 the chain-template library, the shared persona corpus, the Svelte
 UI, and the docs.
+
+The owner-approved product direction lives in
+[`docs/product/program-manager.md`](docs/product/program-manager.md). Research,
+planning, and design are capabilities used in support of programs and projects;
+the first target MVP is a read-only, evidence-backed program pulse. The live
+runtime still exposes only the research and autoresearch product-facing packs,
+so do not describe the target MVP as shipped behavior.
 
 **There are no custom Go components in SemTeams.** Every processor
 comes from semstreams via the `github.com/c360studio/semstreams`
@@ -41,20 +48,21 @@ Live task categories (ADR-058, 2026-08-07):
   in an attested devcontainer sandbox
   (`configs/rules/autoresearch/`).
 
-**Parked (ADR-058):** the dev-side packs (`create-change`,
+**Parked donor material (ADR-058):** the dev-side packs (`create-change`,
 `proof-readiness`, `dev-from-task`, `dev-via-test`) are on disk but
 UNWIRED — they predate the upstream canonical predicate contract
 (3-segment lower-kebab, fail-closed at persistence, NO alias mode).
 Their contract tests carry a `parked_packs` build tag; their journeys
 are `describe.skip`; the coordinator taxonomy is
-`research | autoresearch | respond_direct | ask_user`. Re-wiring one
-without re-authoring its predicates fails the CI fence
+`research | autoresearch | respond_direct | ask_user`. SemDev now owns the
+issue-to-PR implementation journey; do not rewire these packs as a shortcut to
+program-manager action. Any separately approved reuse would first require
+predicate re-authoring and would fail the current CI fence otherwise
 (`test/contract/predicate_contract_test.go`). Read
 [ADR-058](docs/adr/058-beta159-realignment-and-demo-lane-focus.md)
 before touching any of this.
 
-Adding a new prompt class (e.g. web-research, dev-via-spec
-reintroduction) is a **new category pack**: rule files under
+Adding a new prompt class (e.g. program-report or project-plan) is a **new category pack**: rule files under
 `configs/rules/<category>/`, persona bundles under
 `configs/personas/fragments/<role>-<category>-<phase?>/`, plus a
 coordinator-persona entry teaching the new `decide(action=<category>)`
@@ -387,7 +395,7 @@ would have shipped otherwise.
 
 ## Product-Shell-Tool Discipline (MANDATORY)
 
-SemTeams is a reference/demo product on top of semstreams (ADR-029).
+SemTeams is a thin program-manager product shell on top of semstreams (ADR-029).
 The product shell intentionally stays thin. The trap pattern is
 **accretion** — each individual product-shell tool, rule, or payload
 is defensible; the cumulative drift turns the product shell into a
