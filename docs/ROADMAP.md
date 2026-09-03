@@ -61,8 +61,9 @@ This stage is read-only. It does not file issues or review pull requests.
 - Use research when repository facts do not fully explain a program finding.
 - Enrich project analysis with SemSource code, documentation, and change
   evidence through supported service interfaces.
-- Add recommendation classes such as documentation drift, dependency risk,
-  and missing delivery evidence.
+- Add recommendation classes such as SOP-version drift (a project pinned
+  behind the current org SOP release with an applicable change; documentation
+  drift is one instance of it), dependency risk, and missing delivery evidence.
 - Restore artifact evidence fetch and context handoff through the contract
   owned by [#261](https://github.com/C360Studio/semteams/issues/261).
 
@@ -81,10 +82,13 @@ This stage is read-only. It does not file issues or review pull requests.
   and escalations rather than reprocess every repository directly.
 - Monitor the outcomes of approved actions.
 - Add operator-selected notification and cadence policies.
-- Retain project-local lessons and export eligible cross-product lessons to
-  SemMem.
+- Retain project-local lessons and push eligible ones to SemMem over
+  SemStreams federation, as any SemStreams-based instance can; SemTeams is a
+  lesson source as well as an observer of the SOP process. Institutional
+  knowledge flows back to products only through SOP releases.
 - Add generic MCP consumption when the governed client primitive exists in
-  SemStreams; keep SemSource-specific integration product-local.
+  SemStreams; keep SemSource-specific integration product-local. MCP is
+  runtime retrieval of active practices, never the trigger; SOP releases are.
 
 ## Release alignment
 

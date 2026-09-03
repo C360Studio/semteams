@@ -59,7 +59,8 @@ SemTeams grows through one coherent loop:
 4. **Plan** sequencing, milestones, issues, and coordination steps.
 5. **Design** product or technical proposals when a recommendation needs deeper treatment.
 6. **Act** under explicit authority by filing issues, reviewing pull requests, and monitoring outcomes.
-7. **Learn** from outcomes locally and export durable cross-product lessons to SemMem.
+7. **Learn** from outcomes locally and push eligible lessons to SemMem over SemStreams federation, as every
+   SemStreams-based instance can. SemTeams is a lesson source as well as an observer of the SOP process.
 
 Every report separates observed facts from recommendations. A factual claim carries recoverable evidence: repository,
 object identity, state, timestamp, link, and relevant issue/PR/release relationships. Recommendations state the
@@ -130,8 +131,11 @@ The MVP does not:
 - make architecture or product decisions without the operator; or
 - curate cross-product knowledge inside SemTeams.
 
-Docs drift is one future project-insight finding. Trending-topic reports are a standing research use case. Neither needs
-its own product identity.
+Docs drift is one future project-insight finding. Its general form is SOP-version drift: a project whose manifest pins
+an org SOP bundle version behind the current SOP release, where at least one change since the pin applies to that
+project. The trigger is a versioned SOP release, never an individual lesson, and the recommendation is one adoption
+issue per project per version. Trending-topic reports are a standing research use case. Neither needs its own product
+identity.
 
 ## Authority ladder
 
@@ -155,12 +159,18 @@ are not implied by always-on operation.
   program-management journeys.
 - **SemDev** owns the maker-side issue-to-reviewed-PR workflow and clean-room verification.
 - **SemSource** supplies code, documentation, and change evidence through its supported service interfaces.
-- **SemMem** curates provenance-backed lessons and practices that deserve promotion across products.
+- **SemMem** ingests lessons pushed from any SemStreams-based instance, curates them into ecosystem practices, and owns
+  the org SOP repository's content policy. It files SOP items as structured issues; it does not author PRs. Practices
+  reach consumers as versioned SOP releases, which are the trigger, and over MCP for runtime retrieval, which is never
+  the trigger.
 - **GitHub** remains the human-visible work bus and authority for repository work state.
 
 SemTeams can later file an issue for SemDev to consume and independently review the resulting pull request for the
 operator. That review complements SemDev's internal quality gates; it does not duplicate them or require a private
-SemTeams-to-SemDev API.
+SemTeams-to-SemDev API. The same rule holds across the ecosystem: managers and curators file issues, and SemDev
+instances are the only PR authors, including on the SOP repository. Every edge between products is either a visible
+artifact on GitHub or a governed SemStreams contract that carries provenance and is idempotent; never a shared graph or
+an ad-hoc private API. Lessons flow in by push; institutional knowledge flows back out only as SOP releases.
 
 ## Release posture
 
