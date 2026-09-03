@@ -1,7 +1,11 @@
 # Proposal: SemTeams as a 24/7 Personal Assistant (D-ladder update)
 
-**Status**: Research notes (2026-08-19). Not a decision. This updates and
-partially corrects the **North-star deployment roadmap** in
+**Status**: Superseded as product framing by the owner-approved
+[program-manager direction](../product/program-manager.md) (2026-08-26).
+Retained as technical research for unattended operation, GitHub reach,
+SemSource integration, and the D-ladder. Its docs-drift-first phasing is no
+longer the MVP plan. This updates and partially corrects the
+**North-star deployment roadmap** in
 [ADR-056 §North-star](../adr/056-openspec-spec-driven-development-umbrella.md)
 rather than proposing a parallel plan — that ladder (D0–D6) already
 describes this deployment. Three of its assumptions are stale at
@@ -17,7 +21,12 @@ The companion research note
 [`knowledge-org-para-gtd.md`](knowledge-org-para-gtd.md) carries the evidence
 for the new items.
 
-## The deployment
+## The researched deployment
+
+The jobs below motivated the research. They are now examples of work a program
+manager may recommend or support, not the definition of the product. In
+particular, repository activity and program reporting precede docs drift in the
+current MVP direction.
 
 Run SemTeams continuously on a Mac mini beside SemSource. Explicitly **not**
 email or personal comms — the operator handles those. Three standing jobs:

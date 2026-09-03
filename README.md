@@ -1,11 +1,18 @@
 # SemTeams
 
-> Reference/demo product for agentic teams, built on the
+> An always-on program manager for a configurable portfolio, built on the
 > [semstreams](https://github.com/c360studio/semstreams) framework.
 
-SemTeams is the product shell — UI, configs, personas, rules, and a
-small set of product-shell tools — that demonstrates how to build a
-multi-agent system on top of semstreams. It has **no custom Go
+SemTeams observes work across programs and projects, explains what changed,
+identifies where attention is needed, and helps an operator carry approved
+actions through. Research, planning, and design are supporting capabilities of
+that program manager, not separate product identities. The target product and
+MVP boundary are defined in
+[`docs/product/program-manager.md`](docs/product/program-manager.md).
+
+The current repository is the early product shell — UI, configs, personas,
+rules, and a small set of product-shell tools — proving the multi-agent runtime
+on top of SemStreams. It has **no custom Go
 components**: every processor (graph, rule, agentic-dispatch,
 agentic-loop, agentic-model, agentic-tools, …) is imported from the
 upstream framework.
@@ -31,7 +38,7 @@ covers what SemTeams adds on top.
 |---|---|---|
 | Web UI | `ui/` | Svelte 5 + SvelteKit 2 chat / graph explorer / runtime monitor |
 | Bootstrap config | `configs/flow-bootstrap.json` | Production substrate-plus-overlays wiring; mock-LLM clone at `e2e-flow-bootstrap.json` |
-| Category packs | `configs/rules/<category>/` | Category-keyed rule packs. Live product-facing packs: `research/` and `autoresearch/`. Support packs: `coordinator/`, `agent-run/`, and `ops/`. The dev-side packs (`create-change/`, `proof-readiness/`, `dev-from-task/`, `dev-via-test/`) are parked in place pending predicate re-authoring — see [ADR-058](docs/adr/058-beta159-realignment-and-demo-lane-focus.md). New task classes add a pack — no new components. |
+| Category packs | `configs/rules/<category>/` | Live: `research/` and `autoresearch/`. Support: `coordinator/`, `agent-run/`, and `ops/`. Parked dev packs are donor material; see [ADR-058](docs/adr/058-beta159-realignment-and-demo-lane-focus.md). New task classes add a pack, not a component. |
 | Personas | `configs/personas/fragments/<role>/*.md` | Role-specific prompt fragments loaded by the category packs. See [`configs/README.md`](configs/README.md) for the current inventory. |
 | Product tools | `cmd/semteams/tools/` | Tool executors that don't belong upstream: source ingest, artifact/spec emission, proof analysis/projection, sandbox bootstrap, and pack-specific measurement emitters. |
 | Product shell | `cmd/semteams/main.go` | ~600 LoC binary that wires the framework primitives directly for this product shell |
@@ -100,8 +107,9 @@ gates.
 Spec-authoring and software-implementation asks are currently
 **parked**, not live routes. The coordinator answers them honestly
 instead of dispatching `create-change`, `proof-readiness`,
-`dev-from-task`, or `dev-via-test`. Those packs remain on disk for
-re-authoring under the canonical predicate contract; see
+`dev-from-task`, or `dev-via-test`. Those packs remain on disk as donor
+material; SemDev now owns the issue-to-PR implementation journey. Do not
+reintroduce them as a shortcut to program-manager action. See
 [ADR-058](docs/adr/058-beta159-realignment-and-demo-lane-focus.md).
 
 Research results retain recoverable source evidence, but beta.160 does
@@ -192,8 +200,13 @@ layering, product-shell wiring map, mandatory protocols
 
 ## Status
 
-Active development. Breaking changes expected. Current architecture
-is **substrate-plus-overlays**: a single product-shell flow wires
+Active development. Breaking changes expected. The shipped proof is not yet
+the program-manager MVP: today the live product-facing packs are research and
+autoresearch. The next product slice is a read-only, evidence-backed program
+pulse across operator-configured projects and repositories; see the
+[`roadmap`](docs/ROADMAP.md).
+
+Current architecture is **substrate-plus-overlays**: a single product-shell flow wires
 substrate singletons, and task classes are added as category-keyed
 rule packs + named persona bundles rather than separate flow
 configs. The demo scope is the inner and outer loops
@@ -205,11 +218,10 @@ configs. The demo scope is the inner and outer loops
 - **autoresearch** — Karpathy-style propose/execute iteration loop
   with empirical keep/revert decisions and per-tenant devcontainer
   attestation.
-- **Parked** — the spec-authoring and software-implementation packs
+- **Parked donor material** — the spec-authoring and software-implementation packs
   (`create-change`, `proof-readiness`, `dev-from-task`,
-  `dev-via-test`) are unwired pending re-authoring under the
-  upstream canonical predicate contract. The coordinator answers
-  those asks honestly instead of routing them. See
+  `dev-via-test`) are unwired. SemDev owns that product journey; the
+  coordinator answers those asks honestly instead of routing them. See
   [`docs/demo-mvp-claims.md`](docs/demo-mvp-claims.md).
 
 ## License
