@@ -33,10 +33,11 @@ OpenSpec changes own a claimed PR's target state and task truth. See
 | [053](053-adoption-plan.md) | Adoption plan for proof/readiness work |
 | [054](054-test-harness-team-proof-environments-before-code.md) | Test-harness team for proof environments before code |
 | [055](055-formal-claim-analysis-for-verification-gates.md) | Formal claim analysis for verification gates |
-| [056](056-openspec-spec-driven-development-umbrella.md) | OpenSpec-compatible, environment-gated spec-driven development umbrella. Its packs are parked by 058 pending predicate migration. |
+| [056](056-openspec-spec-driven-development-umbrella.md) | OpenSpec-compatible, environment-gated spec-driven development umbrella. Its packs are parked by 058 pending predicate migration; its §North-star roadmap is superseded by 060. |
 | [057](057-openspec-graph-spec-model-and-create-change.md) | Graph-backed OpenSpec model and `create_change` pack. Parked by 058. |
 | [**058**](058-beta159-realignment-and-demo-lane-focus.md) | **Realign to semstreams v1.0.0-beta.159 + canonical predicates; demo scope = front door + research/autoresearch; dev-side packs parked in place.** Current architecture posture. |
 | [**059**](059-semstreams-beta160-graph-foundation-adoption.md) | **Adopt semstreams v1.0.0-beta.160's typed graph-mutation, strict-port, service-composition, trajectory, and fresh-storage contracts while retaining ADR-058's live/parked boundary.** Current framework baseline. |
+| [**060**](060-program-manager-direction-and-research-design.md) | **Program-manager direction: observation-first authority ladder, containment before unattended ticks, GitHub-or-governed-contract edges, SOP releases as the practice trigger, `program-report` as the first research depth profile, ensemble synthesis over bounded walkers for non-verifiable domains.** Supersedes 056 §North-star only. Current product direction. |
 
 ## Conventions
 

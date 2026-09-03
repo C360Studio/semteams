@@ -92,6 +92,9 @@ record, and review is a mechanical derivation check (every cited object appears 
 trajectory) plus plan conformance. The evidence record is channel-typed so that `pr-review`, docs-drift findings, and
 open-web research later share the same reviewer and the same check. GitHub is the first domain because it is the only
 candidate domain with ground truth; the open web and SemSource are later channels of the same engine.
+That reduced review is the verifiable-domain shortcut: the GitHub API is ground truth. Research over channels without
+ground truth adds the falsification phase and origin-counted redundant width recorded in
+[ADR-060](../adr/060-program-manager-direction-and-research-design.md) decision 6.
 
 `autoresearch` remains a useful shipped framework demonstration. It is not part of the initial program-manager MVP
 story unless a concrete program-management journey requires metric optimization.
