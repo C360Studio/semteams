@@ -478,6 +478,17 @@ task openspec:queue-test
 - [semstreams](https://github.com/c360studio/semstreams) — framework.
   Owns all `agentic-*`, `graph-*`, `rule`, I/O, and gateway components.
   The place to make framework-level changes.
-- [semdragons](https://github.com/c360studio/semdragons),
-  [semspec](https://github.com/c360studio/semspec) — sibling products
-  that also import semstreams.
+- [semdev](https://github.com/c360studio/semdev) — maker side: the
+  issue-to-reviewed-PR workflow, one instance per project queue. The only PR
+  author in the ecosystem, including on the org SOP repository.
+- [semmem](https://github.com/c360studio/semmem) — cross-product knowledge
+  curator. Ingests lessons pushed from any SemStreams-based instance, owns the
+  SOP repository's content policy, files SOP items as issues, publishes
+  practices as versioned SOP releases; serves them over MCP for runtime
+  retrieval. Federation back to products happens only via SOP releases.
+- [semsource](https://github.com/c360studio/semsource) — code, documentation,
+  and change evidence over its own service interfaces; does not share our
+  graph.
+- [semdragons](https://github.com/c360studio/semdragons) — sibling product
+  that also imports semstreams. `semspec` was mined for design and retired
+  (semstreams ADR-080).
