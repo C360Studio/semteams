@@ -167,6 +167,11 @@ the first end-to-end target; UC-2/UC-3 layer on.
 
 ## North-star deployment roadmap
 
+> **Superseded in part by [ADR-060](060-program-manager-direction-and-research-design.md) (2026-09-03).** This
+> section and the 2026-07-30 addendum below are retained for archeology only. The D1/D2 dev arc moved to SemDev;
+> the ladder is re-based on observation (program pulse) in ADR-060 decision 1. The rest of this ADR is unchanged.
+
+
 The destination is a **self-hosted, always-on, single-operator
 program-manager**: SemTeams on a Mac Mini on the operator's LAN, running
 continuously, coordinating the **`sem*` repo family** (semstreams,
@@ -291,6 +296,10 @@ phase that needs them):
   for living-spec current-state evolving via archived deltas.
 
 ## Addendum 2026-07-30: D2/P5 invariants from the Kody-pattern comparison
+
+> **Superseded in part by [ADR-060](060-program-manager-direction-and-research-design.md) (2026-09-03).** The
+> D2/P5 arc these invariants were written for is SemDev's; ADR-060 §Consequences records where they re-apply.
+
 
 The approved comparison does **not** port Kody or pivot SemTeams toward a
 Kody runtime. D2/P5 remains a substrate-plus-overlays addition that reuses
