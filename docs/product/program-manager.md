@@ -1,6 +1,7 @@
 # SemTeams Program Manager
 
-**Status:** Owner-approved product direction, 2026-08-26. This document describes the target product and MVP. For the
+**Status:** Owner-approved product direction, 2026-08-26; amended 2026-09-03 per the owner ruling on
+[#264](https://github.com/C360Studio/semteams/issues/264). This document describes the target product and MVP. For the
 behavior available today, see the [README](../../README.md) and [demo claim boundary](../demo-mvp-claims.md).
 
 ## Product promise
@@ -83,6 +84,14 @@ have meaningfully different terminal contracts. Packs may reuse tools, evidence 
 first MVP must not depend on opaque pack-to-pack composition: each user-visible journey has an explicit entry point,
 terminal result, and authority boundary.
 
+Evidence-verified research is the program manager's core competence, and `program-report` is built as the first depth
+profile of the `research` capability, not beside it: the planner decomposes the operator's portfolio, gatherers read
+GitHub through the product-owned adapter, synthesis emits a pulse artifact whose every factual claim carries an evidence
+record, and review is a mechanical derivation check (every cited object appears in a tool result in the run's own
+trajectory) plus plan conformance. The evidence record is channel-typed so that `pr-review`, docs-drift findings, and
+open-web research later share the same reviewer and the same check. GitHub is the first domain because it is the only
+candidate domain with ground truth; the open web and SemSource are later channels of the same engine.
+
 `autoresearch` remains a useful shipped framework demonstration. It is not part of the initial program-manager MVP
 story unless a concrete program-management journey requires metric optimization.
 
@@ -107,8 +116,10 @@ The first implementation slice is the smallest useful version of that promise:
 
 > Produce an evidence-backed daily program pulse across configured projects and repositories.
 
-Targeted research may enrich a pulse when the observed evidence is insufficient, but it is not a prerequisite for the
-first end-to-end proof.
+Deeper targeted research over open-web or SemSource channels may enrich a pulse when the observed evidence is
+insufficient; it is not a prerequisite for the first end-to-end proof. What is a prerequisite is the shared evidence
+contract and the containment budget: the first proof must not ship a fetch-and-summarize pipeline with its own evidence
+shape or an unbounded loop.
 
 The MVP does not:
 
