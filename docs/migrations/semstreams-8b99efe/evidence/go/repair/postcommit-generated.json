@@ -1,0 +1,22 @@
+[
+  {
+    "name": "schema-check",
+    "command": [
+      "task",
+      "schema:check-changes"
+    ],
+    "head": "edf87d3104d4b5cc494623c89b17742539951380",
+    "exit_code": 0,
+    "elapsed_seconds": 0.047
+  },
+  {
+    "name": "ui-generated-check",
+    "command": [
+      "task",
+      "ui:generate-types:check"
+    ],
+    "head": "edf87d3104d4b5cc494623c89b17742539951380",
+    "exit_code": 0,
+    "elapsed_seconds": 0.671
+  }
+]

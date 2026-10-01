@@ -1,0 +1,3570 @@
+[
+  {
+    "name": "autoresearch",
+    "exit": 0,
+    "playwright_exit": 0,
+    "skipped": false,
+    "source_changed": false,
+    "manifest": {
+      "name": "autoresearch",
+      "fixture": "autoresearch.yaml",
+      "spec": "autoresearch.spec.ts",
+      "config": "e2e-flow-bootstrap.json",
+      "source": "/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams",
+      "project": "stmig162",
+      "port": 33162,
+      "runner_sha256": "ce2a20e21ee8ae26939460b76f79a185e743b8727a6ae8264463167b9fe5d31e",
+      "matrix_sha256": "6cbebefa31505fd1f7cc4beeb92766e936aba301e30f9eae46b0e2cc4ec89136",
+      "source_tree_sha256": "79ad0a9e17faa8f3d3c4473808da9faa2d34353323612013f10e5fd3b0fd9ba8",
+      "ui_source_tree_sha256": "49f88c4db835aa4ef7f8e707ef9e317965c0b2044c0e7bdbe27c61ca1136c935",
+      "derived_config_sha256": "3cb221ccf480403bf0240549959498f25a69712fcc1a827c49fac35881449f17",
+      "compose_sha256": "b3d24c084351b73c985d1c11d27c891a7af12e4c1e7b7a6c368e0a7e2db7266e",
+      "sha256": {
+        "go.mod": "fe05e2ea4b4c45bfc181ff83b3a925dccda4dd3d54970b03765c9b50d0b96fff",
+        "go.sum": "8cb9cd26889b1efdd0d03402581fbc26b354bde2b45f195efd71e90b93e51599",
+        "ui/package-lock.json": "28fd4403ce710547429496e98d4b7f3e941986eb67e6957316e298ffb2a144c4",
+        "configs/e2e-flow-bootstrap.json": "f19b57b80dac11e7bdfcce311b59733a4c797b8b765fb7602861b774ec904106",
+        "test/fixtures/journeys/autoresearch.yaml": "89529961d95aa9fa574c41ba66b80fabe314f7be0b6f7e82e8c38603e7baa32b",
+        "ui/e2e/agentic/autoresearch.spec.ts": "ba37aa6f1090a3f64d2cc81ee3bf6e6957b8cd483c649977ea4f406317b1677f"
+      },
+      "images": [
+        {
+          "Id": "sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b",
+          "RepoTags": [
+            "caddy:2-alpine"
+          ],
+          "RepoDigests": [
+            "caddy@sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b"
+          ]
+        },
+        {
+          "Id": "sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66",
+          "RepoTags": [
+            "nats:2.14.4-alpine",
+            "nats@sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66"
+          ],
+          "RepoDigests": [
+            "nats@sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66"
+          ]
+        },
+        {
+          "Id": "sha256:d96116ba2b09643bb02fad97b2d0c2e069c3e8d96d2a19b11c77fa96c41cdca1",
+          "RepoTags": [
+            "stmig162-backend:autoresearch-repair"
+          ],
+          "RepoDigests": [
+            "stmig162-backend@sha256:d96116ba2b09643bb02fad97b2d0c2e069c3e8d96d2a19b11c77fa96c41cdca1"
+          ]
+        },
+        {
+          "Id": "sha256:09fb79ed5ef11c76875be1b9ed97cd9750ab4065a7e06a7a158876050f096ec7",
+          "RepoTags": [
+            "stmig162-mock-llm:8b99efe"
+          ],
+          "RepoDigests": [
+            "stmig162-mock-llm@sha256:09fb79ed5ef11c76875be1b9ed97cd9750ab4065a7e06a7a158876050f096ec7"
+          ]
+        },
+        {
+          "Id": "sha256:80aa3f7be0de406f45471018b06229b9e7151bf38b8ef0e7a01351d74d79ca6f",
+          "RepoTags": [
+            "stmig162-sandbox:8b99efe"
+          ],
+          "RepoDigests": [
+            "stmig162-sandbox@sha256:80aa3f7be0de406f45471018b06229b9e7151bf38b8ef0e7a01351d74d79ca6f"
+          ]
+        },
+        {
+          "Id": "sha256:5bbae7d16029a20ca17382a58d6acd2f73c1478b151516ba83549faad691a91a",
+          "RepoTags": [
+            "stmig162-ui:8b99efe"
+          ],
+          "RepoDigests": [
+            "stmig162-ui@sha256:5bbae7d16029a20ca17382a58d6acd2f73c1478b151516ba83549faad691a91a"
+          ]
+        }
+      ],
+      "source_after_tree_sha256": "79ad0a9e17faa8f3d3c4473808da9faa2d34353323612013f10e5fd3b0fd9ba8",
+      "ui_source_after_tree_sha256": "49f88c4db835aa4ef7f8e707ef9e317965c0b2044c0e7bdbe27c61ca1136c935",
+      "source_changed": false
+    },
+    "config_file": "configs/3cb221ccf480403bf0240549959498f25a69712fcc1a827c49fac35881449f17.json",
+    "compose_file": "compose/autoresearch.json",
+    "stats": {
+      "startTime": "2026-10-01T14:19:27.439Z",
+      "duration": 3458.92,
+      "expected": 1,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "tests": [
+      {
+        "title": "optimize prompt \u2192 baseline \u2192 2 kept iterations \u2192 approved reply",
+        "status": "passed",
+        "duration_ms": 2531,
+        "errors": [],
+        "proof_file": "proofs/autoresearch.json",
+        "screenshots": [
+          "proofs/autoresearch-autoresearch-terminal-response-ui.png"
+        ],
+        "screenshot_limit": "Existing fixed right-rail clipping; screenshot alone is not full-content proof. Browser assertion parses exact expanded raw DOM payload. No rich-body-rendering claim."
+      }
+    ],
+    "backend_readiness": {
+      "exit": 0,
+      "stdout": "READY",
+      "stderr": "--2026-10-01 14:19:31--  http://localhost:8080/readyz\nResolving localhost (localhost)... ::1, 127.0.0.1\nConnecting to localhost (localhost)|::1|:8080... connected.\nHTTP request sent, awaiting response... \n  HTTP/1.1 200 OK\n  Date: Thu, 01 Oct 2026 14:19:31 GMT\n  Content-Length: 5\n  Content-Type: text/plain; charset=utf-8\nLength: 5 [text/plain]\nSaving to: 'STDOUT'\n\n     0K                                                       100% 2.08M=0s\n\n2026-10-01 14:19:31 (2.08 MB/s) - written to stdout [5/5]\n\n"
+    },
+    "run_phases": {
+      "status": 200,
+      "body": [
+        {
+          "subject": "c360.semteams-bootstrap-e2e-e8c788.chain.agent.execution.5e527474-e4cf-4dbd-b9a3-0a1958c40d2e",
+          "predicate": "agent.run.phase",
+          "object": "completed",
+          "source": "",
+          "timestamp": "2026-10-01T14:19:30.129189041Z",
+          "confidence": 1
+        }
+      ]
+    },
+    "run_approval": {
+      "pending": {
+        "status": 200,
+        "body": []
+      },
+      "answered": {
+        "status": 200,
+        "body": []
+      },
+      "outstanding": {
+        "status": 200,
+        "body": []
+      }
+    },
+    "loops": [
+      {
+        "loop_id": "0f4cddaf-9010-416f-9b04-e810b02c2c16",
+        "task_id": "rule-c360.semteams-bootstrap-e2e-e8c788.agentic-loop.agent.execution.fbeabd20-b8b7-40ca-abc4-cadc3e18949b-1790864369618744833",
+        "state": "complete",
+        "role": "autoresearch-execute",
+        "iterations": 1,
+        "max_iterations": 8,
+        "outcome": "success",
+        "result": "{\"action\":\"measured\",\"reason\":\"Iteration 1: 1.20s \u2192 1.00s, tests still pass \u2014 kept.\"}"
+      },
+      {
+        "loop_id": "29064689-f8f5-400c-acef-e0daeb5ec76f",
+        "task_id": "rule-c360.semteams-bootstrap-e2e-e8c788.agentic-loop.agent.execution.8981ea65-7d1f-4224-b838-169d00849af0-1790864369832437500",
+        "state": "complete",
+        "role": "autoresearch-execute",
+        "iterations": 1,
+        "max_iterations": 8,
+        "outcome": "success",
+        "result": "{\"action\":\"measured\",\"reason\":\"Iteration 2: 1.00s \u2192 0.85s, tests still pass \u2014 kept. Cap reached.\"}"
+      },
+      {
+        "loop_id": "3ccfce61-f63d-4f6f-a3da-644ba986e8c7",
+        "task_id": "rule-c360.semteams-bootstrap-e2e-e8c788.agentic-loop.agent.execution.5e527474-e4cf-4dbd-b9a3-0a1958c40d2e-1790864369441494930",
+        "state": "complete",
+        "role": "autoresearch-baseline",
+        "iterations": 1,
+        "max_iterations": 8,
+        "outcome": "success",
+        "result": "{\"action\":\"propose\",\"reason\":\"Baseline captured at 1.20s. Beginning the iteration loop (cap 2) \u2014 propose single-axis changes and keep the ones that lower the wallclock.\"}"
+      },
+      {
+        "loop_id": "5848907d-9672-463d-8dc7-be1716c99f7d",
+        "task_id": "rule-c360.semteams-bootstrap-e2e-e8c788.chain.agent.execution.5e527474-e4cf-4dbd-b9a3-0a1958c40d2e-1790864369965342958",
+        "state": "complete",
+        "role": "autoresearch-synthesize",
+        "iterations": 1,
+        "max_iterations": 8,
+        "outcome": "success",
+        "result": "{\"action\":\"emit\",\"reason\":\"Artifact emitted: 1.20s \u2192 0.85s (29% faster), both iterations kept. Routing to the reviewer.\"}"
+      },
+      {
+        "loop_id": "59d126dc-e6d7-47f6-8f06-1710e73bc792",
+        "task_id": "rule-c360.semteams-bootstrap-e2e-e8c788.chain.agent.execution.5e527474-e4cf-4dbd-b9a3-0a1958c40d2e-1790864370145437958",
+        "state": "complete",
+        "role": "ops-chain-observer",
+        "max_iterations": 8,
+        "outcome": "success",
+        "result": "{\"action\":\"observed\",\"reason\":\"Read the run entity and the coordinator loop result. Run reached its terminal phase with no operator-actionable pattern; emitting no findings.\"}"
+      },
+      {
+        "loop_id": "5e527474-e4cf-4dbd-b9a3-0a1958c40d2e",
+        "task_id": "dispatch-19e0755b2a92cd143da2edd68da8aae82768f0687cea13c9a390ee5c172fa307",
+        "state": "complete",
+        "role": "coordinator",
+        "iterations": 2,
+        "max_iterations": 8,
+        "user_id": "ui-anonymous",
+        "channel_type": "http",
+        "outcome": "success",
+        "result": "{\"action\":\"autoresearch\",\"reason\":\"Optimize the wallclock of `go test ./...`. Command: go test ./...; surface: ./...; cap: 2 iterations; metric: real seconds parsed from the test output. Lower is better.\"}"
+      },
+      {
+        "loop_id": "7ffd82b6-787e-4adb-b9da-3db9231bcb2a",
+        "task_id": "rule-c360.semteams-bootstrap-e2e-e8c788.agentic-loop.agent.execution.5e527474-e4cf-4dbd-b9a3-0a1958c40d2e-1790864370217165042",
+        "state": "complete",
+        "role": "coordinator",
+        "max_iterations": 8,
+        "outcome": "success",
+        "result": "{\"action\":\"respond_direct\",\"reason\":\"Optimized `go test ./...` from 1.20s to 0.85s (about 29% faster) across two kept iterations: parallelizing independent suites and dropping a redundant fixture rebuild. Both changes keep the tests passing.\"}"
+      },
+      {
+        "loop_id": "8981ea65-7d1f-4224-b838-169d00849af0",
+        "task_id": "rule-c360.semteams-bootstrap-e2e-e8c788.chain.agent.execution.5e527474-e4cf-4dbd-b9a3-0a1958c40d2e-1790864369774024583",
+        "state": "complete",
+        "role": "autoresearch-propose",
+        "max_iterations": 8,
+        "outcome": "success",
+        "result": "{\"action\":\"measure\",\"reason\":\"Iteration 2 hypothesis: drop a redundant fixture rebuild in TestMain \u2014 further reduces setup time.\"}"
+      },
+      {
+        "loop_id": "f1422d70-0f8f-4fa8-9491-065ff7e4eb35",
+        "task_id": "rule-c360.semteams-bootstrap-e2e-e8c788.agentic-loop.agent.execution.5848907d-9672-463d-8dc7-be1716c99f7d-1790864370054692041",
+        "state": "complete",
+        "role": "reviewer-autoresearch",
+        "max_iterations": 8,
+        "outcome": "success",
+        "result": "{\"action\":\"approved\",\"reason\":\"Rollup is structurally complete: baseline, per-iteration journey, running best, and kept changes all present; the kept iterations genuinely moved the metric (1.20 \u2192 0.85). Approved.\"}"
+      },
+      {
+        "loop_id": "fbeabd20-b8b7-40ca-abc4-cadc3e18949b",
+        "task_id": "rule-c360.semteams-bootstrap-e2e-e8c788.chain.agent.execution.5e527474-e4cf-4dbd-b9a3-0a1958c40d2e-1790864369516462375",
+        "state": "complete",
+        "role": "autoresearch-propose",
+        "max_iterations": 8,
+        "outcome": "success",
+        "result": "{\"action\":\"measure\",\"reason\":\"Iteration 1 hypothesis: enable test caching / parallelism (t.Parallel on the independent suites) \u2014 should cut wallclock without changing behavior.\"}"
+      }
+    ],
+    "user_responses": [
+      {
+        "sequence": 236,
+        "timestamp": "2026-10-01T14:19:30.238455083Z",
+        "subject": "user.response.http.http-1790864369380353389",
+        "message_type": "agentic.user_response.v1",
+        "trace_id": "ea1ab78dcc012a46456d3ba9a549e157",
+        "span_id": "f1dacd76020f75a2",
+        "summary": "Type: agentic.user_response.v1, Payload: *agentic.UserResponse",
+        "raw_data": {
+          "id": "917526c8-60dc-4ea5-a72c-c6eedc3c47c9",
+          "type": {
+            "domain": "agentic",
+            "category": "user_response",
+            "version": "v1"
+          },
+          "payload": {
+            "response_id": "terminal-user-response:8b2ad44a-a672-416c-b86e-c74c4a995bf5",
+            "channel_type": "http",
+            "channel_id": "http-1790864369380353389",
+            "user_id": "ui-anonymous",
+            "in_reply_to": "7ffd82b6-787e-4adb-b9da-3db9231bcb2a",
+            "type": "result",
+            "content": "Optimized `go test ./...` from 1.20s to 0.85s (about 29% faster) across two kept iterations: parallelizing independent suites and dropping a redundant fixture rebuild. Both changes keep the tests passing.",
+            "timestamp": "2026-10-01T14:19:30.235818625Z"
+          },
+          "meta": {
+            "created_at": 1790864370238,
+            "received_at": 1790864370238,
+            "source": "agentic-dispatch"
+          }
+        }
+      },
+      {
+        "sequence": 2,
+        "timestamp": "2026-10-01T14:19:29.387129222Z",
+        "subject": "user.response.http.http-1790864369380353389",
+        "message_type": "agentic.user_response.v1",
+        "trace_id": "7858ca6f50fa492aad03955f6974593f",
+        "span_id": "5fad4fcb286eb267",
+        "summary": "Type: agentic.user_response.v1, Payload: *agentic.UserResponse",
+        "raw_data": {
+          "id": "c23f5efb-9050-4afb-80f9-dd87ecea3876",
+          "type": {
+            "domain": "agentic",
+            "category": "user_response",
+            "version": "v1"
+          },
+          "payload": {
+            "response_id": "11b57f17-2a4f-46f7-a378-6ecb43c1a4ea",
+            "channel_type": "http",
+            "channel_id": "http-1790864369380353389",
+            "user_id": "ui-anonymous",
+            "in_reply_to": "5e527474-e4cf-4dbd-b9a3-0a1958c40d2e",
+            "type": "status",
+            "content": "Task submitted. Loop: 5e527474-e4cf-4dbd-b9a3-0a1958c40d2e",
+            "timestamp": "2026-10-01T14:19:29.38481868Z"
+          },
+          "meta": {
+            "created_at": 1790864369384,
+            "received_at": 1790864369384,
+            "source": "agentic-dispatch"
+          }
+        }
+      }
+    ],
+    "tool_errors": [],
+    "warnings_and_errors": [
+      {
+        "time": "2026-10-01T14:19:21.630677677Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/rule.(*Processor).loadRules",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/rule/rule_loader.go",
+          "line": 157
+        },
+        "msg": "Invalid buffer window size, using default",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "component": "rule-processor",
+        "default": 600000000000,
+        "error": "time: invalid duration \"\""
+      },
+      {
+        "time": "2026-10-01T14:19:21.630705135Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/rule.(*Processor).loadRules",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/rule/rule_loader.go",
+          "line": 164
+        },
+        "msg": "Invalid alert cooldown period, using default",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "component": "rule-processor",
+        "default": 120000000000,
+        "error": "time: invalid duration \"\""
+      },
+      {
+        "time": "2026-10-01T14:19:21.660871093Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/service.(*ComponentManager).analyzeBootComposition",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/service/component_manager.go",
+          "line": 409
+        },
+        "msg": "composition finding",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "type": "disconnected_node",
+        "component": "objectstore",
+        "port": "",
+        "message": "component has no connections"
+      },
+      {
+        "time": "2026-10-01T14:19:21.660886093Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/service.(*ComponentManager).analyzeBootComposition",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/service/component_manager.go",
+          "line": 409
+        },
+        "msg": "composition finding",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "type": "orphaned_port",
+        "component": "agentic-model",
+        "port": "agent.stream",
+        "message": "output port 'agent.stream' (stream): no_subscribers"
+      },
+      {
+        "time": "2026-10-01T14:19:21.66089151Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/service.(*ComponentManager).analyzeBootComposition",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/service/component_manager.go",
+          "line": 409
+        },
+        "msg": "composition finding",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "type": "orphaned_port",
+        "component": "agentic-tools",
+        "port": "tool.list",
+        "message": "input port 'tool.list' (request): optional_api_unused"
+      },
+      {
+        "time": "2026-10-01T14:19:21.660897177Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/service.(*ComponentManager).analyzeBootComposition",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/service/component_manager.go",
+          "line": 409
+        },
+        "msg": "composition finding",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "type": "orphaned_port",
+        "component": "graph-gateway",
+        "port": "graph_index_queries",
+        "message": "output port 'graph_index_queries' (request): optional_api_unused"
+      },
+      {
+        "time": "2026-10-01T14:19:21.660902343Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/service.(*ComponentManager).analyzeBootComposition",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/service/component_manager.go",
+          "line": 409
+        },
+        "msg": "composition finding",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "type": "orphaned_port",
+        "component": "objectstore",
+        "port": "events",
+        "message": "output port 'events' (stream): no_subscribers"
+      },
+      {
+        "time": "2026-10-01T14:19:21.660909468Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/service.(*ComponentManager).analyzeBootComposition",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/service/component_manager.go",
+          "line": 409
+        },
+        "msg": "composition finding",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "type": "orphaned_port",
+        "component": "objectstore",
+        "port": "stored",
+        "message": "output port 'stored' (stream): no_subscribers"
+      },
+      {
+        "time": "2026-10-01T14:19:21.660913635Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/service.(*ComponentManager).analyzeBootComposition",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/service/component_manager.go",
+          "line": 409
+        },
+        "msg": "composition finding",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "type": "orphaned_port",
+        "component": "objectstore",
+        "port": "write",
+        "message": "input port 'write' (stream): no_publishers"
+      },
+      {
+        "time": "2026-10-01T14:19:21.660921677Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/service.(*ComponentManager).analyzeBootComposition",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/service/component_manager.go",
+          "line": 409
+        },
+        "msg": "composition finding",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "type": "orphaned_port",
+        "component": "teams-dispatch",
+        "port": "user.response",
+        "message": "output port 'user.response' (stream): no_subscribers"
+      },
+      {
+        "time": "2026-10-01T14:19:21.660926385Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/service.(*ComponentManager).analyzeBootComposition",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/service/component_manager.go",
+          "line": 409
+        },
+        "msg": "composition finding",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "type": "orphaned_port",
+        "component": "teams-loop",
+        "port": "trajectories",
+        "message": "output port 'trajectories' (watch): optional_index_unwatched"
+      },
+      {
+        "time": "2026-10-01T14:19:21.680217802Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/graph-query.(*Component).superviseSummaryView",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/graph-query/summary_view.go",
+          "line": 124
+        },
+        "msg": "COMMUNITY_SUMMARIES unavailable; using statistical summaries",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "component": "graph-query",
+        "error": "framework bucket \"COMMUNITY_SUMMARIES\" is not ready: its owner (graph-clustering) has not provisioned it in this deployment",
+        "retry_interval": 5000000000
+      },
+      {
+        "time": "2026-10-01T14:19:21.680714677Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/graph-query.(*Component).superviseCommunityGenerations",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/graph-query/component.go",
+          "line": 740
+        },
+        "msg": "community generation unavailable; retrying",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "component": "graph-query",
+        "generation": 1,
+        "error": "framework bucket \"COMMUNITY_INDEX\" is not ready: its owner (graph-clustering) has not provisioned it in this deployment",
+        "retry_interval": 5000000000
+      },
+      {
+        "time": "2026-10-01T14:19:26.683486346Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/graph-query.(*Component).superviseSummaryView",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/graph-query/summary_view.go",
+          "line": 124
+        },
+        "msg": "COMMUNITY_SUMMARIES unavailable; using statistical summaries",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "component": "graph-query",
+        "error": "framework bucket \"COMMUNITY_SUMMARIES\" is not ready: its owner (graph-clustering) has not provisioned it in this deployment",
+        "retry_interval": 5000000000
+      },
+      {
+        "time": "2026-10-01T14:19:26.683562887Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/graph-query.(*Component).superviseCommunityGenerations",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/graph-query/component.go",
+          "line": 740
+        },
+        "msg": "community generation unavailable; retrying",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "component": "graph-query",
+        "generation": 2,
+        "error": "framework bucket \"COMMUNITY_INDEX\" is not ready: its owner (graph-clustering) has not provisioned it in this deployment",
+        "retry_interval": 5000000000
+      },
+      {
+        "time": "2026-10-01T14:19:26.844910846Z",
+        "level": "ERROR",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/agentic-dispatch.(*Component).handleListLoops",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/agentic-dispatch/http.go",
+          "line": 608
+        },
+        "msg": "agentic-dispatch: loop listing refused while loop authority is unavailable",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "request_id": "9643be98",
+        "error": "Component.currentLoopSnapshot: loop projection not caught up failed: graphview: view not ready"
+      },
+      {
+        "time": "2026-10-01T14:19:26.845053554Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/agentic-dispatch.(*Component).writeJSONError",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/agentic-dispatch/http.go",
+          "line": 500
+        },
+        "msg": "HTTP error response",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "status": 503,
+        "message": "loop state is not available right now; retry shortly"
+      },
+      {
+        "time": "2026-10-01T14:19:29.440247097Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/agentic/agentrun.ResolveRun",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/agentic/agentrun/agentrun.go",
+          "line": 423
+        },
+        "msg": "agentrun.ResolveRun: agent.loop.run triple absent \u2014 falling back to ancestry walk",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "loop_id": "5e527474-e4cf-4dbd-b9a3-0a1958c40d2e",
+        "org": "c360",
+        "platform": "semteams-bootstrap-e2e-e8c788"
+      },
+      {
+        "time": "2026-10-01T14:19:29.533739958Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/agentic/agentrun.ResolveRun",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/agentic/agentrun/agentrun.go",
+          "line": 423
+        },
+        "msg": "agentrun.ResolveRun: agent.loop.run triple absent \u2014 falling back to ancestry walk",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "loop_id": "fbeabd20-b8b7-40ca-abc4-cadc3e18949b",
+        "org": "c360",
+        "platform": "semteams-bootstrap-e2e-e8c788"
+      },
+      {
+        "time": "2026-10-01T14:19:29.618701166Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/rule.(*ExecutionContext).warnUnresolvedTemplateVars",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/rule/execution_context.go",
+          "line": 841
+        },
+        "msg": "Unresolved template variables in rule substitution \u2014 likely silent-pass bug",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "unresolved": [
+          "$entity.triple.autoresearch.best.value"
+        ],
+        "template": "AUTORESEARCH EXECUTE \u2014 measure the proposed diff and let the empirical compare route the outcome.\n\nThe propose phase at loop $entity.instance applied a diff within the surface. Your job is exactly three things: run the measurement command, capture the metric, call the empirical-compare emit tool. You do NOT decide whether to keep or revert \u2014 the emit tool's executor reads the run entity's autoresearch.best.value, compares numerically, and stamps the outcome on your loop. Then the bash revert/keep step happens based on what outcome the tool stamped.\n\nMEASUREMENT CONTEXT (inlined at spawn \u2014 do NOT re-fetch via read_loop_result):\n\n- command: $entity.triple.agent.lineage.command\n- surface: $entity.triple.agent.lineage.surface\n- metric_parser: $entity.triple.agent.lineage.metric-parser\n\nIteration 1 \u2014 call read_loop_result on $entity.instance (the propose loop) for the hypothesis + diff summary. The reason field carries: hypothesis, surface-bounded edits, expected qualitative effect.\n\nIteration 2 \u2014 bash: run the command verbatim above. Capture stdout + exit code. Apply the metric_parser instructions to extract a single numeric value.\n\nIteration 3 \u2014 call emit_autoresearch_measurement with the measurement:\n\n```\nemit_autoresearch_measurement(\n  value=<measured number>,\n  pass=<bool \u2014 true iff exit code 0>,\n  stdout_tail=\"<last ~200 chars for audit>\",\n  stderr_tail=\"<last ~200 chars if any>\"\n)\n```\n\nThe tool executor (product-shell) does the empirical compare:\n\n1. Reads $entity.triple.autoresearch.best.value from the run entity.\n2. If pass=false \u2192 stamps outcome=crashed on your loop.\n3. Else if value < best.value \u2192 stamps outcome=kept on your loop AND updates autoresearch.best.value + .best.experiment_id on the run entity.\n4. Else \u2192 stamps outcome=reverted on your loop.\n\nThe outcome is on your loop's autoresearch.measurement.outcome triple after this call returns.\n\nIteration 4 \u2014 depending on the stamped outcome, revert or keep:\n\n- **outcome=kept**: the diff stays. No action.\n- **outcome=reverted OR outcome=crashed**: revert the working tree via `git checkout -- <surface globs from above>`. This restores the tree to its state before propose applied the diff.\n\nReverting after the empirical compare keeps the working tree at the running-best state so the next propose iteration applies its diff against the same reference as prior iterations.\n\nIteration 5 \u2014 call decide(action=\"measured\", reason=\"value=<n> pass=<bool> outcome=<kept|reverted|crashed> \u2014 <one-line measurement summary>\"). Rule 04 fires on this and stamps experiment.completed on the run entity. Rule 05 fires next based on the accumulated count (continue or cap-exhaust synthesize).\n\nIf the measurement command itself crashes catastrophically (sandbox unreachable, command not found), call decide(action=\"needs_clarification\", reason=\"execute environment failure: <specific reason>\") \u2014 recovery routes to coordinator. Distinguish: command exit code non-zero with stdout is a `pass=false` measurement (the tool stamps outcome=crashed, iteration counts toward cap). Sandbox unreachable / framework-level failure is needs_clarification.",
+        "rule_id": "autoresearch_propose_to_execute",
+        "entity_id": "c360.semteams-bootstrap-e2e-e8c788.agentic-loop.agent.execution.fbeabd20-b8b7-40ca-abc4-cadc3e18949b"
+      },
+      {
+        "time": "2026-10-01T14:19:29.647088833Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/agentic/agentrun.ResolveRun",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/agentic/agentrun/agentrun.go",
+          "line": 423
+        },
+        "msg": "agentrun.ResolveRun: agent.loop.run triple absent \u2014 falling back to ancestry walk",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "loop_id": "0f4cddaf-9010-416f-9b04-e810b02c2c16",
+        "org": "c360",
+        "platform": "semteams-bootstrap-e2e-e8c788"
+      },
+      {
+        "time": "2026-10-01T14:19:29.773974708Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/rule.(*ExecutionContext).substituteVariablesWith.(*ExecutionContext).applyTripleLengthSubstitutions.func2",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/rule/execution_context.go",
+          "line": 494
+        },
+        "msg": "triple-length substitution: Object is not list-shaped; replacing token with error sentinel",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "token": "$entity.triple.autoresearch.experiment.completed.length",
+        "predicate": "autoresearch.experiment.completed",
+        "object_type": "string",
+        "rule_id": "autoresearch_iteration_dispatch",
+        "hint": "the .length suffix requires the triple Object to be []string, []any, or a JSON-encoded list string \u2014 see coerceTripleObjectToStrings"
+      },
+      {
+        "time": "2026-10-01T14:19:29.791301708Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/agentic/agentrun.ResolveRun",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/agentic/agentrun/agentrun.go",
+          "line": 423
+        },
+        "msg": "agentrun.ResolveRun: agent.loop.run triple absent \u2014 falling back to ancestry walk",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "loop_id": "8981ea65-7d1f-4224-b838-169d00849af0",
+        "org": "c360",
+        "platform": "semteams-bootstrap-e2e-e8c788"
+      },
+      {
+        "time": "2026-10-01T14:19:29.832398208Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/rule.(*ExecutionContext).warnUnresolvedTemplateVars",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/rule/execution_context.go",
+          "line": 841
+        },
+        "msg": "Unresolved template variables in rule substitution \u2014 likely silent-pass bug",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "unresolved": [
+          "$entity.triple.autoresearch.best.value"
+        ],
+        "template": "AUTORESEARCH EXECUTE \u2014 measure the proposed diff and let the empirical compare route the outcome.\n\nThe propose phase at loop $entity.instance applied a diff within the surface. Your job is exactly three things: run the measurement command, capture the metric, call the empirical-compare emit tool. You do NOT decide whether to keep or revert \u2014 the emit tool's executor reads the run entity's autoresearch.best.value, compares numerically, and stamps the outcome on your loop. Then the bash revert/keep step happens based on what outcome the tool stamped.\n\nMEASUREMENT CONTEXT (inlined at spawn \u2014 do NOT re-fetch via read_loop_result):\n\n- command: $entity.triple.agent.lineage.command\n- surface: $entity.triple.agent.lineage.surface\n- metric_parser: $entity.triple.agent.lineage.metric-parser\n\nIteration 1 \u2014 call read_loop_result on $entity.instance (the propose loop) for the hypothesis + diff summary. The reason field carries: hypothesis, surface-bounded edits, expected qualitative effect.\n\nIteration 2 \u2014 bash: run the command verbatim above. Capture stdout + exit code. Apply the metric_parser instructions to extract a single numeric value.\n\nIteration 3 \u2014 call emit_autoresearch_measurement with the measurement:\n\n```\nemit_autoresearch_measurement(\n  value=<measured number>,\n  pass=<bool \u2014 true iff exit code 0>,\n  stdout_tail=\"<last ~200 chars for audit>\",\n  stderr_tail=\"<last ~200 chars if any>\"\n)\n```\n\nThe tool executor (product-shell) does the empirical compare:\n\n1. Reads $entity.triple.autoresearch.best.value from the run entity.\n2. If pass=false \u2192 stamps outcome=crashed on your loop.\n3. Else if value < best.value \u2192 stamps outcome=kept on your loop AND updates autoresearch.best.value + .best.experiment_id on the run entity.\n4. Else \u2192 stamps outcome=reverted on your loop.\n\nThe outcome is on your loop's autoresearch.measurement.outcome triple after this call returns.\n\nIteration 4 \u2014 depending on the stamped outcome, revert or keep:\n\n- **outcome=kept**: the diff stays. No action.\n- **outcome=reverted OR outcome=crashed**: revert the working tree via `git checkout -- <surface globs from above>`. This restores the tree to its state before propose applied the diff.\n\nReverting after the empirical compare keeps the working tree at the running-best state so the next propose iteration applies its diff against the same reference as prior iterations.\n\nIteration 5 \u2014 call decide(action=\"measured\", reason=\"value=<n> pass=<bool> outcome=<kept|reverted|crashed> \u2014 <one-line measurement summary>\"). Rule 04 fires on this and stamps experiment.completed on the run entity. Rule 05 fires next based on the accumulated count (continue or cap-exhaust synthesize).\n\nIf the measurement command itself crashes catastrophically (sandbox unreachable, command not found), call decide(action=\"needs_clarification\", reason=\"execute environment failure: <specific reason>\") \u2014 recovery routes to coordinator. Distinguish: command exit code non-zero with stdout is a `pass=false` measurement (the tool stamps outcome=crashed, iteration counts toward cap). Sandbox unreachable / framework-level failure is needs_clarification.",
+        "rule_id": "autoresearch_propose_to_execute",
+        "entity_id": "c360.semteams-bootstrap-e2e-e8c788.agentic-loop.agent.execution.8981ea65-7d1f-4224-b838-169d00849af0"
+      },
+      {
+        "time": "2026-10-01T14:19:29.85948875Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/agentic/agentrun.ResolveRun",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/agentic/agentrun/agentrun.go",
+          "line": 423
+        },
+        "msg": "agentrun.ResolveRun: agent.loop.run triple absent \u2014 falling back to ancestry walk",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "loop_id": "29064689-f8f5-400c-acef-e0daeb5ec76f",
+        "org": "c360",
+        "platform": "semteams-bootstrap-e2e-e8c788"
+      },
+      {
+        "time": "2026-10-01T14:19:29.965286208Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/rule.(*ExecutionContext).substituteVariablesWith.(*ExecutionContext).applyTripleLengthSubstitutions.func2",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/rule/execution_context.go",
+          "line": 494
+        },
+        "msg": "triple-length substitution: Object is not list-shaped; replacing token with error sentinel",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "token": "$entity.triple.autoresearch.experiment.completed.length",
+        "predicate": "autoresearch.experiment.completed",
+        "object_type": "string",
+        "rule_id": "autoresearch_iteration_dispatch",
+        "hint": "the .length suffix requires the triple Object to be []string, []any, or a JSON-encoded list string \u2014 see coerceTripleObjectToStrings"
+      },
+      {
+        "time": "2026-10-01T14:19:29.991479125Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/agentic/agentrun.ResolveRun",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/agentic/agentrun/agentrun.go",
+          "line": 423
+        },
+        "msg": "agentrun.ResolveRun: agent.loop.run triple absent \u2014 falling back to ancestry walk",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "loop_id": "5848907d-9672-463d-8dc7-be1716c99f7d",
+        "org": "c360",
+        "platform": "semteams-bootstrap-e2e-e8c788"
+      },
+      {
+        "time": "2026-10-01T14:19:30.073282958Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/agentic/agentrun.ResolveRun",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/agentic/agentrun/agentrun.go",
+          "line": 423
+        },
+        "msg": "agentrun.ResolveRun: agent.loop.run triple absent \u2014 falling back to ancestry walk",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "loop_id": "f1422d70-0f8f-4fa8-9491-065ff7e4eb35",
+        "org": "c360",
+        "platform": "semteams-bootstrap-e2e-e8c788"
+      },
+      {
+        "time": "2026-10-01T14:19:30.163030167Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/agentic/agentrun.ResolveRun",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/agentic/agentrun/agentrun.go",
+          "line": 423
+        },
+        "msg": "agentrun.ResolveRun: agent.loop.run triple absent \u2014 falling back to ancestry walk",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "loop_id": "59d126dc-e6d7-47f6-8f06-1710e73bc792",
+        "org": "c360",
+        "platform": "semteams-bootstrap-e2e-e8c788"
+      }
+    ],
+    "samples": [
+      {
+        "timestamp": 1790864366.841654,
+        "loops": {
+          "status": 503,
+          "body": "{\"response_id\":\"21307891-7c60-4f80-ac1f-5c0081406d10\",\"type\":\"error\",\"content\":\"loop state is not available right now; retry shortly\",\"timestamp\":\"2026-10-01T14:19:26Z\"}\n"
+        },
+        "backend_readiness": {
+          "exit": 0,
+          "stdout": "READY",
+          "stderr": "--2026-10-01 14:19:26--  http://localhost:8080/readyz\nResolving localhost (localhost)... ::1, 127.0.0.1\nConnecting to localhost (localhost)|::1|:8080... connected.\nHTTP request sent, awaiting response... \n  HTTP/1.1 200 OK\n  Date: Thu, 01 Oct 2026 14:19:26 GMT\n  Content-Length: 5\n  Content-Type: text/plain; charset=utf-8\nLength: 5 [text/plain]\nSaving to: 'STDOUT'\n\n     0K                                                       100% 1.91M=0s\n\n2026-10-01 14:19:26 (1.91 MB/s) - written to stdout [5/5]\n\n"
+        }
+      }
+    ]
+  },
+  {
+    "name": "autoresearch-guardrails",
+    "exit": 0,
+    "playwright_exit": 0,
+    "skipped": false,
+    "source_changed": false,
+    "manifest": {
+      "name": "autoresearch-guardrails",
+      "fixture": "autoresearch-guardrails.yaml",
+      "spec": "autoresearch-guardrails.spec.ts",
+      "config": "e2e-flow-bootstrap.json",
+      "source": "/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams",
+      "project": "stmig162",
+      "port": 33162,
+      "runner_sha256": "ce2a20e21ee8ae26939460b76f79a185e743b8727a6ae8264463167b9fe5d31e",
+      "matrix_sha256": "6cbebefa31505fd1f7cc4beeb92766e936aba301e30f9eae46b0e2cc4ec89136",
+      "source_tree_sha256": "79ad0a9e17faa8f3d3c4473808da9faa2d34353323612013f10e5fd3b0fd9ba8",
+      "ui_source_tree_sha256": "49f88c4db835aa4ef7f8e707ef9e317965c0b2044c0e7bdbe27c61ca1136c935",
+      "derived_config_sha256": "3cb221ccf480403bf0240549959498f25a69712fcc1a827c49fac35881449f17",
+      "compose_sha256": "5d73f68f1fae34a1fe44a8f9574451d0a7fe3c58494421bea8a8fc4fb05b7054",
+      "sha256": {
+        "go.mod": "fe05e2ea4b4c45bfc181ff83b3a925dccda4dd3d54970b03765c9b50d0b96fff",
+        "go.sum": "8cb9cd26889b1efdd0d03402581fbc26b354bde2b45f195efd71e90b93e51599",
+        "ui/package-lock.json": "28fd4403ce710547429496e98d4b7f3e941986eb67e6957316e298ffb2a144c4",
+        "configs/e2e-flow-bootstrap.json": "f19b57b80dac11e7bdfcce311b59733a4c797b8b765fb7602861b774ec904106",
+        "test/fixtures/journeys/autoresearch-guardrails.yaml": "2f695ead43c5cd16d3e22db5d3d0b4291249b7aaabab29f84572d7fa79e3fbbe",
+        "ui/e2e/agentic/autoresearch-guardrails.spec.ts": "b49c041f789ba76072c95662c4ba2005643ad8199189cd5e98519331c9d455e1"
+      },
+      "images": [
+        {
+          "Id": "sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b",
+          "RepoTags": [
+            "caddy:2-alpine"
+          ],
+          "RepoDigests": [
+            "caddy@sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b"
+          ]
+        },
+        {
+          "Id": "sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66",
+          "RepoTags": [
+            "nats:2.14.4-alpine",
+            "nats@sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66"
+          ],
+          "RepoDigests": [
+            "nats@sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66"
+          ]
+        },
+        {
+          "Id": "sha256:d96116ba2b09643bb02fad97b2d0c2e069c3e8d96d2a19b11c77fa96c41cdca1",
+          "RepoTags": [
+            "stmig162-backend:autoresearch-repair"
+          ],
+          "RepoDigests": [
+            "stmig162-backend@sha256:d96116ba2b09643bb02fad97b2d0c2e069c3e8d96d2a19b11c77fa96c41cdca1"
+          ]
+        },
+        {
+          "Id": "sha256:09fb79ed5ef11c76875be1b9ed97cd9750ab4065a7e06a7a158876050f096ec7",
+          "RepoTags": [
+            "stmig162-mock-llm:8b99efe"
+          ],
+          "RepoDigests": [
+            "stmig162-mock-llm@sha256:09fb79ed5ef11c76875be1b9ed97cd9750ab4065a7e06a7a158876050f096ec7"
+          ]
+        },
+        {
+          "Id": "sha256:80aa3f7be0de406f45471018b06229b9e7151bf38b8ef0e7a01351d74d79ca6f",
+          "RepoTags": [
+            "stmig162-sandbox:8b99efe"
+          ],
+          "RepoDigests": [
+            "stmig162-sandbox@sha256:80aa3f7be0de406f45471018b06229b9e7151bf38b8ef0e7a01351d74d79ca6f"
+          ]
+        },
+        {
+          "Id": "sha256:5bbae7d16029a20ca17382a58d6acd2f73c1478b151516ba83549faad691a91a",
+          "RepoTags": [
+            "stmig162-ui:8b99efe"
+          ],
+          "RepoDigests": [
+            "stmig162-ui@sha256:5bbae7d16029a20ca17382a58d6acd2f73c1478b151516ba83549faad691a91a"
+          ]
+        }
+      ],
+      "source_after_tree_sha256": "79ad0a9e17faa8f3d3c4473808da9faa2d34353323612013f10e5fd3b0fd9ba8",
+      "ui_source_after_tree_sha256": "49f88c4db835aa4ef7f8e707ef9e317965c0b2044c0e7bdbe27c61ca1136c935",
+      "source_changed": false
+    },
+    "config_file": "configs/3cb221ccf480403bf0240549959498f25a69712fcc1a827c49fac35881449f17.json",
+    "compose_file": "compose/autoresearch-guardrails.json",
+    "stats": {
+      "startTime": "2026-10-01T14:19:44.885Z",
+      "duration": 3692.784,
+      "expected": 1,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "tests": [
+      {
+        "title": "refuses vague objectives, then rejects guardrail-breaking metric wins",
+        "status": "passed",
+        "duration_ms": 2819,
+        "errors": [],
+        "proof_file": "proofs/autoresearch-guardrails.json",
+        "screenshots": [
+          "proofs/autoresearch-guardrails-autoresearch-terminal-response-ui.png"
+        ],
+        "screenshot_limit": "Existing fixed right-rail clipping; screenshot alone is not full-content proof. Browser assertion parses exact expanded raw DOM payload. No rich-body-rendering claim."
+      }
+    ],
+    "backend_readiness": {
+      "exit": 0,
+      "stdout": "READY",
+      "stderr": "--2026-10-01 14:19:49--  http://localhost:8080/readyz\nResolving localhost (localhost)... ::1, 127.0.0.1\nConnecting to localhost (localhost)|::1|:8080... connected.\nHTTP request sent, awaiting response... \n  HTTP/1.1 200 OK\n  Date: Thu, 01 Oct 2026 14:19:49 GMT\n  Content-Length: 5\n  Content-Type: text/plain; charset=utf-8\nLength: 5 [text/plain]\nSaving to: 'STDOUT'\n\n     0K                                                       100% 1.18M=0s\n\n2026-10-01 14:19:49 (1.18 MB/s) - written to stdout [5/5]\n\n"
+    },
+    "run_phases": {
+      "status": 200,
+      "body": [
+        {
+          "subject": "c360.semteams-bootstrap-e2e-9d9a19.chain.agent.execution.fadd0f41-2bf5-4a75-812e-1a1b177e2dea",
+          "predicate": "agent.run.phase",
+          "object": "completed",
+          "source": "",
+          "timestamp": "2026-10-01T14:19:47.832848758Z",
+          "confidence": 1
+        }
+      ]
+    },
+    "run_approval": {
+      "pending": {
+        "status": 200,
+        "body": []
+      },
+      "answered": {
+        "status": 200,
+        "body": []
+      },
+      "outstanding": {
+        "status": 200,
+        "body": []
+      }
+    },
+    "loops": [
+      {
+        "loop_id": "3f32a375-729c-44bf-86ae-29090daa5907",
+        "task_id": "rule-c360.semteams-bootstrap-e2e-9d9a19.agentic-loop.agent.execution.6aed87bf-a9a1-4f40-8e5a-b18d29eb151f-1790864387562488258",
+        "state": "complete",
+        "role": "autoresearch-execute",
+        "iterations": 1,
+        "max_iterations": 8,
+        "outcome": "success",
+        "result": "{\"action\":\"measured\",\"reason\":\"Iteration 2: value=0.10 pass=false outcome=crashed - guardrail violation, apparent speedup rejected and reverted.\"}"
+      },
+      {
+        "loop_id": "41e11db5-fb92-4b57-89ab-94575eb39ad7",
+        "task_id": "rule-c360.semteams-bootstrap-e2e-9d9a19.chain.agent.execution.fadd0f41-2bf5-4a75-812e-1a1b177e2dea-1790864387841597633",
+        "state": "complete",
+        "role": "ops-chain-observer",
+        "max_iterations": 8,
+        "outcome": "success",
+        "result": "{\"action\":\"observed\",\"reason\":\"Read the run entity and the coordinator loop result. Run reached its terminal phase with no operator-actionable pattern; emitting no findings.\"}"
+      },
+      {
+        "loop_id": "4adf19cb-4456-41a6-8ed1-dfd945d2137e",
+        "task_id": "rule-c360.semteams-bootstrap-e2e-9d9a19.agentic-loop.agent.execution.fadd0f41-2bf5-4a75-812e-1a1b177e2dea-1790864387167328425",
+        "state": "complete",
+        "role": "autoresearch-baseline",
+        "iterations": 1,
+        "max_iterations": 8,
+        "outcome": "success",
+        "result": "{\"action\":\"propose\",\"reason\":\"Baseline captured at 1.20s. Command=go test ./...; surface=test/helpers/, internal/testutil/; cap=2; metric_parser=parse trailing ok-line seconds; guardrail=tests must pass.\"}"
+      },
+      {
+        "loop_id": "4c7c422c-1509-4e6d-b2f4-26866e84283e",
+        "task_id": "dispatch-38081a852a2583eea668bfe59e44a3880250aae701ed1366ff7361f27828ae86",
+        "state": "complete",
+        "role": "coordinator",
+        "max_iterations": 8,
+        "user_id": "ui-anonymous",
+        "channel_type": "http",
+        "outcome": "success",
+        "result": "{\"action\":\"ask_user\",\"reason\":\"What scalar metric, measurement command, metric parser, iteration cap, and bounded edit surface should I optimize? \\\"Developer experience\\\" is too broad for autoresearch without a measurable target and guardrails.\"}"
+      },
+      {
+        "loop_id": "4feac501-f925-4cb3-8eb6-d331b5c74a3e",
+        "task_id": "rule-c360.semteams-bootstrap-e2e-9d9a19.agentic-loop.agent.execution.fadd0f41-2bf5-4a75-812e-1a1b177e2dea-1790864387880066342",
+        "state": "complete",
+        "role": "coordinator",
+        "max_iterations": 8,
+        "outcome": "success",
+        "result": "{\"action\":\"respond_direct\",\"reason\":\"Autoresearch kept the passing fixture-cache improvement and improved `go test ./...` from 1.20s to 1.00s. A later 0.10s result was rejected because the pass/coverage guardrail failed, so it was recorded as crashed and not promoted as the best. Keep the passing change only.\"}"
+      },
+      {
+        "loop_id": "6aed87bf-a9a1-4f40-8e5a-b18d29eb151f",
+        "task_id": "rule-c360.semteams-bootstrap-e2e-9d9a19.chain.agent.execution.fadd0f41-2bf5-4a75-812e-1a1b177e2dea-1790864387489261591",
+        "state": "complete",
+        "role": "autoresearch-propose",
+        "max_iterations": 8,
+        "outcome": "success",
+        "result": "{\"action\":\"measure\",\"reason\":\"Iteration 2 hypothesis: skip a slow integration-style helper path. This may lower wallclock but risks violating the pass/coverage guardrail.\"}"
+      },
+      {
+        "loop_id": "7f6726ee-c3b9-45be-b649-ebf8e20b418f",
+        "task_id": "rule-c360.semteams-bootstrap-e2e-9d9a19.chain.agent.execution.fadd0f41-2bf5-4a75-812e-1a1b177e2dea-1790864387654993258",
+        "state": "complete",
+        "role": "autoresearch-synthesize",
+        "iterations": 1,
+        "max_iterations": 8,
+        "outcome": "success",
+        "result": "{\"action\":\"emit\",\"reason\":\"Artifact emitted: 1.20s -\\u003e 1.00s best (16.7% faster); one kept iteration and one crashed guardrail violation. Routing to reviewer.\"}"
+      },
+      {
+        "loop_id": "b58f0cb6-c372-4278-aab3-9338573511a3",
+        "task_id": "rule-c360.semteams-bootstrap-e2e-9d9a19.agentic-loop.agent.execution.7f6726ee-c3b9-45be-b649-ebf8e20b418f-1790864387744480758",
+        "state": "complete",
+        "role": "reviewer-autoresearch",
+        "max_iterations": 8,
+        "outcome": "success",
+        "result": "{\"action\":\"approved\",\"reason\":\"Rollup is structurally complete: scalar metric, baseline, cap, one kept improvement, one guardrail-failed crashed iteration, and best_value preserved at 1.00 rather than the failed 0.10 value. Approved.\"}"
+      },
+      {
+        "loop_id": "bee96147-6867-4dbb-aebd-2ccc86efdc83",
+        "task_id": "rule-c360.semteams-bootstrap-e2e-9d9a19.chain.agent.execution.fadd0f41-2bf5-4a75-812e-1a1b177e2dea-1790864387255353508",
+        "state": "complete",
+        "role": "autoresearch-propose",
+        "max_iterations": 8,
+        "outcome": "success",
+        "result": "{\"action\":\"measure\",\"reason\":\"Iteration 1 hypothesis: cache deterministic test fixture construction inside test/helpers/ to reduce setup wallclock while leaving assertions intact.\"}"
+      },
+      {
+        "loop_id": "c9195adf-fa58-4c2a-93cc-0e19315b87d5",
+        "task_id": "rule-c360.semteams-bootstrap-e2e-9d9a19.agentic-loop.agent.execution.bee96147-6867-4dbb-aebd-2ccc86efdc83-1790864387350033216",
+        "state": "complete",
+        "role": "autoresearch-execute",
+        "iterations": 1,
+        "max_iterations": 8,
+        "outcome": "success",
+        "result": "{\"action\":\"measured\",\"reason\":\"Iteration 1: value=1.00 pass=true outcome=kept - fixture cache reduced wallclock and all tests passed.\"}"
+      },
+      {
+        "loop_id": "fadd0f41-2bf5-4a75-812e-1a1b177e2dea",
+        "task_id": "dispatch-af22b47143c72b960063d2d6514b38d565c4d77f75cd6eb6959b84b997543d74",
+        "state": "complete",
+        "role": "coordinator",
+        "iterations": 2,
+        "max_iterations": 8,
+        "user_id": "ui-anonymous",
+        "channel_type": "http",
+        "outcome": "success",
+        "result": "{\"action\":\"autoresearch\",\"reason\":\"Optimize the wallclock of `go test ./...` while preserving the pass gate. Command: go test ./...; surface: test/helpers/, internal/testutil/; cap: 2 iterations; metric_parser: parse the trailing ok-line seconds as a float. Lower is better. Guardrail: the command must exit 0 and all tests must still pass; a lower value with failing tests must be rejected.\"}"
+      }
+    ],
+    "user_responses": [
+      {
+        "sequence": 251,
+        "timestamp": "2026-10-01T14:19:47.901534008Z",
+        "subject": "user.response.http.http-1790864387106520050",
+        "message_type": "agentic.user_response.v1",
+        "trace_id": "c98b801049e6ef0c92592a21c556077f",
+        "span_id": "eb569385b161191e",
+        "summary": "Type: agentic.user_response.v1, Payload: *agentic.UserResponse",
+        "raw_data": {
+          "id": "817a99dc-a9bf-4ce0-9705-641239f3ed80",
+          "type": {
+            "domain": "agentic",
+            "category": "user_response",
+            "version": "v1"
+          },
+          "payload": {
+            "response_id": "terminal-user-response:3df1bd6d-e357-4692-86d0-055a1d2d0edd",
+            "channel_type": "http",
+            "channel_id": "http-1790864387106520050",
+            "user_id": "ui-anonymous",
+            "in_reply_to": "4feac501-f925-4cb3-8eb6-d331b5c74a3e",
+            "type": "result",
+            "content": "Autoresearch kept the passing fixture-cache improvement and improved `go test ./...` from 1.20s to 1.00s. A later 0.10s result was rejected because the pass/coverage guardrail failed, so it was recorded as crashed and not promoted as the best. Keep the passing change only.",
+            "timestamp": "2026-10-01T14:19:47.898923092Z"
+          },
+          "meta": {
+            "created_at": 1790864387901,
+            "received_at": 1790864387901,
+            "source": "agentic-dispatch"
+          }
+        }
+      },
+      {
+        "sequence": 19,
+        "timestamp": "2026-10-01T14:19:47.110674383Z",
+        "subject": "user.response.http.http-1790864387106520050",
+        "message_type": "agentic.user_response.v1",
+        "trace_id": "197e0314337fa559171d8ac6944e6e03",
+        "span_id": "aa80eaa25cd3fa9b",
+        "summary": "Type: agentic.user_response.v1, Payload: *agentic.UserResponse",
+        "raw_data": {
+          "id": "93d2d213-9d7a-4de7-b165-7511e56d6172",
+          "type": {
+            "domain": "agentic",
+            "category": "user_response",
+            "version": "v1"
+          },
+          "payload": {
+            "response_id": "6bf02daa-01a3-4f15-b7bb-59255984e052",
+            "channel_type": "http",
+            "channel_id": "http-1790864387106520050",
+            "user_id": "ui-anonymous",
+            "in_reply_to": "fadd0f41-2bf5-4a75-812e-1a1b177e2dea",
+            "type": "status",
+            "content": "Task submitted. Loop: fadd0f41-2bf5-4a75-812e-1a1b177e2dea",
+            "timestamp": "2026-10-01T14:19:47.109920341Z"
+          },
+          "meta": {
+            "created_at": 1790864387109,
+            "received_at": 1790864387109,
+            "source": "agentic-dispatch"
+          }
+        }
+      },
+      {
+        "sequence": 16,
+        "timestamp": "2026-10-01T14:19:46.776347883Z",
+        "subject": "user.response.http.http-1790864386742429341",
+        "message_type": "agentic.user_response.v1",
+        "trace_id": "db8f7cafd0d9edd700b615afed0426cb",
+        "span_id": "a677c10f25b769b0",
+        "summary": "Type: agentic.user_response.v1, Payload: *agentic.UserResponse",
+        "raw_data": {
+          "id": "0b2c1c98-d91d-4ca2-b2a7-b72d79fd7715",
+          "type": {
+            "domain": "agentic",
+            "category": "user_response",
+            "version": "v1"
+          },
+          "payload": {
+            "response_id": "terminal-user-response:4e3ee925-bd8f-42ee-a591-76ca4356dfdd",
+            "channel_type": "http",
+            "channel_id": "http-1790864386742429341",
+            "user_id": "ui-anonymous",
+            "in_reply_to": "4c7c422c-1509-4e6d-b2f4-26866e84283e",
+            "type": "prompt",
+            "content": "What scalar metric, measurement command, metric parser, iteration cap, and bounded edit surface should I optimize? \"Developer experience\" is too broad for autoresearch without a measurable target and guardrails.",
+            "timestamp": "2026-10-01T14:19:46.773057966Z"
+          },
+          "meta": {
+            "created_at": 1790864386776,
+            "received_at": 1790864386776,
+            "source": "agentic-dispatch"
+          }
+        }
+      },
+      {
+        "sequence": 2,
+        "timestamp": "2026-10-01T14:19:46.747694008Z",
+        "subject": "user.response.http.http-1790864386742429341",
+        "message_type": "agentic.user_response.v1",
+        "trace_id": "a069926ca9c8f42c9eb28881a3ce5c7d",
+        "span_id": "fe6303d224f0061e",
+        "summary": "Type: agentic.user_response.v1, Payload: *agentic.UserResponse",
+        "raw_data": {
+          "id": "1bd1f7ff-d7ae-4d85-80b1-a2dceb93914b",
+          "type": {
+            "domain": "agentic",
+            "category": "user_response",
+            "version": "v1"
+          },
+          "payload": {
+            "response_id": "ca9c7555-fa00-4d14-8922-3d30cdf872b4",
+            "channel_type": "http",
+            "channel_id": "http-1790864386742429341",
+            "user_id": "ui-anonymous",
+            "in_reply_to": "4c7c422c-1509-4e6d-b2f4-26866e84283e",
+            "type": "status",
+            "content": "Task submitted. Loop: 4c7c422c-1509-4e6d-b2f4-26866e84283e",
+            "timestamp": "2026-10-01T14:19:46.746473549Z"
+          },
+          "meta": {
+            "created_at": 1790864386746,
+            "received_at": 1790864386746,
+            "source": "agentic-dispatch"
+          }
+        }
+      }
+    ],
+    "tool_errors": [],
+    "warnings_and_errors": [
+      {
+        "time": "2026-10-01T14:19:38.865284421Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/rule.(*Processor).loadRules",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/rule/rule_loader.go",
+          "line": 157
+        },
+        "msg": "Invalid buffer window size, using default",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "component": "rule-processor",
+        "default": 600000000000,
+        "error": "time: invalid duration \"\""
+      },
+      {
+        "time": "2026-10-01T14:19:38.865303671Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/rule.(*Processor).loadRules",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/rule/rule_loader.go",
+          "line": 164
+        },
+        "msg": "Invalid alert cooldown period, using default",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "component": "rule-processor",
+        "default": 120000000000,
+        "error": "time: invalid duration \"\""
+      },
+      {
+        "time": "2026-10-01T14:19:38.878313796Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/service.(*ComponentManager).analyzeBootComposition",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/service/component_manager.go",
+          "line": 409
+        },
+        "msg": "composition finding",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "type": "disconnected_node",
+        "component": "objectstore",
+        "port": "",
+        "message": "component has no connections"
+      },
+      {
+        "time": "2026-10-01T14:19:38.878322712Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/service.(*ComponentManager).analyzeBootComposition",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/service/component_manager.go",
+          "line": 409
+        },
+        "msg": "composition finding",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "type": "orphaned_port",
+        "component": "agentic-model",
+        "port": "agent.stream",
+        "message": "output port 'agent.stream' (stream): no_subscribers"
+      },
+      {
+        "time": "2026-10-01T14:19:38.878327254Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/service.(*ComponentManager).analyzeBootComposition",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/service/component_manager.go",
+          "line": 409
+        },
+        "msg": "composition finding",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "type": "orphaned_port",
+        "component": "agentic-tools",
+        "port": "tool.list",
+        "message": "input port 'tool.list' (request): optional_api_unused"
+      },
+      {
+        "time": "2026-10-01T14:19:38.878336296Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/service.(*ComponentManager).analyzeBootComposition",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/service/component_manager.go",
+          "line": 409
+        },
+        "msg": "composition finding",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "type": "orphaned_port",
+        "component": "graph-gateway",
+        "port": "graph_index_queries",
+        "message": "output port 'graph_index_queries' (request): optional_api_unused"
+      },
+      {
+        "time": "2026-10-01T14:19:38.878341379Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/service.(*ComponentManager).analyzeBootComposition",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/service/component_manager.go",
+          "line": 409
+        },
+        "msg": "composition finding",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "type": "orphaned_port",
+        "component": "objectstore",
+        "port": "events",
+        "message": "output port 'events' (stream): no_subscribers"
+      },
+      {
+        "time": "2026-10-01T14:19:38.878347421Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/service.(*ComponentManager).analyzeBootComposition",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/service/component_manager.go",
+          "line": 409
+        },
+        "msg": "composition finding",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "type": "orphaned_port",
+        "component": "objectstore",
+        "port": "stored",
+        "message": "output port 'stored' (stream): no_subscribers"
+      },
+      {
+        "time": "2026-10-01T14:19:38.878352254Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/service.(*ComponentManager).analyzeBootComposition",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/service/component_manager.go",
+          "line": 409
+        },
+        "msg": "composition finding",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "type": "orphaned_port",
+        "component": "objectstore",
+        "port": "write",
+        "message": "input port 'write' (stream): no_publishers"
+      },
+      {
+        "time": "2026-10-01T14:19:38.878356546Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/service.(*ComponentManager).analyzeBootComposition",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/service/component_manager.go",
+          "line": 409
+        },
+        "msg": "composition finding",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "type": "orphaned_port",
+        "component": "teams-dispatch",
+        "port": "user.response",
+        "message": "output port 'user.response' (stream): no_subscribers"
+      },
+      {
+        "time": "2026-10-01T14:19:38.878360921Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/service.(*ComponentManager).analyzeBootComposition",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/service/component_manager.go",
+          "line": 409
+        },
+        "msg": "composition finding",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "type": "orphaned_port",
+        "component": "teams-loop",
+        "port": "trajectories",
+        "message": "output port 'trajectories' (watch): optional_index_unwatched"
+      },
+      {
+        "time": "2026-10-01T14:19:38.894213296Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/graph-query.(*Component).superviseSummaryView",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/graph-query/summary_view.go",
+          "line": 124
+        },
+        "msg": "COMMUNITY_SUMMARIES unavailable; using statistical summaries",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "component": "graph-query",
+        "error": "framework bucket \"COMMUNITY_SUMMARIES\" is not ready: its owner (graph-clustering) has not provisioned it in this deployment",
+        "retry_interval": 5000000000
+      },
+      {
+        "time": "2026-10-01T14:19:38.894255254Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/graph-query.(*Component).superviseCommunityGenerations",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/graph-query/component.go",
+          "line": 740
+        },
+        "msg": "community generation unavailable; retrying",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "component": "graph-query",
+        "generation": 1,
+        "error": "framework bucket \"COMMUNITY_INDEX\" is not ready: its owner (graph-clustering) has not provisioned it in this deployment",
+        "retry_interval": 5000000000
+      },
+      {
+        "time": "2026-10-01T14:19:43.895499673Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/graph-query.(*Component).superviseCommunityGenerations",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/graph-query/component.go",
+          "line": 740
+        },
+        "msg": "community generation unavailable; retrying",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "component": "graph-query",
+        "generation": 2,
+        "error": "framework bucket \"COMMUNITY_INDEX\" is not ready: its owner (graph-clustering) has not provisioned it in this deployment",
+        "retry_interval": 5000000000
+      },
+      {
+        "time": "2026-10-01T14:19:43.89556109Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/graph-query.(*Component).superviseSummaryView",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/graph-query/summary_view.go",
+          "line": 124
+        },
+        "msg": "COMMUNITY_SUMMARIES unavailable; using statistical summaries",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "component": "graph-query",
+        "error": "framework bucket \"COMMUNITY_SUMMARIES\" is not ready: its owner (graph-clustering) has not provisioned it in this deployment",
+        "retry_interval": 5000000000
+      },
+      {
+        "time": "2026-10-01T14:19:44.261477548Z",
+        "level": "ERROR",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/agentic-dispatch.(*Component).handleListLoops",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/agentic-dispatch/http.go",
+          "line": 608
+        },
+        "msg": "agentic-dispatch: loop listing refused while loop authority is unavailable",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "request_id": "4089e22f",
+        "error": "Component.currentLoopSnapshot: loop projection not caught up failed: graphview: view not ready"
+      },
+      {
+        "time": "2026-10-01T14:19:44.261597882Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/agentic-dispatch.(*Component).writeJSONError",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/agentic-dispatch/http.go",
+          "line": 500
+        },
+        "msg": "HTTP error response",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "status": 503,
+        "message": "loop state is not available right now; retry shortly"
+      },
+      {
+        "time": "2026-10-01T14:19:46.776388966Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/agentic/agentrun.ResolveRun",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/agentic/agentrun/agentrun.go",
+          "line": 423
+        },
+        "msg": "agentrun.ResolveRun: agent.loop.run triple absent \u2014 falling back to ancestry walk",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "loop_id": "4c7c422c-1509-4e6d-b2f4-26866e84283e",
+        "org": "c360",
+        "platform": "semteams-bootstrap-e2e-9d9a19"
+      },
+      {
+        "time": "2026-10-01T14:19:47.163274883Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/agentic/agentrun.ResolveRun",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/agentic/agentrun/agentrun.go",
+          "line": 423
+        },
+        "msg": "agentrun.ResolveRun: agent.loop.run triple absent \u2014 falling back to ancestry walk",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "loop_id": "fadd0f41-2bf5-4a75-812e-1a1b177e2dea",
+        "org": "c360",
+        "platform": "semteams-bootstrap-e2e-9d9a19"
+      },
+      {
+        "time": "2026-10-01T14:19:47.276086841Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/agentic/agentrun.ResolveRun",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/agentic/agentrun/agentrun.go",
+          "line": 423
+        },
+        "msg": "agentrun.ResolveRun: agent.loop.run triple absent \u2014 falling back to ancestry walk",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "loop_id": "bee96147-6867-4dbb-aebd-2ccc86efdc83",
+        "org": "c360",
+        "platform": "semteams-bootstrap-e2e-9d9a19"
+      },
+      {
+        "time": "2026-10-01T14:19:47.349986758Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/rule.(*ExecutionContext).warnUnresolvedTemplateVars",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/rule/execution_context.go",
+          "line": 841
+        },
+        "msg": "Unresolved template variables in rule substitution \u2014 likely silent-pass bug",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "unresolved": [
+          "$entity.triple.autoresearch.best.value"
+        ],
+        "template": "AUTORESEARCH EXECUTE \u2014 measure the proposed diff and let the empirical compare route the outcome.\n\nThe propose phase at loop $entity.instance applied a diff within the surface. Your job is exactly three things: run the measurement command, capture the metric, call the empirical-compare emit tool. You do NOT decide whether to keep or revert \u2014 the emit tool's executor reads the run entity's autoresearch.best.value, compares numerically, and stamps the outcome on your loop. Then the bash revert/keep step happens based on what outcome the tool stamped.\n\nMEASUREMENT CONTEXT (inlined at spawn \u2014 do NOT re-fetch via read_loop_result):\n\n- command: $entity.triple.agent.lineage.command\n- surface: $entity.triple.agent.lineage.surface\n- metric_parser: $entity.triple.agent.lineage.metric-parser\n\nIteration 1 \u2014 call read_loop_result on $entity.instance (the propose loop) for the hypothesis + diff summary. The reason field carries: hypothesis, surface-bounded edits, expected qualitative effect.\n\nIteration 2 \u2014 bash: run the command verbatim above. Capture stdout + exit code. Apply the metric_parser instructions to extract a single numeric value.\n\nIteration 3 \u2014 call emit_autoresearch_measurement with the measurement:\n\n```\nemit_autoresearch_measurement(\n  value=<measured number>,\n  pass=<bool \u2014 true iff exit code 0>,\n  stdout_tail=\"<last ~200 chars for audit>\",\n  stderr_tail=\"<last ~200 chars if any>\"\n)\n```\n\nThe tool executor (product-shell) does the empirical compare:\n\n1. Reads $entity.triple.autoresearch.best.value from the run entity.\n2. If pass=false \u2192 stamps outcome=crashed on your loop.\n3. Else if value < best.value \u2192 stamps outcome=kept on your loop AND updates autoresearch.best.value + .best.experiment_id on the run entity.\n4. Else \u2192 stamps outcome=reverted on your loop.\n\nThe outcome is on your loop's autoresearch.measurement.outcome triple after this call returns.\n\nIteration 4 \u2014 depending on the stamped outcome, revert or keep:\n\n- **outcome=kept**: the diff stays. No action.\n- **outcome=reverted OR outcome=crashed**: revert the working tree via `git checkout -- <surface globs from above>`. This restores the tree to its state before propose applied the diff.\n\nReverting after the empirical compare keeps the working tree at the running-best state so the next propose iteration applies its diff against the same reference as prior iterations.\n\nIteration 5 \u2014 call decide(action=\"measured\", reason=\"value=<n> pass=<bool> outcome=<kept|reverted|crashed> \u2014 <one-line measurement summary>\"). Rule 04 fires on this and stamps experiment.completed on the run entity. Rule 05 fires next based on the accumulated count (continue or cap-exhaust synthesize).\n\nIf the measurement command itself crashes catastrophically (sandbox unreachable, command not found), call decide(action=\"needs_clarification\", reason=\"execute environment failure: <specific reason>\") \u2014 recovery routes to coordinator. Distinguish: command exit code non-zero with stdout is a `pass=false` measurement (the tool stamps outcome=crashed, iteration counts toward cap). Sandbox unreachable / framework-level failure is needs_clarification.",
+        "rule_id": "autoresearch_propose_to_execute",
+        "entity_id": "c360.semteams-bootstrap-e2e-9d9a19.agentic-loop.agent.execution.bee96147-6867-4dbb-aebd-2ccc86efdc83"
+      },
+      {
+        "time": "2026-10-01T14:19:47.376134508Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/agentic/agentrun.ResolveRun",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/agentic/agentrun/agentrun.go",
+          "line": 423
+        },
+        "msg": "agentrun.ResolveRun: agent.loop.run triple absent \u2014 falling back to ancestry walk",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "loop_id": "c9195adf-fa58-4c2a-93cc-0e19315b87d5",
+        "org": "c360",
+        "platform": "semteams-bootstrap-e2e-9d9a19"
+      },
+      {
+        "time": "2026-10-01T14:19:47.489205091Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/rule.(*ExecutionContext).substituteVariablesWith.(*ExecutionContext).applyTripleLengthSubstitutions.func2",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/rule/execution_context.go",
+          "line": 494
+        },
+        "msg": "triple-length substitution: Object is not list-shaped; replacing token with error sentinel",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "token": "$entity.triple.autoresearch.experiment.completed.length",
+        "predicate": "autoresearch.experiment.completed",
+        "object_type": "string",
+        "rule_id": "autoresearch_iteration_dispatch",
+        "hint": "the .length suffix requires the triple Object to be []string, []any, or a JSON-encoded list string \u2014 see coerceTripleObjectToStrings"
+      },
+      {
+        "time": "2026-10-01T14:19:47.508500383Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/agentic/agentrun.ResolveRun",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/agentic/agentrun/agentrun.go",
+          "line": 423
+        },
+        "msg": "agentrun.ResolveRun: agent.loop.run triple absent \u2014 falling back to ancestry walk",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "loop_id": "6aed87bf-a9a1-4f40-8e5a-b18d29eb151f",
+        "org": "c360",
+        "platform": "semteams-bootstrap-e2e-9d9a19"
+      },
+      {
+        "time": "2026-10-01T14:19:47.562449966Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/rule.(*ExecutionContext).warnUnresolvedTemplateVars",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/rule/execution_context.go",
+          "line": 841
+        },
+        "msg": "Unresolved template variables in rule substitution \u2014 likely silent-pass bug",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "unresolved": [
+          "$entity.triple.autoresearch.best.value"
+        ],
+        "template": "AUTORESEARCH EXECUTE \u2014 measure the proposed diff and let the empirical compare route the outcome.\n\nThe propose phase at loop $entity.instance applied a diff within the surface. Your job is exactly three things: run the measurement command, capture the metric, call the empirical-compare emit tool. You do NOT decide whether to keep or revert \u2014 the emit tool's executor reads the run entity's autoresearch.best.value, compares numerically, and stamps the outcome on your loop. Then the bash revert/keep step happens based on what outcome the tool stamped.\n\nMEASUREMENT CONTEXT (inlined at spawn \u2014 do NOT re-fetch via read_loop_result):\n\n- command: $entity.triple.agent.lineage.command\n- surface: $entity.triple.agent.lineage.surface\n- metric_parser: $entity.triple.agent.lineage.metric-parser\n\nIteration 1 \u2014 call read_loop_result on $entity.instance (the propose loop) for the hypothesis + diff summary. The reason field carries: hypothesis, surface-bounded edits, expected qualitative effect.\n\nIteration 2 \u2014 bash: run the command verbatim above. Capture stdout + exit code. Apply the metric_parser instructions to extract a single numeric value.\n\nIteration 3 \u2014 call emit_autoresearch_measurement with the measurement:\n\n```\nemit_autoresearch_measurement(\n  value=<measured number>,\n  pass=<bool \u2014 true iff exit code 0>,\n  stdout_tail=\"<last ~200 chars for audit>\",\n  stderr_tail=\"<last ~200 chars if any>\"\n)\n```\n\nThe tool executor (product-shell) does the empirical compare:\n\n1. Reads $entity.triple.autoresearch.best.value from the run entity.\n2. If pass=false \u2192 stamps outcome=crashed on your loop.\n3. Else if value < best.value \u2192 stamps outcome=kept on your loop AND updates autoresearch.best.value + .best.experiment_id on the run entity.\n4. Else \u2192 stamps outcome=reverted on your loop.\n\nThe outcome is on your loop's autoresearch.measurement.outcome triple after this call returns.\n\nIteration 4 \u2014 depending on the stamped outcome, revert or keep:\n\n- **outcome=kept**: the diff stays. No action.\n- **outcome=reverted OR outcome=crashed**: revert the working tree via `git checkout -- <surface globs from above>`. This restores the tree to its state before propose applied the diff.\n\nReverting after the empirical compare keeps the working tree at the running-best state so the next propose iteration applies its diff against the same reference as prior iterations.\n\nIteration 5 \u2014 call decide(action=\"measured\", reason=\"value=<n> pass=<bool> outcome=<kept|reverted|crashed> \u2014 <one-line measurement summary>\"). Rule 04 fires on this and stamps experiment.completed on the run entity. Rule 05 fires next based on the accumulated count (continue or cap-exhaust synthesize).\n\nIf the measurement command itself crashes catastrophically (sandbox unreachable, command not found), call decide(action=\"needs_clarification\", reason=\"execute environment failure: <specific reason>\") \u2014 recovery routes to coordinator. Distinguish: command exit code non-zero with stdout is a `pass=false` measurement (the tool stamps outcome=crashed, iteration counts toward cap). Sandbox unreachable / framework-level failure is needs_clarification.",
+        "rule_id": "autoresearch_propose_to_execute",
+        "entity_id": "c360.semteams-bootstrap-e2e-9d9a19.agentic-loop.agent.execution.6aed87bf-a9a1-4f40-8e5a-b18d29eb151f"
+      },
+      {
+        "time": "2026-10-01T14:19:47.590167925Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/agentic/agentrun.ResolveRun",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/agentic/agentrun/agentrun.go",
+          "line": 423
+        },
+        "msg": "agentrun.ResolveRun: agent.loop.run triple absent \u2014 falling back to ancestry walk",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "loop_id": "3f32a375-729c-44bf-86ae-29090daa5907",
+        "org": "c360",
+        "platform": "semteams-bootstrap-e2e-9d9a19"
+      },
+      {
+        "time": "2026-10-01T14:19:47.65493855Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/rule.(*ExecutionContext).substituteVariablesWith.(*ExecutionContext).applyTripleLengthSubstitutions.func2",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/rule/execution_context.go",
+          "line": 494
+        },
+        "msg": "triple-length substitution: Object is not list-shaped; replacing token with error sentinel",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "token": "$entity.triple.autoresearch.experiment.completed.length",
+        "predicate": "autoresearch.experiment.completed",
+        "object_type": "string",
+        "rule_id": "autoresearch_iteration_dispatch",
+        "hint": "the .length suffix requires the triple Object to be []string, []any, or a JSON-encoded list string \u2014 see coerceTripleObjectToStrings"
+      },
+      {
+        "time": "2026-10-01T14:19:47.681332175Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/agentic/agentrun.ResolveRun",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/agentic/agentrun/agentrun.go",
+          "line": 423
+        },
+        "msg": "agentrun.ResolveRun: agent.loop.run triple absent \u2014 falling back to ancestry walk",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "loop_id": "7f6726ee-c3b9-45be-b649-ebf8e20b418f",
+        "org": "c360",
+        "platform": "semteams-bootstrap-e2e-9d9a19"
+      },
+      {
+        "time": "2026-10-01T14:19:47.763202008Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/agentic/agentrun.ResolveRun",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/agentic/agentrun/agentrun.go",
+          "line": 423
+        },
+        "msg": "agentrun.ResolveRun: agent.loop.run triple absent \u2014 falling back to ancestry walk",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "loop_id": "b58f0cb6-c372-4278-aab3-9338573511a3",
+        "org": "c360",
+        "platform": "semteams-bootstrap-e2e-9d9a19"
+      },
+      {
+        "time": "2026-10-01T14:19:47.859378467Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/agentic/agentrun.ResolveRun",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/agentic/agentrun/agentrun.go",
+          "line": 423
+        },
+        "msg": "agentrun.ResolveRun: agent.loop.run triple absent \u2014 falling back to ancestry walk",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "loop_id": "41e11db5-fb92-4b57-89ab-94575eb39ad7",
+        "org": "c360",
+        "platform": "semteams-bootstrap-e2e-9d9a19"
+      },
+      {
+        "time": "2026-10-01T14:19:48.897007717Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/graph-query.(*Component).superviseCommunityGenerations",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/graph-query/component.go",
+          "line": 740
+        },
+        "msg": "community generation unavailable; retrying",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "component": "graph-query",
+        "generation": 3,
+        "error": "framework bucket \"COMMUNITY_INDEX\" is not ready: its owner (graph-clustering) has not provisioned it in this deployment",
+        "retry_interval": 5000000000
+      },
+      {
+        "time": "2026-10-01T14:19:48.89700805Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/graph-query.(*Component).superviseSummaryView",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/graph-query/summary_view.go",
+          "line": 124
+        },
+        "msg": "COMMUNITY_SUMMARIES unavailable; using statistical summaries",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "component": "graph-query",
+        "error": "framework bucket \"COMMUNITY_SUMMARIES\" is not ready: its owner (graph-clustering) has not provisioned it in this deployment",
+        "retry_interval": 5000000000
+      }
+    ],
+    "samples": [
+      {
+        "timestamp": 1790864384.255411,
+        "loops": {
+          "status": 503,
+          "body": "{\"response_id\":\"dbee425d-8495-4849-8f37-1b81273f1134\",\"type\":\"error\",\"content\":\"loop state is not available right now; retry shortly\",\"timestamp\":\"2026-10-01T14:19:44Z\"}\n"
+        },
+        "backend_readiness": {
+          "exit": 0,
+          "stdout": "READY",
+          "stderr": "--2026-10-01 14:19:44--  http://localhost:8080/readyz\nResolving localhost (localhost)... ::1, 127.0.0.1\nConnecting to localhost (localhost)|::1|:8080... connected.\nHTTP request sent, awaiting response... \n  HTTP/1.1 200 OK\n  Date: Thu, 01 Oct 2026 14:19:44 GMT\n  Content-Length: 5\n  Content-Type: text/plain; charset=utf-8\nLength: 5 [text/plain]\nSaving to: 'STDOUT'\n\n     0K                                                       100% 2.86M=0s\n\n2026-10-01 14:19:44 (2.86 MB/s) - written to stdout [5/5]\n\n"
+        }
+      }
+    ]
+  },
+  {
+    "name": "autoresearch-descended-clarification",
+    "exit": 0,
+    "playwright_exit": 0,
+    "skipped": false,
+    "source_changed": false,
+    "manifest": {
+      "name": "autoresearch-descended-clarification",
+      "fixture": "autoresearch-descended-clarification.yaml",
+      "spec": "autoresearch-exit.spec.ts",
+      "config": "e2e-flow-bootstrap.json",
+      "source": "/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams",
+      "project": "stmig162",
+      "port": 33162,
+      "runner_sha256": "ce2a20e21ee8ae26939460b76f79a185e743b8727a6ae8264463167b9fe5d31e",
+      "matrix_sha256": "6cbebefa31505fd1f7cc4beeb92766e936aba301e30f9eae46b0e2cc4ec89136",
+      "source_tree_sha256": "79ad0a9e17faa8f3d3c4473808da9faa2d34353323612013f10e5fd3b0fd9ba8",
+      "ui_source_tree_sha256": "49f88c4db835aa4ef7f8e707ef9e317965c0b2044c0e7bdbe27c61ca1136c935",
+      "derived_config_sha256": "3cb221ccf480403bf0240549959498f25a69712fcc1a827c49fac35881449f17",
+      "compose_sha256": "aff5be11596113aeffa26963074b93d24d01aebd2ae1da37a57619ab0edda9e7",
+      "sha256": {
+        "go.mod": "fe05e2ea4b4c45bfc181ff83b3a925dccda4dd3d54970b03765c9b50d0b96fff",
+        "go.sum": "8cb9cd26889b1efdd0d03402581fbc26b354bde2b45f195efd71e90b93e51599",
+        "ui/package-lock.json": "28fd4403ce710547429496e98d4b7f3e941986eb67e6957316e298ffb2a144c4",
+        "configs/e2e-flow-bootstrap.json": "f19b57b80dac11e7bdfcce311b59733a4c797b8b765fb7602861b774ec904106",
+        "test/fixtures/journeys/autoresearch-descended-clarification.yaml": "bcbc4f5508dd32f918ee51ba5bcd2b8d44c0e1fdd84f677bd3c4d0525a4d5f56",
+        "ui/e2e/agentic/autoresearch-exit.spec.ts": "53091a92c3ed6b5675093f0b4299c84dafdcac70d97f358d12a6eec8e414a8da"
+      },
+      "images": [
+        {
+          "Id": "sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b",
+          "RepoTags": [
+            "caddy:2-alpine"
+          ],
+          "RepoDigests": [
+            "caddy@sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b"
+          ]
+        },
+        {
+          "Id": "sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66",
+          "RepoTags": [
+            "nats:2.14.4-alpine",
+            "nats@sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66"
+          ],
+          "RepoDigests": [
+            "nats@sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66"
+          ]
+        },
+        {
+          "Id": "sha256:d96116ba2b09643bb02fad97b2d0c2e069c3e8d96d2a19b11c77fa96c41cdca1",
+          "RepoTags": [
+            "stmig162-backend:autoresearch-repair"
+          ],
+          "RepoDigests": [
+            "stmig162-backend@sha256:d96116ba2b09643bb02fad97b2d0c2e069c3e8d96d2a19b11c77fa96c41cdca1"
+          ]
+        },
+        {
+          "Id": "sha256:09fb79ed5ef11c76875be1b9ed97cd9750ab4065a7e06a7a158876050f096ec7",
+          "RepoTags": [
+            "stmig162-mock-llm:8b99efe"
+          ],
+          "RepoDigests": [
+            "stmig162-mock-llm@sha256:09fb79ed5ef11c76875be1b9ed97cd9750ab4065a7e06a7a158876050f096ec7"
+          ]
+        },
+        {
+          "Id": "sha256:80aa3f7be0de406f45471018b06229b9e7151bf38b8ef0e7a01351d74d79ca6f",
+          "RepoTags": [
+            "stmig162-sandbox:8b99efe"
+          ],
+          "RepoDigests": [
+            "stmig162-sandbox@sha256:80aa3f7be0de406f45471018b06229b9e7151bf38b8ef0e7a01351d74d79ca6f"
+          ]
+        },
+        {
+          "Id": "sha256:5bbae7d16029a20ca17382a58d6acd2f73c1478b151516ba83549faad691a91a",
+          "RepoTags": [
+            "stmig162-ui:8b99efe"
+          ],
+          "RepoDigests": [
+            "stmig162-ui@sha256:5bbae7d16029a20ca17382a58d6acd2f73c1478b151516ba83549faad691a91a"
+          ]
+        }
+      ],
+      "source_after_tree_sha256": "79ad0a9e17faa8f3d3c4473808da9faa2d34353323612013f10e5fd3b0fd9ba8",
+      "ui_source_after_tree_sha256": "49f88c4db835aa4ef7f8e707ef9e317965c0b2044c0e7bdbe27c61ca1136c935",
+      "source_changed": false
+    },
+    "config_file": "configs/3cb221ccf480403bf0240549959498f25a69712fcc1a827c49fac35881449f17.json",
+    "compose_file": "compose/autoresearch-descended-clarification.json",
+    "stats": {
+      "startTime": "2026-10-01T14:20:03.427Z",
+      "duration": 2457.9260000000004,
+      "expected": 1,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "tests": [
+      {
+        "title": "autoresearch descended clarification returns to the original user route",
+        "status": "passed",
+        "duration_ms": 1960,
+        "errors": [],
+        "proof_file": "proofs/autoresearch-descended-clarification.json",
+        "screenshots": [
+          "proofs/autoresearch-descended-clarification-autoresearch-terminal-response-ui.png"
+        ],
+        "screenshot_limit": "Existing fixed right-rail clipping; screenshot alone is not full-content proof. Browser assertion parses exact expanded raw DOM payload. No rich-body-rendering claim."
+      }
+    ],
+    "backend_readiness": {
+      "exit": 0,
+      "stdout": "READY",
+      "stderr": "--2026-10-01 14:20:06--  http://localhost:8080/readyz\nResolving localhost (localhost)... ::1, 127.0.0.1\nConnecting to localhost (localhost)|::1|:8080... connected.\nHTTP request sent, awaiting response... \n  HTTP/1.1 200 OK\n  Date: Thu, 01 Oct 2026 14:20:06 GMT\n  Content-Length: 5\n  Content-Type: text/plain; charset=utf-8\nLength: 5 [text/plain]\nSaving to: 'STDOUT'\n\n     0K                                                       100% 2.24M=0s\n\n2026-10-01 14:20:06 (2.24 MB/s) - written to stdout [5/5]\n\n"
+    },
+    "run_phases": {
+      "status": 200,
+      "body": [
+        {
+          "subject": "c360.semteams-bootstrap-e2e-50111c.chain.agent.execution.15d5e77b-4eee-4c64-8bb0-0667473e8836",
+          "predicate": "agent.run.phase",
+          "object": "awaiting_approval",
+          "source": "",
+          "timestamp": "2026-10-01T14:20:05.285223419Z",
+          "confidence": 1
+        }
+      ]
+    },
+    "run_approval": {
+      "pending": {
+        "status": 200,
+        "body": []
+      },
+      "answered": {
+        "status": 200,
+        "body": []
+      },
+      "outstanding": {
+        "status": 200,
+        "body": []
+      }
+    },
+    "loops": [
+      {
+        "loop_id": "15d5e77b-4eee-4c64-8bb0-0667473e8836",
+        "task_id": "dispatch-bb997619a7a01c312d3429f574324a99c7e33a5e374716f98bdc5153a0f8e573",
+        "state": "complete",
+        "role": "coordinator",
+        "iterations": 2,
+        "max_iterations": 8,
+        "user_id": "ui-anonymous",
+        "channel_type": "http",
+        "outcome": "success",
+        "result": "{\"action\":\"autoresearch\",\"reason\":\"Optimize the wallclock of `go test ./...`. Command: go test ./...; surface: ./...; cap: 2 iterations; metric: real seconds parsed from the test output. Lower is better.\"}"
+      },
+      {
+        "loop_id": "52d50504-29ae-4a1c-8497-f99be1c763dc",
+        "task_id": "rule-c360.semteams-bootstrap-e2e-50111c.agentic-loop.agent.execution.15d5e77b-4eee-4c64-8bb0-0667473e8836-1790864404986625085",
+        "state": "complete",
+        "role": "autoresearch-baseline",
+        "iterations": 1,
+        "max_iterations": 8,
+        "outcome": "success",
+        "result": "{\"action\":\"propose\",\"reason\":\"Baseline captured at 1.20s. Beginning the iteration loop (cap 2) \u2014 propose single-axis changes and keep the ones that lower the wallclock.\"}"
+      },
+      {
+        "loop_id": "aaa6b845-bb23-4abf-96b9-cba9bb010514",
+        "task_id": "rule-c360.semteams-bootstrap-e2e-50111c.agentic-loop.agent.execution.15d5e77b-4eee-4c64-8bb0-0667473e8836-1790864405218268127",
+        "state": "complete",
+        "role": "coordinator",
+        "max_iterations": 8,
+        "outcome": "success",
+        "result": "{\"action\":\"ask_user\",\"reason\":\"Which additional test directories may the optimizer change? The current bounded surface cannot support a useful next experiment.\"}"
+      },
+      {
+        "loop_id": "ce9100ef-0feb-4958-86aa-a2042bf2e362",
+        "task_id": "rule-c360.semteams-bootstrap-e2e-50111c.chain.agent.execution.15d5e77b-4eee-4c64-8bb0-0667473e8836-1790864405066285836",
+        "state": "complete",
+        "role": "autoresearch-propose",
+        "max_iterations": 8,
+        "outcome": "success",
+        "result": "{\"action\":\"needs_clarification\",\"reason\":\"The bounded surface is too narrow; ask the user which additional test directories may change.\"}"
+      }
+    ],
+    "user_responses": [
+      {
+        "sequence": 100,
+        "timestamp": "2026-10-01T14:20:05.240991294Z",
+        "subject": "user.response.http.http-1790864404925563752",
+        "message_type": "agentic.user_response.v1",
+        "trace_id": "45402adb62ddf6061c5fc9279d1d08fc",
+        "span_id": "f3698da117c113fa",
+        "summary": "Type: agentic.user_response.v1, Payload: *agentic.UserResponse",
+        "raw_data": {
+          "id": "eee0392e-a308-4ed7-9cbf-439e13f2c243",
+          "type": {
+            "domain": "agentic",
+            "category": "user_response",
+            "version": "v1"
+          },
+          "payload": {
+            "response_id": "terminal-user-response:b4492906-8625-4e54-905d-b6e36eed5eb3",
+            "channel_type": "http",
+            "channel_id": "http-1790864404925563752",
+            "user_id": "ui-anonymous",
+            "in_reply_to": "aaa6b845-bb23-4abf-96b9-cba9bb010514",
+            "type": "prompt",
+            "content": "Which additional test directories may the optimizer change? The current bounded surface cannot support a useful next experiment.",
+            "timestamp": "2026-10-01T14:20:05.237594377Z"
+          },
+          "meta": {
+            "created_at": 1790864405240,
+            "received_at": 1790864405240,
+            "source": "agentic-dispatch"
+          }
+        }
+      },
+      {
+        "sequence": 2,
+        "timestamp": "2026-10-01T14:20:04.93129246Z",
+        "subject": "user.response.http.http-1790864404925563752",
+        "message_type": "agentic.user_response.v1",
+        "trace_id": "7beb9b9be953ae7618ad15b12ee51183",
+        "span_id": "431adf72c0d9660e",
+        "summary": "Type: agentic.user_response.v1, Payload: *agentic.UserResponse",
+        "raw_data": {
+          "id": "abcfc3a3-a225-4d9a-988e-907955d8c0c3",
+          "type": {
+            "domain": "agentic",
+            "category": "user_response",
+            "version": "v1"
+          },
+          "payload": {
+            "response_id": "8c59c391-b5de-49ee-bfed-802e761a9a5c",
+            "channel_type": "http",
+            "channel_id": "http-1790864404925563752",
+            "user_id": "ui-anonymous",
+            "in_reply_to": "15d5e77b-4eee-4c64-8bb0-0667473e8836",
+            "type": "status",
+            "content": "Task submitted. Loop: 15d5e77b-4eee-4c64-8bb0-0667473e8836",
+            "timestamp": "2026-10-01T14:20:04.930277044Z"
+          },
+          "meta": {
+            "created_at": 1790864404930,
+            "received_at": 1790864404930,
+            "source": "agentic-dispatch"
+          }
+        }
+      }
+    ],
+    "tool_errors": [],
+    "warnings_and_errors": [
+      {
+        "time": "2026-10-01T14:19:57.552720596Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/rule.(*Processor).loadRules",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/rule/rule_loader.go",
+          "line": 157
+        },
+        "msg": "Invalid buffer window size, using default",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "component": "rule-processor",
+        "default": 600000000000,
+        "error": "time: invalid duration \"\""
+      },
+      {
+        "time": "2026-10-01T14:19:57.552737971Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/rule.(*Processor).loadRules",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/rule/rule_loader.go",
+          "line": 164
+        },
+        "msg": "Invalid alert cooldown period, using default",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "component": "rule-processor",
+        "default": 120000000000,
+        "error": "time: invalid duration \"\""
+      },
+      {
+        "time": "2026-10-01T14:19:57.564373721Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/service.(*ComponentManager).analyzeBootComposition",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/service/component_manager.go",
+          "line": 409
+        },
+        "msg": "composition finding",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "type": "disconnected_node",
+        "component": "objectstore",
+        "port": "",
+        "message": "component has no connections"
+      },
+      {
+        "time": "2026-10-01T14:19:57.564385846Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/service.(*ComponentManager).analyzeBootComposition",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/service/component_manager.go",
+          "line": 409
+        },
+        "msg": "composition finding",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "type": "orphaned_port",
+        "component": "agentic-model",
+        "port": "agent.stream",
+        "message": "output port 'agent.stream' (stream): no_subscribers"
+      },
+      {
+        "time": "2026-10-01T14:19:57.564391513Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/service.(*ComponentManager).analyzeBootComposition",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/service/component_manager.go",
+          "line": 409
+        },
+        "msg": "composition finding",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "type": "orphaned_port",
+        "component": "agentic-tools",
+        "port": "tool.list",
+        "message": "input port 'tool.list' (request): optional_api_unused"
+      },
+      {
+        "time": "2026-10-01T14:19:57.564396263Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/service.(*ComponentManager).analyzeBootComposition",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/service/component_manager.go",
+          "line": 409
+        },
+        "msg": "composition finding",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "type": "orphaned_port",
+        "component": "graph-gateway",
+        "port": "graph_index_queries",
+        "message": "output port 'graph_index_queries' (request): optional_api_unused"
+      },
+      {
+        "time": "2026-10-01T14:19:57.564401388Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/service.(*ComponentManager).analyzeBootComposition",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/service/component_manager.go",
+          "line": 409
+        },
+        "msg": "composition finding",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "type": "orphaned_port",
+        "component": "objectstore",
+        "port": "events",
+        "message": "output port 'events' (stream): no_subscribers"
+      },
+      {
+        "time": "2026-10-01T14:19:57.564405596Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/service.(*ComponentManager).analyzeBootComposition",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/service/component_manager.go",
+          "line": 409
+        },
+        "msg": "composition finding",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "type": "orphaned_port",
+        "component": "objectstore",
+        "port": "stored",
+        "message": "output port 'stored' (stream): no_subscribers"
+      },
+      {
+        "time": "2026-10-01T14:19:57.564413805Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/service.(*ComponentManager).analyzeBootComposition",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/service/component_manager.go",
+          "line": 409
+        },
+        "msg": "composition finding",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "type": "orphaned_port",
+        "component": "objectstore",
+        "port": "write",
+        "message": "input port 'write' (stream): no_publishers"
+      },
+      {
+        "time": "2026-10-01T14:19:57.564417596Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/service.(*ComponentManager).analyzeBootComposition",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/service/component_manager.go",
+          "line": 409
+        },
+        "msg": "composition finding",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "type": "orphaned_port",
+        "component": "teams-dispatch",
+        "port": "user.response",
+        "message": "output port 'user.response' (stream): no_subscribers"
+      },
+      {
+        "time": "2026-10-01T14:19:57.564421305Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/service.(*ComponentManager).analyzeBootComposition",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/service/component_manager.go",
+          "line": 409
+        },
+        "msg": "composition finding",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "type": "orphaned_port",
+        "component": "teams-loop",
+        "port": "trajectories",
+        "message": "output port 'trajectories' (watch): optional_index_unwatched"
+      },
+      {
+        "time": "2026-10-01T14:19:57.580900388Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/graph-query.(*Component).superviseSummaryView",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/graph-query/summary_view.go",
+          "line": 124
+        },
+        "msg": "COMMUNITY_SUMMARIES unavailable; using statistical summaries",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "component": "graph-query",
+        "error": "framework bucket \"COMMUNITY_SUMMARIES\" is not ready: its owner (graph-clustering) has not provisioned it in this deployment",
+        "retry_interval": 5000000000
+      },
+      {
+        "time": "2026-10-01T14:19:57.580970763Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/graph-query.(*Component).superviseCommunityGenerations",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/graph-query/component.go",
+          "line": 740
+        },
+        "msg": "community generation unavailable; retrying",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "component": "graph-query",
+        "generation": 1,
+        "error": "framework bucket \"COMMUNITY_INDEX\" is not ready: its owner (graph-clustering) has not provisioned it in this deployment",
+        "retry_interval": 5000000000
+      },
+      {
+        "time": "2026-10-01T14:20:02.579988501Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/graph-query.(*Component).superviseCommunityGenerations",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/graph-query/component.go",
+          "line": 740
+        },
+        "msg": "community generation unavailable; retrying",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "component": "graph-query",
+        "generation": 2,
+        "error": "framework bucket \"COMMUNITY_INDEX\" is not ready: its owner (graph-clustering) has not provisioned it in this deployment",
+        "retry_interval": 5000000000
+      },
+      {
+        "time": "2026-10-01T14:20:02.580003959Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/graph-query.(*Component).superviseSummaryView",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/graph-query/summary_view.go",
+          "line": 124
+        },
+        "msg": "COMMUNITY_SUMMARIES unavailable; using statistical summaries",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "component": "graph-query",
+        "error": "framework bucket \"COMMUNITY_SUMMARIES\" is not ready: its owner (graph-clustering) has not provisioned it in this deployment",
+        "retry_interval": 5000000000
+      },
+      {
+        "time": "2026-10-01T14:20:02.843806959Z",
+        "level": "ERROR",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/agentic-dispatch.(*Component).handleListLoops",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/agentic-dispatch/http.go",
+          "line": 608
+        },
+        "msg": "agentic-dispatch: loop listing refused while loop authority is unavailable",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "request_id": "a67e3eb7",
+        "error": "Component.currentLoopSnapshot: loop projection not caught up failed: graphview: view not ready"
+      },
+      {
+        "time": "2026-10-01T14:20:02.843901168Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/agentic-dispatch.(*Component).writeJSONError",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/agentic-dispatch/http.go",
+          "line": 500
+        },
+        "msg": "HTTP error response",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "status": 503,
+        "message": "loop state is not available right now; retry shortly"
+      },
+      {
+        "time": "2026-10-01T14:20:04.981765419Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/agentic/agentrun.ResolveRun",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/agentic/agentrun/agentrun.go",
+          "line": 423
+        },
+        "msg": "agentrun.ResolveRun: agent.loop.run triple absent \u2014 falling back to ancestry walk",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "loop_id": "15d5e77b-4eee-4c64-8bb0-0667473e8836",
+        "org": "c360",
+        "platform": "semteams-bootstrap-e2e-50111c"
+      },
+      {
+        "time": "2026-10-01T14:20:05.086243127Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/agentic/agentrun.ResolveRun",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/agentic/agentrun/agentrun.go",
+          "line": 423
+        },
+        "msg": "agentrun.ResolveRun: agent.loop.run triple absent \u2014 falling back to ancestry walk",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "loop_id": "ce9100ef-0feb-4958-86aa-a2042bf2e362",
+        "org": "c360",
+        "platform": "semteams-bootstrap-e2e-50111c"
+      }
+    ],
+    "samples": [
+      {
+        "timestamp": 1790864402.8384798,
+        "loops": {
+          "status": 503,
+          "body": "{\"response_id\":\"1113c3d1-1dec-4019-a1d7-70d6ed6f6464\",\"type\":\"error\",\"content\":\"loop state is not available right now; retry shortly\",\"timestamp\":\"2026-10-01T14:20:02Z\"}\n"
+        },
+        "backend_readiness": {
+          "exit": 0,
+          "stdout": "READY",
+          "stderr": "--2026-10-01 14:20:02--  http://localhost:8080/readyz\nResolving localhost (localhost)... ::1, 127.0.0.1\nConnecting to localhost (localhost)|::1|:8080... connected.\nHTTP request sent, awaiting response... \n  HTTP/1.1 200 OK\n  Date: Thu, 01 Oct 2026 14:20:02 GMT\n  Content-Length: 5\n  Content-Type: text/plain; charset=utf-8\nLength: 5 [text/plain]\nSaving to: 'STDOUT'\n\n     0K                                                       100% 2.12M=0s\n\n2026-10-01 14:20:02 (2.12 MB/s) - written to stdout [5/5]\n\n"
+        }
+      }
+    ]
+  },
+  {
+    "name": "autoresearch-propose-failed",
+    "exit": 0,
+    "playwright_exit": 0,
+    "skipped": false,
+    "source_changed": false,
+    "manifest": {
+      "name": "autoresearch-propose-failed",
+      "fixture": "autoresearch-propose-failed.yaml",
+      "spec": "autoresearch-exit.spec.ts",
+      "config": "e2e-flow-bootstrap.json",
+      "source": "/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams",
+      "project": "stmig162",
+      "port": 33162,
+      "runner_sha256": "ce2a20e21ee8ae26939460b76f79a185e743b8727a6ae8264463167b9fe5d31e",
+      "matrix_sha256": "6cbebefa31505fd1f7cc4beeb92766e936aba301e30f9eae46b0e2cc4ec89136",
+      "source_tree_sha256": "79ad0a9e17faa8f3d3c4473808da9faa2d34353323612013f10e5fd3b0fd9ba8",
+      "ui_source_tree_sha256": "49f88c4db835aa4ef7f8e707ef9e317965c0b2044c0e7bdbe27c61ca1136c935",
+      "derived_config_sha256": "3cb221ccf480403bf0240549959498f25a69712fcc1a827c49fac35881449f17",
+      "compose_sha256": "cc957e0c0b7f3d694af77018be3199a264336a26e71350375f42033f5bb39970",
+      "sha256": {
+        "go.mod": "fe05e2ea4b4c45bfc181ff83b3a925dccda4dd3d54970b03765c9b50d0b96fff",
+        "go.sum": "8cb9cd26889b1efdd0d03402581fbc26b354bde2b45f195efd71e90b93e51599",
+        "ui/package-lock.json": "28fd4403ce710547429496e98d4b7f3e941986eb67e6957316e298ffb2a144c4",
+        "configs/e2e-flow-bootstrap.json": "f19b57b80dac11e7bdfcce311b59733a4c797b8b765fb7602861b774ec904106",
+        "test/fixtures/journeys/autoresearch-propose-failed.yaml": "37f600ad8f9073410db675e1db0cc7460918d304461af66e59bc54bea31efc1b",
+        "ui/e2e/agentic/autoresearch-exit.spec.ts": "53091a92c3ed6b5675093f0b4299c84dafdcac70d97f358d12a6eec8e414a8da"
+      },
+      "images": [
+        {
+          "Id": "sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b",
+          "RepoTags": [
+            "caddy:2-alpine"
+          ],
+          "RepoDigests": [
+            "caddy@sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b"
+          ]
+        },
+        {
+          "Id": "sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66",
+          "RepoTags": [
+            "nats:2.14.4-alpine",
+            "nats@sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66"
+          ],
+          "RepoDigests": [
+            "nats@sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66"
+          ]
+        },
+        {
+          "Id": "sha256:d96116ba2b09643bb02fad97b2d0c2e069c3e8d96d2a19b11c77fa96c41cdca1",
+          "RepoTags": [
+            "stmig162-backend:autoresearch-repair"
+          ],
+          "RepoDigests": [
+            "stmig162-backend@sha256:d96116ba2b09643bb02fad97b2d0c2e069c3e8d96d2a19b11c77fa96c41cdca1"
+          ]
+        },
+        {
+          "Id": "sha256:09fb79ed5ef11c76875be1b9ed97cd9750ab4065a7e06a7a158876050f096ec7",
+          "RepoTags": [
+            "stmig162-mock-llm:8b99efe"
+          ],
+          "RepoDigests": [
+            "stmig162-mock-llm@sha256:09fb79ed5ef11c76875be1b9ed97cd9750ab4065a7e06a7a158876050f096ec7"
+          ]
+        },
+        {
+          "Id": "sha256:80aa3f7be0de406f45471018b06229b9e7151bf38b8ef0e7a01351d74d79ca6f",
+          "RepoTags": [
+            "stmig162-sandbox:8b99efe"
+          ],
+          "RepoDigests": [
+            "stmig162-sandbox@sha256:80aa3f7be0de406f45471018b06229b9e7151bf38b8ef0e7a01351d74d79ca6f"
+          ]
+        },
+        {
+          "Id": "sha256:5bbae7d16029a20ca17382a58d6acd2f73c1478b151516ba83549faad691a91a",
+          "RepoTags": [
+            "stmig162-ui:8b99efe"
+          ],
+          "RepoDigests": [
+            "stmig162-ui@sha256:5bbae7d16029a20ca17382a58d6acd2f73c1478b151516ba83549faad691a91a"
+          ]
+        }
+      ],
+      "source_after_tree_sha256": "79ad0a9e17faa8f3d3c4473808da9faa2d34353323612013f10e5fd3b0fd9ba8",
+      "ui_source_after_tree_sha256": "49f88c4db835aa4ef7f8e707ef9e317965c0b2044c0e7bdbe27c61ca1136c935",
+      "source_changed": false
+    },
+    "config_file": "configs/3cb221ccf480403bf0240549959498f25a69712fcc1a827c49fac35881449f17.json",
+    "compose_file": "compose/autoresearch-propose-failed.json",
+    "stats": {
+      "startTime": "2026-10-01T14:20:20.838Z",
+      "duration": 3314.0409999999997,
+      "expected": 1,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "tests": [
+      {
+        "title": "autoresearch nonbudgeted failure returns to the original user route",
+        "status": "passed",
+        "duration_ms": 2785,
+        "errors": [],
+        "proof_file": "proofs/autoresearch-propose-failed.json",
+        "screenshots": [
+          "proofs/autoresearch-propose-failed-autoresearch-terminal-response-ui.png"
+        ],
+        "screenshot_limit": "Existing fixed right-rail clipping; screenshot alone is not full-content proof. Browser assertion parses exact expanded raw DOM payload. No rich-body-rendering claim."
+      }
+    ],
+    "backend_readiness": {
+      "exit": 0,
+      "stdout": "READY",
+      "stderr": "--2026-10-01 14:20:24--  http://localhost:8080/readyz\nResolving localhost (localhost)... ::1, 127.0.0.1\nConnecting to localhost (localhost)|::1|:8080... connected.\nHTTP request sent, awaiting response... \n  HTTP/1.1 200 OK\n  Date: Thu, 01 Oct 2026 14:20:24 GMT\n  Content-Length: 5\n  Content-Type: text/plain; charset=utf-8\nLength: 5 [text/plain]\nSaving to: 'STDOUT'\n\n     0K                                                       100%  938K=0s\n\n2026-10-01 14:20:24 (938 KB/s) - written to stdout [5/5]\n\n"
+    },
+    "run_phases": {
+      "status": 200,
+      "body": [
+        {
+          "subject": "c360.semteams-bootstrap-e2e-f6fb61.chain.agent.execution.a0b14381-587e-4b04-811b-ffee81b239f3",
+          "predicate": "agent.run.phase",
+          "object": "failed",
+          "source": "",
+          "timestamp": "2026-10-01T14:20:23.094110052Z",
+          "confidence": 1
+        }
+      ]
+    },
+    "run_approval": {
+      "pending": {
+        "status": 200,
+        "body": []
+      },
+      "answered": {
+        "status": 200,
+        "body": []
+      },
+      "outstanding": {
+        "status": 200,
+        "body": []
+      }
+    },
+    "loops": [
+      {
+        "loop_id": "3ecfcbe2-ebe4-47c0-9002-9ac175744575",
+        "task_id": "rule-c360.semteams-bootstrap-e2e-f6fb61.agentic-loop.agent.execution.a0b14381-587e-4b04-811b-ffee81b239f3-1790864423275255719",
+        "state": "complete",
+        "role": "coordinator",
+        "max_iterations": 8,
+        "outcome": "success",
+        "result": "{\"action\":\"respond_direct\",\"reason\":\"Autoresearch could not continue: the propose loop exhausted its iteration budget. No experiment was executed and the run failed.\"}"
+      },
+      {
+        "loop_id": "74748c8c-7325-45a2-8e61-e2a09decf3ca",
+        "task_id": "rule-c360.semteams-bootstrap-e2e-f6fb61.chain.agent.execution.a0b14381-587e-4b04-811b-ffee81b239f3-1790864423171330011",
+        "state": "complete",
+        "role": "ops-chain-observer",
+        "max_iterations": 8,
+        "outcome": "success",
+        "result": "{\"action\":\"observed\",\"reason\":\"Read the run entity and the coordinator loop result. Run reached its terminal phase with no operator-actionable pattern; emitting no findings.\"}"
+      },
+      {
+        "loop_id": "a0b14381-587e-4b04-811b-ffee81b239f3",
+        "task_id": "dispatch-414000aa7113bb276ecad5543ab004ab1e28d1d8e32cf07c9a4a780ff42b6b6e",
+        "state": "complete",
+        "role": "coordinator",
+        "iterations": 2,
+        "max_iterations": 8,
+        "user_id": "ui-anonymous",
+        "channel_type": "http",
+        "outcome": "success",
+        "result": "{\"action\":\"autoresearch\",\"reason\":\"Optimize the wallclock of `go test ./...`. Command: go test ./...; surface: ./...; cap: 2 iterations; metric: real seconds parsed from the test output. Lower is better.\"}"
+      },
+      {
+        "loop_id": "afc43a54-be10-4568-9b57-062590760c41",
+        "task_id": "rule-c360.semteams-bootstrap-e2e-f6fb61.chain.agent.execution.a0b14381-587e-4b04-811b-ffee81b239f3-1790864422641847552",
+        "state": "failed",
+        "role": "autoresearch-propose",
+        "iterations": 8,
+        "max_iterations": 8,
+        "outcome": "failed",
+        "error": "agentic-loop.HandleModelResponse: check max iterations failed: max iterations reached: loop afc43a54-be10-4568-9b57-062590760c41 at 8/8 iterations"
+      },
+      {
+        "loop_id": "b056d668-d0e6-4ed6-94b3-ebaebd9ff778",
+        "task_id": "rule-c360.semteams-bootstrap-e2e-f6fb61.agentic-loop.agent.execution.a0b14381-587e-4b04-811b-ffee81b239f3-1790864422452662719",
+        "state": "complete",
+        "role": "autoresearch-baseline",
+        "iterations": 1,
+        "max_iterations": 8,
+        "outcome": "success",
+        "result": "{\"action\":\"propose\",\"reason\":\"Baseline captured at 1.20s. Beginning the iteration loop (cap 2) \u2014 propose single-axis changes and keep the ones that lower the wallclock.\"}"
+      }
+    ],
+    "user_responses": [
+      {
+        "sequence": 188,
+        "timestamp": "2026-10-01T14:20:23.312160303Z",
+        "subject": "user.response.http.http-1790864422372498552",
+        "message_type": "agentic.user_response.v1",
+        "trace_id": "c6d6be987912452e73d78086c7d80da3",
+        "span_id": "424b0c3f063677f5",
+        "summary": "Type: agentic.user_response.v1, Payload: *agentic.UserResponse",
+        "raw_data": {
+          "id": "bde3be88-9eec-465f-b7b7-8245671bafd6",
+          "type": {
+            "domain": "agentic",
+            "category": "user_response",
+            "version": "v1"
+          },
+          "payload": {
+            "response_id": "terminal-user-response:c319e097-c736-4055-ab0b-9ebc05d37571",
+            "channel_type": "http",
+            "channel_id": "http-1790864422372498552",
+            "user_id": "ui-anonymous",
+            "in_reply_to": "3ecfcbe2-ebe4-47c0-9002-9ac175744575",
+            "type": "result",
+            "content": "Autoresearch could not continue: the propose loop exhausted its iteration budget. No experiment was executed and the run failed.",
+            "timestamp": "2026-10-01T14:20:23.308817094Z"
+          },
+          "meta": {
+            "created_at": 1790864423311,
+            "received_at": 1790864423311,
+            "source": "agentic-dispatch"
+          }
+        }
+      },
+      {
+        "sequence": 2,
+        "timestamp": "2026-10-01T14:20:22.376111302Z",
+        "subject": "user.response.http.http-1790864422372498552",
+        "message_type": "agentic.user_response.v1",
+        "trace_id": "74565e37712342254d654fb1ac4ae757",
+        "span_id": "b74cc2ebe5bf4ab2",
+        "summary": "Type: agentic.user_response.v1, Payload: *agentic.UserResponse",
+        "raw_data": {
+          "id": "b941066d-e540-4373-b6b1-dff5cad9cf00",
+          "type": {
+            "domain": "agentic",
+            "category": "user_response",
+            "version": "v1"
+          },
+          "payload": {
+            "response_id": "4448f5eb-9452-44ba-a664-6b1740ca8593",
+            "channel_type": "http",
+            "channel_id": "http-1790864422372498552",
+            "user_id": "ui-anonymous",
+            "in_reply_to": "a0b14381-587e-4b04-811b-ffee81b239f3",
+            "type": "status",
+            "content": "Task submitted. Loop: a0b14381-587e-4b04-811b-ffee81b239f3",
+            "timestamp": "2026-10-01T14:20:22.375571719Z"
+          },
+          "meta": {
+            "created_at": 1790864422375,
+            "received_at": 1790864422375,
+            "source": "agentic-dispatch"
+          }
+        }
+      }
+    ],
+    "tool_errors": [],
+    "warnings_and_errors": [
+      {
+        "time": "2026-10-01T14:20:14.355878298Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/rule.(*Processor).loadRules",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/rule/rule_loader.go",
+          "line": 157
+        },
+        "msg": "Invalid buffer window size, using default",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "component": "rule-processor",
+        "default": 600000000000,
+        "error": "time: invalid duration \"\""
+      },
+      {
+        "time": "2026-10-01T14:20:14.355901548Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/rule.(*Processor).loadRules",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/rule/rule_loader.go",
+          "line": 164
+        },
+        "msg": "Invalid alert cooldown period, using default",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "component": "rule-processor",
+        "default": 120000000000,
+        "error": "time: invalid duration \"\""
+      },
+      {
+        "time": "2026-10-01T14:20:14.370047382Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/service.(*ComponentManager).analyzeBootComposition",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/service/component_manager.go",
+          "line": 409
+        },
+        "msg": "composition finding",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "type": "disconnected_node",
+        "component": "objectstore",
+        "port": "",
+        "message": "component has no connections"
+      },
+      {
+        "time": "2026-10-01T14:20:14.370073757Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/service.(*ComponentManager).analyzeBootComposition",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/service/component_manager.go",
+          "line": 409
+        },
+        "msg": "composition finding",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "type": "orphaned_port",
+        "component": "agentic-model",
+        "port": "agent.stream",
+        "message": "output port 'agent.stream' (stream): no_subscribers"
+      },
+      {
+        "time": "2026-10-01T14:20:14.370081423Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/service.(*ComponentManager).analyzeBootComposition",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/service/component_manager.go",
+          "line": 409
+        },
+        "msg": "composition finding",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "type": "orphaned_port",
+        "component": "agentic-tools",
+        "port": "tool.list",
+        "message": "input port 'tool.list' (request): optional_api_unused"
+      },
+      {
+        "time": "2026-10-01T14:20:14.370087298Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/service.(*ComponentManager).analyzeBootComposition",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/service/component_manager.go",
+          "line": 409
+        },
+        "msg": "composition finding",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "type": "orphaned_port",
+        "component": "graph-gateway",
+        "port": "graph_index_queries",
+        "message": "output port 'graph_index_queries' (request): optional_api_unused"
+      },
+      {
+        "time": "2026-10-01T14:20:14.370091757Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/service.(*ComponentManager).analyzeBootComposition",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/service/component_manager.go",
+          "line": 409
+        },
+        "msg": "composition finding",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "type": "orphaned_port",
+        "component": "objectstore",
+        "port": "events",
+        "message": "output port 'events' (stream): no_subscribers"
+      },
+      {
+        "time": "2026-10-01T14:20:14.370096048Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/service.(*ComponentManager).analyzeBootComposition",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/service/component_manager.go",
+          "line": 409
+        },
+        "msg": "composition finding",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "type": "orphaned_port",
+        "component": "objectstore",
+        "port": "stored",
+        "message": "output port 'stored' (stream): no_subscribers"
+      },
+      {
+        "time": "2026-10-01T14:20:14.370099757Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/service.(*ComponentManager).analyzeBootComposition",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/service/component_manager.go",
+          "line": 409
+        },
+        "msg": "composition finding",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "type": "orphaned_port",
+        "component": "objectstore",
+        "port": "write",
+        "message": "input port 'write' (stream): no_publishers"
+      },
+      {
+        "time": "2026-10-01T14:20:14.37010384Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/service.(*ComponentManager).analyzeBootComposition",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/service/component_manager.go",
+          "line": 409
+        },
+        "msg": "composition finding",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "type": "orphaned_port",
+        "component": "teams-dispatch",
+        "port": "user.response",
+        "message": "output port 'user.response' (stream): no_subscribers"
+      },
+      {
+        "time": "2026-10-01T14:20:14.37010809Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/service.(*ComponentManager).analyzeBootComposition",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/service/component_manager.go",
+          "line": 409
+        },
+        "msg": "composition finding",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "type": "orphaned_port",
+        "component": "teams-loop",
+        "port": "trajectories",
+        "message": "output port 'trajectories' (watch): optional_index_unwatched"
+      },
+      {
+        "time": "2026-10-01T14:20:14.385838798Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/graph-query.(*Component).superviseCommunityGenerations",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/graph-query/component.go",
+          "line": 740
+        },
+        "msg": "community generation unavailable; retrying",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "component": "graph-query",
+        "generation": 1,
+        "error": "framework bucket \"COMMUNITY_INDEX\" is not ready: its owner (graph-clustering) has not provisioned it in this deployment",
+        "retry_interval": 5000000000
+      },
+      {
+        "time": "2026-10-01T14:20:14.385845298Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/graph-query.(*Component).superviseSummaryView",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/graph-query/summary_view.go",
+          "line": 124
+        },
+        "msg": "COMMUNITY_SUMMARIES unavailable; using statistical summaries",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "component": "graph-query",
+        "error": "framework bucket \"COMMUNITY_SUMMARIES\" is not ready: its owner (graph-clustering) has not provisioned it in this deployment",
+        "retry_interval": 5000000000
+      },
+      {
+        "time": "2026-10-01T14:20:19.387131592Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/graph-query.(*Component).superviseSummaryView",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/graph-query/summary_view.go",
+          "line": 124
+        },
+        "msg": "COMMUNITY_SUMMARIES unavailable; using statistical summaries",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "component": "graph-query",
+        "error": "framework bucket \"COMMUNITY_SUMMARIES\" is not ready: its owner (graph-clustering) has not provisioned it in this deployment",
+        "retry_interval": 5000000000
+      },
+      {
+        "time": "2026-10-01T14:20:19.387128592Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/graph-query.(*Component).superviseCommunityGenerations",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/graph-query/component.go",
+          "line": 740
+        },
+        "msg": "community generation unavailable; retrying",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "component": "graph-query",
+        "generation": 2,
+        "error": "framework bucket \"COMMUNITY_INDEX\" is not ready: its owner (graph-clustering) has not provisioned it in this deployment",
+        "retry_interval": 5000000000
+      },
+      {
+        "time": "2026-10-01T14:20:20.250238718Z",
+        "level": "ERROR",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/agentic-dispatch.(*Component).handleListLoops",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/agentic-dispatch/http.go",
+          "line": 608
+        },
+        "msg": "agentic-dispatch: loop listing refused while loop authority is unavailable",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "request_id": "ac657870",
+        "error": "Component.currentLoopSnapshot: loop projection not caught up failed: graphview: view not ready"
+      },
+      {
+        "time": "2026-10-01T14:20:20.250312801Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/agentic-dispatch.(*Component).writeJSONError",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/agentic-dispatch/http.go",
+          "line": 500
+        },
+        "msg": "HTTP error response",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "status": 503,
+        "message": "loop state is not available right now; retry shortly"
+      },
+      {
+        "time": "2026-10-01T14:20:22.450174969Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/agentic/agentrun.ResolveRun",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/agentic/agentrun/agentrun.go",
+          "line": 423
+        },
+        "msg": "agentrun.ResolveRun: agent.loop.run triple absent \u2014 falling back to ancestry walk",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "loop_id": "a0b14381-587e-4b04-811b-ffee81b239f3",
+        "org": "c360",
+        "platform": "semteams-bootstrap-e2e-f6fb61"
+      },
+      {
+        "time": "2026-10-01T14:20:22.806947261Z",
+        "level": "ERROR",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/agentic-loop.(*Component).handleLoopFailure",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/agentic-loop/component.go",
+          "line": 2246
+        },
+        "msg": "Loop processing failed",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "error": "agentic-loop.HandleModelResponse: check max iterations failed: max iterations reached: loop afc43a54-be10-4568-9b57-062590760c41 at 8/8 iterations",
+        "loop_id": "afc43a54-be10-4568-9b57-062590760c41",
+        "reason": "max_iterations"
+      },
+      {
+        "time": "2026-10-01T14:20:22.812659469Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/agentic/agentrun.ResolveRun",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/agentic/agentrun/agentrun.go",
+          "line": 423
+        },
+        "msg": "agentrun.ResolveRun: agent.loop.run triple absent \u2014 falling back to ancestry walk",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "loop_id": "afc43a54-be10-4568-9b57-062590760c41",
+        "org": "c360",
+        "platform": "semteams-bootstrap-e2e-f6fb61"
+      },
+      {
+        "time": "2026-10-01T14:20:23.238519719Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/agentic/agentrun.ResolveRun",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/agentic/agentrun/agentrun.go",
+          "line": 423
+        },
+        "msg": "agentrun.ResolveRun: agent.loop.run triple absent \u2014 falling back to ancestry walk",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "loop_id": "74748c8c-7325-45a2-8e61-e2a09decf3ca",
+        "org": "c360",
+        "platform": "semteams-bootstrap-e2e-f6fb61"
+      },
+      {
+        "time": "2026-10-01T14:20:24.387550261Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/graph-query.(*Component).superviseCommunityGenerations",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/graph-query/component.go",
+          "line": 740
+        },
+        "msg": "community generation unavailable; retrying",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "component": "graph-query",
+        "generation": 3,
+        "error": "framework bucket \"COMMUNITY_INDEX\" is not ready: its owner (graph-clustering) has not provisioned it in this deployment",
+        "retry_interval": 5000000000
+      },
+      {
+        "time": "2026-10-01T14:20:24.387573303Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/graph-query.(*Component).superviseSummaryView",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/graph-query/summary_view.go",
+          "line": 124
+        },
+        "msg": "COMMUNITY_SUMMARIES unavailable; using statistical summaries",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "component": "graph-query",
+        "error": "framework bucket \"COMMUNITY_SUMMARIES\" is not ready: its owner (graph-clustering) has not provisioned it in this deployment",
+        "retry_interval": 5000000000
+      }
+    ],
+    "samples": [
+      {
+        "timestamp": 1790864420.248115,
+        "loops": {
+          "status": 503,
+          "body": "{\"response_id\":\"a3379a40-808e-4dfd-8814-591189b2bb6f\",\"type\":\"error\",\"content\":\"loop state is not available right now; retry shortly\",\"timestamp\":\"2026-10-01T14:20:20Z\"}\n"
+        },
+        "backend_readiness": {
+          "exit": 0,
+          "stdout": "READY",
+          "stderr": "--2026-10-01 14:20:20--  http://localhost:8080/readyz\nResolving localhost (localhost)... ::1, 127.0.0.1\nConnecting to localhost (localhost)|::1|:8080... connected.\nHTTP request sent, awaiting response... \n  HTTP/1.1 200 OK\n  Date: Thu, 01 Oct 2026 14:20:20 GMT\n  Content-Length: 5\n  Content-Type: text/plain; charset=utf-8\nLength: 5 [text/plain]\nSaving to: 'STDOUT'\n\n     0K                                                       100% 2.86M=0s\n\n2026-10-01 14:20:20 (2.86 MB/s) - written to stdout [5/5]\n\n"
+        }
+      }
+    ]
+  },
+  {
+    "name": "autoresearch-descended-status",
+    "exit": 0,
+    "playwright_exit": 0,
+    "skipped": false,
+    "source_changed": false,
+    "manifest": {
+      "name": "autoresearch-descended-status",
+      "fixture": "autoresearch-descended-status.yaml",
+      "spec": "autoresearch-exit.spec.ts",
+      "config": "e2e-flow-bootstrap.json",
+      "source": "/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams",
+      "project": "stmig162",
+      "port": 33162,
+      "runner_sha256": "ce2a20e21ee8ae26939460b76f79a185e743b8727a6ae8264463167b9fe5d31e",
+      "matrix_sha256": "6cbebefa31505fd1f7cc4beeb92766e936aba301e30f9eae46b0e2cc4ec89136",
+      "source_tree_sha256": "79ad0a9e17faa8f3d3c4473808da9faa2d34353323612013f10e5fd3b0fd9ba8",
+      "ui_source_tree_sha256": "49f88c4db835aa4ef7f8e707ef9e317965c0b2044c0e7bdbe27c61ca1136c935",
+      "derived_config_sha256": "3cb221ccf480403bf0240549959498f25a69712fcc1a827c49fac35881449f17",
+      "compose_sha256": "bee3216e7a823cf384cbf8c82440fd94ecd19e078cc1ef1e10dd44753d640a62",
+      "sha256": {
+        "go.mod": "fe05e2ea4b4c45bfc181ff83b3a925dccda4dd3d54970b03765c9b50d0b96fff",
+        "go.sum": "8cb9cd26889b1efdd0d03402581fbc26b354bde2b45f195efd71e90b93e51599",
+        "ui/package-lock.json": "28fd4403ce710547429496e98d4b7f3e941986eb67e6957316e298ffb2a144c4",
+        "configs/e2e-flow-bootstrap.json": "f19b57b80dac11e7bdfcce311b59733a4c797b8b765fb7602861b774ec904106",
+        "test/fixtures/journeys/autoresearch-descended-status.yaml": "d464ede6548934430625288d39e5592369332e0e331e2336d19f4f2994cdc778",
+        "ui/e2e/agentic/autoresearch-exit.spec.ts": "53091a92c3ed6b5675093f0b4299c84dafdcac70d97f358d12a6eec8e414a8da"
+      },
+      "images": [
+        {
+          "Id": "sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b",
+          "RepoTags": [
+            "caddy:2-alpine"
+          ],
+          "RepoDigests": [
+            "caddy@sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b"
+          ]
+        },
+        {
+          "Id": "sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66",
+          "RepoTags": [
+            "nats:2.14.4-alpine",
+            "nats@sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66"
+          ],
+          "RepoDigests": [
+            "nats@sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66"
+          ]
+        },
+        {
+          "Id": "sha256:d96116ba2b09643bb02fad97b2d0c2e069c3e8d96d2a19b11c77fa96c41cdca1",
+          "RepoTags": [
+            "stmig162-backend:autoresearch-repair"
+          ],
+          "RepoDigests": [
+            "stmig162-backend@sha256:d96116ba2b09643bb02fad97b2d0c2e069c3e8d96d2a19b11c77fa96c41cdca1"
+          ]
+        },
+        {
+          "Id": "sha256:09fb79ed5ef11c76875be1b9ed97cd9750ab4065a7e06a7a158876050f096ec7",
+          "RepoTags": [
+            "stmig162-mock-llm:8b99efe"
+          ],
+          "RepoDigests": [
+            "stmig162-mock-llm@sha256:09fb79ed5ef11c76875be1b9ed97cd9750ab4065a7e06a7a158876050f096ec7"
+          ]
+        },
+        {
+          "Id": "sha256:80aa3f7be0de406f45471018b06229b9e7151bf38b8ef0e7a01351d74d79ca6f",
+          "RepoTags": [
+            "stmig162-sandbox:8b99efe"
+          ],
+          "RepoDigests": [
+            "stmig162-sandbox@sha256:80aa3f7be0de406f45471018b06229b9e7151bf38b8ef0e7a01351d74d79ca6f"
+          ]
+        },
+        {
+          "Id": "sha256:5bbae7d16029a20ca17382a58d6acd2f73c1478b151516ba83549faad691a91a",
+          "RepoTags": [
+            "stmig162-ui:8b99efe"
+          ],
+          "RepoDigests": [
+            "stmig162-ui@sha256:5bbae7d16029a20ca17382a58d6acd2f73c1478b151516ba83549faad691a91a"
+          ]
+        }
+      ],
+      "source_after_tree_sha256": "79ad0a9e17faa8f3d3c4473808da9faa2d34353323612013f10e5fd3b0fd9ba8",
+      "ui_source_after_tree_sha256": "49f88c4db835aa4ef7f8e707ef9e317965c0b2044c0e7bdbe27c61ca1136c935",
+      "source_changed": false
+    },
+    "config_file": "configs/3cb221ccf480403bf0240549959498f25a69712fcc1a827c49fac35881449f17.json",
+    "compose_file": "compose/autoresearch-descended-status.json",
+    "stats": {
+      "startTime": "2026-10-01T14:20:39.191Z",
+      "duration": 2333.435,
+      "expected": 1,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "tests": [
+      {
+        "title": "autoresearch descended limitation status returns to the original user route",
+        "status": "passed",
+        "duration_ms": 1924,
+        "errors": [],
+        "proof_file": "proofs/autoresearch-descended-status.json",
+        "screenshots": [
+          "proofs/autoresearch-descended-status-autoresearch-terminal-response-ui.png"
+        ],
+        "screenshot_limit": "Existing fixed right-rail clipping; screenshot alone is not full-content proof. Browser assertion parses exact expanded raw DOM payload. No rich-body-rendering claim."
+      }
+    ],
+    "backend_readiness": {
+      "exit": 0,
+      "stdout": "READY",
+      "stderr": "--2026-10-01 14:20:41--  http://localhost:8080/readyz\nResolving localhost (localhost)... ::1, 127.0.0.1\nConnecting to localhost (localhost)|::1|:8080... connected.\nHTTP request sent, awaiting response... \n  HTTP/1.1 200 OK\n  Date: Thu, 01 Oct 2026 14:20:41 GMT\n  Content-Length: 5\n  Content-Type: text/plain; charset=utf-8\nLength: 5 [text/plain]\nSaving to: 'STDOUT'\n\n     0K                                                       100% 1.73M=0s\n\n2026-10-01 14:20:41 (1.73 MB/s) - written to stdout [5/5]\n\n"
+    },
+    "run_phases": {
+      "status": 200,
+      "body": [
+        {
+          "subject": "c360.semteams-bootstrap-e2e-eb39b8.chain.agent.execution.828f418f-5f6c-4658-94b2-94b7082d393f",
+          "predicate": "agent.run.phase",
+          "object": "executing",
+          "source": "",
+          "timestamp": "2026-10-01T14:20:40.781330797Z",
+          "confidence": 1
+        }
+      ]
+    },
+    "run_approval": {
+      "pending": {
+        "status": 200,
+        "body": []
+      },
+      "answered": {
+        "status": 200,
+        "body": []
+      },
+      "outstanding": {
+        "status": 200,
+        "body": []
+      }
+    },
+    "loops": [
+      {
+        "loop_id": "67efeae7-e215-4113-814e-89c4880546fe",
+        "task_id": "rule-c360.semteams-bootstrap-e2e-eb39b8.chain.agent.execution.828f418f-5f6c-4658-94b2-94b7082d393f-1790864440744812588",
+        "state": "complete",
+        "role": "autoresearch-propose",
+        "max_iterations": 8,
+        "outcome": "success",
+        "result": "{\"action\":\"needs_clarification\",\"reason\":\"The bounded surface is too narrow; ask the user which additional test directories may change.\"}"
+      },
+      {
+        "loop_id": "828f418f-5f6c-4658-94b2-94b7082d393f",
+        "task_id": "dispatch-3d5cfef006fddb6d7d40b0e45e91153ce9078d713455c72ba3485a11ce608565",
+        "state": "complete",
+        "role": "coordinator",
+        "iterations": 2,
+        "max_iterations": 8,
+        "user_id": "ui-anonymous",
+        "channel_type": "http",
+        "outcome": "success",
+        "result": "{\"action\":\"autoresearch\",\"reason\":\"Optimize the wallclock of `go test ./...`. Command: go test ./...; surface: ./...; cap: 2 iterations; metric: real seconds parsed from the test output. Lower is better.\"}"
+      },
+      {
+        "loop_id": "a2535383-c353-4b1f-8ddd-0de36946ae36",
+        "task_id": "rule-c360.semteams-bootstrap-e2e-eb39b8.agentic-loop.agent.execution.828f418f-5f6c-4658-94b2-94b7082d393f-1790864440912306505",
+        "state": "complete",
+        "role": "coordinator",
+        "max_iterations": 8,
+        "outcome": "success",
+        "result": "{\"action\":\"respond_direct\",\"reason\":\"Autoresearch stopped before an experiment because the current surface is too narrow. No improvement or completed optimization is claimed; the run requires follow-up under the existing lifecycle policy.\"}"
+      },
+      {
+        "loop_id": "ac57ae9b-f584-45f0-900f-1c5575c54293",
+        "task_id": "rule-c360.semteams-bootstrap-e2e-eb39b8.agentic-loop.agent.execution.828f418f-5f6c-4658-94b2-94b7082d393f-1790864440653458046",
+        "state": "complete",
+        "role": "autoresearch-baseline",
+        "iterations": 1,
+        "max_iterations": 8,
+        "outcome": "success",
+        "result": "{\"action\":\"propose\",\"reason\":\"Baseline captured at 1.20s. Beginning the iteration loop (cap 2) \u2014 propose single-axis changes and keep the ones that lower the wallclock.\"}"
+      }
+    ],
+    "user_responses": [
+      {
+        "sequence": 100,
+        "timestamp": "2026-10-01T14:20:40.93544963Z",
+        "subject": "user.response.http.http-1790864440590412880",
+        "message_type": "agentic.user_response.v1",
+        "trace_id": "abf3f3aeb6db9762d0b10c3846d9f0df",
+        "span_id": "335abeca87bb04e8",
+        "summary": "Type: agentic.user_response.v1, Payload: *agentic.UserResponse",
+        "raw_data": {
+          "id": "0ccb6e66-a2fd-4b8d-940b-ba07e12142a0",
+          "type": {
+            "domain": "agentic",
+            "category": "user_response",
+            "version": "v1"
+          },
+          "payload": {
+            "response_id": "terminal-user-response:99e34e67-98e2-4461-9c7f-13574ff33f5a",
+            "channel_type": "http",
+            "channel_id": "http-1790864440590412880",
+            "user_id": "ui-anonymous",
+            "in_reply_to": "a2535383-c353-4b1f-8ddd-0de36946ae36",
+            "type": "result",
+            "content": "Autoresearch stopped before an experiment because the current surface is too narrow. No improvement or completed optimization is claimed; the run requires follow-up under the existing lifecycle policy.",
+            "timestamp": "2026-10-01T14:20:40.932250797Z"
+          },
+          "meta": {
+            "created_at": 1790864440935,
+            "received_at": 1790864440935,
+            "source": "agentic-dispatch"
+          }
+        }
+      },
+      {
+        "sequence": 2,
+        "timestamp": "2026-10-01T14:20:40.596221296Z",
+        "subject": "user.response.http.http-1790864440590412880",
+        "message_type": "agentic.user_response.v1",
+        "trace_id": "b297db42a013cea1742d8cbdda2547d1",
+        "span_id": "3edee333a6d63d86",
+        "summary": "Type: agentic.user_response.v1, Payload: *agentic.UserResponse",
+        "raw_data": {
+          "id": "8224e475-bc41-4305-9030-857b9ec1a8d9",
+          "type": {
+            "domain": "agentic",
+            "category": "user_response",
+            "version": "v1"
+          },
+          "payload": {
+            "response_id": "6983507a-76f8-4a0c-be3d-d89bccf01915",
+            "channel_type": "http",
+            "channel_id": "http-1790864440590412880",
+            "user_id": "ui-anonymous",
+            "in_reply_to": "828f418f-5f6c-4658-94b2-94b7082d393f",
+            "type": "status",
+            "content": "Task submitted. Loop: 828f418f-5f6c-4658-94b2-94b7082d393f",
+            "timestamp": "2026-10-01T14:20:40.595536046Z"
+          },
+          "meta": {
+            "created_at": 1790864440595,
+            "received_at": 1790864440595,
+            "source": "agentic-dispatch"
+          }
+        }
+      }
+    ],
+    "tool_errors": [],
+    "warnings_and_errors": [
+      {
+        "time": "2026-10-01T14:20:32.705038793Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/rule.(*Processor).loadRules",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/rule/rule_loader.go",
+          "line": 157
+        },
+        "msg": "Invalid buffer window size, using default",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "component": "rule-processor",
+        "default": 600000000000,
+        "error": "time: invalid duration \"\""
+      },
+      {
+        "time": "2026-10-01T14:20:32.705064043Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/rule.(*Processor).loadRules",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/rule/rule_loader.go",
+          "line": 164
+        },
+        "msg": "Invalid alert cooldown period, using default",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "component": "rule-processor",
+        "default": 120000000000,
+        "error": "time: invalid duration \"\""
+      },
+      {
+        "time": "2026-10-01T14:20:32.715236626Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/service.(*ComponentManager).analyzeBootComposition",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/service/component_manager.go",
+          "line": 409
+        },
+        "msg": "composition finding",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "type": "disconnected_node",
+        "component": "objectstore",
+        "port": "",
+        "message": "component has no connections"
+      },
+      {
+        "time": "2026-10-01T14:20:32.715289709Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/service.(*ComponentManager).analyzeBootComposition",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/service/component_manager.go",
+          "line": 409
+        },
+        "msg": "composition finding",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "type": "orphaned_port",
+        "component": "agentic-model",
+        "port": "agent.stream",
+        "message": "output port 'agent.stream' (stream): no_subscribers"
+      },
+      {
+        "time": "2026-10-01T14:20:32.715335626Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/service.(*ComponentManager).analyzeBootComposition",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/service/component_manager.go",
+          "line": 409
+        },
+        "msg": "composition finding",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "type": "orphaned_port",
+        "component": "agentic-tools",
+        "port": "tool.list",
+        "message": "input port 'tool.list' (request): optional_api_unused"
+      },
+      {
+        "time": "2026-10-01T14:20:32.715355793Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/service.(*ComponentManager).analyzeBootComposition",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/service/component_manager.go",
+          "line": 409
+        },
+        "msg": "composition finding",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "type": "orphaned_port",
+        "component": "graph-gateway",
+        "port": "graph_index_queries",
+        "message": "output port 'graph_index_queries' (request): optional_api_unused"
+      },
+      {
+        "time": "2026-10-01T14:20:32.715368876Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/service.(*ComponentManager).analyzeBootComposition",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/service/component_manager.go",
+          "line": 409
+        },
+        "msg": "composition finding",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "type": "orphaned_port",
+        "component": "objectstore",
+        "port": "events",
+        "message": "output port 'events' (stream): no_subscribers"
+      },
+      {
+        "time": "2026-10-01T14:20:32.715380209Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/service.(*ComponentManager).analyzeBootComposition",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/service/component_manager.go",
+          "line": 409
+        },
+        "msg": "composition finding",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "type": "orphaned_port",
+        "component": "objectstore",
+        "port": "stored",
+        "message": "output port 'stored' (stream): no_subscribers"
+      },
+      {
+        "time": "2026-10-01T14:20:32.715390126Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/service.(*ComponentManager).analyzeBootComposition",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/service/component_manager.go",
+          "line": 409
+        },
+        "msg": "composition finding",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "type": "orphaned_port",
+        "component": "objectstore",
+        "port": "write",
+        "message": "input port 'write' (stream): no_publishers"
+      },
+      {
+        "time": "2026-10-01T14:20:32.715406001Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/service.(*ComponentManager).analyzeBootComposition",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/service/component_manager.go",
+          "line": 409
+        },
+        "msg": "composition finding",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "type": "orphaned_port",
+        "component": "teams-dispatch",
+        "port": "user.response",
+        "message": "output port 'user.response' (stream): no_subscribers"
+      },
+      {
+        "time": "2026-10-01T14:20:32.715414709Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/service.(*ComponentManager).analyzeBootComposition",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/service/component_manager.go",
+          "line": 409
+        },
+        "msg": "composition finding",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "type": "orphaned_port",
+        "component": "teams-loop",
+        "port": "trajectories",
+        "message": "output port 'trajectories' (watch): optional_index_unwatched"
+      },
+      {
+        "time": "2026-10-01T14:20:32.732954584Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/graph-query.(*Component).superviseSummaryView",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/graph-query/summary_view.go",
+          "line": 124
+        },
+        "msg": "COMMUNITY_SUMMARIES unavailable; using statistical summaries",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "component": "graph-query",
+        "error": "framework bucket \"COMMUNITY_SUMMARIES\" is not ready: its owner (graph-clustering) has not provisioned it in this deployment",
+        "retry_interval": 5000000000
+      },
+      {
+        "time": "2026-10-01T14:20:32.732961168Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/graph-query.(*Component).superviseCommunityGenerations",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/graph-query/component.go",
+          "line": 740
+        },
+        "msg": "community generation unavailable; retrying",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "component": "graph-query",
+        "generation": 1,
+        "error": "framework bucket \"COMMUNITY_INDEX\" is not ready: its owner (graph-clustering) has not provisioned it in this deployment",
+        "retry_interval": 5000000000
+      },
+      {
+        "time": "2026-10-01T14:20:37.733834378Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/graph-query.(*Component).superviseSummaryView",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/graph-query/summary_view.go",
+          "line": 124
+        },
+        "msg": "COMMUNITY_SUMMARIES unavailable; using statistical summaries",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "component": "graph-query",
+        "error": "framework bucket \"COMMUNITY_SUMMARIES\" is not ready: its owner (graph-clustering) has not provisioned it in this deployment",
+        "retry_interval": 5000000000
+      },
+      {
+        "time": "2026-10-01T14:20:37.733834378Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/graph-query.(*Component).superviseCommunityGenerations",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/graph-query/component.go",
+          "line": 740
+        },
+        "msg": "community generation unavailable; retrying",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "component": "graph-query",
+        "generation": 2,
+        "error": "framework bucket \"COMMUNITY_INDEX\" is not ready: its owner (graph-clustering) has not provisioned it in this deployment",
+        "retry_interval": 5000000000
+      },
+      {
+        "time": "2026-10-01T14:20:38.604913962Z",
+        "level": "ERROR",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/agentic-dispatch.(*Component).handleListLoops",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/agentic-dispatch/http.go",
+          "line": 608
+        },
+        "msg": "agentic-dispatch: loop listing refused while loop authority is unavailable",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "request_id": "b872e123",
+        "error": "Component.currentLoopSnapshot: loop projection not caught up failed: graphview: view not ready"
+      },
+      {
+        "time": "2026-10-01T14:20:38.605030921Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/agentic-dispatch.(*Component).writeJSONError",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/agentic-dispatch/http.go",
+          "line": 500
+        },
+        "msg": "HTTP error response",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "status": 503,
+        "message": "loop state is not available right now; retry shortly"
+      },
+      {
+        "time": "2026-10-01T14:20:40.65319913Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/agentic/agentrun.ResolveRun",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/agentic/agentrun/agentrun.go",
+          "line": 423
+        },
+        "msg": "agentrun.ResolveRun: agent.loop.run triple absent \u2014 falling back to ancestry walk",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "loop_id": "828f418f-5f6c-4658-94b2-94b7082d393f",
+        "org": "c360",
+        "platform": "semteams-bootstrap-e2e-eb39b8"
+      },
+      {
+        "time": "2026-10-01T14:20:40.764974547Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/agentic/agentrun.ResolveRun",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/agentic/agentrun/agentrun.go",
+          "line": 423
+        },
+        "msg": "agentrun.ResolveRun: agent.loop.run triple absent \u2014 falling back to ancestry walk",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "loop_id": "67efeae7-e215-4113-814e-89c4880546fe",
+        "org": "c360",
+        "platform": "semteams-bootstrap-e2e-eb39b8"
+      }
+    ],
+    "samples": [
+      {
+        "timestamp": 1790864438.598882,
+        "loops": {
+          "status": 503,
+          "body": "{\"response_id\":\"6894c2e5-3ed7-43e3-83c5-a6f5d329a0b7\",\"type\":\"error\",\"content\":\"loop state is not available right now; retry shortly\",\"timestamp\":\"2026-10-01T14:20:38Z\"}\n"
+        },
+        "backend_readiness": {
+          "exit": 0,
+          "stdout": "READY",
+          "stderr": "--2026-10-01 14:20:38--  http://localhost:8080/readyz\nResolving localhost (localhost)... ::1, 127.0.0.1\nConnecting to localhost (localhost)|::1|:8080... connected.\nHTTP request sent, awaiting response... \n  HTTP/1.1 200 OK\n  Date: Thu, 01 Oct 2026 14:20:38 GMT\n  Content-Length: 5\n  Content-Type: text/plain; charset=utf-8\nLength: 5 [text/plain]\nSaving to: 'STDOUT'\n\n     0K                                                       100% 3.01M=0s\n\n2026-10-01 14:20:38 (3.01 MB/s) - written to stdout [5/5]\n\n"
+        }
+      }
+    ]
+  }
+]

@@ -1,0 +1,120 @@
+== ui-lint.log (exit 0) ==
+
+> @c360/semteams-ui@0.0.1 lint
+> eslint .
+
+
+
+== ui-check.log (exit 0) ==
+
+> @c360/semteams-ui@0.0.1 check
+> svelte-kit sync && svelte-check --tsconfig ./tsconfig.json
+
+Loading svelte-check in workspace: /Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/ui
+Getting Svelte diagnostics...
+
+svelte-check found 0 errors and 0 warnings
+
+
+== ui-test.log (exit 0) ==
+g: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ src/lib/types/ui-state.test.ts (7 tests) 5ms
+(node:57655) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ src/routes/api/ai/chat/server.test.ts (2 tests) 7ms
+(node:57667) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:57669) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ src/lib/utils/zip.test.ts (6 tests) 4ms
+(node:57668) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ src/routes/api/ai/generate-flow/server.test.ts (2 tests) 5ms
+(node:57674) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ src/lib/stores/taskRefs.test.ts (8 tests) 9ms
+(node:57675) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ src/lib/utils/accessibility.test.ts (15 tests) 4ms
+ ✓ src/lib/services/compositionApi.test.ts (2 tests) 7ms
+(node:57673) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ src/lib/services/agentChatBridge.test.ts (13 tests) 4ms
+(node:57679) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:57680) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ src/lib/types/flow.test.ts (13 tests) 5ms
+(node:57681) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ src/lib/types/slashCommand.test.ts (10 tests) 7ms
+(node:57685) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ src/lib/utils/sigma-layout.test.ts (6 tests) 3ms
+(node:57686) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ src/lib/types/graph.identity.test.ts (1 test) 5ms
+ ✓ src/lib/stores/userIdentity.test.ts (7 tests) 4ms
+(node:57689) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ↓ src/lib/contract/openapi.contract.test.ts (12 tests | 12 skipped)
+
+ Test Files  171 passed | 1 skipped (172)
+      Tests  3704 passed | 12 skipped (3716)
+   Start at  09:10:16
+   Duration  25.38s (transform 7.93s, setup 12.78s, collect 55.31s, tests 75.08s, environment 78.34s, prepare 10.17s)
+
+
+
+== ui-build.log (exit 0) ==
+json                                     6.38 kB
+.svelte-kit/output/server/_app/immutable/assets/_error.CHV4RkbH.css               0.59 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.BMw8sZkm.css                1.90 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.BjHWRdyS.css                2.21 kB
+.svelte-kit/output/server/_app/immutable/assets/_layout.edchf-PW.css             21.15 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.bYuKp3Nl.css               21.43 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.WTrgWGmZ.css               28.78 kB
+.svelte-kit/output/server/entries/pages/_page.ts.js                               0.00 kB
+.svelte-kit/output/server/entries/pages/graph/_page.ts.js                         0.04 kB
+.svelte-kit/output/server/chunks/index-server.js                                  0.12 kB
+.svelte-kit/output/server/entries/pages/flows/_page.ts.js                         0.12 kB
+.svelte-kit/output/server/entries/pages/flows/_id_/_page.ts.js                    0.12 kB
+.svelte-kit/output/server/chunks/environment.js                                   0.23 kB
+.svelte-kit/output/server/entries/endpoints/api/ai/chat/_server.ts.js             0.25 kB
+.svelte-kit/output/server/entries/endpoints/api/ai/generate-flow/_server.ts.js    0.25 kB
+.svelte-kit/output/server/chunks/equality.js                                      0.33 kB
+.svelte-kit/output/server/internal.js                                             0.37 kB
+.svelte-kit/output/server/chunks/server2.js                                       0.50 kB
+.svelte-kit/output/server/chunks/server.js                                        0.71 kB
+.svelte-kit/output/server/chunks/utils2.js                                        0.95 kB
+.svelte-kit/output/server/entries/pages/_error.svelte.js                          0.96 kB
+.svelte-kit/output/server/chunks/utils.js                                         1.15 kB
+.svelte-kit/output/server/chunks/hooks.server.js                                  1.26 kB
+.svelte-kit/output/server/chunks/index2.js                                        1.33 kB
+.svelte-kit/output/server/chunks/shared.js                                        1.35 kB
+.svelte-kit/output/server/entries/pages/admin/flows/_page.ts.js                   1.57 kB
+.svelte-kit/output/server/chunks/routing.js                                       2.29 kB
+.svelte-kit/output/server/entries/pages/admin/_page.svelte.js                     3.00 kB
+.svelte-kit/output/server/entries/pages/admin/flows/_page.svelte.js               3.45 kB
+.svelte-kit/output/server/chunks/exports.js                                       6.97 kB
+.svelte-kit/output/server/entries/pages/_layout.svelte.js                        12.52 kB
+.svelte-kit/output/server/chunks/index.js                                        26.62 kB
+.svelte-kit/output/server/remote-entry.js                                        27.67 kB
+.svelte-kit/output/server/entries/pages/_page.svelte.js                          28.43 kB
+.svelte-kit/output/server/chunks/taskStore.svelte.js                             59.70 kB
+.svelte-kit/output/server/entries/pages/graph/_page.svelte.js                    69.35 kB
+.svelte-kit/output/server/chunks/internal.js                                     72.40 kB
+.svelte-kit/output/server/index.js                                              125.29 kB
+✓ built in 2.10s
+
+Run npm run preview to preview your production build locally.
+
+> Using @sveltejs/adapter-node
+  ✔ done
+
+
+== e2e-lint.log (exit 0) ==
+
+
+== e2e-types.log (exit 0) ==

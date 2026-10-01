@@ -1,0 +1,5 @@
+ok  	github.com/c360studio/semteams/test/contract	2.221s
+ok  	github.com/c360studio/semteams/cmd/semteams/tools/emitautoresearchbaseline	(cached)
+ok  	github.com/c360studio/semteams/cmd/semteams/tools/emitautoresearchmeasurement	(cached)
+ok  	github.com/c360studio/semteams/cmd/semteams/tools/emitautoresearchartifact	(cached)
+ok  	github.com/c360studio/semteams/cmd/semteams/approvalpause	(cached)

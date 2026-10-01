@@ -1,10 +1,10 @@
 # Go migration validation snapshot
 
-Final local Go gates passed against the stable approval-projection implementation. The intermediate red/green
-snapshots below are retained as development history. [Independent Go code review](go-review.md) is approved with no
-remaining blocking code findings. The [final browser matrix](browser-baseline.md) records 20 passes, one autoresearch
-delivery failure and five explicit skips. Post-commit schema and frontend generated-type checks pass. Passing local Go tests
-does not qualify the unresolved autoresearch final typed delivery.
+The final local Go gates pass after the autoresearch origin-return repair. Both the
+[original migration review](go-review.md) and [repair review](autoresearch-repair-review.md) approve their scoped code.
+All five focused repaired browser cases and all 24 active scenarios in the expanded full matrix pass; five explicit
+skips remain. Browser evidence is recorded separately in the
+[browser report](browser-baseline.md). Intermediate red/green and pre-repair gate snapshots remain development history.
 
 ## Baseline and environment
 
@@ -12,16 +12,20 @@ does not qualify the unresolved autoresearch final typed delivery.
 - Frozen target: `v1.0.0-beta.162.0.20260930150212-8b99efe9c66a`, SHA
   `8b99efe9c66a4faa4fa509f9f62cc6bad8392128`; no replacement or upstream shim.
 - Dedicated worktree: `/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams`, branch
-  `codex/semstreams-frozen-8b99efe`. Proposal commit: `4300f6c8`; qualified source is preserved in content commit `f70537c8`.
+  `codex/semstreams-frozen-8b99efe`. Proposal commit: `4300f6c8`; initial qualified source is in `f70537c8`, historical
+blocked qualification in
+  `8656192c`, and the repaired implementation in `edf87d3104d4b5cc494623c89b17742539951380`.
 - Baseline Go source preserved at `/tmp/semteams-migration-8b99efe/baseline-source`.
-  Later browser comparisons deliberately amended selected E2E specs/fixtures in that directory (observer synchronization,
+  Later browser comparisons deliberately amended selected E2E specs/fixtures in that directory (observer
+synchronization,
   two-gather proof and corrected autoresearch emitter inputs). It is not an immutable whole-directory archive.
   Baseline Go source/module remain unchanged; each browser run's manifest records its exact amended inputs.
 - macOS arm64, Go `1.26.4` (module minimum `1.26.3`), Task `3.51.1`, local Docker Desktop.
 - Integration uses fresh testcontainers and test cleanup, `TESTCONTAINERS_RYUK_DISABLED=true`, sequential
   package execution (`-p 1`). The unchanged upstream `NewTestClient` defaults to `nats:2.14-alpine`
   (beta.160 `natsclient/test_client.go:589`; frozen line 598). The cached local image reports **2.14.7**.
-  The browser lane explicitly uses **2.14.4-alpine**. These are different runtime lanes; the Go gate results
+  The browser lane explicitly uses **2.14.4-alpine**; new approval and autoresearch behavioral fixtures explicitly
+  pin NATS **2.14.4**. These are different runtime lanes; the complete Go gate results
   must not be described as NATS 2.14.4 qualification. No paid LLM or production NATS storage was used.
 - Both `configs/flow-bootstrap.json` and `configs/e2e-flow-bootstrap.json` are decoded and composition-validated.
   Runtime behavior uses the browser lane's isolated mock configuration; see that lane for exact compose settings.
@@ -45,7 +49,7 @@ The floating Go helper tag was not changed for this migration. A later machine m
 rather than assuming this cached-image result. This documents a preexisting reproducibility limit, not a proven
 behavioral defect or a reason to relabel the existing gate.
 
-## Final local Go gates
+## Pre-repair full Go snapshot
 
 [Machine-readable commands and exits](evidence/go/final-go-gates.json) records these outcomes after the approval
 projection and final tests were complete:
@@ -62,19 +66,16 @@ The integration gate adds `GOFLAGS=-coverprofile=/tmp/semteams-migration-8b99efe
 -covermode=atomic` to the unchanged `go test -race -count=1 -tags=integration -p 1 ./...` task. Other listed commands
 have empty `GOFLAGS`. The unchanged testcontainer helper and local NATS 2.14.7 identity are described above.
 
-Final lint has zero errors and seven warnings. Five are retained from the baseline; two new non-failing warnings
-are approval projection function length (52 statements against the 50-statement rule) and a local variable named
-`copy`. The [independent review disposition](go-review.md#new-lint-warning-disposition) accepts the cohesive
-function length and defers the cosmetic rename to the next approved source edit under #280 to preserve the final
-qualification source identity. Neither warning is suppressed or treated as a behavioral blocker. The final gate is
-green, but its warning count is not the earlier five-warning snapshot.
+That historical lint snapshot had zero errors and seven warnings. Five were baseline warnings; the two additions
+were the cohesive approval projection function length and a local variable named `copy`. Independent review accepted
+the 52-statement projection function. The subsequent approved repair renamed the local to `existingCount`, so the
+current gate has six warnings. No warning was suppressed. Historical generated-output checks at `f70537c8` passed.
 
-`task schema:check-changes` and `task ui:generate-types:check` both pass after content commit `f70537c8`.
-The exact check record appears below. Independent code review is approved; hosted checks remain owned by the PR lane.
+## Coverage snapshot before the autoresearch repair
 
-## Final coverage
-
-The full integration coverage profile reports 72.1% overall. The durable
+The pre-repair full integration coverage profile reports 72.1% overall. The repair full gates did not request a new
+coverage profile; the values below describe that measured snapshot, not coverage of the new rule handoff tests. The
+durable
 [function summary](evidence/go/final-go-functions.txt) avoids committing the large raw profile.
 
 | Package | Final statement coverage |
@@ -114,9 +115,9 @@ The full integration gate had already passed before those test-only additions an
 Lint retains five existing warnings, with no errors. The first frozen full race run failed on old
 `flow-service` generator assertions. These were changed to assert retired service absence and supported
 component/composition response types; the full race rerun passes. The schema command generated changed
-framework schemas/OpenAPI, and the orphan retired workflow schema was removed. The dirty-tree schema gate
-currently exits Task status 201 (inner status 1) because these generated changes are not committed. It must
-be run after committing the generated output; this report does not call that gate green at the target.
+framework schemas/OpenAPI, and the orphan retired workflow schema was removed. The initial dirty-tree schema gate
+exited Task status 201 (inner status 1) before those generated changes were committed. The later committed checks
+below passed; the early failure is retained as history.
 
 ## Behavioral tests and attribution
 
@@ -181,13 +182,14 @@ Broad boot wiring and subscriber paths remain under-covered. Full function cover
    guards and live NATS boundary tests now pass. Independent code review is approved, and the
    [actual graph-owner browser proof](browser-evidence/final/run-approval-boundary-proof.json) passes through the
    configured projection, lifecycle rules, exact UI execution fence and typed research delivery.
-2. **Autoresearch terminal delivery:** the final coordinator completes but lacks typed ancestry back to the
-   root HTTP route after the non-loop run-triggered action. See
-   [terminal blocker](autoresearch-terminal-blocker.md) and [reduced wire evidence](autoresearch-route-evidence.json).
-   This is a product lineage limitation exposed by stricter qualification, not a claim that closed upstream
-   issue #1094 is still broken. No publisher shim or unsupported run predicate is added.
+2. **Autoresearch terminal delivery, repaired:** the historical final coordinator lacked typed ancestry back to
+   the root HTTP route after the non-loop run-triggered action. See the
+   [historical failure and qualified repair](autoresearch-terminal-blocker.md) and original
+   [wire evidence](autoresearch-route-evidence.json). The SemTeams-only origin return restores delivery in all five
+   focused browser cases. No publisher shim, unsupported run predicate or upstream change was added.
 3. **Coverage and final gates:** focused regression/coverage evidence below supplements the final full Go gates
-   recorded above. Both independent code reviews are approved. Schema/frontend generated-output dirty-tree
+   recorded in the final repair section below. Both independent code reviews are approved. Schema/frontend
+generated-output dirty-tree
    verification passes after the content commit; hosted CI remains a separate PR gate.
 4. **Product truth:** existing evidence-body rendering is still limited; evidence availability in graph or
    trajectory APIs is not a claim that the UI renders its full body. SemSource dogfooding stays held, and a
@@ -202,7 +204,8 @@ The [ordering red](evidence/go/approval-order-red.log) reproduces answer-before-
 answer, delayed A while B waits, and gates arriving during selected pause/resume actions. The attempted multivalue
 `.length` comparison also remained [red](evidence/go/approval-count-design-red.log): frozen substitution counts a first
 object's list length, not all predicate values. Both mechanisms were replaced. The domain projection's first
-[test-before-code output](evidence/go/approval-projection-red.log) is a compile red for the absent adapter, not a separate
+[test-before-code output](evidence/go/approval-projection-red.log) is a compile red for the absent adapter, not a
+separate
 runtime reproduction. The ordering red provides the behavioral reproduction.
 
 Independent review then identified definite refusal classification and response-revision validation gaps. Their
@@ -245,7 +248,8 @@ and implementspec selected-run authorization 100%. Broader boot/subscriber lifec
 numbers. Full function output is in [approval-projection-functions.txt](evidence/go/approval-projection-functions.txt).
 
 The implementspec tests preserve frozen `errs.ClassifiedError` codes for `invalid_loop_id`, `loop_not_found`,
-`loop_owner_absent`, `loop_record_invalid`, and transient `loop_state_unavailable`, with no graph read/write on rejection.
+`loop_owner_absent`, `loop_record_invalid`, and transient `loop_state_unavailable`, with no graph read/write on
+rejection.
 Nil lookup, a different returned loop ID, and absent owner fail closed. Canonical UUID inputs are used. These tests
 verify SemTeams wrapping of the frozen lookup contract, not upstream's private lookup implementation.
 
@@ -261,4 +265,66 @@ Content commit `f70537c8` contains the reviewed implementation. Regenerating sch
 `task schema:check-changes` both exited 0 after that commit. `task ui:generate-types:check` also exited 0;
 the tracked schema/OpenAPI/type outputs remain unchanged. Exact commands and the full content commit are in
 [evidence/go/postcommit-generated-checks.json](evidence/go/postcommit-generated-checks.json), with adjacent logs.
-These are local checks, separate from hosted CI and the unresolved autoresearch delivery gate.
+These are historical local checks, separate from hosted CI and the later repair-content checks below.
+
+## Autoresearch terminal repair
+
+The production source stayed at `8656192c` while the new behavior tests captured the failure. The
+[exact red command](evidence/go/repair/go-red-command.txt),
+[red output](evidence/go/repair/go-red.log) and
+[test-source snapshot](evidence/go/repair/autoresearch_reply_integration_red_test.go.txt) preserve that state.
+The old reviewer rule published an orphan final coordinator, the origin bridges were absent, and the cap-five
+case stalled clearing pending at iteration four under the default-three action limit. A later
+[ambiguity red](evidence/go/repair/ambiguous-anchor-red.log) preceded exact-one source-anchor guards.
+
+```bash
+TESTCONTAINERS_RYUK_DISABLED=true go test -race -tags=integration ./test/contract \
+  -run '^TestAutoresearch(Reply|IterationCap)' -count=1 -v
+```
+
+The [focused green](evidence/go/repair/go-green.log) uses fresh NATS 2.14.4 JetStream and the real frozen matcher,
+stateful evaluator, action executor, Mint, HandleTask and durable StateTracker. Graph/lifecycle persistence and task
+publication are fixtures. Assertions cover native root parent/run fields despite inherited-first graph anchors,
+phase/origin preservation, terminal child admission, malformed/ambiguous origin rejection, cancellation/approval
+phase selection, duplicate/stale/restarted persisted state and five experiments above the former hidden limit.
+Direct Mint mismatch refusal is tested separately; the action's parent-only publication fallback is not hidden.
+This fixture does not claim crash-window transactional publication or actual graph-owner integration.
+
+[Existing contracts and emitter/approval tests](evidence/go/repair/existing-contracts.log) also pass with the
+[recorded command](evidence/go/repair/go-green-command.txt). The
+[independent review run](evidence/go/autoresearch-independent-review.log) passes after source-anchor correction and
+real child-admission coverage. Actual graph-owner/browser execution is supplied by the
+[five focused results](browser-evidence/repair-focused/results.json), including both clarification decisions and
+involuntary failure. The original failed browser evidence remains historical red.
+
+## Final repair Go gates
+
+[Exact commands, exits and UTC timings](evidence/go/repair/full-results.json) record all seven gates passing against
+the repair source, later committed as `edf87d3104d4b5cc494623c89b17742539951380`:
+
+| Command | Exit | Durable evidence |
+|---|---:|---|
+| `task lint` | 0 | [Lint](evidence/go/repair/full-go-lint.log), six warnings, zero errors |
+| `task test:race` | 0 | [Race](evidence/go/repair/full-go-race.log) |
+| `task test:integration` | 0 | [Integration](evidence/go/repair/full-go-integration.log) |
+| `go build ./...` | 0 | [Build](evidence/go/repair/full-go-build.log) |
+| `task schema:generate` | 0 | [Schema generation](evidence/go/repair/full-schema-generate.log) |
+| `task openspec:validate` | 0 | [OpenSpec](evidence/go/repair/full-openspec-validate.log) |
+| `task openspec:queue-test` | 0 | [Queue fixtures](evidence/go/repair/full-openspec-queue.log) |
+
+The existing helper still resolves to NATS 2.14.7, while the new boundary fixtures pin 2.14.4. Both are explicitly
+accounted for above. These gate invocations add no coverage-profile claim. The focused browser build/run manifests
+establish unchanged source identity. A subsequent full-matrix attempt was
+invalidated by a documentation edit to `configs/rules/autoresearch/README.md` inside its watched source tree, despite
+passing Playwright assertions. The [invalidation record](browser-evidence/repair-final/INVALID-source-mutation.json)
+preserves that orchestration failure. A fresh build and [full stable
+rerun](browser-evidence/repair-final-stable/results.json)
+then passed all 24 active scenarios with five skips and no source mutation. No guard or test failure was waived.
+
+Schema and frontend generated-type dirty-tree checks both pass after the repair implementation commit; the
+[new post-commit record](evidence/go/repair/postcommit-generated.json) records exact commands and outcomes.
+The final documentation/archive commit and hosted checks are tracked by the PR lane, not asserted as future facts.
+
+[Hosted Repository CI run 36876354628](https://github.com/C360Studio/semteams/actions/runs/36876354628) succeeded
+on implementation commit `edf87d31`, including all four jobs. That observed result is separate from the accepted
+expanded browser matrix and from checks for the final documentation/archive commit.

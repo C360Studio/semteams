@@ -1,0 +1,7 @@
+task: [schema:check-changes] schema_status=$(git status --porcelain --untracked-files=all -- schemas specs/openapi.v3.yaml)
+if [ -n "$schema_status" ]; then
+  echo "Schema/OpenAPI files changed! Run 'task schema:generate' and commit:"
+  echo "$schema_status"
+  exit 1
+fi
+

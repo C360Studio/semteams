@@ -1,0 +1,423 @@
+{
+  "name": "stmig162",
+  "networks": {
+    "agentic-net": {
+      "name": "stmig162_agentic-net",
+      "driver": "bridge",
+      "ipam": {}
+    }
+  },
+  "services": {
+    "backend": {
+      "build": {
+        "context": "/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams",
+        "dockerfile": "docker/Dockerfile",
+        "target": "production"
+      },
+      "command": null,
+      "depends_on": {
+        "mock-llm": {
+          "condition": "service_healthy",
+          "required": true
+        },
+        "nats": {
+          "condition": "service_healthy",
+          "required": true
+        },
+        "sandbox": {
+          "condition": "service_healthy",
+          "required": true
+        }
+      },
+      "entrypoint": null,
+      "environment": {
+        "AGENTIC_LLM_URL": "http://mock-llm:8080/v1",
+        "ANTHROPIC_API_KEY": "",
+        "BRAVE_SEARCH_API_KEY": "",
+        "GEMINI_API_KEY": "",
+        "SANDBOX_URL": "http://sandbox:8090",
+        "SEMSTREAMS_LOG_LEVEL": "debug",
+        "SEMSTREAMS_NATS_URLS": "nats://nats:4222",
+        "SEMSTREAMS_PERSONA_OVERLAY_PATH": "",
+        "SEMTEAMS_PLAN_DIR": "/artifacts/plans",
+        "SEMTEAMS_RESEARCH_ARTIFACT_DIR": "/artifacts/research",
+        "SEMTEAMS_SANDBOX_RUNNER": "mock",
+        "SEMTEAMS_SEMSOURCE_DEFAULT_NAMESPACE": "research",
+        "SEMTEAMS_SEMSOURCE_NAMESPACES": "research",
+        "SEMTEAMS_TENANT_ROOT": "/tmp/semteams-migration-8b99efe/target-tenants"
+      },
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "wget",
+          "--spider",
+          "-q",
+          "http://localhost:8080/health"
+        ],
+        "timeout": "3s",
+        "interval": "5s",
+        "retries": 20
+      },
+      "networks": {
+        "agentic-net": null
+      },
+      "volumes": [
+        {
+          "type": "bind",
+          "source": "/private/tmp/semteams-migration-8b99efe/repair/final-stable/approval-boundary-cancel/config.json",
+          "target": "/etc/semstreams/config.json",
+          "read_only": true,
+          "bind": {}
+        },
+        {
+          "type": "bind",
+          "source": "/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/testdata",
+          "target": "/data/testdata",
+          "read_only": true,
+          "bind": {}
+        },
+        {
+          "type": "volume",
+          "source": "agentic-artifacts",
+          "target": "/artifacts",
+          "volume": {}
+        }
+      ],
+      "image": "stmig162-backend:autoresearch-repair-stable"
+    },
+    "caddy": {
+      "command": null,
+      "depends_on": {
+        "ui": {
+          "condition": "service_started",
+          "required": true
+        }
+      },
+      "entrypoint": null,
+      "environment": {
+        "BACKEND_HOST": "backend:8080",
+        "GRAPHQL_HOST": "backend:8082"
+      },
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "wget",
+          "--spider",
+          "-q",
+          "http://localhost:3000"
+        ],
+        "timeout": "3s",
+        "interval": "5s",
+        "retries": 10
+      },
+      "image": "caddy:2-alpine",
+      "networks": {
+        "agentic-net": null
+      },
+      "ports": [
+        {
+          "mode": "ingress",
+          "target": 3000,
+          "published": "33162",
+          "protocol": "tcp",
+          "host_ip": "127.0.0.1"
+        }
+      ],
+      "volumes": [
+        {
+          "type": "bind",
+          "source": "/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/ui/Caddyfile.e2e",
+          "target": "/etc/caddy/Caddyfile",
+          "read_only": true,
+          "bind": {}
+        }
+      ]
+    },
+    "mock-llm": {
+      "build": {
+        "context": "/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams",
+        "dockerfile": "test/e2e/mock/Dockerfile"
+      },
+      "command": [
+        "if [ -n \"$$FIXTURE\" ]; then\n  exec /app/mock-openai --port 8080 --agntcy-port 8081 --fixture=/fixtures/$$FIXTURE\nelse\n  exec /app/mock-openai --port 8080 --agntcy-port 8081\nfi\n"
+      ],
+      "entrypoint": [
+        "/bin/sh",
+        "-c"
+      ],
+      "environment": {
+        "FIXTURE": "sandbox-mvp.yaml"
+      },
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "wget",
+          "--spider",
+          "-q",
+          "http://localhost:8080/health"
+        ],
+        "timeout": "3s",
+        "interval": "5s",
+        "retries": 10
+      },
+      "networks": {
+        "agentic-net": null
+      },
+      "volumes": [
+        {
+          "type": "bind",
+          "source": "/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/test/fixtures/journeys",
+          "target": "/fixtures",
+          "read_only": true,
+          "bind": {}
+        }
+      ],
+      "image": "stmig162-mock-llm:8b99efe"
+    },
+    "nats": {
+      "command": [
+        "-js",
+        "-sd",
+        "/data",
+        "-m",
+        "8222",
+        "--name",
+        "ui-agentic-nats"
+      ],
+      "entrypoint": null,
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "wget",
+          "--quiet",
+          "--tries=1",
+          "--spider",
+          "http://localhost:8222/healthz"
+        ],
+        "timeout": "3s",
+        "interval": "5s",
+        "retries": 10
+      },
+      "image": "nats:2.14.4-alpine",
+      "networks": {
+        "agentic-net": null
+      },
+      "volumes": [
+        {
+          "type": "volume",
+          "source": "nats-agentic-data",
+          "target": "/data",
+          "volume": {}
+        }
+      ]
+    },
+    "sandbox": {
+      "build": {
+        "context": "/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams",
+        "dockerfile": "docker/sandbox.Dockerfile"
+      },
+      "cap_drop": [
+        "ALL"
+      ],
+      "command": [
+        "--addr",
+        ":8090",
+        "--workspace",
+        "/sandbox-cwds",
+        "--docker-mode-strict"
+      ],
+      "deploy": {
+        "resources": {
+          "limits": {
+            "cpus": 2,
+            "memory": "4294967296"
+          },
+          "reservations": {
+            "cpus": 0.5,
+            "memory": "536870912"
+          }
+        },
+        "placement": {}
+      },
+      "entrypoint": null,
+      "environment": {
+        "SANDBOX_DOCKER_MODE": "dood"
+      },
+      "group_add": [
+        "0"
+      ],
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "wget",
+          "-q",
+          "--spider",
+          "http://localhost:8090/health"
+        ],
+        "timeout": "3s",
+        "interval": "5s",
+        "retries": 3,
+        "start_period": "5s"
+      },
+      "image": "stmig162-sandbox:8b99efe",
+      "networks": {
+        "agentic-net": null
+      },
+      "read_only": true,
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "tmpfs": [
+        "/tmp:size=512M",
+        "/var/tmp:size=256M",
+        "/run:size=64M",
+        "/home/sandbox/.docker:size=64M,uid=1001,gid=1001"
+      ],
+      "ulimits": {
+        "nofile": {
+          "soft": 4096,
+          "hard": 8192
+        },
+        "nproc": 512
+      },
+      "volumes": [
+        {
+          "type": "volume",
+          "source": "sandbox-agentic-workspaces",
+          "target": "/sandbox-cwds",
+          "volume": {}
+        },
+        {
+          "type": "bind",
+          "source": "/tmp/semteams-migration-8b99efe/target-tenants",
+          "target": "/tmp/semteams-migration-8b99efe/target-tenants",
+          "bind": {}
+        },
+        {
+          "type": "volume",
+          "source": "agentic-artifacts",
+          "target": "/artifacts",
+          "read_only": true,
+          "volume": {}
+        },
+        {
+          "type": "volume",
+          "source": "sandbox-agentic-caches-m2",
+          "target": "/home/sandbox/.m2",
+          "volume": {}
+        },
+        {
+          "type": "volume",
+          "source": "sandbox-agentic-caches-go",
+          "target": "/go/pkg/mod",
+          "volume": {}
+        },
+        {
+          "type": "volume",
+          "source": "sandbox-agentic-caches-npm",
+          "target": "/home/sandbox/.npm",
+          "volume": {}
+        },
+        {
+          "type": "volume",
+          "source": "sandbox-agentic-caches-gradle",
+          "target": "/home/sandbox/.gradle",
+          "volume": {}
+        },
+        {
+          "type": "bind",
+          "source": "/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/.devcontainer",
+          "target": "/app/.devcontainer",
+          "read_only": true,
+          "bind": {}
+        },
+        {
+          "type": "volume",
+          "source": "sandbox-agentic-devcontainer-state",
+          "target": "/home/sandbox/.devcontainer",
+          "volume": {}
+        },
+        {
+          "type": "bind",
+          "source": "/var/run/docker.sock",
+          "target": "/var/run/docker.sock",
+          "bind": {}
+        }
+      ]
+    },
+    "ui": {
+      "build": {
+        "context": "/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/ui",
+        "dockerfile": "Dockerfile.dev"
+      },
+      "command": null,
+      "entrypoint": null,
+      "environment": {
+        "BACKEND_HOST": "backend:8080",
+        "NODE_ENV": "development"
+      },
+      "networks": {
+        "agentic-net": null
+      },
+      "volumes": [
+        {
+          "type": "bind",
+          "source": "/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/ui/src",
+          "target": "/app/src",
+          "bind": {}
+        },
+        {
+          "type": "bind",
+          "source": "/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/ui/static",
+          "target": "/app/static",
+          "bind": {}
+        },
+        {
+          "type": "volume",
+          "source": "ui-agentic-node-modules",
+          "target": "/app/node_modules",
+          "volume": {}
+        }
+      ],
+      "image": "stmig162-ui:8b99efe"
+    }
+  },
+  "volumes": {
+    "agentic-artifacts": {
+      "name": "stmig162_agentic-artifacts",
+      "driver": "local"
+    },
+    "nats-agentic-data": {
+      "name": "stmig162_nats-agentic-data",
+      "driver": "local"
+    },
+    "sandbox-agentic-caches-go": {
+      "name": "stmig162_sandbox-agentic-caches-go",
+      "driver": "local"
+    },
+    "sandbox-agentic-caches-gradle": {
+      "name": "stmig162_sandbox-agentic-caches-gradle",
+      "driver": "local"
+    },
+    "sandbox-agentic-caches-m2": {
+      "name": "stmig162_sandbox-agentic-caches-m2",
+      "driver": "local"
+    },
+    "sandbox-agentic-caches-npm": {
+      "name": "stmig162_sandbox-agentic-caches-npm",
+      "driver": "local"
+    },
+    "sandbox-agentic-devcontainer-state": {
+      "name": "stmig162_sandbox-agentic-devcontainer-state",
+      "driver": "local"
+    },
+    "sandbox-agentic-workspaces": {
+      "name": "stmig162_sandbox-agentic-workspaces",
+      "driver": "local"
+    },
+    "ui-agentic-node-modules": {
+      "name": "stmig162_ui-agentic-node-modules",
+      "driver": "local"
+    }
+  }
+}

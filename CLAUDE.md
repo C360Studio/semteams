@@ -136,8 +136,8 @@ reconciliation.
 - Go module: `github.com/c360studio/semstreams`, pinned to
   `v1.0.0-beta.162.0.20260930150212-8b99efe9c66a` at frozen SHA
   `8b99efe9c66a4faa4fa509f9f62cc6bad8392128`. Every bump is a first-class change.
-  See the [migration evidence](docs/migrations/semstreams-8b99efe/README.md) for the beta.160 comparison and open
-  qualification blockers. Use fresh isolated NATS 2.14.4 and graph state; retained-state conversion is not supported.
+  See the [migration evidence](docs/migrations/semstreams-8b99efe/README.md) for the beta.160 comparison, qualified compatibility repairs and remaining
+  qualification limits. Use fresh isolated NATS 2.14.4 and graph state; retained-state conversion is not supported.
   No production wipe is authorized. Historical ADR-058/059 describe prior transitions.
 - NATS JetStream (KV, ObjectStore), Prometheus, slog — via semstreams
 - Task (task runner) — run `task --list` for all commands

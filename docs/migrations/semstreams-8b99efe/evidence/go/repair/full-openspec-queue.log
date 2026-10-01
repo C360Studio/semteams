@@ -1,0 +1,38 @@
+task: [openspec:queue-test] scripts/openspec-queue_fixture_test.sh
+=== positive cases: caveats that MUST surface ===
+PASS  lowercase 'halt:' mid-sentence in an open task
+PASS  [~] partial marker regardless of wording
+PASS  explicit RED gate
+PASS  HOLD wording
+PASS  STILL OPEN wording
+PASS  deliberate not-done wording
+
+=== negative cases: shapes that MUST NOT surface ===
+PASS  COMPLETED task mentioning halt is history, not a live condition
+PASS  ordinary open task with no caveat
+
+=== structural case: a clean change must SAY so, not be silent ===
+PASS  clean change emits an explicit no-marker line
+
+=== exit cases: reporter failures and strict mode MUST be trustworthy ===
+PASS  openspec CLI nonzero fails closed (exit 2)
+PASS  malformed openspec JSON fails closed (exit 2)
+PASS  JSON object missing changes fails closed (exit 2, diagnostic present)
+PASS  non-list changes field fails closed (exit 2, diagnostic present)
+PASS  non-object JSON root fails closed (exit 2, diagnostic present)
+PASS  an explicit empty changes list is a valid empty queue (exit 0)
+PASS  empty change name fails closed (exit 2, diagnostic present)
+PASS  unsafe change name fails closed (exit 2, diagnostic present)
+PASS  missing task-count field fails closed (exit 2, diagnostic present)
+PASS  non-integer task-count field fails closed (exit 2, diagnostic present)
+PASS  listed change without tasks.md fails closed (exit 2)
+PASS  strict mode rejects a live caveat (exit 1)
+PASS  strict mode accepts a clean queue (exit 0)
+
+=== argument cases: --stale-days MUST be a positive integer ===
+PASS  missing --stale-days value is rejected (exit 2)
+PASS  nonnumeric --stale-days value is rejected (exit 2)
+PASS  negative --stale-days value is rejected (exit 2)
+PASS  oversized --stale-days value is rejected (exit 2)
+
+passed=26 failed=0

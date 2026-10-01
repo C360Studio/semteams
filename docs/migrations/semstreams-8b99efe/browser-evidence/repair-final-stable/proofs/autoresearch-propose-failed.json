@@ -1,0 +1,828 @@
+{
+  "autoresearch-exit-proof": {
+    "loops": [
+      {
+        "loop_id": "2662767d-8af6-4e4b-ae9a-cfa04ca00d23",
+        "task_id": "rule-c360.semteams-bootstrap-e2e-b86f9b.agentic-loop.agent.execution.f0704c5c-89b7-4ceb-80d5-85ffe23ecca6-1790865876879506836",
+        "state": "complete",
+        "role": "coordinator",
+        "max_iterations": 8,
+        "outcome": "success",
+        "result": "{\"action\":\"respond_direct\",\"reason\":\"Autoresearch could not continue: the propose loop exhausted its iteration budget. No experiment was executed and the run failed.\"}"
+      },
+      {
+        "loop_id": "3ec2652a-bab8-499e-98cd-98b8bc13e20c",
+        "task_id": "rule-c360.semteams-bootstrap-e2e-b86f9b.agentic-loop.agent.execution.f0704c5c-89b7-4ceb-80d5-85ffe23ecca6-1790865876514704169",
+        "state": "complete",
+        "role": "autoresearch-baseline",
+        "iterations": 1,
+        "max_iterations": 8,
+        "outcome": "success",
+        "result": "{\"action\":\"propose\",\"reason\":\"Baseline captured at 1.20s. Beginning the iteration loop (cap 2) \u2014 propose single-axis changes and keep the ones that lower the wallclock.\"}"
+      },
+      {
+        "loop_id": "b9ae2131-bb3f-49e0-940a-2d303a91683a",
+        "task_id": "rule-c360.semteams-bootstrap-e2e-b86f9b.chain.agent.execution.f0704c5c-89b7-4ceb-80d5-85ffe23ecca6-1790865876841427878",
+        "state": "complete",
+        "role": "ops-chain-observer",
+        "max_iterations": 8,
+        "outcome": "success",
+        "result": "{\"action\":\"observed\",\"reason\":\"Read the run entity and the coordinator loop result. Run reached its terminal phase with no operator-actionable pattern; emitting no findings.\"}"
+      },
+      {
+        "loop_id": "f0704c5c-89b7-4ceb-80d5-85ffe23ecca6",
+        "task_id": "dispatch-4744874b4486a48e45c5ead814a2692812b4c29eebeff4e323a09e77aa2f7bea",
+        "state": "complete",
+        "role": "coordinator",
+        "iterations": 2,
+        "max_iterations": 8,
+        "user_id": "ui-anonymous",
+        "channel_type": "http",
+        "outcome": "success",
+        "result": "{\"action\":\"autoresearch\",\"reason\":\"Optimize the wallclock of `go test ./...`. Command: go test ./...; surface: ./...; cap: 2 iterations; metric: real seconds parsed from the test output. Lower is better.\"}"
+      },
+      {
+        "loop_id": "f802bd39-b54c-446b-bd9a-7b85679eb7f7",
+        "task_id": "rule-c360.semteams-bootstrap-e2e-b86f9b.chain.agent.execution.f0704c5c-89b7-4ceb-80d5-85ffe23ecca6-1790865876605774044",
+        "state": "failed",
+        "role": "autoresearch-propose",
+        "iterations": 8,
+        "max_iterations": 8,
+        "outcome": "failed",
+        "error": "agentic-loop.HandleModelResponse: check max iterations failed: max iterations reached: loop f802bd39-b54c-446b-bd9a-7b85679eb7f7 at 8/8 iterations"
+      }
+    ],
+    "sourceMessages": [
+      {
+        "sequence": 140,
+        "timestamp": "2026-10-01T14:44:36.673632336Z",
+        "subject": "tool.result.tool-exec-v1-lenfxjibowlmfpfxa24ukdtn3plcoqa2tc2vpdfoukvliqjy5zta",
+        "message_type": "agentic.tool_result.v1",
+        "trace_id": "3a13a048e1e3bebebfe9acda22dfcd56",
+        "span_id": "28baa278ab0ab8b3",
+        "summary": "Type: agentic.tool_result.v1, Payload: *agentic.ToolResult",
+        "raw_data": {
+          "id": "9b7d15c5-9c7a-416d-82e0-51d0c45ca2db",
+          "type": {
+            "domain": "agentic",
+            "category": "tool_result",
+            "version": "v1"
+          },
+          "payload": {
+            "call_id": "call_e977e253",
+            "name": "scratchpad",
+            "content": "{\"status\":\"ok\",\"scratch_id\":\"314390d0-d068-4aec-9371-49c899bafabd\",\"chars\":116}",
+            "metadata": {
+              "chars": 116,
+              "loop_entity_id": "c360.semteams-bootstrap-e2e-b86f9b.agentic-loop.agent.execution.f802bd39-b54c-446b-bd9a-7b85679eb7f7",
+              "scratch_id": "314390d0-d068-4aec-9371-49c899bafabd"
+            },
+            "loop_id": "f802bd39-b54c-446b-bd9a-7b85679eb7f7",
+            "request_id": "f802bd39-b54c-446b-bd9a-7b85679eb7f7:req:8:0",
+            "execution_id": "tool-exec-v1-lenfxjibowlmfpfxa24ukdtn3plcoqa2tc2vpdfoukvliqjy5zta",
+            "call_ordinal": 1
+          },
+          "meta": {
+            "created_at": 1790865876673,
+            "received_at": 1790865876673,
+            "source": "agentic-tools"
+          }
+        }
+      },
+      {
+        "sequence": 131,
+        "timestamp": "2026-10-01T14:44:36.666012795Z",
+        "subject": "tool.result.tool-exec-v1-p473a76p2ruodkarzyolicpmty5ybyabrljahwbacoqm7ine5xmq",
+        "message_type": "agentic.tool_result.v1",
+        "trace_id": "3a13a048e1e3bebebfe9acda22dfcd56",
+        "span_id": "28baa278ab0ab8b3",
+        "summary": "Type: agentic.tool_result.v1, Payload: *agentic.ToolResult",
+        "raw_data": {
+          "id": "e0f67040-6ff0-4ffb-85ae-f1658f65a04f",
+          "type": {
+            "domain": "agentic",
+            "category": "tool_result",
+            "version": "v1"
+          },
+          "payload": {
+            "call_id": "call_8783ff21",
+            "name": "scratchpad",
+            "content": "{\"status\":\"ok\",\"scratch_id\":\"677ffcaf-d360-4ec2-80aa-a5eccc1d52f9\",\"chars\":116}",
+            "metadata": {
+              "chars": 116,
+              "loop_entity_id": "c360.semteams-bootstrap-e2e-b86f9b.agentic-loop.agent.execution.f802bd39-b54c-446b-bd9a-7b85679eb7f7",
+              "scratch_id": "677ffcaf-d360-4ec2-80aa-a5eccc1d52f9"
+            },
+            "loop_id": "f802bd39-b54c-446b-bd9a-7b85679eb7f7",
+            "request_id": "f802bd39-b54c-446b-bd9a-7b85679eb7f7:req:7:0",
+            "execution_id": "tool-exec-v1-p473a76p2ruodkarzyolicpmty5ybyabrljahwbacoqm7ine5xmq",
+            "call_ordinal": 1
+          },
+          "meta": {
+            "created_at": 1790865876665,
+            "received_at": 1790865876665,
+            "source": "agentic-tools"
+          }
+        }
+      },
+      {
+        "sequence": 122,
+        "timestamp": "2026-10-01T14:44:36.658963961Z",
+        "subject": "tool.result.tool-exec-v1-gox77zntghvhyvy5dp5jouwxcghqsvxn3sfhkz4ud6kibt6gwdbq",
+        "message_type": "agentic.tool_result.v1",
+        "trace_id": "3a13a048e1e3bebebfe9acda22dfcd56",
+        "span_id": "28baa278ab0ab8b3",
+        "summary": "Type: agentic.tool_result.v1, Payload: *agentic.ToolResult",
+        "raw_data": {
+          "id": "e18ff8f6-88ce-4d93-8ebc-fd3f8970e23b",
+          "type": {
+            "domain": "agentic",
+            "category": "tool_result",
+            "version": "v1"
+          },
+          "payload": {
+            "call_id": "call_7820afae",
+            "name": "scratchpad",
+            "content": "{\"status\":\"ok\",\"scratch_id\":\"2316a2e2-5acf-4707-bfd5-3dbf8260fa48\",\"chars\":116}",
+            "metadata": {
+              "chars": 116,
+              "loop_entity_id": "c360.semteams-bootstrap-e2e-b86f9b.agentic-loop.agent.execution.f802bd39-b54c-446b-bd9a-7b85679eb7f7",
+              "scratch_id": "2316a2e2-5acf-4707-bfd5-3dbf8260fa48"
+            },
+            "loop_id": "f802bd39-b54c-446b-bd9a-7b85679eb7f7",
+            "request_id": "f802bd39-b54c-446b-bd9a-7b85679eb7f7:req:6:0",
+            "execution_id": "tool-exec-v1-gox77zntghvhyvy5dp5jouwxcghqsvxn3sfhkz4ud6kibt6gwdbq",
+            "call_ordinal": 1
+          },
+          "meta": {
+            "created_at": 1790865876658,
+            "received_at": 1790865876658,
+            "source": "agentic-tools"
+          }
+        }
+      },
+      {
+        "sequence": 113,
+        "timestamp": "2026-10-01T14:44:36.651902378Z",
+        "subject": "tool.result.tool-exec-v1-pm2dn2aavj55mkrpdh3fzzyphel5p7gtvkdhuqjeb754hkchmjpa",
+        "message_type": "agentic.tool_result.v1",
+        "trace_id": "3a13a048e1e3bebebfe9acda22dfcd56",
+        "span_id": "28baa278ab0ab8b3",
+        "summary": "Type: agentic.tool_result.v1, Payload: *agentic.ToolResult",
+        "raw_data": {
+          "id": "06b2bc97-7b95-43e8-a89d-4c7c639226e0",
+          "type": {
+            "domain": "agentic",
+            "category": "tool_result",
+            "version": "v1"
+          },
+          "payload": {
+            "call_id": "call_34216e10",
+            "name": "scratchpad",
+            "content": "{\"status\":\"ok\",\"scratch_id\":\"42c302b5-5f19-482e-8836-7e9190b3cd48\",\"chars\":116}",
+            "metadata": {
+              "chars": 116,
+              "loop_entity_id": "c360.semteams-bootstrap-e2e-b86f9b.agentic-loop.agent.execution.f802bd39-b54c-446b-bd9a-7b85679eb7f7",
+              "scratch_id": "42c302b5-5f19-482e-8836-7e9190b3cd48"
+            },
+            "loop_id": "f802bd39-b54c-446b-bd9a-7b85679eb7f7",
+            "request_id": "f802bd39-b54c-446b-bd9a-7b85679eb7f7:req:5:0",
+            "execution_id": "tool-exec-v1-pm2dn2aavj55mkrpdh3fzzyphel5p7gtvkdhuqjeb754hkchmjpa",
+            "call_ordinal": 1
+          },
+          "meta": {
+            "created_at": 1790865876651,
+            "received_at": 1790865876651,
+            "source": "agentic-tools"
+          }
+        }
+      },
+      {
+        "sequence": 104,
+        "timestamp": "2026-10-01T14:44:36.643834586Z",
+        "subject": "tool.result.tool-exec-v1-ry5zlusrgdmzbnr6c2mq6k5fic3xogwqu5ib73fw7ti3e5v4qw2q",
+        "message_type": "agentic.tool_result.v1",
+        "trace_id": "3a13a048e1e3bebebfe9acda22dfcd56",
+        "span_id": "28baa278ab0ab8b3",
+        "summary": "Type: agentic.tool_result.v1, Payload: *agentic.ToolResult",
+        "raw_data": {
+          "id": "0e4d2627-65b1-4551-b9ea-7f2808711db9",
+          "type": {
+            "domain": "agentic",
+            "category": "tool_result",
+            "version": "v1"
+          },
+          "payload": {
+            "call_id": "call_5e25afe0",
+            "name": "scratchpad",
+            "content": "{\"status\":\"ok\",\"scratch_id\":\"e7cdf875-f838-4181-9b71-333dacb87d41\",\"chars\":116}",
+            "metadata": {
+              "chars": 116,
+              "loop_entity_id": "c360.semteams-bootstrap-e2e-b86f9b.agentic-loop.agent.execution.f802bd39-b54c-446b-bd9a-7b85679eb7f7",
+              "scratch_id": "e7cdf875-f838-4181-9b71-333dacb87d41"
+            },
+            "loop_id": "f802bd39-b54c-446b-bd9a-7b85679eb7f7",
+            "request_id": "f802bd39-b54c-446b-bd9a-7b85679eb7f7:req:4:0",
+            "execution_id": "tool-exec-v1-ry5zlusrgdmzbnr6c2mq6k5fic3xogwqu5ib73fw7ti3e5v4qw2q",
+            "call_ordinal": 1
+          },
+          "meta": {
+            "created_at": 1790865876643,
+            "received_at": 1790865876643,
+            "source": "agentic-tools"
+          }
+        }
+      },
+      {
+        "sequence": 95,
+        "timestamp": "2026-10-01T14:44:36.637059044Z",
+        "subject": "tool.result.tool-exec-v1-vnv2h44ktqvmixg6xmbwzzamyidlb3yc2bpvsxnhgudcmwpwaayq",
+        "message_type": "agentic.tool_result.v1",
+        "trace_id": "3a13a048e1e3bebebfe9acda22dfcd56",
+        "span_id": "28baa278ab0ab8b3",
+        "summary": "Type: agentic.tool_result.v1, Payload: *agentic.ToolResult",
+        "raw_data": {
+          "id": "5a77b4ab-d8fd-4930-9ede-83d63b6f951d",
+          "type": {
+            "domain": "agentic",
+            "category": "tool_result",
+            "version": "v1"
+          },
+          "payload": {
+            "call_id": "call_8db0da72",
+            "name": "scratchpad",
+            "content": "{\"status\":\"ok\",\"scratch_id\":\"8a818d69-ca1a-4769-90b7-6fdeed85946f\",\"chars\":116}",
+            "metadata": {
+              "chars": 116,
+              "loop_entity_id": "c360.semteams-bootstrap-e2e-b86f9b.agentic-loop.agent.execution.f802bd39-b54c-446b-bd9a-7b85679eb7f7",
+              "scratch_id": "8a818d69-ca1a-4769-90b7-6fdeed85946f"
+            },
+            "loop_id": "f802bd39-b54c-446b-bd9a-7b85679eb7f7",
+            "request_id": "f802bd39-b54c-446b-bd9a-7b85679eb7f7:req:3:0",
+            "execution_id": "tool-exec-v1-vnv2h44ktqvmixg6xmbwzzamyidlb3yc2bpvsxnhgudcmwpwaayq",
+            "call_ordinal": 1
+          },
+          "meta": {
+            "created_at": 1790865876636,
+            "received_at": 1790865876636,
+            "source": "agentic-tools"
+          }
+        }
+      },
+      {
+        "sequence": 85,
+        "timestamp": "2026-10-01T14:44:36.629983378Z",
+        "subject": "tool.result.tool-exec-v1-m3kxom4nbgeahxgda4p5twhrnchsmtkvalpmno3tl7pgartlab6q",
+        "message_type": "agentic.tool_result.v1",
+        "trace_id": "3a13a048e1e3bebebfe9acda22dfcd56",
+        "span_id": "28baa278ab0ab8b3",
+        "summary": "Type: agentic.tool_result.v1, Payload: *agentic.ToolResult",
+        "raw_data": {
+          "id": "5666e991-51d5-419d-abff-f96e6c670d1c",
+          "type": {
+            "domain": "agentic",
+            "category": "tool_result",
+            "version": "v1"
+          },
+          "payload": {
+            "call_id": "call_7969f7ab",
+            "name": "scratchpad",
+            "content": "{\"status\":\"ok\",\"scratch_id\":\"0562f30b-dbd3-488f-ac23-9e372987aa57\",\"chars\":116}",
+            "metadata": {
+              "chars": 116,
+              "loop_entity_id": "c360.semteams-bootstrap-e2e-b86f9b.agentic-loop.agent.execution.f802bd39-b54c-446b-bd9a-7b85679eb7f7",
+              "scratch_id": "0562f30b-dbd3-488f-ac23-9e372987aa57"
+            },
+            "loop_id": "f802bd39-b54c-446b-bd9a-7b85679eb7f7",
+            "request_id": "f802bd39-b54c-446b-bd9a-7b85679eb7f7:req:2:0",
+            "execution_id": "tool-exec-v1-m3kxom4nbgeahxgda4p5twhrnchsmtkvalpmno3tl7pgartlab6q",
+            "call_ordinal": 1
+          },
+          "meta": {
+            "created_at": 1790865876629,
+            "received_at": 1790865876629,
+            "source": "agentic-tools"
+          }
+        }
+      },
+      {
+        "sequence": 76,
+        "timestamp": "2026-10-01T14:44:36.622949753Z",
+        "subject": "tool.result.tool-exec-v1-hrolapfuoc5lveysjhqls6qcxzawwezjzdud7kpxnzspmhy65ama",
+        "message_type": "agentic.tool_result.v1",
+        "trace_id": "3a13a048e1e3bebebfe9acda22dfcd56",
+        "span_id": "28baa278ab0ab8b3",
+        "summary": "Type: agentic.tool_result.v1, Payload: *agentic.ToolResult",
+        "raw_data": {
+          "id": "de468846-aeec-4476-86b3-03cbce19a194",
+          "type": {
+            "domain": "agentic",
+            "category": "tool_result",
+            "version": "v1"
+          },
+          "payload": {
+            "call_id": "call_752ef52e",
+            "name": "scratchpad",
+            "content": "{\"status\":\"ok\",\"scratch_id\":\"49ed60fc-add6-4aa5-9568-b5d15978ae9a\",\"chars\":116}",
+            "metadata": {
+              "chars": 116,
+              "loop_entity_id": "c360.semteams-bootstrap-e2e-b86f9b.agentic-loop.agent.execution.f802bd39-b54c-446b-bd9a-7b85679eb7f7",
+              "scratch_id": "49ed60fc-add6-4aa5-9568-b5d15978ae9a"
+            },
+            "loop_id": "f802bd39-b54c-446b-bd9a-7b85679eb7f7",
+            "request_id": "f802bd39-b54c-446b-bd9a-7b85679eb7f7:req:1:0",
+            "execution_id": "tool-exec-v1-hrolapfuoc5lveysjhqls6qcxzawwezjzdud7kpxnzspmhy65ama",
+            "call_ordinal": 1
+          },
+          "meta": {
+            "created_at": 1790865876622,
+            "received_at": 1790865876622,
+            "source": "agentic-tools"
+          }
+        }
+      }
+    ],
+    "best": [
+      {
+        "subject": "c360.semteams-bootstrap-e2e-b86f9b.chain.agent.execution.f0704c5c-89b7-4ceb-80d5-85ffe23ecca6",
+        "predicate": "autoresearch.best.value",
+        "object": 1.2,
+        "source": "autoresearch-emit-baseline",
+        "timestamp": "2026-10-01T14:44:36.534864336Z",
+        "confidence": 1
+      }
+    ]
+  },
+  "autoresearch-terminal-route-proof": {
+    "root": {
+      "loop_id": "f0704c5c-89b7-4ceb-80d5-85ffe23ecca6",
+      "task_id": "dispatch-4744874b4486a48e45c5ead814a2692812b4c29eebeff4e323a09e77aa2f7bea",
+      "state": "complete",
+      "role": "coordinator",
+      "iterations": 2,
+      "max_iterations": 8,
+      "user_id": "ui-anonymous",
+      "channel_type": "http",
+      "outcome": "success",
+      "result": "{\"action\":\"autoresearch\",\"reason\":\"Optimize the wallclock of `go test ./...`. Command: go test ./...; surface: ./...; cap: 2 iterations; metric: real seconds parsed from the test output. Lower is better.\"}"
+    },
+    "terminal": {
+      "loop_id": "2662767d-8af6-4e4b-ae9a-cfa04ca00d23",
+      "task_id": "rule-c360.semteams-bootstrap-e2e-b86f9b.agentic-loop.agent.execution.f0704c5c-89b7-4ceb-80d5-85ffe23ecca6-1790865876879506836",
+      "state": "complete",
+      "role": "coordinator",
+      "max_iterations": 8,
+      "outcome": "success",
+      "result": "{\"action\":\"respond_direct\",\"reason\":\"Autoresearch could not continue: the propose loop exhausted its iteration budget. No experiment was executed and the run failed.\"}"
+    },
+    "source": {
+      "loop_id": "f802bd39-b54c-446b-bd9a-7b85679eb7f7",
+      "task_id": "rule-c360.semteams-bootstrap-e2e-b86f9b.chain.agent.execution.f0704c5c-89b7-4ceb-80d5-85ffe23ecca6-1790865876605774044",
+      "state": "failed",
+      "role": "autoresearch-propose",
+      "iterations": 8,
+      "max_iterations": 8,
+      "outcome": "failed",
+      "error": "agentic-loop.HandleModelResponse: check max iterations failed: max iterations reached: loop f802bd39-b54c-446b-bd9a-7b85679eb7f7 at 8/8 iterations"
+    },
+    "rootTask": {
+      "loop_id": "f0704c5c-89b7-4ceb-80d5-85ffe23ecca6",
+      "task_id": "dispatch-4744874b4486a48e45c5ead814a2692812b4c29eebeff4e323a09e77aa2f7bea",
+      "source_message_id": "662d511a-7fe4-4c33-8596-3ea91d1e2bf9",
+      "role": "coordinator",
+      "model": "general",
+      "prompt": "Optimize go test ./... wallclock, lower is better, cap 2, bounded surface test/helpers. Keep all tests passing.",
+      "channel_type": "http",
+      "channel_id": "http-1790865876455467628",
+      "user_id": "ui-anonymous",
+      "tools": [
+        {
+          "name": "decide",
+          "description": "Terminal decision tool for coordinator agents. Call exactly once with the action your role's system prompt enumerates. Emits a coordinator.decision.next-action triple on this loop's entity so downstream rules can route; the full args stay in the loop's Result for any agent that needs supporting data.",
+          "parameters": {
+            "properties": {
+              "action": {
+                "description": "The decision. Valid values are enumerated in your role's system prompt.",
+                "type": "string"
+              },
+              "reason": {
+                "description": "Short natural-language justification for the chosen action.",
+                "type": "string"
+              },
+              "retry_hint": {
+                "description": "Optional. Free-form guidance for a downstream pass; populate only when your role's contract names this field.",
+                "type": "string"
+              },
+              "subtopics": {
+                "description": "Optional. List of sub-targets when the chosen action represents a multi-target investigation; populate only when your role's contract names this field.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "action",
+              "reason"
+            ],
+            "type": "object"
+          },
+          "effect": "mutating"
+        },
+        {
+          "name": "read_loop_result",
+          "description": "Fetch the final Result text a previously completed agent loop produced, so this agent can react to or build on it without having the full content injected into its prompt. Returns a text slice plus role/outcome/completed_at metadata and total_bytes so the caller can page through long results by calling again with a different offset.",
+          "parameters": {
+            "properties": {
+              "loop_id": {
+                "description": "Loop ID. Use $entity.instance in rule templates (bare UUID); the full 6-part entity ID also works.",
+                "type": "string"
+              },
+              "max_bytes": {
+                "description": "Maximum bytes of Result text to return in this call. Defaults to 4096. Use smaller values to stay within tight context budgets.",
+                "type": "integer"
+              },
+              "offset": {
+                "description": "Zero-based byte offset into the Result text. Defaults to 0. Use with max_bytes to page through long results.",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "loop_id"
+            ],
+            "type": "object"
+          },
+          "paginated": true,
+          "effect": "read_only"
+        },
+        {
+          "name": "scratchpad",
+          "description": "Free-form reasoning space before committing structured output. Use this to think through decomposition, list constraints you must satisfy, or note edge cases you considered \u2014 content is recorded in the trajectory and graph but not interpreted by any rule or consumer. Call this BEFORE the strict commit tool when the task involves decomposition or multi-step planning.",
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "text": {
+                "description": "Your reasoning. Free-form prose; no schema, no length limit, no interpretation. Lands in the trajectory and on the loop entity for audit and recovery.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "text"
+            ],
+            "type": "object"
+          },
+          "effect": "mutating"
+        },
+        {
+          "name": "query_sandbox_attestation",
+          "description": "Read-only: check whether a fresh sandbox attestation already covers a SandboxRequirements on this chain. Returns {found, fresh, attestation?, staleness_seconds?}. Call BEFORE request_sandbox to skip re-attesting when a recent attestation matches. The signature key is (matched_profile, requirements_hash); pass the same args you would pass to request_sandbox. No side effects: no devcontainer up, no triple stamps, just a graph lookup.",
+          "parameters": {
+            "properties": {
+              "languages": {
+                "description": "Same shape as request_sandbox.languages.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "mounts": {
+                "description": "Same shape as request_sandbox.mounts.",
+                "items": {
+                  "enum": [
+                    "workspace-write",
+                    "workspace-read"
+                  ],
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "network": {
+                "description": "Same shape as request_sandbox.network.",
+                "enum": [
+                  "restricted",
+                  "public",
+                  "none"
+                ],
+                "type": "string"
+              },
+              "privileges": {
+                "description": "Same shape as request_sandbox.privileges.",
+                "items": {
+                  "enum": [
+                    "docker-socket",
+                    "privileged"
+                  ],
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "secrets": {
+                "description": "Same shape as request_sandbox.secrets.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "services": {
+                "description": "Same shape as request_sandbox.services.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "tools": {
+                "description": "Same shape as request_sandbox.tools.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "verification": {
+                "description": "Same shape as request_sandbox.verification. Affects the requirements hash.",
+                "items": {
+                  "properties": {
+                    "command": {
+                      "type": "string"
+                    },
+                    "expect_exit": {
+                      "type": "integer"
+                    },
+                    "name": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "command"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              }
+            },
+            "type": "object"
+          },
+          "effect": "unknown"
+        },
+        {
+          "name": "request_sandbox",
+          "description": "Request a sandbox environment for the work at hand. Synchronous: returns an Attestation that says ready/degraded/failed plus the verified capabilities. Coordinator routes on the attestation shape (.ready/.degraded/.terminal/.admission_outcome). NEVER author container internals (image, mounts as paths, privileges as docker flags) \u2014 those live in catalog profiles. Describe what the WORK needs. The manager handles profile-match + admission + devcontainer up + probes + attestation. Profile lookup is operator-curated; admission gates privileged + public-network + host-path-mounts + un-pre-provisioned secrets. Call exactly once per work request. Before calling, consider whether a fresh attestation already covers your needs by calling query_sandbox_attestation first.",
+          "parameters": {
+            "properties": {
+              "languages": {
+                "description": "Language toolchains the work needs (e.g. ['go'], ['node'], ['go','node']). Matches against profile.advertises.languages.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "mounts": {
+                "description": "Mount class enum. Default 'workspace-write' is the typical case. 'workspace-read' is audit/inspect-only. Host-path bind mounts go via privileges, not here.",
+                "items": {
+                  "enum": [
+                    "workspace-write",
+                    "workspace-read"
+                  ],
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "network": {
+                "description": "Network policy class. 'restricted' (default) admits without operator policy; 'public' pends on AllowPublicNetwork OR admission-reviewer approval; 'none' requires profile support.",
+                "enum": [
+                  "restricted",
+                  "public",
+                  "none"
+                ],
+                "type": "string"
+              },
+              "privileges": {
+                "description": "Privileged capability classes. 'docker-socket' for testcontainers/compose workloads (requires full-stack-e2e profile + admission-reviewer approval). 'privileged' is forbidden by default (requires operator AllowPrivilegedContainers flag + profile allowlist + reviewer signoff).",
+                "items": {
+                  "enum": [
+                    "docker-socket",
+                    "privileged"
+                  ],
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "secrets": {
+                "description": "Pre-provisioned secret identifiers (env-var shape, [A-Z_][A-Z0-9_]*). Each MUST be in operator AvailableSecrets policy \u2014 admission denies otherwise. Coordinator can't ask the user to enter a credential mid-chain.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "services": {
+                "description": "In-container services the work needs (e.g. ['nats']). Most workloads have none. Only full-stack-e2e profile advertises services.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "tools": {
+                "description": "CLI tools the work needs (e.g. ['task','gh'], ['playwright']). Matches against profile.advertises.tools and is verified by preflight probes when listed in verification.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "verification": {
+                "description": "Preflight probes the manager runs inside the container after devcontainer up. Each probe.name becomes a sandbox.attestation.verified-<name> triple the Coordinator can route on. Probes that fail produce Degraded=true (not Ready) and DegradedReasons.",
+                "items": {
+                  "properties": {
+                    "command": {
+                      "description": "Verbatim shell line the probe runs (e.g. 'go version', 'task --list'). This IS user-intent, not LLM-authored shell \u2014 the probe shape IS its command.",
+                      "type": "string"
+                    },
+                    "expect_exit": {
+                      "description": "Required exit code. Default 0. Probes that intend non-zero pass must set explicitly.",
+                      "type": "integer"
+                    },
+                    "name": {
+                      "description": "Capability identifier ([a-z0-9][a-z0-9._-]*). Becomes the verified.<name> predicate suffix; substituted by Coordinator routing.",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "command"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              }
+            },
+            "type": "object"
+          },
+          "effect": "unknown"
+        }
+      ]
+    },
+    "terminalTask": {
+      "task_id": "rule-c360.semteams-bootstrap-e2e-b86f9b.agentic-loop.agent.execution.f0704c5c-89b7-4ceb-80d5-85ffe23ecca6-1790865876879506836",
+      "role": "coordinator",
+      "model": "coordinator",
+      "prompt": "The autoresearch run failed. Read the failed source using read_loop_result(loop_id=\"c360.semteams-bootstrap-e2e-b86f9b.agentic-loop.agent.execution.f802bd39-b54c-446b-bd9a-7b85679eb7f7\"). Report the observed failure and partial evidence plainly. A missing or incomplete result is not success. Finish with decide(action=\"respond_direct\", reason=\"<honest failure summary>\"). Do not retry, delegate, ask for tool approval, or claim the failed run completed successfully.",
+      "parent_loop_id": "f0704c5c-89b7-4ceb-80d5-85ffe23ecca6",
+      "run_id": "f0704c5c-89b7-4ceb-80d5-85ffe23ecca6",
+      "tools": [
+        {
+          "name": "read_loop_result",
+          "description": "Fetch the final Result text a previously completed agent loop produced, so this agent can react to or build on it without having the full content injected into its prompt. Returns a text slice plus role/outcome/completed_at metadata and total_bytes so the caller can page through long results by calling again with a different offset.",
+          "parameters": {
+            "properties": {
+              "loop_id": {
+                "description": "Loop ID. Use $entity.instance in rule templates (bare UUID); the full 6-part entity ID also works.",
+                "type": "string"
+              },
+              "max_bytes": {
+                "description": "Maximum bytes of Result text to return in this call. Defaults to 4096. Use smaller values to stay within tight context budgets.",
+                "type": "integer"
+              },
+              "offset": {
+                "description": "Zero-based byte offset into the Result text. Defaults to 0. Use with max_bytes to page through long results.",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "loop_id"
+            ],
+            "type": "object"
+          },
+          "paginated": true,
+          "effect": "read_only"
+        },
+        {
+          "name": "bash",
+          "description": "Run a shell command. Use for file operations, git, builds, tests, and any other shell task.",
+          "parameters": {
+            "properties": {
+              "command": {
+                "description": "Shell command to execute",
+                "type": "string"
+              },
+              "read_only_paths": {
+                "description": "Paths (files or directories, relative to the worktree root) that should not be modified. Used by verify_clean to filter the dirty-tree check; an entry like \"src/\" matches anything under src/.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "verify_clean": {
+                "description": "If true, run `git status -z --porcelain --untracked-files=all` before the real command and refuse to run if any dirty path matches read_only_paths (or any dirty path at all when read_only_paths is empty). Use to keep a command sequence from clobbering off-limits files.",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "command"
+            ],
+            "type": "object"
+          },
+          "effect": "external_effect"
+        },
+        {
+          "name": "decide",
+          "description": "Terminal decision tool for coordinator agents. Call exactly once with the action your role's system prompt enumerates. Emits a coordinator.decision.next-action triple on this loop's entity so downstream rules can route; the full args stay in the loop's Result for any agent that needs supporting data.",
+          "parameters": {
+            "properties": {
+              "action": {
+                "description": "The decision. Valid values are enumerated in your role's system prompt.",
+                "type": "string"
+              },
+              "reason": {
+                "description": "Short natural-language justification for the chosen action.",
+                "type": "string"
+              },
+              "retry_hint": {
+                "description": "Optional. Free-form guidance for a downstream pass; populate only when your role's contract names this field.",
+                "type": "string"
+              },
+              "subtopics": {
+                "description": "Optional. List of sub-targets when the chosen action represents a multi-target investigation; populate only when your role's contract names this field.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "action",
+              "reason"
+            ],
+            "type": "object"
+          },
+          "effect": "mutating"
+        }
+      ],
+      "tool_choice": {
+        "mode": "required"
+      },
+      "metadata": {
+        "agent.decide.action_allowlist": [
+          "respond_direct"
+        ],
+        "agent.related_loops": {
+          "autoresearch-run": "f0704c5c-89b7-4ceb-80d5-85ffe23ecca6",
+          "failed": "c360.semteams-bootstrap-e2e-b86f9b.agentic-loop.agent.execution.f802bd39-b54c-446b-bd9a-7b85679eb7f7"
+        },
+        "category": "autoresearch",
+        "source_loop_entity_id": "c360.semteams-bootstrap-e2e-b86f9b.agentic-loop.agent.execution.f802bd39-b54c-446b-bd9a-7b85679eb7f7",
+        "wakeup_mode": "autoresearch_failed"
+      }
+    },
+    "reply": {
+      "sequence": 188,
+      "timestamp": "2026-10-01T14:44:36.900661545Z",
+      "subject": "user.response.http.http-1790865876455467628",
+      "message_type": "agentic.user_response.v1",
+      "trace_id": "3711b54135e4089955477906e3780876",
+      "span_id": "cbabdc7fab9952a2",
+      "summary": "Type: agentic.user_response.v1, Payload: *agentic.UserResponse",
+      "raw_data": {
+        "id": "fffe1fdc-ec69-43b1-80ee-f8370ee45f00",
+        "type": {
+          "domain": "agentic",
+          "category": "user_response",
+          "version": "v1"
+        },
+        "payload": {
+          "response_id": "terminal-user-response:3f7d48d9-d03a-452f-96b6-f917d2df6e80",
+          "channel_type": "http",
+          "channel_id": "http-1790865876455467628",
+          "user_id": "ui-anonymous",
+          "in_reply_to": "2662767d-8af6-4e4b-ae9a-cfa04ca00d23",
+          "type": "result",
+          "content": "Autoresearch could not continue: the propose loop exhausted its iteration budget. No experiment was executed and the run failed.",
+          "timestamp": "2026-10-01T14:44:36.89806367Z"
+        },
+        "meta": {
+          "created_at": 1790865876900,
+          "received_at": 1790865876900,
+          "source": "agentic-dispatch"
+        }
+      }
+    },
+    "phases": [
+      {
+        "subject": "c360.semteams-bootstrap-e2e-b86f9b.chain.agent.execution.f0704c5c-89b7-4ceb-80d5-85ffe23ecca6",
+        "predicate": "agent.run.phase",
+        "object": "failed",
+        "source": "",
+        "timestamp": "2026-10-01T14:44:36.818229711Z",
+        "confidence": 1
+      }
+    ],
+    "origins": [
+      {
+        "subject": "c360.semteams-bootstrap-e2e-b86f9b.chain.agent.execution.f0704c5c-89b7-4ceb-80d5-85ffe23ecca6",
+        "predicate": "agent.run.origin-entity-id",
+        "object": "c360.semteams-bootstrap-e2e-b86f9b.agentic-loop.agent.execution.f0704c5c-89b7-4ceb-80d5-85ffe23ecca6",
+        "source": "",
+        "timestamp": "2026-10-01T14:44:36.515318628Z",
+        "confidence": 1
+      }
+    ]
+  }
+}

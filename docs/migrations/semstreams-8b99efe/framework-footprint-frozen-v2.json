@@ -3815,6 +3815,131 @@
         },
         {
           "package": "github.com/c360studio/semstreams/agentic/agentrun",
+          "name": "AgentRun",
+          "declaration": "type github.com/c360studio/semstreams/agentic/agentrun.AgentRun struct{EntityIDField string \"json:\\\"-\\\" lifecycle:\\\"id\\\"\"; PhaseField string \"json:\\\"phase\\\" lifecycle:\\\"phase,predicate=agent.run.phase\\\"\"; ParentRunEntityID string \"json:\\\"parent_run_entity_id,omitempty\\\" lifecycle:\\\"predicate=agent.run.parent-entity-id\\\"\"; OriginEntityID string \"json:\\\"origin_entity_id,omitempty\\\" lifecycle:\\\"predicate=agent.run.origin-entity-id\\\"\"}",
+          "declared_at": {
+            "file": "agentic/agentrun/agentrun.go",
+            "line": 131,
+            "column": 6
+          },
+          "references": [
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 44,
+              "column": 33,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 57,
+              "column": 91,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 59,
+              "column": 31,
+              "source_kind": "test",
+              "call": false
+            }
+          ]
+        },
+        {
+          "package": "github.com/c360studio/semstreams/agentic/agentrun",
+          "name": "EntityIDField",
+          "declaration": "field EntityIDField string",
+          "declared_at": {
+            "file": "agentic/agentrun/agentrun.go",
+            "line": 134,
+            "column": 2
+          },
+          "references": [
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 59,
+              "column": 40,
+              "source_kind": "test",
+              "call": false
+            }
+          ]
+        },
+        {
+          "package": "github.com/c360studio/semstreams/agentic/agentrun",
+          "name": "PhaseField",
+          "declaration": "field PhaseField string",
+          "declared_at": {
+            "file": "agentic/agentrun/agentrun.go",
+            "line": 137,
+            "column": 2
+          },
+          "references": [
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 192,
+              "column": 43,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 417,
+              "column": 48,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 59,
+              "column": 65,
+              "source_kind": "test",
+              "call": false
+            }
+          ]
+        },
+        {
+          "package": "github.com/c360studio/semstreams/agentic/agentrun",
+          "name": "OriginEntityID",
+          "declaration": "field OriginEntityID string",
+          "declared_at": {
+            "file": "agentic/agentrun/agentrun.go",
+            "line": 153,
+            "column": 2
+          },
+          "references": [
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 193,
+              "column": 49,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 286,
+              "column": 20,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 418,
+              "column": 51,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 59,
+              "column": 84,
+              "source_kind": "test",
+              "call": false
+            }
+          ]
+        },
+        {
+          "package": "github.com/c360studio/semstreams/agentic/agentrun",
           "name": "Register",
           "declaration": "func github.com/c360studio/semstreams/agentic/agentrun.Register(mgr *github.com/c360studio/semstreams/pkg/lifecycle.Manager) error",
           "declared_at": {
@@ -3848,6 +3973,25 @@
               "file": "test/contract/agentrun_registration_test.go",
               "line": 77,
               "column": 21,
+              "source_kind": "test",
+              "call": true
+            }
+          ]
+        },
+        {
+          "package": "github.com/c360studio/semstreams/agentic/agentrun",
+          "name": "Mint",
+          "declaration": "func github.com/c360studio/semstreams/agentic/agentrun.Mint(ctx context.Context, mgr github.com/c360studio/semstreams/agentic/agentrun.MintableManager, org string, platform string, rootLoopID string, originEntityID string) (*github.com/c360studio/semstreams/agentic/agentrun.AgentRun, error)",
+          "declared_at": {
+            "file": "agentic/agentrun/agentrun.go",
+            "line": 298,
+            "column": 6
+          },
+          "references": [
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 287,
+              "column": 22,
               "source_kind": "test",
               "call": true
             }
@@ -5564,6 +5708,44 @@
               "column": 39,
               "source_kind": "production",
               "call": true
+            }
+          ]
+        },
+        {
+          "package": "github.com/c360studio/semstreams/agentic",
+          "name": "ParentLoopID",
+          "declaration": "field ParentLoopID string",
+          "declared_at": {
+            "file": "agentic/state.go",
+            "line": 93,
+            "column": 2
+          },
+          "references": [
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 416,
+              "column": 37,
+              "source_kind": "test",
+              "call": false
+            }
+          ]
+        },
+        {
+          "package": "github.com/c360studio/semstreams/agentic",
+          "name": "RunID",
+          "declaration": "field RunID string",
+          "declared_at": {
+            "file": "agentic/state.go",
+            "line": 96,
+            "column": 2
+          },
+          "references": [
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 415,
+              "column": 37,
+              "source_kind": "test",
+              "call": false
             }
           ]
         },
@@ -10835,6 +11017,13 @@
               "file": "cmd/semteams/tools/requestsandbox/executor_test.go",
               "line": 63,
               "column": 25,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 186,
+              "column": 39,
               "source_kind": "test",
               "call": false
             }
@@ -16484,6 +16673,32 @@
         },
         {
           "package": "github.com/c360studio/semstreams/agentic",
+          "name": "AgentRequest",
+          "declaration": "type github.com/c360studio/semstreams/agentic.AgentRequest struct{RequestID string \"json:\\\"request_id\\\"\"; LoopID string \"json:\\\"loop_id\\\"\"; Role string \"json:\\\"role\\\"\"; Messages []github.com/c360studio/semstreams/agentic.ChatMessage \"json:\\\"messages\\\"\"; Model string \"json:\\\"model\\\"\"; MaxTokens int \"json:\\\"max_tokens,omitempty\\\"\"; Temperature float64 \"json:\\\"temperature,omitempty\\\"\"; Tools []github.com/c360studio/semstreams/agentic.ToolDefinition \"json:\\\"tools,omitempty\\\"\"; ToolChoice *github.com/c360studio/semstreams/agentic.ToolChoice \"json:\\\"tool_choice,omitempty\\\"\"; ResponseFormat *github.com/c360studio/semstreams/agentic.ResponseFormat \"json:\\\"response_format,omitempty\\\"\"; Timeout string \"json:\\\"timeout,omitempty\\\"\"}",
+          "declared_at": {
+            "file": "agentic/types.go",
+            "line": 108,
+            "column": 6
+          },
+          "references": [
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 402,
+              "column": 27,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 406,
+              "column": 23,
+              "source_kind": "test",
+              "call": false
+            }
+          ]
+        },
+        {
+          "package": "github.com/c360studio/semstreams/agentic",
           "name": "ResponseTypeText",
           "declaration": "const github.com/c360studio/semstreams/agentic.ResponseTypeText untyped string",
           "declared_at": {
@@ -17032,6 +17247,20 @@
               "column": 95,
               "source_kind": "test",
               "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 118,
+              "column": 19,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 45,
+              "column": 22,
+              "source_kind": "test",
+              "call": false
             }
           ]
         },
@@ -17105,6 +17334,27 @@
               "column": 59,
               "source_kind": "test",
               "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 185,
+              "column": 39,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 312,
+              "column": 49,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 314,
+              "column": 57,
+              "source_kind": "test",
+              "call": false
             }
           ]
         },
@@ -17170,6 +17420,58 @@
               "line": 234,
               "column": 3,
               "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 190,
+              "column": 27,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 191,
+              "column": 30,
+              "source_kind": "test",
+              "call": false
+            }
+          ]
+        },
+        {
+          "package": "github.com/c360studio/semstreams/agentic",
+          "name": "ParentLoopID",
+          "declaration": "field ParentLoopID string",
+          "declared_at": {
+            "file": "agentic/user_types.go",
+            "line": 336,
+            "column": 2
+          },
+          "references": [
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 183,
+              "column": 35,
+              "source_kind": "test",
+              "call": false
+            }
+          ]
+        },
+        {
+          "package": "github.com/c360studio/semstreams/agentic",
+          "name": "RunID",
+          "declaration": "field RunID string",
+          "declared_at": {
+            "file": "agentic/user_types.go",
+            "line": 339,
+            "column": 2
+          },
+          "references": [
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 184,
+              "column": 35,
+              "source_kind": "test",
               "call": false
             }
           ]
@@ -17511,6 +17813,13 @@
               "file": "cmd/semteams/chainpause/decision_handler_test.go",
               "line": 96,
               "column": 59,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 186,
+              "column": 22,
               "source_kind": "test",
               "call": false
             }
@@ -21638,6 +21947,34 @@
               "column": 16,
               "source_kind": "test",
               "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 43,
+              "column": 30,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 57,
+              "column": 49,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 74,
+              "column": 14,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 83,
+              "column": 14,
+              "source_kind": "test",
+              "call": false
             }
           ]
         },
@@ -21706,6 +22043,20 @@
               "column": 28,
               "source_kind": "test",
               "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 74,
+              "column": 26,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 83,
+              "column": 26,
+              "source_kind": "test",
+              "call": false
             }
           ]
         },
@@ -21760,6 +22111,62 @@
               "column": 45,
               "source_kind": "test",
               "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 101,
+              "column": 4,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 76,
+              "column": 24,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 76,
+              "column": 5,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 86,
+              "column": 24,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 91,
+              "column": 23,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 91,
+              "column": 4,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 95,
+              "column": 11,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 96,
+              "column": 23,
+              "source_kind": "test",
+              "call": false
             }
           ]
         },
@@ -21807,6 +22214,60 @@
               "column": 13,
               "source_kind": "test",
               "call": false
+            }
+          ]
+        },
+        {
+          "package": "github.com/c360studio/semstreams/graph",
+          "name": "GetPropertyValue",
+          "declaration": "func (*github.com/c360studio/semstreams/graph.EntityState).GetPropertyValue(predicate string) (any, bool)",
+          "declared_at": {
+            "file": "graph/types.go",
+            "line": 67,
+            "column": 24
+          },
+          "references": [
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 203,
+              "column": 43,
+              "source_kind": "test",
+              "call": true
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 242,
+              "column": 43,
+              "source_kind": "test",
+              "call": true
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 268,
+              "column": 42,
+              "source_kind": "test",
+              "call": true
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 306,
+              "column": 38,
+              "source_kind": "test",
+              "call": true
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 346,
+              "column": 43,
+              "source_kind": "test",
+              "call": true
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 381,
+              "column": 39,
+              "source_kind": "test",
+              "call": true
             }
           ]
         },
@@ -23133,6 +23594,104 @@
               "call": false
             },
             {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 103,
+              "column": 20,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 106,
+              "column": 74,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 214,
+              "column": 21,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 240,
+              "column": 22,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 262,
+              "column": 22,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 265,
+              "column": 22,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 279,
+              "column": 21,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 344,
+              "column": 21,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 359,
+              "column": 21,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 379,
+              "column": 21,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 395,
+              "column": 21,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 62,
+              "column": 19,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 76,
+              "column": 41,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 80,
+              "column": 42,
+              "source_kind": "test",
+              "call": false
+            },
+            {
               "file": "test/contract/research_emit_artifact_contract_test.go",
               "line": 102,
               "column": 83,
@@ -23694,6 +24253,111 @@
               "file": "cmd/semteams/tools/projectspecplan/executor_test.go",
               "line": 216,
               "column": 66,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 103,
+              "column": 27,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 214,
+              "column": 28,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 240,
+              "column": 29,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 262,
+              "column": 29,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 265,
+              "column": 29,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 279,
+              "column": 28,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 344,
+              "column": 28,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 359,
+              "column": 28,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 379,
+              "column": 28,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 395,
+              "column": 28,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 62,
+              "column": 26,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 76,
+              "column": 48,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 81,
+              "column": 21,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 83,
+              "column": 33,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 84,
+              "column": 17,
               "source_kind": "test",
               "call": false
             }
@@ -24401,6 +25065,111 @@
               "column": 8,
               "source_kind": "test",
               "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 103,
+              "column": 40,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 214,
+              "column": 47,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 240,
+              "column": 48,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 262,
+              "column": 48,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 265,
+              "column": 48,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 279,
+              "column": 50,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 344,
+              "column": 50,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 359,
+              "column": 50,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 379,
+              "column": 50,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 395,
+              "column": 50,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 62,
+              "column": 48,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 76,
+              "column": 61,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 87,
+              "column": 10,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 87,
+              "column": 26,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 97,
+              "column": 9,
+              "source_kind": "test",
+              "call": false
             }
           ]
         },
@@ -25027,6 +25796,104 @@
               "file": "cmd/semteams/tools/projectspecplan/executor_test.go",
               "line": 55,
               "column": 24,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 103,
+              "column": 54,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 214,
+              "column": 72,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 240,
+              "column": 73,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 262,
+              "column": 89,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 265,
+              "column": 90,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 279,
+              "column": 92,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 344,
+              "column": 84,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 359,
+              "column": 92,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 379,
+              "column": 72,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 395,
+              "column": 75,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 62,
+              "column": 77,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 76,
+              "column": 75,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 87,
+              "column": 54,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 87,
+              "column": 79,
               "source_kind": "test",
               "call": false
             }
@@ -26570,6 +27437,25 @@
         },
         {
           "package": "github.com/c360studio/semstreams/natsclient",
+          "name": "TestClient",
+          "declaration": "type github.com/c360studio/semstreams/natsclient.TestClient struct{container github.com/testcontainers/testcontainers-go.Container; Client *github.com/c360studio/semstreams/natsclient.Client; URL string; MonitoringURL string; BucketPrefix string; cleanup func() error; cleanupOnce sync.Once; cleanupErr error}",
+          "declared_at": {
+            "file": "natsclient/test_client.go",
+            "line": 354,
+            "column": 6
+          },
+          "references": [
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 53,
+              "column": 51,
+              "source_kind": "test",
+              "call": false
+            }
+          ]
+        },
+        {
+          "package": "github.com/c360studio/semstreams/natsclient",
           "name": "Client",
           "declaration": "field Client *github.com/c360studio/semstreams/natsclient.Client",
           "declared_at": {
@@ -26776,6 +27662,55 @@
               "column": 53,
               "source_kind": "test",
               "call": true
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 198,
+              "column": 85,
+              "source_kind": "test",
+              "call": true
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 231,
+              "column": 85,
+              "source_kind": "test",
+              "call": true
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 275,
+              "column": 85,
+              "source_kind": "test",
+              "call": true
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 295,
+              "column": 85,
+              "source_kind": "test",
+              "call": true
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 323,
+              "column": 85,
+              "source_kind": "test",
+              "call": true
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 367,
+              "column": 85,
+              "source_kind": "test",
+              "call": true
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 388,
+              "column": 85,
+              "source_kind": "test",
+              "call": true
             }
           ]
         },
@@ -26825,6 +27760,55 @@
             {
               "file": "cmd/semteams/approvalpause/projection_integration_test.go",
               "line": 25,
+              "column": 47,
+              "source_kind": "test",
+              "call": true
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 198,
+              "column": 47,
+              "source_kind": "test",
+              "call": true
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 231,
+              "column": 47,
+              "source_kind": "test",
+              "call": true
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 275,
+              "column": 47,
+              "source_kind": "test",
+              "call": true
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 295,
+              "column": 47,
+              "source_kind": "test",
+              "call": true
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 323,
+              "column": 47,
+              "source_kind": "test",
+              "call": true
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 367,
+              "column": 47,
+              "source_kind": "test",
+              "call": true
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 388,
               "column": 47,
               "source_kind": "test",
               "call": true
@@ -26887,6 +27871,74 @@
               "file": "cmd/semteams/rule_hot_reload_integration_test.go",
               "line": 122,
               "column": 25,
+              "source_kind": "test",
+              "call": true
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 198,
+              "column": 19,
+              "source_kind": "test",
+              "call": true
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 231,
+              "column": 19,
+              "source_kind": "test",
+              "call": true
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 275,
+              "column": 19,
+              "source_kind": "test",
+              "call": true
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 295,
+              "column": 19,
+              "source_kind": "test",
+              "call": true
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 323,
+              "column": 19,
+              "source_kind": "test",
+              "call": true
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 367,
+              "column": 19,
+              "source_kind": "test",
+              "call": true
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 388,
+              "column": 19,
+              "source_kind": "test",
+              "call": true
+            }
+          ]
+        },
+        {
+          "package": "github.com/c360studio/semstreams/natsclient",
+          "name": "CreateKVBucket",
+          "declaration": "func (*github.com/c360studio/semstreams/natsclient.TestClient).CreateKVBucket(ctx context.Context, name string) (github.com/nats-io/nats.go/jetstream.KeyValue, error)",
+          "declared_at": {
+            "file": "natsclient/test_client.go",
+            "line": 953,
+            "column": 23
+          },
+          "references": [
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 55,
+              "column": 20,
               "source_kind": "test",
               "call": true
             }
@@ -28303,6 +29355,25 @@
         },
         {
           "package": "github.com/c360studio/semstreams/pkg/lifecycle",
+          "name": "ErrAlreadyExists",
+          "declaration": "var github.com/c360studio/semstreams/pkg/lifecycle.ErrAlreadyExists error",
+          "declared_at": {
+            "file": "pkg/lifecycle/errors.go",
+            "line": 50,
+            "column": 2
+          },
+          "references": [
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 128,
+              "column": 20,
+              "source_kind": "test",
+              "call": false
+            }
+          ]
+        },
+        {
+          "package": "github.com/c360studio/semstreams/pkg/lifecycle",
           "name": "HarnessMessageType",
           "declaration": "func github.com/c360studio/semstreams/pkg/lifecycle.HarnessMessageType() github.com/c360studio/semstreams/message.Type",
           "declared_at": {
@@ -28487,6 +29558,46 @@
               "column": 163,
               "source_kind": "test",
               "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 126,
+              "column": 62,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 132,
+              "column": 79,
+              "source_kind": "test",
+              "call": false
+            }
+          ]
+        },
+        {
+          "package": "github.com/c360studio/semstreams/pkg/lifecycle",
+          "name": "EntityID",
+          "declaration": "func (github.com/c360studio/semstreams/pkg/lifecycle.Participant).EntityID() string",
+          "declared_at": {
+            "file": "pkg/lifecycle/participant.go",
+            "line": 33,
+            "column": 2
+          },
+          "references": [
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 127,
+              "column": 23,
+              "source_kind": "test",
+              "call": true
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 130,
+              "column": 47,
+              "source_kind": "test",
+              "call": true
             }
           ]
         },
@@ -30620,6 +31731,177 @@
           ]
         },
         {
+          "package": "github.com/c360studio/semstreams/processor/agentic-loop",
+          "name": "DefaultConfig",
+          "declaration": "func github.com/c360studio/semstreams/processor/agentic-loop.DefaultConfig() github.com/c360studio/semstreams/processor/agentic-loop.Config",
+          "declared_at": {
+            "file": "processor/agentic-loop/config.go",
+            "line": 368,
+            "column": 6
+          },
+          "references": [
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 398,
+              "column": 57,
+              "source_kind": "test",
+              "call": true
+            }
+          ]
+        },
+        {
+          "package": "github.com/c360studio/semstreams/processor/agentic-loop",
+          "name": "NewMessageHandler",
+          "declaration": "func github.com/c360studio/semstreams/processor/agentic-loop.NewMessageHandler(config github.com/c360studio/semstreams/processor/agentic-loop.Config, loopManagerOpts ...github.com/c360studio/semstreams/processor/agentic-loop.LoopManagerOption) *github.com/c360studio/semstreams/processor/agentic-loop.MessageHandler",
+          "declared_at": {
+            "file": "processor/agentic-loop/handlers.go",
+            "line": 215,
+            "column": 6
+          },
+          "references": [
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 398,
+              "column": 27,
+              "source_kind": "test",
+              "call": true
+            }
+          ]
+        },
+        {
+          "package": "github.com/c360studio/semstreams/processor/agentic-loop",
+          "name": "GetLoop",
+          "declaration": "func (*github.com/c360studio/semstreams/processor/agentic-loop.MessageHandler).GetLoop(loopID string) (github.com/c360studio/semstreams/agentic.LoopEntity, error)",
+          "declared_at": {
+            "file": "processor/agentic-loop/handlers.go",
+            "line": 3484,
+            "column": 26
+          },
+          "references": [
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 413,
+              "column": 25,
+              "source_kind": "test",
+              "call": true
+            }
+          ]
+        },
+        {
+          "package": "github.com/c360studio/semstreams/processor/agentic-loop",
+          "name": "Subject",
+          "declaration": "field Subject string",
+          "declared_at": {
+            "file": "processor/agentic-loop/handlers.go",
+            "line": 48,
+            "column": 2
+          },
+          "references": [
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 404,
+              "column": 30,
+              "source_kind": "test",
+              "call": false
+            }
+          ]
+        },
+        {
+          "package": "github.com/c360studio/semstreams/processor/agentic-loop",
+          "name": "Data",
+          "declaration": "field Data []byte",
+          "declared_at": {
+            "file": "processor/agentic-loop/handlers.go",
+            "line": 49,
+            "column": 2
+          },
+          "references": [
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 408,
+              "column": 44,
+              "source_kind": "test",
+              "call": false
+            }
+          ]
+        },
+        {
+          "package": "github.com/c360studio/semstreams/processor/agentic-loop",
+          "name": "LoopID",
+          "declaration": "field LoopID string",
+          "declared_at": {
+            "file": "processor/agentic-loop/handlers.go",
+            "line": 60,
+            "column": 2
+          },
+          "references": [
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 413,
+              "column": 42,
+              "source_kind": "test",
+              "call": false
+            }
+          ]
+        },
+        {
+          "package": "github.com/c360studio/semstreams/processor/agentic-loop",
+          "name": "PublishedMessages",
+          "declaration": "field PublishedMessages []github.com/c360studio/semstreams/processor/agentic-loop.PublishedMessage",
+          "declared_at": {
+            "file": "processor/agentic-loop/handlers.go",
+            "line": 62,
+            "column": 2
+          },
+          "references": [
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 403,
+              "column": 33,
+              "source_kind": "test",
+              "call": false
+            }
+          ]
+        },
+        {
+          "package": "github.com/c360studio/semstreams/processor/agentic-loop",
+          "name": "Created",
+          "declaration": "field Created bool",
+          "declared_at": {
+            "file": "processor/agentic-loop/handlers.go",
+            "line": 80,
+            "column": 2
+          },
+          "references": [
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 401,
+              "column": 29,
+              "source_kind": "test",
+              "call": false
+            }
+          ]
+        },
+        {
+          "package": "github.com/c360studio/semstreams/processor/agentic-loop",
+          "name": "HandleTask",
+          "declaration": "func (*github.com/c360studio/semstreams/processor/agentic-loop.MessageHandler).HandleTask(ctx context.Context, task github.com/c360studio/semstreams/processor/agentic-loop.TaskMessage) (github.com/c360studio/semstreams/processor/agentic-loop.HandlerResult, error)",
+          "declared_at": {
+            "file": "processor/agentic-loop/handlers.go",
+            "line": 882,
+            "column": 26
+          },
+          "references": [
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 399,
+              "column": 29,
+              "source_kind": "test",
+              "call": true
+            }
+          ]
+        },
+        {
           "package": "github.com/c360studio/semstreams/processor/agentic-tools/executors",
           "name": "NewBashExecutorFromEnv",
           "declaration": "func github.com/c360studio/semstreams/processor/agentic-tools/executors.NewBashExecutorFromEnv() *github.com/c360studio/semstreams/processor/agentic-tools/executors.BashExecutor",
@@ -31875,6 +33157,13 @@
               "column": 48,
               "source_kind": "test",
               "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 170,
+              "column": 36,
+              "source_kind": "test",
+              "call": false
             }
           ]
         },
@@ -31989,6 +33278,103 @@
               "column": 30,
               "source_kind": "test",
               "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 169,
+              "column": 24,
+              "source_kind": "test",
+              "call": false
+            }
+          ]
+        },
+        {
+          "package": "github.com/c360studio/semstreams/processor/rule",
+          "name": "Subject",
+          "declaration": "field Subject string",
+          "declared_at": {
+            "file": "processor/rule/actions.go",
+            "line": 112,
+            "column": 2
+          },
+          "references": [
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 144,
+              "column": 8,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 145,
+              "column": 44,
+              "source_kind": "test",
+              "call": false
+            }
+          ]
+        },
+        {
+          "package": "github.com/c360studio/semstreams/processor/rule",
+          "name": "Predicate",
+          "declaration": "field Predicate string",
+          "declared_at": {
+            "file": "processor/rule/actions.go",
+            "line": 115,
+            "column": 2
+          },
+          "references": [
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 151,
+              "column": 24,
+              "source_kind": "test",
+              "call": false
+            }
+          ]
+        },
+        {
+          "package": "github.com/c360studio/semstreams/processor/rule",
+          "name": "Object",
+          "declaration": "field Object string",
+          "declared_at": {
+            "file": "processor/rule/actions.go",
+            "line": 123,
+            "column": 2
+          },
+          "references": [
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 148,
+              "column": 8,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 149,
+              "column": 42,
+              "source_kind": "test",
+              "call": false
+            }
+          ]
+        },
+        {
+          "package": "github.com/c360studio/semstreams/processor/rule",
+          "name": "ActionTypeReconcilePredicates",
+          "declaration": "const github.com/c360studio/semstreams/processor/rule.ActionTypeReconcilePredicates untyped string",
+          "declared_at": {
+            "file": "processor/rule/actions.go",
+            "line": 48,
+            "column": 2
+          },
+          "references": [
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 140,
+              "column": 23,
+              "source_kind": "test",
+              "call": false
             }
           ]
         },
@@ -32005,6 +33391,13 @@
             {
               "file": "cmd/semteams/approvalpause/rule_order_test.go",
               "line": 24,
+              "column": 10,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 42,
               "column": 10,
               "source_kind": "test",
               "call": false
@@ -32027,6 +33420,13 @@
               "column": 20,
               "source_kind": "test",
               "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 46,
+              "column": 21,
+              "source_kind": "test",
+              "call": false
             }
           ]
         },
@@ -32044,6 +33444,13 @@
               "file": "cmd/semteams/approvalpause/rule_order_test.go",
               "line": 51,
               "column": 13,
+              "source_kind": "test",
+              "call": true
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 66,
+              "column": 12,
               "source_kind": "test",
               "call": true
             }
@@ -32070,6 +33477,44 @@
         },
         {
           "package": "github.com/c360studio/semstreams/processor/rule",
+          "name": "NewActionExecutorFull",
+          "declaration": "func github.com/c360studio/semstreams/processor/rule.NewActionExecutorFull(logger *log/slog.Logger, mutator github.com/c360studio/semstreams/processor/rule.TripleMutator, publisher github.com/c360studio/semstreams/processor/rule.Publisher, platform github.com/c360studio/semstreams/types.PlatformMeta) *github.com/c360studio/semstreams/processor/rule.ActionExecutor",
+          "declared_at": {
+            "file": "processor/rule/actions.go",
+            "line": 843,
+            "column": 6
+          },
+          "references": [
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 65,
+              "column": 22,
+              "source_kind": "test",
+              "call": true
+            }
+          ]
+        },
+        {
+          "package": "github.com/c360studio/semstreams/processor/rule",
+          "name": "Action",
+          "declaration": "type github.com/c360studio/semstreams/processor/rule.Action struct{Type string \"json:\\\"type\\\"\"; Subject string \"json:\\\"subject,omitempty\\\"\"; Predicate string \"json:\\\"predicate,omitempty\\\"\"; ProjectionContract string \"json:\\\"projection_contract,omitempty\\\"\"; ProjectionGroup string \"json:\\\"projection_group,omitempty\\\"\"; Object string \"json:\\\"object,omitempty\\\"\"; TTL string \"json:\\\"ttl,omitempty\\\"\"; Properties map[string]any \"json:\\\"properties,omitempty\\\"\"; Role string \"json:\\\"role,omitempty\\\"\"; Model string \"json:\\\"model,omitempty\\\"\"; Prompt string \"json:\\\"prompt,omitempty\\\"\"; Tools []string \"json:\\\"tools,omitempty\\\"\"; ActionAllowlist []string \"json:\\\"action_allowlist,omitempty\\\"\"; ResponseFormat *github.com/c360studio/semstreams/agentic.ResponseFormat \"json:\\\"response_format,omitempty\\\"\"; ToolChoice *github.com/c360studio/semstreams/agentic.ToolChoice \"json:\\\"tool_choice,omitempty\\\"\"; RelatedLoops map[string]string \"json:\\\"related_loops,omitempty\\\"\"; FilesystemPolicy string \"json:\\\"filesystem_policy,omitempty\\\"\"; ScratchPaths []string \"json:\\\"scratch_paths,omitempty\\\"\"; RunScope string \"json:\\\"run_scope,omitempty\\\"\"; WorkflowSlug string \"json:\\\"workflow_slug,omitempty\\\"\"; WorkflowStep string \"json:\\\"workflow_step,omitempty\\\"\"; When []github.com/c360studio/semstreams/processor/rule/expression.ConditionExpression \"json:\\\"when,omitempty\\\"\"; Bucket string \"json:\\\"bucket,omitempty\\\"\"; Key string \"json:\\\"key,omitempty\\\"\"; Payload map[string]any \"json:\\\"payload,omitempty\\\"\"; Merge bool \"json:\\\"merge,omitempty\\\"\"; ID string \"json:\\\"id,omitempty\\\"\"; MaxIterations *int \"json:\\\"max_iterations,omitempty\\\"\"; LoopMaxIterations string \"json:\\\"loop_max_iterations,omitempty\\\" description:\\\"Iteration budget for the SPAWNED LOOP (agentic-loop's per-iteration cap on the agent this action spawns) — distinct from the action-level firing cap 'max_iterations' above, which bounds how many times this action itself fires. Supports variable substitution (literal or $entity.triple.* reference); must resolve to a positive integer or the action fails.\\\"\"; Reason string \"json:\\\"reason,omitempty\\\"\"; Workflow string \"json:\\\"workflow,omitempty\\\"\"; Phase string \"json:\\\"phase,omitempty\\\"\"; Set map[string]any \"json:\\\"set,omitempty\\\"\"; ForEach string \"json:\\\"for_each,omitempty\\\"\"; ForEachVar string \"json:\\\"for_each_var,omitempty\\\"\"}",
+          "declared_at": {
+            "file": "processor/rule/actions.go",
+            "line": 89,
+            "column": 6
+          },
+          "references": [
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 139,
+              "column": 63,
+              "source_kind": "test",
+              "call": false
+            }
+          ]
+        },
+        {
+          "package": "github.com/c360studio/semstreams/processor/rule",
           "name": "Execute",
           "declaration": "func (*github.com/c360studio/semstreams/processor/rule.ActionExecutor).Execute(ctx context.Context, action github.com/c360studio/semstreams/processor/rule.Action, ec *github.com/c360studio/semstreams/processor/rule.ExecutionContext) error",
           "declared_at": {
@@ -32084,6 +33529,32 @@
               "column": 24,
               "source_kind": "test",
               "call": true
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 154,
+              "column": 19,
+              "source_kind": "test",
+              "call": true
+            }
+          ]
+        },
+        {
+          "package": "github.com/c360studio/semstreams/processor/rule",
+          "name": "Type",
+          "declaration": "field Type string",
+          "declared_at": {
+            "file": "processor/rule/actions.go",
+            "line": 91,
+            "column": 2
+          },
+          "references": [
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 140,
+              "column": 7,
+              "source_kind": "test",
+              "call": false
             }
           ]
         },
@@ -32160,6 +33631,13 @@
               "column": 71,
               "source_kind": "test",
               "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 139,
+              "column": 83,
+              "source_kind": "test",
+              "call": false
             }
           ]
         },
@@ -32177,6 +33655,13 @@
               "file": "cmd/semteams/approvalpause/rule_order_test.go",
               "line": 95,
               "column": 88,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 143,
+              "column": 17,
               "source_kind": "test",
               "call": false
             }
@@ -32198,6 +33683,32 @@
               "column": 111,
               "source_kind": "test",
               "call": false
+            }
+          ]
+        },
+        {
+          "package": "github.com/c360studio/semstreams/processor/rule",
+          "name": "SubstituteVariables",
+          "declaration": "func (*github.com/c360studio/semstreams/processor/rule.ExecutionContext).SubstituteVariables(ctx context.Context, template string) string",
+          "declared_at": {
+            "file": "processor/rule/execution_context.go",
+            "line": 252,
+            "column": 29
+          },
+          "references": [
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 145,
+              "column": 17,
+              "source_kind": "test",
+              "call": true
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 149,
+              "column": 15,
+              "source_kind": "test",
+              "call": true
             }
           ]
         },
@@ -32502,6 +34013,13 @@
               "column": 26,
               "source_kind": "test",
               "call": true
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 167,
+              "column": 26,
+              "source_kind": "test",
+              "call": true
             }
           ]
         },
@@ -32724,6 +34242,27 @@
               "column": 30,
               "source_kind": "test",
               "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 156,
+              "column": 51,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 160,
+              "column": 18,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 164,
+              "column": 59,
+              "source_kind": "test",
+              "call": false
             }
           ]
         },
@@ -32883,6 +34422,215 @@
               "column": 21,
               "source_kind": "test",
               "call": true
+            }
+          ]
+        },
+        {
+          "package": "github.com/c360studio/semstreams/processor/rule",
+          "name": "NewStateTracker",
+          "declaration": "func github.com/c360studio/semstreams/processor/rule.NewStateTracker(bucket github.com/nats-io/nats.go/jetstream.KeyValue, logger *log/slog.Logger) *github.com/c360studio/semstreams/processor/rule.StateTracker",
+          "declared_at": {
+            "file": "processor/rule/state_tracker.go",
+            "line": 77,
+            "column": 6
+          },
+          "references": [
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 71,
+              "column": 53,
+              "source_kind": "test",
+              "call": true
+            }
+          ]
+        },
+        {
+          "package": "github.com/c360studio/semstreams/processor/rule",
+          "name": "Evaluate",
+          "declaration": "func (*github.com/c360studio/semstreams/processor/rule.StatefulEvaluator).Evaluate(ctx context.Context, ev github.com/c360studio/semstreams/processor/rule.Evaluation) (github.com/c360studio/semstreams/processor/rule.Transition, error)",
+          "declared_at": {
+            "file": "processor/rule/stateful_evaluator.go",
+            "line": 133,
+            "column": 29
+          },
+          "references": [
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 176,
+              "column": 23,
+              "source_kind": "test",
+              "call": true
+            }
+          ]
+        },
+        {
+          "package": "github.com/c360studio/semstreams/processor/rule",
+          "name": "StatefulEvaluator",
+          "declaration": "type github.com/c360studio/semstreams/processor/rule.StatefulEvaluator struct{stateTracker *github.com/c360studio/semstreams/processor/rule.StateTracker; actionExecutor github.com/c360studio/semstreams/processor/rule.ActionExecutorInterface; exprEvaluator *github.com/c360studio/semstreams/processor/rule/expression.Evaluator; logger *log/slog.Logger; lifecycleManager github.com/c360studio/semstreams/processor/rule.LifecycleManager; metrics *github.com/c360studio/semstreams/processor/rule.Metrics}",
+          "declared_at": {
+            "file": "processor/rule/stateful_evaluator.go",
+            "line": 26,
+            "column": 6
+          },
+          "references": [
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 47,
+              "column": 21,
+              "source_kind": "test",
+              "call": false
+            }
+          ]
+        },
+        {
+          "package": "github.com/c360studio/semstreams/processor/rule",
+          "name": "NewStatefulEvaluator",
+          "declaration": "func github.com/c360studio/semstreams/processor/rule.NewStatefulEvaluator(stateTracker *github.com/c360studio/semstreams/processor/rule.StateTracker, actionExecutor github.com/c360studio/semstreams/processor/rule.ActionExecutorInterface, logger *log/slog.Logger) *github.com/c360studio/semstreams/processor/rule.StatefulEvaluator",
+          "declared_at": {
+            "file": "processor/rule/stateful_evaluator.go",
+            "line": 74,
+            "column": 6
+          },
+          "references": [
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 71,
+              "column": 24,
+              "source_kind": "test",
+              "call": true
+            }
+          ]
+        },
+        {
+          "package": "github.com/c360studio/semstreams/processor/rule",
+          "name": "Evaluation",
+          "declaration": "type github.com/c360studio/semstreams/processor/rule.Evaluation struct{Rule github.com/c360studio/semstreams/processor/rule.Definition; EntityID string; RelatedID string; CurrentlyMatching bool; Entity *github.com/c360studio/semstreams/graph.EntityState; Related *github.com/c360studio/semstreams/graph.EntityState; Revision uint64; Bootstrap bool; MessageData map[string]any}",
+          "declared_at": {
+            "file": "processor/rule/stateful_evaluator.go",
+            "line": 90,
+            "column": 6
+          },
+          "references": [
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 176,
+              "column": 53,
+              "source_kind": "test",
+              "call": false
+            }
+          ]
+        },
+        {
+          "package": "github.com/c360studio/semstreams/processor/rule",
+          "name": "Rule",
+          "declaration": "field Rule github.com/c360studio/semstreams/processor/rule.Definition",
+          "declared_at": {
+            "file": "processor/rule/stateful_evaluator.go",
+            "line": 91,
+            "column": 2
+          },
+          "references": [
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 176,
+              "column": 64,
+              "source_kind": "test",
+              "call": false
+            }
+          ]
+        },
+        {
+          "package": "github.com/c360studio/semstreams/processor/rule",
+          "name": "EntityID",
+          "declaration": "field EntityID string",
+          "declared_at": {
+            "file": "processor/rule/stateful_evaluator.go",
+            "line": 92,
+            "column": 2
+          },
+          "references": [
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 176,
+              "column": 75,
+              "source_kind": "test",
+              "call": false
+            }
+          ]
+        },
+        {
+          "package": "github.com/c360studio/semstreams/processor/rule",
+          "name": "CurrentlyMatching",
+          "declaration": "field CurrentlyMatching bool",
+          "declared_at": {
+            "file": "processor/rule/stateful_evaluator.go",
+            "line": 94,
+            "column": 2
+          },
+          "references": [
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 176,
+              "column": 105,
+              "source_kind": "test",
+              "call": false
+            }
+          ]
+        },
+        {
+          "package": "github.com/c360studio/semstreams/processor/rule",
+          "name": "Entity",
+          "declaration": "field Entity *github.com/c360studio/semstreams/graph.EntityState",
+          "declared_at": {
+            "file": "processor/rule/stateful_evaluator.go",
+            "line": 95,
+            "column": 2
+          },
+          "references": [
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 176,
+              "column": 89,
+              "source_kind": "test",
+              "call": false
+            }
+          ]
+        },
+        {
+          "package": "github.com/c360studio/semstreams/processor/rule",
+          "name": "Revision",
+          "declaration": "field Revision uint64",
+          "declared_at": {
+            "file": "processor/rule/stateful_evaluator.go",
+            "line": 97,
+            "column": 2
+          },
+          "references": [
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 176,
+              "column": 133,
+              "source_kind": "test",
+              "call": false
+            }
+          ]
+        },
+        {
+          "package": "github.com/c360studio/semstreams/processor/rule",
+          "name": "Bootstrap",
+          "declaration": "field Bootstrap bool",
+          "declared_at": {
+            "file": "processor/rule/stateful_evaluator.go",
+            "line": 98,
+            "column": 2
+          },
+          "references": [
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 176,
+              "column": 148,
+              "source_kind": "test",
+              "call": false
             }
           ]
         },
@@ -35460,6 +37208,13 @@
               "call": false
             },
             {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 65,
+              "column": 66,
+              "source_kind": "test",
+              "call": false
+            },
+            {
               "file": "test/contract/research_emit_artifact_contract_test.go",
               "line": 42,
               "column": 83,
@@ -35902,6 +37657,13 @@
               "file": "cmd/semteams/tools/requestsandbox/executor_test.go",
               "line": 37,
               "column": 28,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 65,
+              "column": 79,
               "source_kind": "test",
               "call": false
             },
@@ -36376,6 +38138,13 @@
               "file": "cmd/semteams/tools/requestsandbox/executor_test.go",
               "line": 37,
               "column": 41,
+              "source_kind": "test",
+              "call": false
+            },
+            {
+              "file": "test/contract/autoresearch_reply_integration_test.go",
+              "line": 65,
+              "column": 92,
               "source_kind": "test",
               "call": false
             },
@@ -36872,6 +38641,39 @@
         },
         {
           "package": "github.com/c360studio/semstreams/vocabulary",
+          "name": "DataTypeEntityID",
+          "declaration": "const github.com/c360studio/semstreams/vocabulary.DataTypeEntityID untyped string",
+          "declared_at": {
+            "file": "vocabulary/predicates.go",
+            "line": 355,
+            "column": 2
+          },
+          "references": [
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 52,
+              "column": 27,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 57,
+              "column": 27,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 62,
+              "column": 27,
+              "source_kind": "production",
+              "call": false
+            }
+          ]
+        },
+        {
+          "package": "github.com/c360studio/semstreams/vocabulary",
           "name": "PredicateMetadata",
           "declaration": "type github.com/c360studio/semstreams/vocabulary.PredicateMetadata struct{Name string; Description string; DataType string; Units string; Range string; Domain string; Category string; StandardIRI string; IsAlias bool; AliasType github.com/c360studio/semstreams/vocabulary.AliasType; AliasPriority int; InverseOf string; IsSymmetric bool; RuleOpaque bool; Role github.com/c360studio/semstreams/vocabulary.PredicateRole; Weight float64}",
           "declared_at": {
@@ -36922,42 +38724,42 @@
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 119,
+              "line": 115,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 124,
+              "line": 120,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 130,
+              "line": 125,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 132,
+              "line": 134,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 137,
+              "line": 139,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 142,
+              "line": 145,
               "column": 3,
               "source_kind": "production",
               "call": false
@@ -36965,6 +38767,13 @@
             {
               "file": "cmd/semteams/vocab/vocab.go",
               "line": 147,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 152,
               "column": 3,
               "source_kind": "production",
               "call": false
@@ -36979,13 +38788,6 @@
             {
               "file": "cmd/semteams/vocab/vocab.go",
               "line": 162,
-              "column": 3,
-              "source_kind": "production",
-              "call": false
-            },
-            {
-              "file": "cmd/semteams/vocab/vocab.go",
-              "line": 167,
               "column": 3,
               "source_kind": "production",
               "call": false
@@ -37027,35 +38829,56 @@
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 199,
+              "line": 197,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 204,
+              "line": 202,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 215,
+              "line": 207,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 222,
+              "line": 214,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 227,
+              "line": 219,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 230,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 237,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 242,
               "column": 3,
               "source_kind": "production",
               "call": false
@@ -37179,49 +39002,56 @@
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 120,
+              "line": 116,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 125,
+              "line": 121,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 130,
+              "line": 126,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 135,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 140,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 145,
               "column": 43,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 133,
-              "column": 3,
-              "source_kind": "production",
-              "call": false
-            },
-            {
-              "file": "cmd/semteams/vocab/vocab.go",
-              "line": 138,
-              "column": 3,
-              "source_kind": "production",
-              "call": false
-            },
-            {
-              "file": "cmd/semteams/vocab/vocab.go",
-              "line": 143,
-              "column": 3,
-              "source_kind": "production",
-              "call": false
-            },
-            {
-              "file": "cmd/semteams/vocab/vocab.go",
               "line": 148,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 153,
               "column": 3,
               "source_kind": "production",
               "call": false
@@ -37236,13 +39066,6 @@
             {
               "file": "cmd/semteams/vocab/vocab.go",
               "line": 163,
-              "column": 3,
-              "source_kind": "production",
-              "call": false
-            },
-            {
-              "file": "cmd/semteams/vocab/vocab.go",
-              "line": 168,
               "column": 3,
               "source_kind": "production",
               "call": false
@@ -37284,35 +39107,56 @@
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 200,
+              "line": 198,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 205,
+              "line": 203,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 216,
+              "line": 208,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 223,
+              "line": 215,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 228,
+              "line": 220,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 231,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 238,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 243,
               "column": 3,
               "source_kind": "production",
               "call": false
@@ -37436,49 +39280,56 @@
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 121,
+              "line": 117,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 126,
+              "line": 122,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 130,
+              "line": 127,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 136,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 141,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 145,
               "column": 115,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 134,
-              "column": 3,
-              "source_kind": "production",
-              "call": false
-            },
-            {
-              "file": "cmd/semteams/vocab/vocab.go",
-              "line": 139,
-              "column": 3,
-              "source_kind": "production",
-              "call": false
-            },
-            {
-              "file": "cmd/semteams/vocab/vocab.go",
-              "line": 144,
-              "column": 3,
-              "source_kind": "production",
-              "call": false
-            },
-            {
-              "file": "cmd/semteams/vocab/vocab.go",
               "line": 149,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 154,
               "column": 3,
               "source_kind": "production",
               "call": false
@@ -37493,13 +39344,6 @@
             {
               "file": "cmd/semteams/vocab/vocab.go",
               "line": 164,
-              "column": 3,
-              "source_kind": "production",
-              "call": false
-            },
-            {
-              "file": "cmd/semteams/vocab/vocab.go",
-              "line": 169,
               "column": 3,
               "source_kind": "production",
               "call": false
@@ -37541,35 +39385,56 @@
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 201,
+              "line": 199,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 206,
+              "line": 204,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 217,
+              "line": 209,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 224,
+              "line": 216,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 229,
+              "line": 221,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 232,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 239,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 244,
               "column": 3,
               "source_kind": "production",
               "call": false
@@ -45781,6 +47646,14 @@
           "from": "github.com/c360studio/semteams/test/contract",
           "to": "context",
           "source_kind": "test",
+          "file": "test/contract/autoresearch_reply_integration_test.go",
+          "line": 6,
+          "column": 2
+        },
+        {
+          "from": "github.com/c360studio/semteams/test/contract",
+          "to": "context",
+          "source_kind": "test",
           "file": "test/contract/research_emit_artifact_contract_test.go",
           "line": 4,
           "column": 2
@@ -45799,6 +47672,14 @@
           "source_kind": "test",
           "file": "test/contract/agentrun_registration_test.go",
           "line": 4,
+          "column": 2
+        },
+        {
+          "from": "github.com/c360studio/semteams/test/contract",
+          "to": "encoding/json",
+          "source_kind": "test",
+          "file": "test/contract/autoresearch_reply_integration_test.go",
+          "line": 7,
           "column": 2
         },
         {
@@ -45955,10 +47836,26 @@
         },
         {
           "from": "github.com/c360studio/semteams/test/contract",
+          "to": "errors",
+          "source_kind": "test",
+          "file": "test/contract/autoresearch_reply_integration_test.go",
+          "line": 8,
+          "column": 2
+        },
+        {
+          "from": "github.com/c360studio/semteams/test/contract",
           "to": "fmt",
           "source_kind": "test",
           "file": "test/contract/agentrun_registration_test.go",
           "line": 6,
+          "column": 2
+        },
+        {
+          "from": "github.com/c360studio/semteams/test/contract",
+          "to": "fmt",
+          "source_kind": "test",
+          "file": "test/contract/autoresearch_reply_integration_test.go",
+          "line": 9,
           "column": 2
         },
         {
@@ -45997,8 +47894,24 @@
           "from": "github.com/c360studio/semteams/test/contract",
           "to": "github.com/c360studio/semstreams/agentic/agentrun",
           "source_kind": "test",
+          "file": "test/contract/autoresearch_reply_integration_test.go",
+          "line": 18,
+          "column": 2
+        },
+        {
+          "from": "github.com/c360studio/semteams/test/contract",
+          "to": "github.com/c360studio/semstreams/agentic/agentrun",
+          "source_kind": "test",
           "file": "test/contract/predicate_contract_test.go",
           "line": 12,
+          "column": 2
+        },
+        {
+          "from": "github.com/c360studio/semteams/test/contract",
+          "to": "github.com/c360studio/semstreams/agentic",
+          "source_kind": "test",
+          "file": "test/contract/autoresearch_reply_integration_test.go",
+          "line": 17,
           "column": 2
         },
         {
@@ -46067,6 +47980,22 @@
         },
         {
           "from": "github.com/c360studio/semteams/test/contract",
+          "to": "github.com/c360studio/semstreams/graph",
+          "source_kind": "test",
+          "file": "test/contract/autoresearch_reply_integration_test.go",
+          "line": 19,
+          "column": 2
+        },
+        {
+          "from": "github.com/c360studio/semteams/test/contract",
+          "to": "github.com/c360studio/semstreams/message",
+          "source_kind": "test",
+          "file": "test/contract/autoresearch_reply_integration_test.go",
+          "line": 20,
+          "column": 2
+        },
+        {
+          "from": "github.com/c360studio/semteams/test/contract",
           "to": "github.com/c360studio/semstreams/message",
           "source_kind": "test",
           "file": "test/contract/message_contract_test.go",
@@ -46079,6 +48008,14 @@
           "source_kind": "test",
           "file": "test/contract/research_emit_artifact_contract_test.go",
           "line": 7,
+          "column": 2
+        },
+        {
+          "from": "github.com/c360studio/semteams/test/contract",
+          "to": "github.com/c360studio/semstreams/natsclient",
+          "source_kind": "test",
+          "file": "test/contract/autoresearch_reply_integration_test.go",
+          "line": 21,
           "column": 2
         },
         {
@@ -46107,6 +48044,14 @@
         },
         {
           "from": "github.com/c360studio/semteams/test/contract",
+          "to": "github.com/c360studio/semstreams/pkg/lifecycle",
+          "source_kind": "test",
+          "file": "test/contract/autoresearch_reply_integration_test.go",
+          "line": 22,
+          "column": 2
+        },
+        {
+          "from": "github.com/c360studio/semteams/test/contract",
           "to": "github.com/c360studio/semstreams/pkg/types",
           "source_kind": "test",
           "file": "test/contract/governed_skg_reconcile_test.go",
@@ -46123,10 +48068,42 @@
         },
         {
           "from": "github.com/c360studio/semteams/test/contract",
+          "to": "github.com/c360studio/semstreams/processor/agentic-loop",
+          "source_kind": "test",
+          "file": "test/contract/autoresearch_reply_integration_test.go",
+          "line": 23,
+          "column": 2
+        },
+        {
+          "from": "github.com/c360studio/semteams/test/contract",
           "to": "github.com/c360studio/semstreams/processor/agentic-tools",
           "source_kind": "test",
           "file": "test/contract/research_emit_artifact_contract_test.go",
           "line": 8,
+          "column": 2
+        },
+        {
+          "from": "github.com/c360studio/semteams/test/contract",
+          "to": "github.com/c360studio/semstreams/processor/rule/expression",
+          "source_kind": "test",
+          "file": "test/contract/autoresearch_reply_integration_test.go",
+          "line": 25,
+          "column": 2
+        },
+        {
+          "from": "github.com/c360studio/semteams/test/contract",
+          "to": "github.com/c360studio/semstreams/processor/rule",
+          "source_kind": "test",
+          "file": "test/contract/autoresearch_reply_integration_test.go",
+          "line": 24,
+          "column": 2
+        },
+        {
+          "from": "github.com/c360studio/semteams/test/contract",
+          "to": "github.com/c360studio/semstreams/types",
+          "source_kind": "test",
+          "file": "test/contract/autoresearch_reply_integration_test.go",
+          "line": 26,
           "column": 2
         },
         {
@@ -46219,10 +48196,26 @@
         },
         {
           "from": "github.com/c360studio/semteams/test/contract",
+          "to": "github.com/nats-io/nats.go/jetstream",
+          "source_kind": "test",
+          "file": "test/contract/autoresearch_reply_integration_test.go",
+          "line": 27,
+          "column": 2
+        },
+        {
+          "from": "github.com/c360studio/semteams/test/contract",
           "to": "github.com/stretchr/testify/assert",
           "source_kind": "test",
           "file": "test/contract/config_dispatch_test.go",
           "line": 9,
+          "column": 2
+        },
+        {
+          "from": "github.com/c360studio/semteams/test/contract",
+          "to": "github.com/stretchr/testify/require",
+          "source_kind": "test",
+          "file": "test/contract/autoresearch_reply_integration_test.go",
+          "line": 28,
           "column": 2
         },
         {
@@ -46283,10 +48276,26 @@
         },
         {
           "from": "github.com/c360studio/semteams/test/contract",
+          "to": "io",
+          "source_kind": "test",
+          "file": "test/contract/autoresearch_reply_integration_test.go",
+          "line": 10,
+          "column": 2
+        },
+        {
+          "from": "github.com/c360studio/semteams/test/contract",
           "to": "log/slog",
           "source_kind": "test",
           "file": "test/contract/agentrun_registration_test.go",
           "line": 8,
+          "column": 2
+        },
+        {
+          "from": "github.com/c360studio/semteams/test/contract",
+          "to": "log/slog",
+          "source_kind": "test",
+          "file": "test/contract/autoresearch_reply_integration_test.go",
+          "line": 11,
           "column": 2
         },
         {
@@ -46303,6 +48312,14 @@
           "source_kind": "test",
           "file": "test/contract/agentrun_registration_test.go",
           "line": 9,
+          "column": 2
+        },
+        {
+          "from": "github.com/c360studio/semteams/test/contract",
+          "to": "os",
+          "source_kind": "test",
+          "file": "test/contract/autoresearch_reply_integration_test.go",
+          "line": 12,
           "column": 2
         },
         {
@@ -46645,6 +48662,14 @@
           "from": "github.com/c360studio/semteams/test/contract",
           "to": "strings",
           "source_kind": "test",
+          "file": "test/contract/autoresearch_reply_integration_test.go",
+          "line": 13,
+          "column": 2
+        },
+        {
+          "from": "github.com/c360studio/semteams/test/contract",
+          "to": "strings",
+          "source_kind": "test",
           "file": "test/contract/autoresearch_rule_pack_test.go",
           "line": 8,
           "column": 2
@@ -46775,6 +48800,14 @@
           "source_kind": "test",
           "file": "test/contract/agentrun_registration_test.go",
           "line": 12,
+          "column": 2
+        },
+        {
+          "from": "github.com/c360studio/semteams/test/contract",
+          "to": "testing",
+          "source_kind": "test",
+          "file": "test/contract/autoresearch_reply_integration_test.go",
+          "line": 14,
           "column": 2
         },
         {
@@ -46983,6 +49016,14 @@
           "source_kind": "test",
           "file": "test/contract/shared_work_protocol_contract_test.go",
           "line": 6,
+          "column": 2
+        },
+        {
+          "from": "github.com/c360studio/semteams/test/contract",
+          "to": "time",
+          "source_kind": "test",
+          "file": "test/contract/autoresearch_reply_integration_test.go",
+          "line": 15,
           "column": 2
         },
         {
@@ -79858,6 +81899,39 @@
         },
         {
           "package": "github.com/c360studio/semstreams/vocabulary",
+          "name": "DataTypeEntityID",
+          "declaration": "const github.com/c360studio/semstreams/vocabulary.DataTypeEntityID untyped string",
+          "declared_at": {
+            "file": "vocabulary/predicates.go",
+            "line": 355,
+            "column": 2
+          },
+          "references": [
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 52,
+              "column": 27,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 57,
+              "column": 27,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 62,
+              "column": 27,
+              "source_kind": "production",
+              "call": false
+            }
+          ]
+        },
+        {
+          "package": "github.com/c360studio/semstreams/vocabulary",
           "name": "PredicateMetadata",
           "declaration": "type github.com/c360studio/semstreams/vocabulary.PredicateMetadata struct{Name string; Description string; DataType string; Units string; Range string; Domain string; Category string; StandardIRI string; IsAlias bool; AliasType github.com/c360studio/semstreams/vocabulary.AliasType; AliasPriority int; InverseOf string; IsSymmetric bool; RuleOpaque bool; Role github.com/c360studio/semstreams/vocabulary.PredicateRole; Weight float64}",
           "declared_at": {
@@ -79908,42 +81982,42 @@
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 119,
+              "line": 115,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 124,
+              "line": 120,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 130,
+              "line": 125,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 132,
+              "line": 134,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 137,
+              "line": 139,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 142,
+              "line": 145,
               "column": 3,
               "source_kind": "production",
               "call": false
@@ -79951,6 +82025,13 @@
             {
               "file": "cmd/semteams/vocab/vocab.go",
               "line": 147,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 152,
               "column": 3,
               "source_kind": "production",
               "call": false
@@ -79965,13 +82046,6 @@
             {
               "file": "cmd/semteams/vocab/vocab.go",
               "line": 162,
-              "column": 3,
-              "source_kind": "production",
-              "call": false
-            },
-            {
-              "file": "cmd/semteams/vocab/vocab.go",
-              "line": 167,
               "column": 3,
               "source_kind": "production",
               "call": false
@@ -80013,35 +82087,56 @@
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 199,
+              "line": 197,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 204,
+              "line": 202,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 215,
+              "line": 207,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 222,
+              "line": 214,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 227,
+              "line": 219,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 230,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 237,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 242,
               "column": 3,
               "source_kind": "production",
               "call": false
@@ -80165,49 +82260,56 @@
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 120,
+              "line": 116,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 125,
+              "line": 121,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 130,
+              "line": 126,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 135,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 140,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 145,
               "column": 43,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 133,
-              "column": 3,
-              "source_kind": "production",
-              "call": false
-            },
-            {
-              "file": "cmd/semteams/vocab/vocab.go",
-              "line": 138,
-              "column": 3,
-              "source_kind": "production",
-              "call": false
-            },
-            {
-              "file": "cmd/semteams/vocab/vocab.go",
-              "line": 143,
-              "column": 3,
-              "source_kind": "production",
-              "call": false
-            },
-            {
-              "file": "cmd/semteams/vocab/vocab.go",
               "line": 148,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 153,
               "column": 3,
               "source_kind": "production",
               "call": false
@@ -80222,13 +82324,6 @@
             {
               "file": "cmd/semteams/vocab/vocab.go",
               "line": 163,
-              "column": 3,
-              "source_kind": "production",
-              "call": false
-            },
-            {
-              "file": "cmd/semteams/vocab/vocab.go",
-              "line": 168,
               "column": 3,
               "source_kind": "production",
               "call": false
@@ -80270,35 +82365,56 @@
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 200,
+              "line": 198,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 205,
+              "line": 203,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 216,
+              "line": 208,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 223,
+              "line": 215,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 228,
+              "line": 220,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 231,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 238,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 243,
               "column": 3,
               "source_kind": "production",
               "call": false
@@ -80422,49 +82538,56 @@
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 121,
+              "line": 117,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 126,
+              "line": 122,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 130,
+              "line": 127,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 136,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 141,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 145,
               "column": 115,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 134,
-              "column": 3,
-              "source_kind": "production",
-              "call": false
-            },
-            {
-              "file": "cmd/semteams/vocab/vocab.go",
-              "line": 139,
-              "column": 3,
-              "source_kind": "production",
-              "call": false
-            },
-            {
-              "file": "cmd/semteams/vocab/vocab.go",
-              "line": 144,
-              "column": 3,
-              "source_kind": "production",
-              "call": false
-            },
-            {
-              "file": "cmd/semteams/vocab/vocab.go",
               "line": 149,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 154,
               "column": 3,
               "source_kind": "production",
               "call": false
@@ -80479,13 +82602,6 @@
             {
               "file": "cmd/semteams/vocab/vocab.go",
               "line": 164,
-              "column": 3,
-              "source_kind": "production",
-              "call": false
-            },
-            {
-              "file": "cmd/semteams/vocab/vocab.go",
-              "line": 169,
               "column": 3,
               "source_kind": "production",
               "call": false
@@ -80527,35 +82643,56 @@
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 201,
+              "line": 199,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 206,
+              "line": 204,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 217,
+              "line": 209,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 224,
+              "line": 216,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 229,
+              "line": 221,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 232,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 239,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 244,
               "column": 3,
               "source_kind": "production",
               "call": false
@@ -122396,6 +124533,39 @@
         },
         {
           "package": "github.com/c360studio/semstreams/vocabulary",
+          "name": "DataTypeEntityID",
+          "declaration": "const github.com/c360studio/semstreams/vocabulary.DataTypeEntityID untyped string",
+          "declared_at": {
+            "file": "vocabulary/predicates.go",
+            "line": 355,
+            "column": 2
+          },
+          "references": [
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 52,
+              "column": 27,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 57,
+              "column": 27,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 62,
+              "column": 27,
+              "source_kind": "production",
+              "call": false
+            }
+          ]
+        },
+        {
+          "package": "github.com/c360studio/semstreams/vocabulary",
           "name": "PredicateMetadata",
           "declaration": "type github.com/c360studio/semstreams/vocabulary.PredicateMetadata struct{Name string; Description string; DataType string; Units string; Range string; Domain string; Category string; StandardIRI string; IsAlias bool; AliasType github.com/c360studio/semstreams/vocabulary.AliasType; AliasPriority int; InverseOf string; IsSymmetric bool; RuleOpaque bool; Role github.com/c360studio/semstreams/vocabulary.PredicateRole; Weight float64}",
           "declared_at": {
@@ -122446,42 +124616,42 @@
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 119,
+              "line": 115,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 124,
+              "line": 120,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 130,
+              "line": 125,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 132,
+              "line": 134,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 137,
+              "line": 139,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 142,
+              "line": 145,
               "column": 3,
               "source_kind": "production",
               "call": false
@@ -122489,6 +124659,13 @@
             {
               "file": "cmd/semteams/vocab/vocab.go",
               "line": 147,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 152,
               "column": 3,
               "source_kind": "production",
               "call": false
@@ -122503,13 +124680,6 @@
             {
               "file": "cmd/semteams/vocab/vocab.go",
               "line": 162,
-              "column": 3,
-              "source_kind": "production",
-              "call": false
-            },
-            {
-              "file": "cmd/semteams/vocab/vocab.go",
-              "line": 167,
               "column": 3,
               "source_kind": "production",
               "call": false
@@ -122551,35 +124721,56 @@
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 199,
+              "line": 197,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 204,
+              "line": 202,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 215,
+              "line": 207,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 222,
+              "line": 214,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 227,
+              "line": 219,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 230,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 237,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 242,
               "column": 3,
               "source_kind": "production",
               "call": false
@@ -122703,49 +124894,56 @@
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 120,
+              "line": 116,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 125,
+              "line": 121,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 130,
+              "line": 126,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 135,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 140,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 145,
               "column": 43,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 133,
-              "column": 3,
-              "source_kind": "production",
-              "call": false
-            },
-            {
-              "file": "cmd/semteams/vocab/vocab.go",
-              "line": 138,
-              "column": 3,
-              "source_kind": "production",
-              "call": false
-            },
-            {
-              "file": "cmd/semteams/vocab/vocab.go",
-              "line": 143,
-              "column": 3,
-              "source_kind": "production",
-              "call": false
-            },
-            {
-              "file": "cmd/semteams/vocab/vocab.go",
               "line": 148,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 153,
               "column": 3,
               "source_kind": "production",
               "call": false
@@ -122760,13 +124958,6 @@
             {
               "file": "cmd/semteams/vocab/vocab.go",
               "line": 163,
-              "column": 3,
-              "source_kind": "production",
-              "call": false
-            },
-            {
-              "file": "cmd/semteams/vocab/vocab.go",
-              "line": 168,
               "column": 3,
               "source_kind": "production",
               "call": false
@@ -122808,35 +124999,56 @@
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 200,
+              "line": 198,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 205,
+              "line": 203,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 216,
+              "line": 208,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 223,
+              "line": 215,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 228,
+              "line": 220,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 231,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 238,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 243,
               "column": 3,
               "source_kind": "production",
               "call": false
@@ -122960,49 +125172,56 @@
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 121,
+              "line": 117,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 126,
+              "line": 122,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 130,
+              "line": 127,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 136,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 141,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 145,
               "column": 115,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 134,
-              "column": 3,
-              "source_kind": "production",
-              "call": false
-            },
-            {
-              "file": "cmd/semteams/vocab/vocab.go",
-              "line": 139,
-              "column": 3,
-              "source_kind": "production",
-              "call": false
-            },
-            {
-              "file": "cmd/semteams/vocab/vocab.go",
-              "line": 144,
-              "column": 3,
-              "source_kind": "production",
-              "call": false
-            },
-            {
-              "file": "cmd/semteams/vocab/vocab.go",
               "line": 149,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 154,
               "column": 3,
               "source_kind": "production",
               "call": false
@@ -123017,13 +125236,6 @@
             {
               "file": "cmd/semteams/vocab/vocab.go",
               "line": 164,
-              "column": 3,
-              "source_kind": "production",
-              "call": false
-            },
-            {
-              "file": "cmd/semteams/vocab/vocab.go",
-              "line": 169,
               "column": 3,
               "source_kind": "production",
               "call": false
@@ -123065,35 +125277,56 @@
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 201,
+              "line": 199,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 206,
+              "line": 204,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 217,
+              "line": 209,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 224,
+              "line": 216,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 229,
+              "line": 221,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 232,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 239,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 244,
               "column": 3,
               "source_kind": "production",
               "call": false
@@ -148283,6 +150516,39 @@
         },
         {
           "package": "github.com/c360studio/semstreams/vocabulary",
+          "name": "DataTypeEntityID",
+          "declaration": "const github.com/c360studio/semstreams/vocabulary.DataTypeEntityID untyped string",
+          "declared_at": {
+            "file": "vocabulary/predicates.go",
+            "line": 355,
+            "column": 2
+          },
+          "references": [
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 52,
+              "column": 27,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 57,
+              "column": 27,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 62,
+              "column": 27,
+              "source_kind": "production",
+              "call": false
+            }
+          ]
+        },
+        {
+          "package": "github.com/c360studio/semstreams/vocabulary",
           "name": "PredicateMetadata",
           "declaration": "type github.com/c360studio/semstreams/vocabulary.PredicateMetadata struct{Name string; Description string; DataType string; Units string; Range string; Domain string; Category string; StandardIRI string; IsAlias bool; AliasType github.com/c360studio/semstreams/vocabulary.AliasType; AliasPriority int; InverseOf string; IsSymmetric bool; RuleOpaque bool; Role github.com/c360studio/semstreams/vocabulary.PredicateRole; Weight float64}",
           "declared_at": {
@@ -148333,42 +150599,42 @@
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 119,
+              "line": 115,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 124,
+              "line": 120,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 130,
+              "line": 125,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 132,
+              "line": 134,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 137,
+              "line": 139,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 142,
+              "line": 145,
               "column": 3,
               "source_kind": "production",
               "call": false
@@ -148376,6 +150642,13 @@
             {
               "file": "cmd/semteams/vocab/vocab.go",
               "line": 147,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 152,
               "column": 3,
               "source_kind": "production",
               "call": false
@@ -148390,13 +150663,6 @@
             {
               "file": "cmd/semteams/vocab/vocab.go",
               "line": 162,
-              "column": 3,
-              "source_kind": "production",
-              "call": false
-            },
-            {
-              "file": "cmd/semteams/vocab/vocab.go",
-              "line": 167,
               "column": 3,
               "source_kind": "production",
               "call": false
@@ -148438,35 +150704,56 @@
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 199,
+              "line": 197,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 204,
+              "line": 202,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 215,
+              "line": 207,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 222,
+              "line": 214,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 227,
+              "line": 219,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 230,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 237,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 242,
               "column": 3,
               "source_kind": "production",
               "call": false
@@ -148590,49 +150877,56 @@
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 120,
+              "line": 116,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 125,
+              "line": 121,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 130,
+              "line": 126,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 135,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 140,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 145,
               "column": 43,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 133,
-              "column": 3,
-              "source_kind": "production",
-              "call": false
-            },
-            {
-              "file": "cmd/semteams/vocab/vocab.go",
-              "line": 138,
-              "column": 3,
-              "source_kind": "production",
-              "call": false
-            },
-            {
-              "file": "cmd/semteams/vocab/vocab.go",
-              "line": 143,
-              "column": 3,
-              "source_kind": "production",
-              "call": false
-            },
-            {
-              "file": "cmd/semteams/vocab/vocab.go",
               "line": 148,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 153,
               "column": 3,
               "source_kind": "production",
               "call": false
@@ -148647,13 +150941,6 @@
             {
               "file": "cmd/semteams/vocab/vocab.go",
               "line": 163,
-              "column": 3,
-              "source_kind": "production",
-              "call": false
-            },
-            {
-              "file": "cmd/semteams/vocab/vocab.go",
-              "line": 168,
               "column": 3,
               "source_kind": "production",
               "call": false
@@ -148695,35 +150982,56 @@
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 200,
+              "line": 198,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 205,
+              "line": 203,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 216,
+              "line": 208,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 223,
+              "line": 215,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 228,
+              "line": 220,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 231,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 238,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 243,
               "column": 3,
               "source_kind": "production",
               "call": false
@@ -148847,49 +151155,56 @@
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 121,
+              "line": 117,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 126,
+              "line": 122,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 130,
+              "line": 127,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 136,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 141,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 145,
               "column": 115,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 134,
-              "column": 3,
-              "source_kind": "production",
-              "call": false
-            },
-            {
-              "file": "cmd/semteams/vocab/vocab.go",
-              "line": 139,
-              "column": 3,
-              "source_kind": "production",
-              "call": false
-            },
-            {
-              "file": "cmd/semteams/vocab/vocab.go",
-              "line": 144,
-              "column": 3,
-              "source_kind": "production",
-              "call": false
-            },
-            {
-              "file": "cmd/semteams/vocab/vocab.go",
               "line": 149,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 154,
               "column": 3,
               "source_kind": "production",
               "call": false
@@ -148904,13 +151219,6 @@
             {
               "file": "cmd/semteams/vocab/vocab.go",
               "line": 164,
-              "column": 3,
-              "source_kind": "production",
-              "call": false
-            },
-            {
-              "file": "cmd/semteams/vocab/vocab.go",
-              "line": 169,
               "column": 3,
               "source_kind": "production",
               "call": false
@@ -148952,35 +151260,56 @@
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 201,
+              "line": 199,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 206,
+              "line": 204,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 217,
+              "line": 209,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 224,
+              "line": 216,
               "column": 3,
               "source_kind": "production",
               "call": false
             },
             {
               "file": "cmd/semteams/vocab/vocab.go",
-              "line": 229,
+              "line": 221,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 232,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 239,
+              "column": 3,
+              "source_kind": "production",
+              "call": false
+            },
+            {
+              "file": "cmd/semteams/vocab/vocab.go",
+              "line": 244,
               "column": 3,
               "source_kind": "production",
               "call": false

@@ -5,12 +5,15 @@ Scope: working-tree changes from `ce22c961` on `codex/semstreams-frozen-8b99efe`
 Framework: `v1.0.0-beta.162.0.20260930150212-8b99efe9c66a` at SHA
 `8b99efe9c66a4faa4fa509f9f62cc6bad8392128`.
 
-**Status: scoped Go code approval; no remaining Go code findings. Migration adoption remains blocked by Q1 below.**
-The approval-ordering defect and both follow-up protocol findings are repaired and independently re-reviewed.
-Final local Go lint, race, integration, build and schema-generation gates passed. The real graph-owner approval
-browser journey also passed. The remaining browser matrix, independent frontend review, hosted gates and generated
-file cleanliness after the content commit are separate qualifications; this is not overall migration readiness.
-SemSource-backed dogfooding stays held. A later SemEngine switch requires its own approved consumer contract.
+**Current status: scoped Go code approval, including the autoresearch repair; no unresolved Go code findings.**
+The approval-ordering findings and the later SemTeams-only origin return repair are approved. Historical Q1 below
+records the original routing failure; it is superseded by the [approved repair review](autoresearch-repair-review.md)
+and the focused browser evidence linked from [Go validation](go-validation.md#autoresearch-terminal-repair).
+The [repair full gates](go-validation.md#final-repair-go-gates) and hosted implementation CI passed; current lint
+reports six warnings and zero errors. Earlier seven-warning gates and source/image hashes below are historical.
+The expanded browser matrix and final documentation/archive checks remain separate qualifications; this code review
+is not an overall migration-readiness assertion. SemSource-backed dogfooding stays held. A later SemEngine switch
+requires its own approved consumer contract.
 
 ## Closed findings and framework-alignment decision
 
@@ -79,7 +82,7 @@ Selected-run command tests retain frozen `errs.ClassifiedError` codes for `inval
 and missing owner refuse without graph read/write. Error wrapping preserves `errors.As`, code and classification.
 This qualifies owner lookup without activating the parked implementation lane.
 
-## Compatibility scope reviewed
+## Initial compatibility scope reviewed — historical snapshot
 
 - Bootstrap constructs one public rule ConfigManager, registers its key family before configuration startup and shares
   it with tool executors. The product rule-config service mirrors the frozen composition-root adapter through public
@@ -104,13 +107,17 @@ resume marker. It does not establish restart recovery: Core-NATS event loss rema
 The new receipt format requires fresh NATS/graph state. Retained beta.160 loop-reference markers are incompatible;
 no dual reader, retained-state conversion or production wipe is authorized or claimed.
 
-## Validation and source identity
+## Pre-repair validation and source identity — historical snapshot
+
+This section retains the initial approval-projection qualification before the autoresearch return repair. Its
+seven-warning count, 42-rule composition and image/source identities are not the current repair snapshot. Use
+[final repair Go gates](go-validation.md#final-repair-go-gates) for the six-warning result and current evidence.
 
 The reviewer inspected recorded full-suite evidence and independently ran focused regressions instead of duplicating
-all infrastructure runs. Final gate manifest:
+all infrastructure runs. Historical gate manifest:
 `/tmp/semteams-migration-8b99efe/evidence/final-go-gates.json`.
 
-| Final local gate | Result |
+| Historical local gate | Result |
 | --- | --- |
 | `task lint` | Exit 0; 0 errors, 7 warnings (baseline: 5 warnings) |
 | `task test:race` | Exit 0 |
@@ -156,10 +163,11 @@ outstanding=0, a completed research run and one typed final user response. The m
 `stmig162`, port 33162 and exact derived configuration/compose hashes. It closes the deployed graph-owner/rule boundary
 gap; the rest of the final browser matrix was still running at this review's signoff.
 
-## Q1 — adoption blocker: autoresearch final delivery loses typed ancestry
+## Q1 — historical adoption blocker, superseded by the approved origin return repair
 
-The empirical autoresearch run can complete without delivering the final coordinator reply to the initiating channel.
-This is distinct from evidence-body rendering limitation #261. It remains unresolved by these correct Go changes.
+Before the repair, the empirical autoresearch run could complete without delivering the final coordinator reply
+to the initiating channel. This was distinct from evidence-body rendering limitation #261. The observations below
+are retained red evidence, not a current unresolved code finding.
 
 The reviewer inspected `/tmp/semteams-migration-8b99efe/evidence/target-browser/autoresearch/final-state.json`:
 sequence 157's synthesize task lacks both `parent_loop_id` and `run_id`, though related-loops metadata survives.
@@ -173,30 +181,37 @@ RunID through `agent.loop.run`. Rule 05 fires from the run entity. Frozen
 `route_less_settled`; the typed route resolver does not use arbitrary related-loops metadata. No supported explicit
 parent/run override preserving this run-triggered product protocol was found.
 
-This is an unresolved consumer-contract gap under intended frozen typed-routing semantics. A supported reauthoring
-must preserve iteration counters, keep/revert behavior and run ownership. Do not stamp the loop-owned `agent.loop.run`
-predicate onto a chain/run, add a generic user-response publisher shim, move the frozen SHA, or count completed loops
-as successful user delivery. Code approval does not waive this adoption blocker.
+The subsequent SemTeams-only repair preserves the run-local iteration state and uses existing rule facts to return
+through the authoritative origin coordinator. It supplies native ancestry without stamping `agent.loop.run` onto a
+run, adding a response publisher shim, changing the frozen SHA or requiring a SemStreams change. The
+[repair review](autoresearch-repair-review.md) records current approval and bounded guarantees. The
+[historical blocker record](autoresearch-terminal-blocker.md) links the reproduced failure to its repair evidence;
+completed loops alone were never accepted as proof of user delivery.
 
-## New lint warning disposition
+## Initial lint warning disposition — historical snapshot
 
-Final lint reports zero errors and seven warnings; the beta.160 baseline has five. The two new warnings are in
+The pre-repair lint run reported zero errors and seven warnings; the beta.160 baseline had five. Its two additions were in
 `cmd/semteams/approvalpause/projection.go`. They are reviewed low-priority maintainability findings, not preexisting
 warnings or unresolved behavioral defects. Scoped code approval remains valid with these explicit dispositions,
 tracked with [migration #280](https://github.com/C360Studio/semteams/issues/280):
 
 - `redefines-builtin-id`, line 202: the local `copy` variable shadows the builtin only within the outstanding-fact
-  branch. No builtin call occurs there, and taking its address preserves the existing fact's annotations. Rename it
-  to `existingCount` during the next approved source-edit cycle. This cosmetic cleanup is deferred to preserve the
-  frozen source/image identity used by the final qualification run; it does not justify rebuilding that evidence alone.
+  branch. No builtin call occurred there, and taking its address preserved the existing fact's annotations. The
+  approved autoresearch repair renamed it to `existingCount`; the warning is resolved in the current six-warning gate.
+  Its initial deferral preserved the earlier source/image qualification snapshot, which remains historical evidence.
 - `function-length`, line 65: `RecordApproval` has 52 statements against a threshold of 50. Accepted without a required
   refactor: the function keeps the exact read, revision fence, bounded retry and receipt classification together.
   Extracting a generic mutation helper solely to meet the count would obscure this domain boundary. Revisit structure
   only if behavior grows or the upstream public projection API removes the adapter.
 
-Neither warning is suppressed. This disposition waives no failed gate, behavioral defect or adoption blocker.
+Neither warning was suppressed. The function-length disposition remains current; the shadowed-variable finding is
+resolved. These dispositions waive no failed gate or behavioral defect.
 
-## Framework footprint method 2 review
+## Initial framework footprint method 2 review — historical snapshot
+
+The table below records the earlier method-2 snapshot. The repair adds rule references and tests; the current
+matched measurements and their method limits are in [framework footprint](framework-footprint.md). Do not treat
+the historical table as the current dependency total.
 
 The script and both final method-2 JSON reports were independently inspected. Declaration file/line/column prevents
 same-named fields from merging. Direct import sites, production/test reference positions, package/module closures,
@@ -225,3 +240,35 @@ is not an exact API-call census. Import counts are source declaration sites, not
 and compiled donor code do not prove active product requirements or expand SemEngine's first release. Use the matched
 [baseline](framework-footprint-beta160-v2.json) and [target](framework-footprint-frozen-v2.json) reports.
 Earlier method-1 counts are historical and must not be used for the final comparison.
+
+
+## Autoresearch return repair review
+
+The follow-up SemTeams-only origin return rules, declared reply-source facts, cap-above-three compatibility change
+and associated Go contract tests received scoped implementation approval. The reviewer authored the design but did
+not implement the reviewed production rules or tests. The [repair review](autoresearch-repair-review.md) records
+resolved exact-one anchor guards, native child admission for terminal runs, the narrow idempotent-Mint exception,
+independent race/integration results and the preserved limitation-reply lifecycle policy. Actual browser delivery
+and final full gates remain separate qualification requirements; the earlier blocker history is not erased.
+
+
+## Final API consistency check: result lookup accepts full loop entity IDs
+
+The new origin-return prompts pass the full canonical source loop entity ID to `read_loop_result`. This matches
+its frozen public contract. `processor/agentic-tools/loop_result.go:70-72` explicitly advertises both bare UUIDs and
+full six-part entity IDs. The executor normalizes the input before reading `COMPLETE_<uuid>`; lines 164-186 define
+that normalization. `loop_result_test.go:343-374` exercises a canonical full entity ID through the executor and
+asserts both returned content and normalized loop metadata.
+
+The reviewer independently ran that existing frozen regression from the product's pinned module graph:
+
+```bash
+go test github.com/c360studio/semstreams/processor/agentic-tools \
+  -run '^TestReadLoopResultExecutor_FullEntityIDLoopArg$' -count=1
+```
+
+It passed in 0.342 seconds on Go 1.26.4, darwin/arm64. The
+[retained output](evidence/go/repair/full-entity-loop-result-review.log) records the result. This is executor-contract
+proof using the upstream test fixture; it does not claim the final-only-`decide` mock coordinator exercised a real
+result-lookup tool call. No rule change or SemStreams change is needed. The earlier replay, Mint fallback,
+cancellation-ordering and limitation-reply qualifications remain in force.

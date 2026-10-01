@@ -1,0 +1,370 @@
+{
+  "scope": "Paired autoresearch fixture runtime warnings: corrected beta.160, frozen before repair, and focused repair. Existing prompt defects do not invalidate measured mock orchestration, but prohibit claiming live-model grounding quality.",
+  "runs": {
+    "beta160": [
+      {
+        "time": "2026-10-01T12:41:51.114170881Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/rule.(*ExecutionContext).warnUnresolvedTemplateVars",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.160/processor/rule/execution_context.go",
+          "line": 835
+        },
+        "msg": "Unresolved template variables in rule substitution \u2014 likely silent-pass bug",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "unresolved": [
+          "$entity.triple.autoresearch.best.value"
+        ],
+        "template": "AUTORESEARCH EXECUTE \u2014 measure the proposed diff and let the empirical compare route the outcome.\n\nThe propose phase at loop $entity.instance applied a diff within the surface. Your job is exactly three things: run the measurement command, capture the metric, call the empirical-compare emit tool. You do NOT decide whether to keep or revert \u2014 the emit tool's executor reads the run entity's autoresearch.best.value, compares numerically, and stamps the outcome on your loop. Then the bash revert/keep step happens based on what outcome the tool stamped.\n\nMEASUREMENT CONTEXT (inlined at spawn \u2014 do NOT re-fetch via read_loop_result):\n\n- command: $entity.triple.agent.lineage.command\n- surface: $entity.triple.agent.lineage.surface\n- metric_parser: $entity.triple.agent.lineage.metric-parser\n\nIteration 1 \u2014 call read_loop_result on $entity.instance (the propose loop) for the hypothesis + diff summary. The reason field carries: hypothesis, surface-bounded edits, expected qualitative effect.\n\nIteration 2 \u2014 bash: run the command verbatim above. Capture stdout + exit code. Apply the metric_parser instructions to extract a single numeric value.\n\nIteration 3 \u2014 call emit_autoresearch_measurement with the measurement:\n\n```\nemit_autoresearch_measurement(\n  value=<measured number>,\n  pass=<bool \u2014 true iff exit code 0>,\n  stdout_tail=\"<last ~200 chars for audit>\",\n  stderr_tail=\"<last ~200 chars if any>\"\n)\n```\n\nThe tool executor (product-shell) does the empirical compare:\n\n1. Reads $entity.triple.autoresearch.best.value from the run entity.\n2. If pass=false \u2192 stamps outcome=crashed on your loop.\n3. Else if value < best.value \u2192 stamps outcome=kept on your loop AND updates autoresearch.best.value + .best.experiment_id on the run entity.\n4. Else \u2192 stamps outcome=reverted on your loop.\n\nThe outcome is on your loop's autoresearch.measurement.outcome triple after this call returns.\n\nIteration 4 \u2014 depending on the stamped outcome, revert or keep:\n\n- **outcome=kept**: the diff stays. No action.\n- **outcome=reverted OR outcome=crashed**: revert the working tree via `git checkout -- <surface globs from above>`. This restores the tree to its state before propose applied the diff.\n\nReverting after the empirical compare keeps the working tree at the running-best state so the next propose iteration applies its diff against the same reference as prior iterations.\n\nIteration 5 \u2014 call decide(action=\"measured\", reason=\"value=<n> pass=<bool> outcome=<kept|reverted|crashed> \u2014 <one-line measurement summary>\"). Rule 04 fires on this and stamps experiment.completed on the run entity. Rule 05 fires next based on the accumulated count (continue or cap-exhaust synthesize).\n\nIf the measurement command itself crashes catastrophically (sandbox unreachable, command not found), call decide(action=\"needs_clarification\", reason=\"execute environment failure: <specific reason>\") \u2014 recovery routes to coordinator. Distinguish: command exit code non-zero with stdout is a `pass=false` measurement (the tool stamps outcome=crashed, iteration counts toward cap). Sandbox unreachable / framework-level failure is needs_clarification.",
+        "rule_id": "autoresearch_propose_to_execute",
+        "entity_id": "c360.bootstrap-e2e-001.agent.agentic-loop.execution.c3f97aa6-a420-464f-89c6-8f8f46f49133"
+      },
+      {
+        "time": "2026-10-01T12:41:51.229865756Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/rule.(*ExecutionContext).substituteVariablesWith.(*ExecutionContext).applyTripleLengthSubstitutions.func2",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.160/processor/rule/execution_context.go",
+          "line": 488
+        },
+        "msg": "triple-length substitution: Object is not list-shaped; replacing token with error sentinel",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "token": "$entity.triple.autoresearch.experiment.completed.length",
+        "predicate": "autoresearch.experiment.completed",
+        "object_type": "string",
+        "rule_id": "autoresearch_iteration_dispatch",
+        "hint": "the .length suffix requires the triple Object to be []string, []any, or a JSON-encoded list string \u2014 see coerceTripleObjectToStrings"
+      },
+      {
+        "time": "2026-10-01T12:41:51.281916173Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/rule.(*ExecutionContext).warnUnresolvedTemplateVars",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.160/processor/rule/execution_context.go",
+          "line": 835
+        },
+        "msg": "Unresolved template variables in rule substitution \u2014 likely silent-pass bug",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "unresolved": [
+          "$entity.triple.autoresearch.best.value"
+        ],
+        "template": "AUTORESEARCH EXECUTE \u2014 measure the proposed diff and let the empirical compare route the outcome.\n\nThe propose phase at loop $entity.instance applied a diff within the surface. Your job is exactly three things: run the measurement command, capture the metric, call the empirical-compare emit tool. You do NOT decide whether to keep or revert \u2014 the emit tool's executor reads the run entity's autoresearch.best.value, compares numerically, and stamps the outcome on your loop. Then the bash revert/keep step happens based on what outcome the tool stamped.\n\nMEASUREMENT CONTEXT (inlined at spawn \u2014 do NOT re-fetch via read_loop_result):\n\n- command: $entity.triple.agent.lineage.command\n- surface: $entity.triple.agent.lineage.surface\n- metric_parser: $entity.triple.agent.lineage.metric-parser\n\nIteration 1 \u2014 call read_loop_result on $entity.instance (the propose loop) for the hypothesis + diff summary. The reason field carries: hypothesis, surface-bounded edits, expected qualitative effect.\n\nIteration 2 \u2014 bash: run the command verbatim above. Capture stdout + exit code. Apply the metric_parser instructions to extract a single numeric value.\n\nIteration 3 \u2014 call emit_autoresearch_measurement with the measurement:\n\n```\nemit_autoresearch_measurement(\n  value=<measured number>,\n  pass=<bool \u2014 true iff exit code 0>,\n  stdout_tail=\"<last ~200 chars for audit>\",\n  stderr_tail=\"<last ~200 chars if any>\"\n)\n```\n\nThe tool executor (product-shell) does the empirical compare:\n\n1. Reads $entity.triple.autoresearch.best.value from the run entity.\n2. If pass=false \u2192 stamps outcome=crashed on your loop.\n3. Else if value < best.value \u2192 stamps outcome=kept on your loop AND updates autoresearch.best.value + .best.experiment_id on the run entity.\n4. Else \u2192 stamps outcome=reverted on your loop.\n\nThe outcome is on your loop's autoresearch.measurement.outcome triple after this call returns.\n\nIteration 4 \u2014 depending on the stamped outcome, revert or keep:\n\n- **outcome=kept**: the diff stays. No action.\n- **outcome=reverted OR outcome=crashed**: revert the working tree via `git checkout -- <surface globs from above>`. This restores the tree to its state before propose applied the diff.\n\nReverting after the empirical compare keeps the working tree at the running-best state so the next propose iteration applies its diff against the same reference as prior iterations.\n\nIteration 5 \u2014 call decide(action=\"measured\", reason=\"value=<n> pass=<bool> outcome=<kept|reverted|crashed> \u2014 <one-line measurement summary>\"). Rule 04 fires on this and stamps experiment.completed on the run entity. Rule 05 fires next based on the accumulated count (continue or cap-exhaust synthesize).\n\nIf the measurement command itself crashes catastrophically (sandbox unreachable, command not found), call decide(action=\"needs_clarification\", reason=\"execute environment failure: <specific reason>\") \u2014 recovery routes to coordinator. Distinguish: command exit code non-zero with stdout is a `pass=false` measurement (the tool stamps outcome=crashed, iteration counts toward cap). Sandbox unreachable / framework-level failure is needs_clarification.",
+        "rule_id": "autoresearch_propose_to_execute",
+        "entity_id": "c360.bootstrap-e2e-001.agent.agentic-loop.execution.42f772f3-7b9f-45a2-885d-8de68ee631ac"
+      },
+      {
+        "time": "2026-10-01T12:41:51.395132423Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/rule.(*ExecutionContext).substituteVariablesWith.(*ExecutionContext).applyTripleLengthSubstitutions.func2",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.160/processor/rule/execution_context.go",
+          "line": 488
+        },
+        "msg": "triple-length substitution: Object is not list-shaped; replacing token with error sentinel",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "token": "$entity.triple.autoresearch.experiment.completed.length",
+        "predicate": "autoresearch.experiment.completed",
+        "object_type": "string",
+        "rule_id": "autoresearch_iteration_dispatch",
+        "hint": "the .length suffix requires the triple Object to be []string, []any, or a JSON-encoded list string \u2014 see coerceTripleObjectToStrings"
+      },
+      {
+        "time": "2026-10-01T12:41:51.505707423Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/rule.(*ExecutionContext).warnUnresolvedTemplateVars",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.160/processor/rule/execution_context.go",
+          "line": 835
+        },
+        "msg": "Unresolved template variables in rule substitution \u2014 likely silent-pass bug",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "unresolved": [
+          "$entity.triple.autoresearch.artifact.path"
+        ],
+        "template": "The autoresearch chain you dispatched has reached its terminal. Reviewer-autoresearch at loop $entity.instance evaluated the autoresearch artifact and approved it.\n\nYour job now is to deliver the result to the user. You are not classifying or delegating \u2014 the chain has already done the work.\n\nIteration 1 \u2014 call read_loop_result(loop_id=$entity.instance) to read the reviewer's structured verdict. The reviewer's reason summarises the run shape: iterations completed, baseline vs best, improvement percentage. If the reviewer's loop entity carries autoresearch.artifact.path, the structured artifact lives at that path \u2014 you may `bash cat $entity.triple.autoresearch.artifact.path` to read the full rollup (journey, kept diffs, open opportunities) if the reviewer's prose is too terse for a user-facing reply.\n\nIteration 2 \u2014 call decide(action=\"respond_direct\", reason=\"<your synthesised user-facing answer>\"). The respond_direct rule publishes your reason on the user-response bus.\n\nWrite the reason as plain prose addressing the user directly. The user asked for an optimization run; tell them what happened: did the metric improve, by how much, what the best change was, whether the run plateaued or hit the cap, what's left to try. Don't dump the full journey \u2014 pick the substantive headline. 3-6 sentences is usually right.",
+        "rule_id": "autoresearch_reviewer_approved_to_coordinator",
+        "entity_id": "c360.bootstrap-e2e-001.agent.agentic-loop.execution.311c2ef5-a43d-43da-830f-fb8cb25df66b"
+      }
+    ],
+    "frozen-before-repair": [
+      {
+        "time": "2026-10-01T12:54:14.802903919Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/rule.(*ExecutionContext).warnUnresolvedTemplateVars",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/rule/execution_context.go",
+          "line": 841
+        },
+        "msg": "Unresolved template variables in rule substitution \u2014 likely silent-pass bug",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "unresolved": [
+          "$entity.triple.autoresearch.best.value"
+        ],
+        "template": "AUTORESEARCH EXECUTE \u2014 measure the proposed diff and let the empirical compare route the outcome.\n\nThe propose phase at loop $entity.instance applied a diff within the surface. Your job is exactly three things: run the measurement command, capture the metric, call the empirical-compare emit tool. You do NOT decide whether to keep or revert \u2014 the emit tool's executor reads the run entity's autoresearch.best.value, compares numerically, and stamps the outcome on your loop. Then the bash revert/keep step happens based on what outcome the tool stamped.\n\nMEASUREMENT CONTEXT (inlined at spawn \u2014 do NOT re-fetch via read_loop_result):\n\n- command: $entity.triple.agent.lineage.command\n- surface: $entity.triple.agent.lineage.surface\n- metric_parser: $entity.triple.agent.lineage.metric-parser\n\nIteration 1 \u2014 call read_loop_result on $entity.instance (the propose loop) for the hypothesis + diff summary. The reason field carries: hypothesis, surface-bounded edits, expected qualitative effect.\n\nIteration 2 \u2014 bash: run the command verbatim above. Capture stdout + exit code. Apply the metric_parser instructions to extract a single numeric value.\n\nIteration 3 \u2014 call emit_autoresearch_measurement with the measurement:\n\n```\nemit_autoresearch_measurement(\n  value=<measured number>,\n  pass=<bool \u2014 true iff exit code 0>,\n  stdout_tail=\"<last ~200 chars for audit>\",\n  stderr_tail=\"<last ~200 chars if any>\"\n)\n```\n\nThe tool executor (product-shell) does the empirical compare:\n\n1. Reads $entity.triple.autoresearch.best.value from the run entity.\n2. If pass=false \u2192 stamps outcome=crashed on your loop.\n3. Else if value < best.value \u2192 stamps outcome=kept on your loop AND updates autoresearch.best.value + .best.experiment_id on the run entity.\n4. Else \u2192 stamps outcome=reverted on your loop.\n\nThe outcome is on your loop's autoresearch.measurement.outcome triple after this call returns.\n\nIteration 4 \u2014 depending on the stamped outcome, revert or keep:\n\n- **outcome=kept**: the diff stays. No action.\n- **outcome=reverted OR outcome=crashed**: revert the working tree via `git checkout -- <surface globs from above>`. This restores the tree to its state before propose applied the diff.\n\nReverting after the empirical compare keeps the working tree at the running-best state so the next propose iteration applies its diff against the same reference as prior iterations.\n\nIteration 5 \u2014 call decide(action=\"measured\", reason=\"value=<n> pass=<bool> outcome=<kept|reverted|crashed> \u2014 <one-line measurement summary>\"). Rule 04 fires on this and stamps experiment.completed on the run entity. Rule 05 fires next based on the accumulated count (continue or cap-exhaust synthesize).\n\nIf the measurement command itself crashes catastrophically (sandbox unreachable, command not found), call decide(action=\"needs_clarification\", reason=\"execute environment failure: <specific reason>\") \u2014 recovery routes to coordinator. Distinguish: command exit code non-zero with stdout is a `pass=false` measurement (the tool stamps outcome=crashed, iteration counts toward cap). Sandbox unreachable / framework-level failure is needs_clarification.",
+        "rule_id": "autoresearch_propose_to_execute",
+        "entity_id": "c360.semteams-bootstrap-e2e-a59bc7.agentic-loop.agent.execution.928b7b18-8d27-4fc2-b29d-64731c31fb95"
+      },
+      {
+        "time": "2026-10-01T12:54:14.925608044Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/rule.(*ExecutionContext).substituteVariablesWith.(*ExecutionContext).applyTripleLengthSubstitutions.func2",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/rule/execution_context.go",
+          "line": 494
+        },
+        "msg": "triple-length substitution: Object is not list-shaped; replacing token with error sentinel",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "token": "$entity.triple.autoresearch.experiment.completed.length",
+        "predicate": "autoresearch.experiment.completed",
+        "object_type": "string",
+        "rule_id": "autoresearch_iteration_dispatch",
+        "hint": "the .length suffix requires the triple Object to be []string, []any, or a JSON-encoded list string \u2014 see coerceTripleObjectToStrings"
+      },
+      {
+        "time": "2026-10-01T12:54:14.980778502Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/rule.(*ExecutionContext).warnUnresolvedTemplateVars",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/rule/execution_context.go",
+          "line": 841
+        },
+        "msg": "Unresolved template variables in rule substitution \u2014 likely silent-pass bug",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "unresolved": [
+          "$entity.triple.autoresearch.best.value"
+        ],
+        "template": "AUTORESEARCH EXECUTE \u2014 measure the proposed diff and let the empirical compare route the outcome.\n\nThe propose phase at loop $entity.instance applied a diff within the surface. Your job is exactly three things: run the measurement command, capture the metric, call the empirical-compare emit tool. You do NOT decide whether to keep or revert \u2014 the emit tool's executor reads the run entity's autoresearch.best.value, compares numerically, and stamps the outcome on your loop. Then the bash revert/keep step happens based on what outcome the tool stamped.\n\nMEASUREMENT CONTEXT (inlined at spawn \u2014 do NOT re-fetch via read_loop_result):\n\n- command: $entity.triple.agent.lineage.command\n- surface: $entity.triple.agent.lineage.surface\n- metric_parser: $entity.triple.agent.lineage.metric-parser\n\nIteration 1 \u2014 call read_loop_result on $entity.instance (the propose loop) for the hypothesis + diff summary. The reason field carries: hypothesis, surface-bounded edits, expected qualitative effect.\n\nIteration 2 \u2014 bash: run the command verbatim above. Capture stdout + exit code. Apply the metric_parser instructions to extract a single numeric value.\n\nIteration 3 \u2014 call emit_autoresearch_measurement with the measurement:\n\n```\nemit_autoresearch_measurement(\n  value=<measured number>,\n  pass=<bool \u2014 true iff exit code 0>,\n  stdout_tail=\"<last ~200 chars for audit>\",\n  stderr_tail=\"<last ~200 chars if any>\"\n)\n```\n\nThe tool executor (product-shell) does the empirical compare:\n\n1. Reads $entity.triple.autoresearch.best.value from the run entity.\n2. If pass=false \u2192 stamps outcome=crashed on your loop.\n3. Else if value < best.value \u2192 stamps outcome=kept on your loop AND updates autoresearch.best.value + .best.experiment_id on the run entity.\n4. Else \u2192 stamps outcome=reverted on your loop.\n\nThe outcome is on your loop's autoresearch.measurement.outcome triple after this call returns.\n\nIteration 4 \u2014 depending on the stamped outcome, revert or keep:\n\n- **outcome=kept**: the diff stays. No action.\n- **outcome=reverted OR outcome=crashed**: revert the working tree via `git checkout -- <surface globs from above>`. This restores the tree to its state before propose applied the diff.\n\nReverting after the empirical compare keeps the working tree at the running-best state so the next propose iteration applies its diff against the same reference as prior iterations.\n\nIteration 5 \u2014 call decide(action=\"measured\", reason=\"value=<n> pass=<bool> outcome=<kept|reverted|crashed> \u2014 <one-line measurement summary>\"). Rule 04 fires on this and stamps experiment.completed on the run entity. Rule 05 fires next based on the accumulated count (continue or cap-exhaust synthesize).\n\nIf the measurement command itself crashes catastrophically (sandbox unreachable, command not found), call decide(action=\"needs_clarification\", reason=\"execute environment failure: <specific reason>\") \u2014 recovery routes to coordinator. Distinguish: command exit code non-zero with stdout is a `pass=false` measurement (the tool stamps outcome=crashed, iteration counts toward cap). Sandbox unreachable / framework-level failure is needs_clarification.",
+        "rule_id": "autoresearch_propose_to_execute",
+        "entity_id": "c360.semteams-bootstrap-e2e-a59bc7.agentic-loop.agent.execution.ea493210-5fcc-4a26-98b6-55d1ff5f81d9"
+      },
+      {
+        "time": "2026-10-01T12:54:15.088920335Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/rule.(*ExecutionContext).substituteVariablesWith.(*ExecutionContext).applyTripleLengthSubstitutions.func2",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/rule/execution_context.go",
+          "line": 494
+        },
+        "msg": "triple-length substitution: Object is not list-shaped; replacing token with error sentinel",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "token": "$entity.triple.autoresearch.experiment.completed.length",
+        "predicate": "autoresearch.experiment.completed",
+        "object_type": "string",
+        "rule_id": "autoresearch_iteration_dispatch",
+        "hint": "the .length suffix requires the triple Object to be []string, []any, or a JSON-encoded list string \u2014 see coerceTripleObjectToStrings"
+      },
+      {
+        "time": "2026-10-01T12:54:15.207455669Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/rule.(*ExecutionContext).warnUnresolvedTemplateVars",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/rule/execution_context.go",
+          "line": 841
+        },
+        "msg": "Unresolved template variables in rule substitution \u2014 likely silent-pass bug",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "unresolved": [
+          "$entity.triple.autoresearch.artifact.path"
+        ],
+        "template": "The autoresearch chain you dispatched has reached its terminal. Reviewer-autoresearch at loop $entity.instance evaluated the autoresearch artifact and approved it.\n\nYour job now is to deliver the result to the user. You are not classifying or delegating \u2014 the chain has already done the work.\n\nIteration 1 \u2014 call read_loop_result(loop_id=$entity.instance) to read the reviewer's structured verdict. The reviewer's reason summarises the run shape: iterations completed, baseline vs best, improvement percentage. If the reviewer's loop entity carries autoresearch.artifact.path, the structured artifact lives at that path \u2014 you may `bash cat $entity.triple.autoresearch.artifact.path` to read the full rollup (journey, kept diffs, open opportunities) if the reviewer's prose is too terse for a user-facing reply.\n\nIteration 2 \u2014 call decide(action=\"respond_direct\", reason=\"<your synthesised user-facing answer>\"). Agentic dispatch publishes the structured decision result as a typed user response; rule 03b records the `reason` audit triple. Channel-ready extraction of `reason` is tracked in semstreams#1090.\n\nWrite the reason as plain prose addressing the user directly. The user asked for an optimization run; tell them what happened: did the metric improve, by how much, what the best change was, whether the run plateaued or hit the cap, what's left to try. Don't dump the full journey \u2014 pick the substantive headline. 3-6 sentences is usually right.",
+        "rule_id": "autoresearch_reviewer_approved_to_coordinator",
+        "entity_id": "c360.semteams-bootstrap-e2e-a59bc7.agentic-loop.agent.execution.cc47184e-5faa-4c54-9c1d-1aed28ba44a1"
+      }
+    ],
+    "repair": [
+      {
+        "time": "2026-10-01T14:19:29.618701166Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/rule.(*ExecutionContext).warnUnresolvedTemplateVars",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/rule/execution_context.go",
+          "line": 841
+        },
+        "msg": "Unresolved template variables in rule substitution \u2014 likely silent-pass bug",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "unresolved": [
+          "$entity.triple.autoresearch.best.value"
+        ],
+        "template": "AUTORESEARCH EXECUTE \u2014 measure the proposed diff and let the empirical compare route the outcome.\n\nThe propose phase at loop $entity.instance applied a diff within the surface. Your job is exactly three things: run the measurement command, capture the metric, call the empirical-compare emit tool. You do NOT decide whether to keep or revert \u2014 the emit tool's executor reads the run entity's autoresearch.best.value, compares numerically, and stamps the outcome on your loop. Then the bash revert/keep step happens based on what outcome the tool stamped.\n\nMEASUREMENT CONTEXT (inlined at spawn \u2014 do NOT re-fetch via read_loop_result):\n\n- command: $entity.triple.agent.lineage.command\n- surface: $entity.triple.agent.lineage.surface\n- metric_parser: $entity.triple.agent.lineage.metric-parser\n\nIteration 1 \u2014 call read_loop_result on $entity.instance (the propose loop) for the hypothesis + diff summary. The reason field carries: hypothesis, surface-bounded edits, expected qualitative effect.\n\nIteration 2 \u2014 bash: run the command verbatim above. Capture stdout + exit code. Apply the metric_parser instructions to extract a single numeric value.\n\nIteration 3 \u2014 call emit_autoresearch_measurement with the measurement:\n\n```\nemit_autoresearch_measurement(\n  value=<measured number>,\n  pass=<bool \u2014 true iff exit code 0>,\n  stdout_tail=\"<last ~200 chars for audit>\",\n  stderr_tail=\"<last ~200 chars if any>\"\n)\n```\n\nThe tool executor (product-shell) does the empirical compare:\n\n1. Reads $entity.triple.autoresearch.best.value from the run entity.\n2. If pass=false \u2192 stamps outcome=crashed on your loop.\n3. Else if value < best.value \u2192 stamps outcome=kept on your loop AND updates autoresearch.best.value + .best.experiment_id on the run entity.\n4. Else \u2192 stamps outcome=reverted on your loop.\n\nThe outcome is on your loop's autoresearch.measurement.outcome triple after this call returns.\n\nIteration 4 \u2014 depending on the stamped outcome, revert or keep:\n\n- **outcome=kept**: the diff stays. No action.\n- **outcome=reverted OR outcome=crashed**: revert the working tree via `git checkout -- <surface globs from above>`. This restores the tree to its state before propose applied the diff.\n\nReverting after the empirical compare keeps the working tree at the running-best state so the next propose iteration applies its diff against the same reference as prior iterations.\n\nIteration 5 \u2014 call decide(action=\"measured\", reason=\"value=<n> pass=<bool> outcome=<kept|reverted|crashed> \u2014 <one-line measurement summary>\"). Rule 04 fires on this and stamps experiment.completed on the run entity. Rule 05 fires next based on the accumulated count (continue or cap-exhaust synthesize).\n\nIf the measurement command itself crashes catastrophically (sandbox unreachable, command not found), call decide(action=\"needs_clarification\", reason=\"execute environment failure: <specific reason>\") \u2014 recovery routes to coordinator. Distinguish: command exit code non-zero with stdout is a `pass=false` measurement (the tool stamps outcome=crashed, iteration counts toward cap). Sandbox unreachable / framework-level failure is needs_clarification.",
+        "rule_id": "autoresearch_propose_to_execute",
+        "entity_id": "c360.semteams-bootstrap-e2e-e8c788.agentic-loop.agent.execution.fbeabd20-b8b7-40ca-abc4-cadc3e18949b"
+      },
+      {
+        "time": "2026-10-01T14:19:29.773974708Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/rule.(*ExecutionContext).substituteVariablesWith.(*ExecutionContext).applyTripleLengthSubstitutions.func2",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/rule/execution_context.go",
+          "line": 494
+        },
+        "msg": "triple-length substitution: Object is not list-shaped; replacing token with error sentinel",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "token": "$entity.triple.autoresearch.experiment.completed.length",
+        "predicate": "autoresearch.experiment.completed",
+        "object_type": "string",
+        "rule_id": "autoresearch_iteration_dispatch",
+        "hint": "the .length suffix requires the triple Object to be []string, []any, or a JSON-encoded list string \u2014 see coerceTripleObjectToStrings"
+      },
+      {
+        "time": "2026-10-01T14:19:29.832398208Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/rule.(*ExecutionContext).warnUnresolvedTemplateVars",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/rule/execution_context.go",
+          "line": 841
+        },
+        "msg": "Unresolved template variables in rule substitution \u2014 likely silent-pass bug",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "unresolved": [
+          "$entity.triple.autoresearch.best.value"
+        ],
+        "template": "AUTORESEARCH EXECUTE \u2014 measure the proposed diff and let the empirical compare route the outcome.\n\nThe propose phase at loop $entity.instance applied a diff within the surface. Your job is exactly three things: run the measurement command, capture the metric, call the empirical-compare emit tool. You do NOT decide whether to keep or revert \u2014 the emit tool's executor reads the run entity's autoresearch.best.value, compares numerically, and stamps the outcome on your loop. Then the bash revert/keep step happens based on what outcome the tool stamped.\n\nMEASUREMENT CONTEXT (inlined at spawn \u2014 do NOT re-fetch via read_loop_result):\n\n- command: $entity.triple.agent.lineage.command\n- surface: $entity.triple.agent.lineage.surface\n- metric_parser: $entity.triple.agent.lineage.metric-parser\n\nIteration 1 \u2014 call read_loop_result on $entity.instance (the propose loop) for the hypothesis + diff summary. The reason field carries: hypothesis, surface-bounded edits, expected qualitative effect.\n\nIteration 2 \u2014 bash: run the command verbatim above. Capture stdout + exit code. Apply the metric_parser instructions to extract a single numeric value.\n\nIteration 3 \u2014 call emit_autoresearch_measurement with the measurement:\n\n```\nemit_autoresearch_measurement(\n  value=<measured number>,\n  pass=<bool \u2014 true iff exit code 0>,\n  stdout_tail=\"<last ~200 chars for audit>\",\n  stderr_tail=\"<last ~200 chars if any>\"\n)\n```\n\nThe tool executor (product-shell) does the empirical compare:\n\n1. Reads $entity.triple.autoresearch.best.value from the run entity.\n2. If pass=false \u2192 stamps outcome=crashed on your loop.\n3. Else if value < best.value \u2192 stamps outcome=kept on your loop AND updates autoresearch.best.value + .best.experiment_id on the run entity.\n4. Else \u2192 stamps outcome=reverted on your loop.\n\nThe outcome is on your loop's autoresearch.measurement.outcome triple after this call returns.\n\nIteration 4 \u2014 depending on the stamped outcome, revert or keep:\n\n- **outcome=kept**: the diff stays. No action.\n- **outcome=reverted OR outcome=crashed**: revert the working tree via `git checkout -- <surface globs from above>`. This restores the tree to its state before propose applied the diff.\n\nReverting after the empirical compare keeps the working tree at the running-best state so the next propose iteration applies its diff against the same reference as prior iterations.\n\nIteration 5 \u2014 call decide(action=\"measured\", reason=\"value=<n> pass=<bool> outcome=<kept|reverted|crashed> \u2014 <one-line measurement summary>\"). Rule 04 fires on this and stamps experiment.completed on the run entity. Rule 05 fires next based on the accumulated count (continue or cap-exhaust synthesize).\n\nIf the measurement command itself crashes catastrophically (sandbox unreachable, command not found), call decide(action=\"needs_clarification\", reason=\"execute environment failure: <specific reason>\") \u2014 recovery routes to coordinator. Distinguish: command exit code non-zero with stdout is a `pass=false` measurement (the tool stamps outcome=crashed, iteration counts toward cap). Sandbox unreachable / framework-level failure is needs_clarification.",
+        "rule_id": "autoresearch_propose_to_execute",
+        "entity_id": "c360.semteams-bootstrap-e2e-e8c788.agentic-loop.agent.execution.8981ea65-7d1f-4224-b838-169d00849af0"
+      },
+      {
+        "time": "2026-10-01T14:19:29.965286208Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/rule.(*ExecutionContext).substituteVariablesWith.(*ExecutionContext).applyTripleLengthSubstitutions.func2",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/rule/execution_context.go",
+          "line": 494
+        },
+        "msg": "triple-length substitution: Object is not list-shaped; replacing token with error sentinel",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "token": "$entity.triple.autoresearch.experiment.completed.length",
+        "predicate": "autoresearch.experiment.completed",
+        "object_type": "string",
+        "rule_id": "autoresearch_iteration_dispatch",
+        "hint": "the .length suffix requires the triple Object to be []string, []any, or a JSON-encoded list string \u2014 see coerceTripleObjectToStrings"
+      }
+    ],
+    "repair_final_stable": [
+      {
+        "time": "2026-10-01T14:38:16.798234341Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/rule.(*ExecutionContext).warnUnresolvedTemplateVars",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/rule/execution_context.go",
+          "line": 841
+        },
+        "msg": "Unresolved template variables in rule substitution \u2014 likely silent-pass bug",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "unresolved": [
+          "$entity.triple.autoresearch.best.value"
+        ],
+        "template": "AUTORESEARCH EXECUTE \u2014 measure the proposed diff and let the empirical compare route the outcome.\n\nThe propose phase at loop $entity.instance applied a diff within the surface. Your job is exactly three things: run the measurement command, capture the metric, call the empirical-compare emit tool. You do NOT decide whether to keep or revert \u2014 the emit tool's executor reads the run entity's autoresearch.best.value, compares numerically, and stamps the outcome on your loop. Then the bash revert/keep step happens based on what outcome the tool stamped.\n\nMEASUREMENT CONTEXT (inlined at spawn \u2014 do NOT re-fetch via read_loop_result):\n\n- command: $entity.triple.agent.lineage.command\n- surface: $entity.triple.agent.lineage.surface\n- metric_parser: $entity.triple.agent.lineage.metric-parser\n\nIteration 1 \u2014 call read_loop_result on $entity.instance (the propose loop) for the hypothesis + diff summary. The reason field carries: hypothesis, surface-bounded edits, expected qualitative effect.\n\nIteration 2 \u2014 bash: run the command verbatim above. Capture stdout + exit code. Apply the metric_parser instructions to extract a single numeric value.\n\nIteration 3 \u2014 call emit_autoresearch_measurement with the measurement:\n\n```\nemit_autoresearch_measurement(\n  value=<measured number>,\n  pass=<bool \u2014 true iff exit code 0>,\n  stdout_tail=\"<last ~200 chars for audit>\",\n  stderr_tail=\"<last ~200 chars if any>\"\n)\n```\n\nThe tool executor (product-shell) does the empirical compare:\n\n1. Reads $entity.triple.autoresearch.best.value from the run entity.\n2. If pass=false \u2192 stamps outcome=crashed on your loop.\n3. Else if value < best.value \u2192 stamps outcome=kept on your loop AND updates autoresearch.best.value + .best.experiment_id on the run entity.\n4. Else \u2192 stamps outcome=reverted on your loop.\n\nThe outcome is on your loop's autoresearch.measurement.outcome triple after this call returns.\n\nIteration 4 \u2014 depending on the stamped outcome, revert or keep:\n\n- **outcome=kept**: the diff stays. No action.\n- **outcome=reverted OR outcome=crashed**: revert the working tree via `git checkout -- <surface globs from above>`. This restores the tree to its state before propose applied the diff.\n\nReverting after the empirical compare keeps the working tree at the running-best state so the next propose iteration applies its diff against the same reference as prior iterations.\n\nIteration 5 \u2014 call decide(action=\"measured\", reason=\"value=<n> pass=<bool> outcome=<kept|reverted|crashed> \u2014 <one-line measurement summary>\"). Rule 04 fires on this and stamps experiment.completed on the run entity. Rule 05 fires next based on the accumulated count (continue or cap-exhaust synthesize).\n\nIf the measurement command itself crashes catastrophically (sandbox unreachable, command not found), call decide(action=\"needs_clarification\", reason=\"execute environment failure: <specific reason>\") \u2014 recovery routes to coordinator. Distinguish: command exit code non-zero with stdout is a `pass=false` measurement (the tool stamps outcome=crashed, iteration counts toward cap). Sandbox unreachable / framework-level failure is needs_clarification.",
+        "rule_id": "autoresearch_propose_to_execute",
+        "entity_id": "c360.semteams-bootstrap-e2e-191f2e.agentic-loop.agent.execution.caeb9b33-d879-4b68-b96f-d203017c9d21"
+      },
+      {
+        "time": "2026-10-01T14:38:16.950471341Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/rule.(*ExecutionContext).substituteVariablesWith.(*ExecutionContext).applyTripleLengthSubstitutions.func2",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/rule/execution_context.go",
+          "line": 494
+        },
+        "msg": "triple-length substitution: Object is not list-shaped; replacing token with error sentinel",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "token": "$entity.triple.autoresearch.experiment.completed.length",
+        "predicate": "autoresearch.experiment.completed",
+        "object_type": "string",
+        "rule_id": "autoresearch_iteration_dispatch",
+        "hint": "the .length suffix requires the triple Object to be []string, []any, or a JSON-encoded list string \u2014 see coerceTripleObjectToStrings"
+      },
+      {
+        "time": "2026-10-01T14:38:17.029771424Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/rule.(*ExecutionContext).warnUnresolvedTemplateVars",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/rule/execution_context.go",
+          "line": 841
+        },
+        "msg": "Unresolved template variables in rule substitution \u2014 likely silent-pass bug",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "unresolved": [
+          "$entity.triple.autoresearch.best.value"
+        ],
+        "template": "AUTORESEARCH EXECUTE \u2014 measure the proposed diff and let the empirical compare route the outcome.\n\nThe propose phase at loop $entity.instance applied a diff within the surface. Your job is exactly three things: run the measurement command, capture the metric, call the empirical-compare emit tool. You do NOT decide whether to keep or revert \u2014 the emit tool's executor reads the run entity's autoresearch.best.value, compares numerically, and stamps the outcome on your loop. Then the bash revert/keep step happens based on what outcome the tool stamped.\n\nMEASUREMENT CONTEXT (inlined at spawn \u2014 do NOT re-fetch via read_loop_result):\n\n- command: $entity.triple.agent.lineage.command\n- surface: $entity.triple.agent.lineage.surface\n- metric_parser: $entity.triple.agent.lineage.metric-parser\n\nIteration 1 \u2014 call read_loop_result on $entity.instance (the propose loop) for the hypothesis + diff summary. The reason field carries: hypothesis, surface-bounded edits, expected qualitative effect.\n\nIteration 2 \u2014 bash: run the command verbatim above. Capture stdout + exit code. Apply the metric_parser instructions to extract a single numeric value.\n\nIteration 3 \u2014 call emit_autoresearch_measurement with the measurement:\n\n```\nemit_autoresearch_measurement(\n  value=<measured number>,\n  pass=<bool \u2014 true iff exit code 0>,\n  stdout_tail=\"<last ~200 chars for audit>\",\n  stderr_tail=\"<last ~200 chars if any>\"\n)\n```\n\nThe tool executor (product-shell) does the empirical compare:\n\n1. Reads $entity.triple.autoresearch.best.value from the run entity.\n2. If pass=false \u2192 stamps outcome=crashed on your loop.\n3. Else if value < best.value \u2192 stamps outcome=kept on your loop AND updates autoresearch.best.value + .best.experiment_id on the run entity.\n4. Else \u2192 stamps outcome=reverted on your loop.\n\nThe outcome is on your loop's autoresearch.measurement.outcome triple after this call returns.\n\nIteration 4 \u2014 depending on the stamped outcome, revert or keep:\n\n- **outcome=kept**: the diff stays. No action.\n- **outcome=reverted OR outcome=crashed**: revert the working tree via `git checkout -- <surface globs from above>`. This restores the tree to its state before propose applied the diff.\n\nReverting after the empirical compare keeps the working tree at the running-best state so the next propose iteration applies its diff against the same reference as prior iterations.\n\nIteration 5 \u2014 call decide(action=\"measured\", reason=\"value=<n> pass=<bool> outcome=<kept|reverted|crashed> \u2014 <one-line measurement summary>\"). Rule 04 fires on this and stamps experiment.completed on the run entity. Rule 05 fires next based on the accumulated count (continue or cap-exhaust synthesize).\n\nIf the measurement command itself crashes catastrophically (sandbox unreachable, command not found), call decide(action=\"needs_clarification\", reason=\"execute environment failure: <specific reason>\") \u2014 recovery routes to coordinator. Distinguish: command exit code non-zero with stdout is a `pass=false` measurement (the tool stamps outcome=crashed, iteration counts toward cap). Sandbox unreachable / framework-level failure is needs_clarification.",
+        "rule_id": "autoresearch_propose_to_execute",
+        "entity_id": "c360.semteams-bootstrap-e2e-191f2e.agentic-loop.agent.execution.4f249562-4442-46c0-8ce3-f54d9916247d"
+      },
+      {
+        "time": "2026-10-01T14:38:17.175654758Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/rule.(*ExecutionContext).substituteVariablesWith.(*ExecutionContext).applyTripleLengthSubstitutions.func2",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/rule/execution_context.go",
+          "line": 494
+        },
+        "msg": "triple-length substitution: Object is not list-shaped; replacing token with error sentinel",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "token": "$entity.triple.autoresearch.experiment.completed.length",
+        "predicate": "autoresearch.experiment.completed",
+        "object_type": "string",
+        "rule_id": "autoresearch_iteration_dispatch",
+        "hint": "the .length suffix requires the triple Object to be []string, []any, or a JSON-encoded list string \u2014 see coerceTripleObjectToStrings"
+      }
+    ]
+  },
+  "classification": [
+    {
+      "token": "$entity.triple.autoresearch.best.value",
+      "rule": "autoresearch_propose_to_execute",
+      "owner": "SemTeams rule03 prompt",
+      "classification": "reproduced existing prompt limitation at both dependency pins",
+      "effect": "Explanatory prose attempts to substitute the running-best value on the propose entity although the scalar is on the run. Literal unresolved token is left in the prompt. Actual emitter best-value comparison uses the run and browser graph assertions pass; mock responses cannot qualify the prompt wording."
+    },
+    {
+      "token": "$entity.triple.autoresearch.experiment.completed.length",
+      "rule": "autoresearch_iteration_dispatch",
+      "owner": "SemTeams rule05 prompt",
+      "classification": "reproduced existing prompt limitation at both dependency pins",
+      "effect": "The object is a scalar entity ID, not a list; framework inserts its error sentinel for prose plateau-count substitution. The unchanged cap gate uses state.iteration and exact two-iteration browser assertions pass. No plateau-N or live grounding claim."
+    },
+    {
+      "token": "$entity.triple.autoresearch.artifact.path",
+      "rule": "autoresearch_reviewer_approved_to_coordinator",
+      "owner": "SemTeams replaced terminal handoff prompt",
+      "classification": "intended repair removes obsolete prompt reference",
+      "effect": "Old terminal prompt substituted an artifact path on reviewer, where it was absent; new source-loop read instruction removes this unresolved token. Both prior pins emitted it, repaired run did not."
+    }
+  ]
+}

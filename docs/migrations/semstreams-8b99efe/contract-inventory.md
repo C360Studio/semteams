@@ -449,3 +449,15 @@ recorded local/browser evidence remain required before the migration can be call
 [datatype]: https://github.com/C360Studio/semstreams/blob/8b99efe9c66a4faa4fa509f9f62cc6bad8392128/docs/operations/migration-predicate-datatype.md
 [responses]: https://github.com/C360Studio/semstreams/blob/8b99efe9c66a4faa4fa509f9f62cc6bad8392128/docs/operations/migration-beta160-user-response-subjects.md
 [graph-read]: https://github.com/C360Studio/semstreams/blob/8b99efe9c66a4faa4fa509f9f62cc6bad8392128/docs/operations/migration-graph-read-tools.md
+
+
+## Autoresearch return repair contract sign-off
+
+On 2026-10-01 the owner authorized completing the SemTeams-only delivery repair. The architect and independent Go
+reviewer approved the [ADR-053 origin return contract](../../adr/053-adoption-plan.md#addendum-2026-10-01--autoresearch-returns-through-its-run-origin)
+for TDD before implementation. The approved scope is source rules 08/10b/12/13, six paired run-to-origin and
+origin-to-coordinator rules, three declared product reply-source facts, the rule-05 repeating-action cap correction,
+and focused qualification tests. Source facts carry full loop entity IDs; no lifecycle or native ancestry field is
+fabricated. Actual origin validation, dual-anchor handling and existing replay/cancellation limits are mandatory.
+Baseline clarification remains on its already native route. Run-local cap, accounting, empirical best and stop
+ownership stay in place. This sign-off authorizes implementation, not a claim that the delivery blocker has passed.

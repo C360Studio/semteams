@@ -35,41 +35,42 @@ not linker reachability, binary size or an exhaustive dynamic registration/capab
 The baseline Go source/module were preserved before adaptation. Later E2E fixture/spec corrections in the baseline
 directory are separately hashed browser inputs and do not change the measured Go source. The directory as a whole
 is therefore not an immutable archive. Target measurements include the revision-fenced approval projection and its
-final tests. Further Go changes require a new measurement; documentation/browser-only changes do not change this census.
+final tests and the terminal-handoff repair. The added runtime declaration is vocabulary.DataTypeEntityID;
+new lifecycle/rule admission references are test-only. Further Go changes require a new measurement; documentation/browser-only changes do not change this census.
 
 ## Matched method-2 counts
 
 | Scope | Measure | beta.160 | Frozen target |
 |---|---|---:|---:|
-| runtime | exported declarations referenced | 296 | 326 |
+| runtime | exported declarations referenced | 296 | 327 |
 | runtime | defining framework packages referenced | 31 | 29 |
 | runtime | framework package closure | 95 | 100 |
 | runtime | all package IDs | 577 | 576 |
 | runtime | resolved module pairs | 68 | 65 |
 | runtime | direct source import locations, all dependencies | 481 | 485 |
-| all with tests | exported declarations referenced | 421 | 467 |
+| all with tests | exported declarations referenced | 421 | 468 |
 | all with tests | defining framework packages referenced | 31 | 31 |
 | all with tests | framework package closure | 95 | 100 |
 | all with tests | all package IDs | 665 | 662 |
 | all with tests | resolved module pairs | 72 | 69 |
 | all with tests | direct source import locations, all dependencies | 1096 | 1149 |
-| integration + tests | exported declarations referenced | 424 | 513 |
-| integration + tests | defining framework packages referenced | 31 | 31 |
+| integration + tests | exported declarations referenced | 424 | 557 |
+| integration + tests | defining framework packages referenced | 31 | 32 |
 | integration + tests | framework package closure | 95 | 100 |
 | integration + tests | all package IDs | 668 | 665 |
 | integration + tests | resolved module pairs | 72 | 69 |
-| integration + tests | direct source import locations, all dependencies | 1128 | 1223 |
+| integration + tests | direct source import locations, all dependencies | 1128 | 1245 |
 | module requirement graph | directed edges | 724 | 718 |
 
 Direct framework import locations (one import statement per consumer file) are runtime production 133 → 136;
-all-source production 143 → 146, default test 97 → 121, and integration-tag test 100 → 141.
+all-source production 143 → 146, default test 97 → 121, and integration-tag test 100 → 151.
 The JSON supplies the exact edges and reference locations rather than inferring requirements from these totals.
 
 ## Parked build context
 
 Both `parked_packs` contexts reproduce the same compile failure in
 `test/contract/create_change_fixture_test.go:72`: `recordingPublisher` lacks `Append` for
-`agentictools.TriplePublisher`. The reported 421 → 467 declarations, 665 → 662 package IDs and 72 → 69 modules
+`agentictools.TriplePublisher`. The reported 421 → 468 declarations, 665 → 662 package IDs and 72 → 69 modules
 are **partial diagnostic sets**, not successful compiled obligations. Neither the tag nor any parked product pack
 was enabled in runtime configuration, and the donor test defect was not repaired to make measurement pass.
 

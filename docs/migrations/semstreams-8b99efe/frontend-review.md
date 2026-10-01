@@ -4,7 +4,10 @@
 
 **2026-10-01 final frontend code status: approved after F1–F4 corrections.** This is independent frontend code
 approval, not migration adoption approval. Independent Go review also approves the repaired approval projection.
-The final browser matrix records 20 passes, one autoresearch delivery failure and five explicit skips.
+The historical pre-repair browser matrix recorded 20 passes, one autoresearch delivery failure and five explicit skips.
+The later [independent repair review](autoresearch-repair-frontend-review.md) approves strengthened native-route,
+run-phase and raw-envelope assertions; all five focused repaired browser cases pass. The complete expanded result
+is recorded separately in the [browser report](browser-baseline.md).
 The initial findings below are retained as review history; the final disposition and browser addendum follow.
 The reviewer made no frontend implementation changes; all blocking frontend findings were fixed and re-reviewed.
 
@@ -185,12 +188,13 @@ network contract tests. [Final gate excerpts](browser-evidence/frontend-final-ga
 An accidentally launched duplicate suite was interrupted after root identified the active final run; its interrupted
 exit is an orchestration event, not a product gate result.
 
-The final consolidated browser matrix is complete with 20 passes, one autoresearch final-delivery failure and five
-explicit skips. The corrected autoresearch emitter proof and actual run-scoped approval boundary pass; final typed
-autoresearch delivery remains blocked. #261 evidence-body rendering, stable-channel continuation, SemSource readiness
-and SemEngine consumer acceptance remain separate limits. This scoped code approval does not waive them.
+At the pre-repair review boundary, the consolidated matrix recorded 20 passes, one autoresearch final-delivery
+failure and five explicit skips. The corrected emitter and actual run-scoped approval proofs passed; final typed
+autoresearch delivery was still blocked. The later origin-return repair resolves that focused gate; its independent
+[assertion review](autoresearch-repair-frontend-review.md) and [browser evidence](browser-baseline.md) supersede the
+old delivery status. #261, stable-channel continuation, SemSource readiness and SemEngine acceptance remain separate.
 
-## Final browser assertion and runner addendum
+## Pre-repair browser assertion and runner addendum
 
 The independent frontend reviewer inspected the final E2E-only changes and runner after product source stabilized.
 **Approved for the reviewed assertion/harness scope; final matrix outcomes remain separate.** No product/UI source
@@ -201,8 +205,9 @@ was edited during this pass.
   field. Its artifact provenance token is explicitly static mock data; a separate assertion proves the graph's running
   best experiment names a real kept execute loop whose measured value equals best.value. This does not assert the
   static artifact token is that dynamic graph reference. Strict final typed reply count and terminal-loop correlation
-  remain in place and are expected to expose the unresolved delivery blocker. Later run-phase assertions in the test
-  are not reached after that failure; retained final-state captures provide separate phase evidence.
+  exposed the original delivery blocker at this review boundary. Later run-phase assertions were not reached in that
+  failed run; retained state captures provide separate phase evidence. The subsequent repair strengthens and passes
+  those final-route/phase gates, as recorded in the separate repair review.
 - `run-approval-boundary.spec.ts` gates the planner's advertised `emit_plan` after the run exists. It reads the actual
   run owner's exact pending tuple, `awaiting_approval` phase and outstanding count, clicks the UI approval, verifies the
   exact execution sent, then requires durable answered/pending history, zero outstanding, terminal run/loops, removed
@@ -219,12 +224,12 @@ was edited during this pass.
   explicit. The selected paths in the source hash guard and prebuilt image identities are recorded, not a claim of
   reproducible binary builds or empirical model/sandbox quality.
 
-The final [run-scoped approval proof](browser-evidence/final/run-approval-boundary-proof.json) passes. The
-[final matrix](browser-evidence/final/results.json) has 26 rows: 20 passed, one failed and five explicitly skipped; every
+The historical [run-scoped approval proof](browser-evidence/final/run-approval-boundary-proof.json) passes. The
+[pre-repair matrix](browser-evidence/final/results.json) has 26 rows: 20 passed, one failed and five explicitly skipped; every
 row records unchanged source hashes. The sole failure is strict final autoresearch delivery after successful emitter,
 artifact-path and running-best proof. The [corrected baseline](browser-evidence/baseline-autoresearch-corrected.json)
 also passes emitter proof and fails strict delivery. The frontend-owned [browser report](browser-baseline.md) retains
-the exact configurations and attribution. Completed execution of the matrix is not passing migration qualification.
+the exact configurations and attribution. That historical matrix was not passing migration qualification. The later repair status is recorded above.
 Existing mock/static provenance, #261, graph-chat placeholder and external ecosystem holds remain unchanged.
 
 The final report's nine composition diagnostics are individually attributed in the

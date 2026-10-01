@@ -1,0 +1,259 @@
+=== RUN   TestAutoresearchReplyNativeOrigin
+2026/10/01 09:08:43 github.com/testcontainers/testcontainers-go - Connected to docker: 
+  Server Version: 29.8.0
+  API Version: 1.51
+  Operating System: Docker Desktop
+  Total Memory: 23742 MB
+  Labels:
+    com.docker.desktop.address=unix:///Users/coby/Library/Containers/com.docker.docker/Data/docker-cli.sock
+  Testcontainers for Go Version: v0.40.0
+  Resolved Docker Host: unix:///var/run/docker.sock
+  Resolved Docker Socket Path: /var/run/docker.sock
+  Test SessionID: d510c1939e15d93d09a999cfa4ea0fb2e2701112d0db24374450915dce79f092
+  Test ProcessID: aa991563-6bb9-4c8e-927c-d4ff85885f0b
+2026/10/01 09:08:43 🐳 Creating container for image nats:2.14.4
+2026/10/01 09:08:43 ✅ Container created: 84b7c1360231
+2026/10/01 09:08:43 🐳 Starting container: 84b7c1360231
+2026/10/01 09:08:43 ✅ Container started: 84b7c1360231
+2026/10/01 09:08:43 ⏳ Waiting for container id 84b7c1360231 image: nats:2.14.4. Waiting for: log message "Server is ready"
+2026/10/01 09:08:43 🔔 Container is ready: 84b7c1360231
+2026/10/01 09:08:43 INFO Connecting to NATS urls=nats://localhost:55004
+2026/10/01 09:08:43 INFO Successfully connected to NATS urls=nats://localhost:55004
+=== RUN   TestAutoresearchReplyNativeOrigin/reviewer_waits_for_successful_run
+2026/10/01 09:08:43 INFO Created new KV bucket bucket=TestAutoresearchReplyNativeOrigin_reviewer_waits_for_successful_run_1790863723797061000
+2026/10/01 09:08:43 WARN Unresolved template variables in rule substitution — likely silent-pass bug unresolved=[$entity.triple.autoresearch.artifact.path] template="The autoresearch chain you dispatched has reached its terminal. Reviewer-autoresearch at loop $entity.instance evaluated the autoresearch artifact and approved it.\n\nYour job now is to deliver the result to the user. You are not classifying or delegating — the chain has already done the work.\n\nIteration 1 — call read_loop_result(loop_id=$entity.instance) to read the reviewer's structured verdict. The reviewer's reason summarises the run shape: iterations completed, baseline vs best, improvement percentage. If the reviewer's loop entity carries autoresearch.artifact.path, the structured artifact lives at that path — you may `bash cat $entity.triple.autoresearch.artifact.path` to read the full rollup (journey, kept diffs, open opportunities) if the reviewer's prose is too terse for a user-facing reply.\n\nIteration 2 — call decide(action=\"respond_direct\", reason=\"<your synthesised user-facing answer>\"). Agentic dispatch publishes the structured decision result as a typed user response; rule 03b records the `reason` audit triple. Channel-ready extraction of `reason` is tracked in semstreams#1090.\n\nWrite the reason as plain prose addressing the user directly. The user asked for an optimization run; tell them what happened: did the metric improve, by how much, what the best change was, whether the run plateaued or hit the cap, what's left to try. Don't dump the full journey — pick the substantive headline. 3-6 sentences is usually right." rule_id=autoresearch_reviewer_approved_to_coordinator entity_id=c360.reply-test.agentic-loop.agent.execution.22222222-2222-4222-8222-222222222222
+    autoresearch_reply_integration_test.go:201: 
+        	Error Trace:	/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/test/contract/autoresearch_reply_integration_test.go:201
+        	Error:      	Should be empty, but was [{ rule-c360.reply-test.agentic-loop.agent.execution.22222222-2222-4222-8222-222222222222-1790863723807824000  coordinator coordinator The autoresearch chain you dispatched has reached its terminal. Reviewer-autoresearch at loop 22222222-2222-4222-8222-222222222222 evaluated the autoresearch artifact and approved it.
+        	            	
+        	            	Your job now is to deliver the result to the user. You are not classifying or delegating — the chain has already done the work.
+        	            	
+        	            	Iteration 1 — call read_loop_result(loop_id=22222222-2222-4222-8222-222222222222) to read the reviewer's structured verdict. The reviewer's reason summarises the run shape: iterations completed, baseline vs best, improvement percentage. If the reviewer's loop entity carries autoresearch.artifact.path, the structured artifact lives at that path — you may `bash cat $entity.triple.autoresearch.artifact.path` to read the full rollup (journey, kept diffs, open opportunities) if the reviewer's prose is too terse for a user-facing reply.
+        	            	
+        	            	Iteration 2 — call decide(action="respond_direct", reason="<your synthesised user-facing answer>"). Agentic dispatch publishes the structured decision result as a typed user response; rule 03b records the `reason` audit triple. Channel-ready extraction of `reason` is tracked in semstreams#1090.
+        	            	
+        	            	Write the reason as plain prose addressing the user directly. The user asked for an optimization run; tell them what happened: did the metric improve, by how much, what the best change was, whether the run plateaued or hit the cap, what's left to try. Don't dump the full journey — pick the substantive headline. 3-6 sentences is usually right.      22222222-2222-4222-8222-222222222222  0 0 <nil>  <nil>  [] 0xc0001d74e0 map[agent.decide.action_allowlist:[respond_direct ask_user] agent.related_loops:map[autoresearch-run:11111111-1111-4111-8111-111111111111 terminal:22222222-2222-4222-8222-222222222222] category:autoresearch terminal_loop_id:22222222-2222-4222-8222-222222222222 wakeup_mode:chain_terminal_autoresearch]  <nil>}]
+        	Test:       	TestAutoresearchReplyNativeOrigin/reviewer_waits_for_successful_run
+        	Messages:   	orphan reviewer must not publish final coordinator directly
+=== RUN   TestAutoresearchReplyNativeOrigin/approved
+2026/10/01 09:08:43 INFO Created new KV bucket bucket=TestAutoresearchReplyNativeOrigin_approved_1790863723812239000
+    autoresearch_reply_integration_test.go:214: 
+        	Error Trace:	/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/test/contract/autoresearch_reply_integration_test.go:158
+        	            				/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/test/contract/autoresearch_reply_integration_test.go:214
+        	Error:      	Received unexpected error:
+        	            	open ../../configs/rules/autoresearch/14-completed-result-to-origin.json: no such file or directory
+        	Test:       	TestAutoresearchReplyNativeOrigin/approved
+=== RUN   TestAutoresearchReplyNativeOrigin/clarification
+2026/10/01 09:08:43 INFO Created new KV bucket bucket=TestAutoresearchReplyNativeOrigin_clarification_1790863723816937000
+    autoresearch_reply_integration_test.go:214: 
+        	Error Trace:	/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/test/contract/autoresearch_reply_integration_test.go:158
+        	            				/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/test/contract/autoresearch_reply_integration_test.go:214
+        	Error:      	Received unexpected error:
+        	            	open ../../configs/rules/autoresearch/16-clarification-result-to-origin.json: no such file or directory
+        	Test:       	TestAutoresearchReplyNativeOrigin/clarification
+=== RUN   TestAutoresearchReplyNativeOrigin/failed
+2026/10/01 09:08:43 INFO Created new KV bucket bucket=TestAutoresearchReplyNativeOrigin_failed_1790863723821214000
+    autoresearch_reply_integration_test.go:214: 
+        	Error Trace:	/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/test/contract/autoresearch_reply_integration_test.go:158
+        	            				/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/test/contract/autoresearch_reply_integration_test.go:214
+        	Error:      	Received unexpected error:
+        	            	open ../../configs/rules/autoresearch/18-failed-result-to-origin.json: no such file or directory
+        	Test:       	TestAutoresearchReplyNativeOrigin/failed
+2026/10/01 09:08:43 🐳 Stopping container: 84b7c1360231
+2026/10/01 09:08:43 ✅ Container stopped: 84b7c1360231
+2026/10/01 09:08:43 🐳 Terminating container: 84b7c1360231
+2026/10/01 09:08:43 🚫 Container terminated: 84b7c1360231
+--- FAIL: TestAutoresearchReplyNativeOrigin (0.37s)
+    --- FAIL: TestAutoresearchReplyNativeOrigin/reviewer_waits_for_successful_run (0.02s)
+    --- FAIL: TestAutoresearchReplyNativeOrigin/approved (0.00s)
+    --- FAIL: TestAutoresearchReplyNativeOrigin/clarification (0.00s)
+    --- FAIL: TestAutoresearchReplyNativeOrigin/failed (0.00s)
+=== RUN   TestAutoresearchReplyPhaseAndOriginGuards
+2026/10/01 09:08:44 🐳 Creating container for image nats:2.14.4
+2026/10/01 09:08:44 ✅ Container created: 8826258a207e
+2026/10/01 09:08:44 🐳 Starting container: 8826258a207e
+2026/10/01 09:08:44 ✅ Container started: 8826258a207e
+2026/10/01 09:08:44 ⏳ Waiting for container id 8826258a207e image: nats:2.14.4. Waiting for: log message "Server is ready"
+2026/10/01 09:08:44 🔔 Container is ready: 8826258a207e
+2026/10/01 09:08:44 INFO Connecting to NATS urls=nats://localhost:55005
+2026/10/01 09:08:44 INFO Successfully connected to NATS urls=nats://localhost:55005
+=== RUN   TestAutoresearchReplyPhaseAndOriginGuards/dispatched
+2026/10/01 09:08:44 INFO Created new KV bucket bucket=TestAutoresearchReplyPhaseAndOriginGuards_dispatched_1790863724188348000
+    autoresearch_reply_integration_test.go:240: 
+        	Error Trace:	/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/test/contract/autoresearch_reply_integration_test.go:158
+        	            				/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/test/contract/autoresearch_reply_integration_test.go:240
+        	Error:      	Received unexpected error:
+        	            	open ../../configs/rules/autoresearch/14-completed-result-to-origin.json: no such file or directory
+        	Test:       	TestAutoresearchReplyPhaseAndOriginGuards/dispatched
+=== RUN   TestAutoresearchReplyPhaseAndOriginGuards/executing
+2026/10/01 09:08:44 INFO Created new KV bucket bucket=TestAutoresearchReplyPhaseAndOriginGuards_executing_1790863724191909000
+    autoresearch_reply_integration_test.go:240: 
+        	Error Trace:	/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/test/contract/autoresearch_reply_integration_test.go:158
+        	            				/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/test/contract/autoresearch_reply_integration_test.go:240
+        	Error:      	Received unexpected error:
+        	            	open ../../configs/rules/autoresearch/14-completed-result-to-origin.json: no such file or directory
+        	Test:       	TestAutoresearchReplyPhaseAndOriginGuards/executing
+=== RUN   TestAutoresearchReplyPhaseAndOriginGuards/awaiting_approval
+2026/10/01 09:08:44 INFO Created new KV bucket bucket=TestAutoresearchReplyPhaseAndOriginGuards_awaiting_approval_1790863724194352000
+    autoresearch_reply_integration_test.go:240: 
+        	Error Trace:	/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/test/contract/autoresearch_reply_integration_test.go:158
+        	            				/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/test/contract/autoresearch_reply_integration_test.go:240
+        	Error:      	Received unexpected error:
+        	            	open ../../configs/rules/autoresearch/14-completed-result-to-origin.json: no such file or directory
+        	Test:       	TestAutoresearchReplyPhaseAndOriginGuards/awaiting_approval
+=== RUN   TestAutoresearchReplyPhaseAndOriginGuards/completed
+2026/10/01 09:08:44 INFO Created new KV bucket bucket=TestAutoresearchReplyPhaseAndOriginGuards_completed_1790863724196819000
+    autoresearch_reply_integration_test.go:240: 
+        	Error Trace:	/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/test/contract/autoresearch_reply_integration_test.go:158
+        	            				/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/test/contract/autoresearch_reply_integration_test.go:240
+        	Error:      	Received unexpected error:
+        	            	open ../../configs/rules/autoresearch/14-completed-result-to-origin.json: no such file or directory
+        	Test:       	TestAutoresearchReplyPhaseAndOriginGuards/completed
+=== RUN   TestAutoresearchReplyPhaseAndOriginGuards/failed
+2026/10/01 09:08:44 INFO Created new KV bucket bucket=TestAutoresearchReplyPhaseAndOriginGuards_failed_1790863724199554000
+    autoresearch_reply_integration_test.go:240: 
+        	Error Trace:	/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/test/contract/autoresearch_reply_integration_test.go:158
+        	            				/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/test/contract/autoresearch_reply_integration_test.go:240
+        	Error:      	Received unexpected error:
+        	            	open ../../configs/rules/autoresearch/14-completed-result-to-origin.json: no such file or directory
+        	Test:       	TestAutoresearchReplyPhaseAndOriginGuards/failed
+=== RUN   TestAutoresearchReplyPhaseAndOriginGuards/cancelled
+2026/10/01 09:08:44 INFO Created new KV bucket bucket=TestAutoresearchReplyPhaseAndOriginGuards_cancelled_1790863724202823000
+    autoresearch_reply_integration_test.go:240: 
+        	Error Trace:	/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/test/contract/autoresearch_reply_integration_test.go:158
+        	            				/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/test/contract/autoresearch_reply_integration_test.go:240
+        	Error:      	Received unexpected error:
+        	            	open ../../configs/rules/autoresearch/14-completed-result-to-origin.json: no such file or directory
+        	Test:       	TestAutoresearchReplyPhaseAndOriginGuards/cancelled
+=== RUN   TestAutoresearchReplyPhaseAndOriginGuards/missing_origin
+2026/10/01 09:08:44 INFO Created new KV bucket bucket=TestAutoresearchReplyPhaseAndOriginGuards_missing_origin_1790863724205893000
+    autoresearch_reply_integration_test.go:266: 
+        	Error Trace:	/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/test/contract/autoresearch_reply_integration_test.go:158
+        	            				/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/test/contract/autoresearch_reply_integration_test.go:266
+        	Error:      	Received unexpected error:
+        	            	open ../../configs/rules/autoresearch/14-completed-result-to-origin.json: no such file or directory
+        	Test:       	TestAutoresearchReplyPhaseAndOriginGuards/missing_origin
+=== RUN   TestAutoresearchReplyPhaseAndOriginGuards/foreign_authority
+2026/10/01 09:08:44 INFO Created new KV bucket bucket=TestAutoresearchReplyPhaseAndOriginGuards_foreign_authority_1790863724208231000
+    autoresearch_reply_integration_test.go:266: 
+        	Error Trace:	/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/test/contract/autoresearch_reply_integration_test.go:158
+        	            				/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/test/contract/autoresearch_reply_integration_test.go:266
+        	Error:      	Received unexpected error:
+        	            	open ../../configs/rules/autoresearch/14-completed-result-to-origin.json: no such file or directory
+        	Test:       	TestAutoresearchReplyPhaseAndOriginGuards/foreign_authority
+=== RUN   TestAutoresearchReplyPhaseAndOriginGuards/wrong_instance
+2026/10/01 09:08:44 INFO Created new KV bucket bucket=TestAutoresearchReplyPhaseAndOriginGuards_wrong_instance_1790863724211496000
+    autoresearch_reply_integration_test.go:266: 
+        	Error Trace:	/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/test/contract/autoresearch_reply_integration_test.go:158
+        	            				/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/test/contract/autoresearch_reply_integration_test.go:266
+        	Error:      	Received unexpected error:
+        	            	open ../../configs/rules/autoresearch/14-completed-result-to-origin.json: no such file or directory
+        	Test:       	TestAutoresearchReplyPhaseAndOriginGuards/wrong_instance
+=== RUN   TestAutoresearchReplyPhaseAndOriginGuards/two_origins
+2026/10/01 09:08:44 INFO Created new KV bucket bucket=TestAutoresearchReplyPhaseAndOriginGuards_two_origins_1790863724214011000
+    autoresearch_reply_integration_test.go:266: 
+        	Error Trace:	/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/test/contract/autoresearch_reply_integration_test.go:158
+        	            				/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/test/contract/autoresearch_reply_integration_test.go:266
+        	Error:      	Received unexpected error:
+        	            	open ../../configs/rules/autoresearch/14-completed-result-to-origin.json: no such file or directory
+        	Test:       	TestAutoresearchReplyPhaseAndOriginGuards/two_origins
+=== RUN   TestAutoresearchReplyPhaseAndOriginGuards/missing_source
+2026/10/01 09:08:44 INFO Created new KV bucket bucket=TestAutoresearchReplyPhaseAndOriginGuards_missing_source_1790863724216028000
+    autoresearch_reply_integration_test.go:266: 
+        	Error Trace:	/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/test/contract/autoresearch_reply_integration_test.go:158
+        	            				/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/test/contract/autoresearch_reply_integration_test.go:266
+        	Error:      	Received unexpected error:
+        	            	open ../../configs/rules/autoresearch/14-completed-result-to-origin.json: no such file or directory
+        	Test:       	TestAutoresearchReplyPhaseAndOriginGuards/missing_source
+=== RUN   TestAutoresearchReplyPhaseAndOriginGuards/ambiguous_source
+2026/10/01 09:08:44 INFO Created new KV bucket bucket=TestAutoresearchReplyPhaseAndOriginGuards_ambiguous_source_1790863724217835000
+    autoresearch_reply_integration_test.go:266: 
+        	Error Trace:	/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/test/contract/autoresearch_reply_integration_test.go:158
+        	            				/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/test/contract/autoresearch_reply_integration_test.go:266
+        	Error:      	Received unexpected error:
+        	            	open ../../configs/rules/autoresearch/14-completed-result-to-origin.json: no such file or directory
+        	Test:       	TestAutoresearchReplyPhaseAndOriginGuards/ambiguous_source
+2026/10/01 09:08:44 🐳 Stopping container: 8826258a207e
+2026/10/01 09:08:44 ✅ Container stopped: 8826258a207e
+2026/10/01 09:08:44 🐳 Terminating container: 8826258a207e
+2026/10/01 09:08:44 🚫 Container terminated: 8826258a207e
+--- FAIL: TestAutoresearchReplyPhaseAndOriginGuards (0.40s)
+    --- FAIL: TestAutoresearchReplyPhaseAndOriginGuards/dispatched (0.00s)
+    --- FAIL: TestAutoresearchReplyPhaseAndOriginGuards/executing (0.00s)
+    --- FAIL: TestAutoresearchReplyPhaseAndOriginGuards/awaiting_approval (0.00s)
+    --- FAIL: TestAutoresearchReplyPhaseAndOriginGuards/completed (0.00s)
+    --- FAIL: TestAutoresearchReplyPhaseAndOriginGuards/failed (0.00s)
+    --- FAIL: TestAutoresearchReplyPhaseAndOriginGuards/cancelled (0.00s)
+    --- FAIL: TestAutoresearchReplyPhaseAndOriginGuards/missing_origin (0.00s)
+    --- FAIL: TestAutoresearchReplyPhaseAndOriginGuards/foreign_authority (0.00s)
+    --- FAIL: TestAutoresearchReplyPhaseAndOriginGuards/wrong_instance (0.00s)
+    --- FAIL: TestAutoresearchReplyPhaseAndOriginGuards/two_origins (0.00s)
+    --- FAIL: TestAutoresearchReplyPhaseAndOriginGuards/missing_source (0.00s)
+    --- FAIL: TestAutoresearchReplyPhaseAndOriginGuards/ambiguous_source (0.00s)
+=== RUN   TestAutoresearchReplyExistingRunMint
+2026/10/01 09:08:44 🐳 Creating container for image nats:2.14.4
+2026/10/01 09:08:44 ✅ Container created: 86ea40085193
+2026/10/01 09:08:44 🐳 Starting container: 86ea40085193
+2026/10/01 09:08:44 ✅ Container started: 86ea40085193
+2026/10/01 09:08:44 ⏳ Waiting for container id 86ea40085193 image: nats:2.14.4. Waiting for: log message "Server is ready"
+2026/10/01 09:08:44 🔔 Container is ready: 86ea40085193
+2026/10/01 09:08:44 INFO Connecting to NATS urls=nats://localhost:55006
+2026/10/01 09:08:44 INFO Successfully connected to NATS urls=nats://localhost:55006
+=== RUN   TestAutoresearchReplyExistingRunMint/completed
+2026/10/01 09:08:44 INFO Created new KV bucket bucket=TestAutoresearchReplyExistingRunMint_completed_1790863724575776000
+    autoresearch_reply_integration_test.go:279: 
+        	Error Trace:	/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/test/contract/autoresearch_reply_integration_test.go:158
+        	            				/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/test/contract/autoresearch_reply_integration_test.go:279
+        	Error:      	Received unexpected error:
+        	            	open ../../configs/rules/autoresearch/15-origin-approved-result-to-coordinator.json: no such file or directory
+        	Test:       	TestAutoresearchReplyExistingRunMint/completed
+=== RUN   TestAutoresearchReplyExistingRunMint/failed
+2026/10/01 09:08:44 INFO Created new KV bucket bucket=TestAutoresearchReplyExistingRunMint_failed_1790863724579516000
+    autoresearch_reply_integration_test.go:279: 
+        	Error Trace:	/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/test/contract/autoresearch_reply_integration_test.go:158
+        	            				/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/test/contract/autoresearch_reply_integration_test.go:279
+        	Error:      	Received unexpected error:
+        	            	open ../../configs/rules/autoresearch/15-origin-approved-result-to-coordinator.json: no such file or directory
+        	Test:       	TestAutoresearchReplyExistingRunMint/failed
+=== RUN   TestAutoresearchReplyExistingRunMint/awaiting_approval
+2026/10/01 09:08:44 INFO Created new KV bucket bucket=TestAutoresearchReplyExistingRunMint_awaiting_approval_1790863724582468000
+    autoresearch_reply_integration_test.go:279: 
+        	Error Trace:	/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/test/contract/autoresearch_reply_integration_test.go:158
+        	            				/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/test/contract/autoresearch_reply_integration_test.go:279
+        	Error:      	Received unexpected error:
+        	            	open ../../configs/rules/autoresearch/15-origin-approved-result-to-coordinator.json: no such file or directory
+        	Test:       	TestAutoresearchReplyExistingRunMint/awaiting_approval
+=== RUN   TestAutoresearchReplyExistingRunMint/Mint_refuses_different_stored_origin
+2026/10/01 09:08:44 INFO Created new KV bucket bucket=TestAutoresearchReplyExistingRunMint_Mint_refuses_different_stored_origin_1790863724585371000
+2026/10/01 09:08:44 🐳 Stopping container: 86ea40085193
+2026/10/01 09:08:44 ✅ Container stopped: 86ea40085193
+2026/10/01 09:08:44 🐳 Terminating container: 86ea40085193
+2026/10/01 09:08:44 🚫 Container terminated: 86ea40085193
+--- FAIL: TestAutoresearchReplyExistingRunMint (0.37s)
+    --- FAIL: TestAutoresearchReplyExistingRunMint/completed (0.00s)
+    --- FAIL: TestAutoresearchReplyExistingRunMint/failed (0.00s)
+    --- FAIL: TestAutoresearchReplyExistingRunMint/awaiting_approval (0.00s)
+    --- PASS: TestAutoresearchReplyExistingRunMint/Mint_refuses_different_stored_origin (0.00s)
+=== RUN   TestAutoresearchIterationCapAboveDefaultActionLimit
+2026/10/01 09:08:44 🐳 Creating container for image nats:2.14.4
+2026/10/01 09:08:44 ✅ Container created: 520875849e99
+2026/10/01 09:08:44 🐳 Starting container: 520875849e99
+2026/10/01 09:08:44 ✅ Container started: 520875849e99
+2026/10/01 09:08:44 ⏳ Waiting for container id 520875849e99 image: nats:2.14.4. Waiting for: log message "Server is ready"
+2026/10/01 09:08:44 🔔 Container is ready: 520875849e99
+2026/10/01 09:08:44 INFO Connecting to NATS urls=nats://localhost:55007
+2026/10/01 09:08:44 INFO Successfully connected to NATS urls=nats://localhost:55007
+2026/10/01 09:08:44 INFO Created new KV bucket bucket=TestAutoresearchIterationCapAboveDefaultActionLimit_1790863724926235000
+    autoresearch_reply_integration_test.go:306: 
+        	Error Trace:	/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/test/contract/autoresearch_reply_integration_test.go:306
+        	Error:      	Should be false
+        	Test:       	TestAutoresearchIterationCapAboveDefaultActionLimit
+        	Messages:   	pending must clear on iteration 4
+2026/10/01 09:08:44 🐳 Stopping container: 520875849e99
+2026/10/01 09:08:45 ✅ Container stopped: 520875849e99
+2026/10/01 09:08:45 🐳 Terminating container: 520875849e99
+2026/10/01 09:08:45 🚫 Container terminated: 520875849e99
+--- FAIL: TestAutoresearchIterationCapAboveDefaultActionLimit (0.36s)
+FAIL
+FAIL	github.com/c360studio/semteams/test/contract	1.982s
+FAIL

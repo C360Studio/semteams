@@ -3,10 +3,66 @@
 Baseline: SemTeams `ce22c961`, SemStreams `v1.0.0-beta.160`. Target: frozen SHA
 `8b99efe9c66a4faa4fa509f9f62cc6bad8392128`, module
 `v1.0.0-beta.162.0.20260930150212-8b99efe9c66a`. All journeys used the mock LLM.
-Final frozen matrix: **20 passed, one failed, five explicit skips** across 26 scenarios. The failure is the
-retained autoresearch typed terminal-reply blocker; successful artifact emission is now proved before that assertion.
+Final stable repair matrix: **24 active scenarios passed, zero failed, five explicit skips** across 29 scenarios
+(25 passing Playwright tests, five skipped tests). The historical 26-scenario result remains **20/1/5** below,
+including the autoresearch delivery defect that motivated the approved SemTeams-only repair.
 These are development qualification results, not evidence of live-model research quality or a shipped program pulse.
-[Final results](browser-evidence/final/results.json) preserve every scenario, assertion error and effective identity.
+[Final stable results](browser-evidence/repair-final-stable/results.json) preserve each scenario, effective identity
+and exact assertions; [pre-repair results](browser-evidence/final/results.json) retain the original failure.
+
+## Approved autoresearch repair qualification
+
+The historical matrix below remains intact: its 20/1/5 outcome identifies the original delivery defect.
+The approved SemTeams-only repair adds a category terminal handoff through the authoritative origin loop, using
+existing frozen framework rules and typed task lineage; it leaves the iteration driver unchanged.
+[Five focused repair scenarios](browser-evidence/repair-focused/results.json) now pass on image
+`sha256:d96116ba2b09643bb02fad97b2d0c2e069c3e8d96d2a19b11c77fa96c41cdca1`:
+
+- Success: cap 2, actual artifact emission, kept best value and original-channel terminal result; run completed.
+- Guardrails: kept 1.00, rejected crashed 0.10, actual typed final result; run completed.
+- Descended clarification `ask_user`: actual original-channel prompt; same run awaiting approval.
+- Nonbudgeted propose failure: actual max-iteration failure, no experiment/artifact, typed failure status; run failed.
+- Descended clarification `respond_direct`: typed limitation status; same run remains executing by existing policy.
+
+Every case proves one terminal task with native `ParentLoopID` and `RunID` naming the original dispatch loop, one run
+with its unchanged authoritative origin, and one typed response on the original channel/user. The browser opens the
+existing Evidence message log and checks the expanded raw payload exactly. Screenshots have existing right-rail
+clipping; they are not full-content visual proof. Rich prose/artifact rendering (#261) remains outside this proof.
+[Independent E2E review](autoresearch-repair-frontend-review.md) approved this scope. Lint/check/unit/build and direct
+E2E type checks passed; [gate excerpts](browser-evidence/repair-focused/ui-gates.txt) retain the result.
+
+The focused runtime source hash was unchanged before/after:
+`79ad0a9e17faa8f3d3c4473808da9faa2d34353323612013f10e5fd3b0fd9ba8`.
+Build and runtime manifests, exact derived configurations, logs and proofs are recorded alongside the focused results.
+The first complete repair run passed all 24 active Playwright scenarios and skipped five, but is **invalid** as a
+qualification run: a configuration README changed during `clarification-autonomous`, producing runner exit 125.
+[Invalidation evidence](browser-evidence/repair-final/INVALID-source-mutation.json) proves the only changed scanned
+file was `configs/rules/autoresearch/README.md`; it preserves both contents and hashes. This is an orchestration
+failure, not a product failure. The guard was not relaxed or waived. The entire matrix was repeated after a
+new build with all inputs frozen; this history is not described as an unbroken first-pass run.
+
+[Paired prompt-warning evidence](browser-evidence/repair-final-stable/prompt-warning-comparison.json) records two existing
+limitations at both pins: rule03's explanatory best-value token resolves on the wrong entity, and rule05's prose
+plateau count applies `.length` to a scalar completion object. The real emitter comparison and state-based iteration
+cap passed; these fixture results do not qualify live prompt grounding or plateau detection. The repair removes the
+old terminal prompt's separate unresolved artifact-path token. Other configured capability warnings retain their
+attribution below.
+
+The valid final run used image `stmig162-backend:autoresearch-repair-stable`, ID
+`sha256:83ddf378cef73029a014bb0f90225f2a166e9538a37ebfac1f62329f0934b23c`.
+Its [752-file build manifest](browser-evidence/repair-final-stable/backend-build.json) was unchanged at
+`f1d65f14c609217259d1c5636e862404180ec77c68ca5d12089b320969fd43f6`.
+All 747 scanned runtime files [matched the image build](browser-evidence/repair-final-stable/browser-build-source-link.json);
+the complete matrix's before/after hash was
+`29fc06e6426d24a7b9364356dce3af929104dc69dcf405a97eb2a3b623f45552`.
+[Source comparison](browser-evidence/repair-final-stable/source-comparison.json) and every scenario confirm no mutation.
+The [only rebuild delta](browser-evidence/repair-final-stable/previous-build-delta.json) was the final README content.
+Exact [configurations](browser-evidence/repair-final-stable/configs/),
+[Compose files](browser-evidence/repair-final-stable/compose/),
+[typed route and artifact proofs](browser-evidence/repair-final-stable/proofs/),
+[runner output](browser-evidence/repair-final-stable/runner.log), image digests and fixture hashes are durable.
+[Scoped cleanup](browser-evidence/repair-final-stable/scoped-cleanup.json) confirms no remaining containers, volumes or
+network for the migration project. Playwright retries remained zero; the invalid whole-run repeat is disclosed above.
 
 ## Reproducible infrastructure
 
@@ -16,9 +72,9 @@ These are development qualification results, not evidence of live-model research
 [target bootstrap](browser-evidence/target-bootstrap.json) preserve actual initial test configs.
 Image identities are recorded in [baseline images](browser-evidence/baseline-image-digests.txt) and
 [initial target images](browser-evidence/target-image-digests.txt), which predate the final approval repair.
-The final backend image `stmig162-backend:8b99efe` has ID
+The historical pre-repair backend image `stmig162-backend:8b99efe` has ID
 `sha256:6aba6492ddd7da32387ffd4fbb46c3414f2fb2949b02afe89fa3f2defab88ed7`.
-[Final build record](browser-evidence/final/final-backend-build.json) and
+[Pre-repair build record](browser-evidence/final/final-backend-build.json) and
 [build-to-runtime source linkage](browser-evidence/final/final-browser-build-source-link.json) identify the qualified
 code. The 741-file build manifest was unchanged; all 736 runtime-scanned files matched that build at launch.
 Every scenario reports `source_changed: false`; the complete matrix's before/after source digest is
@@ -86,8 +142,11 @@ Original failures are retained in [difference excerpts](browser-evidence/differe
 |---|---|---|
 | research-mvp (N=1) | Old checks passed | Explicit root role; adapted identity and strict reply passed. |
 | research-fanout (N=2) | Join passed; typed reply failed | All checks passed; intended delivery improvement. |
-| autoresearch | Old checks passed; corrected artifact proof passed, typed reply failed | Corrected artifact proof passed; strict final typed reply failed. |
-| autoresearch-guardrails | Passed | Passed; mock bounds and refusal paths only. |
+| autoresearch | Old checks passed; corrected artifact proof passed, typed reply failed | Original typed reply failed; approved repair now passes artifact, cap/best, native ancestry and exact UI reply. |
+| autoresearch-guardrails | Passed | Strict typed reply and real kept/crashed metric bounds passed; mock evidence only. |
+| Descended clarification, ask_user | New repair contract | Typed root-channel prompt passed; same run awaiting approval. |
+| Descended clarification, respond_direct | New repair contract | Typed limitation passed; same run remains executing by existing policy. |
+| Nonbudgeted propose failure | New repair contract | Actual max-iterations8 failure and typed root-channel status passed; run remains failed. |
 | coordinator routing / readiness / spawn | Passed | Passed; route decisions and rule task admission. |
 | sandbox-mvp | Passed | Passed; MockRunner, not empirical devcontainer attestation. |
 | ops-agent | Passed | Old segment-order assertion failed; canonical system/domain correction passed. |
@@ -145,9 +204,9 @@ parsing the body or constructing model/backend clients. Donor libraries remain u
 
 ## Existing limitations, reproduced defects, and holds
 
-- **Autoresearch route blocker:** see [terminal-route evidence](autoresearch-terminal-blocker.md).
-  RUN-triggered iterative spawns lack typed ancestry required by frozen terminal delivery. Loop completion is
-  insufficient.
+- **Historical autoresearch route defect:** see [terminal-route evidence](autoresearch-terminal-blocker.md).
+  RUN-triggered iterative spawns lacked typed ancestry required by frozen terminal delivery. The approved repair
+  restores the terminal handoff through the authoritative origin; loop completion alone remains insufficient.
 - **Autoresearch fixture defect:** both pins returned `invalid_args`:
   `best_experiment_id is required (use literal 'baseline' when iterations_kept == 0)` from `emit_autoresearch_artifact`.
   Canned subsequent success prose is not an emitted artifact. Exact [paired
@@ -157,11 +216,12 @@ parsing the body or constructing model/backend clients. Donor libraries remain u
   from generated loop identity. The [corrected beta.160 run](browser-evidence/baseline-autoresearch-corrected.json)
   proves actual successful ToolResult, matching artifact-path triple, and a running-best graph identity that refers
   to a real kept execute loop with the promoted value. Its strict terminal-reply assertion remains red.
-  The [final frozen proof](browser-evidence/final/autoresearch-proof.json) passes those same artifact assertions and
-  retains the terminal-reply failure. [Paired hashes](browser-evidence/final/autoresearch-paired-fixture.json) prove
+  The [pre-repair frozen proof](browser-evidence/final/autoresearch-proof.json) passes those same artifact assertions
+  and retains the terminal-reply failure. [Paired hashes](browser-evidence/final/autoresearch-paired-fixture.json) prove
   identical corrected fixture/spec at both pins. Final-state capture separately reports ten completed loops and a
   completed run; assertions after the failed delivery check did not execute. Static token and metric fixtures do not
-  prove dynamic artifact lineage or live empirical provenance.
+  prove dynamic artifact lineage or live empirical provenance. The repaired final proof now passes all subsequent
+  terminal delivery, phase and iteration assertions; the historical failed run is unchanged.
 - **Donor approval scaffolds:** `tool-approval-gate` tried `create_rule`, which was not advertised to the loop:
   `tool "create_rule" is not permitted for this loop (advertised tool set)`. Its canned “created” prose is not a bypass.
   `approval-pause` reached only one complete coordinator because its category is parked. `approval-resume` was aborted
@@ -200,9 +260,18 @@ use the same 10-minute buffer and 2-minute cooldown defaults. Frozen research lo
 run-resolution ancestry fallback; that path's completed run/reply passed. No config was silently expanded to erase
 these diagnostics. Existing optional capabilities would require separate configuration and qualification if claimed.
 
-Raw local logs and videos are under `/tmp/semteams-migration-8b99efe/evidence`; durable manifests, exact configs,
+[Final runtime warning ledger](browser-evidence/repair-final-stable/runtime-warning-ledger.json) also retains exact
+ToolResult errors. Approval gates and autonomous `ask_user` refusal are intentional policy checks. The activity
+fixture calls unadvertised `query_entity` at both pins; its UI event assertions do not prove that tool succeeded.
+All five autoresearch repair scenarios have no failed ToolResults. The propose failure is the actual configured
+max-iteration failure, not canned success hiding a tool error. Prompt defects described above remain explicit.
+
+Raw local logs and videos are under `/tmp/semteams-migration-8b99efe/evidence` and its sibling `repair/`;
+durable manifests, exact configs,
 structural proofs and failure excerpts above preserve reviewable evidence without relying only on that temporary path.
-The final qualification run completed with 20 passes, one explicit autoresearch delivery blocker and five skips.
-Independent frontend review is approved, including the final fixture/runner assertions; see
-[final disposition](frontend-review.md#final-frontend-re-review-disposition). The known delivery blocker and product
-holds remain explicit; this is not an all-green release claim.
+The historical pre-repair matrix completed with 20 passes, one autoresearch delivery blocker and five skips.
+Independent frontend review is approved, including the repair fixture assertions; see the
+[initial final disposition](frontend-review.md#final-frontend-re-review-disposition) and
+[repair review](autoresearch-repair-frontend-review.md). The final stable repair run completed with 24 active scenario
+passes and five explicit skips. Product holds and
+coverage limitations remain applicable; these mock results do not qualify live research or rich evidence rendering.

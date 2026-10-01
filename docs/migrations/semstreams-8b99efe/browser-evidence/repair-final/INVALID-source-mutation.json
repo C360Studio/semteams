@@ -1,0 +1,28 @@
+{
+  "qualification": "INVALID: whole matrix source identity changed",
+  "classification": "orchestration failure, not a product failure",
+  "source_changes": [
+    {
+      "path": "configs/rules/autoresearch/README.md",
+      "before": "a6c4680a6ae10d8c57a3dbfede48ff84a8740f65ab137c04ea6b6343fe129311",
+      "after": "25b60e569ee5b0a4d206d63bd157b8c5a4ac9a11cc871caa6b57d19c58bc1124"
+    }
+  ],
+  "all_other_scanned_files_unchanged": true,
+  "active_playwright_passes": 24,
+  "explicit_skips": 5,
+  "guard_rejections": [
+    {
+      "name": "clarification-autonomous",
+      "exit": 125,
+      "playwright_exit": 0,
+      "skipped": false,
+      "source_changed": true
+    }
+  ],
+  "disposition": "Preserve this run; rebuild final docs into new image and repeat the entire matrix under final-stable. No source-filter relaxation or qualification waiver.",
+  "byte_exact_snapshots": {
+    "before": "config-README-before.md.txt",
+    "after": "config-README-after.md.txt"
+  }
+}

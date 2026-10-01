@@ -5,14 +5,18 @@ SemTeams moves from `v1.0.0-beta.160` at baseline `ce22c961d30014c463a09f8f8a2a9
 [Issue #280](https://github.com/C360Studio/semteams/issues/280) owns the work;
 [draft PR #281](https://github.com/C360Studio/semteams/pull/281) owns the claim. No replacement module is used.
 
-**Qualification remains incomplete.** The target autoresearch journey completes its chain but fails final typed
-user delivery. Approval projection implementation and final local Go gates are complete. Independent Go and frontend code
-reviews are approved after their corrections. The final isolated browser matrix records **20 passes, one failure
-(autoresearch final typed delivery), and five explicit skips**, with unchanged source hashes in all 26 runs.
-Post-commit schema and frontend generated-type checks pass. Passing Go/frontend gates and other browser journeys do not
-remove the autoresearch delivery blocker. This is SemTeams pack reauthoring work; an upstream API change is not
-asserted to be mandatory. This record is evidence for review, not
-permission to merge or a statement that the migration has landed.
+The autoresearch terminal-delivery blocker is resolved by an independently reviewed SemTeams rule-pack repair.
+All five focused mock browser cases pass: approved optimization, guardrail rejection, descended clarification,
+limitation reply and involuntary failure. Each checks native task ancestry, authoritative run state, the original
+HTTP channel/user and the delivered raw envelope in the existing UI. Full local Go gates and frontend gates pass.
+The final stable 29-scenario browser matrix passes with **24 active passes, five explicit skips, no failures and no
+source changes**. An earlier repair run was invalidated by a pack README edit inside the watched configuration tree;
+its passing Playwright assertions were not accepted as qualification. Schema and frontend generated-type checks pass
+after implementation commit `edf87d3104d4b5cc494623c89b17742539951380`.
+
+The earlier `8656192c` qualification remains preserved as history: 20 passes, one autoresearch terminal-delivery
+failure and five skips. No SemStreams change, response shim or new runtime primitive was needed for the repair.
+This record does not assert that the migration has landed, SemSource is ready, or SemEngine is accepted.
 
 ## Evidence index
 
@@ -25,17 +29,24 @@ permission to merge or a statement that the migration has landed.
 | [Go review](go-review.md) | Independent code approval, repaired approval ordering, lint dispositions and qualification gaps |
 | [Frontend review](frontend-review.md) | Independent F1–F4 code approval and browser-assertion/runner review |
 | [Browser qualification](browser-baseline.md) | Final baseline/target matrix, overrides, attribution and qualification limits |
+| [Final stable matrix](browser-evidence/repair-final-stable/results.json) | Accepted 24-pass/five-skip repair qualification with frozen source/image/config inputs |
+| [Invalidated matrix](browser-evidence/repair-final/INVALID-source-mutation.json) | Preserved documentation-edit orchestration failure; no waived source guard |
 | [Browser captures](browser-evidence/) | Machine-readable source/config/fixture hashes, exact compose/bootstrap files and results |
 | [Browser difference excerpts](browser-evidence/differences.json) | Relevant states, tool errors and failing assertions |
 | [Final warning ledger](browser-evidence/final/warning-ledger.json) | Exact composition warning severity, source, ownership and bounded capability effects |
-| [Autoresearch terminal blocker](autoresearch-terminal-blocker.md) | Exact typed ancestry break and frozen source analysis |
+| [Autoresearch terminal repair](autoresearch-terminal-blocker.md) | Historical typed ancestry failure, qualified repair and preserved boundaries |
+| [Repair Go review](autoresearch-repair-review.md) | Independent approval of origin forwarding, run assertion and behavioral tests |
+| [Repair frontend review](autoresearch-repair-frontend-review.md) | Independent review of typed delivery, run phase and raw UI evidence assertions |
 | [Selected terminal envelopes](autoresearch-route-evidence.json) | Reduced durable wire evidence for that blocker |
 | [Framework footprint](framework-footprint.md) | Measurement method, selected build contexts, limitations and SemEngine boundary |
-| [OpenSpec change](../../../openspec/changes/adopt-semstreams-frozen-8b99efe/) | Proposal, design, contract delta and conservative branch tasks |
+| [Archived OpenSpec change](../../../openspec/changes/archive/2026-10-01-adopt-semstreams-frozen-8b99efe/) | Proposal, design, contract delta and conservative branch tasks |
 
-The [final matrix](browser-evidence/final/results.json) records post-stabilization outcomes. Original failures and
+The [historical 26-scenario matrix](browser-evidence/final/results.json) records the pre-repair outcomes.
+The [five focused repair results](browser-evidence/repair-focused/results.json) record the repaired delivery cases.
+Original failures and
 corrected runs remain separately identified: a corrected assertion or stronger delivery gate changes what the test
-proves. All scoped browser stacks were removed after the matrix.
+proves. All scoped browser stacks were removed after that historical matrix. The current full rerun is recorded
+separately.
 
 ## Baseline comparison and attribution
 
@@ -52,7 +63,11 @@ proves. All scoped browser stacks were removed after the matrix.
 | Fresh sandbox-request approval comparison cannot observe pending baseline loop, but frozen approve/reject/cancel cases pass | Intended durable dispatch-authority change, with baseline observation limit | [Baseline boundary runs](browser-evidence/baseline-boundary-results.json), [target boundary runs](browser-evidence/target-contract-fixes-results.json); does not qualify all run-level event orderings |
 | Approval answer/pending order can poison a later gate or acknowledge another execution | Reproduced implementation defect, repair independently approved | [Go validation](go-validation.md) records revision-fenced pair-set projection and final passing gates; [Go review G1](go-review.md) records code approval; no new bucket or worker |
 | SSE terminal state can regress, edited approval arguments can cross gates, typed cancellation errors are ignored | Reproduced frontend defects | [Frontend review F1–F3](frontend-review.md); fixes have regression tests and independent frontend code approval |
-| Autoresearch final coordinator has no typed ancestry to initial HTTP route | Unresolved consumer-contract gap under intended upstream routing | [Blocker](autoresearch-terminal-blocker.md); keep terminal-delivery test red, no flat-response shim or invented loop predicate |
+| Autoresearch final coordinator has no typed ancestry to initial HTTP route | Reproduced SemTeams pack defect, repaired with existing upstream primitives | [Historical failure and repair](autoresearch-terminal-blocker.md); run facts return through the actual origin loop, preserving native parent/run routing; five focused browser cases pass |
+| A documentation edit changes a watched configuration-tree hash during a matrix run | Orchestration failure, not a product failure or a passing gate | [Exact invalidation](browser-evidence/repair-final/INVALID-source-mutation.json); preserved separately, followed by a fresh image and full 29-scenario rerun with unchanged source |
+| Run cap above three stalls under the default per-action firing limit | Existing authored-rule limit exposed by the new behavioral test | [Go red/green](go-validation.md#autoresearch-terminal-repair); repeating clear/propose actions explicitly use `max_iterations: 0`, leaving the run cap authoritative |
+| Descended clarification chooses `respond_direct` and leaves the run executing | Existing explicit lifecycle policy, preserved | [Repair review](autoresearch-repair-review.md#preserved-limitation-reply-lifecycle); the response is delivered, but does not claim completed optimization or qualify subsequent continuation |
+| Rule03 best-value prompt token and rule05 journal `.length` prose remain unresolved/sentinel-valued | Existing prompt-grounding defects at both pins | [Paired warning evidence](browser-evidence/repair-focused/prompt-warning-comparison.json); mocks qualify routing/tool outcomes, not live-model interpretation of those prompts |
 | Autoresearch fixture omits `best_experiment_id` when calling artifact emitter | Existing fixture defect, reproduced at both pins | [Original paired errors](browser-evidence/autoresearch-fixture-defect.json); [corrected baseline](browser-evidence/baseline-autoresearch-corrected.json) proves actual emitter success/path and run best-value/experiment facts, then still fails strict final delivery; the [corrected target](browser-evidence/final/autoresearch-proof.json) proves those same artifact facts and still fails strict final delivery |
 | Trajectory exposes facts/references but UI does not dereference full evidence bodies | Existing limitation #261 | [Claim boundary](../../demo-mvp-claims.md); do not claim ArtifactCard/context handoff, prose/tool bodies or rich narrative restored |
 | Graph Chat pane is an unwired no-op at baseline and target | Existing UI limitation | [Frontend review](frontend-review.md); graph exploration and top-level product dispatch remain functional, no working graph-assistant claim |
@@ -67,12 +82,14 @@ proves. All scoped browser stacks were removed after the matrix.
 | Parked donor and artifact-handoff journeys remain skipped | Existing scope exclusions | [Baseline](browser-evidence/baseline-browser-results.json) and [target](browser-evidence/target-browser-results.json); skipped is not passed |
 
 The original baseline matrix records 21 core scenarios (16 active, five explicit skips) plus two failing old approval
-fixtures. The active baseline run-failed failure was repaired in the assertion and rerun explicitly. The target matrix
-retains the same core exclusions. Initial research/ops assertion failures have separate corrected results; autoresearch
-terminal delivery remains red. The [final browser report](browser-baseline.md) consolidates 20 passes, one failure and five skips, including the new
-boundary/fan-out cases. The [actual final run-scoped approval proof](browser-evidence/final/run-approval-boundary-proof.json)
-passes through graph owner/projection, lifecycle rules, UI execution fencing and typed
-research delivery; this does not remove the separate autoresearch delivery blocker.
+fixtures. Its run-failed assertion race was repaired and rerun explicitly. Initial target research/ops assertion
+failures have separate corrected results. The historical full target matrix has 20 passes, one terminal-delivery
+failure and five skips. The repaired terminal cases now pass in the
+[focused results](browser-evidence/repair-focused/results.json) and the
+[accepted full matrix](browser-evidence/repair-final-stable/results.json). All 24 active scenarios pass; five remain
+explicitly outside scope.
+The [actual run-scoped approval proof](browser-evidence/final/run-approval-boundary-proof.json) passes through graph
+owner/projection, lifecycle rules, UI execution fencing and typed research delivery.
 
 ## Configuration and state boundary
 
@@ -88,8 +105,10 @@ sandbox-request approval policy. Mock LLM/attested sandbox fixtures do not quali
 execution quality. The browser lane records effective configuration hashes and monitors concrete state during runs.
 
 Browser qualification uses fresh NATS 2.14.4 and graph state. Existing Go integration gates use the unchanged
-upstream `2.14-alpine` helper, locally resolved to 2.14.7; see [runtime identities](evidence/runtime/nats-identities.json). Canonical identity and pending approval marker formats differ
-from beta.160; the implemented repair uses loop/execution-correlated durable sets with revision-fenced reconciliation. No retained-state reader/conversion, recovery
+upstream `2.14-alpine` helper, locally resolved to 2.14.7; see [runtime
+identities](evidence/runtime/nats-identities.json). Canonical identity and pending approval marker formats differ
+from beta.160; the implemented repair uses loop/execution-correlated durable sets with revision-fenced reconciliation.
+No retained-state reader/conversion, recovery
 migration or production wipe is authorized or claimed. Existing storage must be assessed separately before deployment.
 
 ## Compatibility and product limits
@@ -102,12 +121,15 @@ unwired. Historical ADRs describe their original releases and are not rewritten 
 
 SemTeams can complete the SemStreams upgrade independently of SemEngine. Framework references and compile closure
 inform a later approved consumer contract. Full registrar closure and parked source/test obligations are not automatic
-SemEngine first-release requirements. The [matched method-2 footprint](framework-footprint.md) includes declaration/reference positions, import edges, module
+SemEngine first-release requirements. The [matched method-2 footprint](framework-footprint.md) includes
+declaration/reference positions, import edges, module
 graph and parked build diagnostics; its semantic and dynamic-runtime limits remain explicit.
 
 SemSource-backed dogfooding remains held until SemSource is ready. Program Pulse remains the target product, not shipped
 behavior. Evidence-body rendering limitation [#261](https://github.com/C360Studio/semteams/issues/261) remains separate
-from the autoresearch terminal-route blocker. Neither can be hidden by a passing graph query or successful loop count.
+from the repaired autoresearch terminal route. Raw envelope inspection does not imply evidence-body rendering.
 
-Post-content schema and frontend generated-type cleanliness checks passed at `f70537c8`; see
-[the exact check record](evidence/go/postcommit-generated-checks.json). Hosted CI is tracked on the draft PR.
+Historical post-content schema and frontend generated-type checks passed at `f70537c8`; see
+[the exact record](evidence/go/postcommit-generated-checks.json). The [repair-content
+checks](evidence/go/repair/postcommit-generated.json) also pass after `edf87d31`.
+Hosted CI is tracked on the PR and is separate from these local qualification results.

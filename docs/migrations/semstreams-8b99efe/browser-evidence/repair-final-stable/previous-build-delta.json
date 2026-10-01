@@ -1,0 +1,10 @@
+{
+  "changed_files": [
+    {
+      "path": "configs/rules/autoresearch/README.md",
+      "before": "a6c4680a6ae10d8c57a3dbfede48ff84a8740f65ab137c04ea6b6343fe129311",
+      "after": "25b60e569ee5b0a4d206d63bd157b8c5a4ac9a11cc871caa6b57d19c58bc1124"
+    }
+  ],
+  "qualification_history": "Previous complete run invalidated by configuration README write; rebuilt final doc content and repeated every scenario without relaxing guard or retrying unchanged product failures."
+}

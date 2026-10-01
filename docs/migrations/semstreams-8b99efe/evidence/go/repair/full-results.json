@@ -1,0 +1,87 @@
+[
+  {
+    "name": "go-lint",
+    "command": [
+      "task",
+      "lint"
+    ],
+    "cwd": "/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams",
+    "started_at": "2026-10-01T14:21:49.220310+00:00",
+    "exit_code": 0,
+    "elapsed_seconds": 1.741,
+    "completed_at": "2026-10-01T14:21:50.961396+00:00"
+  },
+  {
+    "name": "go-race",
+    "command": [
+      "task",
+      "test:race"
+    ],
+    "cwd": "/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams",
+    "started_at": "2026-10-01T14:21:50.961691+00:00",
+    "exit_code": 0,
+    "elapsed_seconds": 15.46,
+    "completed_at": "2026-10-01T14:22:06.422186+00:00"
+  },
+  {
+    "name": "go-integration",
+    "command": [
+      "task",
+      "test:integration"
+    ],
+    "cwd": "/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams",
+    "started_at": "2026-10-01T14:22:06.422591+00:00",
+    "exit_code": 0,
+    "elapsed_seconds": 67.533,
+    "completed_at": "2026-10-01T14:23:13.955605+00:00"
+  },
+  {
+    "name": "go-build",
+    "command": [
+      "go",
+      "build",
+      "./..."
+    ],
+    "cwd": "/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams",
+    "started_at": "2026-10-01T14:23:13.956240+00:00",
+    "exit_code": 0,
+    "elapsed_seconds": 3.481,
+    "completed_at": "2026-10-01T14:23:17.437497+00:00"
+  },
+  {
+    "name": "schema-generate",
+    "command": [
+      "task",
+      "schema:generate"
+    ],
+    "cwd": "/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams",
+    "started_at": "2026-10-01T14:23:17.437795+00:00",
+    "exit_code": 0,
+    "elapsed_seconds": 0.415,
+    "completed_at": "2026-10-01T14:23:17.853200+00:00"
+  },
+  {
+    "name": "openspec-validate",
+    "command": [
+      "task",
+      "openspec:validate"
+    ],
+    "cwd": "/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams",
+    "started_at": "2026-10-01T14:23:17.853515+00:00",
+    "exit_code": 0,
+    "elapsed_seconds": 0.389,
+    "completed_at": "2026-10-01T14:23:18.242983+00:00"
+  },
+  {
+    "name": "openspec-queue",
+    "command": [
+      "task",
+      "openspec:queue-test"
+    ],
+    "cwd": "/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams",
+    "started_at": "2026-10-01T14:23:18.243389+00:00",
+    "exit_code": 0,
+    "elapsed_seconds": 4.598,
+    "completed_at": "2026-10-01T14:23:22.841207+00:00"
+  }
+]
