@@ -936,3 +936,97 @@ gap ("B") follows thread 3.
    "Open at implementation time").
 4. Grammar-collision audit for `agent.run*` tokens before stamping
    (`feedback_grammar_collision_audit_on_new_tokens`).
+
+
+## Addendum 2026-10-01 — Autoresearch returns through its run origin
+
+The frozen SemStreams consumer qualification exposed a product wiring error: the autoresearch iteration driver
+fires on the run entity, so its children have no native parent/run link back to the user's coordinator. Product
+`related_loops` context remains useful for reading results, but the typed terminal dispatcher correctly does not
+interpret that metadata as routing authority. The fix belongs to the SemTeams category pack; it requires no
+SemStreams change or future framework feature.
+
+### Framework-alignment decision
+
+Keep the accumulator and iteration driver on the run. Moving dispatch onto each baseline/execute loop would reset
+per-entity iteration state and lose the run-local cap, best value and journal. Do not copy that state to another
+owner, fabricate a loop predicate on the run, or add a response publisher, subscriber, tool, queue or bucket.
+
+Use the existing cross-entity rule marker pattern already used by the agent-run lifecycle pack. Three explicit
+product facts identify the source of a return to the user:
+
+| Predicate | Source event | Run phase required before forwarding |
+|---|---|---|
+| `autoresearch.reply.approved` | Successful reviewer `approved` terminal | `completed` |
+| `autoresearch.reply.clarification` | Successful descended role `needs_clarification` terminal | `executing` |
+| `autoresearch.reply.failed` | Non-budgeted baseline/propose/synthesize/reviewer involuntary failure | `failed` |
+
+Each object is the full canonical source loop entity ID, registered with `DataTypeEntityID`. The canonical entity
+reference participates as a graph edge; `PredicateMetadata` has no `IsEdge` field. These are append-only evidence
+facts, not transient queue entries or current-state projections. The pack first writes the
+fact on the run, then forwards the same fact to its existing `agent.run.origin-entity-id`. Duplicate writes of the
+same fact are set-idempotent. The bridge requires exactly one source and exactly one origin, and validates:
+
+```text
+agent.run.origin-entity-id == $entity.org.$entity.platform.agentic-loop.agent.execution.$entity.instance
+```
+
+This comparison checks the stored framework-owned relation; the write subject remains that stored relation. A
+foreign, malformed or different-instance origin does not qualify. The origin rule requires a coordinator whose
+decision was `autoresearch` and exactly one corresponding reply source. Missing or ambiguous facts fail closed.
+No origin is recovered from arbitrary lineage strings.
+
+The origin then publishes a coordinator with `run_scope: new`. Here this means an idempotent assertion of the
+already existing origin-rooted run: `agentrun.Mint` retrieves the existing run and verifies its origin without
+resetting its phase. The task receives native `ParentLoopID` and `RunID` equal to that origin loop's UUID. Plain
+inheritance is insufficient because a clarification-reply coordinator may carry an older inherited run before
+minting its own run; first-value graph inheritance would select the older anchor. The return does not write or
+invent native ancestry fields itself.
+
+Approved-result and failure-report coordinators may only `respond_direct`. Clarification retains
+`respond_direct` / `ask_user` and the existing autonomous clarification policy. Baseline clarification already has
+native ancestry and retains its existing route. Reviewer rejection stays within the synthesize/review arc; it does
+not send an approved fact. Budgeted execute failure still consumes an iteration and continues; it is not a run
+failure or user-error terminal. The failure report must not invent an error explanation if `read_loop_result`
+has no completion body for the failed loop.
+
+### Ownership and execution boundaries
+
+The run remains the only owner of cap, completed-experiment journal, empirical best, stop state and lifecycle.
+The return facts do not rearm iteration, clear evidence, retry failed work or change the lifecycle. The repeating
+rule-05 clear-marker and propose actions explicitly opt out of the framework's default three-action firing cap;
+the existing run cap is their bound. This preserves configured caps above three without introducing a second
+budget authority. Synthesize and stop actions remain one-shot.
+
+Approved and failure forwarding require their respective terminal run phases, so a cancelled run cannot qualify
+through a late approval or failure fact. Clarification forwarding requires `executing`; cancellation observed
+before that evaluation suppresses it. An action admitted before cancellation remains subject to the existing
+rule selection/publication ordering boundary. Cross-entity marker forwarding is not a cancellation transaction.
+
+No return rule opts into `on_recovery` or `rerun_on_recovery`. Successfully persisted match state suppresses
+repeated facts, stale revisions and restart replay. The framework executes actions before persisting match state;
+this does not establish transactional exactly-once publication across a process crash. Similarly, the existing
+`publish_agent` action logs a Mint failure, clears `RunID`, and may still publish with native parent ancestry.
+The authored origin guards prevent identity mismatch in a well-formed handoff; they do not change that transport
+or lifecycle failure policy. Parent ancestry is the existing typed dispatch fallback, not a product workaround.
+
+### Frozen source evidence and qualification
+
+The survey used SHA `8b99efe9c66a4faa4fa509f9f62cc6bad8392128`:
+
+- `processor/rule/actions.go:93-112` supports cross-entity triple subjects;
+  `1800-1889` defines native parent/run assignment; `1987-1993` defines Mint failure behavior.
+- `agentic/agentrun/agentrun.go:248-345` owns the canonical origin relation and idempotent origin-checked Mint.
+- `processor/rule/stateful_evaluator.go:110-115,183-186` keys iteration by firing entity; its stale revision and
+  persisted matching-state rules define replay behavior.
+- `processor/rule/actions.go:323-344` defines the per-action default of three and explicit zero opt-out.
+- `processor/agentic-dispatch/terminal_settlement.go` owns typed response selection and durable ancestry routing.
+- `processor/agentic-tools/loop_result.go` accepts the full source loop entity ID and normalizes it for lookup.
+
+Architect and independent Go reviewer approved this design for TDD before implementation. Required evidence uses
+actual frozen rule matching/actions and NATS-backed state tracking: source terminal gates; phase/origin guards;
+dual inherited/current anchors; unchanged completed/failed/awaiting phases on idempotent Mint; unrelated-run
+isolation; duplicate/stale/restart behavior; cap above three; failed-execute accounting; empirical best and stop
+behavior. Real mock browser journeys must prove final typed delivery, descended clarification and failure reports,
+with source/root/run correlation. Independent implementation review remains required. This addendum records the
+design; test outcomes belong in the migration qualification record.

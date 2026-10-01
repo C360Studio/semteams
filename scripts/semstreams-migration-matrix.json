@@ -181,5 +181,23 @@
     "fixture": "research-fanout.yaml",
     "spec": "research-fanout.spec.ts",
     "config": "e2e-flow-bootstrap.json"
+  },
+  {
+    "name": "autoresearch-descended-clarification",
+    "fixture": "autoresearch-descended-clarification.yaml",
+    "spec": "autoresearch-exit.spec.ts",
+    "config": "e2e-flow-bootstrap.json"
+  },
+  {
+    "name": "autoresearch-propose-failed",
+    "fixture": "autoresearch-propose-failed.yaml",
+    "spec": "autoresearch-exit.spec.ts",
+    "config": "e2e-flow-bootstrap.json"
+  },
+  {
+    "name": "autoresearch-descended-status",
+    "fixture": "autoresearch-descended-status.yaml",
+    "spec": "autoresearch-exit.spec.ts",
+    "config": "e2e-flow-bootstrap.json"
   }
 ]

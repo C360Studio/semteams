@@ -1,7 +1,10 @@
 import { test, expect } from "@playwright/test";
+import { assertAutoresearchTerminalDelivery, readMessages } from "./autoresearch_delivery";
 
 interface Loop {
   loop_id?: string;
+  task_id?: string;
+  result?: string;
   role?: string | null;
   state?: string;
 }
@@ -32,7 +35,7 @@ test.describe("OpenSpec 6.4 - autoresearch metric guardrails", () => {
   test("refuses vague objectives, then rejects guardrail-breaking metric wins", async ({
     page,
     request,
-  }) => {
+  }, testInfo) => {
     await page.goto("/");
     await expect(page.getByTestId("connection-status")).toHaveAttribute(
       "data-summary",
@@ -67,8 +70,14 @@ test.describe("OpenSpec 6.4 - autoresearch metric guardrails", () => {
       "vague/non-scalar objective must not spawn the autoresearch arc",
     ).toBe(false);
 
-    let replies = await fetchUserResponses(request);
-    expect(replies.length, "ask_user should publish a user response").toBeGreaterThan(0);
+    // Count only the actual typed prompt for this coordinator, not submission
+    // status or unrelated logger entries returned by an unsupported filter.
+    await expect.poll(async () => (await readMessages(request)).filter((entry) =>
+      entry.subject.startsWith("user.response.") && entry.message_type === "agentic.user_response.v1"
+      && entry.raw_data?.payload?.type === "prompt"
+      && entry.raw_data?.payload?.in_reply_to === refusalLoops![0].loop_id
+      && entry.raw_data?.payload?.content?.includes("What scalar metric")).length,
+    { timeout: 10_000 }).toBe(1);
 
     await page.getByTestId("chat-input").fill(
       "Optimize `go test ./...` wallclock. Metric: trailing ok-line seconds, lower is better. Command: `go test ./...`. Surface: `test/helpers/` and `internal/testutil/`. Cap: 2 iterations. Guardrail: all tests must keep passing; do not keep changes that skip coverage or fail the command.",
@@ -189,11 +198,10 @@ test.describe("OpenSpec 6.4 - autoresearch metric guardrails", () => {
     });
     expect(values(bestExperimentArtifact)).toContain("iteration-1");
 
-    replies = await fetchUserResponses(request);
-    expect(
-      replies.length,
-      "ask_user + final respond_direct should both publish user responses",
-    ).toBeGreaterThanOrEqual(2);
+    await assertAutoresearchTerminalDelivery(page, request, testInfo, loops, {
+      content: "Autoresearch kept the passing fixture-cache improvement",
+      sourceRole: "reviewer-autoresearch", relatedLoopKey: "terminal", phase: "completed",
+    });
   });
 });
 
@@ -222,18 +230,6 @@ async function fetchTriples(
     );
   }
   return (await resp.json()) as Triple[];
-}
-
-async function fetchUserResponses(
-  request: import("@playwright/test").APIRequestContext,
-): Promise<Array<{ subject: string }>> {
-  const resp = await request.get(
-    "/message-logger/entries?subject_prefix=dispatch.user.response&limit=20",
-  );
-  if (!resp.ok()) {
-    throw new Error(`/message-logger/entries returned ${resp.status()}: ${await resp.text()}`);
-  }
-  return (await resp.json()) as Array<{ subject: string }>;
 }
 
 async function measurementByOutcome(

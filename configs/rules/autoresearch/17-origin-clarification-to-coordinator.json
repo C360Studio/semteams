@@ -1,0 +1,71 @@
+{
+  "id": "autoresearch_origin_clarification_to_coordinator",
+  "type": "expression",
+  "name": "Origin coordinator \u2192 routed autoresearch clarification reply",
+  "description": "The actual origin loop publishes the reply coordinator using native parent inheritance. run_scope=new idempotently asserts the existing origin-rooted run, preserving its phase and verifying its stored origin; it selects this root even if the loop retains an older inherited run anchor. The frozen executor can publish parent-only after a Mint error; this rule does not claim transactional fail-closed publication.",
+  "enabled": true,
+  "entity": {
+    "pattern": "*.*.agentic-loop.agent.execution.*"
+  },
+  "conditions": [
+    {
+      "field": "agent.loop.role",
+      "operator": "eq",
+      "value": "coordinator",
+      "required": true
+    },
+    {
+      "field": "coordinator.decision.next-action",
+      "operator": "eq",
+      "value": "autoresearch",
+      "required": true
+    },
+    {
+      "field": "autoresearch.reply.clarification",
+      "operator": "length_eq",
+      "value": 1,
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "publish_agent",
+      "subject": "agent.task.coordinator",
+      "role": "coordinator",
+      "model": "coordinator",
+      "tools": [
+        "read_loop_result",
+        "bash",
+        "decide"
+      ],
+      "tool_choice": {
+        "mode": "required"
+      },
+      "action_allowlist": [
+        "respond_direct",
+        "ask_user"
+      ],
+      "properties": {
+        "wakeup_mode": "autoresearch_clarification",
+        "source_loop_entity_id": "$entity.triple.autoresearch.reply.clarification",
+        "category": "autoresearch"
+      },
+      "related_loops": {
+        "rejecting": "$entity.triple.autoresearch.reply.clarification",
+        "autoresearch-run": "$entity.instance"
+      },
+      "prompt": "An autoresearch role could not continue and requested clarification. Read its terminal reason using read_loop_result(loop_id=\"$entity.triple.autoresearch.reply.clarification\"). Explain the actual gap and partial progress. Use decide(action=\"ask_user\", reason=\"<specific question>\") only for something the user can clarify; otherwise decide(action=\"respond_direct\", reason=\"<honest limitation/status>\"). Do not restart work or describe the run as successful. The existing restricted_decide_actions policy still governs ask_user.",
+      "run_scope": "new"
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "pack": "autoresearch",
+    "actor": "origin coordinator",
+    "contract": "origin-loop reply handoff",
+    "result": "clarification",
+    "replay": "No on_recovery or rerun_on_recovery. Persisted matching state suppresses normal restart repeats.",
+    "run_assertion": "Idempotent assertion of the existing origin-rooted run; does not reset lifecycle phase."
+  }
+}

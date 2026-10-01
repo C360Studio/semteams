@@ -199,8 +199,8 @@ func approvalFacts(entity *graph.EntityState, key string, answer bool, now time.
 			if priorCount != nil || tr.Subject != entity.ID {
 				return nil, false, errors.New("invalid approval outstanding projection")
 			}
-			copy := tr
-			priorCount = &copy
+			existingCount := tr
+			priorCount = &existingCount
 			continue
 		}
 		var target map[string]message.Triple

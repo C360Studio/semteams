@@ -47,6 +47,21 @@ var predicates = []vocabulary.PredicateMetadata{
 
 	// --- autoresearch pack ---
 	{
+		Name:        "autoresearch.reply.approved",
+		Description: "Immutable approved source loop entity reference, relayed from the run to its canonical origin for routed reply delivery",
+		DataType:    vocabulary.DataTypeEntityID,
+	},
+	{
+		Name:        "autoresearch.reply.clarification",
+		Description: "Immutable clarification source loop entity reference, relayed from the run to its canonical origin for routed reply delivery",
+		DataType:    vocabulary.DataTypeEntityID,
+	},
+	{
+		Name:        "autoresearch.reply.failed",
+		Description: "Immutable failed source loop entity reference, relayed from the run to its canonical origin for routed reply delivery",
+		DataType:    vocabulary.DataTypeEntityID,
+	},
+	{
 		Name:        "autoresearch.run.status",
 		Description: "Autoresearch run status (running | stopped); replace-owned by rule-pack.semteams",
 		DataType:    "string",

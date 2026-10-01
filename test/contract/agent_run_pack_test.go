@@ -37,6 +37,7 @@ type ruleDoc struct {
 		When            json.RawMessage   `json:"when"`
 		RelatedLoops    map[string]string `json:"related_loops"`
 		Role            string            `json:"role"`
+		RunScope        string            `json:"run_scope"`
 		ActionAllowlist []string          `json:"action_allowlist"`
 		Tools           []string          `json:"tools"`
 	} `json:"on_enter"`
@@ -123,7 +124,7 @@ func TestAgentRunPack_HandoffMarker(t *testing.T) {
 		t.Error("handoff marker must gate on rule.task.spawned != \"\" (confirmed handoff, Coby review P1a) — NOT on agent.run.phase==dispatched (bare mint, which survives a publish failure)")
 	}
 	// agent.run.entity-id presence is the run-less-chat guard.
-	if !r.hasCondition("agent.run.entity-id", "ne", "") {
+	if !r.hasCondition("agent.run.entity-id", "ne", "") && !r.hasCondition("agent.run.entity-id", "length_eq", float64(1)) {
 		t.Error("handoff marker must gate on agent.run.entity-id != \"\" (run-less-chat guard)")
 	}
 	// Must NOT trigger on bare mint.
@@ -429,11 +430,11 @@ func TestAgentRunPack_FailedStampAnchorGuarded(t *testing.T) {
 		r := loadRule(t, tc.path)
 		switch tc.subject {
 		case "$entity.triple.agent.lineage.run-loop-entity-id":
-			if !r.hasConditionField("agent.lineage.run-loop-entity-id", "length_gt") {
+			if !r.hasConditionField("agent.lineage.run-loop-entity-id", "length_gt") && !r.hasCondition("agent.lineage.run-loop-entity-id", "length_eq", float64(1)) {
 				t.Errorf("%s: a agent.lineage.run-loop-entity-id failed-stamp must guard on `agent.lineage.run-loop-entity-id length_gt 0` (C1 garbage-literal-subject defense)", tc.path)
 			}
 		case "$entity.triple.agent.run.entity-id":
-			if !r.hasCondition("agent.run.entity-id", "ne", "") {
+			if !r.hasCondition("agent.run.entity-id", "ne", "") && !r.hasCondition("agent.run.entity-id", "length_eq", float64(1)) {
 				t.Errorf("%s: an agent.run.entity-id failed-stamp must guard on `agent.run.entity-id != \"\"` (anchor-present / run-less-chat guard)", tc.path)
 			}
 		}
@@ -541,7 +542,7 @@ func TestAgentRunPack_ClarificationResumeMarker(t *testing.T) {
 	}
 	// The run anchor (Thread 1) — semstreams#256 (beta.106) threads run_id onto
 	// the reply, so the reply loop carries agent.run.entity-id.
-	if !r.hasCondition("agent.run.entity-id", "ne", "") {
+	if !r.hasCondition("agent.run.entity-id", "ne", "") && !r.hasCondition("agent.run.entity-id", "length_eq", float64(1)) {
 		t.Error("agent-run/10: must require agent.run.entity-id != \"\" (the run anchor threaded by semstreams#256)")
 	}
 	// The reply discriminator (Thread 2) — the loop-local signal that this is a
@@ -793,11 +794,15 @@ const (
 	// agent-run/05 or 06. No rule maps here today; the class is retained because
 	// a future pack MAY introduce a new deferred path before its anchor is wired.
 	dispDeferred4b = "deferred_4b"
+	// Origin reply reasserts the existing self-rooted run after a phase-gated result relay.
+	dispOriginReply = "origin_reply"
 )
 
 var coordinatorSpawnDisposition = map[string]string{
+	"autoresearch_origin_approved_to_coordinator":                 dispOriginReply,
+	"autoresearch_origin_clarification_to_coordinator":            dispOriginReply,
+	"autoresearch_origin_failed_to_coordinator":                   dispOriginReply,
 	"research_reviewer_approved_to_coordinator":                   dispPostApproval,   // research/07
-	"autoresearch_reviewer_approved_to_coordinator":               dispPostApproval,   // autoresearch/08
 	"dev_via_test_cbg_approved_to_coordinator":                    dispPostApproval,   // dev-via-test/07a
 	"dev_via_test_plan_approved_to_coordinator":                   dispAnchorThreaded, // dev-via-test/02b
 	"dev_via_test_plan_retry_driver":                              dispAnchorThreaded, // dev-via-test/02d
@@ -806,7 +811,6 @@ var coordinatorSpawnDisposition = map[string]string{
 	"dev_from_task_ready_request_to_coordinator":                  dispAnchorThreaded, // dev-from-task/02
 	"research_needs_clarification_to_coordinator":                 dispAnchorInherit,  // research/06
 	"autoresearch_needs_clarification_replan":                     dispAnchorInherit,  // autoresearch/10 (baseline — 4b-1a)
-	"autoresearch_descended_needs_clarification_replan":           dispAnchorThreaded, // autoresearch/10b (4b-1a)
 	"dev_via_test_plan_rejected_to_coordinator":                   dispAnchorThreaded, // dev-via-test/02e (4b-1a)
 	"dev_via_test_lisa_needs_clarification_to_coordinator":        dispAnchorInherit,  // dev-via-test/02f (first-pass — 4b-1a)
 	"dev_via_test_replan_lisa_needs_clarification_to_coordinator": dispAnchorThreaded, // dev-via-test/02f-replan (4b-1a)
@@ -818,6 +822,7 @@ var coordinatorSpawnDisposition = map[string]string{
 }
 
 type coordSpawnInfo struct {
+	originReply      bool
 	threadsRunLoopID bool
 	stampsSuccess    bool
 	allowlist        []string
@@ -847,10 +852,12 @@ func findCoordinatorSpawnRules(t *testing.T) map[string]coordSpawnInfo {
 			return nil // not a rule doc — skip
 		}
 		var info coordSpawnInfo
+		info.originReply = r.hasCondition("agent.loop.role", "eq", "coordinator") && r.hasCondition("coordinator.decision.next-action", "eq", "autoresearch")
 		var isCoordSpawn, firstCoord bool
 		firstCoord = true
 		for _, a := range r.OnEnter {
 			if a.Type == "publish_agent" && a.Role == "coordinator" {
+				info.originReply = info.originReply && a.RunScope == "new" && a.RelatedLoops["autoresearch-run"] == "$entity.instance"
 				isCoordSpawn = true
 				_, threaded := a.RelatedLoops["run-loop-entity-id"]
 				if firstCoord {
@@ -905,6 +912,10 @@ func TestAgentRunPack_CoordinatorSpawnCoverage(t *testing.T) {
 	// Per-disposition invariants.
 	for id, info := range found {
 		switch coordinatorSpawnDisposition[id] {
+		case dispOriginReply:
+			if !info.originReply || info.threadsRunLoopID {
+				t.Errorf("%s: origin reply must use the actual autoresearch origin and idempotent self-run assertion without conflicting inherited lineage", id)
+			}
 		case dispPostApproval:
 			if !info.stampsSuccess {
 				t.Errorf("%s: classified post_approval but does not stamp agent.run.outcome=success — a post_approval "+
@@ -1011,7 +1022,7 @@ func TestAnchorSplitSiblingsKeepContractInSync(t *testing.T) {
 		},
 		{
 			"../../configs/rules/autoresearch/10-needs-clarification-replan.json",
-			"../../configs/rules/autoresearch/10b-descended-needs-clarification-replan.json",
+			"../../configs/rules/autoresearch/17-origin-clarification-to-coordinator.json",
 		},
 	}
 	for _, p := range pairs {
