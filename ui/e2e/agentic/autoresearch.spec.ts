@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { assertAnchorBornFirst, RUN_ANCHOR } from "./born_first";
+import { assertAutoresearchTerminalDelivery } from "./autoresearch_delivery";
 
 /**
  * Journey: autoresearch pack (Karpathy propose/execute iteration
@@ -19,7 +20,7 @@ import { assertAnchorBornFirst, RUN_ANCHOR } from "./born_first";
  *
  * Load-bearing assertions: the rule-05 presence-marker loop ran
  * exactly cap=2 iterations (2 propose + 2 execute), best.value was
- * promoted below baseline (the empirical keep), and the chain
+ * promoted below the synthetic baseline, an artifact was emitted, and the chain
  * terminated with a delivered reply. A regression in the iteration
  * dispatch (rule 05), the cap gate, or best-promotion (rule 04c)
  * fails here.
@@ -32,8 +33,10 @@ import { assertAnchorBornFirst, RUN_ANCHOR } from "./born_first";
 
 interface Loop {
   loop_id?: string;
+  task_id?: string;
   role?: string | null;
   state?: string;
+  result?: string;
 }
 interface Triple {
   subject?: string;
@@ -61,7 +64,7 @@ test.describe("autoresearch — propose/execute iteration mock-LLM journey", () 
   test("optimize prompt → baseline → 2 kept iterations → approved reply", async ({
     page,
     request,
-  }) => {
+  }, testInfo) => {
     await page.goto("/");
     await expect(page.getByTestId("connection-status")).toHaveAttribute(
       "data-summary",
@@ -149,7 +152,7 @@ test.describe("autoresearch — propose/execute iteration mock-LLM journey", () 
       ).toBe(true);
     }
 
-    // Empirical keep: best.value promoted below baseline (1.20 → 0.85).
+    // Fixture-driven keep: best.value promoted below baseline (1.20 → 0.85).
     // Proves rule 04c fired on the kept measurements.
     const best = await fetchTriples(request, {
       predicate: "autoresearch.best.value",
@@ -170,16 +173,55 @@ test.describe("autoresearch — propose/execute iteration mock-LLM journey", () 
       `expected best.value (${bestVal}) promoted below the 1.20 baseline`,
     ).toBeLessThan(1.2);
 
-    // Terminal user reply published.
-    const resp = await request.get(
-      "/message-logger/entries?subject_prefix=dispatch.user.response&limit=10",
-    );
-    expect(resp.ok(), "/message-logger/entries non-OK").toBe(true);
-    const payloads = (await resp.json()) as Array<{ subject: string }>;
-    expect(
-      payloads.length,
-      "expected a user.response.* publish (coordinator respond_direct)",
-    ).toBeGreaterThanOrEqual(1);
+    // Artifact success must come from the executor, not the fixture's subsequent
+    // canned decide(emit). The original fixture omitted a required field and
+    // older role/count assertions silently accepted an invalid_args ToolResult.
+    const synthesis = settled.find((loop) => loop.role === "autoresearch-synthesize")!;
+    const messagesResponse = await request.get("/message-logger/entries?limit=500");
+    expect(messagesResponse.ok()).toBe(true);
+    type ToolResultEntry = {
+      subject: string;
+      raw_data?: { payload?: { name?: string; loop_id?: string; error?: string; content?: string } };
+    };
+    const messages: ToolResultEntry[] = await messagesResponse.json();
+    const artifactResults = messages.filter((entry) => entry.subject.startsWith("tool.result.")
+      && entry.raw_data?.payload?.name === "emit_autoresearch_artifact"
+      && entry.raw_data?.payload?.loop_id === synthesis.loop_id);
+    expect(artifactResults, "the synthesize loop must receive its artifact ToolResult").toHaveLength(1);
+    const artifactResult = artifactResults[0].raw_data!.payload!;
+    expect(artifactResult.error ?? "", "artifact emitter must actually succeed").toBe("");
+    const artifact = JSON.parse(artifactResult.content!) as { path: string; loop_entity_id: string; revision: number };
+    expect(artifact.revision).toBe(1);
+    expect(artifact.path).toMatch(/\.artifacts\/autoresearch\/.+\.md$/);
+    expect(artifact.loop_entity_id.endsWith(`.${synthesis.loop_id}`)).toBe(true);
+    const artifactPaths = await fetchTriples(request, { predicate: "autoresearch.artifact.path", limit: 10 });
+    expect(artifactPaths).toHaveLength(1);
+    expect(artifactPaths[0]).toMatchObject({ subject: artifact.loop_entity_id, object: artifact.path });
+
+    // The artifact's static provenance token is explicitly mock-only. Separately
+    // prove that the running best graph identity names a real kept execute loop.
+    const bestExperiments = await fetchTriples(request, { predicate: "autoresearch.best.experiment-id", limit: 10 });
+    expect(bestExperiments).toHaveLength(1);
+    const bestEntity = String(bestExperiments[0].object);
+    const executeLoops = settled.filter((loop) => loop.role === "autoresearch-execute");
+    expect(executeLoops.some((loop) => bestEntity.endsWith(`.${loop.loop_id}`))).toBe(true);
+    const keptMeasurements = await fetchTriples(request, { predicate: "autoresearch.measurement.outcome", limit: 10 });
+    expect(keptMeasurements.find((triple) => triple.subject === bestEntity)?.object).toBe("kept");
+    const measurementValues = await fetchTriples(request, { predicate: "autoresearch.measurement.value", limit: 10 });
+    expect(Number(measurementValues.find((triple) => triple.subject === bestEntity)?.object)).toBe(bestVal);
+    const artifactProvenance = await fetchTriples(request, { predicate: "autoresearch.artifact.best-experiment-id", limit: 10 });
+    expect(artifactProvenance.find((triple) => triple.subject === artifact.loop_entity_id)?.object)
+      .toBe("mock-provenance-second-kept-iteration");
+    await testInfo.attach("autoresearch-artifact-proof", {
+      contentType: "application/json",
+      body: JSON.stringify({ artifactResult, artifactPaths, best, bestExperiments, keptMeasurements,
+        measurementValues, artifactProvenance, executeLoops }, null, 2),
+    });
+
+    await assertAutoresearchTerminalDelivery(page, request, testInfo, settled, {
+      content: "Optimized `go test ./...` from 1.20s to 0.85s",
+      sourceRole: "reviewer-autoresearch", relatedLoopKey: "terminal", phase: "completed",
+    });
 
     // ADR-053 Phase 4a — the run reached `completed`, NOT `failed`/`dispatched`/
     // `executing`. This is the direct agent.run.phase assertion the design spike
@@ -194,7 +236,7 @@ test.describe("autoresearch — propose/execute iteration mock-LLM journey", () 
         limit: 20,
       });
       const objs = phases
-        .filter((t) => String(t.subject ?? "").includes("agent.chain.execution."))
+        .filter((t) => String(t.subject ?? "").includes("chain.agent.execution."))
         .map((t) => String(t.object));
       // Settle on a terminal phase (completed) or fail fast on failed.
       if (objs.includes("completed") || objs.includes("failed")) return objs;
@@ -215,7 +257,7 @@ test.describe("autoresearch — propose/execute iteration mock-LLM journey", () 
 
     // BORN-FIRST gate (ADR-055/056 must-exist flip, semteams#222). rule 04c
     // upserts autoresearch.best.value onto the run anchor (agent.lineage.run-loop-entity-id
-    // → agent.chain.execution.*). Prove that anchor was BORN-FIRST by the lifecycle
+    // → chain.agent.execution.*). Prove that anchor was BORN-FIRST by the lifecycle
     // Manager (carries agent.run.phase), not auto-vivified by the best.value marker.
     // Fails under simulated auto-vivify (a stub would carry only best.value).
     await assertAnchorBornFirst(request, {

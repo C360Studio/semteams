@@ -1,0 +1,7 @@
+# Keep machine-generated migration measurements and captures collapsible in review.
+docs/migrations/semstreams-8b99efe/framework-footprint-*.json linguist-generated=true
+docs/migrations/semstreams-8b99efe/browser-evidence/** linguist-generated=true
+docs/migrations/semstreams-8b99efe/evidence/** linguist-generated=true
+
+# Raw captured logs retain original whitespace as qualification evidence.
+docs/migrations/semstreams-8b99efe/**/*.log -whitespace

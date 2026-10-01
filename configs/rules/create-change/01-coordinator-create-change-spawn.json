@@ -41,7 +41,7 @@
     },
     {
       "type": "add_triple",
-      "subject": "$entity.org.$entity.platform.agent.chain.execution.$entity.instance",
+      "subject": "$entity.org.$entity.platform.chain.agent.execution.$entity.instance",
       "predicate": "coordinator.decision.reason",
       "object": "$entity.triple.coordinator.decision.reason"
     }
@@ -52,7 +52,7 @@
     "phase": "ADR-057 §D5 — author spawn",
     "adr": "docs/adr/057-openspec-graph-spec-model-and-create-change.md",
     "category_token": "create_change",
-    "run_entity_pattern": "Coordinator's own loop ID is the run ID. The run entity is the deterministic subject $entity.org.$entity.platform.agent.chain.execution.$entity.instance; change.<slug>.* triples land there (emit_change resolves it from related_loops['create-change-run']), and this rule copies coordinator.decision.reason there for reviewer fidelity checks.",
+    "run_entity_pattern": "Coordinator's own loop ID is the run ID. The run entity is the deterministic subject $entity.org.$entity.platform.chain.agent.execution.$entity.instance; change.<slug>.* triples land there (emit_change resolves it from related_loops['create-change-run']), and this rule copies coordinator.decision.reason there for reviewer fidelity checks.",
     "no_lineage_fence_rationale": "Unlike dev-via-test/01, no lineage.run-loop-entity-id fence: create-change is single-dispatch (no between-task mode) and the recovery coordinator (rules 04/05) MUST be able to re-fire this rule to re-dispatch a fresh change (supersession-via-new-spawn, ADR-039 Shape A). Mirrors research/01.",
     "tool_choice_rationale": "Required-mode keeps the author on the tool path through emit_change. Without it the author risks text-only completion (semstreams#158 class) and the strict schema never executes."
   }

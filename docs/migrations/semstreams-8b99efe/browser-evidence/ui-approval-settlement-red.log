@@ -1,0 +1,210 @@
+
+ RUN  v3.2.4 /Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/ui
+
+(node:14055) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:14057) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:14056) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ❯ src/lib/stores/runStatus.test.ts (35 tests | 3 failed) 13ms
+   ✓ deriveRunStatuses > returns an empty map when all triple arrays are empty 1ms
+   ✓ deriveRunStatuses > classifies approval_pending as tool_gate pause 1ms
+   ✓ deriveRunStatuses > parses the loop identity from an execution-scoped JSON tuple 0ms
+   × deriveRunStatuses > suppresses historical gates on a completed run 4ms
+     → expected { cause: 'tool_gate', …(2) } to be null
+   × deriveRunStatuses > suppresses historical gates on a failed run 1ms
+     → expected { cause: 'tool_gate', …(2) } to be null
+   × deriveRunStatuses > suppresses historical gates on a cancelled run 0ms
+     → expected { cause: 'tool_gate', …(2) } to be null
+   ✓ deriveRunStatuses > subtracts an answered A without hiding the next B gate on the same loop 0ms
+   ✓ deriveRunStatuses > does not re-pause when the answer arrives before a duplicate pending event 0ms
+   ✓ deriveRunStatuses > all answered historical tuples have no actionable pause 0ms
+   ✓ deriveRunStatuses > deduplicates the same tuple and preserves execution IDs containing separators 0ms
+   ✓ deriveRunStatuses > does not expose malformed approval identity not-json as an actionable gate 0ms
+   ✓ deriveRunStatuses > does not expose malformed approval identity ["loop-a"] as an actionable gate 0ms
+   ✓ deriveRunStatuses > does not expose malformed approval identity ["loop-a",null] as an actionable gate 0ms
+   ✓ deriveRunStatuses > does not expose malformed approval identity ["loop-a",""] as an actionable gate 0ms
+   ✓ deriveRunStatuses > does not expose malformed approval identity ["", "execution-A"] as an actionable gate 0ms
+   ✓ deriveRunStatuses > does not expose malformed approval identity ["loop-a","execution-A","extra"] as an actionable gate 0ms
+   ✓ deriveRunStatuses > does not expose malformed approval identity ["c360.platform.agentic-loop.agent.execution.loop-a","execution-A"] as an actionable gate 0ms
+   ✓ deriveRunStatuses > uses full subject history to subtract answers absent from a predicate-limited page 0ms
+   ✓ deriveRunStatuses > classifies clarification_pending as clarification pause with question 0ms
+   ✓ deriveRunStatuses > falls back to empty string when question triple is absent 0ms
+   ✓ deriveRunStatuses > correlates question to the right asking loop when multiple clarifications exist 0ms
+   ✓ deriveRunStatuses > prefers tool_gate when both markers are present for the same run 0ms
+   ✓ deriveRunStatuses > excludes a run entity id that lacks both markers 0ms
+   ✓ deriveRunStatuses > skips triples whose subject does not contain the run entity infix 0ms
+   ✓ deriveRunStatuses > handles multiple paused runs simultaneously 0ms
+   ✓ deriveRunStatuses > attaches graph health facts for runs with lifecycle/proof triples 0ms
+   ✓ deriveRunStatuses > derives freshness from subject-scoped proof triples 0ms
+   ✓ deriveRunStatuses > skips a run entity id that contains the infix but yields an empty bare id 0ms
+   ✓ deriveRunStatuses > recovers the bare asking-loop id from a clarification marker that is already bare 0ms
+   ✓ deriveRunStatuses > normalizes a clarification marker even if the backend later stamps the full ref 0ms
+   ✓ runStatus store — poll lifecycle > ignores a concurrent pollOnce while one is in flight (in-flight guard) 0ms
+   ✓ runStatus store — poll lifecycle > captures a poll error in lastError without throwing 0ms
+   ✓ runStatus store — poll lifecycle > clears lastError after a subsequent successful poll 0ms
+   ✓ runStatus store — poll lifecycle > polls approval answers and does not count historical receipts as paused 1ms
+   ✓ runStatus store — poll lifecycle > fetches full run-subject triples for dynamic proof evidence 0ms
+ ❯ src/lib/components/board/PendingApprovalSection.test.ts (17 tests | 2 failed) 477ms
+   ✓ PendingApprovalSection > rendering > renders the tool name, reason, and formatted args 21ms
+   ✓ PendingApprovalSection > rendering > renders with empty arguments object when none supplied 2ms
+   ✓ PendingApprovalSection > rendering > approve and reject buttons advertise the tool name in aria-label 2ms
+   ✓ PendingApprovalSection > rendering > aria-label tracks in-flight verb (WCAG 2.5.3 Label-in-Name) 54ms
+   ✓ PendingApprovalSection > approve / reject paths > approve click POSTs decision=approve with the loopId 19ms
+   ✓ PendingApprovalSection > approve / reject paths > reject click POSTs decision=reject 20ms
+   ✓ PendingApprovalSection > approve / reject paths > forwards the optional reason field when populated 46ms
+   ✓ PendingApprovalSection > discards edits when a different pending execution arrives 22ms
+   ✓ PendingApprovalSection > modify path > Edit toggles the JSON editor pre-filled with current arguments 19ms
+   ✓ PendingApprovalSection > modify path > Submit modified POSTs decision=modify with parsed arguments 73ms
+   ✓ PendingApprovalSection > modify path > rejects malformed JSON without firing the request 53ms
+   ✓ PendingApprovalSection > modify path > rejects a non-object JSON value (array, scalar) without firing 52ms
+   ✓ PendingApprovalSection > modify path > Cancel returns to the approve / reject layout without firing 31ms
+   ✓ PendingApprovalSection > error handling > surfaces a 409 with a user-friendly stale-state message 16ms
+   ✓ PendingApprovalSection > error handling > surfaces non-409 status codes with the original message 14ms
+   × ignores execution A resolve after B replaces it 17ms
+     → expect(element).toBeEnabled()
+
+Received element is not enabled:
+  <input
+  class="reason-input svelte-1iwjy7u"
+  data-testid="approval-reason-input"
+  disabled=""
+  placeholder="Why this decision?"
+  type="text"
+/>
+   × ignores execution A reject after B replaces it 16ms
+     → expect(element).toBeEnabled()
+
+Received element is not enabled:
+  <input
+  class="reason-input svelte-1iwjy7u"
+  data-testid="approval-reason-input"
+  disabled=""
+  placeholder="Why this decision?"
+  type="text"
+/>
+ ❯ src/lib/components/board/RunWaitingSection.test.ts (25 tests | 2 failed) 677ms
+   ✓ RunWaitingSection — clarification > renders the question prose 14ms
+   ✓ RunWaitingSection — clarification > falls back to default copy when question is empty 2ms
+   ✓ RunWaitingSection — clarification > renders the textarea and Send button 1ms
+   ✓ RunWaitingSection — clarification > calls sendMessage with runId + inReplyTo on Send 93ms
+   ✓ RunWaitingSection — clarification > clears the textarea on success 49ms
+   ✓ RunWaitingSection — clarification > does not call sendMessage when reply is whitespace-only 19ms
+   ✓ RunWaitingSection — clarification > shows inline error when sendMessage throws 38ms
+   ✓ RunWaitingSection — clarification > disables Send while in-flight 36ms
+   ✓ RunWaitingSection — clarification > sends on Enter (no Shift) — keyboard submit path 32ms
+   ✓ RunWaitingSection — clarification > does NOT send on Shift+Enter (newline, not submit) 29ms
+   ✓ RunWaitingSection — clarification > shows a confirmation after a successful reply (poll-lag gap) 55ms
+   ✓ RunWaitingSection — clarification > does not render approval section for clarification pause 1ms
+   ✓ RunWaitingSection — tool_gate > renders the approval section with Approve and Reject buttons 7ms
+   ✓ RunWaitingSection — tool_gate > does not render the reply textarea for tool_gate pause 1ms
+   ✓ RunWaitingSection — tool_gate > calls submitApproval with approve + gatedLoopId on Approve 17ms
+   ✓ RunWaitingSection — tool_gate > calls submitApproval with reject + gatedLoopId on Reject 16ms
+   ✓ RunWaitingSection — tool_gate > includes reason in submitApproval body when reason is entered 45ms
+   ✓ RunWaitingSection — tool_gate > disables buttons while in-flight 17ms
+   ✓ RunWaitingSection — tool_gate > shows inline error when submitApproval throws 18ms
+   ✓ RunWaitingSection — tool_gate > shows a confirmation after a successful decision 16ms
+   ✓ RunWaitingSection — tool_gate > shows 409 message when submitApproval throws AgentApiError with status 409 17ms
+   ✓ RunWaitingSection — graph receipt and current gate agreement > disables approval when the graph tuple refers to a different execution 16ms
+   ✓ clears the previous gate's reason when execution B replaces A 81ms
+   × ignores run gate A resolve after B replaces it 30ms
+     → expect(element).toBeEnabled()
+
+Received element is not enabled:
+  <input
+  class="reason-input svelte-z4850c"
+  disabled=""
+  id="run-approval-reason"
+  placeholder="Why this decision?"
+  type="text"
+/>
+   × ignores run gate A reject after B replaces it 26ms
+     → expect(element).toBeEnabled()
+
+Received element is not enabled:
+  <input
+  class="reason-input svelte-z4850c"
+  disabled=""
+  id="run-approval-reason"
+  placeholder="Why this decision?"
+  type="text"
+/>
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/lib/stores/runStatus.test.ts > deriveRunStatuses > suppresses historical gates on a completed run
+ FAIL  src/lib/stores/runStatus.test.ts > deriveRunStatuses > suppresses historical gates on a failed run
+ FAIL  src/lib/stores/runStatus.test.ts > deriveRunStatuses > suppresses historical gates on a cancelled run
+AssertionError: expected { cause: 'tool_gate', …(2) } to be null
+
+- Expected: 
+null
+
++ Received: 
+{
+  "cause": "tool_gate",
+  "executionId": "execution-pending",
+  "gatedLoopId": "loop-a",
+}
+
+ ❯ src/lib/stores/runStatus.test.ts:99:40
+     97|     const result = deriveRunStatuses([approvalTriple("run-a", "loop-a"…
+     98|       [clarTriple("run-a", "asking-loop")], [], [{ subject: runEntity(…
+     99|     expect(result.get("run-a")?.pause).toBeNull();
+       |                                        ^
+    100|     expect(result.get("run-a")?.healthFacts?.phase).toBe(phase);
+    101|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/7]⎯
+
+ FAIL  src/lib/components/board/PendingApprovalSection.test.ts > ignores execution A resolve after B replaces it
+ FAIL  src/lib/components/board/PendingApprovalSection.test.ts > ignores execution A reject after B replaces it
+Error: expect(element).toBeEnabled()
+
+Received element is not enabled:
+  <input
+  class="reason-input svelte-1iwjy7u"
+  data-testid="approval-reason-input"
+  disabled=""
+  placeholder="Why this decision?"
+  type="text"
+/>
+ ❯ src/lib/components/board/PendingApprovalSection.test.ts:337:55
+    335|   await user.click(screen.getByTestId("approval-approve"));
+    336|   await rerender({ loopId: "loop-a", pendingApproval: makePending({ ex…
+    337|   expect(screen.getByTestId("approval-reason-input")).toBeEnabled();
+       |                                                       ^
+    338|   await user.type(screen.getByTestId("approval-reason-input"), "Review…
+    339|   if (settlement === "resolve") resolve({ accepted: true });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/7]⎯
+
+ FAIL  src/lib/components/board/RunWaitingSection.test.ts > ignores run gate A resolve after B replaces it
+ FAIL  src/lib/components/board/RunWaitingSection.test.ts > ignores run gate A reject after B replaces it
+Error: expect(element).toBeEnabled()
+
+Received element is not enabled:
+  <input
+  class="reason-input svelte-z4850c"
+  disabled=""
+  id="run-approval-reason"
+  placeholder="Why this decision?"
+  type="text"
+/>
+ ❯ src/lib/components/board/RunWaitingSection.test.ts:438:60
+    436|   mockPendingLoop.mockReturnValue({ pending_approval: { execution_id: …
+    437|   await rerender({ runId: "run-a", pause: { ...TOOL_GATE_PAUSE, execut…
+    438|   expect(screen.getByRole("textbox", { name: /reason/i })).toBeEnabled…
+       |                                                            ^
+    439|   await user.type(screen.getByRole("textbox", { name: /reason/i }), "R…
+    440|   if (settlement === "resolve") resolve({ accepted: true });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/7]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  7 failed | 70 passed (77)
+   Start at  07:29:26
+   Duration  1.61s (transform 624ms, setup 139ms, collect 1.45s, tests 1.17s, environment 526ms, prepare 115ms)
+

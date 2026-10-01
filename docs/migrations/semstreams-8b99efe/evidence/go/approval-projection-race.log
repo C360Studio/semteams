@@ -1,0 +1,4 @@
+ok  	github.com/c360studio/semteams/cmd/semteams/approvalpause	1.944s	coverage: 80.5% of statements
+ok  	github.com/c360studio/semteams/cmd/semteams/commands/implementspec	1.301s	coverage: 85.0% of statements
+ok  	github.com/c360studio/semteams/cmd/semteams/chain	1.631s	coverage: 76.0% of statements
+ok  	github.com/c360studio/semteams/test/contract	2.074s	coverage: [no statements]

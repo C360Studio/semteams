@@ -1,0 +1,5 @@
+--- FAIL: TestStatefulToolsUseDeclaredLoopAuthorityBucket (0.00s)
+    loops_bucket_test.go:16: bucket = "", want named agent_loops authority
+FAIL
+FAIL	github.com/c360studio/semteams/cmd/semteams	0.300s
+FAIL

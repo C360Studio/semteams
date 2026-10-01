@@ -10,9 +10,9 @@ import "testing"
 // coverage against real wire bytes — the pre-160 bare shape decoded to zero
 // triples silently and starved autoresearch's empirical compare.
 func TestDecodeExactEntityTriples_Beta160Envelope(t *testing.T) {
-	fixture := []byte(`{"entity":{"id":"c360.demo.agent.chain.execution.loop_1","triples":[` +
-		`{"subject":"c360.demo.agent.chain.execution.loop_1","predicate":"autoresearch.best.value","object":1.2},` +
-		`{"subject":"c360.demo.agent.chain.execution.loop_1","predicate":"autoresearch.run.status","object":"active"}` +
+	fixture := []byte(`{"entity":{"id":"c360.demo.chain.agent.execution.loop_1","triples":[` +
+		`{"subject":"c360.demo.chain.agent.execution.loop_1","predicate":"autoresearch.best.value","object":1.2},` +
+		`{"subject":"c360.demo.chain.agent.execution.loop_1","predicate":"autoresearch.run.status","object":"active"}` +
 		`]},"kvRevision":7}`)
 
 	triples, err := DecodeExactEntityTriples(fixture)
@@ -33,7 +33,7 @@ func TestDecodeExactEntityTriples_Beta160Envelope(t *testing.T) {
 // shape suddenly parses, the responder contract changed again; re-verify
 // against the pinned tag before adjusting either way.
 func TestDecodeExactEntityTriples_Bare159ShapeYieldsEmpty(t *testing.T) {
-	bare := []byte(`{"id":"c360.demo.agent.chain.execution.loop_1","triples":[` +
+	bare := []byte(`{"id":"c360.demo.chain.agent.execution.loop_1","triples":[` +
 		`{"predicate":"autoresearch.best.value","object":1.2}]}`)
 
 	triples, err := DecodeExactEntityTriples(bare)

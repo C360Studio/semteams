@@ -52,7 +52,7 @@ func makeCall(args map[string]any) agentic.ToolCall {
 		Arguments: args,
 		Metadata: map[string]any{
 			agentic.MetadataKeyRelatedLoops: map[string]any{
-				runanchor.ChainEntityRoleKey: "c360.ops.agent.chain.execution.c1",
+				runanchor.ChainEntityRoleKey: "c360.ops.chain.agent.execution.c1",
 			},
 		},
 	}
@@ -178,7 +178,7 @@ func TestExecute_FrontDoorLoopIDFallback_ReadsExistingLoopEntity(t *testing.T) {
 	if res.Error != "" {
 		t.Fatalf("expected no error, got %q", res.Error)
 	}
-	want := "c360.ops.agent.agentic-loop.execution.loop-1"
+	want := "c360.ops.agentic-loop.agent.execution.loop-1"
 	if reader.lastID != want {
 		t.Fatalf("read entity ID wrong: got %q want %q", reader.lastID, want)
 	}

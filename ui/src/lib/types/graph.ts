@@ -3,7 +3,7 @@
  *
  * Types for visualizing the semantic knowledge graph built by semstreams.
  * The graph uses RDF-like triples (Subject-Predicate-Object) where:
- * - Entities have 6-part IDs: org.platform.domain.system.type.instance
+ * - Entities have 6-part IDs: org.platform.system.domain.type.instance
  * - Relationships are triples where the object references another entity
  * - Properties are triples where the object is a literal value
  */
@@ -14,8 +14,8 @@
 
 /**
  * Parsed components of a 6-part entity ID.
- * Format: org.platform.domain.system.type.instance
- * Example: "c360.ops.robotics.gcs.drone.001"
+ * Format: org.platform.system.domain.type.instance
+ * Example: "c360.ops.gcs.robotics.drone.001"
  */
 export interface EntityIdParts {
   org: string;
@@ -317,8 +317,8 @@ export function parseEntityId(id: string): EntityIdParts {
     return {
       org: parts[0] || "unknown",
       platform: parts[1] || "unknown",
-      domain: parts[2] || "unknown",
-      system: parts[3] || "unknown",
+      domain: parts[3] || "unknown",
+      system: parts[2] || "unknown",
       type: parts[4] || "unknown",
       instance: parts[5] || "unknown",
     };
@@ -326,8 +326,8 @@ export function parseEntityId(id: string): EntityIdParts {
   return {
     org: parts[0],
     platform: parts[1],
-    domain: parts[2],
-    system: parts[3],
+    domain: parts[3],
+    system: parts[2],
     type: parts[4],
     instance: parts[5],
   };

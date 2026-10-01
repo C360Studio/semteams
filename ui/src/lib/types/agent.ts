@@ -4,7 +4,6 @@ export type AgentLoopState =
   | "architecting"
   | "executing"
   | "reviewing"
-  | "paused"
   | "awaiting_approval"
   | "complete"
   | "success"
@@ -38,6 +37,8 @@ export interface AgentLoop {
   loop_id: string;
   task_id: string;
   state: AgentLoopState;
+  /** Latest loop record state when a durable terminal observation differs. */
+  record_state?: AgentLoopState;
   role: string;
   iterations: number;
   max_iterations: number;
@@ -64,6 +65,8 @@ export interface AgentLoop {
 // PendingApproval mirrors agentic.PendingApprovalState from semstreams.
 // Wire shape is set by the upstream JSON tags on the Go struct.
 export interface PendingApproval {
+  /** Identity of the exact execution reviewed by the operator. */
+  execution_id: string;
   call_id: string;
   tool_name: string;
   arguments?: Record<string, unknown>;
@@ -73,7 +76,7 @@ export interface PendingApproval {
   /**
    * Auto-reject deadline as a nanosecond integer. Go's time.Duration
    * has no custom JSON marshaller, so it serialises as int64
-   * (nanoseconds). Zero / absent means wait indefinitely. Convert to
+   * (nanoseconds). The framework applies its bounded default when absent or zero. Convert to
    * seconds at the render site: `Math.round(timeout / 1e9)`.
    */
   timeout?: number;
@@ -159,8 +162,9 @@ export function normalizeWireLoop(env: WireActivityEnvelope): AgentLoop | null {
 export function extractCompletionPatch(
   env: WireActivityEnvelope,
 ): { id: string; patch: Partial<AgentLoop> } | null {
-  if (!env.loop_id?.startsWith("COMPLETE_")) return null;
-  const id = env.loop_id.slice("COMPLETE_".length);
+  const legacy = env.loop_id?.startsWith("COMPLETE_");
+  if (!legacy && env.type !== "loop_completed") return null;
+  const id = legacy ? env.loop_id.slice("COMPLETE_".length) : env.loop_id;
   const w = env.data;
   if (!id || !w) return null;
   const patch: Partial<AgentLoop> = {};
@@ -169,17 +173,12 @@ export function extractCompletionPatch(
   if (w.tokens_in !== undefined) patch.tokens_in = w.tokens_in;
   if (w.tokens_out !== undefined) patch.tokens_out = w.tokens_out;
   if (w.outcome !== undefined) patch.outcome = w.outcome;
+  if (w.error !== undefined) patch.error = w.error;
+  patch.state = w.outcome === "cancelled" ? "cancelled"
+    : w.outcome === "failed" || w.outcome === "error" || w.outcome === "truncated" ? "failed" : "complete";
+  patch.pending_approval = undefined;
   return { id, patch };
 }
-
-export type ControlSignal =
-  | "pause"
-  | "resume"
-  | "cancel"
-  | "approve"
-  | "reject"
-  | "feedback"
-  | "retry";
 
 export type AgentActivityEventType =
   | "connected"
@@ -201,23 +200,13 @@ export interface LoopUpdateEvent {
   error: string;
 }
 
-export interface SignalRequest {
-  type: ControlSignal;
-  reason?: string;
-}
-
-export interface SignalResponse {
-  loop_id: string;
-  signal: string;
-  status: string;
-}
-
 // ApprovalDecision values match the upstream agentic.ApprovalDecision*
 // constants ("approve" / "reject" / "modify"). Wire format on
 // POST /teams-dispatch/loops/{id}/approval.
 export type ApprovalDecision = "approve" | "reject" | "modify";
 
 export interface ApprovalRequest {
+  execution_id: string;
   decision: ApprovalDecision;
   /** Required when decision === "modify"; ignored otherwise. */
   modified_arguments?: Record<string, unknown>;
@@ -234,6 +223,7 @@ export interface ApprovalRequest {
 
 export interface ApprovalAcceptResponse {
   loop_id: string;
+  execution_id?: string;
   decision: ApprovalDecision;
   accepted: boolean;
   message?: string;

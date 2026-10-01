@@ -171,7 +171,7 @@ test.describe("Ops run-terminal observation", () => {
       expect(
         f.subject,
         `finding subject ${f.subject} is not a minted ops diagnosis entity`,
-      ).toContain(".ops.diagnosis.finding.");
+      ).toContain(".diagnosis.ops.finding.");
     }
 
     // -----------------------------------------------------------------

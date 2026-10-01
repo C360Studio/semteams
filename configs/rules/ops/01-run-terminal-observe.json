@@ -5,7 +5,7 @@
   "description": "ADR-027 Phase 1, re-wired for the substrate-plus-overlays world. Fires once when a run reaches an absorbing phase and spawns one ops-chain-observer to diagnose the completed chain. Triggering on the RUN entity rather than on a reviewer role is what makes this category-agnostic: it covers research, autoresearch, and every future pack without re-authoring, and it covers failed and cancelled runs — the ones ops has the most to say about — which a reviewer-completion trigger structurally misses. Replaces chain-terminal-observe.json, whose `agent.loop.role eq reviewer-qa` trigger became dead config when ADR-041/042 retired that role.",
   "enabled": true,
   "entity": {
-    "pattern": "*.*.agent.chain.execution.*"
+    "pattern": "*.*.chain.agent.execution.*"
   },
   "conditions": [
     {

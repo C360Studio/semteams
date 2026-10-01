@@ -1,16 +1,8 @@
 <script lang="ts">
-  // Read-only flow inventory. The editor was retired in favor of
-  // agent-authored flows (coordinator edits, humans approve/reject).
-  // Authoritative source for flow definitions is configs/*.json in
-  // the repo, version-controlled and code-reviewed; the runtime
-  // copy lives in the dispatch's NATS KV bucket.
   import type { PageData } from "./$types";
 
   let { data }: { data: PageData } = $props();
 
-  function componentCount(flow: { nodes?: unknown[] }): number {
-    return Array.isArray(flow.nodes) ? flow.nodes.length : 0;
-  }
 </script>
 
 <svelte:head>
@@ -21,9 +13,8 @@
   <header class="page-header">
     <h1 class="page-title">Flows</h1>
     <p class="page-subtitle">
-      Read-only inventory. Flows are managed by the coordinator —
-      humans approve proposed changes, not edit JSON. Authoritative
-      definitions live in <code>configs/*.json</code>.
+      Read-only inventory. Configured components and their admitted connections come from the configured bootstrap.
+      Definitions live in <code>configs/flow-bootstrap.json</code>.
     </p>
   </header>
 
@@ -34,24 +25,33 @@
     </div>
   {/if}
 
-  {#if data.flows.length === 0 && !data.error}
-    <p class="empty-state">No flows deployed.</p>
+  {#if data.validation}
+    <section class="page-header" aria-label="Composition validation" data-testid="composition-validation">
+      <p>Validation: {data.validation.status}</p>
+      {#each [...data.validation.errors, ...data.validation.warnings] as finding, index (index)}
+        <p>{finding.severity}: {finding.component} — {finding.message}</p>
+      {/each}
+    </section>
+  {/if}
+
+  {#if data.components.length === 0 && !data.error}
+    <p class="empty-state">No components in the admitted composition.</p>
   {:else}
     <div class="flow-list" data-testid="flow-list">
-      {#each data.flows as flow (flow.id)}
+      {#each data.components as component (component.instance)}
         <div class="flow-row" data-testid="flow-row">
           <div class="flow-row-main">
-            <span class="flow-name">{flow.name}</span>
-            {#if flow.description}
-              <span class="flow-description">{flow.description}</span>
+            <span class="flow-name">{component.instance}</span>
+            {#if component.factory}
+              <span class="flow-description">{component.factory}</span>
             {/if}
           </div>
           <div class="flow-row-meta">
             <span class="meta-pill" title="Component count">
-              {componentCount(flow)} components
+              {component.type}
             </span>
-            <span class="meta-id" title={flow.id}>
-              {flow.id.slice(0, 8)}…
+            <span class="meta-id" title={component.instance}>
+              {component.inputs.length} inputs · {component.outputs.length} outputs
             </span>
           </div>
         </div>

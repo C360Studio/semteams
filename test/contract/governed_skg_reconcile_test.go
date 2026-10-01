@@ -31,7 +31,7 @@ import (
 //
 // Owner-claim disjointness (rule-pack.semteams's autoresearch.* predicates vs
 // the lifecycle agent-run owner's agent.run.* predicates on the SAME
-// *.*.agent.chain.execution.* entity pattern) is verified live at boot — the
+// *.*.chain.agent.execution.* entity pattern) is verified live at boot — the
 // multi-owner-by-predicate-group pattern is observe-only on this tag (an overlap
 // would WARN, not brick). It is not re-derived here; this test scopes to the
 // boot-fatal envelope.
@@ -103,7 +103,7 @@ const (
 	e2eFlowBootstrapPath = "../../configs/e2e-flow-bootstrap.json"
 	rulesRootDir         = "../../configs/rules"
 	expectedPackID       = "semteams"
-	runAnchorPattern     = "*.*.agent.chain.execution.*"
+	runAnchorPattern     = "*.*.chain.agent.execution.*"
 )
 
 // loadRuleProcessorOwnership reads the named flow config and returns the rule
@@ -295,7 +295,7 @@ func TestReconcile_MigratedRulesUseOwnedLane(t *testing.T) {
 //
 // The entity.pattern blanket sweep tripped step 2 live (2026-08-14): rule 05
 // fires on the run entity but declared *.*.*.*.*.*, which the contract scope
-// *.*.agent.chain.execution.* cannot contain — a boot-abort the structural
+// *.*.chain.agent.execution.* cannot contain — a boot-abort the structural
 // entity.pattern fence could not see. This is the go-test-speed pin for the
 // class.
 //

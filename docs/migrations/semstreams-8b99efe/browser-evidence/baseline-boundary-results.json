@@ -1,0 +1,71 @@
+[
+  {
+    "name": "approval-boundary-approve",
+    "exit": 1,
+    "skipped": false,
+    "manifest": {
+      "name": "approval-boundary-approve",
+      "fixture": "sandbox-mvp.yaml",
+      "spec": "approval-boundary.spec.ts",
+      "config": "e2e-flow-bootstrap-approval-boundary.gen.json",
+      "action": "approve",
+      "source": "/tmp/semteams-migration-8b99efe/baseline-source",
+      "project": "stmig160",
+      "port": 33160,
+      "sha256": {
+        "go.mod": "4a57073aab788a36c2ae3bcd7318f99871ab10210694cfd6ca7f8807f10ea8c3",
+        "ui/package-lock.json": "28fd4403ce710547429496e98d4b7f3e941986eb67e6957316e298ffb2a144c4",
+        "configs/e2e-flow-bootstrap.json": "9f8d491d49c2a956100a0e09711150ab2504746ea450ea7bb681b7b0de9fdcd6",
+        "test/fixtures/journeys/sandbox-mvp.yaml": "3bf4a1dc1953397accbd4fd15b11122abf0576569eb570203b4cf2ca467032f4",
+        "ui/e2e/agentic/approval-boundary.spec.ts": "810191cdea151c4af3c1db003dd3262f91de00232d2fdabbf6b97c8fd4db5158"
+      },
+      "derived_config_sha256": "baa3357e96aa33cb428f084d5cb4f258ec181143a7ea09f27e6d761ed032a121"
+    }
+  },
+  {
+    "name": "approval-boundary-reject",
+    "exit": 1,
+    "skipped": false,
+    "manifest": {
+      "name": "approval-boundary-reject",
+      "fixture": "sandbox-mvp.yaml",
+      "spec": "approval-boundary.spec.ts",
+      "config": "e2e-flow-bootstrap-approval-boundary.gen.json",
+      "action": "reject",
+      "source": "/tmp/semteams-migration-8b99efe/baseline-source",
+      "project": "stmig160",
+      "port": 33160,
+      "sha256": {
+        "go.mod": "4a57073aab788a36c2ae3bcd7318f99871ab10210694cfd6ca7f8807f10ea8c3",
+        "ui/package-lock.json": "28fd4403ce710547429496e98d4b7f3e941986eb67e6957316e298ffb2a144c4",
+        "configs/e2e-flow-bootstrap.json": "9f8d491d49c2a956100a0e09711150ab2504746ea450ea7bb681b7b0de9fdcd6",
+        "test/fixtures/journeys/sandbox-mvp.yaml": "3bf4a1dc1953397accbd4fd15b11122abf0576569eb570203b4cf2ca467032f4",
+        "ui/e2e/agentic/approval-boundary.spec.ts": "810191cdea151c4af3c1db003dd3262f91de00232d2fdabbf6b97c8fd4db5158"
+      },
+      "derived_config_sha256": "baa3357e96aa33cb428f084d5cb4f258ec181143a7ea09f27e6d761ed032a121"
+    }
+  },
+  {
+    "name": "approval-boundary-cancel",
+    "exit": 1,
+    "skipped": false,
+    "manifest": {
+      "name": "approval-boundary-cancel",
+      "fixture": "sandbox-mvp.yaml",
+      "spec": "approval-boundary.spec.ts",
+      "config": "e2e-flow-bootstrap-approval-boundary.gen.json",
+      "action": "cancel",
+      "source": "/tmp/semteams-migration-8b99efe/baseline-source",
+      "project": "stmig160",
+      "port": 33160,
+      "sha256": {
+        "go.mod": "4a57073aab788a36c2ae3bcd7318f99871ab10210694cfd6ca7f8807f10ea8c3",
+        "ui/package-lock.json": "28fd4403ce710547429496e98d4b7f3e941986eb67e6957316e298ffb2a144c4",
+        "configs/e2e-flow-bootstrap.json": "9f8d491d49c2a956100a0e09711150ab2504746ea450ea7bb681b7b0de9fdcd6",
+        "test/fixtures/journeys/sandbox-mvp.yaml": "3bf4a1dc1953397accbd4fd15b11122abf0576569eb570203b4cf2ca467032f4",
+        "ui/e2e/agentic/approval-boundary.spec.ts": "810191cdea151c4af3c1db003dd3262f91de00232d2fdabbf6b97c8fd4db5158"
+      },
+      "derived_config_sha256": "baa3357e96aa33cb428f084d5cb4f258ec181143a7ea09f27e6d761ed032a121"
+    }
+  }
+]

@@ -1,0 +1,5 @@
+Worktree: /Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams
+Production baseline: 8656192c (unchanged while behavioral red captured)
+TESTCONTAINERS_RYUK_DISABLED=true go test -race -tags=integration ./test/contract -run '^TestAutoresearch(Reply|IterationCap)' -count=1 -v
+Exit 1. Actual reviewer rule publishes an orphan final coordinator; new handoff files absent; cap5 stalls clearing pending at iteration4 under default per-action firing limit3.
+NATS fixtures: nats:2.14.4 with JetStream, fresh containers and KV buckets, cleaned by test helper. Initial missingJetStream test-harness setup was corrected before this behavioral red capture.

@@ -1,6 +1,5 @@
 <script lang="ts">
   import type { TaskInfo } from "$lib/types/task";
-  import type { ControlSignal } from "$lib/types/agent";
   import { isActiveState } from "$lib/types/agent";
   import { agentApi } from "$lib/services/agentApi";
   import { taskLabels } from "$lib/stores/taskLabels.svelte";
@@ -85,10 +84,10 @@
     }
   });
 
-  async function handleSignal(signal: ControlSignal) {
+  async function cancelLoop() {
     signalError = null;
     try {
-      await agentApi.sendSignal(task.id, signal);
+      await agentApi.cancelLoop(task.id);
     } catch (err) {
       signalError = err instanceof Error ? err.message : "Signal failed";
     }
@@ -149,13 +148,18 @@
   }
 </script>
 
-<aside class="detail-panel" data-testid="task-detail-panel" aria-label="Task detail">
+<aside
+  class="detail-panel"
+  data-testid="task-detail-panel"
+  aria-label="Task detail"
+>
   <header class="panel-header">
     <div class="header-top">
       <StateBadge state={task.state} />
       <span class="role">{task.role}</span>
       {#if task.shortRef !== null}
-        <span class="header-ref" data-testid="header-ref">#{task.shortRef}</span>
+        <span class="header-ref" data-testid="header-ref">#{task.shortRef}</span
+        >
       {/if}
       <button
         class="close-btn"
@@ -199,15 +203,17 @@
       <span class="meta-item">
         {task.iterations}/{task.maxIterations} iterations
       </span>
-      <span class="meta-item meta-id" title={task.id}>{task.id.slice(0, 12)}…</span>
+      <span class="meta-item meta-id" title={task.id}
+        >{task.id.slice(0, 12)}…</span
+      >
       {#if task.titleEdited && !editingTitle}
         <button
           type="button"
           class="meta-reset"
           data-testid="title-reset"
           onclick={resetTitleToAuto}
-          title="Reset to auto-derived title"
-        >reset</button>
+          title="Reset to auto-derived title">reset</button
+        >
       {/if}
     </div>
 
@@ -219,8 +225,8 @@
             type="button"
             class="alias-remove"
             onclick={() => removeAlias(alias)}
-            aria-label="Remove alias {alias}"
-          >×</button>
+            aria-label="Remove alias {alias}">×</button
+          >
         </span>
       {/each}
       <input
@@ -238,8 +244,14 @@
       <p class="alias-error" role="alert">{aliasError}</p>
     {/if}
 
+    {#if task.primaryLoop.record_state}
+      <p role="status" data-testid="terminal-record-pending">Completion observed; loop record still reports {task.primaryLoop.record_state}.</p>
+    {/if}
+
     {#if signalError}
-      <div class="signal-error" role="alert" data-testid="signal-error">{signalError}</div>
+      <div class="signal-error" role="alert" data-testid="signal-error">
+        {signalError}
+      </div>
     {/if}
 
     {#if task.state === "awaiting_approval" && task.primaryLoop.pending_approval}
@@ -259,17 +271,7 @@
 
     <div class="action-buttons">
       {#if isActiveState(task.state)}
-        <button type="button" class="action-btn" onclick={() => handleSignal("pause")}>
-          Pause
-        </button>
-        <button type="button" class="action-btn danger" onclick={() => handleSignal("cancel")}>
-          Cancel
-        </button>
-      {:else if task.state === "paused"}
-        <button type="button" class="action-btn" onclick={() => handleSignal("resume")}>
-          Resume
-        </button>
-        <button type="button" class="action-btn danger" onclick={() => handleSignal("cancel")}>
+        <button type="button" class="action-btn danger" onclick={cancelLoop}>
           Cancel
         </button>
       {:else if task.state === "awaiting_approval"}
@@ -277,7 +279,7 @@
              controls inside <PendingApprovalSection> — the agentic-loop
              cancel signal terminates the loop and discards the pending
              approval, while approve/reject/modify resolve it. -->
-        <button type="button" class="action-btn danger" onclick={() => handleSignal("cancel")}>
+        <button type="button" class="action-btn danger" onclick={cancelLoop}>
           Cancel
         </button>
       {/if}
@@ -345,7 +347,8 @@
               ← Back to {task.title}
             </button>
             <span class="focus-current">
-              Viewing <span class="focus-current-role">{focusedChild.role}</span>
+              Viewing <span class="focus-current-role">{focusedChild.role}</span
+              >
             </span>
           </div>
         {/if}
@@ -657,7 +660,9 @@
     font-weight: 500;
     color: var(--ui-text-secondary, #6b7280);
     border-bottom: 2px solid transparent;
-    transition: color 0.15s, border-color 0.15s;
+    transition:
+      color 0.15s,
+      border-color 0.15s;
   }
 
   .panel-tab:hover {

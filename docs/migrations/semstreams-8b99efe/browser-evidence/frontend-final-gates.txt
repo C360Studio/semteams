@@ -1,0 +1,82 @@
+Final frontend gates after F1–F4 and approval-history corrections.
+Root ran sequential task ui:lint, task ui:check, task ui:test, task ui:build; all exit 0.
+Frontend source stable during runs; Go-only edits did not change these inputs.
+Excerpts follow; full local logs retain the matching final-ui-* names.
+
+
+== final-ui-lint.log ==
+task: [ui:lint] npm run lint
+
+> @c360/semteams-ui@0.0.1 lint
+> eslint .
+
+[middle omitted]
+task: [ui:lint] npm run lint
+
+> @c360/semteams-ui@0.0.1 lint
+> eslint .
+
+
+
+== final-ui-check.log ==
+task: [ui:check] npm run check
+
+> @c360/semteams-ui@0.0.1 check
+> svelte-kit sync && svelte-check --tsconfig ./tsconfig.json
+
+[middle omitted]
+task: [ui:check] npm run check
+
+> @c360/semteams-ui@0.0.1 check
+> svelte-kit sync && svelte-check --tsconfig ./tsconfig.json
+
+Loading svelte-check in workspace: /Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/ui
+Getting Svelte diagnostics...
+
+svelte-check found 0 errors and 0 warnings
+
+
+== final-ui-test.log ==
+task: [ui:test] npm run test
+
+> @c360/semteams-ui@0.0.1 test
+> vitest
+
+[middle omitted]
+ ✓ src/lib/types/graph.identity.test.ts (1 test) 5ms
+(node:16236) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ src/lib/services/runStatusApi.test.ts (7 tests) 5ms
+ ✓ src/lib/utils/verdict.test.ts (8 tests) 7ms
+(node:16240) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ↓ src/lib/contract/openapi.contract.test.ts (12 tests | 12 skipped)
+
+ Test Files  171 passed | 1 skipped (172)
+      Tests  3704 passed | 12 skipped (3716)
+   Start at  07:35:52
+   Duration  17.66s (transform 5.31s, setup 9.74s, collect 39.62s, tests 48.84s, environment 50.73s, prepare 7.52s)
+
+
+
+== final-ui-build.log ==
+task: [ui:build] npm run build
+
+> @c360/semteams-ui@0.0.1 build
+> vite build
+
+[middle omitted]
+.svelte-kit/output/server/entries/pages/_layout.svelte.js                        12.52 kB
+.svelte-kit/output/server/chunks/index.js                                        26.62 kB
+.svelte-kit/output/server/remote-entry.js                                        27.67 kB
+.svelte-kit/output/server/entries/pages/_page.svelte.js                          28.43 kB
+.svelte-kit/output/server/chunks/taskStore.svelte.js                             59.70 kB
+.svelte-kit/output/server/entries/pages/graph/_page.svelte.js                    69.35 kB
+.svelte-kit/output/server/chunks/internal.js                                     72.40 kB
+.svelte-kit/output/server/index.js                                              125.29 kB
+✓ built in 1.85s
+
+Run npm run preview to preview your production build locally.
+
+> Using @sveltejs/adapter-node
+  ✔ done

@@ -1,0 +1,115 @@
+[
+  {
+    "name": "research-mvp",
+    "exit": 0,
+    "skipped": false,
+    "manifest": {
+      "name": "research-mvp",
+      "fixture": "research-mvp.yaml",
+      "spec": "research-mvp.spec.ts",
+      "config": "e2e-flow-bootstrap.json",
+      "source": "/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams",
+      "project": "stmig162",
+      "port": 33162,
+      "sha256": {
+        "go.mod": "fe05e2ea4b4c45bfc181ff83b3a925dccda4dd3d54970b03765c9b50d0b96fff",
+        "ui/package-lock.json": "28fd4403ce710547429496e98d4b7f3e941986eb67e6957316e298ffb2a144c4",
+        "configs/e2e-flow-bootstrap.json": "537a7eabe926b8e5c4f0d761cfa203880269b376c1217fcfe22cfa81690feb48",
+        "test/fixtures/journeys/research-mvp.yaml": "73409209441e47724950739c43725f1d20e02bf923d045dff1859d8dc913fa65",
+        "ui/e2e/agentic/research-mvp.spec.ts": "b4d3e0fe163b5530c7672003b2f4d7c6f794e0f811177a75dbb39102b7e96349"
+      },
+      "derived_config_sha256": "21aefdbc3d4396d513edfa8a9472b23005bff07ec515163e985c8a020616d815"
+    }
+  },
+  {
+    "name": "ops-agent",
+    "exit": 0,
+    "skipped": false,
+    "manifest": {
+      "name": "ops-agent",
+      "fixture": "ops-run-terminal.yaml",
+      "spec": "ops-run-terminal.spec.ts",
+      "config": "e2e-flow-bootstrap.json",
+      "source": "/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams",
+      "project": "stmig162",
+      "port": 33162,
+      "sha256": {
+        "go.mod": "fe05e2ea4b4c45bfc181ff83b3a925dccda4dd3d54970b03765c9b50d0b96fff",
+        "ui/package-lock.json": "28fd4403ce710547429496e98d4b7f3e941986eb67e6957316e298ffb2a144c4",
+        "configs/e2e-flow-bootstrap.json": "537a7eabe926b8e5c4f0d761cfa203880269b376c1217fcfe22cfa81690feb48",
+        "test/fixtures/journeys/ops-run-terminal.yaml": "8ee2eef2b65edd0caf1c7633366912497d14252a379b74af9690ead1ba4fba97",
+        "ui/e2e/agentic/ops-run-terminal.spec.ts": "8b5e1d60f87866a5a188542513e42d430efbc7ce9c313701dfbed400fefee9bb"
+      },
+      "derived_config_sha256": "21aefdbc3d4396d513edfa8a9472b23005bff07ec515163e985c8a020616d815"
+    }
+  },
+  {
+    "name": "approval-boundary-approve",
+    "exit": 0,
+    "skipped": false,
+    "manifest": {
+      "name": "approval-boundary-approve",
+      "fixture": "sandbox-mvp.yaml",
+      "spec": "approval-boundary.spec.ts",
+      "config": "e2e-flow-bootstrap-approval-boundary.gen.json",
+      "action": "approve",
+      "source": "/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams",
+      "project": "stmig162",
+      "port": 33162,
+      "sha256": {
+        "go.mod": "fe05e2ea4b4c45bfc181ff83b3a925dccda4dd3d54970b03765c9b50d0b96fff",
+        "ui/package-lock.json": "28fd4403ce710547429496e98d4b7f3e941986eb67e6957316e298ffb2a144c4",
+        "configs/e2e-flow-bootstrap.json": "537a7eabe926b8e5c4f0d761cfa203880269b376c1217fcfe22cfa81690feb48",
+        "test/fixtures/journeys/sandbox-mvp.yaml": "3bf4a1dc1953397accbd4fd15b11122abf0576569eb570203b4cf2ca467032f4",
+        "ui/e2e/agentic/approval-boundary.spec.ts": "987794601028ec5eae949e5422a967427ce35d0c6f6170b3f863a287e7ec5d89"
+      },
+      "derived_config_sha256": "cc68e3a3feb12e05d78a93a01227a4f6faf8f7eeb41f03dcf8a8f4708216321a"
+    }
+  },
+  {
+    "name": "approval-boundary-reject",
+    "exit": 0,
+    "skipped": false,
+    "manifest": {
+      "name": "approval-boundary-reject",
+      "fixture": "sandbox-mvp.yaml",
+      "spec": "approval-boundary.spec.ts",
+      "config": "e2e-flow-bootstrap-approval-boundary.gen.json",
+      "action": "reject",
+      "source": "/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams",
+      "project": "stmig162",
+      "port": 33162,
+      "sha256": {
+        "go.mod": "fe05e2ea4b4c45bfc181ff83b3a925dccda4dd3d54970b03765c9b50d0b96fff",
+        "ui/package-lock.json": "28fd4403ce710547429496e98d4b7f3e941986eb67e6957316e298ffb2a144c4",
+        "configs/e2e-flow-bootstrap.json": "537a7eabe926b8e5c4f0d761cfa203880269b376c1217fcfe22cfa81690feb48",
+        "test/fixtures/journeys/sandbox-mvp.yaml": "3bf4a1dc1953397accbd4fd15b11122abf0576569eb570203b4cf2ca467032f4",
+        "ui/e2e/agentic/approval-boundary.spec.ts": "987794601028ec5eae949e5422a967427ce35d0c6f6170b3f863a287e7ec5d89"
+      },
+      "derived_config_sha256": "cc68e3a3feb12e05d78a93a01227a4f6faf8f7eeb41f03dcf8a8f4708216321a"
+    }
+  },
+  {
+    "name": "approval-boundary-cancel",
+    "exit": 0,
+    "skipped": false,
+    "manifest": {
+      "name": "approval-boundary-cancel",
+      "fixture": "sandbox-mvp.yaml",
+      "spec": "approval-boundary.spec.ts",
+      "config": "e2e-flow-bootstrap-approval-boundary.gen.json",
+      "action": "cancel",
+      "source": "/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams",
+      "project": "stmig162",
+      "port": 33162,
+      "sha256": {
+        "go.mod": "fe05e2ea4b4c45bfc181ff83b3a925dccda4dd3d54970b03765c9b50d0b96fff",
+        "ui/package-lock.json": "28fd4403ce710547429496e98d4b7f3e941986eb67e6957316e298ffb2a144c4",
+        "configs/e2e-flow-bootstrap.json": "537a7eabe926b8e5c4f0d761cfa203880269b376c1217fcfe22cfa81690feb48",
+        "test/fixtures/journeys/sandbox-mvp.yaml": "3bf4a1dc1953397accbd4fd15b11122abf0576569eb570203b4cf2ca467032f4",
+        "ui/e2e/agentic/approval-boundary.spec.ts": "987794601028ec5eae949e5422a967427ce35d0c6f6170b3f863a287e7ec5d89"
+      },
+      "derived_config_sha256": "cc68e3a3feb12e05d78a93a01227a4f6faf8f7eeb41f03dcf8a8f4708216321a"
+    }
+  }
+]

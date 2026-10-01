@@ -6,11 +6,8 @@ import {
   type AgentLoopState,
   type ActiveLoopState,
   type AgentLoop,
-  type ControlSignal,
   type AgentActivityEventType,
   type LoopUpdateEvent,
-  type SignalRequest,
-  type SignalResponse,
   type LoopTrajectory,
   type TrajectoryFact,
   type WireActivityEnvelope,
@@ -34,7 +31,6 @@ describe("isActiveState", () => {
   });
 
   const inactiveStates: AgentLoopState[] = [
-    "paused",
     "awaiting_approval",
     "complete",
     "success",
@@ -87,26 +83,6 @@ describe("AgentLoop", () => {
 // ControlSignal — literal union
 // ---------------------------------------------------------------------------
 
-describe("ControlSignal", () => {
-  const validSignals: ControlSignal[] = [
-    "pause",
-    "resume",
-    "cancel",
-    "approve",
-    "reject",
-    "feedback",
-    "retry",
-  ];
-
-  it.each(validSignals)("'%s' is a valid ControlSignal", (signal) => {
-    const req: SignalRequest = { type: signal };
-    expect(req.type).toBe(signal);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// AgentActivityEventType — literal union
-// ---------------------------------------------------------------------------
 
 describe("AgentActivityEventType", () => {
   const validTypes: AgentActivityEventType[] = [
@@ -155,39 +131,6 @@ describe("LoopUpdateEvent", () => {
 // SignalRequest / SignalResponse
 // ---------------------------------------------------------------------------
 
-describe("SignalRequest", () => {
-  it("has required type field", () => {
-    const req: SignalRequest = { type: "approve" };
-    expect(req.type).toBe("approve");
-  });
-
-  it("reason is optional", () => {
-    const req: SignalRequest = { type: "reject", reason: "Unsafe operation" };
-    expect(req.reason).toBe("Unsafe operation");
-
-    const reqNoReason: SignalRequest = { type: "pause" };
-    expect(reqNoReason.reason).toBeUndefined();
-  });
-});
-
-describe("SignalResponse", () => {
-  it("has loop_id, signal, and status", () => {
-    const res: SignalResponse = {
-      loop_id: "loop-1",
-      signal: "approve",
-      status: "accepted",
-    };
-    expect(res.loop_id).toBe("loop-1");
-    expect(res.signal).toBe("approve");
-    expect(res.status).toBe("accepted");
-  });
-});
-
-// ---------------------------------------------------------------------------
-// LoopTrajectory / TrajectoryFact — the beta.160 GraphQL trajectory shape.
-// Field list verified against gateway/graph-gateway/component.go
-// (trajectoryTypeDef / trajectoryFactTypeDef) at v1.0.0-beta.160.
-// ---------------------------------------------------------------------------
 
 function makeObservedTotals(): LoopTrajectory["observed_totals"] {
   return {
@@ -466,6 +409,8 @@ describe("extractCompletionPatch", () => {
     const out = extractCompletionPatch(env);
     expect(out?.id).toBe("loop-1");
     expect(out?.patch).toEqual({
+      state: "complete",
+      pending_approval: undefined,
       outcome: "success",
       prompt: "compare mqtt vs nats",
       result: "## Summary\n\n...",
@@ -484,7 +429,7 @@ describe("extractCompletionPatch", () => {
     // Only `prompt` was set — patch should not include keys for the
     // missing fields, so a merge doesn't accidentally overwrite values
     // that the main loop entry already has.
-    expect(out?.patch).toEqual({ prompt: "hi" });
-    expect(Object.keys(out?.patch ?? {})).toEqual(["prompt"]);
+    expect(out?.patch).toEqual({ prompt: "hi", state: "complete", pending_approval: undefined });
+    expect(out?.patch.result).toBeUndefined();
   });
 });

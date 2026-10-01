@@ -23,7 +23,7 @@ import type { RunHealth } from "$lib/utils/runHealth";
  * import: runStatus imports task.ts types, not vice-versa.
  */
 export type RunPause =
-  | { cause: "tool_gate"; gatedLoopId: string }
+  | { cause: "tool_gate"; gatedLoopId: string; executionId: string }
   | { cause: "clarification"; askingLoopId: string; question: string };
 
 /** Kanban column identifiers. Each maps to one or more AgentLoopStates. */
@@ -88,7 +88,6 @@ export function loopStateToColumn(state: AgentLoopState): TaskColumn {
     case "reviewing":
       return "executing";
     case "awaiting_approval":
-    case "paused":
       return "needs_you";
     case "complete":
     case "success":

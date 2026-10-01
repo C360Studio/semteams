@@ -222,7 +222,7 @@ func TestExecute_HappyPath_TriplesAndPayload(t *testing.T) {
 	}
 
 	triples := tp.snapshot()
-	wantLoopEntityID := "c360.test.agent.agentic-loop.execution.loop-planner-abc"
+	wantLoopEntityID := "c360.test.agentic-loop.agent.execution.loop-planner-abc"
 	const wantTripleCount = 4
 	if len(triples) != wantTripleCount {
 		t.Errorf("triple count = %d, want %d", len(triples), wantTripleCount)

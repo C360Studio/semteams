@@ -127,7 +127,7 @@ describe("TaskCard", () => {
     render(TaskCard, {
       props: {
         task: makeTask({
-          runPause: { cause: "tool_gate", gatedLoopId: "loop-gated" },
+          runPause: { cause: "tool_gate", gatedLoopId: "loop-gated", executionId: "execution-pending" },
         }),
       },
     });

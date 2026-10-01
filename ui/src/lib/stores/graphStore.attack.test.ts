@@ -16,7 +16,7 @@ beforeEach(() => {
 // parseEntityId splits on "." and requires 6 parts: org.platform.domain.system.type.instance
 function makeEntity(id: string, type = "thing", domain = "default") {
   return buildGraphEntity({
-    id: `org.platform.${domain}.system.${type}.${id}`,
+    id: `org.platform.system.${domain}.${type}.${id}`,
     properties: [],
     outgoing: [],
     incoming: [],

@@ -14,7 +14,7 @@ function makeAttachment(
   return {
     kind: "entity-detail",
     entity: {
-      id: "c360.ops.robotics.gcs.drone.001",
+      id: "c360.ops.gcs.robotics.drone.001",
       label: "001",
       type: "drone",
       domain: "robotics",
@@ -25,7 +25,7 @@ function makeAttachment(
       relationships: [
         {
           predicate: "fleet.membership.current",
-          targetId: "c360.ops.robotics.gcs.fleet.alpha",
+          targetId: "c360.ops.gcs.robotics.fleet.alpha",
         },
       ],
       ...entityOverrides,
@@ -69,7 +69,7 @@ describe("EntityDetailCard.attack — XSS in property values", () => {
       relationships: [
         {
           predicate: "<script>evil()</script>",
-          targetId: "c360.ops.robotics.gcs.fleet.alpha",
+          targetId: "c360.ops.gcs.robotics.fleet.alpha",
         },
       ],
     });
@@ -171,7 +171,7 @@ describe("EntityDetailCard.attack — entity with 100+ properties", () => {
   it("renders 100 relationships without crashing", () => {
     const relationships = Array.from({ length: 100 }, (_, i) => ({
       predicate: `rel.${i}.target`,
-      targetId: `c360.ops.robotics.gcs.drone.${String(i).padStart(3, "0")}`,
+      targetId: `c360.ops.gcs.robotics.drone.${String(i).padStart(3, "0")}`,
     }));
     const attachment = makeAttachment({ relationships });
     expect(() =>
@@ -200,15 +200,15 @@ describe("EntityDetailCard.attack — duplicate keys in relationships", () => {
       relationships: [
         {
           predicate: "same.predicate",
-          targetId: "c360.ops.robotics.gcs.fleet.alpha",
+          targetId: "c360.ops.gcs.robotics.fleet.alpha",
         },
         {
           predicate: "same.predicate",
-          targetId: "c360.ops.robotics.gcs.fleet.beta",
+          targetId: "c360.ops.gcs.robotics.fleet.beta",
         },
         {
           predicate: "same.predicate",
-          targetId: "c360.ops.robotics.gcs.fleet.gamma",
+          targetId: "c360.ops.gcs.robotics.fleet.gamma",
         },
       ],
     });
@@ -254,7 +254,7 @@ describe("EntityDetailCard.attack — onViewEntity safety", () => {
 
     expect(onViewEntity).toHaveBeenCalledTimes(3);
     expect(onViewEntity).toHaveBeenCalledWith(
-      "c360.ops.robotics.gcs.drone.001",
+      "c360.ops.gcs.robotics.drone.001",
     );
   });
 });
@@ -267,7 +267,7 @@ describe("EntityDetailCard.attack — phase-1 backward compat (no entity field)"
   it("does not crash when entity field is undefined (phase-1 shape)", () => {
     const phase1Attachment: EntityDetailAttachment = {
       kind: "entity-detail",
-      entityId: "c360.ops.robotics.gcs.drone.001",
+      entityId: "c360.ops.gcs.robotics.drone.001",
       summary: "A drone entity",
       propertyCount: 3,
       relationshipCount: 1,

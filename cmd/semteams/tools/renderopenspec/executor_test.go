@@ -13,7 +13,7 @@ import (
 
 func platform() types.PlatformMeta { return types.PlatformMeta{Org: "c360", Platform: "ops"} }
 
-const testRunEntity = "c360.ops.agent.chain.execution.loop_test"
+const testRunEntity = "c360.ops.chain.agent.execution.loop_test"
 
 // fakeReader returns a fixed triple map for the expected entity id; an unknown
 // id returns an empty map (mirrors a graph miss).

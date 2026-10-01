@@ -1,0 +1,38 @@
+--- FAIL: TestShippedBootstrapCompositions (0.01s)
+    --- FAIL: TestShippedBootstrapCompositions/../../configs/flow-bootstrap.json (0.00s)
+        composition_contract_test.go:30: composition warning disconnected_node on objectstore/: component has no connections
+        composition_contract_test.go:30: composition warning orphaned_port on agentic-model/agent.stream: output port 'agent.stream' (stream): no_subscribers
+        composition_contract_test.go:30: composition warning orphaned_port on agentic-tools/agent_loops: input port 'agent_loops' (read): no_publishers
+        composition_contract_test.go:30: composition warning orphaned_port on agentic-tools/tool.list: input port 'tool.list' (request): optional_api_unused
+        composition_contract_test.go:30: composition warning orphaned_port on agentic-tools/tool.result: output port 'tool.result' (stream): no_subscribers
+        composition_contract_test.go:30: composition warning orphaned_port on graph-gateway/agentic_queries: output port 'agentic_queries' (request): optional_api_unused
+        composition_contract_test.go:30: composition warning orphaned_port on graph-gateway/graph_index_queries: output port 'graph_index_queries' (request): optional_api_unused
+        composition_contract_test.go:30: composition warning orphaned_port on objectstore/events: output port 'events' (stream): no_subscribers
+        composition_contract_test.go:30: composition warning orphaned_port on objectstore/stored: output port 'stored' (stream): no_subscribers
+        composition_contract_test.go:30: composition warning orphaned_port on objectstore/write: input port 'write' (stream): no_publishers
+        composition_contract_test.go:30: composition warning orphaned_port on teams-dispatch/agent_loops: input port 'agent_loops' (read): no_publishers
+        composition_contract_test.go:30: composition warning orphaned_port on teams-dispatch/user.response: output port 'user.response' (stream): no_subscribers
+        composition_contract_test.go:30: composition error orphaned_port on agentic-tools/tool.execute: input port 'tool.execute' (stream): no_publishers
+        composition_contract_test.go:30: composition error orphaned_port on teams-dispatch/user.message: input port 'user.message' (stream): no_publishers
+        composition_contract_test.go:30: composition error port_declaration_error on teams-loop/: factory agentic-loop rejected the configuration: Registry.Declare: port declaration failed: agentic-loop.NewComponent: validate explicit config fields failed: retired field loops_bucket is not supported; configure ports.outputs named loops with config.bucket
+        composition_contract_test.go:30: composition has 3 error finding(s)
+    --- FAIL: TestShippedBootstrapCompositions/../../configs/e2e-flow-bootstrap.json (0.00s)
+        composition_contract_test.go:30: composition warning disconnected_node on objectstore/: component has no connections
+        composition_contract_test.go:30: composition warning orphaned_port on agentic-model/agent.stream: output port 'agent.stream' (stream): no_subscribers
+        composition_contract_test.go:30: composition warning orphaned_port on agentic-tools/agent_loops: input port 'agent_loops' (read): no_publishers
+        composition_contract_test.go:30: composition warning orphaned_port on agentic-tools/tool.list: input port 'tool.list' (request): optional_api_unused
+        composition_contract_test.go:30: composition warning orphaned_port on agentic-tools/tool.result: output port 'tool.result' (stream): no_subscribers
+        composition_contract_test.go:30: composition warning orphaned_port on graph-gateway/agentic_queries: output port 'agentic_queries' (request): optional_api_unused
+        composition_contract_test.go:30: composition warning orphaned_port on graph-gateway/graph_index_queries: output port 'graph_index_queries' (request): optional_api_unused
+        composition_contract_test.go:30: composition warning orphaned_port on objectstore/events: output port 'events' (stream): no_subscribers
+        composition_contract_test.go:30: composition warning orphaned_port on objectstore/stored: output port 'stored' (stream): no_subscribers
+        composition_contract_test.go:30: composition warning orphaned_port on objectstore/write: input port 'write' (stream): no_publishers
+        composition_contract_test.go:30: composition warning orphaned_port on teams-dispatch/agent_loops: input port 'agent_loops' (read): no_publishers
+        composition_contract_test.go:30: composition warning orphaned_port on teams-dispatch/user.response: output port 'user.response' (stream): no_subscribers
+        composition_contract_test.go:30: composition error orphaned_port on agentic-tools/tool.execute: input port 'tool.execute' (stream): no_publishers
+        composition_contract_test.go:30: composition error orphaned_port on teams-dispatch/user.message: input port 'user.message' (stream): no_publishers
+        composition_contract_test.go:30: composition error port_declaration_error on teams-loop/: factory agentic-loop rejected the configuration: Registry.Declare: port declaration failed: agentic-loop.NewComponent: validate explicit config fields failed: retired field loops_bucket is not supported; configure ports.outputs named loops with config.bucket
+        composition_contract_test.go:30: composition has 3 error finding(s)
+FAIL
+FAIL	github.com/c360studio/semteams/test/contract	0.363s
+FAIL

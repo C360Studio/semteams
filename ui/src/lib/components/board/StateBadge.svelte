@@ -35,11 +35,6 @@
     color: #0f766e;
   }
 
-  .state-badge.paused {
-    background: #fef3c7;
-    color: #92400e;
-  }
-
   .state-badge.awaiting_approval {
     background: #ffedd5;
     color: #9a3412;

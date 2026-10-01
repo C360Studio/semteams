@@ -53,7 +53,7 @@ func baseArgs() map[string]any {
 func runMetadata() map[string]any {
 	return map[string]any{
 		agentic.MetadataKeyRelatedLoops: map[string]any{
-			"run-loop-entity-id": "c360.ops.agent.agentic-loop.execution.coord-1",
+			"run-loop-entity-id": "c360.ops.agentic-loop.agent.execution.coord-1",
 			"autoresearch-run":   "coord-1",
 		},
 	}
@@ -73,7 +73,7 @@ func TestExecutor_Happy(t *testing.T) {
 	// (autoresearch-run="coord-1") via TryChainExecutionEntityID, NOT taken
 	// verbatim from run-loop-entity-id. So the subject is the chain.execution
 	// entity, not the coordinator's agentic-loop entity.
-	wantSubject := "c360.ops.agent.chain.execution.coord-1"
+	wantSubject := "c360.ops.chain.agent.execution.coord-1"
 	for _, tr := range pub.triples {
 		if tr.Subject != wantSubject {
 			t.Errorf("subject = %q, want %q", tr.Subject, wantSubject)

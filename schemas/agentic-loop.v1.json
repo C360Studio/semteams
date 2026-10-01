@@ -7,7 +7,8 @@
   "properties": {
     "approval_timeout": {
       "type": "string",
-      "description": "Auto-reject pending approvals after this duration (e.g. 5m or 1h). Empty means wait indefinitely",
+      "description": "Positive approval wait at most 12h inclusive. Omission defaults to 12h. TTL24h provides nominal grace not a completion guarantee",
+      "default": "12h",
       "category": "advanced"
     },
     "consumer": {
@@ -23,15 +24,15 @@
         },
         "heartbeat_interval": {
           "type": "string",
-          "description": "InProgress heartbeat interval (e.g. 60s or 2m). Must be less than ack_wait",
-          "default": "60s",
+          "description": "InProgress heartbeat interval for long-running consumers. Must be no more than half the shortest configured BackOff interval",
+          "default": "15s",
           "category": "advanced"
         },
         "max_deliver": {
           "type": "number",
-          "description": "Maximum redelivery attempts for long-running consumers",
+          "description": "Maximum redelivery attempts for long-running consumers. Must cover the fixed two-entry BackOff",
           "default": 2,
-          "minimum": 1,
+          "minimum": 2,
           "maximum": 10,
           "category": "advanced"
         }
@@ -83,18 +84,6 @@
           "description": "Enable context slicing when budget is exceeded"
         }
       }
-    },
-    "delete_consumer_on_stop": {
-      "type": "boolean",
-      "description": "Delete durable consumers on Stop (use for tests only)",
-      "default": false,
-      "category": "advanced"
-    },
-    "loops_bucket": {
-      "type": "string",
-      "description": "NATS KV bucket name for storing loop state",
-      "default": "AGENT_LOOPS",
-      "category": "advanced"
     },
     "max_iterations": {
       "type": "number",
@@ -161,8 +150,7 @@
   },
   "required": [
     "max_iterations",
-    "timeout",
-    "loops_bucket"
+    "timeout"
   ],
   "x-component-metadata": {
     "name": "agentic-loop",

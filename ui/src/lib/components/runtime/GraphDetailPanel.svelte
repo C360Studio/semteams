@@ -3,7 +3,7 @@
 	 * GraphDetailPanel - Detail sidebar for selected entity
 	 *
 	 * Displays comprehensive information about the selected entity:
-	 * - Entity ID breakdown (org.platform.domain.system.type.instance)
+	 * - Entity ID breakdown (org.platform.system.domain.type.instance)
 	 * - Properties table with confidence indicators
 	 * - Outgoing and incoming relationships
 	 * - Community membership

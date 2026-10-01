@@ -1,0 +1,13 @@
+{
+  "content_commit": "f70537c868001c7c6a79100fe3b1ccc655a7ff61",
+  "checks": [
+    {
+      "command": "task schema:generate && task schema:check-changes",
+      "exit": 0
+    },
+    {
+      "command": "task ui:generate-types:check",
+      "exit": 0
+    }
+  ]
+}

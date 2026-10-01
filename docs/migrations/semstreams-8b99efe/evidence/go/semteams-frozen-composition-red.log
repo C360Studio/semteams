@@ -1,0 +1,8 @@
+--- FAIL: TestShippedBootstrapCompositions (0.00s)
+    --- FAIL: TestShippedBootstrapCompositions/../../configs/flow-bootstrap.json (0.00s)
+        composition_contract_test.go:28: failed to parse config: config field platform.instance_id was removed (ADR-102, BREAKING): platform.id is the single deployment authority field and positions 1-2 of every minted entity ID. Delete instance_id and put its value in platform.id
+    --- FAIL: TestShippedBootstrapCompositions/../../configs/e2e-flow-bootstrap.json (0.00s)
+        composition_contract_test.go:28: failed to parse config: config field platform.instance_id was removed (ADR-102, BREAKING): platform.id is the single deployment authority field and positions 1-2 of every minted entity ID. Delete instance_id and put its value in platform.id
+FAIL
+FAIL	github.com/c360studio/semteams/test/contract	0.471s
+FAIL

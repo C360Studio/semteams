@@ -25,17 +25,26 @@ recorded through the shared graph substrate.
 
 ## Current Product State
 
-- The Go module is pinned to SemStreams `v1.0.0-beta.160`. Crossing the beta.159-to-beta.160 boundary requires fresh
-  NATS storage and NATS server 2.14.4; there is no compatibility or in-place data migration.
+- The Go module is pinned to SemStreams `v1.0.0-beta.162.0.20260930150212-8b99efe9c66a` at SHA
+  `8b99efe9c66a4faa4fa509f9f62cc6bad8392128`. The migration from beta.160 is under qualification in PR #281.
+  Fresh isolated NATS 2.14.4 and graph state are required; retained-state conversion is not implemented.
+  No production storage wipe is authorized. See `docs/migrations/semstreams-8b99efe/README.md` for blockers.
 - The live product-facing categories are `research` and `autoresearch`. `coordinator`, `agent-run`, and `ops` are
   support packs in the bootstrap.
 - `create-change`, `proof-readiness`, `dev-from-task`, and `dev-via-test` remain on disk but are unwired under ADR-058.
-  They must be re-authored for the canonical predicate and beta.160 graph-mutation contracts before re-wiring. Their
+  They must be re-authored for the canonical predicate and current graph-mutation contracts before re-wiring. Their
   journeys and relevant tests remain parked and are not live demo evidence.
 - The coordinator's live taxonomy is `research | autoresearch | respond_direct | ask_user`; parked-team requests receive
   an honest direct response.
 - `Repository CI` runs Go, UI, and Governance/OpenSpec jobs for every pull request to `main`; the jobs feed one stable
   `CI Status Check` aggregate. Required mock E2E and a main-branch ruleset remain future work.
+
+- Runtime saved-flow authoring, managers and template seeds are retired. The UI exposes admitted composition and
+  graph exploration. The rule manager joins configuration through a registered key family and readiness barrier.
+- Evidence-body rendering and artifact handoff remain limited by #261. Program Pulse remains the target product,
+  not shipped behavior. Autoresearch final user delivery remains a migration blocker.
+- SemSource-backed dogfooding waits for SemSource readiness. A later SemEngine switch needs its own approved consumer
+  contract; symbol and closure measurements are evidence, not permission to expand its first release.
 
 ## How We Spec
 

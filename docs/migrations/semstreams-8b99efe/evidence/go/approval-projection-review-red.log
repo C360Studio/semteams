@@ -1,0 +1,10 @@
+--- FAIL: TestProjectionBadMutationReceiptsAreUnknownAndNeverRetried (0.00s)
+    --- FAIL: TestProjectionBadMutationReceiptsAreUnknownAndNeverRetried/nonadvancing_applied (0.00s)
+        projection_test.go:290: unsafe receipt handling attempts=1 err=<nil>
+    --- FAIL: TestProjectionBadMutationReceiptsAreUnknownAndNeverRetried/advancing_unchanged (0.00s)
+        projection_test.go:290: unsafe receipt handling attempts=1 err=<nil>
+--- FAIL: TestProjectionDefiniteRefusalsAreNotUnknown (0.00s)
+    projection_test.go:317: definite refusal reported incorrectly: projection mutation reconcile failed (commit-unknown, unknown): nats: no responders available for request
+FAIL
+FAIL	github.com/c360studio/semteams/cmd/semteams/approvalpause	0.314s
+FAIL

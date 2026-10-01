@@ -112,7 +112,7 @@ describe("createGraphQLClient — query sends correct request", () => {
     await client.query(
       "query GetEntity($id: String!) { entity(id: $id) { id } }",
       {
-        id: "c360.ops.robotics.gcs.drone.001",
+        id: "c360.ops.gcs.robotics.drone.001",
       },
     );
 
@@ -120,7 +120,7 @@ describe("createGraphQLClient — query sends correct request", () => {
     const body = JSON.parse(init.body as string) as {
       variables: Record<string, unknown>;
     };
-    expect(body.variables).toEqual({ id: "c360.ops.robotics.gcs.drone.001" });
+    expect(body.variables).toEqual({ id: "c360.ops.gcs.robotics.drone.001" });
   });
 
   it("sends null/omits variables when not provided", async () => {
@@ -161,17 +161,17 @@ describe("createGraphQLClient — query parses response data", () => {
 
   it("returns entity data when entity query succeeds", async () => {
     const payload = {
-      entity: { id: "c360.ops.robotics.gcs.drone.001", triples: [] },
+      entity: { id: "c360.ops.gcs.robotics.drone.001", triples: [] },
     };
     mockFetch.mockResolvedValueOnce(makeGraphQLResponse(payload));
 
     const client = createGraphQLClient({ baseUrl: "http://backend:8082" });
     const result = await client.query<typeof payload>(
       "query GetEntity($id: String!) { entity(id: $id) { id triples { subject predicate object } } }",
-      { id: "c360.ops.robotics.gcs.drone.001" },
+      { id: "c360.ops.gcs.robotics.drone.001" },
     );
 
-    expect(result.entity.id).toBe("c360.ops.robotics.gcs.drone.001");
+    expect(result.entity.id).toBe("c360.ops.gcs.robotics.drone.001");
   });
 });
 

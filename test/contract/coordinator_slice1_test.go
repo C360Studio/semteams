@@ -102,6 +102,59 @@ func TestMVPCoordinatorActionTaxonomy(t *testing.T) {
 	}
 }
 
+// TestCoordinatorResponseRulesReserveTypedUserResponseSubjects enforces the
+// beta.161 adoption boundary: generic rule actions must not publish flat
+// envelopes into user.response.>, which is reserved for
+// agentic.user_response/v1. The two coordinator rules retain only their audit
+// triples; agentic-dispatch owns typed response delivery.
+func TestCoordinatorResponseRulesReserveTypedUserResponseSubjects(t *testing.T) {
+	type action struct {
+		Type      string `json:"type"`
+		Subject   string `json:"subject"`
+		Predicate string `json:"predicate"`
+	}
+	type rule struct {
+		OnEnter []action `json:"on_enter"`
+		OnExit  []action `json:"on_exit"`
+	}
+
+	rulePaths, err := filepath.Glob("../../configs/rules/*/*.json")
+	if err != nil {
+		t.Fatalf("glob rule files: %v", err)
+	}
+	wantAudit := map[string]string{
+		"03-ask-user.json":        "coordinator.clarification.question",
+		"03b-respond-direct.json": "coordinator.clarification.reply",
+	}
+	foundAudit := map[string]bool{}
+
+	for _, rulePath := range rulePaths {
+		data, err := os.ReadFile(rulePath)
+		if err != nil {
+			t.Fatalf("read %s: %v", rulePath, err)
+		}
+		var parsed rule
+		if err := json.Unmarshal(data, &parsed); err != nil {
+			t.Fatalf("unmarshal %s: %v", rulePath, err)
+		}
+		actions := append(parsed.OnEnter, parsed.OnExit...)
+		for _, candidate := range actions {
+			if candidate.Type == "publish" && strings.HasPrefix(candidate.Subject, "user.response.") {
+				t.Errorf("%s: flat publish action targets reserved typed subject %q", rulePath, candidate.Subject)
+			}
+			if want, ok := wantAudit[filepath.Base(rulePath)]; ok && candidate.Type == "add_triple" && candidate.Predicate == want {
+				foundAudit[filepath.Base(rulePath)] = true
+			}
+		}
+	}
+
+	for ruleName, predicate := range wantAudit {
+		if !foundAudit[ruleName] {
+			t.Errorf("%s: missing retained audit triple %q", ruleName, predicate)
+		}
+	}
+}
+
 // bootstrapLoadedRules reads configs/flow-bootstrap.json's
 // rule.config.rules_files list and returns absolute paths (within
 // this repo, not the in-container /app/ paths) suitable for

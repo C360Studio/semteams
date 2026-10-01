@@ -1,0 +1,67 @@
+name: autoresearch-propose-failed
+description: Mock-only terminal failure qualification. A valid baseline starts one propose loop. Its
+  only response is an advertised scratchpad call, repeated by the mock until max_iterations=8
+  actually fails the loop. The original coordinator receives one failure notification on its
+  original route; the run stays failed. No execute, synthesis, reviewer, artifact or empirical
+  success is claimed.
+responses_by_role:
+  - match: You are the SemTeams coordinator
+    responses:
+      - tool_call:
+          name: query_sandbox_attestation
+          arguments_json: |
+            {}
+      - tool_call:
+          name: request_sandbox
+          arguments_json: >
+            {
+              "profile": "go-backend",
+              "reason": "Optimizing a Go test command's wallclock needs a prepared environment to run the measurement repeatedly."
+            }
+      - tool_call:
+          name: decide
+          arguments_json: >
+            {
+              "action": "autoresearch",
+              "reason": "Optimize the wallclock of `go test ./...`. Command: go test ./...; surface: ./...; cap: 2 iterations; metric: real seconds parsed from the test output. Lower is better."
+            }
+      - tool_call:
+          name: decide
+          arguments_json: '{"action":"respond_direct","reason":"Autoresearch could not continue: the propose
+            loop exhausted its iteration budget. No experiment was executed and the run failed."}'
+  - match: "**BASELINE phase**"
+    responses:
+      - tool_call:
+          name: emit_autoresearch_baseline
+          arguments_json: |
+            {
+              "command": "go test ./...",
+              "surface": "./...",
+              "cap": 2,
+              "metric_parser": "real seconds from the go test summary line",
+              "baseline_value": 1.20,
+              "baseline_pass": true,
+              "baseline_stdout_tail": "ok  example  1.20s"
+            }
+      - tool_call:
+          name: decide
+          arguments_json: >
+            {
+              "action": "propose",
+              "reason": "Baseline captured at 1.20s. Beginning the iteration loop (cap 2) — propose single-axis changes and keep the ones that lower the wallclock."
+            }
+  - match: "**PROPOSE phase**"
+    responses:
+      - tool_call:
+          name: scratchpad
+          arguments_json: '{"text":"Still investigating the bounded surface. This repeating mock step
+            intentionally reaches the real loop iteration cap."}'
+  - match: operations analyst
+    responses:
+      - tool_call:
+          name: decide
+          arguments_json: >
+            {
+              "action": "observed",
+              "reason": "Read the run entity and the coordinator loop result. Run reached its terminal phase with no operator-actionable pattern; emitting no findings."
+            }

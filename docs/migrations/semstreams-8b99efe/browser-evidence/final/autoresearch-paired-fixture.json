@@ -1,0 +1,16 @@
+{
+  "comparison": "Identical corrected fixture/spec at beta.160 and frozen; both pass actual emitter + graph artifact path + real kept best-loop assertions, then fail strict terminal user-response delivery.",
+  "files": {
+    "test/fixtures/journeys/autoresearch.yaml": {
+      "baseline_sha256": "89529961d95aa9fa574c41ba66b80fabe314f7be0b6f7e82e8c38603e7baa32b",
+      "target_sha256": "89529961d95aa9fa574c41ba66b80fabe314f7be0b6f7e82e8c38603e7baa32b",
+      "equal": true
+    },
+    "ui/e2e/agentic/autoresearch.spec.ts": {
+      "baseline_sha256": "9469d0f46cce4f2b1c5b051084793375004483768eff4f40f2481a02c341e188",
+      "target_sha256": "9469d0f46cce4f2b1c5b051084793375004483768eff4f40f2481a02c341e188",
+      "equal": true
+    }
+  },
+  "limits": "Artifact best_experiment_id input is an explicit static mock provenance token. Separate graph assertion proves real kept loop identity, not dynamic interpolation of that ID into the artifact, empirical quality, or rich evidence-body rendering. Later assertions after failed terminal delivery do not execute; final-state snapshots separately record completed run."
+}

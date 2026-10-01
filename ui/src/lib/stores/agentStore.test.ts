@@ -473,6 +473,23 @@ describe("agentStore", () => {
     });
   });
 
+  describe("durable completion ordering", () => {
+    it.each([
+      ["success", "complete"], ["failed", "failed"], ["cancelled", "cancelled"],
+    ])("retains canonical %s marker before record and through stale snapshots", async (outcome, state) => {
+      const loopId = "1ee71b2f-9dc1-45d3-8c9d-c4a317b00a79";
+      agentStore.connect();
+      const events = MockEventSource.instances[0];
+      events.simulateEvent("activity", { type: "loop_completed", loop_id: loopId, data: { outcome, result: "Terminal evidence" } });
+      const stale = createMockLoop({ loop_id: loopId, state: "executing" });
+      events.simulateEvent("activity", { type: "loop_update", loop_id: loopId, data: stale });
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => [stale] }));
+      await agentStore.refreshLoops();
+      expect(agentStore.getLoop(loopId)).toMatchObject({ state, outcome, result: "Terminal evidence", record_state: "executing" });
+      expect(agentStore.activeLoops).toHaveLength(0);
+    });
+  });
+
   // =========================================================================
   // Derived getters
   // =========================================================================
@@ -538,6 +555,7 @@ describe("agentStore", () => {
           loop_id: "gated",
           state: "awaiting_approval",
           pending_approval: {
+            execution_id: "execution-pending",
             call_id: "call-1",
             tool_name: "create_rule",
             arguments: { name: "high-temp-alert" },

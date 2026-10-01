@@ -93,6 +93,15 @@ var mintPointSuffixes = []string{
 	"configs/rules/create-change/01-coordinator-create-change-spawn.json",
 }
 
+// These replies originate on the same coordinator that minted the run. The
+// existing Mint call is deliberately idempotent; integration tests prove it
+// retains phase and origin while selecting this run over older inherited anchors.
+var originReplySuffixes = []string{
+	"configs/rules/autoresearch/15-origin-approved-result-to-coordinator.json",
+	"configs/rules/autoresearch/17-origin-clarification-to-coordinator.json",
+	"configs/rules/autoresearch/19-origin-failed-to-coordinator.json",
+}
+
 // runScopeNoneSuffixes are the rules allowed to declare run_scope="none" — the
 // documented opt-OUT (upstream: "do NOT propagate RunID"), which is the
 // opposite of a mint and must not be confused with one.
@@ -113,8 +122,8 @@ var runScopeNoneSuffixes = []string{
 // guard (Phase 2 mint points + Phase 4a transition scoping).
 //
 // Two structural invariants:
-//  1. run_scope="new" appears at EXACTLY the 3 coordinator root spawns and
-//     nowhere else. A stray run_scope on a downstream rule would mint a second
+//  1. run_scope="new" appears at category root spawns and the explicitly
+//     classified idempotent origin replies. A stray run_scope on a downstream rule would mint a second
 //     run (mis-anchoring the chain's run identity) or mint off a non-loop
 //     entity (silent inherit-fallback). Every run_scope value must be "new" —
 //     "inherit"/"none" are the framework default/opt-out and would be noise here.
@@ -160,15 +169,16 @@ func TestRunScopeMintPointsAndLifecycleTransitions(t *testing.T) {
 		t.Errorf("run_scope values other than \"new\" found (use the default for inherit/none):\n  %s",
 			strings.Join(badValues, "\n  "))
 	}
-	// Invariant 1b: run_scope appears at exactly the 3 mint points.
-	for _, suffix := range mintPointSuffixes {
+	// Invariant 1b: only category mint points and same-origin assertions use new.
+	allowedNew := append(append([]string{}, mintPointSuffixes...), originReplySuffixes...)
+	for _, suffix := range allowedNew {
 		if !hasSuffixIn(runScopeFiles, suffix) {
 			t.Errorf("expected run_scope=\"new\" at mint point %q, but none found there", suffix)
 		}
 	}
 	for f := range runScopeFiles {
-		if !matchesAnySuffix(f, mintPointSuffixes) {
-			t.Errorf("run_scope found OUTSIDE the category-pack mint points: %s — a downstream spawn must inherit "+
+		if !matchesAnySuffix(f, allowedNew) {
+			t.Errorf("run_scope found OUTSIDE category mint points and idempotent origin replies: %s — a downstream spawn must inherit "+
 				"(omit run_scope), not mint a second run", f)
 		}
 	}

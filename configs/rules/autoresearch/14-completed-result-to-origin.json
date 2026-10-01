@@ -1,0 +1,53 @@
+{
+  "id": "autoresearch_completed_result_to_origin",
+  "type": "expression",
+  "name": "Autoresearch approved result \u2192 actual origin loop",
+  "description": "Forward an immutable result only from the eligible run phase with one source and exactly one canonical same-authority origin whose instance equals the run. Never invent agent.loop.run on a run entity. Append facts remain durable; ordinary persisted rule state suppresses repeat publication after normal replay/restart. No cross-entity transaction or crash-window exactly-once claim.",
+  "enabled": true,
+  "entity": {
+    "pattern": "*.*.chain.agent.execution.*"
+  },
+  "conditions": [
+    {
+      "field": "agent.run.phase",
+      "operator": "eq",
+      "value": "completed",
+      "required": true
+    },
+    {
+      "field": "autoresearch.reply.approved",
+      "operator": "length_eq",
+      "value": 1,
+      "required": true
+    },
+    {
+      "field": "agent.run.origin-entity-id",
+      "operator": "length_eq",
+      "value": 1,
+      "required": true
+    },
+    {
+      "field": "agent.run.origin-entity-id",
+      "operator": "eq",
+      "value": "$entity.org.$entity.platform.agentic-loop.agent.execution.$entity.instance",
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "add_triple",
+      "subject": "$entity.triple.agent.run.origin-entity-id",
+      "predicate": "autoresearch.reply.approved",
+      "object": "$entity.triple.autoresearch.reply.approved"
+    }
+  ],
+  "on_exit": [],
+  "metadata": {
+    "pack": "autoresearch",
+    "actor": "run",
+    "contract": "origin-loop reply handoff",
+    "result": "approved",
+    "phase_gate": "completed"
+  }
+}

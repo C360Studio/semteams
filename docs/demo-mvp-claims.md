@@ -6,17 +6,28 @@ surface is the coordinator front door (outer loop) plus the research and autores
 spec-driven-development claims that previously lived here are parked with their packs and move to the Parked Claims
 section until those packs are re-authored and re-wired.
 
-## Supported Claims
+## Frozen migration qualification
+
+The beta.160 baseline and frozen target are compared in the
+[migration record](migrations/semstreams-8b99efe/README.md). The module is pinned to
+`v1.0.0-beta.162.0.20260930150212-8b99efe9c66a`. The aggregate demo is not fully qualified at this target:
+autoresearch completes its loops/run but does not deliver the final coordinator reply to the initiating user.
+Approval event-ordering and independent reviewer findings must also be resolved before migration sign-off.
+A loop count, terminal graph phase, or logger completion is insufficient evidence of user delivery.
+
+## Supported and bounded claims
 
 SemTeams can route prompt classes from the coordinator front door: plain chat/direct response, clarification, research,
 or autoresearch. Product-level slash commands are supported as coordinator-routed hints, not bypasses. Asks for parked
 teams (spec authoring, implementation) get an honest direct response, never a silent dead-end.
 
 SemTeams can run an evidence-gathering research arc end to end: plan, fan out parallel gatherer loops, join, synthesize,
-review, and deliver an artifact whose sources are recoverable from the graph.
+review, and publish a typed final coordinator response. Source facts are recoverable from the graph; this does not
+claim full artifact-body rendering in the UI.
 
-SemTeams can run an autoresearch optimization arc end to end: baseline a measurement, propose and execute changes in an
-attested sandbox, keep only empirically better results, and deliver a reviewed rollup.
+The autoresearch pack exercises baseline measurement, bounded proposal/execution in an attested sandbox, empirical
+keep/revert decisions, synthesis, and review. Final rollup delivery to the initiating user is blocked at the frozen
+target by missing typed ancestry after a run-triggered rule; do not claim end-to-end delivery until that gate passes.
 
 SemTeams can prove sandbox readiness fails closed: execution-bound routing waits on, or honestly surfaces, a
 non-ready/denied sandbox attestation instead of dispatching work into an unprepared environment.
@@ -34,13 +45,19 @@ in-repo but are unwired; the claims return when the packs are re-authored under 
 
 ## Parked Regression (ADR-059)
 
-Artifact context handoff is not a live beta.160 claim. ADR-059 decision 7 removed the trajectory evidence bodies that
+Artifact context handoff is not a live claim, including at the frozen migration target. ADR-059 decision 7 removed the trajectory evidence bodies that
 fed `ArtifactCard`, the handoff panel, team buttons, and context chip. The
 `artifact-context-handoff.spec.ts` journey is deliberately `describe.skip`. Git history preserves the removed OpenSpec
 change. Issue [#261](https://github.com/C360Studio/semteams/issues/261) owns the authorized evidence-fetch UI contract
 and freshly reconciled change required to dereference each fact's `StorageReference` and restore artifact rendering.
 
 ## Non-Claims
+
+Program Pulse is the approved target MVP, not a delivered slice. SemSource-backed dogfooding is held until SemSource
+is ready. A future SemEngine switch requires its own consumer contract; this migration does not expand its first release.
+
+Runtime saved-flow authoring/deployment is retired. `/admin/flows` displays admitted composition, not current liveness.
+Neither HTTP submission acknowledgement nor successful cancellation acknowledgement proves a terminal outcome.
 
 SemTeams is not claiming it can build software in this deployment: the implementation teams are parked.
 

@@ -58,7 +58,7 @@ One call, one finding. Required fields:
   cites
 - `severity` — **exactly one of `info`, `warn`, `critical`**
 
-The tool mints `{org}.{platform}.ops.diagnosis.finding.{uuid}`
+The tool mints `{org}.{platform}.diagnosis.ops.finding.{uuid}`
 entities. Those are the audit trail an operator reads.
 
 ### Severity is a closed set

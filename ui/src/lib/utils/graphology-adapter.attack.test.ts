@@ -81,7 +81,7 @@ describe("graphology-adapter attack tests", () => {
   it("syncStoreToGraph: handles entity id containing colon (relationship id separator)", () => {
     // Colons in node ids should not confuse edge key parsing
     const graph = new Graph();
-    const entity = makeEntity("c360.ops.robotics.gcs.drone.001");
+    const entity = makeEntity("c360.ops.gcs.robotics.drone.001");
     expect(() => syncStoreToGraph(graph, [entity], [])).not.toThrow();
   });
 
@@ -90,14 +90,14 @@ describe("graphology-adapter attack tests", () => {
   it("syncStoreToGraph: edge size is at least 1 for zero-confidence relationship", () => {
     const graph = new Graph();
     const rel = makeRelationship(
-      "c360.ops.robotics.gcs.drone.001",
+      "c360.ops.gcs.robotics.drone.001",
       "a.b.c",
-      "c360.ops.robotics.gcs.fleet.west",
+      "c360.ops.gcs.robotics.fleet.west",
       0,
     );
     const entities = [
-      makeEntity("c360.ops.robotics.gcs.drone.001", [rel], []),
-      makeEntity("c360.ops.robotics.gcs.fleet.west", [], [rel]),
+      makeEntity("c360.ops.gcs.robotics.drone.001", [rel], []),
+      makeEntity("c360.ops.gcs.robotics.fleet.west", [], [rel]),
     ];
     syncStoreToGraph(graph, entities, [rel]);
     const size = graph.getEdgeAttribute(rel.id, "size");
@@ -107,14 +107,14 @@ describe("graphology-adapter attack tests", () => {
   it("syncStoreToGraph: edge size is capped reasonably for confidence > 1", () => {
     const graph = new Graph();
     const rel = makeRelationship(
-      "c360.ops.robotics.gcs.drone.001",
+      "c360.ops.gcs.robotics.drone.001",
       "a.b.c",
-      "c360.ops.robotics.gcs.fleet.west",
+      "c360.ops.gcs.robotics.fleet.west",
       999,
     );
     const entities = [
-      makeEntity("c360.ops.robotics.gcs.drone.001", [rel], []),
-      makeEntity("c360.ops.robotics.gcs.fleet.west", [], [rel]),
+      makeEntity("c360.ops.gcs.robotics.drone.001", [rel], []),
+      makeEntity("c360.ops.gcs.robotics.fleet.west", [], [rel]),
     ];
     // Should not throw — no validation that confidence <= 1
     expect(() => syncStoreToGraph(graph, entities, [rel])).not.toThrow();
@@ -125,13 +125,13 @@ describe("graphology-adapter attack tests", () => {
   it("syncStoreToGraph: edge label uses last segment of dotted predicate", () => {
     const graph = new Graph();
     const rel = makeRelationship(
-      "c360.ops.robotics.gcs.drone.001",
+      "c360.ops.gcs.robotics.drone.001",
       "fleet.membership.current",
-      "c360.ops.robotics.gcs.fleet.west",
+      "c360.ops.gcs.robotics.fleet.west",
     );
     const entities = [
-      makeEntity("c360.ops.robotics.gcs.drone.001", [rel], []),
-      makeEntity("c360.ops.robotics.gcs.fleet.west", [], [rel]),
+      makeEntity("c360.ops.gcs.robotics.drone.001", [rel], []),
+      makeEntity("c360.ops.gcs.robotics.fleet.west", [], [rel]),
     ];
     syncStoreToGraph(graph, entities, [rel]);
     expect(graph.getEdgeAttribute(rel.id, "label")).toBe("current");
@@ -141,13 +141,13 @@ describe("graphology-adapter attack tests", () => {
     // predicate with no dots: split('.').pop() returns the full string, not ""
     const graph = new Graph();
     const rel = makeRelationship(
-      "c360.ops.robotics.gcs.drone.001",
+      "c360.ops.gcs.robotics.drone.001",
       "nodot",
-      "c360.ops.robotics.gcs.fleet.west",
+      "c360.ops.gcs.robotics.fleet.west",
     );
     const entities = [
-      makeEntity("c360.ops.robotics.gcs.drone.001", [rel], []),
-      makeEntity("c360.ops.robotics.gcs.fleet.west", [], [rel]),
+      makeEntity("c360.ops.gcs.robotics.drone.001", [rel], []),
+      makeEntity("c360.ops.gcs.robotics.fleet.west", [], [rel]),
     ];
     syncStoreToGraph(graph, entities, [rel]);
     expect(graph.getEdgeAttribute(rel.id, "label")).toBe("nodot");
@@ -157,13 +157,13 @@ describe("graphology-adapter attack tests", () => {
     // "a.b." -> split gives ["a","b",""] -> pop() returns "" -> fallback to full predicate
     const graph = new Graph();
     const rel = makeRelationship(
-      "c360.ops.robotics.gcs.drone.001",
+      "c360.ops.gcs.robotics.drone.001",
       "a.b.",
-      "c360.ops.robotics.gcs.fleet.west",
+      "c360.ops.gcs.robotics.fleet.west",
     );
     const entities = [
-      makeEntity("c360.ops.robotics.gcs.drone.001", [rel], []),
-      makeEntity("c360.ops.robotics.gcs.fleet.west", [], [rel]),
+      makeEntity("c360.ops.gcs.robotics.drone.001", [rel], []),
+      makeEntity("c360.ops.gcs.robotics.fleet.west", [], [rel]),
     ];
     syncStoreToGraph(graph, entities, [rel]);
     // "" is falsy so the || branch fires: label === "a.b."
@@ -175,13 +175,13 @@ describe("graphology-adapter attack tests", () => {
   it("syncStoreToGraph: duplicate relationship ids in input do not add duplicate edges", () => {
     const graph = new Graph();
     const rel = makeRelationship(
-      "c360.ops.robotics.gcs.drone.001",
+      "c360.ops.gcs.robotics.drone.001",
       "a.b.c",
-      "c360.ops.robotics.gcs.fleet.west",
+      "c360.ops.gcs.robotics.fleet.west",
     );
     const entities = [
-      makeEntity("c360.ops.robotics.gcs.drone.001", [rel, rel], []),
-      makeEntity("c360.ops.robotics.gcs.fleet.west", [], [rel, rel]),
+      makeEntity("c360.ops.gcs.robotics.drone.001", [rel, rel], []),
+      makeEntity("c360.ops.gcs.robotics.fleet.west", [], [rel, rel]),
     ];
     // Two identical rels in the array — second hasEdge check should skip it
     expect(() => syncStoreToGraph(graph, entities, [rel, rel])).not.toThrow();
@@ -193,7 +193,7 @@ describe("graphology-adapter attack tests", () => {
   it("syncStoreToGraph: handles 1000 nodes without throwing", () => {
     const graph = new Graph();
     const entities = Array.from({ length: 1000 }, (_, i) =>
-      makeEntity(`c360.ops.robotics.gcs.drone.n${i}`),
+      makeEntity(`c360.ops.gcs.robotics.drone.n${i}`),
     );
     expect(() => syncStoreToGraph(graph, entities, [])).not.toThrow();
     expect(graph.order).toBe(1000);
@@ -202,13 +202,13 @@ describe("graphology-adapter attack tests", () => {
   it("syncStoreToGraph: handles 500 edges between 1000 nodes without throwing", () => {
     const graph = new Graph();
     const entities = Array.from({ length: 1000 }, (_, i) =>
-      makeEntity(`c360.ops.robotics.gcs.drone.n${i}`),
+      makeEntity(`c360.ops.gcs.robotics.drone.n${i}`),
     );
     const rels = Array.from({ length: 500 }, (_, i) =>
       makeRelationship(
-        `c360.ops.robotics.gcs.drone.n${i}`,
+        `c360.ops.gcs.robotics.drone.n${i}`,
         "a.b.c",
-        `c360.ops.robotics.gcs.drone.n${i + 1 < 1000 ? i + 1 : 0}`,
+        `c360.ops.gcs.robotics.drone.n${i + 1 < 1000 ? i + 1 : 0}`,
       ),
     );
     expect(() => syncStoreToGraph(graph, entities, rels)).not.toThrow();
@@ -221,14 +221,14 @@ describe("graphology-adapter attack tests", () => {
     const graph = new Graph();
     // Entity with outgoing/incoming but none of those neighbors are in the graph yet
     const rel = makeRelationship(
-      "c360.ops.robotics.gcs.drone.001",
+      "c360.ops.gcs.robotics.drone.001",
       "a.b.c",
-      "c360.ops.robotics.gcs.fleet.notingraph",
+      "c360.ops.gcs.robotics.fleet.notingraph",
     );
-    const entity = makeEntity("c360.ops.robotics.gcs.drone.001", [rel], []);
+    const entity = makeEntity("c360.ops.gcs.robotics.drone.001", [rel], []);
     expect(() => addToGraph(graph, [entity], [])).not.toThrow();
-    const x = graph.getNodeAttribute("c360.ops.robotics.gcs.drone.001", "x");
-    const y = graph.getNodeAttribute("c360.ops.robotics.gcs.drone.001", "y");
+    const x = graph.getNodeAttribute("c360.ops.gcs.robotics.drone.001", "x");
+    const y = graph.getNodeAttribute("c360.ops.gcs.robotics.drone.001", "y");
     expect(typeof x).toBe("number");
     expect(typeof y).toBe("number");
   });
@@ -238,13 +238,13 @@ describe("graphology-adapter attack tests", () => {
   it("syncStoreToGraph: node size never exceeds MAX_NODE_SIZE (20) regardless of connections", () => {
     const graph = new Graph();
     // Entity with 200 outgoing connections
-    const hub = "c360.ops.robotics.gcs.drone.hub";
+    const hub = "c360.ops.gcs.robotics.drone.hub";
     const rels = Array.from({ length: 200 }, (_, i) => {
-      const target = `c360.ops.robotics.gcs.drone.n${i}`;
+      const target = `c360.ops.gcs.robotics.drone.n${i}`;
       return makeRelationship(hub, "a.b.c", target);
     });
     const spoke_entities = Array.from({ length: 200 }, (_, i) =>
-      makeEntity(`c360.ops.robotics.gcs.drone.n${i}`),
+      makeEntity(`c360.ops.gcs.robotics.drone.n${i}`),
     );
     const hubEntity = makeEntity(hub, rels, []);
     syncStoreToGraph(graph, [hubEntity, ...spoke_entities], rels);
@@ -254,10 +254,10 @@ describe("graphology-adapter attack tests", () => {
 
   it("syncStoreToGraph: isolated node size is at least MIN_NODE_SIZE (5)", () => {
     const graph = new Graph();
-    const entity = makeEntity("c360.ops.robotics.gcs.drone.001");
+    const entity = makeEntity("c360.ops.gcs.robotics.drone.001");
     syncStoreToGraph(graph, [entity], []);
     const size = graph.getNodeAttribute(
-      "c360.ops.robotics.gcs.drone.001",
+      "c360.ops.gcs.robotics.drone.001",
       "size",
     );
     expect(size).toBeGreaterThanOrEqual(5);
@@ -268,8 +268,8 @@ describe("graphology-adapter attack tests", () => {
   it("syncStoreToGraph: repeated syncs on same graph do not accumulate nodes", () => {
     const graph = new Graph();
     const entities = [
-      makeEntity("c360.ops.robotics.gcs.drone.001"),
-      makeEntity("c360.ops.robotics.gcs.fleet.west"),
+      makeEntity("c360.ops.gcs.robotics.drone.001"),
+      makeEntity("c360.ops.gcs.robotics.fleet.west"),
     ];
 
     for (let i = 0; i < 10; i++) {

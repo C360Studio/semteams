@@ -19,6 +19,10 @@ type portDef struct {
 		Subject    string   `json:"subject"`
 		StreamName string   `json:"stream_name"`
 		Subjects   []string `json:"subjects"`
+		Interface  struct {
+			Type    string `json:"type"`
+			Version string `json:"version"`
+		} `json:"interface"`
 	} `json:"config"`
 }
 
@@ -166,10 +170,8 @@ func canonicalStreamFor(subject string) string {
 //     wake-up coordinator path when chains terminate.
 //   - agent.task.* JetStream output (AGENT stream) — spawns initial
 //     and rule-driven loops.
-//   - user.response.> JetStream output (USER stream) — reply prose for
-//     channel routers to deliver. (nats fire-and-forget through
-//     beta.159; beta.160's dispatch default is jetstream/USER and a
-//     kind-mismatch override is a boot error.)
+//   - user.response.> JetStream output (USER stream) — typed
+//     agentic.user_response/v1 messages for channel routers to deliver.
 //
 // The bug class this catches: the MVP-1 bootstrap declared a
 // self-loop input (subject equal to its own output, reading from
@@ -260,6 +262,12 @@ func TestFlowBootstrapDispatchShape(t *testing.T) {
 						if p.Config.Kind != want.kind {
 							t.Errorf("dispatch %s %q kind=%q, want %q",
 								laneName, portName, p.Config.Kind, want.kind)
+						}
+						if portName == "user.response" {
+							if p.Config.Interface.Type != "agentic.user_response" || p.Config.Interface.Version != "v1" {
+								t.Errorf("dispatch %s %q interface=%s/%s, want agentic.user_response/v1",
+									laneName, portName, p.Config.Interface.Type, p.Config.Interface.Version)
+							}
 						}
 					}
 					if !found {

@@ -1,0 +1,9 @@
+Worktree: /Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams
+Focused behavioral green (exit0):
+TESTCONTAINERS_RYUK_DISABLED=true go test -race -tags=integration ./test/contract -run '^TestAutoresearch(Reply|IterationCap)' -count=1 -v
+Fresh NATS2.14.4 JetStream containers; graph/lifecycle persistence fixtures, real frozen Matches/StatefulEvaluator/ActionExecutor/Mint/HandleTask and real NATS StateTracker.
+Existing contracts (exit0):
+go test -race ./test/contract ./cmd/semteams/tools/emitautoresearchbaseline ./cmd/semteams/tools/emitautoresearchmeasurement ./cmd/semteams/tools/emitautoresearchartifact ./cmd/semteams/approvalpause
+Follow-up ambiguous source-anchor red (exit1 before exact1 guard correction):
+TESTCONTAINERS_RYUK_DISABLED=true go test -race -tags=integration ./test/contract -run '^TestAutoresearchReplyAmbiguousSourceAnchor$' -count=1 -v
+Go/runtime configs stable after these runs. Full gates and final browser qualification owned by root/frontend; not duplicated here.

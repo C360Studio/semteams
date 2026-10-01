@@ -25,7 +25,7 @@ function makeAttachment(
   return {
     kind: "entity-detail",
     entity: {
-      id: "c360.ops.robotics.gcs.drone.001",
+      id: "c360.ops.gcs.robotics.drone.001",
       label: "001",
       type: "drone",
       domain: "robotics",
@@ -37,11 +37,11 @@ function makeAttachment(
       relationships: [
         {
           predicate: "fleet.membership.current",
-          targetId: "c360.ops.robotics.gcs.fleet.alpha",
+          targetId: "c360.ops.gcs.robotics.fleet.alpha",
         },
         {
           predicate: "command.link.primary",
-          targetId: "c360.ops.robotics.gcs.station.001",
+          targetId: "c360.ops.gcs.robotics.station.001",
         },
       ],
       ...overrides,
@@ -53,7 +53,7 @@ function makeMinimalAttachment(): EntityDetailAttachmentV4 {
   return {
     kind: "entity-detail",
     entity: {
-      id: "c360.ops.robotics.gcs.drone.bare",
+      id: "c360.ops.gcs.robotics.drone.bare",
       label: "bare",
       type: "drone",
       domain: "robotics",
@@ -201,11 +201,11 @@ describe("EntityDetailCard — shows relationship info", () => {
       relationships: [
         {
           predicate: "fleet.membership.current",
-          targetId: "c360.ops.robotics.gcs.fleet.alpha",
+          targetId: "c360.ops.gcs.robotics.fleet.alpha",
         },
         {
           predicate: "command.link.primary",
-          targetId: "c360.ops.robotics.gcs.station.001",
+          targetId: "c360.ops.gcs.robotics.station.001",
         },
       ],
     });
@@ -222,7 +222,7 @@ describe("EntityDetailCard — shows relationship info", () => {
       relationships: [
         {
           predicate: "fleet.membership.current",
-          targetId: "c360.ops.robotics.gcs.fleet.alpha",
+          targetId: "c360.ops.gcs.robotics.fleet.alpha",
         },
       ],
     });
@@ -265,7 +265,7 @@ describe("EntityDetailCard — clicking entity calls onViewEntity", () => {
 
     expect(onViewEntity).toHaveBeenCalledOnce();
     expect(onViewEntity).toHaveBeenCalledWith(
-      "c360.ops.robotics.gcs.drone.001",
+      "c360.ops.gcs.robotics.drone.001",
     );
   });
 
@@ -274,7 +274,7 @@ describe("EntityDetailCard — clicking entity calls onViewEntity", () => {
     const user = userEvent.setup();
 
     const attachment = makeAttachment({
-      id: "c360.sec.border.surveillance.sensor.007",
+      id: "c360.sec.surveillance.border.sensor.007",
       label: "007",
       type: "sensor",
       domain: "border",
@@ -287,7 +287,7 @@ describe("EntityDetailCard — clicking entity calls onViewEntity", () => {
     await user.click(screen.getByTestId("entity-detail-entity-id"));
 
     expect(onViewEntity).toHaveBeenCalledWith(
-      "c360.sec.border.surveillance.sensor.007",
+      "c360.sec.surveillance.border.sensor.007",
     );
   });
 });

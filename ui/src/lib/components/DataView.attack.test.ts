@@ -116,7 +116,7 @@ describe("DataView attack — rapid tab switching", () => {
 
 describe("DataView attack — entity/chip race conditions", () => {
   it("does not crash when +Chat is clicked and entity is simultaneously deselected", async () => {
-    const entity = makeEntity("c360.ops.robotics.gcs.drone.001");
+    const entity = makeEntity("c360.ops.gcs.robotics.drone.001");
     graphStore.upsertEntity(entity);
     graphStore.selectEntity(entity.id);
 
@@ -139,7 +139,7 @@ describe("DataView attack — entity/chip race conditions", () => {
   });
 
   it("double-clicking +Chat does NOT create duplicate chips (dedup by kind+value)", async () => {
-    const entity = makeEntity("c360.ops.robotics.gcs.drone.002");
+    const entity = makeEntity("c360.ops.gcs.robotics.drone.002");
     graphStore.upsertEntity(entity);
     graphStore.selectEntity(entity.id);
 
@@ -170,9 +170,9 @@ describe("DataView attack — entity/chip race conditions", () => {
   });
 
   it("rapid +Chat clicks from multiple entities accumulate distinct chips", async () => {
-    const e1 = makeEntity("c360.ops.robotics.gcs.drone.001");
-    const e2 = makeEntity("c360.ops.robotics.gcs.drone.002");
-    const e3 = makeEntity("c360.ops.robotics.gcs.drone.003");
+    const e1 = makeEntity("c360.ops.gcs.robotics.drone.001");
+    const e2 = makeEntity("c360.ops.gcs.robotics.drone.002");
+    const e3 = makeEntity("c360.ops.gcs.robotics.drone.003");
 
     graphStore.upsertEntity(e1);
     graphStore.upsertEntity(e2);
@@ -310,7 +310,7 @@ describe("DataView attack — empty graphStore context", () => {
 
 describe("DataView attack — auto-switch effect loop guard", () => {
   it("selecting same entity twice does NOT trigger redundant re-renders or loops", async () => {
-    const entity = makeEntity("c360.ops.robotics.gcs.drone.loop");
+    const entity = makeEntity("c360.ops.gcs.robotics.drone.loop");
     graphStore.upsertEntity(entity);
     graphStore.selectEntity(entity.id);
 
@@ -335,7 +335,7 @@ describe("DataView attack — auto-switch effect loop guard", () => {
   });
 
   it("manual tab override is NOT clobbered by auto-switch when entity stays selected", async () => {
-    const entity = makeEntity("c360.ops.robotics.gcs.drone.override");
+    const entity = makeEntity("c360.ops.gcs.robotics.drone.override");
     graphStore.upsertEntity(entity);
     graphStore.selectEntity(entity.id);
 
@@ -381,7 +381,7 @@ describe("DataView attack — auto-switch effect loop guard", () => {
     });
 
     // Now select a new entity — should auto-switch to details
-    const entity = makeEntity("c360.ops.robotics.gcs.drone.new");
+    const entity = makeEntity("c360.ops.gcs.robotics.drone.new");
     graphStore.upsertEntity(entity);
     graphStore.selectEntity(entity.id);
 
@@ -432,7 +432,7 @@ describe("GraphDetailPanel attack — null and undefined prop hardening", () => 
   });
 
   it("does not throw when onAddChip is called after the entity reference is replaced", async () => {
-    const entity = makeEntity("c360.ops.robotics.gcs.drone.001");
+    const entity = makeEntity("c360.ops.gcs.robotics.drone.001");
     const captured: Parameters<typeof GraphDetailPanel>[0][] = [];
 
     const onAddChip = vi.fn((chip) => captured.push(chip));
@@ -479,7 +479,7 @@ describe("GraphDetailPanel attack — null and undefined prop hardening", () => 
 
 describe("graphStore attack — clearExpanded() safety", () => {
   it("clearExpanded does not affect selectedEntityId", () => {
-    const entity = makeEntity("c360.ops.robotics.gcs.drone.001");
+    const entity = makeEntity("c360.ops.gcs.robotics.drone.001");
     graphStore.upsertEntity(entity);
     graphStore.selectEntity(entity.id);
     graphStore.markExpanded(entity.id);
@@ -490,7 +490,7 @@ describe("graphStore attack — clearExpanded() safety", () => {
   });
 
   it("clearExpanded does not affect entities map", () => {
-    const entity = makeEntity("c360.ops.robotics.gcs.drone.001");
+    const entity = makeEntity("c360.ops.gcs.robotics.drone.001");
     graphStore.upsertEntity(entity);
     graphStore.markExpanded(entity.id);
 

@@ -22,7 +22,7 @@ func envelopeFor(t *testing.T, payload message.Payload) []byte {
 	return data
 }
 
-func newSubscriber(reader EntityTripleReader, pub TriplePublisher) *Subscriber {
+func newSubscriber(reader EntityTripleReader, pub GateProjection) *Subscriber {
 	return NewSubscriber(NewPauser(reader, pub, testOrg, testPlatform), "", "", nil)
 }
 
@@ -36,9 +36,10 @@ func TestHandlePendingMsg_ApprovalPending(t *testing.T) {
 	sub := newSubscriber(reader, pub)
 
 	sub.handlePendingMsg(context.Background(), envelopeFor(t, &agentic.ApprovalPendingEvent{
-		LoopID:   "loop-77",
-		CallID:   "call-77",
-		ToolName: "create_rule",
+		LoopID:      "00000000-0000-4000-8000-000000000077",
+		CallID:      "call-77",
+		ExecutionID: "execution-77",
+		ToolName:    "create_rule",
 	}))
 
 	if len(pub.written) != 1 {
@@ -50,7 +51,7 @@ func TestHandlePendingMsg_ApprovalPending(t *testing.T) {
 }
 
 // TestHandleResponseMsg_ApprovalResponse decodes a real ApprovalResponse envelope and
-// drives the resume half — stamps agent.run.approval-resumed (4c PR-2).
+// drives the resume half — stamps agent.run.approval-answered (4c PR-2).
 func TestHandleResponseMsg_ApprovalResponse(t *testing.T) {
 	const runEntity = "c360.ops.agent.chain.execution.run-88"
 	reader := &fakeReader{triples: map[string]any{agvocab.LoopRunEntityID: runEntity}}
@@ -58,17 +59,18 @@ func TestHandleResponseMsg_ApprovalResponse(t *testing.T) {
 	sub := newSubscriber(reader, pub)
 
 	sub.handleResponseMsg(context.Background(), envelopeFor(t, &agentic.ApprovalResponse{
-		LoopID:     "loop-88",
-		CallID:     "call-88",
-		Decision:   agentic.ApprovalDecisionApprove,
-		ApprovedBy: "ui-anonymous",
-		DecidedAt:  time.Unix(0, 0).UTC(),
+		LoopID:      "00000000-0000-4000-8000-000000000088",
+		CallID:      "call-88",
+		ExecutionID: "execution-88",
+		Decision:    agentic.ApprovalDecisionApprove,
+		ApprovedBy:  "ui-anonymous",
+		DecidedAt:   time.Unix(0, 0).UTC(),
 	}))
 
-	if len(pub.written) != 1 {
-		t.Fatalf("want 1 triple written from a decoded approval_response event, got %d", len(pub.written))
+	if len(pub.written) != 2 {
+		t.Fatalf("want resume marker and receipt from a decoded approval_response event, got %d", len(pub.written))
 	}
-	if pub.written[0].Subject != runEntity || pub.written[0].Predicate != MarkerApprovalResumed {
+	if pub.written[0].Subject != runEntity || pub.written[0].Predicate != MarkerApprovalPending {
 		t.Errorf("decoded response stamped wrong triple: %+v", pub.written[0])
 	}
 }

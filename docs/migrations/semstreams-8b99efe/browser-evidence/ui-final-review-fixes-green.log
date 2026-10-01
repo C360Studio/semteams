@@ -1,0 +1,27 @@
+
+ RUN  v3.2.4 /Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/ui
+
+(node:14906) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:14908) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:14907) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:14910) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:14905) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:14909) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ src/routes/api/ai/chat/server.test.ts (2 tests) 4ms
+ ✓ src/routes/api/ai/generate-flow/server.test.ts (2 tests) 5ms
+ ✓ src/lib/stores/runStatus.test.ts (35 tests) 11ms
+ ✓ src/lib/components/board/PendingApprovalSection.test.ts (17 tests) 561ms
+ ✓ src/lib/stores/agentStore.test.ts (35 tests) 974ms
+ ✓ src/lib/components/board/RunWaitingSection.test.ts (25 tests) 766ms
+
+ Test Files  6 passed (6)
+      Tests  116 passed (116)
+   Start at  07:32:39
+   Duration  1.72s (transform 722ms, setup 355ms, collect 1.55s, tests 2.32s, environment 1.22s, prepare 283ms)
+

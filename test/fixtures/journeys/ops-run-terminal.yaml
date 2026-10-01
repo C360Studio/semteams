@@ -152,7 +152,7 @@ responses_by_role:
               "finding": "The gather phase ran a single subtopic, so the synthesis rests on one evidence sweep rather than the plan's stated breadth.",
               "recommendation": "If comparison questions routinely decompose to one subtopic, check whether the planner's subtopic extraction is under-splitting before tuning anything downstream.",
               "confidence": 0.72,
-              "evidence": ["c360.semteams.agent.chain.execution.run-under-observation"],
+              "evidence": ["c360.semteams.chain.agent.execution.run-under-observation"],
               "severity": "warn"
             }
       - tool_call:
@@ -162,7 +162,7 @@ responses_by_role:
               "finding": "The run reached its terminal phase with every loop completing on first attempt and no recovery rule firing.",
               "recommendation": "No action. Recording the clean baseline so a later regression in loop-retry behaviour has something to compare against.",
               "confidence": 0.95,
-              "evidence": ["c360.semteams.agent.chain.execution.run-under-observation"],
+              "evidence": ["c360.semteams.chain.agent.execution.run-under-observation"],
               "severity": "info"
             }
       - tool_call:

@@ -1,0 +1,569 @@
+{
+  "autoresearch-exit-proof": {
+    "loops": [
+      {
+        "loop_id": "39707464-9cab-4e80-8b1c-99544dd953c8",
+        "task_id": "dispatch-c65dc747752f88fe839fe9a29dedfcee4b075aed17993cef507177d668fb2a5b",
+        "state": "complete",
+        "role": "coordinator",
+        "iterations": 2,
+        "max_iterations": 8,
+        "user_id": "ui-anonymous",
+        "channel_type": "http",
+        "outcome": "success",
+        "result": "{\"action\":\"autoresearch\",\"reason\":\"Optimize the wallclock of `go test ./...`. Command: go test ./...; surface: ./...; cap: 2 iterations; metric: real seconds parsed from the test output. Lower is better.\"}"
+      },
+      {
+        "loop_id": "456f0a6b-d0c8-4850-ab1e-9e471d847600",
+        "task_id": "rule-c360.semteams-bootstrap-e2e-b49b94.agentic-loop.agent.execution.39707464-9cab-4e80-8b1c-99544dd953c8-1790865151054268209",
+        "state": "complete",
+        "role": "autoresearch-baseline",
+        "iterations": 1,
+        "max_iterations": 8,
+        "outcome": "success",
+        "result": "{\"action\":\"propose\",\"reason\":\"Baseline captured at 1.20s. Beginning the iteration loop (cap 2) \u2014 propose single-axis changes and keep the ones that lower the wallclock.\"}"
+      },
+      {
+        "loop_id": "59be49e9-c916-4378-bdc4-e5c7cd0a909b",
+        "task_id": "rule-c360.semteams-bootstrap-e2e-b49b94.chain.agent.execution.39707464-9cab-4e80-8b1c-99544dd953c8-1790865151134795667",
+        "state": "complete",
+        "role": "autoresearch-propose",
+        "max_iterations": 8,
+        "outcome": "success",
+        "result": "{\"action\":\"needs_clarification\",\"reason\":\"The bounded surface is too narrow; ask the user which additional test directories may change.\"}"
+      },
+      {
+        "loop_id": "7ede3ebb-a329-4d54-9a26-ba346746d8d6",
+        "task_id": "rule-c360.semteams-bootstrap-e2e-b49b94.agentic-loop.agent.execution.39707464-9cab-4e80-8b1c-99544dd953c8-1790865151286788042",
+        "state": "complete",
+        "role": "coordinator",
+        "max_iterations": 8,
+        "outcome": "success",
+        "result": "{\"action\":\"respond_direct\",\"reason\":\"Autoresearch stopped before an experiment because the current surface is too narrow. No improvement or completed optimization is claimed; the run requires follow-up under the existing lifecycle policy.\"}"
+      }
+    ],
+    "sourceMessages": [
+      {
+        "sequence": 76,
+        "timestamp": "2026-10-01T14:32:31.15230625Z",
+        "subject": "tool.result.tool-exec-v1-vccf65jopnjb7hd4rafje5uauyaubkouv5qzmtuo5dny32exnafa",
+        "message_type": "agentic.tool_result.v1",
+        "trace_id": "3b52a3815d54ed77c82a5d94306a7fb3",
+        "span_id": "6508586791c6d8ab",
+        "summary": "Type: agentic.tool_result.v1, Payload: *agentic.ToolResult",
+        "raw_data": {
+          "id": "3bbed24c-f6c6-4b14-9e93-08e5d4f67168",
+          "type": {
+            "domain": "agentic",
+            "category": "tool_result",
+            "version": "v1"
+          },
+          "payload": {
+            "call_id": "call_cbbcb9e0",
+            "name": "decide",
+            "content": "{\"action\":\"needs_clarification\",\"reason\":\"The bounded surface is too narrow; ask the user which additional test directories may change.\"}",
+            "metadata": {
+              "action": "needs_clarification",
+              "has_retry_hint": false,
+              "loop_entity_id": "c360.semteams-bootstrap-e2e-b49b94.agentic-loop.agent.execution.59be49e9-c916-4378-bdc4-e5c7cd0a909b",
+              "reason": "The bounded surface is too narrow; ask the user which additional test directories may change.",
+              "subtopic_count": 0
+            },
+            "loop_id": "59be49e9-c916-4378-bdc4-e5c7cd0a909b",
+            "request_id": "59be49e9-c916-4378-bdc4-e5c7cd0a909b:req:1:0",
+            "execution_id": "tool-exec-v1-vccf65jopnjb7hd4rafje5uauyaubkouv5qzmtuo5dny32exnafa",
+            "call_ordinal": 1,
+            "stop_loop": true
+          },
+          "meta": {
+            "created_at": 1790865151152,
+            "received_at": 1790865151152,
+            "source": "agentic-tools"
+          }
+        }
+      }
+    ],
+    "best": [
+      {
+        "subject": "c360.semteams-bootstrap-e2e-b49b94.chain.agent.execution.39707464-9cab-4e80-8b1c-99544dd953c8",
+        "predicate": "autoresearch.best.value",
+        "object": 1.2,
+        "source": "autoresearch-emit-baseline",
+        "timestamp": "2026-10-01T14:32:31.073686042Z",
+        "confidence": 1
+      }
+    ]
+  },
+  "autoresearch-terminal-route-proof": {
+    "root": {
+      "loop_id": "39707464-9cab-4e80-8b1c-99544dd953c8",
+      "task_id": "dispatch-c65dc747752f88fe839fe9a29dedfcee4b075aed17993cef507177d668fb2a5b",
+      "state": "complete",
+      "role": "coordinator",
+      "iterations": 2,
+      "max_iterations": 8,
+      "user_id": "ui-anonymous",
+      "channel_type": "http",
+      "outcome": "success",
+      "result": "{\"action\":\"autoresearch\",\"reason\":\"Optimize the wallclock of `go test ./...`. Command: go test ./...; surface: ./...; cap: 2 iterations; metric: real seconds parsed from the test output. Lower is better.\"}"
+    },
+    "terminal": {
+      "loop_id": "7ede3ebb-a329-4d54-9a26-ba346746d8d6",
+      "task_id": "rule-c360.semteams-bootstrap-e2e-b49b94.agentic-loop.agent.execution.39707464-9cab-4e80-8b1c-99544dd953c8-1790865151286788042",
+      "state": "complete",
+      "role": "coordinator",
+      "max_iterations": 8,
+      "outcome": "success",
+      "result": "{\"action\":\"respond_direct\",\"reason\":\"Autoresearch stopped before an experiment because the current surface is too narrow. No improvement or completed optimization is claimed; the run requires follow-up under the existing lifecycle policy.\"}"
+    },
+    "source": {
+      "loop_id": "59be49e9-c916-4378-bdc4-e5c7cd0a909b",
+      "task_id": "rule-c360.semteams-bootstrap-e2e-b49b94.chain.agent.execution.39707464-9cab-4e80-8b1c-99544dd953c8-1790865151134795667",
+      "state": "complete",
+      "role": "autoresearch-propose",
+      "max_iterations": 8,
+      "outcome": "success",
+      "result": "{\"action\":\"needs_clarification\",\"reason\":\"The bounded surface is too narrow; ask the user which additional test directories may change.\"}"
+    },
+    "rootTask": {
+      "loop_id": "39707464-9cab-4e80-8b1c-99544dd953c8",
+      "task_id": "dispatch-c65dc747752f88fe839fe9a29dedfcee4b075aed17993cef507177d668fb2a5b",
+      "source_message_id": "77bc8038-7809-4704-99a0-682f05e950db",
+      "role": "coordinator",
+      "model": "general",
+      "prompt": "Optimize go test ./... wallclock, lower is better, cap 2, bounded surface test/helpers. Keep all tests passing.",
+      "channel_type": "http",
+      "channel_id": "http-1790865150996223084",
+      "user_id": "ui-anonymous",
+      "tools": [
+        {
+          "name": "decide",
+          "description": "Terminal decision tool for coordinator agents. Call exactly once with the action your role's system prompt enumerates. Emits a coordinator.decision.next-action triple on this loop's entity so downstream rules can route; the full args stay in the loop's Result for any agent that needs supporting data.",
+          "parameters": {
+            "properties": {
+              "action": {
+                "description": "The decision. Valid values are enumerated in your role's system prompt.",
+                "type": "string"
+              },
+              "reason": {
+                "description": "Short natural-language justification for the chosen action.",
+                "type": "string"
+              },
+              "retry_hint": {
+                "description": "Optional. Free-form guidance for a downstream pass; populate only when your role's contract names this field.",
+                "type": "string"
+              },
+              "subtopics": {
+                "description": "Optional. List of sub-targets when the chosen action represents a multi-target investigation; populate only when your role's contract names this field.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "action",
+              "reason"
+            ],
+            "type": "object"
+          },
+          "effect": "mutating"
+        },
+        {
+          "name": "read_loop_result",
+          "description": "Fetch the final Result text a previously completed agent loop produced, so this agent can react to or build on it without having the full content injected into its prompt. Returns a text slice plus role/outcome/completed_at metadata and total_bytes so the caller can page through long results by calling again with a different offset.",
+          "parameters": {
+            "properties": {
+              "loop_id": {
+                "description": "Loop ID. Use $entity.instance in rule templates (bare UUID); the full 6-part entity ID also works.",
+                "type": "string"
+              },
+              "max_bytes": {
+                "description": "Maximum bytes of Result text to return in this call. Defaults to 4096. Use smaller values to stay within tight context budgets.",
+                "type": "integer"
+              },
+              "offset": {
+                "description": "Zero-based byte offset into the Result text. Defaults to 0. Use with max_bytes to page through long results.",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "loop_id"
+            ],
+            "type": "object"
+          },
+          "paginated": true,
+          "effect": "read_only"
+        },
+        {
+          "name": "scratchpad",
+          "description": "Free-form reasoning space before committing structured output. Use this to think through decomposition, list constraints you must satisfy, or note edge cases you considered \u2014 content is recorded in the trajectory and graph but not interpreted by any rule or consumer. Call this BEFORE the strict commit tool when the task involves decomposition or multi-step planning.",
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "text": {
+                "description": "Your reasoning. Free-form prose; no schema, no length limit, no interpretation. Lands in the trajectory and on the loop entity for audit and recovery.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "text"
+            ],
+            "type": "object"
+          },
+          "effect": "mutating"
+        },
+        {
+          "name": "query_sandbox_attestation",
+          "description": "Read-only: check whether a fresh sandbox attestation already covers a SandboxRequirements on this chain. Returns {found, fresh, attestation?, staleness_seconds?}. Call BEFORE request_sandbox to skip re-attesting when a recent attestation matches. The signature key is (matched_profile, requirements_hash); pass the same args you would pass to request_sandbox. No side effects: no devcontainer up, no triple stamps, just a graph lookup.",
+          "parameters": {
+            "properties": {
+              "languages": {
+                "description": "Same shape as request_sandbox.languages.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "mounts": {
+                "description": "Same shape as request_sandbox.mounts.",
+                "items": {
+                  "enum": [
+                    "workspace-write",
+                    "workspace-read"
+                  ],
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "network": {
+                "description": "Same shape as request_sandbox.network.",
+                "enum": [
+                  "restricted",
+                  "public",
+                  "none"
+                ],
+                "type": "string"
+              },
+              "privileges": {
+                "description": "Same shape as request_sandbox.privileges.",
+                "items": {
+                  "enum": [
+                    "docker-socket",
+                    "privileged"
+                  ],
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "secrets": {
+                "description": "Same shape as request_sandbox.secrets.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "services": {
+                "description": "Same shape as request_sandbox.services.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "tools": {
+                "description": "Same shape as request_sandbox.tools.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "verification": {
+                "description": "Same shape as request_sandbox.verification. Affects the requirements hash.",
+                "items": {
+                  "properties": {
+                    "command": {
+                      "type": "string"
+                    },
+                    "expect_exit": {
+                      "type": "integer"
+                    },
+                    "name": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "command"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              }
+            },
+            "type": "object"
+          },
+          "effect": "unknown"
+        },
+        {
+          "name": "request_sandbox",
+          "description": "Request a sandbox environment for the work at hand. Synchronous: returns an Attestation that says ready/degraded/failed plus the verified capabilities. Coordinator routes on the attestation shape (.ready/.degraded/.terminal/.admission_outcome). NEVER author container internals (image, mounts as paths, privileges as docker flags) \u2014 those live in catalog profiles. Describe what the WORK needs. The manager handles profile-match + admission + devcontainer up + probes + attestation. Profile lookup is operator-curated; admission gates privileged + public-network + host-path-mounts + un-pre-provisioned secrets. Call exactly once per work request. Before calling, consider whether a fresh attestation already covers your needs by calling query_sandbox_attestation first.",
+          "parameters": {
+            "properties": {
+              "languages": {
+                "description": "Language toolchains the work needs (e.g. ['go'], ['node'], ['go','node']). Matches against profile.advertises.languages.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "mounts": {
+                "description": "Mount class enum. Default 'workspace-write' is the typical case. 'workspace-read' is audit/inspect-only. Host-path bind mounts go via privileges, not here.",
+                "items": {
+                  "enum": [
+                    "workspace-write",
+                    "workspace-read"
+                  ],
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "network": {
+                "description": "Network policy class. 'restricted' (default) admits without operator policy; 'public' pends on AllowPublicNetwork OR admission-reviewer approval; 'none' requires profile support.",
+                "enum": [
+                  "restricted",
+                  "public",
+                  "none"
+                ],
+                "type": "string"
+              },
+              "privileges": {
+                "description": "Privileged capability classes. 'docker-socket' for testcontainers/compose workloads (requires full-stack-e2e profile + admission-reviewer approval). 'privileged' is forbidden by default (requires operator AllowPrivilegedContainers flag + profile allowlist + reviewer signoff).",
+                "items": {
+                  "enum": [
+                    "docker-socket",
+                    "privileged"
+                  ],
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "secrets": {
+                "description": "Pre-provisioned secret identifiers (env-var shape, [A-Z_][A-Z0-9_]*). Each MUST be in operator AvailableSecrets policy \u2014 admission denies otherwise. Coordinator can't ask the user to enter a credential mid-chain.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "services": {
+                "description": "In-container services the work needs (e.g. ['nats']). Most workloads have none. Only full-stack-e2e profile advertises services.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "tools": {
+                "description": "CLI tools the work needs (e.g. ['task','gh'], ['playwright']). Matches against profile.advertises.tools and is verified by preflight probes when listed in verification.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "verification": {
+                "description": "Preflight probes the manager runs inside the container after devcontainer up. Each probe.name becomes a sandbox.attestation.verified-<name> triple the Coordinator can route on. Probes that fail produce Degraded=true (not Ready) and DegradedReasons.",
+                "items": {
+                  "properties": {
+                    "command": {
+                      "description": "Verbatim shell line the probe runs (e.g. 'go version', 'task --list'). This IS user-intent, not LLM-authored shell \u2014 the probe shape IS its command.",
+                      "type": "string"
+                    },
+                    "expect_exit": {
+                      "description": "Required exit code. Default 0. Probes that intend non-zero pass must set explicitly.",
+                      "type": "integer"
+                    },
+                    "name": {
+                      "description": "Capability identifier ([a-z0-9][a-z0-9._-]*). Becomes the verified.<name> predicate suffix; substituted by Coordinator routing.",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "command"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              }
+            },
+            "type": "object"
+          },
+          "effect": "unknown"
+        }
+      ]
+    },
+    "terminalTask": {
+      "task_id": "rule-c360.semteams-bootstrap-e2e-b49b94.agentic-loop.agent.execution.39707464-9cab-4e80-8b1c-99544dd953c8-1790865151286788042",
+      "role": "coordinator",
+      "model": "coordinator",
+      "prompt": "An autoresearch role could not continue and requested clarification. Read its terminal reason using read_loop_result(loop_id=\"c360.semteams-bootstrap-e2e-b49b94.agentic-loop.agent.execution.59be49e9-c916-4378-bdc4-e5c7cd0a909b\"). Explain the actual gap and partial progress. Use decide(action=\"ask_user\", reason=\"<specific question>\") only for something the user can clarify; otherwise decide(action=\"respond_direct\", reason=\"<honest limitation/status>\"). Do not restart work or describe the run as successful. The existing restricted_decide_actions policy still governs ask_user.",
+      "parent_loop_id": "39707464-9cab-4e80-8b1c-99544dd953c8",
+      "run_id": "39707464-9cab-4e80-8b1c-99544dd953c8",
+      "tools": [
+        {
+          "name": "read_loop_result",
+          "description": "Fetch the final Result text a previously completed agent loop produced, so this agent can react to or build on it without having the full content injected into its prompt. Returns a text slice plus role/outcome/completed_at metadata and total_bytes so the caller can page through long results by calling again with a different offset.",
+          "parameters": {
+            "properties": {
+              "loop_id": {
+                "description": "Loop ID. Use $entity.instance in rule templates (bare UUID); the full 6-part entity ID also works.",
+                "type": "string"
+              },
+              "max_bytes": {
+                "description": "Maximum bytes of Result text to return in this call. Defaults to 4096. Use smaller values to stay within tight context budgets.",
+                "type": "integer"
+              },
+              "offset": {
+                "description": "Zero-based byte offset into the Result text. Defaults to 0. Use with max_bytes to page through long results.",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "loop_id"
+            ],
+            "type": "object"
+          },
+          "paginated": true,
+          "effect": "read_only"
+        },
+        {
+          "name": "bash",
+          "description": "Run a shell command. Use for file operations, git, builds, tests, and any other shell task.",
+          "parameters": {
+            "properties": {
+              "command": {
+                "description": "Shell command to execute",
+                "type": "string"
+              },
+              "read_only_paths": {
+                "description": "Paths (files or directories, relative to the worktree root) that should not be modified. Used by verify_clean to filter the dirty-tree check; an entry like \"src/\" matches anything under src/.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "verify_clean": {
+                "description": "If true, run `git status -z --porcelain --untracked-files=all` before the real command and refuse to run if any dirty path matches read_only_paths (or any dirty path at all when read_only_paths is empty). Use to keep a command sequence from clobbering off-limits files.",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "command"
+            ],
+            "type": "object"
+          },
+          "effect": "external_effect"
+        },
+        {
+          "name": "decide",
+          "description": "Terminal decision tool for coordinator agents. Call exactly once with the action your role's system prompt enumerates. Emits a coordinator.decision.next-action triple on this loop's entity so downstream rules can route; the full args stay in the loop's Result for any agent that needs supporting data.",
+          "parameters": {
+            "properties": {
+              "action": {
+                "description": "The decision. Valid values are enumerated in your role's system prompt.",
+                "type": "string"
+              },
+              "reason": {
+                "description": "Short natural-language justification for the chosen action.",
+                "type": "string"
+              },
+              "retry_hint": {
+                "description": "Optional. Free-form guidance for a downstream pass; populate only when your role's contract names this field.",
+                "type": "string"
+              },
+              "subtopics": {
+                "description": "Optional. List of sub-targets when the chosen action represents a multi-target investigation; populate only when your role's contract names this field.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "action",
+              "reason"
+            ],
+            "type": "object"
+          },
+          "effect": "mutating"
+        }
+      ],
+      "tool_choice": {
+        "mode": "required"
+      },
+      "metadata": {
+        "agent.decide.action_allowlist": [
+          "respond_direct",
+          "ask_user"
+        ],
+        "agent.related_loops": {
+          "autoresearch-run": "39707464-9cab-4e80-8b1c-99544dd953c8",
+          "rejecting": "c360.semteams-bootstrap-e2e-b49b94.agentic-loop.agent.execution.59be49e9-c916-4378-bdc4-e5c7cd0a909b"
+        },
+        "category": "autoresearch",
+        "source_loop_entity_id": "c360.semteams-bootstrap-e2e-b49b94.agentic-loop.agent.execution.59be49e9-c916-4378-bdc4-e5c7cd0a909b",
+        "wakeup_mode": "autoresearch_clarification"
+      }
+    },
+    "reply": {
+      "sequence": 100,
+      "timestamp": "2026-10-01T14:32:31.309948917Z",
+      "subject": "user.response.http.http-1790865150996223084",
+      "message_type": "agentic.user_response.v1",
+      "trace_id": "da5163c4607494424a2288384069bea4",
+      "span_id": "daf2e9ad2ddff809",
+      "summary": "Type: agentic.user_response.v1, Payload: *agentic.UserResponse",
+      "raw_data": {
+        "id": "fc2c86d8-9d19-4ccb-8d7d-681b2a3ccee7",
+        "type": {
+          "domain": "agentic",
+          "category": "user_response",
+          "version": "v1"
+        },
+        "payload": {
+          "response_id": "terminal-user-response:833c8e0a-9ea3-4bb0-bde0-9869be49dfda",
+          "channel_type": "http",
+          "channel_id": "http-1790865150996223084",
+          "user_id": "ui-anonymous",
+          "in_reply_to": "7ede3ebb-a329-4d54-9a26-ba346746d8d6",
+          "type": "result",
+          "content": "Autoresearch stopped before an experiment because the current surface is too narrow. No improvement or completed optimization is claimed; the run requires follow-up under the existing lifecycle policy.",
+          "timestamp": "2026-10-01T14:32:31.306442792Z"
+        },
+        "meta": {
+          "created_at": 1790865151309,
+          "received_at": 1790865151309,
+          "source": "agentic-dispatch"
+        }
+      }
+    },
+    "phases": [
+      {
+        "subject": "c360.semteams-bootstrap-e2e-b49b94.chain.agent.execution.39707464-9cab-4e80-8b1c-99544dd953c8",
+        "predicate": "agent.run.phase",
+        "object": "executing",
+        "source": "",
+        "timestamp": "2026-10-01T14:32:31.175577834Z",
+        "confidence": 1
+      }
+    ],
+    "origins": [
+      {
+        "subject": "c360.semteams-bootstrap-e2e-b49b94.chain.agent.execution.39707464-9cab-4e80-8b1c-99544dd953c8",
+        "predicate": "agent.run.origin-entity-id",
+        "object": "c360.semteams-bootstrap-e2e-b49b94.agentic-loop.agent.execution.39707464-9cab-4e80-8b1c-99544dd953c8",
+        "source": "",
+        "timestamp": "2026-10-01T14:32:31.054856417Z",
+        "confidence": 1
+      }
+    ]
+  }
+}

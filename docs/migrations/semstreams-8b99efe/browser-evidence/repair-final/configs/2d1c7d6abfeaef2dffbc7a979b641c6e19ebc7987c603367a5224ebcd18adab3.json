@@ -1,0 +1,753 @@
+{
+  "version": "2.0.0",
+  "platform": {
+    "org": "c360",
+    "id": "semteams-bootstrap-e2e",
+    "type": "agentic-e2e",
+    "region": "local",
+    "environment": "test"
+  },
+  "tier": "agentic",
+  "nats": {
+    "urls": [
+      "nats://localhost:4222"
+    ]
+  },
+  "streams": {
+    "USER": {
+      "subjects": [
+        "user.>"
+      ],
+      "storage": "file",
+      "max_age": "1h",
+      "max_bytes": 67108864,
+      "discard": "old"
+    },
+    "AGENT": {
+      "subjects": [
+        "agent.>"
+      ],
+      "max_age": "24h",
+      "max_bytes": 268435456,
+      "discard": "old"
+    },
+    "TOOL": {
+      "subjects": [
+        "tool.execute.>",
+        "tool.result.>"
+      ],
+      "max_age": "24h",
+      "max_bytes": 268435456,
+      "discard": "old"
+    }
+  },
+  "model_registry": {
+    "endpoints": {
+      "general": {
+        "provider": "openai",
+        "url": "http://mock-llm:8080/v1",
+        "model": "mock-model",
+        "max_tokens": 16384,
+        "supports_tools": true,
+        "tool_format": "openai",
+        "stream": true
+      },
+      "fast": {
+        "provider": "openai",
+        "url": "http://mock-llm:8080/v1",
+        "model": "mock-model",
+        "max_tokens": 8192,
+        "supports_tools": true,
+        "tool_format": "openai",
+        "stream": false
+      }
+    },
+    "defaults": {
+      "model": "general"
+    },
+    "capabilities": {
+      "coordinator": {
+        "preferred": [
+          "general"
+        ],
+        "requires_tools": true
+      },
+      "research": {
+        "preferred": [
+          "general"
+        ],
+        "fallback": [
+          "fast"
+        ],
+        "requires_tools": true
+      },
+      "reviewing": {
+        "preferred": [
+          "general"
+        ],
+        "fallback": [
+          "fast"
+        ],
+        "requires_tools": true
+      },
+      "general": {
+        "preferred": [
+          "general"
+        ],
+        "fallback": [
+          "fast"
+        ],
+        "requires_tools": true
+      },
+      "claude-haiku": {
+        "preferred": [
+          "general"
+        ],
+        "fallback": [
+          "fast"
+        ],
+        "requires_tools": true
+      }
+    }
+  },
+  "services": {
+    "service-manager": {
+      "enabled": true,
+      "config": {
+        "http_port": 8080,
+        "swagger_ui": true,
+        "server_info": {
+          "title": "SemTeams Bootstrap",
+          "description": "Substrate-singleton boot config per ADR-042 \u00a7Phase 2 redesign. Agentic + graph + rule-processor components run as singletons; task-category rule packs and named persona bundles run through them. No chain-specific configuration here.",
+          "version": "0.7.0"
+        }
+      }
+    },
+    "component-manager": {
+      "enabled": true,
+      "config": {}
+    },
+    "metrics": {
+      "enabled": true,
+      "config": {
+        "port": 9090,
+        "path": "/metrics"
+      }
+    },
+    "message-logger": {
+      "enabled": true,
+      "config": {
+        "max_entries": 10000,
+        "monitor_subjects": [
+          "agent.>",
+          "tool.>",
+          "user.>",
+          "graph.mutation.>",
+          "discovery.>"
+        ]
+      }
+    },
+    "log-forwarder": {
+      "enabled": true,
+      "config": {
+        "min_level": "DEBUG",
+        "exclude_sources": []
+      }
+    },
+    "metrics-forwarder": {
+      "enabled": true,
+      "config": {
+        "push_interval": "5s",
+        "include_go_metrics": false,
+        "include_proc_metrics": false
+      }
+    }
+  },
+  "components": {
+    "graph-ingest": {
+      "type": "processor",
+      "name": "graph-ingest",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [
+            {
+              "name": "graph_mutations",
+              "config": {
+                "kind": "nats-request",
+                "subject": "graph.mutation.>",
+                "interface": {
+                  "type": "semstreams.graph.mutation",
+                  "version": "v1"
+                }
+              },
+              "description": "Triple add/remove mutations from agent emit tools, rules, and operator-side subscribers",
+              "required": true
+            }
+          ],
+          "outputs": [
+            {
+              "name": "entity_states",
+              "config": {
+                "kind": "kv-write",
+                "bucket": "ENTITY_STATES"
+              },
+              "description": "Entity state KV bucket"
+            }
+          ]
+        },
+        "enable_hierarchy": true
+      }
+    },
+    "graph-query": {
+      "type": "processor",
+      "name": "graph-query",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [
+            {
+              "name": "graph_queries",
+              "config": {
+                "kind": "nats-request",
+                "subject": "graph.query.*",
+                "interface": {
+                  "type": "graph.query",
+                  "version": "v1"
+                }
+              },
+              "required": true
+            }
+          ],
+          "outputs": []
+        },
+        "query_timeout": 30000000000,
+        "max_depth": 5
+      }
+    },
+    "rule": {
+      "type": "processor",
+      "name": "rule-processor",
+      "enabled": true,
+      "config": {
+        "entity_watch_buckets": {
+          "ENTITY_STATES": [
+            "c360.*.*.*.*.*"
+          ]
+        },
+        "ports": {
+          "inputs": [
+            {
+              "name": "entity_states",
+              "config": {
+                "kind": "kv-watch",
+                "bucket": "ENTITY_STATES"
+              },
+              "description": "Entity state changes drive rule evaluation. Rule conditions resolve against entity facts (agent.loop.role, coordinator.decision.next-action, etc.), not raw NATS messages \u2014 the message-path evaluator can't bind entity-typed predicates."
+            }
+          ],
+          "outputs": [
+            {
+              "name": "agent_task",
+              "config": {
+                "kind": "jetstream",
+                "stream_name": "AGENT",
+                "subjects": [
+                  "agent.task.*"
+                ]
+              },
+              "description": "Agent task triggers from rules"
+            },
+            {
+              "name": "graph_mutations",
+              "config": {
+                "kind": "nats-request",
+                "subject": "graph.mutation.>",
+                "interface": {
+                  "type": "semstreams.graph.mutation",
+                  "version": "v1"
+                }
+              },
+              "description": "Typed graph mutations from rule actions (beta.160 canonical mutation port)",
+              "required": true
+            }
+          ]
+        },
+        "enable_graph_integration": true,
+        "pack_id": "semteams",
+        "projection_contracts": [
+          {
+            "name": "autoresearch.run-projection",
+            "entity_pattern": "*.*.chain.agent.execution.*",
+            "groups": [
+              {
+                "name": "best-value",
+                "mode": "reconcile",
+                "predicates": [
+                  "autoresearch.best.value"
+                ]
+              },
+              {
+                "name": "best-experiment-id",
+                "mode": "reconcile",
+                "predicates": [
+                  "autoresearch.best.experiment-id"
+                ]
+              },
+              {
+                "name": "run-status",
+                "mode": "reconcile",
+                "predicates": [
+                  "autoresearch.run.status"
+                ]
+              },
+              {
+                "name": "iteration-pending",
+                "mode": "reconcile",
+                "predicates": [
+                  "autoresearch.iteration.pending"
+                ]
+              }
+            ]
+          }
+        ],
+        "rules_files": [
+          "/app/configs/rules/research/01-coordinator-research-spawn.json",
+          "/app/configs/rules/research/02-plan-to-gather.json",
+          "/app/configs/rules/research/03a-gather-stamp-completion-on-plan.json",
+          "/app/configs/rules/research/03b-synthesize-when-all-gathers-complete.json",
+          "/app/configs/rules/research/04-synthesize-to-reviewer.json",
+          "/app/configs/rules/research/05-reviewer-rejected-retry.json",
+          "/app/configs/rules/research/06-needs-clarification-replan.json",
+          "/app/configs/rules/research/07-reviewer-approved-to-coordinator.json",
+          "/app/configs/rules/research/08-loop-failed-pause.json",
+          "/app/configs/rules/research/09-loop-failed-run-outcome.json",
+          "/app/configs/rules/autoresearch/01-coordinator-autoresearch-spawn.json",
+          "/app/configs/rules/autoresearch/03-propose-to-execute.json",
+          "/app/configs/rules/autoresearch/04a-execute-stamp-completion.json",
+          "/app/configs/rules/autoresearch/04b-execute-stamp-failed.json",
+          "/app/configs/rules/autoresearch/04c-execute-promote-best-on-kept.json",
+          "/app/configs/rules/autoresearch/05-iteration-dispatch.json",
+          "/app/configs/rules/autoresearch/07-synthesize-to-reviewer.json",
+          "/app/configs/rules/autoresearch/08-reviewer-approved-to-coordinator.json",
+          "/app/configs/rules/autoresearch/09-reviewer-rejected-resynthesize.json",
+          "/app/configs/rules/autoresearch/10-needs-clarification-replan.json",
+          "/app/configs/rules/autoresearch/10b-descended-needs-clarification-replan.json",
+          "/app/configs/rules/autoresearch/11-loop-failed-pause.json",
+          "/app/configs/rules/autoresearch/12-baseline-loop-failed-run-outcome.json",
+          "/app/configs/rules/autoresearch/13-loop-failed-run-outcome.json",
+          "/app/configs/rules/autoresearch/14-completed-result-to-origin.json",
+          "/app/configs/rules/autoresearch/15-origin-approved-result-to-coordinator.json",
+          "/app/configs/rules/autoresearch/16-clarification-result-to-origin.json",
+          "/app/configs/rules/autoresearch/17-origin-clarification-to-coordinator.json",
+          "/app/configs/rules/autoresearch/18-failed-result-to-origin.json",
+          "/app/configs/rules/autoresearch/19-origin-failed-to-coordinator.json",
+          "/app/configs/rules/coordinator/03b-respond-direct.json",
+          "/app/configs/rules/coordinator/03-ask-user.json",
+          "/app/configs/rules/agent-run/01-handoff-marker.json",
+          "/app/configs/rules/agent-run/01b-handoff-marker-redispatch.json",
+          "/app/configs/rules/agent-run/02-dispatched-to-executing.json",
+          "/app/configs/rules/agent-run/03-executing-to-completed.json",
+          "/app/configs/rules/agent-run/04-executing-to-failed.json",
+          "/app/configs/rules/agent-run/04b-dispatched-to-failed.json",
+          "/app/configs/rules/agent-run/05-coordinator-failed-run-anchor.json",
+          "/app/configs/rules/agent-run/06-coordinator-failed-lineage-anchor.json",
+          "/app/configs/rules/agent-run/07-ask-user-pause-run-anchor.json",
+          "/app/configs/rules/agent-run/08-ask-user-pause-lineage-anchor.json",
+          "/app/configs/rules/agent-run/09-executing-to-awaiting-on-clarification.json",
+          "/app/configs/rules/agent-run/10-clarification-reply-resume-marker.json",
+          "/app/configs/rules/agent-run/11-resume-awaiting-to-executing.json",
+          "/app/configs/rules/agent-run/12-executing-to-awaiting-on-approval.json",
+          "/app/configs/rules/agent-run/13-resume-awaiting-to-executing-on-approval.json",
+          "/app/configs/rules/ops/01-run-terminal-observe.json"
+        ],
+        "inline_rules": []
+      }
+    },
+    "teams-loop": {
+      "type": "processor",
+      "name": "agentic-loop",
+      "enabled": true,
+      "config": {
+        "max_iterations": 8,
+        "timeout": "60s",
+        "stream_name": "AGENT",
+        "consumer": {
+          "ack_wait": "60s",
+          "heartbeat_interval": "10s",
+          "max_deliver": 2
+        },
+        "context": {
+          "compact_threshold": 1.0,
+          "headroom_ratio": 0.05,
+          "headroom_tokens": 100
+        },
+        "ports": {
+          "inputs": [
+            {
+              "name": "agent.task",
+              "required": true,
+              "config": {
+                "kind": "jetstream",
+                "stream_name": "AGENT",
+                "subjects": [
+                  "agent.task.*"
+                ]
+              },
+              "description": "Agent task requests"
+            },
+            {
+              "name": "agent.response",
+              "required": true,
+              "config": {
+                "kind": "jetstream",
+                "stream_name": "AGENT",
+                "subjects": [
+                  "agent.response.>"
+                ]
+              },
+              "description": "Model responses"
+            },
+            {
+              "name": "tool.result",
+              "required": true,
+              "config": {
+                "kind": "jetstream",
+                "stream_name": "TOOL",
+                "subjects": [
+                  "tool.result.>"
+                ]
+              },
+              "description": "Tool execution results"
+            },
+            {
+              "name": "agent.approval_response",
+              "config": {
+                "kind": "jetstream",
+                "stream_name": "AGENT",
+                "subjects": [
+                  "agent.approval_response.*"
+                ]
+              },
+              "description": "Human approve/reject/modify decisions (ADR-053 \u00a74c PR-2). The loop's setupSubscriptions routes this port to handleApprovalResponseMessage \u2192 ResolveApprovalIfPending, which un-parks the gated loop. WITHOUT this declared input the loop never subscribes and can NEVER resume from an approval gate. Also drives the approvalpause subscriber's run-phase resume marker."
+            }
+          ],
+          "outputs": [
+            {
+              "name": "agent.request",
+              "config": {
+                "kind": "jetstream",
+                "stream_name": "AGENT",
+                "subjects": [
+                  "agent.request.*"
+                ]
+              },
+              "description": "Model requests"
+            },
+            {
+              "name": "tool.execute",
+              "config": {
+                "kind": "jetstream",
+                "stream_name": "TOOL",
+                "subjects": [
+                  "tool.execute.*"
+                ]
+              },
+              "description": "Tool execution requests"
+            },
+            {
+              "name": "agent.complete",
+              "config": {
+                "kind": "jetstream",
+                "stream_name": "AGENT",
+                "subjects": [
+                  "agent.complete.*"
+                ]
+              },
+              "description": "Task completions"
+            },
+            {
+              "name": "agent.failed",
+              "config": {
+                "kind": "jetstream",
+                "stream_name": "AGENT",
+                "subjects": [
+                  "agent.failed.*"
+                ]
+              },
+              "description": "Loop failures \u2014 drives the chainpause subscriber (ADR-037 \u00a7D5 audit triples). Retires alongside chainpause in ADR-042 \u00a7Phase 6 migration cut; until then, declaring the port keeps the bootstrap canonical."
+            },
+            {
+              "name": "agent.approval_pending",
+              "config": {
+                "kind": "jetstream",
+                "stream_name": "AGENT",
+                "subjects": [
+                  "agent.approval_pending.*"
+                ]
+              },
+              "description": "Tool-gate approval-pending events \u2014 drives the approvalpause subscriber (ADR-053 \u00a74c: run-phase reflection of the loop-level approval_required gate). Declaring the port keeps the subject covered by the AGENT stream so PublishToStream succeeds and lets portresolver resolve the subscribe subject."
+            },
+            {
+              "name": "loops",
+              "config": {
+                "kind": "kv-write",
+                "bucket": "AGENT_LOOPS"
+              },
+              "description": "Canonical loop authority storage"
+            }
+          ]
+        }
+      }
+    },
+    "agentic-model": {
+      "type": "processor",
+      "name": "agentic-model",
+      "enabled": true,
+      "config": {
+        "stream_name": "AGENT",
+        "timeout": "30s",
+        "_e2e_divergence": "retry.max_attempts: production bootstrap retries 3x; mock-llm is deterministic and fast \u2014 retries here would only mask fixture errors as transient failures. Retry-path coverage is out of scope for this MVP-5 journey; a separate spec can exercise it with a flake-injecting mock-llm fixture if needed.",
+        "retry": {
+          "max_attempts": 1,
+          "backoff": "exponential"
+        },
+        "ports": {
+          "inputs": [
+            {
+              "name": "agent.request",
+              "required": true,
+              "config": {
+                "kind": "jetstream",
+                "stream_name": "AGENT",
+                "subjects": [
+                  "agent.request.>"
+                ]
+              },
+              "description": "Agent request input"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "agent.response",
+              "required": true,
+              "config": {
+                "kind": "jetstream",
+                "stream_name": "AGENT",
+                "subjects": [
+                  "agent.response.*"
+                ]
+              },
+              "description": "Agent response output"
+            }
+          ]
+        }
+      }
+    },
+    "agentic-tools": {
+      "type": "processor",
+      "name": "agentic-tools",
+      "enabled": true,
+      "config": {
+        "stream_name": "TOOL",
+        "timeout": "10s",
+        "allowed_tools": null,
+        "restricted_decide_actions": [],
+        "approval_required": [
+          "emit_plan"
+        ],
+        "ports": {
+          "inputs": [
+            {
+              "name": "tool.execute",
+              "required": true,
+              "config": {
+                "kind": "jetstream",
+                "stream_name": "TOOL",
+                "subjects": [
+                  "tool.execute.>"
+                ]
+              },
+              "description": "Tool execution requests"
+            },
+            {
+              "name": "entity_states",
+              "config": {
+                "kind": "kv-read",
+                "bucket": "ENTITY_STATES"
+              },
+              "description": "Entity state KV for graph queries"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "tool.result",
+              "required": true,
+              "config": {
+                "kind": "jetstream",
+                "stream_name": "TOOL",
+                "subjects": [
+                  "tool.result.*"
+                ]
+              },
+              "description": "Tool execution results"
+            }
+          ]
+        }
+      }
+    },
+    "teams-dispatch": {
+      "type": "processor",
+      "name": "agentic-dispatch",
+      "enabled": true,
+      "config": {
+        "default_role": "coordinator",
+        "auto_continue": true,
+        "default_tools": [
+          "decide",
+          "read_loop_result",
+          "scratchpad",
+          "query_sandbox_attestation",
+          "request_sandbox"
+        ],
+        "stream_name": "USER",
+        "ports": {
+          "inputs": [
+            {
+              "name": "user.message",
+              "required": true,
+              "config": {
+                "kind": "jetstream",
+                "stream_name": "USER",
+                "subjects": [
+                  "user.message.>"
+                ]
+              },
+              "description": "User messages from any channel",
+              "external": true
+            },
+            {
+              "name": "agent.complete",
+              "required": true,
+              "config": {
+                "kind": "jetstream",
+                "stream_name": "AGENT",
+                "subjects": [
+                  "agent.complete.*"
+                ]
+              },
+              "description": "Loop completions \u2014 drives the coordinator's wake-up reply path"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "agent.task",
+              "config": {
+                "kind": "jetstream",
+                "stream_name": "AGENT",
+                "subjects": [
+                  "agent.task.*"
+                ]
+              },
+              "description": "Task messages to agent loops"
+            },
+            {
+              "name": "user.response",
+              "config": {
+                "kind": "jetstream",
+                "stream_name": "USER",
+                "subjects": [
+                  "user.response.>"
+                ],
+                "interface": {
+                  "type": "agentic.user_response",
+                  "version": "v1"
+                }
+              },
+              "description": "Typed responses back to users; channel routers fan out to UI/email/SMS"
+            },
+            {
+              "name": "agent.approval_response",
+              "config": {
+                "kind": "jetstream",
+                "stream_name": "AGENT",
+                "subjects": [
+                  "agent.approval_response.*"
+                ]
+              },
+              "description": "Approve/reject/modify decisions published by POST /teams-dispatch/loops/{id}/approval (ADR-053 \u00a74c PR-2). Declared so PublishToStream is AGENT-stream-covered, ResolveSubject resolves the subject, and the AGENT stream carries agent.approval_response.* for the teams-loop consumer + the approvalpause resume subscriber."
+            }
+          ]
+        },
+        "permissions": {
+          "view": [
+            "*"
+          ],
+          "submit_task": [
+            "*"
+          ],
+          "cancel_own": true,
+          "cancel_any": [],
+          "approve": [
+            "*"
+          ]
+        }
+      }
+    },
+    "graph-gateway": {
+      "type": "gateway",
+      "name": "graph-gateway",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "outputs": [
+            {
+              "name": "graph_queries",
+              "required": true,
+              "config": {
+                "kind": "nats-request",
+                "subject": "graph.query.*",
+                "interface": {
+                  "type": "graph.query",
+                  "version": "v1"
+                }
+              }
+            },
+            {
+              "name": "graph_index_queries",
+              "required": true,
+              "config": {
+                "kind": "nats-request",
+                "subject": "graph.index.query.*"
+              }
+            },
+            {
+              "name": "agentic_queries",
+              "required": true,
+              "config": {
+                "kind": "nats-request",
+                "subject": "agentic.query.*",
+                "interface": {
+                  "type": "agentic.query",
+                  "version": "v1"
+                }
+              }
+            }
+          ]
+        },
+        "graphql_path": "/graphql",
+        "mcp_path": "/mcp",
+        "enable_playground": false,
+        "query_timeout": 60000000000
+      }
+    },
+    "objectstore": {
+      "type": "storage",
+      "name": "objectstore",
+      "enabled": true,
+      "config": {
+        "bucket_name": "AGENT_CONTENT"
+      }
+    }
+  }
+}

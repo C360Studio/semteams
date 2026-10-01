@@ -1,0 +1,6 @@
+task: [ui:generate-types] npx openapi-typescript ../specs/openapi.v3.yaml --output src/lib/types/api.generated.ts
+✨ openapi-typescript 7.10.1
+🚀 ../specs/openapi.v3.yaml → src/lib/types/api.generated.ts [65.3ms]
+task: [ui:generate-types] echo "✅ TypeScript types generated from ../specs/openapi.v3.yaml"
+✅ TypeScript types generated from ../specs/openapi.v3.yaml
+task: [ui:generate-types:check] git diff --exit-code src/lib/types/api.generated.ts || (echo "⚠️  Generated types changed! Run 'task generate-types' and commit."; exit 1)

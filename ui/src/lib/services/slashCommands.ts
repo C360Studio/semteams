@@ -166,32 +166,6 @@ export const COMMANDS: SlashCommand[] = [
     },
   },
   {
-    name: "pause",
-    aliases: [],
-    description: "Pause an active agent loop",
-    usage: "/pause <loop-id>",
-    intent: "agent-control",
-    availableOn: ["flow-builder", "data-view"],
-    parse: (args: string) => ({
-      intent: "agent-control",
-      content: `/pause ${args}`.trim(),
-      params: { action: "pause", loopId: args.trim() },
-    }),
-  },
-  {
-    name: "resume",
-    aliases: [],
-    description: "Resume a paused agent loop",
-    usage: "/resume <loop-id>",
-    intent: "agent-control",
-    availableOn: ["flow-builder", "data-view"],
-    parse: (args: string) => ({
-      intent: "agent-control",
-      content: `/resume ${args}`.trim(),
-      params: { action: "resume", loopId: args.trim() },
-    }),
-  },
-  {
     name: "export-spec",
     aliases: ["spec-export"],
     description: "Export an OpenSpec change artifact",

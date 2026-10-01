@@ -131,7 +131,7 @@ func TestAttest_TriplesSkipEmptyVerified(t *testing.T) {
 		{Name: "loud", Stdout: "ok", ExitCode: 0},
 	}
 	a := Attest(goBackendProfile(), SandboxRequirements{}, "sha256:x", "", probes, fixedTime())
-	triples := a.Triples("c360.platform1.agent.chain.execution.c1")
+	triples := a.Triples("c360.platform1.chain.agent.execution.c1")
 	for _, tr := range triples {
 		if tr.Predicate == PredicateAttestationVerifiedPrefix+"silent" {
 			t.Fatalf("verified.silent stamped despite empty stdout")
@@ -214,7 +214,7 @@ func TestAttest_TriplesShape(t *testing.T) {
 		{Name: "task", Stdout: "", ExitCode: 127, Stderr: "task not found"},
 	}
 	a := Attest(goBackendProfile(), SandboxRequirements{Languages: []string{"go"}}, "sha256:img", testHostWorkspaceFolder, probes, fixedTime())
-	triples := a.Triples("c360.platform1.agent.chain.execution.testchain")
+	triples := a.Triples("c360.platform1.chain.agent.execution.testchain")
 
 	if len(triples) == 0 {
 		t.Fatalf("Triples returned empty for non-empty entity id")
@@ -238,7 +238,7 @@ func TestAttest_TriplesShape(t *testing.T) {
 	got := make(map[string]bool, len(triples))
 	for _, tr := range triples {
 		got[tr.Predicate] = true
-		if tr.Subject != "c360.platform1.agent.chain.execution.testchain" {
+		if tr.Subject != "c360.platform1.chain.agent.execution.testchain" {
 			t.Errorf("subject drift: %q", tr.Subject)
 		}
 		if tr.Source != "sandbox-manager-attestation" {
@@ -276,7 +276,7 @@ func TestAttest_TriplesStampHostWorkspaceFolder(t *testing.T) {
 	// the predicate name or the value here breaks that routing
 	// silently. Lock predicate + value + source at the boundary.
 	a := Attest(goBackendProfile(), SandboxRequirements{}, "sha256:img", testHostWorkspaceFolder, nil, fixedTime())
-	triples := a.Triples("c360.platform1.agent.chain.execution.testchain")
+	triples := a.Triples("c360.platform1.chain.agent.execution.testchain")
 	var found bool
 	for _, tr := range triples {
 		if tr.Predicate != PredicateAttestationHostWorkspaceFolder {
@@ -306,7 +306,7 @@ func TestAttest_TriplesOmitHostWorkspaceFolderWhenEmpty(t *testing.T) {
 	// — the same opaque "config not found" failure mode the wsf split
 	// (ce4f07b) fixed in the runner. Omit instead.
 	a := Attest(goBackendProfile(), SandboxRequirements{}, "sha256:img", "", nil, fixedTime())
-	triples := a.Triples("c360.platform1.agent.chain.execution.testchain")
+	triples := a.Triples("c360.platform1.chain.agent.execution.testchain")
 	for _, tr := range triples {
 		if tr.Predicate == PredicateAttestationHostWorkspaceFolder {
 			t.Fatalf("empty host_workspace_folder must NOT be stamped; routing would substitute '' and fail opaquely")
@@ -366,7 +366,7 @@ func TestAttestTerminalError(t *testing.T) {
 // "the manager actually brought a container up" and never "the manager
 // tried and failed before Up()."
 func TestNonAdmittedPaths_NeverStampHostWorkspaceFolder(t *testing.T) {
-	const subject = "c360.platform1.agent.chain.execution.testchain"
+	const subject = "c360.platform1.chain.agent.execution.testchain"
 	cases := []struct {
 		name string
 		a    Attestation

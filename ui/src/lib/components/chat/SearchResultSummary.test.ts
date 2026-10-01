@@ -29,19 +29,19 @@ function makeAttachment(
     query: "drones near border",
     results: [
       {
-        id: "c360.ops.robotics.gcs.drone.001",
+        id: "c360.ops.gcs.robotics.drone.001",
         label: "001",
         type: "drone",
         domain: "robotics",
       },
       {
-        id: "c360.ops.robotics.gcs.drone.002",
+        id: "c360.ops.gcs.robotics.drone.002",
         label: "002",
         type: "drone",
         domain: "robotics",
       },
       {
-        id: "c360.sec.border.surveillance.sensor.001",
+        id: "c360.sec.surveillance.border.sensor.001",
         label: "001",
         type: "sensor",
         domain: "border",
@@ -117,7 +117,7 @@ describe("SearchResultSummary — shows result count", () => {
           totalCount: 142,
           results: [
             {
-              id: "c360.ops.robotics.gcs.drone.001",
+              id: "c360.ops.gcs.robotics.drone.001",
               label: "001",
               type: "drone",
               domain: "robotics",
@@ -154,7 +154,7 @@ describe("SearchResultSummary — renders result items", () => {
     const attachment = makeAttachment({
       results: [
         {
-          id: "c360.ops.robotics.gcs.drone.omega",
+          id: "c360.ops.gcs.robotics.drone.omega",
           label: "omega",
           type: "drone",
           domain: "robotics",
@@ -172,7 +172,7 @@ describe("SearchResultSummary — renders result items", () => {
     const attachment = makeAttachment({
       results: [
         {
-          id: "c360.sec.border.surveillance.sensor.001",
+          id: "c360.sec.surveillance.border.sensor.001",
           label: "001",
           type: "sensor",
           domain: "border",
@@ -208,7 +208,7 @@ describe("SearchResultSummary — clicking result calls onViewEntity", () => {
     const attachment = makeAttachment({
       results: [
         {
-          id: "c360.ops.robotics.gcs.drone.click-me",
+          id: "c360.ops.gcs.robotics.drone.click-me",
           label: "click-me",
           type: "drone",
           domain: "robotics",
@@ -221,13 +221,13 @@ describe("SearchResultSummary — clicking result calls onViewEntity", () => {
     });
 
     const item = screen.getByTestId(
-      "search-result-item-c360.ops.robotics.gcs.drone.click-me",
+      "search-result-item-c360.ops.gcs.robotics.drone.click-me",
     );
     await user.click(item);
 
     expect(onViewEntity).toHaveBeenCalledOnce();
     expect(onViewEntity).toHaveBeenCalledWith(
-      "c360.ops.robotics.gcs.drone.click-me",
+      "c360.ops.gcs.robotics.drone.click-me",
     );
   });
 
@@ -238,13 +238,13 @@ describe("SearchResultSummary — clicking result calls onViewEntity", () => {
     const attachment = makeAttachment({
       results: [
         {
-          id: "c360.ops.robotics.gcs.drone.alpha",
+          id: "c360.ops.gcs.robotics.drone.alpha",
           label: "alpha",
           type: "drone",
           domain: "robotics",
         },
         {
-          id: "c360.ops.robotics.gcs.drone.beta",
+          id: "c360.ops.gcs.robotics.drone.beta",
           label: "beta",
           type: "drone",
           domain: "robotics",
@@ -258,18 +258,18 @@ describe("SearchResultSummary — clicking result calls onViewEntity", () => {
 
     await user.click(
       screen.getByTestId(
-        "search-result-item-c360.ops.robotics.gcs.drone.alpha",
+        "search-result-item-c360.ops.gcs.robotics.drone.alpha",
       ),
     );
     expect(onViewEntity).toHaveBeenLastCalledWith(
-      "c360.ops.robotics.gcs.drone.alpha",
+      "c360.ops.gcs.robotics.drone.alpha",
     );
 
     await user.click(
-      screen.getByTestId("search-result-item-c360.ops.robotics.gcs.drone.beta"),
+      screen.getByTestId("search-result-item-c360.ops.gcs.robotics.drone.beta"),
     );
     expect(onViewEntity).toHaveBeenLastCalledWith(
-      "c360.ops.robotics.gcs.drone.beta",
+      "c360.ops.gcs.robotics.drone.beta",
     );
   });
 });
@@ -285,7 +285,7 @@ describe("SearchResultSummary — onViewEntity is optional", () => {
     const attachment = makeAttachment({
       results: [
         {
-          id: "c360.ops.robotics.gcs.drone.safe",
+          id: "c360.ops.gcs.robotics.drone.safe",
           label: "safe",
           type: "drone",
           domain: "robotics",
@@ -298,7 +298,7 @@ describe("SearchResultSummary — onViewEntity is optional", () => {
     await expect(
       user.click(
         screen.getByTestId(
-          "search-result-item-c360.ops.robotics.gcs.drone.safe",
+          "search-result-item-c360.ops.gcs.robotics.drone.safe",
         ),
       ),
     ).resolves.not.toThrow();
@@ -358,7 +358,7 @@ describe("SearchResultSummary — table-driven count display", () => {
       totalCount > 0
         ? [
             {
-              id: "c360.ops.robotics.gcs.drone.001",
+              id: "c360.ops.gcs.robotics.drone.001",
               label: "001",
               type: "drone",
               domain: "robotics",

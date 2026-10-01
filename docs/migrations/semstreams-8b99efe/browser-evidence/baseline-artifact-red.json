@@ -1,0 +1,97 @@
+{
+  "manifest": {
+    "name": "autoresearch",
+    "fixture": "autoresearch.yaml",
+    "spec": "autoresearch.spec.ts",
+    "config": "e2e-flow-bootstrap.json",
+    "source": "/private/tmp/semteams-migration-8b99efe/baseline-source",
+    "project": "stmig160",
+    "port": 33160,
+    "source_tree_sha256": "e08f33b17aca1c60a0fe0eea0f63f7fd798b83de315665f6f44238e3b265d758",
+    "ui_source_tree_sha256": "d2dc14ee9f609810aa8daccd14582b5df637618d2d550a441e52b20e2efd828f",
+    "derived_config_sha256": "09877f1b670b14a63b8cd43b193dc9e6cc3daad0e991b2fd6922e22c0dfc4a57",
+    "compose_sha256": "d3b230a8f6903f7e94c6c823c5619924a625df74dc06fa34114a6380d9c49226",
+    "sha256": {
+      "go.mod": "4a57073aab788a36c2ae3bcd7318f99871ab10210694cfd6ca7f8807f10ea8c3",
+      "go.sum": "d7c4add28c35ecfedf05eecc4467a36b92e9772b69fdb277d2cf277d6b81cc2e",
+      "ui/package-lock.json": "28fd4403ce710547429496e98d4b7f3e941986eb67e6957316e298ffb2a144c4",
+      "configs/e2e-flow-bootstrap.json": "9f8d491d49c2a956100a0e09711150ab2504746ea450ea7bb681b7b0de9fdcd6",
+      "test/fixtures/journeys/autoresearch.yaml": "c3ee985ea3c3e53998141b35d0facae4070154c32966382745f11d8d06feb225",
+      "ui/e2e/agentic/autoresearch.spec.ts": "9469d0f46cce4f2b1c5b051084793375004483768eff4f40f2481a02c341e188"
+    },
+    "images": [
+      {
+        "Id": "sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b",
+        "RepoTags": [
+          "caddy:2-alpine"
+        ],
+        "RepoDigests": [
+          "caddy@sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b"
+        ]
+      },
+      {
+        "Id": "sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66",
+        "RepoTags": [
+          "nats:2.14.4-alpine",
+          "nats@sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66"
+        ],
+        "RepoDigests": [
+          "nats@sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66"
+        ]
+      },
+      {
+        "Id": "sha256:a796b647360176d100374c955d7672aa2fbd78f32e97a6d8388c4593f72c21bc",
+        "RepoTags": [
+          "stmig160-backend:ce22c961"
+        ],
+        "RepoDigests": [
+          "stmig160-backend@sha256:a796b647360176d100374c955d7672aa2fbd78f32e97a6d8388c4593f72c21bc"
+        ]
+      },
+      {
+        "Id": "sha256:0e87c457c9ee4a76e960f3a3fc11b0f93daf7dbceaa0912f1e17657aea85bf79",
+        "RepoTags": [
+          "stmig160-mock-llm:ce22c961"
+        ],
+        "RepoDigests": [
+          "stmig160-mock-llm@sha256:0e87c457c9ee4a76e960f3a3fc11b0f93daf7dbceaa0912f1e17657aea85bf79"
+        ]
+      },
+      {
+        "Id": "sha256:7b6f05ed7f86853fd3a8fe955de974b0bd74c8a3fcd0fdd2ebe2ac52277d0905",
+        "RepoTags": [
+          "stmig160-sandbox:ce22c961"
+        ],
+        "RepoDigests": [
+          "stmig160-sandbox@sha256:7b6f05ed7f86853fd3a8fe955de974b0bd74c8a3fcd0fdd2ebe2ac52277d0905"
+        ]
+      },
+      {
+        "Id": "sha256:06e64b6bef0a698048c419533c13e6f1814a3a5bf0467b7c46a3e85125f471d7",
+        "RepoTags": [
+          "stmig160-ui:ce22c961"
+        ],
+        "RepoDigests": [
+          "stmig160-ui@sha256:06e64b6bef0a698048c419533c13e6f1814a3a5bf0467b7c46a3e85125f471d7"
+        ]
+      }
+    ],
+    "source_after_tree_sha256": "e08f33b17aca1c60a0fe0eea0f63f7fd798b83de315665f6f44238e3b265d758",
+    "ui_source_after_tree_sha256": "d2dc14ee9f609810aa8daccd14582b5df637618d2d550a441e52b20e2efd828f",
+    "source_changed": false
+  },
+  "source_comparison": {
+    "before": "e08f33b17aca1c60a0fe0eea0f63f7fd798b83de315665f6f44238e3b265d758",
+    "after": "e08f33b17aca1c60a0fe0eea0f63f7fd798b83de315665f6f44238e3b265d758",
+    "unchanged": true
+  },
+  "status": "failed",
+  "errors": [
+    "Error: artifact emitter must actually succeed\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m\"\"\u001b[39m\nReceived: \u001b[31m\"best_experiment_id is required (use literal 'baseline' when iterations_kept == 0)\"\u001b[39m\n\n  188 |     expect(artifactResults, \"the synthesize loop must receive its artifact ToolResult\").toHaveLength(1);\n  189 |     const artifactResult = artifactResults[0].raw_data!.payload!;\n> 190 |     expect(artifactResult.error ?? \"\", \"artifact emitter must actually succeed\").toBe(\"\");\n      |                                                                                  ^\n  191 |     const artifact = JSON.parse(artifactResult.content!) as { path: string; loop_entity_id: string; revision: number };\n  192 |     expect(artifact.revision).toBe(1);\n  193 |     expect(artifact.path).toMatch(/\\.artifacts\\/autoresearch\\/.+\\.md$/);\n    at /private/tmp/semteams-migration-8b99efe/baseline-source/ui/e2e/agentic/autoresearch.spec.ts:190:82"
+  ],
+  "readiness": {
+    "exit": 0,
+    "stdout": "READY",
+    "stderr": "--2026-10-01 12:41:02--  http://localhost:8080/readyz\nResolving localhost (localhost)... ::1, 127.0.0.1\nConnecting to localhost (localhost)|::1|:8080... connected.\nHTTP request sent, awaiting response... \n  HTTP/1.1 200 OK\n  Date: Thu, 01 Oct 2026 12:41:02 GMT\n  Content-Length: 5\n  Content-Type: text/plain; charset=utf-8\nLength: 5 [text/plain]\nSaving to: 'STDOUT'\n\n     0K                                                       100% 1.61M=0s\n\n2026-10-01 12:41:02 (1.61 MB/s) - written to stdout [5/5]\n\n"
+  }
+}

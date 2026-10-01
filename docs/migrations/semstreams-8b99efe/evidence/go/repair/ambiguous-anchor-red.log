@@ -1,0 +1,53 @@
+=== RUN   TestAutoresearchReplyAmbiguousSourceAnchor
+2026/10/01 09:16:35 github.com/testcontainers/testcontainers-go - Connected to docker: 
+  Server Version: 29.8.0
+  API Version: 1.51
+  Operating System: Docker Desktop
+  Total Memory: 23742 MB
+  Labels:
+    com.docker.desktop.address=unix:///Users/coby/Library/Containers/com.docker.docker/Data/docker-cli.sock
+  Testcontainers for Go Version: v0.40.0
+  Resolved Docker Host: unix:///var/run/docker.sock
+  Resolved Docker Socket Path: /var/run/docker.sock
+  Test SessionID: ef01e6150337436c75d47a3a196fe518d08d654f98a98e8f6f8ce31f9c835429
+  Test ProcessID: 4d4dfe95-e73a-42dc-a2b4-b0305df7cd70
+2026/10/01 09:16:35 🐳 Creating container for image nats:2.14.4
+2026/10/01 09:16:35 ✅ Container created: f8c2702a1760
+2026/10/01 09:16:35 🐳 Starting container: f8c2702a1760
+2026/10/01 09:16:35 ✅ Container started: f8c2702a1760
+2026/10/01 09:16:35 ⏳ Waiting for container id f8c2702a1760 image: nats:2.14.4. Waiting for: log message "Server is ready"
+2026/10/01 09:16:35 🔔 Container is ready: f8c2702a1760
+2026/10/01 09:16:35 INFO Connecting to NATS urls=nats://localhost:55026
+2026/10/01 09:16:35 INFO Successfully connected to NATS urls=nats://localhost:55026
+=== RUN   TestAutoresearchReplyAmbiguousSourceAnchor/clarification
+2026/10/01 09:16:35 INFO Created new KV bucket bucket=TestAutoresearchReplyAmbiguousSourceAnchor_clarification_1790864195769783000
+    autoresearch_reply_integration_test.go:381: 
+        	Error Trace:	/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/test/contract/autoresearch_reply_integration_test.go:381
+        	Error:      	Should be false
+        	Test:       	TestAutoresearchReplyAmbiguousSourceAnchor/clarification
+        	Messages:   	ambiguous source must not forward a result using the first anchor
+=== RUN   TestAutoresearchReplyAmbiguousSourceAnchor/baseline_failure
+2026/10/01 09:16:35 INFO Created new KV bucket bucket=TestAutoresearchReplyAmbiguousSourceAnchor_baseline_failure_1790864195776927000
+    autoresearch_reply_integration_test.go:381: 
+        	Error Trace:	/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/test/contract/autoresearch_reply_integration_test.go:381
+        	Error:      	Should be false
+        	Test:       	TestAutoresearchReplyAmbiguousSourceAnchor/baseline_failure
+        	Messages:   	ambiguous source must not forward a result using the first anchor
+=== RUN   TestAutoresearchReplyAmbiguousSourceAnchor/descended_failure
+2026/10/01 09:16:35 INFO Created new KV bucket bucket=TestAutoresearchReplyAmbiguousSourceAnchor_descended_failure_1790864195780386000
+    autoresearch_reply_integration_test.go:381: 
+        	Error Trace:	/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/test/contract/autoresearch_reply_integration_test.go:381
+        	Error:      	Should be false
+        	Test:       	TestAutoresearchReplyAmbiguousSourceAnchor/descended_failure
+        	Messages:   	ambiguous source must not forward a result using the first anchor
+2026/10/01 09:16:35 🐳 Stopping container: f8c2702a1760
+2026/10/01 09:16:35 ✅ Container stopped: f8c2702a1760
+2026/10/01 09:16:35 🐳 Terminating container: f8c2702a1760
+2026/10/01 09:16:35 🚫 Container terminated: f8c2702a1760
+--- FAIL: TestAutoresearchReplyAmbiguousSourceAnchor (0.31s)
+    --- FAIL: TestAutoresearchReplyAmbiguousSourceAnchor/clarification (0.01s)
+    --- FAIL: TestAutoresearchReplyAmbiguousSourceAnchor/baseline_failure (0.00s)
+    --- FAIL: TestAutoresearchReplyAmbiguousSourceAnchor/descended_failure (0.00s)
+FAIL
+FAIL	github.com/c360studio/semteams/test/contract	0.947s
+FAIL

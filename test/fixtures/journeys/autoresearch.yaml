@@ -6,9 +6,8 @@ description: |
   presence-marker iteration loop, the cap gate, the best-value
   promotion, and the reviewer + wake-up terminal.
 
-  The mock serves responses in GLOBAL ORDER. The chain is linear
-  (cap=2 → exactly two propose/execute iterations, no fan-out), so
-  the order below == the order of LLM requests. Placeholder bash /
+  The mock serves role-keyed responses, with separate queues for each phase.
+  The chain is linear (cap=2 → exactly two propose/execute iterations). Placeholder bash /
   read_loop_result calls are omitted: the rules fire on the decide
   actions + the emit stamps, not on those reads, and bash errors
   harmlessly under SEMTEAMS_SANDBOX_RUNNER=mock. The iteration loop
@@ -55,6 +54,10 @@ description: |
 
     Loop H  coordinator (wake-up)
       15. decide(respond_direct)   → coordinator/03b → user.response.*
+
+  Artifact provenance uses the explicit static token mock-provenance-second-kept-iteration.
+  This token is schema-valid mock data, not a generated loop UUID or evidence of live research.
+  The paired spec independently verifies the running best graph identity names a real kept loop.
 
   Paired spec: ui/e2e/agentic/autoresearch.spec.ts.
   Required config: configs/e2e-flow-bootstrap.json (autoresearch rules wired).
@@ -204,6 +207,7 @@ responses_by_role:
               "iterations_kept": 2,
               "iterations_reverted": 0,
               "iterations_crashed": 0,
+              "best_experiment_id": "mock-provenance-second-kept-iteration",
               "best_diff_summary": "t.Parallel on independent suites + dropped a redundant TestMain fixture rebuild",
               "journey": ["iter1: t.Parallel → 1.00s kept", "iter2: drop fixture rebuild → 0.85s kept"],
               "open_opportunities": ["profile the remaining 0.85s for I/O waits"]

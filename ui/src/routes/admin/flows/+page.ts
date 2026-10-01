@@ -1,3 +1,4 @@
+import { getComposition } from "$lib/services/compositionApi";
 import type { PageLoad } from "./$types";
 import {
   isConnectivityError,
@@ -6,20 +7,8 @@ import {
 
 export const load: PageLoad = async ({ fetch }) => {
   try {
-    const response = await fetch("/flowbuilder/flows");
-    if (!response.ok) {
-      const contentType = response.headers.get("content-type");
-      if (contentType?.includes("text/html")) {
-        throw new Error(
-          "Backend service unavailable (received HTML error page)",
-        );
-      }
-      throw new Error(`Failed to load flows: ${response.statusText}`);
-    }
-    const data = await response.json();
-    return {
-      flows: data.flows || [],
-    };
+    const { graph, validation } = await getComposition(fetch);
+    return { components: graph.nodes, validation };
   } catch (error) {
     console.error("Failed to load flows:", error);
 
@@ -31,7 +20,8 @@ export const load: PageLoad = async ({ fetch }) => {
     }
 
     return {
-      flows: [],
+      components: [],
+      validation: null,
       error: errorMessage,
     };
   }

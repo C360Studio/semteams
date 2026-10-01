@@ -1,0 +1,588 @@
+{
+  "autoresearch-artifact-proof": {
+    "artifactResult": {
+      "call_id": "call_4e9fb532",
+      "name": "emit_autoresearch_artifact",
+      "content": "{\"improvement_pct\":29.2,\"loop_entity_id\":\"c360.semteams-bootstrap-e2e-e8c788.agentic-loop.agent.execution.5848907d-9672-463d-8dc7-be1716c99f7d\",\"path\":\".artifacts/autoresearch/2026-10-01-go-test-wallclock-optimization.md\",\"revision\":1,\"slug\":\"2026-10-01-go-test-wallclock-optimization\"}",
+      "metadata": {
+        "loop_entity_id": "c360.semteams-bootstrap-e2e-e8c788.agentic-loop.agent.execution.5848907d-9672-463d-8dc7-be1716c99f7d",
+        "path": ".artifacts/autoresearch/2026-10-01-go-test-wallclock-optimization.md"
+      },
+      "loop_id": "5848907d-9672-463d-8dc7-be1716c99f7d",
+      "request_id": "5848907d-9672-463d-8dc7-be1716c99f7d:req:1:0",
+      "execution_id": "tool-exec-v1-tmme36zze77mgutlzal4qsxn5o5ypsiv5kymzdnjtrinr365mjeq",
+      "call_ordinal": 1
+    },
+    "artifactPaths": [
+      {
+        "subject": "c360.semteams-bootstrap-e2e-e8c788.agentic-loop.agent.execution.5848907d-9672-463d-8dc7-be1716c99f7d",
+        "predicate": "autoresearch.artifact.path",
+        "object": ".artifacts/autoresearch/2026-10-01-go-test-wallclock-optimization.md",
+        "source": "autoresearch-emit-artifact",
+        "timestamp": "2026-10-01T14:19:29.980750916Z",
+        "confidence": 1
+      }
+    ],
+    "best": [
+      {
+        "subject": "c360.semteams-bootstrap-e2e-e8c788.chain.agent.execution.5e527474-e4cf-4dbd-b9a3-0a1958c40d2e",
+        "predicate": "autoresearch.best.value",
+        "object": 0.85,
+        "source": "rule_engine",
+        "timestamp": "2026-10-01T14:19:29.876206291Z",
+        "confidence": 1,
+        "context": "rule:autoresearch_execute_promote_best_on_kept:c360.semteams-bootstrap-e2e-e8c788.chain.agent.execution.5e527474-e4cf-4dbd-b9a3-0a1958c40d2e:1:promote_best_value"
+      }
+    ],
+    "bestExperiments": [
+      {
+        "subject": "c360.semteams-bootstrap-e2e-e8c788.chain.agent.execution.5e527474-e4cf-4dbd-b9a3-0a1958c40d2e",
+        "predicate": "autoresearch.best.experiment-id",
+        "object": "c360.semteams-bootstrap-e2e-e8c788.agentic-loop.agent.execution.29064689-f8f5-400c-acef-e0daeb5ec76f",
+        "source": "rule_engine",
+        "timestamp": "2026-10-01T14:19:29.877503416Z",
+        "confidence": 1,
+        "context": "rule:autoresearch_execute_promote_best_on_kept:c360.semteams-bootstrap-e2e-e8c788.chain.agent.execution.5e527474-e4cf-4dbd-b9a3-0a1958c40d2e:1:promote_best_experiment_id"
+      }
+    ],
+    "keptMeasurements": [
+      {
+        "subject": "c360.semteams-bootstrap-e2e-e8c788.agentic-loop.agent.execution.0f4cddaf-9010-416f-9b04-e810b02c2c16",
+        "predicate": "autoresearch.measurement.outcome",
+        "object": "kept",
+        "source": "autoresearch-emit-measurement",
+        "timestamp": "2026-10-01T14:19:29.636260541Z",
+        "confidence": 1
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-e8c788.agentic-loop.agent.execution.29064689-f8f5-400c-acef-e0daeb5ec76f",
+        "predicate": "autoresearch.measurement.outcome",
+        "object": "kept",
+        "source": "autoresearch-emit-measurement",
+        "timestamp": "2026-10-01T14:19:29.848790083Z",
+        "confidence": 1
+      }
+    ],
+    "measurementValues": [
+      {
+        "subject": "c360.semteams-bootstrap-e2e-e8c788.agentic-loop.agent.execution.0f4cddaf-9010-416f-9b04-e810b02c2c16",
+        "predicate": "autoresearch.measurement.value",
+        "object": 1,
+        "source": "autoresearch-emit-measurement",
+        "timestamp": "2026-10-01T14:19:29.636260541Z",
+        "confidence": 1
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-e8c788.agentic-loop.agent.execution.29064689-f8f5-400c-acef-e0daeb5ec76f",
+        "predicate": "autoresearch.measurement.value",
+        "object": 0.85,
+        "source": "autoresearch-emit-measurement",
+        "timestamp": "2026-10-01T14:19:29.848790083Z",
+        "confidence": 1
+      }
+    ],
+    "artifactProvenance": [
+      {
+        "subject": "c360.semteams-bootstrap-e2e-e8c788.agentic-loop.agent.execution.5848907d-9672-463d-8dc7-be1716c99f7d",
+        "predicate": "autoresearch.artifact.best-experiment-id",
+        "object": "mock-provenance-second-kept-iteration",
+        "source": "autoresearch-emit-artifact",
+        "timestamp": "2026-10-01T14:19:29.980750916Z",
+        "confidence": 1
+      }
+    ],
+    "executeLoops": [
+      {
+        "loop_id": "0f4cddaf-9010-416f-9b04-e810b02c2c16",
+        "task_id": "rule-c360.semteams-bootstrap-e2e-e8c788.agentic-loop.agent.execution.fbeabd20-b8b7-40ca-abc4-cadc3e18949b-1790864369618744833",
+        "state": "complete",
+        "role": "autoresearch-execute",
+        "iterations": 1,
+        "max_iterations": 8,
+        "outcome": "success",
+        "result": "{\"action\":\"measured\",\"reason\":\"Iteration 1: 1.20s \u2192 1.00s, tests still pass \u2014 kept.\"}"
+      },
+      {
+        "loop_id": "29064689-f8f5-400c-acef-e0daeb5ec76f",
+        "task_id": "rule-c360.semteams-bootstrap-e2e-e8c788.agentic-loop.agent.execution.8981ea65-7d1f-4224-b838-169d00849af0-1790864369832437500",
+        "state": "complete",
+        "role": "autoresearch-execute",
+        "iterations": 1,
+        "max_iterations": 8,
+        "outcome": "success",
+        "result": "{\"action\":\"measured\",\"reason\":\"Iteration 2: 1.00s \u2192 0.85s, tests still pass \u2014 kept. Cap reached.\"}"
+      }
+    ]
+  },
+  "autoresearch-terminal-route-proof": {
+    "root": {
+      "loop_id": "5e527474-e4cf-4dbd-b9a3-0a1958c40d2e",
+      "task_id": "dispatch-19e0755b2a92cd143da2edd68da8aae82768f0687cea13c9a390ee5c172fa307",
+      "state": "complete",
+      "role": "coordinator",
+      "iterations": 2,
+      "max_iterations": 8,
+      "user_id": "ui-anonymous",
+      "channel_type": "http",
+      "outcome": "success",
+      "result": "{\"action\":\"autoresearch\",\"reason\":\"Optimize the wallclock of `go test ./...`. Command: go test ./...; surface: ./...; cap: 2 iterations; metric: real seconds parsed from the test output. Lower is better.\"}"
+    },
+    "terminal": {
+      "loop_id": "7ffd82b6-787e-4adb-b9da-3db9231bcb2a",
+      "task_id": "rule-c360.semteams-bootstrap-e2e-e8c788.agentic-loop.agent.execution.5e527474-e4cf-4dbd-b9a3-0a1958c40d2e-1790864370217165042",
+      "state": "complete",
+      "role": "coordinator",
+      "max_iterations": 8,
+      "outcome": "success",
+      "result": "{\"action\":\"respond_direct\",\"reason\":\"Optimized `go test ./...` from 1.20s to 0.85s (about 29% faster) across two kept iterations: parallelizing independent suites and dropping a redundant fixture rebuild. Both changes keep the tests passing.\"}"
+    },
+    "source": {
+      "loop_id": "f1422d70-0f8f-4fa8-9491-065ff7e4eb35",
+      "task_id": "rule-c360.semteams-bootstrap-e2e-e8c788.agentic-loop.agent.execution.5848907d-9672-463d-8dc7-be1716c99f7d-1790864370054692041",
+      "state": "complete",
+      "role": "reviewer-autoresearch",
+      "max_iterations": 8,
+      "outcome": "success",
+      "result": "{\"action\":\"approved\",\"reason\":\"Rollup is structurally complete: baseline, per-iteration journey, running best, and kept changes all present; the kept iterations genuinely moved the metric (1.20 \u2192 0.85). Approved.\"}"
+    },
+    "rootTask": {
+      "loop_id": "5e527474-e4cf-4dbd-b9a3-0a1958c40d2e",
+      "task_id": "dispatch-19e0755b2a92cd143da2edd68da8aae82768f0687cea13c9a390ee5c172fa307",
+      "source_message_id": "2a82df21-7523-484f-a14f-853363d4c4a8",
+      "role": "coordinator",
+      "model": "general",
+      "prompt": "Make `go test ./...` faster \u2014 measure the wallclock, propose changes, and keep the ones that lower it. Cap at 2 iterations.",
+      "channel_type": "http",
+      "channel_id": "http-1790864369380353389",
+      "user_id": "ui-anonymous",
+      "tools": [
+        {
+          "name": "decide",
+          "description": "Terminal decision tool for coordinator agents. Call exactly once with the action your role's system prompt enumerates. Emits a coordinator.decision.next-action triple on this loop's entity so downstream rules can route; the full args stay in the loop's Result for any agent that needs supporting data.",
+          "parameters": {
+            "properties": {
+              "action": {
+                "description": "The decision. Valid values are enumerated in your role's system prompt.",
+                "type": "string"
+              },
+              "reason": {
+                "description": "Short natural-language justification for the chosen action.",
+                "type": "string"
+              },
+              "retry_hint": {
+                "description": "Optional. Free-form guidance for a downstream pass; populate only when your role's contract names this field.",
+                "type": "string"
+              },
+              "subtopics": {
+                "description": "Optional. List of sub-targets when the chosen action represents a multi-target investigation; populate only when your role's contract names this field.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "action",
+              "reason"
+            ],
+            "type": "object"
+          },
+          "effect": "mutating"
+        },
+        {
+          "name": "read_loop_result",
+          "description": "Fetch the final Result text a previously completed agent loop produced, so this agent can react to or build on it without having the full content injected into its prompt. Returns a text slice plus role/outcome/completed_at metadata and total_bytes so the caller can page through long results by calling again with a different offset.",
+          "parameters": {
+            "properties": {
+              "loop_id": {
+                "description": "Loop ID. Use $entity.instance in rule templates (bare UUID); the full 6-part entity ID also works.",
+                "type": "string"
+              },
+              "max_bytes": {
+                "description": "Maximum bytes of Result text to return in this call. Defaults to 4096. Use smaller values to stay within tight context budgets.",
+                "type": "integer"
+              },
+              "offset": {
+                "description": "Zero-based byte offset into the Result text. Defaults to 0. Use with max_bytes to page through long results.",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "loop_id"
+            ],
+            "type": "object"
+          },
+          "paginated": true,
+          "effect": "read_only"
+        },
+        {
+          "name": "scratchpad",
+          "description": "Free-form reasoning space before committing structured output. Use this to think through decomposition, list constraints you must satisfy, or note edge cases you considered \u2014 content is recorded in the trajectory and graph but not interpreted by any rule or consumer. Call this BEFORE the strict commit tool when the task involves decomposition or multi-step planning.",
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "text": {
+                "description": "Your reasoning. Free-form prose; no schema, no length limit, no interpretation. Lands in the trajectory and on the loop entity for audit and recovery.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "text"
+            ],
+            "type": "object"
+          },
+          "effect": "mutating"
+        },
+        {
+          "name": "query_sandbox_attestation",
+          "description": "Read-only: check whether a fresh sandbox attestation already covers a SandboxRequirements on this chain. Returns {found, fresh, attestation?, staleness_seconds?}. Call BEFORE request_sandbox to skip re-attesting when a recent attestation matches. The signature key is (matched_profile, requirements_hash); pass the same args you would pass to request_sandbox. No side effects: no devcontainer up, no triple stamps, just a graph lookup.",
+          "parameters": {
+            "properties": {
+              "languages": {
+                "description": "Same shape as request_sandbox.languages.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "mounts": {
+                "description": "Same shape as request_sandbox.mounts.",
+                "items": {
+                  "enum": [
+                    "workspace-write",
+                    "workspace-read"
+                  ],
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "network": {
+                "description": "Same shape as request_sandbox.network.",
+                "enum": [
+                  "restricted",
+                  "public",
+                  "none"
+                ],
+                "type": "string"
+              },
+              "privileges": {
+                "description": "Same shape as request_sandbox.privileges.",
+                "items": {
+                  "enum": [
+                    "docker-socket",
+                    "privileged"
+                  ],
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "secrets": {
+                "description": "Same shape as request_sandbox.secrets.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "services": {
+                "description": "Same shape as request_sandbox.services.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "tools": {
+                "description": "Same shape as request_sandbox.tools.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "verification": {
+                "description": "Same shape as request_sandbox.verification. Affects the requirements hash.",
+                "items": {
+                  "properties": {
+                    "command": {
+                      "type": "string"
+                    },
+                    "expect_exit": {
+                      "type": "integer"
+                    },
+                    "name": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "command"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              }
+            },
+            "type": "object"
+          },
+          "effect": "unknown"
+        },
+        {
+          "name": "request_sandbox",
+          "description": "Request a sandbox environment for the work at hand. Synchronous: returns an Attestation that says ready/degraded/failed plus the verified capabilities. Coordinator routes on the attestation shape (.ready/.degraded/.terminal/.admission_outcome). NEVER author container internals (image, mounts as paths, privileges as docker flags) \u2014 those live in catalog profiles. Describe what the WORK needs. The manager handles profile-match + admission + devcontainer up + probes + attestation. Profile lookup is operator-curated; admission gates privileged + public-network + host-path-mounts + un-pre-provisioned secrets. Call exactly once per work request. Before calling, consider whether a fresh attestation already covers your needs by calling query_sandbox_attestation first.",
+          "parameters": {
+            "properties": {
+              "languages": {
+                "description": "Language toolchains the work needs (e.g. ['go'], ['node'], ['go','node']). Matches against profile.advertises.languages.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "mounts": {
+                "description": "Mount class enum. Default 'workspace-write' is the typical case. 'workspace-read' is audit/inspect-only. Host-path bind mounts go via privileges, not here.",
+                "items": {
+                  "enum": [
+                    "workspace-write",
+                    "workspace-read"
+                  ],
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "network": {
+                "description": "Network policy class. 'restricted' (default) admits without operator policy; 'public' pends on AllowPublicNetwork OR admission-reviewer approval; 'none' requires profile support.",
+                "enum": [
+                  "restricted",
+                  "public",
+                  "none"
+                ],
+                "type": "string"
+              },
+              "privileges": {
+                "description": "Privileged capability classes. 'docker-socket' for testcontainers/compose workloads (requires full-stack-e2e profile + admission-reviewer approval). 'privileged' is forbidden by default (requires operator AllowPrivilegedContainers flag + profile allowlist + reviewer signoff).",
+                "items": {
+                  "enum": [
+                    "docker-socket",
+                    "privileged"
+                  ],
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "secrets": {
+                "description": "Pre-provisioned secret identifiers (env-var shape, [A-Z_][A-Z0-9_]*). Each MUST be in operator AvailableSecrets policy \u2014 admission denies otherwise. Coordinator can't ask the user to enter a credential mid-chain.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "services": {
+                "description": "In-container services the work needs (e.g. ['nats']). Most workloads have none. Only full-stack-e2e profile advertises services.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "tools": {
+                "description": "CLI tools the work needs (e.g. ['task','gh'], ['playwright']). Matches against profile.advertises.tools and is verified by preflight probes when listed in verification.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "verification": {
+                "description": "Preflight probes the manager runs inside the container after devcontainer up. Each probe.name becomes a sandbox.attestation.verified-<name> triple the Coordinator can route on. Probes that fail produce Degraded=true (not Ready) and DegradedReasons.",
+                "items": {
+                  "properties": {
+                    "command": {
+                      "description": "Verbatim shell line the probe runs (e.g. 'go version', 'task --list'). This IS user-intent, not LLM-authored shell \u2014 the probe shape IS its command.",
+                      "type": "string"
+                    },
+                    "expect_exit": {
+                      "description": "Required exit code. Default 0. Probes that intend non-zero pass must set explicitly.",
+                      "type": "integer"
+                    },
+                    "name": {
+                      "description": "Capability identifier ([a-z0-9][a-z0-9._-]*). Becomes the verified.<name> predicate suffix; substituted by Coordinator routing.",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "command"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              }
+            },
+            "type": "object"
+          },
+          "effect": "unknown"
+        }
+      ]
+    },
+    "terminalTask": {
+      "task_id": "rule-c360.semteams-bootstrap-e2e-e8c788.agentic-loop.agent.execution.5e527474-e4cf-4dbd-b9a3-0a1958c40d2e-1790864370217165042",
+      "role": "coordinator",
+      "model": "coordinator",
+      "prompt": "The autoresearch run reached completed after reviewer approval. Read the approved reviewer at c360.semteams-bootstrap-e2e-e8c788.agentic-loop.agent.execution.f1422d70-0f8f-4fa8-9491-065ff7e4eb35 using read_loop_result(loop_id=\"c360.semteams-bootstrap-e2e-e8c788.agentic-loop.agent.execution.f1422d70-0f8f-4fa8-9491-065ff7e4eb35\"). Summarize the actual artifact and measurement evidence: baseline, best, cap, kept/reverted/crashed iterations and remaining limits. Do not claim live empirical quality from mock data or infer evidence bodies from references. Finish with decide(action=\"respond_direct\", reason=\"<plain user-facing result>\"). This is result delivery, not another delegation.",
+      "parent_loop_id": "5e527474-e4cf-4dbd-b9a3-0a1958c40d2e",
+      "run_id": "5e527474-e4cf-4dbd-b9a3-0a1958c40d2e",
+      "tools": [
+        {
+          "name": "read_loop_result",
+          "description": "Fetch the final Result text a previously completed agent loop produced, so this agent can react to or build on it without having the full content injected into its prompt. Returns a text slice plus role/outcome/completed_at metadata and total_bytes so the caller can page through long results by calling again with a different offset.",
+          "parameters": {
+            "properties": {
+              "loop_id": {
+                "description": "Loop ID. Use $entity.instance in rule templates (bare UUID); the full 6-part entity ID also works.",
+                "type": "string"
+              },
+              "max_bytes": {
+                "description": "Maximum bytes of Result text to return in this call. Defaults to 4096. Use smaller values to stay within tight context budgets.",
+                "type": "integer"
+              },
+              "offset": {
+                "description": "Zero-based byte offset into the Result text. Defaults to 0. Use with max_bytes to page through long results.",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "loop_id"
+            ],
+            "type": "object"
+          },
+          "paginated": true,
+          "effect": "read_only"
+        },
+        {
+          "name": "bash",
+          "description": "Run a shell command. Use for file operations, git, builds, tests, and any other shell task.",
+          "parameters": {
+            "properties": {
+              "command": {
+                "description": "Shell command to execute",
+                "type": "string"
+              },
+              "read_only_paths": {
+                "description": "Paths (files or directories, relative to the worktree root) that should not be modified. Used by verify_clean to filter the dirty-tree check; an entry like \"src/\" matches anything under src/.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "verify_clean": {
+                "description": "If true, run `git status -z --porcelain --untracked-files=all` before the real command and refuse to run if any dirty path matches read_only_paths (or any dirty path at all when read_only_paths is empty). Use to keep a command sequence from clobbering off-limits files.",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "command"
+            ],
+            "type": "object"
+          },
+          "effect": "external_effect"
+        },
+        {
+          "name": "decide",
+          "description": "Terminal decision tool for coordinator agents. Call exactly once with the action your role's system prompt enumerates. Emits a coordinator.decision.next-action triple on this loop's entity so downstream rules can route; the full args stay in the loop's Result for any agent that needs supporting data.",
+          "parameters": {
+            "properties": {
+              "action": {
+                "description": "The decision. Valid values are enumerated in your role's system prompt.",
+                "type": "string"
+              },
+              "reason": {
+                "description": "Short natural-language justification for the chosen action.",
+                "type": "string"
+              },
+              "retry_hint": {
+                "description": "Optional. Free-form guidance for a downstream pass; populate only when your role's contract names this field.",
+                "type": "string"
+              },
+              "subtopics": {
+                "description": "Optional. List of sub-targets when the chosen action represents a multi-target investigation; populate only when your role's contract names this field.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "action",
+              "reason"
+            ],
+            "type": "object"
+          },
+          "effect": "mutating"
+        }
+      ],
+      "tool_choice": {
+        "mode": "required"
+      },
+      "metadata": {
+        "agent.decide.action_allowlist": [
+          "respond_direct"
+        ],
+        "agent.related_loops": {
+          "autoresearch-run": "5e527474-e4cf-4dbd-b9a3-0a1958c40d2e",
+          "terminal": "c360.semteams-bootstrap-e2e-e8c788.agentic-loop.agent.execution.f1422d70-0f8f-4fa8-9491-065ff7e4eb35"
+        },
+        "category": "autoresearch",
+        "source_loop_entity_id": "c360.semteams-bootstrap-e2e-e8c788.agentic-loop.agent.execution.f1422d70-0f8f-4fa8-9491-065ff7e4eb35",
+        "wakeup_mode": "chain_terminal_autoresearch"
+      }
+    },
+    "reply": {
+      "sequence": 236,
+      "timestamp": "2026-10-01T14:19:30.238455083Z",
+      "subject": "user.response.http.http-1790864369380353389",
+      "message_type": "agentic.user_response.v1",
+      "trace_id": "ea1ab78dcc012a46456d3ba9a549e157",
+      "span_id": "f1dacd76020f75a2",
+      "summary": "Type: agentic.user_response.v1, Payload: *agentic.UserResponse",
+      "raw_data": {
+        "id": "917526c8-60dc-4ea5-a72c-c6eedc3c47c9",
+        "type": {
+          "domain": "agentic",
+          "category": "user_response",
+          "version": "v1"
+        },
+        "payload": {
+          "response_id": "terminal-user-response:8b2ad44a-a672-416c-b86e-c74c4a995bf5",
+          "channel_type": "http",
+          "channel_id": "http-1790864369380353389",
+          "user_id": "ui-anonymous",
+          "in_reply_to": "7ffd82b6-787e-4adb-b9da-3db9231bcb2a",
+          "type": "result",
+          "content": "Optimized `go test ./...` from 1.20s to 0.85s (about 29% faster) across two kept iterations: parallelizing independent suites and dropping a redundant fixture rebuild. Both changes keep the tests passing.",
+          "timestamp": "2026-10-01T14:19:30.235818625Z"
+        },
+        "meta": {
+          "created_at": 1790864370238,
+          "received_at": 1790864370238,
+          "source": "agentic-dispatch"
+        }
+      }
+    },
+    "phases": [
+      {
+        "subject": "c360.semteams-bootstrap-e2e-e8c788.chain.agent.execution.5e527474-e4cf-4dbd-b9a3-0a1958c40d2e",
+        "predicate": "agent.run.phase",
+        "object": "completed",
+        "source": "",
+        "timestamp": "2026-10-01T14:19:30.129189041Z",
+        "confidence": 1
+      }
+    ],
+    "origins": [
+      {
+        "subject": "c360.semteams-bootstrap-e2e-e8c788.chain.agent.execution.5e527474-e4cf-4dbd-b9a3-0a1958c40d2e",
+        "predicate": "agent.run.origin-entity-id",
+        "object": "c360.semteams-bootstrap-e2e-e8c788.agentic-loop.agent.execution.5e527474-e4cf-4dbd-b9a3-0a1958c40d2e",
+        "source": "",
+        "timestamp": "2026-10-01T14:19:29.442169055Z",
+        "confidence": 1
+      }
+    ]
+  }
+}

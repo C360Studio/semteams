@@ -1,0 +1,320 @@
+{
+  "scope": "ToolResult schema/policy errors and runtime diagnostic attribution for final stable matrix; successful Playwright checks are not a claim every fixture tool succeeded. Exact all-scenario WARN/ERROR records remain in results.json.",
+  "activity_fixture_limitation": {
+    "classification": "existing SemTeams fixture/tool-advertisement mismatch reproduced at both pins",
+    "error": "tool \"query_entity\" is not permitted for this loop (advertised tool set)",
+    "effect": "Activity test proves observable tool/status events, not successful query_entity execution.",
+    "beta160": [
+      {
+        "sequence": 12,
+        "timestamp": "2026-10-01T11:52:59.852465176Z",
+        "subject": "tool.result.call_2a8c1b35",
+        "message_type": "agentic.tool_result.v1",
+        "trace_id": "74473069641ba2c19a018ef07e740d43",
+        "span_id": "2af129a5b109230f",
+        "summary": "Type: agentic.tool_result.v1, Payload: *agentic.ToolResult",
+        "raw_data": {
+          "id": "992600e1-793a-4fff-b9ac-f3a65b41e36d",
+          "type": {
+            "domain": "agentic",
+            "category": "tool_result",
+            "version": "v1"
+          },
+          "payload": {
+            "call_id": "call_2a8c1b35",
+            "error": "tool \"query_entity\" is not permitted for this loop (advertised tool set)",
+            "error_kind": "permission",
+            "loop_id": "loop_1d8525a7"
+          },
+          "meta": {
+            "created_at": 1790855579852,
+            "received_at": 1790855579852,
+            "source": "agentic-tools"
+          }
+        }
+      }
+    ],
+    "frozen_before_repair": [
+      {
+        "sequence": 12,
+        "timestamp": "2026-10-01T12:56:56.677146133Z",
+        "subject": "tool.result.tool-exec-v1-kplv64tqnjzgilx4e5wxyoy2chhumhtyeanpbvvfnl5obwma2aha",
+        "message_type": "agentic.tool_result.v1",
+        "trace_id": "19ba6ccb56fcd377e4e52ed712ae0197",
+        "span_id": "3c6a885ef69e4069",
+        "summary": "Type: agentic.tool_result.v1, Payload: *agentic.ToolResult",
+        "raw_data": {
+          "id": "11938b1f-723d-49b3-837f-8afdf5f71c4e",
+          "type": {
+            "domain": "agentic",
+            "category": "tool_result",
+            "version": "v1"
+          },
+          "payload": {
+            "call_id": "call_d54e3c9e",
+            "error": "tool \"query_entity\" is not permitted for this loop (advertised tool set)",
+            "error_kind": "permission",
+            "loop_id": "ffbe0862-5b8a-42f7-8f6f-b7ed0cbcce1a",
+            "request_id": "ffbe0862-5b8a-42f7-8f6f-b7ed0cbcce1a:req:1:0",
+            "execution_id": "tool-exec-v1-kplv64tqnjzgilx4e5wxyoy2chhumhtyeanpbvvfnl5obwma2aha",
+            "call_ordinal": 1
+          },
+          "meta": {
+            "created_at": 1790859416676,
+            "received_at": 1790859416676,
+            "source": "agentic-tools"
+          }
+        }
+      }
+    ],
+    "frozen_repaired": [
+      {
+        "sequence": 12,
+        "timestamp": "2026-10-01T14:40:48.408346883Z",
+        "subject": "tool.result.tool-exec-v1-62zwydj62zvo4ufpdl6sdvbsvxbdpmcejwsib3zoum63q6bhuvjq",
+        "message_type": "agentic.tool_result.v1",
+        "trace_id": "ae0d27246b4c35ff81fbb544a9263e7c",
+        "span_id": "cde7000196c392b8",
+        "summary": "Type: agentic.tool_result.v1, Payload: *agentic.ToolResult",
+        "raw_data": {
+          "id": "4c61d779-da9f-4790-ba30-000b8bd6b13c",
+          "type": {
+            "domain": "agentic",
+            "category": "tool_result",
+            "version": "v1"
+          },
+          "payload": {
+            "call_id": "call_d138843b",
+            "error": "tool \"query_entity\" is not permitted for this loop (advertised tool set)",
+            "error_kind": "permission",
+            "loop_id": "94043aff-2842-4307-b42b-7c213ff0d562",
+            "request_id": "94043aff-2842-4307-b42b-7c213ff0d562:req:1:0",
+            "execution_id": "tool-exec-v1-62zwydj62zvo4ufpdl6sdvbsvxbdpmcejwsib3zoum63q6bhuvjq",
+            "call_ordinal": 1
+          },
+          "meta": {
+            "created_at": 1790865648408,
+            "received_at": 1790865648408,
+            "source": "agentic-tools"
+          }
+        }
+      }
+    ]
+  },
+  "intentional_policy_rejections": [
+    {
+      "scenario": "run-approval-boundary",
+      "classification": "intended approval or autonomous clarification boundary",
+      "tool_errors": [
+        {
+          "sequence": 30,
+          "timestamp": "2026-10-01T14:37:37.904546337Z",
+          "subject": "tool.result.tool-exec-v1-nhewgbyqp2hojzhcchxtd3psb5zix34nsrr7dzo7vi4m456do2hq",
+          "message_type": "agentic.tool_result.v1",
+          "trace_id": "974990e483bae5d4b3629de512f5c838",
+          "span_id": "bc8fdf0d0daa87d7",
+          "summary": "Type: agentic.tool_result.v1, Payload: *agentic.ToolResult",
+          "raw_data": {
+            "id": "9c27b5af-cef3-43b1-943e-03010ffca595",
+            "type": {
+              "domain": "agentic",
+              "category": "tool_result",
+              "version": "v1"
+            },
+            "payload": {
+              "call_id": "call_ca968569",
+              "name": "emit_plan",
+              "error": "approval_required: Tool 'emit_plan' requires human approval before execution",
+              "error_kind": "permission",
+              "loop_id": "62e36c4f-ecd2-4fc8-b3bd-4f7a60f34f0a",
+              "request_id": "62e36c4f-ecd2-4fc8-b3bd-4f7a60f34f0a:req:1:0",
+              "execution_id": "tool-exec-v1-nhewgbyqp2hojzhcchxtd3psb5zix34nsrr7dzo7vi4m456do2hq",
+              "call_ordinal": 1
+            },
+            "meta": {
+              "created_at": 1790865457904,
+              "received_at": 1790865457904,
+              "source": "agentic-tools"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "scenario": "clarification-autonomous",
+      "classification": "intended approval or autonomous clarification boundary",
+      "tool_errors": [
+        {
+          "sequence": 12,
+          "timestamp": "2026-10-01T14:42:55.117201303Z",
+          "subject": "tool.result.tool-exec-v1-5fwyyyr4gjup5oiz77pwjjufavnlrh2bcv6a2udflbr6iethdwhq",
+          "message_type": "agentic.tool_result.v1",
+          "trace_id": "5aec3fcfe71d4958d6d420a34e56961e",
+          "span_id": "d4f00d9a43d3b5be",
+          "summary": "Type: agentic.tool_result.v1, Payload: *agentic.ToolResult",
+          "raw_data": {
+            "id": "22aba3e8-2547-4f75-8cee-1464c10a1073",
+            "type": {
+              "domain": "agentic",
+              "category": "tool_result",
+              "version": "v1"
+            },
+            "payload": {
+              "call_id": "call_3ba21802",
+              "name": "decide",
+              "error": "action \"ask_user\" is restricted by deployment policy and cannot be used in this run; resolve without it and re-emit a different action your role's system prompt enumerates.",
+              "error_kind": "invalid_args",
+              "loop_id": "dab56bf9-7fff-47fe-9e0d-509c2f955965",
+              "request_id": "dab56bf9-7fff-47fe-9e0d-509c2f955965:req:1:0",
+              "execution_id": "tool-exec-v1-5fwyyyr4gjup5oiz77pwjjufavnlrh2bcv6a2udflbr6iethdwhq",
+              "call_ordinal": 1
+            },
+            "meta": {
+              "created_at": 1790865775116,
+              "received_at": 1790865775116,
+              "source": "agentic-tools"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "scenario": "approval-boundary-approve",
+      "classification": "intended approval or autonomous clarification boundary",
+      "tool_errors": [
+        {
+          "sequence": 20,
+          "timestamp": "2026-10-01T14:43:11.371624047Z",
+          "subject": "tool.result.tool-exec-v1-kmw5ventraor7irwxverlq6qt2jgln7m4tr2pom6tnldtkk4uuhq",
+          "message_type": "agentic.tool_result.v1",
+          "trace_id": "dc1a82706e8da1eeff18088da7c0e79d",
+          "span_id": "f034fd32fd84dc28",
+          "summary": "Type: agentic.tool_result.v1, Payload: *agentic.ToolResult",
+          "raw_data": {
+            "id": "c436d62b-26fc-42ed-95a4-511925bd660c",
+            "type": {
+              "domain": "agentic",
+              "category": "tool_result",
+              "version": "v1"
+            },
+            "payload": {
+              "call_id": "call_7d310e75",
+              "name": "request_sandbox",
+              "error": "approval_required: Tool 'request_sandbox' requires human approval before execution",
+              "error_kind": "permission",
+              "loop_id": "c0198772-0605-4d87-92c1-b77d77f5b3d9",
+              "request_id": "c0198772-0605-4d87-92c1-b77d77f5b3d9:req:2:0",
+              "execution_id": "tool-exec-v1-kmw5ventraor7irwxverlq6qt2jgln7m4tr2pom6tnldtkk4uuhq",
+              "call_ordinal": 1
+            },
+            "meta": {
+              "created_at": 1790865791371,
+              "received_at": 1790865791371,
+              "source": "agentic-tools"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "scenario": "approval-boundary-reject",
+      "classification": "intended approval or autonomous clarification boundary",
+      "tool_errors": [
+        {
+          "sequence": 20,
+          "timestamp": "2026-10-01T14:43:27.778831555Z",
+          "subject": "tool.result.tool-exec-v1-enjcv4dpg6eh7uquesdit6blwn6gixyzevuqrnkj7jz4yiefekla",
+          "message_type": "agentic.tool_result.v1",
+          "trace_id": "9c352cbe642c8fafee2ce7a6352e1a85",
+          "span_id": "74ae2314c13ce407",
+          "summary": "Type: agentic.tool_result.v1, Payload: *agentic.ToolResult",
+          "raw_data": {
+            "id": "8cb9a26b-9969-4959-bfa3-c54b4b9cbcdf",
+            "type": {
+              "domain": "agentic",
+              "category": "tool_result",
+              "version": "v1"
+            },
+            "payload": {
+              "call_id": "call_4a186ceb",
+              "name": "request_sandbox",
+              "error": "approval_required: Tool 'request_sandbox' requires human approval before execution",
+              "error_kind": "permission",
+              "loop_id": "168f05da-baa3-4319-9717-b2991c911ee8",
+              "request_id": "168f05da-baa3-4319-9717-b2991c911ee8:req:2:0",
+              "execution_id": "tool-exec-v1-enjcv4dpg6eh7uquesdit6blwn6gixyzevuqrnkj7jz4yiefekla",
+              "call_ordinal": 1
+            },
+            "meta": {
+              "created_at": 1790865807778,
+              "received_at": 1790865807778,
+              "source": "agentic-tools"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "scenario": "approval-boundary-cancel",
+      "classification": "intended approval or autonomous clarification boundary",
+      "tool_errors": [
+        {
+          "sequence": 20,
+          "timestamp": "2026-10-01T14:43:45.177624757Z",
+          "subject": "tool.result.tool-exec-v1-hxb7m7nvrum3ebhqoiimhlezvyl7p2tzonrjd7y3yaudjlfoj2fq",
+          "message_type": "agentic.tool_result.v1",
+          "trace_id": "b4c74b68eb75740e29ca1bd24fce582e",
+          "span_id": "dad45149cde3c249",
+          "summary": "Type: agentic.tool_result.v1, Payload: *agentic.ToolResult",
+          "raw_data": {
+            "id": "3b76e012-71e0-4d55-92b2-639480812e8d",
+            "type": {
+              "domain": "agentic",
+              "category": "tool_result",
+              "version": "v1"
+            },
+            "payload": {
+              "call_id": "call_8a1d0339",
+              "name": "request_sandbox",
+              "error": "approval_required: Tool 'request_sandbox' requires human approval before execution",
+              "error_kind": "permission",
+              "loop_id": "10804cc0-611e-4949-ad82-f4d34e1099b8",
+              "request_id": "10804cc0-611e-4949-ad82-f4d34e1099b8:req:2:0",
+              "execution_id": "tool-exec-v1-hxb7m7nvrum3ebhqoiimhlezvyl7p2tzonrjd7y3yaudjlfoj2fq",
+              "call_ordinal": 1
+            },
+            "meta": {
+              "created_at": 1790865825177,
+              "received_at": 1790865825177,
+              "source": "agentic-tools"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "autoresearch_schema_assertion": {
+    "scenarios": [
+      "autoresearch",
+      "autoresearch-guardrails",
+      "autoresearch-descended-clarification",
+      "autoresearch-propose-failed",
+      "autoresearch-descended-status"
+    ],
+    "tool_errors": {
+      "autoresearch": [],
+      "autoresearch-guardrails": [],
+      "autoresearch-descended-clarification": [],
+      "autoresearch-propose-failed": [],
+      "autoresearch-descended-status": []
+    },
+    "claim": "All actual ToolResults in the five repair scenarios are successful. Propose failure is the real configured max-iterations8 loop failure, not a failed-tool result hidden by canned prose. Static artifact provenance remains explicitly not the dynamic best-experiment graph identity."
+  },
+  "composition_and_boot_warnings": {
+    "attribution": "same nine static warning findings, absent optional graph-clustering/index capabilities, empty-duration defaults and intended fail-closed cold-start authority response as previously qualified",
+    "prior_ledger": "../final/warning-ledger.json",
+    "cold_start_contract": "../final/cold-start-authority.json",
+    "final_raw_records": "results.json"
+  },
+  "prompt_warnings": "prompt-warning-comparison.json"
+}

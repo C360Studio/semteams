@@ -23,7 +23,7 @@ const ChainEntityRoleKey = "chain-entity-id"
 
 // Anchor returns the run anchor stamped on a ToolCall by agentic-loop dispatch
 // (MetadataKeyRunID = the bare run loop-id / chain root; MetadataKeyRunEntityID =
-// the resolved 6-part org.platform.agent.chain.execution.<runID>).
+// the resolved 6-part org.platform.chain.agent.execution.<runID>).
 //
 // Returns ("", "") for a standalone loop (not part of a run) or a pre-#250
 // framework — callers fail soft on that, exactly as they did on a Resolver miss.

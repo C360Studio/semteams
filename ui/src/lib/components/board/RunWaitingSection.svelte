@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { agentStore } from "$lib/stores/agentStore.svelte";
   import type { RunPause } from "$lib/types/task";
   import { agentApi, AgentApiError } from "$lib/services/agentApi";
 
@@ -8,6 +9,11 @@
   }
 
   let { runId, pause }: Props = $props();
+  const pending = $derived.by(() => {
+    if (pause.cause !== "tool_gate") return undefined;
+    const current = agentStore.getLoop(pause.gatedLoopId)?.pending_approval;
+    return current?.execution_id === pause.executionId ? current : undefined;
+  });
 
   // ---------------------------------------------------------------------------
   // Clarification path (4b-2)
@@ -62,20 +68,40 @@
   let approveError = $state<string | null>(null);
   let gateSubmitted = $state<"approve" | "reject" | null>(null);
 
-  async function submitGateDecision(decision: "approve" | "reject") {
-    if (pause.cause !== "tool_gate") return;
+  let reviewedExecution = $state<string | null>(null);
+  $effect(() => {
+    const current = pause.cause === "tool_gate" && pending
+      ? JSON.stringify([pause.gatedLoopId, pending.execution_id]) : null;
+    if (current !== reviewedExecution) {
+      reviewedExecution = current;
+      reasonDraft = "";
+      approveError = null;
+      gateSubmitted = null;
+      approveSending = false;
+    }
+  });
 
+  async function submitGateDecision(decision: "approve" | "reject") {
+    if (pause.cause !== "tool_gate" || !pending?.execution_id) return;
+
+    const submittedLoop = pause.gatedLoopId;
+    const submittedExecution = pending.execution_id;
+    const isCurrent = () => pause.cause === "tool_gate" && pause.gatedLoopId === submittedLoop
+      && pending?.execution_id === submittedExecution;
     approveError = null;
     gateSubmitted = null;
     approveSending = true;
     try {
-      await agentApi.submitApproval(pause.gatedLoopId, {
+      await agentApi.submitApproval(submittedLoop, {
         decision,
+        execution_id: submittedExecution,
         ...(reasonDraft.trim() ? { reason: reasonDraft.trim() } : {}),
       });
+      if (!isCurrent()) return;
       reasonDraft = "";
       gateSubmitted = decision;
     } catch (err) {
+      if (!isCurrent()) return;
       if (err instanceof AgentApiError && err.statusCode === 409) {
         // Race: the loop resolved already — inform the operator to refresh.
         approveError =
@@ -85,7 +111,7 @@
           err instanceof Error ? err.message : "Failed to submit decision.";
       }
     } finally {
-      approveSending = false;
+      if (isCurrent()) approveSending = false;
     }
   }
 </script>
@@ -140,19 +166,25 @@
     >
       {replySending ? "Sending…" : "Send"}
     </button>
-
   {:else}
     <!-- 4c: A gated tool call needs approval. -->
     <header class="waiting-header">
       <h3 class="waiting-title">A tool call needs your approval</h3>
     </header>
-    <!-- TODO: Display tool name and args when the gated loop's pending_approval
-         is accessible. The gated loop is rule-spawned and typically 404s on
-         /teams-dispatch/loops/{id}, so we present a minimal approve/reject
-         affordance for v1. Modify path deferred to a follow-up slice. -->
+    {#if pending?.execution_id}
+      <p>{pending.tool_name}</p>
+      <pre>{JSON.stringify(pending.arguments ?? {}, null, 2)}</pre>
+    {:else}
+      <p role="status">
+        Waiting for the pending tool request. Approval is unavailable until its
+        details arrive.
+      </p>
+    {/if}
 
     <div class="approval-section" data-testid="run-approval-section">
-      <label class="reason-label" for="run-approval-reason">Reason (optional)</label>
+      <label class="reason-label" for="run-approval-reason"
+        >Reason (optional)</label
+      >
       <input
         id="run-approval-reason"
         class="reason-input"
@@ -160,7 +192,7 @@
         bind:value={reasonDraft}
         oninput={() => (gateSubmitted = null)}
         placeholder="Why this decision?"
-        disabled={approveSending}
+        disabled={approveSending || !pending?.execution_id}
       />
 
       {#if approveError}
@@ -170,19 +202,27 @@
       {/if}
 
       {#if gateSubmitted}
-        <p class="waiting-confirm" role="status" data-testid="run-approval-confirm">
+        <p
+          class="waiting-confirm"
+          role="status"
+          data-testid="run-approval-confirm"
+        >
           {gateSubmitted === "approve" ? "Approval" : "Rejection"} submitted — waiting
           for the agent to resume…
         </p>
       {/if}
 
-      <div class="approval-buttons" role="group" aria-label="Tool-gate approval decision">
+      <div
+        class="approval-buttons"
+        role="group"
+        aria-label="Tool-gate approval decision"
+      >
         <button
           type="button"
           class="waiting-btn approve"
           data-testid="run-approve"
           onclick={() => void submitGateDecision("approve")}
-          disabled={approveSending}
+          disabled={approveSending || !pending?.execution_id}
           aria-label={approveSending ? "Approving…" : "Approve tool call"}
         >
           {approveSending ? "Approving…" : "Approve"}
@@ -192,7 +232,7 @@
           class="waiting-btn danger"
           data-testid="run-reject"
           onclick={() => void submitGateDecision("reject")}
-          disabled={approveSending}
+          disabled={approveSending || !pending?.execution_id}
           aria-label={approveSending ? "Rejecting…" : "Reject tool call"}
         >
           {approveSending ? "Rejecting…" : "Reject"}

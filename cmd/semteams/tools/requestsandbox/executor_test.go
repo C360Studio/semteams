@@ -77,7 +77,7 @@ func TestExecute_HappyPath_StampsAndReturnsAttestation(t *testing.T) {
 			},
 		},
 		map[string]any{
-			"chain-entity-id": "c360.ops.agent.chain.execution.testchain",
+			"chain-entity-id": "c360.ops.chain.agent.execution.testchain",
 		},
 		"loop-1",
 	)
@@ -89,7 +89,7 @@ func TestExecute_HappyPath_StampsAndReturnsAttestation(t *testing.T) {
 	if res.Error != "" {
 		t.Fatalf("expected no error, got %q (%s)", res.Error, res.ErrorKind)
 	}
-	if mgr.lastChainEntityID != "c360.ops.agent.chain.execution.testchain" {
+	if mgr.lastChainEntityID != "c360.ops.chain.agent.execution.testchain" {
 		t.Fatalf("chain entity not from related_loops: %q", mgr.lastChainEntityID)
 	}
 	if len(mgr.lastReq.Languages) != 1 || mgr.lastReq.Languages[0] != "go" {
@@ -127,7 +127,7 @@ func TestExecute_RunAnchorFallback_DerivesChainEntityFromMetadata(t *testing.T) 
 	if res.Error != "" {
 		t.Fatalf("expected no error, got %q", res.Error)
 	}
-	want := "c360.ops.agent.chain.execution.resolvedchain"
+	want := "c360.ops.chain.agent.execution.resolvedchain"
 	if mgr.lastChainEntityID != want {
 		t.Fatalf("chain entity ID wrong: got %q want %q", mgr.lastChainEntityID, want)
 	}
@@ -145,7 +145,7 @@ func TestExecute_FrontDoorLoopIDFallback_DerivesExistingLoopEntity(t *testing.T)
 	if res.Error != "" {
 		t.Fatalf("expected no error, got %q", res.Error)
 	}
-	want := "c360.ops.agent.agentic-loop.execution.loop-1"
+	want := "c360.ops.agentic-loop.agent.execution.loop-1"
 	if mgr.lastChainEntityID != want {
 		t.Fatalf("chain entity ID wrong: got %q want %q", mgr.lastChainEntityID, want)
 	}
@@ -183,7 +183,7 @@ func TestExecute_AdmissionPending_ReturnsNormally(t *testing.T) {
 			"languages":  []any{"go", "node"},
 			"privileges": []any{"docker-socket"},
 		},
-		map[string]any{"chain-entity-id": "c360.ops.agent.chain.execution.c1"},
+		map[string]any{"chain-entity-id": "c360.ops.chain.agent.execution.c1"},
 		"loop-1",
 	)
 	res, err := exec.Execute(context.Background(), call)
@@ -220,7 +220,7 @@ func TestExecute_AdmissionDenied_Terminal_ReturnsNormally(t *testing.T) {
 			"languages": []any{"go"},
 			"secrets":   []any{"OPENAI_API_KEY"},
 		},
-		map[string]any{"chain-entity-id": "c360.ops.agent.chain.execution.c1"},
+		map[string]any{"chain-entity-id": "c360.ops.chain.agent.execution.c1"},
 		"loop-1",
 	)
 	res, _ := exec.Execute(context.Background(), call)
@@ -239,7 +239,7 @@ func TestExecute_ManagerErr_SurfacesAsNetwork(t *testing.T) {
 	exec := NewExecutor(mgr, newPlatform(), nil)
 	call := makeCall(
 		map[string]any{"languages": []any{"go"}},
-		map[string]any{"chain-entity-id": "c360.ops.agent.chain.execution.c1"},
+		map[string]any{"chain-entity-id": "c360.ops.chain.agent.execution.c1"},
 		"loop-1",
 	)
 	res, _ := exec.Execute(context.Background(), call)
@@ -260,7 +260,7 @@ func TestExecute_ManagerInvalidErr_SurfacesAsInternal(t *testing.T) {
 	exec := NewExecutor(mgr, newPlatform(), nil)
 	call := makeCall(
 		map[string]any{"languages": []any{"go"}},
-		map[string]any{"chain-entity-id": "c360.ops.agent.chain.execution.c1"},
+		map[string]any{"chain-entity-id": "c360.ops.chain.agent.execution.c1"},
 		"loop-1",
 	)
 	res, _ := exec.Execute(context.Background(), call)
@@ -274,7 +274,7 @@ func TestExecute_BadArgs_InvalidArgs(t *testing.T) {
 	exec := NewExecutor(mgr, newPlatform(), nil)
 	call := makeCall(
 		map[string]any{"languages": []any{42}}, // not a string
-		map[string]any{"chain-entity-id": "c360.ops.agent.chain.execution.c1"},
+		map[string]any{"chain-entity-id": "c360.ops.chain.agent.execution.c1"},
 		"loop-1",
 	)
 	res, _ := exec.Execute(context.Background(), call)

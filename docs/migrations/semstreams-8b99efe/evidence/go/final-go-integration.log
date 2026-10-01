@@ -1,0 +1,42 @@
+task: [test:integration] echo "[INTEGRATION] Running integration tests with real NATS (via testcontainers)..."
+[INTEGRATION] Running integration tests with real NATS (via testcontainers)...
+task: [test:integration] go test -race -count=1 -tags=integration -p 1 ./...
+ok  	github.com/c360studio/semteams/cmd/openapi-generator	1.547s	coverage: 59.8% of statements
+ok  	github.com/c360studio/semteams/cmd/semteams	2.685s	coverage: 17.0% of statements
+ok  	github.com/c360studio/semteams/cmd/semteams/approvalpause	1.713s	coverage: 80.5% of statements
+ok  	github.com/c360studio/semteams/cmd/semteams/chain	1.611s	coverage: 76.0% of statements
+ok  	github.com/c360studio/semteams/cmd/semteams/chainpause	2.043s	coverage: 55.3% of statements
+ok  	github.com/c360studio/semteams/cmd/semteams/commands/implementspec	1.277s	coverage: 85.0% of statements
+	github.com/c360studio/semteams/cmd/semteams/commands/teamhint		coverage: 0.0% of statements
+	github.com/c360studio/semteams/cmd/semteams/devviaspec		coverage: 0.0% of statements
+ok  	github.com/c360studio/semteams/cmd/semteams/openspec	1.316s	coverage: 93.8% of statements
+ok  	github.com/c360studio/semteams/cmd/semteams/portresolver	1.315s	coverage: 100.0% of statements
+ok  	github.com/c360studio/semteams/cmd/semteams/research	1.229s	coverage: 94.9% of statements
+ok  	github.com/c360studio/semteams/cmd/semteams/runanchor	1.241s	coverage: 97.4% of statements
+ok  	github.com/c360studio/semteams/cmd/semteams/sandbox	4.171s	coverage: 73.7% of statements
+ok  	github.com/c360studio/semteams/cmd/semteams/sandboxmanager	1.343s	coverage: 81.0% of statements
+ok  	github.com/c360studio/semteams/cmd/semteams/sandboxruntime	1.318s	coverage: 100.0% of statements
+	github.com/c360studio/semteams/cmd/semteams/semsource		coverage: 0.0% of statements
+ok  	github.com/c360studio/semteams/cmd/semteams/slug	1.243s	coverage: 100.0% of statements
+ok  	github.com/c360studio/semteams/cmd/semteams/tools/addsource	1.320s	coverage: 97.1% of statements
+ok  	github.com/c360studio/semteams/cmd/semteams/tools/analyzeproof	1.331s	coverage: 81.1% of statements
+ok  	github.com/c360studio/semteams/cmd/semteams/tools/chainbash	1.244s	coverage: 91.7% of statements
+ok  	github.com/c360studio/semteams/cmd/semteams/tools/emitartifact	1.410s	coverage: 84.0% of statements
+ok  	github.com/c360studio/semteams/cmd/semteams/tools/emitautoresearchartifact	1.398s	coverage: 88.5% of statements
+ok  	github.com/c360studio/semteams/cmd/semteams/tools/emitautoresearchbaseline	1.312s	coverage: 90.0% of statements
+ok  	github.com/c360studio/semteams/cmd/semteams/tools/emitautoresearchmeasurement	1.327s	coverage: 83.3% of statements
+ok  	github.com/c360studio/semteams/cmd/semteams/tools/emitchange	1.325s	coverage: 87.2% of statements
+ok  	github.com/c360studio/semteams/cmd/semteams/tools/emitdevviatestmeasurement	1.315s	coverage: 87.3% of statements
+ok  	github.com/c360studio/semteams/cmd/semteams/tools/emitdevviatestplan	1.365s	coverage: 80.6% of statements
+ok  	github.com/c360studio/semteams/cmd/semteams/tools/emitplan	1.393s	coverage: 79.4% of statements
+ok  	github.com/c360studio/semteams/cmd/semteams/tools/projectspecplan	1.330s	coverage: 75.8% of statements
+ok  	github.com/c360studio/semteams/cmd/semteams/tools/querysandboxattestation	1.324s	coverage: 81.2% of statements
+ok  	github.com/c360studio/semteams/cmd/semteams/tools/renderopenspec	1.220s	coverage: 85.9% of statements
+ok  	github.com/c360studio/semteams/cmd/semteams/tools/requestsandbox	1.337s	coverage: 91.7% of statements
+	github.com/c360studio/semteams/cmd/semteams/vocab		coverage: 0.0% of statements
+ok  	github.com/c360studio/semteams/test/contract	2.139s	coverage: [no statements]
+ok  	github.com/c360studio/semteams/test/e2e/mock	6.447s	coverage: 61.8% of statements
+	github.com/c360studio/semteams/test/e2e/mock/cmd		coverage: 0.0% of statements
+ok  	github.com/c360studio/semteams/test/integration	1.322s	coverage: [no statements]
+task: [test:integration] echo "[OK] Integration tests complete"
+[OK] Integration tests complete

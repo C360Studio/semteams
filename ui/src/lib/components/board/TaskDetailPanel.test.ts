@@ -37,13 +37,13 @@ function makeEmptyTrajectory(loopId: string): LoopTrajectory {
   };
 }
 
-// Mock agentApi — covers TaskDetailPanel's sendSignal calls,
+// Mock agentApi — covers TaskDetailPanel's cancelLoop calls,
 // PendingApprovalSection's submitApproval calls, and TaskStory /
 // RunEvidencePanel's getLoopTrajectory calls.
 vi.mock("$lib/services/agentApi", () => ({
   agentApi: {
     sendMessage: vi.fn().mockResolvedValue({ content: "ok" }),
-    sendSignal: vi.fn().mockResolvedValue({
+    cancelLoop: vi.fn().mockResolvedValue({
       loop_id: "loop_001",
       signal: "pause",
       status: "sent",
@@ -57,9 +57,11 @@ vi.mock("$lib/services/agentApi", () => ({
     // TaskStory/RunEvidencePanel poll the GraphQL trajectory(loopId)
     // field (semstreams beta.160); record the arg so the focused-loop
     // tests can assert which loop's story is being shown.
-    getLoopTrajectory: vi.fn().mockImplementation((loopId: string) =>
-      Promise.resolve(makeEmptyTrajectory(loopId)),
-    ),
+    getLoopTrajectory: vi
+      .fn()
+      .mockImplementation((loopId: string) =>
+        Promise.resolve(makeEmptyTrajectory(loopId)),
+      ),
   },
   AgentApiError: class AgentApiError extends Error {
     statusCode: number;
@@ -133,11 +135,7 @@ function makeTask(overrides: Partial<TaskInfo> = {}): TaskInfo {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(agentApi.sendMessage).mockResolvedValue({ content: "ok" });
-  vi.mocked(agentApi.sendSignal).mockResolvedValue({
-    loop_id: "loop_001",
-    signal: "pause",
-    status: "sent",
-  });
+  vi.mocked(agentApi.cancelLoop).mockResolvedValue({ content: "Cancellation requested" });
   vi.mocked(agentApi.submitApproval).mockResolvedValue({
     loop_id: "loop_001",
     decision: "approve",
@@ -155,14 +153,18 @@ beforeEach(() => {
 
 describe("TaskDetailPanel", () => {
   it("renders task title and state", () => {
-    render(TaskDetailPanel, { props: { task: makeTask({ title: "My Task", state: "planning" }) } });
+    render(TaskDetailPanel, {
+      props: { task: makeTask({ title: "My Task", state: "planning" }) },
+    });
 
     expect(screen.getByText("My Task")).toBeInTheDocument();
   });
 
   it("renders role and iteration count", () => {
     render(TaskDetailPanel, {
-      props: { task: makeTask({ role: "editor", iterations: 5, maxIterations: 20 }) },
+      props: {
+        task: makeTask({ role: "editor", iterations: 5, maxIterations: 20 }),
+      },
     });
 
     expect(screen.getByText("editor")).toBeInTheDocument();
@@ -170,7 +172,9 @@ describe("TaskDetailPanel", () => {
   });
 
   it("renders truncated ID with ellipsis", () => {
-    render(TaskDetailPanel, { props: { task: makeTask({ id: "loop_abcdef123456" }) } });
+    render(TaskDetailPanel, {
+      props: { task: makeTask({ id: "loop_abcdef123456" }) },
+    });
 
     // ID is now displayed without the "ID: " label (the monospace
     // styling + ellipsis says it's an identifier).
@@ -198,17 +202,12 @@ describe("TaskDetailPanel", () => {
   });
 
   describe("action buttons per state", () => {
-    it("shows Pause + Cancel for active states", () => {
-      render(TaskDetailPanel, { props: { task: makeTask({ state: "executing" }) } });
+    it("shows Cancel without unsupported Pause for active states", () => {
+      render(TaskDetailPanel, {
+        props: { task: makeTask({ state: "executing" }) },
+      });
 
-      expect(screen.getByText("Pause")).toBeInTheDocument();
-      expect(screen.getByText("Cancel")).toBeInTheDocument();
-    });
-
-    it("shows Resume + Cancel for paused state", () => {
-      render(TaskDetailPanel, { props: { task: makeTask({ state: "paused" }) } });
-
-      expect(screen.getByText("Resume")).toBeInTheDocument();
+      expect(screen.queryByText("Pause")).not.toBeInTheDocument();
       expect(screen.getByText("Cancel")).toBeInTheDocument();
     });
 
@@ -220,6 +219,7 @@ describe("TaskDetailPanel", () => {
             primaryLoop: makeLoop({
               state: "awaiting_approval",
               pending_approval: {
+                execution_id: "execution-pending",
                 call_id: "call-1",
                 tool_name: "create_rule",
                 arguments: { name: "alert" },
@@ -232,7 +232,9 @@ describe("TaskDetailPanel", () => {
 
       // Approve / Reject now live inside PendingApprovalSection — the
       // panel header surface only carries Cancel for this state.
-      expect(screen.getByTestId("pending-approval-section")).toBeInTheDocument();
+      expect(
+        screen.getByTestId("pending-approval-section"),
+      ).toBeInTheDocument();
       expect(screen.getByTestId("approval-approve")).toBeInTheDocument();
       expect(screen.getByTestId("approval-reject")).toBeInTheDocument();
       expect(screen.getByText("Cancel")).toBeInTheDocument();
@@ -253,7 +255,9 @@ describe("TaskDetailPanel", () => {
     });
 
     it("shows no action buttons for complete state", () => {
-      render(TaskDetailPanel, { props: { task: makeTask({ state: "complete" }) } });
+      render(TaskDetailPanel, {
+        props: { task: makeTask({ state: "complete" }) },
+      });
 
       expect(screen.queryByText("Pause")).not.toBeInTheDocument();
       expect(screen.queryByTestId("approval-approve")).not.toBeInTheDocument();
@@ -279,7 +283,9 @@ describe("TaskDetailPanel", () => {
 
       expect(screen.getByTestId("run-waiting-section")).toBeInTheDocument();
       expect(screen.getByTestId("run-reply-input")).toBeInTheDocument();
-      expect(screen.getByTestId("run-question")).toHaveTextContent("Which region?");
+      expect(screen.getByTestId("run-question")).toHaveTextContent(
+        "Which region?",
+      );
     });
 
     it("renders RunWaitingSection when the run is paused (tool_gate)", () => {
@@ -287,7 +293,7 @@ describe("TaskDetailPanel", () => {
         props: {
           task: makeTask({
             state: "complete",
-            runPause: { cause: "tool_gate", gatedLoopId: "loop-gated-1" },
+            runPause: { cause: "tool_gate", gatedLoopId: "loop-gated-1", executionId: "execution-pending" },
           }),
         },
       });
@@ -298,9 +304,13 @@ describe("TaskDetailPanel", () => {
     });
 
     it("does NOT render RunWaitingSection when runPause is null", () => {
-      render(TaskDetailPanel, { props: { task: makeTask({ runPause: null }) } });
+      render(TaskDetailPanel, {
+        props: { task: makeTask({ runPause: null }) },
+      });
 
-      expect(screen.queryByTestId("run-waiting-section")).not.toBeInTheDocument();
+      expect(
+        screen.queryByTestId("run-waiting-section"),
+      ).not.toBeInTheDocument();
     });
   });
 
@@ -326,14 +336,16 @@ describe("TaskDetailPanel", () => {
       const panel = screen.getByTestId("run-health-panel");
       expect(panel).toHaveTextContent("Working");
       expect(panel).toHaveTextContent("reviewer-dev-via-test reviewing");
-      expect(panel).toHaveTextContent("Wait for the current loop or gate to emit evidence");
+      expect(panel).toHaveTextContent(
+        "Wait for the current loop or gate to emit evidence",
+      );
       expect(panel).toHaveTextContent("fresh");
       expect(panel).toHaveTextContent("1");
     });
   });
 
   describe("signal dispatch", () => {
-    it("approve click flows through submitApproval (not sendSignal)", async () => {
+    it("approve click flows through submitApproval (not cancelLoop)", async () => {
       const user = userEvent.setup();
       render(TaskDetailPanel, {
         props: {
@@ -344,6 +356,7 @@ describe("TaskDetailPanel", () => {
               loop_id: "loop_xyz",
               state: "awaiting_approval",
               pending_approval: {
+                execution_id: "execution-pending",
                 call_id: "call-xyz",
                 tool_name: "create_rule",
                 arguments: { name: "alert" },
@@ -361,10 +374,10 @@ describe("TaskDetailPanel", () => {
         expect.objectContaining({ decision: "approve" }),
       );
       // Old broken signal path is gone.
-      expect(agentApi.sendSignal).not.toHaveBeenCalled();
+      expect(agentApi.cancelLoop).not.toHaveBeenCalled();
     });
 
-    it("Cancel click still uses sendSignal during awaiting_approval", async () => {
+    it("Cancel click still uses cancelLoop during awaiting_approval", async () => {
       const user = userEvent.setup();
       render(TaskDetailPanel, {
         props: {
@@ -375,6 +388,7 @@ describe("TaskDetailPanel", () => {
               loop_id: "loop_cancel",
               state: "awaiting_approval",
               pending_approval: {
+                execution_id: "execution-pending",
                 call_id: "call-c",
                 tool_name: "delete_rule",
                 arguments: {},
@@ -387,7 +401,7 @@ describe("TaskDetailPanel", () => {
 
       await user.click(screen.getByText("Cancel"));
 
-      expect(agentApi.sendSignal).toHaveBeenCalledWith("loop_cancel", "cancel");
+      expect(agentApi.cancelLoop).toHaveBeenCalledWith("loop_cancel");
     });
   });
 
@@ -460,7 +474,10 @@ describe("TaskDetailPanel", () => {
             primaryLoop: makeLoop({ loop_id: "loop_parent" }),
             childLoops: [
               makeLoop({ loop_id: "c1", role: "researcher-research-plan" }),
-              makeLoop({ loop_id: "c2", role: "researcher-research-synthesize" }),
+              makeLoop({
+                loop_id: "c2",
+                role: "researcher-research-synthesize",
+              }),
             ],
           }),
         },
@@ -598,7 +615,7 @@ describe("TaskDetailPanel", () => {
             runHealth: {
               state: "working",
               label: "Working",
-              runEntityId: "c360.semteams.agent.chain.execution.loop_001",
+              runEntityId: "c360.semteams.chain.agent.execution.loop_001",
               currentGate: "coordinator executing",
               nextAction: "Wait for evidence",
               detail: "Coordinator is executing.",

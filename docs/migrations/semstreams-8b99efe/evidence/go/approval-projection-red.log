@@ -1,0 +1,8 @@
+# github.com/c360studio/semteams/cmd/semteams/approvalpause [github.com/c360studio/semteams/cmd/semteams/approvalpause.test]
+cmd/semteams/approvalpause/projection_test.go:20:53: undefined: NATSProjection
+cmd/semteams/approvalpause/projection_test.go:23:12: undefined: newProjection
+cmd/semteams/approvalpause/projection_test.go:134:64: undefined: maxProjectionAttempts
+cmd/semteams/approvalpause/projection_test.go:168:22: undefined: MarkerApprovalOutstanding
+cmd/semteams/approvalpause/projection_test.go:209:16: undefined: approvalReconcileSubject
+FAIL	github.com/c360studio/semteams/cmd/semteams/approvalpause [build failed]
+FAIL

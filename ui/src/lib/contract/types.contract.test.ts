@@ -80,12 +80,12 @@ describe.skipIf(!existsSync(GENERATED_TYPES_PATH))(
       }
     });
 
-    it("should export operations for flow management", () => {
+    it("should expose composition inspection and omit retired flow mutation", () => {
       const content = loadGeneratedTypes();
       expect(content).not.toBeNull();
       if (content) {
-        // Check for flow-related paths
-        expect(content).toContain("/flows");
+        expect(content).toContain("/flowgraph");
+        expect(content).not.toContain('"/flows"');
       }
     });
   },

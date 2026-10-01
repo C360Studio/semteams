@@ -47,6 +47,21 @@ var predicates = []vocabulary.PredicateMetadata{
 
 	// --- autoresearch pack ---
 	{
+		Name:        "autoresearch.reply.approved",
+		Description: "Immutable approved source loop entity reference, relayed from the run to its canonical origin for routed reply delivery",
+		DataType:    vocabulary.DataTypeEntityID,
+	},
+	{
+		Name:        "autoresearch.reply.clarification",
+		Description: "Immutable clarification source loop entity reference, relayed from the run to its canonical origin for routed reply delivery",
+		DataType:    vocabulary.DataTypeEntityID,
+	},
+	{
+		Name:        "autoresearch.reply.failed",
+		Description: "Immutable failed source loop entity reference, relayed from the run to its canonical origin for routed reply delivery",
+		DataType:    vocabulary.DataTypeEntityID,
+	},
+	{
 		Name:        "autoresearch.run.status",
 		Description: "Autoresearch run status (running | stopped); replace-owned by rule-pack.semteams",
 		DataType:    "string",
@@ -54,7 +69,7 @@ var predicates = []vocabulary.PredicateMetadata{
 	{
 		Name:        "autoresearch.run.cap",
 		Description: "Iteration cap for the autoresearch run",
-		DataType:    "number",
+		DataType:    "int",
 	},
 	{
 		Name:        "autoresearch.run.command",
@@ -89,7 +104,7 @@ var predicates = []vocabulary.PredicateMetadata{
 	{
 		Name:        "autoresearch.best.value",
 		Description: "Best measurement value so far (replace-owned scalar; lower is better in v1)",
-		DataType:    "number",
+		DataType:    "float",
 	},
 	{
 		Name:        "autoresearch.best.experiment-id",
@@ -104,7 +119,7 @@ var predicates = []vocabulary.PredicateMetadata{
 	{
 		Name:        "autoresearch.measurement.value",
 		Description: "Scalar value of one measurement",
-		DataType:    "number",
+		DataType:    "float",
 	},
 	{
 		Name:        "autoresearch.artifact.path",
@@ -127,15 +142,16 @@ var predicates = []vocabulary.PredicateMetadata{
 	},
 
 	// --- agent-run pause/resume markers (ADR-053, SemTeams-authored) ---
+	{Name: "agent.run.approval-outstanding", Description: "Atomic count of observed approval gates without answers", DataType: "int"},
 	{
 		Name:        "agent.run.approval-pending",
-		Description: "Run-pause marker: a gated tool call awaits human approval (stamped by approvalpause + agent-run rule 12; removed on resume)",
-		DataType:    "string",
+		Description: "Append-only observed gate JSON pair [loopID,executionID]; pending minus answered identifies waiting gates",
+		DataType:    "json",
 	},
 	{
-		Name:        "agent.run.approval-resumed",
-		Description: "Run-resume audit marker: the approval decision that un-parked the run",
-		DataType:    "string",
+		Name:        "agent.run.approval-answered",
+		Description: "Append-only answered gate JSON pair [loopID,executionID]; each answer also appends the pending pair",
+		DataType:    "json",
 	},
 	{
 		Name:        "agent.run.clarification-pending",

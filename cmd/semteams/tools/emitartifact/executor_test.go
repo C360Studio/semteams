@@ -308,7 +308,7 @@ func TestExecute_HappyPath_TripleSet(t *testing.T) {
 	}
 
 	triples := tp.snapshot()
-	wantLoopEntityID := "c360.semteams.agent.agentic-loop.execution.loop-abc"
+	wantLoopEntityID := "c360.semteams.agentic-loop.agent.execution.loop-abc"
 
 	gotPredicates := map[string]any{}
 	for _, tr := range triples {
@@ -408,7 +408,7 @@ func TestExecute_ResultContent_ShapeAndCounts(t *testing.T) {
 	if content.PayloadSubject != "research.artifact.loop-abc" {
 		t.Errorf("payload_subject = %q", content.PayloadSubject)
 	}
-	if content.LoopEntityID != "c360.semteams.agent.agentic-loop.execution.loop-abc" {
+	if content.LoopEntityID != "c360.semteams.agentic-loop.agent.execution.loop-abc" {
 		t.Errorf("loop_entity_id = %q", content.LoopEntityID)
 	}
 }

@@ -30,7 +30,7 @@ const DefaultApprovalPendingSubject = "agent.approval_pending.>"
 // approval-response events (the human's approve/reject/modify decision, published by
 // POST /teams-dispatch/loops/{id}/approval). The agentic-loop ALSO subscribes here to
 // resume the gated loop; this subscriber reads it in parallel to stamp the run-phase
-// resume marker (4c PR-2). Same `.>` safe-superset rationale as the pending default.
+// execution-specific answer fact. Same `.>` safe-superset rationale as the pending default.
 const DefaultApprovalResponseSubject = "agent.approval_response.>"
 
 // Subscriber wraps a Pauser and drives both halves of the 4c tool-gate from
@@ -123,7 +123,7 @@ func (s *Subscriber) handlePendingMsg(ctx context.Context, data []byte) {
 	if err != nil {
 		// Unlike chainpause (which writes 9 §D5 triples and can partially
 		// succeed, so it logs the error AND still surfaces the partial result),
-		// HandlePending is all-or-nothing — a single AddTriple, so an error means
+		// HandlePending is all-or-nothing — one revision-fenced entity mutation, so an error means
 		// Stamped==false and there is nothing further to surface. Early-return.
 		s.logger.Error("approval-pause subscriber: HandlePending error",
 			slog.String("loop_id", ev.LoopID),
@@ -132,10 +132,14 @@ func (s *Subscriber) handlePendingMsg(ctx context.Context, data []byte) {
 		return
 	}
 	if result.Stamped {
-		s.logger.Info("approval-pause: tool-gate detected, run paused on approval",
+		s.logger.Info("approval-pause: observed gate recorded for run",
 			slog.String("loop_id", result.LoopID),
 			slog.String("run_entity_id", result.RunEntityID),
 			slog.String("tool_name", result.ToolName))
+		return
+	}
+	if result.AlreadyAnswered {
+		s.logger.Debug("approval-pause: already answered execution, skipping pending replay", slog.String("loop_id", result.LoopID), slog.String("execution_id", ev.ExecutionID))
 		return
 	}
 	// Not stamped + no error = a run-less loop (no run to pause). Debug, not Info —
@@ -168,10 +172,14 @@ func (s *Subscriber) handleResponseMsg(ctx context.Context, data []byte) {
 		return
 	}
 	if result.Stamped {
-		s.logger.Info("approval-pause: approval resolved, run resuming",
+		s.logger.Info("approval-pause: gate answer recorded for run",
 			slog.String("loop_id", result.LoopID),
 			slog.String("run_entity_id", result.RunEntityID),
 			slog.String("decision", result.Decision))
+		return
+	}
+	if result.AlreadyAnswered {
+		s.logger.Debug("approval-pause: duplicate answer, skipping resume replay", slog.String("loop_id", result.LoopID), slog.String("execution_id", ev.ExecutionID))
 		return
 	}
 	s.logger.Debug("approval-pause: approval response for a run-less loop, skipping run-phase resume",
