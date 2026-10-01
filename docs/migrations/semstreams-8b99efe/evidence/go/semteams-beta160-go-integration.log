@@ -1,0 +1,43 @@
+task: [test:integration] echo "[INTEGRATION] Running integration tests with real NATS (via testcontainers)..."
+[INTEGRATION] Running integration tests with real NATS (via testcontainers)...
+task: [test:integration] go test -race -count=1 -tags=integration -p 1 ./...
+ok  	github.com/c360studio/semteams/cmd/openapi-generator	1.609s
+ok  	github.com/c360studio/semteams/cmd/semteams	1.866s
+ok  	github.com/c360studio/semteams/cmd/semteams/approvalpause	2.903s
+ok  	github.com/c360studio/semteams/cmd/semteams/chain	3.600s
+ok  	github.com/c360studio/semteams/cmd/semteams/chainpause	6.828s
+ok  	github.com/c360studio/semteams/cmd/semteams/commands/implementspec	1.433s
+?   	github.com/c360studio/semteams/cmd/semteams/commands/teamhint	[no test files]
+?   	github.com/c360studio/semteams/cmd/semteams/devviaspec	[no test files]
+ok  	github.com/c360studio/semteams/cmd/semteams/flowtemplates	1.354s
+ok  	github.com/c360studio/semteams/cmd/semteams/openspec	1.312s
+ok  	github.com/c360studio/semteams/cmd/semteams/portresolver	1.382s
+ok  	github.com/c360studio/semteams/cmd/semteams/research	1.274s
+ok  	github.com/c360studio/semteams/cmd/semteams/runanchor	1.305s
+ok  	github.com/c360studio/semteams/cmd/semteams/sandbox	7.922s
+ok  	github.com/c360studio/semteams/cmd/semteams/sandboxmanager	1.443s
+ok  	github.com/c360studio/semteams/cmd/semteams/sandboxruntime	1.376s
+?   	github.com/c360studio/semteams/cmd/semteams/semsource	[no test files]
+ok  	github.com/c360studio/semteams/cmd/semteams/slug	1.232s
+ok  	github.com/c360studio/semteams/cmd/semteams/tools/addsource	1.336s
+ok  	github.com/c360studio/semteams/cmd/semteams/tools/analyzeproof	1.365s
+ok  	github.com/c360studio/semteams/cmd/semteams/tools/chainbash	1.235s
+ok  	github.com/c360studio/semteams/cmd/semteams/tools/emitartifact	1.420s
+ok  	github.com/c360studio/semteams/cmd/semteams/tools/emitautoresearchartifact	1.367s
+ok  	github.com/c360studio/semteams/cmd/semteams/tools/emitautoresearchbaseline	1.302s
+ok  	github.com/c360studio/semteams/cmd/semteams/tools/emitautoresearchmeasurement	1.297s
+ok  	github.com/c360studio/semteams/cmd/semteams/tools/emitchange	1.302s
+ok  	github.com/c360studio/semteams/cmd/semteams/tools/emitdevviatestmeasurement	1.287s
+ok  	github.com/c360studio/semteams/cmd/semteams/tools/emitdevviatestplan	1.312s
+ok  	github.com/c360studio/semteams/cmd/semteams/tools/emitplan	1.537s
+ok  	github.com/c360studio/semteams/cmd/semteams/tools/projectspecplan	1.292s
+ok  	github.com/c360studio/semteams/cmd/semteams/tools/querysandboxattestation	1.293s
+ok  	github.com/c360studio/semteams/cmd/semteams/tools/renderopenspec	1.208s
+ok  	github.com/c360studio/semteams/cmd/semteams/tools/requestsandbox	1.286s
+?   	github.com/c360studio/semteams/cmd/semteams/vocab	[no test files]
+ok  	github.com/c360studio/semteams/test/contract	2.110s
+ok  	github.com/c360studio/semteams/test/e2e/mock	6.374s
+?   	github.com/c360studio/semteams/test/e2e/mock/cmd	[no test files]
+ok  	github.com/c360studio/semteams/test/integration	1.294s
+task: [test:integration] echo "[OK] Integration tests complete"
+[OK] Integration tests complete

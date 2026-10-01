@@ -1,0 +1,23 @@
+2026/10/01 07:31:39 INFO Connecting to NATS urls=nats://localhost:55001
+2026/10/01 07:31:39 INFO Successfully connected to NATS urls=nats://localhost:55001
+2026/10/01 07:31:39 INFO Connecting to NATS urls=nats://localhost:55002
+2026/10/01 07:31:39 INFO Successfully connected to NATS urls=nats://localhost:55002
+--- FAIL: TestNATSEntityReader_PredicateValuesLive (0.33s)
+    --- FAIL: TestNATSEntityReader_PredicateValuesLive/missing_envelope (0.00s)
+        entity_reader_integration_test.go:150: 
+            	Error Trace:	/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/cmd/semteams/chain/entity_reader_integration_test.go:150
+            	Error:      	An error is expected but got nil.
+            	Test:       	TestNATSEntityReader_PredicateValuesLive/missing_envelope
+    --- FAIL: TestNATSEntityReader_PredicateValuesLive/null_entity (0.00s)
+        entity_reader_integration_test.go:150: 
+            	Error Trace:	/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/cmd/semteams/chain/entity_reader_integration_test.go:150
+            	Error:      	An error is expected but got nil.
+            	Test:       	TestNATSEntityReader_PredicateValuesLive/null_entity
+    --- FAIL: TestNATSEntityReader_PredicateValuesLive/wrong_entity (0.00s)
+        entity_reader_integration_test.go:150: 
+            	Error Trace:	/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/cmd/semteams/chain/entity_reader_integration_test.go:150
+            	Error:      	An error is expected but got nil.
+            	Test:       	TestNATSEntityReader_PredicateValuesLive/wrong_entity
+FAIL
+FAIL	github.com/c360studio/semteams/cmd/semteams/chain	2.718s
+FAIL

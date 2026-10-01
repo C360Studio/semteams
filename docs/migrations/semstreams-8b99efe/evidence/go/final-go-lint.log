@@ -1,0 +1,39 @@
+task: [lint:default] go vet ./...
+task: [lint:default] unformatted=$(gofmt -l cmd test)
+if [ -n "$unformatted" ]; then
+  echo "The following Go files need formatting:"
+  echo "$unformatted"
+  exit 1
+fi
+
+task: [lint:default] revive -config revive.toml -formatter friendly ./...
+  ⚠  https://revive.run/r#unused-parameter  parameter 'loopID' seems to be unused, consider removing or renaming it as _
+  cmd/semteams/commands/implementspec/command.go:128:2
+
+  ⚠  https://revive.run/r#redefines-builtin-id  redefinition of the built-in function copy
+  cmd/semteams/tools/analyzeproof/analyzer.go:737:4
+
+  ⚠  https://revive.run/r#function-length  maximum number of statements per function exceeded; max 50 but got 77
+  cmd/semteams/tools/analyzeproof/analyzer.go:177:1
+
+  ⚠  https://revive.run/r#redefines-builtin-id  redefinition of the built-in function copy
+  cmd/semteams/approvalpause/projection.go:202:4
+
+  ⚠  https://revive.run/r#function-length  maximum number of statements per function exceeded; max 50 but got 52
+  cmd/semteams/approvalpause/projection.go:65:1
+
+  ⚠  https://revive.run/r#package-comments  should have a package comment
+  docs/sponsor-packages/dev-via-test-mavlink-decode-2026-06-04/evidence/ralph-workspace/main.go:1:1
+
+  ⚠  https://revive.run/r#function-length  maximum number of statements per function exceeded; max 50 but got 60
+  cmd/semteams/main.go:69:1
+
+⚠ 7 problems (0 errors, 7 warnings)
+
+Warnings:
+  3  function-length
+  2  redefines-builtin-id
+  1  unused-parameter
+  1  package-comments
+
+

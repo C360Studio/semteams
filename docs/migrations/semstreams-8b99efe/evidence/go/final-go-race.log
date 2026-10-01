@@ -1,0 +1,37 @@
+task: [test:race] go test -race -count=1 ./...
+ok  	github.com/c360studio/semteams/cmd/openapi-generator	1.717s
+ok  	github.com/c360studio/semteams/cmd/semteams	1.632s
+ok  	github.com/c360studio/semteams/cmd/semteams/approvalpause	1.785s
+ok  	github.com/c360studio/semteams/cmd/semteams/chain	2.001s
+ok  	github.com/c360studio/semteams/cmd/semteams/chainpause	2.397s
+ok  	github.com/c360studio/semteams/cmd/semteams/commands/implementspec	1.283s
+?   	github.com/c360studio/semteams/cmd/semteams/commands/teamhint	[no test files]
+?   	github.com/c360studio/semteams/cmd/semteams/devviaspec	[no test files]
+ok  	github.com/c360studio/semteams/cmd/semteams/openspec	2.757s
+ok  	github.com/c360studio/semteams/cmd/semteams/portresolver	2.195s
+ok  	github.com/c360studio/semteams/cmd/semteams/research	2.540s
+ok  	github.com/c360studio/semteams/cmd/semteams/runanchor	2.829s
+ok  	github.com/c360studio/semteams/cmd/semteams/sandbox	8.295s
+ok  	github.com/c360studio/semteams/cmd/semteams/sandboxmanager	3.183s
+ok  	github.com/c360studio/semteams/cmd/semteams/sandboxruntime	2.633s
+?   	github.com/c360studio/semteams/cmd/semteams/semsource	[no test files]
+ok  	github.com/c360studio/semteams/cmd/semteams/slug	2.465s
+ok  	github.com/c360studio/semteams/cmd/semteams/tools/addsource	2.346s
+ok  	github.com/c360studio/semteams/cmd/semteams/tools/analyzeproof	2.429s
+ok  	github.com/c360studio/semteams/cmd/semteams/tools/chainbash	2.354s
+ok  	github.com/c360studio/semteams/cmd/semteams/tools/emitartifact	2.459s
+ok  	github.com/c360studio/semteams/cmd/semteams/tools/emitautoresearchartifact	2.535s
+ok  	github.com/c360studio/semteams/cmd/semteams/tools/emitautoresearchbaseline	2.631s
+ok  	github.com/c360studio/semteams/cmd/semteams/tools/emitautoresearchmeasurement	2.639s
+ok  	github.com/c360studio/semteams/cmd/semteams/tools/emitchange	2.709s
+ok  	github.com/c360studio/semteams/cmd/semteams/tools/emitdevviatestmeasurement	2.414s
+ok  	github.com/c360studio/semteams/cmd/semteams/tools/emitdevviatestplan	2.497s
+ok  	github.com/c360studio/semteams/cmd/semteams/tools/emitplan	2.628s
+ok  	github.com/c360studio/semteams/cmd/semteams/tools/projectspecplan	2.621s
+ok  	github.com/c360studio/semteams/cmd/semteams/tools/querysandboxattestation	2.614s
+ok  	github.com/c360studio/semteams/cmd/semteams/tools/renderopenspec	2.582s
+ok  	github.com/c360studio/semteams/cmd/semteams/tools/requestsandbox	2.553s
+?   	github.com/c360studio/semteams/cmd/semteams/vocab	[no test files]
+ok  	github.com/c360studio/semteams/test/contract	2.458s
+ok  	github.com/c360studio/semteams/test/e2e/mock	6.823s
+?   	github.com/c360studio/semteams/test/e2e/mock/cmd	[no test files]

@@ -12,7 +12,8 @@ Reviewed the working frontend diff in PR #281 against baseline `ce22c961` and th
 `8b99efe9c66a4faa4fa509f9f62cc6bad8392128`, with the [approved contract inventory](contract-inventory.md).
 Scope includes identity parsing, run projections, dispatch ownership/cancellation, approval execution correlation,
 terminal SSE handling, composition inventory, active graph routes, relevant component tests, and browser assertions.
-Generated TypeScript is included in the final passing frontend gates; its post-commit dirty-tree check remains pending.
+Generated TypeScript is included in the final passing frontend gates. PM follow-through after code review:
+`task ui:generate-types:check` passed at content commit `f70537c8` with no tracked output drift.
 
 ## Initial blocking findings (resolved)
 

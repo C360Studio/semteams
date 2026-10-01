@@ -1,0 +1,7 @@
+ok  	github.com/c360studio/semteams/cmd/semteams	6.883s	coverage: 17.1% of statements
+ok  	github.com/c360studio/semteams/cmd/semteams/commands/implementspec	1.525s	coverage: 84.1% of statements
+ok  	github.com/c360studio/semteams/cmd/semteams/approvalpause	1.309s	coverage: 68.7% of statements
+ok  	github.com/c360studio/semteams/cmd/semteams/chain	1.937s	coverage: 62.0% of statements
+ok  	github.com/c360studio/semteams/cmd/semteams/chainpause	2.852s	coverage: 55.3% of statements
+ok  	github.com/c360studio/semteams/cmd/semteams/sandboxmanager	1.329s	coverage: 81.0% of statements
+ok  	github.com/c360studio/semteams/cmd/semteams/sandboxruntime	1.356s	coverage: 100.0% of statements

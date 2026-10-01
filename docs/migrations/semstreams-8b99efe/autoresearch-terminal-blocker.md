@@ -34,6 +34,28 @@ non-loop trigger as `route_less_settled`. Its resolver at lines 427-452 follows 
 `ParentLoopID` records in `AGENT_LOOPS`; it does not interpret category-specific `related_loops` metadata.
 
 The migration adds no response publisher shim, no invented loop predicate on the run entity, and no new runtime
-primitive. The frozen SHA is unchanged. Restoring final autoresearch delivery requires a supported consumer
-contract for run-entity-triggered lineage; until resolved, the full terminal delivery gate is red and the draft
-must not claim end-to-end autoresearch user delivery. This is separate from evidence-body rendering limitations.
+primitive. The frozen SHA is unchanged. Restoring final autoresearch delivery requires qualification of a loop-triggered SemTeams pack reauthoring,
+or an approved explicit run-trigger lineage contract. Neither is implemented or qualified in this draft.
+The full terminal delivery gate remains red; the draft must not claim end-to-end autoresearch user delivery. This is separate from evidence-body rendering limitations.
+
+## Consumer reauthoring feasibility
+
+The architect's final read-only check confirms this is current SemTeams pack wiring, not an unavoidable upstream
+blocker. Frozen `processor/rule/actions.go:731-753` already stamps the persistent root coordinator's typed run anchor;
+a loop-triggered dispatch can therefore preserve ancestry using existing primitives. SemTeams can pursue that design
+independently of SemEngine and SemSource.
+
+Simply changing rule 05 to fire on each baseline/execute loop is not equivalent:
+
+- `processor/rule/stateful_evaluator.go:110-115,183-186` keys rule state and its iteration counter by firing entity.
+  Every newly spawned loop would restart the counter instead of preserving the run's cap.
+- `emitautoresearchbaseline/executor.go:131-138,237-257` seeds cap, best, status and pending state on the run.
+  Frozen `processor/rule/expression_factory.go:288-303` substitutes from the firing entity/lifecycle context;
+  `related_loops` metadata does not make the run snapshot available to those conditions and prompts.
+- Rules 04a/04b account for clean and failed executions separately; 04c independently promotes the kept best result.
+  A replacement must preserve that accounting, the stop latch, and the ordering of state used for the next dispatch.
+
+A persistent root-loop trigger is a design candidate. It needs an explicit cross-entity projection/marker handoff
+and qualification of cap, failure accounting, best promotion, stale completion and restart behavior. This is a material
+pack contract reauthoring, not a one-field compatibility patch. Issue #280 retains that unqualified work; an upstream
+API change is not asserted to be mandatory, and the hold does not expand SemEngine's first-release requirements.

@@ -43,5 +43,5 @@ schemas and independent reviews. [The migration record](../../../docs/migrations
 indexes the source/configuration hashes, gate snapshots and observed differences. Autoresearch final typed delivery
 remains blocked. Approval ordering is repaired and independently approved; final local Go/frontend gates pass.
 The isolated browser matrix completes with 20 passes, one autoresearch delivery failure and five explicit skips.
-Post-commit generated-output checks and final hosted PR checks remain pending. Do not archive this change or
+Post-commit generated-output checks pass; hosted PR checks are recorded on the draft PR. Do not archive this change or
 assert adoption complete while final typed autoresearch delivery remains unresolved.

@@ -1,0 +1,40 @@
+task: [schema:generate] mkdir -p schemas specs
+task: [schema:generate] go run ./cmd/openapi-generator -out ./schemas -openapi ./specs/openapi.v3.yaml
+2026/10/01 06:48:31 OpenAPI Generator
+2026/10/01 06:48:31   Registry: ./componentregistry
+2026/10/01 06:48:31   Output dir: ./schemas
+2026/10/01 06:48:31   OpenAPI spec: ./specs/openapi.v3.yaml
+2026/10/01 06:48:31 Found 27 component types
+2026/10/01 06:48:31 ⚠️  Meta-schema not found, skipping validation: meta-schema not found in any of: [./specs/component-schema-meta.json ../specs/component-schema-meta.json ../../specs/component-schema-meta.json]
+2026/10/01 06:48:31   ✓ Generated component schema: schemas/httppost.v1.json
+2026/10/01 06:48:31   ✓ Generated component schema: schemas/websocket.v1.json
+2026/10/01 06:48:31   ✓ Generated component schema: schemas/graph-index-spatial.v1.json
+2026/10/01 06:48:31   ✓ Generated component schema: schemas/agentic-loop.v1.json
+2026/10/01 06:48:31   ✓ Generated component schema: schemas/file_input.v1.json
+2026/10/01 06:48:31   ✓ Generated component schema: schemas/file.v1.json
+2026/10/01 06:48:31   ✓ Generated component schema: schemas/websocket_input.v1.json
+2026/10/01 06:48:31   ✓ Generated component schema: schemas/json_generic.v1.json
+2026/10/01 06:48:31   ✓ Generated component schema: schemas/graph-gateway.v1.json
+2026/10/01 06:48:31   ✓ Generated component schema: schemas/graph-ingest.v1.json
+2026/10/01 06:48:31   ✓ Generated component schema: schemas/agentic-tools.v1.json
+2026/10/01 06:48:31   ✓ Generated component schema: schemas/json_filter.v1.json
+2026/10/01 06:48:31   ✓ Generated component schema: schemas/json_map.v1.json
+2026/10/01 06:48:31   ✓ Generated component schema: schemas/gated-dag.v1.json
+2026/10/01 06:48:31   ✓ Generated component schema: schemas/agentic-dispatch.v1.json
+2026/10/01 06:48:31   ✓ Generated component schema: schemas/graph-embedding.v1.json
+2026/10/01 06:48:31   ✓ Generated component schema: schemas/objectstore.v1.json
+2026/10/01 06:48:31   ✓ Generated component schema: schemas/http.v1.json
+2026/10/01 06:48:31   ✓ Generated component schema: schemas/udp.v1.json
+2026/10/01 06:48:31   ✓ Generated component schema: schemas/agentic-model.v1.json
+2026/10/01 06:48:31   ✓ Generated component schema: schemas/graph-index.v1.json
+2026/10/01 06:48:31   ✓ Generated component schema: schemas/graph-query.v1.json
+2026/10/01 06:48:31   ✓ Generated component schema: schemas/agentic-governance.v1.json
+2026/10/01 06:48:31   ✓ Generated component schema: schemas/graph-clustering.v1.json
+2026/10/01 06:48:31   ✓ Generated component schema: schemas/graph-index-temporal.v1.json
+2026/10/01 06:48:31   ✓ Generated component schema: schemas/rule-processor.v1.json
+2026/10/01 06:48:31   ✓ Generated component schema: schemas/lifecycle-gateway.v1.json
+2026/10/01 06:48:31 Found 6 service OpenAPI specs
+2026/10/01 06:48:31   ✓ Generated OpenAPI spec: ./specs/openapi.v3.yaml
+2026/10/01 06:48:31 ✅ OpenAPI generation complete!
+task: [schema:generate] echo "Schemas and OpenAPI spec generated"
+Schemas and OpenAPI spec generated

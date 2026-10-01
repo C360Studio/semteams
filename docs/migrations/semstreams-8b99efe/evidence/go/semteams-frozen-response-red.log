@@ -1,0 +1,11 @@
+--- FAIL: TestCoordinatorResponseRulesReserveTypedUserResponseSubjects (0.00s)
+    coordinator_slice1_test.go:143: ../../configs/rules/coordinator/03-ask-user.json: flat publish action targets reserved typed subject "user.response.$entity.instance"
+    coordinator_slice1_test.go:143: ../../configs/rules/coordinator/03b-respond-direct.json: flat publish action targets reserved typed subject "user.response.$entity.instance"
+--- FAIL: TestFlowBootstrapDispatchShape (0.00s)
+    --- FAIL: TestFlowBootstrapDispatchShape/../../configs/flow-bootstrap.json (0.00s)
+        flow_bootstrap_stream_wiring_test.go:268: dispatch output "user.response" interface=/, want agentic.user_response/v1
+    --- FAIL: TestFlowBootstrapDispatchShape/../../configs/e2e-flow-bootstrap.json (0.00s)
+        flow_bootstrap_stream_wiring_test.go:268: dispatch output "user.response" interface=/, want agentic.user_response/v1
+FAIL
+FAIL	github.com/c360studio/semteams/test/contract	0.429s
+FAIL

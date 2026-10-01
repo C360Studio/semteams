@@ -20,7 +20,7 @@
 - [x] 3.4 Reconcile every observed difference and retain explicit evidence-body rendering limits.
 - [x] 3.5 Resolve independent Go/frontend code findings and record code approval while retaining adoption blockers.
 - [x] 3.6 Reconcile migration documentation and branch-checkable task truth against final evidence.
-- [ ] 3.7 Verify schema and frontend generated-type dirty-tree checks after the content commit.
+- [x] 3.7 Verify schema and frontend generated-type dirty-tree checks after the content commit.
 
 The checked tasks record available artifacts, not passing migration qualification. The autoresearch delivery blocker
 remains open in the migration record and PR #281. Both independent code reviews are approved; the accepted

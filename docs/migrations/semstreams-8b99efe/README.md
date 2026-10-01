@@ -9,8 +9,9 @@ SemTeams moves from `v1.0.0-beta.160` at baseline `ce22c961d30014c463a09f8f8a2a9
 user delivery. Approval projection implementation and final local Go gates are complete. Independent Go and frontend code
 reviews are approved after their corrections. The final isolated browser matrix records **20 passes, one failure
 (autoresearch final typed delivery), and five explicit skips**, with unchanged source hashes in all 26 runs.
-Post-commit generated-output checks remain pending. Passing Go/frontend gates and other browser journeys do not
-remove the autoresearch delivery blocker. This record is evidence for review, not
+Post-commit schema and frontend generated-type checks pass. Passing Go/frontend gates and other browser journeys do not
+remove the autoresearch delivery blocker. This is SemTeams pack reauthoring work; an upstream API change is not
+asserted to be mandatory. This record is evidence for review, not
 permission to merge or a statement that the migration has landed.
 
 ## Evidence index
@@ -107,3 +108,6 @@ graph and parked build diagnostics; its semantic and dynamic-runtime limits rema
 SemSource-backed dogfooding remains held until SemSource is ready. Program Pulse remains the target product, not shipped
 behavior. Evidence-body rendering limitation [#261](https://github.com/C360Studio/semteams/issues/261) remains separate
 from the autoresearch terminal-route blocker. Neither can be hidden by a passing graph query or successful loop count.
+
+Post-content schema and frontend generated-type cleanliness checks passed at `f70537c8`; see
+[the exact check record](evidence/go/postcommit-generated-checks.json). Hosted CI is tracked on the draft PR.

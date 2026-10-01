@@ -1,0 +1,6 @@
+# github.com/c360studio/semteams/cmd/semteams [github.com/c360studio/semteams/cmd/semteams.test]
+cmd/semteams/shutdown_test.go:32:12: undefined: runUntilShutdown
+cmd/semteams/shutdown_test.go:45:12: undefined: runUntilShutdown
+cmd/semteams/shutdown_test.go:52:12: undefined: runUntilShutdown
+FAIL	github.com/c360studio/semteams/cmd/semteams [build failed]
+FAIL

@@ -1,0 +1,116 @@
+
+ RUN  v3.2.4 /Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/ui
+
+(node:14515) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:14514) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+stderr | src/routes/api/ai/chat/server.test.ts > retired flow-authoring endpoint > returns 410 before parsing, model or backend access (malformed=false)
+Failed to fetch component catalog: TypeError: Cannot read properties of undefined (reading 'getComponentCatalog')
+    at Module.POST (/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/ui/src/routes/api/ai/chat/+server.ts:226:24)
+    at processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at /Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/ui/src/routes/api/ai/chat/server.test.ts:20:22
+    at file:///Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/ui/node_modules/@vitest/runner/dist/chunk-hooks.js:752:20
+
+stderr | src/routes/api/ai/generate-flow/server.test.ts > retired flow-authoring endpoint > returns 410 before parsing, model or backend access (malformed=false)
+Failed to fetch component catalog: TypeError: Cannot read properties of undefined (reading 'getComponentCatalog')
+    at Module.POST (/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/ui/src/routes/api/ai/generate-flow/+server.ts:146:42)
+    at processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at /Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/ui/src/routes/api/ai/generate-flow/server.test.ts:20:22
+    at file:///Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/ui/node_modules/@vitest/runner/dist/chunk-hooks.js:752:20
+
+ ❯ src/routes/api/ai/chat/server.test.ts (2 tests | 2 failed) 8ms
+   × retired flow-authoring endpoint > returns 410 before parsing, model or backend access (malformed=false) 7ms
+     → expected 503 to be 410 // Object.is equality
+   × retired flow-authoring endpoint > returns 410 before parsing, model or backend access (malformed=true) 1ms
+     → expected 400 to be 410 // Object.is equality
+ ❯ src/routes/api/ai/generate-flow/server.test.ts (2 tests | 2 failed) 8ms
+   × retired flow-authoring endpoint > returns 410 before parsing, model or backend access (malformed=false) 7ms
+     → expected 503 to be 410 // Object.is equality
+   × retired flow-authoring endpoint > returns 410 before parsing, model or backend access (malformed=true) 1ms
+     → expected 400 to be 410 // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/routes/api/ai/chat/server.test.ts > retired flow-authoring endpoint > returns 410 before parsing, model or backend access (malformed=false)
+AssertionError: expected 503 to be 410 // Object.is equality
+
+- Expected
++ Received
+
+- 410
++ 503
+
+ ❯ src/routes/api/ai/chat/server.test.ts:21:29
+     19|     else parse.mockResolvedValue({ prompt: "Create a flow", messages: …
+     20|     const response = await POST({ request: { headers: new Headers(), j…
+     21|     expect(response.status).toBe(410);
+       |                             ^
+     22|     expect(await response.json()).toMatchObject({ code: "FLOW_AUTHORIN…
+     23|     expect(parse).not.toHaveBeenCalled();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  src/routes/api/ai/chat/server.test.ts > retired flow-authoring endpoint > returns 410 before parsing, model or backend access (malformed=true)
+AssertionError: expected 400 to be 410 // Object.is equality
+
+- Expected
++ Received
+
+- 410
++ 400
+
+ ❯ src/routes/api/ai/chat/server.test.ts:21:29
+     19|     else parse.mockResolvedValue({ prompt: "Create a flow", messages: …
+     20|     const response = await POST({ request: { headers: new Headers(), j…
+     21|     expect(response.status).toBe(410);
+       |                             ^
+     22|     expect(await response.json()).toMatchObject({ code: "FLOW_AUTHORIN…
+     23|     expect(parse).not.toHaveBeenCalled();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  src/routes/api/ai/generate-flow/server.test.ts > retired flow-authoring endpoint > returns 410 before parsing, model or backend access (malformed=false)
+AssertionError: expected 503 to be 410 // Object.is equality
+
+- Expected
++ Received
+
+- 410
++ 503
+
+ ❯ src/routes/api/ai/generate-flow/server.test.ts:21:29
+     19|     else parse.mockResolvedValue({ prompt: "Create a flow", messages: …
+     20|     const response = await POST({ request: { headers: new Headers(), j…
+     21|     expect(response.status).toBe(410);
+       |                             ^
+     22|     expect(await response.json()).toMatchObject({ code: "FLOW_AUTHORIN…
+     23|     expect(parse).not.toHaveBeenCalled();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  src/routes/api/ai/generate-flow/server.test.ts > retired flow-authoring endpoint > returns 410 before parsing, model or backend access (malformed=true)
+AssertionError: expected 400 to be 410 // Object.is equality
+
+- Expected
++ Received
+
+- 410
++ 400
+
+ ❯ src/routes/api/ai/generate-flow/server.test.ts:21:29
+     19|     else parse.mockResolvedValue({ prompt: "Create a flow", messages: …
+     20|     const response = await POST({ request: { headers: new Headers(), j…
+     21|     expect(response.status).toBe(410);
+       |                             ^
+     22|     expect(await response.json()).toMatchObject({ code: "FLOW_AUTHORIN…
+     23|     expect(parse).not.toHaveBeenCalled();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  4 failed (4)
+   Start at  07:31:05
+   Duration  460ms (transform 61ms, setup 84ms, collect 56ms, tests 16ms, environment 336ms, prepare 71ms)
+

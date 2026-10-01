@@ -1,0 +1,18 @@
+task: [schema:check-changes] schema_status=$(git status --porcelain --untracked-files=all -- schemas specs/openapi.v3.yaml)
+if [ -n "$schema_status" ]; then
+  echo "Schema/OpenAPI files changed! Run 'task schema:generate' and commit:"
+  echo "$schema_status"
+  exit 1
+fi
+
+Schema/OpenAPI files changed! Run 'task schema:generate' and commit:
+ M schemas/agentic-dispatch.v1.json
+ M schemas/agentic-governance.v1.json
+ M schemas/agentic-loop.v1.json
+ M schemas/agentic-model.v1.json
+ M schemas/agentic-tools.v1.json
+ M schemas/rule-processor.v1.json
+ M schemas/websocket.v1.json
+ D schemas/workflow-definition.v1.json
+ M specs/openapi.v3.yaml
+task: Failed to run task "schema:check-changes": exit status 1

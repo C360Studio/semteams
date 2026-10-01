@@ -3,7 +3,7 @@
 Final local Go gates passed against the stable approval-projection implementation. The intermediate red/green
 snapshots below are retained as development history. [Independent Go code review](go-review.md) is approved with no
 remaining blocking code findings. The [final browser matrix](browser-baseline.md) records 20 passes, one autoresearch
-delivery failure and five explicit skips. Post-commit generated-output checks remain pending. Passing local Go tests
+delivery failure and five explicit skips. Post-commit schema and frontend generated-type checks pass. Passing local Go tests
 does not qualify the unresolved autoresearch final typed delivery.
 
 ## Baseline and environment
@@ -12,7 +12,7 @@ does not qualify the unresolved autoresearch final typed delivery.
 - Frozen target: `v1.0.0-beta.162.0.20260930150212-8b99efe9c66a`, SHA
   `8b99efe9c66a4faa4fa509f9f62cc6bad8392128`; no replacement or upstream shim.
 - Dedicated worktree: `/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams`, branch
-  `codex/semstreams-frozen-8b99efe`. Proposal commit: `4300f6c8`; target results include uncommitted implementation.
+  `codex/semstreams-frozen-8b99efe`. Proposal commit: `4300f6c8`; qualified source is preserved in content commit `f70537c8`.
 - Baseline Go source preserved at `/tmp/semteams-migration-8b99efe/baseline-source`.
   Later browser comparisons deliberately amended selected E2E specs/fixtures in that directory (observer synchronization,
   two-gather proof and corrected autoresearch emitter inputs). It is not an immutable whole-directory archive.
@@ -69,8 +69,8 @@ function length and defers the cosmetic rename to the next approved source edit 
 qualification source identity. Neither warning is suppressed or treated as a behavioral blocker. The final gate is
 green, but its warning count is not the earlier five-warning snapshot.
 
-`task schema:check-changes` and the frontend generated-types dirty-tree check remain pending the content commit.
-Generation success is not a claim that those checks passed. Independent code review is approved; final hosted checks remain owned by the PR lane.
+`task schema:check-changes` and `task ui:generate-types:check` both pass after content commit `f70537c8`.
+The exact check record appears below. Independent code review is approved; hosted checks remain owned by the PR lane.
 
 ## Final coverage
 
@@ -104,7 +104,7 @@ this Go profile.
 | `task test:integration` | exit 0 | exit 0 | `evidence/go/semteams-{beta160,frozen}-go-integration.log` |
 | `go build ./...` | exit 0 | exit 0 | `evidence/go/semteams-{beta160,frozen}-go-build.log` |
 | `task schema:generate` | exit 0 | exit 0 | `evidence/go/semteams-{beta160,frozen}-schema-generate.log` |
-| `task schema:check-changes` | exit 0 | pending after commit | `evidence/go/semteams-frozen-schema-check.log` |
+| `task schema:check-changes` | exit 0 | historical pending; final check passed | `evidence/go/semteams-frozen-schema-check.log` |
 
 `task test:race` executes `go test -race -count=1 ./...`. `task test:integration` executes
 `go test -race -count=1 -tags=integration -p 1 ./...` with the environment above. The final lint, race and build
@@ -188,7 +188,7 @@ Broad boot wiring and subscriber paths remain under-covered. Full function cover
    issue #1094 is still broken. No publisher shim or unsupported run predicate is added.
 3. **Coverage and final gates:** focused regression/coverage evidence below supplements the final full Go gates
    recorded above. Both independent code reviews are approved. Schema/frontend generated-output dirty-tree
-   verification remains pending after the content commit; hosted CI remains a separate PR gate.
+   verification passes after the content commit; hosted CI remains a separate PR gate.
 4. **Product truth:** existing evidence-body rendering is still limited; evidence availability in graph or
    trajectory APIs is not a claim that the UI renders its full body. SemSource dogfooding stays held, and a
    later SemEngine adoption needs its own approved consumer contract.
@@ -254,3 +254,11 @@ The accepted framework-alignment decision is recorded in
 The [inventory](contract-inventory.md#approval-ordering-review-and-accepted-projection-contract) records format,
 lifecycle and future upstream public-client migration boundaries. Final full gates, actual-owner browser evidence,
 and independent final Go review are recorded separately; this focused result does not claim complete migration approval.
+
+## Committed generated-output checks
+
+Content commit `f70537c8` contains the reviewed implementation. Regenerating schemas and running
+`task schema:check-changes` both exited 0 after that commit. `task ui:generate-types:check` also exited 0;
+the tracked schema/OpenAPI/type outputs remain unchanged. Exact commands and the full content commit are in
+[evidence/go/postcommit-generated-checks.json](evidence/go/postcommit-generated-checks.json), with adjacent logs.
+These are local checks, separate from hosted CI and the unresolved autoresearch delivery gate.

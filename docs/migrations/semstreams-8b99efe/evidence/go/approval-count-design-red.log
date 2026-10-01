@@ -1,0 +1,16 @@
+--- FAIL: TestApprovalRulesAnswerBeforePendingDoesNotBlockNextGate (0.00s)
+    rule_order_test.go:142: unanswered B did not pause: phase=executing
+--- FAIL: TestApprovalRulesFailedPendingThenAnswerDoesNotBlockNextGate (0.00s)
+    rule_order_test.go:158: failed A write blocked B: phase=executing
+--- FAIL: TestApprovalRulesLateFirstAnswerDoesNotResumeDifferentGate (0.00s)
+    rule_order_test.go:173: late A resumed B: phase=executing
+--- FAIL: TestApprovalRulesAnswerBeforePauseTransitionDoesNotStrandRun (0.00s)
+    rule_order_test.go:193: early answer stranded run: phase=awaiting_approval
+--- FAIL: TestApprovalRulesNextGateDuringSelectedResumeSurvives (0.00s)
+    rule_order_test.go:209: A answer should select resume
+2026/10/01 07:27:17 INFO approval-pause: tool-gate detected, run paused on approval loop_id=00000000-0000-4000-8000-000000000077 run_entity_id=c360.ops.agent.chain.execution.run-77 tool_name=create_rule
+2026/10/01 07:27:17 INFO approval-pause: approval resolved, run resuming loop_id=00000000-0000-4000-8000-000000000088 run_entity_id=c360.ops.agent.chain.execution.run-88 decision=approve
+FAIL
+FAIL	github.com/c360studio/semteams/cmd/semteams/approvalpause	0.286s
+ok  	github.com/c360studio/semteams/test/contract	0.369s
+FAIL
