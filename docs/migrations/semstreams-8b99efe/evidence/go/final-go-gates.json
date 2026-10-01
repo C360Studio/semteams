@@ -1,0 +1,48 @@
+[
+  {
+    "gate": "go-lint",
+    "command": [
+      "task",
+      "lint"
+    ],
+    "exit": 0,
+    "GOFLAGS": ""
+  },
+  {
+    "gate": "go-race",
+    "command": [
+      "task",
+      "test:race"
+    ],
+    "exit": 0,
+    "GOFLAGS": ""
+  },
+  {
+    "gate": "go-integration",
+    "command": [
+      "task",
+      "test:integration"
+    ],
+    "exit": 0,
+    "GOFLAGS": "-coverprofile=/tmp/semteams-migration-8b99efe/evidence/final-go.cover -covermode=atomic"
+  },
+  {
+    "gate": "go-build",
+    "command": [
+      "go",
+      "build",
+      "./..."
+    ],
+    "exit": 0,
+    "GOFLAGS": ""
+  },
+  {
+    "gate": "schema-generate",
+    "command": [
+      "task",
+      "schema:generate"
+    ],
+    "exit": 0,
+    "GOFLAGS": ""
+  }
+]

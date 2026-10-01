@@ -230,7 +230,7 @@ describe("AgentLoopCard — table-driven state rendering", () => {
     { state: "architecting" as const },
     { state: "executing" as const },
     { state: "reviewing" as const },
-    { state: "paused" as const },
+    { state: "awaiting_approval" as const },
     { state: "awaiting_approval" as const },
     { state: "complete" as const },
     { state: "failed" as const },

@@ -71,7 +71,7 @@
   }
 
   /* Paused — amber */
-  .state-badge.paused {
+  .state-badge.awaiting_approval {
     background: #fef3c7;
     color: #92400e;
   }

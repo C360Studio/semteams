@@ -133,7 +133,7 @@ interface MetricsDeriveInput {
   staleAfterMs?: number;
 }
 
-const RUN_INFIX = ".agent.chain.execution.";
+const RUN_INFIX = ".chain.agent.execution.";
 const DEFAULT_EVIDENCE_STALE_AFTER_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_METRICS_STALE_AFTER_MS = 60 * 1000;
 

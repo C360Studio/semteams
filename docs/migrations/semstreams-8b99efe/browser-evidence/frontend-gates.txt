@@ -1,0 +1,408 @@
+== baseline-ui-lint.log ==
+
+> @c360/semteams-ui@0.0.1 lint
+> eslint .
+
+
+== baseline-ui-check.log ==
+
+> @c360/semteams-ui@0.0.1 check
+> svelte-kit sync && svelte-check --tsconfig ./tsconfig.json
+
+Loading svelte-check in workspace: /private/tmp/semteams-migration-8b99efe/baseline-source/ui
+Getting Svelte diagnostics...
+
+svelte-check found 0 errors and 0 warnings
+
+== baseline-ui-test.log ==
+alStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:88209) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ src/lib/stores/statusStore.test.ts (8 tests) 14ms
+ ✓ src/lib/stores/taskRefs.test.ts (8 tests) 8ms
+ ✓ src/lib/components/chat/ChatToolbar.test.ts (9 tests) 391ms
+ ✓ src/lib/components/EditComponentModal.phase3.test.ts (2 tests) 137ms
+ ✓ src/lib/components/board/RunHealthPanel.test.ts (2 tests) 106ms
+(node:88214) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ src/lib/utils/zip.test.ts (6 tests) 7ms
+(node:88216) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:88220) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ src/lib/types/ui-state.test.ts (7 tests) 30ms
+ ✓ src/lib/services/messageLoggerApi.test.ts (13 tests) 17ms
+(node:88233) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ src/lib/utils/sigma-layout.test.ts (6 tests) 7ms
+(node:88239) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:88222) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ src/lib/utils/verdict.test.ts (8 tests) 5ms
+(node:88242) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ src/lib/stores/userIdentity.test.ts (7 tests) 5ms
+ ✓ src/lib/components/layout/TopNav.test.ts (2 tests) 20ms
+
+ Test Files  168 passed | 1 skipped (169)
+      Tests  3720 passed | 12 skipped (3732)
+   Start at  06:48:32
+   Duration  38.12s (transform 8.10s, setup 18.39s, collect 58.81s, tests 121.82s, environment 127.85s, prepare 18.99s)
+
+
+== baseline-ui-build.log ==
+                               0.28 kB
+.svelte-kit/output/server/chunks/equality.js                                      0.33 kB
+.svelte-kit/output/server/internal.js                                             0.44 kB
+.svelte-kit/output/server/chunks/server2.js                                       0.50 kB
+.svelte-kit/output/server/chunks/server.js                                        0.71 kB
+.svelte-kit/output/server/chunks/utils2.js                                        0.95 kB
+.svelte-kit/output/server/entries/pages/_error.svelte.js                          0.96 kB
+.svelte-kit/output/server/chunks/utils.js                                         1.15 kB
+.svelte-kit/output/server/chunks/hooks.server.js                                  1.27 kB
+.svelte-kit/output/server/chunks/index2.js                                        1.33 kB
+.svelte-kit/output/server/chunks/shared.js                                        1.35 kB
+.svelte-kit/output/server/entries/pages/admin/flows/_page.ts.js                   1.46 kB
+.svelte-kit/output/server/chunks/routing.js                                       2.29 kB
+.svelte-kit/output/server/entries/pages/admin/flows/_page.svelte.js               2.66 kB
+.svelte-kit/output/server/entries/pages/admin/_page.svelte.js                     3.00 kB
+.svelte-kit/output/server/chunks/rateLimit.js                                     6.52 kB
+.svelte-kit/output/server/chunks/exports.js                                       6.97 kB
+.svelte-kit/output/server/entries/pages/_layout.svelte.js                        12.58 kB
+.svelte-kit/output/server/entries/endpoints/api/ai/chat/_server.ts.js            14.24 kB
+.svelte-kit/output/server/entries/endpoints/api/ai/generate-flow/_server.ts.js   22.11 kB
+.svelte-kit/output/server/chunks/index.js                                        26.62 kB
+.svelte-kit/output/server/remote-entry.js                                        27.67 kB
+.svelte-kit/output/server/entries/pages/_page.svelte.js                          27.80 kB
+.svelte-kit/output/server/chunks/taskStore.svelte.js                             57.19 kB
+.svelte-kit/output/server/entries/pages/graph/_page.svelte.js                    70.20 kB
+.svelte-kit/output/server/chunks/internal.js                                     72.16 kB
+.svelte-kit/output/server/index.js                                              125.33 kB
+✓ built in 2.52s
+
+Run npm run preview to preview your production build locally.
+
+> Using @sveltejs/adapter-node
+  ✔ done
+
+== ui-approval-history-red.log ==
+e("run-a", "loop-a"), object…
+    129|       expect(deriveRunStatuses([malformed], [], []).get("run-a")?.paus…
+       |                                                                          ^
+    130|     });
+    131| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/16]⎯
+
+ FAIL  src/lib/stores/runStatus.test.ts > deriveRunStatuses > uses full subject history to subtract answers absent from a predicate-limited page
+AssertionError: expected { cause: 'tool_gate', …(1) } to be null
+
+- Expected: 
+null
+
++ Received: 
+{
+  "cause": "tool_gate",
+  "gatedLoopId": "[\"loop-a\",\"execution-A\"]",
+}
+
+ ❯ src/lib/stores/runStatus.test.ts:135:8
+    133|     const pending = approvalTriple("run-a", "loop-a", "execution-A");
+    134|     expect(deriveRunStatuses([pending], [], [], [answeredTriple("run-a…
+    135|       .toBeNull();
+       |        ^
+    136|   });
+    137| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/16]⎯
+
+ FAIL  src/lib/stores/runStatus.test.ts > runStatus store — poll lifecycle > ignores a concurrent pollOnce while one is in flight (in-flight guard)
+AssertionError: expected "getTriples" to be called 6 times, but got 5 times
+ ❯ src/lib/stores/runStatus.test.ts:366:28
+    364|     // Only the first poll's predicate fetches were issued — the second
+    365|     // call short-circuited on the guard.
+    366|     expect(mockGetTriples).toHaveBeenCalledTimes(4 + RUN_HEALTH_PREDIC…
+       |                            ^
+    367| 
+    368|     resolveFirst([]);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/16]⎯
+
+ FAIL  src/lib/components/board/RunWaitingSection.test.ts > RunWaitingSection — graph receipt and current gate agreement > disables approval when the graph tuple refers to a different execution
+Error: expect(element).toBeDisabled()
+
+Received element is not disabled:
+  <button
+  aria-label="Approve tool call"
+  class="waiting-btn approve svelte-z4850c"
+  data-testid="run-approve"
+  type="button"
+/>
+ ❯ src/lib/components/board/RunWaitingSection.test.ts:411:21
+    409|     render(RunWaitingSection, { props: { runId: "run-a", pause: { ...T…
+    410|     const approve = screen.getByTestId("run-approve");
+    411|     expect(approve).toBeDisabled();
+       |                     ^
+    412|     await userEvent.click(approve);
+    413|     expect(mockSubmitApproval).not.toHaveBeenCalled();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/16]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  16 failed | 37 passed (53)
+   Start at  07:22:12
+   Duration  1.63s (transform 399ms, setup 108ms, collect 814ms, tests 576ms, environment 666ms, prepare 89ms)
+
+
+== ui-approval-history-green.log ==
+
+ RUN  v3.2.4 /Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/ui
+
+(node:11415) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:11411) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:11413) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:11414) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:11412) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ src/lib/types/task.test.ts (51 tests) 9ms
+ ✓ src/lib/stores/runStatus.test.ts (32 tests) 11ms
+ ✓ src/lib/components/board/TaskCard.test.ts (12 tests) 88ms
+ ✓ src/lib/components/board/TaskDetailPanel.test.ts (27 tests) 360ms
+ ✓ src/lib/components/board/RunWaitingSection.test.ts (23 tests) 658ms
+
+ Test Files  5 passed (5)
+      Tests  145 passed (145)
+   Start at  07:24:28
+   Duration  1.73s (transform 962ms, setup 283ms, collect 2.40s, tests 1.13s, environment 1.03s, prepare 204ms)
+
+
+== ui-approval-settlement-red.log ==
+-a", "loop-a"…
+     98|       [clarTriple("run-a", "asking-loop")], [], [{ subject: runEntity(…
+     99|     expect(result.get("run-a")?.pause).toBeNull();
+       |                                        ^
+    100|     expect(result.get("run-a")?.healthFacts?.phase).toBe(phase);
+    101|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/7]⎯
+
+ FAIL  src/lib/components/board/PendingApprovalSection.test.ts > ignores execution A resolve after B replaces it
+ FAIL  src/lib/components/board/PendingApprovalSection.test.ts > ignores execution A reject after B replaces it
+Error: expect(element).toBeEnabled()
+
+Received element is not enabled:
+  <input
+  class="reason-input svelte-1iwjy7u"
+  data-testid="approval-reason-input"
+  disabled=""
+  placeholder="Why this decision?"
+  type="text"
+/>
+ ❯ src/lib/components/board/PendingApprovalSection.test.ts:337:55
+    335|   await user.click(screen.getByTestId("approval-approve"));
+    336|   await rerender({ loopId: "loop-a", pendingApproval: makePending({ ex…
+    337|   expect(screen.getByTestId("approval-reason-input")).toBeEnabled();
+       |                                                       ^
+    338|   await user.type(screen.getByTestId("approval-reason-input"), "Review…
+    339|   if (settlement === "resolve") resolve({ accepted: true });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/7]⎯
+
+ FAIL  src/lib/components/board/RunWaitingSection.test.ts > ignores run gate A resolve after B replaces it
+ FAIL  src/lib/components/board/RunWaitingSection.test.ts > ignores run gate A reject after B replaces it
+Error: expect(element).toBeEnabled()
+
+Received element is not enabled:
+  <input
+  class="reason-input svelte-z4850c"
+  disabled=""
+  id="run-approval-reason"
+  placeholder="Why this decision?"
+  type="text"
+/>
+ ❯ src/lib/components/board/RunWaitingSection.test.ts:438:60
+    436|   mockPendingLoop.mockReturnValue({ pending_approval: { execution_id: …
+    437|   await rerender({ runId: "run-a", pause: { ...TOOL_GATE_PAUSE, execut…
+    438|   expect(screen.getByRole("textbox", { name: /reason/i })).toBeEnabled…
+       |                                                            ^
+    439|   await user.type(screen.getByRole("textbox", { name: /reason/i }), "R…
+    440|   if (settlement === "resolve") resolve({ accepted: true });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/7]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  7 failed | 70 passed (77)
+   Start at  07:29:26
+   Duration  1.61s (transform 624ms, setup 139ms, collect 1.45s, tests 1.17s, environment 526ms, prepare 115ms)
+
+
+== ui-approval-settlement-green.log ==
+
+ RUN  v3.2.4 /Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/ui
+
+(node:14312) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:14313) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:14311) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ src/lib/stores/runStatus.test.ts (35 tests) 10ms
+ ✓ src/lib/components/board/PendingApprovalSection.test.ts (17 tests) 544ms
+ ✓ src/lib/components/board/RunWaitingSection.test.ts (25 tests) 736ms
+
+ Test Files  3 passed (3)
+      Tests  77 passed (77)
+   Start at  07:30:35
+   Duration  1.57s (transform 562ms, setup 141ms, collect 1.16s, tests 1.29s, environment 522ms, prepare 102ms)
+
+
+== ui-retired-authoring-red.log ==
+ expect(await response.json()).toMatchObject({ code: "FLOW_AUTHORIN…
+     23|     expect(parse).not.toHaveBeenCalled();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  src/routes/api/ai/chat/server.test.ts > retired flow-authoring endpoint > returns 410 before parsing, model or backend access (malformed=true)
+AssertionError: expected 400 to be 410 // Object.is equality
+
+- Expected
++ Received
+
+- 410
++ 400
+
+ ❯ src/routes/api/ai/chat/server.test.ts:21:29
+     19|     else parse.mockResolvedValue({ prompt: "Create a flow", messages: …
+     20|     const response = await POST({ request: { headers: new Headers(), j…
+     21|     expect(response.status).toBe(410);
+       |                             ^
+     22|     expect(await response.json()).toMatchObject({ code: "FLOW_AUTHORIN…
+     23|     expect(parse).not.toHaveBeenCalled();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  src/routes/api/ai/generate-flow/server.test.ts > retired flow-authoring endpoint > returns 410 before parsing, model or backend access (malformed=false)
+AssertionError: expected 503 to be 410 // Object.is equality
+
+- Expected
++ Received
+
+- 410
++ 503
+
+ ❯ src/routes/api/ai/generate-flow/server.test.ts:21:29
+     19|     else parse.mockResolvedValue({ prompt: "Create a flow", messages: …
+     20|     const response = await POST({ request: { headers: new Headers(), j…
+     21|     expect(response.status).toBe(410);
+       |                             ^
+     22|     expect(await response.json()).toMatchObject({ code: "FLOW_AUTHORIN…
+     23|     expect(parse).not.toHaveBeenCalled();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  src/routes/api/ai/generate-flow/server.test.ts > retired flow-authoring endpoint > returns 410 before parsing, model or backend access (malformed=true)
+AssertionError: expected 400 to be 410 // Object.is equality
+
+- Expected
++ Received
+
+- 410
++ 400
+
+ ❯ src/routes/api/ai/generate-flow/server.test.ts:21:29
+     19|     else parse.mockResolvedValue({ prompt: "Create a flow", messages: …
+     20|     const response = await POST({ request: { headers: new Headers(), j…
+     21|     expect(response.status).toBe(410);
+       |                             ^
+     22|     expect(await response.json()).toMatchObject({ code: "FLOW_AUTHORIN…
+     23|     expect(parse).not.toHaveBeenCalled();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  4 failed (4)
+   Start at  07:31:05
+   Duration  460ms (transform 61ms, setup 84ms, collect 56ms, tests 16ms, environment 336ms, prepare 71ms)
+
+
+== target-ui-test.log ==
+...` to show where the warning was created)
+ ✓ src/lib/types/flow.test.ts (13 tests) 4ms
+(node:12052) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ src/lib/services/flowDiff.test.ts (24 tests) 7ms
+(node:12053) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ src/lib/utils/graphology-adapter.test.ts (12 tests) 5ms
+(node:12055) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ src/lib/types/ui-state.test.ts (7 tests) 6ms
+ ✓ src/lib/utils/sigma-layout.test.ts (6 tests) 3ms
+(node:12060) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ src/lib/validation/schema-validator.test.ts (20 tests) 6ms
+(node:12063) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:12062) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ src/lib/utils/zip.test.ts (6 tests) 13ms
+ ✓ src/lib/types/slashCommand.test.ts (10 tests) 13ms
+(node:12065) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ src/lib/services/frozenMigration.test.ts (4 tests) 5ms
+(node:12069) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ src/lib/utils/verdict.test.ts (8 tests) 3ms
+(node:12070) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ↓ src/lib/contract/openapi.contract.test.ts (12 tests | 12 skipped)
+
+ Test Files  171 passed | 1 skipped (172)
+      Tests  3725 passed | 12 skipped (3737)
+   Start at  07:25:10
+   Duration  20.06s (transform 5.57s, setup 10.18s, collect 41.40s, tests 56.73s, environment 60.93s, prepare 8.96s)
+
+
+== target-ui-build.log ==
+                               0.28 kB
+.svelte-kit/output/server/chunks/equality.js                                      0.33 kB
+.svelte-kit/output/server/internal.js                                             0.44 kB
+.svelte-kit/output/server/chunks/server2.js                                       0.50 kB
+.svelte-kit/output/server/chunks/server.js                                        0.71 kB
+.svelte-kit/output/server/chunks/utils2.js                                        0.95 kB
+.svelte-kit/output/server/entries/pages/_error.svelte.js                          0.96 kB
+.svelte-kit/output/server/chunks/utils.js                                         1.15 kB
+.svelte-kit/output/server/chunks/hooks.server.js                                  1.27 kB
+.svelte-kit/output/server/chunks/index2.js                                        1.33 kB
+.svelte-kit/output/server/chunks/shared.js                                        1.35 kB
+.svelte-kit/output/server/entries/pages/admin/flows/_page.ts.js                   1.57 kB
+.svelte-kit/output/server/chunks/routing.js                                       2.29 kB
+.svelte-kit/output/server/entries/pages/admin/_page.svelte.js                     3.00 kB
+.svelte-kit/output/server/entries/pages/admin/flows/_page.svelte.js               3.45 kB
+.svelte-kit/output/server/chunks/rateLimit.js                                     6.52 kB
+.svelte-kit/output/server/chunks/exports.js                                       6.97 kB
+.svelte-kit/output/server/entries/pages/_layout.svelte.js                        12.52 kB
+.svelte-kit/output/server/entries/endpoints/api/ai/chat/_server.ts.js            14.24 kB
+.svelte-kit/output/server/entries/endpoints/api/ai/generate-flow/_server.ts.js   22.11 kB
+.svelte-kit/output/server/chunks/index.js                                        26.62 kB
+.svelte-kit/output/server/remote-entry.js                                        27.67 kB
+.svelte-kit/output/server/entries/pages/_page.svelte.js                          28.43 kB
+.svelte-kit/output/server/chunks/taskStore.svelte.js                             59.48 kB
+.svelte-kit/output/server/entries/pages/graph/_page.svelte.js                    69.35 kB
+.svelte-kit/output/server/chunks/internal.js                                     72.16 kB
+.svelte-kit/output/server/index.js                                              125.33 kB
+✓ built in 2.00s
+
+Run npm run preview to preview your production build locally.
+
+> Using @sveltejs/adapter-node
+  ✔ done

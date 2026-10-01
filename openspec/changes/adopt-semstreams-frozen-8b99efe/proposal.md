@@ -2,11 +2,11 @@
 
 ## Why
 
-SemTeams currently imports SemStreams `v1.0.0-beta.160`. The owner requested independent migration to
+The starting SemTeams baseline imports SemStreams `v1.0.0-beta.160`. The owner requested independent migration to
 `v1.0.0-beta.162.0.20260930150212-8b99efe9c66a`, frozen SHA
 `8b99efe9c66a4faa4fa509f9f62cc6bad8392128`, alongside SemEngine development.
-Issue [#280](https://github.com/C360Studio/semteams/issues/280) owns the work; the draft PR on
-`codex/semstreams-frozen-8b99efe` owns the claim (link added on creation). Earlier draft #270 is historical
+Issue [#280](https://github.com/C360Studio/semteams/issues/280) owns the work; draft PR
+[#281](https://github.com/C360Studio/semteams/pull/281) on `codex/semstreams-frozen-8b99efe` owns the claim. Earlier draft #270 is historical
 beta.161 evidence, including the final-coordinator delivery failure, not proof for this target.
 
 ## What Changes
@@ -35,3 +35,13 @@ Product-shell lifecycle/bootstrap, framework registries and tool wiring, strict 
 and trajectory consumers, generated schemas, and UI/browser qualification. No new framework primitives
 are authorized by this migration. Fresh NATS storage is used for qualification; retained production state
 requires a separate recovery or migration decision.
+
+## Current stop-point
+
+The branch pins the exact frozen module and records beta.160 baseline evidence, compatibility changes, generated
+schemas and independent reviews. [The migration record](../../../docs/migrations/semstreams-8b99efe/README.md)
+indexes the source/configuration hashes, gate snapshots and observed differences. Autoresearch final typed delivery
+remains blocked. Approval ordering is repaired and independently approved; final local Go/frontend gates pass.
+The isolated browser matrix completes with 20 passes, one autoresearch delivery failure and five explicit skips.
+Post-commit generated-output checks and final hosted PR checks remain pending. Do not archive this change or
+assert adoption complete while final typed autoresearch delivery remains unresolved.

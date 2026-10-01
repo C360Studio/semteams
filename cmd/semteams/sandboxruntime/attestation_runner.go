@@ -121,7 +121,7 @@ func (r *AttestationRunner) resolveWorkspaceFolder(ctx context.Context, taskID s
 	if taskID == "" {
 		return ""
 	}
-	entityID := fmt.Sprintf("%s.%s.agent.chain.execution.%s", r.platform.Org, r.platform.Platform, taskID)
+	entityID := fmt.Sprintf("%s.%s.chain.agent.execution.%s", r.platform.Org, r.platform.Platform, taskID)
 	triples, err := r.entities.ReadEntity(ctx, entityID)
 	if err != nil {
 		// Don't double-log a cancelled context — the default-runner

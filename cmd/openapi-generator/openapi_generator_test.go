@@ -10,6 +10,7 @@ import (
 
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/componentregistry"
+	"github.com/c360studio/semstreams/composition"
 	"github.com/c360studio/semstreams/service"
 	"github.com/xeipuuv/gojsonschema"
 	"gopkg.in/yaml.v3"
@@ -431,8 +432,8 @@ func TestTypeNameFromReflect(t *testing.T) {
 func TestServiceOpenAPIRegistry(t *testing.T) {
 	specs := service.GetAllOpenAPISpecs()
 
-	// We should have at least the flow-service, component-manager, and message-logger
-	expectedServices := []string{"flow-service", "component-manager", "message-logger"}
+	// Retained component and message inspection services publish their APIs.
+	expectedServices := []string{"component-manager", "message-logger"}
 
 	for _, name := range expectedServices {
 		if _, exists := specs[name]; !exists {
@@ -445,14 +446,24 @@ func TestServiceOpenAPIRegistry(t *testing.T) {
 func TestResponseTypesInRegistry(t *testing.T) {
 	specs := service.GetAllOpenAPISpecs()
 
-	// Flow service should have response types
-	flowSpec, exists := specs["flow-service"]
-	if !exists {
-		t.Fatal("flow-service not found in registry")
+	if _, exists := specs["flow-service"]; exists {
+		t.Fatal("retired flow-service must not publish a saved-flow API")
 	}
 
-	if len(flowSpec.ResponseTypes) == 0 {
-		t.Error("flow-service should have ResponseTypes declared")
+	componentSpec, exists := specs["component-manager"]
+	if !exists {
+		t.Fatal("component-manager not found in registry")
+	}
+	for _, want := range []reflect.Type{reflect.TypeOf(composition.Result{}), reflect.TypeOf(composition.Graph{})} {
+		found := false
+		for _, got := range componentSpec.ResponseTypes {
+			if got == want {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("component-manager response registry missing %v", want)
+		}
 	}
 
 	// Message logger should have response types

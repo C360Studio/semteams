@@ -30,6 +30,20 @@
     JSON.stringify(pendingApproval.arguments ?? {}, null, 2),
   );
 
+  let reviewedExecution = $state<string | null>(null);
+  $effect(() => {
+    const execution = JSON.stringify([loopId, pendingApproval.execution_id]);
+    if (execution !== reviewedExecution) {
+      reviewedExecution = execution;
+      editingArgs = false;
+      argsDraft = "";
+      argsError = null;
+      reasonDraft = "";
+      submitError = null;
+      submitting = null;
+    }
+  });
+
   function startModify() {
     argsDraft = formattedArgs;
     argsError = null;
@@ -51,7 +65,11 @@
       // error gives the user a chance to fix without losing input.
       try {
         const parsed: unknown = JSON.parse(argsDraft);
-        if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+        if (
+          typeof parsed !== "object" ||
+          parsed === null ||
+          Array.isArray(parsed)
+        ) {
           argsError = "Arguments must be a JSON object.";
           return;
         }
@@ -62,13 +80,18 @@
       }
     }
 
+    const submittedLoop = loopId;
+    const submittedExecution = pendingApproval.execution_id;
+    const isCurrent = () => loopId === submittedLoop && pendingApproval.execution_id === submittedExecution;
     submitting = decision;
     try {
-      await agentApi.submitApproval(loopId, {
+      await agentApi.submitApproval(submittedLoop, {
         decision,
+        execution_id: submittedExecution,
         ...(modifiedArguments && { modified_arguments: modifiedArguments }),
         ...(reasonDraft.trim() !== "" && { reason: reasonDraft.trim() }),
       });
+      if (!isCurrent()) return;
       // Clear local form state on success. The loop's state
       // transition arrives via the SSE stream and the parent
       // re-renders without this section once pending_approval
@@ -77,6 +100,7 @@
       editingArgs = false;
       argsDraft = "";
     } catch (err) {
+      if (!isCurrent()) return;
       if (err instanceof AgentApiError) {
         // 409 means the loop already resolved (race with another
         // approver, dispatch restart, etc.). Surface the specific
@@ -89,7 +113,7 @@
         submitError = err instanceof Error ? err.message : "Approval failed.";
       }
     } finally {
-      submitting = null;
+      if (isCurrent()) submitting = null;
     }
   }
 </script>
@@ -143,7 +167,9 @@
         </p>
       {/if}
     {:else}
-      <pre class="args-display" data-testid="approval-args-display">{formattedArgs}</pre>
+      <pre
+        class="args-display"
+        data-testid="approval-args-display">{formattedArgs}</pre>
     {/if}
   </div>
 

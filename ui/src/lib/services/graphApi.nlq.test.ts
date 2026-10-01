@@ -18,17 +18,17 @@ describe("graphApi.globalSearch", () => {
   const makeGlobalSearchData = () => ({
     entities: [
       {
-        id: "c360.ops.robotics.gcs.drone.001",
+        id: "c360.ops.gcs.robotics.drone.001",
         triples: [
           {
-            subject: "c360.ops.robotics.gcs.drone.001",
+            subject: "c360.ops.gcs.robotics.drone.001",
             predicate: "core.property.name",
             object: "Drone 001",
           },
           {
-            subject: "c360.ops.robotics.gcs.drone.001",
+            subject: "c360.ops.gcs.robotics.drone.001",
             predicate: "fleet.membership.current",
-            object: "c360.ops.robotics.gcs.fleet.alpha",
+            object: "c360.ops.gcs.robotics.fleet.alpha",
           },
         ],
       },
@@ -42,8 +42,8 @@ describe("graphApi.globalSearch", () => {
     ],
     relationships: [
       {
-        from: "c360.ops.robotics.gcs.drone.001",
-        to: "c360.ops.robotics.gcs.fleet.alpha",
+        from: "c360.ops.gcs.robotics.drone.001",
+        to: "c360.ops.gcs.robotics.fleet.alpha",
         predicate: "fleet.membership.current",
       },
     ],
@@ -133,7 +133,7 @@ describe("graphApi.globalSearch", () => {
       const result = await graphApi.globalSearch("find drones");
 
       expect(result.entities).toHaveLength(1);
-      expect(result.entities[0].id).toBe("c360.ops.robotics.gcs.drone.001");
+      expect(result.entities[0].id).toBe("c360.ops.gcs.robotics.drone.001");
       expect(result.entities[0].triples).toHaveLength(2);
     });
 
@@ -155,10 +155,10 @@ describe("graphApi.globalSearch", () => {
 
       expect(result.relationships).toHaveLength(1);
       expect(result.relationships[0].from).toBe(
-        "c360.ops.robotics.gcs.drone.001",
+        "c360.ops.gcs.robotics.drone.001",
       );
       expect(result.relationships[0].to).toBe(
-        "c360.ops.robotics.gcs.fleet.alpha",
+        "c360.ops.gcs.robotics.fleet.alpha",
       );
       expect(result.relationships[0].predicate).toBe(
         "fleet.membership.current",
@@ -195,9 +195,9 @@ describe("graphApi.globalSearch", () => {
     it("should handle results with multiple entities", async () => {
       const multiEntityData = {
         entities: [
-          { id: "c360.ops.robotics.gcs.drone.001", triples: [] },
-          { id: "c360.ops.robotics.gcs.drone.002", triples: [] },
-          { id: "c360.ops.robotics.gcs.fleet.alpha", triples: [] },
+          { id: "c360.ops.gcs.robotics.drone.001", triples: [] },
+          { id: "c360.ops.gcs.robotics.drone.002", triples: [] },
+          { id: "c360.ops.gcs.robotics.fleet.alpha", triples: [] },
         ],
         community_summaries: [],
         relationships: [],

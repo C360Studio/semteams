@@ -37,30 +37,30 @@ describe("DataView GraphQL Integration", () => {
   // Default mock response: getEntitiesByPrefix returns BackendEntity[] directly
   const createMockEntities = () => [
     {
-      id: "c360.ops.robotics.gcs.fleet.west-coast",
+      id: "c360.ops.gcs.robotics.fleet.west-coast",
       triples: [
         {
-          subject: "c360.ops.robotics.gcs.fleet.west-coast",
+          subject: "c360.ops.gcs.robotics.fleet.west-coast",
           predicate: "fleet.name",
           object: "West Coast Fleet",
         },
         {
-          subject: "c360.ops.robotics.gcs.fleet.west-coast",
+          subject: "c360.ops.gcs.robotics.fleet.west-coast",
           predicate: "fleet.region",
           object: "US-West",
         },
       ],
     },
     {
-      id: "c360.ops.robotics.gcs.drone.001",
+      id: "c360.ops.gcs.robotics.drone.001",
       triples: [
         {
-          subject: "c360.ops.robotics.gcs.drone.001",
+          subject: "c360.ops.gcs.robotics.drone.001",
           predicate: "vehicle.type",
           object: "drone",
         },
         {
-          subject: "c360.ops.robotics.gcs.drone.001",
+          subject: "c360.ops.gcs.robotics.drone.001",
           predicate: "vehicle.status",
           object: "active",
         },
@@ -73,9 +73,9 @@ describe("DataView GraphQL Integration", () => {
     entities: createMockEntities(),
     edges: [
       {
-        subject: "c360.ops.robotics.gcs.drone.001",
+        subject: "c360.ops.gcs.robotics.drone.001",
         predicate: "fleet.membership.current",
-        object: "c360.ops.robotics.gcs.fleet.west-coast",
+        object: "c360.ops.gcs.robotics.fleet.west-coast",
       },
     ],
   });
@@ -501,10 +501,10 @@ describe("DataView GraphQL Integration", () => {
       mockPathSearchFn.mockResolvedValueOnce({
         entities: [
           {
-            id: "c360.ops.robotics.gcs.drone.001",
+            id: "c360.ops.gcs.robotics.drone.001",
             triples: [
               {
-                subject: "c360.ops.robotics.gcs.drone.001",
+                subject: "c360.ops.gcs.robotics.drone.001",
                 predicate: "expanded.property",
                 object: "new data",
               },
@@ -516,11 +516,11 @@ describe("DataView GraphQL Integration", () => {
 
       // Simulate entity expand by calling the component's handler directly
       // This tests that the integration logic is correctly set up
-      await component.handleEntityExpand("c360.ops.robotics.gcs.drone.001");
+      await component.handleEntityExpand("c360.ops.gcs.robotics.drone.001");
 
       await waitFor(() => {
         expect(mockPathSearchFn).toHaveBeenCalledWith(
-          "c360.ops.robotics.gcs.drone.001",
+          "c360.ops.gcs.robotics.drone.001",
           1,
           20,
         );
@@ -543,11 +543,11 @@ describe("DataView GraphQL Integration", () => {
         edges: [],
       });
 
-      await component.handleEntityExpand("c360.ops.robotics.gcs.fleet.alpha");
+      await component.handleEntityExpand("c360.ops.gcs.robotics.fleet.alpha");
 
       await waitFor(() => {
         expect(mockPathSearchFn).toHaveBeenCalledWith(
-          "c360.ops.robotics.gcs.fleet.alpha",
+          "c360.ops.gcs.robotics.fleet.alpha",
           1,
           20,
         );
@@ -569,7 +569,7 @@ describe("DataView GraphQL Integration", () => {
       const expansionError = new GraphApiError("Failed to expand entity", 500);
       mockPathSearchFn.mockRejectedValueOnce(expansionError);
 
-      await component.handleEntityExpand("c360.ops.robotics.gcs.drone.001");
+      await component.handleEntityExpand("c360.ops.gcs.robotics.drone.001");
 
       // Should display error
       await waitFor(() => {

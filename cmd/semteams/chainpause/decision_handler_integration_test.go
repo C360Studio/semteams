@@ -30,7 +30,7 @@ func TestNATSPauseDataReader_LiveSubject(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	const failedLoopEntityID = "c360.test.agent.agentic-loop.execution.failed-loop-id"
+	const failedLoopEntityID = "c360.test.agentic-loop.agent.execution.failed-loop-id"
 	// beta.160 exact-read envelope (see chain.DecodeExactEntityTriples):
 	// {entity: {id, triples}, kvRevision} — the bare shape decodes to
 	// zero triples silently.
@@ -105,7 +105,7 @@ func TestNATSPauseDataReader_NotFoundReturnsEmpty(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	const missingEntityID = "c360.test.agent.agentic-loop.execution.does-not-exist"
+	const missingEntityID = "c360.test.agentic-loop.agent.execution.does-not-exist"
 	var lastRequest map[string]string
 	sub, err := tc.Client.SubscribeForRequests(
 		ctx,

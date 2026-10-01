@@ -45,7 +45,7 @@ func TestNATSEntityReader_LiveSubject(t *testing.T) {
 	// see entity_reader_test.go). Asserts the reader sent the right
 	// request shape (`{"id": "..."}`) before returning canned data the
 	// reader's decoder must handle.
-	const stubEntityID = "c360.test.agent.agentic-loop.execution.test-loop-id"
+	const stubEntityID = "c360.test.agentic-loop.agent.execution.test-loop-id"
 	stubResponse := []byte(`{
 		"entity": {
 			"id": "` + stubEntityID + `",
@@ -73,13 +73,7 @@ func TestNATSEntityReader_LiveSubject(t *testing.T) {
 	require.NoError(t, err, "stub subscribe to %s failed", DefaultGraphQueryEntitySubject)
 	t.Cleanup(func() { _ = sub.Unsubscribe() })
 
-	// Settle: SubscribeForRequests is async wire-protocol register;
-	// natsclient has no exported Flush. Mirrors upstream's own
-	// natsclient/request_integration_test.go pattern. Without this the
-	// reader's first Request can race the server's subject-table
-	// propagation, surface as "no responders," and read like a real
-	// bug under CI testcontainer cold-start load.
-	time.Sleep(50 * time.Millisecond)
+	require.NoError(t, tc.Client.GetConnection().FlushWithContext(ctx))
 
 	// Empty subject → constructor falls back to DefaultGraphQueryEntitySubject;
 	// matches what main.go passes for the production wiring.

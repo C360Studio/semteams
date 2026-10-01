@@ -26,8 +26,7 @@ that view through one program-manager journey with project drill-down.
 
 **There are no custom Go components in SemTeams.** Every processor
 comes from semstreams via the `github.com/c360studio/semstreams`
-Go module dependency. The product shell in `cmd/semteams/` (~600
-LoC) independently wires every framework primitive per ADR-029.
+Go module dependency. The product shell in `cmd/semteams/`  independently wires every framework primitive per ADR-029.
 
 ## Bundled chains are illustrative configurations, not the product
 
@@ -134,7 +133,12 @@ reconciliation.
   `banner.go`, `logging.go`). Independently implements every
   framework-wiring pattern per ADR-029 — no imports from upstream
   `cmd/semstreams/`. See [ADR-029](docs/adr/029-product-shell-wiring.md).
-- Go module: `github.com/c360studio/semstreams` (currently `v1.0.0-beta.160`; every bump is a first-class change — see ADR-058 for the beta.115→159 flag-day and ADR-059 for the beta.160 graph-foundation cutover; fresh NATS storage + NATS server 2.14.4 mandatory across the 159→160 boundary)
+- Go module: `github.com/c360studio/semstreams`, pinned to
+  `v1.0.0-beta.162.0.20260930150212-8b99efe9c66a` at frozen SHA
+  `8b99efe9c66a4faa4fa509f9f62cc6bad8392128`. Every bump is a first-class change.
+  See the [migration evidence](docs/migrations/semstreams-8b99efe/README.md) for the beta.160 comparison and open
+  qualification blockers. Use fresh isolated NATS 2.14.4 and graph state; retained-state conversion is not supported.
+  No production wipe is authorized. Historical ADR-058/059 describe prior transitions.
 - NATS JetStream (KV, ObjectStore), Prometheus, slog — via semstreams
 - Task (task runner) — run `task --list` for all commands
 - `ui/` — Svelte 5 + SvelteKit 2 + TypeScript frontend (subtree-imported
@@ -147,13 +151,13 @@ reconciliation.
 |------|---------|
 | `cmd/semteams/` | Product-shell binary. Wires Pattern-A/B/C framework primitives per ADR-029 — no custom components, but non-trivial wiring (payload registry, persona loader, Pattern-B managers, `executors.RegisterBuiltins`) |
 | `cmd/openapi-generator/` | Dev tool: generate OpenAPI spec from component registry |
-| `configs/` | Flow-template library. Loadable at runtime via UI |
+| `configs/` | Bootstrap composition, category rule packs, personas; retired flow templates are donor material |
 | `docs/` | Product and integration documentation |
 | `schemas/`, `specs/` | Generated (via `task schema:generate`) — do not hand-edit |
 | `test/contract/` | Contract tests: payload registry consistency, config sanity checks |
 | `test/e2e/mock/` | Mock OpenAI / AGNTCY server for UI Playwright journeys |
 | `test/fixtures/journeys/` | Playwright journey fixtures (YAML) |
-| `ui/` | Svelte 5 + SvelteKit 2 frontend (graph explorer, flow builder, agentic UI) |
+| `ui/` | Svelte 5 + SvelteKit 2 frontend (graph explorer, read-only composition inventory, agentic UI) |
 | `docker/` | Production Dockerfile + optional services compose (observability) |
 
 ## What does NOT live here
@@ -255,42 +259,55 @@ tool the model never received. Ops terminates with
 The ops agent emits findings via the `emit_diagnosis` tool (not raw
 triples). Each call requires `finding`, `recommendation`, `confidence`
 (0.0–1.0), and `evidence` (≥1 graph entity ID). The framework's
-executor mints `{org}.{platform}.ops.diagnosis.finding.{uuid}`
+executor mints `{org}.{platform}.diagnosis.ops.finding.{uuid}`
 entities with `ops.diagnosis.{finding,recommendation,confidence,
 evidence,observed_role,severity}` predicates.
 
-Phase 2 (ops proposes changes) is **config-only** per upstream's
-`_phase2_note`: add `create_rule`/`manage_flow`/etc. to
-`allowed_tools` and mirror into `approval_required`. The existing
-`ApprovalFilter` transitions the loop to `LoopStateAwaitingApproval`
-for human review. No framework blocker remaining.
+Phase 2 (ops proposes changes) is not part of this deployment. It needs a separately approved tool and approval
+contract; retired flow-management APIs are not available. Approval requires the exact pending execution identity,
+and omitted approval timeout now means 12 hours. The frozen migration's approval qualification must pass before
+broader approval claims are made.
 
 ### Product-Shell Wiring (ADR-029)
 
 `cmd/semteams/main.go` independently implements every framework-wiring
 pattern the product relies on — it does **not** import from
 `cmd/semstreams/`. Upstream's `main.go` is reference, not library.
-Mirroring (~50 lines of boot code) is the cost of admission. Live
-wirings:
+Composition-root lifecycle ordering is owned here under ADR-029. Live wirings:
 
 | Surface | Pattern | Call site |
 |---|---|---|
 | `componentregistry.Register` | C | `setupRegistriesAndManager` |
 | `persona.NewManager` + `LoadFromDirectory` | B | `loadPersonaFragments` |
-| `rule.NewConfigManager` | B | `buildRuleManager` → `executors.RegisterBuiltins` |
-| `flowstore.NewManager` | B | `buildFlowManager` → `executors.RegisterBuiltins` |
-| `flowtemplate.NewManager` | B | `buildFlowTemplateManager` → `executors.RegisterBuiltins` |
+| `rule.NewConfigManager` + `config.WithKeyFamily` | B | `run` → `setupRemainingInfrastructure` → shared tool dependencies |
+| rule-config lifecycle adapter | B | `registerRuleConfigService`; starts after components inside `StartAll`, stops before them |
+| public loop/lesson projection contracts | C | `agentic.LoopExecutionContract()` / `agentic.LessonContract()` |
 | `payloadregistry.New` + `payloadbuiltins.Register` | A | before tool registry; plumbed via `Dependencies.PayloadRegistry` (beta.18) |
 | `agentictools.NewExecutorRegistry` + `executors.RegisterBuiltins` | A + B tool executors | after persona load; plumbed via `Dependencies.ToolRegistry` (beta.16) |
 
 When a journey breaks because a tool executor isn't firing or persona
 fragments aren't grounding, suspect drift here first.
 
-Product-local subscribers (not tools, not rules) also live here:
-`evidence.NATSSubscriber` (agent.complete.> → evidence triples) and
-`chainpause.Subscriber` (agent.failed.> → §D5 chain.paused triples).
-Both follow the same start-after-tools boot order enforced by
-`setupToolsAndPreprocessor`.
+Product-local `chainpause.Subscriber` and `approvalpause.Subscriber` also live here. They reflect failed-loop and
+approval events onto product run state through the graph mutation contract. They start after tool registration.
+The old evidence-body subscriber is retired; trajectory facts/references do not restore UI evidence rendering (#261).
+
+The rule key family is registered before config startup; the same rule manager serves executors and live reload.
+Initial rule reconciliation is inside the service readiness barrier. Runtime authority remains live while StopAll
+uses a fresh bounded shutdown context. Local writers read the effective platform ID after configuration starts.
+
+Canonical IDs are `org.platform.system.domain.type.instance`: loops use `agentic-loop.agent.execution`, runs use
+`chain.agent.execution`. The platform segment includes the framework-minted authority suffix; never reconstruct it
+from the configured base alone. Loop tokens crossing control boundaries are canonical UUIDs. `/implement-spec`
+uses durable `LookupLoopOwner` and remains subject to the parked-pack boundary.
+
+Saved-flow managers, seed loader, `--flow-templates`, and `/flowbuilder/*` are removed. Composition inspection uses
+`/components/flowgraph` and `/components/validate`; admitted composition is not a runtime health signal. GraphQL entity
+exploration remains separate. Typed `agentic.user_response.v1` belongs on `user.response.*`; flat rule publishers
+must not be reintroduced to bypass a routing gap.
+
+SemSource-backed dogfooding remains held until SemSource is ready. A later SemEngine switch needs an approved
+consumer contract; measured compiler dependencies are evidence for that decision, not automatic release scope.
 
 ### Component Instance vs Factory
 

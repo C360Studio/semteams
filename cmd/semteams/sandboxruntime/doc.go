@@ -50,7 +50,7 @@
 //	upstream BashExecutor with WithRunner(AttestationRunner)
 //	   ↓
 //	AttestationRunner.Exec(ctx, chainID, command, timeoutMs)
-//	   ├─ reads {org}.{platform}.agent.chain.execution.{chainID}
+//	   ├─ reads {org}.{platform}.chain.agent.execution.{chainID}
 //	   │       for sandbox.attestation.{ready,host_workspace_folder}
 //	   ├─ if found+ready+wsf:
 //	   │       wraps `cmd` → `devcontainer exec --workspace-folder <wsf>

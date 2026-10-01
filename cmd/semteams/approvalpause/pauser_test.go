@@ -31,31 +31,39 @@ func (f *fakeReader) ReadEntity(_ context.Context, entityID string) (map[string]
 	return f.triples, nil
 }
 
+func (f *fakeReader) ReadPredicateValues(_ context.Context, _, _ string) ([]any, error) {
+	return nil, f.err
+}
+
 // fakePublisher records every triple written and can be primed to fail.
 type fakePublisher struct {
 	written []message.Triple
 	err     error
 }
 
-func (f *fakePublisher) Append(_ context.Context, triples []message.Triple) error {
+func (f *fakePublisher) RecordApproval(_ context.Context, run, loop, execution string, answer bool) (bool, error) {
 	if f.err != nil {
-		return f.err
+		return false, f.err
 	}
-	f.written = append(f.written, triples...)
-	return nil
+	f.written = append(f.written, message.Triple{Subject: run, Predicate: MarkerApprovalPending, Object: pair(loop, execution), Source: pauserSource})
+	if answer {
+		f.written = append(f.written, message.Triple{Subject: run, Predicate: MarkerApprovalAnswered, Object: pair(loop, execution), Source: pauserSource})
+	}
+	return false, nil
 }
 
 func newEvent(loopID string) *agentic.ApprovalPendingEvent {
 	return &agentic.ApprovalPendingEvent{
-		LoopID:   loopID,
-		CallID:   "call-1",
-		ToolName: "create_rule",
+		LoopID:      loopID,
+		ExecutionID: "execution-1",
+		CallID:      "call-1",
+		ToolName:    "create_rule",
 	}
 }
 
 // TestHandlePending_InheritAnchor: a loop carrying agent.run.entity-id (the inherit
 // anchor) gets agent.run.approval-pending stamped on that run entity, with the loop
-// entity as the navigable object.
+// and execution as an opaque correlation pair.
 func TestHandlePending_InheritAnchor(t *testing.T) {
 	const runEntity = "c360.ops.agent.chain.execution.run-123"
 	reader := &fakeReader{triples: map[string]any{agvocab.LoopRunEntityID: runEntity}}
@@ -87,8 +95,8 @@ func TestHandlePending_InheritAnchor(t *testing.T) {
 	if got.Predicate != MarkerApprovalPending {
 		t.Errorf("triple predicate = %q, want %q", got.Predicate, MarkerApprovalPending)
 	}
-	if got.Object != wantLoopEntity {
-		t.Errorf("triple object = %q, want gated loop entity %q", got.Object, wantLoopEntity)
+	if got.Object != `["loop-abc","execution-1"]` {
+		t.Errorf("triple object = %q, want execution correlation pair", got.Object)
 	}
 	if got.Source != pauserSource {
 		t.Errorf("triple source = %q, want %q", got.Source, pauserSource)
@@ -201,10 +209,10 @@ func TestHandlePending_ReaderError(t *testing.T) {
 	}
 }
 
-// TestHandleResponse_StampsResumed: an approval response on a run-anchored loop
-// stamps agent.run.approval-resumed on the run entity (4c PR-2). Approve, reject, and
+// TestHandleResponse_StampsAnsweredPair: an approval response on a run-anchored loop
+// stamps agent.run.approval-answered on the run entity (4c PR-2). Approve, reject, and
 // modify all resume — the marker is decision-independent.
-func TestHandleResponse_StampsResumed(t *testing.T) {
+func TestHandleResponse_StampsAnsweredPair(t *testing.T) {
 	const runEntity = "c360.ops.agent.chain.execution.run-r1"
 	for _, decision := range []string{
 		agentic.ApprovalDecisionApprove,
@@ -216,7 +224,7 @@ func TestHandleResponse_StampsResumed(t *testing.T) {
 		p := NewPauser(reader, pub, testOrg, testPlatform)
 
 		res, err := p.HandleResponse(context.Background(), &agentic.ApprovalResponse{
-			LoopID: "loop-r1", CallID: "call-r1", Decision: decision, ApprovedBy: "u",
+			LoopID: "loop-r1", ExecutionID: "execution-r1", CallID: "call-r1", Decision: decision, ApprovedBy: "u",
 		})
 		if err != nil {
 			t.Fatalf("decision=%s: HandleResponse error: %v", decision, err)
@@ -224,8 +232,8 @@ func TestHandleResponse_StampsResumed(t *testing.T) {
 		if !res.Stamped || res.RunEntityID != runEntity || res.Decision != decision {
 			t.Fatalf("decision=%s: bad result %+v", decision, res)
 		}
-		if len(pub.written) != 1 || pub.written[0].Predicate != MarkerApprovalResumed || pub.written[0].Subject != runEntity {
-			t.Errorf("decision=%s: must stamp %s on the run entity, got %+v", decision, MarkerApprovalResumed, pub.written)
+		if len(pub.written) != 2 || pub.written[0].Predicate != MarkerApprovalPending || pub.written[1].Predicate != MarkerApprovalAnswered || pub.written[0].Subject != runEntity || pub.written[0].Object != `["loop-r1","execution-r1"]` || pub.written[1].Object != pub.written[0].Object {
+			t.Errorf("decision=%s: must stamp %s on the run entity, got %+v", decision, MarkerApprovalPending, pub.written)
 		}
 	}
 }
@@ -237,7 +245,7 @@ func TestHandleResponse_RunlessLoop(t *testing.T) {
 	pub := &fakePublisher{}
 	p := NewPauser(reader, pub, testOrg, testPlatform)
 
-	res, err := p.HandleResponse(context.Background(), &agentic.ApprovalResponse{LoopID: "loop-x", Decision: "approve"})
+	res, err := p.HandleResponse(context.Background(), &agentic.ApprovalResponse{LoopID: "loop-x", ExecutionID: "execution-x", Decision: "approve"})
 	if err != nil {
 		t.Fatalf("run-less response must not error: %v", err)
 	}
@@ -263,7 +271,7 @@ func TestHandleResponse_MalformedLoopID(t *testing.T) {
 	pub := &fakePublisher{}
 	p := NewPauser(reader, pub, testOrg, testPlatform)
 
-	_, err := p.HandleResponse(context.Background(), &agentic.ApprovalResponse{LoopID: "bad.loop.id", Decision: "approve"})
+	_, err := p.HandleResponse(context.Background(), &agentic.ApprovalResponse{LoopID: "bad.loop.id", ExecutionID: "execution-bad", Decision: "approve"})
 	if err == nil {
 		t.Fatal("expected an error for a malformed loop id")
 	}
@@ -282,7 +290,7 @@ func TestHandleResponse_ReaderError(t *testing.T) {
 	pub := &fakePublisher{}
 	p := NewPauser(reader, pub, testOrg, testPlatform)
 
-	_, err := p.HandleResponse(context.Background(), &agentic.ApprovalResponse{LoopID: "loop-err", Decision: "approve"})
+	_, err := p.HandleResponse(context.Background(), &agentic.ApprovalResponse{LoopID: "loop-err", ExecutionID: "execution-err", Decision: "approve"})
 	if err == nil {
 		t.Fatal("expected an error when the reader fails")
 	}

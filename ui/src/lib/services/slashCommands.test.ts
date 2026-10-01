@@ -257,10 +257,10 @@ describe("parseSlashCommand — query extraction", () => {
 
   it("extracts content from /explain with entity ID", () => {
     const result = parseSlashCommand(
-      "/explain c360.ops.robotics.gcs.drone.001",
+      "/explain c360.ops.gcs.robotics.drone.001",
       "data-view",
     );
-    expect(result!.result.content).toBe("c360.ops.robotics.gcs.drone.001");
+    expect(result!.result.content).toBe("c360.ops.gcs.robotics.drone.001");
   });
 
   it("/health extracts no meaningful query (health has no args)", () => {
@@ -420,7 +420,7 @@ describe("getCommandsForPage — flow-builder", () => {
   // flow-builder excludes data-view-only /query, but includes governed spec shortcuts.
   it("returns all 15 commands for flow-builder", () => {
     const commands = getCommandsForPage("flow-builder");
-    expect(commands).toHaveLength(15);
+    expect(commands).toHaveLength(13);
   });
 
   it("includes search on flow-builder", () => {
@@ -460,7 +460,7 @@ describe("getCommandsForPage — data-view", () => {
   // data-view excludes /flow and /debug, but includes /query plus governed spec shortcuts.
   it("returns 14 commands for data-view (no /flow, no /debug)", () => {
     const commands = getCommandsForPage("data-view");
-    expect(commands).toHaveLength(14);
+    expect(commands).toHaveLength(12);
   });
 
   it("includes search on data-view", () => {
@@ -692,43 +692,9 @@ describe("parseSlashCommand — /reject", () => {
   });
 });
 
-describe("parseSlashCommand — /pause", () => {
-  it("/pause loop123 returns agent-control intent", () => {
-    const result = parseSlashCommand("/pause loop123", "flow-builder");
-    expect(result).not.toBeNull();
-    expect(result!.command.name).toBe("pause");
-    expect(result!.result.intent).toBe("agent-control");
-    expect(result!.result.params).toMatchObject({
-      action: "pause",
-      loopId: "loop123",
-    });
-  });
-
-  it("/pause is available on both pages", () => {
-    const fb = parseSlashCommand("/pause loop1", "flow-builder");
-    const dv = parseSlashCommand("/pause loop1", "data-view");
-    expect(fb).not.toBeNull();
-    expect(dv).not.toBeNull();
-  });
-});
-
-describe("parseSlashCommand — /resume", () => {
-  it("/resume loop123 returns agent-control intent", () => {
-    const result = parseSlashCommand("/resume loop123", "flow-builder");
-    expect(result).not.toBeNull();
-    expect(result!.command.name).toBe("resume");
-    expect(result!.result.intent).toBe("agent-control");
-    expect(result!.result.params).toMatchObject({
-      action: "resume",
-      loopId: "loop123",
-    });
-  });
-
-  it("/resume is available on both pages", () => {
-    const fb = parseSlashCommand("/resume loop1", "flow-builder");
-    const dv = parseSlashCommand("/resume loop1", "data-view");
-    expect(fb).not.toBeNull();
-    expect(dv).not.toBeNull();
+describe("retired loop controls", () => {
+  it.each(["/pause", "/resume"])("does not advertise or parse %s", (command) => {
+    expect(parseSlashCommand(`${command} loop1`, "data-view")).toBeNull();
   });
 });
 
@@ -738,8 +704,8 @@ describe("getCommandsForPage — includes agent-control commands", () => {
     const names = commands.map((c) => c.name);
     expect(names).toContain("approve");
     expect(names).toContain("reject");
-    expect(names).toContain("pause");
-    expect(names).toContain("resume");
+    expect(names).not.toContain("pause");
+    expect(names).not.toContain("resume");
   });
 
   it("data-view includes approve, reject, pause, resume", () => {
@@ -747,8 +713,8 @@ describe("getCommandsForPage — includes agent-control commands", () => {
     const names = commands.map((c) => c.name);
     expect(names).toContain("approve");
     expect(names).toContain("reject");
-    expect(names).toContain("pause");
-    expect(names).toContain("resume");
+    expect(names).not.toContain("pause");
+    expect(names).not.toContain("resume");
   });
 });
 
@@ -761,12 +727,12 @@ describe("filterCommands — agent-control commands", () => {
   it("'re' matches /reject and /resume on flow-builder", () => {
     const filtered = filterCommands("re", "flow-builder");
     expect(filtered.some((c) => c.name === "reject")).toBe(true);
-    expect(filtered.some((c) => c.name === "resume")).toBe(true);
+    expect(filtered.some((c) => c.name === "resume")).toBe(false);
   });
 
   it("'pa' matches /pause on data-view", () => {
     const filtered = filterCommands("pa", "data-view");
-    expect(filtered.some((c) => c.name === "pause")).toBe(true);
+    expect(filtered.some((c) => c.name === "pause")).toBe(false);
   });
 
   it("'ye' matches /approve via 'yes' alias", () => {

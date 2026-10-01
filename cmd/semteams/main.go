@@ -21,9 +21,6 @@ import (
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/componentregistry"
 	"github.com/c360studio/semstreams/config"
-	flowengine "github.com/c360studio/semstreams/engine"
-	"github.com/c360studio/semstreams/flowstore"
-	"github.com/c360studio/semstreams/flowtemplate"
 	"github.com/c360studio/semstreams/metric"
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/payloadbuiltins"
@@ -36,12 +33,10 @@ import (
 	rulepkg "github.com/c360studio/semstreams/processor/rule"
 	"github.com/c360studio/semstreams/service"
 	"github.com/c360studio/semstreams/types"
-	agvocab "github.com/c360studio/semstreams/vocabulary/agentic"
 	vocabbuiltins "github.com/c360studio/semstreams/vocabulary/builtins"
 	"github.com/c360studio/semteams/cmd/semteams/approvalpause"
 	"github.com/c360studio/semteams/cmd/semteams/chain"
 	"github.com/c360studio/semteams/cmd/semteams/chainpause"
-	"github.com/c360studio/semteams/cmd/semteams/flowtemplates"
 	"github.com/c360studio/semteams/cmd/semteams/portresolver"
 	"github.com/c360studio/semteams/cmd/semteams/vocab"
 )
@@ -118,14 +113,15 @@ func run() error {
 	}
 
 	// 4. Connect to NATS (required - semstreams cannot operate without NATS)
-	ctx := context.Background()
+	ctx, cancelRuntime := context.WithCancel(context.Background())
+	defer cancelRuntime()
 	natsClient, err := connectToNATSWithSpinner(ctx, cfg)
 	if err != nil {
 		return err
 	}
 	defer natsClient.Close(ctx)
 
-	// 5. Ensure JetStream streams exist (LOGS, HEALTH, METRICS, FLOWS)
+	// 5. Ensure configured JetStream streams exist
 	if err := ensureStreamsWithSpinner(ctx, cfg, natsClient); err != nil {
 		return err
 	}
@@ -139,7 +135,11 @@ func run() error {
 		"build_time", BuildTime)
 
 	// 7. Create remaining infrastructure
-	metricsRegistry, platform, configManager, err := setupRemainingInfrastructure(ctx, cfg, natsClient, logger)
+	ruleManager, err := rulepkg.NewConfigManager(logger)
+	if err != nil {
+		return fmt.Errorf("create rule manager: %w", err)
+	}
+	metricsRegistry, platform, configManager, err := setupRemainingInfrastructure(ctx, cfg, natsClient, logger, ruleManager)
 	if err != nil {
 		return err
 	}
@@ -160,11 +160,8 @@ func run() error {
 		return err
 	}
 
-	// 9b. Seed the persona fragment corpus (PERSONAS bucket) + the flow-template
-	// inventory (FLOW_TEMPLATES bucket) from disk. Must run before
-	// setupToolsAndPreprocessor so the list_flow_templates tool sees the inventory
-	// on first call. Both managers thread into the tool/preprocessor wiring.
-	personaMgr, flowTemplateMgr := seedKVCorpora(ctx, natsClient, cliCfg.PersonaFragmentsPath, cliCfg.PersonaOverlayPath, cliCfg.FlowTemplatesPath)
+	// Seed persona fragments before constructing the tool registry.
+	personaMgr := loadPersonaFragments(ctx, natsClient, cliCfg.PersonaFragmentsPath, cliCfg.PersonaOverlayPath)
 
 	// 9c. Wire the agent-run substrate: the shared Lifecycle harness Manager +
 	// agent-run workflow (ADR-053 Phase 1) + the MilestoneSubscriber (observe-
@@ -186,7 +183,7 @@ func run() error {
 	// (ADR-036 §Phase 2), and start the chain-pause subscriber (ADR-037 v1).
 	// Extracted to keep run() under revive's function-length threshold while
 	// keeping the ordering invariant: tools before svcDeps, preprocessors after.
-	toolRegistry, chainPauseHTTP, err := setupToolsAndPreprocessor(ctx, cfg, natsClient, platform, configManager, componentRegistry, personaMgr, flowTemplateMgr, metricsRegistry, substrate.mutation, slog.Default())
+	toolRegistry, chainPauseHTTP, err := setupToolsAndPreprocessor(ctx, cfg, natsClient, platform, componentRegistry, personaMgr, ruleManager, substrate.mutation, slog.Default())
 	if err != nil {
 		return err
 	}
@@ -213,6 +210,10 @@ func run() error {
 
 	// 11. Configure and create services
 	if err := configureAndCreateServices(cfg, manager, svcDeps); err != nil {
+		return err
+	}
+
+	if err := registerRuleConfigService(manager, ruleManager, logger); err != nil {
 		return err
 	}
 
@@ -261,11 +262,9 @@ func setupToolsAndPreprocessor(
 	cfg *config.Config,
 	natsClient *natsclient.Client,
 	platform types.PlatformMeta,
-	configManager *config.Manager,
 	componentRegistry *component.Registry,
 	personaMgr *persona.Manager,
-	flowTemplateMgr *flowtemplate.Manager,
-	metricsRegistry *metric.MetricsRegistry,
+	ruleManager *rulepkg.ConfigManager,
 	mutationClient *projection.MutationClient,
 	logger *slog.Logger,
 ) (*agentictools.ExecutorRegistry, *chainpause.HTTPHandler, error) {
@@ -278,14 +277,6 @@ func setupToolsAndPreprocessor(
 	// Metadata["task_id"] to chain_id so every role in a chain shares one
 	// sandbox worktree. SkipBuiltins=[bash] omits the framework bash so
 	// the slot is free for the wrapper.
-	// Build flow manager + engine together so they share a single
-	// *flowstore.Manager instance. Engine writes to semstreams_config KV;
-	// component_manager (upstream) watches that bucket and spins up
-	// components dynamically (multi-flow runtime per ADR-042 §Phase 4
-	// addendum). Nil flow manager → engine nil → registerFlowLifecycle
-	// skips. Same gate posture as the other Pattern-B tools.
-	flowMgr := buildFlowManager(natsClient, logger)
-	flowEngine := buildFlowEngine(configManager, flowMgr, componentRegistry, natsClient, metricsRegistry, logger)
 
 	toolRegistry := agentictools.NewExecutorRegistry()
 	if err := executors.RegisterBuiltins(ctx, toolRegistry, executors.ToolDependencies{
@@ -293,11 +284,8 @@ func setupToolsAndPreprocessor(
 		MutationClient:          mutationClient,
 		Platform:                platform,
 		Logger:                  logger,
-		RuleManager:             buildRuleManager(ctx, natsClient, configManager, logger),
-		FlowManager:             flowMgr,
+		RuleManager:             ruleManager,
 		PersonaManager:          personaMgr,
-		FlowTemplateManager:     flowTemplateMgr,
-		FlowEngineManager:       flowEngine,
 		ComponentRegistry:       componentRegistry,
 		LoopsBucket:             extractLoopsBucket(cfg),
 		RestrictedDecideActions: extractRestrictedDecideActions(cfg, logger),
@@ -339,7 +327,7 @@ func setupToolsAndPreprocessor(
 
 	// 9g. (ADR-053) The hand-rolled chain milestone stampers were RETIRED
 	// here — they wrote chain.* projections onto the canonical
-	// agent.chain.execution.<id> entity, which is now owned exclusively by
+	// chain.agent.execution.<id> entity, which is now owned exclusively by
 	// the agent-run lifecycle substrate (run_scope=new mint + the agent-run
 	// transition rules). The dual-write was the adoption-plan hedge; keeping
 	// it meant the DispatchedStamper raced the mint for the same entity and
@@ -401,7 +389,10 @@ func startChainPauseSubscriber(ctx context.Context, cfg *config.Config, natsClie
 // startChainPauseSubscriber. A run-less gated loop (front-door coordinator) resolves
 // no anchor and is a no-op.
 func startApprovalPauseSubscriber(ctx context.Context, cfg *config.Config, natsClient *natsclient.Client, platform types.PlatformMeta, logger *slog.Logger) error {
-	triplePublisher := agentictools.NewNATSTriplePublisher(natsClient)
+	approvalProjection, err := approvalpause.NewNATSProjection(natsClient, platform.Org, platform.Platform)
+	if err != nil {
+		return fmt.Errorf("approval projection: %w", err)
+	}
 	entityReader := chain.NewNATSEntityReader(natsClient, chain.DefaultGraphQueryEntitySubject)
 
 	// PAUSE subject (agent.approval_pending, published by teams-loop) + RESUME
@@ -410,7 +401,7 @@ func startApprovalPauseSubscriber(ctx context.Context, cfg *config.Config, natsC
 	// the literal constant (same rationale as startChainPauseSubscriber).
 	approvalPendingSubject := portresolver.SubjectOrDefault(cfg, "teams-loop", "agent.approval_pending", approvalpause.DefaultApprovalPendingSubject)
 	approvalResponseSubject := portresolver.SubjectOrDefault(cfg, "teams-dispatch", "agent.approval_response", approvalpause.DefaultApprovalResponseSubject)
-	pauser := approvalpause.NewPauser(entityReader, triplePublisher, platform.Org, platform.Platform)
+	pauser := approvalpause.NewPauser(entityReader, approvalProjection, platform.Org, platform.Platform)
 	sub := approvalpause.NewSubscriber(pauser, approvalPendingSubject, approvalResponseSubject, logger)
 	if err := sub.Start(ctx, natsClient); err != nil {
 		return fmt.Errorf("subscribe to agent.approval_pending/response events: %w", err)
@@ -486,21 +477,25 @@ func loadPersonaFragments(ctx context.Context, natsClient *natsclient.Client, ro
 	return mgr
 }
 
-// extractLoopsBucket pulls the agentic-tools loops_bucket config value so
-// executors.RegisterBuiltins can thread it into the stateful-tool registrations
-// (read_loop_result, flow_monitor). Empty return lets RegisterBuiltins fall
-// back to the AGENT_LOOPS default. Independent reimplementation of
-// upstream cmd/semstreams/main.go per ADR-029 — not an import.
+// extractLoopsBucket resolves stateful tools against their declared authority
+// port. An absent override leaves RegisterBuiltins on the framework default.
 func extractLoopsBucket(cfg *config.Config) string {
 	for _, cc := range cfg.Components {
 		if cc.Name != "agentic-tools" || !cc.Enabled {
 			continue
 		}
-		var tcfg struct {
-			LoopsBucket string `json:"loops_bucket"`
+		var declared struct {
+			Ports *component.PortConfig `json:"ports"`
 		}
-		if err := json.Unmarshal(cc.Config, &tcfg); err == nil && tcfg.LoopsBucket != "" {
-			return tcfg.LoopsBucket
+		if err := json.Unmarshal(cc.Config, &declared); err != nil || declared.Ports == nil {
+			continue
+		}
+		for _, port := range declared.Ports.Inputs {
+			if port.Name == "agent_loops" {
+				if kv, ok := port.Config.(component.KVReadPort); ok {
+					return kv.Bucket
+				}
+			}
 		}
 	}
 	return ""
@@ -537,111 +532,6 @@ func extractRestrictedDecideActions(cfg *config.Config, logger *slog.Logger) []s
 		}
 	}
 	return nil
-}
-
-// buildRuleManager constructs a rule.ConfigManager (KV-backed rule CRUD)
-// for use by the Pattern-B rule executors. Nil on init failure →
-// registerRules skips. Note: upstream's runtime hot-reload ConfigManager
-// lives on the rule processor itself and reads the same KV bucket — two
-// instances coexist safely (NATS KV serialises per-key writes). Ours is
-// write-only CRUD for agentic-tools; the processor-internal one is
-// read+apply. Independent reimplementation per ADR-029.
-func buildRuleManager(ctx context.Context, natsClient *natsclient.Client, configMgr *config.Manager, logger *slog.Logger) executors.RuleManager {
-	rcm := rulepkg.NewConfigManager(nil, configMgr, logger)
-	if err := rcm.InitializeKVStore(natsClient); err != nil {
-		logger.Warn("rule CRUD tools disabled: could not initialise rules KV store",
-			"error", err)
-		return nil
-	}
-	_ = ctx // reserved for future use if KV init needs a context
-	return rcm
-}
-
-// buildFlowManager constructs a flowstore.Manager (KV-backed flow CRUD).
-// Nil on init failure → registerFlows skips. Independent reimplementation
-// per ADR-029.
-//
-// Returns the concrete *flowstore.Manager rather than the
-// executors.FlowManager interface so the same instance can be threaded
-// into both the agentic-tools deps struct (for create_flow / get_flow
-// CRUD) and flowengine.NewEngine (for deploy_flow / start_flow
-// lifecycle, ADR-042 Phase 4). The concrete type satisfies the
-// interface implicitly.
-func buildFlowManager(natsClient *natsclient.Client, logger *slog.Logger) *flowstore.Manager {
-	mgr, err := flowstore.NewManager(natsClient)
-	if err != nil {
-		logger.Warn("flow CRUD tools disabled: could not initialise flow store",
-			"error", err)
-		return nil
-	}
-	return mgr
-}
-
-// buildFlowEngine constructs a flowengine.Engine for ADR-042 Phase 4's
-// deploy_flow / start_flow / stop_flow / undeploy_flow agent tools
-// (semstreams beta.76 surface). Returns nil when the flow manager is
-// nil — registerFlowLifecycle skips when the dep is nil, same gate
-// pattern as the other Pattern-B tools.
-//
-// The engine writes to semstreams_config KV; service/component_manager
-// already watches that bucket and spins up new components dynamically
-// (multi-flow runtime). No restart, no second binary. ADR-042 Phase 4
-// addendum captures the investigation.
-func buildFlowEngine(configMgr *config.Manager, flowMgr *flowstore.Manager, componentRegistry *component.Registry, natsClient *natsclient.Client, metricsRegistry *metric.MetricsRegistry, logger *slog.Logger) *flowengine.Engine {
-	if flowMgr == nil {
-		logger.Warn("flow-lifecycle tools disabled: flow manager is nil")
-		return nil
-	}
-	return flowengine.NewEngine(configMgr, flowMgr, componentRegistry, natsClient, logger, metricsRegistry)
-}
-
-// buildFlowTemplateManager constructs a flowtemplate.Manager (KV-backed
-// template CRUD + render). Nil on init failure → registerFlowTemplates
-// skips and the seed loader becomes a no-op. Independent reimplementation
-// per ADR-029.
-//
-// Returns the concrete *flowtemplate.Manager rather than the
-// executors.FlowTemplateManager interface so the same instance can be
-// threaded into both the seed loader (ADR-042 Phase 1) and the
-// agentic-tools deps struct. The concrete type satisfies the interface
-// implicitly.
-func buildFlowTemplateManager(natsClient *natsclient.Client, logger *slog.Logger) *flowtemplate.Manager {
-	mgr, err := flowtemplate.NewManager(natsClient)
-	if err != nil {
-		logger.Warn("flow-template tools disabled: could not initialise flow-template store",
-			"error", err)
-		return nil
-	}
-	return mgr
-}
-
-// loadFlowTemplates seeds the FLOW_TEMPLATES KV bucket from a directory
-// of flat *.json files. Mirror of loadPersonaFragments — same boot-time
-// upsert pattern with a different manager. ADR-042 Phase 1.
-//
-// Returns the manager threaded through so the caller can pass it into
-// the agentic-tools deps struct alongside other Pattern-B managers.
-// Nil manager and missing directory are both non-fatal: the manager
-// being nil disables the template tools entirely; a missing directory
-// just means the operator hasn't authored any templates yet.
-func loadFlowTemplates(ctx context.Context, natsClient *natsclient.Client, root string, logger *slog.Logger) *flowtemplate.Manager {
-	mgr := buildFlowTemplateManager(natsClient, logger)
-	if mgr == nil {
-		return nil
-	}
-	if root == "" {
-		logger.Debug("flow-templates path empty, skipping seed")
-		return mgr
-	}
-	logger.Info("loading flow templates", "root", root)
-	if err := flowtemplates.LoadFromDirectory(ctx, root, mgr, logger); err != nil {
-		logger.Warn("flow-template loader reported errors",
-			"path", root,
-			"error", err)
-		// Return the manager anyway — partial seed is better than no
-		// template CRUD tooling, same posture as loadPersonaFragments.
-	}
-	return mgr
 }
 
 // parseCLI parses and validates CLI flags.
@@ -717,20 +607,13 @@ func setupRemainingInfrastructure(
 	cfg *config.Config,
 	natsClient *natsclient.Client,
 	logger *slog.Logger,
+	ruleManager *rulepkg.ConfigManager,
 ) (*metric.MetricsRegistry, types.PlatformMeta, *config.Manager, error) {
 	// Create metrics registry
 	metricsRegistry := metric.NewMetricsRegistry()
 
-	// Extract platform identity
-	platform := extractPlatformMeta(cfg)
-
-	slog.Info("Platform identity configured",
-		"org", platform.Org,
-		"platform", platform.Platform,
-		"environment", cfg.Platform.Environment)
-
 	// Create and start config manager
-	configManager, err := config.NewConfigManager(cfg, natsClient, logger)
+	configManager, err := config.NewConfigManager(cfg, natsClient, logger, config.WithKeyFamily(ruleManager.KeyFamily()))
 	if err != nil {
 		return nil, types.PlatformMeta{}, nil, fmt.Errorf("create config manager: %w", err)
 	}
@@ -739,6 +622,8 @@ func setupRemainingInfrastructure(
 		return nil, types.PlatformMeta{}, nil, fmt.Errorf("start config manager: %w", err)
 	}
 
+	// Config.Start mints the durable platform suffix; all writers use that identity.
+	platform := extractPlatformMeta(configManager.GetConfig().Get())
 	return metricsRegistry, platform, configManager, nil
 }
 
@@ -758,14 +643,10 @@ func createNATSClient(cfg *config.Config) (*natsclient.Client, error) {
 
 // extractPlatformMeta extracts platform identity from config.
 func extractPlatformMeta(cfg *config.Config) types.PlatformMeta {
-	platformID := cfg.Platform.InstanceID
-	if platformID == "" {
-		platformID = cfg.Platform.ID
-	}
 
 	return types.PlatformMeta{
 		Org:      cfg.Platform.Org,
-		Platform: platformID,
+		Platform: cfg.Platform.ID,
 	}
 }
 
@@ -879,16 +760,6 @@ func buildPayloadRegistry() (*payloadregistry.Registry, error) {
 	return reg, nil
 }
 
-// seedKVCorpora loads the persona fragment corpus (PERSONAS bucket) and the
-// flow-template inventory (FLOW_TEMPLATES bucket, ADR-042 Phase 1) from disk,
-// returning the managers run() threads into the tool/preprocessor wiring.
-// Extracted from run() to keep it under revive's function-length threshold.
-func seedKVCorpora(ctx context.Context, natsClient *natsclient.Client, personaRoot, personaOverlay, flowTemplateRoot string) (*persona.Manager, *flowtemplate.Manager) {
-	personaMgr := loadPersonaFragments(ctx, natsClient, personaRoot, personaOverlay)
-	flowTemplateMgr := loadFlowTemplates(ctx, natsClient, flowTemplateRoot, slog.Default())
-	return personaMgr, flowTemplateMgr
-}
-
 // wireAgentRunSubstrate builds the shared Lifecycle harness Manager (ADR-047),
 // wires the beta.160 graph runtime (typed mutation client over the canonical
 // semstreams.graph.mutation/v1 port), registers the agent-run workflow
@@ -954,73 +825,10 @@ type agentRunSubstrate struct {
 	mutation  *projection.MutationClient
 }
 
-// builtinProjectionContracts declares the graph projection contracts for the
-// built-in agentic writers: spawn-identity origin predicates are
-// BirthPredicates on the loop-execution entity, the write_todos projection is
-// the reconcile-mode "todos" group (one agent.todo.record literal at
-// beta.160), and the lesson-record contract covers the agentic lesson writer.
-// (Historically ADR-056 Decision-6 ownership claims; beta.160 replaced
-// ownership with per-mutation projection-contract validation.)
-// Mirrors upstream internal/builtinprojection.Contracts() verbatim (the package
-// is internal, so per ADR-029 the product shell carries its own copy); a reader
-// diffing against upstream should treat it as the same declaration.
+// builtinProjectionContracts uses the public framework contracts so domain/system
+// ordering and typed birth schemas cannot drift in a product-shell copy.
 func builtinProjectionContracts() []projection.Contract {
-	return []projection.Contract{
-		{
-			Name:          "agentic.loop-execution",
-			MessageType:   agentic.LoopExecutionMessageType().Key(),
-			EntityPattern: "*.*.agent.agentic-loop.execution.*",
-			BirthPredicates: []string{
-				agvocab.LoopRole,
-				agvocab.LoopTask,
-				agvocab.LoopParent,
-				agvocab.LoopRun,
-				agvocab.LoopRunEntityID,
-				agvocab.LoopReplyTo,
-				agvocab.LoopWorkflow,
-				agvocab.LoopWorkflowStep,
-				agvocab.LoopUser,
-				agvocab.LoopDescription,
-			},
-			Groups: []projection.PredicateGroup{{
-				Name: "todos",
-				Mode: projection.ModeReconcile,
-				// beta.160: the graph representation is one rule-opaque
-				// agent.todo.record JSON literal per item; the five field
-				// predicates no longer exist upstream.
-				Predicates: []string{
-					agvocab.TodoRecord,
-				},
-			}},
-		},
-		{
-			Name:          "agentic.lesson-record",
-			MessageType:   agentic.AgentLessonMessageType().Key(),
-			EntityPattern: "*.*.agent.lesson.record.*",
-			BirthPredicates: []string{
-				agvocab.LessonCategory,
-				agvocab.LessonPolarity,
-				agvocab.LessonSeverity,
-				agvocab.LessonCreatedAt,
-				agvocab.LessonSummary,
-				agvocab.LessonDetail,
-				agvocab.LessonInjectionForm,
-				agvocab.LessonEvidence,
-				agvocab.LessonAppliesTo,
-				agvocab.LessonObservedRole,
-				agvocab.ActionExecutedBy,
-			},
-			Groups: []projection.PredicateGroup{{
-				Name: "lesson-lifecycle",
-				Mode: projection.ModeReconcile,
-				Predicates: []string{
-					agvocab.LessonStatus,
-					agvocab.LessonSupersededBy,
-					agvocab.LessonRetiredAt,
-				},
-			}},
-		},
-	}
+	return []projection.Contract{agentic.LoopExecutionContract(), agentic.LessonContract()}
 }
 
 // configureAndCreateServices configures the manager and creates all services
@@ -1047,19 +855,30 @@ func runWithSignalHandling(ctx context.Context, manager *service.Manager, shutdo
 	signalCtx, signalCancel := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 	defer signalCancel()
 
+	return runUntilShutdown(ctx, manager, signalCtx.Done(), shutdownTimeout)
+}
+
+type serviceLifecycle interface {
+	StartAll(context.Context) error
+	StopAll(context.Context) error
+}
+
+// A stop signal requests controlled shutdown; it must not cancel Start authority
+// before StopAll has joined the services (frozen lifecycle ownership contract).
+func runUntilShutdown(ctx context.Context, manager serviceLifecycle, stopped <-chan struct{}, shutdownTimeout time.Duration) error {
 	slog.Info("Starting all services")
-	if err := manager.StartAll(signalCtx); err != nil {
+	if err := manager.StartAll(ctx); err != nil {
 		return fmt.Errorf("start services: %w", err)
 	}
 	slog.Info("All services started successfully")
 
-	<-signalCtx.Done()
+	<-stopped
 	slog.Info("Received shutdown signal")
 
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer shutdownCancel()
 
-	if err := shutdown(shutdownCtx, manager, shutdownTimeout); err != nil {
+	if err := shutdown(shutdownCtx, manager); err != nil {
 		return fmt.Errorf("graceful shutdown failed: %w", err)
 	}
 
@@ -1068,19 +887,10 @@ func runWithSignalHandling(ctx context.Context, manager *service.Manager, shutdo
 }
 
 // shutdown performs graceful shutdown of all services
-func shutdown(ctx context.Context, manager *service.Manager, timeout time.Duration) error {
-	if deadline, ok := ctx.Deadline(); ok {
-		remaining := time.Until(deadline)
-		if remaining < timeout {
-			timeout = remaining
-		}
+func shutdown(ctx context.Context, manager serviceLifecycle) error {
+	if err := manager.StopAll(ctx); err != nil {
+		return fmt.Errorf("stop services: %w", err)
 	}
-
-	if err := manager.StopAll(timeout); err != nil {
-		slog.Error("Error stopping services", "error", err)
-		return err
-	}
-
 	return nil
 }
 

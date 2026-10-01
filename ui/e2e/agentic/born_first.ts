@@ -65,11 +65,11 @@ async function pollFor<T>(
 
 /** Born-first envelope predicate by anchor entity-id segment. */
 export const RUN_ANCHOR = {
-  substr: "agent.chain.execution.",
+  substr: "chain.agent.execution.",
   envelope: "agent.run.phase",
 } as const;
 export const LOOP_ANCHOR = {
-  substr: "agent.agentic-loop.execution.",
+  substr: "agentic-loop.agent.execution.",
   envelope: "agent.loop.role",
 } as const;
 

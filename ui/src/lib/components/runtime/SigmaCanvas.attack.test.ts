@@ -54,7 +54,7 @@ describe("SigmaCanvas attack tests", () => {
     expect(() =>
       render(SigmaCanvas, {
         props: {
-          entities: [makeEntity("c360.ops.robotics.gcs.drone.001")],
+          entities: [makeEntity("c360.ops.gcs.robotics.drone.001")],
           relationships: [],
           // selectedEntityId, hoveredEntityId, callbacks all omitted
         },
@@ -102,7 +102,7 @@ describe("SigmaCanvas attack tests", () => {
 
   it("renders without throwing with 500 entities", () => {
     const entities = Array.from({ length: 500 }, (_, i) =>
-      makeEntity(`c360.ops.robotics.gcs.drone.n${i}`),
+      makeEntity(`c360.ops.gcs.robotics.drone.n${i}`),
     );
     expect(() =>
       render(SigmaCanvas, { props: { entities, relationships: [] } }),
@@ -111,13 +111,13 @@ describe("SigmaCanvas attack tests", () => {
 
   it("renders without throwing with 200 relationships", () => {
     const entities = Array.from({ length: 201 }, (_, i) =>
-      makeEntity(`c360.ops.robotics.gcs.drone.n${i}`),
+      makeEntity(`c360.ops.gcs.robotics.drone.n${i}`),
     );
     const relationships = Array.from({ length: 200 }, (_, i) =>
       makeRelationship(
-        `c360.ops.robotics.gcs.drone.n${i}`,
+        `c360.ops.gcs.robotics.drone.n${i}`,
         "a.b.c",
-        `c360.ops.robotics.gcs.drone.n${i + 1}`,
+        `c360.ops.gcs.robotics.drone.n${i + 1}`,
       ),
     );
     expect(() =>
@@ -186,8 +186,8 @@ describe("SigmaCanvas attack tests", () => {
 
   it("stats overlay shows correct entity count", () => {
     const entities = [
-      makeEntity("c360.ops.robotics.gcs.drone.001"),
-      makeEntity("c360.ops.robotics.gcs.drone.002"),
+      makeEntity("c360.ops.gcs.robotics.drone.001"),
+      makeEntity("c360.ops.gcs.robotics.drone.002"),
     ];
     const { getByText } = render(SigmaCanvas, {
       props: { entities, relationships: [] },
@@ -208,7 +208,7 @@ describe("SigmaCanvas attack tests", () => {
     expect(() =>
       render(SigmaCanvas, {
         props: {
-          entities: [makeEntity("c360.ops.robotics.gcs.drone.001")],
+          entities: [makeEntity("c360.ops.gcs.robotics.drone.001")],
           relationships: [],
           // onEntitySelect deliberately omitted
         },
@@ -221,7 +221,7 @@ describe("SigmaCanvas attack tests", () => {
   it("entity label with HTML characters does not inject markup into stats overlay", () => {
     // Stats overlay uses Svelte template text interpolation (not {@html}), so
     // the label cannot escape. But verify the count rendered is numeric only.
-    const entities = [makeEntity("c360.ops.robotics.gcs.drone.001")];
+    const entities = [makeEntity("c360.ops.gcs.robotics.drone.001")];
     const { getByText } = render(SigmaCanvas, {
       props: { entities, relationships: [] },
     });

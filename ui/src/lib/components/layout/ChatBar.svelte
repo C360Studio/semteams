@@ -2,7 +2,7 @@
   import { agentApi } from "$lib/services/agentApi";
   import { chatHandoff } from "$lib/stores/chatHandoff.svelte";
   import { taskStore } from "$lib/stores/taskStore.svelte";
-  import type { ControlSignal } from "$lib/types/agent";
+  import type { ApprovalDecision } from "$lib/types/agent";
 
   let input = $state("");
   let sending = $state(false);
@@ -10,11 +10,9 @@
   let inputEl = $state<HTMLInputElement>();
 
   /** Slash commands that operate on the selected task. */
-  const TASK_COMMANDS: Record<string, ControlSignal> = {
+  const TASK_COMMANDS: Record<string, "cancel" | ApprovalDecision> = {
     "/approve": "approve",
     "/reject": "reject",
-    "/pause": "pause",
-    "/resume": "resume",
     "/cancel": "cancel",
   };
   // The spec (/create-change, /spec), build (/dev-via-test), and
@@ -136,10 +134,24 @@
         // Slash command — route to signal API on the selected task.
         const signal = TASK_COMMANDS[firstWord];
         const reason = text.slice(firstWord.length).trim() || undefined;
-        await agentApi.sendSignal(taskStore.selectedTask!.id, signal, reason);
+        const task = taskStore.selectedTask!;
+        if (signal === "cancel") {
+          await agentApi.cancelLoop(task.id);
+        } else {
+          const pending = task.primaryLoop.pending_approval;
+          if (!pending?.execution_id)
+            throw new Error(
+              "No pending approval is available. Refresh the task.",
+            );
+          await agentApi.submitApproval(task.id, {
+            decision: signal,
+            execution_id: pending.execution_id,
+            ...(reason ? { reason } : {}),
+          });
+        }
         // Unreachable while RUN_MESSAGE_COMMANDS is empty (dev packs parked,
-      // ADR-058) — kept so repopulating the Set re-activates run routing.
-    } else if (RUN_MESSAGE_COMMANDS.has(firstWord)) {
+        // ADR-058) — kept so repopulating the Set re-activates run routing.
+      } else if (RUN_MESSAGE_COMMANDS.has(firstWord)) {
         // Slash command — dispatch as a run-attached message so the backend
         // command sees the selected task as UserMessage.RunID.
         await agentApi.sendMessage(message, {

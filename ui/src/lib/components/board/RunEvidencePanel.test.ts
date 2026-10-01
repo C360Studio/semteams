@@ -110,12 +110,12 @@ beforeEach(() => {
   );
   vi.mocked(getTriples).mockResolvedValue([
     {
-      subject: "c360.semteams.agent.chain.execution.run-1",
+      subject: "c360.semteams.chain.agent.execution.run-1",
       predicate: "proof_readiness.route",
       object: "implementation",
     },
     {
-      subject: "c360.semteams.agent.chain.execution.run-1",
+      subject: "c360.semteams.chain.agent.execution.run-1",
       predicate: "agent.run.phase",
       object: "executing",
     },
@@ -148,7 +148,7 @@ describe("RunEvidencePanel", () => {
     render(RunEvidencePanel, {
       props: {
         loopId: "loop-1",
-        runEntityId: "c360.semteams.agent.chain.execution.run-1",
+        runEntityId: "c360.semteams.chain.agent.execution.run-1",
       },
     });
 
@@ -156,7 +156,7 @@ describe("RunEvidencePanel", () => {
     await vi.waitFor(() => {
       expect(agentApi.getLoopTrajectory).toHaveBeenCalledWith("loop-1");
       expect(getTriples).toHaveBeenCalledWith({
-        subject: "c360.semteams.agent.chain.execution.run-1",
+        subject: "c360.semteams.chain.agent.execution.run-1",
         limit: 250,
       });
     });
@@ -200,7 +200,7 @@ describe("RunEvidencePanel", () => {
       if (params.subject?.endsWith("run-old")) return oldTriples;
       return Promise.resolve([
         {
-          subject: "c360.semteams.agent.chain.execution.run-new",
+          subject: "c360.semteams.chain.agent.execution.run-new",
           predicate: "proof_readiness.route",
           object: "implementation",
         },
@@ -210,13 +210,13 @@ describe("RunEvidencePanel", () => {
     const { rerender } = render(RunEvidencePanel, {
       props: {
         loopId: "loop-old",
-        runEntityId: "c360.semteams.agent.chain.execution.run-old",
+        runEntityId: "c360.semteams.chain.agent.execution.run-old",
       },
     });
 
     await rerender({
       loopId: "loop-new",
-      runEntityId: "c360.semteams.agent.chain.execution.run-new",
+      runEntityId: "c360.semteams.chain.agent.execution.run-new",
     });
 
     await vi.waitFor(() => {
@@ -227,7 +227,7 @@ describe("RunEvidencePanel", () => {
     resolveOldTrajectory(makeTrajectory({ loop_id: "loop-old", facts: [] }));
     resolveOldTriples([
       {
-        subject: "c360.semteams.agent.chain.execution.run-old",
+        subject: "c360.semteams.chain.agent.execution.run-old",
         predicate: "proof_readiness.route",
         object: "test_harness",
       },

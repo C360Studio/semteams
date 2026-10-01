@@ -57,8 +57,8 @@ interface EntityLookupResult {
 
 // ---------------------------------------------------------------------------
 // Entity ID parsing helpers
-// ID format: c360.<org>.<domain>.<subdomain>.<type>.<instance>
-//   index:    0    1     2        3           4      5
+// ID format: <org>.<platform>.<system>.<domain>.<type>.<instance>
+//   index:    0        1        2        3       4       5
 // ---------------------------------------------------------------------------
 
 function parseEntityId(id: string): {
@@ -67,8 +67,8 @@ function parseEntityId(id: string): {
   domain: string;
 } {
   const parts = id.split(".");
-  // domain is index 2, type is index 4, label is last segment
-  const domain = parts[2] ?? "unknown";
+  // domain is index 3, type is index 4, label is last segment
+  const domain = parts[3] ?? "unknown";
   const type = parts[4] ?? "unknown";
   const label = parts[parts.length - 1] ?? id;
   return { label, type, domain };

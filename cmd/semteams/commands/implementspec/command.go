@@ -146,7 +146,7 @@ func (c *Command) Execute(
 	}
 
 	target, reason := parseArgs(args)
-	runID, runEntityID, changeSlug, err := c.resolveTarget(cmdCtx, msg, target)
+	runID, runEntityID, changeSlug, err := c.resolveTarget(ctx, cmdCtx, msg, target)
 	if err != nil {
 		return agentic.UserResponse{}, err
 	}
@@ -201,6 +201,7 @@ func hasCommandPermission(cmdCtx *agenticdispatch.CommandContext, userID string)
 }
 
 func (c *Command) resolveTarget(
+	ctx context.Context,
 	cmdCtx *agenticdispatch.CommandContext,
 	msg agentic.UserMessage,
 	target string,
@@ -218,22 +219,22 @@ func (c *Command) resolveTarget(
 	if err != nil {
 		return "", "", "", fmt.Errorf("resolve run entity for %q: %w", runID, err)
 	}
-	if err := authorizeSelectedRun(cmdCtx, msg, runID); err != nil {
+	if err := authorizeSelectedRun(ctx, cmdCtx, msg, runID); err != nil {
 		return "", "", "", err
 	}
 
 	return runID, runEntityID, changeSlug, nil
 }
 
-func authorizeSelectedRun(cmdCtx *agenticdispatch.CommandContext, msg agentic.UserMessage, runID string) error {
-	if cmdCtx.LoopTracker == nil {
-		return fmt.Errorf("loop tracker unavailable; cannot verify selected run access")
+func authorizeSelectedRun(ctx context.Context, cmdCtx *agenticdispatch.CommandContext, msg agentic.UserMessage, runID string) error {
+	if cmdCtx.LookupLoopOwner == nil {
+		return fmt.Errorf("loop ownership lookup unavailable; cannot verify selected run access")
 	}
-	info := cmdCtx.LoopTracker.Get(runID)
-	if info == nil {
-		return fmt.Errorf("selected run %q is not tracked; refresh and select the task again", runID)
+	info, err := cmdCtx.LookupLoopOwner(ctx, runID)
+	if err != nil {
+		return fmt.Errorf("read selected run %q owner: %w", runID, err)
 	}
-	if msg.UserID == "" || info.UserID == "" || info.UserID != msg.UserID {
+	if info.LoopID != runID || msg.UserID == "" || info.UserID == "" || info.UserID != msg.UserID {
 		return fmt.Errorf("permission denied for selected run %q", runID)
 	}
 	return nil
@@ -324,5 +325,5 @@ func isChainExecutionEntityID(s string) bool {
 	if len(parts) != 6 {
 		return false
 	}
-	return parts[2] == "agent" && parts[3] == "chain" && parts[4] == "execution"
+	return parts[2] == "chain" && parts[3] == "agent" && parts[4] == "execution"
 }

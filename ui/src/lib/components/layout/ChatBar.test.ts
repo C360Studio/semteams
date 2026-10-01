@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/svelte";
 import userEvent from "@testing-library/user-event";
 import { chatHandoff } from "$lib/stores/chatHandoff.svelte";
+import type { TaskInfo } from "$lib/types/task";
 import ChatBar from "./ChatBar.svelte";
 
 // ---------------------------------------------------------------------------
@@ -10,8 +11,11 @@ import ChatBar from "./ChatBar.svelte";
 
 vi.mock("$lib/services/agentApi", () => ({
   agentApi: {
+    cancelLoop: vi
+      .fn()
+      .mockResolvedValue({ content: "Cancellation requested" }),
     sendMessage: vi.fn().mockResolvedValue({ content: "ok" }),
-    sendSignal: vi.fn().mockResolvedValue({ status: "sent" }),
+    submitApproval: vi.fn().mockResolvedValue({ status: "sent" }),
   },
 }));
 
@@ -348,12 +352,19 @@ describe("ChatBar — message dispatch", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Slash command routing (agentApi.sendSignal)
+// Slash command routing (agentApi.submitApproval)
 // ---------------------------------------------------------------------------
 
 describe("ChatBar — slash commands", () => {
-  it("/approve routes to sendSignal on selected task", async () => {
-    mockSelectedTask.mockReturnValue(selectedTask({ id: "loop_xyz" }));
+  it("/approve routes to submitApproval on selected task", async () => {
+    mockSelectedTask.mockReturnValue(
+      selectedTask({
+        id: "loop_xyz",
+        primaryLoop: {
+          pending_approval: { execution_id: "execution-pending" },
+        } as TaskInfo["primaryLoop"],
+      }),
+    );
     const user = userEvent.setup();
     render(ChatBar);
 
@@ -361,15 +372,21 @@ describe("ChatBar — slash commands", () => {
     await user.type(input, "/approve");
     await user.click(screen.getByTestId("send-button"));
 
-    expect(agentApi.sendSignal).toHaveBeenCalledWith(
-      "loop_xyz",
-      "approve",
-      undefined,
-    );
+    expect(agentApi.submitApproval).toHaveBeenCalledWith("loop_xyz", {
+      decision: "approve",
+      execution_id: "execution-pending",
+    });
   });
 
   it("/reject with reason passes the reason", async () => {
-    mockSelectedTask.mockReturnValue(selectedTask({ id: "loop_xyz" }));
+    mockSelectedTask.mockReturnValue(
+      selectedTask({
+        id: "loop_xyz",
+        primaryLoop: {
+          pending_approval: { execution_id: "execution-pending" },
+        } as TaskInfo["primaryLoop"],
+      }),
+    );
     const user = userEvent.setup();
     render(ChatBar);
 
@@ -377,11 +394,11 @@ describe("ChatBar — slash commands", () => {
     await user.type(input, "/reject Too risky");
     await user.click(screen.getByTestId("send-button"));
 
-    expect(agentApi.sendSignal).toHaveBeenCalledWith(
-      "loop_xyz",
-      "reject",
-      "Too risky",
-    );
+    expect(agentApi.submitApproval).toHaveBeenCalledWith("loop_xyz", {
+      decision: "reject",
+      execution_id: "execution-pending",
+      reason: "Too risky",
+    });
   });
 
   it("/research routes through coordinator chat without a selected task", async () => {
@@ -396,7 +413,7 @@ describe("ChatBar — slash commands", () => {
     expect(agentApi.sendMessage).toHaveBeenCalledWith(
       "/research compare MQTT and NATS",
     );
-    expect(agentApi.sendSignal).not.toHaveBeenCalled();
+    expect(agentApi.submitApproval).not.toHaveBeenCalled();
   });
 
   it("slash command without selected task shows error", async () => {
@@ -408,7 +425,7 @@ describe("ChatBar — slash commands", () => {
     await user.type(input, "/approve");
     await user.click(screen.getByTestId("send-button"));
 
-    expect(agentApi.sendSignal).not.toHaveBeenCalled();
+    expect(agentApi.submitApproval).not.toHaveBeenCalled();
     expect(screen.getByTestId("chat-error")).toBeInTheDocument();
     expect(screen.getByText(/Select a task first/)).toBeInTheDocument();
   });
@@ -429,7 +446,7 @@ describe("ChatBar — slash commands", () => {
     expect(agentApi.sendMessage).toHaveBeenCalledWith(
       "/implement-spec add-health-endpoint",
     );
-    expect(agentApi.sendSignal).not.toHaveBeenCalled();
+    expect(agentApi.submitApproval).not.toHaveBeenCalled();
     expect(screen.queryByTestId("chat-error")).not.toBeInTheDocument();
   });
 
@@ -460,7 +477,7 @@ describe("ChatBar — slash commands", () => {
     await user.click(screen.getByTestId("send-button"));
 
     expect(agentApi.sendMessage).toHaveBeenCalledWith("/unknowncmd something");
-    expect(agentApi.sendSignal).not.toHaveBeenCalled();
+    expect(agentApi.submitApproval).not.toHaveBeenCalled();
   });
 });
 

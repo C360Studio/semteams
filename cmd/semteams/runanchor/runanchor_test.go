@@ -14,13 +14,13 @@ const (
 // wantEntity is the 6-part chain entity ID the framework would mint for a given
 // bare runID under the test org/platform.
 func wantEntity(runID string) string {
-	return testOrg + "." + testPlatform + ".agent.chain.execution." + runID
+	return testOrg + "." + testPlatform + ".chain.agent.execution." + runID
 }
 
 // wantLoopEntity is the 6-part loop entity ID agentic-loop births for a given
 // loopID under the test org/platform.
 func wantLoopEntity(loopID string) string {
-	return testOrg + "." + testPlatform + ".agent.agentic-loop.execution." + loopID
+	return testOrg + "." + testPlatform + ".agentic-loop.agent.execution." + loopID
 }
 
 func TestAnchor(t *testing.T) {
@@ -34,10 +34,10 @@ func TestAnchor(t *testing.T) {
 			name: "both keys present returned verbatim",
 			meta: map[string]any{
 				agentic.MetadataKeyRunID:       "run-123",
-				agentic.MetadataKeyRunEntityID: "c360.ops.agent.chain.execution.run-123",
+				agentic.MetadataKeyRunEntityID: "c360.ops.chain.agent.execution.run-123",
 			},
 			wantRunID:    "run-123",
-			wantEntityID: "c360.ops.agent.chain.execution.run-123",
+			wantEntityID: "c360.ops.chain.agent.execution.run-123",
 		},
 		{
 			name: "only runID present reconstructs entity from org/platform",
@@ -92,7 +92,7 @@ func TestAnchor(t *testing.T) {
 }
 
 func TestChainEntityID(t *testing.T) {
-	const pinned = "c360.ops.agent.chain.execution.pinned-chain"
+	const pinned = "c360.ops.chain.agent.execution.pinned-chain"
 
 	tests := []struct {
 		name    string
@@ -104,7 +104,7 @@ func TestChainEntityID(t *testing.T) {
 			name: "related_loops pin takes precedence over run anchor",
 			meta: map[string]any{
 				agentic.MetadataKeyRelatedLoops: map[string]any{ChainEntityRoleKey: pinned},
-				agentic.MetadataKeyRunEntityID:  "c360.ops.agent.chain.execution.other",
+				agentic.MetadataKeyRunEntityID:  "c360.ops.chain.agent.execution.other",
 			},
 			want: pinned,
 		},
@@ -119,9 +119,9 @@ func TestChainEntityID(t *testing.T) {
 		{
 			name: "falls back to run anchor entity when no pin",
 			meta: map[string]any{
-				agentic.MetadataKeyRunEntityID: "c360.ops.agent.chain.execution.from-anchor",
+				agentic.MetadataKeyRunEntityID: "c360.ops.chain.agent.execution.from-anchor",
 			},
-			want: "c360.ops.agent.chain.execution.from-anchor",
+			want: "c360.ops.chain.agent.execution.from-anchor",
 		},
 		{
 			name: "reconstructs entity from bare runID when only runID present",

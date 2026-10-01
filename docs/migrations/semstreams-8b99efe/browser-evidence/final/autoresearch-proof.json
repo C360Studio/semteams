@@ -1,0 +1,117 @@
+{
+  "autoresearch-artifact-proof": {
+    "artifactResult": {
+      "call_id": "call_02a44cd0",
+      "name": "emit_autoresearch_artifact",
+      "content": "{\"improvement_pct\":29.2,\"loop_entity_id\":\"c360.semteams-bootstrap-e2e-a59bc7.agentic-loop.agent.execution.f766dbe0-fb91-4593-8cd9-e7385eaa8d32\",\"path\":\".artifacts/autoresearch/2026-10-01-go-test-wallclock-optimization.md\",\"revision\":1,\"slug\":\"2026-10-01-go-test-wallclock-optimization\"}",
+      "metadata": {
+        "loop_entity_id": "c360.semteams-bootstrap-e2e-a59bc7.agentic-loop.agent.execution.f766dbe0-fb91-4593-8cd9-e7385eaa8d32",
+        "path": ".artifacts/autoresearch/2026-10-01-go-test-wallclock-optimization.md"
+      },
+      "loop_id": "f766dbe0-fb91-4593-8cd9-e7385eaa8d32",
+      "request_id": "f766dbe0-fb91-4593-8cd9-e7385eaa8d32:req:1:0",
+      "execution_id": "tool-exec-v1-x2dxrfoxbifr4rr6eirq44roczagyft56hhqpdpbf6abnqqiyp2a",
+      "call_ordinal": 1
+    },
+    "artifactPaths": [
+      {
+        "subject": "c360.semteams-bootstrap-e2e-a59bc7.agentic-loop.agent.execution.f766dbe0-fb91-4593-8cd9-e7385eaa8d32",
+        "predicate": "autoresearch.artifact.path",
+        "object": ".artifacts/autoresearch/2026-10-01-go-test-wallclock-optimization.md",
+        "source": "autoresearch-emit-artifact",
+        "timestamp": "2026-10-01T12:54:15.103520835Z",
+        "confidence": 1
+      }
+    ],
+    "best": [
+      {
+        "subject": "c360.semteams-bootstrap-e2e-a59bc7.chain.agent.execution.741c1038-be8f-4b3b-95da-5ed1501a253a",
+        "predicate": "autoresearch.best.value",
+        "object": 0.85,
+        "source": "rule_engine",
+        "timestamp": "2026-10-01T12:54:15.022668085Z",
+        "confidence": 1,
+        "context": "rule:autoresearch_execute_promote_best_on_kept:c360.semteams-bootstrap-e2e-a59bc7.chain.agent.execution.741c1038-be8f-4b3b-95da-5ed1501a253a:1:promote_best_value"
+      }
+    ],
+    "bestExperiments": [
+      {
+        "subject": "c360.semteams-bootstrap-e2e-a59bc7.chain.agent.execution.741c1038-be8f-4b3b-95da-5ed1501a253a",
+        "predicate": "autoresearch.best.experiment-id",
+        "object": "c360.semteams-bootstrap-e2e-a59bc7.agentic-loop.agent.execution.00900457-555e-4b1b-9988-d606a3ff7ad3",
+        "source": "rule_engine",
+        "timestamp": "2026-10-01T12:54:15.023984585Z",
+        "confidence": 1,
+        "context": "rule:autoresearch_execute_promote_best_on_kept:c360.semteams-bootstrap-e2e-a59bc7.chain.agent.execution.741c1038-be8f-4b3b-95da-5ed1501a253a:1:promote_best_experiment_id"
+      }
+    ],
+    "keptMeasurements": [
+      {
+        "subject": "c360.semteams-bootstrap-e2e-a59bc7.agentic-loop.agent.execution.00900457-555e-4b1b-9988-d606a3ff7ad3",
+        "predicate": "autoresearch.measurement.outcome",
+        "object": "kept",
+        "source": "autoresearch-emit-measurement",
+        "timestamp": "2026-10-01T12:54:14.997183919Z",
+        "confidence": 1
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-a59bc7.agentic-loop.agent.execution.eb0c0e73-ca10-457d-a0fe-779a4866cd21",
+        "predicate": "autoresearch.measurement.outcome",
+        "object": "kept",
+        "source": "autoresearch-emit-measurement",
+        "timestamp": "2026-10-01T12:54:14.820456835Z",
+        "confidence": 1
+      }
+    ],
+    "measurementValues": [
+      {
+        "subject": "c360.semteams-bootstrap-e2e-a59bc7.agentic-loop.agent.execution.00900457-555e-4b1b-9988-d606a3ff7ad3",
+        "predicate": "autoresearch.measurement.value",
+        "object": 0.85,
+        "source": "autoresearch-emit-measurement",
+        "timestamp": "2026-10-01T12:54:14.997183919Z",
+        "confidence": 1
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-a59bc7.agentic-loop.agent.execution.eb0c0e73-ca10-457d-a0fe-779a4866cd21",
+        "predicate": "autoresearch.measurement.value",
+        "object": 1,
+        "source": "autoresearch-emit-measurement",
+        "timestamp": "2026-10-01T12:54:14.820456835Z",
+        "confidence": 1
+      }
+    ],
+    "artifactProvenance": [
+      {
+        "subject": "c360.semteams-bootstrap-e2e-a59bc7.agentic-loop.agent.execution.f766dbe0-fb91-4593-8cd9-e7385eaa8d32",
+        "predicate": "autoresearch.artifact.best-experiment-id",
+        "object": "mock-provenance-second-kept-iteration",
+        "source": "autoresearch-emit-artifact",
+        "timestamp": "2026-10-01T12:54:15.103520835Z",
+        "confidence": 1
+      }
+    ],
+    "executeLoops": [
+      {
+        "loop_id": "00900457-555e-4b1b-9988-d606a3ff7ad3",
+        "task_id": "rule-c360.semteams-bootstrap-e2e-a59bc7.agentic-loop.agent.execution.ea493210-5fcc-4a26-98b6-55d1ff5f81d9-1790859254980818919",
+        "state": "complete",
+        "role": "autoresearch-execute",
+        "iterations": 1,
+        "max_iterations": 8,
+        "outcome": "success",
+        "result": "{\"action\":\"measured\",\"reason\":\"Iteration 2: 1.00s \u2192 0.85s, tests still pass \u2014 kept. Cap reached.\"}"
+      },
+      {
+        "loop_id": "eb0c0e73-ca10-457d-a0fe-779a4866cd21",
+        "task_id": "rule-c360.semteams-bootstrap-e2e-a59bc7.agentic-loop.agent.execution.928b7b18-8d27-4fc2-b29d-64731c31fb95-1790859254802946127",
+        "state": "complete",
+        "role": "autoresearch-execute",
+        "iterations": 1,
+        "max_iterations": 8,
+        "outcome": "success",
+        "result": "{\"action\":\"measured\",\"reason\":\"Iteration 1: 1.20s \u2192 1.00s, tests still pass \u2014 kept.\"}"
+      }
+    ]
+  }
+}

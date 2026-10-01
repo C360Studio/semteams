@@ -1,0 +1,27 @@
+{
+  "classification": "intended upstream fail-closed authoritative-view catch-up",
+  "backend_log": {
+    "time": "2026-10-01T12:53:34.675335803Z",
+    "level": "ERROR",
+    "source": {
+      "function": "github.com/c360studio/semstreams/processor/agentic-dispatch.(*Component).handleListLoops",
+      "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/agentic-dispatch/http.go",
+      "line": 608
+    },
+    "msg": "agentic-dispatch: loop listing refused while loop authority is unavailable",
+    "service": "semstreams",
+    "version": "0.1.0",
+    "pid": 1,
+    "request_id": "ef61b5a1",
+    "error": "Component.currentLoopSnapshot: loop projection not caught up failed: graphview: view not ready"
+  },
+  "loops": {
+    "status": 503,
+    "body": "{\"response_id\":\"c4eb9eb7-4b5e-47e6-9a92-62a7d082dbc7\",\"type\":\"error\",\"content\":\"loop state is not available right now; retry shortly\",\"timestamp\":\"2026-10-01T12:53:34Z\"}\n"
+  },
+  "backend_readiness": {
+    "exit": 0,
+    "stdout": "READY",
+    "stderr": "--2026-10-01 12:53:34--  http://localhost:8080/readyz\nResolving localhost (localhost)... ::1, 127.0.0.1\nConnecting to localhost (localhost)|::1|:8080... connected.\nHTTP request sent, awaiting response... \n  HTTP/1.1 200 OK\n  Date: Thu, 01 Oct 2026 12:53:34 GMT\n  Content-Length: 5\n  Content-Type: text/plain; charset=utf-8\nLength: 5 [text/plain]\nSaving to: 'STDOUT'\n\n     0K                                                       100% 2.34M=0s\n\n2026-10-01 12:53:34 (2.34 MB/s) - written to stdout [5/5]\n\n"
+  }
+}

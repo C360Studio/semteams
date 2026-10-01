@@ -460,7 +460,7 @@ func TestWiredRulesDeclareEntityPattern(t *testing.T) {
 // instead of silently diverging. The loop pattern has no exported equivalent
 // (its source of truth, semstreams internal/builtinprojection/contracts.go,
 // is an internal package), so it stays a literal.
-const loopEntityPattern = "*.*.agent.agentic-loop.execution.*"
+const loopEntityPattern = "*.*.agentic-loop.agent.execution.*"
 
 var runEntityPattern = agentrun.EntityIDPattern
 

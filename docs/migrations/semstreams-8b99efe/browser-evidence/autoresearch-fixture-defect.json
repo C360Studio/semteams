@@ -1,0 +1,29 @@
+[
+  {
+    "pin": "baseline",
+    "tool_results": [
+      {
+        "call_id": "call_3ef058c3",
+        "name": "emit_autoresearch_artifact",
+        "error": "best_experiment_id is required (use literal 'baseline' when iterations_kept == 0)",
+        "error_kind": "invalid_args",
+        "loop_id": "df0b0d3b-0e41-4af3-9b41-166725b72549"
+      }
+    ]
+  },
+  {
+    "pin": "target",
+    "tool_results": [
+      {
+        "call_id": "call_17655ff7",
+        "name": "emit_autoresearch_artifact",
+        "error": "best_experiment_id is required (use literal 'baseline' when iterations_kept == 0)",
+        "error_kind": "invalid_args",
+        "loop_id": "511ab881-bc70-4726-b8c4-4aabf355c9c3",
+        "request_id": "511ab881-bc70-4726-b8c4-4aabf355c9c3:req:1:0",
+        "execution_id": "tool-exec-v1-nc3pw6dz5iylx6ddeefpzihptimhrrpngpjol7v5bnavfougihca",
+        "call_ordinal": 1
+      }
+    ]
+  }
+]

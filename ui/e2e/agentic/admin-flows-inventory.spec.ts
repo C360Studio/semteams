@@ -1,25 +1,9 @@
 import { test, expect } from "@playwright/test";
 
 /**
- * Journey: Admin flows inventory is read-only
- *
- * Goal: After bffa800 (drop the flow editor) the `/admin/flows` page
- * is a read-only inventory of deployed flows. Coordinator-authored
- * changes are the path forward; humans approve via the existing
- * approval gate, not by editing JSON.
- *
- * Validates:
- *   - The admin landing exposes a "Flows" card pointing at /admin/flows.
- *   - Clicking the card lands on /admin/flows.
- *   - The flows page renders with subtitle copy that names the
- *     read-only contract ("Coordinator authors changes…").
- *   - No Create / Edit / Delete affordances are present (regression
- *     guard against re-introducing the editor).
- *
- * Required config: any working backend (dev-research is fine).
- *
- * Run via:
- *   task test:e2e:agentic:admin-flows-inventory
+ * Frozen migration: the retained admin route shows admitted composition and
+ * validation. Graph exploration uses returned canonical entity identities;
+ * neither surface may request the retired runtime flow authoring API.
  */
 
 test.describe("Admin flows inventory", () => {
@@ -52,24 +36,14 @@ test.describe("Admin flows inventory", () => {
       "Read-only inventory",
     );
     await expect(flowsPage).toContainText(
-      "Flows are managed by the coordinator",
+      "Configured components and their admitted connections",
     );
 
-    // Either flow rows render, the empty-state message does, OR an
-    // error banner appears (e.g. when this stack doesn't include the
-    // flow-builder component — common on lean per-scenario configs).
-    // None of those paths should expose an editor.
-    const flowList = page.getByTestId("flow-list");
-    const empty = flowsPage.locator(".empty-state");
-    const errorBanner = page.getByTestId("error-banner");
-    const haveAny =
-      (await flowList.count()) > 0 ||
-      (await empty.count()) > 0 ||
-      (await errorBanner.count()) > 0;
-    expect(
-      haveAny,
-      "expected flow-list, empty-state, or error-banner — got none",
-    ).toBe(true);
+    // A working frozen bootstrap must expose its admitted component inventory.
+    await expect(page.getByTestId("error-banner")).toHaveCount(0);
+    await expect(page.getByTestId("composition-validation")).toBeVisible();
+    await expect(page.getByTestId("flow-list")).toContainText("teams-loop");
+    await expect(page.getByTestId("flow-list")).toContainText("agentic-loop");
 
     // Regression guard — these affordances were removed in bffa800.
     // None of them must reappear without an explicit product-shape
@@ -90,4 +64,57 @@ test.describe("Admin flows inventory", () => {
       page.getByRole("button", { name: /^edit$/i }),
     ).toHaveCount(0);
   });
+  test("graph inspector preserves canonical entity identity without flowbuilder", async ({ page, request }) => {
+    test.setTimeout(120_000);
+    const retiredRequests: string[] = [];
+    page.on("request", (outgoing) => {
+      if (new URL(outgoing.url()).pathname.startsWith("/flowbuilder/")) retiredRequests.push(outgoing.url());
+    });
+    await page.goto("/");
+    await expect(page.getByTestId("connection-status")).toHaveAttribute("data-summary", "healthy");
+    await page.getByTestId("chat-input").fill("Compare MQTT vs NATS on constrained ARM devices.");
+    await page.getByTestId("send-button").click();
+    await expect.poll(async () => {
+      const response = await request.get("/teams-dispatch/loops");
+      if (!response.ok()) return false;
+      const loops = await response.json() as Array<{ state: string }>;
+      return loops.length === 7 && loops.every((loop) => loop.state === "complete");
+    }, { timeout: 60_000 }).toBe(true);
+
+    const graphResponse = page.waitForResponse((response) => new URL(response.url()).pathname === "/graphql"
+      && (response.request().postData() ?? "").includes("GetEntitiesByPrefix"));
+    await page.goto("/graph");
+    const graph = await (await graphResponse).json();
+    expect(graph.errors).toBeUndefined();
+    const entities = graph.data.entitiesByPrefix.entities as Array<{ id: string }>;
+    const entity = entities.find((item) => item.id.includes(".agentic-loop.agent.execution."));
+    expect(entity, "graph must return an actual loop entity").toBeDefined();
+    const [org, platform, system, domain, type, instance] = entity!.id.split(".");
+    expect(system).toBe("agentic-loop");
+    expect(domain).toBe("agent");
+    expect(instance).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+    await expect(page.getByTestId("data-view")).toBeVisible();
+    await expect(page.getByTestId("sigma-canvas")).toContainText(`${entities.length} entities`);
+    await expect(page.getByTestId("data-view").getByRole("alert")).toHaveCount(0);
+    await expect(page.getByTestId("domain-filter-agent")).toBeVisible();
+    await expect(page.getByTestId("domain-filter-agentic-loop")).toHaveCount(0);
+    // Existing deterministic selection seam: no synthetic graph state or data.
+    await page.evaluate((id) => window.__e2eSelectEntity!(id), entity!.id);
+    const detail = page.getByTestId("graph-detail-panel");
+    await expect(detail).toBeVisible();
+    for (const [label, value] of Object.entries({ org, platform, system, domain, type, instance })) {
+      await expect(detail.locator(".id-part").filter({ has: page.locator(".id-label", { hasText: new RegExp(`^${label}$`) }) })
+        .locator(".id-value")).toHaveText(value);
+    }
+    await page.getByTestId("domain-filter-agent").click();
+    await expect(page.getByTestId("domain-filter-agent")).toHaveClass(/active/);
+    await page.getByTestId("reset-filters").click();
+    await expect(page.getByTestId("sigma-canvas")).toContainText(`${entities.length} entities`);
+    expect(retiredRequests).toEqual([]);
+    for (const endpoint of ["/api/ai/chat", "/api/ai/generate-flow"]) {
+      const response = await request.post(endpoint, { data: { prompt: "Create a flow" } });
+      expect(response.status()).toBe(410);
+    }
+  });
+
 });

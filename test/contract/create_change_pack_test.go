@@ -143,7 +143,7 @@ func TestCreateChangePack_01_Spawn(t *testing.T) {
 	if askStamp == nil {
 		t.Fatal("rule 01 does not copy coordinator.decision.reason onto the run entity — reviewer fidelity gate loses the original ask")
 	}
-	if askStamp.Subject != "$entity.org.$entity.platform.agent.chain.execution.$entity.instance" {
+	if askStamp.Subject != "$entity.org.$entity.platform.chain.agent.execution.$entity.instance" {
 		t.Errorf("rule 01 ask stamp subject = %q; want deterministic run entity literal", askStamp.Subject)
 	}
 	if obj, _ := askStamp.Object.(string); obj != "$entity.triple.coordinator.decision.reason" {

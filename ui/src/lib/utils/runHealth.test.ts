@@ -8,7 +8,7 @@ import {
   runIdFromEntity,
 } from "./runHealth";
 
-const RUN_ENTITY = "c360.semteams.agent.chain.execution.run-1";
+const RUN_ENTITY = "c360.semteams.chain.agent.execution.run-1";
 
 function triple(predicate: string, object: string, subject = RUN_ENTITY): RawTriple {
   return { subject, predicate, object };
@@ -34,7 +34,7 @@ function loop(overrides: Partial<AgentLoop> = {}): AgentLoop {
 describe("runHealth", () => {
   it("extracts bare run id from a full run entity id", () => {
     expect(runIdFromEntity(RUN_ENTITY)).toBe("run-1");
-    expect(runIdFromEntity("c360.semteams.agent.agentic-loop.execution.loop-1")).toBe("");
+    expect(runIdFromEntity("c360.semteams.agentic-loop.agent.execution.loop-1")).toBe("");
   });
 
   it("derives graph facts from lifecycle, proof, CBG, and evidence triples", () => {

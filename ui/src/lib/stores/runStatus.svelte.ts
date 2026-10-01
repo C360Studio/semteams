@@ -1,37 +1,8 @@
-// Run-status polling store
-// Polls /graph/triples for run-level pause markers (ADR-053 Phase 4b-2 / 4c).
-//
-// A "run" parks in `awaiting_approval` when:
-//   - a gated tool call fires (4c tool-gate):      agent.run.approval-pending
-//   - a recovery coordinator calls ask_user (4b-2): agent.run.clarification-pending
-//
-// The front-door coordinator's loop (the kanban card) is typically already
-// `complete` when this happens — so agentStore's SSE stream does not surface
-// the pause. This store polls the triple endpoint and exposes the pause data
-// so the board can surface a "Waiting on you" affordance.
-//
-// Design: pause source of truth = marker PRESENCE, not agent.run.phase.
-// Rules 11/13 REMOVE the marker as part of the resume transition, so a
-// present marker means "human needed now". We do not fetch agent.run.phase
-// at all.
-//
-// MARKER OBJECT FORMS ARE ASYMMETRIC (verified against semstreams beta.106):
-//   - agent.run.approval-pending.object  = the FULL 6-part loop entity ref
-//     (cmd/semteams/approvalpause/pauser.go stamps TryLoopExecutionEntityID).
-//   - agent.run.clarification-pending.object = the BARE loop UUID
-//     (configs/rules/agent-run/07,08 stamp `$entity.instance`, which
-//     execution_context.go documents as "the bare loop UUID").
-// Both are audit-only to the backend (rules key on predicate PRESENCE, not the
-// object), so the backend never noticed the inconsistency — but a consumer that
-// reads the object (this store, to recover the loop id for the reply/approval
-// anchor) must normalize. `toBareLoopId` accepts either form. This asymmetry is
-// a backend-cleanup candidate (normalize 07/08 to `$entity.id`); tracked for the
-// consumer-tester feedback pass. The clarification-resume e2e proves the correct
-// anchor is the BARE loop id (in_reply_to), extracted from coordinator.clarification.question.
-//
-// Poll interval: 2500ms by default. An AbortController + in-flight guard prevent
-// concurrent and orphaned fetches (mirrors systemStatus). Errors are captured in
-// lastError but never thrown, to keep the reactive graph stable.
+// Poll graph run status. Approval history is append-only: exact JSON
+// [bareLoopID, executionID] tuples in approval-pending minus approval-answered
+// identify unresolved gates. Historical receipts alone never imply a pause.
+// Clarification still uses its removable bare-loop marker. The loop record's
+// pending_approval remains the authority for rendering and submitting a gate.
 
 import { SvelteMap } from "svelte/reactivity";
 import { getTriples } from "$lib/services/runStatusApi";
@@ -49,8 +20,8 @@ export interface RunStatus {
   healthFacts: GraphRunHealthFacts | null;
 }
 
-const RUN_INFIX = ".agent.chain.execution.";
-const LOOP_INFIX = ".agent.agentic-loop.execution.";
+const RUN_INFIX = ".chain.agent.execution.";
+const LOOP_INFIX = ".agentic-loop.agent.execution.";
 const POLL_INTERVAL_MS = 2500;
 
 /** Extract the bare id after a fixed entity-id infix. Returns "" if not found. */
@@ -61,9 +32,9 @@ function bareIdAfter(entityId: string, infix: string): string {
 
 /**
  * Normalize a loop reference to its BARE id, accepting either a full 6-part
- * loop entity ref (`…agent.agentic-loop.execution.<id>`) or an already-bare id.
- * The two run-pause markers stamp different forms (see file header); the reply
- * and approval anchors both want the bare id, so callers normalize here.
+ * loop entity ref (`…agentic-loop.agent.execution.<id>`) or an already-bare id.
+ * Clarification markers and question subjects use these two forms. Approval
+ * tuples are parsed separately and must never pass through this helper.
  */
 function toBareLoopId(loopRef: string): string {
   return loopRef.includes(LOOP_INFIX) ? bareIdAfter(loopRef, LOOP_INFIX) : loopRef;
@@ -98,28 +69,32 @@ function dedupeTriples(triples: RawTriple[]): RawTriple[] {
   return out;
 }
 
-/**
- * Pure helper: derive the run-status map from three triple arrays.
- * Exported so tests can drive the parse logic without timers or fetch mocks.
- *
- * @param approvalTriples   - triples with predicate `agent.run.approval-pending`
- *                            (object = full loop entity ref)
- * @param clarTriples       - triples with predicate `agent.run.clarification-pending`
- *                            (object = bare loop UUID)
- * @param questionTriples   - triples with predicate `coordinator.clarification.question`
- *                            (subject = full asking-loop entity ref, object = prose)
- * @returns SvelteMap<bare runId, RunStatus>. Callers ITERATE this map (copy its
- *          contents into reactive state); they must NOT bind to it directly.
- */
+type ApprovalIdentity = [loopId: string, executionId: string];
+
+function approvalIdentity(object: string): ApprovalIdentity | null {
+  try {
+    const value: unknown = JSON.parse(object);
+    if (!Array.isArray(value) || value.length !== 2
+      || value.some((part) => typeof part !== "string" || part.trim().length === 0)
+      || value[0].includes(".")) return null;
+    return value as ApprovalIdentity;
+  } catch {
+    return null;
+  }
+}
+
+/** Derive current pauses; approval history is a set difference, never last-write-wins. */
 export function deriveRunStatuses(
   approvalTriples: RawTriple[],
   clarTriples: RawTriple[],
   questionTriples: RawTriple[],
   healthTriples: RawTriple[] = [],
+  answeredTriples: RawTriple[] = [],
 ): SvelteMap<string, RunStatus> {
   const healthFacts = deriveGraphRunHealthFacts([
     ...approvalTriples,
     ...clarTriples,
+    ...answeredTriples,
     ...healthTriples,
   ]);
 
@@ -127,11 +102,27 @@ export function deriveRunStatuses(
   // svelte/prefer-svelte-reactivity rule that applies file-wide to
   // .svelte.ts files. These are local intermediaries in a pure function,
   // not reactive state — but the rule fires on all `new Map()` in the file.
-  const approvalByRunEntity: Record<string, string> = {};
-  for (const t of approvalTriples) {
-    if (t.subject.includes(RUN_INFIX)) {
-      approvalByRunEntity[t.subject] = t.object;
-    }
+  const approvals = [...approvalTriples, ...healthTriples.filter((t) => t.predicate === "agent.run.approval-pending")];
+  const answers = [...answeredTriples, ...healthTriples.filter((t) => t.predicate === "agent.run.approval-answered")];
+  const answeredByRun: Record<string, Record<string, true>> = {};
+  for (const t of answers) {
+    const identity = approvalIdentity(t.object);
+    if (!t.subject.includes(RUN_INFIX) || !identity) continue;
+    (answeredByRun[t.subject] ??= {})[JSON.stringify(identity)] = true;
+  }
+  const pendingByRun: Record<string, Record<string, ApprovalIdentity>> = {};
+  for (const t of approvals) {
+    const identity = approvalIdentity(t.object);
+    if (!t.subject.includes(RUN_INFIX) || !identity) continue;
+    const key = JSON.stringify(identity);
+    if (!answeredByRun[t.subject]?.[key]) (pendingByRun[t.subject] ??= {})[key] = identity;
+  }
+  const approvalByRunEntity: Record<string, ApprovalIdentity> = {};
+  for (const [run, identities] of Object.entries(pendingByRun)) {
+    // Stable selection if several loops in the same run need approval. Answering
+    // one leaves the other tuple available on the following poll.
+    const key = Object.keys(identities).sort()[0];
+    if (key) approvalByRunEntity[run] = identities[key];
   }
 
   const clarByRunEntity: Record<string, string> = {};
@@ -171,12 +162,14 @@ export function deriveRunStatuses(
     const bareRunId = bareIdAfter(runEntityId, RUN_INFIX);
     if (!bareRunId) continue;
 
-    if (runEntityId in approvalByRunEntity) {
-      // tool_gate: object is the FULL loop entity ref → normalize to bare.
-      const gatedLoopId = toBareLoopId(approvalByRunEntity[runEntityId]);
+    const facts = healthFacts.get(bareRunId) ?? null;
+    if (facts && ["completed", "failed", "cancelled"].includes(facts.phase)) {
+      result.set(bareRunId, { runId: bareRunId, pause: null, healthFacts: facts });
+    } else if (runEntityId in approvalByRunEntity) {
+      const [gatedLoopId, executionId] = approvalByRunEntity[runEntityId];
       result.set(bareRunId, {
         runId: bareRunId,
-        pause: { cause: "tool_gate", gatedLoopId },
+        pause: { cause: "tool_gate", gatedLoopId, executionId },
         healthFacts: healthFacts.get(bareRunId) ?? null,
       });
     } else if (runEntityId in clarByRunEntity) {
@@ -219,8 +212,9 @@ function createRunStatusStore() {
     const ctrl = new AbortController();
     currentAbort = ctrl;
     try {
-      const [approvalTriples, clarTriples, questionTriples, ...healthBatches] = await Promise.all([
+      const [approvalTriples, answeredTriples, clarTriples, questionTriples, ...healthBatches] = await Promise.all([
         getTriples({ predicate: "agent.run.approval-pending", limit: 100, signal: ctrl.signal }),
+        getTriples({ predicate: "agent.run.approval-answered", limit: 100, signal: ctrl.signal }),
         getTriples({ predicate: "agent.run.clarification-pending", limit: 100, signal: ctrl.signal }),
         getTriples({ predicate: "coordinator.clarification.question", limit: 100, signal: ctrl.signal }),
         ...RUN_HEALTH_PREDICATES.map((predicate) =>
@@ -230,6 +224,7 @@ function createRunStatusStore() {
       const healthTriples = healthBatches.flat();
       const runEntityIds = runEntityIdsFromTriples(
         approvalTriples,
+        answeredTriples,
         clarTriples,
         healthTriples,
       );
@@ -246,10 +241,11 @@ function createRunStatusStore() {
         clarTriples,
         questionTriples,
         dedupeTriples([...healthTriples, ...subjectBatches.flat()]),
+        answeredTriples,
       );
 
-      // Replace map contents to exactly the set of currently-paused runs.
-      // Runs that resolved drop out; newly-paused runs appear.
+      // Replace the observed run status, including resumed runs whose
+      // approval receipts remain in graph history.
       const toDelete: string[] = [];
       for (const key of statuses.keys()) {
         if (!derived.has(key)) toDelete.push(key);
@@ -291,19 +287,19 @@ function createRunStatusStore() {
       fetching = false; // safety reset so a later start() always polls
     },
 
-    /** Get the RunStatus for a bare runId, or undefined if not paused. */
+    /** Get the status for an observed bare runId. */
     get(runId: string): RunStatus | undefined {
       return statuses.get(runId);
     },
 
-    /** All currently-paused run statuses. */
+    /** All observed run statuses, including historical runs. */
     getList(): RunStatus[] {
       return [...statuses.values()];
     },
 
     /** Count of runs currently paused and waiting on the operator. */
     get pausedCount(): number {
-      return statuses.size;
+      return [...statuses.values()].filter((status) => status.pause !== null).length;
     },
 
     /**

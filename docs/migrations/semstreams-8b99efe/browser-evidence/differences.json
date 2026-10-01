@@ -1,0 +1,865 @@
+{
+  "baseline-browser/run-failed": {
+    "loops": {
+      "status": 200,
+      "body": [
+        {
+          "loop_id": "loop_6e666705",
+          "task_id": "536e61c7-6809-432b-b092-33a658a92aae",
+          "state": "complete",
+          "max_iterations": 20,
+          "user_id": "http-user",
+          "channel_type": "http",
+          "outcome": "success",
+          "result": "{\"action\":\"research\",\"reason\":\"The user is asking for a comparison that benefits from evidence gathering \u2014 routing to the research category so the research-pack arc can scope it. (4a\u2032 failure journey: the planner is wedged to a max-iterations failure to exercise executing\u2192failed.)\"}"
+        },
+        {
+          "loop_id": "0a30df02-47ef-4fa5-91db-28b13d47d876",
+          "task_id": "rule-c360.bootstrap-e2e-001.agent.agentic-loop.execution.loop_6e666705-1790855698785610176",
+          "state": "failed",
+          "role": "researcher-research-plan",
+          "max_iterations": 8,
+          "outcome": "failed",
+          "error": "agentic-loop.HandleModelResponse: check max iterations failed: max iterations reached: loop 0a30df02-47ef-4fa5-91db-28b13d47d876 at 8/8 iterations"
+        },
+        {
+          "loop_id": "25869fc4-f005-4243-8169-67e581cb008d",
+          "task_id": "rule-c360.bootstrap-e2e-001.agent.chain.execution.loop_6e666705-1790855699317207135",
+          "state": "complete",
+          "role": "ops-chain-observer",
+          "max_iterations": 8,
+          "outcome": "success",
+          "result": "{\"action\":\"observed\",\"reason\":\"Read the run entity and the coordinator loop result. Run reached its terminal phase with no operator-actionable pattern; emitting no findings.\"}"
+        }
+      ]
+    },
+    "run_phases": {
+      "status": 200,
+      "body": [
+        {
+          "subject": "c360.bootstrap-e2e-001.agent.chain.execution.loop_6e666705",
+          "predicate": "agent.run.phase",
+          "object": "failed",
+          "source": "",
+          "timestamp": "2026-10-01T11:54:59.25855601Z",
+          "confidence": 1
+        }
+      ]
+    },
+    "responses": [
+      {
+        "sequence": 16,
+        "timestamp": "2026-10-01T11:54:58.776994426Z",
+        "subject": "user.response.http.http-1790855698743092134",
+        "message_type": "agentic.user_response.v1",
+        "trace_id": "04882963dbe2a2e9d13a1c2187c575fa",
+        "span_id": "9adfdc46194117a1",
+        "summary": "Type: agentic.user_response.v1, Payload: *agentic.UserResponse",
+        "raw_data": {
+          "id": "48986ef9-f46c-46b0-932f-4c19a5eea68d",
+          "type": {
+            "domain": "agentic",
+            "category": "user_response",
+            "version": "v1"
+          },
+          "payload": {
+            "response_id": "463f44d9-4b10-4486-8fc2-f5042cc8fa00",
+            "channel_type": "http",
+            "channel_id": "http-1790855698743092134",
+            "user_id": "http-user",
+            "in_reply_to": "loop_6e666705",
+            "type": "status",
+            "content": "Loop loop_6e666705: success",
+            "timestamp": "2026-10-01T11:54:58.776676093Z"
+          },
+          "meta": {
+            "created_at": 1790855698776,
+            "received_at": 1790855698776,
+            "source": "agentic-dispatch"
+          }
+        }
+      },
+      {
+        "sequence": 2,
+        "timestamp": "2026-10-01T11:54:58.744761718Z",
+        "subject": "user.response.http.http-1790855698743092134",
+        "message_type": "agentic.user_response.v1",
+        "trace_id": "3f2461da6cff782c75c9dd3d52941795",
+        "span_id": "eea6a0c0c73c98ee",
+        "summary": "Type: agentic.user_response.v1, Payload: *agentic.UserResponse",
+        "raw_data": {
+          "id": "2e375a8b-f6f6-4c81-ad39-6c77b9ac91c5",
+          "type": {
+            "domain": "agentic",
+            "category": "user_response",
+            "version": "v1"
+          },
+          "payload": {
+            "response_id": "6baff1d8-aa7a-4eea-b94c-ead425f16c6b",
+            "channel_type": "http",
+            "channel_id": "http-1790855698743092134",
+            "user_id": "http-user",
+            "in_reply_to": "loop_6e666705",
+            "type": "status",
+            "content": "Task submitted. Loop: loop_6e666705",
+            "timestamp": "2026-10-01T11:54:58.744365884Z"
+          },
+          "meta": {
+            "created_at": 1790855698744,
+            "received_at": 1790855698744,
+            "source": "agentic-dispatch"
+          }
+        }
+      }
+    ],
+    "tool_errors": [],
+    "assertion_excerpt": "(node:92209) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.\n(Use `node --trace-deprecation ...` to show where the warning was created)\n\nRunning 1 test using 1 worker\n\n(node:92226) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n(Use `node --trace-warnings ...` to show where the warning was created)\n(node:92226) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.\n(node:92226) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n(Use `node --trace-warnings ...` to show where the warning was created)\n  \u2718  1 [chromium] \u203a e2e/agentic/run-failed.spec.ts:40:3 \u203a ADR-053 Phase 4a\u2032 \u2014 executing\u2192failed run transition \u203a planner fails while executing \u2192 run transitions executing\u2192failed (1.7s)\n\n\n  1) [chromium] \u203a e2e/agentic/run-failed.spec.ts:40:3 \u203a ADR-053 Phase 4a\u2032 \u2014 executing\u2192failed run transition \u203a planner fails while executing \u2192 run transitions executing\u2192failed \n\n    Error: expected exactly 3 loops (coordinator dispatch + wedged planner + ops observer); a fourth means the planner spawned downstream despite failing. Got: [{\"role\":\"(dispatch)\",\"state\":\"complete\"},{\"role\":\"researcher-research-plan\",\"state\":\"failed\"}]\n\n    \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\n    Expected: \u001b[32m3\u001b[39m\n    Received: \u001b[31m2\u001b[39m\n\n      163 |       \"expected exactly 3 loops (coordinator dispatch + wedged planner + ops observer); a fourth means the planner spawned downstream despite failing. Got: \" +\n      164 |         JSON.stringify(loops.map((l) => ({ role: l.role || \"(dispatch)\", state: l.state }))),\n    > 165 |     ).toBe(3);\n          |       ^\n      166 |\n      167 |     // The ops observer fires on the run's FAILED terminal, not only on success.\n      168 |     // That is the whole reason the rule triggers on the run entity rather than\n        at /private/tmp/semteams-migration-8b99efe/baseline-source/ui/e2e/agentic/run-failed.spec.ts:165:7\n\n"
+  },
+  "baseline-browser/tool-approval-gate": {
+    "loops": {
+      "status": 200,
+      "body": [
+        {
+          "loop_id": "loop_44837f93",
+          "task_id": "1f3c53b8-2358-4661-9d43-caf6ea27e3b4",
+          "state": "complete",
+          "max_iterations": 20,
+          "user_id": "http-user",
+          "channel_type": "http",
+          "outcome": "success",
+          "result": "Rule \"high-temperature-alert\" created successfully. I'll now monitor\nenvironmental sensors and emit a warning when any temperature reading\nexceeds 100.\n"
+        }
+      ]
+    },
+    "run_phases": {
+      "status": 200,
+      "body": []
+    },
+    "responses": [
+      {
+        "sequence": 21,
+        "timestamp": "2026-10-01T11:55:37.849026264Z",
+        "subject": "user.response.http.http-1790855737809444597",
+        "message_type": "agentic.user_response.v1",
+        "trace_id": "3472a8f3a5990305211d733acd1a0bad",
+        "span_id": "730445c341afa79e",
+        "summary": "Type: agentic.user_response.v1, Payload: *agentic.UserResponse",
+        "raw_data": {
+          "id": "6b23ee03-c0ef-471c-9a24-86fb04e19436",
+          "type": {
+            "domain": "agentic",
+            "category": "user_response",
+            "version": "v1"
+          },
+          "payload": {
+            "response_id": "a7dab0b5-f9b4-40d2-b2dc-7f41b2a91f8c",
+            "channel_type": "http",
+            "channel_id": "http-1790855737809444597",
+            "user_id": "http-user",
+            "in_reply_to": "loop_44837f93",
+            "type": "status",
+            "content": "Loop loop_44837f93: success",
+            "timestamp": "2026-10-01T11:55:37.848654764Z"
+          },
+          "meta": {
+            "created_at": 1790855737848,
+            "received_at": 1790855737848,
+            "source": "agentic-dispatch"
+          }
+        }
+      },
+      {
+        "sequence": 2,
+        "timestamp": "2026-10-01T11:55:37.813151972Z",
+        "subject": "user.response.http.http-1790855737809444597",
+        "message_type": "agentic.user_response.v1",
+        "trace_id": "2e11d284b9f36122b62b9a4775140e0b",
+        "span_id": "12ff902327cc048b",
+        "summary": "Type: agentic.user_response.v1, Payload: *agentic.UserResponse",
+        "raw_data": {
+          "id": "d4e45242-f98c-4193-bdef-673c6f7c6230",
+          "type": {
+            "domain": "agentic",
+            "category": "user_response",
+            "version": "v1"
+          },
+          "payload": {
+            "response_id": "6d976a81-0712-440f-9800-6213cd4ce38b",
+            "channel_type": "http",
+            "channel_id": "http-1790855737809444597",
+            "user_id": "http-user",
+            "in_reply_to": "loop_44837f93",
+            "type": "status",
+            "content": "Task submitted. Loop: loop_44837f93",
+            "timestamp": "2026-10-01T11:55:37.811856305Z"
+          },
+          "meta": {
+            "created_at": 1790855737811,
+            "received_at": 1790855737811,
+            "source": "agentic-dispatch"
+          }
+        }
+      }
+    ],
+    "tool_errors": [
+      {
+        "call_id": "call_28c66701",
+        "error": "tool \"create_rule\" is not permitted for this loop (advertised tool set)",
+        "error_kind": "permission",
+        "loop_id": "loop_44837f93"
+      }
+    ],
+    "assertion_excerpt": "(node:93731) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.\n(Use `node --trace-deprecation ...` to show where the warning was created)\n\nRunning 1 test using 1 worker\n\n(node:93734) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n(Use `node --trace-warnings ...` to show where the warning was created)\n(node:93734) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.\n(node:93734) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n(Use `node --trace-warnings ...` to show where the warning was created)\n  \u2718  1 [chromium] \u203a e2e/agentic/tool-approval-gate.spec.ts:41:3 \u203a Tool Approval Gate \u203a user creates task via chat bar, approves tool, loop completes (30.4s)\n\n\n  1) [chromium] \u203a e2e/agentic/tool-approval-gate.spec.ts:41:3 \u203a Tool Approval Gate \u203a user creates task via chat bar, approves tool, loop completes \n\n    \u001b[31mTest timeout of 30000ms exceeded.\u001b[39m\n\n    Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\n    Locator: locator('[data-testid=\\'task-card\\'][data-column=\\'needs_you\\']')\n    Expected: visible\n    Error: element(s) not found\n\n    Call log:\n    \u001b[2m  - Expect \"toBeVisible\" with timeout 30000ms\u001b[22m\n    \u001b[2m  - waiting for locator('[data-testid=\\'task-card\\'][data-column=\\'needs_you\\']')\u001b[22m\n\n\n       97 |     await expect(\n       98 |       page.locator(\"[data-testid='task-card'][data-column='needs_you']\"),\n    >  99 |     ).toBeVisible({ timeout: 30000 });\n          |       ^\n      100 |\n      101 |     // -----------------------------------------------------------------\n      102 |     // Step 5 \u2014 open the detail panel via URL state. Direct\n        at /private/tmp/semteams-migration-8b99efe/baseline-source/ui/e2e/agentic/tool-approval-gate.spec.ts:99:7\n\n"
+  },
+  "baseline-browser/approval-pause": {
+    "loops": {
+      "status": 200,
+      "body": [
+        {
+          "loop_id": "loop_eac322b1",
+          "task_id": "296d38d4-ba3f-4aa5-a17e-9fcecb7cda79",
+          "state": "complete",
+          "max_iterations": 20,
+          "user_id": "http-user",
+          "channel_type": "http",
+          "outcome": "success",
+          "result": "{\"action\":\"dev_via_test\",\"reason\":\"Add a Go HTTP service that decodes MAVLink v2 HEARTBEAT frames over UDP and serves the latest at GET /heartbeat as JSON. (4c pause journey: first-pass Lisa escalates needs_clarification, then the recovery coordinator calls a gated tool to exercise executing\u2192awaiting_approval via the approval_required tool-gate.)\"}"
+        }
+      ]
+    },
+    "run_phases": {
+      "status": 200,
+      "body": []
+    },
+    "responses": [
+      {
+        "sequence": 16,
+        "timestamp": "2026-10-01T11:56:23.335928548Z",
+        "subject": "user.response.http.http-1790855783304704965",
+        "message_type": "agentic.user_response.v1",
+        "trace_id": "fec122333201e9a81c2c075e51af1bc4",
+        "span_id": "c3c6aceaaaa37bb1",
+        "summary": "Type: agentic.user_response.v1, Payload: *agentic.UserResponse",
+        "raw_data": {
+          "id": "ef52f5ff-5002-4744-be21-1068fe3c68e3",
+          "type": {
+            "domain": "agentic",
+            "category": "user_response",
+            "version": "v1"
+          },
+          "payload": {
+            "response_id": "642e8560-ae74-4f78-a5e1-712914046ad9",
+            "channel_type": "http",
+            "channel_id": "http-1790855783304704965",
+            "user_id": "http-user",
+            "in_reply_to": "loop_eac322b1",
+            "type": "status",
+            "content": "Loop loop_eac322b1: success",
+            "timestamp": "2026-10-01T11:56:23.335614215Z"
+          },
+          "meta": {
+            "created_at": 1790855783335,
+            "received_at": 1790855783335,
+            "source": "agentic-dispatch"
+          }
+        }
+      },
+      {
+        "sequence": 2,
+        "timestamp": "2026-10-01T11:56:23.308023882Z",
+        "subject": "user.response.http.http-1790855783304704965",
+        "message_type": "agentic.user_response.v1",
+        "trace_id": "30c613ef7a53367d1353865cb001b82b",
+        "span_id": "f2881d642cee2836",
+        "summary": "Type: agentic.user_response.v1, Payload: *agentic.UserResponse",
+        "raw_data": {
+          "id": "42be3a07-2862-4d25-a133-a4a6608e4ba8",
+          "type": {
+            "domain": "agentic",
+            "category": "user_response",
+            "version": "v1"
+          },
+          "payload": {
+            "response_id": "94b547d6-8d59-4b0f-b054-cee8bb958857",
+            "channel_type": "http",
+            "channel_id": "http-1790855783304704965",
+            "user_id": "http-user",
+            "in_reply_to": "loop_eac322b1",
+            "type": "status",
+            "content": "Task submitted. Loop: loop_eac322b1",
+            "timestamp": "2026-10-01T11:56:23.307111298Z"
+          },
+          "meta": {
+            "created_at": 1790855783307,
+            "received_at": 1790855783307,
+            "source": "agentic-dispatch"
+          }
+        }
+      }
+    ],
+    "tool_errors": [],
+    "assertion_excerpt": "(node:94059) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.\n(Use `node --trace-deprecation ...` to show where the warning was created)\n\nRunning 1 test using 1 worker\n\n(node:94060) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n(Use `node --trace-warnings ...` to show where the warning was created)\n(node:94060) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.\n(node:94060) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n(Use `node --trace-warnings ...` to show where the warning was created)\n  \u2718  1 [chromium] \u203a e2e/agentic/approval-pause.spec.ts:51:3 \u203a ADR-053 Phase 4c \u2014 in-run tool-gate pauses the run (executing\u2192awaiting_approval) \u203a recovery coordinator gated create_rule \u2192 run transitions executing\u2192awaiting_approval (1.5m)\n\n\n  1) [chromium] \u203a e2e/agentic/approval-pause.spec.ts:51:3 \u203a ADR-053 Phase 4c \u2014 in-run tool-gate pauses the run (executing\u2192awaiting_approval) \u203a recovery coordinator gated create_rule \u2192 run transitions executing\u2192awaiting_approval \n\n    Error: agent.run.phase never reached a settled phase on the run entity (run stuck in dispatched/executing \u2014 the gated create_rule did not drive executing\u2192awaiting_approval)\n\n    \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeTruthy\u001b[2m()\u001b[22m\n\n    Received: \u001b[31mnull\u001b[39m\n\n      100 |       runPhases,\n      101 |       \"agent.run.phase never reached a settled phase on the run entity (run stuck in dispatched/executing \u2014 the gated create_rule did not drive executing\u2192awaiting_approval)\",\n    > 102 |     ).toBeTruthy();\n          |       ^\n      103 |     expect(\n      104 |       runPhases,\n      105 |       \"run must reach awaiting_approval (ADR-053 4c: approvalpause stamps approval_pending \u2192 agent-run/12 executing\u2192awaiting_approval). Got: \" +\n        at /private/tmp/semteams-migration-8b99efe/baseline-source/ui/e2e/agentic/approval-pause.spec.ts:102:7\n\n"
+  },
+  "target-browser/research-mvp": {
+    "loops": {
+      "status": 200,
+      "body": [
+        {
+          "loop_id": "831ae6c3-3849-4b3a-a904-9ba9624b46b8",
+          "task_id": "rule-c360.semteams-bootstrap-e2e-a91fef.agentic-loop.agent.execution.a87f07f2-e9d4-49ea-943c-4bebc7c6df91-1790856181002630219",
+          "state": "complete",
+          "role": "reviewer-research",
+          "max_iterations": 8,
+          "outcome": "success",
+          "result": "{\"action\":\"approved\",\"reason\":\"Checklist satisfied: three actors with role text, two integration points with direction, two decomposable task-shaped recommendations, all artifact fields well-formed. open_gaps carries the test_harness path (not applicable \u2014 informational research). Substrate untouched. Research arc terminates here \u2014 rule 07 will spawn the wake-up coordinator to deliver the answer.\"}"
+        },
+        {
+          "loop_id": "96a00cff-7671-4ef9-a8ab-2eea19c2b2b6",
+          "task_id": "rule-c360.semteams-bootstrap-e2e-a91fef.chain.agent.execution.9b073329-413f-48ec-80cd-21913ea930f0-1790856181138466010",
+          "state": "complete",
+          "role": "ops-chain-observer",
+          "max_iterations": 8,
+          "outcome": "success",
+          "result": "{\"action\":\"observed\",\"reason\":\"Read the run entity and the coordinator loop result. Run reached its terminal phase with no operator-actionable pattern; emitting no findings.\"}"
+        },
+        {
+          "loop_id": "9b073329-413f-48ec-80cd-21913ea930f0",
+          "task_id": "dispatch-2f3aa7c3906ae3c95713452e32b7bb838e9d8193c54064e2590489b38a680a92",
+          "state": "complete",
+          "role": "coordinator",
+          "max_iterations": 8,
+          "user_id": "ui-anonymous",
+          "channel_type": "http",
+          "outcome": "success",
+          "result": "{\"action\":\"research\",\"reason\":\"The user is asking for a comparison of MQTT vs NATS for IoT edge deployments \u2014 a comparison-of-named-products question that benefits from evidence gathering rather than a small-talk reply. Routing to the research category so the research-pack arc can scope the synthesis.\"}"
+        },
+        {
+          "loop_id": "a87f07f2-e9d4-49ea-943c-4bebc7c6df91",
+          "task_id": "rule-c360.semteams-bootstrap-e2e-a91fef.agentic-loop.agent.execution.c8513988-fe21-4bf1-929e-0e13fd2d127a-1790856180890137177",
+          "state": "complete",
+          "role": "researcher-research-synthesize",
+          "iterations": 1,
+          "max_iterations": 8,
+          "outcome": "success",
+          "result": "{\"action\":\"emit\",\"reason\":\"Artifact rev 1 emitted. Three actors (MQTT broker, NATS server, constrained ARM device); two integration points (broker \u2192 edge); two task-shaped recommendations (when to choose which). Reviewer should approve and the wake-up coordinator can deliver the synthesised comparison directly.\"}"
+        },
+        {
+          "loop_id": "c8513988-fe21-4bf1-929e-0e13fd2d127a",
+          "task_id": "rule-c360.semteams-bootstrap-e2e-a91fef.agentic-loop.agent.execution.9b073329-413f-48ec-80cd-21913ea930f0-1790856180672387843",
+          "state": "complete",
+          "role": "researcher-research-plan",
+          "iterations": 1,
+          "max_iterations": 8,
+          "outcome": "success",
+          "result": "{\"action\":\"gather\",\"reason\":\"Plan emitted. One gather probe covers the comparison's load-bearing axes (latency + footprint on constrained ARM); SYNTHESIZE will compose the answer the wake-up coordinator delivers to the user.\",\"subtopics\":[\"MQTT vs NATS \u2014 latency + memory footprint on constrained ARM (Raspberry Pi class) edge devices\"]}"
+        },
+        {
+          "loop_id": "d319ef5d-2800-47a0-a502-b98a31585a42",
+          "task_id": "rule-c360.semteams-bootstrap-e2e-a91fef.agentic-loop.agent.execution.831ae6c3-3849-4b3a-a904-9ba9624b46b8-1790856181048913635",
+          "state": "complete",
+          "role": "coordinator",
+          "max_iterations": 8,
+          "outcome": "success",
+          "result": "{\"action\":\"respond_direct\",\"reason\":\"For IoT edge deployments on constrained ARM devices, MQTT has the edge on raw latency and footprint (Mosquitto runs under 2MB resident; QoS 0 publishes complete in well under a millisecond on Raspberry Pi-class hardware). NATS wins when you need both pub/sub AND request-reply in the same broker \u2014 its subject hierarchy is more expressive and JetStream gives you persistence \u2014 but it costs ~30MB of resident memory which matters on the tightest devices. Pick MQTT if pub/sub alone is sufficient and memory is tight; pick NATS when the workload needs request-reply or you have \\u003e256MB RAM to spare. The full research artifact (actors, integration points, decision criteria) is captured in the chain entity for follow-up.\"}"
+        },
+        {
+          "loop_id": "f14a709e-6e17-4928-8b01-c40830fa61a8",
+          "task_id": "rule-c360.semteams-bootstrap-e2e-a91fef.agentic-loop.agent.execution.c8513988-fe21-4bf1-929e-0e13fd2d127a-1790856180793395385",
+          "state": "complete",
+          "role": "researcher-research-gather",
+          "max_iterations": 8,
+          "outcome": "success",
+          "result": "{\"action\":\"synthesize\",\"reason\":\"Subtopic: MQTT vs NATS \u2014 latency + memory footprint on constrained ARM (Raspberry Pi class) edge devices\\n\\nEvidence gathered: MQTT (Mosquitto) runs under 2MB resident on Raspberry Pi-class hardware; QoS 0 publishes complete in well under a millisecond. NATS server binary ~10MB, runtime ~30MB resident, but offers subject-hierarchy pub/sub PLUS request-reply in one broker; JetStream adds persistence. Forwarding to SYNTHESIZE to compose the comparison \u2014 actors (MQTT brokers, NATS servers, ARM hardware class) and integration points (broker \u2192 edge sensor).\"}"
+        }
+      ]
+    },
+    "run_phases": {
+      "status": 200,
+      "body": [
+        {
+          "subject": "c360.semteams-bootstrap-e2e-a91fef.chain.agent.execution.9b073329-413f-48ec-80cd-21913ea930f0",
+          "predicate": "agent.run.phase",
+          "object": "completed",
+          "source": "",
+          "timestamp": "2026-10-01T12:03:01.081700385Z",
+          "confidence": 1
+        }
+      ]
+    },
+    "responses": [
+      {
+        "sequence": 131,
+        "timestamp": "2026-10-01T12:03:01.072813344Z",
+        "subject": "user.response.http.http-1790856180626866385",
+        "message_type": "agentic.user_response.v1",
+        "trace_id": "c7c2911b9792cdebbf62d4fd625d1955",
+        "span_id": "65395c99c13ed59b",
+        "summary": "Type: agentic.user_response.v1, Payload: *agentic.UserResponse",
+        "raw_data": {
+          "id": "5ca4ff2a-6520-4632-9a35-5bce37e80c68",
+          "type": {
+            "domain": "agentic",
+            "category": "user_response",
+            "version": "v1"
+          },
+          "payload": {
+            "response_id": "terminal-user-response:4ef5c054-6a26-4fa5-af98-fdd012aa0f32",
+            "channel_type": "http",
+            "channel_id": "http-1790856180626866385",
+            "user_id": "ui-anonymous",
+            "in_reply_to": "d319ef5d-2800-47a0-a502-b98a31585a42",
+            "type": "result",
+            "content": "For IoT edge deployments on constrained ARM devices, MQTT has the edge on raw latency and footprint (Mosquitto runs under 2MB resident; QoS 0 publishes complete in well under a millisecond on Raspberry Pi-class hardware). NATS wins when you need both pub/sub AND request-reply in the same broker \u2014 its subject hierarchy is more expressive and JetStream gives you persistence \u2014 but it costs ~30MB of resident memory which matters on the tightest devices. Pick MQTT if pub/sub alone is sufficient and memory is tight; pick NATS when the workload needs request-reply or you have >256MB RAM to spare. The full research artifact (actors, integration points, decision criteria) is captured in the chain entity for follow-up.",
+            "timestamp": "2026-10-01T12:03:01.068658427Z"
+          },
+          "meta": {
+            "created_at": 1790856181072,
+            "received_at": 1790856181072,
+            "source": "agentic-dispatch"
+          }
+        }
+      },
+      {
+        "sequence": 2,
+        "timestamp": "2026-10-01T12:03:00.634011385Z",
+        "subject": "user.response.http.http-1790856180626866385",
+        "message_type": "agentic.user_response.v1",
+        "trace_id": "f6c2d9cadf8c26ac5df689f2edce1ff4",
+        "span_id": "229568393c0fb817",
+        "summary": "Type: agentic.user_response.v1, Payload: *agentic.UserResponse",
+        "raw_data": {
+          "id": "0ae0e9e6-26ae-4f6e-86b7-179c08b799c8",
+          "type": {
+            "domain": "agentic",
+            "category": "user_response",
+            "version": "v1"
+          },
+          "payload": {
+            "response_id": "cd6bc361-a92f-4079-b62c-fe8815d5486a",
+            "channel_type": "http",
+            "channel_id": "http-1790856180626866385",
+            "user_id": "ui-anonymous",
+            "in_reply_to": "9b073329-413f-48ec-80cd-21913ea930f0",
+            "type": "status",
+            "content": "Task submitted. Loop: 9b073329-413f-48ec-80cd-21913ea930f0",
+            "timestamp": "2026-10-01T12:03:00.632584468Z"
+          },
+          "meta": {
+            "created_at": 1790856180632,
+            "received_at": 1790856180632,
+            "source": "agentic-dispatch"
+          }
+        }
+      }
+    ],
+    "tool_errors": [],
+    "assertion_excerpt": "(node:98781) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.\n(Use `node --trace-deprecation ...` to show where the warning was created)\n\nRunning 1 test using 1 worker\n\n(node:98791) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n(Use `node --trace-warnings ...` to show where the warning was created)\n(node:98791) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.\n(node:98791) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n(Use `node --trace-warnings ...` to show where the warning was created)\n  \u2718  1 [chromium] \u203a e2e/agentic/research-mvp.spec.ts:83:3 \u203a ADR-042 MVP-5 \u2014 Research category mock-LLM journey \u203a user prompt \u2192 full research-category arc \u2192 coordinator delivers reply (2.0s)\n\n\n  1) [chromium] \u203a e2e/agentic/research-mvp.spec.ts:83:3 \u203a ADR-042 MVP-5 \u2014 Research category mock-LLM journey \u203a user prompt \u2192 full research-category arc \u2192 coordinator delivers reply \n\n    Error: expected exactly 1 dispatch-spawned loop with empty role (Loop 0); got 0\n\n    \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\n    Expected: \u001b[32m1\u001b[39m\n    Received: \u001b[31m0\u001b[39m\n\n      167 |       dispatchLoops.length,\n      168 |       `expected exactly 1 dispatch-spawned loop with empty role (Loop 0); got ${dispatchLoops.length}`,\n    > 169 |     ).toBe(1);\n          |       ^\n      170 |\n      171 |     const expectedDefaultRole = \"coordinator\";\n      172 |     const roles = finalLoops.map((l) => l.role || expectedDefaultRole);\n        at /Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/ui/e2e/agentic/research-mvp.spec.ts:169:7\n\n"
+  },
+  "target-browser/ops-agent": {
+    "loops": {
+      "status": 200,
+      "body": [
+        {
+          "loop_id": "022c06db-524a-4643-9992-879a5d01cba0",
+          "task_id": "rule-c360.semteams-bootstrap-e2e-e2b1ae.agentic-loop.agent.execution.eebf88d4-96f6-4827-9035-cb0626f76256-1790856354604212924",
+          "state": "complete",
+          "role": "researcher-research-synthesize",
+          "iterations": 1,
+          "max_iterations": 8,
+          "outcome": "success",
+          "result": "{\"action\":\"emit\",\"reason\":\"Artifact rev 1 emitted. Three actors (MQTT broker, NATS server, constrained ARM device); two integration points (broker \u2192 edge); two task-shaped recommendations (when to choose which). Reviewer should approve and the wake-up coordinator can deliver the synthesised comparison directly.\"}"
+        },
+        {
+          "loop_id": "0470fd98-607d-4553-ad6f-575f23c9a10b",
+          "task_id": "rule-c360.semteams-bootstrap-e2e-e2b1ae.chain.agent.execution.1b991443-dc66-4373-9147-312f644fbc57-1790856354842707799",
+          "state": "complete",
+          "role": "ops-chain-observer",
+          "iterations": 2,
+          "max_iterations": 8,
+          "outcome": "success",
+          "result": "{\"action\":\"observed\",\"reason\":\"Read the run entity and the coordinator loop result. Emitted two findings: one gather-breadth signal at 0.72, one clean-baseline note.\"}"
+        },
+        {
+          "loop_id": "1b991443-dc66-4373-9147-312f644fbc57",
+          "task_id": "dispatch-98b02b6b3db40bdb6de9cc5472f53000c0137eeb1b8e0e8227bd924476a461cd",
+          "state": "complete",
+          "role": "coordinator",
+          "max_iterations": 8,
+          "user_id": "http-user",
+          "channel_type": "http",
+          "outcome": "success",
+          "result": "{\"action\":\"research\",\"reason\":\"The user is asking for a comparison of MQTT vs NATS for IoT edge deployments \u2014 a comparison-of-named-products question that benefits from evidence gathering rather than a small-talk reply. Routing to the research category so the research-pack arc can scope the synthesis.\"}"
+        },
+        {
+          "loop_id": "22703aec-70c8-4fa4-990e-3bc87a6bbea9",
+          "task_id": "rule-c360.semteams-bootstrap-e2e-e2b1ae.agentic-loop.agent.execution.eebf88d4-96f6-4827-9035-cb0626f76256-1790856354515991507",
+          "state": "complete",
+          "role": "researcher-research-gather",
+          "max_iterations": 8,
+          "outcome": "success",
+          "result": "{\"action\":\"synthesize\",\"reason\":\"Subtopic: MQTT vs NATS \u2014 latency + memory footprint on constrained ARM (Raspberry Pi class) edge devices\\n\\nEvidence gathered: MQTT (Mosquitto) runs under 2MB resident on Raspberry Pi-class hardware; QoS 0 publishes complete in well under a millisecond. NATS server binary ~10MB, runtime ~30MB resident, but offers subject-hierarchy pub/sub PLUS request-reply in one broker; JetStream adds persistence. Forwarding to SYNTHESIZE to compose the comparison \u2014 actors (MQTT brokers, NATS servers, ARM hardware class) and integration points (broker \u2192 edge sensor).\"}"
+        },
+        {
+          "loop_id": "490796b3-2961-4fd1-9126-fa8dfd86a721",
+          "task_id": "rule-c360.semteams-bootstrap-e2e-e2b1ae.agentic-loop.agent.execution.022c06db-524a-4643-9992-879a5d01cba0-1790856354709246424",
+          "state": "complete",
+          "role": "reviewer-research",
+          "max_iterations": 8,
+          "outcome": "success",
+          "result": "{\"action\":\"approved\",\"reason\":\"Checklist satisfied: three actors with role text, two integration points with direction, two decomposable task-shaped recommendations, all artifact fields well-formed. open_gaps carries the test_harness path (not applicable \u2014 informational research). Substrate untouched. Research arc terminates here \u2014 rule 07 will spawn the wake-up coordinator to deliver the answer.\"}"
+        },
+        {
+          "loop_id": "7a8745f0-aa71-4ebe-8ce7-359f81848a70",
+          "task_id": "rule-c360.semteams-bootstrap-e2e-e2b1ae.agentic-loop.agent.execution.490796b3-2961-4fd1-9126-fa8dfd86a721-1790856354756626299",
+          "state": "complete",
+          "role": "coordinator",
+          "max_iterations": 8,
+          "outcome": "success",
+          "result": "{\"action\":\"respond_direct\",\"reason\":\"For IoT edge deployments on constrained ARM devices, MQTT has the edge on raw latency and footprint (Mosquitto runs under 2MB resident; QoS 0 publishes complete in well under a millisecond on Raspberry Pi-class hardware). NATS wins when you need both pub/sub AND request-reply in the same broker \u2014 its subject hierarchy is more expressive and JetStream gives you persistence \u2014 but it costs ~30MB of resident memory which matters on the tightest devices. Pick MQTT if pub/sub alone is sufficient and memory is tight; pick NATS when the workload needs request-reply or you have \\u003e256MB RAM to spare. The full research artifact (actors, integration points, decision criteria) is captured in the chain entity for follow-up.\"}"
+        },
+        {
+          "loop_id": "eebf88d4-96f6-4827-9035-cb0626f76256",
+          "task_id": "rule-c360.semteams-bootstrap-e2e-e2b1ae.agentic-loop.agent.execution.1b991443-dc66-4373-9147-312f644fbc57-1790856354420041049",
+          "state": "complete",
+          "role": "researcher-research-plan",
+          "iterations": 1,
+          "max_iterations": 8,
+          "outcome": "success",
+          "result": "{\"action\":\"gather\",\"reason\":\"Plan emitted. One gather probe covers the comparison's load-bearing axes (latency + footprint on constrained ARM); SYNTHESIZE will compose the answer the wake-up coordinator delivers to the user.\",\"subtopics\":[\"MQTT vs NATS \u2014 latency + memory footprint on constrained ARM (Raspberry Pi class) edge devices\"]}"
+        }
+      ]
+    },
+    "run_phases": {
+      "status": 200,
+      "body": [
+        {
+          "subject": "c360.semteams-bootstrap-e2e-e2b1ae.chain.agent.execution.1b991443-dc66-4373-9147-312f644fbc57",
+          "predicate": "agent.run.phase",
+          "object": "completed",
+          "source": "",
+          "timestamp": "2026-10-01T12:05:54.778867091Z",
+          "confidence": 1
+        }
+      ]
+    },
+    "responses": [
+      {
+        "sequence": 132,
+        "timestamp": "2026-10-01T12:05:54.780604757Z",
+        "subject": "user.response.http.http-1790856354393901549",
+        "message_type": "agentic.user_response.v1",
+        "trace_id": "ba35a7ab1c6ee2eec9f1a06f646c18c7",
+        "span_id": "6d461e3f20fc6e26",
+        "summary": "Type: agentic.user_response.v1, Payload: *agentic.UserResponse",
+        "raw_data": {
+          "id": "c93dd202-71fd-4b70-852e-acb48d67436d",
+          "type": {
+            "domain": "agentic",
+            "category": "user_response",
+            "version": "v1"
+          },
+          "payload": {
+            "response_id": "terminal-user-response:6ea104da-18fa-4daa-bd4a-06e9f1f8982a",
+            "channel_type": "http",
+            "channel_id": "http-1790856354393901549",
+            "user_id": "http-user",
+            "in_reply_to": "7a8745f0-aa71-4ebe-8ce7-359f81848a70",
+            "type": "result",
+            "content": "For IoT edge deployments on constrained ARM devices, MQTT has the edge on raw latency and footprint (Mosquitto runs under 2MB resident; QoS 0 publishes complete in well under a millisecond on Raspberry Pi-class hardware). NATS wins when you need both pub/sub AND request-reply in the same broker \u2014 its subject hierarchy is more expressive and JetStream gives you persistence \u2014 but it costs ~30MB of resident memory which matters on the tightest devices. Pick MQTT if pub/sub alone is sufficient and memory is tight; pick NATS when the workload needs request-reply or you have >256MB RAM to spare. The full research artifact (actors, integration points, decision criteria) is captured in the chain entity for follow-up.",
+            "timestamp": "2026-10-01T12:05:54.776794132Z"
+          },
+          "meta": {
+            "created_at": 1790856354780,
+            "received_at": 1790856354780,
+            "source": "agentic-dispatch"
+          }
+        }
+      },
+      {
+        "sequence": 2,
+        "timestamp": "2026-10-01T12:05:54.395933632Z",
+        "subject": "user.response.http.http-1790856354393901549",
+        "message_type": "agentic.user_response.v1",
+        "trace_id": "5b8744e6cc9e41ced8cb60cbdafb00b0",
+        "span_id": "c9c0f328258b3dcc",
+        "summary": "Type: agentic.user_response.v1, Payload: *agentic.UserResponse",
+        "raw_data": {
+          "id": "45df0759-ab87-4a03-924a-d53cb8efbde4",
+          "type": {
+            "domain": "agentic",
+            "category": "user_response",
+            "version": "v1"
+          },
+          "payload": {
+            "response_id": "e7a77810-2737-4fe1-9f87-959c29f6c96d",
+            "channel_type": "http",
+            "channel_id": "http-1790856354393901549",
+            "user_id": "http-user",
+            "in_reply_to": "1b991443-dc66-4373-9147-312f644fbc57",
+            "type": "status",
+            "content": "Task submitted. Loop: 1b991443-dc66-4373-9147-312f644fbc57",
+            "timestamp": "2026-10-01T12:05:54.395562799Z"
+          },
+          "meta": {
+            "created_at": 1790856354395,
+            "received_at": 1790856354395,
+            "source": "agentic-dispatch"
+          }
+        }
+      }
+    ],
+    "tool_errors": [],
+    "assertion_excerpt": "(node:3158) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.\n(Use `node --trace-deprecation ...` to show where the warning was created)\n\nRunning 1 test using 1 worker\n\n(node:3182) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n(Use `node --trace-warnings ...` to show where the warning was created)\n(node:3182) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.\n(node:3182) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n(Use `node --trace-warnings ...` to show where the warning was created)\n  \u2718  1 [chromium] \u203a e2e/agentic/ops-run-terminal.spec.ts:89:3 \u203a Ops run-terminal observation \u203a run reaches terminal \u2192 exactly one observer \u2192 diagnosis entities minted (528ms)\n\n\n  1) [chromium] \u203a e2e/agentic/ops-run-terminal.spec.ts:89:3 \u203a Ops run-terminal observation \u203a run reaches terminal \u2192 exactly one observer \u2192 diagnosis entities minted \n\n    Error: finding subject c360.semteams-bootstrap-e2e-e2b1ae.diagnosis.ops.finding.5d99a427-5cb4-4437-a6fe-237031770fd4 is not a minted ops diagnosis entity\n\n    \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoContain\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // indexOf\u001b[22m\n\n    Expected substring: \u001b[32m\".ops.diagnosis.finding.\"\u001b[39m\n    Received string:    \u001b[31m\"c360.semteams-bootstrap-e2e-e2b1ae.diagnosis.ops.finding.5d99a427-5cb4-4437-a6fe-237031770fd4\"\u001b[39m\n\n      172 |         f.subject,\n      173 |         `finding subject ${f.subject} is not a minted ops diagnosis entity`,\n    > 174 |       ).toContain(\".ops.diagnosis.finding.\");\n          |         ^\n      175 |     }\n      176 |\n      177 |     // -----------------------------------------------------------------\n        at /Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/ui/e2e/agentic/ops-run-terminal.spec.ts:174:9\n\n  1 failed\n    [chromium] \u203a e2e/agentic/ops-run-terminal.spec.ts:89:3 \u203a Ops run-terminal observation \u203a run reaches terminal \u2192 exactly one observer \u2192 diagnosis entities minted \n{\n  \"config\": {\n    \"configFile\": \"/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/ui/playwright.config.ts\",\n    \"rootDir\": \"/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/ui/e2e/agentic\",\n    \"forbidOnly\": false,\n    \"fullyParallel\": true,\n    \"globalSetup\": null,\n    \"globalTeardown\": null,\n    \"globalTimeout\": 0,\n    \"grep\": {},\n    \"grepInvert\": null,\n    \"maxFailures\": 0,\n    \"metadata\": {\n      \"actualWorkers\": 1\n    },\n    \"preserveOutput\": \"always\",\n    \"reporter\": [\n      [\n        \"list\"\n      ],\n      [\n        \"json\"\n      ]\n    ],\n    \"reportSlowTests\": {\n      \"max\": 5,\n      \"threshold\": 300000\n    },\n    \"quiet\": false,\n    \"projects\": [\n      {\n        \"outputDir\": \"/tmp/semteams-migration-8b99efe/evidence/target-browser/ops-agent/test-results\",\n        \"repeatEach\": 1,\n        \"retries\": 0,\n        \"metadata\": {\n          \"actualWorkers\": 1\n        },\n        \"id\": \"chromium\",\n        \"name\": \"chromium\",\n        \"testDir\": \"/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/ui/e2e/agentic\",\n        \"testIgnore\": [],\n        \"testMatch\": [\n          \"**/*.@(spec|test).?(c|m)[jt]s?(x)\"\n        ],\n        \"timeout\": 30000\n      }\n    ],\n    \"shard\": null,\n    \"updateSnapshots\": \"missing\",\n    \"updateSourceMethod\": \"patch\",\n    \"version\": \"1.56.0\",\n    \"workers\": 1,\n    \"webServer\": null\n  },\n  \"suites\": [\n    {\n      \"title\": \"ops-run-terminal.spec.ts\",\n      \"file\": \"ops-run-terminal.spec.ts\",\n      \"column\": 0,\n      \"line\": 0,\n      \"specs\": [],\n      \"suites\": [\n        {\n          \"title\": \"Ops run-terminal observation\",\n          \"file\": \"ops-run-terminal.spec.ts\",\n          \"line\": 81,\n          \"column\": 6,\n          \"specs\": [\n            {\n              \"title\": \"run reaches terminal \u2192 exactly one observer \u2192 diagnosis entities minted\",\n              \"ok\": false,\n              \"tags\": [],\n              \"tests\": [\n                {\n                  \"timeout\": 270000,\n                  \"annotations\": [],\n                  \"expectedStatus\": \"passed\",\n                  \"projectId\": \"chromium\",\n                  \"projectName\": \"chromium\",\n                  \"results\": [\n                    {\n                      \"workerIndex\": 0,\n                      \"parallelIndex\": 0,\n                      \"status\": \"failed\",\n                      \"duration\": 528,\n                      \"error\": {\n                        \"message\": \"Error: finding subject c360.semteams-bootstrap-e2e-e2b1ae.diagnosis.ops.finding.5d99a427-5cb4-4437-a6fe-237031770fd4 is not a minted ops diagnosis entity\\n\\n\\u001b[2mexpect(\\u001b[22m\\u001b[31mreceived\\u001b[39m\\u001b[2m).\\u001b[22mtoContain\\u001b[2m(\\u001b[22m\\u001b[32mexpected\\u001b[39m\\u001b[2m) // indexOf\\u001b[22m\\n\\nExpected substring: \\u001b[32m\\\".ops.diagnosis.finding.\\\"\\u001b[39m\\nReceived string:    \\u001b[31m\\\"c360.semteams-bootstrap-e2e-e2b1ae.diagnosis.ops.finding.5d99a427-5cb4-4437-a6fe-237031770fd4\\\"\\u001b[39m\",\n                        \"stack\": \"Error: finding subject c360.semteams-bootstrap-e2e-e2b1ae.diagnosis.ops.finding.5d99a427-5cb4-4437-a6fe-237031770fd4 is not a minted ops diagnosis entity\\n\\n\\u001b[2mexpect(\\u001b[22m\\u001b[31mreceived\\u001b[39m\\u001b[2m).\\u001b[22mtoContain\\u001b[2m(\\u001b[22m\\u001b[32mexpected\\u001b[39m\\u001b[2m) // indexOf\\u001b[22m\\n\\nExpected substring: \\u001b[32m\\\".ops.diagnosis.finding.\\\"\\u001b[39m\\nReceived string:    \\u001b["
+  },
+  "target-browser/autoresearch": {
+    "loops": {
+      "status": 200,
+      "body": [
+        {
+          "loop_id": "511ab881-bc70-4726-b8c4-4aabf355c9c3",
+          "task_id": "rule-c360.semteams-bootstrap-e2e-ea83c6.chain.agent.execution.64158ebb-2f1c-434c-b88d-eb8f487b5529-1790856198119617171",
+          "state": "complete",
+          "role": "autoresearch-synthesize",
+          "iterations": 1,
+          "max_iterations": 8,
+          "outcome": "success",
+          "result": "{\"action\":\"emit\",\"reason\":\"Artifact emitted: 1.20s \u2192 0.85s (29% faster), both iterations kept. Routing to the reviewer.\"}"
+        },
+        {
+          "loop_id": "5369fe55-c3ea-4380-8a50-8cddd3305192",
+          "task_id": "rule-c360.semteams-bootstrap-e2e-ea83c6.chain.agent.execution.64158ebb-2f1c-434c-b88d-eb8f487b5529-1790856197925981712",
+          "state": "complete",
+          "role": "autoresearch-propose",
+          "max_iterations": 8,
+          "outcome": "success",
+          "result": "{\"action\":\"measure\",\"reason\":\"Iteration 2 hypothesis: drop a redundant fixture rebuild in TestMain \u2014 further reduces setup time.\"}"
+        },
+        {
+          "loop_id": "64158ebb-2f1c-434c-b88d-eb8f487b5529",
+          "task_id": "dispatch-09ed84c6dccad33a0798332454d9f779603d8f5a23ebfd8a1099d68ce4e63296",
+          "state": "complete",
+          "role": "coordinator",
+          "iterations": 2,
+          "max_iterations": 8,
+          "user_id": "ui-anonymous",
+          "channel_type": "http",
+          "outcome": "success",
+          "result": "{\"action\":\"autoresearch\",\"reason\":\"Optimize the wallclock of `go test ./...`. Command: go test ./...; surface: ./...; cap: 2 iterations; metric: real seconds parsed from the test output. Lower is better.\"}"
+        },
+        {
+          "loop_id": "91870058-e729-4654-a2eb-a62a49ac2bcf",
+          "task_id": "rule-c360.semteams-bootstrap-e2e-ea83c6.chain.agent.execution.64158ebb-2f1c-434c-b88d-eb8f487b5529-1790856197663604462",
+          "state": "complete",
+          "role": "autoresearch-propose",
+          "max_iterations": 8,
+          "outcome": "success",
+          "result": "{\"action\":\"measure\",\"reason\":\"Iteration 1 hypothesis: enable test caching / parallelism (t.Parallel on the independent suites) \u2014 should cut wallclock without changing behavior.\"}"
+        },
+        {
+          "loop_id": "9df6e681-4b2d-4fbf-a10d-4eee8de46490",
+          "task_id": "rule-c360.semteams-bootstrap-e2e-ea83c6.agentic-loop.agent.execution.64158ebb-2f1c-434c-b88d-eb8f487b5529-1790856197571497921",
+          "state": "complete",
+          "role": "autoresearch-baseline",
+          "iterations": 1,
+          "max_iterations": 8,
+          "outcome": "success",
+          "result": "{\"action\":\"propose\",\"reason\":\"Baseline captured at 1.20s. Beginning the iteration loop (cap 2) \u2014 propose single-axis changes and keep the ones that lower the wallclock.\"}"
+        },
+        {
+          "loop_id": "c5795807-6b92-4c64-bf90-134942ac49e2",
+          "task_id": "rule-c360.semteams-bootstrap-e2e-ea83c6.agentic-loop.agent.execution.ec8bb9c9-e6b0-4cfd-9b39-85e9e4066ceb-1790856198275251296",
+          "state": "complete",
+          "role": "coordinator",
+          "max_iterations": 8,
+          "outcome": "success",
+          "result": "{\"action\":\"respond_direct\",\"reason\":\"Optimized `go test ./...` from 1.20s to 0.85s (about 29% faster) across two kept iterations: parallelizing independent suites and dropping a redundant fixture rebuild. Both changes keep the tests passing.\"}"
+        },
+        {
+          "loop_id": "cb9a4740-6583-455f-9c97-2b3bfdd1ea01",
+          "task_id": "rule-c360.semteams-bootstrap-e2e-ea83c6.agentic-loop.agent.execution.91870058-e729-4654-a2eb-a62a49ac2bcf-1790856197757221379",
+          "state": "complete",
+          "role": "autoresearch-execute",
+          "iterations": 1,
+          "max_iterations": 8,
+          "outcome": "success",
+          "result": "{\"action\":\"measured\",\"reason\":\"Iteration 1: 1.20s \u2192 1.00s, tests still pass \u2014 kept.\"}"
+        },
+        {
+          "loop_id": "d8f1b806-9c0f-421b-aa09-119d8f2dd21b",
+          "task_id": "rule-c360.semteams-bootstrap-e2e-ea83c6.chain.agent.execution.64158ebb-2f1c-434c-b88d-eb8f487b5529-1790856198376830588",
+          "state": "complete",
+          "role": "ops-chain-observer",
+          "max_iterations": 8,
+          "outcome": "success",
+          "result": "{\"action\":\"observed\",\"reason\":\"Read the run entity and the coordinator loop result. Run reached its terminal phase with no operator-actionable pattern; emitting no findings.\"}"
+        },
+        {
+          "loop_id": "dd1ef220-23b8-4685-b04c-b7f5da444500",
+          "task_id": "rule-c360.semteams-bootstrap-e2e-ea83c6.agentic-loop.agent.execution.5369fe55-c3ea-4380-8a50-8cddd3305192-1790856197990377504",
+          "state": "complete",
+          "role": "autoresearch-execute",
+          "iterations": 1,
+          "max_iterations": 8,
+          "outcome": "success",
+          "result": "{\"action\":\"measured\",\"reason\":\"Iteration 2: 1.00s \u2192 0.85s, tests still pass \u2014 kept. Cap reached.\"}"
+        },
+        {
+          "loop_id": "ec8bb9c9-e6b0-4cfd-9b39-85e9e4066ceb",
+          "task_id": "rule-c360.semteams-bootstrap-e2e-ea83c6.agentic-loop.agent.execution.511ab881-bc70-4726-b8c4-4aabf355c9c3-1790856198210591629",
+          "state": "complete",
+          "role": "reviewer-autoresearch",
+          "max_iterations": 8,
+          "outcome": "success",
+          "result": "{\"action\":\"approved\",\"reason\":\"Rollup is structurally complete: baseline, per-iteration journey, running best, and kept changes all present; the kept iterations genuinely moved the metric (1.20 \u2192 0.85). Approved.\"}"
+        }
+      ]
+    },
+    "run_phases": {
+      "status": 200,
+      "body": [
+        {
+          "subject": "c360.semteams-bootstrap-e2e-ea83c6.chain.agent.execution.64158ebb-2f1c-434c-b88d-eb8f487b5529",
+          "predicate": "agent.run.phase",
+          "object": "completed",
+          "source": "",
+          "timestamp": "2026-10-01T12:03:18.298459129Z",
+          "confidence": 1
+        }
+      ]
+    },
+    "responses": [
+      {
+        "sequence": 2,
+        "timestamp": "2026-10-01T12:03:17.514276421Z",
+        "subject": "user.response.http.http-1790856197506307379",
+        "message_type": "agentic.user_response.v1",
+        "trace_id": "b8f94f326de396335e2d3b3ab7003e46",
+        "span_id": "1433d879aa7bb12f",
+        "summary": "Type: agentic.user_response.v1, Payload: *agentic.UserResponse",
+        "raw_data": {
+          "id": "4a21aab6-8960-4bee-849f-6e18e2e7e4e5",
+          "type": {
+            "domain": "agentic",
+            "category": "user_response",
+            "version": "v1"
+          },
+          "payload": {
+            "response_id": "accfb4f4-3f72-4389-94dd-176fbdf7c6d5",
+            "channel_type": "http",
+            "channel_id": "http-1790856197506307379",
+            "user_id": "ui-anonymous",
+            "in_reply_to": "64158ebb-2f1c-434c-b88d-eb8f487b5529",
+            "type": "status",
+            "content": "Task submitted. Loop: 64158ebb-2f1c-434c-b88d-eb8f487b5529",
+            "timestamp": "2026-10-01T12:03:17.512763921Z"
+          },
+          "meta": {
+            "created_at": 1790856197512,
+            "received_at": 1790856197512,
+            "source": "agentic-dispatch"
+          }
+        }
+      }
+    ],
+    "tool_errors": [
+      {
+        "call_id": "call_17655ff7",
+        "name": "emit_autoresearch_artifact",
+        "error": "best_experiment_id is required (use literal 'baseline' when iterations_kept == 0)",
+        "error_kind": "invalid_args",
+        "loop_id": "511ab881-bc70-4726-b8c4-4aabf355c9c3",
+        "request_id": "511ab881-bc70-4726-b8c4-4aabf355c9c3:req:1:0",
+        "execution_id": "tool-exec-v1-nc3pw6dz5iylx6ddeefpzihptimhrrpngpjol7v5bnavfougihca",
+        "call_ordinal": 1
+      }
+    ],
+    "assertion_excerpt": "(node:99012) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.\n(Use `node --trace-deprecation ...` to show where the warning was created)\n\nRunning 1 test using 1 worker\n\n(node:99022) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n(Use `node --trace-warnings ...` to show where the warning was created)\n(node:99022) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.\n(node:99022) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n(Use `node --trace-warnings ...` to show where the warning was created)\n  \u2718  1 [chromium] \u203a e2e/agentic/autoresearch.spec.ts:42:3 \u203a autoresearch \u2014 propose/execute iteration mock-LLM journey \u203a optimize prompt \u2192 baseline \u2192 2 kept iterations \u2192 approved reply (12.5s)\n\n\n  1) [chromium] \u203a e2e/agentic/autoresearch.spec.ts:42:3 \u203a autoresearch \u2014 propose/execute iteration mock-LLM journey \u203a optimize prompt \u2192 baseline \u2192 2 kept iterations \u2192 approved reply \n\n    Error: expected a typed user.response.* publish for coordinator respond_direct\n\n    \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeTruthy\u001b[2m()\u001b[22m\n\n    Received: \u001b[31mnull\u001b[39m\n\n      201 |       payloads,\n      202 |       \"expected a typed user.response.* publish for coordinator respond_direct\",\n    > 203 |     ).toBeTruthy();\n          |       ^\n      204 |     const delivered = payloads!;\n      205 |     expect(delivered.every((entry) => entry.subject.startsWith(\"user.response.\"))).toBe(true);\n      206 |     expect(delivered.every((entry) => entry.message_type === \"agentic.user_response.v1\")).toBe(true);\n        at /Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams/ui/e2e/agentic/autoresearch.spec.ts:203:7\n\n"
+  },
+  "baseline-boundary/approval-boundary-approve": {
+    "loops": {
+      "status": 200,
+      "body": [
+        {
+          "loop_id": "loop_564e7b9a",
+          "task_id": "c8006ecf-2bf2-4a9a-93da-1c74529f15a1",
+          "state": "pending",
+          "max_iterations": 20,
+          "user_id": "http-user",
+          "channel_type": "http",
+          "pending_approval": {
+            "call_id": "call_db112387",
+            "tool_name": "request_sandbox",
+            "arguments": {
+              "languages": [
+                "go"
+              ],
+              "network": "restricted",
+              "tools": [
+                "task"
+              ],
+              "verification": [
+                {
+                  "command": "go version",
+                  "name": "go"
+                },
+                {
+                  "command": "task --version",
+                  "name": "task"
+                }
+              ]
+            },
+            "reason": "approval_required: Tool 'request_sandbox' requires human approval before execution",
+            "requested_at": "2026-10-01T12:11:01.35918526Z"
+          }
+        }
+      ]
+    },
+    "run_phases": {
+      "status": 200,
+      "body": []
+    },
+    "responses": [
+      {
+        "sequence": 2,
+        "timestamp": "2026-10-01T12:11:01.21023126Z",
+        "subject": "user.response.http.http-1790856661206600010",
+        "message_type": "agentic.user_response.v1",
+        "trace_id": "b32201216919f17ac5799785d9903cd2",
+        "span_id": "8d80c8b6149f8709",
+        "summary": "Type: agentic.user_response.v1, Payload: *agentic.UserResponse",
+        "raw_data": {
+          "id": "33362b82-6507-4f19-973a-6fed43b7b76e",
+          "type": {
+            "domain": "agentic",
+            "category": "user_response",
+            "version": "v1"
+          },
+          "payload": {
+            "response_id": "f8c0377e-df81-4478-b0f6-b5717e1ce55b",
+            "channel_type": "http",
+            "channel_id": "http-1790856661206600010",
+            "user_id": "http-user",
+            "in_reply_to": "loop_564e7b9a",
+            "type": "status",
+            "content": "Task submitted. Loop: loop_564e7b9a",
+            "timestamp": "2026-10-01T12:11:01.209519677Z"
+          },
+          "meta": {
+            "created_at": 1790856661209,
+            "received_at": 1790856661209,
+            "source": "agentic-dispatch"
+          }
+        }
+      }
+    ],
+    "tool_errors": [
+      {
+        "call_id": "call_db112387",
+        "error": "approval_required: Tool 'request_sandbox' requires human approval before execution",
+        "error_kind": "permission",
+        "loop_id": "loop_564e7b9a"
+      }
+    ],
+    "assertion_excerpt": "(node:6653) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.\n(Use `node --trace-deprecation ...` to show where the warning was created)\n\nRunning 1 test using 1 worker\n\n(node:6691) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n(Use `node --trace-warnings ...` to show where the warning was created)\n(node:6691) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.\n(node:6691) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n(Use `node --trace-warnings ...` to show where the warning was created)\n  \u2718  1 [chromium] \u203a e2e/agentic/approval-boundary.spec.ts:8:1 \u203a pending sandbox request: approve preserves execution and identity boundaries (16.8s)\n\n\n  1) [chromium] \u203a e2e/agentic/approval-boundary.spec.ts:8:1 \u203a pending sandbox request: approve preserves execution and identity boundaries \n\n    Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\n    Expected: \u001b[32mtrue\u001b[39m\n    Received: \u001b[31mfalse\u001b[39m\n\n    Call Log:\n    - Timeout 15000ms exceeded while waiting on the predicate\n\n      12 |   await page.getByTestId(\"send-button\").click();\n      13 |   let pending: { loop_id: string; state: string; user_id: string; pending_approval: { execution_id: string; tool_name: string } } | undefined;\n    > 14 |   await expect.poll(async () => {\n         |   ^\n      15 |     const response = await request.get(\"/teams-dispatch/loops\");\n      16 |     if (!response.ok()) return false;\n      17 |     pending = (await response.json()).find((loop: { state: string }) => loop.state === \"awaiting_approval\");\n        at /private/tmp/semteams-migration-8b99efe/baseline-source/ui/e2e/agentic/approval-boundary.spec.ts:14:3\n\n"
+  }
+}

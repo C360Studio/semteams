@@ -16,7 +16,7 @@ paths:
     /activity:
         get:
             summary: Real-time activity events (SSE)
-            description: 'Server-Sent Events stream of loop activity. Event types: loop_created, loop_updated, loop_deleted, loop_completed. loop_completed fires when a COMPLETE_<id> KV key is written; the envelope loop_id is the bare id (prefix stripped) matching data.loop_id — use event.type=="loop_completed" to detect terminal entries. When type is loop_completed, data.outcome carries the verdict ("success", "failed", or "cancelled"); data.state is NOT populated on terminal events. Each event''s data field is an ActivityEvent whose data field is a Loop (see #/components/schemas/Loop and #/components/schemas/ActivityEvent). Connect with EventSource or curl -N. Note: OpenAPI 3.0 cannot express per-event SSE JSON schema; consult the ActivityEvent and Loop component schemas.'
+            description: 'Server-Sent Events stream of loop activity. Event types: loop_created, loop_updated, loop_deleted, loop_completed. loop_completed fires when a valid ordinary completion is written to a COMPLETE_<id> KV key; the envelope loop_id is the bare id (prefix stripped) matching data.loop_id — use event.type=="loop_completed" to detect terminal entries. When type is loop_completed, data.outcome carries the verdict ("success", "failed", or "cancelled"). Unsupported or malformed completion records produce per-key error events. Each event''s data field is an ActivityEvent whose data field is a Loop (see #/components/schemas/Loop and #/components/schemas/ActivityEvent). Connect with EventSource or curl -N. Note: OpenAPI 3.0 cannot express per-event SSE JSON schema; consult the ActivityEvent and Loop component schemas.'
             tags:
                 - AgenticDispatch
             responses:
@@ -38,7 +38,7 @@ paths:
     /config/{name}:
         get:
             summary: Get component configuration
-            description: Returns the current configuration for a specific component
+            description: Returns the constructor-captured boot configuration for a specific component
             tags:
                 - Components
             parameters:
@@ -60,7 +60,7 @@ paths:
     /debug/state:
         get:
             summary: Internal component state for debugging
-            description: Returns internal state including active loops, registered commands, configuration, and uptime. Useful for debugging and monitoring.
+            description: Returns current loop projection readiness and poison count, registered commands, configuration, and uptime. An unavailable projection returns diagnostics with HTTP 503.
             tags:
                 - AgenticDispatch
             responses:
@@ -69,36 +69,13 @@ paths:
                     content:
                         application/json:
                             schema:
-                                type: object
-    /deployment/{id}/deploy:
-        post:
-            summary: Deploy flow
-            description: Deploys a flow to the runtime
-            tags:
-                - Deployment
-            responses:
-                "200":
-                    description: Flow deployed
-                "400":
-                    description: Validation errors
-    /deployment/{id}/start:
-        post:
-            summary: Start flow
-            description: Starts a deployed flow
-            tags:
-                - Deployment
-            responses:
-                "200":
-                    description: Flow started
-    /deployment/{id}/stop:
-        post:
-            summary: Stop flow
-            description: Stops a running flow
-            tags:
-                - Deployment
-            responses:
-                "200":
-                    description: Flow stopped
+                                $ref: '#/components/schemas/DebugState'
+                "503":
+                    description: Loop projection unavailable, not caught up, or poisoned; readiness is false
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/DebugState'
     /entries:
         get:
             summary: Get recent message entries
@@ -127,192 +104,24 @@ paths:
                                     $ref: '#/components/schemas/MessageLogEntry'
     /flowgraph:
         get:
-            summary: Get component FlowGraph
-            description: Returns the complete FlowGraph with nodes and edges for all managed components
+            summary: Get the composition graph projection
+            description: Returns the boot composition's graph projection (nodes with resolved ports, derived edges) as retained at boot; Mermaid when format=mermaid
             tags:
                 - Components
                 - FlowGraph
-            responses:
-                "200":
-                    description: FlowGraph with nodes and edges
-                    content:
-                        application/json:
-                            schema:
-                                type: object
-    /flows:
-        get:
-            summary: List all flows
-            description: Returns a list of all visual flows
-            tags:
-                - Flows
-            responses:
-                "200":
-                    description: List of flows
-                    content:
-                        application/json:
-                            schema:
-                                type: object
-        post:
-            summary: Create a new flow
-            description: Creates a new visual flow
-            tags:
-                - Flows
-            requestBody:
-                description: Flow definition to create
-                required: true
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/Flow'
-            responses:
-                "201":
-                    description: Flow created
-                    content:
-                        application/json:
-                            schema:
-                                type: object
-                "400":
-                    description: Invalid request
-    /flows/{id}:
-        get:
-            summary: Get flow by ID
-            description: Returns a single flow by ID
-            tags:
-                - Flows
             parameters:
-                - name: id
-                  in: path
-                  required: true
-                  description: Flow ID
-                  schema:
-                    type: string
-            responses:
-                "200":
-                    description: Flow details
-                    content:
-                        application/json:
-                            schema:
-                                type: object
-                "404":
-                    description: Flow not found
-        put:
-            summary: Update flow
-            description: Updates an existing flow
-            tags:
-                - Flows
-            requestBody:
-                description: Updated flow definition
-                required: true
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/Flow'
-            responses:
-                "200":
-                    description: Flow updated
-                    content:
-                        application/json:
-                            schema:
-                                type: object
-                "404":
-                    description: Flow not found
-                "409":
-                    description: Version conflict
-        delete:
-            summary: Delete flow
-            description: Deletes a flow
-            tags:
-                - Flows
-            responses:
-                "204":
-                    description: Flow deleted
-                "404":
-                    description: Flow not found
-    /flows/{id}/runtime/health:
-        get:
-            summary: Get runtime health
-            description: Returns health status and timing for flow components (status, uptime, last activity)
-            tags:
-                - Runtime
-            parameters:
-                - name: id
-                  in: path
-                  required: true
-                  description: Flow ID
-                  schema:
-                    type: string
-            responses:
-                "200":
-                    description: Runtime health status
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/RuntimeHealthResponse'
-                "404":
-                    description: Flow not found
-    /flows/{id}/runtime/messages:
-        get:
-            summary: Get runtime messages
-            description: Returns filtered message logger entries for flow components (NATS message flow visibility)
-            tags:
-                - Runtime
-            parameters:
-                - name: id
-                  in: path
-                  required: true
-                  description: Flow ID
-                  schema:
-                    type: string
-                - name: limit
+                - name: format
                   in: query
-                  description: 'Maximum number of messages to return (default: 100, max: 1000)'
-                  schema:
-                    type: integer
-            responses:
-                "200":
-                    description: Runtime message entries
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/RuntimeMessagesResponse'
-                "404":
-                    description: Flow not found
-    /flows/{id}/runtime/metrics:
-        get:
-            summary: Get runtime metrics
-            description: Returns runtime metrics for flow components (throughput, errors, queue depth) with graceful degradation
-            tags:
-                - Runtime
-            parameters:
-                - name: id
-                  in: path
-                  required: true
-                  description: Flow ID
+                  description: json (default) or mermaid
                   schema:
                     type: string
             responses:
                 "200":
-                    description: Runtime metrics
+                    description: Composition graph projection
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/RuntimeMetricsResponse'
-                "404":
-                    description: Flow not found
-    /gaps:
-        get:
-            summary: Get component flow gaps
-            description: Returns disconnected nodes and orphaned ports in the component flow
-            tags:
-                - Components
-                - FlowGraph
-            responses:
-                "200":
-                    description: Component flow gaps and disconnected nodes
-                    content:
-                        application/json:
-                            schema:
-                                type: object
+                                $ref: '#/components/schemas/Graph'
     /graphql:
         post:
             summary: Execute GraphQL query
@@ -522,8 +331,8 @@ paths:
                                 type: object
     /loops:
         get:
-            summary: List all tracked loops
-            description: Returns all active and recent loops. Supports optional filtering by user_id and state query parameters.
+            summary: List current persisted loops
+            description: Returns the authoritative current loop projection. Supports optional filtering by user_id and state query parameters.
             tags:
                 - AgenticDispatch
             parameters:
@@ -533,7 +342,7 @@ paths:
                   schema: {}
                 - name: state
                   in: query
-                  description: Filter by loop state (pending, executing, paused, complete, failed, cancelled)
+                  description: Filter by loop state (pending, exploring, planning, architecting, executing, reviewing, awaiting_approval, complete, failed, cancelled)
                   schema: {}
             responses:
                 "200":
@@ -544,6 +353,8 @@ paths:
                                 type: array
                                 items:
                                     $ref: '#/components/schemas/Loop'
+                "503":
+                    description: The current loop projection is unavailable, not caught up, or poisoned
     /loops/{id}:
         get:
             summary: Get single loop by ID
@@ -563,8 +374,14 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Loop'
+                "400":
+                    description: Loop ID is missing or is not a framework-minted loop token
                 "404":
                     description: Loop not found
+                "500":
+                    description: The current loop authority is inconsistent; no caller action resolves it
+                "503":
+                    description: Loop state is not readable right now; retry
     /loops/{id}/approval:
         post:
             summary: Submit human approval response for a gated tool call
@@ -592,43 +409,17 @@ paths:
                             schema:
                                 type: object
                 "400":
-                    description: Invalid request body or decision value
+                    description: Invalid request body or decision value, or a loop ID that is not a framework-minted loop token
+                "403":
+                    description: Requester is not in the approve permission list (default admits everyone)
                 "404":
                     description: Loop not found
                 "409":
                     description: Loop exists but is not awaiting approval
                 "500":
                     description: Failed to publish approval (NATS error)
-    /loops/{id}/signal:
-        post:
-            summary: Send control signal to loop
-            description: Sends a control signal (pause, resume, cancel) to an active loop.
-            tags:
-                - AgenticDispatch
-            parameters:
-                - name: id
-                  in: path
-                  required: true
-                  description: Loop ID
-                  schema: {}
-            requestBody:
-                description: Control signal to send
-                required: true
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/SignalRequest'
-            responses:
-                "200":
-                    description: Signal accepted
-                    content:
-                        application/json:
-                            schema:
-                                type: object
-                "400":
-                    description: Invalid signal type
-                "404":
-                    description: Loop not found
+                "503":
+                    description: Loop state is not readable right now; retry
     /mcp:
         post:
             summary: MCP endpoint
@@ -664,6 +455,10 @@ paths:
                                 type: object
                 "400":
                     description: Invalid request
+                "409":
+                    description: The current loop route is ambiguous or conflicts with the request; no task is published
+                "503":
+                    description: Required loop authority is unavailable, not caught up, or poisoned; no task is published
     /paths:
         get:
             summary: Get component data paths
@@ -713,46 +508,6 @@ paths:
                                 type: object
                 "404":
                     description: Component not found
-    /status/stream:
-        get:
-            summary: WebSocket status stream
-            description: |
-                Real-time flow status updates via WebSocket.
-
-                ## Connection
-                Connect with: ws://host/flowbuilder/status/stream?flowId={flowId}
-
-                ## Message Types (Server → Client)
-                All messages are wrapped in StatusStreamEnvelope:
-                - **flow_status**: Flow state changes (deployed, running, stopped, failed)
-                - **component_health**: Component health updates (every 5s)
-                - **component_metrics**: Real-time metrics from MetricsForwarder
-                - **log_entry**: Log messages from LogForwarder
-
-                ## Filtering (Client → Server)
-                Send SubscribeCommand JSON to filter messages:
-                - message_types: Array of message types to receive
-                - log_level: Minimum log level (DEBUG < INFO < WARN < ERROR)
-                - sources: Array of component names to filter by
-
-                ## Example Subscribe Command
-                {"command":"subscribe","message_types":["flow_status","log_entry"],"log_level":"WARN"}
-            tags:
-                - Status
-            parameters:
-                - name: flowId
-                  in: query
-                  required: true
-                  description: Flow ID to subscribe to for status updates
-                  schema:
-                    type: string
-            responses:
-                "101":
-                    description: Switching to WebSocket protocol
-                "400":
-                    description: Missing or invalid flowId parameter
-                "404":
-                    description: Flow not found
     /subjects:
         get:
             summary: Get monitored subjects
@@ -825,18 +580,18 @@ paths:
                     description: Component type not found
     /validate:
         get:
-            summary: Validate component flow connectivity
-            description: Performs FlowGraph connectivity analysis for operational validation (used by E2E tests)
+            summary: Get the boot composition findings
+            description: Returns the composition validation result computed over the admitted composition at boot (ADR-100), verbatim
             tags:
                 - Components
                 - FlowGraph
             responses:
                 "200":
-                    description: Flow connectivity analysis results
+                    description: Composition validation result
                     content:
                         application/json:
                             schema:
-                                type: object
+                                $ref: '#/components/schemas/Result'
     /workflows:
         get:
             summary: List registered workflow types
@@ -1152,7 +907,11 @@ components:
                                             type: object
                                         call_id:
                                             type: string
+                                        execution_id:
+                                            type: string
                                         reason:
+                                            type: string
+                                        request_id:
                                             type: string
                                         requested_at:
                                             format: date-time
@@ -1163,6 +922,7 @@ components:
                                             type: string
                                       required:
                                         - call_id
+                                        - execution_id
                                         - tool_name
                                         - requested_at
                                       type: object
@@ -1209,6 +969,8 @@ components:
                     type: boolean
                 decision:
                     type: string
+                execution_id:
+                    type: string
                 loop_id:
                     type: string
                 message:
@@ -1225,6 +987,8 @@ components:
             properties:
                 decision:
                     type: string
+                execution_id:
+                    type: string
                 modified_arguments:
                     additionalProperties: {}
                     type: object
@@ -1234,6 +998,7 @@ components:
                     type: string
             required:
                 - decision
+                - execution_id
             type: object
         ComponentType:
             properties:
@@ -1296,123 +1061,247 @@ components:
                 - name
                 - type
             type: object
-        Flow:
+        DebugState:
             properties:
-                connections:
+                command_count:
+                    type: integer
+                commands:
+                    items:
+                        type: string
+                    type: array
+                config:
+                    properties:
+                        auto_continue:
+                            type: boolean
+                        default_model:
+                            type: string
+                        default_role:
+                            type: string
+                        stream_name:
+                            type: string
+                    required:
+                        - default_role
+                        - default_model
+                        - auto_continue
+                        - stream_name
+                    type: object
+                loop_count:
+                    type: integer
+                loop_projection_poisoned:
+                    type: integer
+                loop_projection_ready:
+                    type: boolean
+                loops:
+                    items:
+                        anyOf:
+                            - properties:
+                                channel_id:
+                                    type: string
+                                channel_type:
+                                    type: string
+                                completed_at:
+                                    format: date-time
+                                    type: string
+                                context_request_id:
+                                    type: string
+                                created_at:
+                                    format: date-time
+                                    type: string
+                                error:
+                                    type: string
+                                iterations:
+                                    type: integer
+                                loop_id:
+                                    type: string
+                                max_iterations:
+                                    type: integer
+                                metadata:
+                                    additionalProperties: {}
+                                    type: object
+                                outcome:
+                                    type: string
+                                pending_approval:
+                                    anyOf:
+                                        - properties:
+                                            arguments:
+                                                additionalProperties: {}
+                                                type: object
+                                            call_id:
+                                                type: string
+                                            execution_id:
+                                                type: string
+                                            reason:
+                                                type: string
+                                            request_id:
+                                                type: string
+                                            requested_at:
+                                                format: date-time
+                                                type: string
+                                            tool_name:
+                                                type: string
+                                            trace_id:
+                                                type: string
+                                          required:
+                                            - call_id
+                                            - execution_id
+                                            - tool_name
+                                            - requested_at
+                                          type: object
+                                        - type: "null"
+                                result:
+                                    type: string
+                                role:
+                                    type: string
+                                state:
+                                    type: string
+                                task_id:
+                                    type: string
+                                user_id:
+                                    type: string
+                                workflow_slug:
+                                    type: string
+                                workflow_step:
+                                    type: string
+                              required:
+                                - loop_id
+                                - task_id
+                                - user_id
+                                - channel_type
+                                - channel_id
+                                - state
+                                - iterations
+                                - max_iterations
+                                - created_at
+                              type: object
+                            - type: "null"
+                    type: array
+                start_time:
+                    format: date-time
+                    type: string
+                started:
+                    type: boolean
+                uptime:
+                    type: string
+            required:
+                - loop_projection_ready
+                - loop_projection_poisoned
+                - started
+                - loop_count
+                - command_count
+                - loops
+                - commands
+                - config
+            type: object
+        Graph:
+            properties:
+                edges:
                     items:
                         properties:
-                            id:
+                            connection_id:
                                 type: string
-                            source_node_id:
+                            from:
                                 type: string
-                            source_port:
+                            from_port:
                                 type: string
-                            target_node_id:
+                            pattern:
                                 type: string
-                            target_port:
+                            to:
+                                type: string
+                            to_port:
                                 type: string
                         required:
-                            - id
-                            - source_node_id
-                            - source_port
-                            - target_node_id
-                            - target_port
+                            - from
+                            - from_port
+                            - to
+                            - to_port
+                            - pattern
+                            - connection_id
                         type: object
                     type: array
-                created_at:
-                    format: date-time
-                    type: string
-                created_by:
-                    type: string
-                deployed_at:
-                    anyOf:
-                        - format: date-time
-                          type: string
-                        - type: "null"
-                description:
-                    type: string
-                id:
-                    type: string
-                last_modified:
-                    format: date-time
-                    type: string
-                name:
-                    type: string
                 nodes:
                     items:
                         properties:
-                            component:
+                            factory:
                                 type: string
-                            config:
-                                additionalProperties: {}
-                                type: object
-                            id:
+                            inputs:
+                                items:
+                                    properties:
+                                        connection_id:
+                                            type: string
+                                        description:
+                                            type: string
+                                        direction:
+                                            type: string
+                                        external:
+                                            type: boolean
+                                        kind:
+                                            type: string
+                                        name:
+                                            type: string
+                                        pattern:
+                                            type: string
+                                        required:
+                                            type: boolean
+                                        type:
+                                            type: string
+                                    required:
+                                        - name
+                                        - direction
+                                        - type
+                                        - required
+                                        - connection_id
+                                        - pattern
+                                        - description
+                                        - kind
+                                    type: object
+                                type: array
+                            instance:
                                 type: string
-                            name:
-                                type: string
-                            position:
-                                properties:
-                                    x:
-                                        type: number
-                                    "y":
-                                        type: number
-                                required:
-                                    - x
-                                    - "y"
-                                type: object
+                            outputs:
+                                items:
+                                    properties:
+                                        connection_id:
+                                            type: string
+                                        description:
+                                            type: string
+                                        direction:
+                                            type: string
+                                        external:
+                                            type: boolean
+                                        kind:
+                                            type: string
+                                        name:
+                                            type: string
+                                        pattern:
+                                            type: string
+                                        required:
+                                            type: boolean
+                                        type:
+                                            type: string
+                                    required:
+                                        - name
+                                        - direction
+                                        - type
+                                        - required
+                                        - connection_id
+                                        - pattern
+                                        - description
+                                        - kind
+                                    type: object
+                                type: array
                             type:
                                 type: string
                         required:
-                            - id
-                            - component
+                            - instance
+                            - factory
                             - type
-                            - name
-                            - position
-                            - config
+                            - inputs
+                            - outputs
                         type: object
                     type: array
-                runtime_state:
-                    type: string
-                started_at:
-                    anyOf:
-                        - format: date-time
-                          type: string
-                        - type: "null"
-                stopped_at:
-                    anyOf:
-                        - format: date-time
-                          type: string
-                        - type: "null"
-                updated_at:
-                    format: date-time
-                    type: string
-                version:
-                    type: integer
             required:
-                - id
-                - name
-                - version
                 - nodes
-                - connections
-                - runtime_state
-                - created_at
-                - updated_at
-                - last_modified
-            type: object
-        FlowStatusPayload:
-            properties:
-                error:
-                    type: string
-                prev_state:
-                    type: string
-                state:
-                    type: string
-                timestamp:
-                    type: integer
-            required:
-                - state
-                - prev_state
-                - timestamp
+                - edges
             type: object
         GraphQLRequest:
             properties:
@@ -1467,23 +1356,6 @@ components:
                 - content
                 - timestamp
             type: object
-        LogEntryPayload:
-            properties:
-                fields:
-                    additionalProperties: {}
-                    type: object
-                level:
-                    type: string
-                message:
-                    type: string
-                source:
-                    type: string
-            required:
-                - level
-                - source
-                - message
-                - fields
-            type: object
         Loop:
             properties:
                 channel_type:
@@ -1508,7 +1380,11 @@ components:
                                 type: object
                             call_id:
                                 type: string
+                            execution_id:
+                                type: string
                             reason:
+                                type: string
+                            request_id:
                                 type: string
                             requested_at:
                                 format: date-time
@@ -1519,6 +1395,7 @@ components:
                                 type: string
                           required:
                             - call_id
+                            - execution_id
                             - tool_name
                             - requested_at
                           type: object
@@ -1581,7 +1458,11 @@ components:
                                 type: object
                             call_id:
                                 type: string
+                            execution_id:
+                                type: string
                             reason:
+                                type: string
+                            request_id:
                                 type: string
                             requested_at:
                                 format: date-time
@@ -1592,6 +1473,7 @@ components:
                                 type: string
                           required:
                             - call_id
+                            - execution_id
                             - tool_name
                             - requested_at
                           type: object
@@ -1653,51 +1535,176 @@ components:
                 - subject
                 - summary
             type: object
-        MetricEntry:
+        Result:
             properties:
-                labels:
-                    additionalProperties:
-                        type: string
-                    type: object
-                name:
-                    type: string
-                type:
-                    type: string
-                value:
-                    type: number
-            required:
-                - name
-                - type
-                - value
-                - labels
-            type: object
-        MetricsPayload:
-            properties:
-                component:
-                    type: string
-                metrics:
+                errors:
                     items:
                         properties:
-                            labels:
-                                additionalProperties:
-                                    type: string
-                                type: object
-                            name:
+                            component:
                                 type: string
+                            message:
+                                type: string
+                            port:
+                                type: string
+                            severity:
+                                type: string
+                            suggestions:
+                                items:
+                                    type: string
+                                type: array
                             type:
                                 type: string
-                            value:
-                                type: number
                         required:
-                            - name
                             - type
-                            - value
-                            - labels
+                            - severity
+                            - component
+                            - message
+                            - suggestions
+                        type: object
+                    type: array
+                graph:
+                    properties:
+                        edges:
+                            items:
+                                properties:
+                                    connection_id:
+                                        type: string
+                                    from:
+                                        type: string
+                                    from_port:
+                                        type: string
+                                    pattern:
+                                        type: string
+                                    to:
+                                        type: string
+                                    to_port:
+                                        type: string
+                                required:
+                                    - from
+                                    - from_port
+                                    - to
+                                    - to_port
+                                    - pattern
+                                    - connection_id
+                                type: object
+                            type: array
+                        nodes:
+                            items:
+                                properties:
+                                    factory:
+                                        type: string
+                                    inputs:
+                                        items:
+                                            properties:
+                                                connection_id:
+                                                    type: string
+                                                description:
+                                                    type: string
+                                                direction:
+                                                    type: string
+                                                external:
+                                                    type: boolean
+                                                kind:
+                                                    type: string
+                                                name:
+                                                    type: string
+                                                pattern:
+                                                    type: string
+                                                required:
+                                                    type: boolean
+                                                type:
+                                                    type: string
+                                            required:
+                                                - name
+                                                - direction
+                                                - type
+                                                - required
+                                                - connection_id
+                                                - pattern
+                                                - description
+                                                - kind
+                                            type: object
+                                        type: array
+                                    instance:
+                                        type: string
+                                    outputs:
+                                        items:
+                                            properties:
+                                                connection_id:
+                                                    type: string
+                                                description:
+                                                    type: string
+                                                direction:
+                                                    type: string
+                                                external:
+                                                    type: boolean
+                                                kind:
+                                                    type: string
+                                                name:
+                                                    type: string
+                                                pattern:
+                                                    type: string
+                                                required:
+                                                    type: boolean
+                                                type:
+                                                    type: string
+                                            required:
+                                                - name
+                                                - direction
+                                                - type
+                                                - required
+                                                - connection_id
+                                                - pattern
+                                                - description
+                                                - kind
+                                            type: object
+                                        type: array
+                                    type:
+                                        type: string
+                                required:
+                                    - instance
+                                    - factory
+                                    - type
+                                    - inputs
+                                    - outputs
+                                type: object
+                            type: array
+                    required:
+                        - nodes
+                        - edges
+                    type: object
+                status:
+                    type: string
+                warnings:
+                    items:
+                        properties:
+                            component:
+                                type: string
+                            message:
+                                type: string
+                            port:
+                                type: string
+                            severity:
+                                type: string
+                            suggestions:
+                                items:
+                                    type: string
+                                type: array
+                            type:
+                                type: string
+                        required:
+                            - type
+                            - severity
+                            - component
+                            - message
+                            - suggestions
                         type: object
                     type: array
             required:
-                - component
-                - metrics
+                - status
+                - errors
+                - warnings
+                - graph
             type: object
         ReviewRequest:
             properties:
@@ -1713,194 +1720,6 @@ components:
                     type: string
             required:
                 - decision
-            type: object
-        RuntimeHealthResponse:
-            properties:
-                components:
-                    items:
-                        properties:
-                            component:
-                                type: string
-                            details: {}
-                            healthy:
-                                type: boolean
-                            last_activity:
-                                anyOf:
-                                    - format: date-time
-                                      type: string
-                                    - type: "null"
-                            message:
-                                type: string
-                            name:
-                                type: string
-                            start_time:
-                                anyOf:
-                                    - format: date-time
-                                      type: string
-                                    - type: "null"
-                            status:
-                                type: string
-                            type:
-                                type: string
-                            uptime_seconds:
-                                anyOf:
-                                    - type: number
-                                    - type: "null"
-                        required:
-                            - name
-                            - component
-                            - type
-                            - status
-                            - healthy
-                            - message
-                            - details
-                        type: object
-                    type: array
-                overall:
-                    properties:
-                        degraded_count:
-                            type: integer
-                        error_count:
-                            type: integer
-                        running_count:
-                            type: integer
-                        status:
-                            type: string
-                    required:
-                        - status
-                        - running_count
-                        - degraded_count
-                        - error_count
-                    type: object
-                timestamp:
-                    format: date-time
-                    type: string
-            required:
-                - timestamp
-                - overall
-                - components
-            type: object
-        RuntimeMessagesResponse:
-            properties:
-                limit:
-                    type: integer
-                messages:
-                    items:
-                        properties:
-                            component:
-                                type: string
-                            direction:
-                                type: string
-                            message_id:
-                                type: string
-                            message_type:
-                                type: string
-                            metadata:
-                                additionalProperties: {}
-                                type: object
-                            subject:
-                                type: string
-                            summary:
-                                type: string
-                            timestamp:
-                                type: string
-                        required:
-                            - timestamp
-                            - subject
-                            - message_id
-                            - component
-                            - direction
-                            - summary
-                        type: object
-                    type: array
-                note:
-                    type: string
-                timestamp:
-                    type: string
-                total:
-                    type: integer
-            required:
-                - timestamp
-                - messages
-                - total
-                - limit
-            type: object
-        RuntimeMetricsResponse:
-            properties:
-                components:
-                    items:
-                        properties:
-                            component:
-                                type: string
-                            error_rate:
-                                anyOf:
-                                    - type: number
-                                    - type: "null"
-                            name:
-                                type: string
-                            queue_depth:
-                                anyOf:
-                                    - type: number
-                                    - type: "null"
-                            raw_counters:
-                                anyOf:
-                                    - additionalProperties:
-                                        minimum: 0
-                                        type: integer
-                                      type: object
-                                    - type: "null"
-                            status:
-                                type: string
-                            throughput:
-                                anyOf:
-                                    - type: number
-                                    - type: "null"
-                            type:
-                                type: string
-                        required:
-                            - name
-                            - component
-                            - type
-                            - status
-                        type: object
-                    type: array
-                prometheus_available:
-                    type: boolean
-                timestamp:
-                    format: date-time
-                    type: string
-            required:
-                - timestamp
-                - prometheus_available
-                - components
-            type: object
-        SignalRequest:
-            properties:
-                reason:
-                    type: string
-                type:
-                    type: string
-            required:
-                - type
-                - reason
-            type: object
-        SignalResponse:
-            properties:
-                accepted:
-                    type: boolean
-                loop_id:
-                    type: string
-                message:
-                    type: string
-                signal:
-                    type: string
-                timestamp:
-                    type: string
-            required:
-                - loop_id
-                - signal
-                - accepted
-                - timestamp
             type: object
         StatePatchRequest:
             additionalProperties: {}
@@ -1932,25 +1751,6 @@ components:
                 - human_approved
                 - human_rejected
                 - applied
-            type: object
-        StatusStreamEnvelope:
-            properties:
-                flow_id:
-                    type: string
-                id:
-                    type: string
-                payload:
-                    format: byte
-                    type: string
-                timestamp:
-                    type: integer
-                type:
-                    type: string
-            required:
-                - type
-                - id
-                - timestamp
-                - flow_id
             type: object
         StructuralAnomaly:
             properties:
@@ -2051,23 +1851,6 @@ components:
                 - status
                 - detected_at
             type: object
-        SubscribeCommand:
-            properties:
-                command:
-                    type: string
-                log_level:
-                    type: string
-                message_types:
-                    items:
-                        type: string
-                    type: array
-                sources:
-                    items:
-                        type: string
-                    type: array
-            required:
-                - command
-            type: object
         TransitionRequest:
             properties:
                 note:
@@ -2082,12 +1865,8 @@ tags:
       description: User message processing and command dispatch
     - name: Components
       description: Component management and monitoring endpoints
-    - name: Deployment
-      description: Flow deployment and runtime control
     - name: FlowGraph
       description: Component flow analysis and connectivity validation endpoints
-    - name: Flows
-      description: Visual flow CRUD operations
     - name: GraphQL
       description: GraphQL query endpoint for knowledge graph operations
     - name: Inference
@@ -2098,7 +1877,3 @@ tags:
       description: Model Context Protocol endpoint for AI tool integration
     - name: MessageLogger
       description: Message observation and debugging endpoints
-    - name: Runtime
-      description: Runtime metrics and observability
-    - name: Status
-      description: Real-time status updates

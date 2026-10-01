@@ -3,10 +3,8 @@ package approvalpause
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/c360studio/semstreams/agentic"
-	"github.com/c360studio/semstreams/message"
 	agvocab "github.com/c360studio/semstreams/vocabulary/agentic"
 )
 
@@ -15,21 +13,13 @@ import (
 const pauserSource = "approvalpause"
 
 const (
-	// MarkerApprovalPending is stamped on the RUN entity to record that one of
-	// its loops is parked in LoopStateAwaitingApproval on a gated tool call.
-	// Rule 12 (agent-run/12-executing-to-awaiting-on-approval.json) consumes it
-	// and transitions the run executing→awaiting_approval.
-	//
-	// DISTINCT from the 4b-2 clarification marker (agent.run.clarification-pending):
-	// both pauses land in awaiting_approval, but the two are kept on separate
-	// predicates so their resume halves never cross-resume (ADR-053 §4c).
+	// MarkerApprovalPending records every observed gate as a JSON string pair
+	// [loopID, executionID]. It is append-only, not a loop-entity edge.
 	MarkerApprovalPending = "agent.run.approval-pending"
 
-	// MarkerApprovalResumed is the resume marker the PR-2 half will stamp on the
-	// run (the 4c twin of agent.run.clarification-resumed). It is declared here in
-	// PR-1 so the pause rule's bounce-proof guard and the disambiguation contract
-	// tests reference a single source of truth; PR-1 never stamps it.
-	MarkerApprovalResumed = "agent.run.approval-resumed"
+	// MarkerApprovalAnswered records answered pairs. A response appends to BOTH
+	// sets atomically, preserving answered ⊆ pending even if it arrives first.
+	MarkerApprovalAnswered = "agent.run.approval-answered"
 )
 
 // lineageRunAnchor is the related_loops-threaded run anchor a run-entity-descended
@@ -47,53 +37,49 @@ type EntityTripleReader interface {
 	ReadEntity(ctx context.Context, entityID string) (map[string]any, error)
 }
 
-// TriplePublisher is the narrow write surface the Pauser needs.
-// agentictools.NATSTriplePublisher satisfies it structurally.
-type TriplePublisher interface {
-	Append(ctx context.Context, triples []message.Triple) error
+// GateProjection atomically records a gate against the exact run authority.
+type GateProjection interface {
+	RecordApproval(ctx context.Context, runID, loopID, executionID string, answered bool) (bool, error)
 }
 
 // PauseResult reports what HandlePending did, for caller logging and test
 // assertions. Stamped is true only when a run anchor resolved AND the marker
 // write succeeded.
 type PauseResult struct {
-	LoopID      string
-	RunEntityID string
-	ToolName    string
-	Stamped     bool
+	LoopID          string
+	RunEntityID     string
+	ToolName        string
+	Stamped         bool
+	AlreadyAnswered bool
 }
 
-// ResumeResult reports what HandleResponse did (the 4c PR-2 resume half).
-// Stamped is true only when a run anchor resolved AND the agent.run.approval-resumed
-// write succeeded. Decision is the human's approve/reject/modify decision — carried
-// for logging; the run resumes regardless of decision (any response means the loop
-// is no longer parked in awaiting_approval).
+// ResumeResult reports whether a response's execution-specific receipt was
+// persisted. Rule 13 resumes only when every observed gate has an answer and
+// the current run pause was caused by rule 12.
 type ResumeResult struct {
-	LoopID      string
-	RunEntityID string
-	Decision    string
-	Stamped     bool
+	LoopID          string
+	RunEntityID     string
+	Decision        string
+	Stamped         bool
+	AlreadyAnswered bool
 }
 
-// Pauser resolves the run anchor of an approval-gated loop and stamps the run-phase
-// approval markers on the run entity — agent.run.approval-pending when the loop
-// PAUSES (HandlePending), agent.run.approval-resumed when the human responds
-// (HandleResponse, PR-2). Both halves share one anchor-resolution path. Fail-soft:
-// a malformed loop id, a graph-read error, or a run-less loop never panics — a
-// runtime subscriber must not crash the dispatch goroutine, and the wire events are
-// delivered regardless (the UI surfaces the loop-level request independently).
+// Pauser resolves each approval event's run anchor and appends execution-specific
+// pending/answered facts through the framework's owned graph store. Rule 12 and
+// rule 13 derive the phase from those sets; this subscriber never clears facts.
+// Core-NATS delivery remains best effort, so a lost event can still need repair.
 type Pauser struct {
-	reader    EntityTripleReader
-	publisher TriplePublisher
-	org       string
-	platform  string
+	reader     EntityTripleReader
+	projection GateProjection
+	org        string
+	platform   string
 }
 
 // NewPauser constructs a Pauser. org/platform are the product's platform identity
 // (types.PlatformMeta) — used to reconstruct the 6-part loop-execution entity ID
 // from the bare LoopID the ApprovalPendingEvent carries.
-func NewPauser(reader EntityTripleReader, pub TriplePublisher, org, platform string) *Pauser {
-	return &Pauser{reader: reader, publisher: pub, org: org, platform: platform}
+func NewPauser(reader EntityTripleReader, projection GateProjection, org, platform string) *Pauser {
+	return &Pauser{reader: reader, projection: projection, org: org, platform: platform}
 }
 
 // HandlePending is the subscription entry point for agent.approval_pending.* events.
@@ -106,74 +92,64 @@ func NewPauser(reader EntityTripleReader, pub TriplePublisher, org, platform str
 // graph-read failure, triple-write failure) are returned wrapped so the subscriber
 // can log them without aborting the subscription.
 func (p *Pauser) HandlePending(ctx context.Context, ev *agentic.ApprovalPendingEvent) (PauseResult, error) {
-	if ev == nil {
+	if ctx == nil {
+		return PauseResult{}, fmt.Errorf("approvalpause: context is required")
+	}
+	if ev == nil || ev.LoopID == "" {
 		return PauseResult{}, nil
 	}
-	runEntityID, stamped, err := p.stampRunMarker(ctx, ev.LoopID, MarkerApprovalPending)
-	return PauseResult{LoopID: ev.LoopID, RunEntityID: runEntityID, ToolName: ev.ToolName, Stamped: stamped}, err
+	runEntityID, stamped, answered, err := p.stampRunMarker(ctx, ev.LoopID, ev.ExecutionID, MarkerApprovalPending)
+	return PauseResult{LoopID: ev.LoopID, RunEntityID: runEntityID, ToolName: ev.ToolName, Stamped: stamped, AlreadyAnswered: answered}, err
 }
 
-// HandleResponse is the subscription entry point for agent.approval_response.*
-// events (4c PR-2). The human's approve/reject/modify decision moves the gated loop
-// out of LoopStateAwaitingApproval (the framework re-injects the result and the loop
-// continues), so the RUN should resume executing. This stamps
-// agent.run.approval-resumed on the run entity; rule agent-run/13 consumes it and
-// transitions the run awaiting_approval→executing, clearing both approval markers.
-//
-// The marker is stamped regardless of decision — approve, reject, AND modify all
-// un-park the loop, so all three resume the run. A run-less loop is a benign no-op.
+// HandleResponse records a valid approve/reject/modify answer. Both the observed
+// gate and its answer are appended in one run-entity mutation. This makes an
+// answer delivered before its pending event safe without resuming another gate.
 func (p *Pauser) HandleResponse(ctx context.Context, ev *agentic.ApprovalResponse) (ResumeResult, error) {
-	if ev == nil {
+	if ctx == nil {
+		return ResumeResult{}, fmt.Errorf("approvalpause: context is required")
+	}
+	if ev == nil || ev.LoopID == "" {
 		return ResumeResult{}, nil
 	}
-	runEntityID, stamped, err := p.stampRunMarker(ctx, ev.LoopID, MarkerApprovalResumed)
-	return ResumeResult{LoopID: ev.LoopID, RunEntityID: runEntityID, Decision: ev.Decision, Stamped: stamped}, err
+	switch ev.Decision {
+	case agentic.ApprovalDecisionApprove, agentic.ApprovalDecisionReject, agentic.ApprovalDecisionModify:
+	default:
+		return ResumeResult{}, fmt.Errorf("approvalpause: invalid approval decision %q", ev.Decision)
+	}
+	runEntityID, stamped, answered, err := p.stampRunMarker(ctx, ev.LoopID, ev.ExecutionID, MarkerApprovalAnswered)
+	return ResumeResult{LoopID: ev.LoopID, RunEntityID: runEntityID, Decision: ev.Decision, Stamped: stamped, AlreadyAnswered: answered}, err
 }
 
-// stampRunMarker is the shared anchor-resolve-and-stamp path for both the pause
-// (HandlePending) and resume (HandleResponse) halves. It reconstructs the loop
-// entity, reads its run anchor, and (when the loop belongs to a run) stamps
-// `predicate` = the loop entity on the run entity. Returns the resolved run entity
-// ("" for a run-less loop, a benign no-op) and whether the marker was written.
-//
-// Uses the error-returning TryLoopExecutionEntityID — a malformed loop id must fail
-// soft, not panic the subscription goroutine (ADR-036 Stage 3.8). The marker object
-// is the navigable 6-part loop-entity ref (mirrors agent.loop.parent / reply_to);
-// it is audit-only (the rules key on predicate presence, not object).
-func (p *Pauser) stampRunMarker(ctx context.Context, loopID, predicate string) (runEntityID string, stamped bool, err error) {
-	if loopID == "" {
-		return "", false, nil
+// stampRunMarker writes on the existing run entity through the framework's
+// revision-fenced approval projection. Event order and concurrent process instances
+// are resolved at the graph owner, without relying on a local callback mutex.
+func (p *Pauser) stampRunMarker(ctx context.Context, loopID, executionID, predicate string) (runEntityID string, stamped, answered bool, err error) {
+	if executionID == "" {
+		return "", false, false, fmt.Errorf("approvalpause: execution_id is required")
 	}
 	loopEntityID, err := agentic.TryLoopExecutionEntityID(p.org, p.platform, loopID)
 	if err != nil {
-		return "", false, fmt.Errorf("approvalpause: build loop entity id for %q: %w", loopID, err)
+		return "", false, false, fmt.Errorf("approvalpause: build loop entity id for %q: %w", loopID, err)
 	}
 
+	if err := ctx.Err(); err != nil {
+		return "", false, false, err
+	}
 	triples, err := p.reader.ReadEntity(ctx, loopEntityID)
 	if err != nil {
-		return "", false, fmt.Errorf("approvalpause: read loop entity %q: %w", loopEntityID, err)
+		return "", false, false, fmt.Errorf("approvalpause: read loop entity %q: %w", loopEntityID, err)
 	}
-
 	runEntityID = resolveRunAnchor(triples)
 	if runEntityID == "" {
-		// Run-less loop (front-door single coordinator, or a standalone loop): no
-		// run to pause/resume. No-op — mirrors the front-door decide(ask_user) no-op.
-		return "", false, nil
+		return "", false, false, nil
 	}
 
-	now := time.Now().UTC()
-	triple := message.Triple{
-		Subject:    runEntityID,
-		Predicate:  predicate,
-		Object:     loopEntityID,
-		Source:     pauserSource,
-		Timestamp:  now,
-		Confidence: 1.0,
+	answered, err = p.projection.RecordApproval(ctx, runEntityID, loopID, executionID, predicate == MarkerApprovalAnswered)
+	if err != nil {
+		return runEntityID, false, false, fmt.Errorf("approvalpause: record gate on %q: %w", runEntityID, err)
 	}
-	if err := p.publisher.Append(ctx, []message.Triple{triple}); err != nil {
-		return runEntityID, false, fmt.Errorf("approvalpause: stamp %s on %q: %w", predicate, runEntityID, err)
-	}
-	return runEntityID, true, nil
+	return runEntityID, !answered, answered, nil
 }
 
 // resolveRunAnchor returns the run entity a gated loop belongs to, in precedence

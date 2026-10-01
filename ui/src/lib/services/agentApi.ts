@@ -6,9 +6,7 @@ import type {
   AgentLoop,
   ApprovalAcceptResponse,
   ApprovalRequest,
-  ControlSignal,
   LoopTrajectory,
-  SignalResponse,
 } from "$lib/types/agent";
 
 const DISPATCH_BASE = "/teams-dispatch";
@@ -234,13 +232,10 @@ function sumObservedTotals(
     tool_completions: a.tool_completions + b.tool_completions,
     context_compactions: a.context_compactions + b.context_compactions,
     terminal_observations: a.terminal_observations + b.terminal_observations,
-    requested_observations:
-      a.requested_observations + b.requested_observations,
-    completed_observations:
-      a.completed_observations + b.completed_observations,
+    requested_observations: a.requested_observations + b.requested_observations,
+    completed_observations: a.completed_observations + b.completed_observations,
     failed_observations: a.failed_observations + b.failed_observations,
-    cancelled_observations:
-      a.cancelled_observations + b.cancelled_observations,
+    cancelled_observations: a.cancelled_observations + b.cancelled_observations,
   };
 }
 
@@ -266,7 +261,8 @@ async function fetchFullTrajectory(loopId: string): Promise<LoopTrajectory> {
       merged = { ...page, facts: [...page.facts] };
     } else {
       merged.facts.push(...page.facts);
-      merged.terminal_observed = merged.terminal_observed || page.terminal_observed;
+      merged.terminal_observed =
+        merged.terminal_observed || page.terminal_observed;
       merged.observed_totals = sumObservedTotals(
         merged.observed_totals,
         page.observed_totals,
@@ -275,7 +271,11 @@ async function fetchFullTrajectory(loopId: string): Promise<LoopTrajectory> {
 
     const next = page.next_cursor;
     merged.next_cursor = next || undefined;
-    if (!next || seenCursors.has(next) || merged.facts.length >= TRAJECTORY_FACT_CAP) {
+    if (
+      !next ||
+      seenCursors.has(next) ||
+      merged.facts.length >= TRAJECTORY_FACT_CAP
+    ) {
       break;
     }
     seenCursors.add(next);
@@ -298,12 +298,18 @@ export const agentApi = {
     content: string,
     opts?: { runId?: string; inReplyTo?: string },
   ): Promise<{ content: string }> {
-    const body: Record<string, string> = { content };
+    const body: Record<string, string> = {
+      content,
+      user_id: userIdentity.value,
+    };
     if (opts?.runId) body.run_id = opts.runId;
     if (opts?.inReplyTo) body.in_reply_to = opts.inReplyTo;
     const response = await fetch(`${DISPATCH_BASE}/message`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "X-User-Id": userIdentity.value,
+      },
       body: JSON.stringify(body),
     });
     if (!response.ok) {
@@ -314,7 +320,11 @@ export const agentApi = {
         error,
       );
     }
-    return response.json();
+    const payload = await response.json();
+    if (payload.type === "error") {
+      throw new AgentApiError(payload.content || "Command refused", response.status || 200, payload);
+    }
+    return payload;
   },
 
   async listLoops(): Promise<AgentLoop[]> {
@@ -339,25 +349,9 @@ export const agentApi = {
     return response.json();
   },
 
-  async sendSignal(
-    id: string,
-    type: ControlSignal,
-    reason?: string,
-  ): Promise<SignalResponse> {
-    const response = await fetch(`${DISPATCH_BASE}/loops/${id}/signal`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type, ...(reason ? { reason } : {}) }),
-    });
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({}));
-      throw new AgentApiError(
-        `Failed to send signal: ${response.statusText}`,
-        response.status,
-        error,
-      );
-    }
-    return response.json();
+  /** Cancellation is an identity-checked command, not an arbitrary signal. */
+  async cancelLoop(id: string): Promise<{ content: string }> {
+    return agentApi.sendMessage(`/cancel ${id}`);
   },
 
   /**
@@ -384,6 +378,12 @@ export const agentApi = {
     id: string,
     request: ApprovalRequest,
   ): Promise<ApprovalAcceptResponse> {
+    if (!request.execution_id?.trim()) {
+      throw new AgentApiError(
+        "Approval requires a pending execution identity; refresh the task.",
+        409,
+      );
+    }
     const identity = userIdentity.value;
     // Treat an explicitly-empty user_id the same as absent: fall back
     // to the store value. Upstream IdentityFromRequest treats empty

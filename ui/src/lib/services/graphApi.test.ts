@@ -17,10 +17,10 @@ describe("graphApi", () => {
           pathSearch: {
             entities: [
               {
-                id: "c360.ops.robotics.gcs.drone.001",
+                id: "c360.ops.gcs.robotics.drone.001",
                 triples: [
                   {
-                    subject: "c360.ops.robotics.gcs.drone.001",
+                    subject: "c360.ops.gcs.robotics.drone.001",
                     predicate: "core.property.name",
                     object: "Drone 001",
                   },
@@ -29,9 +29,9 @@ describe("graphApi", () => {
             ],
             edges: [
               {
-                subject: "c360.ops.robotics.gcs.drone.001",
+                subject: "c360.ops.gcs.robotics.drone.001",
                 predicate: "fleet.membership.current",
-                object: "c360.ops.robotics.gcs.fleet.alpha",
+                object: "c360.ops.gcs.robotics.fleet.alpha",
               },
             ],
           },
@@ -44,7 +44,7 @@ describe("graphApi", () => {
       });
 
       const result = await graphApi.pathSearch(
-        "c360.ops.robotics.gcs.drone.001",
+        "c360.ops.gcs.robotics.drone.001",
         2,
         50,
       );
@@ -59,7 +59,7 @@ describe("graphApi", () => {
 
       const body = JSON.parse(mockFetch.mock.calls[0][1].body);
       expect(body.variables).toEqual({
-        startEntity: "c360.ops.robotics.gcs.drone.001",
+        startEntity: "c360.ops.gcs.robotics.drone.001",
         maxDepth: 2,
         maxNodes: 50,
       });
@@ -85,11 +85,11 @@ describe("graphApi", () => {
         json: async () => mockResponse,
       });
 
-      await graphApi.pathSearch("c360.ops.robotics.gcs.drone.001");
+      await graphApi.pathSearch("c360.ops.gcs.robotics.drone.001");
 
       const body = JSON.parse(mockFetch.mock.calls[0][1].body);
       expect(body.variables).toEqual({
-        startEntity: "c360.ops.robotics.gcs.drone.001",
+        startEntity: "c360.ops.gcs.robotics.drone.001",
         maxDepth: 3,
         maxNodes: 100,
       });
@@ -111,7 +111,7 @@ describe("graphApi", () => {
       });
 
       const result = await graphApi.pathSearch(
-        "c360.ops.robotics.gcs.drone.999",
+        "c360.ops.gcs.robotics.drone.999",
         1,
         10,
       );
@@ -126,7 +126,7 @@ describe("graphApi", () => {
       mockFetch.mockRejectedValueOnce(new Error("Network error"));
 
       await expect(
-        graphApi.pathSearch("c360.ops.robotics.gcs.drone.001"),
+        graphApi.pathSearch("c360.ops.gcs.robotics.drone.001"),
       ).rejects.toThrow(GraphApiError);
     });
 
@@ -139,7 +139,7 @@ describe("graphApi", () => {
       });
 
       try {
-        await graphApi.pathSearch("c360.ops.robotics.gcs.drone.001");
+        await graphApi.pathSearch("c360.ops.gcs.robotics.drone.001");
         expect.fail("Should have thrown GraphApiError");
       } catch (error) {
         expect(error).toBeInstanceOf(GraphApiError);
@@ -181,7 +181,7 @@ describe("graphApi", () => {
       });
 
       await expect(
-        graphApi.pathSearch("c360.ops.robotics.gcs.drone.001"),
+        graphApi.pathSearch("c360.ops.gcs.robotics.drone.001"),
       ).rejects.toThrow(GraphApiError);
     });
   });
@@ -195,10 +195,10 @@ describe("graphApi", () => {
         data: {
           entity: {
             entity: {
-              id: "c360.ops.robotics.gcs.drone.001",
+              id: "c360.ops.gcs.robotics.drone.001",
               triples: [
                 {
-                  subject: "c360.ops.robotics.gcs.drone.001",
+                  subject: "c360.ops.gcs.robotics.drone.001",
                   predicate: "core.property.name",
                   object: "Drone 001",
                 },
@@ -215,7 +215,7 @@ describe("graphApi", () => {
       });
 
       const result = await graphApi.getEntity(
-        "c360.ops.robotics.gcs.drone.001",
+        "c360.ops.gcs.robotics.drone.001",
       );
 
       expect(mockFetch).toHaveBeenCalledWith("/graphql", {
@@ -228,7 +228,7 @@ describe("graphApi", () => {
 
       const body = JSON.parse(mockFetch.mock.calls[0][1].body);
       expect(body.variables).toEqual({
-        id: "c360.ops.robotics.gcs.drone.001",
+        id: "c360.ops.gcs.robotics.drone.001",
       });
 
       expect(result).toEqual(mockResponse.data.entity.entity);
@@ -276,7 +276,7 @@ describe("graphApi", () => {
       mockFetch.mockRejectedValueOnce(new Error("Connection refused"));
 
       await expect(
-        graphApi.getEntity("c360.ops.robotics.gcs.drone.001"),
+        graphApi.getEntity("c360.ops.gcs.robotics.drone.001"),
       ).rejects.toThrow(GraphApiError);
     });
 
@@ -289,7 +289,7 @@ describe("graphApi", () => {
       });
 
       try {
-        await graphApi.getEntity("c360.ops.robotics.gcs.drone.001");
+        await graphApi.getEntity("c360.ops.gcs.robotics.drone.001");
         expect.fail("Should have thrown GraphApiError");
       } catch (error) {
         expect(error).toBeInstanceOf(GraphApiError);
@@ -308,11 +308,11 @@ describe("graphApi", () => {
           entitiesByPrefix: {
             entities: [
               {
-                id: "c360.ops.robotics.gcs.drone.001",
+                id: "c360.ops.gcs.robotics.drone.001",
                 triples: [],
               },
               {
-                id: "c360.ops.robotics.gcs.drone.002",
+                id: "c360.ops.gcs.robotics.drone.002",
                 triples: [],
               },
             ],
@@ -327,7 +327,7 @@ describe("graphApi", () => {
       });
 
       const result = await graphApi.getEntitiesByPrefix(
-        "c360.ops.robotics.gcs.drone",
+        "c360.ops.gcs.robotics.drone",
         10,
       );
 
@@ -341,7 +341,7 @@ describe("graphApi", () => {
 
       const body = JSON.parse(mockFetch.mock.calls[0][1].body);
       expect(body.variables).toEqual({
-        prefix: "c360.ops.robotics.gcs.drone",
+        prefix: "c360.ops.gcs.robotics.drone",
         limit: 10,
       });
 

@@ -224,7 +224,7 @@ describe("agentChatBridge", () => {
         role: "reviewer",
       });
 
-      handleLoopStateChange(loop, "paused");
+      handleLoopStateChange(loop, "awaiting_approval");
 
       expect(mockedChatStore.addAssistantMessage).toHaveBeenCalledTimes(1);
       const [message, attachments] =
@@ -259,8 +259,8 @@ describe("agentChatBridge", () => {
       expect(mockedChatStore.addAssistantMessage).not.toHaveBeenCalled();
     });
 
-    it("should not inject a message for exploring -> paused", () => {
-      const loop = createMockLoop({ state: "paused" });
+    it("should not inject a message for exploring -> reviewing", () => {
+      const loop = createMockLoop({ state: "reviewing" });
 
       handleLoopStateChange(loop, "exploring");
 

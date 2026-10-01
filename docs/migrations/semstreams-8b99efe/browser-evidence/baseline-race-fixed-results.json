@@ -1,0 +1,24 @@
+[
+  {
+    "name": "run-failed",
+    "exit": 0,
+    "skipped": false,
+    "manifest": {
+      "name": "run-failed",
+      "fixture": "run-failed.yaml",
+      "spec": "run-failed.spec.ts",
+      "config": "e2e-flow-bootstrap.json",
+      "source": "/tmp/semteams-migration-8b99efe/baseline-source",
+      "project": "stmig160",
+      "port": 33160,
+      "sha256": {
+        "go.mod": "4a57073aab788a36c2ae3bcd7318f99871ab10210694cfd6ca7f8807f10ea8c3",
+        "ui/package-lock.json": "28fd4403ce710547429496e98d4b7f3e941986eb67e6957316e298ffb2a144c4",
+        "configs/e2e-flow-bootstrap.json": "9f8d491d49c2a956100a0e09711150ab2504746ea450ea7bb681b7b0de9fdcd6",
+        "test/fixtures/journeys/run-failed.yaml": "f71a24bd9fa02b1b7eeacaf5b38c47e44904cb3b97b71cfe79359c34dbab10e0",
+        "ui/e2e/agentic/run-failed.spec.ts": "5eda120306f089135ade828c785ec35878eac2d18b07a82971a2d35bdbd9f92b"
+      },
+      "derived_config_sha256": "9f21d1d4bb86aab2c00ec6477154ac8bde4ae027e1ab2058dc8d8b67172b8b09"
+    }
+  }
+]

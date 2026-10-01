@@ -86,8 +86,11 @@ describe("agentApi", () => {
 
       expect(mockFetch).toHaveBeenCalledWith("/teams-dispatch/message", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: "Hello" }),
+        headers: {
+          "Content-Type": "application/json",
+          "X-User-Id": "ui-anonymous",
+        },
+        body: JSON.stringify({ content: "Hello", user_id: "ui-anonymous" }),
       });
       expect(result).toEqual({ content: "Hello from agent" });
     });
@@ -141,6 +144,7 @@ describe("agentApi", () => {
       const [, init] = mockFetch.mock.calls[0];
       expect(JSON.parse(init.body)).toEqual({
         content: "My reply",
+        user_id: "ui-anonymous",
         run_id: "run-abc",
         in_reply_to: "loop-ask-1",
       });
@@ -156,7 +160,7 @@ describe("agentApi", () => {
 
       const [, init] = mockFetch.mock.calls[0];
       const parsed = JSON.parse(init.body);
-      expect(parsed).toEqual({ content: "Hello no opts" });
+      expect(parsed).toEqual({ content: "Hello no opts", user_id: "ui-anonymous" });
       expect(parsed.run_id).toBeUndefined();
       expect(parsed.in_reply_to).toBeUndefined();
     });
@@ -246,108 +250,6 @@ describe("agentApi", () => {
   });
 
   // =========================================================================
-  // sendSignal
-  // =========================================================================
-
-  describe("sendSignal", () => {
-    it("should POST signal without reason", async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          loop_id: "loop-1",
-          signal: "pause",
-          status: "accepted",
-        }),
-      });
-
-      const result = await agentApi.sendSignal("loop-1", "pause");
-
-      expect(mockFetch).toHaveBeenCalledWith(
-        "/teams-dispatch/loops/loop-1/signal",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ type: "pause" }),
-        },
-      );
-      expect(result).toEqual({
-        loop_id: "loop-1",
-        signal: "pause",
-        status: "accepted",
-      });
-    });
-
-    it("should POST signal with reason", async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          loop_id: "loop-1",
-          signal: "reject",
-          status: "accepted",
-        }),
-      });
-
-      const result = await agentApi.sendSignal(
-        "loop-1",
-        "reject",
-        "Does not meet requirements",
-      );
-
-      expect(mockFetch).toHaveBeenCalledWith(
-        "/teams-dispatch/loops/loop-1/signal",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            type: "reject",
-            reason: "Does not meet requirements",
-          }),
-        },
-      );
-      expect(result).toEqual({
-        loop_id: "loop-1",
-        signal: "reject",
-        status: "accepted",
-      });
-    });
-
-    it("should throw AgentApiError on failure", async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        status: 400,
-        statusText: "Bad Request",
-        json: async () => ({ error: "Invalid signal for current state" }),
-      });
-
-      try {
-        await agentApi.sendSignal("loop-1", "approve");
-        expect.fail("Should have thrown AgentApiError");
-      } catch (error) {
-        expect(error).toBeInstanceOf(AgentApiError);
-        expect((error as AgentApiError).statusCode).toBe(400);
-        expect((error as AgentApiError).details).toEqual({
-          error: "Invalid signal for current state",
-        });
-      }
-    });
-
-    it("should handle malformed error JSON gracefully", async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        status: 500,
-        statusText: "Internal Server Error",
-        json: async () => {
-          throw new Error("Invalid JSON");
-        },
-      });
-
-      await expect(agentApi.sendSignal("loop-1", "cancel")).rejects.toThrow(
-        AgentApiError,
-      );
-    });
-  });
-
-  // =========================================================================
   // submitApproval
   // =========================================================================
 
@@ -359,6 +261,7 @@ describe("agentApi", () => {
         json: async () => ({
           loop_id: "loop-1",
           decision: "approve",
+          execution_id: "execution-pending",
           accepted: true,
           message: "Approval 'approve' submitted for loop loop-1",
           timestamp: "2026-04-29T10:30:00Z",
@@ -367,6 +270,7 @@ describe("agentApi", () => {
 
       const result = await agentApi.submitApproval("loop-1", {
         decision: "approve",
+        execution_id: "execution-pending",
       });
 
       expect(mockFetch).toHaveBeenCalledTimes(1);
@@ -380,6 +284,7 @@ describe("agentApi", () => {
       expect(init.headers["X-User-Id"]).toBe("ui-anonymous");
       expect(JSON.parse(init.body)).toEqual({
         decision: "approve",
+        execution_id: "execution-pending",
         user_id: "ui-anonymous",
       });
       expect(result.accepted).toBe(true);
@@ -393,6 +298,7 @@ describe("agentApi", () => {
         json: async () => ({
           loop_id: "loop-2",
           decision: "modify",
+          execution_id: "execution-pending",
           accepted: true,
           timestamp: "2026-04-29T10:31:00Z",
         }),
@@ -400,6 +306,7 @@ describe("agentApi", () => {
 
       await agentApi.submitApproval("loop-2", {
         decision: "modify",
+        execution_id: "execution-pending",
         modified_arguments: { path: "/tmp/safe" },
         reason: "narrow scope",
       });
@@ -407,6 +314,7 @@ describe("agentApi", () => {
       const [, init] = mockFetch.mock.calls[0];
       expect(JSON.parse(init.body)).toEqual({
         decision: "modify",
+        execution_id: "execution-pending",
         modified_arguments: { path: "/tmp/safe" },
         reason: "narrow scope",
         user_id: "ui-anonymous",
@@ -420,6 +328,7 @@ describe("agentApi", () => {
         json: async () => ({
           loop_id: "loop-3",
           decision: "reject",
+          execution_id: "execution-pending",
           accepted: true,
           timestamp: "2026-04-29T10:32:00Z",
         }),
@@ -427,6 +336,7 @@ describe("agentApi", () => {
 
       await agentApi.submitApproval("loop-3", {
         decision: "reject",
+        execution_id: "execution-pending",
         user_id: "alice@example.com",
       });
 
@@ -447,6 +357,7 @@ describe("agentApi", () => {
         json: async () => ({
           loop_id: "loop-empty",
           decision: "approve",
+          execution_id: "execution-pending",
           accepted: true,
           timestamp: "2026-04-29T10:33:00Z",
         }),
@@ -454,6 +365,7 @@ describe("agentApi", () => {
 
       await agentApi.submitApproval("loop-empty", {
         decision: "approve",
+        execution_id: "execution-pending",
         user_id: "   ",
       });
 
@@ -472,7 +384,10 @@ describe("agentApi", () => {
       });
 
       await expect(
-        agentApi.submitApproval("loop-unknown", { decision: "approve" }),
+        agentApi.submitApproval("loop-unknown", {
+          decision: "approve",
+          execution_id: "execution-pending",
+        }),
       ).rejects.toMatchObject({
         name: "AgentApiError",
         statusCode: 404,
@@ -489,7 +404,10 @@ describe("agentApi", () => {
       });
 
       await expect(
-        agentApi.submitApproval("loop-stale", { decision: "approve" }),
+        agentApi.submitApproval("loop-stale", {
+          decision: "approve",
+          execution_id: "execution-pending",
+        }),
       ).rejects.toMatchObject({
         name: "AgentApiError",
         statusCode: 409,
@@ -507,6 +425,7 @@ describe("agentApi", () => {
       await expect(
         agentApi.submitApproval("loop-1", {
           decision: "approve",
+          execution_id: "execution-pending",
         }),
       ).rejects.toBeInstanceOf(AgentApiError);
     });
@@ -522,7 +441,10 @@ describe("agentApi", () => {
       });
 
       await expect(
-        agentApi.submitApproval("loop-1", { decision: "approve" }),
+        agentApi.submitApproval("loop-1", {
+          decision: "approve",
+          execution_id: "execution-pending",
+        }),
       ).rejects.toMatchObject({
         statusCode: 500,
       });
@@ -603,9 +525,7 @@ describe("agentApi", () => {
         mockFetch.mockResolvedValueOnce({
           ok: true,
           json: async () => ({
-            errors: [
-              { message: "trajectory not found: trajectory not found" },
-            ],
+            errors: [{ message: "trajectory not found: trajectory not found" }],
           }),
         });
 

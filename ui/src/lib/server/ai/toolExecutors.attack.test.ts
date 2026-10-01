@@ -222,7 +222,7 @@ describe("executeEntityLookup.attack — malformed entity IDs", () => {
 
   it("does not throw on entityId with newlines and tabs", async () => {
     const ctx = makeContext(async () => ({ entity: null }));
-    const weirdId = "c360\n.ops\t.robotics.gcs.drone.001";
+    const weirdId = "c360\n.ops\t.gcs.robotics.drone.001";
     const result = await executeEntityLookup({ entityId: weirdId }, ctx);
     expect(result).toHaveProperty("attachments");
   });
@@ -240,7 +240,7 @@ describe("executeEntityLookup.attack — malformed entity IDs", () => {
 // ---------------------------------------------------------------------------
 
 describe("executeEntityLookup.attack — adversarial triple values", () => {
-  const entityId = "c360.ops.robotics.gcs.drone.001";
+  const entityId = "c360.ops.gcs.robotics.drone.001";
 
   it("handles triple with null object value without throwing", async () => {
     const ctx = makeContext(async () => ({
@@ -285,7 +285,7 @@ describe("executeEntityLookup.attack — adversarial triple values", () => {
   });
 
   it("handles triple where subject differs from entity id (relationship)", async () => {
-    const otherId = "c360.ops.robotics.gcs.fleet.alpha";
+    const otherId = "c360.ops.gcs.robotics.fleet.alpha";
     const ctx = makeContext(async () => ({
       entity: {
         id: entityId,
@@ -335,7 +335,7 @@ describe("executeEntityLookup.attack — error recovery", () => {
     });
     const result = await executeEntityLookup(
       {
-        entityId: "c360.ops.robotics.gcs.drone.001",
+        entityId: "c360.ops.gcs.robotics.drone.001",
       },
       ctx,
     );
@@ -350,7 +350,7 @@ describe("executeEntityLookup.attack — error recovery", () => {
     });
     const result = await executeEntityLookup(
       {
-        entityId: "c360.ops.robotics.gcs.drone.001",
+        entityId: "c360.ops.gcs.robotics.drone.001",
       },
       ctx,
     );

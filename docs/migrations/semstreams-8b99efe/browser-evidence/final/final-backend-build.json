@@ -1,0 +1,105 @@
+{
+  "command": [
+    "docker",
+    "compose",
+    "-p",
+    "stmig162",
+    "-f",
+    "/tmp/semteams-migration-8b99efe/target-compose.json",
+    "build",
+    "backend"
+  ],
+  "exit": 0,
+  "before_sha256": "92ba491c1199aad6fc7b08bdd969047513a6fb2ef107e3d6003850793c122f28",
+  "after_sha256": "92ba491c1199aad6fc7b08bdd969047513a6fb2ef107e3d6003850793c122f28",
+  "unchanged": true,
+  "completed_at": 1790859114.11093,
+  "image": {
+    "Id": "sha256:6aba6492ddd7da32387ffd4fbb46c3414f2fb2949b02afe89fa3f2defab88ed7",
+    "RepoTags": [
+      "stmig162-backend:8b99efe"
+    ],
+    "RepoDigests": [
+      "stmig162-backend@sha256:6aba6492ddd7da32387ffd4fbb46c3414f2fb2949b02afe89fa3f2defab88ed7"
+    ],
+    "Comment": "buildkit.dockerfile.v0",
+    "Created": "2026-10-01T12:51:53.267719381Z",
+    "Config": {
+      "User": "semstreams",
+      "ExposedPorts": {
+        "14550/udp": {},
+        "8080/tcp": {},
+        "9090/tcp": {}
+      },
+      "Env": [
+        "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      ],
+      "Entrypoint": [
+        "/app/semstreams"
+      ],
+      "Cmd": [
+        "--config",
+        "/etc/semstreams/config.json"
+      ],
+      "WorkingDir": "/app",
+      "Labels": {
+        "com.docker.compose.project": "stmig162",
+        "com.docker.compose.service": "backend",
+        "com.docker.compose.version": "5.5.1",
+        "org.opencontainers.image.created": "unknown",
+        "org.opencontainers.image.description": "Semantic stream processing framework for edge deployments",
+        "org.opencontainers.image.licenses": "MIT",
+        "org.opencontainers.image.revision": "unknown",
+        "org.opencontainers.image.source": "https://github.com/c360/semstreams",
+        "org.opencontainers.image.title": "SemStreams",
+        "org.opencontainers.image.vendor": "C360",
+        "org.opencontainers.image.version": "dev"
+      },
+      "ArgsEscaped": true,
+      "Healthcheck": {
+        "Test": [
+          "CMD-SHELL",
+          "wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1"
+        ],
+        "Interval": 30000000000,
+        "Timeout": 3000000000,
+        "StartPeriod": 5000000000,
+        "Retries": 3
+      }
+    },
+    "Architecture": "arm64",
+    "Os": "linux",
+    "Size": 60359260,
+    "RootFS": {
+      "Type": "layers",
+      "Layers": [
+        "sha256:1b349a3334531b575b01d409540dd8aca14ef29abddacd50f36643d7c949db4b",
+        "sha256:f22d132252fb898996b3cd34abf25fc10336e31e27122cf18bbc5b86e8f0527b",
+        "sha256:86d6aa0432e7e7ace045a2861ef4d1d184915f8d3ef4ac7da008a9ff149b04f7",
+        "sha256:5f70bf18a086007016e948b04aed3b82103a36bea41755b6cddfaf10ace3c6ef",
+        "sha256:ea2eeb9b2d58f71008025ae9bd16f469aa13f0609bcb3319d7316a344274d0cf",
+        "sha256:462c2617e40623a41e444f066f517da5b716ad150a4c29c3f6d972e05e2ca06d",
+        "sha256:2b14f1d988e79c45f03af6cb02ae267077701b3ff3ac43c847737bc0047fbccf",
+        "sha256:4fa814b41e79ad1cba7f0bbc6c54c8fb63c515c8ce1504207026228c09673276",
+        "sha256:394999f0f0a161110792ad6004b8d7d2cbb7dfcfc9d3599b34b0a46e02eca647",
+        "sha256:18dbd60b6f06b570cf01478193b834a47888eede4829bcdebf1731a917e2a6ee"
+      ]
+    },
+    "Metadata": {
+      "LastTagTime": "2026-10-01T12:51:53.826976423Z"
+    },
+    "Descriptor": {
+      "mediaType": "application/vnd.oci.image.index.v1+json",
+      "digest": "sha256:6aba6492ddd7da32387ffd4fbb46c3414f2fb2949b02afe89fa3f2defab88ed7",
+      "size": 856
+    },
+    "Identity": {
+      "Build": [
+        {
+          "Ref": "x69jcmoh9yp3f9i2hjwjgtgyc",
+          "CreatedAt": "2026-10-01T12:51:53.953446715Z"
+        }
+      ]
+    }
+  }
+}

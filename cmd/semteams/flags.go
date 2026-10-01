@@ -13,7 +13,6 @@ type CLIConfig struct {
 	ConfigPath           string
 	PersonaFragmentsPath string
 	PersonaOverlayPath   string
-	FlowTemplatesPath    string
 	LogLevel             string
 	LogFormat            string
 	Debug                bool
@@ -44,10 +43,6 @@ func parseFlags() *CLIConfig {
 	flag.StringVar(&cfg.PersonaOverlayPath, "persona-overlay",
 		getEnv("SEMSTREAMS_PERSONA_OVERLAY_PATH", ""),
 		"Optional second persona-fragments tree loaded AFTER the base tree; same-id fragments overwrite the base (LoadFromDirectory upsert semantics). Used to select a deployment-mode persona variant — e.g. the autonomous coordinator overlay (ADR-053 §4b clarification policy). Empty = base only (env: SEMSTREAMS_PERSONA_OVERLAY_PATH).")
-
-	flag.StringVar(&cfg.FlowTemplatesPath, "flow-templates",
-		getEnv("SEMTEAMS_FLOW_TEMPLATES_PATH", "configs/flow-templates"),
-		"Directory of flat *.json flow-template files seeded into the FLOW_TEMPLATES KV bucket at boot (env: SEMTEAMS_FLOW_TEMPLATES_PATH). Missing dir is a warning, not fatal. ADR-042 Phase 1.")
 
 	flag.StringVar(&cfg.LogLevel, "log-level",
 		getEnv("SEMSTREAMS_LOG_LEVEL", "info"),

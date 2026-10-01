@@ -1,0 +1,35 @@
+{
+  "scope": "Local image identities and nats-server version inspection. Go helper tag is unchanged across both framework pins; this is not a claim that floating tags reproduce the same digest on another host.",
+  "lanes": [
+    {
+      "lane": "Go integration helper",
+      "requested_image": "nats:2.14-alpine",
+      "image_id": "sha256:4063edae0717ba5f7501bfde75f97fd9b57f5b93597b92c70b6a6fbbf6a74e06",
+      "repo_digests": [
+        "nats@sha256:4063edae0717ba5f7501bfde75f97fd9b57f5b93597b92c70b6a6fbbf6a74e06"
+      ],
+      "platform": {
+        "Os": "linux",
+        "Architecture": "arm64",
+        "Variant": "v8"
+      },
+      "reported_version": "nats-server: v2.14.7",
+      "image_version": "2.14.7"
+    },
+    {
+      "lane": "isolated browser",
+      "requested_image": "nats:2.14.4-alpine",
+      "image_id": "sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66",
+      "repo_digests": [
+        "nats@sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66"
+      ],
+      "platform": {
+        "Os": "linux",
+        "Architecture": "arm64",
+        "Variant": "v8"
+      },
+      "reported_version": "nats-server: v2.14.4",
+      "image_version": "2.14.4"
+    }
+  ]
+}

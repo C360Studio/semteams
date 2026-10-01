@@ -1,0 +1,464 @@
+[
+  {
+    "name": "research-mvp",
+    "exit": 1,
+    "skipped": false,
+    "manifest": {
+      "name": "research-mvp",
+      "fixture": "research-mvp.yaml",
+      "spec": "research-mvp.spec.ts",
+      "config": "e2e-flow-bootstrap.json",
+      "source": "/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams",
+      "project": "stmig162",
+      "port": 33162,
+      "sha256": {
+        "go.mod": "fe05e2ea4b4c45bfc181ff83b3a925dccda4dd3d54970b03765c9b50d0b96fff",
+        "ui/package-lock.json": "28fd4403ce710547429496e98d4b7f3e941986eb67e6957316e298ffb2a144c4",
+        "configs/e2e-flow-bootstrap.json": "537a7eabe926b8e5c4f0d761cfa203880269b376c1217fcfe22cfa81690feb48",
+        "test/fixtures/journeys/research-mvp.yaml": "73409209441e47724950739c43725f1d20e02bf923d045dff1859d8dc913fa65",
+        "ui/e2e/agentic/research-mvp.spec.ts": "d250e42693e6004d51c568d1987b3f6aea3a978f83864efb9a51ced0a4195405"
+      },
+      "derived_config_sha256": "21aefdbc3d4396d513edfa8a9472b23005bff07ec515163e985c8a020616d815"
+    }
+  },
+  {
+    "name": "autoresearch",
+    "exit": 1,
+    "skipped": false,
+    "manifest": {
+      "name": "autoresearch",
+      "fixture": "autoresearch.yaml",
+      "spec": "autoresearch.spec.ts",
+      "config": "e2e-flow-bootstrap.json",
+      "source": "/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams",
+      "project": "stmig162",
+      "port": 33162,
+      "sha256": {
+        "go.mod": "fe05e2ea4b4c45bfc181ff83b3a925dccda4dd3d54970b03765c9b50d0b96fff",
+        "ui/package-lock.json": "28fd4403ce710547429496e98d4b7f3e941986eb67e6957316e298ffb2a144c4",
+        "configs/e2e-flow-bootstrap.json": "537a7eabe926b8e5c4f0d761cfa203880269b376c1217fcfe22cfa81690feb48",
+        "test/fixtures/journeys/autoresearch.yaml": "c3ee985ea3c3e53998141b35d0facae4070154c32966382745f11d8d06feb225",
+        "ui/e2e/agentic/autoresearch.spec.ts": "d3f077537332db69b3a7355194dde671bcc64f8b285ca0dc7a3348d650c20ff6"
+      },
+      "derived_config_sha256": "21aefdbc3d4396d513edfa8a9472b23005bff07ec515163e985c8a020616d815"
+    }
+  },
+  {
+    "name": "autoresearch-guardrails",
+    "exit": 0,
+    "skipped": false,
+    "manifest": {
+      "name": "autoresearch-guardrails",
+      "fixture": "autoresearch-guardrails.yaml",
+      "spec": "autoresearch-guardrails.spec.ts",
+      "config": "e2e-flow-bootstrap.json",
+      "source": "/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams",
+      "project": "stmig162",
+      "port": 33162,
+      "sha256": {
+        "go.mod": "fe05e2ea4b4c45bfc181ff83b3a925dccda4dd3d54970b03765c9b50d0b96fff",
+        "ui/package-lock.json": "28fd4403ce710547429496e98d4b7f3e941986eb67e6957316e298ffb2a144c4",
+        "configs/e2e-flow-bootstrap.json": "537a7eabe926b8e5c4f0d761cfa203880269b376c1217fcfe22cfa81690feb48",
+        "test/fixtures/journeys/autoresearch-guardrails.yaml": "2f695ead43c5cd16d3e22db5d3d0b4291249b7aaabab29f84572d7fa79e3fbbe",
+        "ui/e2e/agentic/autoresearch-guardrails.spec.ts": "f00e299d8a46d18026edffc1a8a2d9f2804facf9ece5fb9a8117d9efb7d3fa15"
+      },
+      "derived_config_sha256": "21aefdbc3d4396d513edfa8a9472b23005bff07ec515163e985c8a020616d815"
+    }
+  },
+  {
+    "name": "coordinator-routing-matrix",
+    "exit": 0,
+    "skipped": false,
+    "manifest": {
+      "name": "coordinator-routing-matrix",
+      "fixture": "coordinator-routing-matrix.yaml",
+      "spec": "coordinator-routing-matrix.spec.ts",
+      "config": "e2e-flow-bootstrap-routing-only.gen.json",
+      "source": "/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams",
+      "project": "stmig162",
+      "port": 33162,
+      "sha256": {
+        "go.mod": "fe05e2ea4b4c45bfc181ff83b3a925dccda4dd3d54970b03765c9b50d0b96fff",
+        "ui/package-lock.json": "28fd4403ce710547429496e98d4b7f3e941986eb67e6957316e298ffb2a144c4",
+        "configs/e2e-flow-bootstrap.json": "537a7eabe926b8e5c4f0d761cfa203880269b376c1217fcfe22cfa81690feb48",
+        "test/fixtures/journeys/coordinator-routing-matrix.yaml": "dea71d5e81172d2686bfd5257b9ad89854f165e9447cd2f1bc4ee121f3e99bf1",
+        "ui/e2e/agentic/coordinator-routing-matrix.spec.ts": "216410e60902ae258f9a6955dad011ca4663d6b0724e0d9932f87e5da8e524f6"
+      },
+      "derived_config_sha256": "bf1d77e6b34a1e47ce0d4eb8183f9d3c7480bf4af385ae1198a2b585cffff355"
+    }
+  },
+  {
+    "name": "coordinator-readiness-gate",
+    "exit": 0,
+    "skipped": false,
+    "manifest": {
+      "name": "coordinator-readiness-gate",
+      "fixture": "coordinator-readiness-gate.yaml",
+      "spec": "coordinator-readiness-gate.spec.ts",
+      "config": "e2e-flow-bootstrap.json",
+      "source": "/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams",
+      "project": "stmig162",
+      "port": 33162,
+      "sha256": {
+        "go.mod": "fe05e2ea4b4c45bfc181ff83b3a925dccda4dd3d54970b03765c9b50d0b96fff",
+        "ui/package-lock.json": "28fd4403ce710547429496e98d4b7f3e941986eb67e6957316e298ffb2a144c4",
+        "configs/e2e-flow-bootstrap.json": "537a7eabe926b8e5c4f0d761cfa203880269b376c1217fcfe22cfa81690feb48",
+        "test/fixtures/journeys/coordinator-readiness-gate.yaml": "e75173810161c26e3b0f4ca5923e9edf40b23ac3ac215a49e116b47425eea60a",
+        "ui/e2e/agentic/coordinator-readiness-gate.spec.ts": "2c41bf0a92a062ee3e42a345785cabc66d20b09fa74dd9f9e0ac0b6109e0b800"
+      },
+      "derived_config_sha256": "21aefdbc3d4396d513edfa8a9472b23005bff07ec515163e985c8a020616d815"
+    }
+  },
+  {
+    "name": "coordinator-team-spawn",
+    "exit": 0,
+    "skipped": false,
+    "manifest": {
+      "name": "coordinator-team-spawn",
+      "fixture": "coordinator-team-spawn.yaml",
+      "spec": "coordinator-team-spawn.spec.ts",
+      "config": "e2e-flow-bootstrap-team-spawn.gen.json",
+      "source": "/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams",
+      "project": "stmig162",
+      "port": 33162,
+      "sha256": {
+        "go.mod": "fe05e2ea4b4c45bfc181ff83b3a925dccda4dd3d54970b03765c9b50d0b96fff",
+        "ui/package-lock.json": "28fd4403ce710547429496e98d4b7f3e941986eb67e6957316e298ffb2a144c4",
+        "configs/e2e-flow-bootstrap.json": "537a7eabe926b8e5c4f0d761cfa203880269b376c1217fcfe22cfa81690feb48",
+        "test/fixtures/journeys/coordinator-team-spawn.yaml": "914519e99876e185acdaf129d4da64f73325adb375079073cb91337e505c2986",
+        "ui/e2e/agentic/coordinator-team-spawn.spec.ts": "8e93e7214843a0b22d3c54848d29b5aced089ce3daac5237a9a8cf9bc2522abe"
+      },
+      "derived_config_sha256": "abdbae464e9fcf0cf6ef003b6c3fd3103fe9c37901679dfa6c643409ef82a09a"
+    }
+  },
+  {
+    "name": "sandbox-mvp",
+    "exit": 0,
+    "skipped": false,
+    "manifest": {
+      "name": "sandbox-mvp",
+      "fixture": "sandbox-mvp.yaml",
+      "spec": "sandbox-mvp.spec.ts",
+      "config": "e2e-flow-bootstrap.json",
+      "source": "/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams",
+      "project": "stmig162",
+      "port": 33162,
+      "sha256": {
+        "go.mod": "fe05e2ea4b4c45bfc181ff83b3a925dccda4dd3d54970b03765c9b50d0b96fff",
+        "ui/package-lock.json": "28fd4403ce710547429496e98d4b7f3e941986eb67e6957316e298ffb2a144c4",
+        "configs/e2e-flow-bootstrap.json": "537a7eabe926b8e5c4f0d761cfa203880269b376c1217fcfe22cfa81690feb48",
+        "test/fixtures/journeys/sandbox-mvp.yaml": "3bf4a1dc1953397accbd4fd15b11122abf0576569eb570203b4cf2ca467032f4",
+        "ui/e2e/agentic/sandbox-mvp.spec.ts": "068cba93519529a65f1c084147626c0d8ec819f725edea322e4b419f11f96308"
+      },
+      "derived_config_sha256": "21aefdbc3d4396d513edfa8a9472b23005bff07ec515163e985c8a020616d815"
+    }
+  },
+  {
+    "name": "ops-agent",
+    "exit": 1,
+    "skipped": false,
+    "manifest": {
+      "name": "ops-agent",
+      "fixture": "ops-run-terminal.yaml",
+      "spec": "ops-run-terminal.spec.ts",
+      "config": "e2e-flow-bootstrap.json",
+      "source": "/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams",
+      "project": "stmig162",
+      "port": 33162,
+      "sha256": {
+        "go.mod": "fe05e2ea4b4c45bfc181ff83b3a925dccda4dd3d54970b03765c9b50d0b96fff",
+        "ui/package-lock.json": "28fd4403ce710547429496e98d4b7f3e941986eb67e6957316e298ffb2a144c4",
+        "configs/e2e-flow-bootstrap.json": "537a7eabe926b8e5c4f0d761cfa203880269b376c1217fcfe22cfa81690feb48",
+        "test/fixtures/journeys/ops-run-terminal.yaml": "8ee2eef2b65edd0caf1c7633366912497d14252a379b74af9690ead1ba4fba97",
+        "ui/e2e/agentic/ops-run-terminal.spec.ts": "d9ecd1626b81d7162bd551277a8e29f0ae608fc80ecfda5f1b4ab1b7d87a863d"
+      },
+      "derived_config_sha256": "21aefdbc3d4396d513edfa8a9472b23005bff07ec515163e985c8a020616d815"
+    }
+  },
+  {
+    "name": "real-time-activity-stream",
+    "exit": 0,
+    "skipped": false,
+    "manifest": {
+      "name": "real-time-activity-stream",
+      "fixture": "real-time-activity-stream.yaml",
+      "spec": "real-time-activity-stream.spec.ts",
+      "config": "e2e-flow-bootstrap.json",
+      "source": "/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams",
+      "project": "stmig162",
+      "port": 33162,
+      "sha256": {
+        "go.mod": "fe05e2ea4b4c45bfc181ff83b3a925dccda4dd3d54970b03765c9b50d0b96fff",
+        "ui/package-lock.json": "28fd4403ce710547429496e98d4b7f3e941986eb67e6957316e298ffb2a144c4",
+        "configs/e2e-flow-bootstrap.json": "537a7eabe926b8e5c4f0d761cfa203880269b376c1217fcfe22cfa81690feb48",
+        "test/fixtures/journeys/real-time-activity-stream.yaml": "b029f7033f8bb2ae6225539cc897b154487269b4001e518cb8111bf2f39c7919",
+        "ui/e2e/agentic/real-time-activity-stream.spec.ts": "eace78de85ba27d73df65a3b704b6a0e5a5d536fc9a07d61e256a536d85efe66"
+      },
+      "derived_config_sha256": "21aefdbc3d4396d513edfa8a9472b23005bff07ec515163e985c8a020616d815"
+    }
+  },
+  {
+    "name": "task-story-trace",
+    "exit": 0,
+    "skipped": false,
+    "manifest": {
+      "name": "task-story-trace",
+      "fixture": "research-mvp.yaml",
+      "spec": "task-story-trace.spec.ts",
+      "config": "e2e-flow-bootstrap.json",
+      "source": "/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams",
+      "project": "stmig162",
+      "port": 33162,
+      "sha256": {
+        "go.mod": "fe05e2ea4b4c45bfc181ff83b3a925dccda4dd3d54970b03765c9b50d0b96fff",
+        "ui/package-lock.json": "28fd4403ce710547429496e98d4b7f3e941986eb67e6957316e298ffb2a144c4",
+        "configs/e2e-flow-bootstrap.json": "537a7eabe926b8e5c4f0d761cfa203880269b376c1217fcfe22cfa81690feb48",
+        "test/fixtures/journeys/research-mvp.yaml": "73409209441e47724950739c43725f1d20e02bf923d045dff1859d8dc913fa65",
+        "ui/e2e/agentic/task-story-trace.spec.ts": "df571ebeaa18602d33112721f6838a6969de1128a20d7dd2a5b54c0872440c44"
+      },
+      "derived_config_sha256": "21aefdbc3d4396d513edfa8a9472b23005bff07ec515163e985c8a020616d815"
+    }
+  },
+  {
+    "name": "action-chips",
+    "exit": 0,
+    "skipped": false,
+    "manifest": {
+      "name": "action-chips",
+      "fixture": "research-mvp.yaml",
+      "spec": "action-chips-personas.spec.ts",
+      "config": "e2e-flow-bootstrap.json",
+      "source": "/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams",
+      "project": "stmig162",
+      "port": 33162,
+      "sha256": {
+        "go.mod": "fe05e2ea4b4c45bfc181ff83b3a925dccda4dd3d54970b03765c9b50d0b96fff",
+        "ui/package-lock.json": "28fd4403ce710547429496e98d4b7f3e941986eb67e6957316e298ffb2a144c4",
+        "configs/e2e-flow-bootstrap.json": "537a7eabe926b8e5c4f0d761cfa203880269b376c1217fcfe22cfa81690feb48",
+        "test/fixtures/journeys/research-mvp.yaml": "73409209441e47724950739c43725f1d20e02bf923d045dff1859d8dc913fa65",
+        "ui/e2e/agentic/action-chips-personas.spec.ts": "3f426ef8c1424e2e24c153d764e232ed287b186fa7426253c059bebac1e8e5ba"
+      },
+      "derived_config_sha256": "21aefdbc3d4396d513edfa8a9472b23005bff07ec515163e985c8a020616d815"
+    }
+  },
+  {
+    "name": "task-title-aliases",
+    "exit": 0,
+    "skipped": false,
+    "manifest": {
+      "name": "task-title-aliases",
+      "fixture": "research-mvp.yaml",
+      "spec": "task-title-aliases.spec.ts",
+      "config": "e2e-flow-bootstrap.json",
+      "source": "/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams",
+      "project": "stmig162",
+      "port": 33162,
+      "sha256": {
+        "go.mod": "fe05e2ea4b4c45bfc181ff83b3a925dccda4dd3d54970b03765c9b50d0b96fff",
+        "ui/package-lock.json": "28fd4403ce710547429496e98d4b7f3e941986eb67e6957316e298ffb2a144c4",
+        "configs/e2e-flow-bootstrap.json": "537a7eabe926b8e5c4f0d761cfa203880269b376c1217fcfe22cfa81690feb48",
+        "test/fixtures/journeys/research-mvp.yaml": "73409209441e47724950739c43725f1d20e02bf923d045dff1859d8dc913fa65",
+        "ui/e2e/agentic/task-title-aliases.spec.ts": "bda19c77293ffe430192c52b8e34b92f66c4dcf86121b14d61f00fcffbcccf17"
+      },
+      "derived_config_sha256": "21aefdbc3d4396d513edfa8a9472b23005bff07ec515163e985c8a020616d815"
+    }
+  },
+  {
+    "name": "admin-flows-inventory",
+    "exit": 0,
+    "skipped": false,
+    "manifest": {
+      "name": "admin-flows-inventory",
+      "fixture": "research-mvp.yaml",
+      "spec": "admin-flows-inventory.spec.ts",
+      "config": "e2e-flow-bootstrap.json",
+      "source": "/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams",
+      "project": "stmig162",
+      "port": 33162,
+      "sha256": {
+        "go.mod": "fe05e2ea4b4c45bfc181ff83b3a925dccda4dd3d54970b03765c9b50d0b96fff",
+        "ui/package-lock.json": "28fd4403ce710547429496e98d4b7f3e941986eb67e6957316e298ffb2a144c4",
+        "configs/e2e-flow-bootstrap.json": "537a7eabe926b8e5c4f0d761cfa203880269b376c1217fcfe22cfa81690feb48",
+        "test/fixtures/journeys/research-mvp.yaml": "73409209441e47724950739c43725f1d20e02bf923d045dff1859d8dc913fa65",
+        "ui/e2e/agentic/admin-flows-inventory.spec.ts": "4d7b5a182ad740290db40dca5b1499a4d17636464b043bc8d7828f50254e1c9f"
+      },
+      "derived_config_sha256": "21aefdbc3d4396d513edfa8a9472b23005bff07ec515163e985c8a020616d815"
+    }
+  },
+  {
+    "name": "chain-drill-in",
+    "exit": 0,
+    "skipped": false,
+    "manifest": {
+      "name": "chain-drill-in",
+      "fixture": "research-mvp.yaml",
+      "spec": "chain-drill-in.spec.ts",
+      "config": "e2e-flow-bootstrap.json",
+      "source": "/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams",
+      "project": "stmig162",
+      "port": 33162,
+      "sha256": {
+        "go.mod": "fe05e2ea4b4c45bfc181ff83b3a925dccda4dd3d54970b03765c9b50d0b96fff",
+        "ui/package-lock.json": "28fd4403ce710547429496e98d4b7f3e941986eb67e6957316e298ffb2a144c4",
+        "configs/e2e-flow-bootstrap.json": "537a7eabe926b8e5c4f0d761cfa203880269b376c1217fcfe22cfa81690feb48",
+        "test/fixtures/journeys/research-mvp.yaml": "73409209441e47724950739c43725f1d20e02bf923d045dff1859d8dc913fa65",
+        "ui/e2e/agentic/chain-drill-in.spec.ts": "c8af2f7647a08a2fb3005fab5bacf362a57af816b9374f3c74f388b7fcff126a"
+      },
+      "derived_config_sha256": "21aefdbc3d4396d513edfa8a9472b23005bff07ec515163e985c8a020616d815"
+    }
+  },
+  {
+    "name": "artifact-context-handoff",
+    "exit": 0,
+    "skipped": true,
+    "manifest": {
+      "name": "artifact-context-handoff",
+      "fixture": "research-mvp.yaml",
+      "spec": "artifact-context-handoff.spec.ts",
+      "config": "e2e-flow-bootstrap.json",
+      "source": "/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams",
+      "project": "stmig162",
+      "port": 33162,
+      "sha256": {
+        "go.mod": "fe05e2ea4b4c45bfc181ff83b3a925dccda4dd3d54970b03765c9b50d0b96fff",
+        "ui/package-lock.json": "28fd4403ce710547429496e98d4b7f3e941986eb67e6957316e298ffb2a144c4",
+        "configs/e2e-flow-bootstrap.json": "537a7eabe926b8e5c4f0d761cfa203880269b376c1217fcfe22cfa81690feb48",
+        "test/fixtures/journeys/research-mvp.yaml": "73409209441e47724950739c43725f1d20e02bf923d045dff1859d8dc913fa65",
+        "ui/e2e/agentic/artifact-context-handoff.spec.ts": "5c211be6cdf2380754c6b8a2d28123e600a16c585c7ae8e9244794754aad27f7"
+      },
+      "derived_config_sha256": "21aefdbc3d4396d513edfa8a9472b23005bff07ec515163e985c8a020616d815"
+    }
+  },
+  {
+    "name": "run-failed",
+    "exit": 0,
+    "skipped": false,
+    "manifest": {
+      "name": "run-failed",
+      "fixture": "run-failed.yaml",
+      "spec": "run-failed.spec.ts",
+      "config": "e2e-flow-bootstrap.json",
+      "source": "/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams",
+      "project": "stmig162",
+      "port": 33162,
+      "sha256": {
+        "go.mod": "fe05e2ea4b4c45bfc181ff83b3a925dccda4dd3d54970b03765c9b50d0b96fff",
+        "ui/package-lock.json": "28fd4403ce710547429496e98d4b7f3e941986eb67e6957316e298ffb2a144c4",
+        "configs/e2e-flow-bootstrap.json": "537a7eabe926b8e5c4f0d761cfa203880269b376c1217fcfe22cfa81690feb48",
+        "test/fixtures/journeys/run-failed.yaml": "f71a24bd9fa02b1b7eeacaf5b38c47e44904cb3b97b71cfe79359c34dbab10e0",
+        "ui/e2e/agentic/run-failed.spec.ts": "3988da3b6a13a66d625427e84db286844d405ba85d3ffd04f9fd461b5e7148f3"
+      },
+      "derived_config_sha256": "21aefdbc3d4396d513edfa8a9472b23005bff07ec515163e985c8a020616d815"
+    }
+  },
+  {
+    "name": "run-failed-coordinator",
+    "exit": 0,
+    "skipped": true,
+    "manifest": {
+      "name": "run-failed-coordinator",
+      "fixture": "run-failed-coordinator.yaml",
+      "spec": "run-failed-coordinator.spec.ts",
+      "config": "e2e-flow-bootstrap.json",
+      "source": "/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams",
+      "project": "stmig162",
+      "port": 33162,
+      "sha256": {
+        "go.mod": "fe05e2ea4b4c45bfc181ff83b3a925dccda4dd3d54970b03765c9b50d0b96fff",
+        "ui/package-lock.json": "28fd4403ce710547429496e98d4b7f3e941986eb67e6957316e298ffb2a144c4",
+        "configs/e2e-flow-bootstrap.json": "537a7eabe926b8e5c4f0d761cfa203880269b376c1217fcfe22cfa81690feb48",
+        "test/fixtures/journeys/run-failed-coordinator.yaml": "26348f289c546ec1bd0f2d524a42e0f58e31fefdce914b6e4f7237b440ead347",
+        "ui/e2e/agentic/run-failed-coordinator.spec.ts": "3c9f165e89d275adf1047513c2347a8ca9740d8afa898bfc03d5ed9c1fcbfce0"
+      },
+      "derived_config_sha256": "21aefdbc3d4396d513edfa8a9472b23005bff07ec515163e985c8a020616d815"
+    }
+  },
+  {
+    "name": "run-failed-coordinator-inherit",
+    "exit": 0,
+    "skipped": true,
+    "manifest": {
+      "name": "run-failed-coordinator-inherit",
+      "fixture": "run-failed-coordinator-inherit.yaml",
+      "spec": "run-failed-coordinator-inherit.spec.ts",
+      "config": "e2e-flow-bootstrap.json",
+      "source": "/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams",
+      "project": "stmig162",
+      "port": 33162,
+      "sha256": {
+        "go.mod": "fe05e2ea4b4c45bfc181ff83b3a925dccda4dd3d54970b03765c9b50d0b96fff",
+        "ui/package-lock.json": "28fd4403ce710547429496e98d4b7f3e941986eb67e6957316e298ffb2a144c4",
+        "configs/e2e-flow-bootstrap.json": "537a7eabe926b8e5c4f0d761cfa203880269b376c1217fcfe22cfa81690feb48",
+        "test/fixtures/journeys/run-failed-coordinator-inherit.yaml": "f13fb3a076f30db577e1325c8ec0ebfe7084c384c59ec9432464a8b0e147ba30",
+        "ui/e2e/agentic/run-failed-coordinator-inherit.spec.ts": "31903111ffabd0cab34dc80f5509815e0bc4428070fd9b87f1e125e7504a29a9"
+      },
+      "derived_config_sha256": "21aefdbc3d4396d513edfa8a9472b23005bff07ec515163e985c8a020616d815"
+    }
+  },
+  {
+    "name": "ask-user-pause",
+    "exit": 0,
+    "skipped": true,
+    "manifest": {
+      "name": "ask-user-pause",
+      "fixture": "ask-user-pause.yaml",
+      "spec": "ask-user-pause.spec.ts",
+      "config": "e2e-flow-bootstrap.json",
+      "source": "/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams",
+      "project": "stmig162",
+      "port": 33162,
+      "sha256": {
+        "go.mod": "fe05e2ea4b4c45bfc181ff83b3a925dccda4dd3d54970b03765c9b50d0b96fff",
+        "ui/package-lock.json": "28fd4403ce710547429496e98d4b7f3e941986eb67e6957316e298ffb2a144c4",
+        "configs/e2e-flow-bootstrap.json": "537a7eabe926b8e5c4f0d761cfa203880269b376c1217fcfe22cfa81690feb48",
+        "test/fixtures/journeys/ask-user-pause.yaml": "45210ecec7588a05d30b8fb3c56bc97aad04e6586ccbe5fa5e5f738d214f6f91",
+        "ui/e2e/agentic/ask-user-pause.spec.ts": "e2c46a3f2c1e07cceb385ad98fa226d14b34bfe23f5ca875466ce003fe274705"
+      },
+      "derived_config_sha256": "21aefdbc3d4396d513edfa8a9472b23005bff07ec515163e985c8a020616d815"
+    }
+  },
+  {
+    "name": "clarification-resume",
+    "exit": 0,
+    "skipped": true,
+    "manifest": {
+      "name": "clarification-resume",
+      "fixture": "clarification-resume.yaml",
+      "spec": "clarification-resume.spec.ts",
+      "config": "e2e-flow-bootstrap.json",
+      "source": "/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams",
+      "project": "stmig162",
+      "port": 33162,
+      "sha256": {
+        "go.mod": "fe05e2ea4b4c45bfc181ff83b3a925dccda4dd3d54970b03765c9b50d0b96fff",
+        "ui/package-lock.json": "28fd4403ce710547429496e98d4b7f3e941986eb67e6957316e298ffb2a144c4",
+        "configs/e2e-flow-bootstrap.json": "537a7eabe926b8e5c4f0d761cfa203880269b376c1217fcfe22cfa81690feb48",
+        "test/fixtures/journeys/clarification-resume.yaml": "5bb3b57ed627304c6a8177e53af122aeae6556d351f4cc69439269c673ed0f58",
+        "ui/e2e/agentic/clarification-resume.spec.ts": "a83c92355d7cb80748cc22482e7fb8492611cf5f2753fbce7e2a23e5557cfef1"
+      },
+      "derived_config_sha256": "21aefdbc3d4396d513edfa8a9472b23005bff07ec515163e985c8a020616d815"
+    }
+  },
+  {
+    "name": "clarification-autonomous",
+    "exit": 0,
+    "skipped": false,
+    "manifest": {
+      "name": "clarification-autonomous",
+      "fixture": "clarification-autonomous.yaml",
+      "spec": "clarification-autonomous.spec.ts",
+      "config": "e2e-flow-bootstrap-autonomous.gen.json",
+      "source": "/Users/coby/.codex/worktrees/semstreams-frozen-migration/semteams",
+      "project": "stmig162",
+      "port": 33162,
+      "sha256": {
+        "go.mod": "fe05e2ea4b4c45bfc181ff83b3a925dccda4dd3d54970b03765c9b50d0b96fff",
+        "ui/package-lock.json": "28fd4403ce710547429496e98d4b7f3e941986eb67e6957316e298ffb2a144c4",
+        "configs/e2e-flow-bootstrap.json": "537a7eabe926b8e5c4f0d761cfa203880269b376c1217fcfe22cfa81690feb48",
+        "test/fixtures/journeys/clarification-autonomous.yaml": "ecfe977ea8ab2d1074fcea0abb23508c64f1f24f39f883b3e6b639f727ac2b8f",
+        "ui/e2e/agentic/clarification-autonomous.spec.ts": "f323a70f2f04e4708caefafa1fc0786d47bbb07c6cbef9a1131eb9f8233f5375"
+      },
+      "derived_config_sha256": "a0224c88a95170888ec218a2f6443de0437e10ee855c6570b02ff74b6e2c34ac"
+    }
+  }
+]

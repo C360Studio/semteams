@@ -1,0 +1,917 @@
+{
+  "scope": "Representative paired research-mvp runs with the same fixture. Counts depend on run duration; this is not an assertion that all other scenarios have identical log totals. Full final scenario tool errors and state are in results.json.",
+  "offline_command": "go test ./test/contract -run ^TestShippedBootstrapCompositions$ -count=1 -v",
+  "offline_exit": 0,
+  "offline_result": "Both configs/flow-bootstrap.json and configs/e2e-flow-bootstrap.json emit exactly the same nine findings below and PASS. No offline/live discrepancy. AssertValid and boot admission reject error severity, not warning severity.",
+  "composition_findings": [
+    {
+      "severity": "warning",
+      "code": "disconnected_node",
+      "component": "objectstore",
+      "port": "",
+      "message": "component has no connections",
+      "classification": "existing optional storage topology, newly reported",
+      "owner": "SemTeams bootstrap",
+      "observed_or_scoped_effect": "No declared message-port connections. The component also supplies registered storage capabilities; this finding alone is not evidence that artifact or trajectory storage failed. The isolated stream ingestion surface is unused.",
+      "log_record": {
+        "time": "2026-10-01T12:53:48.721467837Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/service.(*ComponentManager).analyzeBootComposition",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/service/component_manager.go",
+          "line": 409
+        },
+        "msg": "composition finding",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "type": "disconnected_node",
+        "component": "objectstore",
+        "port": "",
+        "message": "component has no connections"
+      }
+    },
+    {
+      "severity": "warning",
+      "code": "orphaned_port",
+      "component": "agentic-model",
+      "port": "agent.stream",
+      "message": "output port 'agent.stream' (stream): no_subscribers",
+      "classification": "existing optional model output, newly reported",
+      "owner": "SemStreams default port + SemTeams UI scope",
+      "observed_or_scoped_effect": "agent.stream exists in both framework defaults; frozen normalized declarations retain it when config names agent.response only. No component consumes incremental core-NATS chunks. Completed response/activity qualification does not qualify token-by-token UI prose streaming.",
+      "log_record": {
+        "time": "2026-10-01T12:53:48.721495629Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/service.(*ComponentManager).analyzeBootComposition",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/service/component_manager.go",
+          "line": 409
+        },
+        "msg": "composition finding",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "type": "orphaned_port",
+        "component": "agentic-model",
+        "port": "agent.stream",
+        "message": "output port 'agent.stream' (stream): no_subscribers"
+      }
+    },
+    {
+      "severity": "warning",
+      "code": "orphaned_port",
+      "component": "agentic-tools",
+      "port": "tool.list",
+      "message": "input port 'tool.list' (request): optional_api_unused",
+      "classification": "existing optional request API, newly reported",
+      "owner": "SemTeams bootstrap",
+      "observed_or_scoped_effect": "No declared component invokes discovery.tool.list. Tool execution/advertisement works in journeys; this optional discovery request API is not exercised.",
+      "log_record": {
+        "time": "2026-10-01T12:53:48.721510254Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/service.(*ComponentManager).analyzeBootComposition",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/service/component_manager.go",
+          "line": 409
+        },
+        "msg": "composition finding",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "type": "orphaned_port",
+        "component": "agentic-tools",
+        "port": "tool.list",
+        "message": "input port 'tool.list' (request): optional_api_unused"
+      }
+    },
+    {
+      "severity": "warning",
+      "code": "orphaned_port",
+      "component": "graph-gateway",
+      "port": "graph_index_queries",
+      "message": "output port 'graph_index_queries' (request): optional_api_unused",
+      "classification": "existing configured capability gap, newly reported",
+      "owner": "SemTeams bootstrap omits graph-index; upstream processor/graph-index owns request handlers",
+      "observed_or_scoped_effect": "Both bootstraps omit graph-index. Its query.go registers graph.index.query.* request handlers; no configured counterpart is represented. Request-pattern orphans remain warning severity even when required:true. Entity/inspector/domain-filter journeys pass via other graph surfaces; index-specific routes remain unwired/unqualified, not claimed healthy. No index-specific HTTP failure was separately reproduced.",
+      "log_record": {
+        "time": "2026-10-01T12:53:48.721520212Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/service.(*ComponentManager).analyzeBootComposition",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/service/component_manager.go",
+          "line": 409
+        },
+        "msg": "composition finding",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "type": "orphaned_port",
+        "component": "graph-gateway",
+        "port": "graph_index_queries",
+        "message": "output port 'graph_index_queries' (request): optional_api_unused"
+      }
+    },
+    {
+      "severity": "warning",
+      "code": "orphaned_port",
+      "component": "objectstore",
+      "port": "events",
+      "message": "output port 'events' (stream): no_subscribers",
+      "classification": "existing unused optional stream output, newly reported",
+      "owner": "SemTeams bootstrap",
+      "observed_or_scoped_effect": "No declared consumer for storage.objectstore.events. Event-based storage notifications are not delivered to a configured component; no active journey requires that notification path.",
+      "log_record": {
+        "time": "2026-10-01T12:53:48.72153367Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/service.(*ComponentManager).analyzeBootComposition",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/service/component_manager.go",
+          "line": 409
+        },
+        "msg": "composition finding",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "type": "orphaned_port",
+        "component": "objectstore",
+        "port": "events",
+        "message": "output port 'events' (stream): no_subscribers"
+      }
+    },
+    {
+      "severity": "warning",
+      "code": "orphaned_port",
+      "component": "objectstore",
+      "port": "stored",
+      "message": "output port 'stored' (stream): no_subscribers",
+      "classification": "existing unused optional stream output, newly reported",
+      "owner": "SemTeams bootstrap",
+      "observed_or_scoped_effect": "No declared consumer for storage.objectstore.stored. The ContentStorable message-output path is not integrated; do not claim this boundary is qualified.",
+      "log_record": {
+        "time": "2026-10-01T12:53:48.721543712Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/service.(*ComponentManager).analyzeBootComposition",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/service/component_manager.go",
+          "line": 409
+        },
+        "msg": "composition finding",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "type": "orphaned_port",
+        "component": "objectstore",
+        "port": "stored",
+        "message": "output port 'stored' (stream): no_subscribers"
+      }
+    },
+    {
+      "severity": "warning",
+      "code": "orphaned_port",
+      "component": "objectstore",
+      "port": "write",
+      "message": "input port 'write' (stream): no_publishers",
+      "classification": "existing unused optional stream input, newly reported",
+      "owner": "SemTeams bootstrap",
+      "observed_or_scoped_effect": "No component publishes storage.objectstore.write; its Required field is false. Stream-based objectstore ingestion is not qualified. No required-input admission defect.",
+      "log_record": {
+        "time": "2026-10-01T12:53:48.721558795Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/service.(*ComponentManager).analyzeBootComposition",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/service/component_manager.go",
+          "line": 409
+        },
+        "msg": "composition finding",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "type": "orphaned_port",
+        "component": "objectstore",
+        "port": "write",
+        "message": "input port 'write' (stream): no_publishers"
+      }
+    },
+    {
+      "severity": "warning",
+      "code": "orphaned_port",
+      "component": "teams-dispatch",
+      "port": "user.response",
+      "message": "output port 'user.response' (stream): no_subscribers",
+      "classification": "external observer not represented as component edge",
+      "owner": "SemStreams composition declarations + SemTeams UI",
+      "observed_or_scoped_effect": "No configured component input receives user.response. The message logger and browser are external observers, not admitted component nodes. Research and run-approval proofs contain real typed final user.response messages. This finding does not establish the separate autoresearch lineage defect.",
+      "log_record": {
+        "time": "2026-10-01T12:53:48.721568212Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/service.(*ComponentManager).analyzeBootComposition",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/service/component_manager.go",
+          "line": 409
+        },
+        "msg": "composition finding",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "type": "orphaned_port",
+        "component": "teams-dispatch",
+        "port": "user.response",
+        "message": "output port 'user.response' (stream): no_subscribers"
+      }
+    },
+    {
+      "severity": "warning",
+      "code": "orphaned_port",
+      "component": "teams-loop",
+      "port": "trajectories",
+      "message": "output port 'trajectories' (watch): optional_index_unwatched",
+      "classification": "existing optional watch output, newly reported",
+      "owner": "SemTeams bootstrap",
+      "observed_or_scoped_effect": "No declared component watches this index. Request-based trajectory access passed approval/task-story journeys; watch-based downstream indexing remains unqualified.",
+      "log_record": {
+        "time": "2026-10-01T12:53:48.721577545Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/service.(*ComponentManager).analyzeBootComposition",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/service/component_manager.go",
+          "line": 409
+        },
+        "msg": "composition finding",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "type": "orphaned_port",
+        "component": "teams-loop",
+        "port": "trajectories",
+        "message": "output port 'trajectories' (watch): optional_index_unwatched"
+      }
+    }
+  ],
+  "paired_runtime_differences": [
+    {
+      "message": "Failed to check KV config existence",
+      "baseline_count": 1,
+      "target_count": 0,
+      "classification": "intended removal of mutable upstream config manager",
+      "owner": "SemStreams config lifecycle; SemTeams canonical boot integration",
+      "effect": "Baseline fresh empty KV logs nats: no keys found; frozen uses canonical admitted boot configuration. No baseline boot failure observed."
+    },
+    {
+      "message": "Invalid buffer window size, using default",
+      "baseline_count": 1,
+      "target_count": 1,
+      "classification": "existing configuration default fallback",
+      "owner": "SemTeams rule config / SemStreams parser",
+      "effect": "Empty duration parses invalid; actual fallback is 600000000000 ns (10 minutes). No delta or failed rule journey attributed to this warning."
+    },
+    {
+      "message": "Invalid alert cooldown period, using default",
+      "baseline_count": 1,
+      "target_count": 1,
+      "classification": "existing configuration default fallback",
+      "owner": "SemTeams rule config / SemStreams parser",
+      "effect": "Empty duration parses invalid; actual fallback is 120000000000 ns (2 minutes). No delta or failed rule journey attributed to this warning."
+    },
+    {
+      "message": "community generation unavailable; retrying",
+      "baseline_count": 3,
+      "target_count": 3,
+      "classification": "existing configured capability limitation",
+      "owner": "SemTeams bootstrap omits graph-clustering; framework bucket owner is graph-clustering",
+      "effect": "COMMUNITY_INDEX owner absent at both pins. Community generation is unavailable; supervisor retries every 5 seconds. No community/GraphRAG qualification claimed."
+    },
+    {
+      "message": "COMMUNITY_SUMMARIES unavailable; using statistical summaries",
+      "baseline_count": 3,
+      "target_count": 3,
+      "classification": "existing configured capability limitation",
+      "owner": "SemTeams bootstrap omits graph-clustering; framework bucket owner is graph-clustering",
+      "effect": "COMMUNITY_SUMMARIES owner absent at both pins; summary read path uses statistical fallback on a miss, not stored LLM community summaries. Does not prove complete graph intelligence."
+    },
+    {
+      "message": "agentic-dispatch: loop listing refused while loop authority is unavailable",
+      "baseline_count": 0,
+      "target_count": 1,
+      "classification": "intended frozen fail-closed authoritative-view response",
+      "owner": "SemStreams dispatch graphview contract",
+      "effect": "Cold /loops HTTP503 while backend /readyz HTTP200 READY. Readiness does not qualify empty-loop-list availability. Exact currentLoopSnapshot error is graphview: view not ready; post-submission admitted-state assertions pass. No claim that startup loop listing was available."
+    },
+    {
+      "message": "HTTP error response",
+      "baseline_count": 0,
+      "target_count": 1,
+      "classification": "same cold loop-list refusal, not a second defect",
+      "owner": "SemStreams dispatch",
+      "effect": "503 loop state is not available right now; retry shortly. See cold-start-authority.json."
+    },
+    {
+      "message": "agentrun.ResolveRun: agent.loop.run triple absent \u2014 falling back to ancestry walk",
+      "baseline_count": 0,
+      "target_count": 2,
+      "classification": "frozen compatibility ancestry fallback observed",
+      "owner": "SemTeams task lineage plus SemStreams run resolver",
+      "effect": "Typed agent.loop.run absent for the logged loop; resolver takes documented parent walk. Research final delivery and completed run pass; no failure attributed here. This observation is not proof that the separate RUN-triggered autoresearch typed-delivery path is valid."
+    }
+  ],
+  "raw_warning_records": {
+    "baseline-browser": [
+      {
+        "time": "2026-10-01T11:49:53.313370382Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/config.(*Manager).Start",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.160/config/manager.go",
+          "line": 190
+        },
+        "msg": "Failed to check KV config existence",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "error": "list KV keys: nats: no keys found"
+      },
+      {
+        "time": "2026-10-01T11:49:53.344861632Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/rule.(*Processor).loadRules",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.160/processor/rule/rule_loader.go",
+          "line": 157
+        },
+        "msg": "Invalid buffer window size, using default",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "component": "rule-processor",
+        "default": 600000000000,
+        "error": "time: invalid duration \"\""
+      },
+      {
+        "time": "2026-10-01T11:49:53.344872965Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/rule.(*Processor).loadRules",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.160/processor/rule/rule_loader.go",
+          "line": 164
+        },
+        "msg": "Invalid alert cooldown period, using default",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "component": "rule-processor",
+        "default": 120000000000,
+        "error": "time: invalid duration \"\""
+      },
+      {
+        "time": "2026-10-01T11:49:53.376464215Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/graph-query.(*Component).superviseCommunityGenerations",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.160/processor/graph-query/component.go",
+          "line": 614
+        },
+        "msg": "community generation unavailable; retrying",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "component": "graph-query",
+        "generation": 1,
+        "error": "framework bucket \"COMMUNITY_INDEX\" is not ready: its owner (graph-clustering) has not provisioned it in this deployment",
+        "retry_interval": 5000000000
+      },
+      {
+        "time": "2026-10-01T11:49:53.376470215Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/graph-query.(*Component).superviseSummaryView",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.160/processor/graph-query/summary_view.go",
+          "line": 124
+        },
+        "msg": "COMMUNITY_SUMMARIES unavailable; using statistical summaries",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "component": "graph-query",
+        "error": "framework bucket \"COMMUNITY_SUMMARIES\" is not ready: its owner (graph-clustering) has not provisioned it in this deployment",
+        "retry_interval": 5000000000
+      },
+      {
+        "time": "2026-10-01T11:49:58.379276009Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/graph-query.(*Component).superviseSummaryView",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.160/processor/graph-query/summary_view.go",
+          "line": 124
+        },
+        "msg": "COMMUNITY_SUMMARIES unavailable; using statistical summaries",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "component": "graph-query",
+        "error": "framework bucket \"COMMUNITY_SUMMARIES\" is not ready: its owner (graph-clustering) has not provisioned it in this deployment",
+        "retry_interval": 5000000000
+      },
+      {
+        "time": "2026-10-01T11:49:58.379276342Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/graph-query.(*Component).superviseCommunityGenerations",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.160/processor/graph-query/component.go",
+          "line": 614
+        },
+        "msg": "community generation unavailable; retrying",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "component": "graph-query",
+        "generation": 2,
+        "error": "framework bucket \"COMMUNITY_INDEX\" is not ready: its owner (graph-clustering) has not provisioned it in this deployment",
+        "retry_interval": 5000000000
+      },
+      {
+        "time": "2026-10-01T11:50:03.38205447Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/graph-query.(*Component).superviseCommunityGenerations",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.160/processor/graph-query/component.go",
+          "line": 614
+        },
+        "msg": "community generation unavailable; retrying",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "component": "graph-query",
+        "generation": 3,
+        "error": "framework bucket \"COMMUNITY_INDEX\" is not ready: its owner (graph-clustering) has not provisioned it in this deployment",
+        "retry_interval": 5000000000
+      },
+      {
+        "time": "2026-10-01T11:50:03.38206597Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/graph-query.(*Component).superviseSummaryView",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.160/processor/graph-query/summary_view.go",
+          "line": 124
+        },
+        "msg": "COMMUNITY_SUMMARIES unavailable; using statistical summaries",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "component": "graph-query",
+        "error": "framework bucket \"COMMUNITY_SUMMARIES\" is not ready: its owner (graph-clustering) has not provisioned it in this deployment",
+        "retry_interval": 5000000000
+      }
+    ],
+    "target-final": [
+      {
+        "time": "2026-10-01T12:53:48.706875462Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/rule.(*Processor).loadRules",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/rule/rule_loader.go",
+          "line": 157
+        },
+        "msg": "Invalid buffer window size, using default",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "component": "rule-processor",
+        "default": 600000000000,
+        "error": "time: invalid duration \"\""
+      },
+      {
+        "time": "2026-10-01T12:53:48.706896379Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/rule.(*Processor).loadRules",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/rule/rule_loader.go",
+          "line": 164
+        },
+        "msg": "Invalid alert cooldown period, using default",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "component": "rule-processor",
+        "default": 120000000000,
+        "error": "time: invalid duration \"\""
+      },
+      {
+        "time": "2026-10-01T12:53:48.721467837Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/service.(*ComponentManager).analyzeBootComposition",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/service/component_manager.go",
+          "line": 409
+        },
+        "msg": "composition finding",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "type": "disconnected_node",
+        "component": "objectstore",
+        "port": "",
+        "message": "component has no connections"
+      },
+      {
+        "time": "2026-10-01T12:53:48.721495629Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/service.(*ComponentManager).analyzeBootComposition",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/service/component_manager.go",
+          "line": 409
+        },
+        "msg": "composition finding",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "type": "orphaned_port",
+        "component": "agentic-model",
+        "port": "agent.stream",
+        "message": "output port 'agent.stream' (stream): no_subscribers"
+      },
+      {
+        "time": "2026-10-01T12:53:48.721510254Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/service.(*ComponentManager).analyzeBootComposition",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/service/component_manager.go",
+          "line": 409
+        },
+        "msg": "composition finding",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "type": "orphaned_port",
+        "component": "agentic-tools",
+        "port": "tool.list",
+        "message": "input port 'tool.list' (request): optional_api_unused"
+      },
+      {
+        "time": "2026-10-01T12:53:48.721520212Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/service.(*ComponentManager).analyzeBootComposition",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/service/component_manager.go",
+          "line": 409
+        },
+        "msg": "composition finding",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "type": "orphaned_port",
+        "component": "graph-gateway",
+        "port": "graph_index_queries",
+        "message": "output port 'graph_index_queries' (request): optional_api_unused"
+      },
+      {
+        "time": "2026-10-01T12:53:48.72153367Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/service.(*ComponentManager).analyzeBootComposition",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/service/component_manager.go",
+          "line": 409
+        },
+        "msg": "composition finding",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "type": "orphaned_port",
+        "component": "objectstore",
+        "port": "events",
+        "message": "output port 'events' (stream): no_subscribers"
+      },
+      {
+        "time": "2026-10-01T12:53:48.721543712Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/service.(*ComponentManager).analyzeBootComposition",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/service/component_manager.go",
+          "line": 409
+        },
+        "msg": "composition finding",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "type": "orphaned_port",
+        "component": "objectstore",
+        "port": "stored",
+        "message": "output port 'stored' (stream): no_subscribers"
+      },
+      {
+        "time": "2026-10-01T12:53:48.721558795Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/service.(*ComponentManager).analyzeBootComposition",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/service/component_manager.go",
+          "line": 409
+        },
+        "msg": "composition finding",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "type": "orphaned_port",
+        "component": "objectstore",
+        "port": "write",
+        "message": "input port 'write' (stream): no_publishers"
+      },
+      {
+        "time": "2026-10-01T12:53:48.721568212Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/service.(*ComponentManager).analyzeBootComposition",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/service/component_manager.go",
+          "line": 409
+        },
+        "msg": "composition finding",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "type": "orphaned_port",
+        "component": "teams-dispatch",
+        "port": "user.response",
+        "message": "output port 'user.response' (stream): no_subscribers"
+      },
+      {
+        "time": "2026-10-01T12:53:48.721577545Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/service.(*ComponentManager).analyzeBootComposition",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/service/component_manager.go",
+          "line": 409
+        },
+        "msg": "composition finding",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "type": "orphaned_port",
+        "component": "teams-loop",
+        "port": "trajectories",
+        "message": "output port 'trajectories' (watch): optional_index_unwatched"
+      },
+      {
+        "time": "2026-10-01T12:53:48.738200962Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/graph-query.(*Component).superviseCommunityGenerations",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/graph-query/component.go",
+          "line": 740
+        },
+        "msg": "community generation unavailable; retrying",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "component": "graph-query",
+        "generation": 1,
+        "error": "framework bucket \"COMMUNITY_INDEX\" is not ready: its owner (graph-clustering) has not provisioned it in this deployment",
+        "retry_interval": 5000000000
+      },
+      {
+        "time": "2026-10-01T12:53:48.738213379Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/graph-query.(*Component).superviseSummaryView",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/graph-query/summary_view.go",
+          "line": 124
+        },
+        "msg": "COMMUNITY_SUMMARIES unavailable; using statistical summaries",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "component": "graph-query",
+        "error": "framework bucket \"COMMUNITY_SUMMARIES\" is not ready: its owner (graph-clustering) has not provisioned it in this deployment",
+        "retry_interval": 5000000000
+      },
+      {
+        "time": "2026-10-01T12:53:53.739400506Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/graph-query.(*Component).superviseSummaryView",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/graph-query/summary_view.go",
+          "line": 124
+        },
+        "msg": "COMMUNITY_SUMMARIES unavailable; using statistical summaries",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "component": "graph-query",
+        "error": "framework bucket \"COMMUNITY_SUMMARIES\" is not ready: its owner (graph-clustering) has not provisioned it in this deployment",
+        "retry_interval": 5000000000
+      },
+      {
+        "time": "2026-10-01T12:53:53.739403048Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/graph-query.(*Component).superviseCommunityGenerations",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/graph-query/component.go",
+          "line": 740
+        },
+        "msg": "community generation unavailable; retrying",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "component": "graph-query",
+        "generation": 2,
+        "error": "framework bucket \"COMMUNITY_INDEX\" is not ready: its owner (graph-clustering) has not provisioned it in this deployment",
+        "retry_interval": 5000000000
+      },
+      {
+        "time": "2026-10-01T12:53:54.178845381Z",
+        "level": "ERROR",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/agentic-dispatch.(*Component).handleListLoops",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/agentic-dispatch/http.go",
+          "line": 608
+        },
+        "msg": "agentic-dispatch: loop listing refused while loop authority is unavailable",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "request_id": "ff0ca513",
+        "error": "Component.currentLoopSnapshot: loop projection not caught up failed: graphview: view not ready"
+      },
+      {
+        "time": "2026-10-01T12:53:54.178936965Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/agentic-dispatch.(*Component).writeJSONError",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/agentic-dispatch/http.go",
+          "line": 500
+        },
+        "msg": "HTTP error response",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "status": 503,
+        "message": "loop state is not available right now; retry shortly"
+      },
+      {
+        "time": "2026-10-01T12:53:56.556151466Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/agentic/agentrun.ResolveRun",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/agentic/agentrun/agentrun.go",
+          "line": 423
+        },
+        "msg": "agentrun.ResolveRun: agent.loop.run triple absent \u2014 falling back to ancestry walk",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "loop_id": "316722f6-e68b-4f7b-bb1a-a0d26526ddbe",
+        "org": "c360",
+        "platform": "semteams-bootstrap-e2e-62c8d3"
+      },
+      {
+        "time": "2026-10-01T12:53:56.940035549Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/agentic/agentrun.ResolveRun",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/agentic/agentrun/agentrun.go",
+          "line": 423
+        },
+        "msg": "agentrun.ResolveRun: agent.loop.run triple absent \u2014 falling back to ancestry walk",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "loop_id": "a1e4b3c5-a8f7-4368-bfe6-177d13cb1d17",
+        "org": "c360",
+        "platform": "semteams-bootstrap-e2e-62c8d3"
+      },
+      {
+        "time": "2026-10-01T12:53:58.740695925Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/graph-query.(*Component).superviseSummaryView",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/graph-query/summary_view.go",
+          "line": 124
+        },
+        "msg": "COMMUNITY_SUMMARIES unavailable; using statistical summaries",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "component": "graph-query",
+        "error": "framework bucket \"COMMUNITY_SUMMARIES\" is not ready: its owner (graph-clustering) has not provisioned it in this deployment",
+        "retry_interval": 5000000000
+      },
+      {
+        "time": "2026-10-01T12:53:58.740695634Z",
+        "level": "WARN",
+        "source": {
+          "function": "github.com/c360studio/semstreams/processor/graph-query.(*Component).superviseCommunityGenerations",
+          "file": "/go/pkg/mod/github.com/c360studio/semstreams@v1.0.0-beta.162.0.20260930150212-8b99efe9c66a/processor/graph-query/component.go",
+          "line": 740
+        },
+        "msg": "community generation unavailable; retrying",
+        "service": "semstreams",
+        "version": "0.1.0",
+        "pid": 1,
+        "component": "graph-query",
+        "generation": 3,
+        "error": "framework bucket \"COMMUNITY_INDEX\" is not ready: its owner (graph-clustering) has not provisioned it in this deployment",
+        "retry_interval": 5000000000
+      }
+    ]
+  },
+  "frozen_source_evidence": {
+    "composition/assert.go": {
+      "sha256": "078ffb84c3352e1ef729ecb97a54c95b8b61788e88da03ce09150df77d142483",
+      "start_line": 9,
+      "end_line": 29,
+      "excerpt": "\n// AssertValid fails t when the composition has an error-severity finding,\n// printing every one; warnings are logged and pass. It is the one call a\n// product's CI makes over each shipped configuration (precedent for a\n// testing.TB-taking framework helper: natsclient.NewTestClient).\nfunc AssertValid(t testing.TB, catalog *component.Registry, cfg *config.Config) {\n\tt.Helper()\n\tresult, err := Validate(catalog, cfg)\n\tif err != nil {\n\t\tt.Fatalf(\"composition validation: %v\", err)\n\t\treturn\n\t}\n\tfor _, warning := range result.Warnings {\n\t\tt.Logf(\"composition warning %s on %s/%s: %s\", warning.Type, warning.Component, warning.Port, warning.Message)\n\t}\n\tif len(result.Errors) == 0 {\n\t\treturn\n\t}\n\tfor _, finding := range result.Errors {\n\t\tt.Errorf(\"composition error %s on %s/%s: %s\", finding.Type, finding.Component, finding.Port, finding.Message)\n\t}",
+      "url": "https://github.com/C360Studio/semstreams/blob/8b99efe9c66a4faa4fa509f9f62cc6bad8392128/composition/assert.go#L9"
+    },
+    "composition/findings.go": {
+      "sha256": "cffcc9c305571830d80687d1f4e7f35cc871e10af701dead578b2608db53bf5a",
+      "start_line": 64,
+      "end_line": 83,
+      "excerpt": "// severityOf is the one severity table. An orphaned port is an error exactly\n// when it is a required stream input with no publisher; every other orphan is\n// a warning. The rule was lifted from the since-deleted engine validator\n// (engine/validator.go:313-361 as it stood at 5cc0c7fb, removed by #1093) \u2014\n// cited for provenance only; that path no longer exists to compare against.\nfunc severityOf(typ string, orphan *flowgraph.OrphanedPort) string {\n\tswitch typ {\n\tcase TypeDisconnectedNode, TypeMissingInterface, TypeEmptyComposition:\n\t\treturn SeverityWarning\n\tcase TypeOrphanedPort:\n\t\tif orphan != nil && orphan.Issue == flowgraph.IssueNoPublishers &&\n\t\t\torphan.Required && orphan.Pattern == component.PatternStream {\n\t\t\treturn SeverityError\n\t\t}\n\t\treturn SeverityWarning\n\tdefault:\n\t\treturn SeverityError\n\t}\n}\n",
+      "url": "https://github.com/C360Studio/semstreams/blob/8b99efe9c66a4faa4fa509f9f62cc6bad8392128/composition/findings.go#L64"
+    },
+    "service/component_manager.go": {
+      "sha256": "c3e19ff557ed1895e0e55a9af78e2e97f1d560fe574e7e67a813a63af3031ce3",
+      "start_line": 384,
+      "end_line": 425,
+      "excerpt": "\tcm.registry.SealComposition(componentadmission.Access{})\n\tcm.initialized.Store(true)\n\treturn nil\n}\n\n// analyzeBootComposition runs composition.Analyze over the admitted Registry\n// declarations and the boot configuration's explicit streams, logs every\n// finding, retains the result for the HTTP projections, and returns an error\n// \u2014 refusing boot \u2014 when the result has an error-severity finding. The\n// precondition the owner set for the refuse (every shipped configuration\n// measured clean, ADR-100 default 3) holds since the external-boundary marker\n// ruling of 2026-08-26.\nfunc (cm *ComponentManager) analyzeBootComposition() error {\n\tsnapshots := cm.registry.Snapshots(componentadmission.Access{})\n\tdeclarations := make([]component.Declaration, 0, len(snapshots))\n\tfor _, snapshot := range snapshots {\n\t\tdeclarations = append(declarations, snapshot.Declaration())\n\t}\n\tresult := composition.Analyze(declarations, cm.bootStreams)\n\n\tcm.mu.Lock()\n\tcm.bootFindings = result\n\tcm.mu.Unlock()\n\n\tfor _, finding := range result.Warnings {\n\t\tcm.logger.Warn(\"composition finding\",\n\t\t\t\"type\", finding.Type, \"component\", finding.Component, \"port\", finding.Port, \"message\", finding.Message)\n\t}\n\tfor _, finding := range result.Errors {\n\t\tcm.logger.Error(\"composition finding\",\n\t\t\t\"type\", finding.Type, \"component\", finding.Component, \"port\", finding.Port, \"message\", finding.Message)\n\t}\n\tcm.logger.Info(\"composition validated at boot\",\n\t\t\"status\", result.Status, \"errors\", len(result.Errors), \"warnings\", len(result.Warnings),\n\t\t\"components\", len(result.Graph.Nodes), \"edges\", len(result.Graph.Edges))\n\n\tif len(result.Errors) == 0 {\n\t\treturn nil\n\t}\n\tdescriptions := make([]string, 0, len(result.Errors))\n\tfor _, finding := range result.Errors {\n\t\tdescription := fmt.Sprintf(\"%s on %s/%s: %s\", finding.Type, finding.Component, finding.Port, finding.Message)",
+      "url": "https://github.com/C360Studio/semstreams/blob/8b99efe9c66a4faa4fa509f9f62cc6bad8392128/service/component_manager.go#L384"
+    },
+    "processor/agentic-dispatch/http.go": {
+      "sha256": "0e6b8fc54c7c766b38ccd939c7ade6a056551fe642ac096552e202b61c19dfaa",
+      "start_line": 594,
+      "end_line": 615,
+      "excerpt": "\tctx, requestID := c.withRequestID(w, r)\n\tstartTime := time.Now()\n\n\t// Get optional query filters\n\tuserID := r.URL.Query().Get(\"user_id\")\n\tstate := r.URL.Query().Get(\"state\")\n\n\tc.logger.DebugContext(ctx, \"listing loops\",\n\t\tslog.String(\"request_id\", requestID),\n\t\tslog.String(\"user_id\", userID),\n\t\tslog.String(\"state\", state))\n\n\tsnapshot, err := c.currentLoopSnapshot(ctx)\n\tif err != nil {\n\t\tc.logger.ErrorContext(ctx, \"agentic-dispatch: loop listing refused while loop authority is unavailable\",\n\t\t\tslog.String(\"request_id\", requestID),\n\t\t\tslog.String(\"error\", err.Error()))\n\t\tc.metrics.recordHTTPRequest(\"/loops\", \"GET\", \"503\")\n\t\tc.writeJSONError(w, http.StatusServiceUnavailable, loopViewUnavailableMessage)\n\t\treturn\n\t}\n\tloops := currentLoopInfos(snapshot, userID)",
+      "url": "https://github.com/C360Studio/semstreams/blob/8b99efe9c66a4faa4fa509f9f62cc6bad8392128/processor/agentic-dispatch/http.go#L594"
+    },
+    "storage/objectstore/config.go": {
+      "sha256": "a177e1a231c43625e12e3e00fa6ab2409bc349557b6ba9e4487f1900942d8e2b",
+      "start_line": 74,
+      "end_line": 94,
+      "excerpt": "//   - Default caching settings\nfunc DefaultConfig() Config {\n\tinputDefs := []component.PortDefinition{\n\t\t{\n\t\t\tName: \"write\", Config: component.NATSPort{Subject: \"storage.objectstore.write\"}, Required: false,\n\t\t\tDescription: \"NATS subject for write operations (accepts any message)\",\n\t\t},\n\t}\n\n\toutputDefs := []component.PortDefinition{\n\t\t{\n\t\t\tName: \"events\", Config: component.NATSPort{Subject: \"storage.objectstore.events\"}, Required: false,\n\t\t\tDescription: \"Storage events (stored, retrieved)\",\n\t\t},\n\t\t{\n\t\t\tName: \"stored\", Config: component.NATSPort{Subject: \"storage.objectstore.stored\", Interface: &component.InterfaceContract{\n\t\t\t\t// StoredMessage with StorageRef\n\t\t\t\tType: \"storage.stored.v1\"}}, Required: false,\n\t\t\tDescription: \"StoredMessage output for ContentStorable pattern\",\n\t\t},\n\t}",
+      "url": "https://github.com/C360Studio/semstreams/blob/8b99efe9c66a4faa4fa509f9f62cc6bad8392128/storage/objectstore/config.go#L74"
+    },
+    "processor/agentic-model/config.go": {
+      "sha256": "15b86f03266f3d9016aad58905ae773c23b75d1b631b3121ed4e443ed81b5472",
+      "start_line": 139,
+      "end_line": 150,
+      "excerpt": "\t}\n\n\toutputDefs := []component.PortDefinition{\n\t\t{\n\t\t\tName: \"agent.response\", Config: component.JetStreamPort{Subjects: []string{\"agent.response.*\"}, StreamName: \"AGENT\"}, Required: true,\n\t\t\tDescription: \"Agent response output (JetStream)\",\n\t\t},\n\t\t{\n\t\t\tName: \"agent.stream\", Config: component.NATSPort{Subject: \"agent.stream.*\"}, Description: \"Streaming delta chunks (core NATS, fire-and-forget)\",\n\t\t},\n\t}\n",
+      "url": "https://github.com/C360Studio/semstreams/blob/8b99efe9c66a4faa4fa509f9f62cc6bad8392128/processor/agentic-model/config.go#L139"
+    },
+    "processor/agentic-tools/config.go": {
+      "sha256": "380ce31133c5e13af172d8af0283a1c1a93b392c265b35208e5272c6bb663475",
+      "start_line": 124,
+      "end_line": 135,
+      "excerpt": "func DefaultConfig() Config {\n\tinputDefs := []component.PortDefinition{\n\t\t{\n\t\t\tName: \"tool.execute\", Config: component.JetStreamPort{Subjects: []string{\"tool.execute.>\"}, StreamName: \"AGENT\"}, Required: true,\n\t\t\tDescription: \"Tool execution requests (JetStream)\",\n\t\t},\n\t\t{\n\t\t\tName: \"tool.list\", Config: component.NATSRequestPort{Subject: \"discovery.tool.list\"}, Description: \"Tool discovery request/reply\",\n\t\t},\n\t\t{Name: \"entity_states\", Config: component.KVReadPort{Bucket: graph.BucketEntityStates}},\n\t\t{Name: \"agent_loops\", Config: component.KVReadPort{Bucket: \"AGENT_LOOPS\"}},\n\t}",
+      "url": "https://github.com/C360Studio/semstreams/blob/8b99efe9c66a4faa4fa509f9f62cc6bad8392128/processor/agentic-tools/config.go#L124"
+    },
+    "processor/graph-query/summary_view.go": {
+      "sha256": "86f6ee76d1c8b2818301d793cf4a409ac07c176de7e95b98322bdf1cc3fa01e2",
+      "start_line": 107,
+      "end_line": 132,
+      "excerpt": "\nfunc (c *Component) superviseSummaryView(ctx context.Context) {\n\tif c.openSummaryReader == nil {\n\t\tc.logger.Error(\"community summary view supervisor has no catalog reader opener\")\n\t\treturn\n\t}\n\twaitRetry := c.waitSummaryRetry\n\tif waitRetry == nil {\n\t\twaitRetry = waitSummaryViewRetry\n\t}\n\n\tfor ctx.Err() == nil {\n\t\treader, err := c.openSummaryReader(ctx)\n\t\tif err != nil {\n\t\t\tif ctx.Err() != nil {\n\t\t\t\treturn\n\t\t\t}\n\t\t\tc.logger.Warn(\"COMMUNITY_SUMMARIES unavailable; using statistical summaries\",\n\t\t\t\t\"error\", err, \"retry_interval\", c.config.RecheckInterval)\n\t\t\tif !waitRetry(ctx, c.config.RecheckInterval) {\n\t\t\t\treturn\n\t\t\t}\n\t\t\tcontinue\n\t\t}\n\t\tif ctx.Err() != nil {\n\t\t\treturn",
+      "url": "https://github.com/C360Studio/semstreams/blob/8b99efe9c66a4faa4fa509f9f62cc6bad8392128/processor/graph-query/summary_view.go#L107"
+    },
+    "processor/graph-query/component.go": {
+      "sha256": "03d7a38f2a63bf9fe2eccaa1673b5d9862365093bbdc9f39296bf3c5d8d1def0",
+      "start_line": 711,
+      "end_line": 748,
+      "excerpt": "\tif c.openCommunityReader == nil {\n\t\tc.logger.Error(\"community generation supervisor has no catalog reader opener\")\n\t\treturn\n\t}\n\twaitRetry := c.waitCommunityRetry\n\tif waitRetry == nil {\n\t\twaitRetry = func(ctx context.Context, interval time.Duration) bool {\n\t\t\ttimer := time.NewTimer(interval)\n\t\t\tdefer timer.Stop()\n\t\t\tselect {\n\t\t\tcase <-ctx.Done():\n\t\t\t\treturn false\n\t\t\tcase <-timer.C:\n\t\t\t\treturn true\n\t\t\t}\n\t\t}\n\t}\n\n\tvar generationID uint64\n\tfor ctx.Err() == nil {\n\t\tgenerationID++\n\t\tgeneration := newCommunityGeneration(generationID)\n\t\treader, err := c.openCommunityReader(ctx)\n\t\tif err == nil {\n\t\t\terr = c.communityCache.watchGeneration(ctx, reader, generation)\n\t\t}\n\t\tif ctx.Err() != nil {\n\t\t\treturn\n\t\t}\n\t\tc.logger.Warn(\"community generation unavailable; retrying\",\n\t\t\t\"generation\", generationID, \"error\", err,\n\t\t\t\"retry_interval\", c.config.RecheckInterval)\n\t\tif !waitRetry(ctx, c.config.RecheckInterval) {\n\t\t\treturn\n\t\t}\n\t}\n}\n",
+      "url": "https://github.com/C360Studio/semstreams/blob/8b99efe9c66a4faa4fa509f9f62cc6bad8392128/processor/graph-query/component.go#L711"
+    },
+    "agentic/agentrun/agentrun.go": {
+      "sha256": "032f153c3909a1aadbd086debff5752ba8323223751220a2a036f75268843352",
+      "start_line": 405,
+      "end_line": 430,
+      "excerpt": "\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"agentrun.ResolveRun: read agent.loop.run triple: %w\", err)\n\t}\n\tif ok && runID != \"\" {\n\t\trunEntityID, err := agentic.TryChainExecutionEntityID(org, platform, runID)\n\t\tif err != nil {\n\t\t\treturn nil, semerrs.WrapInvalid(err, \"agentrun\", \"ResolveRun\", \"build run entity ID from triple\")\n\t\t}\n\t\tparticipant, err := runs.Get(ctx, WorkflowName, runEntityID)\n\t\tif err != nil {\n\t\t\treturn nil, fmt.Errorf(\"agentrun.ResolveRun: Manager.Get: %w\", err)\n\t\t}\n\t\treturn asAgentRun(participant)\n\t}\n\n\t// -- Path 2: ancestry-walk fallback --\n\t// Walk agent.loop.parent triples to the root (the loop with no parent).\n\t// The root loop's bare ID is the run ID for pre-migration loops.\n\tlogger.Warn(\"agentrun.ResolveRun: agent.loop.run triple absent \u2014 falling back to ancestry walk\",\n\t\tslog.String(\"loop_id\", loopID),\n\t\tslog.String(\"org\", org),\n\t\tslog.String(\"platform\", platform))\n\n\tcurrentEntityID := loopEntityID\n\tcurrentLoopID := loopID\n\tfor hop := 0; hop < maxAncestryHops; hop++ {",
+      "url": "https://github.com/C360Studio/semstreams/blob/8b99efe9c66a4faa4fa509f9f62cc6bad8392128/agentic/agentrun/agentrun.go#L405"
+    },
+    "processor/graph-index/query.go": {
+      "sha256": "1153f2760537b774e347e580e930724402b0e0d5933e50da9f8e074ae73f2f0d",
+      "start_line": 24,
+      "end_line": 82,
+      "excerpt": "func (c *Component) setupQueryHandlers(ctx context.Context) error {\n\tsubscribeForRequests := c.subscribeForRequests\n\tif subscribeForRequests == nil {\n\t\tsubscribeForRequests = c.natsClient.SubscribeForRequests\n\t}\n\n\t// Subscribe to outgoing query\n\tsub, err := subscribeForRequests(ctx, \"graph.index.query.outgoing\", c.handleQueryOutgoingNATS)\n\tif err != nil {\n\t\treturn errs.Wrap(err, \"Component\", \"setupQueryHandlers\", \"subscribe outgoing query\")\n\t}\n\tc.querySubscriptions = append(c.querySubscriptions, sub)\n\n\t// Subscribe to incoming query\n\tsub, err = subscribeForRequests(ctx, \"graph.index.query.incoming\", c.handleQueryIncomingNATS)\n\tif err != nil {\n\t\treturn errs.Wrap(err, \"Component\", \"setupQueryHandlers\", \"subscribe incoming query\")\n\t}\n\tc.querySubscriptions = append(c.querySubscriptions, sub)\n\n\t// Subscribe to alias query\n\tsub, err = subscribeForRequests(ctx, \"graph.index.query.alias\", c.handleQueryAliasNATS)\n\tif err != nil {\n\t\treturn errs.Wrap(err, \"Component\", \"setupQueryHandlers\", \"subscribe alias query\")\n\t}\n\tc.querySubscriptions = append(c.querySubscriptions, sub)\n\n\t// Subscribe to predicate query\n\tsub, err = subscribeForRequests(ctx, \"graph.index.query.predicate\", c.handleQueryPredicateNATS)\n\tif err != nil {\n\t\treturn errs.Wrap(err, \"Component\", \"setupQueryHandlers\", \"subscribe predicate query\")\n\t}\n\tc.querySubscriptions = append(c.querySubscriptions, sub)\n\n\t// Subscribe to predicate list query\n\tsub, err = subscribeForRequests(ctx, \"graph.index.query.predicateList\", c.handleQueryPredicateListNATS)\n\tif err != nil {\n\t\treturn errs.Wrap(err, \"Component\", \"setupQueryHandlers\", \"subscribe predicateList query\")\n\t}\n\tc.querySubscriptions = append(c.querySubscriptions, sub)\n\n\t// Subscribe to predicate stats query\n\tsub, err = subscribeForRequests(ctx, \"graph.index.query.predicateStats\", c.handleQueryPredicateStatsNATS)\n\tif err != nil {\n\t\treturn errs.Wrap(err, \"Component\", \"setupQueryHandlers\", \"subscribe predicateStats query\")\n\t}\n\tc.querySubscriptions = append(c.querySubscriptions, sub)\n\n\t// Subscribe to compound predicate query\n\tsub, err = subscribeForRequests(ctx, \"graph.index.query.predicateCompound\", c.handleQueryPredicateCompoundNATS)\n\tif err != nil {\n\t\treturn errs.Wrap(err, \"Component\", \"setupQueryHandlers\", \"subscribe predicateCompound query\")\n\t}\n\tc.querySubscriptions = append(c.querySubscriptions, sub)\n\n\t// Subscribe to name query (gh#376 \u2014 deterministic name\u2192ranked-IDs)\n\tsub, err = subscribeForRequests(ctx, \"graph.index.query.byName\", c.handleQueryByNameNATS)\n\tif err != nil {\n\t\treturn errs.Wrap(err, \"Component\", \"setupQueryHandlers\", \"subscribe byName query\")",
+      "url": "https://github.com/C360Studio/semstreams/blob/8b99efe9c66a4faa4fa509f9f62cc6bad8392128/processor/graph-index/query.go#L24"
+    }
+  },
+  "configured_component_factories": {
+    "baseline": {
+      "graph-ingest": "graph-ingest",
+      "graph-query": "graph-query",
+      "rule": "rule-processor",
+      "teams-loop": "agentic-loop",
+      "agentic-model": "agentic-model",
+      "agentic-tools": "agentic-tools",
+      "teams-dispatch": "agentic-dispatch",
+      "graph-gateway": "graph-gateway",
+      "objectstore": "objectstore"
+    },
+    "target": {
+      "graph-ingest": "graph-ingest",
+      "graph-query": "graph-query",
+      "rule": "rule-processor",
+      "teams-loop": "agentic-loop",
+      "agentic-model": "agentic-model",
+      "agentic-tools": "agentic-tools",
+      "teams-dispatch": "agentic-dispatch",
+      "graph-gateway": "graph-gateway",
+      "objectstore": "objectstore"
+    }
+  }
+}

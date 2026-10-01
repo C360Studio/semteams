@@ -96,7 +96,7 @@ describe("DataView — right panel tab controls", () => {
   });
 
   it("'Details' tab is active by default when an entity is selected", async () => {
-    const entity = makeEntity("c360.ops.robotics.gcs.drone.001");
+    const entity = makeEntity("c360.ops.gcs.robotics.drone.001");
     graphStore.upsertEntity(entity);
     graphStore.selectEntity(entity.id);
 
@@ -204,7 +204,7 @@ describe("DataView — right panel tab controls", () => {
 
 describe("DataView — entity to chip integration", () => {
   it("GraphDetailPanel shows '+Chat' button when entity is selected", async () => {
-    const entity = makeEntity("c360.ops.robotics.gcs.drone.001");
+    const entity = makeEntity("c360.ops.gcs.robotics.drone.001");
     graphStore.upsertEntity(entity);
     graphStore.selectEntity(entity.id);
 
@@ -230,7 +230,7 @@ describe("DataView — entity to chip integration", () => {
   });
 
   it("clicking '+Chat' adds entity as chip to chatStore", async () => {
-    const entity = makeEntity("c360.ops.robotics.gcs.drone.001");
+    const entity = makeEntity("c360.ops.gcs.robotics.drone.001");
     graphStore.upsertEntity(entity);
     graphStore.selectEntity(entity.id);
 
@@ -251,7 +251,7 @@ describe("DataView — entity to chip integration", () => {
   });
 
   it("chip added from '+Chat' has correct label (entity instance part)", async () => {
-    const entity = makeEntity("c360.ops.robotics.gcs.drone.001");
+    const entity = makeEntity("c360.ops.gcs.robotics.drone.001");
     graphStore.upsertEntity(entity);
     graphStore.selectEntity(entity.id);
 
@@ -271,7 +271,7 @@ describe("DataView — entity to chip integration", () => {
   });
 
   it("chip added from '+Chat' has correct shape (kind, label, value)", async () => {
-    const entity = makeEntity("c360.ops.robotics.gcs.fleet.west-coast");
+    const entity = makeEntity("c360.ops.gcs.robotics.fleet.west-coast");
     graphStore.upsertEntity(entity);
     graphStore.selectEntity(entity.id);
 
@@ -294,7 +294,7 @@ describe("DataView — entity to chip integration", () => {
   });
 
   it("clicking '+Chat' switches right panel to Chat tab", async () => {
-    const entity = makeEntity("c360.ops.robotics.gcs.drone.001");
+    const entity = makeEntity("c360.ops.gcs.robotics.drone.001");
     graphStore.upsertEntity(entity);
     graphStore.selectEntity(entity.id);
 
@@ -345,9 +345,9 @@ describe("DataView — DataViewContext passed to ChatPanel", () => {
 
   it("ChatPanel is rendered after entities are loaded — entityCount reflects store size", async () => {
     // Insert 3 entities into the store
-    graphStore.upsertEntity(makeEntity("c360.ops.robotics.gcs.drone.001"));
-    graphStore.upsertEntity(makeEntity("c360.ops.robotics.gcs.drone.002"));
-    graphStore.upsertEntity(makeEntity("c360.ops.robotics.gcs.fleet.alpha"));
+    graphStore.upsertEntity(makeEntity("c360.ops.gcs.robotics.drone.001"));
+    graphStore.upsertEntity(makeEntity("c360.ops.gcs.robotics.drone.002"));
+    graphStore.upsertEntity(makeEntity("c360.ops.gcs.robotics.fleet.alpha"));
 
     const user = userEvent.setup();
     render(DataView, { props: { flowId: defaultFlowId() } });
@@ -367,7 +367,7 @@ describe("DataView — DataViewContext passed to ChatPanel", () => {
   });
 
   it("ChatPanel receives selectedEntityId from graphStore when entity is selected", async () => {
-    const entity = makeEntity("c360.ops.robotics.gcs.drone.001");
+    const entity = makeEntity("c360.ops.gcs.robotics.drone.001");
     graphStore.upsertEntity(entity);
     graphStore.selectEntity(entity.id);
 
@@ -436,7 +436,7 @@ describe("DataView — onViewEntity from chat", () => {
   });
 
   it("onViewEntity selects entity in graphStore", async () => {
-    const entity = makeEntity("c360.ops.robotics.gcs.drone.001");
+    const entity = makeEntity("c360.ops.gcs.robotics.drone.001");
     graphStore.upsertEntity(entity);
 
     // Expose onViewEntity by rendering DataView and triggering it via
@@ -452,7 +452,7 @@ describe("DataView — onViewEntity from chat", () => {
   });
 
   it("onViewEntity switches right panel back to Details tab", async () => {
-    const entity = makeEntity("c360.ops.robotics.gcs.drone.001");
+    const entity = makeEntity("c360.ops.gcs.robotics.drone.001");
     graphStore.upsertEntity(entity);
 
     const user = userEvent.setup();
@@ -538,7 +538,7 @@ describe("DataView — tab switching table-driven", () => {
     {
       name: "entity selected → Details tab active",
       setup: () => {
-        const e = makeEntity("c360.ops.robotics.gcs.drone.999");
+        const e = makeEntity("c360.ops.gcs.robotics.drone.999");
         graphStore.upsertEntity(e);
         graphStore.selectEntity(e.id);
       },

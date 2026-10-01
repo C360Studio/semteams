@@ -1,0 +1,207 @@
+{
+  "manifest": {
+    "name": "autoresearch",
+    "fixture": "autoresearch.yaml",
+    "spec": "autoresearch.spec.ts",
+    "config": "e2e-flow-bootstrap.json",
+    "source": "/private/tmp/semteams-migration-8b99efe/baseline-source",
+    "project": "stmig160",
+    "port": 33160,
+    "source_tree_sha256": "ac9be9b5f96fe9d210c1900bfe460453ff088c19c2decbce62b609f4eaf6cf23",
+    "ui_source_tree_sha256": "d2dc14ee9f609810aa8daccd14582b5df637618d2d550a441e52b20e2efd828f",
+    "derived_config_sha256": "09877f1b670b14a63b8cd43b193dc9e6cc3daad0e991b2fd6922e22c0dfc4a57",
+    "compose_sha256": "4c5674a572fab49689b392e189848918302887342f57648c3059ed24eb245982",
+    "sha256": {
+      "go.mod": "4a57073aab788a36c2ae3bcd7318f99871ab10210694cfd6ca7f8807f10ea8c3",
+      "go.sum": "d7c4add28c35ecfedf05eecc4467a36b92e9772b69fdb277d2cf277d6b81cc2e",
+      "ui/package-lock.json": "28fd4403ce710547429496e98d4b7f3e941986eb67e6957316e298ffb2a144c4",
+      "configs/e2e-flow-bootstrap.json": "9f8d491d49c2a956100a0e09711150ab2504746ea450ea7bb681b7b0de9fdcd6",
+      "test/fixtures/journeys/autoresearch.yaml": "89529961d95aa9fa574c41ba66b80fabe314f7be0b6f7e82e8c38603e7baa32b",
+      "ui/e2e/agentic/autoresearch.spec.ts": "9469d0f46cce4f2b1c5b051084793375004483768eff4f40f2481a02c341e188"
+    },
+    "images": [
+      {
+        "Id": "sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b",
+        "RepoTags": [
+          "caddy:2-alpine"
+        ],
+        "RepoDigests": [
+          "caddy@sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b"
+        ]
+      },
+      {
+        "Id": "sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66",
+        "RepoTags": [
+          "nats:2.14.4-alpine",
+          "nats@sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66"
+        ],
+        "RepoDigests": [
+          "nats@sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66"
+        ]
+      },
+      {
+        "Id": "sha256:a796b647360176d100374c955d7672aa2fbd78f32e97a6d8388c4593f72c21bc",
+        "RepoTags": [
+          "stmig160-backend:ce22c961"
+        ],
+        "RepoDigests": [
+          "stmig160-backend@sha256:a796b647360176d100374c955d7672aa2fbd78f32e97a6d8388c4593f72c21bc"
+        ]
+      },
+      {
+        "Id": "sha256:0e87c457c9ee4a76e960f3a3fc11b0f93daf7dbceaa0912f1e17657aea85bf79",
+        "RepoTags": [
+          "stmig160-mock-llm:ce22c961"
+        ],
+        "RepoDigests": [
+          "stmig160-mock-llm@sha256:0e87c457c9ee4a76e960f3a3fc11b0f93daf7dbceaa0912f1e17657aea85bf79"
+        ]
+      },
+      {
+        "Id": "sha256:7b6f05ed7f86853fd3a8fe955de974b0bd74c8a3fcd0fdd2ebe2ac52277d0905",
+        "RepoTags": [
+          "stmig160-sandbox:ce22c961"
+        ],
+        "RepoDigests": [
+          "stmig160-sandbox@sha256:7b6f05ed7f86853fd3a8fe955de974b0bd74c8a3fcd0fdd2ebe2ac52277d0905"
+        ]
+      },
+      {
+        "Id": "sha256:06e64b6bef0a698048c419533c13e6f1814a3a5bf0467b7c46a3e85125f471d7",
+        "RepoTags": [
+          "stmig160-ui:ce22c961"
+        ],
+        "RepoDigests": [
+          "stmig160-ui@sha256:06e64b6bef0a698048c419533c13e6f1814a3a5bf0467b7c46a3e85125f471d7"
+        ]
+      }
+    ],
+    "source_after_tree_sha256": "ac9be9b5f96fe9d210c1900bfe460453ff088c19c2decbce62b609f4eaf6cf23",
+    "ui_source_after_tree_sha256": "d2dc14ee9f609810aa8daccd14582b5df637618d2d550a441e52b20e2efd828f",
+    "source_changed": false
+  },
+  "source_comparison": {
+    "before": "ac9be9b5f96fe9d210c1900bfe460453ff088c19c2decbce62b609f4eaf6cf23",
+    "after": "ac9be9b5f96fe9d210c1900bfe460453ff088c19c2decbce62b609f4eaf6cf23",
+    "unchanged": true
+  },
+  "status": "failed",
+  "errors": [
+    "Error: expected a typed user.response.* publish for coordinator respond_direct\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeTruthy\u001b[2m()\u001b[22m\n\nReceived: \u001b[31mnull\u001b[39m\n\n  246 |       payloads,\n  247 |       \"expected a typed user.response.* publish for coordinator respond_direct\",\n> 248 |     ).toBeTruthy();\n      |       ^\n  249 |     const delivered = payloads!;\n  250 |     expect(delivered.every((entry) => entry.subject.startsWith(\"user.response.\"))).toBe(true);\n  251 |     expect(delivered.every((entry) => entry.message_type === \"agentic.user_response.v1\")).toBe(true);\n    at /private/tmp/semteams-migration-8b99efe/baseline-source/ui/e2e/agentic/autoresearch.spec.ts:248:7"
+  ],
+  "readiness": {
+    "exit": 0,
+    "stdout": "READY",
+    "stderr": "--2026-10-01 12:42:02--  http://localhost:8080/readyz\nResolving localhost (localhost)... ::1, 127.0.0.1\nConnecting to localhost (localhost)|::1|:8080... connected.\nHTTP request sent, awaiting response... \n  HTTP/1.1 200 OK\n  Date: Thu, 01 Oct 2026 12:42:02 GMT\n  Content-Length: 5\n  Content-Type: text/plain; charset=utf-8\nLength: 5 [text/plain]\nSaving to: 'STDOUT'\n\n     0K                                                       100%  614K=0s\n\n2026-10-01 12:42:02 (614 KB/s) - written to stdout [5/5]\n\n"
+  },
+  "artifact_proof": {
+    "artifactResult": {
+      "call_id": "call_23cebc6d",
+      "name": "emit_autoresearch_artifact",
+      "content": "{\"improvement_pct\":29.2,\"loop_entity_id\":\"c360.bootstrap-e2e-001.agent.agentic-loop.execution.32e73806-b274-4a47-b96e-78a5ec767401\",\"path\":\".artifacts/autoresearch/2026-10-01-go-test-wallclock-optimization.md\",\"revision\":1,\"slug\":\"2026-10-01-go-test-wallclock-optimization\"}",
+      "metadata": {
+        "loop_entity_id": "c360.bootstrap-e2e-001.agent.agentic-loop.execution.32e73806-b274-4a47-b96e-78a5ec767401",
+        "path": ".artifacts/autoresearch/2026-10-01-go-test-wallclock-optimization.md"
+      },
+      "loop_id": "32e73806-b274-4a47-b96e-78a5ec767401"
+    },
+    "artifactPaths": [
+      {
+        "subject": "c360.bootstrap-e2e-001.agent.agentic-loop.execution.32e73806-b274-4a47-b96e-78a5ec767401",
+        "predicate": "autoresearch.artifact.path",
+        "object": ".artifacts/autoresearch/2026-10-01-go-test-wallclock-optimization.md",
+        "source": "autoresearch-emit-artifact",
+        "timestamp": "2026-10-01T12:41:51.409721673Z",
+        "confidence": 1
+      }
+    ],
+    "best": [
+      {
+        "subject": "c360.bootstrap-e2e-001.agent.chain.execution.loop_430b8ec7",
+        "predicate": "autoresearch.best.value",
+        "object": 0.85,
+        "source": "rule_engine",
+        "timestamp": "2026-10-01T12:41:51.326462589Z",
+        "confidence": 1,
+        "context": "rule:autoresearch_execute_promote_best_on_kept:c360.bootstrap-e2e-001.agent.chain.execution.loop_430b8ec7:1:promote_best_value"
+      }
+    ],
+    "bestExperiments": [
+      {
+        "subject": "c360.bootstrap-e2e-001.agent.chain.execution.loop_430b8ec7",
+        "predicate": "autoresearch.best.experiment-id",
+        "object": "c360.bootstrap-e2e-001.agent.agentic-loop.execution.c1e7f535-b161-445a-9f4d-11742ef28219",
+        "source": "rule_engine",
+        "timestamp": "2026-10-01T12:41:51.327753214Z",
+        "confidence": 1,
+        "context": "rule:autoresearch_execute_promote_best_on_kept:c360.bootstrap-e2e-001.agent.chain.execution.loop_430b8ec7:1:promote_best_experiment_id"
+      }
+    ],
+    "keptMeasurements": [
+      {
+        "subject": "c360.bootstrap-e2e-001.agent.agentic-loop.execution.6a86c504-2a23-4eee-a51b-350af4406202",
+        "predicate": "autoresearch.measurement.outcome",
+        "object": "kept",
+        "source": "autoresearch-emit-measurement",
+        "timestamp": "2026-10-01T12:41:51.131148297Z",
+        "confidence": 1
+      },
+      {
+        "subject": "c360.bootstrap-e2e-001.agent.agentic-loop.execution.c1e7f535-b161-445a-9f4d-11742ef28219",
+        "predicate": "autoresearch.measurement.outcome",
+        "object": "kept",
+        "source": "autoresearch-emit-measurement",
+        "timestamp": "2026-10-01T12:41:51.297459673Z",
+        "confidence": 1
+      }
+    ],
+    "measurementValues": [
+      {
+        "subject": "c360.bootstrap-e2e-001.agent.agentic-loop.execution.6a86c504-2a23-4eee-a51b-350af4406202",
+        "predicate": "autoresearch.measurement.value",
+        "object": 1,
+        "source": "autoresearch-emit-measurement",
+        "timestamp": "2026-10-01T12:41:51.131148297Z",
+        "confidence": 1
+      },
+      {
+        "subject": "c360.bootstrap-e2e-001.agent.agentic-loop.execution.c1e7f535-b161-445a-9f4d-11742ef28219",
+        "predicate": "autoresearch.measurement.value",
+        "object": 0.85,
+        "source": "autoresearch-emit-measurement",
+        "timestamp": "2026-10-01T12:41:51.297459673Z",
+        "confidence": 1
+      }
+    ],
+    "artifactProvenance": [
+      {
+        "subject": "c360.bootstrap-e2e-001.agent.agentic-loop.execution.32e73806-b274-4a47-b96e-78a5ec767401",
+        "predicate": "autoresearch.artifact.best-experiment-id",
+        "object": "mock-provenance-second-kept-iteration",
+        "source": "autoresearch-emit-artifact",
+        "timestamp": "2026-10-01T12:41:51.409721673Z",
+        "confidence": 1
+      }
+    ],
+    "executeLoops": [
+      {
+        "loop_id": "c1e7f535-b161-445a-9f4d-11742ef28219",
+        "task_id": "rule-c360.bootstrap-e2e-001.agent.agentic-loop.execution.42f772f3-7b9f-45a2-885d-8de68ee631ac-1790858511281947173",
+        "state": "complete",
+        "role": "autoresearch-execute",
+        "max_iterations": 8,
+        "outcome": "success",
+        "result": "{\"action\":\"measured\",\"reason\":\"Iteration 2: 1.00s \u2192 0.85s, tests still pass \u2014 kept. Cap reached.\"}"
+      },
+      {
+        "loop_id": "6a86c504-2a23-4eee-a51b-350af4406202",
+        "task_id": "rule-c360.bootstrap-e2e-001.agent.agentic-loop.execution.c3f97aa6-a420-464f-89c6-8f8f46f49133-1790858511114213214",
+        "state": "complete",
+        "role": "autoresearch-execute",
+        "max_iterations": 8,
+        "outcome": "success",
+        "result": "{\"action\":\"measured\",\"reason\":\"Iteration 1: 1.20s \u2192 1.00s, tests still pass \u2014 kept.\"}"
+      }
+    ]
+  }
+}

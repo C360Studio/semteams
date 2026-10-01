@@ -15,7 +15,7 @@ import (
 
 func platform() types.PlatformMeta { return types.PlatformMeta{Org: "c360", Platform: "ops"} }
 
-const testRunEntity = "c360.ops.agent.chain.execution.run-123"
+const testRunEntity = "c360.ops.chain.agent.execution.run-123"
 
 var fixedNow = time.Date(2026, 6, 24, 12, 0, 0, 0, time.UTC)
 

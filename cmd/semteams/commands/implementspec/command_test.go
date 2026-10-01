@@ -2,6 +2,7 @@ package implementspec
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -10,6 +11,7 @@ import (
 	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semstreams/pkg/errs"
 	agenticdispatch "github.com/c360studio/semstreams/processor/agentic-dispatch"
 	"github.com/c360studio/semstreams/types"
 )
@@ -17,7 +19,7 @@ import (
 var fixedNow = time.Date(2026, 6, 24, 12, 0, 0, 0, time.UTC)
 
 func TestExecute_AnalyzesProofAndRequestsImplementationWhenReady(t *testing.T) {
-	runEntityID := "c360.semteams.agent.chain.execution.loop_root"
+	runEntityID := "c360.semteams.chain.agent.execution.loop_root"
 	reader := &recordingReader{
 		entities: map[string]map[string]any{
 			runEntityID: readyHealthEndpointTriples(),
@@ -66,7 +68,7 @@ func TestExecute_AnalyzesProofAndRequestsImplementationWhenReady(t *testing.T) {
 }
 
 func TestExecute_BlockedProofDoesNotRequestImplementation(t *testing.T) {
-	runEntityID := "c360.semteams.agent.chain.execution.loop_root"
+	runEntityID := "c360.semteams.chain.agent.execution.loop_root"
 	reader := &recordingReader{
 		entities: map[string]map[string]any{
 			runEntityID: {
@@ -105,7 +107,7 @@ func TestExecute_BlockedProofDoesNotRequestImplementation(t *testing.T) {
 }
 
 func TestExecute_RejectsSlugThatDoesNotExistOnRun(t *testing.T) {
-	runEntityID := "c360.semteams.agent.chain.execution.loop_root"
+	runEntityID := "c360.semteams.chain.agent.execution.loop_root"
 	reader := &recordingReader{
 		entities: map[string]map[string]any{
 			runEntityID: readyHealthEndpointTriples(),
@@ -131,7 +133,7 @@ func TestExecute_RejectsSlugThatDoesNotExistOnRun(t *testing.T) {
 }
 
 func TestExecute_RejectsRunIDArgument(t *testing.T) {
-	runEntityID := "c360.semteams.agent.chain.execution.loop_root"
+	runEntityID := "c360.semteams.chain.agent.execution.loop_root"
 	reader := &recordingReader{
 		entities: map[string]map[string]any{
 			runEntityID: readyHealthEndpointTriples(),
@@ -145,9 +147,9 @@ func TestExecute_RejectsRunIDArgument(t *testing.T) {
 		ChannelType: "web",
 		ChannelID:   "ui",
 		UserID:      "alice",
-		Content:     "/implement-spec c360.semteams.agent.chain.execution.other",
+		Content:     "/implement-spec c360.semteams.chain.agent.execution.other",
 		RunID:       "loop_root",
-	}, []string{"c360.semteams.agent.chain.execution.other", ""}, "")
+	}, []string{"c360.semteams.chain.agent.execution.other", ""}, "")
 	if err == nil || !strings.Contains(err.Error(), "not a run id") {
 		t.Fatalf("Execute error = %v, want run-id argument rejection", err)
 	}
@@ -172,7 +174,7 @@ func TestExecute_RejectsUntrackedSelectedRun(t *testing.T) {
 		Content:     "/implement-spec add-health-endpoint",
 		RunID:       "other-run",
 	}, []string{"add-health-endpoint", ""}, "")
-	if err == nil || !strings.Contains(err.Error(), `selected run "other-run" is not tracked`) {
+	if err == nil || !strings.Contains(err.Error(), `read selected run "other-run" owner`) {
 		t.Fatalf("Execute error = %v, want untracked selected-run rejection", err)
 	}
 	if len(publisher.triples) != 0 {
@@ -185,13 +187,9 @@ func TestExecute_RejectsSelectedRunOwnedByDifferentUser(t *testing.T) {
 	publisher := &recordingPublisher{}
 	cmd := testCommand(reader, publisher)
 	cmdCtx := testCommandContext()
-	cmdCtx.LoopTracker.Track(&agenticdispatch.LoopInfo{
-		LoopID:      "bob-run",
-		UserID:      "bob",
-		ChannelType: "web",
-		ChannelID:   "ui",
-		State:       "complete",
-	})
+	cmdCtx.LookupLoopOwner = func(_ context.Context, id string) (agenticdispatch.LoopOwner, error) {
+		return agenticdispatch.LoopOwner{LoopID: id, UserID: "bob"}, nil
+	}
 
 	_, err := cmd.Execute(context.Background(), cmdCtx, agentic.UserMessage{
 		MessageID:   "msg-6",
@@ -257,16 +255,13 @@ func testCommand(reader *recordingReader, publisher *recordingPublisher) *Comman
 }
 
 func testCommandContext() *agenticdispatch.CommandContext {
-	tracker := agenticdispatch.NewLoopTracker()
-	tracker.Track(&agenticdispatch.LoopInfo{
-		LoopID:      "loop_root",
-		UserID:      "alice",
-		ChannelType: "web",
-		ChannelID:   "ui",
-		State:       "complete",
-	})
 	return &agenticdispatch.CommandContext{
-		LoopTracker:   tracker,
+		LookupLoopOwner: func(_ context.Context, id string) (agenticdispatch.LoopOwner, error) {
+			if id != "loop_root" {
+				return agenticdispatch.LoopOwner{}, fmt.Errorf("loop_not_found")
+			}
+			return agenticdispatch.LoopOwner{LoopID: id, UserID: "alice"}, nil
+		},
 		HasPermission: func(_, _ string) bool { return true },
 	}
 }
@@ -334,4 +329,67 @@ func triplesByPredicate(triples []message.Triple) map[string]string {
 		out[tr.Predicate] = fmt.Sprint(tr.Object)
 	}
 	return out
+}
+
+func TestExecute_PreservesClassifiedOwnerLookupFailures(t *testing.T) {
+	const selected = "00000000-0000-4000-8000-000000000501"
+	for _, code := range []string{"invalid_loop_id", "loop_not_found", "loop_owner_absent", "loop_record_invalid", "loop_state_unavailable"} {
+		t.Run(code, func(t *testing.T) {
+			reader, publisher := &recordingReader{}, &recordingPublisher{}
+			cmd := testCommand(reader, publisher)
+			commandCtx := testCommandContext()
+			class := errs.ErrorInvalid
+			if code == "loop_state_unavailable" {
+				class = errs.ErrorTransient
+			}
+			failure := errs.ClassifiedCode(class, code, errors.New("owner lookup failed"))
+			commandCtx.LookupLoopOwner = func(_ context.Context, id string) (agenticdispatch.LoopOwner, error) {
+				if id != selected {
+					t.Fatalf("lookup id=%q", id)
+				}
+				return agenticdispatch.LoopOwner{}, failure
+			}
+			_, err := cmd.Execute(context.Background(), commandCtx, agentic.UserMessage{UserID: "alice", RunID: selected}, []string{"add-health-endpoint"}, "")
+			var classified *errs.ClassifiedError
+			if !errors.As(err, &classified) || classified.Code != code {
+				t.Fatalf("classification lost: %v", err)
+			}
+			if errs.IsTransient(err) != (class == errs.ErrorTransient) {
+				t.Fatalf("transient class lost: %v", err)
+			}
+			if reader.readEntityID != "" || len(publisher.triples) != 0 {
+				t.Fatal("untrusted owner reached graph read/write")
+			}
+		})
+	}
+}
+
+func TestExecute_RefusesUnavailableOrMalformedOwner(t *testing.T) {
+	const selected = "00000000-0000-4000-8000-000000000501"
+	for _, tc := range []struct {
+		name   string
+		lookup func(context.Context, string) (agenticdispatch.LoopOwner, error)
+	}{
+		{name: "lookup unavailable"},
+		{name: "wrong loop", lookup: func(context.Context, string) (agenticdispatch.LoopOwner, error) {
+			return agenticdispatch.LoopOwner{LoopID: "00000000-0000-4000-8000-000000000502", UserID: "alice"}, nil
+		}},
+		{name: "missing owner", lookup: func(context.Context, string) (agenticdispatch.LoopOwner, error) {
+			return agenticdispatch.LoopOwner{LoopID: selected}, nil
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			reader, publisher := &recordingReader{}, &recordingPublisher{}
+			cmd := testCommand(reader, publisher)
+			commandCtx := testCommandContext()
+			commandCtx.LookupLoopOwner = tc.lookup
+			_, err := cmd.Execute(context.Background(), commandCtx, agentic.UserMessage{UserID: "alice", RunID: selected}, []string{"add-health-endpoint"}, "")
+			if err == nil {
+				t.Fatal("malformed owner accepted")
+			}
+			if reader.readEntityID != "" || len(publisher.triples) != 0 {
+				t.Fatal("untrusted owner reached graph read/write")
+			}
+		})
+	}
 }

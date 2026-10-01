@@ -1,0 +1,516 @@
+{
+  "source": "target-browser/autoresearch/final-state.json",
+  "events": [
+    {
+      "sequence": 231,
+      "subject": "agent.complete.d8f1b806-9c0f-421b-aa09-119d8f2dd21b",
+      "message_type": "agentic.loop_completed.v1",
+      "payload": {
+        "loop_id": "d8f1b806-9c0f-421b-aa09-119d8f2dd21b",
+        "task_id": "rule-c360.semteams-bootstrap-e2e-ea83c6.chain.agent.execution.64158ebb-2f1c-434c-b88d-eb8f487b5529-1790856198376830588",
+        "decision": {
+          "action": "observed",
+          "reason": "Read the run entity and the coordinator loop result. Run reached its terminal phase with no operator-actionable pattern; emitting no findings."
+        },
+        "metadata": {
+          "agent.decide.action_allowlist": [
+            "observed"
+          ],
+          "agent.related_loops": {
+            "root": "64158ebb-2f1c-434c-b88d-eb8f487b5529"
+          },
+          "coordinator_loop_id": "64158ebb-2f1c-434c-b88d-eb8f487b5529",
+          "run_entity_id": "c360.semteams-bootstrap-e2e-ea83c6.chain.agent.execution.64158ebb-2f1c-434c-b88d-eb8f487b5529",
+          "run_phase": "completed"
+        }
+      }
+    },
+    {
+      "sequence": 217,
+      "subject": "agent.task.ops-chain-observer",
+      "message_type": "agentic.task.v1",
+      "payload": {
+        "task_id": "rule-c360.semteams-bootstrap-e2e-ea83c6.chain.agent.execution.64158ebb-2f1c-434c-b88d-eb8f487b5529-1790856198376830588",
+        "metadata": {
+          "agent.decide.action_allowlist": [
+            "observed"
+          ],
+          "agent.related_loops": {
+            "root": "64158ebb-2f1c-434c-b88d-eb8f487b5529"
+          },
+          "coordinator_loop_id": "64158ebb-2f1c-434c-b88d-eb8f487b5529",
+          "run_entity_id": "c360.semteams-bootstrap-e2e-ea83c6.chain.agent.execution.64158ebb-2f1c-434c-b88d-eb8f487b5529",
+          "run_phase": "completed"
+        }
+      }
+    },
+    {
+      "sequence": 214,
+      "subject": "agent.complete.c5795807-6b92-4c64-bf90-134942ac49e2",
+      "message_type": "agentic.loop_completed.v1",
+      "payload": {
+        "loop_id": "c5795807-6b92-4c64-bf90-134942ac49e2",
+        "task_id": "rule-c360.semteams-bootstrap-e2e-ea83c6.agentic-loop.agent.execution.ec8bb9c9-e6b0-4cfd-9b39-85e9e4066ceb-1790856198275251296",
+        "parent_loop": "ec8bb9c9-e6b0-4cfd-9b39-85e9e4066ceb",
+        "decision": {
+          "action": "respond_direct",
+          "reason": "Optimized `go test ./...` from 1.20s to 0.85s (about 29% faster) across two kept iterations: parallelizing independent suites and dropping a redundant fixture rebuild. Both changes keep the tests passing."
+        },
+        "metadata": {
+          "agent.decide.action_allowlist": [
+            "respond_direct",
+            "ask_user"
+          ],
+          "agent.related_loops": {
+            "autoresearch-run": "64158ebb-2f1c-434c-b88d-eb8f487b5529",
+            "terminal": "ec8bb9c9-e6b0-4cfd-9b39-85e9e4066ceb"
+          },
+          "category": "autoresearch",
+          "terminal_loop_id": "ec8bb9c9-e6b0-4cfd-9b39-85e9e4066ceb",
+          "wakeup_mode": "chain_terminal_autoresearch"
+        }
+      }
+    },
+    {
+      "sequence": 199,
+      "subject": "agent.task.coordinator",
+      "message_type": "agentic.task.v1",
+      "payload": {
+        "task_id": "rule-c360.semteams-bootstrap-e2e-ea83c6.agentic-loop.agent.execution.ec8bb9c9-e6b0-4cfd-9b39-85e9e4066ceb-1790856198275251296",
+        "parent_loop_id": "ec8bb9c9-e6b0-4cfd-9b39-85e9e4066ceb",
+        "metadata": {
+          "agent.decide.action_allowlist": [
+            "respond_direct",
+            "ask_user"
+          ],
+          "agent.related_loops": {
+            "autoresearch-run": "64158ebb-2f1c-434c-b88d-eb8f487b5529",
+            "terminal": "ec8bb9c9-e6b0-4cfd-9b39-85e9e4066ceb"
+          },
+          "category": "autoresearch",
+          "terminal_loop_id": "ec8bb9c9-e6b0-4cfd-9b39-85e9e4066ceb",
+          "wakeup_mode": "chain_terminal_autoresearch"
+        }
+      }
+    },
+    {
+      "sequence": 196,
+      "subject": "agent.complete.ec8bb9c9-e6b0-4cfd-9b39-85e9e4066ceb",
+      "message_type": "agentic.loop_completed.v1",
+      "payload": {
+        "loop_id": "ec8bb9c9-e6b0-4cfd-9b39-85e9e4066ceb",
+        "task_id": "rule-c360.semteams-bootstrap-e2e-ea83c6.agentic-loop.agent.execution.511ab881-bc70-4726-b8c4-4aabf355c9c3-1790856198210591629",
+        "parent_loop": "511ab881-bc70-4726-b8c4-4aabf355c9c3",
+        "decision": {
+          "action": "approved",
+          "reason": "Rollup is structurally complete: baseline, per-iteration journey, running best, and kept changes all present; the kept iterations genuinely moved the metric (1.20 → 0.85). Approved."
+        },
+        "metadata": {
+          "agent.decide.action_allowlist": [
+            "approved",
+            "insufficient",
+            "needs_clarification"
+          ],
+          "agent.related_loops": {
+            "autoresearch-run": "64158ebb-2f1c-434c-b88d-eb8f487b5529",
+            "autoresearch-synthesize": "511ab881-bc70-4726-b8c4-4aabf355c9c3",
+            "run-loop-entity-id": "c360.semteams-bootstrap-e2e-ea83c6.chain.agent.execution.64158ebb-2f1c-434c-b88d-eb8f487b5529"
+          },
+          "category": "autoresearch",
+          "prior_loop_id": "511ab881-bc70-4726-b8c4-4aabf355c9c3"
+        }
+      }
+    },
+    {
+      "sequence": 182,
+      "subject": "agent.task.reviewer-autoresearch",
+      "message_type": "agentic.task.v1",
+      "payload": {
+        "task_id": "rule-c360.semteams-bootstrap-e2e-ea83c6.agentic-loop.agent.execution.511ab881-bc70-4726-b8c4-4aabf355c9c3-1790856198210591629",
+        "parent_loop_id": "511ab881-bc70-4726-b8c4-4aabf355c9c3",
+        "metadata": {
+          "agent.decide.action_allowlist": [
+            "approved",
+            "insufficient",
+            "needs_clarification"
+          ],
+          "agent.related_loops": {
+            "autoresearch-run": "64158ebb-2f1c-434c-b88d-eb8f487b5529",
+            "autoresearch-synthesize": "511ab881-bc70-4726-b8c4-4aabf355c9c3",
+            "run-loop-entity-id": "c360.semteams-bootstrap-e2e-ea83c6.chain.agent.execution.64158ebb-2f1c-434c-b88d-eb8f487b5529"
+          },
+          "category": "autoresearch",
+          "prior_loop_id": "511ab881-bc70-4726-b8c4-4aabf355c9c3"
+        }
+      }
+    },
+    {
+      "sequence": 180,
+      "subject": "agent.complete.511ab881-bc70-4726-b8c4-4aabf355c9c3",
+      "message_type": "agentic.loop_completed.v1",
+      "payload": {
+        "loop_id": "511ab881-bc70-4726-b8c4-4aabf355c9c3",
+        "task_id": "rule-c360.semteams-bootstrap-e2e-ea83c6.chain.agent.execution.64158ebb-2f1c-434c-b88d-eb8f487b5529-1790856198119617171",
+        "decision": {
+          "action": "emit",
+          "reason": "Artifact emitted: 1.20s → 0.85s (29% faster), both iterations kept. Routing to the reviewer."
+        },
+        "metadata": {
+          "agent.decide.action_allowlist": [
+            "emit",
+            "needs_clarification"
+          ],
+          "agent.related_loops": {
+            "autoresearch-run": "64158ebb-2f1c-434c-b88d-eb8f487b5529",
+            "command": "go test ./...",
+            "metric-parser": "real seconds from the go test summary line",
+            "run-loop-entity-id": "c360.semteams-bootstrap-e2e-ea83c6.chain.agent.execution.64158ebb-2f1c-434c-b88d-eb8f487b5529",
+            "surface": "./..."
+          },
+          "category": "autoresearch",
+          "phase": "synthesize",
+          "run_loop_id": "64158ebb-2f1c-434c-b88d-eb8f487b5529",
+          "stop_reason": "cap"
+        }
+      }
+    },
+    {
+      "sequence": 157,
+      "subject": "agent.task.autoresearch-synthesize",
+      "message_type": "agentic.task.v1",
+      "payload": {
+        "task_id": "rule-c360.semteams-bootstrap-e2e-ea83c6.chain.agent.execution.64158ebb-2f1c-434c-b88d-eb8f487b5529-1790856198119617171",
+        "metadata": {
+          "agent.decide.action_allowlist": [
+            "emit",
+            "needs_clarification"
+          ],
+          "agent.related_loops": {
+            "autoresearch-run": "64158ebb-2f1c-434c-b88d-eb8f487b5529",
+            "command": "go test ./...",
+            "metric-parser": "real seconds from the go test summary line",
+            "run-loop-entity-id": "c360.semteams-bootstrap-e2e-ea83c6.chain.agent.execution.64158ebb-2f1c-434c-b88d-eb8f487b5529",
+            "surface": "./..."
+          },
+          "category": "autoresearch",
+          "phase": "synthesize",
+          "run_loop_id": "64158ebb-2f1c-434c-b88d-eb8f487b5529",
+          "stop_reason": "cap"
+        }
+      }
+    },
+    {
+      "sequence": 150,
+      "subject": "agent.complete.dd1ef220-23b8-4685-b04c-b7f5da444500",
+      "message_type": "agentic.loop_completed.v1",
+      "payload": {
+        "loop_id": "dd1ef220-23b8-4685-b04c-b7f5da444500",
+        "task_id": "rule-c360.semteams-bootstrap-e2e-ea83c6.agentic-loop.agent.execution.5369fe55-c3ea-4380-8a50-8cddd3305192-1790856197990377504",
+        "parent_loop": "5369fe55-c3ea-4380-8a50-8cddd3305192",
+        "decision": {
+          "action": "measured",
+          "reason": "Iteration 2: 1.00s → 0.85s, tests still pass — kept. Cap reached."
+        },
+        "metadata": {
+          "agent.decide.action_allowlist": [
+            "measured",
+            "needs_clarification"
+          ],
+          "agent.related_loops": {
+            "autoresearch-propose": "5369fe55-c3ea-4380-8a50-8cddd3305192",
+            "autoresearch-run": "64158ebb-2f1c-434c-b88d-eb8f487b5529",
+            "command": "go test ./...",
+            "metric-parser": "real seconds from the go test summary line",
+            "run-loop-entity-id": "c360.semteams-bootstrap-e2e-ea83c6.chain.agent.execution.64158ebb-2f1c-434c-b88d-eb8f487b5529",
+            "surface": "./..."
+          },
+          "category": "autoresearch",
+          "phase": "execute",
+          "propose_loop_id": "5369fe55-c3ea-4380-8a50-8cddd3305192",
+          "run_loop_id": "64158ebb-2f1c-434c-b88d-eb8f487b5529"
+        }
+      }
+    },
+    {
+      "sequence": 127,
+      "subject": "agent.task.autoresearch-execute",
+      "message_type": "agentic.task.v1",
+      "payload": {
+        "task_id": "rule-c360.semteams-bootstrap-e2e-ea83c6.agentic-loop.agent.execution.5369fe55-c3ea-4380-8a50-8cddd3305192-1790856197990377504",
+        "parent_loop_id": "5369fe55-c3ea-4380-8a50-8cddd3305192",
+        "metadata": {
+          "agent.decide.action_allowlist": [
+            "measured",
+            "needs_clarification"
+          ],
+          "agent.related_loops": {
+            "autoresearch-propose": "5369fe55-c3ea-4380-8a50-8cddd3305192",
+            "autoresearch-run": "64158ebb-2f1c-434c-b88d-eb8f487b5529",
+            "command": "go test ./...",
+            "metric-parser": "real seconds from the go test summary line",
+            "run-loop-entity-id": "c360.semteams-bootstrap-e2e-ea83c6.chain.agent.execution.64158ebb-2f1c-434c-b88d-eb8f487b5529",
+            "surface": "./..."
+          },
+          "category": "autoresearch",
+          "phase": "execute",
+          "propose_loop_id": "5369fe55-c3ea-4380-8a50-8cddd3305192",
+          "run_loop_id": "64158ebb-2f1c-434c-b88d-eb8f487b5529"
+        }
+      }
+    },
+    {
+      "sequence": 125,
+      "subject": "agent.complete.5369fe55-c3ea-4380-8a50-8cddd3305192",
+      "message_type": "agentic.loop_completed.v1",
+      "payload": {
+        "loop_id": "5369fe55-c3ea-4380-8a50-8cddd3305192",
+        "task_id": "rule-c360.semteams-bootstrap-e2e-ea83c6.chain.agent.execution.64158ebb-2f1c-434c-b88d-eb8f487b5529-1790856197925981712",
+        "decision": {
+          "action": "measure",
+          "reason": "Iteration 2 hypothesis: drop a redundant fixture rebuild in TestMain — further reduces setup time."
+        },
+        "metadata": {
+          "agent.decide.action_allowlist": [
+            "measure",
+            "needs_clarification"
+          ],
+          "agent.related_loops": {
+            "autoresearch-run": "64158ebb-2f1c-434c-b88d-eb8f487b5529",
+            "command": "go test ./...",
+            "metric-parser": "real seconds from the go test summary line",
+            "run-loop-entity-id": "c360.semteams-bootstrap-e2e-ea83c6.chain.agent.execution.64158ebb-2f1c-434c-b88d-eb8f487b5529",
+            "surface": "./..."
+          },
+          "category": "autoresearch",
+          "phase": "propose",
+          "run_loop_id": "64158ebb-2f1c-434c-b88d-eb8f487b5529"
+        }
+      }
+    },
+    {
+      "sequence": 111,
+      "subject": "agent.task.autoresearch-propose",
+      "message_type": "agentic.task.v1",
+      "payload": {
+        "task_id": "rule-c360.semteams-bootstrap-e2e-ea83c6.chain.agent.execution.64158ebb-2f1c-434c-b88d-eb8f487b5529-1790856197925981712",
+        "metadata": {
+          "agent.decide.action_allowlist": [
+            "measure",
+            "needs_clarification"
+          ],
+          "agent.related_loops": {
+            "autoresearch-run": "64158ebb-2f1c-434c-b88d-eb8f487b5529",
+            "command": "go test ./...",
+            "metric-parser": "real seconds from the go test summary line",
+            "run-loop-entity-id": "c360.semteams-bootstrap-e2e-ea83c6.chain.agent.execution.64158ebb-2f1c-434c-b88d-eb8f487b5529",
+            "surface": "./..."
+          },
+          "category": "autoresearch",
+          "phase": "propose",
+          "run_loop_id": "64158ebb-2f1c-434c-b88d-eb8f487b5529"
+        }
+      }
+    },
+    {
+      "sequence": 104,
+      "subject": "agent.complete.cb9a4740-6583-455f-9c97-2b3bfdd1ea01",
+      "message_type": "agentic.loop_completed.v1",
+      "payload": {
+        "loop_id": "cb9a4740-6583-455f-9c97-2b3bfdd1ea01",
+        "task_id": "rule-c360.semteams-bootstrap-e2e-ea83c6.agentic-loop.agent.execution.91870058-e729-4654-a2eb-a62a49ac2bcf-1790856197757221379",
+        "parent_loop": "91870058-e729-4654-a2eb-a62a49ac2bcf",
+        "decision": {
+          "action": "measured",
+          "reason": "Iteration 1: 1.20s → 1.00s, tests still pass — kept."
+        },
+        "metadata": {
+          "agent.decide.action_allowlist": [
+            "measured",
+            "needs_clarification"
+          ],
+          "agent.related_loops": {
+            "autoresearch-propose": "91870058-e729-4654-a2eb-a62a49ac2bcf",
+            "autoresearch-run": "64158ebb-2f1c-434c-b88d-eb8f487b5529",
+            "command": "go test ./...",
+            "metric-parser": "real seconds from the go test summary line",
+            "run-loop-entity-id": "c360.semteams-bootstrap-e2e-ea83c6.chain.agent.execution.64158ebb-2f1c-434c-b88d-eb8f487b5529",
+            "surface": "./..."
+          },
+          "category": "autoresearch",
+          "phase": "execute",
+          "propose_loop_id": "91870058-e729-4654-a2eb-a62a49ac2bcf",
+          "run_loop_id": "64158ebb-2f1c-434c-b88d-eb8f487b5529"
+        }
+      }
+    },
+    {
+      "sequence": 81,
+      "subject": "agent.task.autoresearch-execute",
+      "message_type": "agentic.task.v1",
+      "payload": {
+        "task_id": "rule-c360.semteams-bootstrap-e2e-ea83c6.agentic-loop.agent.execution.91870058-e729-4654-a2eb-a62a49ac2bcf-1790856197757221379",
+        "parent_loop_id": "91870058-e729-4654-a2eb-a62a49ac2bcf",
+        "metadata": {
+          "agent.decide.action_allowlist": [
+            "measured",
+            "needs_clarification"
+          ],
+          "agent.related_loops": {
+            "autoresearch-propose": "91870058-e729-4654-a2eb-a62a49ac2bcf",
+            "autoresearch-run": "64158ebb-2f1c-434c-b88d-eb8f487b5529",
+            "command": "go test ./...",
+            "metric-parser": "real seconds from the go test summary line",
+            "run-loop-entity-id": "c360.semteams-bootstrap-e2e-ea83c6.chain.agent.execution.64158ebb-2f1c-434c-b88d-eb8f487b5529",
+            "surface": "./..."
+          },
+          "category": "autoresearch",
+          "phase": "execute",
+          "propose_loop_id": "91870058-e729-4654-a2eb-a62a49ac2bcf",
+          "run_loop_id": "64158ebb-2f1c-434c-b88d-eb8f487b5529"
+        }
+      }
+    },
+    {
+      "sequence": 78,
+      "subject": "agent.complete.91870058-e729-4654-a2eb-a62a49ac2bcf",
+      "message_type": "agentic.loop_completed.v1",
+      "payload": {
+        "loop_id": "91870058-e729-4654-a2eb-a62a49ac2bcf",
+        "task_id": "rule-c360.semteams-bootstrap-e2e-ea83c6.chain.agent.execution.64158ebb-2f1c-434c-b88d-eb8f487b5529-1790856197663604462",
+        "decision": {
+          "action": "measure",
+          "reason": "Iteration 1 hypothesis: enable test caching / parallelism (t.Parallel on the independent suites) — should cut wallclock without changing behavior."
+        },
+        "metadata": {
+          "agent.decide.action_allowlist": [
+            "measure",
+            "needs_clarification"
+          ],
+          "agent.related_loops": {
+            "autoresearch-run": "64158ebb-2f1c-434c-b88d-eb8f487b5529",
+            "command": "go test ./...",
+            "metric-parser": "real seconds from the go test summary line",
+            "run-loop-entity-id": "c360.semteams-bootstrap-e2e-ea83c6.chain.agent.execution.64158ebb-2f1c-434c-b88d-eb8f487b5529",
+            "surface": "./..."
+          },
+          "category": "autoresearch",
+          "phase": "propose",
+          "run_loop_id": "64158ebb-2f1c-434c-b88d-eb8f487b5529"
+        }
+      }
+    },
+    {
+      "sequence": 64,
+      "subject": "agent.task.autoresearch-propose",
+      "message_type": "agentic.task.v1",
+      "payload": {
+        "task_id": "rule-c360.semteams-bootstrap-e2e-ea83c6.chain.agent.execution.64158ebb-2f1c-434c-b88d-eb8f487b5529-1790856197663604462",
+        "metadata": {
+          "agent.decide.action_allowlist": [
+            "measure",
+            "needs_clarification"
+          ],
+          "agent.related_loops": {
+            "autoresearch-run": "64158ebb-2f1c-434c-b88d-eb8f487b5529",
+            "command": "go test ./...",
+            "metric-parser": "real seconds from the go test summary line",
+            "run-loop-entity-id": "c360.semteams-bootstrap-e2e-ea83c6.chain.agent.execution.64158ebb-2f1c-434c-b88d-eb8f487b5529",
+            "surface": "./..."
+          },
+          "category": "autoresearch",
+          "phase": "propose",
+          "run_loop_id": "64158ebb-2f1c-434c-b88d-eb8f487b5529"
+        }
+      }
+    },
+    {
+      "sequence": 60,
+      "subject": "agent.complete.9df6e681-4b2d-4fbf-a10d-4eee8de46490",
+      "message_type": "agentic.loop_completed.v1",
+      "payload": {
+        "loop_id": "9df6e681-4b2d-4fbf-a10d-4eee8de46490",
+        "task_id": "rule-c360.semteams-bootstrap-e2e-ea83c6.agentic-loop.agent.execution.64158ebb-2f1c-434c-b88d-eb8f487b5529-1790856197571497921",
+        "parent_loop": "64158ebb-2f1c-434c-b88d-eb8f487b5529",
+        "run_id": "64158ebb-2f1c-434c-b88d-eb8f487b5529",
+        "decision": {
+          "action": "propose",
+          "reason": "Baseline captured at 1.20s. Beginning the iteration loop (cap 2) — propose single-axis changes and keep the ones that lower the wallclock."
+        },
+        "metadata": {
+          "agent.decide.action_allowlist": [
+            "propose",
+            "needs_clarification"
+          ],
+          "agent.related_loops": {
+            "autoresearch-run": "64158ebb-2f1c-434c-b88d-eb8f487b5529"
+          },
+          "category": "autoresearch",
+          "phase": "baseline",
+          "run_loop_id": "64158ebb-2f1c-434c-b88d-eb8f487b5529"
+        }
+      }
+    },
+    {
+      "sequence": 37,
+      "subject": "agent.task.autoresearch-baseline",
+      "message_type": "agentic.task.v1",
+      "payload": {
+        "task_id": "rule-c360.semteams-bootstrap-e2e-ea83c6.agentic-loop.agent.execution.64158ebb-2f1c-434c-b88d-eb8f487b5529-1790856197571497921",
+        "parent_loop_id": "64158ebb-2f1c-434c-b88d-eb8f487b5529",
+        "run_id": "64158ebb-2f1c-434c-b88d-eb8f487b5529",
+        "metadata": {
+          "agent.decide.action_allowlist": [
+            "propose",
+            "needs_clarification"
+          ],
+          "agent.related_loops": {
+            "autoresearch-run": "64158ebb-2f1c-434c-b88d-eb8f487b5529"
+          },
+          "category": "autoresearch",
+          "phase": "baseline",
+          "run_loop_id": "64158ebb-2f1c-434c-b88d-eb8f487b5529"
+        }
+      }
+    },
+    {
+      "sequence": 32,
+      "subject": "agent.complete.64158ebb-2f1c-434c-b88d-eb8f487b5529",
+      "message_type": "agentic.loop_completed.v1",
+      "payload": {
+        "loop_id": "64158ebb-2f1c-434c-b88d-eb8f487b5529",
+        "task_id": "dispatch-09ed84c6dccad33a0798332454d9f779603d8f5a23ebfd8a1099d68ce4e63296",
+        "channel_type": "http",
+        "channel_id": "http-1790856197506307379",
+        "user_id": "ui-anonymous",
+        "decision": {
+          "action": "autoresearch",
+          "reason": "Optimize the wallclock of `go test ./...`. Command: go test ./...; surface: ./...; cap: 2 iterations; metric: real seconds parsed from the test output. Lower is better."
+        }
+      }
+    },
+    {
+      "sequence": 2,
+      "subject": "user.response.http.http-1790856197506307379",
+      "message_type": "agentic.user_response.v1",
+      "payload": {
+        "channel_type": "http",
+        "channel_id": "http-1790856197506307379",
+        "user_id": "ui-anonymous",
+        "in_reply_to": "64158ebb-2f1c-434c-b88d-eb8f487b5529",
+        "type": "status"
+      }
+    },
+    {
+      "sequence": 1,
+      "subject": "agent.task.dispatch-09ed84c6dccad33a0798332454d9f779603d8f5a23ebfd8a1099d68ce4e63296",
+      "message_type": "agentic.task.v1",
+      "payload": {
+        "loop_id": "64158ebb-2f1c-434c-b88d-eb8f487b5529",
+        "task_id": "dispatch-09ed84c6dccad33a0798332454d9f779603d8f5a23ebfd8a1099d68ce4e63296",
+        "channel_type": "http",
+        "channel_id": "http-1790856197506307379",
+        "user_id": "ui-anonymous"
+      }
+    }
+  ]
+}

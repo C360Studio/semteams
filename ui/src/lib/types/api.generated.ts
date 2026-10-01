@@ -13,7 +13,7 @@ export interface paths {
         };
         /**
          * Real-time activity events (SSE)
-         * @description Server-Sent Events stream of loop activity. Event types: loop_created, loop_updated, loop_deleted, loop_completed. loop_completed fires when a COMPLETE_<id> KV key is written; the envelope loop_id is the bare id (prefix stripped) matching data.loop_id — use event.type=="loop_completed" to detect terminal entries. When type is loop_completed, data.outcome carries the verdict ("success", "failed", or "cancelled"); data.state is NOT populated on terminal events. Each event's data field is an ActivityEvent whose data field is a Loop (see #/components/schemas/Loop and #/components/schemas/ActivityEvent). Connect with EventSource or curl -N. Note: OpenAPI 3.0 cannot express per-event SSE JSON schema; consult the ActivityEvent and Loop component schemas.
+         * @description Server-Sent Events stream of loop activity. Event types: loop_created, loop_updated, loop_deleted, loop_completed. loop_completed fires when a valid ordinary completion is written to a COMPLETE_<id> KV key; the envelope loop_id is the bare id (prefix stripped) matching data.loop_id — use event.type=="loop_completed" to detect terminal entries. When type is loop_completed, data.outcome carries the verdict ("success", "failed", or "cancelled"). Unsupported or malformed completion records produce per-key error events. Each event's data field is an ActivityEvent whose data field is a Loop (see #/components/schemas/Loop and #/components/schemas/ActivityEvent). Connect with EventSource or curl -N. Note: OpenAPI 3.0 cannot express per-event SSE JSON schema; consult the ActivityEvent and Loop component schemas.
          */
         get: {
             parameters: {
@@ -89,7 +89,7 @@ export interface paths {
         };
         /**
          * Get component configuration
-         * @description Returns the current configuration for a specific component
+         * @description Returns the constructor-captured boot configuration for a specific component
          */
         get: {
             parameters: {
@@ -138,7 +138,7 @@ export interface paths {
         };
         /**
          * Internal component state for debugging
-         * @description Returns internal state including active loops, registered commands, configuration, and uptime. Useful for debugging and monitoring.
+         * @description Returns current loop projection readiness and poison count, registered commands, configuration, and uptime. An unavailable projection returns diagnostics with HTTP 503.
          */
         get: {
             parameters: {
@@ -155,131 +155,22 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": Record<string, never>;
+                        "application/json": components["schemas"]["DebugState"];
+                    };
+                };
+                /** @description Loop projection unavailable, not caught up, or poisoned; readiness is false */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DebugState"];
                     };
                 };
             };
         };
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/deployment/{id}/deploy": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Deploy flow
-         * @description Deploys a flow to the runtime
-         */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Flow deployed */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-                /** @description Validation errors */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/deployment/{id}/start": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Start flow
-         * @description Starts a deployed flow
-         */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Flow started */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/deployment/{id}/stop": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Stop flow
-         * @description Stops a running flow
-         */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Flow stopped */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
         delete?: never;
         options?: never;
         head?: never;
@@ -338,407 +229,28 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Get component FlowGraph
-         * @description Returns the complete FlowGraph with nodes and edges for all managed components
-         */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description FlowGraph with nodes and edges */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": Record<string, never>;
-                    };
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/flows": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List all flows
-         * @description Returns a list of all visual flows
-         */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description List of flows */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": Record<string, never>;
-                    };
-                };
-            };
-        };
-        put?: never;
-        /**
-         * Create a new flow
-         * @description Creates a new visual flow
-         */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            /** @description Flow definition to create */
-            requestBody: {
-                content: {
-                    "application/json": components["schemas"]["Flow"];
-                };
-            };
-            responses: {
-                /** @description Flow created */
-                201: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": Record<string, never>;
-                    };
-                };
-                /** @description Invalid request */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/flows/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get flow by ID
-         * @description Returns a single flow by ID
-         */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    /** @description Flow ID */
-                    id: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Flow details */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": Record<string, never>;
-                    };
-                };
-                /** @description Flow not found */
-                404: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        /**
-         * Update flow
-         * @description Updates an existing flow
-         */
-        put: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            /** @description Updated flow definition */
-            requestBody: {
-                content: {
-                    "application/json": components["schemas"]["Flow"];
-                };
-            };
-            responses: {
-                /** @description Flow updated */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": Record<string, never>;
-                    };
-                };
-                /** @description Flow not found */
-                404: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-                /** @description Version conflict */
-                409: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        post?: never;
-        /**
-         * Delete flow
-         * @description Deletes a flow
-         */
-        delete: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Flow deleted */
-                204: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-                /** @description Flow not found */
-                404: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/flows/{id}/runtime/health": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get runtime health
-         * @description Returns health status and timing for flow components (status, uptime, last activity)
-         */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    /** @description Flow ID */
-                    id: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Runtime health status */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["RuntimeHealthResponse"];
-                    };
-                };
-                /** @description Flow not found */
-                404: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/flows/{id}/runtime/messages": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get runtime messages
-         * @description Returns filtered message logger entries for flow components (NATS message flow visibility)
+         * Get the composition graph projection
+         * @description Returns the boot composition's graph projection (nodes with resolved ports, derived edges) as retained at boot; Mermaid when format=mermaid
          */
         get: {
             parameters: {
                 query?: {
-                    /** @description Maximum number of messages to return (default: 100, max: 1000) */
-                    limit?: number;
+                    /** @description json (default) or mermaid */
+                    format?: string;
                 };
-                header?: never;
-                path: {
-                    /** @description Flow ID */
-                    id: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Runtime message entries */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["RuntimeMessagesResponse"];
-                    };
-                };
-                /** @description Flow not found */
-                404: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/flows/{id}/runtime/metrics": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get runtime metrics
-         * @description Returns runtime metrics for flow components (throughput, errors, queue depth) with graceful degradation
-         */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    /** @description Flow ID */
-                    id: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Runtime metrics */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["RuntimeMetricsResponse"];
-                    };
-                };
-                /** @description Flow not found */
-                404: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/gaps": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get component flow gaps
-         * @description Returns disconnected nodes and orphaned ports in the component flow
-         */
-        get: {
-            parameters: {
-                query?: never;
                 header?: never;
                 path?: never;
                 cookie?: never;
             };
             requestBody?: never;
             responses: {
-                /** @description Component flow gaps and disconnected nodes */
+                /** @description Composition graph projection */
                 200: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": Record<string, never>;
+                        "application/json": components["schemas"]["Graph"];
                     };
                 };
             };
@@ -1245,15 +757,15 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List all tracked loops
-         * @description Returns all active and recent loops. Supports optional filtering by user_id and state query parameters.
+         * List current persisted loops
+         * @description Returns the authoritative current loop projection. Supports optional filtering by user_id and state query parameters.
          */
         get: {
             parameters: {
                 query?: {
                     /** @description Filter by user ID */
                     user_id?: unknown;
-                    /** @description Filter by loop state (pending, executing, paused, complete, failed, cancelled) */
+                    /** @description Filter by loop state (pending, exploring, planning, architecting, executing, reviewing, awaiting_approval, complete, failed, cancelled) */
                     state?: unknown;
                 };
                 header?: never;
@@ -1270,6 +782,13 @@ export interface paths {
                     content: {
                         "application/json": components["schemas"]["Loop"][];
                     };
+                };
+                /** @description The current loop projection is unavailable, not caught up, or poisoned */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
                 };
             };
         };
@@ -1313,8 +832,29 @@ export interface paths {
                         "application/json": components["schemas"]["Loop"];
                     };
                 };
+                /** @description Loop ID is missing or is not a framework-minted loop token */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
                 /** @description Loop not found */
                 404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description The current loop authority is inconsistent; no caller action resolves it */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Loop state is not readable right now; retry */
+                503: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -1369,8 +909,15 @@ export interface paths {
                         "application/json": Record<string, never>;
                     };
                 };
-                /** @description Invalid request body or decision value */
+                /** @description Invalid request body or decision value, or a loop ID that is not a framework-minted loop token */
                 400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Requester is not in the approve permission list (default admits everyone) */
+                403: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -1397,62 +944,8 @@ export interface paths {
                     };
                     content?: never;
                 };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/loops/{id}/signal": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Send control signal to loop
-         * @description Sends a control signal (pause, resume, cancel) to an active loop.
-         */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    /** @description Loop ID */
-                    id: unknown;
-                };
-                cookie?: never;
-            };
-            /** @description Control signal to send */
-            requestBody: {
-                content: {
-                    "application/json": components["schemas"]["SignalRequest"];
-                };
-            };
-            responses: {
-                /** @description Signal accepted */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": Record<string, never>;
-                    };
-                };
-                /** @description Invalid signal type */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-                /** @description Loop not found */
-                404: {
+                /** @description Loop state is not readable right now; retry */
+                503: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -1543,6 +1036,20 @@ export interface paths {
                 };
                 /** @description Invalid request */
                 400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description The current loop route is ambiguous or conflicts with the request; no task is published */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Required loop authority is unavailable, not caught up, or poisoned; no task is published */
+                503: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -1667,79 +1174,6 @@ export interface paths {
                     };
                 };
                 /** @description Component not found */
-                404: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/status/stream": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * WebSocket status stream
-         * @description Real-time flow status updates via WebSocket.
-         *
-         *     ## Connection
-         *     Connect with: ws://host/flowbuilder/status/stream?flowId={flowId}
-         *
-         *     ## Message Types (Server → Client)
-         *     All messages are wrapped in StatusStreamEnvelope:
-         *     - **flow_status**: Flow state changes (deployed, running, stopped, failed)
-         *     - **component_health**: Component health updates (every 5s)
-         *     - **component_metrics**: Real-time metrics from MetricsForwarder
-         *     - **log_entry**: Log messages from LogForwarder
-         *
-         *     ## Filtering (Client → Server)
-         *     Send SubscribeCommand JSON to filter messages:
-         *     - message_types: Array of message types to receive
-         *     - log_level: Minimum log level (DEBUG < INFO < WARN < ERROR)
-         *     - sources: Array of component names to filter by
-         *
-         *     ## Example Subscribe Command
-         *     {"command":"subscribe","message_types":["flow_status","log_entry"],"log_level":"WARN"}
-         */
-        get: {
-            parameters: {
-                query: {
-                    /** @description Flow ID to subscribe to for status updates */
-                    flowId: string;
-                };
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Switching to WebSocket protocol */
-                101: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-                /** @description Missing or invalid flowId parameter */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-                /** @description Flow not found */
                 404: {
                     headers: {
                         [name: string]: unknown;
@@ -1940,8 +1374,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Validate component flow connectivity
-         * @description Performs FlowGraph connectivity analysis for operational validation (used by E2E tests)
+         * Get the boot composition findings
+         * @description Returns the composition validation result computed over the admitted composition at boot (ADR-100), verbatim
          */
         get: {
             parameters: {
@@ -1952,13 +1386,13 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description Flow connectivity analysis results */
+                /** @description Composition validation result */
                 200: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": Record<string, never>;
+                        "application/json": components["schemas"]["Result"];
                     };
                 };
             };
@@ -2533,7 +1967,9 @@ export interface components {
                         [key: string]: unknown;
                     };
                     call_id: string;
+                    execution_id: string;
                     reason?: string;
+                    request_id?: string;
                     /** Format: date-time */
                     requested_at: string;
                     tool_name: string;
@@ -2558,12 +1994,14 @@ export interface components {
         ApprovalAcceptResponse: {
             accepted: boolean;
             decision: string;
+            execution_id?: string;
             loop_id: string;
             message?: string;
             timestamp: string;
         };
         ApprovalRequest: {
             decision: string;
+            execution_id: string;
             modified_arguments?: {
                 [key: string]: unknown;
             };
@@ -2590,48 +2028,96 @@ export interface components {
             /** @description Component version */
             version?: string;
         };
-        Flow: {
-            connections: {
-                id: string;
-                source_node_id: string;
-                source_port: string;
-                target_node_id: string;
-                target_port: string;
-            }[];
-            /** Format: date-time */
-            created_at: string;
-            created_by?: string;
-            deployed_at?: string | null;
-            description?: string;
-            id: string;
-            /** Format: date-time */
-            last_modified: string;
-            name: string;
-            nodes: {
-                component: string;
-                config: {
+        DebugState: {
+            command_count: number;
+            commands: string[];
+            config: {
+                auto_continue: boolean;
+                default_model: string;
+                default_role: string;
+                stream_name: string;
+            };
+            loop_count: number;
+            loop_projection_poisoned: number;
+            loop_projection_ready: boolean;
+            loops: ({
+                channel_id: string;
+                channel_type: string;
+                /** Format: date-time */
+                completed_at?: string;
+                context_request_id?: string;
+                /** Format: date-time */
+                created_at: string;
+                error?: string;
+                iterations: number;
+                loop_id: string;
+                max_iterations: number;
+                metadata?: {
                     [key: string]: unknown;
                 };
-                id: string;
-                name: string;
-                position: {
-                    x: number;
-                    y: number;
-                };
+                outcome?: string;
+                pending_approval?: {
+                    arguments?: {
+                        [key: string]: unknown;
+                    };
+                    call_id: string;
+                    execution_id: string;
+                    reason?: string;
+                    request_id?: string;
+                    /** Format: date-time */
+                    requested_at: string;
+                    tool_name: string;
+                    trace_id?: string;
+                } | null;
+                result?: string;
+                role?: string;
+                state: string;
+                task_id: string;
+                user_id: string;
+                workflow_slug?: string;
+                workflow_step?: string;
+            } | null)[];
+            /** Format: date-time */
+            start_time?: string;
+            started: boolean;
+            uptime?: string;
+        };
+        Graph: {
+            edges: {
+                connection_id: string;
+                from: string;
+                from_port: string;
+                pattern: string;
+                to: string;
+                to_port: string;
+            }[];
+            nodes: {
+                factory: string;
+                inputs: {
+                    connection_id: string;
+                    description: string;
+                    direction: string;
+                    external?: boolean;
+                    kind: string;
+                    name: string;
+                    pattern: string;
+                    required: boolean;
+                    type: string;
+                }[];
+                instance: string;
+                outputs: {
+                    connection_id: string;
+                    description: string;
+                    direction: string;
+                    external?: boolean;
+                    kind: string;
+                    name: string;
+                    pattern: string;
+                    required: boolean;
+                    type: string;
+                }[];
                 type: string;
             }[];
-            runtime_state: string;
-            started_at?: string | null;
-            stopped_at?: string | null;
-            /** Format: date-time */
-            updated_at: string;
-            version: number;
-        };
-        FlowStatusPayload: {
-            error?: string;
-            prev_state: string;
-            state: string;
-            timestamp: number;
         };
         GraphQLRequest: {
             query: string;
@@ -2659,14 +2145,6 @@ export interface components {
             timestamp: string;
             type: string;
         };
-        LogEntryPayload: {
-            fields: {
-                [key: string]: unknown;
-            };
-            level: string;
-            message: string;
-            source: string;
-        };
         Loop: {
             channel_type?: string;
             error?: string;
@@ -2680,7 +2158,9 @@ export interface components {
                     [key: string]: unknown;
                 };
                 call_id: string;
+                execution_id: string;
                 reason?: string;
+                request_id?: string;
                 /** Format: date-time */
                 requested_at: string;
                 tool_name: string;
@@ -2718,7 +2198,9 @@ export interface components {
                     [key: string]: unknown;
                 };
                 call_id: string;
+                execution_id: string;
                 reason?: string;
+                request_id?: string;
                 /** Format: date-time */
                 requested_at: string;
                 tool_name: string;
@@ -2748,23 +2230,60 @@ export interface components {
             timestamp: string;
             trace_id?: string;
         };
-        MetricEntry: {
-            labels: {
-                [key: string]: string;
-            };
-            name: string;
-            type: string;
-            value: number;
-        };
-        MetricsPayload: {
-            component: string;
-            metrics: {
-                labels: {
-                    [key: string]: string;
-                };
-                name: string;
+        Result: {
+            errors: {
+                component: string;
+                message: string;
+                port?: string;
+                severity: string;
+                suggestions: string[];
                 type: string;
-                value: number;
+            }[];
+            graph: {
+                edges: {
+                    connection_id: string;
+                    from: string;
+                    from_port: string;
+                    pattern: string;
+                    to: string;
+                    to_port: string;
+                }[];
+                nodes: {
+                    factory: string;
+                    inputs: {
+                        connection_id: string;
+                        description: string;
+                        direction: string;
+                        external?: boolean;
+                        kind: string;
+                        name: string;
+                        pattern: string;
+                        required: boolean;
+                        type: string;
+                    }[];
+                    instance: string;
+                    outputs: {
+                        connection_id: string;
+                        description: string;
+                        direction: string;
+                        external?: boolean;
+                        kind: string;
+                        name: string;
+                        pattern: string;
+                        required: boolean;
+                        type: string;
+                    }[];
+                    type: string;
+                }[];
+            };
+            status: string;
+            warnings: {
+                component: string;
+                message: string;
+                port?: string;
+                severity: string;
+                suggestions: string[];
+                type: string;
             }[];
         };
         ReviewRequest: {
@@ -2773,74 +2292,6 @@ export interface components {
             override_predicate?: string;
             reviewed_by?: string;
             target_entity?: string;
-        };
-        RuntimeHealthResponse: {
-            components: {
-                component: string;
-                details: unknown;
-                healthy: boolean;
-                last_activity?: string | null;
-                message: string;
-                name: string;
-                start_time?: string | null;
-                status: string;
-                type: string;
-                uptime_seconds?: number | null;
-            }[];
-            overall: {
-                degraded_count: number;
-                error_count: number;
-                running_count: number;
-                status: string;
-            };
-            /** Format: date-time */
-            timestamp: string;
-        };
-        RuntimeMessagesResponse: {
-            limit: number;
-            messages: {
-                component: string;
-                direction: string;
-                message_id: string;
-                message_type?: string;
-                metadata?: {
-                    [key: string]: unknown;
-                };
-                subject: string;
-                summary: string;
-                timestamp: string;
-            }[];
-            note?: string;
-            timestamp: string;
-            total: number;
-        };
-        RuntimeMetricsResponse: {
-            components: {
-                component: string;
-                error_rate?: number | null;
-                name: string;
-                queue_depth?: number | null;
-                raw_counters?: {
-                    [key: string]: number;
-                } | null;
-                status: string;
-                throughput?: number | null;
-                type: string;
-            }[];
-            prometheus_available: boolean;
-            /** Format: date-time */
-            timestamp: string;
-        };
-        SignalRequest: {
-            reason: string;
-            type: string;
-        };
-        SignalResponse: {
-            accepted: boolean;
-            loop_id: string;
-            message?: string;
-            signal: string;
-            timestamp: string;
         };
         StatePatchRequest: {
             [key: string]: unknown;
@@ -2854,14 +2305,6 @@ export interface components {
             llm_rejected: number;
             pending_review: number;
             total_detected: number;
-        };
-        StatusStreamEnvelope: {
-            flow_id: string;
-            id: string;
-            /** Format: byte */
-            payload?: string;
-            timestamp: number;
-            type: string;
         };
         StructuralAnomaly: {
             confidence: number;
@@ -2904,12 +2347,6 @@ export interface components {
             } | null;
             type: string;
         };
-        SubscribeCommand: {
-            command: string;
-            log_level?: string;
-            message_types?: string[];
-            sources?: string[];
-        };
         TransitionRequest: {
             note?: string;
             phase: string;
@@ -2933,11 +2370,6 @@ export interface components {
             default_role: string;
             /** @description Tool names granted to initial user-message tasks (resolved at dispatch; nil/empty falls back to global discovery) */
             default_tools?: string[];
-            /**
-             * @description Delete durable consumers on Stop (use for tests only)
-             * @default false
-             */
-            delete_consumer_on_stop: boolean;
             /**
              * @description Enable LLM-assisted intent classification for ambiguous messages
              * @default false
@@ -3198,11 +2630,6 @@ export interface components {
                 /** @description Severity levels that trigger admin alerts */
                 notify_admin_severity?: string[];
                 /**
-                 * @description Send error messages to users
-                 * @default true
-                 */
-                notify_user: boolean;
-                /**
                  * @description Violation retention in days
                  * @default 90
                  */
@@ -3219,8 +2646,11 @@ export interface components {
          * @description Orchestrates agentic loops with tool calls, state management, and trajectory tracking
          */
         "agentic-loop.v1": {
-            /** @description Auto-reject pending approvals after this duration (e.g. 5m or 1h). Empty means wait indefinitely */
-            approval_timeout?: string;
+            /**
+             * @description Positive approval wait at most 12h inclusive. Omission defaults to 12h. TTL24h provides nominal grace not a completion guarantee
+             * @default 12h
+             */
+            approval_timeout: string;
             /** @description JetStream consumer tuning for long-running ports (agent.task/agent.response/tool.result) */
             consumer?: {
                 /**
@@ -3229,12 +2659,12 @@ export interface components {
                  */
                 ack_wait: string;
                 /**
-                 * @description InProgress heartbeat interval (e.g. 60s or 2m). Must be less than ack_wait
-                 * @default 60s
+                 * @description InProgress heartbeat interval for long-running consumers. Must be no more than half the shortest configured BackOff interval
+                 * @default 15s
                  */
                 heartbeat_interval: string;
                 /**
-                 * @description Maximum redelivery attempts for long-running consumers
+                 * @description Maximum redelivery attempts for long-running consumers. Must cover the fixed two-entry BackOff
                  * @default 2
                  */
                 max_deliver: number;
@@ -3260,16 +2690,6 @@ export interface components {
                 /** @description Enable context slicing when budget is exceeded */
                 slice_on_budget?: boolean;
             };
-            /**
-             * @description Delete durable consumers on Stop (use for tests only)
-             * @default false
-             */
-            delete_consumer_on_stop: boolean;
-            /**
-             * @description NATS KV bucket name for storing loop state
-             * @default AGENT_LOOPS
-             */
-            loops_bucket: string;
             /**
              * @description Maximum number of iterations before loop terminates
              * @default 20
@@ -3323,11 +2743,6 @@ export interface components {
         "agentic-model.v1": {
             /** @description Suffix appended to consumer names for uniqueness */
             consumer_name_suffix?: string;
-            /**
-             * @description Delete durable consumers on Stop (use for tests only)
-             * @default false
-             */
-            delete_consumer_on_stop: boolean;
             /** @description Port configuration */
             ports?: string;
             /** @description Retry configuration */
@@ -3381,11 +2796,6 @@ export interface components {
             approval_required?: string[];
             /** @description Suffix appended to consumer names for uniqueness */
             consumer_name_suffix?: string;
-            /**
-             * @description Delete durable consumers on Stop (use for tests only)
-             * @default false
-             */
-            delete_consumer_on_stop: boolean;
             /**
              * @description Enable tool category filtering for role-based access
              * @default false
@@ -4562,7 +3972,14 @@ export interface components {
                 /** @description indexing_profile */
                 indexing_profile?: string;
                 /** @description message_type */
-                message_type?: string;
+                message_type?: {
+                    /** @description category */
+                    category?: string;
+                    /** @description domain */
+                    domain?: string;
+                    /** @description version */
+                    version?: string;
+                };
                 /** @description name */
                 name?: string;
             }[];
@@ -4605,6 +4022,11 @@ export interface components {
              * @default false
              */
             passthrough: boolean;
+            /**
+             * @description WebSocket upgrade path-only ServeMux pattern
+             * @default /ws
+             */
+            path: string;
             /** @description Port configuration */
             ports?: string;
         };

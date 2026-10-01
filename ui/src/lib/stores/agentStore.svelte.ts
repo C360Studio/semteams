@@ -25,6 +25,7 @@ function createAgentStore() {
   let connected = $state(false);
   let error = $state<string | null>(null);
   let loops = new SvelteMap<string, AgentLoop>();
+  const completions = new SvelteMap<string, Partial<AgentLoop>>();
   let eventSource: EventSource | null = null;
   let reconnectAttempts = 0;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -32,7 +33,11 @@ function createAgentStore() {
 
   function mergeLoop(loop: AgentLoop) {
     const existing = loops.get(loop.loop_id);
-    loops.set(loop.loop_id, existing ? { ...existing, ...loop } : loop);
+    const terminal = completions.get(loop.loop_id);
+    loops.set(loop.loop_id, {
+      ...existing, ...loop, ...terminal,
+      record_state: terminal && loop.state !== terminal.state ? loop.state : undefined,
+    });
   }
 
   async function refreshLoops() {
@@ -75,6 +80,7 @@ function createAgentStore() {
       const envelope = JSON.parse(event.data) as WireActivityEnvelope;
       if (envelope.type === "loop_deleted") {
         loops.delete(envelope.loop_id);
+        completions.delete(envelope.loop_id);
         return;
       }
 
@@ -85,10 +91,13 @@ function createAgentStore() {
       // the result is what we surface in detail panels, etc.
       const patch = extractCompletionPatch(envelope);
       if (patch) {
+        completions.set(patch.id, patch.patch);
         const existing = loops.get(patch.id);
-        if (existing) loops.set(patch.id, { ...existing, ...patch.patch });
-        // If the parent loop hasn't arrived yet, drop the patch — it'll
-        // come around again or is for a loop we never saw.
+        const record = existing ?? normalizeWireLoop({
+          type: "loop_updated", loop_id: patch.id,
+          data: { ...envelope.data, loop_id: patch.id },
+        });
+        if (record) mergeLoop(record);
         return;
       }
 
@@ -214,6 +223,7 @@ function createAgentStore() {
 
     removeLoop(id: string) {
       loops.delete(id);
+      completions.delete(id);
     },
 
     refreshLoops,
@@ -221,6 +231,7 @@ function createAgentStore() {
     reset() {
       this.disconnect();
       loops.clear();
+      completions.clear();
       error = null;
     },
   };

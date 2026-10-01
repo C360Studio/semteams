@@ -27,8 +27,8 @@ function makeEntity(id: string): GraphEntity {
   };
 }
 
-const DRONE_ENTITY = makeEntity("c360.ops.robotics.gcs.drone.001");
-const FLEET_ENTITY = makeEntity("c360.ops.robotics.gcs.fleet.west-coast");
+const DRONE_ENTITY = makeEntity("c360.ops.gcs.robotics.drone.001");
+const FLEET_ENTITY = makeEntity("c360.ops.gcs.robotics.fleet.west-coast");
 
 // ---------------------------------------------------------------------------
 // 1. "+Chat" button presence
@@ -219,13 +219,13 @@ describe("GraphDetailPanel — chip shape table-driven", () => {
     {
       entity: DRONE_ENTITY,
       expectedKind: "entity" as const,
-      expectedValue: "c360.ops.robotics.gcs.drone.001",
+      expectedValue: "c360.ops.gcs.robotics.drone.001",
       expectedLabel: "001",
     },
     {
       entity: FLEET_ENTITY,
       expectedKind: "entity" as const,
-      expectedValue: "c360.ops.robotics.gcs.fleet.west-coast",
+      expectedValue: "c360.ops.gcs.robotics.fleet.west-coast",
       expectedLabel: "west-coast",
     },
   ];
@@ -303,9 +303,9 @@ describe("GraphDetailPanel — no regression with onAddChip prop", () => {
       ...DRONE_ENTITY,
       outgoing: [
         {
-          id: "c360.ops.robotics.gcs.drone.001:fleet.membership:c360.ops.robotics.gcs.fleet.alpha",
-          sourceId: "c360.ops.robotics.gcs.drone.001",
-          targetId: "c360.ops.robotics.gcs.fleet.alpha",
+          id: "c360.ops.gcs.robotics.drone.001:fleet.membership:c360.ops.gcs.robotics.fleet.alpha",
+          sourceId: "c360.ops.gcs.robotics.drone.001",
+          targetId: "c360.ops.gcs.robotics.fleet.alpha",
           predicate: "fleet.membership",
           confidence: 0.9,
           timestamp: Date.now(),
@@ -329,7 +329,7 @@ describe("GraphDetailPanel — no regression with onAddChip prop", () => {
 
     expect(onEntityClick).toHaveBeenCalledOnce();
     expect(onEntityClick).toHaveBeenCalledWith(
-      "c360.ops.robotics.gcs.fleet.alpha",
+      "c360.ops.gcs.robotics.fleet.alpha",
     );
   });
 });

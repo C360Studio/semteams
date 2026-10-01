@@ -7,15 +7,15 @@ describe("graphTransform", () => {
       const backendResult = {
         entities: [
           {
-            id: "c360.ops.robotics.gcs.drone.001",
+            id: "c360.ops.gcs.robotics.drone.001",
             triples: [
               {
-                subject: "c360.ops.robotics.gcs.drone.001",
+                subject: "c360.ops.gcs.robotics.drone.001",
                 predicate: "core.property.name",
                 object: "Drone 001",
               },
               {
-                subject: "c360.ops.robotics.gcs.drone.001",
+                subject: "c360.ops.gcs.robotics.drone.001",
                 predicate: "core.property.status",
                 object: "active",
               },
@@ -28,7 +28,7 @@ describe("graphTransform", () => {
       const result = transformPathSearchResult(backendResult);
 
       expect(result).toHaveLength(1);
-      expect(result[0].id).toBe("c360.ops.robotics.gcs.drone.001");
+      expect(result[0].id).toBe("c360.ops.gcs.robotics.drone.001");
       expect(result[0].idParts).toEqual({
         org: "c360",
         platform: "ops",
@@ -44,20 +44,20 @@ describe("graphTransform", () => {
       const backendResult = {
         entities: [
           {
-            id: "c360.ops.robotics.gcs.drone.001",
+            id: "c360.ops.gcs.robotics.drone.001",
             triples: [
               {
-                subject: "c360.ops.robotics.gcs.drone.001",
+                subject: "c360.ops.gcs.robotics.drone.001",
                 predicate: "core.property.name",
                 object: "Drone 001",
               },
               {
-                subject: "c360.ops.robotics.gcs.drone.001",
+                subject: "c360.ops.gcs.robotics.drone.001",
                 predicate: "telemetry.sensor.altitude",
                 object: 150.5,
               },
               {
-                subject: "c360.ops.robotics.gcs.drone.001",
+                subject: "c360.ops.gcs.robotics.drone.001",
                 predicate: "core.status.active",
                 object: true,
               },
@@ -90,12 +90,12 @@ describe("graphTransform", () => {
       const backendResult = {
         entities: [
           {
-            id: "c360.ops.robotics.gcs.drone.001",
+            id: "c360.ops.gcs.robotics.drone.001",
             triples: [
               {
-                subject: "c360.ops.robotics.gcs.drone.001",
+                subject: "c360.ops.gcs.robotics.drone.001",
                 predicate: "fleet.membership.current",
-                object: "c360.ops.robotics.gcs.fleet.alpha",
+                object: "c360.ops.gcs.robotics.fleet.alpha",
               },
             ],
           },
@@ -108,12 +108,12 @@ describe("graphTransform", () => {
       expect(result[0].properties).toHaveLength(0);
       expect(result[0].outgoing).toHaveLength(1);
       expect(result[0].outgoing[0]).toMatchObject({
-        sourceId: "c360.ops.robotics.gcs.drone.001",
-        targetId: "c360.ops.robotics.gcs.fleet.alpha",
+        sourceId: "c360.ops.gcs.robotics.drone.001",
+        targetId: "c360.ops.gcs.robotics.fleet.alpha",
         predicate: "fleet.membership.current",
       });
       expect(result[0].outgoing[0].id).toBe(
-        "c360.ops.robotics.gcs.drone.001:fleet.membership.current:c360.ops.robotics.gcs.fleet.alpha",
+        "c360.ops.gcs.robotics.drone.001:fleet.membership.current:c360.ops.gcs.robotics.fleet.alpha",
       );
     });
 
@@ -121,19 +121,19 @@ describe("graphTransform", () => {
       const backendResult = {
         entities: [
           {
-            id: "c360.ops.robotics.gcs.drone.001",
+            id: "c360.ops.gcs.robotics.drone.001",
             triples: [],
           },
           {
-            id: "c360.ops.robotics.gcs.fleet.alpha",
+            id: "c360.ops.gcs.robotics.fleet.alpha",
             triples: [],
           },
         ],
         edges: [
           {
-            subject: "c360.ops.robotics.gcs.drone.001",
+            subject: "c360.ops.gcs.robotics.drone.001",
             predicate: "fleet.membership.current",
-            object: "c360.ops.robotics.gcs.fleet.alpha",
+            object: "c360.ops.gcs.robotics.fleet.alpha",
           },
         ],
       };
@@ -143,23 +143,23 @@ describe("graphTransform", () => {
       expect(result).toHaveLength(2);
 
       const drone = result.find(
-        (e) => e.id === "c360.ops.robotics.gcs.drone.001",
+        (e) => e.id === "c360.ops.gcs.robotics.drone.001",
       );
       const fleet = result.find(
-        (e) => e.id === "c360.ops.robotics.gcs.fleet.alpha",
+        (e) => e.id === "c360.ops.gcs.robotics.fleet.alpha",
       );
 
       expect(drone?.outgoing).toHaveLength(1);
       expect(drone?.outgoing[0]).toMatchObject({
-        sourceId: "c360.ops.robotics.gcs.drone.001",
-        targetId: "c360.ops.robotics.gcs.fleet.alpha",
+        sourceId: "c360.ops.gcs.robotics.drone.001",
+        targetId: "c360.ops.gcs.robotics.fleet.alpha",
         predicate: "fleet.membership.current",
       });
 
       expect(fleet?.incoming).toHaveLength(1);
       expect(fleet?.incoming[0]).toMatchObject({
-        sourceId: "c360.ops.robotics.gcs.drone.001",
-        targetId: "c360.ops.robotics.gcs.fleet.alpha",
+        sourceId: "c360.ops.gcs.robotics.drone.001",
+        targetId: "c360.ops.gcs.robotics.fleet.alpha",
         predicate: "fleet.membership.current",
       });
     });
@@ -168,40 +168,40 @@ describe("graphTransform", () => {
       const backendResult = {
         entities: [
           {
-            id: "c360.ops.robotics.gcs.drone.001",
+            id: "c360.ops.gcs.robotics.drone.001",
             triples: [
               {
-                subject: "c360.ops.robotics.gcs.drone.001",
+                subject: "c360.ops.gcs.robotics.drone.001",
                 predicate: "core.property.name",
                 object: "Drone 001",
               },
             ],
           },
           {
-            id: "c360.ops.robotics.gcs.drone.002",
+            id: "c360.ops.gcs.robotics.drone.002",
             triples: [
               {
-                subject: "c360.ops.robotics.gcs.drone.002",
+                subject: "c360.ops.gcs.robotics.drone.002",
                 predicate: "core.property.name",
                 object: "Drone 002",
               },
             ],
           },
           {
-            id: "c360.ops.robotics.gcs.fleet.alpha",
+            id: "c360.ops.gcs.robotics.fleet.alpha",
             triples: [],
           },
         ],
         edges: [
           {
-            subject: "c360.ops.robotics.gcs.drone.001",
+            subject: "c360.ops.gcs.robotics.drone.001",
             predicate: "fleet.membership.current",
-            object: "c360.ops.robotics.gcs.fleet.alpha",
+            object: "c360.ops.gcs.robotics.fleet.alpha",
           },
           {
-            subject: "c360.ops.robotics.gcs.drone.002",
+            subject: "c360.ops.gcs.robotics.drone.002",
             predicate: "fleet.membership.current",
-            object: "c360.ops.robotics.gcs.fleet.alpha",
+            object: "c360.ops.gcs.robotics.fleet.alpha",
           },
         ],
       };
@@ -211,14 +211,14 @@ describe("graphTransform", () => {
       expect(result).toHaveLength(3);
 
       const fleet = result.find(
-        (e) => e.id === "c360.ops.robotics.gcs.fleet.alpha",
+        (e) => e.id === "c360.ops.gcs.robotics.fleet.alpha",
       );
       expect(fleet?.incoming).toHaveLength(2);
       expect(fleet?.incoming.map((r) => r.sourceId)).toContain(
-        "c360.ops.robotics.gcs.drone.001",
+        "c360.ops.gcs.robotics.drone.001",
       );
       expect(fleet?.incoming.map((r) => r.sourceId)).toContain(
-        "c360.ops.robotics.gcs.drone.002",
+        "c360.ops.gcs.robotics.drone.002",
       );
     });
 
@@ -237,7 +237,7 @@ describe("graphTransform", () => {
       const backendResult = {
         entities: [
           {
-            id: "c360.ops.robotics.gcs.drone.001",
+            id: "c360.ops.gcs.robotics.drone.001",
             triples: [],
           },
         ],
@@ -256,22 +256,22 @@ describe("graphTransform", () => {
       const backendResult = {
         entities: [
           {
-            id: "c360.ops.robotics.gcs.drone.001",
+            id: "c360.ops.gcs.robotics.drone.001",
             triples: [
               {
-                subject: "c360.ops.robotics.gcs.drone.001",
+                subject: "c360.ops.gcs.robotics.drone.001",
                 predicate: "core.property.manufacturer",
                 object: "DJI Enterprise",
               },
               {
-                subject: "c360.ops.robotics.gcs.drone.001",
+                subject: "c360.ops.gcs.robotics.drone.001",
                 predicate: "core.property.model",
                 object: "M30T",
               },
               {
-                subject: "c360.ops.robotics.gcs.drone.001",
+                subject: "c360.ops.gcs.robotics.drone.001",
                 predicate: "fleet.membership.current",
-                object: "c360.ops.robotics.gcs.fleet.alpha",
+                object: "c360.ops.gcs.robotics.fleet.alpha",
               },
             ],
           },
@@ -328,12 +328,12 @@ describe("graphTransform", () => {
       const backendResult = {
         entities: [
           {
-            id: "c360.ops.robotics.gcs.drone.001",
+            id: "c360.ops.gcs.robotics.drone.001",
             triples: [
               {
-                subject: "c360.ops.robotics.gcs.drone.001",
+                subject: "c360.ops.gcs.robotics.drone.001",
                 predicate: "fleet.membership.current",
-                object: "c360.ops.robotics.gcs.fleet.beta",
+                object: "c360.ops.gcs.robotics.fleet.beta",
               },
             ],
           },
@@ -346,7 +346,7 @@ describe("graphTransform", () => {
       expect(result).toHaveLength(1);
       expect(result[0].outgoing).toHaveLength(1);
       expect(result[0].outgoing[0].targetId).toBe(
-        "c360.ops.robotics.gcs.fleet.beta",
+        "c360.ops.gcs.robotics.fleet.beta",
       );
     });
 
@@ -354,20 +354,20 @@ describe("graphTransform", () => {
       const backendResult = {
         entities: [
           {
-            id: "c360.ops.robotics.gcs.drone.001",
+            id: "c360.ops.gcs.robotics.drone.001",
             triples: [
               {
-                subject: "c360.ops.robotics.gcs.drone.001",
+                subject: "c360.ops.gcs.robotics.drone.001",
                 predicate: "telemetry.sensor.battery",
                 object: 85,
               },
               {
-                subject: "c360.ops.robotics.gcs.drone.001",
+                subject: "c360.ops.gcs.robotics.drone.001",
                 predicate: "telemetry.sensor.temperature",
                 object: 22.5,
               },
               {
-                subject: "c360.ops.robotics.gcs.drone.001",
+                subject: "c360.ops.gcs.robotics.drone.001",
                 predicate: "core.status.armed",
                 object: false,
               },
@@ -390,15 +390,15 @@ describe("graphTransform", () => {
       const backendResult = {
         entities: [
           {
-            id: "c360.ops.robotics.gcs.drone.001",
+            id: "c360.ops.gcs.robotics.drone.001",
             triples: [
               {
-                subject: "c360.ops.robotics.gcs.drone.001",
+                subject: "c360.ops.gcs.robotics.drone.001",
                 predicate: "core.property.notes",
                 object: "some.string.with.dots.but.not.six",
               },
               {
-                subject: "c360.ops.robotics.gcs.drone.001",
+                subject: "c360.ops.gcs.robotics.drone.001",
                 predicate: "core.property.shortId",
                 object: "abc.def",
               },
@@ -418,15 +418,15 @@ describe("graphTransform", () => {
       const backendResult = {
         entities: [
           {
-            id: "c360.ops.robotics.gcs.drone.001",
+            id: "c360.ops.gcs.robotics.drone.001",
             triples: [],
           },
         ],
         edges: [
           {
-            subject: "c360.ops.robotics.gcs.drone.001",
+            subject: "c360.ops.gcs.robotics.drone.001",
             predicate: "core.relationship.parent",
-            object: "c360.ops.robotics.gcs.drone.001",
+            object: "c360.ops.gcs.robotics.drone.001",
           },
         ],
       };
@@ -437,10 +437,10 @@ describe("graphTransform", () => {
       expect(result[0].outgoing).toHaveLength(1);
       expect(result[0].incoming).toHaveLength(1);
       expect(result[0].outgoing[0].sourceId).toBe(
-        "c360.ops.robotics.gcs.drone.001",
+        "c360.ops.gcs.robotics.drone.001",
       );
       expect(result[0].outgoing[0].targetId).toBe(
-        "c360.ops.robotics.gcs.drone.001",
+        "c360.ops.gcs.robotics.drone.001",
       );
     });
 
@@ -448,24 +448,24 @@ describe("graphTransform", () => {
       const backendResult = {
         entities: [
           {
-            id: "c360.ops.robotics.gcs.drone.001",
+            id: "c360.ops.gcs.robotics.drone.001",
             triples: [],
           },
           {
-            id: "c360.ops.robotics.gcs.fleet.alpha",
+            id: "c360.ops.gcs.robotics.fleet.alpha",
             triples: [],
           },
         ],
         edges: [
           {
-            subject: "c360.ops.robotics.gcs.drone.001",
+            subject: "c360.ops.gcs.robotics.drone.001",
             predicate: "fleet.membership.current",
-            object: "c360.ops.robotics.gcs.fleet.alpha",
+            object: "c360.ops.gcs.robotics.fleet.alpha",
           },
           {
-            subject: "c360.ops.robotics.gcs.drone.001",
+            subject: "c360.ops.gcs.robotics.drone.001",
             predicate: "fleet.membership.previous",
-            object: "c360.ops.robotics.gcs.fleet.alpha",
+            object: "c360.ops.gcs.robotics.fleet.alpha",
           },
         ],
       };
@@ -473,7 +473,7 @@ describe("graphTransform", () => {
       const result = transformPathSearchResult(backendResult);
 
       const drone = result.find(
-        (e) => e.id === "c360.ops.robotics.gcs.drone.001",
+        (e) => e.id === "c360.ops.gcs.robotics.drone.001",
       );
       expect(drone?.outgoing).toHaveLength(2);
       expect(drone?.outgoing[0].id).not.toBe(drone?.outgoing[1].id);

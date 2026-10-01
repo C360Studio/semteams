@@ -14,29 +14,27 @@ const mockGetTriples = vi.mocked(getTriples);
 const ORG = "c360.semteams";
 
 function runEntity(runId: string): string {
-  return `${ORG}.agent.chain.execution.${runId}`;
+  return `${ORG}.chain.agent.execution.${runId}`;
 }
 
 function loopEntity(loopId: string): string {
-  return `${ORG}.agent.agentic-loop.execution.${loopId}`;
+  return `${ORG}.agentic-loop.agent.execution.${loopId}`;
 }
 
-// approval_pending.object is the FULL 6-part loop entity ref — the
-// cmd/semteams/approvalpause subscriber stamps TryLoopExecutionEntityID(loopID).
-// Contrast clarTriple (bare). The store normalizes both via toBareLoopId.
-function approvalTriple(runId: string, gatedLoopId: string): RawTriple {
+// Approval history uses exact JSON [bare loop ID, execution ID] identities.
+function approvalTriple(runId: string, gatedLoopId: string, executionId = "execution-pending"): RawTriple {
   return {
     subject: runEntity(runId),
     predicate: "agent.run.approval-pending",
-    object: loopEntity(gatedLoopId),
+    object: JSON.stringify([gatedLoopId, executionId]),
   };
 }
 
-// NOTE: clarification_pending.object is the BARE loop UUID — configs/rules/
-// agent-run/07,08 stamp `$entity.instance` (the bare id per
-// execution_context.go), NOT the full entity ref. This asymmetry vs
-// approval_pending (full ref, see approvalTriple) is the real backend shape
-// the store must normalize. Pinned by "marker object forms are asymmetric".
+function answeredTriple(runId: string, gatedLoopId: string, executionId: string): RawTriple {
+  return { ...approvalTriple(runId, gatedLoopId, executionId), predicate: "agent.run.approval-answered" };
+}
+
+// Clarification markers remain bare loop IDs.
 function clarTriple(runId: string, askingLoopId: string): RawTriple {
   return {
     subject: runEntity(runId),
@@ -78,11 +76,12 @@ describe("deriveRunStatuses", () => {
     expect(status!.pause).toEqual({
       cause: "tool_gate",
       gatedLoopId: "loop-gated-1",
+      executionId: "execution-pending",
     });
   });
 
-  it("parses the bare gated-loop id from a full entity id", () => {
-    // Full org-qualified entity id — bareIdAfter must strip correctly.
+  it("parses the loop identity from an execution-scoped JSON tuple", () => {
+    // JSON tuple must never be treated as an entity ID.
     const result = deriveRunStatuses(
       [approvalTriple("run-xyz", "loop-gate-42")],
       [],
@@ -92,6 +91,55 @@ describe("deriveRunStatuses", () => {
       cause: "tool_gate",
       gatedLoopId: "loop-gate-42",
     });
+  });
+
+  it.each(["completed", "failed", "cancelled"])("suppresses historical gates on a %s run", (phase) => {
+    const result = deriveRunStatuses([approvalTriple("run-a", "loop-a")],
+      [clarTriple("run-a", "asking-loop")], [], [{ subject: runEntity("run-a"), predicate: "agent.run.phase", object: phase }]);
+    expect(result.get("run-a")?.pause).toBeNull();
+    expect(result.get("run-a")?.healthFacts?.phase).toBe(phase);
+  });
+
+  it("subtracts an answered A without hiding the next B gate on the same loop", () => {
+    const result = deriveRunStatuses([
+      approvalTriple("run-a", "loop-a", "execution-A"),
+      approvalTriple("run-a", "loop-a", "execution-B"),
+    ], [], [], [], [answeredTriple("run-a", "loop-a", "execution-A")]);
+    expect(result.get("run-a")?.pause).toEqual({ cause: "tool_gate", gatedLoopId: "loop-a", executionId: "execution-B" });
+  });
+
+  it("does not re-pause when the answer arrives before a duplicate pending event", () => {
+    const answer = answeredTriple("run-a", "loop-a", "execution-A");
+    expect(deriveRunStatuses([], [], [], [], [answer]).get("run-a")?.pause).toBeNull();
+    const pending = approvalTriple("run-a", "loop-a", "execution-A");
+    expect(deriveRunStatuses([pending, pending], [], [], [], [answer, answer]).get("run-a")?.pause).toBeNull();
+  });
+
+  it("all answered historical tuples have no actionable pause", () => {
+    const pending = [approvalTriple("run-a", "loop-a", "execution-A"), approvalTriple("run-a", "loop-b", "execution-B")];
+    const answered = [answeredTriple("run-a", "loop-a", "execution-A"), answeredTriple("run-a", "loop-b", "execution-B")];
+    expect(deriveRunStatuses(pending, [], [], [], answered).get("run-a")?.pause).toBeNull();
+  });
+
+  it("deduplicates the same tuple and preserves execution IDs containing separators", () => {
+    const pending = approvalTriple("run-a", "loop-a", "execution.A:7");
+    const duplicate = { ...pending, object: '[ "loop-a", "execution.A:7" ]' };
+    expect(deriveRunStatuses([pending, duplicate], [], []).get("run-a")?.pause).toEqual({
+      cause: "tool_gate", gatedLoopId: "loop-a", executionId: "execution.A:7",
+    });
+  });
+
+  it.each(['not-json', '["loop-a"]', '["loop-a",null]', '["loop-a",""]', '["", "execution-A"]',
+    '["loop-a","execution-A","extra"]', '["c360.platform.agentic-loop.agent.execution.loop-a","execution-A"]'])
+    ("does not expose malformed approval identity %s as an actionable gate", (object) => {
+      const malformed = { ...approvalTriple("run-a", "loop-a"), object };
+      expect(deriveRunStatuses([malformed], [], []).get("run-a")?.pause).toBeNull();
+    });
+
+  it("uses full subject history to subtract answers absent from a predicate-limited page", () => {
+    const pending = approvalTriple("run-a", "loop-a", "execution-A");
+    expect(deriveRunStatuses([pending], [], [], [answeredTriple("run-a", "loop-a", "execution-A")]).get("run-a")?.pause)
+      .toBeNull();
   });
 
   // -------------------------------------------------------------------------
@@ -172,7 +220,7 @@ describe("deriveRunStatuses", () => {
   it("skips triples whose subject does not contain the run entity infix", () => {
     // A triple that happens to carry approval_pending but on a NON-run entity
     const badTriple: RawTriple = {
-      subject: `${ORG}.agent.agentic-loop.execution.some-loop`,
+      subject: `${ORG}.agentic-loop.agent.execution.some-loop`,
       predicate: "agent.run.approval-pending",
       object: loopEntity("gate-99"),
     };
@@ -248,7 +296,7 @@ describe("deriveRunStatuses", () => {
   it("skips a run entity id that contains the infix but yields an empty bare id", () => {
     // Subject ends right at the infix (nothing after it)
     const badRunEntity: RawTriple = {
-      subject: `${ORG}.agent.chain.execution.`,
+      subject: `${ORG}.chain.agent.execution.`,
       predicate: "agent.run.approval-pending",
       object: loopEntity("loop-x"),
     };
@@ -261,8 +309,8 @@ describe("deriveRunStatuses", () => {
   // Marker-object asymmetry — the regression that the green unit tests masked.
   // clarification_pending stamps the BARE loop id ($entity.instance); the UI
   // must NOT re-strip it (that yielded "" → empty in_reply_to → run never
-  // resumed). approval_pending stamps the FULL ref. Both must normalize to the
-  // same bare id and the question must still join.
+  // resumed). Clarification references must continue to normalize independently
+  // of the execution-scoped approval tuple contract.
   // -------------------------------------------------------------------------
 
   it("recovers the bare asking-loop id from a clarification marker that is already bare", () => {
@@ -322,7 +370,7 @@ describe("runStatus store — poll lifecycle", () => {
 
     // Only the first poll's predicate fetches were issued — the second
     // call short-circuited on the guard.
-    expect(mockGetTriples).toHaveBeenCalledTimes(3 + RUN_HEALTH_PREDICATES.length);
+    expect(mockGetTriples).toHaveBeenCalledTimes(4 + RUN_HEALTH_PREDICATES.length);
 
     resolveFirst([]);
     await Promise.all([p1, p2]);
@@ -342,6 +390,19 @@ describe("runStatus store — poll lifecycle", () => {
     mockGetTriples.mockResolvedValue([]);
     await runStatus.pollOnce();
     expect(runStatus.lastError).toBeNull();
+  });
+
+  it("polls approval answers and does not count historical receipts as paused", async () => {
+    const pending = approvalTriple("run-receipt", "loop-a", "execution-A");
+    const answered = answeredTriple("run-receipt", "loop-a", "execution-A");
+    mockGetTriples.mockImplementation((params) => Promise.resolve(
+      params.predicate === "agent.run.approval-pending" ? [pending]
+        : params.predicate === "agent.run.approval-answered" ? [answered] : [],
+    ));
+    await runStatus.pollOnce();
+    expect(mockGetTriples).toHaveBeenCalledWith(expect.objectContaining({ predicate: "agent.run.approval-answered" }));
+    expect(runStatus.get("run-receipt")?.pause).toBeNull();
+    expect(runStatus.pausedCount).toBe(0);
   });
 
   it("fetches full run-subject triples for dynamic proof evidence", async () => {

@@ -29,7 +29,7 @@ describe("entryMentionsLoop", () => {
       raw_data: {
         triple: {
           subject:
-            "c360.coordinator-001.agent.agentic-loop.execution.loop_e0ce4dd7",
+            "c360.coordinator-001.agentic-loop.agent.execution.loop_e0ce4dd7",
           predicate: "agent.loop.has-step",
         },
       },

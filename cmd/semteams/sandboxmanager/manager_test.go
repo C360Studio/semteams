@@ -80,7 +80,7 @@ func TestManagerRequest_HappyPath_AdmitsAndStamps(t *testing.T) {
 			{Name: "task", Command: "task --list"},
 		},
 	}
-	att, err := m.Request(context.Background(), "c360.platform1.agent.chain.execution.chain1", req)
+	att, err := m.Request(context.Background(), "c360.platform1.chain.agent.execution.chain1", req)
 	if err != nil {
 		t.Fatalf("Request error: %v", err)
 	}
@@ -115,7 +115,7 @@ func TestManagerRequest_AdmissionPending_NoUp(t *testing.T) {
 		Languages:  []string{"go", "node"},
 		Privileges: []Privilege{PrivilegeDockerSocket},
 	}
-	att, err := m.Request(context.Background(), "c360.platform1.agent.chain.execution.c1", req)
+	att, err := m.Request(context.Background(), "c360.platform1.chain.agent.execution.c1", req)
 	if err != nil {
 		t.Fatalf("Request error: %v", err)
 	}
@@ -137,7 +137,7 @@ func TestManagerRequest_AdmissionDenied_Terminal(t *testing.T) {
 		Languages: []string{"go"},
 		Secrets:   []string{"NOT_PROVISIONED"},
 	}
-	att, _ := m.Request(context.Background(), "c360.platform1.agent.chain.execution.c1", req)
+	att, _ := m.Request(context.Background(), "c360.platform1.chain.agent.execution.c1", req)
 	if att.AdmissionOutcome != AdmissionDenied {
 		t.Fatalf("expected denied, got %s", att.AdmissionOutcome)
 	}
@@ -168,7 +168,7 @@ func TestManagerRequest_UpFails_Terminal(t *testing.T) {
 	pub := &fakePublisher{}
 	m := newTestManager(t, runner, pub, AdmissionPolicy{})
 	req := SandboxRequirements{Languages: []string{"go"}}
-	att, _ := m.Request(context.Background(), "c360.platform1.agent.chain.execution.c1", req)
+	att, _ := m.Request(context.Background(), "c360.platform1.chain.agent.execution.c1", req)
 	if !att.Terminal {
 		t.Fatalf("expected terminal on Up failure")
 	}
@@ -195,7 +195,7 @@ func TestManagerRequest_ProbeFailDegrades(t *testing.T) {
 			{Name: "missing", Command: "missing --version"},
 		},
 	}
-	att, _ := m.Request(context.Background(), "c360.platform1.agent.chain.execution.c1", req)
+	att, _ := m.Request(context.Background(), "c360.platform1.chain.agent.execution.c1", req)
 	if att.Ready {
 		t.Fatalf("expected Ready=false on degraded")
 	}
@@ -221,7 +221,7 @@ func TestManagerRequest_PublisherErr_Surfaced(t *testing.T) {
 	pub := &fakePublisher{err: errors.New("nats down")}
 	m := newTestManager(t, &fakeRunner{}, pub, AdmissionPolicy{})
 	req := SandboxRequirements{Languages: []string{"go"}}
-	_, err := m.Request(context.Background(), "c360.platform1.agent.chain.execution.c1", req)
+	_, err := m.Request(context.Background(), "c360.platform1.chain.agent.execution.c1", req)
 	if err == nil {
 		t.Fatalf("publisher err not surfaced")
 	}
@@ -305,7 +305,7 @@ func TestManagerRequest_NormalizesBeforeProbe(t *testing.T) {
 			{Name: "GO", Command: "  go version  "},
 		},
 	}
-	att, err := m.Request(context.Background(), "c360.platform1.agent.chain.execution.c1", req)
+	att, err := m.Request(context.Background(), "c360.platform1.chain.agent.execution.c1", req)
 	if err != nil {
 		t.Fatalf("Request error: %v", err)
 	}

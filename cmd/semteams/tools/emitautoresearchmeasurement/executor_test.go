@@ -64,7 +64,7 @@ func runMetadata() map[string]any {
 		agentic.MetadataKeyRelatedLoops: map[string]any{
 			// ADR-053 Phase 3a: resolution derives the run entity id from the
 			// run LOOP id (autoresearch-run) via TryChainExecutionEntityID, so
-			// the run entity is c360.ops.agent.chain.execution.coord-1.
+			// the run entity is c360.ops.chain.agent.execution.coord-1.
 			"autoresearch-run": "coord-1",
 		},
 	}
@@ -127,8 +127,8 @@ func TestExecutor_KeptStampsOutcomeButLeavesRunBestToRule04c(t *testing.T) {
 	if res.Error != "" {
 		t.Fatalf("unexpected error: %s", res.Error)
 	}
-	execEntity := "c360.ops.agent.agentic-loop.execution.exec-7"
-	runEntity := "c360.ops.agent.chain.execution.coord-1"
+	execEntity := "c360.ops.agentic-loop.agent.execution.exec-7"
+	runEntity := "c360.ops.chain.agent.execution.coord-1"
 
 	// outcome stamped kept on execute loop — this is what rule 04c
 	// fires on.
@@ -170,7 +170,7 @@ func TestExecutor_RevertedDoesNotStampRunBest(t *testing.T) {
 		Metadata:  runMetadata(),
 	})
 
-	runEntity := "c360.ops.agent.chain.execution.coord-1"
+	runEntity := "c360.ops.chain.agent.execution.coord-1"
 	if _, found := pub.findOn(runEntity, "autoresearch.best.value"); found {
 		t.Errorf("best.value stamped on run entity for reverted outcome — must be 0 stamps (rule 04c gates on outcome=kept and lives in the rule layer regardless)")
 	}
@@ -187,8 +187,8 @@ func TestExecutor_CrashedStampsOutcomeNoRunBestUpdate(t *testing.T) {
 		Metadata:  runMetadata(),
 	})
 
-	execEntity := "c360.ops.agent.agentic-loop.execution.exec-9"
-	runEntity := "c360.ops.agent.chain.execution.coord-1"
+	execEntity := "c360.ops.agentic-loop.agent.execution.exec-9"
+	runEntity := "c360.ops.chain.agent.execution.coord-1"
 	out, _ := pub.findOn(execEntity, "autoresearch.measurement.outcome")
 	if out != OutcomeCrashed {
 		t.Errorf("outcome = %v, want crashed", out)

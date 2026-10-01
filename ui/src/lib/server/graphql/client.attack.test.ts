@@ -72,7 +72,7 @@ describe("client.attack — very large response", () => {
   it("handles a very large JSON response without crashing", async () => {
     // 10 000 entities
     const entities = Array.from({ length: 10_000 }, (_, i) => ({
-      id: `c360.ops.robotics.gcs.drone.${String(i).padStart(6, "0")}`,
+      id: `c360.ops.gcs.robotics.drone.${String(i).padStart(6, "0")}`,
       triples: [],
     }));
 

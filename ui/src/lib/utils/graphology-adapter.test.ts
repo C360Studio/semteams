@@ -39,17 +39,17 @@ describe("graphology-adapter", () => {
     it("should add nodes with correct attributes", () => {
       const graph = new Graph();
       const entities = [
-        makeEntity("c360.ops.robotics.gcs.drone.001"),
-        makeEntity("c360.ops.robotics.gcs.fleet.west"),
+        makeEntity("c360.ops.gcs.robotics.drone.001"),
+        makeEntity("c360.ops.gcs.robotics.fleet.west"),
       ];
 
       syncStoreToGraph(graph, entities, []);
 
       expect(graph.order).toBe(2);
-      expect(graph.hasNode("c360.ops.robotics.gcs.drone.001")).toBe(true);
-      expect(graph.hasNode("c360.ops.robotics.gcs.fleet.west")).toBe(true);
+      expect(graph.hasNode("c360.ops.gcs.robotics.drone.001")).toBe(true);
+      expect(graph.hasNode("c360.ops.gcs.robotics.fleet.west")).toBe(true);
 
-      const attrs = graph.getNodeAttributes("c360.ops.robotics.gcs.drone.001");
+      const attrs = graph.getNodeAttributes("c360.ops.gcs.robotics.drone.001");
       expect(attrs.label).toBe("001");
       expect(attrs.entityType).toBe("drone");
       expect(attrs.domain).toBe("robotics");
@@ -62,13 +62,13 @@ describe("graphology-adapter", () => {
     it("should add edges with correct attributes", () => {
       const graph = new Graph();
       const rel = makeRelationship(
-        "c360.ops.robotics.gcs.drone.001",
+        "c360.ops.gcs.robotics.drone.001",
         "fleet.membership.current",
-        "c360.ops.robotics.gcs.fleet.west",
+        "c360.ops.gcs.robotics.fleet.west",
       );
       const entities = [
-        makeEntity("c360.ops.robotics.gcs.drone.001", [rel], []),
-        makeEntity("c360.ops.robotics.gcs.fleet.west", [], [rel]),
+        makeEntity("c360.ops.gcs.robotics.drone.001", [rel], []),
+        makeEntity("c360.ops.gcs.robotics.fleet.west", [], [rel]),
       ];
 
       syncStoreToGraph(graph, entities, [rel]);
@@ -82,20 +82,20 @@ describe("graphology-adapter", () => {
 
     it("should clear previous data on sync", () => {
       const graph = new Graph();
-      const entities1 = [makeEntity("c360.ops.robotics.gcs.drone.001")];
+      const entities1 = [makeEntity("c360.ops.gcs.robotics.drone.001")];
       syncStoreToGraph(graph, entities1, []);
       expect(graph.order).toBe(1);
 
-      const entities2 = [makeEntity("c360.ops.robotics.gcs.fleet.west")];
+      const entities2 = [makeEntity("c360.ops.gcs.robotics.fleet.west")];
       syncStoreToGraph(graph, entities2, []);
       expect(graph.order).toBe(1);
-      expect(graph.hasNode("c360.ops.robotics.gcs.fleet.west")).toBe(true);
-      expect(graph.hasNode("c360.ops.robotics.gcs.drone.001")).toBe(false);
+      expect(graph.hasNode("c360.ops.gcs.robotics.fleet.west")).toBe(true);
+      expect(graph.hasNode("c360.ops.gcs.robotics.drone.001")).toBe(false);
     });
 
     it("should preserve existing node positions on re-sync", () => {
       const graph = new Graph();
-      const entity = makeEntity("c360.ops.robotics.gcs.drone.001");
+      const entity = makeEntity("c360.ops.gcs.robotics.drone.001");
       syncStoreToGraph(graph, [entity], []);
 
       // Set a known position (simulating FA2 output)
@@ -111,10 +111,10 @@ describe("graphology-adapter", () => {
 
     it("should assign random positions for new nodes during re-sync", () => {
       const graph = new Graph();
-      const entity1 = makeEntity("c360.ops.robotics.gcs.drone.001");
+      const entity1 = makeEntity("c360.ops.gcs.robotics.drone.001");
       syncStoreToGraph(graph, [entity1], []);
 
-      const entity2 = makeEntity("c360.ops.robotics.gcs.fleet.west");
+      const entity2 = makeEntity("c360.ops.gcs.robotics.fleet.west");
       syncStoreToGraph(graph, [entity1, entity2], []);
 
       // entity2 is new — should have a position (random, but present)
@@ -125,11 +125,11 @@ describe("graphology-adapter", () => {
     it("should skip edges where source or target node is missing", () => {
       const graph = new Graph();
       const rel = makeRelationship(
-        "c360.ops.robotics.gcs.drone.001",
+        "c360.ops.gcs.robotics.drone.001",
         "fleet.membership.current",
-        "c360.ops.robotics.gcs.fleet.missing",
+        "c360.ops.gcs.robotics.fleet.missing",
       );
-      const entities = [makeEntity("c360.ops.robotics.gcs.drone.001")];
+      const entities = [makeEntity("c360.ops.gcs.robotics.drone.001")];
 
       syncStoreToGraph(graph, entities, [rel]);
 
@@ -147,21 +147,21 @@ describe("graphology-adapter", () => {
     it("should scale node size with connections", () => {
       const graph = new Graph();
       const rel1 = makeRelationship(
-        "c360.ops.robotics.gcs.drone.001",
+        "c360.ops.gcs.robotics.drone.001",
         "a.b.c",
-        "c360.ops.robotics.gcs.fleet.west",
+        "c360.ops.gcs.robotics.fleet.west",
       );
       const rel2 = makeRelationship(
-        "c360.ops.robotics.gcs.drone.001",
+        "c360.ops.gcs.robotics.drone.001",
         "x.y.z",
-        "c360.ops.robotics.gcs.fleet.west",
+        "c360.ops.gcs.robotics.fleet.west",
       );
       const connected = makeEntity(
-        "c360.ops.robotics.gcs.drone.001",
+        "c360.ops.gcs.robotics.drone.001",
         [rel1, rel2],
         [],
       );
-      const isolated = makeEntity("c360.ops.robotics.gcs.fleet.west", [], []);
+      const isolated = makeEntity("c360.ops.gcs.robotics.fleet.west", [], []);
 
       syncStoreToGraph(graph, [connected, isolated], []);
 
@@ -174,20 +174,20 @@ describe("graphology-adapter", () => {
   describe("addToGraph", () => {
     it("should add new nodes without removing existing ones", () => {
       const graph = new Graph();
-      const entities1 = [makeEntity("c360.ops.robotics.gcs.drone.001")];
+      const entities1 = [makeEntity("c360.ops.gcs.robotics.drone.001")];
       syncStoreToGraph(graph, entities1, []);
 
-      const entities2 = [makeEntity("c360.ops.robotics.gcs.fleet.west")];
+      const entities2 = [makeEntity("c360.ops.gcs.robotics.fleet.west")];
       addToGraph(graph, entities2, []);
 
       expect(graph.order).toBe(2);
-      expect(graph.hasNode("c360.ops.robotics.gcs.drone.001")).toBe(true);
-      expect(graph.hasNode("c360.ops.robotics.gcs.fleet.west")).toBe(true);
+      expect(graph.hasNode("c360.ops.gcs.robotics.drone.001")).toBe(true);
+      expect(graph.hasNode("c360.ops.gcs.robotics.fleet.west")).toBe(true);
     });
 
     it("should not duplicate existing nodes", () => {
       const graph = new Graph();
-      const entity = makeEntity("c360.ops.robotics.gcs.drone.001");
+      const entity = makeEntity("c360.ops.gcs.robotics.drone.001");
       syncStoreToGraph(graph, [entity], []);
 
       addToGraph(graph, [entity], []);
@@ -198,13 +198,13 @@ describe("graphology-adapter", () => {
     it("should not duplicate existing edges", () => {
       const graph = new Graph();
       const rel = makeRelationship(
-        "c360.ops.robotics.gcs.drone.001",
+        "c360.ops.gcs.robotics.drone.001",
         "fleet.membership.current",
-        "c360.ops.robotics.gcs.fleet.west",
+        "c360.ops.gcs.robotics.fleet.west",
       );
       const entities = [
-        makeEntity("c360.ops.robotics.gcs.drone.001", [rel], []),
-        makeEntity("c360.ops.robotics.gcs.fleet.west", [], [rel]),
+        makeEntity("c360.ops.gcs.robotics.drone.001", [rel], []),
+        makeEntity("c360.ops.gcs.robotics.fleet.west", [], [rel]),
       ];
       syncStoreToGraph(graph, entities, [rel]);
 
@@ -215,7 +215,7 @@ describe("graphology-adapter", () => {
 
     it("should position new nodes near existing neighbors", () => {
       const graph = new Graph();
-      const existingEntity = makeEntity("c360.ops.robotics.gcs.drone.001");
+      const existingEntity = makeEntity("c360.ops.gcs.robotics.drone.001");
       syncStoreToGraph(graph, [existingEntity], []);
 
       // Set known position for existing node
@@ -223,12 +223,12 @@ describe("graphology-adapter", () => {
       graph.setNodeAttribute(existingEntity.id, "y", 50);
 
       const rel = makeRelationship(
-        "c360.ops.robotics.gcs.fleet.west",
+        "c360.ops.gcs.robotics.fleet.west",
         "has.member",
-        "c360.ops.robotics.gcs.drone.001",
+        "c360.ops.gcs.robotics.drone.001",
       );
       const newEntity = makeEntity(
-        "c360.ops.robotics.gcs.fleet.west",
+        "c360.ops.gcs.robotics.fleet.west",
         [rel],
         [],
       );

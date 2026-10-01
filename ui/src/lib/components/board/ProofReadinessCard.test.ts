@@ -4,7 +4,7 @@ import ProofReadinessCard from "./ProofReadinessCard.svelte";
 
 function proofResult() {
   return JSON.stringify({
-    run_entity_id: "c360.ops.agent.chain.execution.run-123",
+    run_entity_id: "c360.ops.chain.agent.execution.run-123",
     status: "failed",
     version: "go-native-v1",
     finding_count: 2,
@@ -91,7 +91,7 @@ describe("ProofReadinessCard", () => {
     expect(screen.getByText("Readiness Gate")).toBeInTheDocument();
     expect(screen.getByText("Claim Analysis")).toBeInTheDocument();
     expect(screen.getByTestId("proof-status")).toHaveTextContent("failed");
-    expect(screen.getByText("c360.ops.agent.chain.execution.run-123")).toBeInTheDocument();
+    expect(screen.getByText("c360.ops.chain.agent.execution.run-123")).toBeInTheDocument();
     expect(screen.getByText("go-native-v1")).toBeInTheDocument();
   });
 

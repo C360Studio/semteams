@@ -46,6 +46,23 @@ covers what SemTeams adds on top.
 Everything else — the `agentic-*` processors, the rule engine, the
 graph, the NATS stream wiring — lives upstream in semstreams.
 
+## Frozen framework migration
+
+This branch pins SemStreams `v1.0.0-beta.162.0.20260930150212-8b99efe9c66a`
+(SHA `8b99efe9c66a4faa4fa509f9f62cc6bad8392128`). The upgrade from beta.160
+is under qualification in [draft PR #281](https://github.com/C360Studio/semteams/pull/281).
+The [migration evidence](docs/migrations/semstreams-8b99efe/README.md) records
+baseline comparisons, compatibility changes, review findings, and blockers.
+The autoresearch terminal-delivery gate remains red: a completed run does not
+yet guarantee delivery of its final coordinator reply to the initiating user.
+
+Use fresh, isolated NATS and graph state for this migration. Canonical entity
+identity and approval markers changed; retained beta.160 state conversion is
+not implemented. This instruction does not authorize deleting production data.
+SemSource-backed dogfooding waits for SemSource readiness. A later SemEngine
+switch needs its own approved consumer contract; dependency measurements do
+not expand SemEngine's first release automatically.
+
 ## Run it
 
 ### Prereqs
@@ -58,17 +75,18 @@ task --version      # go install github.com/go-task/task/v3/cmd/task@v3.51.1
 caddy version       # required only for the live local UI path: task dev:research
 ```
 
-### First proof: no-key demo MVP
+### No-key demo qualification
 
 ```bash
 task ui:test:e2e:agentic:demo-mvp
 ```
 
-That runs the black-box mock-LLM evidence pack for the current demo
-claims: coordinator routing, the reviewed research arc, fail-closed
+That runs the black-box mock-LLM evidence pack for the demo
+contracts: coordinator routing, the reviewed research arc, fail-closed
 readiness before execution routing, and empirical autoresearch.
 It uses the dockerized e2e stack and requires no LLM API keys or
-host Caddy install.
+host Caddy install. The frozen migration currently has the terminal-delivery
+blocker described above; running the aggregate is not a claim that every gate passes.
 
 ### Live chat UI
 
@@ -112,8 +130,8 @@ material; SemDev now owns the issue-to-PR implementation journey. Do not
 reintroduce them as a shortcut to program-manager action. See
 [ADR-058](docs/adr/058-beta159-realignment-and-demo-lane-focus.md).
 
-Research results retain recoverable source evidence, but beta.160 does
-not currently render the evidence bodies needed by `ArtifactCard` or
+Research results retain recoverable source evidence, but the current UI does
+not render the evidence bodies needed by `ArtifactCard` or
 artifact-context handoff. GraphQL exposes trajectory previews and
 `StorageReference` values; an authorized evidence-fetch pass must land
 before copy, attach, context-chip, or cross-team artifact reuse can be
@@ -129,10 +147,10 @@ pack does and **how the sandbox is created**.
 
 | You want | Run | Notes |
 |---|---|---|
-| No-key demo claim proof | `task ui:test:e2e:agentic:demo-mvp` | Black-box Playwright + mock-LLM evidence pack. No API keys. |
+| No-key demo qualification | `task ui:test:e2e:agentic:demo-mvp` | Black-box Playwright + mock-LLM evidence pack. No API keys. |
 | Live chat UI | `task dev:research` | Needs `GEMINI_API_KEY` for the default model registry; `BRAVE_SEARCH_API_KEY` recommended for web search. |
 | Research arc proof | `task ui:test:e2e:agentic:research-mvp` | Mock-LLM plan/fan-out/join/synthesize/review journey. |
-| Autoresearch proof | `task ui:test:e2e:agentic:autoresearch` | Mock-LLM metric iteration with sandbox admission and keep/revert evidence. |
+| Autoresearch proof | `task ui:test:e2e:agentic:autoresearch` | Mock-LLM metric iteration; final user-delivery qualification is currently blocked. |
 | Coordinator routing proof | `task ui:test:e2e:agentic:coordinator-routing-matrix` | Includes honest responses for parked team asks. |
 
 `task --list` shows everything.
@@ -155,8 +173,9 @@ pack does and **how the sandbox is created**.
   [`cmd/semteams/tools/README.md`](cmd/semteams/tools/README.md)
   first. There is a mandatory framework-alignment review before
   adding to the shell — the semspec accretion lesson.
-- **You want a flow other than the stock ones** → copy a config
-  from `configs/`, swap personas / rules, point the binary at it.
+- **You want different product composition** → edit the bootstrap config
+  and category packs, then restart. `/admin/flows` shows read-only admitted
+  composition; runtime saved-flow authoring/deployment is retired.
 - **You want framework concepts (graph, rules, NATS streams,
   Graphable, payload registry)** → upstream
   [semstreams docs](https://github.com/c360studio/semstreams/tree/main/docs).
@@ -200,13 +219,13 @@ layering, product-shell wiring map, mandatory protocols
 
 ## Status
 
-Active development. Breaking changes expected. The shipped proof is not yet
+Active development. Breaking changes expected. The current runtime is not yet
 the program-manager MVP: today the live product-facing packs are research and
 autoresearch. The next product slice is a read-only, evidence-backed program
 pulse across operator-configured projects and repositories; see the
 [`roadmap`](docs/ROADMAP.md).
 
-Current architecture is **substrate-plus-overlays**: a single product-shell flow wires
+Current architecture is **substrate-plus-overlays**: a single bootstrap configuration wires
 substrate singletons, and task classes are added as category-keyed
 rule packs + named persona bundles rather than separate flow
 configs. The demo scope is the inner and outer loops

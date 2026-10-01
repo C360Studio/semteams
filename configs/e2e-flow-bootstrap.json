@@ -5,7 +5,6 @@
     "id": "semteams-bootstrap-e2e",
     "type": "agentic-e2e",
     "region": "local",
-    "instance_id": "bootstrap-e2e-001",
     "environment": "test"
   },
   "tier": "agentic",
@@ -279,7 +278,7 @@
         "projection_contracts": [
           {
             "name": "autoresearch.run-projection",
-            "entity_pattern": "*.*.agent.chain.execution.*",
+            "entity_pattern": "*.*.chain.agent.execution.*",
             "groups": [
               {
                 "name": "best-value",
@@ -367,7 +366,6 @@
         "max_iterations": 8,
         "timeout": "60s",
         "stream_name": "AGENT",
-        "loops_bucket": "AGENT_LOOPS",
         "consumer": {
           "ack_wait": "60s",
           "heartbeat_interval": "10s",
@@ -483,6 +481,14 @@
                 ]
               },
               "description": "Tool-gate approval-pending events — drives the approvalpause subscriber (ADR-053 §4c: run-phase reflection of the loop-level approval_required gate). Declaring the port keeps the subject covered by the AGENT stream so PublishToStream succeeds and lets portresolver resolve the subscribe subject."
+            },
+            {
+              "name": "loops",
+              "config": {
+                "kind": "kv-write",
+                "bucket": "AGENT_LOOPS"
+              },
+              "description": "Canonical loop authority storage"
             }
           ]
         }
@@ -611,7 +617,8 @@
                   "user.message.>"
                 ]
               },
-              "description": "User messages from any channel"
+              "description": "User messages from any channel",
+              "external": true
             },
             {
               "name": "agent.complete",
@@ -645,9 +652,13 @@
                 "stream_name": "USER",
                 "subjects": [
                   "user.response.>"
-                ]
+                ],
+                "interface": {
+                  "type": "agentic.user_response",
+                  "version": "v1"
+                }
               },
-              "description": "Responses back to users (fire-and-forget; channel routers fan out to UI/email/SMS)"
+              "description": "Typed responses back to users; channel routers fan out to UI/email/SMS"
             },
             {
               "name": "agent.approval_response",

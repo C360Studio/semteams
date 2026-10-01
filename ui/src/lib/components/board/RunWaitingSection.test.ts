@@ -8,6 +8,10 @@ import type { RunPause } from "$lib/types/task";
 // Mock agentApi — we don't want real network calls in unit tests
 // ---------------------------------------------------------------------------
 
+const mockPendingLoop = vi.hoisted(() => vi.fn());
+vi.mock("$lib/stores/agentStore.svelte", () => ({
+  agentStore: { getLoop: mockPendingLoop },
+}));
 const mockSendMessage = vi.fn();
 const mockSubmitApproval = vi.fn();
 
@@ -45,9 +49,17 @@ const CLARIFICATION_NO_QUESTION: RunPause = {
 const TOOL_GATE_PAUSE: RunPause = {
   cause: "tool_gate",
   gatedLoopId: "loop-gated-7",
+  executionId: "execution-pending",
 };
 
 beforeEach(() => {
+  mockPendingLoop.mockReturnValue({
+    pending_approval: {
+      execution_id: "execution-pending",
+      tool_name: "create_rule",
+      arguments: {},
+    },
+  });
   mockSendMessage.mockReset();
   mockSubmitApproval.mockReset();
 });
@@ -145,14 +157,18 @@ describe("RunWaitingSection — clarification", () => {
 
     await waitFor(() => {
       expect(screen.getByTestId("run-reply-error")).toBeInTheDocument();
-      expect(screen.getByTestId("run-reply-error")).toHaveTextContent("Network failure");
+      expect(screen.getByTestId("run-reply-error")).toHaveTextContent(
+        "Network failure",
+      );
     });
   });
 
   it("disables Send while in-flight", async () => {
     let resolveMsg!: (v: { content: string }) => void;
     mockSendMessage.mockReturnValueOnce(
-      new Promise<{ content: string }>((r) => { resolveMsg = r; }),
+      new Promise<{ content: string }>((r) => {
+        resolveMsg = r;
+      }),
     );
     const user = userEvent.setup();
 
@@ -227,7 +243,9 @@ describe("RunWaitingSection — clarification", () => {
       props: { runId: "run-abc", pause: CLARIFICATION_PAUSE },
     });
 
-    expect(screen.queryByTestId("run-approval-section")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("run-approval-section"),
+    ).not.toBeInTheDocument();
   });
 });
 
@@ -266,6 +284,7 @@ describe("RunWaitingSection — tool_gate", () => {
 
     expect(mockSubmitApproval).toHaveBeenCalledWith("loop-gated-7", {
       decision: "approve",
+      execution_id: "execution-pending",
     });
   });
 
@@ -281,6 +300,7 @@ describe("RunWaitingSection — tool_gate", () => {
 
     expect(mockSubmitApproval).toHaveBeenCalledWith("loop-gated-7", {
       decision: "reject",
+      execution_id: "execution-pending",
     });
   });
 
@@ -292,11 +312,15 @@ describe("RunWaitingSection — tool_gate", () => {
       props: { runId: "run-xyz", pause: TOOL_GATE_PAUSE },
     });
 
-    await user.type(screen.getByRole("textbox", { name: /reason/i }), "Too broad");
+    await user.type(
+      screen.getByRole("textbox", { name: /reason/i }),
+      "Too broad",
+    );
     await user.click(screen.getByTestId("run-approve"));
 
     expect(mockSubmitApproval).toHaveBeenCalledWith("loop-gated-7", {
       decision: "approve",
+      execution_id: "execution-pending",
       reason: "Too broad",
     });
   });
@@ -304,7 +328,9 @@ describe("RunWaitingSection — tool_gate", () => {
   it("disables buttons while in-flight", async () => {
     let resolveApproval!: (v: { accepted: boolean }) => void;
     mockSubmitApproval.mockReturnValueOnce(
-      new Promise<{ accepted: boolean }>((r) => { resolveApproval = r; }),
+      new Promise<{ accepted: boolean }>((r) => {
+        resolveApproval = r;
+      }),
     );
     const user = userEvent.setup();
 
@@ -334,7 +360,9 @@ describe("RunWaitingSection — tool_gate", () => {
 
     await waitFor(() => {
       expect(screen.getByTestId("run-approval-error")).toBeInTheDocument();
-      expect(screen.getByTestId("run-approval-error")).toHaveTextContent("Backend error");
+      expect(screen.getByTestId("run-approval-error")).toHaveTextContent(
+        "Backend error",
+      );
     });
   });
 
@@ -374,4 +402,44 @@ describe("RunWaitingSection — tool_gate", () => {
       expect(err).toHaveTextContent("no longer pending");
     });
   });
+});
+
+describe("RunWaitingSection — graph receipt and current gate agreement", () => {
+  it("disables approval when the graph tuple refers to a different execution", async () => {
+    render(RunWaitingSection, { props: { runId: "run-a", pause: { ...TOOL_GATE_PAUSE, executionId: "old-execution" } } });
+    const approve = screen.getByTestId("run-approve");
+    expect(approve).toBeDisabled();
+    await userEvent.click(approve);
+    expect(mockSubmitApproval).not.toHaveBeenCalled();
+  });
+});
+
+it("clears the previous gate's reason when execution B replaces A", async () => {
+  const user = userEvent.setup();
+  const { rerender } = render(RunWaitingSection, { props: { runId: "run-a", pause: TOOL_GATE_PAUSE } });
+  await user.type(screen.getByRole("textbox", { name: /reason/i }), "Only approved execution A");
+  mockPendingLoop.mockReturnValue({ pending_approval: { execution_id: "execution-B", tool_name: "request_sandbox", arguments: { role: "researcher" } } });
+  await rerender({ runId: "run-a", pause: { ...TOOL_GATE_PAUSE, executionId: "execution-B" } });
+  expect(screen.getByRole("textbox", { name: /reason/i })).toHaveValue("");
+  expect(screen.getByText("request_sandbox")).toBeVisible();
+  await user.click(screen.getByTestId("run-approve"));
+  expect(mockSubmitApproval).toHaveBeenCalledWith("loop-gated-7", { decision: "approve", execution_id: "execution-B" });
+});
+
+it.each(["resolve", "reject"])("ignores run gate A %s after B replaces it", async (settlement) => {
+  let resolve!: (value: { accepted: boolean }) => void;
+  let reject!: (reason: Error) => void;
+  mockSubmitApproval.mockReturnValueOnce(new Promise((yes, no) => { resolve = yes; reject = no; }));
+  const user = userEvent.setup();
+  const { rerender } = render(RunWaitingSection, { props: { runId: "run-a", pause: TOOL_GATE_PAUSE } });
+  await user.click(screen.getByTestId("run-approve"));
+  mockPendingLoop.mockReturnValue({ pending_approval: { execution_id: "execution-B", tool_name: "request_sandbox", arguments: {} } });
+  await rerender({ runId: "run-a", pause: { ...TOOL_GATE_PAUSE, executionId: "execution-B" } });
+  expect(screen.getByRole("textbox", { name: /reason/i })).toBeEnabled();
+  await user.type(screen.getByRole("textbox", { name: /reason/i }), "Reviewing B");
+  if (settlement === "resolve") resolve({ accepted: true });
+  else reject(new Error("A failed"));
+  await waitFor(() => expect(screen.getByRole("textbox", { name: /reason/i })).toHaveValue("Reviewing B"));
+  expect(screen.queryByTestId("run-approval-confirm")).not.toBeInTheDocument();
+  expect(screen.queryByText("A failed")).not.toBeInTheDocument();
 });

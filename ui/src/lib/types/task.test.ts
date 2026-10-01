@@ -44,7 +44,6 @@ describe("loopStateToColumn", () => {
     ["executing", "executing"],
     ["reviewing", "executing"],
     ["awaiting_approval", "needs_you"],
-    ["paused", "needs_you"],
     ["complete", "done"],
     ["success", "done"],
     ["truncated", "done"],
@@ -57,14 +56,13 @@ describe("loopStateToColumn", () => {
     expect(loopStateToColumn(state)).toBe(expectedColumn);
   });
 
-  it("covers all 10 AgentLoopState values", () => {
+  it("covers supported AgentLoopState values", () => {
     const allStates: AgentLoopState[] = [
       "exploring",
       "planning",
       "architecting",
       "executing",
       "reviewing",
-      "paused",
       "awaiting_approval",
       "complete",
       "failed",
@@ -73,7 +71,7 @@ describe("loopStateToColumn", () => {
     for (const state of allStates) {
       expect(loopStateToColumn(state)).toBeDefined();
     }
-    expect(allStates).toHaveLength(10);
+    expect(allStates).toHaveLength(9);
   });
 });
 
@@ -343,7 +341,7 @@ describe("deriveTaskInfo", () => {
         parent_loop_id: "parent",
       });
       const child2 = makeLoop({
-        state: "paused",
+        state: "awaiting_approval",
         loop_id: "child2",
         parent_loop_id: "parent",
       });
@@ -445,7 +443,7 @@ describe("deriveTaskInfo", () => {
   });
 
   it("runPause is passed through onto the TaskInfo", () => {
-    const pause: RunPause = { cause: "tool_gate", gatedLoopId: "loop-gated" };
+    const pause: RunPause = { cause: "tool_gate", gatedLoopId: "loop-gated", executionId: "execution-pending" };
     const t = deriveTaskInfo(
       makeLoop({ state: "complete" }),
       [],
@@ -457,7 +455,7 @@ describe("deriveTaskInfo", () => {
   });
 
   it("runPause forces effectiveColumn to needs_you even when primary loop is complete", () => {
-    const pause: RunPause = { cause: "tool_gate", gatedLoopId: "loop-gated" };
+    const pause: RunPause = { cause: "tool_gate", gatedLoopId: "loop-gated", executionId: "execution-pending" };
     const t = deriveTaskInfo(
       makeLoop({ state: "complete" }),
       [],

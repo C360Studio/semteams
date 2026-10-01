@@ -71,7 +71,7 @@ test.describe("ADR-053 Phase 4a′ — executing→failed run transition", () =>
         limit: 20,
       });
       const objs = phases
-        .filter((t) => String(t.subject ?? "").includes("agent.chain.execution."))
+        .filter((t) => String(t.subject ?? "").includes("chain.agent.execution."))
         .map((t) => String(t.object));
       if (objs.includes("failed") || objs.includes("completed")) return objs;
       return null;
@@ -102,7 +102,7 @@ test.describe("ADR-053 Phase 4a′ — executing→failed run transition", () =>
         limit: 20,
       });
       const objs = triples
-        .filter((t) => String(t.subject ?? "").includes("agent.chain.execution."))
+        .filter((t) => String(t.subject ?? "").includes("chain.agent.execution."))
         .map((t) => String(t.object));
       return objs.length > 0 ? objs : null;
     }, { timeoutMs: 15_000 });
@@ -155,9 +155,13 @@ test.describe("ADR-053 Phase 4a′ — executing→failed run transition", () =>
     // `failed`. A failed run is precisely the case it exists for, so its
     // presence here is a feature assertion, not incidental noise.
     // -----------------------------------------------------------------
-    const loops = (await request
-      .get("/teams-dispatch/loops")
-      .then((r) => r.json())) as Array<{ role: string; state: string }>;
+    // Run terminal publication and observer completion are distinct async events.
+    // Poll the required outcome instead of racing the first terminal run triple.
+    let loops: Array<{ role: string; state: string }> = [];
+    await expect.poll(async () => {
+      loops = await request.get("/teams-dispatch/loops").then((r) => r.json());
+      return loops.find((loop) => loop.role === "ops-chain-observer")?.state;
+    }, { timeout: 15_000 }).toBe("complete");
     expect(
       loops.length,
       "expected exactly 3 loops (coordinator dispatch + wedged planner + ops observer); a fourth means the planner spawned downstream despite failing. Got: " +

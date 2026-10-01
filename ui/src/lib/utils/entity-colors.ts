@@ -2,7 +2,7 @@
  * Entity Color Mapping for Knowledge Graph Visualization
  *
  * Maps entity domains and types to colors for the graph visualization.
- * Entity IDs have format: org.platform.domain.system.type.instance
+ * Entity IDs have format: org.platform.system.domain.type.instance
  * Colors are assigned based on domain (primary) and type (secondary).
  */
 

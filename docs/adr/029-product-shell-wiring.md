@@ -154,3 +154,77 @@ Every adopted wiring must be demonstrable at boot:
   `executors.RegisterAll` tool wiring in the consuming product.
 - semteams ADR-025 — product-shell consolidation; this ADR is the
   concrete wiring contract that consolidation requires.
+
+## Addendum 2026-10-01: execution-correlated approval projection
+
+The frozen SemStreams migration requires SemTeams to handle repeated approval-pending events after an answer.
+Review of the initial receipt implementation also reproduced answer-before-pending and delayed-answer ordering
+failures: loop-only resume markers could block every later gate or resume a different execution. Clearing all markers
+could delete a newly arrived gate. These are product run-phase projection defects; loop/tool admission stays upstream.
+
+### Decision and framework alignment
+
+Use the existing canonical graph owner to maintain exactly three predicates on an existing local run entity:
+`agent.run.approval-pending`, `agent.run.approval-answered`, and `agent.run.approval-outstanding`. The two sets contain
+canonical JSON string pairs `[bareLoopID, executionID]`; JSON encoding preserves opaque execution IDs without delimiter
+ambiguity. An answer records both pairs, so answered is always a subset of pending. The scalar is their set difference
+cardinality. The sets grow monotonically; annotations on existing tuples are preserved. These are literal JSON values,
+not graph edges. Vocabulary declares the pairs as `json` and the derived count as `int`.
+
+The product adapter exact-reads the graph owner and submits a `graph.ReconcilePredicatesRequest` with that same
+`ExpectedRevision`. It binds the effective local authority, `chain.agent.execution` identity and existing
+`lifecycle.harness.v1` type. Its fixed `projection.Contract` declares one `ModeReconcile` group containing only these
+three predicates. Contract validation requires their vocabulary declarations before construction. This is a write to
+an already registered framework entity, so it creates no payload type or entity-birth registration obligation.
+
+Framework survey at SHA `8b99efe9c66a4faa4fa509f9f62cc6bad8392128`:
+
+- [ADR-091's canonical mutation protocol][approval-protocol] and the public
+  [ReconcilePredicatesRequest][approval-request] already provide the revision fence. The documented operation is
+  `graph.mutation.entity.reconcile`, backed by the configured graph-ingest canonical mutation port.
+- [ExactEntityReader][approval-exact] returns validated entity bytes and their same-entry authority revision. It
+  distinguishes absent, invalid and unavailable authority; none becomes an empty successful approval history.
+- The public [projection MutationClient][approval-client] accepts Desired, then independently reads a revision inside
+  `Reconcile`. It cannot fence a desired set computed from the caller's earlier snapshot. An intervening gate could be
+  overwritten despite passing that later revision check. Calling it repeatedly does not repair this mismatch.
+- The lower-level `internal/graphmutation.Client` cannot be imported by SemTeams. The product adapter consumes only
+  the existing public typed operation; it is not a copy of the internal client or a general graph client.
+- Rule `.length` substitution counts the first triple object's list elements, whereas `length_*` operators count
+  matching triples. Comparing those for two multivalue pair sets is invalid; executable frozen-rule tests rejected
+  that attempted expression. No new rule action, operator, store, bucket, stream, worker or authority is introduced.
+
+Only a definite classified revision conflict causes a fresh read, recomputation and retry, bounded to eight attempts
+and the caller context with a five-second ceiling. One logical event retains its request ID and provenance across
+conflicts. Classified server refusals and no responders are definite noncommits. Other post-dispatch transport failures
+or invalid replies are commit-unknown and are not retried or inferred successful from matching stored content. Accepted
+receipts must match entity identity, type, request ID and desired facts; applied revisions advance the fence and unchanged
+revisions equal it. Malformed or inconsistent existing history fails closed, including on duplicate events.
+
+### Lifecycle and migration boundaries
+
+The adapter never writes run phase or lifecycle audit. Rule 12 pauses only an executing run with outstanding gates and
+reserves transition reason `tool approval pending`. Rule 13 resumes only an awaiting run with zero outstanding gates,
+that exact reason, source `rule`, previous phase `executing`, and no pending clarification. Phase and audit are one
+framework lifecycle transition. The source and previous-phase guards matter because an empty later transition note
+can retain an older note. An already selected resume can briefly precede a newer gate's pause, but no history is removed,
+so the rules converge without losing the newer gate. Terminal phases never re-enter execution through these rules.
+
+Fresh graph storage is required. There is no interpretation of the old loop-reference marker format. Terminal runs
+retain history and the UI suppresses actionable waits for completed, failed or cancelled runs. A live loop's
+`pending_approval.execution_id` remains the only approval request identity; these graph facts never authorize a tool.
+Core-NATS event loss remains a separate existing limitation; this change adds neither replay nor repair workers.
+
+The architect and independent Go reviewer approved this narrow existing-protocol adaptation for TDD. Behavioral tests
+exercise answer-first, failed pending mutation, late A while B waits, separate concurrent writers, subscriber recreation,
+phase-transition races, terminal history, refusal/ambiguity and cancellation. Actual graph-owner browser qualification
+is recorded with the migration evidence rather than inferred from the protocol fixture.
+
+Migration posture: adopt an upstream public projection operation that accepts the caller's exact revision, or an
+upstream run-approval projection with equivalent ordering guarantees, when available. Replace this domain adapter at
+that point. Do not grow it into a generic mutation client or use it to bypass another framework contract. This migration
+neither expands SemEngine's initial release nor enables SemSource-backed dogfooding.
+
+[approval-protocol]: https://github.com/C360Studio/semstreams/blob/8b99efe9c66a4faa4fa509f9f62cc6bad8392128/docs/adr/091-graph-mutation-authority-without-semantic-ownership.md
+[approval-request]: https://github.com/C360Studio/semstreams/blob/8b99efe9c66a4faa4fa509f9f62cc6bad8392128/graph/mutation_requests.go
+[approval-exact]: https://github.com/C360Studio/semstreams/blob/8b99efe9c66a4faa4fa509f9f62cc6bad8392128/graph/exact_entity.go
+[approval-client]: https://github.com/C360Studio/semstreams/blob/8b99efe9c66a4faa4fa509f9f62cc6bad8392128/pkg/projection/mutation_client.go

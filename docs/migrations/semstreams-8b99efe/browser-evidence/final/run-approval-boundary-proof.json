@@ -1,0 +1,699 @@
+{
+  "run-approval-pending": {
+    "planner": {
+      "loop_id": "fcb8d273-fb93-4cbc-8738-99b41a4b2427",
+      "task_id": "rule-c360.semteams-bootstrap-e2e-48f944.agentic-loop.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7-1790859216379901179",
+      "state": "awaiting_approval",
+      "role": "researcher-research-plan",
+      "max_iterations": 8,
+      "pending_approval": {
+        "call_id": "call_a137fd58",
+        "execution_id": "tool-exec-v1-ondpuu2k552sdeos7wfh34p6z75mrtzs4nljdlfqv4k2kgpjbgma",
+        "request_id": "fcb8d273-fb93-4cbc-8738-99b41a4b2427:req:1:0",
+        "tool_name": "emit_plan",
+        "arguments": {
+          "context": "Initial planning pass. N=1: a single gather probe covers the latency + footprint axes the synthesize pass needs to compose an answer the wake-up coordinator can deliver.",
+          "epics": [
+            "E1 \u2014 Protocol surface: pub/sub vs request/reply, QoS levels, retained messages",
+            "E2 \u2014 Footprint: memory + binary size on constrained ARM (Raspberry Pi class)",
+            "E3 \u2014 Latency: round-trip benchmarks on constrained hardware"
+          ],
+          "goal": "Compare MQTT and NATS for IoT edge deployments \u2014 latency, footprint, and reliability characteristics on constrained ARM devices.",
+          "revision": 1,
+          "scope_in": [
+            "MQTT broker family (Mosquitto, EMQ X, HiveMQ) \u2014 protocol surface + QoS levels",
+            "NATS server family (NATS Core, JetStream) \u2014 subject hierarchy + persistence story",
+            "ARM-device benchmarks for both"
+          ],
+          "scope_out": [
+            "MQTT/NATS bridge implementations \u2014 out of scope for the comparison question",
+            "Cloud-only deployment patterns \u2014 user asked about edge"
+          ],
+          "title": "MQTT vs NATS for IoT edge \u2014 research plan"
+        },
+        "reason": "approval_required: Tool 'emit_plan' requires human approval before execution",
+        "requested_at": "2026-10-01T12:53:36.397452929Z"
+      }
+    },
+    "runEntity": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+    "waiting": [
+      {
+        "subject": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "predicate": "agent.run.origin-entity-id",
+        "object": "c360.semteams-bootstrap-e2e-48f944.agentic-loop.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "source": "",
+        "timestamp": "2026-10-01T12:53:36.380419762Z",
+        "confidence": 1
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "predicate": "entity.indexing.profile",
+        "object": "control",
+        "source": "graph-ingest-indexing-profile",
+        "timestamp": "2026-10-01T12:53:36.380567387Z",
+        "confidence": 1
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "predicate": "agent.run.approval-pending",
+        "object": "[\"fcb8d273-fb93-4cbc-8738-99b41a4b2427\",\"tool-exec-v1-ondpuu2k552sdeos7wfh34p6z75mrtzs4nljdlfqv4k2kgpjbgma\"]",
+        "source": "approvalpause",
+        "timestamp": "2026-10-01T12:53:36.398934637Z",
+        "confidence": 1
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "predicate": "agent.run.approval-outstanding",
+        "object": 1,
+        "source": "approvalpause",
+        "timestamp": "2026-10-01T12:53:36.398934637Z",
+        "confidence": 1
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "predicate": "agent.run.handoff",
+        "object": "8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "source": "rule_engine",
+        "timestamp": "2026-10-01T12:53:36.419719596Z",
+        "confidence": 1
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "predicate": "agent.run.phase",
+        "object": "awaiting_approval",
+        "source": "",
+        "timestamp": "2026-10-01T12:53:36.459944012Z",
+        "confidence": 1
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "predicate": "lifecycle.transition.from",
+        "object": "",
+        "source": "",
+        "timestamp": "2026-10-01T12:53:36.380185762Z",
+        "confidence": 1,
+        "context": "43aedcb8-dcfa-4011-9741-4360b0488c8f"
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "predicate": "lifecycle.transition.to",
+        "object": "dispatched",
+        "source": "",
+        "timestamp": "2026-10-01T12:53:36.380185762Z",
+        "confidence": 1,
+        "context": "43aedcb8-dcfa-4011-9741-4360b0488c8f"
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "predicate": "lifecycle.transition.at",
+        "object": "2026-10-01T12:53:36.380185762Z",
+        "source": "",
+        "timestamp": "2026-10-01T12:53:36.380185762Z",
+        "confidence": 1,
+        "context": "43aedcb8-dcfa-4011-9741-4360b0488c8f"
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "predicate": "lifecycle.transition.source",
+        "object": "framework",
+        "source": "",
+        "timestamp": "2026-10-01T12:53:36.380185762Z",
+        "confidence": 1,
+        "context": "43aedcb8-dcfa-4011-9741-4360b0488c8f"
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "predicate": "lifecycle.transition.note",
+        "object": "created",
+        "source": "",
+        "timestamp": "2026-10-01T12:53:36.380185762Z",
+        "confidence": 1,
+        "context": "43aedcb8-dcfa-4011-9741-4360b0488c8f"
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "predicate": "lifecycle.transition.from",
+        "object": "dispatched",
+        "source": "",
+        "timestamp": "2026-10-01T12:53:36.448281137Z",
+        "confidence": 1,
+        "context": "f6223f42-a752-4067-aeda-220b31f6ef45"
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "predicate": "lifecycle.transition.to",
+        "object": "executing",
+        "source": "",
+        "timestamp": "2026-10-01T12:53:36.448281137Z",
+        "confidence": 1,
+        "context": "f6223f42-a752-4067-aeda-220b31f6ef45"
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "predicate": "lifecycle.transition.at",
+        "object": "2026-10-01T12:53:36.448281137Z",
+        "source": "",
+        "timestamp": "2026-10-01T12:53:36.448281137Z",
+        "confidence": 1,
+        "context": "f6223f42-a752-4067-aeda-220b31f6ef45"
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "predicate": "lifecycle.transition.source",
+        "object": "rule",
+        "source": "",
+        "timestamp": "2026-10-01T12:53:36.448281137Z",
+        "confidence": 1,
+        "context": "f6223f42-a752-4067-aeda-220b31f6ef45"
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "predicate": "lifecycle.transition.note",
+        "object": "child task handed off (rule.task.spawned confirmed) \u2014 run is now executing",
+        "source": "",
+        "timestamp": "2026-10-01T12:53:36.448281137Z",
+        "confidence": 1,
+        "context": "f6223f42-a752-4067-aeda-220b31f6ef45"
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "predicate": "lifecycle.transition.from",
+        "object": "executing",
+        "source": "",
+        "timestamp": "2026-10-01T12:53:36.459941429Z",
+        "confidence": 1,
+        "context": "f1af676a-6898-4c53-aa47-c59a5c82e4a2"
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "predicate": "lifecycle.transition.to",
+        "object": "awaiting_approval",
+        "source": "",
+        "timestamp": "2026-10-01T12:53:36.459941429Z",
+        "confidence": 1,
+        "context": "f1af676a-6898-4c53-aa47-c59a5c82e4a2"
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "predicate": "lifecycle.transition.at",
+        "object": "2026-10-01T12:53:36.459941429Z",
+        "source": "",
+        "timestamp": "2026-10-01T12:53:36.459941429Z",
+        "confidence": 1,
+        "context": "f1af676a-6898-4c53-aa47-c59a5c82e4a2"
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "predicate": "lifecycle.transition.source",
+        "object": "rule",
+        "source": "",
+        "timestamp": "2026-10-01T12:53:36.459941429Z",
+        "confidence": 1,
+        "context": "f1af676a-6898-4c53-aa47-c59a5c82e4a2"
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "predicate": "lifecycle.transition.note",
+        "object": "tool approval pending",
+        "source": "",
+        "timestamp": "2026-10-01T12:53:36.459941429Z",
+        "confidence": 1,
+        "context": "f1af676a-6898-4c53-aa47-c59a5c82e4a2"
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "predicate": "agent.run.last-transition-source",
+        "object": "rule",
+        "source": "",
+        "timestamp": "2026-10-01T12:53:36.459946137Z",
+        "confidence": 1
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "predicate": "agent.run.last-transition-at",
+        "object": "2026-10-01T12:53:36.459941429Z",
+        "source": "",
+        "timestamp": "2026-10-01T12:53:36.459946554Z",
+        "confidence": 1
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "predicate": "agent.run.last-transition-from",
+        "object": "executing",
+        "source": "",
+        "timestamp": "2026-10-01T12:53:36.459946596Z",
+        "confidence": 1
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "predicate": "agent.run.last-transition-note",
+        "object": "tool approval pending",
+        "source": "",
+        "timestamp": "2026-10-01T12:53:36.459946679Z",
+        "confidence": 1
+      }
+    ]
+  },
+  "run-approval-settled": {
+    "submitted": {
+      "decision": "approve",
+      "execution_id": "tool-exec-v1-ondpuu2k552sdeos7wfh34p6z75mrtzs4nljdlfqv4k2kgpjbgma",
+      "user_id": "ui-anonymous"
+    },
+    "runEntity": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+    "finished": [
+      {
+        "subject": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "predicate": "agent.run.origin-entity-id",
+        "object": "c360.semteams-bootstrap-e2e-48f944.agentic-loop.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "source": "",
+        "timestamp": "2026-10-01T12:53:36.380419762Z",
+        "confidence": 1
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "predicate": "entity.indexing.profile",
+        "object": "control",
+        "source": "graph-ingest-indexing-profile",
+        "timestamp": "2026-10-01T12:53:36.380567387Z",
+        "confidence": 1
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "predicate": "agent.run.handoff",
+        "object": "8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "source": "rule_engine",
+        "timestamp": "2026-10-01T12:53:36.419719596Z",
+        "confidence": 1
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "predicate": "agent.run.approval-pending",
+        "object": "[\"fcb8d273-fb93-4cbc-8738-99b41a4b2427\",\"tool-exec-v1-ondpuu2k552sdeos7wfh34p6z75mrtzs4nljdlfqv4k2kgpjbgma\"]",
+        "source": "approvalpause",
+        "timestamp": "2026-10-01T12:53:36.398934637Z",
+        "confidence": 1
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "predicate": "agent.run.approval-answered",
+        "object": "[\"fcb8d273-fb93-4cbc-8738-99b41a4b2427\",\"tool-exec-v1-ondpuu2k552sdeos7wfh34p6z75mrtzs4nljdlfqv4k2kgpjbgma\"]",
+        "source": "approvalpause",
+        "timestamp": "2026-10-01T12:53:36.889239762Z",
+        "confidence": 1
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "predicate": "agent.run.approval-outstanding",
+        "object": 0,
+        "source": "approvalpause",
+        "timestamp": "2026-10-01T12:53:36.889239762Z",
+        "confidence": 1
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "predicate": "agent.run.outcome",
+        "object": "success",
+        "source": "rule_engine",
+        "timestamp": "2026-10-01T12:53:37.153168304Z",
+        "confidence": 1
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "predicate": "agent.run.phase",
+        "object": "completed",
+        "source": "",
+        "timestamp": "2026-10-01T12:53:37.177257388Z",
+        "confidence": 1
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "predicate": "lifecycle.transition.from",
+        "object": "",
+        "source": "",
+        "timestamp": "2026-10-01T12:53:36.380185762Z",
+        "confidence": 1,
+        "context": "43aedcb8-dcfa-4011-9741-4360b0488c8f"
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "predicate": "lifecycle.transition.to",
+        "object": "dispatched",
+        "source": "",
+        "timestamp": "2026-10-01T12:53:36.380185762Z",
+        "confidence": 1,
+        "context": "43aedcb8-dcfa-4011-9741-4360b0488c8f"
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "predicate": "lifecycle.transition.at",
+        "object": "2026-10-01T12:53:36.380185762Z",
+        "source": "",
+        "timestamp": "2026-10-01T12:53:36.380185762Z",
+        "confidence": 1,
+        "context": "43aedcb8-dcfa-4011-9741-4360b0488c8f"
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "predicate": "lifecycle.transition.source",
+        "object": "framework",
+        "source": "",
+        "timestamp": "2026-10-01T12:53:36.380185762Z",
+        "confidence": 1,
+        "context": "43aedcb8-dcfa-4011-9741-4360b0488c8f"
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "predicate": "lifecycle.transition.note",
+        "object": "created",
+        "source": "",
+        "timestamp": "2026-10-01T12:53:36.380185762Z",
+        "confidence": 1,
+        "context": "43aedcb8-dcfa-4011-9741-4360b0488c8f"
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "predicate": "lifecycle.transition.from",
+        "object": "dispatched",
+        "source": "",
+        "timestamp": "2026-10-01T12:53:36.448281137Z",
+        "confidence": 1,
+        "context": "f6223f42-a752-4067-aeda-220b31f6ef45"
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "predicate": "lifecycle.transition.to",
+        "object": "executing",
+        "source": "",
+        "timestamp": "2026-10-01T12:53:36.448281137Z",
+        "confidence": 1,
+        "context": "f6223f42-a752-4067-aeda-220b31f6ef45"
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "predicate": "lifecycle.transition.at",
+        "object": "2026-10-01T12:53:36.448281137Z",
+        "source": "",
+        "timestamp": "2026-10-01T12:53:36.448281137Z",
+        "confidence": 1,
+        "context": "f6223f42-a752-4067-aeda-220b31f6ef45"
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "predicate": "lifecycle.transition.source",
+        "object": "rule",
+        "source": "",
+        "timestamp": "2026-10-01T12:53:36.448281137Z",
+        "confidence": 1,
+        "context": "f6223f42-a752-4067-aeda-220b31f6ef45"
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "predicate": "lifecycle.transition.note",
+        "object": "child task handed off (rule.task.spawned confirmed) \u2014 run is now executing",
+        "source": "",
+        "timestamp": "2026-10-01T12:53:36.448281137Z",
+        "confidence": 1,
+        "context": "f6223f42-a752-4067-aeda-220b31f6ef45"
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "predicate": "lifecycle.transition.from",
+        "object": "executing",
+        "source": "",
+        "timestamp": "2026-10-01T12:53:36.459941429Z",
+        "confidence": 1,
+        "context": "f1af676a-6898-4c53-aa47-c59a5c82e4a2"
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "predicate": "lifecycle.transition.to",
+        "object": "awaiting_approval",
+        "source": "",
+        "timestamp": "2026-10-01T12:53:36.459941429Z",
+        "confidence": 1,
+        "context": "f1af676a-6898-4c53-aa47-c59a5c82e4a2"
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "predicate": "lifecycle.transition.at",
+        "object": "2026-10-01T12:53:36.459941429Z",
+        "source": "",
+        "timestamp": "2026-10-01T12:53:36.459941429Z",
+        "confidence": 1,
+        "context": "f1af676a-6898-4c53-aa47-c59a5c82e4a2"
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "predicate": "lifecycle.transition.source",
+        "object": "rule",
+        "source": "",
+        "timestamp": "2026-10-01T12:53:36.459941429Z",
+        "confidence": 1,
+        "context": "f1af676a-6898-4c53-aa47-c59a5c82e4a2"
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "predicate": "lifecycle.transition.note",
+        "object": "tool approval pending",
+        "source": "",
+        "timestamp": "2026-10-01T12:53:36.459941429Z",
+        "confidence": 1,
+        "context": "f1af676a-6898-4c53-aa47-c59a5c82e4a2"
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "predicate": "lifecycle.transition.from",
+        "object": "awaiting_approval",
+        "source": "",
+        "timestamp": "2026-10-01T12:53:36.908957637Z",
+        "confidence": 1,
+        "context": "b069aa90-f2ec-4e46-a81e-3c3404e2db59"
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "predicate": "lifecycle.transition.to",
+        "object": "executing",
+        "source": "",
+        "timestamp": "2026-10-01T12:53:36.908957637Z",
+        "confidence": 1,
+        "context": "b069aa90-f2ec-4e46-a81e-3c3404e2db59"
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "predicate": "lifecycle.transition.at",
+        "object": "2026-10-01T12:53:36.908957637Z",
+        "source": "",
+        "timestamp": "2026-10-01T12:53:36.908957637Z",
+        "confidence": 1,
+        "context": "b069aa90-f2ec-4e46-a81e-3c3404e2db59"
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "predicate": "lifecycle.transition.source",
+        "object": "rule",
+        "source": "",
+        "timestamp": "2026-10-01T12:53:36.908957637Z",
+        "confidence": 1,
+        "context": "b069aa90-f2ec-4e46-a81e-3c3404e2db59"
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "predicate": "lifecycle.transition.note",
+        "object": "all observed tool approval gates answered",
+        "source": "",
+        "timestamp": "2026-10-01T12:53:36.908957637Z",
+        "confidence": 1,
+        "context": "b069aa90-f2ec-4e46-a81e-3c3404e2db59"
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "predicate": "lifecycle.transition.from",
+        "object": "executing",
+        "source": "",
+        "timestamp": "2026-10-01T12:53:37.177255846Z",
+        "confidence": 1,
+        "context": "1f7ea02a-a89c-4b37-a584-c12d7037d3c7"
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "predicate": "lifecycle.transition.to",
+        "object": "completed",
+        "source": "",
+        "timestamp": "2026-10-01T12:53:37.177255846Z",
+        "confidence": 1,
+        "context": "1f7ea02a-a89c-4b37-a584-c12d7037d3c7"
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "predicate": "lifecycle.transition.at",
+        "object": "2026-10-01T12:53:37.177255846Z",
+        "source": "",
+        "timestamp": "2026-10-01T12:53:37.177255846Z",
+        "confidence": 1,
+        "context": "1f7ea02a-a89c-4b37-a584-c12d7037d3c7"
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "predicate": "lifecycle.transition.source",
+        "object": "rule",
+        "source": "",
+        "timestamp": "2026-10-01T12:53:37.177255846Z",
+        "confidence": 1,
+        "context": "1f7ea02a-a89c-4b37-a584-c12d7037d3c7"
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "predicate": "lifecycle.transition.note",
+        "object": "chain reached its success terminal (reviewer/CBG approved) \u2014 run completed",
+        "source": "",
+        "timestamp": "2026-10-01T12:53:37.177255846Z",
+        "confidence": 1,
+        "context": "1f7ea02a-a89c-4b37-a584-c12d7037d3c7"
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "predicate": "agent.run.last-transition-source",
+        "object": "rule",
+        "source": "",
+        "timestamp": "2026-10-01T12:53:37.177260138Z",
+        "confidence": 1
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "predicate": "agent.run.last-transition-at",
+        "object": "2026-10-01T12:53:37.177255846Z",
+        "source": "",
+        "timestamp": "2026-10-01T12:53:37.177260263Z",
+        "confidence": 1
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "predicate": "agent.run.last-transition-from",
+        "object": "executing",
+        "source": "",
+        "timestamp": "2026-10-01T12:53:37.177260346Z",
+        "confidence": 1
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "predicate": "agent.run.last-transition-note",
+        "object": "chain reached its success terminal (reviewer/CBG approved) \u2014 run completed",
+        "source": "",
+        "timestamp": "2026-10-01T12:53:37.177260513Z",
+        "confidence": 1
+      },
+      {
+        "subject": "c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "predicate": "rule.task.spawned",
+        "object": "rule-c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7-1790859217219690971",
+        "source": "rule_engine",
+        "timestamp": "2026-10-01T12:53:37.220200596Z",
+        "confidence": 1
+      }
+    ],
+    "loops": [
+      {
+        "loop_id": "1213a97e-a48c-4bcf-a52d-5aba3c974464",
+        "task_id": "rule-c360.semteams-bootstrap-e2e-48f944.agentic-loop.agent.execution.fcb8d273-fb93-4cbc-8738-99b41a4b2427-1790859217018727638",
+        "state": "complete",
+        "role": "researcher-research-synthesize",
+        "iterations": 1,
+        "max_iterations": 8,
+        "outcome": "success",
+        "result": "{\"action\":\"emit\",\"reason\":\"Artifact rev 1 emitted. Three actors (MQTT broker, NATS server, constrained ARM device); two integration points (broker \u2192 edge); two task-shaped recommendations (when to choose which). Reviewer should approve and the wake-up coordinator can deliver the synthesised comparison directly.\"}"
+      },
+      {
+        "loop_id": "408bad32-d722-4282-9f11-3e8c0610ad5f",
+        "task_id": "rule-c360.semteams-bootstrap-e2e-48f944.agentic-loop.agent.execution.1213a97e-a48c-4bcf-a52d-5aba3c974464-1790859217111478179",
+        "state": "complete",
+        "role": "reviewer-research",
+        "max_iterations": 8,
+        "outcome": "success",
+        "result": "{\"action\":\"approved\",\"reason\":\"Checklist satisfied: three actors with role text, two integration points with direction, two decomposable task-shaped recommendations, all artifact fields well-formed. open_gaps carries the test_harness path (not applicable \u2014 informational research). Substrate untouched. Research arc terminates here \u2014 rule 07 will spawn the wake-up coordinator to deliver the answer.\"}"
+      },
+      {
+        "loop_id": "8a99070d-cac5-4ce7-a2ae-1043fc6386e7",
+        "task_id": "dispatch-055c407a806ec087f2598fc1f675614d352f9f279208ba084f4cebaa2ac14f5e",
+        "state": "complete",
+        "role": "coordinator",
+        "max_iterations": 8,
+        "user_id": "ui-anonymous",
+        "channel_type": "http",
+        "outcome": "success",
+        "result": "{\"action\":\"research\",\"reason\":\"The user is asking for a comparison of MQTT vs NATS for IoT edge deployments \u2014 a comparison-of-named-products question that benefits from evidence gathering rather than a small-talk reply. Routing to the research category so the research-pack arc can scope the synthesis.\"}"
+      },
+      {
+        "loop_id": "9c57d4c4-4e0e-43fb-90e4-1857f809884f",
+        "task_id": "rule-c360.semteams-bootstrap-e2e-48f944.agentic-loop.agent.execution.fcb8d273-fb93-4cbc-8738-99b41a4b2427-1790859216950781679",
+        "state": "complete",
+        "role": "researcher-research-gather",
+        "max_iterations": 8,
+        "outcome": "success",
+        "result": "{\"action\":\"synthesize\",\"reason\":\"Subtopic: MQTT vs NATS \u2014 latency + memory footprint on constrained ARM (Raspberry Pi class) edge devices\\n\\nEvidence gathered: MQTT (Mosquitto) runs under 2MB resident on Raspberry Pi-class hardware; QoS 0 publishes complete in well under a millisecond. NATS server binary ~10MB, runtime ~30MB resident, but offers subject-hierarchy pub/sub PLUS request-reply in one broker; JetStream adds persistence. Forwarding to SYNTHESIZE to compose the comparison \u2014 actors (MQTT brokers, NATS servers, ARM hardware class) and integration points (broker \u2192 edge sensor).\"}"
+      },
+      {
+        "loop_id": "ae5f18d2-de69-4383-b792-cb6f7be48056",
+        "task_id": "rule-c360.semteams-bootstrap-e2e-48f944.agentic-loop.agent.execution.408bad32-d722-4282-9f11-3e8c0610ad5f-1790859217153785513",
+        "state": "complete",
+        "role": "coordinator",
+        "max_iterations": 8,
+        "outcome": "success",
+        "result": "{\"action\":\"respond_direct\",\"reason\":\"For IoT edge deployments on constrained ARM devices, MQTT has the edge on raw latency and footprint (Mosquitto runs under 2MB resident; QoS 0 publishes complete in well under a millisecond on Raspberry Pi-class hardware). NATS wins when you need both pub/sub AND request-reply in the same broker \u2014 its subject hierarchy is more expressive and JetStream gives you persistence \u2014 but it costs ~30MB of resident memory which matters on the tightest devices. Pick MQTT if pub/sub alone is sufficient and memory is tight; pick NATS when the workload needs request-reply or you have \\u003e256MB RAM to spare. The full research artifact (actors, integration points, decision criteria) is captured in the chain entity for follow-up.\"}"
+      },
+      {
+        "loop_id": "c4830b3c-b74e-47d3-9f06-49956c2b8128",
+        "task_id": "rule-c360.semteams-bootstrap-e2e-48f944.chain.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7-1790859217219690971",
+        "state": "complete",
+        "role": "ops-chain-observer",
+        "max_iterations": 8,
+        "outcome": "success",
+        "result": "{\"action\":\"observed\",\"reason\":\"Read the run entity and the coordinator loop result. Run reached its terminal phase with no operator-actionable pattern; emitting no findings.\"}"
+      },
+      {
+        "loop_id": "fcb8d273-fb93-4cbc-8738-99b41a4b2427",
+        "task_id": "rule-c360.semteams-bootstrap-e2e-48f944.agentic-loop.agent.execution.8a99070d-cac5-4ce7-a2ae-1043fc6386e7-1790859216379901179",
+        "state": "complete",
+        "role": "researcher-research-plan",
+        "iterations": 1,
+        "max_iterations": 8,
+        "outcome": "success",
+        "result": "{\"action\":\"gather\",\"reason\":\"Plan emitted. One gather probe covers the comparison's load-bearing axes (latency + footprint on constrained ARM); SYNTHESIZE will compose the answer the wake-up coordinator delivers to the user.\",\"subtopics\":[\"MQTT vs NATS \u2014 latency + memory footprint on constrained ARM (Raspberry Pi class) edge devices\"]}"
+      }
+    ],
+    "results": [
+      {
+        "sequence": 139,
+        "timestamp": "2026-10-01T12:53:37.173154638Z",
+        "subject": "user.response.http.http-1790859216354298179",
+        "message_type": "agentic.user_response.v1",
+        "trace_id": "87f8447ca782d269d8f3a9c07ba09191",
+        "span_id": "fe3b7ccd984ac9e7",
+        "summary": "Type: agentic.user_response.v1, Payload: *agentic.UserResponse",
+        "raw_data": {
+          "id": "91d77e53-73dc-4aa6-949a-502cc27acda9",
+          "type": {
+            "domain": "agentic",
+            "category": "user_response",
+            "version": "v1"
+          },
+          "payload": {
+            "response_id": "terminal-user-response:fb42c3a9-30d8-4bff-a9ef-5d0db12bb5d8",
+            "channel_type": "http",
+            "channel_id": "http-1790859216354298179",
+            "user_id": "ui-anonymous",
+            "in_reply_to": "ae5f18d2-de69-4383-b792-cb6f7be48056",
+            "type": "result",
+            "content": "For IoT edge deployments on constrained ARM devices, MQTT has the edge on raw latency and footprint (Mosquitto runs under 2MB resident; QoS 0 publishes complete in well under a millisecond on Raspberry Pi-class hardware). NATS wins when you need both pub/sub AND request-reply in the same broker \u2014 its subject hierarchy is more expressive and JetStream gives you persistence \u2014 but it costs ~30MB of resident memory which matters on the tightest devices. Pick MQTT if pub/sub alone is sufficient and memory is tight; pick NATS when the workload needs request-reply or you have >256MB RAM to spare. The full research artifact (actors, integration points, decision criteria) is captured in the chain entity for follow-up.",
+            "timestamp": "2026-10-01T12:53:37.170381721Z"
+          },
+          "meta": {
+            "created_at": 1790859217172,
+            "received_at": 1790859217172,
+            "source": "agentic-dispatch"
+          }
+        }
+      }
+    ]
+  }
+}

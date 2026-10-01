@@ -59,7 +59,7 @@ const dataViewContextWithSelection: ChatPageContext = {
   page: "data-view",
   flowId: "flow-789",
   entityCount: 500,
-  selectedEntityId: "c360.ops.robotics.gcs.drone.001",
+  selectedEntityId: "c360.ops.gcs.robotics.drone.001",
   filters: {},
 };
 
@@ -67,7 +67,7 @@ const chipEntity: ContextChip = {
   id: "chip-1",
   kind: "entity",
   label: "drone-001",
-  value: "c360.ops.robotics.gcs.drone.001",
+  value: "c360.ops.gcs.robotics.drone.001",
 };
 
 const chipComponent: ContextChip = {
@@ -184,13 +184,13 @@ describe("buildSystemPrompt — data-view context", () => {
       dataViewContextWithSelection,
       [],
     );
-    expect(prompt).toContain("c360.ops.robotics.gcs.drone.001");
+    expect(prompt).toContain("c360.ops.gcs.robotics.drone.001");
   });
 
   it("does NOT mention selected entity when selectedEntityId is null", () => {
     const prompt = buildSystemPrompt("general", dataViewContext, []);
     // No entity ID should appear from selection
-    expect(prompt).not.toContain("c360.ops.robotics.gcs.drone.001");
+    expect(prompt).not.toContain("c360.ops.gcs.robotics.drone.001");
   });
 
   it("does NOT include flow-builder specific content when on data-view", () => {
@@ -216,7 +216,7 @@ describe("buildSystemPrompt — context chips", () => {
     const prompt = buildSystemPrompt("general", flowBuilderContext, [
       chipEntity,
     ]);
-    expect(prompt).toContain("c360.ops.robotics.gcs.drone.001");
+    expect(prompt).toContain("c360.ops.gcs.robotics.drone.001");
   });
 
   it("includes chip kind when chips are provided", () => {

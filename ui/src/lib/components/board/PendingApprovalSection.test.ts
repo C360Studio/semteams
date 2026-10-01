@@ -9,6 +9,7 @@ vi.mock("$lib/services/agentApi", () => ({
     submitApproval: vi.fn().mockResolvedValue({
       loop_id: "loop_001",
       decision: "approve",
+      execution_id: "execution-pending",
       accepted: true,
       timestamp: "2026-04-29T11:00:00Z",
     }),
@@ -27,8 +28,11 @@ vi.mock("$lib/services/agentApi", () => ({
 
 import { agentApi, AgentApiError } from "$lib/services/agentApi";
 
-function makePending(overrides: Partial<PendingApproval> = {}): PendingApproval {
+function makePending(
+  overrides: Partial<PendingApproval> = {},
+): PendingApproval {
   return {
+    execution_id: "execution-pending",
     call_id: "call-default",
     tool_name: "create_rule",
     arguments: { name: "high-temperature-alert", threshold: 100 },
@@ -74,7 +78,9 @@ describe("PendingApprovalSection", () => {
         },
       });
 
-      expect(screen.getByTestId("approval-args-display")).toHaveTextContent("{}");
+      expect(screen.getByTestId("approval-args-display")).toHaveTextContent(
+        "{}",
+      );
     });
 
     it("approve and reject buttons advertise the tool name in aria-label", () => {
@@ -141,6 +147,7 @@ describe("PendingApprovalSection", () => {
 
       expect(agentApi.submitApproval).toHaveBeenCalledWith("loop_xyz", {
         decision: "approve",
+        execution_id: "execution-pending",
       });
     });
 
@@ -154,6 +161,7 @@ describe("PendingApprovalSection", () => {
 
       expect(agentApi.submitApproval).toHaveBeenCalledWith("loop_xyz", {
         decision: "reject",
+        execution_id: "execution-pending",
       });
     });
 
@@ -171,9 +179,19 @@ describe("PendingApprovalSection", () => {
 
       expect(agentApi.submitApproval).toHaveBeenCalledWith("loop_xyz", {
         decision: "approve",
+        execution_id: "execution-pending",
         reason: "looks safe",
       });
     });
+  });
+
+  it("discards edits when a different pending execution arrives", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(PendingApprovalSection, { props: { loopId: "loop_001", pendingApproval: makePending({ execution_id: "execution-a" }) } });
+    await user.click(screen.getByTestId("approval-edit-args"));
+    await rerender({ loopId: "loop_001", pendingApproval: makePending({ execution_id: "execution-b", arguments: { name: "different-request" } }) });
+    expect(screen.queryByTestId("approval-submit-modify")).not.toBeInTheDocument();
+    expect(agentApi.submitApproval).not.toHaveBeenCalled();
   });
 
   describe("modify path", () => {
@@ -183,10 +201,14 @@ describe("PendingApprovalSection", () => {
         props: { loopId: "loop_xyz", pendingApproval: makePending() },
       });
 
-      expect(screen.queryByTestId("approval-args-editor")).not.toBeInTheDocument();
+      expect(
+        screen.queryByTestId("approval-args-editor"),
+      ).not.toBeInTheDocument();
       await user.click(screen.getByTestId("approval-edit-args"));
 
-      const editor = screen.getByTestId("approval-args-editor") as HTMLTextAreaElement;
+      const editor = screen.getByTestId(
+        "approval-args-editor",
+      ) as HTMLTextAreaElement;
       expect(editor).toBeInTheDocument();
       expect(editor.value).toContain("high-temperature-alert");
       // Approve / Reject collapse while editing.
@@ -209,6 +231,7 @@ describe("PendingApprovalSection", () => {
 
       expect(agentApi.submitApproval).toHaveBeenCalledWith("loop_xyz", {
         decision: "modify",
+        execution_id: "execution-pending",
         modified_arguments: { name: "narrowed" },
       });
     });
@@ -260,7 +283,9 @@ describe("PendingApprovalSection", () => {
       await user.click(screen.getByTestId("approval-edit-args"));
       await user.click(screen.getByTestId("approval-cancel-edit"));
 
-      expect(screen.queryByTestId("approval-args-editor")).not.toBeInTheDocument();
+      expect(
+        screen.queryByTestId("approval-args-editor"),
+      ).not.toBeInTheDocument();
       expect(screen.getByTestId("approval-approve")).toBeInTheDocument();
       expect(screen.getByTestId("approval-reject")).toBeInTheDocument();
       expect(agentApi.submitApproval).not.toHaveBeenCalled();
@@ -299,4 +324,21 @@ describe("PendingApprovalSection", () => {
       expect(err).toHaveTextContent(/nats publish failed/);
     });
   });
+});
+
+it.each(["resolve", "reject"])("ignores execution A %s after B replaces it", async (settlement) => {
+  let resolve!: (value: Awaited<ReturnType<typeof agentApi.submitApproval>>) => void;
+  let reject!: (reason: Error) => void;
+  vi.mocked(agentApi.submitApproval).mockReturnValueOnce(new Promise((yes, no) => { resolve = yes; reject = no; }));
+  const user = userEvent.setup();
+  const { rerender } = render(PendingApprovalSection, { props: { loopId: "loop-a", pendingApproval: makePending() } });
+  await user.click(screen.getByTestId("approval-approve"));
+  await rerender({ loopId: "loop-a", pendingApproval: makePending({ execution_id: "execution-B" }) });
+  expect(screen.getByTestId("approval-reason-input")).toBeEnabled();
+  await user.type(screen.getByTestId("approval-reason-input"), "Reviewing B");
+  if (settlement === "resolve") resolve({ accepted: true, loop_id: "loop-a", decision: "approve", timestamp: "2026-10-01T12:00:00Z" });
+  else reject(new Error("A failed"));
+  await new Promise<void>((done) => queueMicrotask(done));
+  expect(screen.getByTestId("approval-reason-input")).toHaveValue("Reviewing B");
+  expect(screen.queryByText("A failed")).not.toBeInTheDocument();
 });

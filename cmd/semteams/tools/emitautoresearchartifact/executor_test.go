@@ -76,7 +76,7 @@ func TestExecutor_HappyPath(t *testing.T) {
 		t.Fatalf("unexpected error: %s", res.Error)
 	}
 
-	wantSubject := "c360.ops.agent.agentic-loop.execution.synth-1"
+	wantSubject := "c360.ops.agentic-loop.agent.execution.synth-1"
 	for _, tr := range pub.triples {
 		if tr.Subject != wantSubject {
 			t.Errorf("subject = %q, want %q", tr.Subject, wantSubject)

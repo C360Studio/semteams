@@ -6,9 +6,9 @@ import type { GlobalSearchResult } from "$lib/types/graph";
 // Fixture helpers
 // ---------------------------------------------------------------------------
 
-const DRONE_001 = "c360.ops.robotics.gcs.drone.001";
-const DRONE_002 = "c360.ops.robotics.gcs.drone.002";
-const FLEET_ALPHA = "c360.ops.robotics.gcs.fleet.alpha";
+const DRONE_001 = "c360.ops.gcs.robotics.drone.001";
+const DRONE_002 = "c360.ops.gcs.robotics.drone.002";
+const FLEET_ALPHA = "c360.ops.gcs.robotics.fleet.alpha";
 
 function makeResult(
   overrides: Partial<GlobalSearchResult> = {},

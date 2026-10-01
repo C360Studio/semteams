@@ -16,7 +16,7 @@ function makeAttachment(
     query: "drones",
     results: [
       {
-        id: "c360.ops.robotics.gcs.drone.001",
+        id: "c360.ops.gcs.robotics.drone.001",
         label: "001",
         type: "drone",
         domain: "robotics",
@@ -37,7 +37,7 @@ describe("SearchResultSummary.attack — XSS in result fields", () => {
     const attachment = makeAttachment({
       results: [
         {
-          id: "c360.ops.robotics.gcs.drone.001",
+          id: "c360.ops.gcs.robotics.drone.001",
           label: xssLabel,
           type: "drone",
           domain: "robotics",
@@ -72,7 +72,7 @@ describe("SearchResultSummary.attack — XSS in result fields", () => {
     const attachment = makeAttachment({
       results: [
         {
-          id: "c360.ops.robotics.gcs.drone.001",
+          id: "c360.ops.gcs.robotics.drone.001",
           label: "drone",
           type: '<iframe src="evil.com">',
           domain: "robotics",
@@ -89,7 +89,7 @@ describe("SearchResultSummary.attack — XSS in result fields", () => {
     const attachment = makeAttachment({
       results: [
         {
-          id: "c360.ops.robotics.gcs.drone.001",
+          id: "c360.ops.gcs.robotics.drone.001",
           label: "drone",
           type: "drone",
           domain: '"><script>evil()</script>',
@@ -110,7 +110,7 @@ describe("SearchResultSummary.attack — XSS in result fields", () => {
 describe("SearchResultSummary.attack — very many results", () => {
   it("renders 1000 results without crashing", () => {
     const results = Array.from({ length: 1_000 }, (_, i) => ({
-      id: `c360.ops.robotics.gcs.drone.${String(i).padStart(4, "0")}`,
+      id: `c360.ops.gcs.robotics.drone.${String(i).padStart(4, "0")}`,
       label: String(i),
       type: "drone",
       domain: "robotics",
@@ -126,7 +126,7 @@ describe("SearchResultSummary.attack — very many results", () => {
     const attachment = makeAttachment({
       results: [
         {
-          id: "c360.ops.robotics.gcs.drone.001",
+          id: "c360.ops.gcs.robotics.drone.001",
           label: longLabel,
           type: "drone",
           domain: "robotics",
@@ -150,7 +150,7 @@ describe("SearchResultSummary.attack — missing fields on result objects", () =
       query: "drones",
       results: [
         {
-          id: "c360.ops.robotics.gcs.drone.001",
+          id: "c360.ops.gcs.robotics.drone.001",
           label: "001",
           type: "drone",
           domain: "",
@@ -167,7 +167,7 @@ describe("SearchResultSummary.attack — missing fields on result objects", () =
     const attachment = makeAttachment({
       results: [
         {
-          id: "c360.ops.robotics.gcs.drone.001",
+          id: "c360.ops.gcs.robotics.drone.001",
           label: "",
           type: "",
           domain: "",
@@ -184,7 +184,7 @@ describe("SearchResultSummary.attack — missing fields on result objects", () =
     const attachment: SearchResultAttachment = {
       kind: "search-result",
       query: "drones",
-      entityIds: ["c360.ops.robotics.gcs.drone.001"],
+      entityIds: ["c360.ops.gcs.robotics.drone.001"],
       count: 1,
     };
     expect(() =>
@@ -212,7 +212,7 @@ describe("SearchResultSummary.attack — safe when onViewEntity missing", () => 
     render(SearchResultSummary, { props: { attachment } });
 
     const item = screen.getByTestId(
-      "search-result-item-c360.ops.robotics.gcs.drone.001",
+      "search-result-item-c360.ops.gcs.robotics.drone.001",
     );
     await expect(user.click(item)).resolves.not.toThrow();
   });
@@ -225,7 +225,7 @@ describe("SearchResultSummary.attack — safe when onViewEntity missing", () => 
     });
 
     const item = screen.getByTestId(
-      "search-result-item-c360.ops.robotics.gcs.drone.001",
+      "search-result-item-c360.ops.gcs.robotics.drone.001",
     );
     await expect(user.click(item)).resolves.not.toThrow();
   });
@@ -243,7 +243,7 @@ describe("SearchResultSummary.attack — rapid clicks", () => {
     render(SearchResultSummary, { props: { attachment, onViewEntity } });
 
     const item = screen.getByTestId(
-      "search-result-item-c360.ops.robotics.gcs.drone.001",
+      "search-result-item-c360.ops.gcs.robotics.drone.001",
     );
     await user.click(item);
     await user.click(item);
@@ -251,7 +251,7 @@ describe("SearchResultSummary.attack — rapid clicks", () => {
 
     expect(onViewEntity).toHaveBeenCalledTimes(3);
     expect(onViewEntity).toHaveBeenCalledWith(
-      "c360.ops.robotics.gcs.drone.001",
+      "c360.ops.gcs.robotics.drone.001",
     );
   });
 });

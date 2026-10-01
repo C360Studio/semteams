@@ -29,8 +29,8 @@ describe("executeGraphSearch — returns SearchResultAttachment", () => {
     const ctx = makeContext(async () => ({
       globalSearch: {
         entities: [
-          { id: "c360.ops.robotics.gcs.drone.001", triples: [] },
-          { id: "c360.ops.robotics.gcs.drone.002", triples: [] },
+          { id: "c360.ops.gcs.robotics.drone.001", triples: [] },
+          { id: "c360.ops.gcs.robotics.drone.002", triples: [] },
         ],
         count: 2,
         duration_ms: 15,
@@ -66,8 +66,8 @@ describe("executeGraphSearch — returns SearchResultAttachment", () => {
     const ctx = makeContext(async () => ({
       globalSearch: {
         entities: [
-          { id: "c360.ops.robotics.gcs.drone.001", triples: [] },
-          { id: "c360.ops.robotics.gcs.drone.002", triples: [] },
+          { id: "c360.ops.gcs.robotics.drone.001", triples: [] },
+          { id: "c360.ops.gcs.robotics.drone.002", triples: [] },
         ],
         count: 2,
         duration_ms: 20,
@@ -88,7 +88,7 @@ describe("executeGraphSearch — returns SearchResultAttachment", () => {
     };
 
     expect(attachment.results).toHaveLength(2);
-    expect(attachment.results[0].id).toBe("c360.ops.robotics.gcs.drone.001");
+    expect(attachment.results[0].id).toBe("c360.ops.gcs.robotics.drone.001");
     // label is derived from the entity ID (instance part)
     expect(attachment.results[0].label).toBeTruthy();
     // type comes from the 5th ID segment
@@ -100,7 +100,7 @@ describe("executeGraphSearch — returns SearchResultAttachment", () => {
   it("attachment includes totalCount matching GraphQL count", async () => {
     const ctx = makeContext(async () => ({
       globalSearch: {
-        entities: [{ id: "c360.ops.robotics.gcs.drone.001", triples: [] }],
+        entities: [{ id: "c360.ops.gcs.robotics.drone.001", triples: [] }],
         count: 42,
         duration_ms: 10,
         community_summaries: [],
@@ -121,11 +121,11 @@ describe("executeGraphSearch — returns SearchResultAttachment", () => {
     const ctx = makeContext(async () => ({
       globalSearch: {
         entities: [
-          { id: "c360.ops.robotics.gcs.drone.001", triples: [] },
-          { id: "c360.ops.robotics.gcs.drone.002", triples: [] },
-          { id: "c360.ops.robotics.gcs.drone.003", triples: [] },
-          { id: "c360.ops.robotics.gcs.sensor.001", triples: [] },
-          { id: "c360.ops.robotics.gcs.sensor.002", triples: [] },
+          { id: "c360.ops.gcs.robotics.drone.001", triples: [] },
+          { id: "c360.ops.gcs.robotics.drone.002", triples: [] },
+          { id: "c360.ops.gcs.robotics.drone.003", triples: [] },
+          { id: "c360.ops.gcs.robotics.sensor.001", triples: [] },
+          { id: "c360.ops.gcs.robotics.sensor.002", triples: [] },
         ],
         count: 5,
         duration_ms: 30,
@@ -292,7 +292,7 @@ describe("executeGraphSearch — handles GraphQL error gracefully", () => {
 // ---------------------------------------------------------------------------
 
 describe("executeEntityLookup — returns EntityDetailAttachment", () => {
-  const entityId = "c360.ops.robotics.gcs.drone.001";
+  const entityId = "c360.ops.gcs.robotics.drone.001";
 
   it("returns attachment with kind='entity-detail'", async () => {
     const ctx = makeContext(async () => ({
@@ -436,7 +436,7 @@ describe("executeEntityLookup — entity not found", () => {
   });
 
   it("ErrorAttachment message mentions not found or entity id", async () => {
-    const missingId = "c360.ops.robotics.gcs.drone.missing";
+    const missingId = "c360.ops.gcs.robotics.drone.missing";
     const ctx = makeContext(async () => ({ entity: null }));
 
     const result = await executeEntityLookup({ entityId: missingId }, ctx);
@@ -458,7 +458,7 @@ describe("executeEntityLookup — handles GraphQL error gracefully", () => {
 
     const result = await executeEntityLookup(
       {
-        entityId: "c360.ops.robotics.gcs.drone.001",
+        entityId: "c360.ops.gcs.robotics.drone.001",
       },
       ctx,
     );
@@ -474,7 +474,7 @@ describe("executeEntityLookup — handles GraphQL error gracefully", () => {
 
     const result = await executeEntityLookup(
       {
-        entityId: "c360.ops.robotics.gcs.drone.001",
+        entityId: "c360.ops.gcs.robotics.drone.001",
       },
       ctx,
     );
@@ -489,7 +489,7 @@ describe("executeEntityLookup — handles GraphQL error gracefully", () => {
     });
 
     await expect(
-      executeEntityLookup({ entityId: "c360.ops.robotics.gcs.drone.001" }, ctx),
+      executeEntityLookup({ entityId: "c360.ops.gcs.robotics.drone.001" }, ctx),
     ).resolves.toBeDefined();
   });
 });
@@ -501,17 +501,17 @@ describe("executeEntityLookup — handles GraphQL error gracefully", () => {
 describe("executeGraphSearch — table-driven entity ID parsing", () => {
   const entityCases = [
     {
-      id: "c360.ops.robotics.gcs.drone.alpha",
+      id: "c360.ops.gcs.robotics.drone.alpha",
       expectedType: "drone",
       expectedDomain: "robotics",
     },
     {
-      id: "c360.ops.maritime.coastal.vessel.beta",
+      id: "c360.ops.coastal.maritime.vessel.beta",
       expectedType: "vessel",
       expectedDomain: "maritime",
     },
     {
-      id: "c360.sec.border.surveillance.sensor.001",
+      id: "c360.sec.surveillance.border.sensor.001",
       expectedType: "sensor",
       expectedDomain: "border",
     },

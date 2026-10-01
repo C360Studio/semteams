@@ -1,0 +1,185 @@
+[
+  {
+    "name": "run-approval-boundary",
+    "fixture": "research-mvp.yaml",
+    "spec": "run-approval-boundary.spec.ts",
+    "config": "e2e-flow-bootstrap-run-approval-boundary.gen.json"
+  },
+  {
+    "name": "research-mvp",
+    "fixture": "research-mvp.yaml",
+    "spec": "research-mvp.spec.ts",
+    "config": "e2e-flow-bootstrap.json"
+  },
+  {
+    "name": "autoresearch",
+    "fixture": "autoresearch.yaml",
+    "spec": "autoresearch.spec.ts",
+    "config": "e2e-flow-bootstrap.json"
+  },
+  {
+    "name": "autoresearch-guardrails",
+    "fixture": "autoresearch-guardrails.yaml",
+    "spec": "autoresearch-guardrails.spec.ts",
+    "config": "e2e-flow-bootstrap.json"
+  },
+  {
+    "name": "coordinator-routing-matrix",
+    "fixture": "coordinator-routing-matrix.yaml",
+    "spec": "coordinator-routing-matrix.spec.ts",
+    "config": "e2e-flow-bootstrap-routing-only.gen.json"
+  },
+  {
+    "name": "coordinator-readiness-gate",
+    "fixture": "coordinator-readiness-gate.yaml",
+    "spec": "coordinator-readiness-gate.spec.ts",
+    "config": "e2e-flow-bootstrap.json"
+  },
+  {
+    "name": "coordinator-team-spawn",
+    "fixture": "coordinator-team-spawn.yaml",
+    "spec": "coordinator-team-spawn.spec.ts",
+    "config": "e2e-flow-bootstrap-team-spawn.gen.json"
+  },
+  {
+    "name": "sandbox-mvp",
+    "fixture": "sandbox-mvp.yaml",
+    "spec": "sandbox-mvp.spec.ts",
+    "config": "e2e-flow-bootstrap.json"
+  },
+  {
+    "name": "ops-agent",
+    "fixture": "ops-run-terminal.yaml",
+    "spec": "ops-run-terminal.spec.ts",
+    "config": "e2e-flow-bootstrap.json"
+  },
+  {
+    "name": "real-time-activity-stream",
+    "fixture": "real-time-activity-stream.yaml",
+    "spec": "real-time-activity-stream.spec.ts",
+    "config": "e2e-flow-bootstrap.json"
+  },
+  {
+    "name": "task-story-trace",
+    "fixture": "research-mvp.yaml",
+    "spec": "task-story-trace.spec.ts",
+    "config": "e2e-flow-bootstrap.json"
+  },
+  {
+    "name": "action-chips",
+    "fixture": "research-mvp.yaml",
+    "spec": "action-chips-personas.spec.ts",
+    "config": "e2e-flow-bootstrap.json"
+  },
+  {
+    "name": "task-title-aliases",
+    "fixture": "research-mvp.yaml",
+    "spec": "task-title-aliases.spec.ts",
+    "config": "e2e-flow-bootstrap.json"
+  },
+  {
+    "name": "admin-flows-inventory",
+    "fixture": "research-mvp.yaml",
+    "spec": "admin-flows-inventory.spec.ts",
+    "config": "e2e-flow-bootstrap.json"
+  },
+  {
+    "name": "chain-drill-in",
+    "fixture": "research-mvp.yaml",
+    "spec": "chain-drill-in.spec.ts",
+    "config": "e2e-flow-bootstrap.json"
+  },
+  {
+    "name": "artifact-context-handoff",
+    "fixture": "research-mvp.yaml",
+    "spec": "artifact-context-handoff.spec.ts",
+    "config": "e2e-flow-bootstrap.json"
+  },
+  {
+    "name": "run-failed",
+    "fixture": "run-failed.yaml",
+    "spec": "run-failed.spec.ts",
+    "config": "e2e-flow-bootstrap.json"
+  },
+  {
+    "name": "run-failed-coordinator",
+    "fixture": "run-failed-coordinator.yaml",
+    "spec": "run-failed-coordinator.spec.ts",
+    "config": "e2e-flow-bootstrap.json"
+  },
+  {
+    "name": "run-failed-coordinator-inherit",
+    "fixture": "run-failed-coordinator-inherit.yaml",
+    "spec": "run-failed-coordinator-inherit.spec.ts",
+    "config": "e2e-flow-bootstrap.json"
+  },
+  {
+    "name": "ask-user-pause",
+    "fixture": "ask-user-pause.yaml",
+    "spec": "ask-user-pause.spec.ts",
+    "config": "e2e-flow-bootstrap.json"
+  },
+  {
+    "name": "clarification-resume",
+    "fixture": "clarification-resume.yaml",
+    "spec": "clarification-resume.spec.ts",
+    "config": "e2e-flow-bootstrap.json"
+  },
+  {
+    "name": "clarification-autonomous",
+    "fixture": "clarification-autonomous.yaml",
+    "spec": "clarification-autonomous.spec.ts",
+    "config": "e2e-flow-bootstrap-autonomous.gen.json"
+  },
+  {
+    "name": "tool-approval-gate",
+    "fixture": "tool-approval-gate.yaml",
+    "spec": "tool-approval-gate.spec.ts",
+    "config": "e2e-flow-bootstrap.json"
+  },
+  {
+    "name": "approval-pause",
+    "fixture": "approval-pause.yaml",
+    "spec": "approval-pause.spec.ts",
+    "config": "e2e-flow-bootstrap.json"
+  },
+  {
+    "name": "approval-resume",
+    "fixture": "approval-resume.yaml",
+    "spec": "approval-resume.spec.ts",
+    "config": "e2e-flow-bootstrap.json"
+  },
+  {
+    "name": "clarification-resume-ui",
+    "fixture": "clarification-resume.yaml",
+    "spec": "clarification-resume-ui.spec.ts",
+    "config": "e2e-flow-bootstrap.json"
+  },
+  {
+    "name": "approval-boundary-approve",
+    "fixture": "sandbox-mvp.yaml",
+    "spec": "approval-boundary.spec.ts",
+    "config": "e2e-flow-bootstrap-approval-boundary.gen.json",
+    "action": "approve"
+  },
+  {
+    "name": "approval-boundary-reject",
+    "fixture": "sandbox-mvp.yaml",
+    "spec": "approval-boundary.spec.ts",
+    "config": "e2e-flow-bootstrap-approval-boundary.gen.json",
+    "action": "reject"
+  },
+  {
+    "name": "approval-boundary-cancel",
+    "fixture": "sandbox-mvp.yaml",
+    "spec": "approval-boundary.spec.ts",
+    "config": "e2e-flow-bootstrap-approval-boundary.gen.json",
+    "action": "cancel"
+  },
+  {
+    "name": "research-fanout",
+    "fixture": "research-fanout.yaml",
+    "spec": "research-fanout.spec.ts",
+    "config": "e2e-flow-bootstrap.json"
+  }
+]
