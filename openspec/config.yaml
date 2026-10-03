@@ -3,10 +3,12 @@ schema: spec-driven
 # Concise context shown during artifact creation. The human-readable source is
 # openspec/project.md; CLAUDE.md and AGENTS.md own the shared work rituals.
 context: |
-  SemTeams is a configurable multi-agent product harness on SemStreams
+  SemTeams is an always-on program manager currently on frozen SemStreams
   v1.0.0-beta.162.0.20260930150212-8b99efe9c66a (Go 1.26.3; Svelte 5/SvelteKit 2/TypeScript; NATS
-  JetStream; Task runner). It owns product composition and semantics, not
-  framework processors or contracts. Read openspec/project.md before scope.
+  JetStream; Task runner). ADR-061 assigns target agent-runtime ownership to
+  SemTeams and shared substrate/generic durability to SemEngine. Extraction,
+  engine adoption and SemDev pack activation are not shipped. Read
+  openspec/project.md before scope; do not duplicate planned engine durability.
 
   Live product categories are research and autoresearch. Coordinator,
   agent-run, and ops are support packs. The create-change,
@@ -14,11 +16,19 @@ context: |
   unwired under ADR-058 pending canonical-predicate and current graph-mutation
   re-authoring. Do not describe them as current live demo routes.
 
-  Frozen migration PR #281 requires fresh isolated NATS/graph state; no
-  retained-state conversion or production wipe is authorized. Autoresearch
-  final delivery remains blocked. Evidence-body rendering remains limited
-  by #261; Program Pulse is a target. SemSource dogfooding is held until
-  ready; SemEngine adoption needs its own approved consumer contract.
+  Frozen migration PR #281 landed with 24 active mock browser passes, five
+  explicit skips and the autoresearch delivery repair. Fresh isolated
+  NATS/graph state is required; no retained-state conversion or production
+  wipe is authorized. Evidence-body rendering remains limited by #261;
+  Program Pulse is a target. SemSource dogfooding is held until ready;
+  SemEngine adoption needs its own approved consumer contract.
+
+  The future development pack preserves issue -> OpenSpec -> implementation
+  -> verification -> PR, harness outcomes and clean-room verification on one
+  shared runtime. Observable-work identity, revisions, decisions, evidence,
+  controls and current-state views are design commitments, not shipped APIs.
+  Explicit registration preserves the complete frozen catalog; availability
+  does not activate a component or pack.
 
   Repository CI runs unconditional Go, UI, and Governance/OpenSpec jobs for
   pull requests to main and reports one CI Status Check aggregate. Required
@@ -41,4 +51,4 @@ rules:
   spec:
     - Describe accepted behavior verified against code and current wiring, not aspirations.
     - Use Requirement plus GIVEN/WHEN/THEN scenarios and name approval or fail-closed boundaries.
-    - Keep framework mechanics upstream unless SemTeams composition changes their product behavior.
+    - Follow ADR-061 ownership; keep generic substrate mechanics in SemEngine and distinguish future runtime contracts from implemented behavior.

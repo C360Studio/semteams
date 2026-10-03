@@ -1,0 +1,205 @@
+Captured command output; tabs expanded to spaces for repository whitespace checks.
+
+=== baseline-lint ===
+task: [lint:default] go vet ./...
+task: [lint:default] unformatted=$(gofmt -l cmd test)
+if [ -n "$unformatted" ]; then
+  echo "The following Go files need formatting:"
+  echo "$unformatted"
+  exit 1
+fi
+
+task: [lint:default] revive -config revive.toml -formatter friendly ./...
+  ⚠  https://revive.run/r#unused-parameter  parameter 'loopID' seems to be unused, consider removing or renaming it as _
+  cmd/semteams/commands/implementspec/command.go:128:2
+
+  ⚠  https://revive.run/r#redefines-builtin-id  redefinition of the built-in function copy
+  cmd/semteams/tools/analyzeproof/analyzer.go:737:4
+
+  ⚠  https://revive.run/r#function-length  maximum number of statements per function exceeded; max 50 but got 77
+  cmd/semteams/tools/analyzeproof/analyzer.go:177:1
+
+  ⚠  https://revive.run/r#function-length  maximum number of statements per function exceeded; max 50 but got 52
+  cmd/semteams/approvalpause/projection.go:65:1
+
+  ⚠  https://revive.run/r#package-comments  should have a package comment
+  docs/sponsor-packages/dev-via-test-mavlink-decode-2026-06-04/evidence/ralph-workspace/main.go:1:1
+
+  ⚠  https://revive.run/r#function-length  maximum number of statements per function exceeded; max 50 but got 60
+  cmd/semteams/main.go:69:1
+
+⚠ 6 problems (0 errors, 6 warnings)
+
+Warnings:
+  3  function-length
+  1  unused-parameter
+  1  redefines-builtin-id
+  1  package-comments
+
+
+
+=== final-lint ===
+task: [lint:default] go vet ./...
+task: [lint:default] unformatted=$(gofmt -l cmd internal test)
+if [ -n "$unformatted" ]; then
+  echo "The following Go files need formatting:"
+  echo "$unformatted"
+  exit 1
+fi
+
+task: [lint:default] revive -config revive.toml -formatter friendly ./...
+  ⚠  https://revive.run/r#unused-parameter  parameter 'loopID' seems to be unused, consider removing or renaming it as _
+  cmd/semteams/commands/implementspec/command.go:128:2
+
+  ⚠  https://revive.run/r#redefines-builtin-id  redefinition of the built-in function copy
+  cmd/semteams/tools/analyzeproof/analyzer.go:737:4
+
+  ⚠  https://revive.run/r#function-length  maximum number of statements per function exceeded; max 50 but got 77
+  cmd/semteams/tools/analyzeproof/analyzer.go:177:1
+
+  ⚠  https://revive.run/r#function-length  maximum number of statements per function exceeded; max 50 but got 52
+  cmd/semteams/approvalpause/projection.go:65:1
+
+  ⚠  https://revive.run/r#package-comments  should have a package comment
+  docs/sponsor-packages/dev-via-test-mavlink-decode-2026-06-04/evidence/ralph-workspace/main.go:1:1
+
+  ⚠  https://revive.run/r#function-length  maximum number of statements per function exceeded; max 50 but got 60
+  cmd/semteams/main.go:68:1
+
+⚠ 6 problems (0 errors, 6 warnings)
+
+Warnings:
+  3  function-length
+  1  package-comments
+  1  unused-parameter
+  1  redefines-builtin-id
+
+
+
+=== source-snapshot-red ===
+F
+======================================================================
+FAIL: test_internal_runtime_change_invalidates_source_identity (test_qualify_migration_browser.SourceSnapshotTest.test_internal_runtime_change_invalidates_source_identity)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/coby/.codex/worktrees/agent-runtime-foundation/semteams/scripts/test_qualify_migration_browser.py", line 25, in test_internal_runtime_change_invalidates_source_identity
+    self.assertNotEqual(runner.tree_sha(before), runner.tree_sha(after))
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: '51ccda1cee3cf1e0474783b41683e7eb460738dc97adde1411f7dfc1d2e0086b' == '51ccda1cee3cf1e0474783b41683e7eb460738dc97adde1411f7dfc1d2e0086b'
+
+----------------------------------------------------------------------
+Ran 1 test in 0.002s
+
+FAILED (failures=1)
+
+=== source-snapshot-green ===
+.
+----------------------------------------------------------------------
+Ran 1 test in 0.002s
+
+OK
+
+=== final-browser-runner-test ===
+task: [test:browser-runner] python3 -m unittest discover -s scripts -p test_qualify_migration_browser.py
+.
+----------------------------------------------------------------------
+Ran 1 test in 0.002s
+
+OK
+
+=== final-types ===
+
+> @c360/semteams-ui@0.0.1 generate-types:check
+> npm run generate-types && git diff --exit-code src/lib/types/api.generated.ts || (echo '⚠️  Generated types changed! Run npm run generate-types and commit.'; exit 1)
+
+
+> @c360/semteams-ui@0.0.1 generate-types
+> openapi-typescript $OPENAPI_SPEC_PATH --output src/lib/types/api.generated.ts
+
+✨ openapi-typescript 7.10.1
+file:///Users/coby/.codex/worktrees/agent-runtime-foundation/semteams/ui/node_modules/openapi-typescript/dist/lib/redoc.mjs:10
+    throw new Error("Can\u2019t parse empty schema");
+          ^
+
+Error: Can’t parse empty schema
+    at parseSchema (file:///Users/coby/.codex/worktrees/agent-runtime-foundation/semteams/ui/node_modules/openapi-typescript/dist/lib/redoc.mjs:10:11)
+    at parseSchema (file:///Users/coby/.codex/worktrees/agent-runtime-foundation/semteams/ui/node_modules/openapi-typescript/dist/lib/redoc.mjs:31:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async validateAndBundle (file:///Users/coby/.codex/worktrees/agent-runtime-foundation/semteams/ui/node_modules/openapi-typescript/dist/lib/redoc.mjs:87:20)
+    at async openapiTS (file:///Users/coby/.codex/worktrees/agent-runtime-foundation/semteams/ui/node_modules/openapi-typescript/dist/index.mjs:40:18)
+    at async generateSchema (file:///Users/coby/.codex/worktrees/agent-runtime-foundation/semteams/ui/node_modules/openapi-typescript/bin/cli.js:133:5)
+    at async main (file:///Users/coby/.codex/worktrees/agent-runtime-foundation/semteams/ui/node_modules/openapi-typescript/bin/cli.js:229:20)
+
+Node.js v26.0.0
+⚠️  Generated types changed! Run npm run generate-types and commit.
+
+=== final-types-corrected ===
+
+> @c360/semteams-ui@0.0.1 generate-types:check
+> npm run generate-types && git diff --exit-code src/lib/types/api.generated.ts || (echo '⚠️  Generated types changed! Run npm run generate-types and commit.'; exit 1)
+
+
+> @c360/semteams-ui@0.0.1 generate-types
+> openapi-typescript $OPENAPI_SPEC_PATH --output src/lib/types/api.generated.ts
+
+✨ openapi-typescript 7.10.1
+🚀 ../specs/openapi.v3.yaml → src/lib/types/api.generated.ts [69.3ms]
+
+=== catalog omission mutations (restored) ===
+internal/runtimecatalog/components.go omission: exit 1
+--- FAIL: TestComponentsMatchFrozenCatalog (0.03s)
+    catalog_test.go:35: component metadata/schema/dependency drift (-frozen +product):
+          map[string]*component.Registration{
+            "agentic-dispatch":   &{Name: "agentic-dispatch", Type: "processor", Protocol: "jetstream", Domain: "agentic", ...},
+            "agentic-governance": &{Name: "agentic-governance", Type: "processor", Protocol: "agentic", Domain: "governance", ...},
+        -   "agentic-loop": &{
+        -       Name:        "agentic-loop",
+        -       Type:        "processor",
+        -       Protocol:    "nats",
+        -       Domain:      "agentic",
+        -       Description: "Orchestrates agentic loops with tool calls, state management, and trajectory tracking",
+        -       Version:     "1.0.0",
+        -       Schema: component.ConfigSchema{
+        -           Properties: map[string]component.PropertySchema{
+        -               "approval_timeout":     {...},
+        -               "consumer":             {...},
+        -               "consumer_name_suffix": {...},
+        -               "context":              {...},
+        -               ...
+        -           },
+        -           Required: []string{"max_iterations", "timeout"},
+        -       },
+        -       Ports:        ⟪0x0104f90670⟫,
+        -       Dependencies: []string{"model-registry"},
+        -   },
+            "agentic-model": &{Name: "agentic-model", Type: "processor", Protocol: "openai", Domain: "semantic", ...},
+            "agentic-tools": &{Name: "agentic-tools", Type: "processor", Protocol: "tools", Domain: "semantic", ...},
+            ... // 22 identical entries
+          }
+FAIL
+FAIL    github.com/c360studio/semteams/internal/runtimecatalog  0.406s
+FAIL
+
+internal/runtimecatalog/payloads.go omission: exit 1
+--- FAIL: TestPayloadsMatchFrozenCatalog (0.00s)
+    catalog_test.go:63: payload metadata/profile/projection-contract drift (-frozen +product):
+          map[string]*payloadregistry.Registration{
+            ... // 22 identical entries
+            "gateddag.stall.v1":     &{Domain: "gateddag", Category: "stall", Version: "v1", Description: "Gated-DAG stall (wedge) event", ...},
+            "governance.verdict.v1": &{Domain: "governance", Category: "verdict", Version: "v1", Description: "Governance deny/approve verdict audit event (ADR-039 / ADR-055 \xc2"..., ...},
+        -   "graph.hierarchy_container.v1": &{
+        -       Domain:          "graph",
+        -       Category:        "hierarchy_container",
+        -       Version:         "v1",
+        -       Description:     "Hierarchy container entity born by graph-ingest's structural inference (verbatim carrier)",
+        -       IndexingProfile: "control",
+        -   },
+            "lifecycle.harness.v1": &{Domain: "lifecycle", Category: "harness", Version: "v1", Description: "Lifecycle harness participant entity (verbatim carrier)", ...},
+            "storage.stored.v1":    &{Domain: "storage", Category: "stored", Version: "v1", Description: "Message with semantic data and storage reference", ...},
+          }
+--- FAIL: TestPayloadOwnersRoundTrip (0.00s)
+    --- FAIL: TestPayloadOwnersRoundTrip/graph.hierarchy_container.v1 (0.00s)
+        payloads_test.go:40: BaseMessage.UnmarshalJSON: payload type lookup failed: unregistered payload type: graph.hierarchy_container.v1
+FAIL
+FAIL    github.com/c360studio/semteams/internal/runtimecatalog  0.357s
+FAIL

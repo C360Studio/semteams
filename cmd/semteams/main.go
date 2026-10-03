@@ -19,11 +19,9 @@ import (
 	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/agentic/agentrun"
 	"github.com/c360studio/semstreams/component"
-	"github.com/c360studio/semstreams/componentregistry"
 	"github.com/c360studio/semstreams/config"
 	"github.com/c360studio/semstreams/metric"
 	"github.com/c360studio/semstreams/natsclient"
-	"github.com/c360studio/semstreams/payloadbuiltins"
 	"github.com/c360studio/semstreams/payloadregistry"
 	"github.com/c360studio/semstreams/persona"
 	"github.com/c360studio/semstreams/pkg/lifecycle"
@@ -39,6 +37,7 @@ import (
 	"github.com/c360studio/semteams/cmd/semteams/chainpause"
 	"github.com/c360studio/semteams/cmd/semteams/portresolver"
 	"github.com/c360studio/semteams/cmd/semteams/vocab"
+	"github.com/c360studio/semteams/internal/runtimecatalog"
 )
 
 // Build information constants
@@ -651,11 +650,11 @@ func extractPlatformMeta(cfg *config.Config) types.PlatformMeta {
 }
 
 // setupRegistriesAndManager creates registries and service manager.
-// All factories come from semstreams' componentregistry.Register.
+// The product catalog selects factories implemented by frozen SemStreams.
 func setupRegistriesAndManager(cfg *config.Config) (*component.Registry, *service.Manager, error) {
 	componentRegistry := component.NewRegistry()
 
-	if err := componentregistry.Register(componentRegistry); err != nil {
+	if err := runtimecatalog.RegisterComponents(componentRegistry); err != nil {
 		return nil, nil, fmt.Errorf("register framework components: %w", err)
 	}
 
@@ -741,17 +740,14 @@ func createServiceDependencies(
 	}
 }
 
-// buildPayloadRegistry constructs the shared payload registry, registering the
-// framework first-party builtins (agentic, message, dispatch, rule,
-// operating-model, github-webhook, objectstore) then the SemTeams-local product
-// payloads on top. Per beta.18 the registry is constructor-injected via
-// component.Dependencies.PayloadRegistry, so it must exist before services are
-// constructed. Extracted from run() to keep it under revive's function-length
-// threshold (same rationale as setupToolsAndPreprocessor). Mirrors upstream
-// cmd/semstreams/main.go's payload-registration block.
+// buildPayloadRegistry constructs the shared payload registry from the product
+// catalog's framework owners (message, agentic, gated-dag, objectstore,
+// governance, lifecycle and inference), then layers SemTeams-local payloads on
+// top. It must exist before services are constructed because it is injected via
+// component.Dependencies.PayloadRegistry.
 func buildPayloadRegistry() (*payloadregistry.Registry, error) {
 	reg := payloadregistry.New()
-	if err := payloadbuiltins.Register(reg); err != nil {
+	if err := runtimecatalog.RegisterPayloads(reg); err != nil {
 		return nil, fmt.Errorf("register builtin payloads: %w", err)
 	}
 	if err := registerProductPayloads(reg); err != nil {

@@ -128,7 +128,7 @@ const (
 )
 
 // registerProductPayloads registers all SemTeams-local payload types on top
-// of the framework's first-party payload set (payloadbuiltins.Register).
+// of the framework's first-party payload set (runtimecatalog.RegisterPayloads).
 // R3.1 (ADR-031): research.Artifact — revision-keyed researcher snapshot.
 // ADR-038 PR C Phase C2: devviaspec.Plan — planner output emitted by
 // emit_plan during the research arc (the wider dev-via-spec arc retired

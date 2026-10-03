@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/c360studio/semstreams/component"
-	"github.com/c360studio/semstreams/componentregistry"
+	"github.com/c360studio/semteams/internal/runtimecatalog"
 	"gopkg.in/yaml.v3"
 )
 
@@ -128,7 +128,7 @@ func TestOpenAPISpecContainsAllComponents(t *testing.T) {
 
 	// Initialize component registry
 	registry := component.NewRegistry()
-	if err := componentregistry.Register(registry); err != nil {
+	if err := runtimecatalog.RegisterComponents(registry); err != nil {
 		t.Fatalf("Failed to register components: %v", err)
 	}
 

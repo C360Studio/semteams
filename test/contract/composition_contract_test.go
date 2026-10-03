@@ -5,16 +5,16 @@ import (
 	"testing"
 
 	"github.com/c360studio/semstreams/component"
-	"github.com/c360studio/semstreams/componentregistry"
 	"github.com/c360studio/semstreams/composition"
 	"github.com/c360studio/semstreams/config"
+	"github.com/c360studio/semteams/internal/runtimecatalog"
 )
 
 // These are the two shipped compositions. The same declaration-based validator
 // gates boot, so an upstream port change is caught without starting production.
 func TestShippedBootstrapCompositions(t *testing.T) {
 	registry := component.NewRegistry()
-	if err := componentregistry.Register(registry); err != nil {
+	if err := runtimecatalog.RegisterComponents(registry); err != nil {
 		t.Fatal(err)
 	}
 	for _, path := range []string{"../../configs/flow-bootstrap.json", "../../configs/e2e-flow-bootstrap.json"} {

@@ -5,8 +5,9 @@ import (
 	"testing"
 
 	"github.com/c360studio/semstreams/message"
-	"github.com/c360studio/semstreams/payloadbuiltins"
+	"github.com/c360studio/semstreams/payloadregistry"
 	"github.com/c360studio/semstreams/pkg/types"
+	"github.com/c360studio/semteams/internal/runtimecatalog"
 )
 
 // schemaProvider matches message.Payload's Schema() method
@@ -18,7 +19,7 @@ type schemaProvider interface {
 // have Schema() methods that return values matching their registration.
 // This test catches mismatches that would cause deserialization failures.
 func TestSchemaRegistrationConsistency(t *testing.T) {
-	reg := payloadbuiltins.NewTestRegistry(t)
+	reg := newRuntimePayloadRegistry(t)
 	payloads := reg.List()
 	if len(payloads) == 0 {
 		t.Skip("No payloads registered")
@@ -58,7 +59,7 @@ func TestSchemaRegistrationConsistency(t *testing.T) {
 // have required fields. This is expected and correct behavior - the contract
 // enforcement prevents invalid messages from being serialized.
 func TestBaseMessageRoundTrip(t *testing.T) {
-	reg := payloadbuiltins.NewTestRegistry(t)
+	reg := newRuntimePayloadRegistry(t)
 	decoder := message.NewDecoder(reg)
 	payloads := reg.List()
 	if len(payloads) == 0 {
@@ -112,7 +113,7 @@ func TestBaseMessageRoundTrip(t *testing.T) {
 // TestPayloadValidation verifies that newly created payloads from factories
 // pass validation (or fail with expected errors for required fields).
 func TestPayloadValidation(t *testing.T) {
-	reg := payloadbuiltins.NewTestRegistry(t)
+	reg := newRuntimePayloadRegistry(t)
 	payloads := reg.List()
 	if len(payloads) == 0 {
 		t.Skip("No payloads registered")
@@ -140,7 +141,7 @@ func TestPayloadValidation(t *testing.T) {
 
 // TestPayloadMarshalJSON verifies that all registered payloads can marshal to JSON.
 func TestPayloadMarshalJSON(t *testing.T) {
-	reg := payloadbuiltins.NewTestRegistry(t)
+	reg := newRuntimePayloadRegistry(t)
 	payloads := reg.List()
 	if len(payloads) == 0 {
 		t.Skip("No payloads registered")
@@ -168,4 +169,13 @@ func TestPayloadMarshalJSON(t *testing.T) {
 			}
 		})
 	}
+}
+
+func newRuntimePayloadRegistry(t *testing.T) *payloadregistry.Registry {
+	t.Helper()
+	reg := payloadregistry.New()
+	if err := runtimecatalog.RegisterPayloads(reg); err != nil {
+		t.Fatalf("register runtime payloads: %v", err)
+	}
+	return reg
 }

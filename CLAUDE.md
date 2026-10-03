@@ -4,16 +4,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 # SemTeams Project Context
 
-SemTeams is an **always-on program manager for a configurable portfolio** built on the
-[semstreams](https://github.com/c360studio/semstreams) framework
-— the infrastructure that wraps an LLM with tools, memory,
-triggers, context, and channels so the model can *operate* rather
-than answer one-shot prompts. SemStreams owns the components
-(`agentic-dispatch`, `agentic-loop`, `agentic-memory`,
-`agentic-tools`, `agentic-governance`, plus graph/I/O processors,
-gateways, NATS clients). SemTeams owns the product-shell wiring,
-the chain-template library, the shared persona corpus, the Svelte
-UI, and the docs.
+SemTeams is an **always-on program manager for a configurable portfolio**. The current runtime composes agentic,
+graph, rule and I/O components from the frozen [SemStreams](https://github.com/c360studio/semstreams) dependency.
+SemTeams owns the product wiring, category packs, shared persona corpus, product tools, Svelte UI and documentation.
+
+[ADR-061](docs/adr/061-agent-runtime-ownership-and-observable-work.md) records the approved next boundary: SemEngine
+owns the shared substrate and generic durability; SemTeams owns the agent runtime and absorbs SemDev as a separately
+qualified development pack. Extraction, SemEngine adoption and pack activation are future changes. Do not mistake
+the ownership decision for implemented runtime migration.
 
 The owner-approved product direction lives in
 [`docs/product/program-manager.md`](docs/product/program-manager.md). Research,
@@ -24,9 +22,15 @@ so do not describe the target MVP as shipped behavior. The long-term topology
 is one program manager coordinating durable project managers; the MVP proves
 that view through one program-manager journey with project drill-down.
 
-**There are no custom Go components in SemTeams.** Every processor
-comes from semstreams via the `github.com/c360studio/semstreams`
-Go module dependency. The product shell in `cmd/semteams/`  independently wires every framework primitive per ADR-029.
+**Current implementation:** every processor comes from the frozen `github.com/c360studio/semstreams` dependency.
+`cmd/semteams/` independently wires the primitives per ADR-029; `internal/runtimecatalog` explicitly registers the
+complete frozen component/payload surface for runtime and generators. Registration does not activate a pack.
+
+**Target ownership:** agent loop, dispatch, model/tool orchestration, context, agent-specific approval/governance,
+trajectories and agent rule extensions belong in the SemTeams runtime. Generic graph, transport, mutation, rule,
+lifecycle/projection and durable-execution mechanics belong in SemEngine. Its generic attempt/effect/replay work
+([SemEngine #24](https://github.com/C360Studio/semengine/issues/24)) is planned, not a shipped dependency guarantee.
+Preserve existing recovery while the integration contract is resolved; do not create a competing journal or engine.
 
 ## Bundled chains are illustrative configurations, not the product
 
@@ -55,9 +59,10 @@ UNWIRED — they predate the upstream canonical predicate contract
 (3-segment lower-kebab, fail-closed at persistence, NO alias mode).
 Their contract tests carry a `parked_packs` build tag; their journeys
 are `describe.skip`; the coordinator taxonomy is
-`research | autoresearch | respond_direct | ask_user`. SemDev now owns the
-issue-to-PR implementation journey; do not rewire these packs as a shortcut to
-program-manager action. Any separately approved reuse would first require
+`research | autoresearch | respond_direct | ask_user`. SemDev currently implements the
+issue-to-PR journey. ADR-061 authorizes its future absorption as a separately qualified pack preserving
+issue → OpenSpec → implementation → verification → PR, harness-owned outcomes and clean-room verification.
+Do not rewire the parked packs as a shortcut to that transfer or to program-manager action. Any separately approved reuse would first require
 predicate re-authoring and would fail the current CI fence otherwise
 (`test/contract/predicate_contract_test.go`). Read
 [ADR-058](docs/adr/058-beta159-realignment-and-demo-lane-focus.md)
@@ -67,7 +72,8 @@ Adding a new prompt class (e.g. program-report or project-plan) is a **new categ
 `configs/rules/<category>/`, persona bundles under
 `configs/personas/fragments/<role>-<category>-<phase?>/`, plus a
 coordinator-persona entry teaching the new `decide(action=<category>)`
-token. NO new components, NO runtime flow construction. See
+token. Adding a category does not justify a new runtime component or runtime flow construction. Agent-runtime
+extraction is a separate contract change under ADR-061. See
 [ADR-042](docs/adr/042-coordinator-instantiated-flows-via-templates.md)
 §Phase 2 redesign for the substrate-plus-overlays rationale.
 
@@ -160,13 +166,14 @@ reconciliation.
 | `ui/` | Svelte 5 + SvelteKit 2 frontend (graph explorer, read-only composition inventory, agentic UI) |
 | `docker/` | Production Dockerfile + optional services compose (observability) |
 
-## What does NOT live here
+## Runtime ownership boundary
 
-- Framework code (components, gateways, NATS clients, the graph engine) —
-  all upstream in semstreams.
-- Backend e2e scaffolding — deliberately removed; will be rebuilt from
-  scratch when coordinator/ops-agent work lands.
-- Custom `agentic-*` processors — upstreamed to semstreams as of beta.8.
+- Current component implementations, gateways, NATS clients and graph engine remain in frozen SemStreams.
+- Future agent-runtime extraction belongs here under ADR-061, with existing behavior, tests and provenance carried
+  through reviewed slices. No agentic implementation has moved in the foundation change.
+- Generic graph, transport, lifecycle/projection and durability belong in SemEngine; do not duplicate them locally.
+- Development-pack activation and the SemEngine switch need separate qualification, including recovery, state and
+  authority boundaries. The read-only Program Pulse remains the first product MVP.
 
 ## Common Tasks
 
@@ -277,12 +284,12 @@ Composition-root lifecycle ordering is owned here under ADR-029. Live wirings:
 
 | Surface | Pattern | Call site |
 |---|---|---|
-| `componentregistry.Register` | C | `setupRegistriesAndManager` |
+| `runtimecatalog.RegisterComponents` | C | `setupRegistriesAndManager`; shared catalog with schema/OpenAPI generators |
 | `persona.NewManager` + `LoadFromDirectory` | B | `loadPersonaFragments` |
 | `rule.NewConfigManager` + `config.WithKeyFamily` | B | `run` → `setupRemainingInfrastructure` → shared tool dependencies |
 | rule-config lifecycle adapter | B | `registerRuleConfigService`; starts after components inside `StartAll`, stops before them |
 | public loop/lesson projection contracts | C | `agentic.LoopExecutionContract()` / `agentic.LessonContract()` |
-| `payloadregistry.New` + `payloadbuiltins.Register` | A | before tool registry; plumbed via `Dependencies.PayloadRegistry` (beta.18) |
+| `payloadregistry.New` + `runtimecatalog.RegisterPayloads` | A | before tool registry; existing product payloads layered separately; plumbed via `Dependencies.PayloadRegistry` |
 | `agentictools.NewExecutorRegistry` + `executors.RegisterBuiltins` | A + B tool executors | after persona load; plumbed via `Dependencies.ToolRegistry` (beta.16) |
 
 When a journey breaks because a tool executor isn't firing or persona
@@ -414,8 +421,8 @@ would have shipped otherwise.
 
 ## Product-Shell-Tool Discipline (MANDATORY)
 
-SemTeams is a thin program-manager product shell on top of semstreams (ADR-029).
-The product shell intentionally stays thin. The trap pattern is
+SemTeams keeps application wiring thin (ADR-029) while taking bounded agent-runtime ownership (ADR-061).
+Generic substrate mechanics remain SemEngine's responsibility; domain policy belongs in packs. The trap pattern is
 **accretion** — each individual product-shell tool, rule, or payload
 is defensible; the cumulative drift turns the product shell into a
 bespoke monster (the semspec lesson).
@@ -430,13 +437,13 @@ Before adding any of these, do a **framework-alignment review**:
 
 The review:
 
-1. Survey upstream `~/go/pkg/mod/github.com/c360studio/semstreams@<current>`
-   for an existing or planned-and-roadmapped equivalent.
-2. If exists → use it. If "near" → port to it; do not fork.
-3. If planned but not shipped → land a domain-specific instance,
-   document the migration target in the relevant ADR addendum.
-4. If not in scope upstream by intent → document why the SemTeams
-   case justifies a product-local primitive, in an ADR.
+1. Survey the frozen SemStreams source and SemEngine's admitted contract/roadmap for an existing or planned
+   equivalent. Classify the responsibility as substrate, agent runtime or pack before choosing an implementation.
+2. Reuse existing primitives. A near equivalent calls for alignment, not an unreviewed fork.
+3. Preserve existing agent-specific behavior during extraction and map it to implemented SemEngine contracts.
+   Planned generic durability is not permission for a competing SemTeams journal, effect ledger or workflow engine.
+4. A missing generic mechanism requires an upstream contract discussion. A genuinely agent-specific or domain-local
+   addition requires an ADR explaining ownership, alternatives and any migration target before implementation.
 
 The evidence trail (the ADR addendum recording the survey + the
 alternatives ruled out + the migration posture) is what protects
@@ -448,11 +455,11 @@ product-shell tools with their migration posture and links the
 working-template addendum (ADR-031 §addendum 2026-04-30
 "Framework-alignment review for R3.2 emission shape").
 
-If you cannot point at an upstream pattern your design implements
-or a planned one in the upstream roadmap — **that is a stop signal**.
-Either the design is wrong, or the framework is missing a primitive
-that should be raised upstream rather than worked around in product
-code.
+If ownership or the required engine contract is unresolved, stop that implementation slice and resolve the boundary.
+ADR-061 permits reviewed agent-runtime extraction; it does not permit speculative abstractions, bulk copying or
+working around a missing generic primitive in product code. Future observable-work contracts (stable work identity,
+artifact revisions, revision-bound decisions, evidence provenance, explicit command outcomes and current-state views)
+are design obligations, not claims that those APIs or UI controls are already implemented.
 
 ## E2E Active Monitoring Protocol (MANDATORY)
 
@@ -492,12 +499,11 @@ task openspec:queue-test
 
 ## Related Repos
 
-- [semstreams](https://github.com/c360studio/semstreams) — framework.
-  Owns all `agentic-*`, `graph-*`, `rule`, I/O, and gateway components.
-  The place to make framework-level changes.
-- [semdev](https://github.com/c360studio/semdev) — maker side: the
-  issue-to-reviewed-PR workflow, one instance per project queue. The only PR
-  author in the ecosystem, including on the org SOP repository.
+- [semstreams](https://github.com/c360studio/semstreams) — frozen source of the current runtime and extraction baseline.
+- [semengine](https://github.com/c360studio/semengine) — target shared substrate: graph, transport, rules,
+  lifecycle/projection and generic durability. Its admitted contracts define the migration boundary.
+- [semdev](https://github.com/c360studio/semdev) — current maker-side issue-to-reviewed-PR implementation, to be absorbed
+  as a separately qualified SemTeams pack under ADR-061. Preserve its harness and clean-room verification guarantees.
 - [semmem](https://github.com/c360studio/semmem) — cross-product knowledge
   curator. Ingests lessons pushed from any SemStreams-based instance, owns the
   SOP repository's content policy, files SOP items as issues, publishes

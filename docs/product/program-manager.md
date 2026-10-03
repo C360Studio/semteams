@@ -1,7 +1,9 @@
 # SemTeams Program Manager
 
 **Status:** Owner-approved product direction, 2026-08-26; amended 2026-09-03 per the owner ruling on
-[#264](https://github.com/C360Studio/semteams/issues/264). This document describes the target product and MVP. For the
+[#264](https://github.com/C360Studio/semteams/issues/264), and 2026-10-03 for agent-runtime ownership and SemDev
+absorption ([ADR-061](../adr/061-agent-runtime-ownership-and-observable-work.md)). This document describes the target
+product and MVP. For the
 behavior available today, see the [README](../../README.md) and [demo claim boundary](../demo-mvp-claims.md).
 
 ## Product promise
@@ -14,6 +16,27 @@ in support of a program or project.
 
 The initial customer is an operator responsible for several related projects who needs a trustworthy view across them
 without manually reconstructing status from repositories, issues, pull requests, releases, and documentation.
+
+## Human participation
+
+The product should make human participation less exhausting. A returning operator should see the intended outcome,
+what changed, what is established or uncertain, what needs judgment and what happens next. The default view provides
+that account; the underlying sources, revisions, tool results and verification remain inspectable.
+
+The runtime and pack contracts must support stable work identity across attempts, versioned artifacts, decisions tied
+to the revision reviewed, evidence provenance, and commands whose acceptance and actual outcome are distinguishable.
+These are target contracts, not claims that the current UI or backend implements them. Detailed screens and APIs
+remain unsettled.
+
+For development, the representative acceptance story is to return to an interrupted issue-to-PR task, understand its
+state, inspect and revise the spec, and direct the next step without rebuilding context from chat. Future artifact
+editing must operate on the authoritative repository artifact, validate it and show which downstream approvals or
+evidence need reconsideration. Human checkpoints should correspond to uncertainty and consequence.
+
+The development pack preserves issue → OpenSpec → implementation → verification → PR. Harness-owned outcome facts
+and independent clean-room verification travel with SemDev's workflow. Absorption is separately qualified and does
+not expand the read-only pulse MVP. HumanLayer and Pi provide ideas to assess against this purpose; feature parity
+and an alternative freeform coding workflow are not goals.
 
 ## Operating model
 
@@ -68,8 +91,9 @@ reasoning that connects the evidence to the proposed attention or action.
 
 ## Capability packs
 
-The user experiences one program manager; the runtime stays understandable as bounded category packs on the shared
-SemStreams substrate.
+The user experiences one program manager; capabilities remain bounded category packs on a shared agent runtime.
+Today that runtime and substrate come from frozen SemStreams. ADR-061 assigns the target agent runtime to SemTeams
+and the shared substrate and generic durability to SemEngine; those transfers are not yet implemented.
 
 | Capability | Purpose | Product posture |
 |---|---|---|
@@ -79,6 +103,7 @@ SemStreams substrate.
 | `design-review` | Develop or assess product and technical designs in project context. | Valid post-MVP capability. |
 | `project-action` | Draft or file approved project work and monitor disposition. | Later authority stage. |
 | `pr-review` | Independent review using issue, evidence, and program impact. | Later authority stage. |
+| Development pack (name unsettled) | Absorb SemDev's issue/OpenSpec-to-verified-PR workflow on the shared runtime. | Separately qualified future activation; outside the read-only pulse MVP. |
 
 General and deep research should be depth or budget profiles of the research capability unless experience proves they
 have meaningfully different terminal contracts. Packs may reuse tools, evidence contracts, and persona fragments. The
@@ -157,10 +182,13 @@ are not implied by always-on operation.
 
 ## Sem ecosystem boundaries
 
-- **SemStreams** owns the reusable agentic, graph, rule, governance, memory, and integration primitives.
-- **SemTeams** owns portfolio configuration, program observation, synthesis, recommendations, and operator-facing
-  program-management journeys.
-- **SemDev** owns the maker-side issue-to-reviewed-PR workflow and clean-room verification.
+- **SemStreams** is the frozen source of the current runtime and migration baseline.
+- **SemEngine** owns the target shared graph, transport, mutation, rule, lifecycle/projection and generic durability
+  contracts. Generic attempt/effect/replay mechanics remain planned work, not a shipped guarantee for SemTeams.
+- **SemTeams** owns portfolio configuration, program observation, synthesis, recommendations and operator-facing
+  journeys. ADR-061 also assigns it the agent runtime and pack integration as extraction proceeds.
+- **SemDev** currently implements the maker-side issue-to-reviewed-PR workflow. It will be absorbed as a development
+  pack with its harness-owned outcomes, sandbox execution and clean-room verification preserved.
 - **SemSource** supplies code, documentation, and change evidence through its supported service interfaces.
 - **SemMem** ingests lessons pushed from any SemStreams-based instance, curates them into ecosystem practices, and owns
   the org SOP repository's content policy. It files SOP items as structured issues; it does not author PRs. Practices
@@ -168,18 +196,22 @@ are not implied by always-on operation.
   the trigger.
 - **GitHub** remains the human-visible work bus and authority for repository work state.
 
-SemTeams can later file an issue for SemDev to consume and independently review the resulting pull request for the
-operator. That review complements SemDev's internal quality gates; it does not duplicate them or require a private
-SemTeams-to-SemDev API. The same rule holds across the ecosystem: managers and curators file issues, and SemDev
-instances are the only PR authors, including on the SOP repository. Every edge between products is either a visible
-artifact on GitHub or a governed SemStreams contract that carries provenance and is idempotent; never a shared graph or
-an ad-hoc private API. Lessons flow in by push; institutional knowledge flows back out only as SOP releases.
+Managers and curators propose or file issues under explicit authority. The development workflow owns implementation
+and PR authoring; the program manager may independently review the result for the operator. Moving that workflow
+inside SemTeams does not grant every pack write authority or duplicate its quality gates. GitHub and OpenSpec
+artifacts remain visible work records.
+
+Edges to separate services such as SemSource and SemMem remain visible GitHub artifacts or governed contracts with
+provenance and idempotency, never a shared graph or an ad-hoc private API. SemDev follows that boundary while it is
+still a separate service; future internal pack execution uses the common runtime. Lessons flow in to SemMem by push;
+institutional knowledge flows back out only as SOP releases.
 
 ## Release posture
 
-SemTeams intends to match SemStreams' pace and reach its product v1 alongside SemStreams v1. During the beta period,
-SemTeams should normally remain no more than one released SemStreams beta behind, while treating every dependency bump
-as a verified compatibility change rather than a calendar-only upgrade.
+The current compatibility baseline is frozen SemStreams `8b99efe9c66a4faa4fa509f9f62cc6bad8392128`. Agent-runtime
+extraction and SemEngine adoption proceed through independently qualified changes. Dependency dates do not override
+consumer-contract, recovery, state or product qualification gates; the former rolling-beta posture no longer defines
+this migration.
 
 GitHub issues own sequencing and release membership. This document defines the destination and boundaries; it is not a
 second backlog.

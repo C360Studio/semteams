@@ -11,6 +11,11 @@ tasks:
     cmds:
       - go test -race -count=1 ./...
 
+  browser-runner:
+    desc: Verify browser qualification tracks product-owned source changes
+    cmds:
+      - python3 -m unittest discover -s scripts -p test_qualify_migration_browser.py
+
   integration:
     desc: Run integration tests (uses testcontainers for Docker infra)
     env:
