@@ -1,0 +1,50 @@
+=== RUN   TestConfiguredModelRetryBoundary
+=== RUN   TestConfiguredModelRetryBoundary/production
+2026/10/03 09:54:09 github.com/testcontainers/testcontainers-go - Connected to docker: 
+  Server Version: 29.8.1
+  API Version: 1.51
+  Operating System: Docker Desktop
+  Total Memory: 23742 MB
+  Labels:
+    com.docker.desktop.address=unix:///Users/coby/Library/Containers/com.docker.docker/Data/docker-cli.sock
+  Testcontainers for Go Version: v0.40.0
+  Resolved Docker Host: unix:///var/run/docker.sock
+  Resolved Docker Socket Path: /var/run/docker.sock
+  Test SessionID: 940cf8a9d1542c961c58af760e4520a382383649253b567ff035e8721567990d
+  Test ProcessID: 810c8494-84c3-4075-b437-92ebc74b230e
+2026/10/03 09:54:09 🐳 Creating container for image nats:2.14.4-alpine
+2026/10/03 09:54:09 ✅ Container created: c8a169fc2e04
+2026/10/03 09:54:09 🐳 Starting container: c8a169fc2e04
+2026/10/03 09:54:09 ✅ Container started: c8a169fc2e04
+2026/10/03 09:54:09 ⏳ Waiting for container id c8a169fc2e04 image: nats:2.14.4-alpine. Waiting for: log message "Server is ready"
+2026/10/03 09:54:09 🔔 Container is ready: c8a169fc2e04
+2026/10/03 09:54:09 INFO Connecting to NATS urls=nats://localhost:57178
+2026/10/03 09:54:09 INFO Successfully connected to NATS urls=nats://localhost:57178
+2026/10/03 09:54:09 INFO Component factories registered count=27
+2026/10/03 09:54:09 INFO Created new KV bucket bucket=semstreams_config_c360_semteams-bootstrap
+2026/10/03 09:54:09 INFO JetStream consumer acknowledgement policy applied component=agentic-model port=agent.request stream=AGENT consumer=agentic-model-agent-request-all policy_source=component requested_max_ack_pending=1 effective_max_ack_pending=1
+2026/10/03 09:54:09 🐳 Stopping container: c8a169fc2e04
+2026/10/03 09:54:09 ✅ Container stopped: c8a169fc2e04
+2026/10/03 09:54:09 🐳 Terminating container: c8a169fc2e04
+2026/10/03 09:54:09 🚫 Container terminated: c8a169fc2e04
+=== RUN   TestConfiguredModelRetryBoundary/mock
+2026/10/03 09:54:09 🐳 Creating container for image nats:2.14.4-alpine
+2026/10/03 09:54:09 ✅ Container created: c40b81c111ba
+2026/10/03 09:54:09 🐳 Starting container: c40b81c111ba
+2026/10/03 09:54:09 ✅ Container started: c40b81c111ba
+2026/10/03 09:54:09 ⏳ Waiting for container id c40b81c111ba image: nats:2.14.4-alpine. Waiting for: log message "Server is ready"
+2026/10/03 09:54:09 🔔 Container is ready: c40b81c111ba
+2026/10/03 09:54:09 INFO Connecting to NATS urls=nats://localhost:57179
+2026/10/03 09:54:09 INFO Successfully connected to NATS urls=nats://localhost:57179
+2026/10/03 09:54:09 INFO Component factories registered count=27
+2026/10/03 09:54:09 INFO Created new KV bucket bucket=semstreams_config_c360_semteams-bootstrap-e2e
+2026/10/03 09:54:10 INFO JetStream consumer acknowledgement policy applied component=agentic-model port=agent.request stream=AGENT consumer=agentic-model-agent-request-all policy_source=component requested_max_ack_pending=1 effective_max_ack_pending=1
+2026/10/03 09:54:10 🐳 Stopping container: c40b81c111ba
+2026/10/03 09:54:10 ✅ Container stopped: c40b81c111ba
+2026/10/03 09:54:10 🐳 Terminating container: c40b81c111ba
+2026/10/03 09:54:10 🚫 Container terminated: c40b81c111ba
+--- PASS: TestConfiguredModelRetryBoundary (1.31s)
+    --- PASS: TestConfiguredModelRetryBoundary/production (0.83s)
+    --- PASS: TestConfiguredModelRetryBoundary/mock (0.48s)
+PASS
+ok  	github.com/c360studio/semteams/cmd/semteams	2.854s

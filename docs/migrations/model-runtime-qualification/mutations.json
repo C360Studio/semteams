@@ -1,0 +1,42 @@
+[
+  {
+    "mutation": "reduced-retry-budget",
+    "path": "configs/flow-bootstrap.json",
+    "command": [
+      "go",
+      "test",
+      "-race",
+      "-count=1",
+      "-timeout=90s",
+      "-tags=integration",
+      "./cmd/semteams",
+      "-run",
+      "^TestConfiguredModelRetryBoundary$/^production$",
+      "-v"
+    ],
+    "exit_code": 1,
+    "expected_assertion": "shipped retry setting must govern total provider attempts",
+    "expected_assertion_observed": true,
+    "restored_sha256": "7aacdeb4bcfe232d24ef1a392d52f53aa88ea1db2961a28e687c358941ed2c6f"
+  },
+  {
+    "mutation": "missing-model-factory",
+    "path": "internal/runtimecatalog/components.go",
+    "command": [
+      "go",
+      "test",
+      "-race",
+      "-count=1",
+      "-timeout=90s",
+      "-tags=integration",
+      "./cmd/semteams",
+      "-run",
+      "^TestConfiguredModelRetryBoundary$/^production$",
+      "-v"
+    ],
+    "exit_code": 1,
+    "expected_assertion": "configured model was not admitted by the product registry",
+    "expected_assertion_observed": true,
+    "restored_sha256": "37341776d4f104080b42ac31d8e888265151aaf7b99e515d9efb1203a4591ed9"
+  }
+]

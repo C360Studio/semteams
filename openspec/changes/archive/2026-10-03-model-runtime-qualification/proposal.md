@@ -8,13 +8,14 @@ mock bootstrap permits one and explicitly defers retry-path coverage. Current ca
 prove that production retry behavior through the product boundary.
 
 This change starts from foundation #283 at SemTeams `042193463e3b27fb1996ed4e99bf2b0cd4024a06`, with frozen SemStreams
-`8b99efe9c66a4faa4fa509f9f62cc6bad8392128`. The draft PR on `codex/model-boundary-qualification` owns its claim;
-its URL will be recorded after creation. Extraction-design PR #286 remains a separate review unit.
+`8b99efe9c66a4faa4fa509f9f62cc6bad8392128`. [Draft PR #289](https://github.com/C360Studio/semteams/pull/289), on
+`codex/model-boundary-qualification`, owns the claim. Extraction-design PR #286 remains a separate review unit.
 
 ## What changes
 
 - Add an integration-tagged consumer test using actual product component and payload setup plus the public component
-  manager, each shipped bootstrap's model configuration/ports, isolated real NATS and a local non-streaming HTTP fixture.
+  manager, bootstrap-derived model configuration, isolated real NATS and a local non-streaming HTTP fixture. Mark only
+  the test copy's required request input as external for the fixture; retain retry settings and all other port fields.
 - Prove three total production attempts for HTTP 503, 503, 200, followed by a concrete canonical `AgentResponse` with
   matching request identity/response subject, successful content and `RetryCount: 2`. Prove the mock configuration
   stops after one failed attempt and publishes the correlated typed error response.
@@ -27,8 +28,9 @@ its URL will be recorded after creation. Extraction-design PR #286 remains a sep
 ## Non-goals
 
 No production behavior/config change, runtime extraction, copied shared types/sentinels/rollback/lane policy, SemEngine
-API or new durability promise. This controlled non-streaming fixture does not qualify restarts, exactly-once response
-publication, streaming or live-provider quality. No paid runs, UI change, SemDev activation, parked-pack revival or
+API or new durability promise. This isolated composed model with an explicitly external fixture input does not
+re-prove unchanged full-bootstrap admission. It also does not qualify restarts, exactly-once response publication,
+streaming or live-provider quality. No paid runs, UI change, SemDev activation, parked-pack revival or
 retained-state conversion. #287 continues to track the deferred shared rollback integration.
 
 ## Impact
