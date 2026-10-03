@@ -1,0 +1,106 @@
+{
+  "foundation_commit": "042193463e3b27fb1996ed4e99bf2b0cd4024a06",
+  "semstreams_commit": "8b99efe9c66a4faa4fa509f9f62cc6bad8392128",
+  "semstreams_module": "v1.0.0-beta.162.0.20260930150212-8b99efe9c66a",
+  "go": "go1.26.4 darwin/arm64",
+  "nats_fixture_image": "nats:2.14.4-alpine",
+  "source_sha256": {
+    "cmd/semteams/model_runtime_integration_test.go": "1877e71807a80372d4bfdae74b16b7348e54c0f53feea1dc1ab4c9a0b349945d",
+    "configs/flow-bootstrap.json": "7aacdeb4bcfe232d24ef1a392d52f53aa88ea1db2961a28e687c358941ed2c6f",
+    "configs/e2e-flow-bootstrap.json": "f19b57b80dac11e7bdfcce311b59733a4c797b8b765fb7602861b774ec904106",
+    "internal/runtimecatalog/components.go": "37341776d4f104080b42ac31d8e888265151aaf7b99e515d9efb1203a4591ed9",
+    "internal/runtimecatalog/payloads.go": "ae6d0189afb4c5ee220c88653c60f46fe56a39d81e2fcec38a340bd4300a1738",
+    "go.mod": "fe05e2ea4b4c45bfc181ff83b3a925dccda4dd3d54970b03765c9b50d0b96fff",
+    "go.sum": "8cb9cd26889b1efdd0d03402581fbc26b354bde2b45f195efd71e90b93e51599"
+  },
+  "evidence_sha256": {
+    "focused-race.txt": "8c751a39a640f7db5ffab24b557984db8c071767c3fa61a37e077ca6423fd4a0",
+    "initial-composition-rejection.txt": "29296c9d2ccedef8d217bcbc97b6b45dce0d34f22e3701c2e36560c8ba6aacb4",
+    "integration-race.txt": "ec2f147d17e5d75299e212387bd5ad70842efa6a72a5a3971d6540576b0574e8",
+    "missing-model-factory.txt": "0c200f091a4545ac59303a586a816d4b32783d042bafd255c3c6c6eba7a6f25e",
+    "mutations.json": "fccfdb3e24ea3edab2c97bd4ad6ce32339b7b994666b1a6b4620c9212e4f091c",
+    "reduced-retry-budget.txt": "4df24809fbc43ac79caa103da45c1df9458f3bfa9d72c5d5f8958f69b1744191"
+  },
+  "checks": [
+    {
+      "command": "TESTCONTAINERS_RYUK_DISABLED=true go test -race -count=1 -tags=integration ./cmd/semteams -run '^TestConfiguredModelRetryBoundary$' -v",
+      "exit_code": 0,
+      "evidence": "focused-race.txt"
+    },
+    {
+      "command": "task test:integration",
+      "exit_code": 0,
+      "evidence": "integration-race.txt"
+    },
+    {
+      "command": "task test:race",
+      "exit_code": 0,
+      "log": "/tmp/semteams-model-runtime-qualification/unit-race.txt",
+      "scope": "default build tags; new integration test qualified separately"
+    },
+    {
+      "command": "task lint",
+      "exit_code": 0,
+      "warnings": 6,
+      "errors": 0,
+      "log": "/tmp/semteams-model-runtime-qualification/lint.txt"
+    },
+    {
+      "command": "go build ./...",
+      "exit_code": 0,
+      "log": "/tmp/semteams-model-runtime-qualification/build.txt"
+    },
+    {
+      "command": "task schema:generate",
+      "exit_code": 0,
+      "log": "/tmp/semteams-model-runtime-qualification/schema-generate.txt"
+    },
+    {
+      "command": "task schema:check-changes",
+      "exit_code": 0
+    },
+    {
+      "command": "go vet -tags=integration ./cmd/semteams",
+      "exit_code": 0,
+      "log": "/tmp/semteams-model-runtime-qualification/integration-vet.txt"
+    },
+    {
+      "command": "task openspec:validate",
+      "exit_code": 0,
+      "scope": "post-archive strict validation; four living specifications"
+    },
+    {
+      "command": "task openspec:queue-test",
+      "exit_code": 0,
+      "fixtures_passed": 26,
+      "log": "/tmp/semteams-model-runtime-qualification/queue-fixtures.txt"
+    },
+    {
+      "command": "task openspec:queue",
+      "exit_code": 0,
+      "active_changes": 0
+    }
+  ],
+  "scope": "Isolated non-streaming composed model with test-local External input marker, local HTTP and real NATS; runtime/dependencies/shipped configs/generated interfaces unchanged.",
+  "not_qualified": [
+    "full product boot by this fixture",
+    "live provider quality",
+    "streaming",
+    "restart recovery",
+    "retained state",
+    "exactly-once delivery",
+    "SemEngine compatibility"
+  ],
+  "fixture_cleanup": {
+    "recorded_container_ids": [
+      "05f699f24572",
+      "6719921a05aa",
+      "ac02835f142b",
+      "c40b81c111ba",
+      "c8a169fc2e04",
+      "cfa8241bb38f"
+    ],
+    "remaining_recorded_containers": [],
+    "verification": "docker ps -a --no-trunc; compared recorded container IDs from focused, mutation and initial-failure logs"
+  }
+}
