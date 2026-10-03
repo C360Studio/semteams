@@ -7,6 +7,8 @@ rule-family TaskMessage emission (#293) and model handling of a manually authore
 starts at SemTeams `a331910ee6ec297f86530c4a1d69ca84001a19f5`, with frozen SemStreams
 `8b99efe9c66a4faa4fa509f9f62cc6bad8392128`.
 
+[Draft PR #295](https://github.com/C360Studio/semteams/pull/295) owns this qualification claim.
+
 ## What changes
 
 - Exercise the shipped graph-ingest and teams-loop through product registration, public managers and real local NATS.
