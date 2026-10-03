@@ -65,8 +65,8 @@ actions. Preserve one upstream authority for shared types, sentinels and policy;
 adaptation to force an extraction.
 
 Existing engine work covers action registration/fields and agent action/verdict extraction (#25–28), removal of shared
-tool dependencies (#29), and planned lifecycle/projection-based generic durability (#24). Public action-family shape
-remains unsettled, while the pinned contract already requires unknown pack actions to fail startup. Public shared
+tool dependencies (#29), and planned lifecycle/projection-based generic durability (#24). SETUP03B has chosen the
+E1–E3 contract, including startup refusal for unknown pack actions; its public implementation remains to be qualified. Public shared
 failed-start rollback access is the separate open contract question
 [SemEngine #77](https://github.com/C360Studio/semengine/issues/77), with no chosen API or policy-copy permission. Map to
 actual delivered contracts when available.
@@ -74,7 +74,8 @@ actual delivered contracts when available.
 Existing SemStreams #1352–1354 cover original-source binding, bounded large-entity reads and prior-tool evidence.
 These belong to agent-runtime handoffs over engine graph/store primitives after migration, rather than wholesale engine
 ownership. Their pack-facing behavior and donor ports require qualification. See ADR-063 for direct issue links.
-The evidence record identifies bounded donor E1–E3 fixtures to offer when the action-family boundary is chosen;
+The evidence record identifies candidate donor fixtures for the chosen E1–E3 contract, subject to demonstrated
+SemTeams consumer paths;
 ordinary conversation publish is not E4 approval-action proof. Supported uncovered needs may become deduped upstream
 issues; unresolved product choices remain concise PM questions.
 

@@ -74,7 +74,8 @@ These are acceptance anchors to carry and adapt, not a claim that they ran in th
 
 The donor's [create-change spawn](https://github.com/C360Studio/semdev/blob/7a22bc7422c978992977be6e168bca8c3dba138b/configs/rules/coordinator/02-create-change-spawn.json)
 (`run_scope`, forced `tool_choice`) and [retry route](https://github.com/C360Studio/semdev/blob/7a22bc7422c978992977be6e168bca8c3dba138b/configs/rules/dev-from-task/06c-route-retry.json)
-(budget and ordered actions) are bounded E1–E3 consumer fixtures when the engine's family boundary is chosen. The
+(budget and ordered actions) are candidate consumer fixtures for the E1–E3 contract already chosen by SETUP03B.
+Their SemTeams consumer paths must establish relevance before contributing them as migration evidence. The
 [conversation approval route](https://github.com/C360Studio/semdev/blob/7a22bc7422c978992977be6e168bca8c3dba138b/configs/rules/conversation/03a-route-intent-approve.json)
 is ordinary publish to a validating adapter, not evidence for the E4 approve action family. These samples establish
 neither a new API nor an implementation schedule.

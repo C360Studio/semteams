@@ -89,8 +89,8 @@ Agent actions and shared tool seams map to existing SemEngine [#25](https://gith
 [#28](https://github.com/C360Studio/semengine/issues/28) and [#29](https://github.com/C360Studio/semengine/issues/29).
 Generic attempt/effect durability remains planned under
 [#24's owner ruling](https://github.com/C360Studio/semengine/issues/24#issuecomment-5937829621), not supplied by this pack.
-The public action-family implementation shape remains unsettled; the pinned engine contract already requires unknown
-pack actions to fail startup. Shared failed-start rollback access is the open contract question
+SETUP03B has chosen the E1–E3 action-family contract, including startup refusal for unknown pack actions. The public
+implementation still requires qualification. Shared failed-start rollback access is the open contract question
 [SemEngine #77](https://github.com/C360Studio/semengine/issues/77), separate from #24. It chooses no API and grants no
 permission to copy generic policy to force admission.
 
