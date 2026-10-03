@@ -10,13 +10,13 @@ A candidate package family is not yet an approved extraction cut.
 ## What changes
 
 - Measure root `agentic`, `vocabulary/agentic` and `internal/looptoken` at frozen SemStreams `8b99efe9`, including
-  production/test closure, private dependencies, reverse consumers and concrete-type authority.
+  production/test closure, private dependencies, reverse consumers, concrete types and shared sentinel authority.
 - Record the smallest supportable cut, transition alternatives, source/test/licensing provenance and proving checks.
 - Map engine dependencies and generic recovery/durability to the admitted or planned SemEngine contracts; preserve
   unresolved integration requirements without inventing APIs.
 - Define extraction admission requirements and obtain independent architecture approval of the design.
 
-The draft PR created from this first proposal commit owns the claim and will be linked here immediately after creation.
+[Draft PR #286](https://github.com/C360Studio/semteams/pull/286) owns the design claim.
 It is stacked on #283; both PRs remain separate review units. No release milestone membership is implied.
 
 ## Non-goals

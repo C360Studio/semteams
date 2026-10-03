@@ -1,0 +1,6 @@
+Captured output; tab characters expanded to eight-column stops.
+--- FAIL: TestSymbolsIncludePackageVariables (0.06s)
+    measure-agent-contract-family_test.go:160: exported package sentinel reference omitted
+FAIL
+FAIL    command-line-arguments  0.333s
+FAIL

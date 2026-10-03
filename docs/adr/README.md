@@ -39,6 +39,7 @@ OpenSpec changes own a claimed PR's target state and task truth. See
 | [**059**](059-semstreams-beta160-graph-foundation-adoption.md) | **Adopt semstreams v1.0.0-beta.160's typed graph-mutation, strict-port, service-composition, trajectory, and fresh-storage contracts while retaining ADR-058's live/parked boundary.** Historical beta.160 baseline; frozen 8b99efe qualification lives in the migration evidence. |
 | [**060**](060-program-manager-direction-and-research-design.md) | **Program-manager direction: observation-first authority ladder, containment before unattended ticks, GitHub-or-governed-contract edges, SOP releases as the practice trigger, `program-report` as the first research depth profile, ensemble synthesis over bounded walkers for non-verifiable domains.** Supersedes 056 §North-star only. Program-manager direction retained; permanent maker separation superseded by 061. |
 | [**061**](061-agent-runtime-ownership-and-observable-work.md) | **Target ownership: SemEngine substrate and generic durability, SemTeams agent runtime and observable work, SemDev absorbed as a separately qualified pack.** Preserves the read-only pulse target and current live/parked fence; no extraction or activation claimed. |
+| [**062**](062-agent-contract-extraction-boundary.md) | **Accepted extraction design boundary:** retain one frozen concrete agent-contract authority; a bounded implementation may move first while preserving shared types. Records engine integration holds and provenance/qualification requirements; no runtime copying. |
 
 ## Conventions
 
