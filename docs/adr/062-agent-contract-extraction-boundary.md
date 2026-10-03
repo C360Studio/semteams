@@ -74,11 +74,11 @@ permits an adopter to implement that owner reaction and promises no public helpe
 tests and frozen `natsclient` can fit agent-runtime ownership; generic delivery settlement stays a substrate concern.
 
 The unresolved whole-component cut is access to the shared failed-start rollback policy currently implemented by
-`internal/lifecyclecleanup`. Resolve it through an accessible shared policy or an expressly approved narrow owner
-adaptation; no equivalent reusable public policy was identified. A manager's outer rollback does not discharge a
-component's own acquired obligations. Do not silently copy the generic helper or create a second generic policy. Do not
-mislabel the delivery lane as a promised engine export, or treat future #24 as a prerequisite for an implementation
-move that leaves existing recovery semantics unchanged.
+`internal/lifecyclecleanup`. The initial review considered an accessible shared policy or an expressly approved narrow
+owner adaptation; no equivalent reusable public policy was identified. The owner refinement below selects upstream
+integration and defers the local component move. A manager's outer rollback does not discharge a component's own
+acquired obligations. Do not copy or adapt shared policy to force an extraction, mislabel the delivery lane as a
+promised engine export, or make future #24 a blanket prerequisite for moves that preserve existing semantics.
 
 Phase persistence and revision checks do not establish exactly-once outside effects, recovery of unfinished attempts
 or replay semantics. Preserve current behavior and its limitations until each replacement contract exists and has
@@ -103,16 +103,16 @@ claimed by this design. Existing evidence-body, continuation, recovery and parke
 
 - The proposed small contract-family cut is not independently admissible. Its single-authority consumer transfer
   remains held; a small forward dependency set cannot waive that hold.
-- `agentic-model` with its agent-side delivery lane is a conditional next implementation candidate, retaining frozen
-  contract types and public `natsclient`. Resolve failed-start rollback first and preserve the old model dependency
-  still used by dispatch. No exact implementation cut is admitted by this design.
+- The whole `agentic-model` move is deferred while its private shared rollback dependency remains inaccessible.
+  Its delivery lane remains agent-owned, but no isolated unused copy is needed. Frozen model use by dispatch remains
+  intact; no exact implementation cut is admitted by this design.
 - Implementation ownership can advance on frozen shared types where measured closure and proving tests support it.
   This avoids a speculative module fork, copied substrate or bulk agent-runtime move.
 - The engine action-family API and generic durability contracts need concrete consumer agreement before their
   dependent migrations. They do not block a proven package move that leaves those boundaries unchanged.
-- [Issue #287](https://github.com/C360Studio/semteams/issues/287) owns the failed-start rollback agreement and
-  conditional model/delivery-lane cut. This ADR records the decision; evidence preserves how it was reached without
-  creating a separate migration status system.
+- [Issue #287](https://github.com/C360Studio/semteams/issues/287) tracks shared rollback integration for the SemEngine
+  migration, not a local adaptation prerequisite. This ADR records the decision; evidence preserves how it was reached
+  without creating a separate migration status system.
 
 ## Alternatives considered
 
@@ -126,6 +126,23 @@ claimed by this design. Existing evidence-body, continuation, recovery and parke
   and contrary to the shared-substrate boundary.
 - **Copy the entire reverse consumer group immediately.** Not justified by the candidate's size. Measure a bounded
   implementation-first cut and qualify the eventual contract transfer separately.
+
+## Addendum 2026-10-03: keep shared dependencies upstream
+
+The [owner chose](https://github.com/C360Studio/semteams/issues/287#issuecomment-5970154338) to retain shared types,
+sentinel identities, failed-start rollback and similar shared contracts in their upstream authority during
+preparation, and track their integration for the SemEngine migration. This refinement
+supersedes the earlier option of a narrow local rollback adaptation merely to enable an early extraction.
+
+When a proposed cut meets a shared identity or substrate-policy obstacle, preserve the existing upstream dependency,
+record the integration requirement and defer that cut. Do not create local lookalike types, replacement sentinels,
+duplicate policy or unused helper copies to manufacture progress. The whole model move therefore waits on the shared
+rollback boundary tracked in #287. This does not reclassify `deliverylane` as engine-owned or promise an engine export;
+its agentic ownership is unchanged, and it moves only as part of a useful, qualified implementation boundary.
+
+The measured evidence, source provenance and proving requirements remain valid. No runtime behavior changes, and
+this ruling does not assign all shared agent contracts permanently to SemEngine or defer unrelated work whose
+existing boundaries already fit.
 
 ## Related
 

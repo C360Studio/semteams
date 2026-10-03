@@ -16,10 +16,17 @@ records the decision and alternatives.
 
 Whole model and governance implementation moves were also examined. Both depend on `internal/deliverylane` and
 `internal/lifecyclecleanup`, but the two helpers have different ownership. The delivery lane is agent-side owner
-reaction and can be considered for porting with its tests; generic transport settlement remains a substrate
-responsibility. Lifecycle cleanup is admitted into SemEngine's private namespace and its accessible rollback-policy
-boundary is unresolved. No whole-component copy is authorized by this evidence. [Issue #287](https://github.com/C360Studio/semteams/issues/287)
-owns the precise rollback agreement and conditional model/delivery-lane follow-up.
+reaction; generic transport settlement remains a substrate responsibility. Lifecycle cleanup is admitted into
+SemEngine's private namespace and its accessible rollback-policy boundary is unresolved. No whole-component copy is
+authorized by this evidence.
+
+**Owner refinement, 2026-10-03:** keep shared types, sentinel identities, failed-start rollback and similar shared
+contracts upstream during preparation, and track their integration for the SemEngine migration. The whole model move
+is deferred while shared rollback is inaccessible; do not adapt local policy to force that extraction or copy an
+isolated delivery lane with no live consumer. The lane's agentic ownership is unchanged.
+[Issue #287](https://github.com/C360Studio/semteams/issues/287) tracks upstream integration, not a local adaptation
+prerequisite. [ADR-062's dated addendum](../../adr/062-agent-contract-extraction-boundary.md#addendum-2026-10-03-keep-shared-dependencies-upstream)
+records the ruling. All measurements below remain the historical design evidence; none was rerun or changed by it.
 
 ## What the measurements mean
 
@@ -124,14 +131,13 @@ one first-result latch, recorded stop reason before observer-driven drain, the e
 Owner `Stop` has a separate documented race boundary; the helper does not give the component lifecycle authority.
 Transport metadata validation, heartbeat, work join and terminal settlement remain in `natsclient`.
 
-A future implementation claim must resolve the admitted failed-start rollback policy through an accessible shared
-API or an expressly approved narrow owner adaptation, and preserve those owner-reaction invariants with meaningful
-source tests. No equivalent reusable public rollback policy was identified; manager-level rollback cannot discharge
-resources acquired inside a component's own failed start. The current helper supplies a fresh five-second context
-budget and invokes cleanup synchronously; it cannot preempt a callback that ignores cancellation, so it does not
-promise a five-second wall-clock exit. This is not permission to copy the generic helper silently. Waiting
-for a hypothetical engine delivery-lane API is not required. Neither is generic durability #24 a blocker for a move
-that leaves frozen execution semantics unchanged.
+The initial design considered accessible shared rollback policy or a narrowly approved owner adaptation. The dated
+owner refinement above selects upstream integration and defers the dependent component move; a local adaptation is
+not the next step. No equivalent reusable public rollback policy was identified, and manager-level rollback cannot
+discharge resources acquired inside a component's own failed start. Preserve the source requirements for eventual
+integration: a fresh five-second context budget and synchronous cleanup, without preemption of callbacks that ignore
+cancellation or a five-second wall-clock exit guarantee. The delivery lane needs no hypothetical engine export, and
+#24 remains a separate generic durability requirement rather than the cause of this rollback-access hold.
 
 For eventual root-type/engine integration, the named requirements remain
 [E1 #25](https://github.com/C360Studio/semengine/issues/25) action-family registration,
