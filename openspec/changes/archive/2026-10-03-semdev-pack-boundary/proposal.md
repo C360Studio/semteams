@@ -9,19 +9,23 @@ runtime dependencies need a source-backed transfer contract.
 
 This change starts from foundation #283 at SemTeams `042193463e3b27fb1996ed4e99bf2b0cd4024a06`, with SemStreams
 frozen at `8b99efe9c66a4faa4fa509f9f62cc6bad8392128`. Accepted SemDev source is pinned to
-`7a22bc7422c978992977be6e168bca8c3dba138b` on SemStreams beta.160. The donor's local draft sealed-run and uncommitted
-verification/UI work are separate, unaccepted evidence; neither its guarantees nor its working tree become the baseline.
-The draft PR on `codex/semdev-pack-boundary` will own this claim; its link is recorded after creation.
+`7a22bc7422c978992977be6e168bca8c3dba138b` on SemStreams beta.160. The donor's draft sealed-run and uncommitted
+verification/UI work are separate, unmerged/in-progress evidence. An accepted design decision does not establish
+implemented or merged guarantees. [Draft PR #291](https://github.com/C360Studio/semteams/pull/291), on
+`codex/semdev-pack-boundary`, owns this claim.
 
 ## What changes
 
 - Trace the committed donor workflow through rules, tools, fact writers, authoritative artifacts and meaningful tests.
 - Define development-pack, shared-agent-runtime and generic-engine ownership while preserving harness-owned outcomes,
   revision-bound human decisions, independent verification, bounded execution and governed external effects.
-- Record the beta.160-to-frozen-runtime gap and distinguish implemented donor behavior, pending work and target
+- Adapt donor graph-authored OpenSpec to ADR-061's repository-artifact authority; keep canonical runtime decisions,
+  frozen task projections and harness evidence distinct, with revision-bound approval and stale-work refusal.
+- Record the beta.160-to-frozen-runtime gap and distinguish implemented donor behavior, in-progress work and target
   admission requirements. Preserve one authority for shared types, sentinels and policy.
-- Map actual engine needs to existing work. Prepare concise PM questions for unresolved choices or evidence-backed
-  upstream issues for uncovered gaps after checking for duplicates; invent no API or local workaround.
+- Map actual engine needs to existing work and the reviewed open rollback question
+  [SemEngine #77](https://github.com/C360Studio/semengine/issues/77). Keep existing agent-runtime handoff work distinct
+  from generic engine responsibilities; invent no API or local workaround.
 - Obtain independent architecture/source review and define acceptance and rejection evidence for a later implementation.
 
 ## Non-goals

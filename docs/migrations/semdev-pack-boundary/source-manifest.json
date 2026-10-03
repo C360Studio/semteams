@@ -1,0 +1,261 @@
+{
+  "schema_version": 1,
+  "observed_date": "2026-10-03",
+  "scope": "Selected source and source-test evidence for a design-only admission boundary; not an exhaustive donor census or execution result.",
+  "consumer": {
+    "repository": "C360Studio/semteams",
+    "foundation_commit": "042193463e3b27fb1996ed4e99bf2b0cd4024a06",
+    "frozen_semstreams_commit": "8b99efe9c66a4faa4fa509f9f62cc6bad8392128"
+  },
+  "committed_donor": {
+    "repository": "C360Studio/semdev",
+    "commit": "7a22bc7422c978992977be6e168bca8c3dba138b",
+    "framework_version": "v1.0.0-beta.160",
+    "inspection": "Read-only git archive of committed source. Source tests inspected, not executed in this design change.",
+    "selected_files": [
+      {
+        "path": "LICENSE",
+        "sha256": "f04755968ca6dc99d31430e02ff6db65032586f7ddd5f955e86e2df31310a478",
+        "bytes": 1061
+      },
+      {
+        "path": "configs/rules/conversation/03a-route-intent-approve.json",
+        "sha256": "5158d23e279826e3a0e755a1f5709d873893b7f29c8491fe2c15735e374b13e7",
+        "bytes": 4031
+      },
+      {
+        "path": "configs/rules/coordinator/01-issue-intake-mint-run.json",
+        "sha256": "078cd8a9c650c984a4adf45d69ff4d3809c357df9a630b3eff4d58004bb5e3e1",
+        "bytes": 5890
+      },
+      {
+        "path": "configs/rules/coordinator/02-create-change-spawn.json",
+        "sha256": "b5b7cd6a80a0fb48ddebdcbd98224c81e0e0561c8d2c59146afe1db1bca5b03c",
+        "bytes": 4821
+      },
+      {
+        "path": "configs/rules/dev-from-task/06c-route-retry.json",
+        "sha256": "0a7a1d7054f48b460a514c53125a3d16ead936b6d02b2afd62c929f3b02538f9",
+        "bytes": 6886
+      },
+      {
+        "path": "configs/rules/run-lifecycle/02-resume-after-change-approval.json",
+        "sha256": "ccdf98a22c8da80e1c8ef9955566c152bed2825a05d6f5e7cfefd815d8c540a6",
+        "bytes": 2436
+      },
+      {
+        "path": "docs/evidence-ledger.md",
+        "sha256": "b2fc31c6aeaa1007521ba4d5556ef6d53d32eed0e000ce4c4f59e2a17785660f",
+        "bytes": 28414
+      },
+      {
+        "path": "go.mod",
+        "sha256": "b76052939a9d57addbf27ea77e884587d254ad8b040f14c5d6be83d900d26cd9",
+        "bytes": 4714
+      },
+      {
+        "path": "internal/conversationchannel/approval.go",
+        "sha256": "fee15d04510605660736a725ebf6b68704b5a64cf9ff1334425465b97992ddaa",
+        "bytes": 28855
+      },
+      {
+        "path": "internal/devtask/project.go",
+        "sha256": "ec95b4c4f01849f1eaa556ec6fc168017b6e5196c9197970fa67c05f26a3dbff",
+        "bytes": 7132
+      },
+      {
+        "path": "internal/graphown/contracts.go",
+        "sha256": "54e25f3e119f534d3f25c1e24e618bcca3d591d58d2e83045c52b280d8d4a8c3",
+        "bytes": 25246
+      },
+      {
+        "path": "internal/graphown/ports.go",
+        "sha256": "754ebd237360a9cce407cf8b889a2df7e82a518ce1b871398bc9fb397893fe1a",
+        "bytes": 1457
+      },
+      {
+        "path": "internal/intake/record.go",
+        "sha256": "909b35b3e79aff304e98e813dcf85f1bf99131877b783f8f8d1ef025fb8bb580",
+        "bytes": 4777
+      },
+      {
+        "path": "internal/registry/registry.go",
+        "sha256": "efae0656c8a131d5006c5451f9078e434d9e89da98f23330c7f18761fd4cc806",
+        "bytes": 6652
+      },
+      {
+        "path": "internal/runspace/patcher.go",
+        "sha256": "80a3538584be93992b602693f683cd044758ab47715cd18983a6b969ab5c0ce3",
+        "bytes": 15854
+      },
+      {
+        "path": "internal/station/station.go",
+        "sha256": "43bc6e581bf0347f21d924721a49c5c33aa9ab587c499dbe3d94674fc7a01d26",
+        "bytes": 30485
+      },
+      {
+        "path": "internal/tools/createchange/createchange.go",
+        "sha256": "549d39666e4d8d61bc2197240b3cea87d4dfc77fc1204c7e53d04c3e3da493b8",
+        "bytes": 13578
+      },
+      {
+        "path": "internal/tools/measuretask/measuretask.go",
+        "sha256": "6c493a6562f93364da5e079dc3890a009f56d1216a7c30fcd28e86669b9b4315",
+        "bytes": 14260
+      },
+      {
+        "path": "internal/tools/measuretask/measuretask_test.go",
+        "sha256": "3c93057ef4513aae5e2f1835bbcea039ce8f42c0481a3fd4a59045ac3ca21f51",
+        "bytes": 20146
+      },
+      {
+        "path": "internal/tools/openpr/delivery.go",
+        "sha256": "5adc6a8435c4f9e2827b861d1aaa25999be25e1a3e97cceefd1563caf093c565",
+        "bytes": 12156
+      },
+      {
+        "path": "internal/tools/openpr/delivery_containment_test.go",
+        "sha256": "67c2842a857a218cbf7b4ff3d1832c73eac88a640d9ca47eb37dc12c635144a9",
+        "bytes": 6387
+      },
+      {
+        "path": "internal/tools/openpr/openpr_test.go",
+        "sha256": "50eafaa73a4b646c82e157ba19eb91cc874af1032aa4f2fdf9b46feaa0a776cf",
+        "bytes": 12605
+      },
+      {
+        "path": "internal/tools/projecttasks/projecttasks.go",
+        "sha256": "1c15d1a34009c1d3d3b6406350ff57c88e586b82d20418d91323b1e5a8be8506",
+        "bytes": 13494
+      },
+      {
+        "path": "internal/tools/projecttasks/projecttasks_test.go",
+        "sha256": "7160ff09478973dcbc9fa08175f30cf99e4067869b74d0ddff638980001b1d7b",
+        "bytes": 15181
+      },
+      {
+        "path": "internal/tools/submitreview/submitreview.go",
+        "sha256": "65cb31adf95d10d6f08d6f6a7b4e6a835f7b8cc9f08cbb0e7ce6afe8a68226a6",
+        "bytes": 22931
+      },
+      {
+        "path": "internal/tools/submitreview/submitreview_test.go",
+        "sha256": "6eb163dbd1b0e74d54e0dda7972e2ef5db43fa9c30d86d9b0f9eb8baba9e4f91",
+        "bytes": 22274
+      },
+      {
+        "path": "internal/tools/validatechange/validatechange.go",
+        "sha256": "3d4a73cf1394fee21a740f38dcf3524e1443e6f8c83ac6ab6a2aa91cad7000a4",
+        "bytes": 10438
+      },
+      {
+        "path": "internal/tools/verifyartifact/verifyartifact.go",
+        "sha256": "9c7eb0b99d56482faf7c5c9c71d0f69f9bbd4ffa8734de0610797e673d673398",
+        "bytes": 9757
+      },
+      {
+        "path": "internal/tools/verifyartifact/verifyartifact_test.go",
+        "sha256": "f1fd62c19dc2c76153a9cec6cefde72bc3aee700c7cfea3d25424b09e7668263",
+        "bytes": 7397
+      },
+      {
+        "path": "internal/tools/writechange/writechange.go",
+        "sha256": "031df18f72cac1413a4dfc4d5ee84d6890d579eb96a44cc431884db715ece9a4",
+        "bytes": 7169
+      },
+      {
+        "path": "internal/verify/verify.go",
+        "sha256": "8cd884740110da27e8bb173503b06ff777c18be3b2da5415b9b896b486eb7078",
+        "bytes": 9872
+      },
+      {
+        "path": "internal/verify/verify_test.go",
+        "sha256": "d997fba28dece621fd0525d123b8188bf42c2090223b98a1b703f40aa282bac0",
+        "bytes": 5799
+      },
+      {
+        "path": "test/conformance/g2_lifecycle_test.go",
+        "sha256": "a628d73f1493fa4f4f9d5f14d6121e0a5cd48ddca77b1749e7cc2d6c073d32f3",
+        "bytes": 8015
+      },
+      {
+        "path": "test/conformance/g3_schema_test.go",
+        "sha256": "49a8cfc8601d74b52409000c67e567d38e82e09e1a27597619dd1fa1b422a0e1",
+        "bytes": 3435
+      },
+      {
+        "path": "test/conformance/g5_writers_test.go",
+        "sha256": "d295c0927cded8386bf9c4038a1ab87ffb5cb637e7810f0e62fd631b2ef6b5db",
+        "bytes": 15920
+      },
+      {
+        "path": "test/conformance/testdata/g2fixture/bad.go",
+        "sha256": "3be91249198eaef50d98434d8c2e192e9807f5842c273157fa839b9c2bdd705d",
+        "bytes": 1302
+      },
+      {
+        "path": "test/conformance/upstream_asks_test.go",
+        "sha256": "f93f43a93464618559cfdde9f4053b9420a07626fc3db4dc5da619ea394170f5",
+        "bytes": 29470
+      },
+      {
+        "path": "test/e2e/journey_test.go",
+        "sha256": "bfeacb1b5ddb7ef3d2995023806e5f06252364619b92410f997965b75efceee7",
+        "bytes": 126331
+      }
+    ]
+  },
+  "pending_inputs": {
+    "observed_date": "2026-10-03",
+    "checkout": "/Users/coby/Code/c360/semdev",
+    "baseline_main": "7a22bc7422c978992977be6e168bca8c3dba138b",
+    "checkout_commit": "ca3956af2ed87d5fa5bdb8183cdb506f7beb7240",
+    "files": [
+      {
+        "path": "openspec/changes/semdev-workspace-ui/proposal.md",
+        "sha256": "ea3e8b8fc0f853b0d84bec7682b1a1fb3e3c68f0fb7d3dbd371b2e982345ecfb",
+        "bytes": 2500,
+        "classification": "uncommitted/in-progress working-tree input; not merged implementation evidence"
+      },
+      {
+        "path": "openspec/changes/semdev-workspace-ui/design.md",
+        "sha256": "0290f8fcb6920b47fd48d537b679f898467681a3df1ab125e25fd0de58552f4b",
+        "bytes": 9793,
+        "classification": "uncommitted/in-progress working-tree input; not merged implementation evidence"
+      },
+      {
+        "path": "openspec/changes/spec-driven-test-sensitivity/proposal.md",
+        "sha256": "39ce639d09a83f215f97445dbc78c824093df72d641c391f3170ccd7d6c34ef3",
+        "bytes": 9692,
+        "classification": "uncommitted/in-progress working-tree input; not merged implementation evidence"
+      },
+      {
+        "path": "openspec/changes/spec-driven-test-sensitivity/issue-source-plan.md",
+        "sha256": "4d3a5790c6ff5d70ed53cac579efded2121dd9bbcdc50b6a4082d4eb673c5d9d",
+        "bytes": 9745,
+        "classification": "uncommitted/in-progress working-tree input; not merged implementation evidence"
+      },
+      {
+        "path": "openspec/changes/spec-driven-test-sensitivity/bounded-handoff-pass.md",
+        "sha256": "48efc9aecfed4a26edf148d630b00ea1b9de364dc0d64f0724c6c0f2adbd6bc5",
+        "bytes": 17199,
+        "classification": "uncommitted/in-progress working-tree input; not merged implementation evidence"
+      }
+    ]
+  },
+  "unmerged_decision": {
+    "repository": "C360Studio/semdev",
+    "commit": "ca3956af2ed87d5fa5bdb8183cdb506f7beb7240",
+    "path": "docs/decisions/0003-run-contract-is-sealed-and-pre-resolved.md",
+    "pull_request": "https://github.com/C360Studio/semdev/pull/40",
+    "classification": "Accepted design in an unmerged donor branch; not merged implementation evidence"
+  },
+  "engine_contract_observations": {
+    "repository": "C360Studio/semengine",
+    "main_commit": "2ec3bcf08bc1d2794d6cb1081ebd1982e08cf2c5",
+    "floor_draft_pr": "https://github.com/C360Studio/semengine/pull/48",
+    "floor_draft_head": "cb61cfa3a4815eaada21fdbf34619e08ae4a1fc2",
+    "classification": "Observed contracts and draft source, not promised public API or shipped qualification",
+    "external_rollback_question": "https://github.com/C360Studio/semengine/issues/77"
+  }
+}
