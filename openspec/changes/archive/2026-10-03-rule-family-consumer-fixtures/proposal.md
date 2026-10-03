@@ -7,6 +7,8 @@ PM for its chosen SETUP03B E1–E3 contract. SemTeams begins at foundation `0421
 with frozen SemStreams `8b99efe9c66a4faa4fa509f9f62cc6bad8392128`. The contribution must expose genuine consumer
 behavior and distinguish current configuration from supplemental supported-contract cases.
 
+[Draft PR #293](https://github.com/C360Studio/semteams/pull/293) owns this bounded contribution.
+
 ## What changes
 
 - Add portable rule-pack JSON and independent expected decoded values for tool choice and response format.
