@@ -12,19 +12,19 @@ import (
 	"sort"
 
 	"github.com/c360studio/semstreams/component"
-	"github.com/c360studio/semstreams/componentregistry"
 	"github.com/c360studio/semstreams/service"
+	"github.com/c360studio/semteams/internal/runtimecatalog"
 )
 
 func main() {
 	// Parse command-line flags
-	registryPkg := flag.String("registry", "./componentregistry", "Package containing RegisterAll()")
+	registryPkg := flag.String("registry", "./componentregistry", "Deprecated compatibility flag; ignored (uses SemTeams runtime catalog)")
 	outDir := flag.String("out", "./schemas", "Output directory for schemas")
 	openapiOut := flag.String("openapi", "./specs/openapi.v3.yaml", "Output path for OpenAPI spec")
 	flag.Parse()
 
 	log.Printf("OpenAPI Generator")
-	log.Printf("  Registry: %s", *registryPkg)
+	log.Printf("  Registry: SemTeams runtime catalog (-registry=%q is ignored)", *registryPkg)
 	log.Printf("  Output dir: %s", *outDir)
 	log.Printf("  OpenAPI spec: %s", *openapiOut)
 
@@ -32,7 +32,7 @@ func main() {
 	registry := component.NewRegistry()
 
 	// Register all components
-	if err := componentregistry.Register(registry); err != nil {
+	if err := runtimecatalog.RegisterComponents(registry); err != nil {
 		log.Fatalf("Failed to register components: %v", err)
 	}
 

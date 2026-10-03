@@ -2,33 +2,39 @@
 
 ## Purpose
 
-SemTeams is a configurable multi-agent product harness built on the SemStreams framework. It owns the product shell,
-Svelte UI, category rule packs, persona corpus, product-level tool composition, journeys, and documentation that turn
-SemStreams' agentic and graph primitives into reviewable team workflows.
+SemTeams is an always-on program manager for a configurable portfolio. Its first target MVP is a read-only,
+evidence-backed Program Pulse; current research and autoresearch packs demonstrate the agent foundation.
 
-The product demonstrates auditable agent coordination rather than one-shot prompting: the coordinator classifies work,
-category packs drive bounded roles and gates, artifacts carry evidence between teams, and operator-visible state is
-recorded through the shared graph substrate.
+Today SemTeams composes a frozen SemStreams runtime through its product shell, Svelte UI, category rule packs,
+persona corpus, product tools and journeys. ADR-061 assigns the target agent runtime to SemTeams and the shared
+substrate and generic durability to SemEngine, with SemDev absorbed as a separately qualified development pack.
+Human participation should become less exhausting through observable work, inspectable evidence and explicit
+controls. This direction does not claim that extraction, pack activation or the future UI is implemented.
 
 ## Product Boundary
 
-- **SemStreams owns framework primitives and contracts:** processors, graph ingestion/query/mutation, NATS clients and
-  storage patterns, rule execution, agentic loop/dispatch/model/tools/governance components, payload and vocabulary
-  registries, lifecycle, health, and metrics.
-- **SemTeams owns product composition and semantics:** `cmd/semteams/` wiring, bootstrap configs, product category
-  rules, personas, user-facing workflows, product-only tool executors, Svelte surfaces, and product journeys.
-- SemTeams has no custom Go processors. Reuse an upstream primitive when one exists. A new product-shell tool, rule
-  action shape, payload, KV bucket, or long-lived stream requires the framework-alignment review in `CLAUDE.md` and an
-  ADR addendum or upstream issue recording the result.
+- **SemEngine target:** graph, transport, mutation, rule evaluation, lifecycle/projection and generic durable execution.
+  Attempt/effect/replay mechanics are planned in SemEngine #24, not a shipped guarantee of this dependency.
+- **SemTeams agent-runtime target:** loop, dispatch, model/tool orchestration, context/memory assembly, agent-specific
+  approvals/governance, trajectories and agent rule extensions. Extract in reviewed slices with behavior, tests and
+  source provenance preserved; public engine extension APIs remain unsettled.
+- **SemTeams product and packs:** `cmd/semteams/` wiring, bootstrap/category rules, personas, domain tools, Svelte UI,
+  program semantics and journeys. Development preserves issue → OpenSpec → implementation → verification → PR,
+  harness-owned outcomes and clean-room verification on the shared runtime.
+- All processor implementations currently remain in frozen SemStreams. `internal/runtimecatalog` makes registration
+  explicit without narrowing the frozen surface or activating packs. Reuse existing primitives. New tools, action
+  shapes, payloads, buckets or streams require the framework-alignment review in `CLAUDE.md` and an ADR or upstream
+  contract discussion. Do not create a competing generic durability journal or workflow engine.
 - Cross-repository contracts are shared boundaries. Record the durable reason in an ADR and the current behavioral
   mechanics in a living spec; do not silently fork an upstream contract in the product shell.
 
 ## Current Product State
 
 - The Go module is pinned to SemStreams `v1.0.0-beta.162.0.20260930150212-8b99efe9c66a` at SHA
-  `8b99efe9c66a4faa4fa509f9f62cc6bad8392128`. The migration from beta.160 is under qualification in PR #281.
+  `8b99efe9c66a4faa4fa509f9f62cc6bad8392128`. The qualified migration from beta.160 landed in PR #281.
   Fresh isolated NATS 2.14.4 and graph state are required; retained-state conversion is not implemented.
-  No production storage wipe is authorized. See `docs/migrations/semstreams-8b99efe/README.md` for blockers.
+  No production storage wipe is authorized. See `docs/migrations/semstreams-8b99efe/README.md` for retained evidence
+  and limitations: 24 active mock browser passes, five explicit skips, and the qualified autoresearch delivery repair.
 - The live product-facing categories are `research` and `autoresearch`. `coordinator`, `agent-run`, and `ops` are
   support packs in the bootstrap.
 - `create-change`, `proof-readiness`, `dev-from-task`, and `dev-via-test` remain on disk but are unwired under ADR-058.
@@ -42,9 +48,12 @@ recorded through the shared graph substrate.
 - Runtime saved-flow authoring, managers and template seeds are retired. The UI exposes admitted composition and
   graph exploration. The rule manager joins configuration through a registered key family and readiness barrier.
 - Evidence-body rendering and artifact handoff remain limited by #261. Program Pulse remains the target product,
-  not shipped behavior. Autoresearch final user delivery remains a migration blocker.
+  not shipped behavior. The absorbed development pack and new artifact/control UI are also future behavior.
 - SemSource-backed dogfooding waits for SemSource readiness. A later SemEngine switch needs its own approved consumer
   contract; symbol and closure measurements are evidence, not permission to expand its first release.
+- ADR-061's future observable-work contracts cover work identity across attempts, artifact revisions, revision-bound
+  decisions and invalidation, evidence ownership/provenance, command acceptance versus outcome, and authoritative
+  current-state/change views. Implement and qualify their contracts before describing them as live behavior.
 
 ## How We Spec
 
@@ -62,7 +71,7 @@ recorded through the shared graph substrate.
 
 ## Role Split
 
-- `architect` designs API, graph, data, and integration contracts and reviews product/framework boundaries.
+- `architect` designs API, graph, data, and integration contracts and reviews substrate/runtime/pack boundaries.
 - `go-developer` uses TDD for backend or product-shell implementation; `go-reviewer` owns its quality gate.
 - `svelte-developer` uses Svelte 5 and TypeScript for UI implementation; `svelte-reviewer` owns accessibility, UX, and
   frontend quality review.

@@ -247,7 +247,7 @@ func (a *Artifact) LatestRevisionMutationCount() int {
 
 // RegisterPayloads registers SemTeams-local research payloads with
 // the supplied registry. Call from cmd/semteams/main.go after
-// payloadbuiltins.Register so the SemTeams-local types layer on top
+// runtimecatalog.RegisterPayloads so the SemTeams-local types layer on top
 // of the framework's first-party set.
 func RegisterPayloads(reg *payloadregistry.Registry) error {
 	return reg.Register(&payloadregistry.Registration{

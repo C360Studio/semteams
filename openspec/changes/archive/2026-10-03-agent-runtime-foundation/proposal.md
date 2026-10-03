@@ -8,8 +8,8 @@ inspectable evidence, and explicit controls. The development workflow remains is
 verification → PR. SemEngine owns the shared substrate and generic durability mechanics; this change must not
 create competing primitives.
 
-[Issue #282](https://github.com/C360Studio/semteams/issues/282) owns this bounded foundation change. The draft PR on
-`codex/agent-runtime-foundation` owns its claim; its URL is recorded here once created. The starting point is the
+[Issue #282](https://github.com/C360Studio/semteams/issues/282) owns this bounded foundation change. Draft [PR #283](https://github.com/C360Studio/semteams/pull/283) on
+`codex/agent-runtime-foundation` owns its claim. The starting point is the
 qualified frozen SemStreams adoption, SemTeams `d5ee63252e987f75885b110b3ba02844ab04dedd` / SemStreams
 `8b99efe9c66a4faa4fa509f9f62cc6bad8392128` (#281).
 
@@ -19,7 +19,8 @@ qualified frozen SemStreams adoption, SemTeams `d5ee63252e987f75885b110b3ba02844
 - Define future runtime/pack obligations for durable work identity, versioned artifacts and decisions, evidence
   ownership, and observable controls. Separate these design commitments from implemented capabilities.
 - Replace broad framework component and payload registration with explicit SemTeams composition registration,
-  still using the frozen upstream implementations. Review the catalog and generated-interface impact before coding.
+  preserving all 27 advertised factories and seven framework payload owner families plus existing product
+  payloads. Generated interfaces and runtime behavior remain unchanged; this is not catalog pruning.
 - Prove admitted production/mock compositions and retained behavior with focused tests, existing qualification,
   required local checks, and independent architecture/Go review; add frontend review if its contracts change.
 - Identify the next extraction slice from concrete dependencies without copying implementation in this change.
@@ -34,5 +35,5 @@ future behavior. Existing evidence-body rendering limitation #261 and qualificat
 ## Impact
 
 Repository guidance and architecture/product documentation, a shared composition registration boundary, product
-bootstrap and its schema generator, focused contract tests, and any deliberately changed generated interfaces.
+bootstrap and its schema generator, focused contract tests, and verification of unchanged generated interfaces.
 The exact registration surface is decided in the reviewed design; no new runtime primitive is authorized.
