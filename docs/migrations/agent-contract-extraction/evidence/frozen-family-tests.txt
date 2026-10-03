@@ -1,0 +1,4 @@
+Captured output; tab characters expanded to eight-column stops.
+ok      github.com/c360studio/semstreams/agentic        5.223s
+ok      github.com/c360studio/semstreams/vocabulary/agentic     1.274s
+?       github.com/c360studio/semstreams/internal/looptoken     [no test files]

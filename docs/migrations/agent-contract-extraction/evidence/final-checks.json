@@ -1,0 +1,72 @@
+{
+  "baseline": "042193463e3b27fb1996ed4e99bf2b0cd4024a06",
+  "checks": [
+    {
+      "name": "analyzer-race",
+      "command": [
+        "go",
+        "test",
+        "-race",
+        "scripts/measure-agent-contract-family.go",
+        "scripts/measure-agent-contract-family_test.go"
+      ],
+      "exit_code": 0
+    },
+    {
+      "name": "analyzer-vet",
+      "command": [
+        "go",
+        "vet",
+        "scripts/measure-agent-contract-family.go",
+        "scripts/measure-agent-contract-family_test.go"
+      ],
+      "exit_code": 0
+    },
+    {
+      "name": "openspec",
+      "command": [
+        "task",
+        "openspec:validate"
+      ],
+      "exit_code": 0
+    },
+    {
+      "name": "queue",
+      "command": [
+        "task",
+        "openspec:queue-test"
+      ],
+      "exit_code": 0
+    }
+  ],
+  "runtime_surfaces_unchanged": true,
+  "runtime_surface_paths": [
+    "cmd",
+    "internal",
+    "configs",
+    "go.mod",
+    "go.sum",
+    "schemas",
+    "specs",
+    "ui",
+    ".github",
+    "taskfiles",
+    "test"
+  ],
+  "independent_review": {
+    "architecture": "pass",
+    "analyzer_and_evidence": "pass",
+    "resolved_findings": [
+      "compiled module vs selected module identity binding",
+      "exported sentinel/shared-variable references"
+    ],
+    "report_sha256": "549113c4c80798659fb65b54a397437e2e05cc4ba8f4bef9b9c4446627b8de6b",
+    "archive_and_promoted_spec": "pass"
+  },
+  "hosted_ci": "No child-PR run: Repository CI pull_request filter targets main; this PR is stacked on the foundation branch.",
+  "post_archive": {
+    "strict_specs_passed": 4,
+    "queue_fixtures_passed": 26,
+    "broken_local_links": 0
+  }
+}
