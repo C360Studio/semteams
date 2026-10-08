@@ -7,4 +7,4 @@ work board. Membership is never inferred from activity.
   (read when `WORK_SOURCE=github`).
 - `portfolio.schema.json`: hand-authored JSON Schema (`schemas/` is generated).
 
-Shape and validation: `openspec/changes/work-board-read-only/design.md` D4.
+Shape and validation: `openspec/changes/archive/2026-10-08-work-board-read-only/design.md` D4.

@@ -39,12 +39,12 @@
 - [x] 4.1 Journey `work-board.spec.ts` and `test:e2e:agentic:work-board` (6ad2eaf3, 783a3edd): 3 passed on a fresh
       stack at 78fbc936 (fixtures + live ops control 6.2 s; in-page toggle and selection), after fixing a layout-effect
       reconnect loop and the REST reconcile erasing SSE parents (78fbc936).
-- [ ] 4.2 HOLD on `approval-pause`: `research-mvp` PASS, `ops-agent` PASS, `chain-drill-in` PASS (78fbc936),
-      `ask-user-pause` is a pre-existing skip; `approval-pause` fails at its run-phase assertion ("never reached a
-      settled phase") before and after the fix, and the `main` baseline could not boot because the host disk filled
-      again (Docker build cache from `--no-cache` stack boots). Attribute on `main` once disk is freed. ESLint,
-      svelte-check and `task ui:test` are green.
+- [x] 4.2 Journeys on a fresh stack at 78fbc936: `research-mvp` PASS, `ops-agent` PASS, `chain-drill-in` PASS;
+      `ask-user-pause` is a pre-existing skip. `approval-pause` fails identically on `main` (7f26ca7d, measured
+      2026-10-08, "agent.run.phase never reached a settled phase"): its fixture decides `dev_via_test`, no rule in
+      `e2e-flow-bootstrap.json` consumes that action (dev-via-test pack parked by ADR-058), no run entity is created.
+      Pre-existing; not attributable to this change. ESLint, svelte-check and `task ui:test` are green.
 - [x] 4.3 `svelte-reviewer` passes on each phase (14be75d5, d3ab1c80, dd6bb3df) with fixes (1873b297, 5dd560a9,
       a0937e89) and a verification pass (PASS) whose three leftovers are applied in the follow-up fix; no Go changed.
-- [ ] 4.4 Archive this change and synchronize the `observable-work` specification as the landing PR's final content
-      commit, followed by the read-only reviewer pass.
+- [x] 4.4 Archived 2026-10-08 with the `observable-work` specification synchronized as the landing PR's final
+      content commit; the read-only reviewer pass is recorded on PR #304.
