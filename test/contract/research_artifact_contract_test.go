@@ -3,25 +3,16 @@ package contract
 import (
 	"testing"
 
-	"github.com/c360studio/semstreams/payloadbuiltins"
-
 	"github.com/c360studio/semteams/cmd/semteams/research"
 )
 
-// TestResearchArtifactRegisteredInLiveRegistry asserts that the
-// SemTeams-local research.Artifact payload is reachable through the
-// live registry after the same registration sequence cmd/semteams/
-// main.go performs at boot. Catches:
-//
-//   - the product-payload registration call going missing from main.go
-//   - schema metadata drift (Domain / Category / Version)
-//   - a future framework-side registration colliding with research.artifact.v1
-//
-// R3.1 of ADR-031.
-func TestResearchArtifactRegisteredInLiveRegistry(t *testing.T) {
+// TestResearchArtifactCompatibleWithRuntimeCatalog checks the product payload's
+// schema and collision compatibility with the framework catalog. The actual
+// bootstrap overlay is exercised by cmd/semteams/payload_registry_test.go.
+func TestResearchArtifactCompatibleWithRuntimeCatalog(t *testing.T) {
 	t.Parallel()
 
-	reg := payloadbuiltins.NewTestRegistry(t)
+	reg := newRuntimePayloadRegistry(t)
 	if err := research.RegisterPayloads(reg); err != nil {
 		t.Fatalf("research.RegisterPayloads: %v", err)
 	}

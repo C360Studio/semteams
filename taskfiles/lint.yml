@@ -6,7 +6,7 @@ tasks:
     cmds:
       - go vet ./...
       - |
-        unformatted=$(gofmt -l cmd test)
+        unformatted=$(gofmt -l cmd internal test)
         if [ -n "$unformatted" ]; then
           echo "The following Go files need formatting:"
           echo "$unformatted"

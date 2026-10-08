@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/c360studio/semstreams/component"
-	"github.com/c360studio/semstreams/componentregistry"
 	"github.com/c360studio/semstreams/composition"
 	"github.com/c360studio/semstreams/service"
+	"github.com/c360studio/semteams/internal/runtimecatalog"
 	"github.com/xeipuuv/gojsonschema"
 	"gopkg.in/yaml.v3"
 )
@@ -23,7 +23,7 @@ func TestSchemaGeneration(t *testing.T) {
 
 	// Initialize registry
 	registry := component.NewRegistry()
-	if err := componentregistry.Register(registry); err != nil {
+	if err := runtimecatalog.RegisterComponents(registry); err != nil {
 		t.Fatalf("Failed to register components: %v", err)
 	}
 
@@ -172,7 +172,7 @@ func TestSchemaValidationWithMetaSchema(t *testing.T) {
 
 	// Initialize registry
 	registry := component.NewRegistry()
-	if err := componentregistry.Register(registry); err != nil {
+	if err := runtimecatalog.RegisterComponents(registry); err != nil {
 		t.Fatalf("Failed to register components: %v", err)
 	}
 

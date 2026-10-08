@@ -27,7 +27,7 @@ def sha(path):
 
 def source_snapshot(source):
     paths = [source / name for name in ("go.mod", "go.sum", "ui/package-lock.json")]
-    for directory in ("cmd", "configs", "ui/src", "ui/e2e", "test/fixtures/journeys"):
+    for directory in ("cmd", "internal", "configs", "ui/src", "ui/e2e", "test/fixtures/journeys"):
         paths.extend(path for path in (source / directory).rglob("*") if path.is_file())
     return {str(path.relative_to(source)): sha(path) for path in sorted(paths)}
 

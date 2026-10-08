@@ -1,0 +1,784 @@
+{
+  "date": "2026-10-03",
+  "baseline": "d5ee63252e987f75885b110b3ba02844ab04dedd",
+  "semstreams": "8b99efe9c66a4faa4fa509f9f62cc6bad8392128",
+  "local_go": "go1.26.4 darwin/arm64",
+  "local_node": "v26.0.0",
+  "build": {
+    "source": "/Users/coby/.codex/worktrees/agent-runtime-foundation/semteams",
+    "context": "/tmp/semteams-agent-runtime-foundation/build-context",
+    "command": [
+      "docker",
+      "build",
+      "--progress=plain",
+      "--target",
+      "production",
+      "--build-arg",
+      "GO_VERSION=1.26.4",
+      "--build-arg",
+      "VERSION=foundation-283",
+      "--build-arg",
+      "COMMIT_SHA=worktree-283",
+      "-f",
+      "/tmp/semteams-agent-runtime-foundation/build-context/docker/Dockerfile",
+      "-t",
+      "stmigfoundation283-backend:foundation",
+      "/tmp/semteams-agent-runtime-foundation/build-context"
+    ],
+    "exit": 0,
+    "source_unchanged": true,
+    "image": "sha256:ca459ee49d5dabeb76669b155400f59de011d2126cd042da3fa6b4cba8be3148"
+  },
+  "build_source_shared_file_count": 330,
+  "build_only_files": {
+    ".devcontainer/README.md": "33f82aca3bd134de7f38bfd0083d935dacfee1f023fad7e747504bea1f637be8",
+    ".devcontainer/full-stack-e2e/devcontainer.json": "33fcba8a84f85225d0ee4687ce1fe85d5d1e110210ea70632a598306bfd78ec5",
+    ".devcontainer/go-backend/devcontainer.json": "43c841c7efa959e5390b529965859151210b72bdc75c44433eed256551e1599f",
+    ".devcontainer/svelte-ui/devcontainer.json": "ed63a746454792977670e3793d0bdffdd4ca04fc33b0c732af2d9c7e2d9d360a",
+    "docker/.dockerignore": "672b271232b51f76ce70fa684e34bdf439174bff1bcff3f2f5164c068937ea6b",
+    "docker/Dockerfile": "63610890e32fbc9b30cc62d5a2cbf872ab3ad9ab257c6376179559601bd94963",
+    "docker/compose/sandbox.yml": "958710183a95f397c3f8d76b7dd7df1b9db56609a6c90bfbb683ff3a95b39633",
+    "docker/compose/services.yml": "51d176f24528ef41d4e5e5d778203f99a454c0c3a87fcef627ec1796e226a9f6",
+    "docker/sandbox.Dockerfile": "3a9a0c4995a6adcb9ac7640a062617a111c0f6e5211107600b31fe8f55e33f88"
+  },
+  "checks": [
+    {
+      "name": "lint",
+      "command": [
+        "task",
+        "lint"
+      ],
+      "exit_code": 0
+    },
+    {
+      "name": "race",
+      "command": [
+        "task",
+        "test:race"
+      ],
+      "exit_code": 0
+    },
+    {
+      "name": "integration",
+      "command": [
+        "task",
+        "test:integration"
+      ],
+      "exit_code": 0
+    },
+    {
+      "name": "build",
+      "command": [
+        "go",
+        "build",
+        "./..."
+      ],
+      "exit_code": 0
+    },
+    {
+      "name": "schema",
+      "command": [
+        "task",
+        "schema:generate"
+      ],
+      "exit_code": 0
+    },
+    {
+      "name": "schema-check",
+      "command": [
+        "task",
+        "schema:check-changes"
+      ],
+      "exit_code": 0
+    },
+    {
+      "name": "browser-runner-test",
+      "command": [
+        "task",
+        "test:browser-runner"
+      ],
+      "exit_code": 0
+    },
+    {
+      "name": "openspec",
+      "command": [
+        "task",
+        "openspec:validate"
+      ],
+      "exit_code": 0
+    },
+    {
+      "name": "queue",
+      "command": [
+        "task",
+        "openspec:queue-test"
+      ],
+      "exit_code": 0
+    },
+    {
+      "name": "types",
+      "command": [
+        "npm",
+        "--prefix",
+        "ui",
+        "run",
+        "generate-types:check"
+      ],
+      "exit_code": 1,
+      "outcome": "invocation error: OPENAPI_SPEC_PATH absent; no source changed"
+    },
+    {
+      "name": "types-corrected",
+      "command": [
+        "env",
+        "OPENAPI_SPEC_PATH=../specs/openapi.v3.yaml",
+        "npm",
+        "run",
+        "generate-types:check"
+      ],
+      "cwd": "ui",
+      "exit_code": 0
+    }
+  ],
+  "source_comparison": {
+    "before": "a4f4668222c4b8dfa1de3b1236b7f9b97d1a3b417ec851cc0c6da460c85e0043",
+    "after": "a4f4668222c4b8dfa1de3b1236b7f9b97d1a3b417ec851cc0c6da460c85e0043",
+    "unchanged": true
+  },
+  "browser_scenarios": [
+    {
+      "name": "autoresearch",
+      "exit": 0,
+      "playwright_exit": 0,
+      "skipped": false,
+      "source_changed": false,
+      "stats": {
+        "startTime": "2026-10-03T13:03:00.642Z",
+        "duration": 3748.121,
+        "expected": 1,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "manifest": {
+        "name": "autoresearch",
+        "fixture": "autoresearch.yaml",
+        "spec": "autoresearch.spec.ts",
+        "config": "e2e-flow-bootstrap.json",
+        "source": "/Users/coby/.codex/worktrees/agent-runtime-foundation/semteams",
+        "project": "stmigfoundation283",
+        "port": 33283,
+        "runner_sha256": "263bd68b2ff14a3e1900c90f4fd84a94bdd09881fbff2b6cfbbb26a9acc1f477",
+        "matrix_sha256": "6cbebefa31505fd1f7cc4beeb92766e936aba301e30f9eae46b0e2cc4ec89136",
+        "source_tree_sha256": "a4f4668222c4b8dfa1de3b1236b7f9b97d1a3b417ec851cc0c6da460c85e0043",
+        "ui_source_tree_sha256": "49f88c4db835aa4ef7f8e707ef9e317965c0b2044c0e7bdbe27c61ca1136c935",
+        "derived_config_sha256": "3cb221ccf480403bf0240549959498f25a69712fcc1a827c49fac35881449f17",
+        "compose_sha256": "3dd302b7cf766d5ed5e4e3ad3c1af1fc00a23507d565fca20b2e55c92f098fa0",
+        "sha256": {
+          "go.mod": "fe05e2ea4b4c45bfc181ff83b3a925dccda4dd3d54970b03765c9b50d0b96fff",
+          "go.sum": "8cb9cd26889b1efdd0d03402581fbc26b354bde2b45f195efd71e90b93e51599",
+          "ui/package-lock.json": "28fd4403ce710547429496e98d4b7f3e941986eb67e6957316e298ffb2a144c4",
+          "configs/e2e-flow-bootstrap.json": "f19b57b80dac11e7bdfcce311b59733a4c797b8b765fb7602861b774ec904106",
+          "test/fixtures/journeys/autoresearch.yaml": "89529961d95aa9fa574c41ba66b80fabe314f7be0b6f7e82e8c38603e7baa32b",
+          "ui/e2e/agentic/autoresearch.spec.ts": "ba37aa6f1090a3f64d2cc81ee3bf6e6957b8cd483c649977ea4f406317b1677f"
+        },
+        "images": [
+          {
+            "Id": "sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b",
+            "RepoTags": [
+              "caddy:2-alpine"
+            ],
+            "RepoDigests": [
+              "caddy@sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b"
+            ]
+          },
+          {
+            "Id": "sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66",
+            "RepoTags": [
+              "nats:2.14.4-alpine",
+              "nats@sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66"
+            ],
+            "RepoDigests": [
+              "nats@sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66"
+            ]
+          },
+          {
+            "Id": "sha256:09fb79ed5ef11c76875be1b9ed97cd9750ab4065a7e06a7a158876050f096ec7",
+            "RepoTags": [
+              "stmig162-mock-llm:8b99efe"
+            ],
+            "RepoDigests": [
+              "stmig162-mock-llm@sha256:09fb79ed5ef11c76875be1b9ed97cd9750ab4065a7e06a7a158876050f096ec7"
+            ]
+          },
+          {
+            "Id": "sha256:80aa3f7be0de406f45471018b06229b9e7151bf38b8ef0e7a01351d74d79ca6f",
+            "RepoTags": [
+              "stmig162-sandbox:8b99efe"
+            ],
+            "RepoDigests": [
+              "stmig162-sandbox@sha256:80aa3f7be0de406f45471018b06229b9e7151bf38b8ef0e7a01351d74d79ca6f"
+            ]
+          },
+          {
+            "Id": "sha256:5bbae7d16029a20ca17382a58d6acd2f73c1478b151516ba83549faad691a91a",
+            "RepoTags": [
+              "stmig162-ui:8b99efe"
+            ],
+            "RepoDigests": [
+              "stmig162-ui@sha256:5bbae7d16029a20ca17382a58d6acd2f73c1478b151516ba83549faad691a91a"
+            ]
+          },
+          {
+            "Id": "sha256:ca459ee49d5dabeb76669b155400f59de011d2126cd042da3fa6b4cba8be3148",
+            "RepoTags": [
+              "stmigfoundation283-backend:foundation"
+            ],
+            "RepoDigests": [
+              "stmigfoundation283-backend@sha256:ca459ee49d5dabeb76669b155400f59de011d2126cd042da3fa6b4cba8be3148"
+            ]
+          }
+        ],
+        "source_after_tree_sha256": "a4f4668222c4b8dfa1de3b1236b7f9b97d1a3b417ec851cc0c6da460c85e0043",
+        "ui_source_after_tree_sha256": "49f88c4db835aa4ef7f8e707ef9e317965c0b2044c0e7bdbe27c61ca1136c935",
+        "source_changed": false
+      }
+    },
+    {
+      "name": "coordinator-routing-matrix",
+      "exit": 0,
+      "playwright_exit": 0,
+      "skipped": false,
+      "source_changed": false,
+      "stats": {
+        "startTime": "2026-10-03T13:03:19.356Z",
+        "duration": 26763.644,
+        "expected": 1,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "manifest": {
+        "name": "coordinator-routing-matrix",
+        "fixture": "coordinator-routing-matrix.yaml",
+        "spec": "coordinator-routing-matrix.spec.ts",
+        "config": "e2e-flow-bootstrap-routing-only.gen.json",
+        "source": "/Users/coby/.codex/worktrees/agent-runtime-foundation/semteams",
+        "project": "stmigfoundation283",
+        "port": 33283,
+        "runner_sha256": "263bd68b2ff14a3e1900c90f4fd84a94bdd09881fbff2b6cfbbb26a9acc1f477",
+        "matrix_sha256": "6cbebefa31505fd1f7cc4beeb92766e936aba301e30f9eae46b0e2cc4ec89136",
+        "source_tree_sha256": "a4f4668222c4b8dfa1de3b1236b7f9b97d1a3b417ec851cc0c6da460c85e0043",
+        "ui_source_tree_sha256": "49f88c4db835aa4ef7f8e707ef9e317965c0b2044c0e7bdbe27c61ca1136c935",
+        "derived_config_sha256": "94104034a458add2efa977a84ce97e60367dbccdf81a219c08d934b9a4e0724b",
+        "compose_sha256": "f4050dc0c19d8e12923169acbc993fce453ab5e88a894ef064a619395ccef92f",
+        "sha256": {
+          "go.mod": "fe05e2ea4b4c45bfc181ff83b3a925dccda4dd3d54970b03765c9b50d0b96fff",
+          "go.sum": "8cb9cd26889b1efdd0d03402581fbc26b354bde2b45f195efd71e90b93e51599",
+          "ui/package-lock.json": "28fd4403ce710547429496e98d4b7f3e941986eb67e6957316e298ffb2a144c4",
+          "configs/e2e-flow-bootstrap.json": "f19b57b80dac11e7bdfcce311b59733a4c797b8b765fb7602861b774ec904106",
+          "test/fixtures/journeys/coordinator-routing-matrix.yaml": "dea71d5e81172d2686bfd5257b9ad89854f165e9447cd2f1bc4ee121f3e99bf1",
+          "ui/e2e/agentic/coordinator-routing-matrix.spec.ts": "216410e60902ae258f9a6955dad011ca4663d6b0724e0d9932f87e5da8e524f6"
+        },
+        "images": [
+          {
+            "Id": "sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b",
+            "RepoTags": [
+              "caddy:2-alpine"
+            ],
+            "RepoDigests": [
+              "caddy@sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b"
+            ]
+          },
+          {
+            "Id": "sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66",
+            "RepoTags": [
+              "nats:2.14.4-alpine",
+              "nats@sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66"
+            ],
+            "RepoDigests": [
+              "nats@sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66"
+            ]
+          },
+          {
+            "Id": "sha256:09fb79ed5ef11c76875be1b9ed97cd9750ab4065a7e06a7a158876050f096ec7",
+            "RepoTags": [
+              "stmig162-mock-llm:8b99efe"
+            ],
+            "RepoDigests": [
+              "stmig162-mock-llm@sha256:09fb79ed5ef11c76875be1b9ed97cd9750ab4065a7e06a7a158876050f096ec7"
+            ]
+          },
+          {
+            "Id": "sha256:80aa3f7be0de406f45471018b06229b9e7151bf38b8ef0e7a01351d74d79ca6f",
+            "RepoTags": [
+              "stmig162-sandbox:8b99efe"
+            ],
+            "RepoDigests": [
+              "stmig162-sandbox@sha256:80aa3f7be0de406f45471018b06229b9e7151bf38b8ef0e7a01351d74d79ca6f"
+            ]
+          },
+          {
+            "Id": "sha256:5bbae7d16029a20ca17382a58d6acd2f73c1478b151516ba83549faad691a91a",
+            "RepoTags": [
+              "stmig162-ui:8b99efe"
+            ],
+            "RepoDigests": [
+              "stmig162-ui@sha256:5bbae7d16029a20ca17382a58d6acd2f73c1478b151516ba83549faad691a91a"
+            ]
+          },
+          {
+            "Id": "sha256:ca459ee49d5dabeb76669b155400f59de011d2126cd042da3fa6b4cba8be3148",
+            "RepoTags": [
+              "stmigfoundation283-backend:foundation"
+            ],
+            "RepoDigests": [
+              "stmigfoundation283-backend@sha256:ca459ee49d5dabeb76669b155400f59de011d2126cd042da3fa6b4cba8be3148"
+            ]
+          }
+        ],
+        "source_after_tree_sha256": "a4f4668222c4b8dfa1de3b1236b7f9b97d1a3b417ec851cc0c6da460c85e0043",
+        "ui_source_after_tree_sha256": "49f88c4db835aa4ef7f8e707ef9e317965c0b2044c0e7bdbe27c61ca1136c935",
+        "source_changed": false
+      }
+    },
+    {
+      "name": "admin-flows-inventory",
+      "exit": 0,
+      "playwright_exit": 0,
+      "skipped": false,
+      "source_changed": false,
+      "stats": {
+        "startTime": "2026-10-03T13:04:00.815Z",
+        "duration": 3539.253,
+        "expected": 2,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "manifest": {
+        "name": "admin-flows-inventory",
+        "fixture": "research-mvp.yaml",
+        "spec": "admin-flows-inventory.spec.ts",
+        "config": "e2e-flow-bootstrap.json",
+        "source": "/Users/coby/.codex/worktrees/agent-runtime-foundation/semteams",
+        "project": "stmigfoundation283",
+        "port": 33283,
+        "runner_sha256": "263bd68b2ff14a3e1900c90f4fd84a94bdd09881fbff2b6cfbbb26a9acc1f477",
+        "matrix_sha256": "6cbebefa31505fd1f7cc4beeb92766e936aba301e30f9eae46b0e2cc4ec89136",
+        "source_tree_sha256": "a4f4668222c4b8dfa1de3b1236b7f9b97d1a3b417ec851cc0c6da460c85e0043",
+        "ui_source_tree_sha256": "49f88c4db835aa4ef7f8e707ef9e317965c0b2044c0e7bdbe27c61ca1136c935",
+        "derived_config_sha256": "3cb221ccf480403bf0240549959498f25a69712fcc1a827c49fac35881449f17",
+        "compose_sha256": "2f8d085bf72b714440184082fea7f5114e740e4f8fb54a153ff5c25d5ba9bdf1",
+        "sha256": {
+          "go.mod": "fe05e2ea4b4c45bfc181ff83b3a925dccda4dd3d54970b03765c9b50d0b96fff",
+          "go.sum": "8cb9cd26889b1efdd0d03402581fbc26b354bde2b45f195efd71e90b93e51599",
+          "ui/package-lock.json": "28fd4403ce710547429496e98d4b7f3e941986eb67e6957316e298ffb2a144c4",
+          "configs/e2e-flow-bootstrap.json": "f19b57b80dac11e7bdfcce311b59733a4c797b8b765fb7602861b774ec904106",
+          "test/fixtures/journeys/research-mvp.yaml": "73409209441e47724950739c43725f1d20e02bf923d045dff1859d8dc913fa65",
+          "ui/e2e/agentic/admin-flows-inventory.spec.ts": "4c0ef34647757d003f5a28ee62b6a48f3912985628feb19128f71f9d56376b11"
+        },
+        "images": [
+          {
+            "Id": "sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b",
+            "RepoTags": [
+              "caddy:2-alpine"
+            ],
+            "RepoDigests": [
+              "caddy@sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b"
+            ]
+          },
+          {
+            "Id": "sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66",
+            "RepoTags": [
+              "nats:2.14.4-alpine",
+              "nats@sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66"
+            ],
+            "RepoDigests": [
+              "nats@sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66"
+            ]
+          },
+          {
+            "Id": "sha256:09fb79ed5ef11c76875be1b9ed97cd9750ab4065a7e06a7a158876050f096ec7",
+            "RepoTags": [
+              "stmig162-mock-llm:8b99efe"
+            ],
+            "RepoDigests": [
+              "stmig162-mock-llm@sha256:09fb79ed5ef11c76875be1b9ed97cd9750ab4065a7e06a7a158876050f096ec7"
+            ]
+          },
+          {
+            "Id": "sha256:80aa3f7be0de406f45471018b06229b9e7151bf38b8ef0e7a01351d74d79ca6f",
+            "RepoTags": [
+              "stmig162-sandbox:8b99efe"
+            ],
+            "RepoDigests": [
+              "stmig162-sandbox@sha256:80aa3f7be0de406f45471018b06229b9e7151bf38b8ef0e7a01351d74d79ca6f"
+            ]
+          },
+          {
+            "Id": "sha256:5bbae7d16029a20ca17382a58d6acd2f73c1478b151516ba83549faad691a91a",
+            "RepoTags": [
+              "stmig162-ui:8b99efe"
+            ],
+            "RepoDigests": [
+              "stmig162-ui@sha256:5bbae7d16029a20ca17382a58d6acd2f73c1478b151516ba83549faad691a91a"
+            ]
+          },
+          {
+            "Id": "sha256:ca459ee49d5dabeb76669b155400f59de011d2126cd042da3fa6b4cba8be3148",
+            "RepoTags": [
+              "stmigfoundation283-backend:foundation"
+            ],
+            "RepoDigests": [
+              "stmigfoundation283-backend@sha256:ca459ee49d5dabeb76669b155400f59de011d2126cd042da3fa6b4cba8be3148"
+            ]
+          }
+        ],
+        "source_after_tree_sha256": "a4f4668222c4b8dfa1de3b1236b7f9b97d1a3b417ec851cc0c6da460c85e0043",
+        "ui_source_after_tree_sha256": "49f88c4db835aa4ef7f8e707ef9e317965c0b2044c0e7bdbe27c61ca1136c935",
+        "source_changed": false
+      }
+    },
+    {
+      "name": "approval-boundary-approve",
+      "exit": 0,
+      "playwright_exit": 0,
+      "skipped": false,
+      "source_changed": false,
+      "stats": {
+        "startTime": "2026-10-03T13:04:19.175Z",
+        "duration": 2290.846,
+        "expected": 1,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "manifest": {
+        "name": "approval-boundary-approve",
+        "fixture": "sandbox-mvp.yaml",
+        "spec": "approval-boundary.spec.ts",
+        "config": "e2e-flow-bootstrap-approval-boundary.gen.json",
+        "action": "approve",
+        "source": "/Users/coby/.codex/worktrees/agent-runtime-foundation/semteams",
+        "project": "stmigfoundation283",
+        "port": 33283,
+        "runner_sha256": "263bd68b2ff14a3e1900c90f4fd84a94bdd09881fbff2b6cfbbb26a9acc1f477",
+        "matrix_sha256": "6cbebefa31505fd1f7cc4beeb92766e936aba301e30f9eae46b0e2cc4ec89136",
+        "source_tree_sha256": "a4f4668222c4b8dfa1de3b1236b7f9b97d1a3b417ec851cc0c6da460c85e0043",
+        "ui_source_tree_sha256": "49f88c4db835aa4ef7f8e707ef9e317965c0b2044c0e7bdbe27c61ca1136c935",
+        "derived_config_sha256": "6a641c7e2cae9e9e844b992163e5eba074786c14bb278df22d5d957bda9f0e0e",
+        "compose_sha256": "e75899b0128ff936b244ac52479e1882b4c055bc6ea34604628e997aee4fb15c",
+        "sha256": {
+          "go.mod": "fe05e2ea4b4c45bfc181ff83b3a925dccda4dd3d54970b03765c9b50d0b96fff",
+          "go.sum": "8cb9cd26889b1efdd0d03402581fbc26b354bde2b45f195efd71e90b93e51599",
+          "ui/package-lock.json": "28fd4403ce710547429496e98d4b7f3e941986eb67e6957316e298ffb2a144c4",
+          "configs/e2e-flow-bootstrap.json": "f19b57b80dac11e7bdfcce311b59733a4c797b8b765fb7602861b774ec904106",
+          "test/fixtures/journeys/sandbox-mvp.yaml": "3bf4a1dc1953397accbd4fd15b11122abf0576569eb570203b4cf2ca467032f4",
+          "ui/e2e/agentic/approval-boundary.spec.ts": "987794601028ec5eae949e5422a967427ce35d0c6f6170b3f863a287e7ec5d89"
+        },
+        "images": [
+          {
+            "Id": "sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b",
+            "RepoTags": [
+              "caddy:2-alpine"
+            ],
+            "RepoDigests": [
+              "caddy@sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b"
+            ]
+          },
+          {
+            "Id": "sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66",
+            "RepoTags": [
+              "nats:2.14.4-alpine",
+              "nats@sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66"
+            ],
+            "RepoDigests": [
+              "nats@sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66"
+            ]
+          },
+          {
+            "Id": "sha256:09fb79ed5ef11c76875be1b9ed97cd9750ab4065a7e06a7a158876050f096ec7",
+            "RepoTags": [
+              "stmig162-mock-llm:8b99efe"
+            ],
+            "RepoDigests": [
+              "stmig162-mock-llm@sha256:09fb79ed5ef11c76875be1b9ed97cd9750ab4065a7e06a7a158876050f096ec7"
+            ]
+          },
+          {
+            "Id": "sha256:80aa3f7be0de406f45471018b06229b9e7151bf38b8ef0e7a01351d74d79ca6f",
+            "RepoTags": [
+              "stmig162-sandbox:8b99efe"
+            ],
+            "RepoDigests": [
+              "stmig162-sandbox@sha256:80aa3f7be0de406f45471018b06229b9e7151bf38b8ef0e7a01351d74d79ca6f"
+            ]
+          },
+          {
+            "Id": "sha256:5bbae7d16029a20ca17382a58d6acd2f73c1478b151516ba83549faad691a91a",
+            "RepoTags": [
+              "stmig162-ui:8b99efe"
+            ],
+            "RepoDigests": [
+              "stmig162-ui@sha256:5bbae7d16029a20ca17382a58d6acd2f73c1478b151516ba83549faad691a91a"
+            ]
+          },
+          {
+            "Id": "sha256:ca459ee49d5dabeb76669b155400f59de011d2126cd042da3fa6b4cba8be3148",
+            "RepoTags": [
+              "stmigfoundation283-backend:foundation"
+            ],
+            "RepoDigests": [
+              "stmigfoundation283-backend@sha256:ca459ee49d5dabeb76669b155400f59de011d2126cd042da3fa6b4cba8be3148"
+            ]
+          }
+        ],
+        "source_after_tree_sha256": "a4f4668222c4b8dfa1de3b1236b7f9b97d1a3b417ec851cc0c6da460c85e0043",
+        "ui_source_after_tree_sha256": "49f88c4db835aa4ef7f8e707ef9e317965c0b2044c0e7bdbe27c61ca1136c935",
+        "source_changed": false
+      }
+    },
+    {
+      "name": "approval-boundary-cancel",
+      "exit": 0,
+      "playwright_exit": 0,
+      "skipped": false,
+      "source_changed": false,
+      "stats": {
+        "startTime": "2026-10-03T13:04:35.798Z",
+        "duration": 2216.319,
+        "expected": 1,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "manifest": {
+        "name": "approval-boundary-cancel",
+        "fixture": "sandbox-mvp.yaml",
+        "spec": "approval-boundary.spec.ts",
+        "config": "e2e-flow-bootstrap-approval-boundary.gen.json",
+        "action": "cancel",
+        "source": "/Users/coby/.codex/worktrees/agent-runtime-foundation/semteams",
+        "project": "stmigfoundation283",
+        "port": 33283,
+        "runner_sha256": "263bd68b2ff14a3e1900c90f4fd84a94bdd09881fbff2b6cfbbb26a9acc1f477",
+        "matrix_sha256": "6cbebefa31505fd1f7cc4beeb92766e936aba301e30f9eae46b0e2cc4ec89136",
+        "source_tree_sha256": "a4f4668222c4b8dfa1de3b1236b7f9b97d1a3b417ec851cc0c6da460c85e0043",
+        "ui_source_tree_sha256": "49f88c4db835aa4ef7f8e707ef9e317965c0b2044c0e7bdbe27c61ca1136c935",
+        "derived_config_sha256": "6a641c7e2cae9e9e844b992163e5eba074786c14bb278df22d5d957bda9f0e0e",
+        "compose_sha256": "42e2469249278e6153208050cb987bd1a9b4d508f2ba0a9bbc32e888ca032ec1",
+        "sha256": {
+          "go.mod": "fe05e2ea4b4c45bfc181ff83b3a925dccda4dd3d54970b03765c9b50d0b96fff",
+          "go.sum": "8cb9cd26889b1efdd0d03402581fbc26b354bde2b45f195efd71e90b93e51599",
+          "ui/package-lock.json": "28fd4403ce710547429496e98d4b7f3e941986eb67e6957316e298ffb2a144c4",
+          "configs/e2e-flow-bootstrap.json": "f19b57b80dac11e7bdfcce311b59733a4c797b8b765fb7602861b774ec904106",
+          "test/fixtures/journeys/sandbox-mvp.yaml": "3bf4a1dc1953397accbd4fd15b11122abf0576569eb570203b4cf2ca467032f4",
+          "ui/e2e/agentic/approval-boundary.spec.ts": "987794601028ec5eae949e5422a967427ce35d0c6f6170b3f863a287e7ec5d89"
+        },
+        "images": [
+          {
+            "Id": "sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b",
+            "RepoTags": [
+              "caddy:2-alpine"
+            ],
+            "RepoDigests": [
+              "caddy@sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b"
+            ]
+          },
+          {
+            "Id": "sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66",
+            "RepoTags": [
+              "nats:2.14.4-alpine",
+              "nats@sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66"
+            ],
+            "RepoDigests": [
+              "nats@sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66"
+            ]
+          },
+          {
+            "Id": "sha256:09fb79ed5ef11c76875be1b9ed97cd9750ab4065a7e06a7a158876050f096ec7",
+            "RepoTags": [
+              "stmig162-mock-llm:8b99efe"
+            ],
+            "RepoDigests": [
+              "stmig162-mock-llm@sha256:09fb79ed5ef11c76875be1b9ed97cd9750ab4065a7e06a7a158876050f096ec7"
+            ]
+          },
+          {
+            "Id": "sha256:80aa3f7be0de406f45471018b06229b9e7151bf38b8ef0e7a01351d74d79ca6f",
+            "RepoTags": [
+              "stmig162-sandbox:8b99efe"
+            ],
+            "RepoDigests": [
+              "stmig162-sandbox@sha256:80aa3f7be0de406f45471018b06229b9e7151bf38b8ef0e7a01351d74d79ca6f"
+            ]
+          },
+          {
+            "Id": "sha256:5bbae7d16029a20ca17382a58d6acd2f73c1478b151516ba83549faad691a91a",
+            "RepoTags": [
+              "stmig162-ui:8b99efe"
+            ],
+            "RepoDigests": [
+              "stmig162-ui@sha256:5bbae7d16029a20ca17382a58d6acd2f73c1478b151516ba83549faad691a91a"
+            ]
+          },
+          {
+            "Id": "sha256:ca459ee49d5dabeb76669b155400f59de011d2126cd042da3fa6b4cba8be3148",
+            "RepoTags": [
+              "stmigfoundation283-backend:foundation"
+            ],
+            "RepoDigests": [
+              "stmigfoundation283-backend@sha256:ca459ee49d5dabeb76669b155400f59de011d2126cd042da3fa6b4cba8be3148"
+            ]
+          }
+        ],
+        "source_after_tree_sha256": "a4f4668222c4b8dfa1de3b1236b7f9b97d1a3b417ec851cc0c6da460c85e0043",
+        "ui_source_after_tree_sha256": "49f88c4db835aa4ef7f8e707ef9e317965c0b2044c0e7bdbe27c61ca1136c935",
+        "source_changed": false
+      }
+    },
+    {
+      "name": "research-fanout",
+      "exit": 0,
+      "playwright_exit": 0,
+      "skipped": false,
+      "source_changed": false,
+      "stats": {
+        "startTime": "2026-10-03T13:04:52.352Z",
+        "duration": 2267.408,
+        "expected": 1,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "manifest": {
+        "name": "research-fanout",
+        "fixture": "research-fanout.yaml",
+        "spec": "research-fanout.spec.ts",
+        "config": "e2e-flow-bootstrap.json",
+        "source": "/Users/coby/.codex/worktrees/agent-runtime-foundation/semteams",
+        "project": "stmigfoundation283",
+        "port": 33283,
+        "runner_sha256": "263bd68b2ff14a3e1900c90f4fd84a94bdd09881fbff2b6cfbbb26a9acc1f477",
+        "matrix_sha256": "6cbebefa31505fd1f7cc4beeb92766e936aba301e30f9eae46b0e2cc4ec89136",
+        "source_tree_sha256": "a4f4668222c4b8dfa1de3b1236b7f9b97d1a3b417ec851cc0c6da460c85e0043",
+        "ui_source_tree_sha256": "49f88c4db835aa4ef7f8e707ef9e317965c0b2044c0e7bdbe27c61ca1136c935",
+        "derived_config_sha256": "3cb221ccf480403bf0240549959498f25a69712fcc1a827c49fac35881449f17",
+        "compose_sha256": "c0977ff571c675ac521924449efb9a1a23c0cc278449a3068ebacefaf2c9aeb3",
+        "sha256": {
+          "go.mod": "fe05e2ea4b4c45bfc181ff83b3a925dccda4dd3d54970b03765c9b50d0b96fff",
+          "go.sum": "8cb9cd26889b1efdd0d03402581fbc26b354bde2b45f195efd71e90b93e51599",
+          "ui/package-lock.json": "28fd4403ce710547429496e98d4b7f3e941986eb67e6957316e298ffb2a144c4",
+          "configs/e2e-flow-bootstrap.json": "f19b57b80dac11e7bdfcce311b59733a4c797b8b765fb7602861b774ec904106",
+          "test/fixtures/journeys/research-fanout.yaml": "914b1edec4b0151ed3f59b424c52c9c6ddb490f2cabd2c1ed6a40cd177d2cb36",
+          "ui/e2e/agentic/research-fanout.spec.ts": "854ef43c47f3b1ba911406ecb9fa226d5ef735d608e0c4790a42ef95b7497920"
+        },
+        "images": [
+          {
+            "Id": "sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b",
+            "RepoTags": [
+              "caddy:2-alpine"
+            ],
+            "RepoDigests": [
+              "caddy@sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b"
+            ]
+          },
+          {
+            "Id": "sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66",
+            "RepoTags": [
+              "nats:2.14.4-alpine",
+              "nats@sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66"
+            ],
+            "RepoDigests": [
+              "nats@sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66"
+            ]
+          },
+          {
+            "Id": "sha256:09fb79ed5ef11c76875be1b9ed97cd9750ab4065a7e06a7a158876050f096ec7",
+            "RepoTags": [
+              "stmig162-mock-llm:8b99efe"
+            ],
+            "RepoDigests": [
+              "stmig162-mock-llm@sha256:09fb79ed5ef11c76875be1b9ed97cd9750ab4065a7e06a7a158876050f096ec7"
+            ]
+          },
+          {
+            "Id": "sha256:80aa3f7be0de406f45471018b06229b9e7151bf38b8ef0e7a01351d74d79ca6f",
+            "RepoTags": [
+              "stmig162-sandbox:8b99efe"
+            ],
+            "RepoDigests": [
+              "stmig162-sandbox@sha256:80aa3f7be0de406f45471018b06229b9e7151bf38b8ef0e7a01351d74d79ca6f"
+            ]
+          },
+          {
+            "Id": "sha256:5bbae7d16029a20ca17382a58d6acd2f73c1478b151516ba83549faad691a91a",
+            "RepoTags": [
+              "stmig162-ui:8b99efe"
+            ],
+            "RepoDigests": [
+              "stmig162-ui@sha256:5bbae7d16029a20ca17382a58d6acd2f73c1478b151516ba83549faad691a91a"
+            ]
+          },
+          {
+            "Id": "sha256:ca459ee49d5dabeb76669b155400f59de011d2126cd042da3fa6b4cba8be3148",
+            "RepoTags": [
+              "stmigfoundation283-backend:foundation"
+            ],
+            "RepoDigests": [
+              "stmigfoundation283-backend@sha256:ca459ee49d5dabeb76669b155400f59de011d2126cd042da3fa6b4cba8be3148"
+            ]
+          }
+        ],
+        "source_after_tree_sha256": "a4f4668222c4b8dfa1de3b1236b7f9b97d1a3b417ec851cc0c6da460c85e0043",
+        "ui_source_after_tree_sha256": "49f88c4db835aa4ef7f8e707ef9e317965c0b2044c0e7bdbe27c61ca1136c935",
+        "source_changed": false
+      }
+    }
+  ],
+  "scoped_cleanup": {
+    "containers": 0,
+    "volumes": 0,
+    "networks": 0
+  },
+  "raw_logs": "/tmp/semteams-agent-runtime-foundation",
+  "independent_go_review": {
+    "result": "pass",
+    "manifest_algorithm": "SHA256 of sorted relative-path + space + file-SHA256 + newline lines",
+    "manifest_sha256": "5c23e7a5d094f81229025ffa809d3c04c77c6735727b198b7be8f32da55f3791",
+    "files": {
+      ".github/workflows/ci.yml": "8c03df38608f4d66c615e84cd42c77cdfbb8f49a13620a8c8a92f0b5de40ba14",
+      "cmd/openapi-generator/main.go": "d6bcdb7d97569da4480e891cb34e65f2cbb3fa85c4baceba0bf4c2b93d605f72",
+      "cmd/openapi-generator/openapi_generator_test.go": "28354703230e747c2fe21e04850bd5ec65c00e41fac0d8165ece881613c16fdd",
+      "cmd/semteams/main.go": "076125107d2a99227e871e936e4e7303d40bbca46878c6f395373d3973ed05ba",
+      "cmd/semteams/payload_registry_test.go": "22832d12a8af32e19dab9809ac46ee21a5a3a2e33ea29fdfb1d578b707126960",
+      "cmd/semteams/product_tools.go": "f9024dfe223fa5c52df4e47702fc0b870000f78f6a8c51069aa21726def39d99",
+      "cmd/semteams/research/artifact.go": "6e08267635dcc22d794b6ea38d507fa0b3865055362191f8badc5acf317c0a2a",
+      "internal/runtimecatalog/catalog_test.go": "6ee57cd47fe6f9973c66c1149d98731bd802d9b25cd9d94f1e1a1d914959f832",
+      "internal/runtimecatalog/components.go": "37341776d4f104080b42ac31d8e888265151aaf7b99e515d9efb1203a4591ed9",
+      "internal/runtimecatalog/payloads.go": "ae6d0189afb4c5ee220c88653c60f46fe56a39d81e2fcec38a340bd4300a1738",
+      "internal/runtimecatalog/payloads_test.go": "ad246389e2600b56525c257417bbb1913a5415fd6e7014fff43fc2b7fc30fbcf",
+      "scripts/qualify-migration-browser.py": "263bd68b2ff14a3e1900c90f4fd84a94bdd09881fbff2b6cfbbb26a9acc1f477",
+      "scripts/test_qualify_migration_browser.py": "e1d23b82e3ecbdfd2918fed396131f163e10b88fe0dcd078263ad319f016207e",
+      "taskfiles/lint.yml": "fcc931ae90990918383cff32799cafb7574f7d3aee21ddf7e8081dadd1559d09",
+      "taskfiles/test.yml": "063b7f2c2e2d6a2f540b702e71f66c8b23039fafd8417fea8df50e452b288cd2",
+      "test/contract/composition_contract_test.go": "2e352f62e971dc597a405446296d1994ce3e5661757b5891af4ff50e97897ddb",
+      "test/contract/message_contract_test.go": "47d2f81b784cdbbb9115c1cf1159bd25b3dd82a1427ce0890b87d09e22ee20b7",
+      "test/contract/openapi_contract_test.go": "36f3c5776f9e3047588a526a5c7a2a07f1b5760bba38512cdaf61645fd209dad",
+      "test/contract/research_artifact_contract_test.go": "a906b78a7b2d78e0ee4e9f18d84574d16b72c57427247d2b2e86f6cf2da52a95",
+      "test/contract/schema_contract_test.go": "2fa346a0f700216fcae145e91af651b161a4218788488b8da40eaa81eecf07aa"
+    }
+  },
+  "post_archive_governance": {
+    "strict_validation": {
+      "exit_code": 0,
+      "items_passed": 4
+    },
+    "queue_reporter_fixtures": {
+      "exit_code": 0,
+      "passed": 26,
+      "failed": 0
+    }
+  }
+}

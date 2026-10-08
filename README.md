@@ -17,6 +17,11 @@ components**: every processor (graph, rule, agentic-dispatch,
 agentic-loop, agentic-model, agentic-tools, …) is imported from the
 upstream framework.
 
+The approved next architecture assigns the agent runtime to SemTeams, the shared substrate and generic durability to
+SemEngine, and absorbs SemDev as a separately qualified development pack. That is a migration direction, not shipped
+behavior. The dev workflow retains issue → OpenSpec → implementation → verification → PR. See
+[ADR-061](docs/adr/061-agent-runtime-ownership-and-observable-work.md) for ownership, observable-work goals and limits.
+
 If you are looking for the framework itself (component model,
 knowledge graph, NATS streams, GraphQL gateway), see
 [semstreams](https://github.com/c360studio/semstreams). This README
@@ -43,18 +48,18 @@ covers what SemTeams adds on top.
 | Product tools | `cmd/semteams/tools/` | Tool executors that don't belong upstream: source ingest, artifact/spec emission, proof analysis/projection, sandbox bootstrap, and pack-specific measurement emitters. |
 | Product shell | `cmd/semteams/main.go` | ~600 LoC binary that wires the framework primitives directly for this product shell |
 
-Everything else — the `agentic-*` processors, the rule engine, the
-graph, the NATS stream wiring — lives upstream in semstreams.
+Current `agentic-*` processors, the rule engine, graph and NATS wiring remain in SemStreams.
+`internal/runtimecatalog` makes the complete frozen component/payload registration surface explicit for the runtime
+and generators; it does not activate extra components or packs.
 
 ## Frozen framework migration
 
-This branch pins SemStreams `v1.0.0-beta.162.0.20260930150212-8b99efe9c66a`
-(SHA `8b99efe9c66a4faa4fa509f9f62cc6bad8392128`). The upgrade from beta.160
-is under qualification in [draft PR #281](https://github.com/C360Studio/semteams/pull/281).
-The [migration evidence](docs/migrations/semstreams-8b99efe/README.md) records
-baseline comparisons, compatibility changes, review findings, and blockers.
-The autoresearch terminal-delivery gate remains red: a completed run does not
-yet guarantee delivery of its final coordinator reply to the initiating user.
+SemTeams pins SemStreams `v1.0.0-beta.162.0.20260930150212-8b99efe9c66a`
+(SHA `8b99efe9c66a4faa4fa509f9f62cc6bad8392128`). The upgrade from beta.160 landed in
+[PR #281](https://github.com/C360Studio/semteams/pull/281). Its
+[migration evidence](docs/migrations/semstreams-8b99efe/README.md) records the compatibility changes, independent
+reviews and final mock browser matrix: 24 active passes and five explicit skips. The autoresearch terminal-delivery
+blocker was repaired and qualified; the retained evidence also names the remaining product and recovery limits.
 
 Use fresh, isolated NATS and graph state for this migration. Canonical entity
 identity and approval markers changed; retained beta.160 state conversion is
@@ -85,8 +90,8 @@ That runs the black-box mock-LLM evidence pack for the demo
 contracts: coordinator routing, the reviewed research arc, fail-closed
 readiness before execution routing, and empirical autoresearch.
 It uses the dockerized e2e stack and requires no LLM API keys or
-host Caddy install. The frozen migration currently has the terminal-delivery
-blocker described above; running the aggregate is not a claim that every gate passes.
+host Caddy install. The frozen baseline's terminal-delivery repair is qualified in the migration evidence above;
+inspect each run's results and explicit skips before making a claim about that run.
 
 ### Live chat UI
 
@@ -126,8 +131,8 @@ Spec-authoring and software-implementation asks are currently
 **parked**, not live routes. The coordinator answers them honestly
 instead of dispatching `create-change`, `proof-readiness`,
 `dev-from-task`, or `dev-via-test`. Those packs remain on disk as donor
-material; SemDev now owns the issue-to-PR implementation journey. Do not
-reintroduce them as a shortcut to program-manager action. See
+material. SemDev currently implements the issue-to-PR journey; its future absorption under ADR-061 requires separate
+qualification. Do not reintroduce parked packs as a shortcut to that transfer or to program-manager action. See
 [ADR-058](docs/adr/058-beta159-realignment-and-demo-lane-focus.md).
 
 Research results retain recoverable source evidence, but the current UI does
@@ -150,7 +155,7 @@ pack does and **how the sandbox is created**.
 | No-key demo qualification | `task ui:test:e2e:agentic:demo-mvp` | Black-box Playwright + mock-LLM evidence pack. No API keys. |
 | Live chat UI | `task dev:research` | Needs `GEMINI_API_KEY` for the default model registry; `BRAVE_SEARCH_API_KEY` recommended for web search. |
 | Research arc proof | `task ui:test:e2e:agentic:research-mvp` | Mock-LLM plan/fan-out/join/synthesize/review journey. |
-| Autoresearch proof | `task ui:test:e2e:agentic:autoresearch` | Mock-LLM metric iteration; final user-delivery qualification is currently blocked. |
+| Autoresearch proof | `task ui:test:e2e:agentic:autoresearch` | Mock-LLM metric iteration; final user delivery qualified in the frozen migration. |
 | Coordinator routing proof | `task ui:test:e2e:agentic:coordinator-routing-matrix` | Includes honest responses for parked team asks. |
 
 `task --list` shows everything.
@@ -239,8 +244,8 @@ configs. The demo scope is the inner and outer loops
   attestation.
 - **Parked donor material** — the spec-authoring and software-implementation packs
   (`create-change`, `proof-readiness`, `dev-from-task`,
-  `dev-via-test`) are unwired. SemDev owns that product journey; the
-  coordinator answers those asks honestly instead of routing them. See
+  `dev-via-test`) are unwired. SemDev currently implements that journey; its future absorption is separately qualified
+  under ADR-061. The coordinator answers those asks honestly instead of routing them. See
   [`docs/demo-mvp-claims.md`](docs/demo-mvp-claims.md).
 
 ## License

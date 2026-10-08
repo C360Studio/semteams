@@ -14,7 +14,7 @@ OpenSpec changes own a claimed PR's target state and task truth. See
 | ADR | What it decides |
 |---|---|
 | [023](023-provider-adapters-and-tool-choice.md) | LLM provider adapters and tool-choice handling |
-| [**029**](029-product-shell-wiring.md) | How `cmd/semteams/main.go` wires framework primitives |
+| [**029**](029-product-shell-wiring.md) | How `cmd/semteams/main.go` wires framework primitives; upstream-only agentic implementation premise superseded by 061. |
 | [030](030-approval-flow-ui-and-identity.md) | Approval-flow UI + the `X-User-Id` identity seam |
 | [031](031-research-flow-and-semspec-handoff.md) | Research-flow ownership + dev-via-spec internal mode. Largely superseded by 042; dev-via-spec arc retired in MVP-7. |
 | [032](032-r36-sandbox-design.md) | R3.6 builder sandbox design, precursor to 043 |
@@ -35,9 +35,10 @@ OpenSpec changes own a claimed PR's target state and task truth. See
 | [055](055-formal-claim-analysis-for-verification-gates.md) | Formal claim analysis for verification gates |
 | [056](056-openspec-spec-driven-development-umbrella.md) | OpenSpec-compatible, environment-gated spec-driven development umbrella. Its packs are parked by 058 pending predicate migration; its §North-star roadmap is superseded by 060. |
 | [057](057-openspec-graph-spec-model-and-create-change.md) | Graph-backed OpenSpec model and `create_change` pack. Parked by 058. |
-| [**058**](058-beta159-realignment-and-demo-lane-focus.md) | **Realign to semstreams v1.0.0-beta.159 + canonical predicates; demo scope = front door + research/autoresearch; dev-side packs parked in place.** Current architecture posture. |
-| [**059**](059-semstreams-beta160-graph-foundation-adoption.md) | **Adopt semstreams v1.0.0-beta.160's typed graph-mutation, strict-port, service-composition, trajectory, and fresh-storage contracts while retaining ADR-058's live/parked boundary.** Current framework baseline. |
-| [**060**](060-program-manager-direction-and-research-design.md) | **Program-manager direction: observation-first authority ladder, containment before unattended ticks, GitHub-or-governed-contract edges, SOP releases as the practice trigger, `program-report` as the first research depth profile, ensemble synthesis over bounded walkers for non-verifiable domains.** Supersedes 056 §North-star only. Current product direction. |
+| [**058**](058-beta159-realignment-and-demo-lane-focus.md) | **Realign to semstreams v1.0.0-beta.159 + canonical predicates; demo scope = front door + research/autoresearch; dev-side packs parked in place.** Live/parked boundary retained; future dev restoration approach superseded by 061. |
+| [**059**](059-semstreams-beta160-graph-foundation-adoption.md) | **Adopt semstreams v1.0.0-beta.160's typed graph-mutation, strict-port, service-composition, trajectory, and fresh-storage contracts while retaining ADR-058's live/parked boundary.** Historical beta.160 baseline; frozen 8b99efe qualification lives in the migration evidence. |
+| [**060**](060-program-manager-direction-and-research-design.md) | **Program-manager direction: observation-first authority ladder, containment before unattended ticks, GitHub-or-governed-contract edges, SOP releases as the practice trigger, `program-report` as the first research depth profile, ensemble synthesis over bounded walkers for non-verifiable domains.** Supersedes 056 §North-star only. Program-manager direction retained; permanent maker separation superseded by 061. |
+| [**061**](061-agent-runtime-ownership-and-observable-work.md) | **Target ownership: SemEngine substrate and generic durability, SemTeams agent runtime and observable work, SemDev absorbed as a separately qualified pack.** Preserves the read-only pulse target and current live/parked fence; no extraction or activation claimed. |
 
 ## Conventions
 

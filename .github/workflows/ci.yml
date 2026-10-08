@@ -31,6 +31,9 @@ jobs:
       - name: Unit tests
         run: task test:race
 
+      - name: Browser qualification runner checks
+        run: task test:browser-runner
+
       - name: Integration tests
         run: task test:integration
 
