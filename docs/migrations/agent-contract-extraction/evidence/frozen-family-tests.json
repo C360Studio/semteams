@@ -1,0 +1,13 @@
+{
+  "command": [
+    "go",
+    "test",
+    "-race",
+    "github.com/c360studio/semstreams/agentic",
+    "github.com/c360studio/semstreams/vocabulary/agentic",
+    "github.com/c360studio/semstreams/internal/looptoken"
+  ],
+  "cwd": "/Users/coby/.codex/worktrees/agent-contract-extraction/semteams",
+  "exit_code": 0,
+  "qualification": "frozen source tests, not extracted behavior"
+}

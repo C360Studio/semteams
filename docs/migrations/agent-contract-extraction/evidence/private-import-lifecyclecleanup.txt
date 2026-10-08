@@ -1,0 +1,3 @@
+Captured output; tab characters expanded to eight-column stops.
+package command-line-arguments
+        /tmp/semteams-agent-contract-extraction/private-import-lifecyclecleanup.go:2:8: use of internal package github.com/c360studio/semstreams/internal/lifecyclecleanup not allowed
