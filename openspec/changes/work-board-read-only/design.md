@@ -128,13 +128,15 @@ today, leaves members and unresolved candidates exactly where they were, and `Ta
 narrative row each in the shape above. The ops journey selects observers by role,
 so it is unaffected; task 4.2 verifies it. Known limits of the landed implementation: a control loop is a top-level card
 until its one membership read completes; a failed or truncated membership read leaves it top-level and raises a
-board-level notice; and a loop that has children or a parent is never folded as a control, so no descendant becomes unreachable. A
+board-level notice; and a loop that has children or a parent is never folded as a control, so no descendant becomes
+unreachable. A
 control classified before its run's loop reaches the board is shown as a card and spends a `#ref` before it folds;
 accepted. Two defects found by the journeys and fixed in 78fbc936: the controls store's first poll read
 `agentStore.loopsList` inside the layout effect that owns the SSE connection, re-running it on every loop update (a
 reconnect loop that emptied the board); and, pre-existing on `main`, the 5 s REST reconcile normalised the missing
 `parent_loop_id` to an empty string and erased the parents the stream had supplied, so finished sub-loops became
-top-level cards after five seconds (`chain-drill-in` passed on `main` only because it asserts within that window). In-page URL state is written with `goto(..., { replaceState, keepFocus, noScroll })` because shallow
+top-level cards after five seconds (`chain-drill-in` passed on `main` only because it asserts within that window). In-
+page URL state is written with `goto(..., { replaceState, keepFocus, noScroll })` because shallow
 `replaceState` does not update `page.url` in SvelteKit 2.46 (measured in a real browser). The
 fact at spawn is chosen by nanosecond ordering (`spawnedAtNanos` from the task id) against each
 transition's `at`.
