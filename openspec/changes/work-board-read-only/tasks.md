@@ -28,7 +28,7 @@
 - [x] 3.4 Posted the measured provenance gap on #298 (comment 6065775221): rule identity and the firing fact are not
       readable on any surveyed
       path (task metadata is dropped by the loops REST and lives only in the evidence store). No ops rule change.
-- [ ] 3.5 Runs lens: read rule-spawned loop provenance from graph triples (`agent.loop.task` prefix `rule-<firing
+- [x] 3.5 Runs lens: read rule-spawned loop provenance from graph triples (`agent.loop.task` prefix `rule-<firing
       entity>-`, `agent.lineage.root`), attach those loops to their coordinator card as controls instead of top-level
       cards, and render each control in `TaskStory` as one explained row: control identity, firing entity, the firing
       entity's lifecycle transition preceding the spawn (fact and value), outcome with the terminal decide reason,

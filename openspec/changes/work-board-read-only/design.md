@@ -120,7 +120,12 @@ Runs-lens change this requires: `taskStore` reads `agent.loop.task` and `agent.l
 through `GET /graph/triples` (the runStatus store already polls triples by predicate), attaches each to the
 coordinator card of its firing run as a control instead of rendering it as a top-level card as it does today, and
 `TaskStory` renders controls as one narrative row each in the shape above. The ops journey selects observers by role,
-so it is unaffected; task 4.2 verifies it.
+so it is unaffected; task 4.2 verifies it. Known limits of the landed implementation: the controls store polls the
+`agent.loop.task` predicate with a limit of 500, which every loop carries, so a deployment past 500 loops reports
+controls as truncated (unknown) until a narrower read exists; a control loop can appear as a top-level card for up to
+one poll interval (2.5 s) before the graph read attaches it; and a child of a control loop is not reachable from any
+card. The fact at spawn is chosen by nanosecond ordering (`spawnedAtNanos` from the task id) against each
+transition's `at`.
 
 ## D4 — Portfolio configuration: the minimal read-side shape shared with #267
 
@@ -157,7 +162,9 @@ Route `/work` with `?view=board|table` and `?item=owner/repo%23n` for the overvi
 `?task=` URL state; a "Work" link in `TopNav`. Components under `ui/src/lib/components/work/` (`WorkBoard`,
 `WorkTable`, `WorkItemCard`, `WorkItemOverview`, `OverlayBadge`), a `workStore.svelte.ts` fed by `services/workApi.ts`
 over the D1 endpoints, and `types/work.ts`. Cards carry no drag affordance at all; the read-only rule is structural,
-not a disabled handler. Drill-in navigates to `/?task=<coordinator loop id>`, the existing runs lens.
+not a disabled handler. Board and table each show one visible line explaining that run facts are read when an item
+is opened; opening an item moves focus to the overview heading and closing returns it to the card or row; the Work
+link carries `aria-current` on `/work`. Drill-in navigates to `/?task=<coordinator loop id>`, the existing runs lens.
 
 Fixture set `board-mvp` under `ui/src/lib/server/work/fixtures/board-mvp/`: two repositories, one with a Project
 status field and one without; items covering every column; one item with linked PRs as delivery context; and three
