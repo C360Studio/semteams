@@ -128,7 +128,7 @@ today, leaves members and unresolved candidates exactly where they were, and `Ta
 narrative row each in the shape above. The ops journey selects observers by role,
 so it is unaffected; task 4.2 verifies it. Known limits of the landed implementation: a control loop is a top-level card
 until its one membership read completes; a failed or truncated membership read leaves it top-level and raises a
-board-level notice; and a child of a control loop is not reachable from any card (no live control has children). The
+board-level notice; and a loop that has children or a parent is never folded as a control, so no descendant becomes unreachable. The
 fact at spawn is chosen by nanosecond ordering (`spawnedAtNanos` from the task id) against each
 transition's `at`.
 
