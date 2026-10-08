@@ -5,6 +5,9 @@
 
 <header class="top-nav" data-testid="top-nav">
   <a class="app-name" href={resolve("/")} data-testid="brand-home">semteams</a>
+  <nav aria-label="Primary">
+    <a class="nav-link" href={resolve("/work")} data-testid="nav-work">Work</a>
+  </nav>
   <GlobalStatus />
 </header>
 
@@ -29,6 +32,17 @@
   }
 
   .app-name:hover {
+    color: var(--ui-interactive-primary, #3b82f6);
+  }
+
+  .nav-link {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--ui-text-secondary, #6b7280);
+    text-decoration: none;
+  }
+
+  .nav-link:hover {
     color: var(--ui-interactive-primary, #3b82f6);
   }
 </style>

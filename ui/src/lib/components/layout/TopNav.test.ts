@@ -11,6 +11,15 @@ describe("TopNav", () => {
     expect(brand).toHaveTextContent("semteams");
   });
 
+  it("links to the work lens without displacing the brand link", () => {
+    render(TopNav);
+    const work = screen.getByTestId("nav-work");
+    expect(work).toHaveAttribute("href", "/work");
+    expect(work).toHaveTextContent("Work");
+    expect(screen.getByRole("navigation", { name: "Primary" })).toContainElement(work);
+    expect(screen.getByTestId("brand-home")).toHaveAttribute("href", "/");
+  });
+
   it("does NOT render legacy Board/Graph/Flows tabs", () => {
     // Per ui-redesign.md: SemTeams is delegate-and-watch, not flow-builder.
     // Top-level tab navigation is gone; brand-only header.
