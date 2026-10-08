@@ -36,9 +36,15 @@
 
 ## 4. Verification
 
-- [ ] 4.1 Journey `work-board.spec.ts` per D5, with a `test:e2e:agentic:work-board` task in `ui/Taskfile.yml`.
-- [ ] 4.2 Existing journeys (`research-mvp`, `chain-drill-in`, `ops-run-terminal`, approval, ask-user) still pass;
-      no new ESLint, svelte-check or revive warnings; `task ui:test` green for new component tests.
-- [ ] 4.3 `svelte-reviewer` pass on the work lens and runs-lens change; `go-reviewer` not required unless Go changes.
+- [ ] 4.1 HOLD: journey `work-board.spec.ts` and the `test:e2e:agentic:work-board` task are written (6ad2eaf3) and
+      steps 1–7 passed once on the pre-membership controls code; the final spec has not run end to end because the
+      host disk filled (1.2 GiB free) and Docker's metadata went read-only. Needs a fresh stack after the owner frees
+      disk. The in-page toggle/selection tests are verified in real Chromium against the Vite dev server only.
+- [ ] 4.2 HOLD: `research-mvp` PASS and `ops-agent` PASS on a0937e89; `chain-drill-in` FAILED twice at the Sub-tasks
+      step ("Active loops 0") while the disk was filling, cause unattributed (baseline on `main` needed);
+      `approval-pause` inconclusive (run phase never settled as the disk filled); `ask-user-pause` not run (Docker
+      down). ESLint, svelte-check and `task ui:test` are green.
+- [x] 4.3 `svelte-reviewer` passes on each phase (14be75d5, d3ab1c80, dd6bb3df) with fixes (1873b297, 5dd560a9,
+      a0937e89) and a verification pass (PASS) whose three leftovers are applied in the follow-up fix; no Go changed.
 - [ ] 4.4 Archive this change and synchronize the `observable-work` specification as the landing PR's final content
       commit, followed by the read-only reviewer pass.
