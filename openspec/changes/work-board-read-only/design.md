@@ -39,8 +39,10 @@ sends `/api/*` to that server. The work read API lives there:
 | `GET /api/work/items/{owner}/{repo}/{number}/runs` | Linked runs with overlays (D2) and a `lookup` status for the linkage and for each run's facts |
 
 Every list and lookup carries `lookup: "complete" | "partial" | "failed" | "unsupported"` plus a `reason` when not
-complete. Overlay values are `{ state: "known" | "none" | "unknown", value?, reason? }`; `none` is only emitted when
-the enclosing lookup is `complete`. Methods other than `GET` answer 405. There is no endpoint that enumerates runs
+complete. Overlay values are a discriminated union: `{ state: "known", value, reason? }`, `{ state: "none", reason? }`
+or
+`{ state: "unknown", reason }`; `none` is only emitted when the enclosing lookup is `complete`. Methods other than `GET`
+answer 405. There is no endpoint that enumerates runs
 outside a work item; run facts are fetched per linked run entity, so the browser cannot use the work API to walk the
 graph. Repository scope is the D4 configuration: an unconfigured repository answers 404; an unconfigured work source
 answers 503 `WORK_SOURCE_UNCONFIGURED` on item and run reads. The runs lens keeps its existing direct browser reads
@@ -142,7 +144,8 @@ generated and stays untouched):
 
 Project membership is operator-authored; a repository can appear under more than one project and is never inferred
 from activity (`docs/product/program-manager.md`). `project_board` is optional; without it the D2 fallback applies.
-When a board is configured the source supplies the ordered status options (GitHub's single-select options; the fixture declares them), and the items response returns
+When a board is configured the source supplies the ordered status options (GitHub's single-select options; the fixture
+declares them), and the items response returns
 them as `columns` so empty columns still render.
 The server validates required fields and refuses to start the work API on an invalid document (the board shows the
 validation error). #267 and #273 read the same file from Go; a Go struct is theirs to add. Fixture sets carry their own
@@ -162,7 +165,8 @@ linkage cases: an item bound to a real run, an item declaring no runs (`none`), 
 that does not exist (a real `partial` lookup, not a simulated one). Fixture-mode binding is declared on the item as
 `linked_runs: [{ by: "run_entity_id", value }]` or `[{ by: "coordinator_prompt", equals }]`; the prompt form resolves
 against the coordinator loop entity's `agent.loop.description` triple (exact match) and exists only so a journey can
-bind a run it creates at run time. Both forms are fixture-only; live linkage is `run.issue.ref` (D2). A declared binding that resolves to nothing is a
+bind a run it creates at run time. Both forms are fixture-only; live linkage is `run.issue.ref` (D2). A declared binding
+that resolves to nothing is a
 `partial` lookup, never "no linked run"; only an empty `linked_runs` list is. In fixture mode a missing `linked_runs`
 key means none (the fixture is the source of truth), while a missing `pull_requests` key means unknown delivery
 context. Every `GET /graph/triples` read checks for truncation at its `limit` and degrades to `partial` when hit;
@@ -170,8 +174,10 @@ that endpoint is a full scan on the frozen backend, so the work lens loads runs 
 
 Journey (`ui/e2e/agentic/work-board.spec.ts`, on the `chain-drill-in` template): start a research run through the chat
 exactly as `chain-drill-in` does and wait for the ops observer to complete; open `/work`; assert the board renders
-every fixture column with PM status, execution stage and verification as separate badges; assert the `none` item
-says "no linked run" and the `partial` item says unknown; open the bound item and drill into its run; assert the
+every fixture column with PM status, execution stage and verification as separate badges, with run-derived badges
+unknown ("linked runs are read when an item is opened") until an item's runs are loaded; open the `none` item, load
+its runs and assert "no linked run"; open the `partial` item, load and assert unknown with its reason; open the
+bound item, load its runs and drill into the run; assert the
 story shows the ops control as one explained row with `agent.run.phase` and its value visible and the rule shown as
 unknown with its reason; assert the table
 view renders the same items; assert `POST /api/work/items` answers 405.

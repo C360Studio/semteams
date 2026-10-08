@@ -8,11 +8,11 @@
 
 ## 2. Fixtures and read boundary
 
-- [ ] 2.1 Add the portfolio document shape (D4): `configs/portfolio/portfolio.example.json`, its hand-authored schema,
+- [x] 2.1 Add the portfolio document shape (D4): `configs/portfolio/portfolio.example.json`, its hand-authored schema,
       `types/work.ts`, and server-side validation with a visible error state.
-- [ ] 2.2 Add fixture set `board-mvp` (D5): two repositories, one Project status field, every column, one item with
+- [x] 2.2 Add fixture set `board-mvp` (D5): two repositories, one Project status field, every column, one item with
       linked PRs, and the three linkage cases (bound by coordinator prompt, `none`, dangling run entity id).
-- [ ] 2.3 Implement the `GET /api/work/*` routes (D1) with `lookup` status, `GET`-only, repository scoping, and
+- [x] 2.3 Implement the `GET /api/work/*` routes (D1) with `lookup` status, `GET`-only, repository scoping, and
       server-side overlay reads from `/teams-dispatch/loops/{id}` and `/graph/triples`.
 - [x] 2.4 Measured on the e2e stack 2026-10-08: `GET /teams-dispatch/loops` and `/loops/{id}` expose no `metadata`,
       `prompt` or `parent_loop_id`; loop-entity triples do (`agent.loop.description`, `agent.loop.role`,
@@ -20,12 +20,13 @@
 
 ## 3. Work lens and explained events
 
-- [ ] 3.1 `/work` route with board and table views, `TopNav` link, `workStore`, `workApi`, and the components in D5;
+- [x] 3.1 `/work` route with board and table views, `TopNav` link, `workStore`, `workApi`, and the components in D5;
       PM status, execution stage and verification rendered as separate values.
-- [ ] 3.2 Work-item overview panel (`?item=`): purpose, owner, priority, milestone, dependencies, delivery context;
+- [x] 3.2 Work-item overview panel (`?item=`): purpose, owner, priority, milestone, dependencies, delivery context;
       linked runs on request with the D2 unknown rendering.
-- [ ] 3.3 Drill-in to `/?task=<coordinator loop id>`; cards carry no drag affordance.
-- [x] 3.4 Posted the measured provenance gap on #298 (comment 6065775221): rule identity and the firing fact are not readable on any surveyed
+- [x] 3.3 Drill-in to `/?task=<coordinator loop id>`; cards carry no drag affordance.
+- [x] 3.4 Posted the measured provenance gap on #298 (comment 6065775221): rule identity and the firing fact are not
+      readable on any surveyed
       path (task metadata is dropped by the loops REST and lives only in the evidence store). No ops rule change.
 - [ ] 3.5 Runs lens: read rule-spawned loop provenance from graph triples (`agent.loop.task` prefix `rule-<firing
       entity>-`, `agent.lineage.root`), attach those loops to their coordinator card as controls instead of top-level
