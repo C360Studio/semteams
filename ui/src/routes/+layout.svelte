@@ -5,6 +5,7 @@
 	import { systemStatus } from '$lib/stores/systemStatus.svelte';
 	import { taskRefs } from '$lib/stores/taskRefs.svelte';
 	import { runStatus } from '$lib/stores/runStatus.svelte';
+	import { controlsStore } from '$lib/stores/controlsStore.svelte';
 	import TopNav from '$lib/components/layout/TopNav.svelte';
 	import ChatBar from '$lib/components/layout/ChatBar.svelte';
 
@@ -15,14 +16,18 @@
 	// an interval and reads agentStore reactively for the SSE leg.
 	// runStatus polls /graph/triples for run-level pause markers (ADR-053
 	// Phase 4b-2 / 4c) so the board can surface "Waiting on you" badges.
+	// controlsStore polls the same endpoint for rule-spawned loops so the board
+	// can fold them into the coordinator card of the run that fired them.
 	$effect(() => {
 		agentStore.connect();
 		systemStatus.start();
 		runStatus.start();
+		controlsStore.start();
 		return () => {
 			agentStore.disconnect();
 			systemStatus.stop();
 			runStatus.stop();
+			controlsStore.stop();
 		};
 	});
 
@@ -31,10 +36,13 @@
 	// idempotent so already-assigned loops are no-ops. Keeping this in
 	// the layout (not the store) because $effect can't run at
 	// module scope and we want refs minted as soon as loops appear,
-	// before any consumer renders the card.
+	// before any consumer renders the card. Control loops are not cards, so
+	// they do not get a ref either.
 	$effect(() => {
 		for (const loop of agentStore.loopsList) {
-			if (!loop.parent_loop_id) taskRefs.ensure(loop.loop_id);
+			if (!loop.parent_loop_id && !controlsStore.controlLoopIds.has(loop.loop_id)) {
+				taskRefs.ensure(loop.loop_id);
+			}
 		}
 	});
 </script>

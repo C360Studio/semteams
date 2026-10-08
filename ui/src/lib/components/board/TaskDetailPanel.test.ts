@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import TaskDetailPanel from "./TaskDetailPanel.svelte";
 import type { TaskInfo } from "$lib/types/task";
 import type { AgentLoop, LoopTrajectory } from "$lib/types/agent";
+import type { TaskControl } from "$lib/types/control";
 
 // Function declarations are hoisted, so this is safely callable from the
 // vi.mock factory below (which Vitest hoists above the imports, but only
@@ -128,7 +129,31 @@ function makeTask(overrides: Partial<TaskInfo> = {}): TaskInfo {
     childAttentionCount: 0,
     runPause: null,
     runHealth: null,
+    controls: [],
+    controlsTruncated: false,
     ...overrides,
+  };
+}
+
+function makeControl(
+  loopId: string,
+  overrides: Partial<AgentLoop> = {},
+  runInstance = "loop_001",
+): TaskControl {
+  const prefix = "c360.semteams-bootstrap-e2e-6c50f3";
+  return {
+    loopId,
+    loopEntityId: `${prefix}.agentic-loop.agent.execution.${loopId}`,
+    firingEntityId: `${prefix}.chain.agent.execution.${runInstance}`,
+    runInstance,
+    spawnedAt: new Date(1791480613893),
+    spawnedAtNanos: 1791480613893413505n,
+    loop: makeLoop({
+      loop_id: loopId,
+      role: "ops-chain-observer",
+      state: "complete",
+      ...overrides,
+    }),
   };
 }
 
@@ -567,6 +592,143 @@ describe("TaskDetailPanel", () => {
         const calls = (agentApi.getLoopTrajectory as ReturnType<typeof vi.fn>)
           .mock.calls;
         expect(calls[calls.length - 1][0]).toBe("loop_B");
+      });
+      expect(screen.queryByTestId("focus-breadcrumb")).not.toBeInTheDocument();
+    });
+  });
+
+  describe("controls (design D3)", () => {
+    it("hides the Controls section when the run fired none", () => {
+      render(TaskDetailPanel, { props: { task: makeTask() } });
+
+      expect(screen.queryByTestId("controls-section")).not.toBeInTheDocument();
+      expect(screen.queryByText(/Controls \(/)).not.toBeInTheDocument();
+    });
+
+    it("lists controls beside, not inside, the sub-tasks", () => {
+      render(TaskDetailPanel, {
+        props: {
+          task: makeTask({
+            childLoops: [makeLoop({ loop_id: "c1", role: "researcher" })],
+            controls: [makeControl("obs-1")],
+          }),
+        },
+      });
+
+      expect(screen.getByText("Sub-tasks (1)")).toBeInTheDocument();
+      expect(screen.getByText("Controls (1)")).toBeInTheDocument();
+      expect(screen.getAllByTestId("child-item")).toHaveLength(1);
+      const rows = screen.getAllByTestId("control-row");
+      expect(rows).toHaveLength(1);
+      expect(rows[0].tagName).toBe("BUTTON");
+      expect(rows[0]).toHaveAttribute("data-loop-id", "obs-1");
+      // Text, not colour: state, role and the derived outcome are all spelled out.
+      expect(rows[0]).toHaveTextContent("complete");
+      expect(rows[0]).toHaveTextContent("ops-chain-observer");
+      expect(rows[0]).toHaveTextContent("applied");
+    });
+
+    it("a control is not a sub-task and does not appear in the Sub-tasks count", () => {
+      render(TaskDetailPanel, {
+        props: { task: makeTask({ controls: [makeControl("obs-1")] }) },
+      });
+
+      expect(screen.queryByText(/Sub-tasks/)).not.toBeInTheDocument();
+      expect(screen.queryByTestId("child-item")).not.toBeInTheDocument();
+    });
+
+    it("says the list may be incomplete when the control read was truncated", () => {
+      render(TaskDetailPanel, {
+        props: {
+          task: makeTask({ controls: [makeControl("obs-1")], controlsTruncated: true }),
+        },
+      });
+
+      expect(screen.getByTestId("controls-truncated-note")).toHaveTextContent(
+        "may be incomplete",
+      );
+    });
+
+    it("can be focused from the keyboard, with a pressed state and the breadcrumb", async () => {
+      const user = userEvent.setup();
+      render(TaskDetailPanel, {
+        props: {
+          task: makeTask({
+            id: "loop_001",
+            controls: [makeControl("obs-1")],
+          }),
+        },
+      });
+
+      const row = screen.getByTestId("control-row");
+      expect(row).toHaveAttribute("aria-pressed", "false");
+
+      row.focus();
+      expect(row).toHaveFocus();
+      await user.keyboard("{Enter}");
+
+      await vi.waitFor(() => {
+        expect(agentApi.getLoopTrajectory).toHaveBeenCalledWith("obs-1");
+      });
+      expect(row).toHaveAttribute("aria-pressed", "true");
+      const crumb = screen.getByTestId("focus-breadcrumb");
+      expect(crumb).toHaveTextContent("ops-chain-observer");
+      // The coordinator's Controls explanation belongs to the coordinator story.
+      expect(screen.queryByTestId("story-controls")).not.toBeInTheDocument();
+
+      await user.click(screen.getByTestId("focus-back"));
+      expect(row).toHaveAttribute("aria-pressed", "false");
+      expect(await screen.findByTestId("story-controls")).toBeInTheDocument();
+    });
+
+    it("also activates with Space", async () => {
+      const user = userEvent.setup();
+      render(TaskDetailPanel, {
+        props: { task: makeTask({ controls: [makeControl("obs-1")] }) },
+      });
+
+      screen.getByTestId("control-row").focus();
+      await user.keyboard(" ");
+
+      await vi.waitFor(() => {
+        expect(agentApi.getLoopTrajectory).toHaveBeenCalledWith("obs-1");
+      });
+    });
+
+    it("explains the control in the story and focuses it from the story's identity button", async () => {
+      const user = userEvent.setup();
+      render(TaskDetailPanel, {
+        props: { task: makeTask({ controls: [makeControl("obs-1")] }) },
+      });
+
+      const event = await screen.findByTestId("control-event");
+      expect(event).toHaveAttribute("data-loop", "obs-1");
+      expect(event).toHaveTextContent("rule: unknown");
+
+      await user.click(screen.getByTestId("control-identity"));
+
+      await vi.waitFor(() => {
+        expect(agentApi.getLoopTrajectory).toHaveBeenCalledWith("obs-1");
+      });
+      expect(screen.getByTestId("control-row")).toHaveAttribute("aria-pressed", "true");
+    });
+
+    it("falls back to the coordinator when the focused control is gone", async () => {
+      const user = userEvent.setup();
+      const { rerender } = render(TaskDetailPanel, {
+        props: { task: makeTask({ id: "loop_001", controls: [makeControl("obs-1")] }) },
+      });
+
+      await user.click(screen.getByTestId("control-row"));
+      await vi.waitFor(() => {
+        expect(agentApi.getLoopTrajectory).toHaveBeenCalledWith("obs-1");
+      });
+
+      await rerender({ task: makeTask({ id: "loop_001", controls: [] }) });
+
+      await vi.waitFor(() => {
+        const calls = (agentApi.getLoopTrajectory as ReturnType<typeof vi.fn>).mock.calls;
+        expect(calls[calls.length - 1][0]).toBe("loop_001");
       });
       expect(screen.queryByTestId("focus-breadcrumb")).not.toBeInTheDocument();
     });
