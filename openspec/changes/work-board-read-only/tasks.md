@@ -25,7 +25,7 @@
 - [ ] 3.2 Work-item overview panel (`?item=`): purpose, owner, priority, milestone, dependencies, delivery context;
       linked runs on request with the D2 unknown rendering.
 - [ ] 3.3 Drill-in to `/?task=<coordinator loop id>`; cards carry no drag affordance.
-- [ ] 3.4 Post the measured provenance gap on #298: rule identity and the firing fact are not readable on any surveyed
+- [x] 3.4 Posted the measured provenance gap on #298 (comment 6065775221): rule identity and the firing fact are not readable on any surveyed
       path (task metadata is dropped by the loops REST and lives only in the evidence store). No ops rule change.
 - [ ] 3.5 Runs lens: read rule-spawned loop provenance from graph triples (`agent.loop.task` prefix `rule-<firing
       entity>-`, `agent.lineage.root`), attach those loops to their coordinator card as controls instead of top-level

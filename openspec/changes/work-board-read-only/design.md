@@ -42,7 +42,10 @@ Every list and lookup carries `lookup: "complete" | "partial" | "failed" | "unsu
 complete. Overlay values are `{ state: "known" | "none" | "unknown", value?, reason? }`; `none` is only emitted when
 the enclosing lookup is `complete`. Methods other than `GET` answer 405. There is no endpoint that enumerates runs
 outside a work item; run facts are fetched per linked run entity, so the browser cannot use the work API to walk the
-graph. Repository scope is the D4 configuration: an unconfigured repository answers 404.
+graph. Repository scope is the D4 configuration: an unconfigured repository answers 404; an unconfigured work source
+answers 503 `WORK_SOURCE_UNCONFIGURED` on item and run reads. The runs lens keeps its existing direct browser reads
+(`/teams-dispatch/*`, `/graph/triples`, `/graphql` through Caddy); the work lens adds none, and narrowing those
+existing routes is a separate hardening, not this slice.
 
 Overlay facts are read server-side from the existing reads, never by the browser. Measured on the running stack
 (2026-10-08, 8b99efe): `GET /teams-dispatch/loops` and `/loops/{id}` carry `loop_id`, `task_id`, `role`, `state`,
@@ -80,7 +83,7 @@ Overlays, each with its source on `main` and the condition that makes it unknown
 | Overlay | Source on `main` | Unknown when |
 |---|---|---|
 | Linked runs | Fixture mode: the item's declared `linked_runs` binding (D5). Live mode: the run-entity predicate `run.issue.ref` (donor name, one authority; no SemTeams writer yet) | Live mode on `main`: no writer is wired, so the lookup is `unsupported`, not empty. "No linked run" is shown only for a `complete` lookup |
-| Execution stage | `agent.run.phase` on `*.*.chain.agent.execution.*`: `dispatched`, `executing`, `completed`, `failed`, `cancelled` | Run entity unreadable or predicate absent |
+| Execution stage | `agent.run.phase` on `*.*.chain.agent.execution.*`: `dispatched`, `executing`, `awaiting_approval`, `completed`, `failed`, `cancelled` | Run entity unreadable, predicate absent, or a value outside this list |
 | Needs-you | Coordinator loop `state = awaiting_approval` or `pending_approval` present; run markers `agent.run.clarification-pending`, `agent.run.approval-outstanding > 0` | Loop or run read fails. "Park" has no SemTeams fact and is not rendered |
 | Verification | No fact for research runs; the reviewer verdict is trajectory content | Always unknown in this slice; the development pack supplies it later |
 | Attention / at-risk | Program Pulse (#267) | Absent until #267; never simulated |
@@ -159,7 +162,11 @@ linkage cases: an item bound to a real run, an item declaring no runs (`none`), 
 that does not exist (a real `partial` lookup, not a simulated one). Fixture-mode binding is declared on the item as
 `linked_runs: [{ by: "run_entity_id", value }]` or `[{ by: "coordinator_prompt", equals }]`; the prompt form resolves
 against the coordinator loop entity's `agent.loop.description` triple (exact match) and exists only so a journey can
-bind a run it creates at run time. Both forms are fixture-only; live linkage is `run.issue.ref` (D2).
+bind a run it creates at run time. Both forms are fixture-only; live linkage is `run.issue.ref` (D2). A declared binding that resolves to nothing is a
+`partial` lookup, never "no linked run"; only an empty `linked_runs` list is. In fixture mode a missing `linked_runs`
+key means none (the fixture is the source of truth), while a missing `pull_requests` key means unknown delivery
+context. Every `GET /graph/triples` read checks for truncation at its `limit` and degrades to `partial` when hit;
+that endpoint is a full scan on the frozen backend, so the work lens loads runs only for the opened item.
 
 Journey (`ui/e2e/agentic/work-board.spec.ts`, on the `chain-drill-in` template): start a research run through the chat
 exactly as `chain-drill-in` does and wait for the ops observer to complete; open `/work`; assert the board renders
