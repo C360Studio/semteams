@@ -5,6 +5,7 @@
 	import { agentStore } from '$lib/stores/agentStore.svelte';
 	import { systemStatus } from '$lib/stores/systemStatus.svelte';
 	import { taskRefs } from '$lib/stores/taskRefs.svelte';
+	import { taskStore } from '$lib/stores/taskStore.svelte';
 	import { runStatus } from '$lib/stores/runStatus.svelte';
 	import { controlsStore } from '$lib/stores/controlsStore.svelte';
 	import TopNav from '$lib/components/layout/TopNav.svelte';
@@ -34,21 +35,19 @@
 		};
 	});
 
-	// Auto-assign #N short refs to top-level loops as they arrive.
+	// Auto-assign #N short refs to board cards as they arrive.
 	// $effect re-runs whenever agentStore.loops changes; ensure() is
 	// idempotent so already-assigned loops are no-ops. Keeping this in
 	// the layout (not the store) because $effect can't run at
 	// module scope and we want refs minted as soon as loops appear,
-	// before any consumer renders the card. A loop that may still turn out to be
-	// a control (a rule-fired candidate not yet resolved as a run member) is not
-	// minted yet, so folded controls do not burn numbers; it is minted once it
-	// resolves as a member, or if its classification keeps failing. The effect
-	// reads controlsStore state, so resolution re-runs it.
+	// before any consumer renders the card. A loop that is not a card for good
+	// (a rule-fired candidate still being classified, or a control that folded into
+	// its run's card) is not minted, so folded controls do not burn numbers; a
+	// control that stays a card (taskStore.isRefEligible) is. The effect reads
+	// controlsStore state, so resolution re-runs it.
 	$effect(() => {
 		for (const loop of agentStore.loopsList) {
-			if (!loop.parent_loop_id && !controlsStore.mayBeControl(loop)) {
-				taskRefs.ensure(loop.loop_id);
-			}
+			if (taskStore.isRefEligible(loop)) taskRefs.ensure(loop.loop_id);
 		}
 	});
 </script>

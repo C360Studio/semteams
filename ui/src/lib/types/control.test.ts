@@ -308,6 +308,19 @@ describe("attachControls", () => {
     }
   });
 
+  it("reports exactly the controls it folded, so a refused control is still a card", () => {
+    const folded = attachControls([coordinator, observer], snapshotOf(resolved(control())));
+    expect([...folded.foldedLoopIds]).toEqual([OBSERVER]);
+
+    // Resolved as a control, but refused: its run's loop is not on the board,
+    // or it has children of its own.
+    const orphan = attachControls([observer], snapshotOf(resolved(control())));
+    expect(orphan.foldedLoopIds.size).toBe(0);
+    const withChild = loop("child-of-observer", { parent_loop_id: OBSERVER });
+    const parent = attachControls([coordinator, observer, withChild], snapshotOf(resolved(control())));
+    expect(parent.foldedLoopIds.size).toBe(0);
+  });
+
   it("flags the owning task incomplete when a candidate on its runs is unclassified", () => {
     const child = loop("child-coord", { parent_loop_id: RUN });
     const lost: ControlCandidate = {

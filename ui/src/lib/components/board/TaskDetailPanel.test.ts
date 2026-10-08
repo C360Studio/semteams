@@ -559,6 +559,46 @@ describe("TaskDetailPanel", () => {
       expect(child).toHaveAttribute("aria-pressed", "false");
     });
 
+    it("breadcrumb back-button hands keyboard focus to the sub-task that was focused", async () => {
+      const user = userEvent.setup();
+      render(TaskDetailPanel, {
+        props: {
+          task: makeTask({
+            id: "loop_parent",
+            primaryLoop: makeLoop({ loop_id: "loop_parent" }),
+            childLoops: [
+              makeLoop({ loop_id: "c1", role: "researcher" }),
+              makeLoop({ loop_id: "c2", role: "reviewer" }),
+            ],
+          }),
+        },
+      });
+
+      const second = screen.getAllByTestId("child-item")[1];
+      await user.click(second);
+      const back = await screen.findByTestId("focus-back");
+      back.focus();
+      await user.keyboard("{Enter}");
+
+      await vi.waitFor(() => expect(screen.getAllByTestId("child-item")[1]).toHaveFocus());
+    });
+
+    it("names the back button by its visible text (WCAG 2.5.3)", async () => {
+      const user = userEvent.setup();
+      render(TaskDetailPanel, {
+        props: {
+          task: makeTask({ childLoops: [makeLoop({ loop_id: "c1", role: "researcher" })] }),
+        },
+      });
+
+      await user.click(screen.getByTestId("child-item"));
+
+      const back = await screen.findByTestId("focus-back");
+      const visible = (back.textContent ?? "").replace(/\s+/g, " ").trim();
+      expect(visible).toMatch(/^← Back to /);
+      expect(back).toHaveAccessibleName(visible);
+    });
+
     it("focus does not leak across task changes", async () => {
       const user = userEvent.setup();
       // Initial: task A with one child.
@@ -734,6 +774,28 @@ describe("TaskDetailPanel", () => {
       // Back out with the keyboard: the coordinator's story returns.
       await user.keyboard("{Enter}");
       expect(await screen.findByTestId("story-controls")).toBeInTheDocument();
+    });
+
+    it("returns keyboard focus to the control's row when the back button is activated", async () => {
+      // Going back unmounts the breadcrumb that held focus; the row for the loop
+      // that was focused is the way back to where the operator was.
+      const user = userEvent.setup();
+      render(TaskDetailPanel, {
+        props: { task: makeTask({ controls: [makeControl("obs-1"), makeControl("obs-2")] }) },
+      });
+
+      const identities = await screen.findAllByTestId("control-identity");
+      identities[1].focus();
+      await user.keyboard("{Enter}");
+      await vi.waitFor(() => expect(screen.getByTestId("focus-back")).toHaveFocus());
+
+      await user.keyboard("{Enter}");
+
+      await vi.waitFor(() => {
+        const rows = screen.getAllByTestId("control-row");
+        expect(rows.find((row) => row.getAttribute("data-loop-id") === "obs-2")).toHaveFocus();
+      });
+      expect(screen.queryByTestId("focus-breadcrumb")).not.toBeInTheDocument();
     });
 
     it("keeps focus on the list row that was activated; only the story's button hands focus over", async () => {

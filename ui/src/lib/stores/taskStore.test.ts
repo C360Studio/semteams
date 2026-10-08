@@ -221,3 +221,57 @@ describe("taskStore — rule-fired controls (design D3)", () => {
     }
   });
 });
+
+describe("taskStore — which loops are worth a #ref", () => {
+  it("withholds a ref from a control that folded into its run's card, and from a candidate still being classified", async () => {
+    agentStore.updateLoop(loop("coord-1"));
+    const observer = ruleFired("observer-1", "coord-1", { role: "ops-chain-observer" });
+    agentStore.updateLoop(observer);
+
+    // Not classified yet: it may fold away, so it does not spend a number.
+    expect(taskStore.isRefEligible(observer)).toBe(false);
+
+    await classify({ "observer-1": false });
+    expect(taskStore.tasks.map((t) => t.id)).toEqual(["coord-1"]);
+    expect(taskStore.isRefEligible(observer)).toBe(false);
+    expect(taskStore.isRefEligible(loop("coord-1"))).toBe(true);
+  });
+
+  it("gives a ref to a resolved control that stays a card because its run's loop is not on the board", async () => {
+    const observer = ruleFired("observer-1", "coord-1", { role: "ops-chain-observer" });
+    agentStore.updateLoop(observer);
+    await classify({ "observer-1": false });
+
+    expect(taskStore.tasks.map((t) => t.id)).toEqual(["observer-1"]);
+    expect(taskStore.isRefEligible(observer)).toBe(true);
+  });
+
+  it("gives a ref to a resolved control that stays a card because it has children of its own", async () => {
+    agentStore.updateLoop(loop("coord-1"));
+    const observer = ruleFired("observer-1", "coord-1", { role: "ops-chain-observer" });
+    agentStore.updateLoop(observer);
+    agentStore.updateLoop(loop("sub-1", { parent_loop_id: "observer-1", role: "researcher" }));
+    await classify({ "observer-1": false });
+
+    expect(taskStore.tasks.map((t) => t.id).sort()).toEqual(["coord-1", "observer-1"]);
+    expect(taskStore.isRefEligible(observer)).toBe(true);
+  });
+
+  it("gives a ref to a run member and to a candidate whose classification was given up on", async () => {
+    agentStore.updateLoop(loop("coord-1"));
+    const member = ruleFired("propose-1", "coord-1", { role: "researcher" });
+    agentStore.updateLoop(member);
+    await classify({ "propose-1": true });
+    expect(taskStore.isRefEligible(member)).toBe(true);
+
+    const lost = ruleFired("lost-1", "coord-1", { role: "ops-chain-observer" });
+    agentStore.updateLoop(lost);
+    mockGetTriples.mockRejectedValue(new Error("triples endpoint down"));
+    await controlsStore.pollOnce();
+    expect(taskStore.isRefEligible(lost)).toBe(true);
+  });
+
+  it("never gives a ref to a sub-task", () => {
+    expect(taskStore.isRefEligible(loop("child-1", { parent_loop_id: "coord-1" }))).toBe(false);
+  });
+});

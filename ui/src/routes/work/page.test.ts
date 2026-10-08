@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/svelte";
 import userEvent from "@testing-library/user-event";
-import { replaceState } from "$app/navigation";
+import { goto } from "$app/navigation";
 import WorkPage from "./+page.svelte";
 import {
   abortable,
@@ -16,11 +16,12 @@ import {
 } from "../../test-utils/work";
 import type { Route } from "../../test-utils/work";
 
-// A reactive URL stands in for SvelteKit's page.url so replaceState round-trips
-// into the page the way shallow routing does.
+// A reactive URL stands in for SvelteKit's page.url, and goto() writes the search
+// into it the way a real client-side navigation does. (The shallow replaceState()
+// does not update page.url in a real browser, which is why the page uses goto.)
 const pageMock = vi.hoisted(() => ({ url: null as unknown as URL, state: {} }));
 vi.mock("$app/state", () => ({ page: pageMock }));
-vi.mock("$app/navigation", () => ({ replaceState: vi.fn() }));
+vi.mock("$app/navigation", () => ({ goto: vi.fn() }));
 
 const widgets = [
   makeItem({ ref: "acme/widgets#1", number: 1, title: "Todo widget", column: "Todo" }),
@@ -36,7 +37,7 @@ const boardRoutes: Route[] = [
 beforeEach(async () => {
   const { SvelteURL } = await import("svelte/reactivity");
   pageMock.url = new SvelteURL("http://localhost/work");
-  vi.mocked(replaceState).mockImplementation((next) => {
+  vi.mocked(goto).mockImplementation(async (next) => {
     (pageMock.url as InstanceType<typeof SvelteURL>).search = new URL(String(next)).search;
   });
 });
@@ -87,7 +88,7 @@ describe("/work page", () => {
     expect(rows.map((row) => row.getAttribute("data-item"))).toEqual(["acme/widgets#1", "acme/widgets#2"]);
   });
 
-  it("writes the view to the URL with replaceState and follows it", async () => {
+  it("writes the view to the URL with a replacing navigation and follows it", async () => {
     const user = userEvent.setup();
     stubWorkFetch(...boardRoutes);
     render(WorkPage);
@@ -95,12 +96,14 @@ describe("/work page", () => {
 
     await user.click(screen.getByTestId("view-table"));
 
-    expect(replaceState).toHaveBeenCalledTimes(1);
-    expect(String(vi.mocked(replaceState).mock.calls[0][0])).toBe("http://localhost/work?view=table");
+    expect(goto).toHaveBeenCalledTimes(1);
+    expect(String(vi.mocked(goto).mock.calls[0][0])).toBe("http://localhost/work?view=table");
+    // In place: no history entry, no focus reset, no scroll to the top.
+    expect(vi.mocked(goto).mock.calls[0][1]).toEqual({ replaceState: true, keepFocus: true, noScroll: true });
     expect(await screen.findByTestId("work-table")).toBeInTheDocument();
 
     await user.click(screen.getByTestId("view-board"));
-    expect(String(vi.mocked(replaceState).mock.calls[1][0])).toBe("http://localhost/work");
+    expect(String(vi.mocked(goto).mock.calls[1][0])).toBe("http://localhost/work");
     expect(await screen.findByTestId("work-board")).toBeInTheDocument();
   });
 
@@ -128,7 +131,7 @@ describe("/work page", () => {
 
     await user.click(cards[0]);
 
-    expect(new URL(String(vi.mocked(replaceState).mock.calls[0][0])).searchParams.get("item")).toBe(
+    expect(new URL(String(vi.mocked(goto).mock.calls[0][0])).searchParams.get("item")).toBe(
       "acme/widgets#1",
     );
     const overview = await screen.findByTestId("work-item-overview");
@@ -158,7 +161,7 @@ describe("/work page", () => {
 
     await user.click(screen.getByTestId("work-overview-close"));
 
-    expect(new URL(String(vi.mocked(replaceState).mock.calls[0][0])).searchParams.has("item")).toBe(false);
+    expect(new URL(String(vi.mocked(goto).mock.calls[0][0])).searchParams.has("item")).toBe(false);
     await waitFor(() => expect(screen.queryByTestId("work-item-overview")).not.toBeInTheDocument());
   });
 
@@ -248,6 +251,44 @@ describe("/work page", () => {
       expect(screen.getByTestId("load-linked-runs")).toBe(button);
       expect(button).toHaveFocus();
       expect(button).toHaveAccessibleName("Reload linked runs");
+    });
+
+    it("keeps the focused Refresh button in place while the read is in flight and ignores a second press", async () => {
+      const user = userEvent.setup();
+      const second = deferred<Response>();
+      let portfolioReads = 0;
+      stubWorkFetch((url, init) => {
+        if (url.pathname !== "/api/work/portfolio") return undefined;
+        portfolioReads += 1;
+        return portfolioReads === 1
+          ? json(makePortfolio(["acme/widgets"]))
+          : abortable(init?.signal, second.promise);
+      }, ...boardRoutes.slice(1));
+      render(WorkPage);
+      await screen.findByTestId("work-board");
+      const button = screen.getByTestId("work-refresh");
+      // The first load is a refresh too; wait it out so the press below starts a new one.
+      await waitFor(() => expect(button).toHaveTextContent("Refresh"));
+      await waitFor(() => expect(button).not.toHaveTextContent("Refreshing"));
+      button.focus();
+
+      await user.keyboard("{Enter}");
+      await waitFor(() => expect(portfolioReads).toBe(2));
+
+      expect(screen.getByTestId("work-refresh")).toBe(button);
+      expect(button).toHaveFocus();
+      expect(button).toHaveAttribute("aria-busy", "true");
+      expect(button).toHaveAttribute("aria-disabled", "true");
+      expect(button).not.toBeDisabled();
+
+      await user.keyboard("{Enter}");
+      expect(portfolioReads).toBe(2);
+
+      second.resolve(json(makePortfolio(["acme/widgets"])));
+
+      await waitFor(() => expect(button).toHaveAttribute("aria-busy", "false"));
+      expect(button).not.toHaveAttribute("aria-disabled");
+      expect(button).toHaveFocus();
     });
 
     it("lands on the overview heading when a card opens it, and returns to that card on Close", async () => {

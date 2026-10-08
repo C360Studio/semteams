@@ -224,6 +224,12 @@ export interface ControlAttachment {
   topLevel: AgentLoop[];
   /** Folded controls, keyed by the top-level loop (task id) they attach to. */
   controlsByTask: Record<string, TaskControl[]>;
+  /**
+   * Loop ids of the controls that were actually folded. A control the snapshot
+   * resolved but this refused to fold (it has children, or its run's loop is not
+   * on the board) is not in here: it is still a card.
+   */
+  foldedLoopIds: Set<string>;
   /** Tasks whose controls may be incomplete because a candidate on their runs is unclassified. */
   incompleteTaskIds: Set<string>;
 }
@@ -277,6 +283,7 @@ export function attachControls(loops: AgentLoop[], snapshot: ControlsSnapshot): 
   return {
     topLevel: loops.filter((l) => !l.parent_loop_id && !folded.has(l.loop_id)),
     controlsByTask,
+    foldedLoopIds: folded,
     incompleteTaskIds,
   };
 }

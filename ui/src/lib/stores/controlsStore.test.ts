@@ -240,7 +240,7 @@ describe("controlsStore — membership cache", () => {
     await Promise.all([p1, p2]);
   });
 
-  it("can name the loops that may still be controls, so refs are not spent on them", async () => {
+  it("can name the loops whose classification is still open, so refs are not spent on them", async () => {
     const observer = candidate("observer-1");
     const propose = candidate("propose-1");
     const plain = candidate("plain", { task_id: "dispatch-1" });
@@ -256,8 +256,10 @@ describe("controlsStore — membership cache", () => {
     serve({ "observer-1": controlEntity("observer-1"), "propose-1": memberEntity("propose-1") });
     await controlsStore.pollOnce();
 
-    expect(controlsStore.mayBeControl(observer)).toBe(true);
-    expect(controlsStore.mayBeControl(propose)).toBe(false); // a member is a card
+    // Resolved either way: a member is a card, and a control is settled too (whether it
+    // folds into a card is the attachment's call, not a question still open).
+    expect(controlsStore.mayBeControl(observer)).toBe(false);
+    expect(controlsStore.mayBeControl(propose)).toBe(false);
   });
 
   it("aborts in-flight reads on stop() without reporting an error or spending an attempt, and polls again afterwards", async () => {

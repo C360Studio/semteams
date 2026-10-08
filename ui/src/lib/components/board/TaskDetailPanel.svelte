@@ -62,8 +62,20 @@
     manualFocusId = loopId;
   }
 
-  function focusPrimary() {
+  // Going back unmounts the breadcrumb, which held focus, so focus has to be put
+  // somewhere on purpose: the sub-task or control row of the loop that was focused,
+  // which is where the operator came from (found by its loop id, not by position).
+  async function focusPrimary() {
+    const returnTo = focusedLoopId;
     manualFocusId = null;
+    await tick();
+    Array.from(
+      panelContentEl?.querySelectorAll<HTMLElement>(
+        '[data-testid="child-item"], [data-testid="control-row"]',
+      ) ?? [],
+    )
+      .find((row) => row.dataset.loopId === returnTo)
+      ?.focus();
   }
 
   // The story's control rows are replaced by the focused loop's own story, so
@@ -71,6 +83,7 @@
   // page. Move it to the breadcrumb's back button, the way out of the new view.
   // (The sub-task and control list rows stay mounted, so they keep focus.)
   let backBtnRef = $state<HTMLButtonElement | null>(null);
+  let panelContentEl = $state<HTMLElement>();
 
   async function focusFromStory(loopId: string) {
     focusChild(loopId);
@@ -324,7 +337,7 @@
     {/each}
   </div>
 
-  <div class="panel-content">
+  <div class="panel-content" bind:this={panelContentEl}>
     {#if activeTab === "activity"}
       <div id="panel-activity" role="tabpanel" data-testid="panel-activity">
         {#if task.childLoops.length > 0}
@@ -398,7 +411,6 @@
               bind:this={backBtnRef}
               onclick={focusPrimary}
               data-testid="focus-back"
-              aria-label="Back to parent task story"
             >
               ← Back to {task.title}
             </button>

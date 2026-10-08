@@ -1,7 +1,7 @@
 <script lang="ts">
   import { untrack } from "svelte";
   import { page } from "$app/state";
-  import { replaceState } from "$app/navigation";
+  import { goto } from "$app/navigation";
   import { createWorkStore } from "$lib/stores/workStore.svelte";
   import { summarizeItemOverlays } from "$lib/utils/workView";
   import WorkBoard from "$lib/components/work/WorkBoard.svelte";
@@ -12,8 +12,11 @@
   type View = "board" | "table";
 
   // Read-only work lens (design D5). The URL is the selection: `?view=board|table`
-  // and `?item=owner/repo%23n`, written with shallow replaceState so a refresh or a
-  // shared link restores the lens and the back button keeps meaning "leave the page".
+  // and `?item=owner/repo%23n`, so a refresh or a shared link restores the lens.
+  // Changes are written with goto({ replaceState: true }), a real client-side
+  // navigation, so `page.url` follows and the back button keeps meaning "leave the
+  // page". Shallow replaceState() is not enough: it rewrites the address bar and
+  // `page.state` but not `page.url`, so the derivations below would never change.
   const store = createWorkStore();
 
   let view = $derived<View>(page.url.searchParams.get("view") === "table" ? "table" : "board");
@@ -36,10 +39,12 @@
   function updateUrl(change: (params: URLSearchParams) => void): void {
     const url = new URL(page.url);
     change(url.searchParams);
+    // keepFocus and noScroll: this is an in-page state change, so the focused
+    // control stays put (closeItem moves it on purpose) and the scroll position holds.
     // Same page, different search: resolve() is typed against route literals and
     // cannot express that.
     // eslint-disable-next-line svelte/no-navigation-without-resolve
-    replaceState(url, page.state);
+    void goto(url, { replaceState: true, keepFocus: true, noScroll: true });
   }
 
   function setView(next: View): void {
@@ -68,6 +73,13 @@
     );
     const target = opener?.matches("button") ? opener : opener?.querySelector<HTMLElement>("button");
     (target ?? pageHeading)?.focus();
+  }
+
+  // The button stays mounted and focusable while the read is in flight. It says so
+  // with aria-disabled rather than `disabled`: a disabled control is dropped from
+  // the focus order and focus falls back to the page.
+  function requestRefresh(): void {
+    if (!store.refreshing) void store.refresh();
   }
 
   function closeItem(): void {
@@ -106,8 +118,9 @@
       type="button"
       class="refresh"
       data-testid="work-refresh"
-      disabled={store.refreshing}
-      onclick={() => void store.refresh()}
+      aria-busy={store.refreshing}
+      aria-disabled={store.refreshing ? "true" : undefined}
+      onclick={requestRefresh}
     >
       {store.refreshing ? "Refreshing…" : "Refresh"}
     </button>
@@ -228,7 +241,7 @@
     font-weight: 700;
   }
 
-  .refresh:disabled {
+  .refresh[aria-disabled="true"] {
     cursor: progress;
     opacity: 0.7;
   }

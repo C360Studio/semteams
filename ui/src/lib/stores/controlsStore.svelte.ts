@@ -236,14 +236,18 @@ function createControlsStore() {
     },
 
     /**
-     * True while a top-level loop might still turn out to be a control: it is a
-     * candidate that has not been resolved as a run member and has not given up
-     * being classified. Callers use it to avoid spending a #ref on a loop that
-     * will probably not be a card.
+     * True while a loop's classification is still open: it is a candidate that has
+     * not been resolved (as a run member or as a control) and has not given up being
+     * classified, so it might still turn out to be a control. A resolved control is
+     * settled; whether it folds into a card is the attachment's call.
      */
     mayBeControl(loop: AgentLoop): boolean {
       if (parseControlCandidate(loop) === null) return false;
-      return !snapshot.memberLoopIds.has(loop.loop_id) && !snapshot.unclassifiedLoopIds.has(loop.loop_id);
+      return (
+        !snapshot.memberLoopIds.has(loop.loop_id) &&
+        !snapshot.controlLoopIds.has(loop.loop_id) &&
+        !snapshot.unclassifiedLoopIds.has(loop.loop_id)
+      );
     },
 
     /** Candidates that could not be classified (failed read or retries exhausted). */

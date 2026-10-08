@@ -64,10 +64,10 @@ import type { APIRequestContext, Page } from "@playwright/test";
  *     binding matches every coordinator carrying that exact prompt, so the
  *     journey needs a fresh stack (the Taskfile entry starts one).
  *
- * **Known gap (see the two expected-failure tests at the end):** the in-page
- * Table toggle and card selection do not work in a real browser because
- * `replaceState` does not update `page.url`. This journey therefore reaches
- * the table view and every item by URL, as chain-drill-in reaches its task.
+ * **In-page navigation:** the main journey reaches the table view and every
+ * item by URL, as chain-drill-in reaches its task. The Table toggle and card
+ * selection are exercised in the browser by the two tests at the end, which
+ * need no backend (they run against the fixture source alone).
  *
  * Required fixture: test/fixtures/journeys/ops-run-terminal.yaml
  * Required config:  configs/e2e-flow-bootstrap.json (ops rule wired)
@@ -523,9 +523,8 @@ test.describe("Work board: fixtures + live ops control", () => {
 
     // -----------------------------------------------------------------
     // Step 8 — the table is the same items as the board, and an item's
-    // loaded runs show in its row. Reached by URL (see the known-gap note
-    // at the top of this file): the in-page toggle is exercised, as an
-    // expected failure, by the tests below.
+    // loaded runs show in its row. Reached by URL here; the in-page toggle
+    // is exercised by the tests below.
     // -----------------------------------------------------------------
     await page.goto("/work");
     await waitForBoard(page);
@@ -563,30 +562,14 @@ test.describe("Work board: fixtures + live ops control", () => {
       "none",
     );
   });
+});
 
-  // -------------------------------------------------------------------
-  // Known gap, asserted as an expected failure so it cannot be forgotten.
-  //
-  // In SvelteKit 2.46.4, `replaceState(url, state)` rewrites the address bar
-  // and `page.state` but NOT `page.url`. The work lens (and the runs lens'
-  // taskStore, on main) derive their selection from `page.url.searchParams`,
-  // so an in-page click changes the address bar and nothing else: the Table
-  // toggle leaves the board up, a card does not open its overview, a task
-  // card does not open its panel. Deep links work, because `page.url` is
-  // right on load. Measured 2026-10-08 on this stack in a real browser.
-  // That is also why chain-drill-in navigates with page.goto: "replaceState
-  // races" is really "replaceState never updates page.url".
-  //
-  // These tests state the behaviour an operator expects. They pass today
-  // only because they are annotated to fail; when the URL-state fix lands
-  // Playwright reports "expected to fail, but passed" and the annotation
-  // (and this comment) must be deleted.
-  // -------------------------------------------------------------------
+// In-page URL state. These need only the fixture work source, not the runtime
+// backend, so they sit outside the describe whose beforeAll requires /health.
+// Selection and view live in the URL; a click has to be a real client-side
+// navigation for page.url (and so the view and the open item) to follow.
+test.describe("Work board: in-page URL state", () => {
   test("in-page Table toggle renders the table", async ({ page }) => {
-    test.fail(
-      true,
-      "replaceState does not update page.url (SvelteKit 2.46.4), so the view derived from it never changes",
-    );
     await page.goto("/work");
     await waitForBoard(page);
     await page.getByTestId("view-table").click();
@@ -597,10 +580,6 @@ test.describe("Work board: fixtures + live ops control", () => {
   });
 
   test("in-page card selection opens the item overview", async ({ page }) => {
-    test.fail(
-      true,
-      "replaceState does not update page.url (SvelteKit 2.46.4), so the item derived from it never changes",
-    );
     await page.goto("/work");
     await waitForBoard(page);
     await card(page, NO_RUNS_ITEM).click();

@@ -9,7 +9,7 @@ vi.mock("$env/dynamic/private", async () => ({
 }));
 const pageMock = vi.hoisted(() => ({ url: null as unknown as URL, state: {} }));
 vi.mock("$app/state", () => ({ page: pageMock }));
-vi.mock("$app/navigation", () => ({ replaceState: vi.fn() }));
+vi.mock("$app/navigation", () => ({ goto: vi.fn() }));
 
 import { render, screen, waitFor, within } from "@testing-library/svelte";
 import userEvent from "@testing-library/user-event";
@@ -73,8 +73,8 @@ beforeEach(async () => {
   vi.stubGlobal("fetch", vi.fn(async (input: Parameters<typeof fetch>[0]) => serve(input)));
   const { SvelteURL } = await import("svelte/reactivity");
   pageMock.url = new SvelteURL("http://localhost/work");
-  const { replaceState } = await import("$app/navigation");
-  vi.mocked(replaceState).mockImplementation((next) => {
+  const { goto } = await import("$app/navigation");
+  vi.mocked(goto).mockImplementation(async (next) => {
     (pageMock.url as InstanceType<typeof SvelteURL>).search = new URL(String(next)).search;
   });
 });
