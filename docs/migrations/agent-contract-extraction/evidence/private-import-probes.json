@@ -1,0 +1,24 @@
+[
+  {
+    "helper": "deliverylane",
+    "command": [
+      "go",
+      "run",
+      "/tmp/semteams-agent-contract-extraction/private-import-deliverylane.go"
+    ],
+    "exit_code": 1,
+    "expected_refusal": "use of internal package not allowed",
+    "output": "package command-line-arguments\n\t/tmp/semteams-agent-contract-extraction/private-import-deliverylane.go:2:8: use of internal package github.com/c360studio/semstreams/internal/deliverylane not allowed\n"
+  },
+  {
+    "helper": "lifecyclecleanup",
+    "command": [
+      "go",
+      "run",
+      "/tmp/semteams-agent-contract-extraction/private-import-lifecyclecleanup.go"
+    ],
+    "exit_code": 1,
+    "expected_refusal": "use of internal package not allowed",
+    "output": "package command-line-arguments\n\t/tmp/semteams-agent-contract-extraction/private-import-lifecyclecleanup.go:2:8: use of internal package github.com/c360studio/semstreams/internal/lifecyclecleanup not allowed\n"
+  }
+]

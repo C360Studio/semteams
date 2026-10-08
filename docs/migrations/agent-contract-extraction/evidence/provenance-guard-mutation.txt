@@ -1,0 +1,15 @@
+Captured output; tab characters expanded to eight-column stops.
+Guard temporarily replaced with successful no-op; original source restored afterward.
+--- FAIL: TestProbeModuleIdentityRejectsMismatchedAuthority (0.00s)
+    --- FAIL: TestProbeModuleIdentityRejectsMismatchedAuthority/version (0.00s)
+        measure-agent-contract-family_test.go:117: mismatched compiled probe accepted
+    --- FAIL: TestProbeModuleIdentityRejectsMismatchedAuthority/checksum (0.00s)
+        measure-agent-contract-family_test.go:117: mismatched compiled probe accepted
+    --- FAIL: TestProbeModuleIdentityRejectsMismatchedAuthority/compiled_replacement (0.00s)
+        measure-agent-contract-family_test.go:117: mismatched compiled probe accepted
+    --- FAIL: TestProbeModuleIdentityRejectsMismatchedAuthority/missing_dependency (0.00s)
+        measure-agent-contract-family_test.go:117: mismatched compiled probe accepted
+    measure-agent-contract-family_test.go:123: consumer replacement accepted
+FAIL
+FAIL    command-line-arguments  0.275s
+FAIL

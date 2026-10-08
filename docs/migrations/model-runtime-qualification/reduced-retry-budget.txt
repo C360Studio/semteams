@@ -1,0 +1,39 @@
+=== RUN   TestConfiguredModelRetryBoundary
+=== RUN   TestConfiguredModelRetryBoundary/production
+2026/10/03 09:55:33 github.com/testcontainers/testcontainers-go - Connected to docker: 
+  Server Version: 29.8.1
+  API Version: 1.51
+  Operating System: Docker Desktop
+  Total Memory: 23742 MB
+  Labels:
+    com.docker.desktop.address=unix:///Users/coby/Library/Containers/com.docker.docker/Data/docker-cli.sock
+  Testcontainers for Go Version: v0.40.0
+  Resolved Docker Host: unix:///var/run/docker.sock
+  Resolved Docker Socket Path: /var/run/docker.sock
+  Test SessionID: cc25da84fc38be6d5c755882e309b18b56c56f72bc0991863bffe18bfbef1768
+  Test ProcessID: 418957bb-3049-45bb-b3a3-c463624837ea
+2026/10/03 09:55:33 🐳 Creating container for image nats:2.14.4-alpine
+2026/10/03 09:55:33 ✅ Container created: ac02835f142b
+2026/10/03 09:55:33 🐳 Starting container: ac02835f142b
+2026/10/03 09:55:34 ✅ Container started: ac02835f142b
+2026/10/03 09:55:34 ⏳ Waiting for container id ac02835f142b image: nats:2.14.4-alpine. Waiting for: log message "Server is ready"
+2026/10/03 09:55:34 🔔 Container is ready: ac02835f142b
+2026/10/03 09:55:34 INFO Connecting to NATS urls=nats://localhost:57198
+2026/10/03 09:55:34 INFO Successfully connected to NATS urls=nats://localhost:57198
+2026/10/03 09:55:34 INFO Component factories registered count=27
+2026/10/03 09:55:34 INFO Created new KV bucket bucket=semstreams_config_c360_semteams-bootstrap
+2026/10/03 09:55:34 INFO JetStream consumer acknowledgement policy applied component=agentic-model port=agent.request stream=AGENT consumer=agentic-model-agent-request-all policy_source=component requested_max_ack_pending=1 effective_max_ack_pending=1
+    model_runtime_integration_test.go:151: 
+        	Error Trace:	/Users/coby/.codex/worktrees/model-boundary-qualification/semteams/cmd/semteams/model_runtime_integration_test.go:151
+        	Error:      	"[{POST /v1/chat/completions <nil> {qualification-model false [{user qualify the model boundary   []  false []}]}}]" should have 3 item(s), but has 1
+        	Test:       	TestConfiguredModelRetryBoundary/production
+        	Messages:   	shipped retry setting must govern total provider attempts
+2026/10/03 09:55:34 🐳 Stopping container: ac02835f142b
+2026/10/03 09:55:34 ✅ Container stopped: ac02835f142b
+2026/10/03 09:55:34 🐳 Terminating container: ac02835f142b
+2026/10/03 09:55:34 🚫 Container terminated: ac02835f142b
+--- FAIL: TestConfiguredModelRetryBoundary (0.57s)
+    --- FAIL: TestConfiguredModelRetryBoundary/production (0.57s)
+FAIL
+FAIL	github.com/c360studio/semteams/cmd/semteams	1.040s
+FAIL
