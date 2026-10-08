@@ -72,9 +72,11 @@ describe("GET /api/work/items", () => {
     expect(await response.json()).toMatchObject({ code: "REPOSITORY_NOT_CONFIGURED" });
   });
 
-  it("answers 404 for every repository when the work source is unconfigured", async () => {
+  it("answers 503 WORK_SOURCE_UNCONFIGURED, not a repository 404, when the work source is unconfigured", async () => {
     setEnv({});
-    expect((await call("?repository=c360studio/semteams")).status).toBe(404);
+    const response = await call("?repository=c360studio/semteams");
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({ code: "WORK_SOURCE_UNCONFIGURED" });
     // Parameter errors still win over configuration state.
     expect((await call("")).status).toBe(400);
   });

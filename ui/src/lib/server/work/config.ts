@@ -21,16 +21,27 @@ export interface WorkConfig {
  * The work API cannot serve: the environment, the portfolio document or the
  * fixture set is wrong. Surfaces as 503 with `code` (and `issues` for a
  * document problem) so the board can show what to fix.
+ *
+ * `message` is sent to the browser, so it must never carry a filesystem path or
+ * a raw exception message. Put those in `detail`, which is logged server-side
+ * only.
  */
 export class WorkConfigError extends Error {
   readonly code: string;
   readonly issues?: PortfolioIssue[];
+  readonly detail?: string;
 
-  constructor(message: string, code = "WORK_CONFIG_INVALID", issues?: PortfolioIssue[]) {
+  constructor(
+    message: string,
+    code = "WORK_CONFIG_INVALID",
+    issues?: PortfolioIssue[],
+    detail?: string,
+  ) {
     super(message);
     this.name = "WorkConfigError";
     this.code = code;
     this.issues = issues;
+    this.detail = detail;
   }
 }
 
@@ -51,7 +62,10 @@ export function readWorkConfig(): WorkConfig {
     rawSource !== "github"
   ) {
     throw new WorkConfigError(
-      `WORK_SOURCE must be "fixture" or "github" (or unset), got "${rawSource}"`,
+      'WORK_SOURCE must be "fixture" or "github" (or unset)',
+      "WORK_CONFIG_INVALID",
+      undefined,
+      `got "${rawSource}"`,
     );
   }
   return {

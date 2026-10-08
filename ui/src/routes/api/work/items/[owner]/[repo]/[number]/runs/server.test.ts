@@ -79,6 +79,16 @@ describe("GET /api/work/items/{owner}/{repo}/{number}/runs", () => {
     });
   });
 
+  it("answers partial, not 'no linked run', for item A when no coordinator with its prompt is in the graph", async () => {
+    setEnv({ WORK_SOURCE: "fixture" });
+    stubBackend(fakeBackend({}));
+    expect(await (await call("c360studio", "semteams", "312")).json()).toEqual({
+      lookup: "partial",
+      reason: "prompt binding matched no coordinator loop",
+      runs: [],
+    });
+  });
+
   it("treats an item with no linked_runs key like item B in fixture mode", async () => {
     setEnv({ WORK_SOURCE: "fixture" });
     stubBackend(fakeBackend({}));
@@ -102,6 +112,15 @@ describe("GET /api/work/items/{owner}/{repo}/{number}/runs", () => {
     expect((await call("c360studio", "semteams", "9999")).status).toBe(404);
     expect((await call("someone", "else", "1")).status).toBe(404);
     expect((await call("c360studio", "semteams", "x")).status).toBe(400);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("answers 503 WORK_SOURCE_UNCONFIGURED, without touching the backend, when the work source is unconfigured", async () => {
+    setEnv({});
+    const fetchMock = stubBackend(fakeBackend({}));
+    const response = await call("c360studio", "semteams", "312");
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({ code: "WORK_SOURCE_UNCONFIGURED" });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 

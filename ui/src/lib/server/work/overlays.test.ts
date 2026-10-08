@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { LinkedRun } from "$lib/types/work";
 import {
   NOT_YET_STAMPED_REASON,
+  PROMPT_BINDING_UNMATCHED_REASON,
   READ_TIMEOUT_MS,
   resolveLinkedRuns,
   VERIFICATION_UNKNOWN_REASON,
@@ -41,23 +42,27 @@ const completedRun = (): FakeTriple[] => [
   triple(RUN, "agent.run.handoff", LOOP_ID),
 ];
 
-/** The contract: `none` is only ever emitted by a `complete` lookup. */
-function expectNoneOnlyWhenComplete(resolution: RunsResolution) {
-  const states = resolution.runs.flatMap((r) => [r.execution_stage, r.needs_you, r.verification].map((o) => o.state));
-  if (resolution.lookup !== "complete") expect(states).not.toContain("none");
-  for (const run of resolution.runs) {
-    if (run.lookup !== "complete") {
-      expect([run.execution_stage.state, run.needs_you.state, run.verification.state]).not.toContain("none");
-    }
+/**
+ * The contract: "no linked run" (`complete` with no runs) is only the answer for
+ * an item that declares no bindings. A declared binding that found nothing
+ * could not be proven empty, so it must surface as a gap, never as that answer.
+ */
+function expectNoLinkedRunOnlyForEmptyBindings(resolution: RunsResolution, bindings: LinkedRunBinding[]) {
+  if (resolution.lookup === "complete" && resolution.runs.length === 0) {
+    expect(bindings, "complete with no runs for a declared binding").toEqual([]);
   }
 }
 
 async function resolve(bindings: LinkedRunBinding[], world: FakeWorld) {
   const fetchMock = stubBackend(fakeBackend(world));
   const resolution = await resolveLinkedRuns(bindings, HOST);
-  expectNoneOnlyWhenComplete(resolution);
+  expectNoLinkedRunOnlyForEmptyBindings(resolution, bindings);
   return { resolution, fetchMock };
 }
+
+/** `count` triples on `subject` that carry no fact the overlays read. */
+const filler = (subject: string, count: number): FakeTriple[] =>
+  Array.from({ length: count }, (_, i) => triple(subject, `test.filler.p${i}`, "x"));
 
 afterEach(() => {
   vi.useRealTimers();
@@ -93,7 +98,7 @@ describe("coordinator_prompt binding", () => {
     ]);
     const listing = urls.find((u) => u.searchParams.get("predicate") === "agent.loop.description");
     expect(listing?.searchParams.get("object")).toBe(PROMPT);
-    expect(listing?.searchParams.get("limit")).toBe("10");
+    expect(listing?.searchParams.get("limit")).toBe("50");
   });
 
   it("is a linked run with stage unknown ('run entity not yet stamped') when the coordinator has no run anchor yet", async () => {
@@ -124,7 +129,7 @@ describe("coordinator_prompt binding", () => {
     expect(resolution.runs[0].execution_stage.state).toBe("unknown");
   });
 
-  it("matches only coordinators: a researcher with the same description is not the work item's run", async () => {
+  it("matches only coordinators: a researcher with the same description is not the work item's run, and the binding is partial", async () => {
     const researcher = "c360.semteams-e2e.agentic-loop.agent.execution.loop_researcher";
     const { resolution } = await resolve([byPrompt], {
       triples: [
@@ -133,12 +138,67 @@ describe("coordinator_prompt binding", () => {
         triple(researcher, "agent.run.entity-id", RUN),
       ],
     });
-    expect(resolution).toEqual({ lookup: "complete", runs: [] });
+    // Not "no linked run": a declared binding that matched no coordinator is a gap.
+    expect(resolution).toEqual({ lookup: "partial", reason: PROMPT_BINDING_UNMATCHED_REASON, runs: [] });
   });
 
-  it("is complete with no runs when no loop has that prompt yet", async () => {
+  it("is partial, not 'no linked run', when no loop has that prompt (the frozen triples read answers [] when it cannot read)", async () => {
     const { resolution } = await resolve([byPrompt], { triples: [] });
-    expect(resolution).toEqual({ lookup: "complete", runs: [] });
+    expect(resolution).toEqual({
+      lookup: "partial",
+      reason: "prompt binding matched no coordinator loop",
+      runs: [],
+    });
+  });
+
+  it("keeps the unmatched binding visible next to a binding that did resolve", async () => {
+    const { resolution } = await resolve(
+      [{ by: "coordinator_prompt", equals: "a prompt nothing ran" }, byRun(RUN)],
+      { triples: completedRun(), loops: { [LOOP_ID]: { state: "complete" } } },
+    );
+    expect(resolution.lookup).toBe("partial");
+    expect(resolution.reason).toBe(PROMPT_BINDING_UNMATCHED_REASON);
+    expect(resolution.runs.map((r) => r.run_entity_id)).toEqual([RUN]);
+  });
+
+  it("is partial when the prompt listing is cut off at its limit, even if the coordinator was found", async () => {
+    const others = Array.from({ length: 49 }, (_, i) => {
+      const entity = `c360.semteams-e2e.agentic-loop.agent.execution.loop_other_${i}`;
+      return triple(entity, "agent.loop.description", PROMPT);
+    });
+    const { resolution } = await resolve([byPrompt], {
+      // The coordinator is inside the first 50; the 51st would not be.
+      triples: [...coordinatorFacts(), ...completedRun(), ...others, triple(`${LOOP_ENTITY}x`, "agent.loop.description", PROMPT)],
+      loops: { [LOOP_ID]: { loop_id: LOOP_ID, state: "complete" } },
+    });
+    expect(resolution.lookup).toBe("partial");
+    expect(resolution.reason).toContain("read truncated at 50 triples");
+    // What was read is still reported.
+    expect(resolution.runs.map((r) => r.run_entity_id)).toEqual([RUN]);
+  });
+
+  it("is complete (not truncated) when the prompt listing is under its limit", async () => {
+    const { resolution } = await resolve([byPrompt], {
+      triples: [...coordinatorFacts(), ...completedRun()],
+      loops: { [LOOP_ID]: { loop_id: LOOP_ID, state: "complete" } },
+    });
+    expect(resolution.lookup).toBe("complete");
+  });
+
+  it("is partial, without inventing a run, when a loop's own facts are cut off at their limit", async () => {
+    const { resolution } = await resolve([byPrompt], {
+      // The role and run anchor sit beyond the 200th triple, so this loop can be
+      // neither claimed as the coordinator nor ruled out as a researcher.
+      triples: [
+        triple(LOOP_ENTITY, "agent.loop.description", PROMPT),
+        ...filler(LOOP_ENTITY, 199),
+        triple(LOOP_ENTITY, "agent.loop.role", "coordinator"),
+        triple(LOOP_ENTITY, "agent.run.entity-id", RUN),
+      ],
+    });
+    expect(resolution.lookup).toBe("partial");
+    expect(resolution.reason).toContain(`loop facts for ${LOOP_ID}: read truncated at 200 triples`);
+    expect(resolution.runs).toEqual([]);
   });
 
   it("prefers the coordinator's own run anchor over an inherited one", async () => {
@@ -161,6 +221,7 @@ describe("coordinator_prompt binding", () => {
   it("reports failed when the prompt lookup itself cannot be read", async () => {
     stubBackend(() => new Response("boom", { status: 500 }));
     const resolution = await resolveLinkedRuns([byPrompt], HOST);
+    expectNoLinkedRunOnlyForEmptyBindings(resolution, [byPrompt]);
     expect(resolution.lookup).toBe("failed");
     expect(resolution.reason).toContain("GET /graph/triples answered 500");
     expect(resolution.runs).toEqual([]);
@@ -213,7 +274,7 @@ describe("run_entity_id binding", () => {
     expect(resolution.runs[0].coordinator_loop_id).toBeNull();
   });
 
-  it.each(["dispatched", "executing", "completed", "failed", "cancelled"] as const)(
+  it.each(["dispatched", "executing", "awaiting_approval", "completed", "failed", "cancelled"] as const)(
     "reads agent.run.phase %s",
     async (phase) => {
       const { resolution } = await resolve([byRun(RUN)], {
@@ -223,6 +284,51 @@ describe("run_entity_id binding", () => {
       expect(resolution.runs[0].execution_stage).toEqual({ state: "known", value: phase });
     },
   );
+
+  it("keeps a run in awaiting_approval known and complete: a live phase is not a gap", async () => {
+    const { resolution } = await resolve([byRun(RUN)], {
+      triples: [
+        triple(RUN, "agent.run.phase", "awaiting_approval"),
+        triple(RUN, "agent.run.handoff", LOOP_ID),
+        triple(RUN, "agent.run.approval-outstanding", 1),
+      ],
+      loops: { [LOOP_ID]: { loop_id: LOOP_ID, state: "awaiting_approval" } },
+    });
+    expect(resolution.lookup).toBe("complete");
+    expect(resolution.reason).toBeUndefined();
+    expect(resolution.runs[0].execution_stage).toEqual({ state: "known", value: "awaiting_approval" });
+    expect(resolution.runs[0].needs_you).toMatchObject({ state: "known", value: true });
+  });
+
+  it("is partial, with stage unknown and the truncation reason, when the run's facts are cut off at their limit", async () => {
+    const { resolution } = await resolve([byRun(RUN)], {
+      // Phase and handoff sit beyond the 200th triple: last-wins over a cut-short
+      // read could report a stale phase, and absence of a marker proves nothing.
+      triples: [...filler(RUN, 200), ...completedRun()],
+      loops: { [LOOP_ID]: { loop_id: LOOP_ID, state: "complete" } },
+    });
+    expect(resolution.lookup).toBe("partial");
+    expect(resolution.reason).toContain(`run facts for ${RUN}: read truncated at 200 triples`);
+    expect(resolution.runs[0].execution_stage).toMatchObject({ state: "unknown" });
+    expect(resolution.runs[0].needs_you.state).toBe("unknown");
+  });
+
+  it("still reports needs-you true from a marker inside a truncated read (true is definitive)", async () => {
+    const { resolution } = await resolve([byRun(RUN)], {
+      triples: [triple(RUN, "agent.run.clarification-pending", LOOP_ID), ...filler(RUN, 199), ...completedRun()],
+    });
+    expect(resolution.lookup).toBe("partial");
+    expect(resolution.runs[0].needs_you).toMatchObject({ state: "known", value: true });
+    expect(resolution.runs[0].execution_stage.state).toBe("unknown");
+  });
+
+  it("is complete when the run's facts stop just short of the limit", async () => {
+    const { resolution } = await resolve([byRun(RUN)], {
+      triples: [...filler(RUN, 196), ...completedRun()],
+      loops: { [LOOP_ID]: { loop_id: LOOP_ID, state: "complete" } },
+    });
+    expect(resolution.lookup).toBe("complete");
+  });
 
   it("treats a phase outside the known set, or a missing phase, as unknown rather than guessing", async () => {
     const odd = await resolve([byRun(RUN)], {
@@ -319,7 +425,7 @@ describe("failure handling", () => {
       throw new Error("connect ECONNREFUSED");
     });
     const resolution = await resolveLinkedRuns([byRun(DEAD_RUN)], HOST);
-    expectNoneOnlyWhenComplete(resolution);
+    expectNoLinkedRunOnlyForEmptyBindings(resolution, [byRun(DEAD_RUN)]);
     expect(resolution.lookup).toBe("failed");
     expect(resolution.reason).toContain("ECONNREFUSED");
     // One failed read is reported once, not once per overlay.
@@ -365,6 +471,14 @@ describe("failure handling", () => {
 });
 
 describe("binding set", () => {
+  it("the 'no linked run' assertion rejects a declared binding answered 'complete, no runs' (the B1 negative)", () => {
+    expect(() => expectNoLinkedRunOnlyForEmptyBindings({ lookup: "complete", runs: [] }, [byPrompt])).toThrow();
+    expect(() => expectNoLinkedRunOnlyForEmptyBindings({ lookup: "complete", runs: [] }, [])).not.toThrow();
+    expect(() =>
+      expectNoLinkedRunOnlyForEmptyBindings({ lookup: "partial", reason: "x", runs: [] }, [byPrompt]),
+    ).not.toThrow();
+  });
+
   it("makes no backend read for an empty binding list: complete, no runs, the one legal 'no linked run'", async () => {
     const { resolution, fetchMock } = await resolve([], {});
     expect(resolution).toEqual({ lookup: "complete", runs: [] });

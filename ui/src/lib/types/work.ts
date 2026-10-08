@@ -13,15 +13,14 @@ export type LookupStatus = "complete" | "partial" | "failed" | "unsupported";
 export type WorkSourceKind = "fixture" | "github" | "unconfigured";
 
 /**
- * A value that may not be knowable. `unknown` always carries a reason where one
- * exists; `none` means "looked, and there is nothing" and is only emitted when
- * the enclosing lookup is `complete`.
+ * A value that may not be knowable. `known` is the only variant that carries a
+ * value; `unknown` always carries a reason; `none` means "looked, and there is
+ * nothing" and is only emitted when the enclosing lookup is `complete`.
  */
-export interface Overlay<T> {
-  state: "known" | "none" | "unknown";
-  value?: T;
-  reason?: string;
-}
+export type Overlay<T> =
+  | { state: "known"; value: T; reason?: string }
+  | { state: "none"; reason?: string }
+  | { state: "unknown"; reason: string };
 
 // ---------------------------------------------------------------------------
 // Portfolio (D4)
@@ -106,6 +105,7 @@ export interface WorkItem {
 export type RunPhase =
   | "dispatched"
   | "executing"
+  | "awaiting_approval"
   | "completed"
   | "failed"
   | "cancelled";

@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("$env/dynamic/private", async () => ({
   env: (await import("$lib/server/work/testkit")).mockEnv,
@@ -8,7 +8,15 @@ vi.mock("$env/dynamic/private", async () => ({
 import * as route from "./+server";
 import { setEnv } from "$lib/server/work/testkit";
 
-afterEach(() => setEnv({}));
+// Config problems are logged server-side; keep the run quiet.
+beforeEach(() => {
+  vi.spyOn(console, "error").mockImplementation(() => {});
+});
+
+afterEach(() => {
+  setEnv({});
+  vi.restoreAllMocks();
+});
 
 const call = () => route.GET({} as unknown as Parameters<typeof route.GET>[0]);
 

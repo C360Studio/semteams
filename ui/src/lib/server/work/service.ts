@@ -41,16 +41,19 @@ async function loadContext(): Promise<Context> {
     const set = loadFixtureSet(config.fixtureSet);
     if (!set) {
       throw new WorkConfigError(
-        `unknown WORK_FIXTURE_SET "${config.fixtureSet}"; available: ${listFixtureSets().join(", ") || "none"}`,
+        `unknown WORK_FIXTURE_SET; available: ${listFixtureSets().join(", ") || "none"}`,
         "FIXTURE_SET_UNKNOWN",
+        undefined,
+        `requested "${config.fixtureSet}"`,
       );
     }
     const checked = validatePortfolio(set.portfolio);
     if (!checked.ok) {
       throw new WorkConfigError(
-        `fixture set "${config.fixtureSet}" has an invalid portfolio`,
+        "fixture set has an invalid portfolio",
         "PORTFOLIO_INVALID",
         checked.issues,
+        `fixture set "${config.fixtureSet}"`,
       );
     }
     return {
@@ -71,23 +74,32 @@ async function loadContext(): Promise<Context> {
   try {
     document = JSON.parse(await readFile(config.portfolioPath, "utf8"));
   } catch (err) {
+    // The path and the raw read/parse message stay in the server log: the
+    // browser gets the code, not the operator's filesystem layout.
     throw new WorkConfigError(
-      `portfolio document ${config.portfolioPath} is unreadable: ${err instanceof Error ? err.message : String(err)}`,
+      "portfolio document is unreadable",
       "PORTFOLIO_UNREADABLE",
+      undefined,
+      `${config.portfolioPath}: ${err instanceof Error ? err.message : String(err)}`,
     );
   }
   const checked = validatePortfolio(document);
   if (!checked.ok) {
     throw new WorkConfigError(
-      `portfolio document ${config.portfolioPath} is invalid`,
+      "portfolio document is invalid",
       "PORTFOLIO_INVALID",
       checked.issues,
+      config.portfolioPath,
     );
   }
   return { kind: "ready", config, portfolio: checked.portfolio, source: createGithubSource() };
 }
 
-/** Runs a handler against the loaded context; a config problem becomes 503 with its detail. */
+/**
+ * Runs a handler against the loaded context; a config problem becomes 503 with
+ * its code and validation issues. The error's `detail` (paths, raw exception
+ * text) is logged here and never sent.
+ */
 async function withContext<T>(
   handler: (context: Context) => Promise<WorkResult<T>>,
 ): Promise<WorkResult<T>> {
@@ -95,6 +107,7 @@ async function withContext<T>(
     return await handler(await loadContext());
   } catch (err) {
     if (err instanceof WorkConfigError) {
+      console.error(`[work-api] ${err.code}: ${err.message}${err.detail ? ` (${err.detail})` : ""}`);
       return {
         status: 503,
         body: {
@@ -123,10 +136,12 @@ type Scoped =
   | { ok: false; result: WorkResult<never> };
 
 function scope(context: Context, owner: string, name: string): Scoped {
+  // Not a missing repository: the whole work source is absent, which is a
+  // deployment state (503), not a property of this request (404).
   if (context.kind === "unconfigured") {
     return {
       ok: false,
-      result: failure(404, "REPOSITORY_NOT_CONFIGURED", "work source is not configured"),
+      result: failure(503, "WORK_SOURCE_UNCONFIGURED", "work source is not configured; set WORK_SOURCE"),
     };
   }
   const repository = findRepository(context.portfolio, owner, name);

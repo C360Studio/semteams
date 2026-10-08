@@ -10,7 +10,10 @@
 // (agent.loop.description, agent.loop.role, agent.run.entity-id) instead.
 //
 // A failed read degrades that lookup to `partial` or `failed`; it is never
-// reported as `none`.
+// reported as `none`. The same holds for a read that cannot be trusted to be
+// whole: the frozen /graph/triples returns [] when it cannot read and stops
+// silently at `limit`, so an empty answer proves nothing and a full one may be
+// cut short. Both degrade to `partial` with a reason.
 
 import type {
   LinkedRun,
@@ -27,10 +30,22 @@ const LOOP_INFIX = ".agentic-loop.agent.execution.";
 const RUN_PHASES: readonly RunPhase[] = [
   "dispatched",
   "executing",
+  "awaiting_approval",
   "completed",
   "failed",
   "cancelled",
 ];
+
+// Read limits. A result at the limit is treated as truncated (see truncation()).
+const RUN_FACTS_LIMIT = 200;
+const LOOP_FACTS_LIMIT = 200;
+const PROMPT_LISTING_LIMIT = 50;
+
+export const PROMPT_BINDING_UNMATCHED_REASON = "prompt binding matched no coordinator loop";
+
+function truncation(limit: number): string {
+  return `read truncated at ${limit} triples`;
+}
 
 export const VERIFICATION_UNKNOWN_REASON = "no verification fact for research runs";
 export const NOT_YET_STAMPED_REASON = "run entity not yet stamped";
@@ -148,11 +163,14 @@ function needsYouOverlay(facts: FactsState, loop: LoopState): Overlay<boolean> {
     if (loop.info.state === "awaiting_approval") reasons.push("coordinator loop is awaiting approval");
     else if (isObject(loop.info.pending_approval)) reasons.push("coordinator loop has a pending approval");
   }
-  if (facts.kind === "ok") {
-    if (facts.triples.some((t) => t.predicate === "agent.run.clarification-pending")) {
+  // A marker found in a truncated read still holds (true is definitive); only
+  // its absence is unprovable, which is why `false` below needs an `ok` read.
+  const triples = readTriples(facts);
+  if (triples) {
+    if (triples.some((t) => t.predicate === "agent.run.clarification-pending")) {
       reasons.push("run is waiting for a clarification answer");
     }
-    const outstanding = Number(lastValue(facts.triples, "agent.run.approval-outstanding"));
+    const outstanding = Number(lastValue(triples, "agent.run.approval-outstanding"));
     if (outstanding > 0) reasons.push(`${outstanding} approval gate(s) outstanding`);
   }
   if (reasons.length > 0) return { state: "known", value: true, reason: reasons.join("; ") };
@@ -170,7 +188,13 @@ function needsYouOverlay(facts: FactsState, loop: LoopState): Overlay<boolean> {
 
 type FactsState =
   | { kind: "ok"; triples: Triple[] }
+  /** Read returned `limit` triples: what is here is true, what is absent is unproven. */
+  | { kind: "truncated"; triples: Triple[]; reason: string }
   | { kind: "missing" | "error" | "unstamped"; reason: string };
+
+function readTriples(facts: FactsState): Triple[] | undefined {
+  return facts.kind === "ok" || facts.kind === "truncated" ? facts.triples : undefined;
+}
 
 type LoopState =
   | { kind: "ok"; info: Record<string, unknown> }
@@ -207,19 +231,26 @@ async function resolveRun(reader: Reader, target: RunTarget): Promise<LinkedRun>
   if (target.runEntityId === null) {
     facts = { kind: "unstamped", reason: NOT_YET_STAMPED_REASON };
   } else {
-    const read = tally(await reader.triples({ subject: target.runEntityId, limit: "200" }));
+    const read = tally(await reader.triples({ subject: target.runEntityId, limit: String(RUN_FACTS_LIMIT) }));
     if (!read.ok) {
       facts = { kind: "error", reason: `run facts for ${target.runEntityId} unreadable: ${read.error}` };
     } else if (read.value.length === 0) {
       facts = { kind: "missing", reason: `run entity ${target.runEntityId} has no facts` };
+    } else if (read.value.length >= RUN_FACTS_LIMIT) {
+      facts = {
+        kind: "truncated",
+        triples: read.value,
+        reason: `run facts for ${target.runEntityId}: ${truncation(RUN_FACTS_LIMIT)}`,
+      };
     } else {
       facts = { kind: "ok", triples: read.value };
     }
   }
 
   let coordinatorLoopId = target.coordinatorLoopId;
-  if (coordinatorLoopId === null && facts.kind === "ok") {
-    const handoff = lastValue(facts.triples, "agent.run.handoff");
+  const runTriples = readTriples(facts);
+  if (coordinatorLoopId === null && runTriples) {
+    const handoff = lastValue(runTriples, "agent.run.handoff");
     if (handoff) {
       coordinatorLoopId = bareLoopId(handoff);
       loopPromise = readLoop(coordinatorLoopId);
@@ -267,7 +298,7 @@ interface Part {
 
 interface BindingResolution {
   runs: LinkedRun[];
-  /** Failures that produced no run to carry them (e.g. the listing read failed). */
+  /** Gaps with no run to carry them: a failed or truncated listing, or a binding that matched nothing. */
   parts: Part[];
 }
 
@@ -276,7 +307,7 @@ async function resolvePromptBinding(reader: Reader, equals: string): Promise<Bin
   const listing = await reader.triples({
     predicate: "agent.loop.description",
     object: equals,
-    limit: "10",
+    limit: String(PROMPT_LISTING_LIMIT),
   });
   if (!listing.ok) {
     return {
@@ -293,20 +324,33 @@ async function resolvePromptBinding(reader: Reader, equals: string): Promise<Bin
     ),
   ];
 
+  const parts: Part[] = [];
+  if (listing.value.length >= PROMPT_LISTING_LIMIT) {
+    parts.push({ lookup: "partial", reason: `loop lookup by prompt: ${truncation(PROMPT_LISTING_LIMIT)}` });
+  }
+
   const resolved = await Promise.all(
-    loopEntities.map(async (loopEntity): Promise<LinkedRun | null> => {
+    loopEntities.map(async (loopEntity): Promise<{ run: LinkedRun } | { part: Part } | null> => {
       const loopId = bareLoopId(loopEntity);
-      const read = await reader.triples({ subject: loopEntity, limit: "200" });
+      const read = await reader.triples({ subject: loopEntity, limit: String(LOOP_FACTS_LIMIT) });
       if (!read.ok) {
         return {
-          run_entity_id: null,
-          coordinator_loop_id: loopId,
-          lookup: "failed",
-          reason: `loop facts for ${loopId} unreadable: ${read.error}`,
-          execution_stage: { state: "unknown", reason: "loop facts unreadable" },
-          needs_you: { state: "unknown", reason: "loop facts unreadable" },
-          verification: { state: "unknown", reason: VERIFICATION_UNKNOWN_REASON },
+          run: {
+            run_entity_id: null,
+            coordinator_loop_id: loopId,
+            lookup: "failed",
+            reason: `loop facts for ${loopId} unreadable: ${read.error}`,
+            execution_stage: { state: "unknown", reason: "loop facts unreadable" },
+            needs_you: { state: "unknown", reason: "loop facts unreadable" },
+            verification: { state: "unknown", reason: VERIFICATION_UNKNOWN_REASON },
+          },
         };
+      }
+      // A cut-short read can hide the role or the run anchor, so this loop can
+      // be neither claimed nor ruled out. It is a part, not a run: inventing a
+      // run for a loop that may be a researcher would be wrong the other way.
+      if (read.value.length >= LOOP_FACTS_LIMIT) {
+        return { part: { lookup: "partial", reason: `loop facts for ${loopId}: ${truncation(LOOP_FACTS_LIMIT)}` } };
       }
       // Only a coordinator's run is the work item's run; a researcher loop can
       // share a prompt with it.
@@ -318,10 +362,23 @@ async function resolvePromptBinding(reader: Reader, equals: string): Promise<Bin
       const ownRun = lastValue(read.value, "agent.loop.run");
       const runEntityId =
         (ownRun && anchors.find((a) => a.endsWith(`${RUN_INFIX}${ownRun}`))) || anchors[0] || null;
-      return resolveRun(reader, { runEntityId, coordinatorLoopId: loopId });
+      return { run: await resolveRun(reader, { runEntityId, coordinatorLoopId: loopId }) };
     }),
   );
-  return { runs: resolved.filter((r): r is LinkedRun => r !== null), parts: [] };
+  const runs: LinkedRun[] = [];
+  for (const entry of resolved) {
+    if (entry === null) continue;
+    if ("run" in entry) runs.push(entry.run);
+    else parts.push(entry.part);
+  }
+
+  // A binding that was declared but resolved to nothing is not "no linked run":
+  // the frozen /graph/triples answers [] when it cannot read, so an empty
+  // listing proves nothing. Only an empty binding list is a complete "none".
+  if (runs.length === 0 && parts.length === 0) {
+    parts.push({ lookup: "partial", reason: PROMPT_BINDING_UNMATCHED_REASON });
+  }
+  return { runs, parts };
 }
 
 async function resolveBinding(reader: Reader, binding: LinkedRunBinding): Promise<BindingResolution> {
@@ -339,7 +396,7 @@ export interface RunsResolution {
 /**
  * Resolve an item's declared run bindings against the backend. An empty
  * binding list is a `complete` lookup with no runs: the one legal "no linked
- * run".
+ * run". A declared binding that resolves to nothing is `partial`, never that.
  */
 export async function resolveLinkedRuns(
   bindings: LinkedRunBinding[],

@@ -79,6 +79,40 @@ function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((v) => typeof v === "string");
 }
 
+const DEPENDENCY_SOURCES: readonly string[] = ["blocked-by", "task-list"];
+const PULL_REQUEST_STATES: readonly string[] = ["open", "merged", "closed"];
+
+type IssueSink = (path: string, message: string) => void;
+
+function checkOptionalString(raw: Record<string, unknown>, path: string, key: string, issue: IssueSink) {
+  if (raw[key] !== undefined && typeof raw[key] !== "string") issue(`${path}.${key}`, "must be a string");
+}
+
+function checkOptionalStringArray(raw: Record<string, unknown>, path: string, key: string, issue: IssueSink) {
+  if (raw[key] !== undefined && !isStringArray(raw[key])) issue(`${path}.${key}`, "must be an array of strings");
+}
+
+/** Each entry of an optional array of objects: `ref` required, plus the entry-specific checks. */
+function checkRefList(
+  raw: Record<string, unknown>,
+  path: string,
+  key: string,
+  issue: IssueSink,
+  checkEntry: (entry: Record<string, unknown>, entryPath: string) => void,
+) {
+  const list = raw[key];
+  if (list === undefined) return;
+  if (!Array.isArray(list)) return issue(`${path}.${key}`, "must be an array");
+  list.forEach((entry: unknown, i: number) => {
+    const entryPath = `${path}.${key}[${i}]`;
+    if (!isObject(entry)) return issue(entryPath, "must be an object");
+    if (typeof entry.ref !== "string" || !entry.ref) {
+      issue(`${entryPath}.ref`, "required, must be a non-empty string");
+    }
+    checkEntry(entry, entryPath);
+  });
+}
+
 function parseBinding(raw: unknown): LinkedRunBinding | null {
   if (!isObject(raw)) return null;
   if (raw.by === "run_entity_id" && typeof raw.value === "string" && raw.value) {
@@ -130,6 +164,21 @@ function parseFixtureItems(raw: unknown, portfolio: Portfolio): FixtureItems {
       if (rawItem.state !== "open" && rawItem.state !== "closed") {
         issue(`${itemPath}.state`, 'must be "open" or "closed"');
       }
+      for (const key of ["body", "milestone", "pm_status", "priority"]) {
+        checkOptionalString(rawItem, itemPath, key, issue);
+      }
+      for (const key of ["labels", "assignees"]) checkOptionalStringArray(rawItem, itemPath, key, issue);
+      checkRefList(rawItem, itemPath, "dependencies", issue, (entry, entryPath) => {
+        if (typeof entry.source !== "string" || !DEPENDENCY_SOURCES.includes(entry.source)) {
+          issue(`${entryPath}.source`, 'must be "blocked-by" or "task-list"');
+        }
+      });
+      checkRefList(rawItem, itemPath, "pull_requests", issue, (entry, entryPath) => {
+        checkOptionalString(entry, entryPath, "title", issue);
+        if (entry.state !== undefined && (typeof entry.state !== "string" || !PULL_REQUEST_STATES.includes(entry.state))) {
+          issue(`${entryPath}.state`, 'must be "open", "merged" or "closed"');
+        }
+      });
       if (rawItem.linked_runs !== undefined) {
         const ok =
           Array.isArray(rawItem.linked_runs) &&
@@ -137,6 +186,8 @@ function parseFixtureItems(raw: unknown, portfolio: Portfolio): FixtureItems {
         if (!ok) issue(`${itemPath}.linked_runs`, "every binding needs by + value/equals");
       }
     });
+    // Every field toWorkItem reads was checked above; an invalid fixture throws
+    // below, so this cast never reaches an unchecked shape.
     out[key.toLowerCase()] = entry as unknown as FixtureRepository;
   }
 

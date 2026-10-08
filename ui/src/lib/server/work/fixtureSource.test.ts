@@ -72,7 +72,8 @@ describe("board-mvp (design D5)", () => {
     const items = [...(await source.listItems(semteams)).items, ...(await source.listItems(semsource)).items];
     const known = items.filter((i) => i.delivery.state === "known");
     expect(known).toHaveLength(1);
-    expect(known[0].delivery.value).toHaveLength(2);
+    const delivery = known[0].delivery;
+    expect(delivery.state === "known" && delivery.value).toHaveLength(2);
     expect(items.filter((i) => i.delivery.state === "unknown").length).toBe(items.length - 1);
   });
 
@@ -188,6 +189,91 @@ describe("fixture source behavior", () => {
     const { items } = await source.listItems(portfolio.programs[0].projects[0].repositories[0]);
     expect(items.map((i) => i.delivery.state)).toEqual(["unknown", "none", "known"]);
     expect(items[0].delivery.reason).toBeTruthy();
+  });
+
+  it("rejects wrongly typed optional fields with named issues instead of throwing at read time", () => {
+    const portfolio: Portfolio = {
+      programs: [
+        {
+          id: "p",
+          name: "p",
+          projects: [
+            {
+              id: "x",
+              name: "x",
+              repositories: [{ owner: "o", name: "b", project_board: { owner: "o", number: 1, status_field: "Status" } }],
+            },
+          ],
+        },
+      ],
+    };
+    let error: unknown;
+    try {
+      createFixtureSource(portfolio, {
+        "o/b": {
+          items: [
+            {
+              number: 1,
+              title: "t",
+              state: "open",
+              body: 7,
+              milestone: false,
+              pm_status: 5,
+              priority: {},
+              labels: "bug",
+              assignees: [1],
+              dependencies: [{ ref: "o/b#2", source: "mentions" }, "o/b#3"],
+              pull_requests: [{ ref: "", title: 1, state: "draft" }],
+            },
+          ],
+        },
+      });
+    } catch (err) {
+      error = err;
+    }
+    expect(error).toBeInstanceOf(WorkConfigError);
+    expect((error as WorkConfigError).code).toBe("FIXTURE_INVALID");
+    const issues = (error as WorkConfigError).issues?.map((i) => `${i.path}: ${i.message}`) ?? [];
+    expect(issues).toEqual(
+      expect.arrayContaining([
+        "$[o/b].items[0].body: must be a string",
+        "$[o/b].items[0].milestone: must be a string",
+        "$[o/b].items[0].pm_status: must be a string",
+        "$[o/b].items[0].priority: must be a string",
+        "$[o/b].items[0].labels: must be an array of strings",
+        "$[o/b].items[0].assignees: must be an array of strings",
+        '$[o/b].items[0].dependencies[0].source: must be "blocked-by" or "task-list"',
+        "$[o/b].items[0].dependencies[1]: must be an object",
+        "$[o/b].items[0].pull_requests[0].ref: required, must be a non-empty string",
+        "$[o/b].items[0].pull_requests[0].title: must be a string",
+        '$[o/b].items[0].pull_requests[0].state: must be "open", "merged" or "closed"',
+      ]),
+    );
+  });
+
+  it("accepts the optional fields when they are well typed", () => {
+    const portfolio: Portfolio = {
+      programs: [{ id: "p", name: "p", projects: [{ id: "x", name: "x", repositories: [{ owner: "o", name: "r" }] }] }],
+    };
+    expect(() =>
+      createFixtureSource(portfolio, {
+        "o/r": {
+          items: [
+            {
+              number: 1,
+              title: "t",
+              state: "open",
+              body: "b",
+              milestone: "m",
+              labels: ["a"],
+              assignees: ["u"],
+              dependencies: [{ ref: "o/r#2", source: "task-list" }],
+              pull_requests: [{ ref: "o/r#3", title: "pr", state: "merged" }],
+            },
+          ],
+        },
+      }),
+    ).not.toThrow();
   });
 
   it("rejects a malformed fixture with named issues", () => {

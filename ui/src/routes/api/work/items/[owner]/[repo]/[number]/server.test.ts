@@ -42,12 +42,17 @@ describe("GET /api/work/items/{owner}/{repo}/{number}", () => {
     expect(body.item.dependencies).toEqual([{ ref: "c360studio/semteams#314", source: "blocked-by" }]);
   });
 
-  it("answers 404 for an item that does not exist and for an unconfigured repository", async () => {
+  it("answers 404 for an item that does not exist and for a repository outside the portfolio", async () => {
     setEnv({ WORK_SOURCE: "fixture" });
     expect((await call("c360studio", "semteams", "9999")).status).toBe(404);
     expect((await call("someone", "else", "1")).status).toBe(404);
+  });
+
+  it("answers 503 WORK_SOURCE_UNCONFIGURED when the work source is unconfigured", async () => {
     setEnv({});
-    expect((await call("c360studio", "semteams", "314")).status).toBe(404);
+    const response = await call("c360studio", "semteams", "314");
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({ code: "WORK_SOURCE_UNCONFIGURED" });
   });
 
   it.each(["abc", "0", "-3", "1.5", "07x"])("answers 400 for item number %j", async (number) => {
