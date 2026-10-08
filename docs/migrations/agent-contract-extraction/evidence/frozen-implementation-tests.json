@@ -1,0 +1,13 @@
+{
+  "command": [
+    "go",
+    "test",
+    "-race",
+    "github.com/c360studio/semstreams/processor/agentic-model",
+    "github.com/c360studio/semstreams/internal/deliverylane",
+    "github.com/c360studio/semstreams/internal/lifecyclecleanup"
+  ],
+  "cwd": "/Users/coby/.codex/worktrees/agent-contract-extraction/semteams",
+  "exit_code": 0,
+  "qualification": "default frozen model/lane/rollback tests, not extracted or process-restart behavior"
+}
