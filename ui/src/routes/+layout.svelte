@@ -1,6 +1,7 @@
 <script lang="ts">
 	import favicon from '$lib/assets/favicon.svg';
 	import '../styles/global.css';
+	import { page } from '$app/state';
 	import { agentStore } from '$lib/stores/agentStore.svelte';
 	import { systemStatus } from '$lib/stores/systemStatus.svelte';
 	import { taskRefs } from '$lib/stores/taskRefs.svelte';
@@ -8,6 +9,7 @@
 	import { controlsStore } from '$lib/stores/controlsStore.svelte';
 	import TopNav from '$lib/components/layout/TopNav.svelte';
 	import ChatBar from '$lib/components/layout/ChatBar.svelte';
+	import ControlsNotice from '$lib/components/board/ControlsNotice.svelte';
 
 	let { children } = $props();
 
@@ -16,8 +18,9 @@
 	// an interval and reads agentStore reactively for the SSE leg.
 	// runStatus polls /graph/triples for run-level pause markers (ADR-053
 	// Phase 4b-2 / 4c) so the board can surface "Waiting on you" badges.
-	// controlsStore polls the same endpoint for rule-spawned loops so the board
-	// can fold them into the coordinator card of the run that fired them.
+	// controlsStore reads each rule-fired loop's entity from the same endpoint
+	// (once, cached) to tell run controls from run members, so the board can fold
+	// only the controls into the card of the run that fired them.
 	$effect(() => {
 		agentStore.connect();
 		systemStatus.start();
@@ -36,11 +39,14 @@
 	// idempotent so already-assigned loops are no-ops. Keeping this in
 	// the layout (not the store) because $effect can't run at
 	// module scope and we want refs minted as soon as loops appear,
-	// before any consumer renders the card. Control loops are not cards, so
-	// they do not get a ref either.
+	// before any consumer renders the card. A loop that may still turn out to be
+	// a control (a rule-fired candidate not yet resolved as a run member) is not
+	// minted yet, so folded controls do not burn numbers; it is minted once it
+	// resolves as a member, or if its classification keeps failing. The effect
+	// reads controlsStore state, so resolution re-runs it.
 	$effect(() => {
 		for (const loop of agentStore.loopsList) {
-			if (!loop.parent_loop_id && !controlsStore.controlLoopIds.has(loop.loop_id)) {
+			if (!loop.parent_loop_id && !controlsStore.mayBeControl(loop)) {
 				taskRefs.ensure(loop.loop_id);
 			}
 		}
@@ -53,6 +59,10 @@
 
 <div class="app-shell">
 	<TopNav />
+	{#if page.route.id === '/'}
+		<!-- The board is the only view that folds controls into cards. -->
+		<ControlsNotice />
+	{/if}
 	<ChatBar />
 	<main class="app-main">
 		{@render children?.()}

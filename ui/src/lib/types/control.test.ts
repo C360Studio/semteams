@@ -2,17 +2,21 @@ import { describe, it, expect } from "vitest";
 import type { RawTriple } from "$lib/services/runStatusApi";
 import type { AgentLoop } from "./agent";
 import {
+  EMPTY_CONTROLS,
+  ENTITY_NOT_READABLE,
+  MEMBERSHIP_TRUNCATED,
+  attachControls,
   buildControlsSnapshot,
   controlOutcome,
-  controlsForRun,
   controlsSignature,
   deriveControlEvidence,
   groupLifecycleTransitions,
-  parseControlTriple,
+  membershipFromLoopTriples,
+  parseControlCandidate,
   parseRfc3339Nanos,
-  splitControlLoops,
   transitionPrecedingSpawn,
   type Control,
+  type ControlCandidate,
 } from "./control";
 
 // Shapes below are copied from a measured run on the e2e stack (frozen
@@ -26,10 +30,6 @@ const NANOS = "1791480613893413505"; // 2026-10-08T17:30:13.893413505Z
 
 function loopEntity(loopId: string): string {
   return `${PREFIX}.agentic-loop.agent.execution.${loopId}`;
-}
-
-function taskTriple(loopId: string, object: string): RawTriple {
-  return { subject: loopEntity(loopId), predicate: "agent.loop.task", object };
 }
 
 function control(overrides: Partial<Control> = {}): Control {
@@ -97,11 +97,15 @@ const RUN_HISTORY: RawTriple[] = [
   ),
 ];
 
-describe("parseControlTriple", () => {
-  it("derives the control from a rule-spawned loop on a run entity", () => {
-    const parsed = parseControlTriple(taskTriple(OBSERVER, `rule-${RUN_ENTITY}-${NANOS}`));
+describe("parseControlCandidate", () => {
+  const observer = (taskId: string, overrides: Partial<AgentLoop> = {}) =>
+    loop(OBSERVER, { task_id: taskId, ...overrides });
+
+  it("derives the candidate from a loop whose task id is a rule firing on a run entity", () => {
+    const parsed = parseControlCandidate(observer(`rule-${RUN_ENTITY}-${NANOS}`));
     expect(parsed).toMatchObject({
       loopId: OBSERVER,
+      // Rebuilt from the firing entity's org.platform: the loop entity is not read to find it.
       loopEntityId: loopEntity(OBSERVER),
       firingEntityId: RUN_ENTITY,
       runInstance: RUN,
@@ -109,96 +113,221 @@ describe("parseControlTriple", () => {
   });
 
   it("converts the nanosecond spawn time to a Date and keeps full precision", () => {
-    const parsed = parseControlTriple(taskTriple(OBSERVER, `rule-${RUN_ENTITY}-${NANOS}`))!;
+    const parsed = parseControlCandidate(observer(`rule-${RUN_ENTITY}-${NANOS}`))!;
     expect(parsed.spawnedAt.toISOString()).toBe("2026-10-08T17:30:13.893Z");
     // 19 digits overflow a double; the exact value must survive.
     expect(parsed.spawnedAtNanos).toBe(1791480613893413505n);
   });
 
-  it("ignores dispatch-spawned loops", () => {
-    expect(parseControlTriple(taskTriple("loop-1", "dispatch-9f2c1a"))).toBeNull();
+  it("parses a firing id whose last UUID group is all digits", () => {
+    // The nanos split must land on the stamp, not inside the run id.
+    const digitsRun = "b5a2d6ec-f67d-4cc7-ab5c-123456789012";
+    const firing = `${PREFIX}.chain.agent.execution.${digitsRun}`;
+    const parsed = parseControlCandidate(observer(`rule-${firing}-${NANOS}`))!;
+    expect(parsed.firingEntityId).toBe(firing);
+    expect(parsed.runInstance).toBe(digitsRun);
+    expect(parsed.spawnedAtNanos).toBe(1791480613893413505n);
+  });
+
+  it("does not mistake an all-digit last UUID group for the stamp when the stamp is missing", () => {
+    const firing = `${PREFIX}.chain.agent.execution.b5a2d6ec-f67d-4cc7-ab5c-123456789012`;
+    expect(parseControlCandidate(observer(`rule-${firing}`))).toBeNull();
+  });
+
+  it("ignores dispatch-spawned loops and loops with no task id", () => {
+    expect(parseControlCandidate(observer("dispatch-9f2c1a"))).toBeNull();
+    expect(parseControlCandidate(observer(""))).toBeNull();
   });
 
   it("ignores chain children whose firing entity is a loop (already attached by parent_loop_id)", () => {
     const firingLoop = loopEntity("ce821ec0-b64b-4626-9fe1-0a027b997dbb");
-    expect(parseControlTriple(taskTriple("child-1", `rule-${firingLoop}-${NANOS}`))).toBeNull();
+    expect(parseControlCandidate(observer(`rule-${firingLoop}-${NANOS}`))).toBeNull();
   });
 
   it("ignores a rule task id that does not end in nanos", () => {
-    expect(parseControlTriple(taskTriple(OBSERVER, `rule-${RUN_ENTITY}`))).toBeNull();
+    expect(parseControlCandidate(observer(`rule-${RUN_ENTITY}`))).toBeNull();
   });
 
-  it("ignores other predicates and non-loop subjects", () => {
-    const other: RawTriple = { ...taskTriple(OBSERVER, `rule-${RUN_ENTITY}-${NANOS}`), predicate: "agent.loop.role" };
-    expect(parseControlTriple(other)).toBeNull();
-    const nonLoop: RawTriple = { subject: RUN_ENTITY, predicate: "agent.loop.task", object: `rule-${RUN_ENTITY}-${NANOS}` };
-    expect(parseControlTriple(nonLoop)).toBeNull();
+  it("ignores a loop that already has a parent", () => {
+    expect(
+      parseControlCandidate(observer(`rule-${RUN_ENTITY}-${NANOS}`, { parent_loop_id: RUN })),
+    ).toBeNull();
+  });
+});
+
+describe("membershipFromLoopTriples", () => {
+  const entity = (predicate: string, object = "x"): RawTriple => ({
+    subject: loopEntity(OBSERVER),
+    predicate,
+    object,
+  });
+  // The ops observer's measured loop-entity triples: no agent.loop.run.
+  const OBSERVER_TRIPLES = [
+    entity("agent.loop.task", `rule-${RUN_ENTITY}-${NANOS}`),
+    entity("agent.loop.role", "ops-chain-observer"),
+    entity("agent.lineage.root"),
+    entity("agent.loop.outcome", "success"),
+    entity("coordinator.decision.next-action", "observed"),
+  ];
+
+  it("a loop with agent.loop.run is a run member", () => {
+    expect(
+      membershipFromLoopTriples([...OBSERVER_TRIPLES, entity("agent.loop.run", RUN)], 200),
+    ).toEqual({ status: "member" });
+  });
+
+  it("a complete read without agent.loop.run is a control", () => {
+    expect(membershipFromLoopTriples(OBSERVER_TRIPLES, 200)).toEqual({ status: "control" });
+  });
+
+  it("a truncated read is unknown, never a control", () => {
+    expect(membershipFromLoopTriples(OBSERVER_TRIPLES, OBSERVER_TRIPLES.length)).toEqual({
+      status: "unknown",
+      reason: MEMBERSHIP_TRUNCATED,
+      hard: true,
+    });
+  });
+
+  it("agent.loop.run is conclusive even on a truncated page", () => {
+    const page = [entity("agent.loop.run", RUN), entity("agent.loop.role", "researcher")];
+    expect(membershipFromLoopTriples(page, 2)).toEqual({ status: "member" });
+  });
+
+  it("an entity that is not readable yet is unknown, not a control", () => {
+    // An empty or partial read must not be cached as 'not a member': that would
+    // fold a work loop (and hide its descendants) behind a coordinator card.
+    expect(membershipFromLoopTriples([], 200)).toEqual({
+      status: "unknown",
+      reason: ENTITY_NOT_READABLE,
+      hard: false,
+    });
+    expect(membershipFromLoopTriples([entity("agent.loop.role", "researcher")], 200)).toMatchObject({
+      status: "unknown",
+    });
   });
 });
 
 describe("buildControlsSnapshot", () => {
-  const triples = [
-    taskTriple(OBSERVER, `rule-${RUN_ENTITY}-${NANOS}`),
-    taskTriple("dispatch-loop", "dispatch-abc"),
-    taskTriple("chain-child", `rule-${loopEntity("parent")}-${NANOS}`),
+  const ctl = (loopId: string, run: string, nanos = BigInt(NANOS)) =>
+    control({ loopId, loopEntityId: loopEntity(loopId), runInstance: run, spawnedAtNanos: nanos });
+  const candidates: ControlCandidate[] = [
+    { control: ctl("obs", RUN), membership: { status: "control" } },
+    { control: ctl("work", RUN), membership: { status: "member" } },
+    { control: ctl("pending", RUN), membership: { status: "pending" } },
+    { control: ctl("quiet", RUN), membership: { status: "unknown", reason: "x", surfaced: false } },
+    { control: ctl("loud", "run-2"), membership: { status: "unknown", reason: "y", surfaced: true } },
   ];
 
-  it("indexes controls by run instance and lists their loop ids", () => {
-    const snapshot = buildControlsSnapshot(triples, 500);
+  it("indexes resolved controls by run and sorts the other candidates into their sets", () => {
+    const snapshot = buildControlsSnapshot(candidates);
     expect(Object.keys(snapshot.controlsByRun)).toEqual([RUN]);
-    expect(snapshot.controlsByRun[RUN].map((c) => c.loopId)).toEqual([OBSERVER]);
-    expect([...snapshot.controlLoopIds]).toEqual([OBSERVER]);
-    expect(snapshot.truncated).toBe(false);
-  });
-
-  it("flags a read that filled its limit as truncated", () => {
-    expect(buildControlsSnapshot(triples, 3).truncated).toBe(true);
-    expect(buildControlsSnapshot(triples, 4).truncated).toBe(false);
+    expect(snapshot.controlsByRun[RUN].map((c) => c.loopId)).toEqual(["obs"]);
+    expect([...snapshot.controlLoopIds]).toEqual(["obs"]);
+    expect([...snapshot.memberLoopIds]).toEqual(["work"]);
+    // Pending and not-yet-worth-reporting candidates are in no set: they stay cards.
+    expect([...snapshot.unclassifiedLoopIds]).toEqual(["loud"]);
+    expect([...snapshot.unclassifiedRuns]).toEqual(["run-2"]);
   });
 
   it("orders a run's controls by spawn time", () => {
-    const later = taskTriple("late", `rule-${RUN_ENTITY}-${BigInt(NANOS) + 1000n}`);
-    const earlier = taskTriple("early", `rule-${RUN_ENTITY}-${BigInt(NANOS) - 1000n}`);
-    const snapshot = buildControlsSnapshot([later, earlier], 500);
+    const snapshot = buildControlsSnapshot([
+      { control: ctl("late", RUN, BigInt(NANOS) + 1000n), membership: { status: "control" } },
+      { control: ctl("early", RUN, BigInt(NANOS) - 1000n), membership: { status: "control" } },
+    ]);
     expect(snapshot.controlsByRun[RUN].map((c) => c.loopId)).toEqual(["early", "late"]);
   });
 
   it("gives an unchanged read an unchanged signature, and a changed one a different signature", () => {
-    const a = buildControlsSnapshot(triples, 500);
-    const b = buildControlsSnapshot([...triples].reverse(), 500);
+    const a = buildControlsSnapshot(candidates);
+    const b = buildControlsSnapshot([...candidates].reverse());
     expect(controlsSignature(a)).toBe(controlsSignature(b));
-    expect(controlsSignature(a)).not.toBe(controlsSignature(buildControlsSnapshot(triples, 3)));
-    expect(controlsSignature(a)).not.toBe(controlsSignature(buildControlsSnapshot([], 500)));
+    expect(controlsSignature(a)).not.toBe(controlsSignature(buildControlsSnapshot(candidates.slice(1))));
+    expect(controlsSignature(a)).not.toBe(controlsSignature(EMPTY_CONTROLS));
   });
 });
 
-describe("splitControlLoops / controlsForRun", () => {
-  const coordinator = loop(RUN, { role: "coordinator" });
-  const observer = loop(OBSERVER);
-  const child = loop("child", { parent_loop_id: RUN });
+describe("attachControls", () => {
+  const coordinator = loop(RUN, { role: "coordinator", state: "complete" });
+  const observer = loop(OBSERVER, { task_id: `rule-${RUN_ENTITY}-${NANOS}` });
+  const snapshotOf = (...candidates: ControlCandidate[]) => buildControlsSnapshot(candidates);
+  const resolved = (c: Control): ControlCandidate => ({ control: c, membership: { status: "control" } });
 
-  it("withholds known controls from the top level and keeps everything else", () => {
-    const { topLevel, controlLoops } = splitControlLoops(
-      [coordinator, observer, child],
-      new Set([OBSERVER]),
+  it("folds a resolved control into the task that owns its run", () => {
+    const { topLevel, controlsByTask, incompleteTaskIds } = attachControls(
+      [coordinator, observer],
+      snapshotOf(resolved(control())),
     );
     expect(topLevel.map((l) => l.loop_id)).toEqual([RUN]);
-    expect(controlLoops.map((l) => l.loop_id)).toEqual([OBSERVER]);
+    expect(controlsByTask[RUN].map((c) => c.loopId)).toEqual([OBSERVER]);
+    expect(controlsByTask[RUN][0].loop).toBe(observer);
+    expect(incompleteTaskIds.size).toBe(0);
   });
 
-  it("leaves a control that already has a parent alone", () => {
-    const parented = loop(OBSERVER, { parent_loop_id: RUN });
-    const { topLevel, controlLoops } = splitControlLoops([coordinator, parented], new Set([OBSERVER]));
+  it("leaves a control as a top-level card while its run's loop is not on the board", () => {
+    const { topLevel, controlsByTask } = attachControls([observer], snapshotOf(resolved(control())));
+    expect(topLevel.map((l) => l.loop_id)).toEqual([OBSERVER]);
+    expect(controlsByTask).toEqual({});
+  });
+
+  it("attaches a control fired on a nested run to the top-level task that owns it", () => {
+    // research/06 -> child coordinator -> research/01 (run_scope: new): the run
+    // instance is the child coordinator's id, a descendant of the top-level loop.
+    const child = loop("child-coord", { parent_loop_id: RUN, role: "coordinator" });
+    const grandchild = loop("grand", { parent_loop_id: "child-coord" });
+    const nested = control({ runInstance: "child-coord" });
+    const { topLevel, controlsByTask } = attachControls(
+      [coordinator, child, grandchild, observer],
+      snapshotOf(resolved(nested)),
+    );
     expect(topLevel.map((l) => l.loop_id)).toEqual([RUN]);
-    expect(controlLoops).toEqual([]);
+    expect(controlsByTask[RUN].map((c) => c.loopId)).toEqual([OBSERVER]);
   });
 
-  it("attaches live loops to the run's controls and omits controls with no live loop", () => {
-    const byRun = { [RUN]: [control(), control({ loopId: "ghost", loopEntityId: loopEntity("ghost") })] };
-    const attached = controlsForRun(RUN, byRun, [observer]);
-    expect(attached.map((c) => c.loopId)).toEqual([OBSERVER]);
-    expect(attached[0].loop).toBe(observer);
-    expect(controlsForRun("other-run", byRun, [observer])).toEqual([]);
+  it("never folds a loop that has children, nor one that already has a parent", () => {
+    const withChild = loop("child-of-observer", { parent_loop_id: OBSERVER });
+    const kept = attachControls([coordinator, observer, withChild], snapshotOf(resolved(control())));
+    expect(kept.topLevel.map((l) => l.loop_id)).toEqual([RUN, OBSERVER]);
+    expect(kept.controlsByTask).toEqual({});
+
+    const parented = loop(OBSERVER, { parent_loop_id: RUN });
+    const alone = attachControls([coordinator, parented], snapshotOf(resolved(control())));
+    expect(alone.topLevel.map((l) => l.loop_id)).toEqual([RUN]);
+    expect(alone.controlsByTask).toEqual({});
+  });
+
+  it("does not fold a run member, or a candidate that is still unknown", () => {
+    const member: ControlCandidate = { control: control(), membership: { status: "member" } };
+    const unknown: ControlCandidate = {
+      control: control(),
+      membership: { status: "unknown", reason: "x", surfaced: false },
+    };
+    for (const candidate of [member, unknown]) {
+      const { topLevel, controlsByTask } = attachControls([coordinator, observer], snapshotOf(candidate));
+      expect(topLevel.map((l) => l.loop_id)).toEqual([RUN, OBSERVER]);
+      expect(controlsByTask).toEqual({});
+    }
+  });
+
+  it("flags the owning task incomplete when a candidate on its runs is unclassified", () => {
+    const child = loop("child-coord", { parent_loop_id: RUN });
+    const lost: ControlCandidate = {
+      control: control({ loopId: "lost", runInstance: "child-coord" }),
+      membership: { status: "unknown", reason: "HTTP 500", surfaced: true },
+    };
+    const { incompleteTaskIds } = attachControls([coordinator, child], snapshotOf(lost));
+    expect([...incompleteTaskIds]).toEqual([RUN]);
+  });
+
+  it("orders a task's controls by spawn time across its runs", () => {
+    const child = loop("child-coord", { parent_loop_id: RUN });
+    const later = loop("later");
+    const laterControl = control({ loopId: "later", runInstance: "child-coord", spawnedAtNanos: BigInt(NANOS) + 5n });
+    const earlierControl = control();
+    const { controlsByTask } = attachControls(
+      [coordinator, child, later, observer],
+      snapshotOf(resolved(laterControl), resolved(earlierControl)),
+    );
+    expect(controlsByTask[RUN].map((c) => c.loopId)).toEqual([OBSERVER, "later"]);
   });
 });
 

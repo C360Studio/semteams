@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from "svelte";
   import type { TaskInfo } from "$lib/types/task";
   import { isActiveState } from "$lib/types/agent";
   import { controlOutcome } from "$lib/types/control";
@@ -63,6 +64,18 @@
 
   function focusPrimary() {
     manualFocusId = null;
+  }
+
+  // The story's control rows are replaced by the focused loop's own story, so
+  // the button that was activated unmounts and would drop keyboard focus to the
+  // page. Move it to the breadcrumb's back button, the way out of the new view.
+  // (The sub-task and control list rows stay mounted, so they keep focus.)
+  let backBtnRef = $state<HTMLButtonElement | null>(null);
+
+  async function focusFromStory(loopId: string) {
+    focusChild(loopId);
+    await tick();
+    backBtnRef?.focus();
   }
 
   // Inline title editor. `editingTitle` flips the heading into an input;
@@ -348,7 +361,7 @@
             <h3 class="section-title">Controls ({task.controls.length})</h3>
             {#if task.controlsTruncated}
               <p class="controls-note" data-testid="controls-truncated-note">
-                The control read hit its limit, so this list may be incomplete.
+                Some rule-fired loops on this run could not be classified, so this list may be incomplete.
               </p>
             {/if}
             <ul class="child-list">
@@ -382,6 +395,7 @@
             <button
               type="button"
               class="focus-back"
+              bind:this={backBtnRef}
               onclick={focusPrimary}
               data-testid="focus-back"
               aria-label="Back to parent task story"
@@ -401,7 +415,7 @@
             prompt={focusedChild ? undefined : task.primaryLoop.prompt}
             controls={focusedChild ? [] : task.controls}
             controlsTruncated={task.controlsTruncated}
-            onFocusLoop={focusChild}
+            onFocusLoop={focusFromStory}
           />
         </section>
       </div>

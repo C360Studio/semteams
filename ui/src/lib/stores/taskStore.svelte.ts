@@ -17,7 +17,7 @@ import { runStatus } from "./runStatus.svelte";
 import { controlsStore } from "./controlsStore.svelte";
 import { runtimeStore } from "./runtimeStore.svelte";
 import { deriveMetricsEvidence, deriveRunHealth } from "$lib/utils/runHealth";
-import { controlsForRun, splitControlLoops } from "$lib/types/control";
+import { attachControls } from "$lib/types/control";
 import {
   type TaskInfo,
   type TaskColumn,
@@ -54,9 +54,12 @@ function createTaskStore() {
   }
 
   // Derive tasks from agentStore. Top-level loops (no parent_loop_id)
-  // become tasks; their descendants are grouped under them. Rule-fired
-  // control loops (design D3) are top-level in the loop list but are not
-  // tasks: each attaches to the coordinator task of the run that fired it.
+  // become tasks; their descendants are grouped under them. A rule-fired
+  // control (design D3) is a top-level loop the graph has shown to be NOT a
+  // member of the run it fired on: it folds into the card of the task that owns
+  // that run instead of being a card of its own. Everything else, including a
+  // rule-fired loop that is a run member (autoresearch work loops) or whose
+  // membership is not known yet, stays a top-level card with its descendants.
   let tasks = $derived.by(() => {
     const allLoops = agentStore.loopsList;
     const metricsEvidence = deriveMetricsEvidence({
@@ -68,22 +71,16 @@ function createTaskStore() {
       now: runtimeStore.metricsNow,
     });
 
-    // Separate top-level loops from descendants. Top-level loops have an
-    // empty or absent parent_loop_id. The Go struct uses `omitempty`, so
-    // the field is omitted from JSON when empty — treat both "" and
-    // undefined/missing as top-level.
+    // Top-level loops have an empty or absent parent_loop_id. The Go struct
+    // uses `omitempty`, so the field is omitted from JSON when empty — treat
+    // both "" and undefined/missing as top-level.
     //
-    // A known control is withheld from `topLevel` even while its coordinator
-    // has not appeared yet: showing it as its own card for a moment and then
-    // folding it away is worse than showing it a moment late.
-    // controlsStore reads reactive state, so a poll that learns a new control
+    // controlsStore reads reactive state, so a poll that resolves a candidate
     // re-runs this derivation.
-    const { topLevel, controlLoops } = splitControlLoops(
+    const { topLevel, controlsByTask, incompleteTaskIds } = attachControls(
       allLoops,
-      controlsStore.controlLoopIds,
+      controlsStore.snapshot,
     );
-    const controlsByRun = controlsStore.controlsByRun;
-    const controlsTruncated = controlsStore.truncated;
 
     return topLevel.map((loop) => {
       const childLoops = collectDescendantLoops(loop.loop_id, allLoops);
@@ -115,10 +112,11 @@ function createTaskStore() {
         // — that silently severs this reactivity.
         pause,
         runHealth,
-        // The run instance equals the coordinator's loop_id on this runtime
-        // (the same identity runStatus is keyed by above).
-        controlsForRun(loop.loop_id, controlsByRun, controlLoops),
-        controlsTruncated,
+        // Controls fold in by run instance, which is a loop id: the
+        // coordinator's (the identity runStatus is keyed by above) or a
+        // nested coordinator's under it.
+        controlsByTask[loop.loop_id] ?? [],
+        incompleteTaskIds.has(loop.loop_id),
       );
     });
   });

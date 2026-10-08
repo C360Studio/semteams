@@ -192,15 +192,18 @@ export interface TaskInfo {
   runHealth: RunHealth | null;
 
   /**
-   * Rule-fired control loops attached to this run's coordinator card (design
-   * D3). They are not part of `childLoops`: a control observes or acts on the
-   * run, it is not work the run delegated, so it never moves the card's column.
+   * Rule-fired control loops attached to this task (design D3): loops the graph
+   * showed to be fired on one of its runs without being members of it. They are
+   * not part of `childLoops`: a control observes or acts on the run, it is not
+   * work the run delegated, so it never moves the card's column.
    */
   controls: TaskControl[];
 
   /**
-   * True when the control read hit its limit, so `controls` may be incomplete
-   * and anything derived from it must say so.
+   * True when a rule-fired loop on one of this task's runs could not be
+   * classified (its membership read failed, was cut off, or ran out of
+   * retries), so `controls` may be incomplete and anything derived from it must
+   * say so. The name predates the membership rule and is kept for the callers.
    */
   controlsTruncated: boolean;
 }

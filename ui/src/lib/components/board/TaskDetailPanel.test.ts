@@ -637,7 +637,7 @@ describe("TaskDetailPanel", () => {
       expect(screen.queryByTestId("child-item")).not.toBeInTheDocument();
     });
 
-    it("says the list may be incomplete when the control read was truncated", () => {
+    it("says the list may be incomplete when a rule-fired loop on the run could not be classified", () => {
       render(TaskDetailPanel, {
         props: {
           task: makeTask({ controls: [makeControl("obs-1")], controlsTruncated: true }),
@@ -711,6 +711,56 @@ describe("TaskDetailPanel", () => {
         expect(agentApi.getLoopTrajectory).toHaveBeenCalledWith("obs-1");
       });
       expect(screen.getByTestId("control-row")).toHaveAttribute("aria-pressed", "true");
+    });
+
+    it("hands keyboard focus to the back button when the story's identity button is activated", async () => {
+      // Focusing a control swaps the story for the control's own, which unmounts
+      // the identity button that was just pressed. Focus must not fall to <body>.
+      const user = userEvent.setup();
+      render(TaskDetailPanel, {
+        props: { task: makeTask({ controls: [makeControl("obs-1")] }) },
+      });
+
+      const identity = await screen.findByTestId("control-identity");
+      identity.focus();
+      expect(identity).toHaveFocus();
+      await user.keyboard("{Enter}");
+
+      await vi.waitFor(() => {
+        expect(screen.getByTestId("focus-back")).toHaveFocus();
+      });
+      expect(screen.queryByTestId("control-identity")).not.toBeInTheDocument();
+
+      // Back out with the keyboard: the coordinator's story returns.
+      await user.keyboard("{Enter}");
+      expect(await screen.findByTestId("story-controls")).toBeInTheDocument();
+    });
+
+    it("keeps focus on the list row that was activated; only the story's button hands focus over", async () => {
+      const user = userEvent.setup();
+      render(TaskDetailPanel, {
+        props: { task: makeTask({ controls: [makeControl("obs-1")] }) },
+      });
+
+      const row = screen.getByTestId("control-row");
+      row.focus();
+      await user.keyboard("{Enter}");
+      await vi.waitFor(() => {
+        expect(agentApi.getLoopTrajectory).toHaveBeenCalledWith("obs-1");
+      });
+
+      expect(row).toHaveFocus();
+    });
+
+    it("has one Controls heading in the tab panel; the story's group is named for what it holds", async () => {
+      render(TaskDetailPanel, {
+        props: { task: makeTask({ controls: [makeControl("obs-1")] }) },
+      });
+
+      expect(await screen.findByRole("heading", { name: "Controls fired on this run" })).toBeInTheDocument();
+      expect(screen.getAllByRole("heading", { name: /^Controls/ })).toHaveLength(2);
+      expect(screen.getByRole("heading", { name: "Controls (1)" })).toBeInTheDocument();
+      expect(screen.queryByRole("heading", { name: "Controls" })).not.toBeInTheDocument();
     });
 
     it("falls back to the coordinator when the focused control is gone", async () => {

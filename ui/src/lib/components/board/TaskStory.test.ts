@@ -1,9 +1,10 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/svelte";
 import userEvent from "@testing-library/user-event";
 import TaskStory from "./TaskStory.svelte";
 import { agentApi } from "$lib/services/agentApi";
 import { getTriples } from "$lib/services/runStatusApi";
+import { SETTLE_REREAD_MS } from "$lib/services/controlEvidence";
 import type { RawTriple } from "$lib/services/runStatusApi";
 import type { AgentLoop, LoopTrajectory, TrajectoryFact } from "$lib/types/agent";
 import type { TaskControl } from "$lib/types/control";
@@ -565,7 +566,7 @@ describe("TaskStory — Controls group", () => {
     expect(screen.getByTestId("control-outcome")).toHaveTextContent("decide(observed)");
   });
 
-  it("says the control list may be incomplete when the control read was truncated", async () => {
+  it("says the control list may be incomplete when a rule-fired loop on the run could not be classified", async () => {
     serveGraph();
     render(TaskStory, {
       props: { loopId: RUN, controls: [makeControl()], controlsTruncated: true },
@@ -638,5 +639,98 @@ describe("TaskStory — Controls group", () => {
       expect(screen.getByTestId("control-outcome")).toHaveTextContent("decide(observed)"),
     );
     expect(vi.mocked(getTriples).mock.calls.length).toBe(afterFirstRead + 2);
+  });
+
+  it("names the group for what it holds, so it does not repeat the panel's own Controls heading", async () => {
+    serveGraph();
+    render(TaskStory, { props: { loopId: RUN, controls: [makeControl()] } });
+
+    expect(
+      await screen.findByRole("heading", { name: "Controls fired on this run" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Controls" })).toBeNull();
+  });
+
+  describe("settling a finished control", () => {
+    // A loop can be seen as finished a moment before its outcome and decide are
+    // projected to the graph. Fake timers keep the 1.5 s wait out of the test run.
+    function serveWith(loop: () => RawTriple[]) {
+      vi.mocked(getTriples).mockImplementation((params) =>
+        Promise.resolve(params.subject === RUN_ENTITY ? RUN_HISTORY : loop()),
+      );
+    }
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("reads a finished control once more when its decide is not recorded yet, and then stops", async () => {
+      let loopTriples: RawTriple[] = [loopTriple("agent.loop.outcome", "success")];
+      serveWith(() => loopTriples);
+      render(TaskStory, { props: { loopId: RUN, controls: [makeControl("complete")] } });
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(vi.mocked(getTriples)).toHaveBeenCalledTimes(2);
+      expect(screen.getByTestId("control-outcome")).toHaveTextContent(
+        "decide: unknown (not recorded yet)",
+      );
+
+      // The decide lands in the graph; the single re-read picks it up.
+      loopTriples = FINISHED_OBSERVER;
+      await vi.advanceTimersByTimeAsync(SETTLE_REREAD_MS - 1);
+      expect(vi.mocked(getTriples)).toHaveBeenCalledTimes(2);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(vi.mocked(getTriples)).toHaveBeenCalledTimes(4);
+      expect(screen.getByTestId("control-outcome")).toHaveTextContent("decide(observed)");
+
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(vi.mocked(getTriples)).toHaveBeenCalledTimes(4);
+    });
+
+    it("re-reads only once even if the facts are still missing, and settles on unknown", async () => {
+      serveWith(() => []);
+      render(TaskStory, { props: { loopId: RUN, controls: [makeControl("failed")] } });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(vi.mocked(getTriples)).toHaveBeenCalledTimes(2);
+
+      await vi.advanceTimersByTimeAsync(SETTLE_REREAD_MS);
+      expect(vi.mocked(getTriples)).toHaveBeenCalledTimes(4);
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(vi.mocked(getTriples)).toHaveBeenCalledTimes(4);
+      expect(screen.getByTestId("control-outcome")).toHaveTextContent(
+        "decide: unknown (not recorded yet)",
+      );
+    });
+
+    it("does not re-read a finished control whose outcome and decide are already known", async () => {
+      serveWith(() => FINISHED_OBSERVER);
+      render(TaskStory, { props: { loopId: RUN, controls: [makeControl("complete")] } });
+      await vi.advanceTimersByTimeAsync(SETTLE_REREAD_MS * 4);
+
+      expect(vi.mocked(getTriples)).toHaveBeenCalledTimes(2);
+    });
+
+    it("does not re-read a control that is still running: its decide has not been due yet", async () => {
+      serveWith(() => []);
+      render(TaskStory, { props: { loopId: RUN, controls: [makeControl("executing")] } });
+      await vi.advanceTimersByTimeAsync(SETTLE_REREAD_MS * 4);
+
+      expect(vi.mocked(getTriples)).toHaveBeenCalledTimes(2);
+    });
+
+    it("cancels a pending re-read when the story unmounts", async () => {
+      serveWith(() => []);
+      const { unmount } = render(TaskStory, {
+        props: { loopId: RUN, controls: [makeControl("complete")] },
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      unmount();
+      await vi.advanceTimersByTimeAsync(SETTLE_REREAD_MS * 2);
+
+      expect(vi.mocked(getTriples)).toHaveBeenCalledTimes(2);
+    });
   });
 });

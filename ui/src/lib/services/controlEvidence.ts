@@ -5,11 +5,41 @@
 
 import { getTriples } from "./runStatusApi";
 import type { RawTriple } from "./runStatusApi";
+import type { AgentLoopState } from "$lib/types/agent";
 import { deriveControlEvidence } from "$lib/types/control";
 import type { Control, ControlEvidence, ControlReads } from "$lib/types/control";
 
 export const RUN_READ_LIMIT = 200;
 export const LOOP_READ_LIMIT = 200;
+
+/**
+ * How long after a control loop is first read as finished to read it once more
+ * when its recorded outcome or decide is still missing. The loop record and the
+ * graph projection of its terminal facts are separate writes, so a loop can be
+ * seen as finished a moment before `agent.loop.outcome` and
+ * `coordinator.decision.*` are readable. One bounded re-read, not a poll.
+ */
+export const SETTLE_REREAD_MS = 1500;
+
+const TERMINAL_STATES: ReadonlySet<AgentLoopState> = new Set([
+  "complete",
+  "success",
+  "failed",
+  "error",
+  "cancelled",
+  "truncated",
+]);
+
+/** True when a finished control loop's outcome or decide is still unknown. */
+export function awaitsRecording(
+  loopState: AgentLoopState,
+  evidence: ControlEvidence | undefined,
+): boolean {
+  if (!evidence || !TERMINAL_STATES.has(loopState)) return false;
+  return [evidence.outcome, evidence.nextAction, evidence.reason].some(
+    (value) => value.status === "unknown",
+  );
+}
 
 interface Read {
   triples: RawTriple[] | null;

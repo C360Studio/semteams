@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { loadControlEvidence, LOOP_READ_LIMIT, RUN_READ_LIMIT } from "./controlEvidence";
+import { awaitsRecording, loadControlEvidence, LOOP_READ_LIMIT, RUN_READ_LIMIT } from "./controlEvidence";
 import { getTriples } from "./runStatusApi";
 import type { RawTriple } from "./runStatusApi";
-import type { Control } from "$lib/types/control";
+import type { Control, ControlEvidence, Known } from "$lib/types/control";
 
 vi.mock("./runStatusApi");
 const mockGetTriples = vi.mocked(getTriples);
@@ -94,5 +94,39 @@ describe("loadControlEvidence", () => {
     const ctrl = new AbortController();
     await loadControlEvidence([control("loop-a")], ctrl.signal);
     for (const [params] of mockGetTriples.mock.calls) expect(params.signal).toBe(ctrl.signal);
+  });
+});
+
+describe("awaitsRecording", () => {
+  const known: Known<string> = { status: "known", value: "x" };
+  const missing: Known<string> = { status: "unknown", reason: "not recorded yet" };
+  const evidence = (overrides: Partial<ControlEvidence> = {}): ControlEvidence => ({
+    fact: { status: "unknown", reason: "irrelevant" },
+    description: known,
+    outcome: known,
+    nextAction: known,
+    reason: known,
+    ...overrides,
+  });
+
+  it.each(["complete", "success", "failed", "error", "cancelled", "truncated"] as const)(
+    "is true for a %s loop whose outcome, decide or reason is still unknown",
+    (state) => {
+      expect(awaitsRecording(state, evidence({ outcome: missing }))).toBe(true);
+      expect(awaitsRecording(state, evidence({ nextAction: missing }))).toBe(true);
+      expect(awaitsRecording(state, evidence({ reason: missing }))).toBe(true);
+    },
+  );
+
+  it("is false once the outcome and decide are known; the run fact and description do not count", () => {
+    expect(awaitsRecording("complete", evidence())).toBe(false);
+    expect(awaitsRecording("complete", evidence({ description: missing }))).toBe(false);
+  });
+
+  it("is false for a loop that has not finished, and before any evidence has been read", () => {
+    for (const state of ["exploring", "executing", "reviewing", "awaiting_approval"] as const) {
+      expect(awaitsRecording(state, evidence({ outcome: missing }))).toBe(false);
+    }
+    expect(awaitsRecording("complete", undefined)).toBe(false);
   });
 });

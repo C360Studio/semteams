@@ -34,7 +34,11 @@
 
   import { untrack } from "svelte";
   import { agentApi } from "$lib/services/agentApi";
-  import { loadControlEvidence } from "$lib/services/controlEvidence";
+  import {
+    SETTLE_REREAD_MS,
+    awaitsRecording,
+    loadControlEvidence,
+  } from "$lib/services/controlEvidence";
   import type { LoopTrajectory, TrajectoryFact } from "$lib/types/agent";
   import {
     controlOutcome,
@@ -68,7 +72,7 @@
      * "Controls" group. Pass them only while the coordinator is in focus.
      */
     controls?: TaskControl[];
-    /** The control read hit its limit, so `controls` may be incomplete. */
+    /** A rule-fired loop on this run could not be classified, so `controls` may be incomplete. */
     controlsTruncated?: boolean;
     /** Focus a control's own trajectory (the panel's existing sub-loop focus). */
     onFocusLoop?: (loopId: string) => void;
@@ -148,18 +152,36 @@
     }
     const current = untrack(() => controls);
     const ctrl = new AbortController();
-    void (async () => {
+    let settleTimer: ReturnType<typeof setTimeout> | undefined;
+
+    async function load(): Promise<Record<string, ControlEvidence> | null> {
       try {
         const next = await loadControlEvidence(current, ctrl.signal);
-        if (ctrl.signal.aborted) return;
+        if (ctrl.signal.aborted) return null;
         evidence = next;
         evidenceError = null;
+        return next;
       } catch (err) {
-        if (ctrl.signal.aborted) return;
+        if (ctrl.signal.aborted) return null;
         evidenceError = err instanceof Error ? err.message : String(err);
+        return null;
+      }
+    }
+
+    void (async () => {
+      const first = await load();
+      if (!first || ctrl.signal.aborted) return;
+      // A loop can be seen as finished a moment before its outcome and decide
+      // are readable from the graph: read once more before settling on unknown.
+      // The key changes if the loop's state does, which starts a fresh cycle.
+      if (current.some((c) => awaitsRecording(c.loop.state, first[c.loopId]))) {
+        settleTimer = setTimeout(() => void load(), SETTLE_REREAD_MS);
       }
     })();
-    return () => ctrl.abort();
+    return () => {
+      ctrl.abort();
+      clearTimeout(settleTimer);
+    };
   });
 
   /** A graph value rendered as text, or "unknown (reason)". */
@@ -359,10 +381,10 @@
       data-testid="story-controls"
       aria-labelledby="story-controls-title"
     >
-      <h3 class="controls-title" id="story-controls-title">Controls</h3>
+      <h3 class="controls-title" id="story-controls-title">Controls fired on this run</h3>
       {#if controlsTruncated}
         <p class="controls-note" data-testid="controls-truncated">
-          The control read hit its limit, so this list may be incomplete.
+          Some rule-fired loops on this run could not be classified, so this list may be incomplete.
         </p>
       {/if}
       {#if evidenceError}
