@@ -1,0 +1,59 @@
+=== RUN   TestConfiguredModelRetryBoundary
+=== RUN   TestConfiguredModelRetryBoundary/production
+2026/10/03 09:48:42 github.com/testcontainers/testcontainers-go - Connected to docker: 
+  Server Version: 29.8.1
+  API Version: 1.51
+  Operating System: Docker Desktop
+  Total Memory: 23742 MB
+  Labels:
+    com.docker.desktop.address=unix:///Users/coby/Library/Containers/com.docker.docker/Data/docker-cli.sock
+  Testcontainers for Go Version: v0.40.0
+  Resolved Docker Host: unix:///var/run/docker.sock
+  Resolved Docker Socket Path: /var/run/docker.sock
+  Test SessionID: efd8bdf11fda04331a7e6fb70ccc86a3317c5870387eb2762b40ed76785f8628
+  Test ProcessID: b1653f97-5f9c-47e4-97c3-bf6ffa62b481
+2026/10/03 09:48:42 🐳 Creating container for image nats:2.14-alpine
+2026/10/03 09:48:42 ✅ Container created: cfa8241bb38f
+2026/10/03 09:48:42 🐳 Starting container: cfa8241bb38f
+2026/10/03 09:48:42 ✅ Container started: cfa8241bb38f
+2026/10/03 09:48:42 ⏳ Waiting for container id cfa8241bb38f image: nats:2.14-alpine. Waiting for: log message "Server is ready"
+2026/10/03 09:48:42 🔔 Container is ready: cfa8241bb38f
+2026/10/03 09:48:42 INFO Connecting to NATS urls=nats://localhost:57176
+2026/10/03 09:48:42 INFO Successfully connected to NATS urls=nats://localhost:57176
+2026/10/03 09:48:42 INFO Component factories registered count=27
+2026/10/03 09:48:42 INFO Created new KV bucket bucket=semstreams_config_c360_semteams-bootstrap
+    model_runtime_integration_test.go:85: 
+        	Error Trace:	/Users/coby/.codex/worktrees/model-boundary-qualification/semteams/cmd/semteams/model_runtime_integration_test.go:85
+        	Error:      	Received unexpected error:
+        	            	initialize component manager: composition validation refused boot with 1 error finding(s): orphaned_port on agentic-model/agent.request: input port 'agent.request' (stream): no_publishers (Connect an output from another component; Check that source component is configured correctly; If this input is fed from outside the composition, declare "external": true on the port (a named override replaces the whole port, so restate it there))
+        	Test:       	TestConfiguredModelRetryBoundary/production
+2026/10/03 09:48:42 🐳 Stopping container: cfa8241bb38f
+2026/10/03 09:48:42 ✅ Container stopped: cfa8241bb38f
+2026/10/03 09:48:42 🐳 Terminating container: cfa8241bb38f
+2026/10/03 09:48:42 🚫 Container terminated: cfa8241bb38f
+=== RUN   TestConfiguredModelRetryBoundary/mock
+2026/10/03 09:48:42 🐳 Creating container for image nats:2.14-alpine
+2026/10/03 09:48:42 ✅ Container created: 05f699f24572
+2026/10/03 09:48:42 🐳 Starting container: 05f699f24572
+2026/10/03 09:48:42 ✅ Container started: 05f699f24572
+2026/10/03 09:48:42 ⏳ Waiting for container id 05f699f24572 image: nats:2.14-alpine. Waiting for: log message "Server is ready"
+2026/10/03 09:48:42 🔔 Container is ready: 05f699f24572
+2026/10/03 09:48:42 INFO Connecting to NATS urls=nats://localhost:57177
+2026/10/03 09:48:42 INFO Successfully connected to NATS urls=nats://localhost:57177
+2026/10/03 09:48:43 INFO Component factories registered count=27
+2026/10/03 09:48:43 INFO Created new KV bucket bucket=semstreams_config_c360_semteams-bootstrap-e2e
+    model_runtime_integration_test.go:85: 
+        	Error Trace:	/Users/coby/.codex/worktrees/model-boundary-qualification/semteams/cmd/semteams/model_runtime_integration_test.go:85
+        	Error:      	Received unexpected error:
+        	            	initialize component manager: composition validation refused boot with 1 error finding(s): orphaned_port on agentic-model/agent.request: input port 'agent.request' (stream): no_publishers (Connect an output from another component; Check that source component is configured correctly; If this input is fed from outside the composition, declare "external": true on the port (a named override replaces the whole port, so restate it there))
+        	Test:       	TestConfiguredModelRetryBoundary/mock
+2026/10/03 09:48:43 🐳 Stopping container: 05f699f24572
+2026/10/03 09:48:43 ✅ Container stopped: 05f699f24572
+2026/10/03 09:48:43 🐳 Terminating container: 05f699f24572
+2026/10/03 09:48:43 🚫 Container terminated: 05f699f24572
+--- FAIL: TestConfiguredModelRetryBoundary (0.72s)
+    --- FAIL: TestConfiguredModelRetryBoundary/production (0.38s)
+    --- FAIL: TestConfiguredModelRetryBoundary/mock (0.34s)
+FAIL
+FAIL	github.com/c360studio/semteams/cmd/semteams	1.208s
+FAIL
