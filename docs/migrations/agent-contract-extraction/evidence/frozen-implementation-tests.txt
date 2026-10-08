@@ -1,0 +1,4 @@
+Captured output; tab characters expanded to eight-column stops.
+ok      github.com/c360studio/semstreams/processor/agentic-model        9.023s
+ok      github.com/c360studio/semstreams/internal/deliverylane  1.431s
+ok      github.com/c360studio/semstreams/internal/lifecyclecleanup      1.551s
