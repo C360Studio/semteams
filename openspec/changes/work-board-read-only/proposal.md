@@ -10,8 +10,7 @@ on 2026-10-08 that this fixture-backed, read-only board is the first thing built
 SemDev `semdev-workspace-ui` design (D1–D5, 2026-09-15, design-only) adopted as the design input, consistent with
 [ADR-063](../../../docs/adr/063-development-pack-absorption-boundary.md).
 
-This change starts from `main` at `7f26ca7d` (frozen SemStreams `8b99efe9c66a4faa4fa509f9f62cc6bad8392128`). The
-claiming draft pull request is `claude/gh296-work-board`; its number is recorded in `tasks.md` once opened.
+This change starts from `main` at `7f26ca7d` (frozen SemStreams `8b99efe9c66a4faa4fa509f9f62cc6bad8392128`). [Draft PR #304](https://github.com/C360Studio/semteams/pull/304), on `claude/gh296-work-board`, owns this claim.
 
 ## What changes
 

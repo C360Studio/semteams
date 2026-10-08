@@ -1,6 +1,6 @@
 ## 1. Claim and design
 
-- [x] 1.1 Open the claim for issue #296 on `claude/gh296-work-board` with this proposal as the first content commit.
+- [x] 1.1 Open the claim for issue #296 as draft PR #304 on `claude/gh296-work-board` with this proposal as the first content commit.
 - [ ] 1.2 HOLD on the `architect` read of the product read-API shape; tasks 2.x and 3.x wait on it. The read names
       which existing scoped reads (GraphQL entity queries, `/teams-dispatch/loops`, the trajectory endpoint,
       `/components/flowgraph`) supply the work-item overlays, the portfolio configuration's minimal read-side
