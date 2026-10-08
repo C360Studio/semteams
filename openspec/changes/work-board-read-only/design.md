@@ -104,9 +104,14 @@ the task id, with the task body only as an evidence-store reference (#261). The 
 metadata, which no read path exposes: the loops REST drops it, no loop-entity triple carries it, and the trajectory
 keeps the body in the evidence store. The rule's identity is therefore not readable anywhere on `main`.
 
-Contract: an explained event is rendered from a loop whose `agent.loop.task` starts with `rule-`; the firing entity
-is parsed from that task id (confirmed by `rule.task.spawned` on the firing entity and by `agent.lineage.root`). It
-renders: the control identity (loop id, role); the firing entity; the firing entity's lifecycle transition that
+Contract: a **control** is a loop whose task id (`task_id` on `/loops` and the SSE stream, measured equal to the
+`agent.loop.task` triple) has the form `rule-<firing entity id>-<nanos>` with a run entity as firing entity, AND
+which is not a member of that run: its loop entity carries no `agent.loop.run` triple. The second clause matters
+because the live autoresearch pack fires `publish_agent` on the run entity for its `propose` and `synthesize` WORK
+loops (rule 05); those carry `agent.loop.run` and stay on the board as work with their descendants reachable, while
+the ops observer (`run_scope: none`, no `agent.loop.run`) is a control. Membership is read once per candidate loop
+from its loop-entity triples and cached; there is no predicate-wide poll. An explained event renders: the control
+identity (loop id, role); the firing entity; the firing entity's lifecycle transition that
 precedes the spawn (`to` value and `source`, for example `agent.run.phase → completed`, source `rule`), labelled as
 the fact at spawn; the outcome as the control loop's own state (accepted when the loop exists, applied when it
 completes, rejected when it fails) with the terminal `decide` reason; and `rule: unknown` with the reason "rule
@@ -116,15 +121,15 @@ with a rule `add_triple` would be a product workaround for missing generic prove
 engine stamp rule identity and the firing fact on the spawned loop entity, is posted on #298 with these
 measurements.
 
-Runs-lens change this requires: `taskStore` reads `agent.loop.task` and `agent.lineage.root` for rule-spawned loops
-through `GET /graph/triples` (the runStatus store already polls triples by predicate), attaches each to the
-coordinator card of its firing run as a control instead of rendering it as a top-level card as it does today, and
-`TaskStory` renders controls as one narrative row each in the shape above. The ops journey selects observers by role,
-so it is unaffected; task 4.2 verifies it. Known limits of the landed implementation: the controls store polls the
-`agent.loop.task` predicate with a limit of 500, which every loop carries, so a deployment past 500 loops reports
-controls as truncated (unknown) until a narrower read exists; a control loop can appear as a top-level card for up to
-one poll interval (2.5 s) before the graph read attaches it; and a child of a control loop is not reachable from any
-card. The fact at spawn is chosen by nanosecond ordering (`spawnedAtNanos` from the task id) against each
+Runs-lens change this requires: `taskStore` classifies candidates from `task_id`, resolves membership through one
+cached `GET /graph/triples?subject=<loop entity>` read per candidate, attaches each resolved control to the
+coordinator card of its firing run (top-level or nested) instead of rendering it as a top-level card as it does
+today, leaves members and unresolved candidates exactly where they were, and `TaskStory` renders controls as one
+narrative row each in the shape above. The ops journey selects observers by role,
+so it is unaffected; task 4.2 verifies it. Known limits of the landed implementation: a control loop is a top-level card
+until its one membership read completes; a failed or truncated membership read leaves it top-level and raises a
+board-level notice; and a child of a control loop is not reachable from any card (no live control has children). The
+fact at spawn is chosen by nanosecond ordering (`spawnedAtNanos` from the task id) against each
 transition's `at`.
 
 ## D4 — Portfolio configuration: the minimal read-side shape shared with #267
