@@ -69,13 +69,14 @@
     const returnTo = focusedLoopId;
     manualFocusId = null;
     await tick();
-    Array.from(
+    // If the row is gone (the loop folded or the task changed between clicks),
+    // fall back to the close button rather than letting focus drop to <body>.
+    const row = Array.from(
       panelContentEl?.querySelectorAll<HTMLElement>(
         '[data-testid="child-item"], [data-testid="control-row"]',
       ) ?? [],
-    )
-      .find((row) => row.dataset.loopId === returnTo)
-      ?.focus();
+    ).find((r) => r.dataset.loopId === returnTo);
+    (row ?? closeBtnRef)?.focus();
   }
 
   // The story's control rows are replaced by the focused loop's own story, so
