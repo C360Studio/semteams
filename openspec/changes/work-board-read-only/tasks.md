@@ -36,14 +36,14 @@
 
 ## 4. Verification
 
-- [ ] 4.1 HOLD: journey `work-board.spec.ts` and the `test:e2e:agentic:work-board` task are written (6ad2eaf3) and
-      steps 1–7 passed once on the pre-membership controls code; the final spec has not run end to end because the
-      host disk filled (1.2 GiB free) and Docker's metadata went read-only. Needs a fresh stack after the owner frees
-      disk. The in-page toggle/selection tests are verified in real Chromium against the Vite dev server only.
-- [ ] 4.2 HOLD: `research-mvp` PASS and `ops-agent` PASS on a0937e89; `chain-drill-in` FAILED twice at the Sub-tasks
-      step ("Active loops 0") while the disk was filling, cause unattributed (baseline on `main` needed);
-      `approval-pause` inconclusive (run phase never settled as the disk filled); `ask-user-pause` not run (Docker
-      down). ESLint, svelte-check and `task ui:test` are green.
+- [x] 4.1 Journey `work-board.spec.ts` and `test:e2e:agentic:work-board` (6ad2eaf3, 783a3edd): 3 passed on a fresh
+      stack at 78fbc936 (fixtures + live ops control 6.2 s; in-page toggle and selection), after fixing a layout-effect
+      reconnect loop and the REST reconcile erasing SSE parents (78fbc936).
+- [ ] 4.2 HOLD on `approval-pause`: `research-mvp` PASS, `ops-agent` PASS, `chain-drill-in` PASS (78fbc936),
+      `ask-user-pause` is a pre-existing skip; `approval-pause` fails at its run-phase assertion ("never reached a
+      settled phase") before and after the fix, and the `main` baseline could not boot because the host disk filled
+      again (Docker build cache from `--no-cache` stack boots). Attribute on `main` once disk is freed. ESLint,
+      svelte-check and `task ui:test` are green.
 - [x] 4.3 `svelte-reviewer` passes on each phase (14be75d5, d3ab1c80, dd6bb3df) with fixes (1873b297, 5dd560a9,
       a0937e89) and a verification pass (PASS) whose three leftovers are applied in the follow-up fix; no Go changed.
 - [ ] 4.4 Archive this change and synchronize the `observable-work` specification as the landing PR's final content
