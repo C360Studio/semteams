@@ -47,4 +47,4 @@
 - [x] 4.3 `svelte-reviewer` passes on each phase (14be75d5, d3ab1c80, dd6bb3df) with fixes (1873b297, 5dd560a9,
       a0937e89) and a verification pass (PASS) whose three leftovers are applied in the follow-up fix; no Go changed.
 - [x] 4.4 Archived 2026-10-08 with the `observable-work` specification synchronized as the landing PR's final
-      content commit; the read-only reviewer pass is recorded on PR #304.
+      content commit.

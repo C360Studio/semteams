@@ -10,9 +10,11 @@ asserts no write path and derives no status from another.
 ## Requirements
 ### Requirement: Work lens over GitHub issue-backed work items
 
-SemTeams SHALL present all work across the configured portfolio as GitHub issue-backed work items on a board and a
-table grouped by project, before and independent of any run. GitHub SHALL own work-item identity, body, assignees,
-labels and milestone. Columns SHALL follow the configured GitHub Projects status field; without a Project the
+SemTeams SHALL present the work items of the configured portfolio as GitHub issue-backed work items on a board and
+a table grouped by project, before and independent of any run. GitHub SHALL own work-item identity, body, assignees,
+labels and milestone. The shipped work source is fixture-backed (`WORK_SOURCE=fixture`); a `github` work source
+SHALL answer `unsupported` with a reason and SHALL NOT render an empty board as "no work" until live enumeration
+lands (#273). Columns SHALL follow the configured GitHub Projects status field; without a Project the
 columns SHALL be Todo, In Progress and Done with unknown metadata left unset. PM status, execution stage and
 verification SHALL be displayed as separate values and SHALL NOT be derived from one another.
 
@@ -48,8 +50,8 @@ at-risk findings SHALL be absent until Program Pulse supplies them and SHALL NOT
 
 The work lens SHALL NOT change run state: no drag changes a column, and no control starts, approves or completes a
 run or edits an issue, label or milestone. The browser SHALL read only through a product read API that enforces
-repository and run scoping, and SHALL NOT connect to NATS or hold admin credentials. Fixture-backed enumeration and
-live enumeration SHALL be served behind the same API.
+repository and run scoping, and SHALL NOT connect to NATS or hold admin credentials. Fixture-backed enumeration is
+served behind that API, and live enumeration (#273) SHALL be served behind the same API when it lands.
 
 #### Scenario: Card drag
 
