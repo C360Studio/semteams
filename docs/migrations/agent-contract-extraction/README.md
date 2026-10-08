@@ -30,7 +30,8 @@ records the ruling. All measurements below remain the historical design evidence
 
 ## What the measurements mean
 
-The [machine report](family-report.json), produced by
+The machine report (not committed: it is a 5 MB JSON; regenerate it with the command under
+[Review and reproduction](#review-and-reproduction)), produced by
 [`measure-agent-contract-family.go`](../../../scripts/measure-agent-contract-family.go), retains selected
 module/source identities, checksums, build contexts, errors and source positions. It records Go 1.26.4 on
 `darwin/arm64`, `CGO_ENABLED=1`, and empty `GOFLAGS`. The SemTeams revision is
