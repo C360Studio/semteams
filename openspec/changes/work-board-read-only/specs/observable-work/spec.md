@@ -52,13 +52,15 @@ live enumeration SHALL be served behind the same API.
 
 ### Requirement: Rule-fired controls render as explained events
 
-When the runs lens reached from a work item shows a control fired by a rule, it SHALL show the rule, the firing fact
-and its value, the control identity and the control's outcome, so the story answers why the control happened without
-the trajectory.
+When the runs lens reached from a work item shows a control fired by a rule, it SHALL show the control identity, the
+firing entity, the firing fact and its value at spawn, the control's outcome, and the rule identity when the runtime
+records it, otherwise an explicit unknown with its reason, so the story answers why the control happened without the
+trajectory.
 
 #### Scenario: Ops observer firing
 
 - **GIVEN** a fixture run whose `agent.run.phase` reached a terminal value and fired the ops observer rule
 - **WHEN** the operator drills into that run from its work item
-- **THEN** the story SHALL show the rule name, `agent.run.phase` and its value, the fired control's identity and its
-  outcome as one explained event
+- **THEN** the story SHALL show `agent.run.phase` and its value at spawn, the fired control's identity and its outcome
+  as one explained event
+- **AND** the rule identity SHALL render as unknown with its reason while the runtime does not record it

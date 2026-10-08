@@ -20,8 +20,9 @@ UI `svelte.config.js` (adapter-node), `hooks.server.ts`, `routes/api/ai/*/+serve
 
 **Result of the read:** no runtime type is missing on `main` for the fixture-backed slice. Two facts are not
 written by any live pack (run-to-issue linkage; rule identity on a spawned task). Both are handled below without a
-runtime change: the first as an explicit `unsupported` lookup, the second as a pack-config property on the one live
-rule. Task 1.3 does not trigger.
+runtime change: the first as an explicit `unsupported` lookup; the second cannot be read on any surveyed path (measured
+2026-10-08 on the running e2e stack, D3), so it renders unknown and the engine ask goes to #298. Task 1.3 does not
+trigger.
 
 ## D1 — The read API is a SvelteKit server boundary; no new Go
 
@@ -43,10 +44,16 @@ the enclosing lookup is `complete`. Methods other than `GET` answer 405. There i
 outside a work item; run facts are fetched per linked run entity, so the browser cannot use the work API to walk the
 graph. Repository scope is the D4 configuration: an unconfigured repository answers 404.
 
-Overlay facts are read server-side from the existing reads, never by the browser: `GET /teams-dispatch/loops/{id}`
-for the coordinator loop (`state`, `pending_approval`, `metadata`, `prompt`); `GET /graph/triples?subject=<run>` for
-`agent.run.phase` and the product run markers; the server GraphQL client is available for `entity(id)` when a
-narrower read is wanted. Each backend call failure degrades that lookup to `partial` or `failed`, never to `none`.
+Overlay facts are read server-side from the existing reads, never by the browser. Measured on the running stack
+(2026-10-08, 8b99efe): `GET /teams-dispatch/loops` and `/loops/{id}` carry `loop_id`, `task_id`, `role`, `state`,
+`iterations`, `max_iterations`, `outcome`, `user_id`, `channel_type` and `pending_approval`; they carry NO `prompt`,
+`metadata` or `parent_loop_id`. The loop entity `<org>.<platform>.agentic-loop.agent.execution.<loop_id>` carries
+`agent.loop.description` (the prompt, truncated upstream at 8 KiB), `agent.loop.role`, `agent.loop.run`,
+`agent.run.entity-id`, `agent.loop.task`, `agent.lineage.root`, `agent.loop.outcome` and
+`coordinator.decision.{next-action,reason}`. So: needs-you reads `/loops/{id}` (`state`, `pending_approval`) plus the
+run markers; everything else reads `GET /graph/triples` by subject or by `predicate`+`object` (exact match, `limit`
+applied inside the scan, so bindings use selective predicates). Each backend call failure degrades that lookup to
+`partial` or `failed`, never to `none`.
 
 Why not Go: every read the slice needs already exists on the frozen HTTP surface; a product-shell HTTP handler
 would reimplement a boundary the Node server already has, and would need a framework-alignment review for no new
@@ -80,28 +87,35 @@ Overlays, each with its source on `main` and the condition that makes it unknown
 
 PM status, execution stage and verification are three separately rendered values. A linked run never moves a card.
 
-## D3 — Explained events from existing provenance plus one pack property
+## D3 — Explained events from measured provenance; rule identity is unknown live
 
-What the frozen engine records when a rule fires `publish_agent`: the task's `Metadata` receives the rule's
-`properties` after `$entity.*` substitution and `agent.related_loops`; the firing entity receives
-`rule.task.spawned = <task id>`; the spawned loop appears on `GET /loops` with that `metadata`. The rule's identity
-is not on the task, and the `rule.task.spawned` triple carries `source: rule_engine` rather than the rule id. The
-ops rule already passes `run_entity_id`, `run_phase` (the firing fact's value) and `coordinator_loop_id`.
+What the frozen engine records when a rule fires `publish_agent`, measured on the running stack: the firing entity
+receives `rule.task.spawned = rule-<firing entity id>-<nanos>`; the spawned loop entity carries `agent.loop.task`
+(that same task id), `agent.lineage.root` (the run instance, when the rule declares `related_loops.root`),
+`agent.loop.description` (first line of its prompt) and, at the end, `coordinator.decision.{next-action,reason}`; the
+run entity carries a `lifecycle.transition.{at,from,to,note,source}` history whose five triples per transition share
+one triple `timestamp`. The trajectory's `loop.started` fact carries `source_kind: task` and `source_correlation` =
+the task id, with the task body only as an evidence-store reference (#261). The rule's `properties` land in task
+metadata, which no read path exposes: the loops REST drops it, no loop-entity triple carries it, and the trajectory
+keeps the body in the evidence store. The rule's identity is therefore not readable anywhere on `main`.
 
-Contract: an explained event is rendered from a loop whose `metadata` carries `fired_by_rule` (rule id),
-`firing_fact` (predicate) and `firing_value`, joined to its run by `run_entity_id` / `agent.related_loops.root`. Its
-outcome is the control loop's own state: accepted when the loop exists, applied when it completes, rejected when it
-fails, with the terminal `decide` reason from the trajectory as the explanation. The ops rule gains the three
-properties (`fired_by_rule: ops_run_terminal_observe`, `firing_fact: agent.run.phase`,
-`firing_value: $entity.triple.agent.run.phase`). That is pack configuration passing through an existing engine
-path, not a new policy and not a runtime change. The generic ask, that the engine stamp rule identity on every
-spawned task, belongs to #298 and is not implemented here.
+Contract: an explained event is rendered from a loop whose `agent.loop.task` starts with `rule-`; the firing entity
+is parsed from that task id (confirmed by `rule.task.spawned` on the firing entity and by `agent.lineage.root`). It
+renders: the control identity (loop id, role); the firing entity; the firing entity's lifecycle transition that
+precedes the spawn (`to` value and `source`, for example `agent.run.phase → completed`, source `rule`), labelled as
+the fact at spawn; the outcome as the control loop's own state (accepted when the loop exists, applied when it
+completes, rejected when it fails) with the terminal `decide` reason; and `rule: unknown` with the reason "rule
+identity is not recorded by the frozen runtime (#298)". No pack-config change is made: carrying the rule id in the
+ops rule's `properties` was withdrawn after measurement because nothing can read it, and stamping it from the pack
+with a rule `add_triple` would be a product workaround for missing generic provenance. The generic ask, that the
+engine stamp rule identity and the firing fact on the spawned loop entity, is posted on #298 with these
+measurements.
 
-Runs-lens change this requires: `AgentLoop` gains optional `metadata`; `taskStore` attaches a loop whose metadata
-names `coordinator_loop_id` or `agent.related_loops.root` to that run's coordinator card as a control, instead of
-rendering it as a top-level card as it does today; `TaskStory` renders controls as one narrative row each: rule,
-firing fact and value, control identity, outcome. The ops journey selects observers by role, so it is unaffected;
-task 4.2 verifies it.
+Runs-lens change this requires: `taskStore` reads `agent.loop.task` and `agent.lineage.root` for rule-spawned loops
+through `GET /graph/triples` (the runStatus store already polls triples by predicate), attaches each to the
+coordinator card of its firing run as a control instead of rendering it as a top-level card as it does today, and
+`TaskStory` renders controls as one narrative row each in the shape above. The ops journey selects observers by role,
+so it is unaffected; task 4.2 verifies it.
 
 ## D4 — Portfolio configuration: the minimal read-side shape shared with #267
 
@@ -125,6 +139,8 @@ generated and stays untouched):
 
 Project membership is operator-authored; a repository can appear under more than one project and is never inferred
 from activity (`docs/product/program-manager.md`). `project_board` is optional; without it the D2 fallback applies.
+When a board is configured the source supplies the ordered status options (GitHub's single-select options; the fixture declares them), and the items response returns
+them as `columns` so empty columns still render.
 The server validates required fields and refuses to start the work API on an invalid document (the board shows the
 validation error). #267 and #273 read the same file from Go; a Go struct is theirs to add. Fixture sets carry their own
 portfolio document.
@@ -142,14 +158,15 @@ status field and one without; items covering every column; one item with linked 
 linkage cases: an item bound to a real run, an item declaring no runs (`none`), and an item bound to a run entity
 that does not exist (a real `partial` lookup, not a simulated one). Fixture-mode binding is declared on the item as
 `linked_runs: [{ by: "run_entity_id", value }]` or `[{ by: "coordinator_prompt", equals }]`; the prompt form resolves
-against the coordinator loop's `prompt` on `GET /loops` and exists only so a journey can bind a run it creates at
-run time. Both forms are fixture-only; live linkage is `run.issue.ref` (D2).
+against the coordinator loop entity's `agent.loop.description` triple (exact match) and exists only so a journey can
+bind a run it creates at run time. Both forms are fixture-only; live linkage is `run.issue.ref` (D2).
 
 Journey (`ui/e2e/agentic/work-board.spec.ts`, on the `chain-drill-in` template): start a research run through the chat
 exactly as `chain-drill-in` does and wait for the ops observer to complete; open `/work`; assert the board renders
 every fixture column with PM status, execution stage and verification as separate badges; assert the `none` item
 says "no linked run" and the `partial` item says unknown; open the bound item and drill into its run; assert the
-story shows the ops control as one explained row with `agent.run.phase` and its value visible; assert the table
+story shows the ops control as one explained row with `agent.run.phase` and its value visible and the rule shown as
+unknown with its reason; assert the table
 view renders the same items; assert `POST /api/work/items` answers 405.
 
 Source map, in the SemDev D5 form:
@@ -160,7 +177,7 @@ Source map, in the SemDev D5 form:
 | Linked runs | Fixture binding; `run.issue.ref` later | `unsupported` live until a writer exists |
 | Coordinator loop and needs-you | `GET /teams-dispatch/loops/{id}`, run markers | Available |
 | Execution stage | `agent.run.phase` via `GET /graph/triples` | Available |
-| Rule-fired control | Spawned loop `metadata` + `rule.task.spawned` | Available once the ops rule carries the D3 properties |
+| Rule-fired control | Spawned loop entity triples, `rule.task.spawned`, firing-entity lifecycle history | Available; rule identity unknown (#298) |
 | Verification, attention, evidence bodies | Development pack, #267, #261 | Unknown or absent in this slice |
 
 ## Alternatives rejected
@@ -171,8 +188,12 @@ Source map, in the SemDev D5 form:
   not be drilled into; the journey creates a real run and binds it.
 - Simulating the `partial` case with a fixture flag: a dangling run binding exercises the real failure path instead.
 - Deriving PM status from execution state: violates SemDev D2 and would move cards when runs move.
+- Carrying rule identity through the ops rule's `properties`: they land in task metadata that no read path exposes;
+  withdrawn after measurement. Stamping it from the pack with `add_triple`: a product workaround for missing generic
+  provenance; the ask belongs to the engine (#298).
 
 ## Follow-ons (issues, not tasks here)
 
 `run.issue.ref` writer for SemTeams runs (development pack intake, #290/#291; or #273's intake); engine stamping of
-rule identity on spawned tasks (#298); `github` source mode (#273); attention overlay (#267); evidence bodies (#261).
+rule identity and the firing fact on spawned loop entities (#298, measured gap posted there); `github` source mode
+(#273); attention overlay (#267); evidence bodies (#261).

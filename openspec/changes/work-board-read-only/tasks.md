@@ -1,6 +1,7 @@
 ## 1. Claim and design
 
-- [x] 1.1 Open the claim for issue #296 as draft PR #304 on `claude/gh296-work-board` with this proposal as the first content commit.
+- [x] 1.1 Open the claim for issue #296 as draft PR #304 on `claude/gh296-work-board` with this proposal as the first
+      content commit.
 - [x] 1.2 `architect` read on the product read-API shape, recorded in `design.md` D1–D5: no runtime type is missing on
       `main`; linkage and rule identity are handled as explicit unknown and a pack property.
 - [x] 1.3 Task 1.3 stop condition not triggered (no missing runtime type); no gap posted on #296.
@@ -13,9 +14,9 @@
       linked PRs, and the three linkage cases (bound by coordinator prompt, `none`, dangling run entity id).
 - [ ] 2.3 Implement the `GET /api/work/*` routes (D1) with `lookup` status, `GET`-only, repository scoping, and
       server-side overlay reads from `/teams-dispatch/loops/{id}` and `/graph/triples`.
-- [ ] 2.4 Verify on the e2e stack that `GET /teams-dispatch/loops` returns `metadata` for the ops observer
-      (`run_phase`, `run_entity_id`, `coordinator_loop_id`); if it does not, record the gap in `design.md` D3 and
-      read the same keys from `GET /loops/{id}` or the trajectory instead.
+- [x] 2.4 Measured on the e2e stack 2026-10-08: `GET /teams-dispatch/loops` and `/loops/{id}` expose no `metadata`,
+      `prompt` or `parent_loop_id`; loop-entity triples do (`agent.loop.description`, `agent.loop.role`,
+      `agent.run.entity-id`, `agent.lineage.root`, `agent.loop.task`). Design D1/D3/D5 reconciled.
 
 ## 3. Work lens and explained events
 
@@ -24,9 +25,13 @@
 - [ ] 3.2 Work-item overview panel (`?item=`): purpose, owner, priority, milestone, dependencies, delivery context;
       linked runs on request with the D2 unknown rendering.
 - [ ] 3.3 Drill-in to `/?task=<coordinator loop id>`; cards carry no drag affordance.
-- [ ] 3.4 Add `fired_by_rule`, `firing_fact`, `firing_value` to the ops rule's `properties` (D3, pack config only).
-- [ ] 3.5 Runs lens: `AgentLoop.metadata`, attach rule-spawned loops to their coordinator card as controls, and render
-      each control in `TaskStory` as one explained row (rule, firing fact and value, control identity, outcome).
+- [ ] 3.4 Post the measured provenance gap on #298: rule identity and the firing fact are not readable on any surveyed
+      path (task metadata is dropped by the loops REST and lives only in the evidence store). No ops rule change.
+- [ ] 3.5 Runs lens: read rule-spawned loop provenance from graph triples (`agent.loop.task` prefix `rule-<firing
+      entity>-`, `agent.lineage.root`), attach those loops to their coordinator card as controls instead of top-level
+      cards, and render each control in `TaskStory` as one explained row: control identity, firing entity, the firing
+      entity's lifecycle transition preceding the spawn (fact and value), outcome with the terminal decide reason,
+      and `rule: unknown` with its reason.
 
 ## 4. Verification
 
