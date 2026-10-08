@@ -1,39 +1,38 @@
 ## 1. Claim and design
 
 - [x] 1.1 Open the claim for issue #296 as draft PR #304 on `claude/gh296-work-board` with this proposal as the first content commit.
-- [ ] 1.2 HOLD on the `architect` read of the product read-API shape; tasks 2.x and 3.x wait on it. The read names
-      which existing scoped reads (GraphQL entity queries, `/teams-dispatch/loops`, the trajectory endpoint,
-      `/components/flowgraph`) supply the work-item overlays, the portfolio configuration's minimal read-side
-      shape, and whether any runtime type is missing on `main`; record the result in `design.md`.
-- [ ] 1.3 If the read requires runtime types absent on `main`, stop at the design, post the gap on #296, and leave
-      the remaining tasks unchecked.
+- [x] 1.2 `architect` read on the product read-API shape, recorded in `design.md` D1–D5: no runtime type is missing on
+      `main`; linkage and rule identity are handled as explicit unknown and a pack property.
+- [x] 1.3 Task 1.3 stop condition not triggered (no missing runtime type); no gap posted on #296.
 
 ## 2. Fixtures and read boundary
 
-- [ ] 2.1 Add the portfolio configuration's minimal read-side shape (program → project → repository) shared with #267.
-- [ ] 2.2 Add GitHub enumeration fixtures (issues across two repositories, one with a Project status field, one
-      without) and run-fact fixtures, including one ops-observer firing on `agent.run.phase`.
-- [ ] 2.3 Expose the fixtures behind the product read API with repository and run scoping; the browser never touches
-      NATS or admin credentials.
+- [ ] 2.1 Add the portfolio document shape (D4): `configs/portfolio/portfolio.example.json`, its hand-authored schema,
+      `types/work.ts`, and server-side validation with a visible error state.
+- [ ] 2.2 Add fixture set `board-mvp` (D5): two repositories, one Project status field, every column, one item with
+      linked PRs, and the three linkage cases (bound by coordinator prompt, `none`, dangling run entity id).
+- [ ] 2.3 Implement the `GET /api/work/*` routes (D1) with `lookup` status, `GET`-only, repository scoping, and
+      server-side overlay reads from `/teams-dispatch/loops/{id}` and `/graph/triples`.
+- [ ] 2.4 Verify on the e2e stack that `GET /teams-dispatch/loops` returns `metadata` for the ops observer
+      (`run_phase`, `run_entity_id`, `coordinator_loop_id`); if it does not, record the gap in `design.md` D3 and
+      read the same keys from `GET /loops/{id}` or the trajectory instead.
 
-## 3. Work lens
+## 3. Work lens and explained events
 
-- [ ] 3.1 Board and table over work items, grouped by project, columns from Project status or the Todo / In Progress /
-      Done fallback, PM status visibly separate from execution stage and from verification.
-- [ ] 3.2 Work-item overview: purpose, owner, priority, milestone, dependencies, delivery context; linked specs, runs
-      and evidence on request.
-- [ ] 3.3 Overlays with explicit unknown states: linked runs, execution stage, needs-you; "no linked run" only after a
-      complete scoped lookup; attention absent until #267.
-- [ ] 3.4 Drill-in to the existing runs lens; rule-fired controls render as explained events with the firing fact
-      visible.
-- [ ] 3.5 No card action mutates run state; drag does not change a column.
+- [ ] 3.1 `/work` route with board and table views, `TopNav` link, `workStore`, `workApi`, and the components in D5;
+      PM status, execution stage and verification rendered as separate values.
+- [ ] 3.2 Work-item overview panel (`?item=`): purpose, owner, priority, milestone, dependencies, delivery context;
+      linked runs on request with the D2 unknown rendering.
+- [ ] 3.3 Drill-in to `/?task=<coordinator loop id>`; cards carry no drag affordance.
+- [ ] 3.4 Add `fired_by_rule`, `firing_fact`, `firing_value` to the ops rule's `properties` (D3, pack config only).
+- [ ] 3.5 Runs lens: `AgentLoop.metadata`, attach rule-spawned loops to their coordinator card as controls, and render
+      each control in `TaskStory` as one explained row (rule, firing fact and value, control identity, outcome).
 
 ## 4. Verification
 
-- [ ] 4.1 Playwright journey on the `chain-drill-in.spec.ts` template: render from fixtures, drill-in reaches the run
-      story, unknown renders as unknown.
-- [ ] 4.2 Existing journeys (`research-mvp`, `chain-drill-in`, approval, ask-user) still pass; no new ESLint,
-      svelte-check or revive warnings.
-- [ ] 4.3 `svelte-reviewer` pass on the work lens; `go-reviewer` pass if the read API adds Go.
+- [ ] 4.1 Journey `work-board.spec.ts` per D5, with a `test:e2e:agentic:work-board` task in `ui/Taskfile.yml`.
+- [ ] 4.2 Existing journeys (`research-mvp`, `chain-drill-in`, `ops-run-terminal`, approval, ask-user) still pass;
+      no new ESLint, svelte-check or revive warnings; `task ui:test` green for new component tests.
+- [ ] 4.3 `svelte-reviewer` pass on the work lens and runs-lens change; `go-reviewer` not required unless Go changes.
 - [ ] 4.4 Archive this change and synchronize the `observable-work` specification as the landing PR's final content
       commit, followed by the read-only reviewer pass.
