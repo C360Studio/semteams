@@ -482,6 +482,8 @@ services:
     environment:
       - NODE_ENV=development
       - BACKEND_HOST=backend:8080
+      - WORK_SOURCE=fixture
+      - WORK_FIXTURE_SET=board-mvp
     volumes:
       - ./src:/app/src
       - ./static:/app/static

@@ -1,0 +1,30 @@
+{
+  "programs": [
+    {
+      "id": "c360",
+      "name": "c360",
+      "projects": [
+        {
+          "id": "semteams",
+          "name": "SemTeams",
+          "repositories": [
+            {
+              "owner": "c360studio",
+              "name": "semteams",
+              "project_board": {
+                "owner": "c360studio",
+                "number": 3,
+                "status_field": "Status",
+                "priority_field": "Priority"
+              }
+            },
+            {
+              "owner": "c360studio",
+              "name": "semsource"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
