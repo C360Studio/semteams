@@ -15,6 +15,7 @@
 // discipline as runStatus), so a loop that appears between ticks is classified
 // by the next one.
 
+import { untrack } from "svelte";
 import { getTriples } from "$lib/services/runStatusApi";
 import {
   EMPTY_CONTROLS,
@@ -197,7 +198,12 @@ function createControlsStore() {
     /** Start polling. Idempotent — no-op if already running. */
     start() {
       if (intervalId !== null) return;
-      void pollOnce(); // immediate first tick
+      // +layout.svelte calls this from the $effect that also owns the SSE
+      // connection. The first tick reads agentStore's loops synchronously, and a
+      // tracked read there would make that effect re-run on every loop update:
+      // its cleanup disconnects the stream and the replay updates the loops
+      // again, so the board never settles. start() must never subscribe its caller.
+      untrack(() => void pollOnce()); // immediate first tick
       intervalId = setInterval(() => void pollOnce(), POLL_INTERVAL_MS);
     },
 

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { AgentLoop } from "$lib/types/agent";
 import type { RawTriple } from "$lib/services/runStatusApi";
 
@@ -273,5 +273,107 @@ describe("taskStore — which loops are worth a #ref", () => {
 
   it("never gives a ref to a sub-task", () => {
     expect(taskStore.isRefEligible(loop("child-1", { parent_loop_id: "coord-1" }))).toBe(false);
+  });
+});
+
+// The loops REST snapshot (GET /teams-dispatch/loops, LoopInfo) carries no parent_loop_id, so
+// to the board every loop it returns looks top-level; only the SSE activity stream (the
+// persisted loop entity) knows the tree. The board must reach the same answer whichever of the
+// two a loop arrived through and in whichever order, because agentStore reconciles the REST
+// snapshot on a timer for as long as the page is open.
+describe("taskStore — loops that arrive without parents (REST snapshot)", () => {
+  const COORD = "b5a2d6ec-f67d-4cc7-ab5c-b40e8223a43e";
+  const PLAN = "f8f81f39-62f7-4d02-8bff-96b8bf243d21";
+  const GATHER = "7fe0f0cb-08e7-47f0-8214-9bfc3b374d4c";
+  const SYNTH = "2668e27a-9f5d-4329-b9bf-f380502ba059";
+  const REVIEW = "ce821ec0-b64b-4626-9fe1-0a027b997dbb";
+  const WAKE = "00d53a55-cfc2-499d-9a59-fd90eabf3cdf";
+  const OBSERVER = "8b9f1444-166f-4da3-a1b5-2718995c4b23";
+
+  const chainTask = (parent: string) => `rule-${PREFIX}.agentic-loop.agent.execution.${parent}-${NANOS}`;
+
+  // The shape the e2e stack served for a finished research run: no parent_loop_id anywhere.
+  const rest = [
+    { loop_id: COORD, task_id: "dispatch-ebbe10fe", state: "complete", role: "coordinator", max_iterations: 8, outcome: "success" },
+    { loop_id: PLAN, task_id: chainTask(COORD), state: "complete", role: "researcher-research-plan", max_iterations: 8, outcome: "success" },
+    { loop_id: GATHER, task_id: chainTask(PLAN), state: "complete", role: "researcher-research-gather", max_iterations: 8, outcome: "success" },
+    { loop_id: SYNTH, task_id: chainTask(PLAN), state: "complete", role: "researcher-research-synthesize", max_iterations: 8, outcome: "success" },
+    { loop_id: REVIEW, task_id: chainTask(SYNTH), state: "complete", role: "reviewer-research", max_iterations: 8, outcome: "success" },
+    { loop_id: WAKE, task_id: chainTask(REVIEW), state: "complete", role: "coordinator", max_iterations: 8, outcome: "success" },
+    { loop_id: OBSERVER, task_id: ruleTaskId(COORD), state: "complete", role: "ops-chain-observer", max_iterations: 8, outcome: "success" },
+  ];
+
+  // What the activity stream knows about the same loops.
+  const parents: Record<string, string> = {
+    [PLAN]: COORD,
+    [GATHER]: PLAN,
+    [SYNTH]: PLAN,
+    [REVIEW]: SYNTH,
+    [WAKE]: REVIEW,
+  };
+
+  async function reconcileFromRest() {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => rest }));
+    await agentStore.refreshLoops();
+  }
+
+  function learnParentsFromSse() {
+    for (const l of agentStore.loopsList) {
+      if (parents[l.loop_id]) agentStore.updateLoop({ ...l, parent_loop_id: parents[l.loop_id] });
+    }
+  }
+
+  const coordinator = () => taskStore.tasks.find((t) => t.id === COORD)!;
+  const cards = () => taskStore.tasks.map((t) => t.id).sort();
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("lists every loop as a card while no parent is known, and keeps the observer classifiable", async () => {
+    await reconcileFromRest();
+
+    expect(cards()).toEqual(rest.map((l) => l.loop_id).sort());
+    expect(coordinator().controls).toEqual([]);
+    expect(taskStore.isRefEligible(agentStore.getLoop(OBSERVER)!)).toBe(false); // may still fold away
+
+    await classify({ [OBSERVER]: false });
+    expect(cards()).not.toContain(OBSERVER);
+    expect(coordinator().controls.map((c) => c.loopId)).toEqual([OBSERVER]);
+  });
+
+  it("reaches the coordinator's whole chain as sub-tasks once the stream supplies the parents", async () => {
+    await reconcileFromRest();
+    learnParentsFromSse();
+    await classify({ [OBSERVER]: false });
+
+    expect(cards()).toEqual([COORD]);
+    expect(coordinator().childLoops.map((l) => l.loop_id).sort()).toEqual([PLAN, GATHER, SYNTH, REVIEW, WAKE].sort());
+    expect(coordinator().controls.map((c) => c.loopId)).toEqual([OBSERVER]);
+  });
+
+  it("keeps the chain under the coordinator when the REST snapshot is reconciled again", async () => {
+    // agentStore re-reads the snapshot every few seconds while connected; a snapshot that
+    // does not carry parents says nothing about them and must not undo what the stream said.
+    await reconcileFromRest();
+    learnParentsFromSse();
+    await classify({ [OBSERVER]: false });
+
+    await reconcileFromRest();
+    await classify({});
+
+    expect(cards()).toEqual([COORD]);
+    expect(coordinator().childLoops).toHaveLength(5);
+    expect(coordinator().controls.map((c) => c.loopId)).toEqual([OBSERVER]);
+  });
+
+  it("shows the same board when the snapshot arrives after the stream", async () => {
+    for (const l of rest) agentStore.updateLoop({ ...loop(l.loop_id, { role: l.role, task_id: l.task_id }), parent_loop_id: parents[l.loop_id] ?? "" });
+    await reconcileFromRest();
+    await classify({ [OBSERVER]: false });
+
+    expect(cards()).toEqual([COORD]);
+    expect(coordinator().childLoops).toHaveLength(5);
+    expect(coordinator().controls.map((c) => c.loopId)).toEqual([OBSERVER]);
   });
 });

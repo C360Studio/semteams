@@ -53,7 +53,17 @@ function createAgentStore() {
           loop_id: item.loop_id ?? item.id ?? "",
           data: item,
         });
-        if (loop) mergeLoop(loop);
+        if (!loop) continue;
+        // The snapshot (LoopInfo) never carries parent_loop_id, so its absence
+        // says nothing about the tree: only the activity stream (the persisted
+        // loop entity) knows it. Keep what the stream taught us instead of
+        // reading the missing field as "top-level", which would lift every
+        // sub-loop onto the board on the next reconcile.
+        if (item.parent_loop_id === undefined) {
+          const known = loops.get(loop.loop_id)?.parent_loop_id;
+          if (known) loop.parent_loop_id = known;
+        }
+        mergeLoop(loop);
       }
     } catch (err) {
       if (!connected) {
