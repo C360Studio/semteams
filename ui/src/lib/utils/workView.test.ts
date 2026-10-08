@@ -88,12 +88,47 @@ describe("summarizeItemOverlays", () => {
     expect(summary.needsYou).toEqual({ state: "unknown", reason: "1 of 2 linked runs unknown: loop unreadable" });
   });
 
-  it("reports the run count as incomplete when the lookup was partial", () => {
-    const summary = summarizeItemOverlays(
-      loaded([makeRun({ lookup: "partial" })], { lookup: "partial", reason: "one run unreadable" }),
-    );
+  describe("when the lookup did not complete but some runs came back", () => {
+    const partial = (runs: ReturnType<typeof makeRun>[], overrides: Partial<Extract<LinkedRunsState, { status: "loaded" }>> = {}) =>
+      summarizeItemOverlays(loaded(runs, { lookup: "partial", reason: "one run unreadable", ...overrides }));
+    const incomplete = "at least 1 run; lookup partial: one run unreadable";
 
-    expect(summary.linkedRuns).toEqual({ state: "known", value: 1, reason: "one run unreadable" });
+    it("does not report no-needs-you as known, and carries the lookup reason", () => {
+      const summary = partial([makeRun({ needs_you: { state: "known", value: false } })]);
+
+      expect(summary.needsYou).toEqual({ state: "unknown", reason: incomplete });
+    });
+
+    it("reports the run count, stage and verification as unknown, not as known", () => {
+      const summary = partial([makeRun({ verification: { state: "known", value: "approved" } })]);
+
+      expect(summary.linkedRuns).toEqual({ state: "unknown", reason: incomplete });
+      expect(summary.executionStage).toEqual({ state: "unknown", reason: incomplete });
+      expect(summary.verification).toEqual({ state: "unknown", reason: incomplete });
+    });
+
+    it("keeps a known needs-you of true: one run waiting on the operator stays true whatever else is missing", () => {
+      const waiting = { state: "known", value: true, reason: "coordinator loop is awaiting approval" } as const;
+      const summary = partial([makeRun({ needs_you: waiting })]);
+
+      expect(summary.needsYou).toEqual(waiting);
+      expect(summary.linkedRuns.state).toBe("unknown");
+    });
+
+    it("names the run count in the reason", () => {
+      const summary = partial([makeRun(), makeRun({ run_entity_id: "acme.platform.chain.agent.execution.run-2" })]);
+
+      expect(summary.linkedRuns).toEqual({
+        state: "unknown",
+        reason: "at least 2 runs; lookup partial: one run unreadable",
+      });
+    });
+
+    it.each(["failed", "unsupported"] as const)("treats a %s lookup the same way", (lookup) => {
+      const summary = partial([makeRun()], { lookup, reason: undefined });
+
+      expect(summary.needsYou).toEqual({ state: "unknown", reason: `at least 1 run; lookup ${lookup}` });
+    });
   });
 });
 

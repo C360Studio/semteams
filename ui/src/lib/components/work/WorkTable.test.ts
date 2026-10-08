@@ -3,7 +3,7 @@ import { render, screen, within } from "@testing-library/svelte";
 import userEvent from "@testing-library/user-event";
 import WorkTable from "./WorkTable.svelte";
 import { makeItem, makePortfolio, makeRun } from "../../../test-utils/work";
-import { summarizeItemOverlays } from "$lib/utils/workView";
+import { RUN_FACTS_LENS_NOTE, summarizeItemOverlays } from "$lib/utils/workView";
 import type { RepositoryBoard } from "$lib/stores/workStore.svelte";
 
 const overlaysFor = () => summarizeItemOverlays(undefined);
@@ -147,5 +147,14 @@ describe("WorkTable", () => {
     });
 
     expect(screen.getByTestId("work-lookup")).toHaveTextContent("project board read timed out");
+  });
+
+  it("says once, in visible text, why run-derived cells are unknown, instead of in every row", () => {
+    renderTable();
+
+    const note = screen.getByTestId("run-facts-note");
+    expect(note).toBeVisible();
+    expect(note).toHaveTextContent(RUN_FACTS_LENS_NOTE);
+    expect(screen.getAllByTestId("run-facts-note")).toHaveLength(1);
   });
 });

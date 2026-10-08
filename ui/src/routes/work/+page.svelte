@@ -56,8 +56,24 @@
     });
   }
 
+  // Closing unmounts the control that has focus, so focus has to be put somewhere
+  // on purpose: the card or row that opened the panel (found by its item ref, so a
+  // deep link works too), else the page heading when the item has no card here.
+  let workMain = $state<HTMLElement>();
+  let pageHeading = $state<HTMLElement>();
+
+  function focusOpener(ref: string): void {
+    const opener = Array.from(workMain?.querySelectorAll<HTMLElement>("[data-item]") ?? []).find(
+      (element) => element.dataset.item === ref,
+    );
+    const target = opener?.matches("button") ? opener : opener?.querySelector<HTMLElement>("button");
+    (target ?? pageHeading)?.focus();
+  }
+
   function closeItem(): void {
+    const ref = itemRef;
     updateUrl((params) => params.delete("item"));
+    if (ref) focusOpener(ref);
   }
 </script>
 
@@ -67,7 +83,7 @@
 
 <div class="work-page" data-testid="work-page">
   <header class="work-header">
-    <h1>Work</h1>
+    <h1 tabindex="-1" bind:this={pageHeading}>Work</h1>
     <div class="view-toggle" role="group" aria-label="View" data-testid="work-view-toggle">
       <button
         type="button"
@@ -98,7 +114,7 @@
   </header>
 
   <div class="work-body">
-    <div class="work-main">
+    <div class="work-main" bind:this={workMain}>
       {#if sourceState.kind !== "ready"}
         <WorkSourceState state={sourceState} onretry={() => void store.load()} />
       {:else if view === "board"}
@@ -164,6 +180,11 @@
   .work-header h1 {
     margin: 0;
     font-size: 1.125rem;
+  }
+
+  .work-header h1:focus-visible {
+    outline: 2px solid var(--ui-focus-ring, #0f62fe);
+    outline-offset: 2px;
   }
 
   .view-toggle {

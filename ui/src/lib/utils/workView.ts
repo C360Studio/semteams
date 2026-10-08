@@ -17,6 +17,13 @@ export type LinkedRunsState =
 export const RUNS_NOT_LOADED = "linked runs are read when an item is opened";
 export const RUNS_LOADING = "linked runs are loading";
 
+/**
+ * Said once per lens (board, table) so the unknown badges are explained in
+ * visible text without repeating the reason on every card or row.
+ */
+export const RUN_FACTS_LENS_NOTE =
+  "Run facts are read when an item is opened; open an item and load its runs.";
+
 export interface ItemOverlays {
   executionStage: Overlay<string>;
   needsYou: Overlay<boolean>;
@@ -79,17 +86,32 @@ export function summarizeItemOverlays(state: LinkedRunsState | undefined): ItemO
     }
     return allUnknown(state.reason ?? `linked-run lookup ${state.lookup}`);
   }
+  const needsYou = combineNeedsYou(state.runs.map((run) => run.needs_you));
+  if (state.lookup === "complete") {
+    return {
+      executionStage: combineText(state.runs.map((run) => run.execution_stage)),
+      needsYou,
+      verification: combineText(state.runs.map((run) => run.verification)),
+      linkedRuns: { state: "known", value: state.runs.length },
+    };
+  }
+
+  // Some runs came back but the lookup did not complete, so more may exist.
+  // Everything a missing run could change is unknown: "no" needs-you, the run
+  // count and the stage/verification join. Only a known `true` survives, because
+  // one run waiting on the operator is true whatever else is missing.
+  const count = state.runs.length;
+  const unknown = {
+    state: "unknown" as const,
+    reason:
+      `at least ${count} ${count === 1 ? "run" : "runs"}; lookup ${state.lookup}` +
+      (state.reason ? `: ${state.reason}` : ""),
+  };
   return {
-    executionStage: combineText(state.runs.map((run) => run.execution_stage)),
-    needsYou: combineNeedsYou(state.runs.map((run) => run.needs_you)),
-    verification: combineText(state.runs.map((run) => run.verification)),
-    linkedRuns: {
-      state: "known",
-      value: state.runs.length,
-      ...(state.lookup !== "complete" && {
-        reason: state.reason ?? `linked-run lookup ${state.lookup}`,
-      }),
-    },
+    executionStage: unknown,
+    needsYou: needsYou.state === "known" && needsYou.value ? needsYou : unknown,
+    verification: unknown,
+    linkedRuns: unknown,
   };
 }
 

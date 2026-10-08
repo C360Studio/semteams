@@ -387,4 +387,51 @@ describe("workStore selection", () => {
     expect(signals[0].aborted).toBe(true);
     expect(store.sourceState).toEqual({ kind: "loading" });
   });
+
+  it("dispose aborts an in-flight linked-runs read and leaves its state at loading, not a stale error", async () => {
+    const signals: AbortSignal[] = [];
+    stubWorkFetch(
+      portfolioRoute(["acme/widgets"]),
+      itemsRoute({ "acme/widgets": makeItemsResponse("acme/widgets", [makeItem()]) }),
+      (url, init) => {
+        if (!url.pathname.endsWith("/runs")) return undefined;
+        if (init?.signal) signals.push(init.signal);
+        return abortable(init?.signal, new Promise<Response>(() => {}));
+      },
+    );
+    const store = createWorkStore();
+    await store.load();
+    store.select("acme/widgets#1");
+    const pending = store.loadLinkedRuns();
+    await vi.waitFor(() => expect(signals).toHaveLength(1));
+
+    store.dispose();
+    await pending;
+
+    expect(signals[0].aborted).toBe(true);
+    // An aborted read is not a failure to report.
+    expect(store.linkedRunsFor("acme/widgets#1").status).not.toBe("error");
+  });
+
+  it("dispose aborts an in-flight item read for a deep link", async () => {
+    const signals: AbortSignal[] = [];
+    stubWorkFetch(
+      portfolioRoute(["acme/widgets"]),
+      itemsRoute({ "acme/widgets": makeItemsResponse("acme/widgets", []) }),
+      (url, init) => {
+        if (url.pathname !== "/api/work/items/acme/widgets/9") return undefined;
+        if (init?.signal) signals.push(init.signal);
+        return abortable(init?.signal, new Promise<Response>(() => {}));
+      },
+    );
+    const store = createWorkStore();
+    store.select("acme/widgets#9");
+    await store.load();
+    await vi.waitFor(() => expect(signals).toHaveLength(1));
+
+    store.dispose();
+
+    await vi.waitFor(() => expect(signals[0].aborted).toBe(true));
+    expect(store.selection).toEqual({ kind: "loading", ref: "acme/widgets#9" });
+  });
 });

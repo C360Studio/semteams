@@ -3,7 +3,7 @@ import { render, screen, within } from "@testing-library/svelte";
 import userEvent from "@testing-library/user-event";
 import WorkBoard from "./WorkBoard.svelte";
 import { makeItem, makePortfolio } from "../../../test-utils/work";
-import { summarizeItemOverlays } from "$lib/utils/workView";
+import { RUN_FACTS_LENS_NOTE, summarizeItemOverlays } from "$lib/utils/workView";
 import type { RepositoryBoard } from "$lib/stores/workStore.svelte";
 
 const overlaysFor = () => summarizeItemOverlays(undefined);
@@ -154,5 +154,22 @@ describe("WorkBoard", () => {
     });
 
     expect(container.querySelector("[draggable]")).toBeNull();
+  });
+
+  it("says once, in visible text, why run-derived badges are unknown, instead of on every card", () => {
+    const widgets = board("acme/widgets", {
+      items: [
+        makeItem({ ref: "acme/widgets#1", number: 1 }),
+        makeItem({ ref: "acme/widgets#2", number: 2 }),
+      ],
+    });
+    render(WorkBoard, {
+      props: { programs: makePortfolio(["acme/widgets"]).programs, boards: { "acme/widgets": widgets }, overlaysFor },
+    });
+
+    const note = screen.getByTestId("run-facts-note");
+    expect(note).toBeVisible();
+    expect(note).toHaveTextContent(RUN_FACTS_LENS_NOTE);
+    expect(screen.getAllByTestId("run-facts-note")).toHaveLength(1);
   });
 });

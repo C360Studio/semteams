@@ -91,11 +91,11 @@ describe("WorkItemOverview facts", () => {
     expect(delivery).toHaveTextContent("source does not supply linked pull requests");
   });
 
-  it("closes from its button", async () => {
+  it("closes from its button, which names the item it closes", async () => {
     const user = userEvent.setup();
     const { props } = renderOverview();
 
-    await user.click(screen.getByTestId("work-overview-close"));
+    await user.click(screen.getByRole("button", { name: /^Close\s*overview of acme\/widgets#1$/ }));
 
     expect(props.onclose).toHaveBeenCalledOnce();
   });
@@ -267,5 +267,173 @@ describe("WorkItemOverview linked runs", () => {
     await user.click(screen.getByRole("button", { name: "Reload linked runs" }));
 
     expect(props.onloadruns).toHaveBeenCalledOnce();
+  });
+});
+
+describe("WorkItemOverview focus", () => {
+  it("moves focus to its heading when it opens, so keyboard and screen reader users land on the panel", () => {
+    renderOverview({ item: makeItem({ ref: "acme/widgets#7", number: 7 }) });
+
+    const heading = screen.getByRole("heading", { name: "acme/widgets#7" });
+    expect(heading).toHaveFocus();
+    // Focusable by script only: it must not become a tab stop.
+    expect(heading).toHaveAttribute("tabindex", "-1");
+  });
+
+  it("moves focus to the heading again when a different item opens in the same panel", async () => {
+    const { rerender } = renderOverview({ item: makeItem({ ref: "acme/widgets#7", number: 7 }) });
+    screen.getByTestId("load-linked-runs").focus();
+
+    await rerender({ item: makeItem({ ref: "acme/widgets#8", number: 8 }) });
+
+    expect(screen.getByRole("heading", { name: "acme/widgets#8" })).toHaveFocus();
+  });
+
+  it("does not take focus back when the same item is re-read, e.g. after a refresh", async () => {
+    const { rerender } = renderOverview({ item: makeItem({ ref: "acme/widgets#7", number: 7 }) });
+    const button = screen.getByTestId("load-linked-runs");
+    button.focus();
+
+    await rerender({ item: makeItem({ ref: "acme/widgets#7", number: 7, title: "Retitled" }) });
+
+    expect(button).toHaveFocus();
+  });
+
+  it("tabs from the heading to Close and then to the runs button", async () => {
+    const user = userEvent.setup();
+    renderOverview();
+
+    await user.tab();
+    expect(screen.getByTestId("work-overview-close")).toHaveFocus();
+    await user.tab();
+    expect(screen.getByTestId("load-linked-runs")).toHaveFocus();
+  });
+});
+
+describe("WorkItemOverview linked-runs control and live region", () => {
+  it("keeps the same button mounted, focused and unavailable while runs load, and ignores activation", async () => {
+    const user = userEvent.setup();
+    const { props, rerender } = renderOverview();
+    const button = screen.getByTestId("load-linked-runs");
+    button.focus();
+
+    await rerender({ linkedRuns: { status: "loading" } });
+
+    expect(screen.getByTestId("load-linked-runs")).toBe(button);
+    expect(button).toHaveFocus();
+    expect(button).toHaveAttribute("aria-busy", "true");
+    expect(button).toHaveAttribute("aria-disabled", "true");
+    await user.click(button);
+    await user.keyboard("{Enter}");
+    expect(props.onloadruns).not.toHaveBeenCalled();
+  });
+
+  it("keeps the same button through loading, loaded, reload and failure, and is available again afterwards", async () => {
+    const user = userEvent.setup();
+    const { props, rerender } = renderOverview();
+    const button = screen.getByTestId("load-linked-runs");
+    button.focus();
+
+    await rerender({ linkedRuns: { status: "loading" } });
+    await rerender({ linkedRuns: { status: "loaded", lookup: "complete", runs: [makeRun()] } });
+    expect(screen.getByTestId("load-linked-runs")).toBe(button);
+    expect(button).toHaveFocus();
+    expect(button).not.toHaveAttribute("aria-busy", "true");
+    expect(button).not.toHaveAttribute("aria-disabled", "true");
+    expect(button).toHaveAccessibleName("Reload linked runs");
+
+    await user.click(button);
+    expect(props.onloadruns).toHaveBeenCalledOnce();
+
+    await rerender({ linkedRuns: { status: "loading" } });
+    await rerender({ linkedRuns: { status: "error", code: "HTTP_500", message: "boom" } });
+    expect(screen.getByTestId("load-linked-runs")).toBe(button);
+    expect(button).toHaveFocus();
+    expect(button).toHaveAccessibleName("Try again");
+  });
+
+  it("announces the result through one live region that is mounted before anything is loaded", async () => {
+    const { rerender } = renderOverview();
+    const region = screen.getByRole("status");
+    expect(region.textContent?.trim()).toBe("");
+
+    await rerender({ linkedRuns: { status: "loading" } });
+    expect(screen.getByRole("status")).toBe(region);
+    expect(region).toHaveTextContent(/loading linked runs/i);
+
+    await rerender({ linkedRuns: { status: "loaded", lookup: "complete", runs: [] } });
+    expect(screen.getByRole("status")).toBe(region);
+    expect(region).toHaveTextContent("no linked run");
+
+    await rerender({
+      linkedRuns: { status: "loaded", lookup: "partial", reason: "one run unreadable", runs: [makeRun()] },
+    });
+    expect(screen.getAllByRole("status")).toHaveLength(1);
+    expect(region).toHaveTextContent("1 linked run read");
+    expect(region).toHaveTextContent("partial result");
+    expect(region).toHaveTextContent("one run unreadable");
+  });
+});
+
+describe("WorkItemOverview visible reasons and wording", () => {
+  it("shows the reason for every unknown run fact as visible text, not only in a title", () => {
+    renderOverview({
+      linkedRuns: {
+        status: "loaded",
+        lookup: "complete",
+        runs: [
+          makeRun({
+            needs_you: { state: "unknown", reason: "coordinator loop unreadable" },
+            verification: { state: "unknown", reason: "no verification fact for research runs" },
+          }),
+        ],
+      },
+    });
+
+    const row = within(screen.getByTestId("linked-run-row"));
+    expect(row.getByTestId("overlay-needs-you-reason")).toBeVisible();
+    expect(row.getByTestId("overlay-needs-you-reason")).toHaveTextContent("coordinator loop unreadable");
+    expect(row.getByTestId("overlay-verification-reason")).toHaveTextContent(
+      "no verification fact for research runs",
+    );
+  });
+
+  it('says "not recorded", not "no linked run", for a none fact inside a linked run', () => {
+    renderOverview({
+      linkedRuns: {
+        status: "loaded",
+        lookup: "complete",
+        runs: [makeRun({ verification: { state: "none" } })],
+      },
+    });
+
+    const badge = within(screen.getByTestId("linked-run-row")).getByTestId("overlay-verification");
+    expect(badge).toHaveAttribute("data-state", "none");
+    expect(badge).toHaveTextContent("not recorded");
+    expect(badge).not.toHaveTextContent("no linked run");
+  });
+
+  // dom-accessibility-api trims the hidden span's text, so \s* stands in for the
+  // single space a browser keeps between the visible and the hidden part.
+  it("names the run in each drill-in link so several links are distinguishable", () => {
+    renderOverview({
+      linkedRuns: {
+        status: "loaded",
+        lookup: "complete",
+        runs: [
+          makeRun({ run_entity_id: "acme.platform.chain.agent.execution.run-1", coordinator_loop_id: "loop-1" }),
+          makeRun({ run_entity_id: "acme.platform.chain.agent.execution.run-2", coordinator_loop_id: "loop-2" }),
+        ],
+      },
+    });
+
+    expect(screen.getByRole("link", { name: /^Open this run in the runs lens\s*\(run-1\)$/ })).toHaveAttribute(
+      "href",
+      "/?task=loop-1",
+    );
+    expect(screen.getByRole("link", { name: /^Open this run in the runs lens\s*\(run-2\)$/ })).toHaveAttribute(
+      "href",
+      "/?task=loop-2",
+    );
   });
 });

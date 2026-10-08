@@ -12,6 +12,16 @@
 
   let { item, overlays, selected = false, onselect }: Props = $props();
 
+  // The card is a button, so its name should be short: reference and title. The
+  // labels, assignee, milestone and badges ride along as its description rather
+  // than being read out as one long name (and in a list of buttons).
+  const uid = $props.id();
+  let describedBy = $derived(
+    [item.labels.length > 0 && `${uid}-labels`, `${uid}-meta`, `${uid}-badges`]
+      .filter(Boolean)
+      .join(" "),
+  );
+
   // PM status is a GitHub field, never run state. Without a configured Project
   // status the column is the documented GitHub-field fallback, and says so.
   let pmStatus = $derived(
@@ -38,20 +48,22 @@
   data-item={item.ref}
   data-column={item.column}
   aria-pressed={selected}
+  aria-labelledby="{uid}-ref {uid}-title"
+  aria-describedby={describedBy}
   onclick={() => onselect?.(item.ref)}
 >
-  <span class="card-ref">{item.ref}</span>
-  <span class="card-title">{item.title}</span>
+  <span class="card-ref" id="{uid}-ref">{item.ref}</span>
+  <span class="card-title" id="{uid}-title">{item.title}</span>
 
   {#if item.labels.length > 0}
-    <span class="card-labels" data-testid="card-labels">
+    <span class="card-labels" id="{uid}-labels" data-testid="card-labels">
       {#each item.labels as label (label)}
         <span class="chip">{label}</span>
       {/each}
     </span>
   {/if}
 
-  <span class="card-meta">
+  <span class="card-meta" id="{uid}-meta">
     <span data-testid="card-assignees">
       {item.assignees.length > 0 ? `Assigned: ${item.assignees.join(", ")}` : "Unassigned"}
     </span>
@@ -60,7 +72,7 @@
     {/if}
   </span>
 
-  <span class="card-badges">
+  <span class="card-badges" id="{uid}-badges">
     <OverlayBadge name="pm-status" label="PM status" overlay={pmStatus} noneLabel="not set" />
     <OverlayBadge
       name="execution-stage"

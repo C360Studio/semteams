@@ -127,4 +127,40 @@ describe("WorkItemCard", () => {
 
     expect(onselect).toHaveBeenCalledTimes(2);
   });
+
+  it("is named by its reference and title, and described by everything else on it", () => {
+    render(WorkItemCard, {
+      props: {
+        item: makeItem({
+          ref: "acme/widgets#7",
+          number: 7,
+          title: "Ship the widget",
+          labels: ["type:feature"],
+          assignees: ["coby"],
+          milestone: "v0.3.0",
+          pm_status: "In Review",
+          column: "In Review",
+        }),
+        overlays: unloaded,
+      },
+    });
+
+    const card = screen.getByRole("button", { name: "acme/widgets#7 Ship the widget" });
+    // A long badge/meta string is a description, not part of the name a screen reader lists.
+    expect(card).toHaveAccessibleDescription(/type:feature/);
+    expect(card).toHaveAccessibleDescription(/Assigned: coby/);
+    expect(card).toHaveAccessibleDescription(/Milestone: v0\.3\.0/);
+    expect(card).toHaveAccessibleDescription(/PM status\s*In Review/);
+    expect(card).toHaveAccessibleDescription(/Needs you unknown/);
+    expect(card).toHaveAccessibleDescription(new RegExp(RUNS_NOT_LOADED));
+  });
+
+  it("gives each card its own name and description ids", () => {
+    render(WorkItemCard, { props: { item: makeItem({ ref: "acme/widgets#1" }), overlays: unloaded } });
+    render(WorkItemCard, { props: { item: makeItem({ ref: "acme/widgets#2", number: 2 }), overlays: unloaded } });
+
+    const [first, second] = screen.getAllByTestId("work-item-card");
+    expect(first.getAttribute("aria-labelledby")).not.toBe(second.getAttribute("aria-labelledby"));
+    expect(first.getAttribute("aria-describedby")).not.toBe(second.getAttribute("aria-describedby"));
+  });
 });

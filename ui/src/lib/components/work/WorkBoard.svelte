@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Program } from "$lib/types/work";
   import type { RepositoryBoard } from "$lib/stores/workStore.svelte";
-  import { slug } from "$lib/utils/workView";
+  import { RUN_FACTS_LENS_NOTE, slug } from "$lib/utils/workView";
   import type { ItemOverlays } from "$lib/utils/workView";
   import PortfolioSections from "./PortfolioSections.svelte";
   import WorkItemCard from "./WorkItemCard.svelte";
@@ -26,6 +26,8 @@
     return [...board.columns, ...extra];
   }
 </script>
+
+<p class="lens-note" data-testid="run-facts-note">{RUN_FACTS_LENS_NOTE}</p>
 
 <PortfolioSections {programs} {boards} testid="work-board">
   {#snippet repository(board: RepositoryBoard)}
@@ -69,6 +71,12 @@
 </PortfolioSections>
 
 <style>
+  .lens-note {
+    margin: 0 0 0.75rem;
+    font-size: 0.8125rem;
+    color: var(--ui-text-secondary, #6b7280);
+  }
+
   .columns {
     display: flex;
     gap: 0.75rem;

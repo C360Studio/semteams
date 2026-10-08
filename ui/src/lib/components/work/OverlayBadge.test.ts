@@ -81,4 +81,54 @@ describe("OverlayBadge", () => {
     expect(badge).toHaveAttribute("title", "coordinator loop is awaiting approval");
     expect(badge).toHaveAttribute("data-value", "true");
   });
+
+  it("shows the reason as visible text next to the badge when asked, and not twice for assistive technology", () => {
+    render(OverlayBadge, {
+      props: {
+        name: "verification",
+        label: "Verification",
+        overlay: { state: "unknown", reason: "no verification fact for research runs" },
+        noneLabel: "not recorded",
+        showReason: true,
+      },
+    });
+
+    expect(screen.getByTestId("overlay-verification-reason")).toBeVisible();
+    expect(screen.getByTestId("overlay-verification-reason")).toHaveTextContent(
+      "no verification fact for research runs",
+    );
+    // The visible line replaces the visually hidden copy; the badge keeps its title.
+    expect(screen.queryByText("(no verification fact for research runs)")).not.toBeInTheDocument();
+    expect(screen.getByTestId("overlay-verification")).toHaveAttribute(
+      "title",
+      "no verification fact for research runs",
+    );
+  });
+
+  it("shows no reason line when the overlay carries none", () => {
+    render(OverlayBadge, {
+      props: {
+        name: "execution-stage",
+        label: "Stage",
+        overlay: { state: "known", value: "completed" },
+        noneLabel: "not recorded",
+        showReason: true,
+      },
+    });
+
+    expect(screen.queryByTestId("overlay-execution-stage-reason")).not.toBeInTheDocument();
+  });
+
+  it("keeps the reason hidden from view by default so cards stay compact", () => {
+    render(OverlayBadge, {
+      props: {
+        name: "verification",
+        label: "Verification",
+        overlay: { state: "unknown", reason: "no verification fact for research runs" },
+        noneLabel: "no linked run",
+      },
+    });
+
+    expect(screen.queryByTestId("overlay-verification-reason")).not.toBeInTheDocument();
+  });
 });

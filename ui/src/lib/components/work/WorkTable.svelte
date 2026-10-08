@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Program, WorkItem } from "$lib/types/work";
   import type { RepositoryBoard } from "$lib/stores/workStore.svelte";
+  import { RUN_FACTS_LENS_NOTE } from "$lib/utils/workView";
   import type { ItemOverlays } from "$lib/utils/workView";
   import OverlayBadge from "./OverlayBadge.svelte";
   import PortfolioSections from "./PortfolioSections.svelte";
@@ -63,6 +64,8 @@
     return count === 1 ? "1 run" : `${count} runs`;
   }
 </script>
+
+<p class="lens-note" data-testid="run-facts-note">{RUN_FACTS_LENS_NOTE}</p>
 
 <PortfolioSections {programs} {boards} testid="work-table">
   {#snippet repository(board: RepositoryBoard)}
@@ -157,6 +160,12 @@
 {/snippet}
 
 <style>
+  .lens-note {
+    margin: 0 0 0.75rem;
+    font-size: 0.8125rem;
+    color: var(--ui-text-secondary, #6b7280);
+  }
+
   .table-scroll {
     overflow-x: auto;
     border: 1px solid var(--ui-border-subtle, #e5e7eb);

@@ -11,9 +11,15 @@
     noneLabel: string;
     /** Text for a known value; defaults to String(value). */
     format?: (value: string | number | boolean) => string;
+    /**
+     * Render the reason as visible text after the badge instead of title and
+     * visually hidden text only. For roomy places (the overview); cards and
+     * table cells stay compact and say it once per lens.
+     */
+    showReason?: boolean;
   }
 
-  let { name, label, overlay, noneLabel, format }: Props = $props();
+  let { name, label, overlay, noneLabel, format, showReason = false }: Props = $props();
 
   let knownValue = $derived(overlay.state === "known" ? overlay.value : undefined);
   let text = $derived(
@@ -25,7 +31,9 @@
   State is carried by text and border style, never by colour alone (WCAG 1.4.1):
   unknown is a dashed, italic "unknown" with a "?" glyph; none is a dotted
   badge with its explicit label. The reason is in the title and, for assistive
-  technology and touch, as visually hidden text.
+  technology and touch, as visually hidden text; where there is room
+  (showReason) it is visible text instead, because a title is invisible to
+  keyboard and touch users.
 -->
 <span
   class="overlay-badge"
@@ -46,10 +54,13 @@
       <span class="glyph" aria-hidden="true">?</span>unknown
     {/if}
   </span>
-  {#if overlay.reason}
+  {#if overlay.reason && !showReason}
     <span class="sr-only">({overlay.reason})</span>
   {/if}
 </span>
+{#if overlay.reason && showReason}
+  <span class="overlay-reason" data-testid="overlay-{name}-reason">{overlay.reason}</span>
+{/if}
 
 <style>
   .overlay-badge {
@@ -68,6 +79,11 @@
 
   .overlay-label {
     font-weight: 600;
+    color: var(--ui-text-secondary, #6b7280);
+  }
+
+  .overlay-reason {
+    font-size: 0.75rem;
     color: var(--ui-text-secondary, #6b7280);
   }
 

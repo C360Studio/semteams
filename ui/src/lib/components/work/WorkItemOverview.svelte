@@ -16,6 +16,17 @@
 
   let { item, linkedRuns, onloadruns, onclose }: Props = $props();
 
+  // Opening (or switching to another item) lands focus on the panel's heading, so
+  // keyboard and screen reader users arrive where the content is. It keys on the
+  // ref, not the item object: a refresh re-reads the same item and must not pull
+  // focus back from wherever the operator is.
+  let heading = $state<HTMLHeadingElement>();
+  let itemRef = $derived(item.ref);
+  $effect(() => {
+    void itemRef;
+    heading?.focus();
+  });
+
   const DEPENDENCY_SOURCE = {
     "blocked-by": "blocked by",
     "task-list": "task list",
@@ -24,6 +35,23 @@
   let runsLookup = $derived(
     linkedRuns.status === "loaded" ? linkedRuns.lookup : linkedRuns.status === "idle" ? "not-loaded" : linkedRuns.status,
   );
+
+  let loading = $derived(linkedRuns.status === "loading");
+  let loadLabel = $derived(
+    {
+      idle: "Load linked runs",
+      loading: "Loading linked runs\u2026",
+      error: "Try again",
+      loaded: "Reload linked runs",
+    }[linkedRuns.status],
+  );
+
+  // The button stays mounted and focusable while the read is in flight. It says
+  // so with aria-disabled rather than `disabled`: a disabled control is dropped
+  // from the focus order and focus falls back to the page.
+  function requestRuns(): void {
+    if (!loading) onloadruns();
+  }
 
   function runLabel(entityId: string | null): string {
     return entityId ? (entityId.split(".").at(-1) ?? entityId) : "run entity not resolvable";
@@ -38,11 +66,11 @@
 <aside class="overview" data-testid="work-item-overview" data-item={item.ref} aria-labelledby="overview-heading">
   <header class="overview-header">
     <div>
-      <h2 id="overview-heading" class="overview-ref">{item.ref}</h2>
+      <h2 id="overview-heading" class="overview-ref" tabindex="-1" bind:this={heading}>{item.ref}</h2>
       <p class="overview-title">{item.title}</p>
     </div>
     <button type="button" class="close" data-testid="work-overview-close" onclick={onclose}>
-      Close<span class="sr-only"> overview of {item.ref}</span>
+      Close <span class="sr-only">overview of {item.ref}</span>
     </button>
   </header>
 
@@ -117,74 +145,99 @@
 
     {#if linkedRuns.status === "idle"}
       <p>Linked runs are read on request, not for the whole board.</p>
-      <button type="button" data-testid="load-linked-runs" onclick={onloadruns}>Load linked runs</button>
-    {:else if linkedRuns.status === "loading"}
-      <p role="status" aria-busy="true">Loading linked runs&hellip;</p>
-    {:else if linkedRuns.status === "error"}
+    {/if}
+
+    <button
+      type="button"
+      data-testid="load-linked-runs"
+      aria-busy={loading}
+      aria-disabled={loading ? "true" : undefined}
+      onclick={requestRuns}
+    >
+      {loadLabel}
+    </button>
+
+    <!-- Mounted from the start so each result is announced when it arrives. -->
+    <div role="status" class="runs-status" data-testid="linked-runs-status">
+      {#if linkedRuns.status === "loading"}
+        <p>Loading linked runs&hellip;</p>
+      {:else if linkedRuns.status === "loaded"}
+        <LookupNotice
+          lookup={linkedRuns.lookup}
+          reason={linkedRuns.reason}
+          subject="Linked runs"
+          testid="work-linked-runs-lookup"
+        />
+        {#if linkedRuns.runs.length === 0}
+          {#if linkedRuns.lookup === "complete"}
+            <p data-testid="no-linked-run">no linked run</p>
+          {:else}
+            <p data-testid="linked-runs-unknown">
+              unknown &mdash; the lookup did not complete, so this item is not reported as having no linked run.
+            </p>
+          {/if}
+        {:else}
+          <p data-testid="linked-runs-summary">
+            {linkedRuns.runs.length} linked {linkedRuns.runs.length === 1 ? "run" : "runs"} read.
+          </p>
+        {/if}
+      {/if}
+    </div>
+
+    {#if linkedRuns.status === "error"}
       <p role="alert" data-testid="linked-runs-error">
         Linked runs could not be read (<code>{linkedRuns.code}</code>): {linkedRuns.message}
       </p>
-      <button type="button" data-testid="load-linked-runs" onclick={onloadruns}>Try again</button>
-    {:else}
-      <LookupNotice
-        lookup={linkedRuns.lookup}
-        reason={linkedRuns.reason}
-        subject="Linked runs"
-        testid="work-linked-runs-lookup"
-      />
-
-      {#if linkedRuns.runs.length === 0}
-        {#if linkedRuns.lookup === "complete"}
-          <p data-testid="no-linked-run">no linked run</p>
-        {:else}
-          <p data-testid="linked-runs-unknown">
-            unknown &mdash; the lookup did not complete, so this item is not reported as having no linked run.
-          </p>
-        {/if}
-      {:else}
-        <ul class="run-list">
-          {#each linkedRuns.runs as run, index (run.run_entity_id ?? `${run.coordinator_loop_id}-${index}`)}
-            <li class="run-row" data-testid="linked-run-row" data-run={run.run_entity_id ?? undefined}>
-              <span class="run-id" title={run.run_entity_id ?? undefined}>{runLabel(run.run_entity_id)}</span>
-              <span class="run-badges">
+    {:else if linkedRuns.status === "loaded" && linkedRuns.runs.length > 0}
+      <ul class="run-list">
+        {#each linkedRuns.runs as run, index (run.run_entity_id ?? `${run.coordinator_loop_id}-${index}`)}
+          <li class="run-row" data-testid="linked-run-row" data-run={run.run_entity_id ?? undefined}>
+            <span class="run-id" title={run.run_entity_id ?? undefined}>{runLabel(run.run_entity_id)}</span>
+            <span class="run-facts">
+              <span class="run-fact">
                 <OverlayBadge
                   name="execution-stage"
                   label="Stage"
                   overlay={guardNone(run.execution_stage, run.lookup)}
-                  noneLabel="no linked run"
+                  noneLabel="not recorded"
+                  showReason
                 />
+              </span>
+              <span class="run-fact">
                 <OverlayBadge
                   name="needs-you"
                   label="Needs you"
                   overlay={guardNone(run.needs_you, run.lookup)}
-                  noneLabel="no linked run"
+                  noneLabel="not recorded"
                   format={(value) => (value ? "yes" : "no")}
+                  showReason
                 />
+              </span>
+              <span class="run-fact">
                 <OverlayBadge
                   name="verification"
                   label="Verification"
                   overlay={guardNone(run.verification, run.lookup)}
-                  noneLabel="no linked run"
+                  noneLabel="not recorded"
+                  showReason
                 />
               </span>
-              <LookupNotice lookup={run.lookup} reason={run.reason} subject="Run facts" />
-              {#if run.coordinator_loop_id}
-                <!-- The href starts from resolve("/"); the rule cannot see through the query string. -->
-                <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
-                <a class="drill-in" href={drillInHref(run.coordinator_loop_id)} data-testid="work-drill-in">
-                  Open this run in the runs lens
-                </a>
-              {:else}
-                <span class="drill-in-unavailable" data-testid="work-drill-in-unavailable">
-                  Drill-in unavailable: the coordinator loop for this run could not be resolved.
-                </span>
-              {/if}
-            </li>
-          {/each}
-        </ul>
-      {/if}
-
-      <button type="button" data-testid="load-linked-runs" onclick={onloadruns}>Reload linked runs</button>
+            </span>
+            <LookupNotice lookup={run.lookup} reason={run.reason} subject="Run facts" />
+            {#if run.coordinator_loop_id}
+              <!-- The href starts from resolve("/"); the rule cannot see through the query string. -->
+              <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
+              <a class="drill-in" href={drillInHref(run.coordinator_loop_id)} data-testid="work-drill-in">
+                Open this run in the runs lens <span class="sr-only">({runLabel(run.run_entity_id)})</span>
+              </a>
+            {:else}
+              <span class="drill-in-unavailable" data-testid="work-drill-in-unavailable">
+                Drill-in unavailable: the coordinator loop for this run could not be resolved.
+              </span>
+            {/if}
+          </li>
+        {/each}
+      </ul>
     {/if}
   </section>
 </aside>
@@ -293,10 +346,27 @@
     color: var(--ui-text-secondary, #6b7280);
   }
 
-  .run-badges {
+  .run-facts {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .run-fact {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.25rem;
+    align-items: baseline;
+    gap: 0.25rem 0.5rem;
+  }
+
+  .runs-status {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .runs-status:empty {
+    display: none;
   }
 
   .drill-in-unavailable {
@@ -317,6 +387,12 @@
     cursor: pointer;
   }
 
+  .runs button[aria-disabled="true"] {
+    cursor: progress;
+    opacity: 0.7;
+  }
+
+  .overview-ref:focus-visible,
   .close:focus-visible,
   .runs button:focus-visible,
   .drill-in:focus-visible {
