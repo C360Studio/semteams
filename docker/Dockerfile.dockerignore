@@ -1,0 +1,72 @@
+# Build-context ignore for docker/Dockerfile. BuildKit reads
+# <Dockerfile>.dockerignore beside the Dockerfile before a root .dockerignore,
+# so this file applies to `docker build -f docker/Dockerfile .`, the compose
+# backend builds and the Publish workflow. (A docker/.dockerignore is never
+# read: the context is the repository root.)
+#
+# The builder stage runs `COPY . .`; the runtime stage takes only the binary,
+# configs/ and .devcontainer/. Never exclude go.mod, go.sum, cmd/, internal/,
+# configs/ or .devcontainer/.
+
+# Git metadata and other checkouts
+.git
+.gitignore
+.worktrees
+
+# Agent and browser tooling
+.claude
+.playwright-mcp
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# Build artifacts
+bin/
+dist/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test artifacts
+*.test
+*.out
+coverage.html
+coverage.txt
+
+# Frontend dependencies (the UI is not part of this image)
+ui/node_modules
+
+# Documentation (docs/ holds only evidence, including a separate Go module)
+docs/
+*.md
+!README.md
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+
+# Development files
+.env
+.env.*
+*.local
+
+# Taskfiles (not needed in container)
+Taskfile.yml
+taskfiles/
+
+# Specs and schemas (generated)
+specs/
+schemas/
+
+# Docker files (avoid recursion)
+docker/
+docker-compose*.yml
+
+# Misc
+.DS_Store
+Thumbs.db
+*.log

@@ -17,7 +17,7 @@
 - [x] 6. Harden the publish job: create the release through `gh api` without a third-party release action, refuse a
   tag that already has a release, gate login, push and release on an explicit `dry_run == 'false'`, publish one run
   at a time, label the verified revision, and keep the token out of the checkout.
-- [ ] 7. Replace the unread `docker/.dockerignore` with `docker/Dockerfile.dockerignore` and prove the builder context
+- [x] 7. Replace the unread `docker/.dockerignore` with `docker/Dockerfile.dockerignore` and prove the builder context
   excludes `.git` while keeping `configs` and `.devcontainer`.
 - [ ] 8. Document which commits may be tagged, the admin-only tag ruleset as the guard to enable before the first
   tag, and recovery from a tag pushed before CI finishes.
