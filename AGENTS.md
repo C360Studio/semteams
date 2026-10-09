@@ -497,6 +497,7 @@ task schema:generate
 task schema:check-changes
 task openspec:validate
 task openspec:queue-test
+task publish:verify-test
 ```
 
 ## Related Repos

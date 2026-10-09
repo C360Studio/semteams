@@ -21,4 +21,4 @@
   excludes `.git` while keeping `configs` and `.devcontainer`.
 - [x] 8. Document which commits may be tagged, the admin-only tag ruleset as the guard to enable before the first
   tag, and recovery from a tag pushed before CI finishes.
-- [ ] 9. Archive this change as the final content commit after the reviewer pass.
+- [x] 9. Archive this change as the final content commit after the reviewer pass.

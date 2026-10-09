@@ -78,6 +78,25 @@ missing, incomplete or unsuccessful.
 - THEN it reports `semteams version vX.Y.Z` with the built commit and build date
 - AND its OCI labels name SemTeams, the SemTeams source repository, the verified revision and the MIT license
 
+### Requirement: Merge validation and publication are separate workflows
+
+The repository SHALL keep merge validation and publication as separate workflows; publication SHALL NOT listen for
+`Repository CI` completion, and the `Publish` workflow SHALL be the only publication path.
+
+#### Scenario: No workflow listens for workflow completion
+
+- GIVEN the workflows under `.github/workflows/`
+- WHEN their triggers are inspected
+- THEN no workflow declares a `workflow_run` trigger
+- AND successful `Repository CI` completion cannot start image publication
+
+#### Scenario: The copied publication workflows are removed
+
+- GIVEN `release.yml` and `container.yml` were copied SemStreams publication workflows
+- WHEN image-only tag publication is adopted
+- THEN both workflows are removed
+- AND the `Publish` workflow is the only publication path
+
 ## MODIFIED Requirements
 
 ### Requirement: Repository CI runs the obvious repository checks
@@ -109,21 +128,13 @@ The repository SHALL run separate Go, UI, and governance jobs using repository c
 - AND setup-go reads the Go version from `go.mod`
 - AND official GitHub Actions use reviewed major-version tags rather than floating `latest` or a repository SHA policy
 
+## REMOVED Requirements
+
 ### Requirement: Repository CI cannot activate container publication
 
-The repository SHALL keep merge validation and publication as separate workflows; publication SHALL NOT listen for
-`Repository CI` completion.
+**Reason**: Its scenarios described the copied `container.yml` listening for a workflow named `CI` and the copied
+`release.yml` staying unchanged under issue #259. Both workflows are deleted by this change, so the listener and the
+"remain unchanged" guard no longer exist to describe.
 
-#### Scenario: No workflow listens for workflow completion
-
-- GIVEN the workflows under `.github/workflows/`
-- WHEN their triggers are inspected
-- THEN no workflow declares a `workflow_run` trigger
-- AND successful `Repository CI` completion cannot start image publication
-
-#### Scenario: The copied publication workflows are removed
-
-- GIVEN `release.yml` and `container.yml` were copied SemStreams publication workflows
-- WHEN image-only tag publication is adopted
-- THEN both workflows are removed
-- AND the `Publish` workflow is the only publication path
+**Migration**: The separation it protected is restated as "Merge validation and publication are separate workflows"
+(ADDED above). No workflow declares a `workflow_run` trigger; `Publish` is the only publication path.

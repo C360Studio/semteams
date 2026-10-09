@@ -5,6 +5,7 @@
 Define the repository-wide CI contract that every pull request to `main` must satisfy before merge.
 
 ## Requirements
+
 ### Requirement: One unconditional repository CI workflow reports one aggregate
 
 The repository SHALL run one workflow named `Repository CI` for every pull request targeting `main` and SHALL report
@@ -48,25 +49,103 @@ The repository SHALL run separate Go, UI, and governance jobs using repository c
 - GIVEN the governance job runs
 - WHEN it evaluates repository policy artifacts
 - THEN it runs `task openspec:validate` and `task openspec:queue-test`
+- AND it runs `task publish:verify-test`, which proves the publication evidence gate fails closed
 - AND OpenSpec is 1.7.0, Task is 3.51.1, revive is 1.15.0, and Node is 22.20.0
 - AND setup-go reads the Go version from `go.mod`
 - AND official GitHub Actions use reviewed major-version tags rather than floating `latest` or a repository SHA policy
 
-### Requirement: Repository CI cannot activate container publication
+### Requirement: Publication is image-only, tag-triggered, and gated on CI evidence
 
-The repository SHALL keep the new validation workflow distinct from existing publication triggers and SHALL retire
-obsolete validation workflows.
+The repository SHALL publish only the container image `ghcr.io/c360studio/semteams` from one `Publish` workflow
+triggered by `v*` tags, SHALL verify publication evidence before building, and SHALL fail closed when that evidence is
+missing, incomplete or unsuccessful.
 
-#### Scenario: Workflow name cannot match the publisher listener
+#### Scenario: A tag on verified main publishes the image and a release
 
-- GIVEN the existing container workflow listens for a completed workflow named `CI`
-- WHEN the new workflow is named `Repository CI`
-- THEN the names do not match
-- AND successful `Repository CI` completion cannot start container publication
+- GIVEN `Repository CI` runs on pushes to `main`
+- AND a `v*` SemVer tag points at a commit that is an ancestor of `main` and carries this `Publish` workflow
+- AND every `Repository CI` run for that commit has completed
+- AND the newest `CI Status Check` check-run created by GitHub Actions on that commit, by highest id, concluded
+  `success`
+- WHEN the `Publish` workflow runs for the tag push
+- THEN it builds the image for `linux/amd64` and `linux/arm64`
+- AND it pushes the semver version and `<major>.<minor>` image tags to `ghcr.io/c360studio/semteams` without `latest`
+- AND it creates a GitHub release with generated notes, the image reference and the pushed digest
+- AND it attaches no binaries
 
-#### Scenario: Obsolete workflows retire without publication redesign
+#### Scenario: A tag off main fails before building
 
-- GIVEN `ui.yml` is path-filtered and `semspec-validation.yml` is copied broken validation
-- WHEN `Repository CI` becomes the repository merge check
-- THEN both obsolete workflows are removed
-- AND the container and release workflows remain unchanged under issue #259
+- GIVEN the tagged commit carries this `Publish` workflow
+- AND a `v*` tag points at a commit that is not an ancestor of `main`
+- WHEN the `Publish` workflow verifies publication evidence
+- THEN verification fails
+- AND no image is built or pushed and no release is created
+
+#### Scenario: A tag without complete, successful CI evidence fails before building
+
+- GIVEN the tagged commit carries this `Publish` workflow
+- AND a `v*` tag points at a commit with a `Repository CI` run still queued or in progress, with no `CI Status Check`
+  check-run, or whose newest `CI Status Check` check-run did not conclude `success`
+- WHEN the `Publish` workflow verifies publication evidence
+- THEN verification fails
+- AND an older success does not outvote a newer or still-running check
+- AND missing evidence is not translated into success
+- AND no image is built or pushed and no release is created
+
+#### Scenario: A tag that is not SemVer fails before building
+
+- GIVEN the tagged commit carries this `Publish` workflow
+- AND a `v*` tag that is not SemVer 2.0 `vMAJOR.MINOR.PATCH[-PRERELEASE]`, such as `v01.2.3`, `v1.2` or `v1.2.3+meta`
+- WHEN the `Publish` workflow verifies publication evidence
+- THEN verification fails
+- AND no image is built or pushed and no release is created
+
+#### Scenario: A tag that already has a release is not republished
+
+- GIVEN a `v*` tag that already has a GitHub release
+- WHEN the `Publish` workflow runs for it again
+- THEN it fails before logging in or pushing
+- AND the existing release and the image digest it records stay unchanged
+
+#### Scenario: A manual dispatch is only a dry run
+
+- GIVEN a maintainer starts `Publish` with `workflow_dispatch`
+- WHEN `dry_run` is true, its default
+- THEN the workflow verifies the same evidence and builds both platforms with push disabled
+- AND it performs no registry login, image push or release
+- AND a dispatch with `dry_run` false fails verification because manual publication is not a path
+
+#### Scenario: A prerelease tag stays off the latest release
+
+- GIVEN a `v*` tag whose version carries a hyphen suffix, such as `v0.1.0-rc.1`
+- WHEN the `Publish` workflow creates the release
+- THEN the GitHub release is marked prerelease
+- AND it does not become the repository's latest release
+- AND only the full version image tag is pushed
+
+#### Scenario: A published image identifies itself as SemTeams
+
+- GIVEN an image built by the `Publish` workflow for tag `vX.Y.Z`
+- WHEN the image runs with `--version`
+- THEN it reports `semteams version vX.Y.Z` with the built commit and build date
+- AND its OCI labels name SemTeams, the SemTeams source repository, the verified revision and the MIT license
+
+### Requirement: Merge validation and publication are separate workflows
+
+The repository SHALL keep merge validation and publication as separate workflows; publication SHALL NOT listen for
+`Repository CI` completion, and the `Publish` workflow SHALL be the only publication path.
+
+#### Scenario: No workflow listens for workflow completion
+
+- GIVEN the workflows under `.github/workflows/`
+- WHEN their triggers are inspected
+- THEN no workflow declares a `workflow_run` trigger
+- AND successful `Repository CI` completion cannot start image publication
+
+#### Scenario: The copied publication workflows are removed
+
+- GIVEN `release.yml` and `container.yml` were copied SemStreams publication workflows
+- WHEN image-only tag publication is adopted
+- THEN both workflows are removed
+- AND the `Publish` workflow is the only publication path
+

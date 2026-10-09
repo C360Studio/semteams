@@ -44,8 +44,14 @@ if [ -n "${FAKE_EXPECT_SHA:-}" ] && [[ "$url" != *"$FAKE_EXPECT_SHA"* ]]; then
   exit 3
 fi
 case "$url" in
-  */actions/workflows/ci.yml/runs*) kind=workflow-runs fixture=$FAKE_WORKFLOW_RUNS ;;
-  */check-runs*) kind=check-runs fixture=$FAKE_CHECK_RUNS ;;
+  */actions/workflows/ci.yml/runs*)
+    [[ "$url" == *"?head_sha="*"&per_page=100" ]] ||
+      { echo "fake gh: workflow-runs URL must filter by head_sha and page by 100: $url" >&2; exit 2; }
+    kind=workflow-runs fixture=$FAKE_WORKFLOW_RUNS ;;
+  */check-runs*)
+    [[ "$url" == *"?check_name=CI%20Status%20Check&filter=all&per_page=100" ]] ||
+      { echo "fake gh: check-runs URL must name the check, use filter=all and page by 100: $url" >&2; exit 2; }
+    kind=check-runs fixture=$FAKE_CHECK_RUNS ;;
   *) echo "fake gh: unexpected URL $url" >&2; exit 2 ;;
 esac
 if [ "${FAKE_GH_FAIL:-}" = "$kind" ]; then
