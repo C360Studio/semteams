@@ -130,8 +130,8 @@ Rituals:
   three feed the stable `CI Status Check` aggregate. Required mock E2E and a main-branch ruleset remain future work.
 
 OpenSpec changes are contract deltas, not backlogs. Sequencing, discovery, holds, and future work belong in GitHub
-issues. There is no separate program baton document, and `/tickets` is legacy state pending issue-by-issue
-reconciliation.
+issues. There is no separate program baton document or ticket directory; the legacy `/tickets` YAML records were
+reconciled into issues and removed under #255 (history remains in git).
 
 ## Tech Stack
 
