@@ -1,14 +1,18 @@
-# SemStreams Production Dockerfile
+# SemTeams Production Dockerfile
 #
 # Multi-stage build for minimal, secure production images
 # Supports multi-arch: linux/amd64, linux/arm64
 #
 # Build from repository root:
-#   docker build -t semstreams:latest .
+#   docker build -f docker/Dockerfile -t semteams:dev .
 #
 # Build with buildx for multi-arch:
-#   docker buildx build --platform linux/amd64,linux/arm64 \
-#     -t semstreams:latest .
+#   docker buildx build -f docker/Dockerfile \
+#     --platform linux/amd64,linux/arm64 -t semteams:dev .
+#
+# Tagged images are published only by .github/workflows/publish.yml, which
+# passes VERSION, COMMIT_SHA and BUILD_DATE so `semteams --version` reports
+# the tag.
 
 # Build arguments
 ARG GO_VERSION=1.26
@@ -19,7 +23,9 @@ ARG BUILD_DATE=unknown
 # ============================================================================
 # Builder Stage
 # ============================================================================
-FROM golang:${GO_VERSION}-alpine AS builder
+# The builder runs on the build platform and cross-compiles for the target
+# (CGO is off), so multi-arch builds do not compile Go under emulation.
+FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine AS builder
 
 # Install build dependencies
 RUN apk add --no-cache git ca-certificates tzdata
@@ -48,7 +54,7 @@ RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked CGO_ENABLED=0 GOOS=${TA
       -X main.version=${VERSION} \
       -X main.commit=${COMMIT_SHA} \
       -X main.buildDate=${BUILD_DATE}" \
-    -o /build/semstreams-bin \
+    -o /build/semteams-bin \
     ./cmd/semteams
 
 # ============================================================================
@@ -63,17 +69,17 @@ RUN apk add --no-cache \
     wget
 
 # Create non-root user and group
-RUN addgroup -S -g 1000 semstreams && \
-    adduser -S -u 1000 -G semstreams -h /app semstreams
+RUN addgroup -S -g 1000 semteams && \
+    adduser -S -u 1000 -G semteams -h /app semteams
 
 # Set working directory
 WORKDIR /app
 
 # Copy binary from builder
-COPY --from=builder --chown=semstreams:semstreams /build/semstreams-bin /app/semstreams
+COPY --from=builder --chown=semteams:semteams /build/semteams-bin /app/semteams
 
 # Copy example configs (optional, users should mount their own)
-COPY --from=builder --chown=semstreams:semstreams /build/configs /app/configs
+COPY --from=builder --chown=semteams:semteams /build/configs /app/configs
 
 # ADR-043 PR 4.4 — copy the canonical .devcontainer/<profile>/
 # devcontainer.json files into the production image. The
@@ -83,15 +89,17 @@ COPY --from=builder --chown=semstreams:semstreams /build/configs /app/configs
 # invoked inside the sandbox container — which mounts /app/.devcontainer
 # ro from this image via a shared compose volume (see
 # ui/docker-compose.agentic-e2e.yml + production compose).
-COPY --from=builder --chown=semstreams:semstreams /build/.devcontainer /app/.devcontainer
+COPY --from=builder --chown=semteams:semteams /build/.devcontainer /app/.devcontainer
 
-# Create config directory for mounted configs
+# Create config directory for mounted configs. The /etc/semstreams path and
+# the SEMSTREAMS_* env prefix are a live contract with the compose files and
+# the product shell (ADR-029); renaming them is a separate contract change.
 RUN mkdir -p /etc/semstreams && \
-    chown semstreams:semstreams /etc/semstreams
+    chown semteams:semteams /etc/semstreams
 
 # Create data directory
 RUN mkdir -p /data && \
-    chown semstreams:semstreams /data
+    chown semteams:semteams /data
 
 # Create the agent-emit artifacts directory tree owned by the runtime
 # user. Docker semantics: when a named volume is mounted onto an empty
@@ -102,10 +110,10 @@ RUN mkdir -p /data && \
 # without this seeding the volume defaults to root:root and writes
 # fail with EACCES.
 RUN mkdir -p /artifacts/research /artifacts/plans /artifacts/specs && \
-    chown -R semstreams:semstreams /artifacts
+    chown -R semteams:semteams /artifacts
 
 # Switch to non-root user
-USER semstreams
+USER semteams
 
 # Expose ports
 # HTTP API, Metrics, and UDP input
@@ -118,7 +126,7 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
 
 # Set entrypoint
-ENTRYPOINT ["/app/semstreams"]
+ENTRYPOINT ["/app/semteams"]
 
 # Default command: use mounted config or fall back to example
 # Users should mount their config at /etc/semstreams/config.json
@@ -128,11 +136,11 @@ CMD ["--config", "/etc/semstreams/config.json"]
 ARG VERSION
 ARG COMMIT_SHA
 ARG BUILD_DATE
-LABEL org.opencontainers.image.title="SemStreams" \
-      org.opencontainers.image.description="Semantic stream processing framework for edge deployments" \
+LABEL org.opencontainers.image.title="SemTeams" \
+      org.opencontainers.image.description="Always-on program manager for a configurable portfolio" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${COMMIT_SHA}" \
       org.opencontainers.image.created="${BUILD_DATE}" \
-      org.opencontainers.image.source="https://github.com/c360/semstreams" \
+      org.opencontainers.image.source="https://github.com/C360Studio/semteams" \
       org.opencontainers.image.vendor="C360" \
       org.opencontainers.image.licenses="MIT"

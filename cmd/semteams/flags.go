@@ -150,8 +150,9 @@ Examples:
   %s --validate
 
 Version: %s
-Build: %s
-`, os.Args[0], os.Args[0], os.Args[0], os.Args[0], Version, BuildTime)
+Commit: %s
+Built: %s
+`, os.Args[0], os.Args[0], os.Args[0], os.Args[0], version, commit, buildDate)
 }
 
 // Environment variable helper functions
