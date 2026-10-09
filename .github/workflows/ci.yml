@@ -112,6 +112,9 @@ jobs:
       - name: Test OpenSpec queue reporter
         run: task openspec:queue-test
 
+      - name: Test publish verify script
+        run: task publish:verify-test
+
   status-check:
     name: CI Status Check
     runs-on: ubuntu-latest

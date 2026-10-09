@@ -1,8 +1,9 @@
 name: Publish
 
 # Image-only publication (#259). A v* tag publishes ghcr.io/c360studio/semteams
-# and a GitHub release, but only after the tagged commit is proven to be on
-# main with a successful CI Status Check. workflow_dispatch is a dry run only.
+# and a GitHub release, but only after scripts/publish-verify.sh proves the
+# tagged commit is on main with complete, successful Repository CI.
+# workflow_dispatch is a dry run only. See docs/release.md.
 
 on:
   push:
@@ -17,8 +18,9 @@ on:
 permissions:
   contents: read
 
+# One publication at a time across all tags; queued runs wait.
 concurrency:
-  group: publish-${{ github.ref }}
+  group: publish
   cancel-in-progress: false
 
 jobs:
@@ -26,99 +28,26 @@ jobs:
     name: Verify publication evidence
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      actions: read
       checks: read
+      contents: read
     outputs:
-      version: ${{ steps.version.outputs.version }}
-      sha: ${{ steps.version.outputs.sha }}
-      dry_run: ${{ steps.version.outputs.dry_run }}
-      prerelease: ${{ steps.version.outputs.prerelease }}
+      version: ${{ steps.evidence.outputs.version }}
+      sha: ${{ steps.evidence.outputs.sha }}
+      dry_run: ${{ steps.evidence.outputs.dry_run }}
+      prerelease: ${{ steps.evidence.outputs.prerelease }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
-      - name: Resolve version and mode
-        id: version
-        env:
-          DRY_RUN_INPUT: ${{ inputs.dry_run }}
-        run: |
-          set -euo pipefail
-          # Peel an annotated tag to the commit it names; every later check and
-          # the build use this one commit.
-          sha=$(git rev-parse "${GITHUB_SHA}^{commit}")
-          prerelease=false
-          case "$GITHUB_EVENT_NAME" in
-            push)
-              version=$GITHUB_REF_NAME
-              if [[ "$GITHUB_REF_TYPE" != "tag" ]] ||
-                 [[ ! "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
-                echo "::error::publication requires a vMAJOR.MINOR.PATCH[-PRERELEASE] tag, got ${GITHUB_REF}"
-                exit 1
-              fi
-              dry_run=false
-              if [[ "$version" == *-* ]]; then
-                prerelease=true
-              fi
-              ;;
-            workflow_dispatch)
-              if [[ "$DRY_RUN_INPUT" != "true" ]]; then
-                echo "::error::manual publication is not a path; push a tag"
-                exit 1
-              fi
-              version="dry-run-${sha:0:7}"
-              dry_run=true
-              ;;
-            *)
-              echo "::error::unsupported event ${GITHUB_EVENT_NAME}"
-              exit 1
-              ;;
-          esac
-          {
-            echo "version=${version}"
-            echo "sha=${sha}"
-            echo "dry_run=${dry_run}"
-            echo "prerelease=${prerelease}"
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Require the commit to be on main
-        env:
-          SHA: ${{ steps.version.outputs.sha }}
-        run: |
-          set -euo pipefail
-          git fetch --no-tags --quiet origin +refs/heads/main:refs/remotes/origin/main
-          if ! git merge-base --is-ancestor "$SHA" origin/main; then
-            echo "::error::${SHA} is not an ancestor of main; only commits already on main publish"
-            exit 1
-          fi
-
-      - name: Require a successful CI Status Check
+      - name: Verify tag, main ancestry and CI evidence
+        id: evidence
         env:
           GH_TOKEN: ${{ github.token }}
-          SHA: ${{ steps.version.outputs.sha }}
-        run: |
-          set -euo pipefail
-          # Only check-runs created by GitHub Actions count. The most recently
-          # started run decides, so a failed or still-running rerun is never
-          # outvoted by an older success.
-          runs=$(gh api --paginate \
-            "repos/${GITHUB_REPOSITORY}/commits/${SHA}/check-runs?check_name=CI%20Status%20Check&filter=all&per_page=100" \
-            --jq '.check_runs[]
-              | select(.name == "CI Status Check" and .app.slug == "github-actions")
-              | [(.started_at // ""), (.conclusion // .status)]
-              | @tsv')
-          if [[ -z "$runs" ]]; then
-            echo "::error::no CI Status Check found for ${SHA}"
-            exit 1
-          fi
-          latest=$(printf '%s\n' "$runs" | LC_ALL=C sort | tail -n 1)
-          result=${latest##*$'\t'}
-          if [[ "$result" != "success" ]]; then
-            echo "::error::latest CI Status Check for ${SHA} is ${result}, not success"
-            exit 1
-          fi
-          echo "CI Status Check succeeded for ${SHA}"
+          DRY_RUN_INPUT: ${{ inputs.dry_run }}
+        run: scripts/publish-verify.sh
 
   publish:
     name: Build and publish image
@@ -131,10 +60,29 @@ jobs:
       IMAGE: ghcr.io/c360studio/semteams
       PLATFORMS: linux/amd64,linux/arm64
     steps:
+      # The job runs no git commands, so the write-scoped token is not left
+      # in .git, which the Docker build context would otherwise carry.
       - name: Checkout verified commit
         uses: actions/checkout@v5
         with:
           ref: ${{ needs.verify.outputs.sha }}
+          persist-credentials: false
+
+      # Refuse before pushing: re-pushing the version tags would move them off
+      # the digest an existing release already records.
+      - name: Refuse a tag that already has a release
+        if: needs.verify.outputs.dry_run == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.verify.outputs.version }}
+        run: |
+          set -euo pipefail
+          existing=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+            --jq '.[] | select(.tag_name == env.TAG) | .html_url')
+          if [[ -n "$existing" ]]; then
+            echo "::error::a release for ${TAG} already exists (${existing}); refusing to publish it again"
+            exit 1
+          fi
 
       # The runtime stage runs apk and adduser for each target platform, so
       # arm64 needs emulation on the amd64 runner.
@@ -145,7 +93,7 @@ jobs:
         uses: docker/setup-buildx-action@v4
 
       - name: Log in to GHCR
-        if: needs.verify.outputs.dry_run != 'true'
+        if: needs.verify.outputs.dry_run == 'false'
         uses: docker/login-action@v4
         with:
           registry: ghcr.io
@@ -168,6 +116,7 @@ jobs:
             org.opencontainers.image.description=Always-on program manager for a configurable portfolio
             org.opencontainers.image.vendor=C360
             org.opencontainers.image.licenses=MIT
+            org.opencontainers.image.revision=${{ needs.verify.outputs.sha }}
 
       - name: Record build date
         id: date
@@ -180,7 +129,7 @@ jobs:
           context: .
           file: docker/Dockerfile
           platforms: ${{ env.PLATFORMS }}
-          push: ${{ needs.verify.outputs.dry_run != 'true' }}
+          push: ${{ needs.verify.outputs.dry_run == 'false' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
@@ -197,7 +146,7 @@ jobs:
           DRY_RUN: ${{ needs.verify.outputs.dry_run }}
         run: |
           set -euo pipefail
-          if [[ "$DRY_RUN" != "true" && -z "$DIGEST" ]]; then
+          if [[ "$DRY_RUN" == "false" && -z "$DIGEST" ]]; then
             echo "::error::the build reported no image digest; refusing to create a release"
             exit 1
           fi
@@ -211,25 +160,36 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
+      # The image tag drops the git tag's leading v (metadata-action's
+      # version, e.g. 0.1.0); the release is named after the git tag.
+      # make_latest=legacy never marks a prerelease latest and keeps a
+      # backport from displacing a higher version.
       - name: Create GitHub release
-        if: needs.verify.outputs.dry_run != 'true'
-        uses: softprops/action-gh-release@v3
-        with:
-          tag_name: ${{ needs.verify.outputs.version }}
-          name: ${{ needs.verify.outputs.version }}
-          draft: false
-          prerelease: ${{ needs.verify.outputs.prerelease == 'true' }}
-          make_latest: ${{ needs.verify.outputs.prerelease != 'true' }}
-          generate_release_notes: true
-          body: |
-            ## Image
-
-            - image: `${{ env.IMAGE }}:${{ steps.meta.outputs.version }}`
-            - digest: `${{ steps.build.outputs.digest }}`
-
-            ```sh
-            docker pull ${{ env.IMAGE }}:${{ steps.meta.outputs.version }}
-            ```
+        if: needs.verify.outputs.dry_run == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.verify.outputs.version }}
+          SHA: ${{ needs.verify.outputs.sha }}
+          PRERELEASE: ${{ needs.verify.outputs.prerelease }}
+          IMAGE_TAG: ${{ steps.meta.outputs.version }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          ref="${IMAGE}:${IMAGE_TAG}"
+          fence='```'
+          body=$(printf '## Image\n\n- image: `%s`\n- digest: `%s`\n\n%ssh\ndocker pull %s\n%s\n' \
+            "$ref" "$DIGEST" "$fence" "$ref" "$fence")
+          url=$(gh api --method POST "repos/${GITHUB_REPOSITORY}/releases" \
+            -f tag_name="$TAG" \
+            -f target_commitish="$SHA" \
+            -f name="$TAG" \
+            -f body="$body" \
+            -F draft=false \
+            -F prerelease="$PRERELEASE" \
+            -F generate_release_notes=true \
+            -f make_latest=legacy \
+            --jq '.html_url')
+          echo "created release ${url}"
 
       - name: Report dry run
         if: needs.verify.outputs.dry_run == 'true'
