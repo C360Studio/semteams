@@ -19,6 +19,6 @@
   at a time, label the verified revision, and keep the token out of the checkout.
 - [x] 7. Replace the unread `docker/.dockerignore` with `docker/Dockerfile.dockerignore` and prove the builder context
   excludes `.git` while keeping `configs` and `.devcontainer`.
-- [ ] 8. Document which commits may be tagged, the admin-only tag ruleset as the guard to enable before the first
+- [x] 8. Document which commits may be tagged, the admin-only tag ruleset as the guard to enable before the first
   tag, and recovery from a tag pushed before CI finishes.
 - [ ] 9. Archive this change as the final content commit after the reviewer pass.

@@ -5,24 +5,32 @@ the `Publish` workflow in `.github/workflows/publish.yml`, and it publishes only
 
 ## What a tag does
 
-Pushing a tag such as `v0.1.0` starts `Publish`, which runs two jobs.
+Pushing a tag such as `v0.1.0` starts `Publish`. Its first job runs `scripts/publish-verify.sh`, which fails the run
+before anything is built unless the tag is SemVer 2.0 (`vMAJOR.MINOR.PATCH`, optionally `-PRERELEASE`, no build
+metadata) and the tagged commit:
 
-1. **Verify publication evidence.** The tag must read `vMAJOR.MINOR.PATCH`, optionally with a `-PRERELEASE`
-   suffix. Two gates must then pass, or the run fails before anything is built:
-   - the tagged commit is an ancestor of `main`;
-   - the most recent `CI Status Check` check-run on that commit concluded `success`.
-2. **Build and publish image.** Builds `linux/amd64` and `linux/arm64` from `docker/Dockerfile` at the verified
-   commit, pushes the image tags, and creates the GitHub release.
+- is an ancestor of `main`;
+- has no `Repository CI` run still queued or in progress;
+- has a newest `CI Status Check` check-run (highest id) that concluded `success`.
+
+The second job builds `linux/amd64` and `linux/arm64` from `docker/Dockerfile` at the verified commit, pushes the
+image tags, and creates the GitHub release. It refuses a tag that already has a release.
+
+## Which commits may be tagged
+
+GitHub runs the `Publish` file of the tagged commit, not the one on `main`. A tag on a commit older than the merge of
+PR #307 runs the deleted SemStreams workflows from history with no gate, and a tag on a commit with an edited
+`publish.yml` runs that edit. Tag only commits at or after that merge. The real guard is a repository ruleset that
+restricts `v*` tag creation to admins; the owner enables it in repository settings before the first tag.
 
 ## What is published
 
 | Git tag | Image tags | GitHub release |
 | --- | --- | --- |
-| `v0.1.0` | `0.1.0`, `0.1` | marked latest |
-| `v0.1.0-rc.1` | `0.1.0-rc.1` | marked prerelease, never latest |
+| `v0.1.0` | `0.1.0`, `0.1` | latest, unless a higher version exists |
+| `v0.1.0-rc.1` | `0.1.0-rc.1` | prerelease, never latest |
 
 The release body is GitHub's generated notes, preceded by the image reference, its digest and a `docker pull` line.
-
 Not published: binaries or tarballs, a `latest` image tag, any image from pushes to `main`, and the
 `semteams-sandbox:dev` image, which stays build-local.
 
@@ -34,15 +42,16 @@ binary with `-ldflags`. A tagged image's `--version` ends with
 
 ## Dry run
 
-Once the workflow is on `main`, start `Publish` from the Actions tab or with
-`gh workflow run publish.yml --ref main`, leaving `dry_run` set. It runs the same verification, then builds both
-platforms as `dry-run-<short sha>` without logging in to GHCR, pushing, or creating a release. Clearing `dry_run`
-fails verification: manual publication is not a path; push a tag.
+Once the workflow is on `main`, run `gh workflow run publish.yml --ref main` (or use the Actions tab) with `dry_run`
+left set. It runs the same verification, then builds both platforms as `dry-run-<short sha>` without logging in,
+pushing or creating a release. Clearing `dry_run` fails verification: manual publication is not a path; push a tag.
 
-## Tag protection
+## Recovery
 
-A repository ruleset restricting `v*` tag creation to admins is an owner setting in the repository's GitHub
-settings, not part of this workflow. Until it is enabled, the two evidence gates are the only guard.
+A tag pushed before `main`'s CI finishes fails verification with `Repository CI still running` or
+`no CI Status Check found`. Wait for `Repository CI` to finish on that commit, then re-run the failed `Publish` run;
+do not move or re-push the tag. Runs publish one at a time: a second tag waits for the first, and GitHub keeps only
+one waiting run, so a third tag pushed meanwhile cancels the waiting one, which then needs a re-run.
 
 ## v0.1.0
 

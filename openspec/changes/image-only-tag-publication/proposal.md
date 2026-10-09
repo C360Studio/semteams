@@ -25,14 +25,19 @@ publication and build identity only; it does not change live product packs or ac
   `container.yml` are deleted.
 - Add one `Publish` workflow triggered only by `v*` tags. No floating `latest` image is built from `main`. A
   prerelease version (a hyphen suffix such as `v0.1.0-rc.1`) marks the GitHub release as prerelease.
-- Before building, the workflow verifies that the tagged commit is an ancestor of `main` and that its most recent
-  `CI Status Check` check-run concluded `success`. Missing or unsuccessful evidence fails the run before any build.
-  No new E2E gate is added.
+- Before building, `scripts/publish-verify.sh` verifies that the tag is SemVer 2.0, that the tagged commit is an
+  ancestor of `main`, that no `Repository CI` run for it is still in flight, and that its newest `CI Status Check`
+  check-run concluded `success`. Missing, incomplete or unsuccessful evidence fails the run before any build. A
+  fixture test in the Governance CI job proves the gate. No new E2E gate is added.
+- Because GitHub runs the workflow file of the tagged commit, only commits at or after this change's merge may be
+  tagged; the owner-enabled admin-only `v*` tag ruleset is the guard that enforces who can tag.
 - `workflow_dispatch` is a dry run: it verifies the same evidence, builds without pushing and creates no release.
 - The image identity becomes SemTeams: Dockerfile labels, source URL, runtime user and binary path. The build
   information becomes ldflags-settable variables, so a tagged image reports its tag from `--version`.
-- The GitHub release uses generated notes plus the image reference and digest. There is no hand-maintained changelog
-  template and no attached binary.
+- The GitHub release is created through `gh api` with generated notes plus the image reference and digest. There is
+  no third-party release action, no hand-maintained changelog template and no attached binary; a tag that already has
+  a release is refused.
+- The image build reads `docker/Dockerfile.dockerignore`, so `.git` and other non-build files stay out of the context.
 
 ## Non-goals
 
