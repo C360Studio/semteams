@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import TaskDetailPanel from "./TaskDetailPanel.svelte";
 import type { TaskInfo } from "$lib/types/task";
 import type { AgentLoop, LoopTrajectory } from "$lib/types/agent";
+import type { TaskControl } from "$lib/types/control";
 
 // Function declarations are hoisted, so this is safely callable from the
 // vi.mock factory below (which Vitest hoists above the imports, but only
@@ -128,7 +129,31 @@ function makeTask(overrides: Partial<TaskInfo> = {}): TaskInfo {
     childAttentionCount: 0,
     runPause: null,
     runHealth: null,
+    controls: [],
+    controlsTruncated: false,
     ...overrides,
+  };
+}
+
+function makeControl(
+  loopId: string,
+  overrides: Partial<AgentLoop> = {},
+  runInstance = "loop_001",
+): TaskControl {
+  const prefix = "c360.semteams-bootstrap-e2e-6c50f3";
+  return {
+    loopId,
+    loopEntityId: `${prefix}.agentic-loop.agent.execution.${loopId}`,
+    firingEntityId: `${prefix}.chain.agent.execution.${runInstance}`,
+    runInstance,
+    spawnedAt: new Date(1791480613893),
+    spawnedAtNanos: 1791480613893413505n,
+    loop: makeLoop({
+      loop_id: loopId,
+      role: "ops-chain-observer",
+      state: "complete",
+      ...overrides,
+    }),
   };
 }
 
@@ -534,6 +559,46 @@ describe("TaskDetailPanel", () => {
       expect(child).toHaveAttribute("aria-pressed", "false");
     });
 
+    it("breadcrumb back-button hands keyboard focus to the sub-task that was focused", async () => {
+      const user = userEvent.setup();
+      render(TaskDetailPanel, {
+        props: {
+          task: makeTask({
+            id: "loop_parent",
+            primaryLoop: makeLoop({ loop_id: "loop_parent" }),
+            childLoops: [
+              makeLoop({ loop_id: "c1", role: "researcher" }),
+              makeLoop({ loop_id: "c2", role: "reviewer" }),
+            ],
+          }),
+        },
+      });
+
+      const second = screen.getAllByTestId("child-item")[1];
+      await user.click(second);
+      const back = await screen.findByTestId("focus-back");
+      back.focus();
+      await user.keyboard("{Enter}");
+
+      await vi.waitFor(() => expect(screen.getAllByTestId("child-item")[1]).toHaveFocus());
+    });
+
+    it("names the back button by its visible text (WCAG 2.5.3)", async () => {
+      const user = userEvent.setup();
+      render(TaskDetailPanel, {
+        props: {
+          task: makeTask({ childLoops: [makeLoop({ loop_id: "c1", role: "researcher" })] }),
+        },
+      });
+
+      await user.click(screen.getByTestId("child-item"));
+
+      const back = await screen.findByTestId("focus-back");
+      const visible = (back.textContent ?? "").replace(/\s+/g, " ").trim();
+      expect(visible).toMatch(/^← Back to /);
+      expect(back).toHaveAccessibleName(visible);
+    });
+
     it("focus does not leak across task changes", async () => {
       const user = userEvent.setup();
       // Initial: task A with one child.
@@ -567,6 +632,215 @@ describe("TaskDetailPanel", () => {
         const calls = (agentApi.getLoopTrajectory as ReturnType<typeof vi.fn>)
           .mock.calls;
         expect(calls[calls.length - 1][0]).toBe("loop_B");
+      });
+      expect(screen.queryByTestId("focus-breadcrumb")).not.toBeInTheDocument();
+    });
+  });
+
+  describe("controls (design D3)", () => {
+    it("hides the Controls section when the run fired none", () => {
+      render(TaskDetailPanel, { props: { task: makeTask() } });
+
+      expect(screen.queryByTestId("controls-section")).not.toBeInTheDocument();
+      expect(screen.queryByText(/Controls \(/)).not.toBeInTheDocument();
+    });
+
+    it("lists controls beside, not inside, the sub-tasks", () => {
+      render(TaskDetailPanel, {
+        props: {
+          task: makeTask({
+            childLoops: [makeLoop({ loop_id: "c1", role: "researcher" })],
+            controls: [makeControl("obs-1")],
+          }),
+        },
+      });
+
+      expect(screen.getByText("Sub-tasks (1)")).toBeInTheDocument();
+      expect(screen.getByText("Controls (1)")).toBeInTheDocument();
+      expect(screen.getAllByTestId("child-item")).toHaveLength(1);
+      const rows = screen.getAllByTestId("control-row");
+      expect(rows).toHaveLength(1);
+      expect(rows[0].tagName).toBe("BUTTON");
+      expect(rows[0]).toHaveAttribute("data-loop-id", "obs-1");
+      // Text, not colour: state, role and the derived outcome are all spelled out.
+      expect(rows[0]).toHaveTextContent("complete");
+      expect(rows[0]).toHaveTextContent("ops-chain-observer");
+      expect(rows[0]).toHaveTextContent("applied");
+    });
+
+    it("a control is not a sub-task and does not appear in the Sub-tasks count", () => {
+      render(TaskDetailPanel, {
+        props: { task: makeTask({ controls: [makeControl("obs-1")] }) },
+      });
+
+      expect(screen.queryByText(/Sub-tasks/)).not.toBeInTheDocument();
+      expect(screen.queryByTestId("child-item")).not.toBeInTheDocument();
+    });
+
+    it("says the list may be incomplete when a rule-fired loop on the run could not be classified", () => {
+      render(TaskDetailPanel, {
+        props: {
+          task: makeTask({ controls: [makeControl("obs-1")], controlsTruncated: true }),
+        },
+      });
+
+      expect(screen.getByTestId("controls-truncated-note")).toHaveTextContent(
+        "may be incomplete",
+      );
+    });
+
+    it("can be focused from the keyboard, with a pressed state and the breadcrumb", async () => {
+      const user = userEvent.setup();
+      render(TaskDetailPanel, {
+        props: {
+          task: makeTask({
+            id: "loop_001",
+            controls: [makeControl("obs-1")],
+          }),
+        },
+      });
+
+      const row = screen.getByTestId("control-row");
+      expect(row).toHaveAttribute("aria-pressed", "false");
+
+      row.focus();
+      expect(row).toHaveFocus();
+      await user.keyboard("{Enter}");
+
+      await vi.waitFor(() => {
+        expect(agentApi.getLoopTrajectory).toHaveBeenCalledWith("obs-1");
+      });
+      expect(row).toHaveAttribute("aria-pressed", "true");
+      const crumb = screen.getByTestId("focus-breadcrumb");
+      expect(crumb).toHaveTextContent("ops-chain-observer");
+      // The coordinator's Controls explanation belongs to the coordinator story.
+      expect(screen.queryByTestId("story-controls")).not.toBeInTheDocument();
+
+      await user.click(screen.getByTestId("focus-back"));
+      expect(row).toHaveAttribute("aria-pressed", "false");
+      expect(await screen.findByTestId("story-controls")).toBeInTheDocument();
+    });
+
+    it("also activates with Space", async () => {
+      const user = userEvent.setup();
+      render(TaskDetailPanel, {
+        props: { task: makeTask({ controls: [makeControl("obs-1")] }) },
+      });
+
+      screen.getByTestId("control-row").focus();
+      await user.keyboard(" ");
+
+      await vi.waitFor(() => {
+        expect(agentApi.getLoopTrajectory).toHaveBeenCalledWith("obs-1");
+      });
+    });
+
+    it("explains the control in the story and focuses it from the story's identity button", async () => {
+      const user = userEvent.setup();
+      render(TaskDetailPanel, {
+        props: { task: makeTask({ controls: [makeControl("obs-1")] }) },
+      });
+
+      const event = await screen.findByTestId("control-event");
+      expect(event).toHaveAttribute("data-loop", "obs-1");
+      expect(event).toHaveTextContent("rule: unknown");
+
+      await user.click(screen.getByTestId("control-identity"));
+
+      await vi.waitFor(() => {
+        expect(agentApi.getLoopTrajectory).toHaveBeenCalledWith("obs-1");
+      });
+      expect(screen.getByTestId("control-row")).toHaveAttribute("aria-pressed", "true");
+    });
+
+    it("hands keyboard focus to the back button when the story's identity button is activated", async () => {
+      // Focusing a control swaps the story for the control's own, which unmounts
+      // the identity button that was just pressed. Focus must not fall to <body>.
+      const user = userEvent.setup();
+      render(TaskDetailPanel, {
+        props: { task: makeTask({ controls: [makeControl("obs-1")] }) },
+      });
+
+      const identity = await screen.findByTestId("control-identity");
+      identity.focus();
+      expect(identity).toHaveFocus();
+      await user.keyboard("{Enter}");
+
+      await vi.waitFor(() => {
+        expect(screen.getByTestId("focus-back")).toHaveFocus();
+      });
+      expect(screen.queryByTestId("control-identity")).not.toBeInTheDocument();
+
+      // Back out with the keyboard: the coordinator's story returns.
+      await user.keyboard("{Enter}");
+      expect(await screen.findByTestId("story-controls")).toBeInTheDocument();
+    });
+
+    it("returns keyboard focus to the control's row when the back button is activated", async () => {
+      // Going back unmounts the breadcrumb that held focus; the row for the loop
+      // that was focused is the way back to where the operator was.
+      const user = userEvent.setup();
+      render(TaskDetailPanel, {
+        props: { task: makeTask({ controls: [makeControl("obs-1"), makeControl("obs-2")] }) },
+      });
+
+      const identities = await screen.findAllByTestId("control-identity");
+      identities[1].focus();
+      await user.keyboard("{Enter}");
+      await vi.waitFor(() => expect(screen.getByTestId("focus-back")).toHaveFocus());
+
+      await user.keyboard("{Enter}");
+
+      await vi.waitFor(() => {
+        const rows = screen.getAllByTestId("control-row");
+        expect(rows.find((row) => row.getAttribute("data-loop-id") === "obs-2")).toHaveFocus();
+      });
+      expect(screen.queryByTestId("focus-breadcrumb")).not.toBeInTheDocument();
+    });
+
+    it("keeps focus on the list row that was activated; only the story's button hands focus over", async () => {
+      const user = userEvent.setup();
+      render(TaskDetailPanel, {
+        props: { task: makeTask({ controls: [makeControl("obs-1")] }) },
+      });
+
+      const row = screen.getByTestId("control-row");
+      row.focus();
+      await user.keyboard("{Enter}");
+      await vi.waitFor(() => {
+        expect(agentApi.getLoopTrajectory).toHaveBeenCalledWith("obs-1");
+      });
+
+      expect(row).toHaveFocus();
+    });
+
+    it("has one Controls heading in the tab panel; the story's group is named for what it holds", async () => {
+      render(TaskDetailPanel, {
+        props: { task: makeTask({ controls: [makeControl("obs-1")] }) },
+      });
+
+      expect(await screen.findByRole("heading", { name: "Controls fired on this run" })).toBeInTheDocument();
+      expect(screen.getAllByRole("heading", { name: /^Controls/ })).toHaveLength(2);
+      expect(screen.getByRole("heading", { name: "Controls (1)" })).toBeInTheDocument();
+      expect(screen.queryByRole("heading", { name: "Controls" })).not.toBeInTheDocument();
+    });
+
+    it("falls back to the coordinator when the focused control is gone", async () => {
+      const user = userEvent.setup();
+      const { rerender } = render(TaskDetailPanel, {
+        props: { task: makeTask({ id: "loop_001", controls: [makeControl("obs-1")] }) },
+      });
+
+      await user.click(screen.getByTestId("control-row"));
+      await vi.waitFor(() => {
+        expect(agentApi.getLoopTrajectory).toHaveBeenCalledWith("obs-1");
+      });
+
+      await rerender({ task: makeTask({ id: "loop_001", controls: [] }) });
+
+      await vi.waitFor(() => {
+        const calls = (agentApi.getLoopTrajectory as ReturnType<typeof vi.fn>).mock.calls;
+        expect(calls[calls.length - 1][0]).toBe("loop_001");
       });
       expect(screen.queryByTestId("focus-breadcrumb")).not.toBeInTheDocument();
     });

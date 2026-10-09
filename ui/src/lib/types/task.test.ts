@@ -519,6 +519,8 @@ describe("resolveTaskMention", () => {
       childAttentionCount: 0,
       runPause: null,
       runHealth: null,
+      controls: [],
+      controlsTruncated: false,
       ...overrides,
     };
   }

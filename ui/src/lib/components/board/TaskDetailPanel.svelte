@@ -1,6 +1,8 @@
 <script lang="ts">
+  import { tick } from "svelte";
   import type { TaskInfo } from "$lib/types/task";
   import { isActiveState } from "$lib/types/agent";
+  import { controlOutcome } from "$lib/types/control";
   import { agentApi } from "$lib/services/agentApi";
   import { taskLabels } from "$lib/stores/taskLabels.svelte";
   import PendingApprovalSection from "./PendingApprovalSection.svelte";
@@ -35,26 +37,59 @@
   // the task changes (e.g. user picks a different card) or the focused
   // child drops out of childLoops, the derived falls back to the
   // primary — so we never poll a stale loop ID.
+  //
+  // Rule-fired controls (design D3) are focusable the same way: they are not
+  // sub-tasks, but their trajectory is read with the same story view.
   let manualFocusId = $state<string | null>(null);
+  const focusableLoops = $derived([
+    ...task.childLoops,
+    ...task.controls.map((c) => c.loop),
+  ]);
   const focusedLoopId = $derived.by(() => {
     if (!manualFocusId) return task.id;
     if (manualFocusId === task.id) return task.id;
-    return task.childLoops.some((c) => c.loop_id === manualFocusId)
+    return focusableLoops.some((c) => c.loop_id === manualFocusId)
       ? manualFocusId
       : task.id;
   });
   const focusedChild = $derived(
     focusedLoopId === task.id
       ? null
-      : (task.childLoops.find((c) => c.loop_id === focusedLoopId) ?? null),
+      : (focusableLoops.find((c) => c.loop_id === focusedLoopId) ?? null),
   );
 
   function focusChild(loopId: string) {
     manualFocusId = loopId;
   }
 
-  function focusPrimary() {
+  // Going back unmounts the breadcrumb, which held focus, so focus has to be put
+  // somewhere on purpose: the sub-task or control row of the loop that was focused,
+  // which is where the operator came from (found by its loop id, not by position).
+  async function focusPrimary() {
+    const returnTo = focusedLoopId;
     manualFocusId = null;
+    await tick();
+    // If the row is gone (the loop folded or the task changed between clicks),
+    // fall back to the close button rather than letting focus drop to <body>.
+    const row = Array.from(
+      panelContentEl?.querySelectorAll<HTMLElement>(
+        '[data-testid="child-item"], [data-testid="control-row"]',
+      ) ?? [],
+    ).find((r) => r.dataset.loopId === returnTo);
+    (row ?? closeBtnRef)?.focus();
+  }
+
+  // The story's control rows are replaced by the focused loop's own story, so
+  // the button that was activated unmounts and would drop keyboard focus to the
+  // page. Move it to the breadcrumb's back button, the way out of the new view.
+  // (The sub-task and control list rows stay mounted, so they keep focus.)
+  let backBtnRef = $state<HTMLButtonElement | null>(null);
+  let panelContentEl = $state<HTMLElement>();
+
+  async function focusFromStory(loopId: string) {
+    focusChild(loopId);
+    await tick();
+    backBtnRef?.focus();
   }
 
   // Inline title editor. `editingTitle` flips the heading into an input;
@@ -303,7 +338,7 @@
     {/each}
   </div>
 
-  <div class="panel-content">
+  <div class="panel-content" bind:this={panelContentEl}>
     {#if activeTab === "activity"}
       <div id="panel-activity" role="tabpanel" data-testid="panel-activity">
         {#if task.childLoops.length > 0}
@@ -335,14 +370,48 @@
           </section>
         {/if}
 
+        {#if task.controls.length > 0}
+          <section class="panel-section" data-testid="controls-section">
+            <h3 class="section-title">Controls ({task.controls.length})</h3>
+            {#if task.controlsTruncated}
+              <p class="controls-note" data-testid="controls-truncated-note">
+                Some rule-fired loops on this run could not be classified, so this list may be incomplete.
+              </p>
+            {/if}
+            <ul class="child-list">
+              {#each task.controls as control (control.loopId)}
+                <li>
+                  <button
+                    type="button"
+                    class="child-item"
+                    class:focused={focusedLoopId === control.loopId}
+                    onclick={() => focusChild(control.loopId)}
+                    data-testid="control-row"
+                    data-loop-id={control.loopId}
+                    aria-pressed={focusedLoopId === control.loopId}
+                  >
+                    <span class="child-state {control.loop.state}">
+                      {control.loop.state.replace(/_/g, " ")}
+                    </span>
+                    <span class="child-role">{control.loop.role || "control"}</span>
+                    <span class="child-progress">
+                      {controlOutcome(control.loop.state)}
+                    </span>
+                  </button>
+                </li>
+              {/each}
+            </ul>
+          </section>
+        {/if}
+
         {#if focusedChild}
           <div class="focus-breadcrumb" data-testid="focus-breadcrumb">
             <button
               type="button"
               class="focus-back"
+              bind:this={backBtnRef}
               onclick={focusPrimary}
               data-testid="focus-back"
-              aria-label="Back to parent task story"
             >
               ← Back to {task.title}
             </button>
@@ -357,6 +426,9 @@
           <TaskStory
             loopId={focusedLoopId}
             prompt={focusedChild ? undefined : task.primaryLoop.prompt}
+            controls={focusedChild ? [] : task.controls}
+            controlsTruncated={task.controlsTruncated}
+            onFocusLoop={focusFromStory}
           />
         </section>
       </div>
@@ -760,6 +832,12 @@
     background: #eff6ff;
     border-left: 3px solid var(--ui-interactive-primary, #3b82f6);
     padding-left: calc(0.5rem - 3px);
+  }
+
+  .controls-note {
+    margin: 0 0 0.375rem;
+    font-size: 0.75rem;
+    color: var(--ui-text-secondary, #6b7280);
   }
 
   .focus-breadcrumb {

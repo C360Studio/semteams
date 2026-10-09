@@ -208,6 +208,7 @@ tasks:
       - task: test:e2e:agentic:task-title-aliases
       - task: test:e2e:agentic:admin-flows-inventory
       - task: test:e2e:agentic:chain-drill-in
+      - task: test:e2e:agentic:work-board
       - task: test:e2e:agentic:artifact-context-handoff
       - task: test:e2e:agentic:run-failed
       - task: test:e2e:agentic:run-failed-coordinator
@@ -1105,6 +1106,31 @@ tasks:
           FIXTURE: "{{.FIXTURE}}"
           AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
       - npx playwright test e2e/agentic/chain-drill-in.spec.ts
+
+  test:e2e:agentic:work-board:
+    desc: Run the read-only work board journey (fixture board + a live research run with its ops control)
+    summary: |
+      Opens /work over the board-mvp fixtures (the ui container is started
+      with WORK_SOURCE=fixture, see docker-compose.agentic-e2e.yml), then
+      drives ONE research chain to a terminal run phase so an item bound by
+      coordinator prompt resolves to a real run. Validates the board columns
+      and separate PM status / execution stage / verification badges, the
+      three linkage cases (none, partial, bound), the read-only guarantees,
+      the drill-in to the runs lens where the ops observer is explained as
+      one control, and the table view (OpenSpec work-board-read-only D5).
+
+      Same mock-LLM fixture and config as :ops-agent: the observer is what
+      proves the run reached agent.run.phase = completed.
+    vars:
+      FIXTURE: ops-run-terminal.yaml
+      AGENTIC_CONFIG: e2e-flow-bootstrap.json
+    cmds:
+      - defer: { task: test:e2e:agentic:cleanup }
+      - task: test:e2e:agentic:stack:up
+        vars:
+          FIXTURE: "{{.FIXTURE}}"
+          AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
+      - npx playwright test e2e/agentic/work-board.spec.ts
 
   test:e2e:agentic:artifact-context-handoff:
     desc: Run the artifact context handoff journey (research artifact -> editable coordinator-routed follow-up prompt)

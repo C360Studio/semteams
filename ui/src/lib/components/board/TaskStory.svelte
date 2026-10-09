@@ -24,9 +24,28 @@
   // The wire-level message log lives behind a "Show raw activity"
   // toggle below — answers the few users who actually want it,
   // doesn't intrude on the rest.
+  //
+  // Controls (design D3): when the coordinator is in focus, rule-fired
+  // control loops attached to its run render as one explained row each in a
+  // closing "Controls" group. The rule's identity is not recorded by the
+  // frozen runtime (#298), so every row says "rule: unknown" and why; the rest
+  // of the row is read from the graph on demand (never polled) and any field
+  // that cannot be read says so instead of guessing.
 
+  import { untrack } from "svelte";
   import { agentApi } from "$lib/services/agentApi";
+  import {
+    SETTLE_REREAD_MS,
+    awaitsRecording,
+    loadControlEvidence,
+  } from "$lib/services/controlEvidence";
   import type { LoopTrajectory, TrajectoryFact } from "$lib/types/agent";
+  import {
+    controlOutcome,
+    type ControlEvidence,
+    type Known,
+    type TaskControl,
+  } from "$lib/types/control";
   import { SvelteSet } from "svelte/reactivity";
   import TaskTrace from "./TaskTrace.svelte";
 
@@ -48,9 +67,24 @@
     loopId: string;
     /** When set, used to provide the very first "You asked: …" line. */
     prompt?: string;
+    /**
+     * Rule-fired controls attached to this run, rendered as the closing
+     * "Controls" group. Pass them only while the coordinator is in focus.
+     */
+    controls?: TaskControl[];
+    /** A rule-fired loop on this run could not be classified, so `controls` may be incomplete. */
+    controlsTruncated?: boolean;
+    /** Focus a control's own trajectory (the panel's existing sub-loop focus). */
+    onFocusLoop?: (loopId: string) => void;
   }
 
-  let { loopId, prompt }: Props = $props();
+  let {
+    loopId,
+    prompt,
+    controls = [],
+    controlsTruncated = false,
+    onFocusLoop,
+  }: Props = $props();
 
   const POLL_INTERVAL_MS = 3000;
 
@@ -97,6 +131,69 @@
     const handle = setInterval(refresh, POLL_INTERVAL_MS);
     return () => clearInterval(handle);
   });
+
+  // Control evidence is read once per change, not polled. The key names the
+  // controls and each loop's state: the terminal decide lands when a control's
+  // loop ends, so a state change is the moment worth re-reading. The effect
+  // must NOT depend on the `controls` array itself — the task list re-derives
+  // on every loop event and hands over a fresh array each time.
+  let evidence = $state<Record<string, ControlEvidence>>({});
+  let evidenceError = $state<string | null>(null);
+  const controlsKey = $derived(
+    controls.map((c) => `${c.loopId}:${c.loop.state}`).join("|"),
+  );
+
+  $effect(() => {
+    const key = controlsKey;
+    if (!key) {
+      evidence = {};
+      evidenceError = null;
+      return;
+    }
+    const current = untrack(() => controls);
+    const ctrl = new AbortController();
+    let settleTimer: ReturnType<typeof setTimeout> | undefined;
+
+    async function load(): Promise<Record<string, ControlEvidence> | null> {
+      try {
+        const next = await loadControlEvidence(current, ctrl.signal);
+        if (ctrl.signal.aborted) return null;
+        evidence = next;
+        evidenceError = null;
+        return next;
+      } catch (err) {
+        if (ctrl.signal.aborted) return null;
+        evidenceError = err instanceof Error ? err.message : String(err);
+        return null;
+      }
+    }
+
+    void (async () => {
+      const first = await load();
+      if (!first || ctrl.signal.aborted) return;
+      // A loop can be seen as finished a moment before its outcome and decide
+      // are readable from the graph: read once more before settling on unknown.
+      // The key changes if the loop's state does, which starts a fresh cycle.
+      if (current.some((c) => awaitsRecording(c.loop.state, first[c.loopId]))) {
+        settleTimer = setTimeout(() => void load(), SETTLE_REREAD_MS);
+      }
+    })();
+    return () => {
+      ctrl.abort();
+      clearTimeout(settleTimer);
+    };
+  });
+
+  /** A graph value rendered as text, or "unknown (reason)". */
+  function shown(value: Known<string> | undefined): string {
+    if (!value) return "loading…";
+    return value.status === "known" ? value.value : `unknown (${value.reason})`;
+  }
+
+  /** The description is the first line of the control's prompt. */
+  function firstLine(value: Known<string> | undefined): string {
+    return value?.status === "known" ? (value.value.split("\n")[0] ?? "").trim() : "";
+  }
 
   // narrativeFacts drives the main list; terminalFact powers the closing
   // banner; totalTokens sums the merged (possibly multi-page) totals
@@ -276,6 +373,94 @@
         </span>
       </span>
     </div>
+  {/if}
+
+  {#if controls.length > 0}
+    <section
+      class="story-controls"
+      data-testid="story-controls"
+      aria-labelledby="story-controls-title"
+    >
+      <h3 class="controls-title" id="story-controls-title">Controls fired on this run</h3>
+      {#if controlsTruncated}
+        <p class="controls-note" data-testid="controls-truncated">
+          Some rule-fired loops on this run could not be classified, so this list may be incomplete.
+        </p>
+      {/if}
+      {#if evidenceError}
+        <p class="story-error" role="alert" data-testid="controls-error">
+          Couldn't load control details: {evidenceError}
+        </p>
+      {/if}
+      <ul class="controls-list">
+        {#each controls as control (control.loopId)}
+          {@const ev = evidence[control.loopId]}
+          {@const outcome = controlOutcome(control.loop.state)}
+          {@const description = firstLine(ev?.description)}
+          <li
+            class="control-event"
+            data-testid="control-event"
+            data-loop={control.loopId}
+          >
+            <div class="control-identity-row">
+              <button
+                type="button"
+                class="control-open"
+                data-testid="control-identity"
+                onclick={() => onFocusLoop?.(control.loopId)}
+              >
+                <span class="control-role">{control.loop.role || "control"}</span>
+                <span class="control-loop-id">{control.loopId}</span>
+                <span class="sr-only">— view this loop's trajectory</span>
+              </button>
+              {#if description}
+                <span class="control-description">{description}</span>
+              {/if}
+            </div>
+
+            <p class="control-line" data-testid="control-rule">
+              <span class="control-key">rule: unknown</span>
+              <span class="control-why"
+                >rule identity is not recorded by the frozen runtime (#298)</span
+              >
+            </p>
+
+            <p class="control-line" data-testid="control-firing">
+              <span class="control-key">fired on</span>
+              <code class="control-entity">{control.firingEntityId}</code>
+            </p>
+
+            <p class="control-line" data-testid="control-fact">
+              <span class="control-key">run fact at spawn</span>
+              {#if !ev}
+                <span>loading…</span>
+              {:else if ev.fact.status === "known"}
+                <code>agent.run.phase → {ev.fact.value.to}</code>
+                <span>· source {ev.fact.value.source || "unknown"}</span>
+                {#if ev.fact.value.note}
+                  <span class="control-note">{ev.fact.value.note}</span>
+                {/if}
+              {:else}
+                <span>unknown ({ev.fact.reason})</span>
+              {/if}
+            </p>
+
+            <p class="control-line" data-testid="control-outcome">
+              <span class="control-key">outcome</span>
+              <strong>{outcome}</strong>
+              <span>(loop state: {control.loop.state.replace(/_/g, " ")})</span>
+              <span>· recorded outcome: {shown(ev?.outcome)}</span>
+              {#if ev?.nextAction.status === "known"}
+                <span class="control-decide">decide({ev.nextAction.value})</span>
+              {:else}
+                <span class="control-decide">decide: {shown(ev?.nextAction)}</span>
+              {/if}
+              <span class="control-note">reason: {shown(ev?.reason)}</span>
+            </p>
+          </li>
+        {/each}
+      </ul>
+    </section>
   {/if}
 
   <details class="raw-toggle" bind:open={showRaw}>
@@ -469,6 +654,116 @@
     border-radius: 4px;
     font-size: 0.75rem;
     color: #991b1b;
+  }
+
+  .story-controls {
+    margin-top: 0.25rem;
+    border-top: 1px solid var(--ui-border-subtle, #e5e7eb);
+    padding-top: 0.5rem;
+  }
+
+  .controls-title {
+    margin: 0 0 0.375rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--ui-text-secondary, #6b7280);
+  }
+
+  .controls-note {
+    margin: 0 0 0.375rem;
+    font-size: 0.75rem;
+    color: var(--ui-text-secondary, #6b7280);
+  }
+
+  .controls-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .control-event {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 0.5rem 0.625rem;
+    background: var(--ui-surface-primary, #fff);
+    border: 1px solid var(--ui-border-subtle, #e5e7eb);
+    border-left: 3px solid var(--ui-interactive-primary, #3b82f6);
+    border-radius: 6px;
+    font-size: 0.75rem;
+    color: var(--ui-text-primary, #111827);
+  }
+
+  .control-identity-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+  }
+
+  .control-open {
+    all: unset;
+    cursor: pointer;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.375rem;
+    padding: 0.125rem 0.25rem;
+    margin: 0 -0.25rem;
+    border-radius: 4px;
+  }
+
+  .control-open:hover {
+    background: var(--ui-surface-secondary, #f3f4f6);
+  }
+
+  .control-open:focus-visible {
+    outline: 2px solid var(--ui-interactive-primary, #3b82f6);
+    outline-offset: 1px;
+  }
+
+  .control-role {
+    font-weight: 600;
+    text-decoration: underline;
+  }
+
+  .control-loop-id {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.6875rem;
+    color: var(--ui-text-secondary, #6b7280);
+    overflow-wrap: anywhere;
+  }
+
+  .control-description {
+    color: var(--ui-text-secondary, #6b7280);
+    overflow-wrap: anywhere;
+  }
+
+  .control-line {
+    margin: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 0.375rem;
+    align-items: baseline;
+    overflow-wrap: anywhere;
+  }
+
+  .control-key {
+    font-weight: 600;
+  }
+
+  .control-why,
+  .control-note {
+    color: var(--ui-text-secondary, #6b7280);
+  }
+
+  .control-entity {
+    font-size: 0.6875rem;
+    color: var(--ui-text-secondary, #6b7280);
   }
 
   .raw-toggle {

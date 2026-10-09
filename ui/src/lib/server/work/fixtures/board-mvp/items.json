@@ -1,0 +1,198 @@
+{
+  "c360studio/semteams": {
+    "status_options": [
+      "Todo",
+      "In Progress",
+      "In Review",
+      "Done"
+    ],
+    "items": [
+      {
+        "number": 310,
+        "title": "Add a Program Pulse summary card to the portfolio overview",
+        "body": "Show one evidence-backed line per project on the program overview so a program manager can see what moved since the last visit.\n\nBlocked by #314 until runs carry their issue reference.",
+        "state": "open",
+        "labels": [
+          "type:feature",
+          "area:ui"
+        ],
+        "assignees": [],
+        "milestone": "v0.3.0",
+        "pm_status": "Todo",
+        "priority": "P2",
+        "dependencies": [
+          {
+            "ref": "c360studio/semteams#314",
+            "source": "blocked-by"
+          }
+        ]
+      },
+      {
+        "number": 311,
+        "title": "Document the portfolio.json shape for operators",
+        "body": "Operators author program, project and repository membership by hand. Explain each field, the optional project board, and what the work board shows when the document is invalid.",
+        "state": "open",
+        "labels": [
+          "type:docs",
+          "area:docs"
+        ],
+        "assignees": [
+          "coby"
+        ],
+        "pm_status": "Todo",
+        "priority": "P3",
+        "linked_runs": []
+      },
+      {
+        "number": 312,
+        "title": "Compare MQTT vs NATS for IoT edge deployments",
+        "body": "Research request: which of MQTT or NATS has lower latency on constrained ARM devices, and what does each cost in memory at idle? Needs sources the team can re-check.",
+        "state": "open",
+        "labels": [
+          "type:research",
+          "area:research"
+        ],
+        "assignees": [
+          "claude"
+        ],
+        "milestone": "v0.3.0",
+        "pm_status": "In Progress",
+        "priority": "P1",
+        "linked_runs": [
+          {
+            "by": "coordinator_prompt",
+            "equals": "Compare MQTT vs NATS for IoT edge deployments — which has lower latency on constrained ARM devices?"
+          }
+        ]
+      },
+      {
+        "number": 313,
+        "title": "Re-run attestation for the autoresearch devcontainer profile",
+        "body": "The last attestation run for the canonical devcontainer profile was lost when the stack was reset. Re-run it and confirm the attested sandbox still satisfies the profile.",
+        "state": "open",
+        "labels": [
+          "type:chore",
+          "area:autoresearch"
+        ],
+        "assignees": [
+          "codex"
+        ],
+        "pm_status": "In Progress",
+        "linked_runs": [
+          {
+            "by": "run_entity_id",
+            "value": "c360.semteams.chain.agent.execution.00000000-0000-4000-8000-00000000dead"
+          }
+        ]
+      },
+      {
+        "number": 314,
+        "title": "Stamp run.issue.ref when a run starts from a work item",
+        "body": "A run started from an issue should carry its issue reference so the work board can show which runs belong to which work item without guessing.",
+        "state": "open",
+        "labels": [
+          "type:feature",
+          "area:runtime"
+        ],
+        "assignees": [
+          "codex"
+        ],
+        "milestone": "v0.3.0",
+        "pm_status": "In Review",
+        "priority": "P1",
+        "pull_requests": [
+          {
+            "ref": "c360studio/semteams#320",
+            "title": "feat(runs): stamp run.issue.ref at intake",
+            "state": "open"
+          },
+          {
+            "ref": "c360studio/semteams#321",
+            "title": "test(runs): cover issue reference stamping on restart",
+            "state": "open"
+          }
+        ]
+      },
+      {
+        "number": 315,
+        "title": "Retire the flat persona JSON files",
+        "body": "The flat persona JSON files were never read; personas load by fragment directory. Delete them and their references.",
+        "state": "closed",
+        "labels": [
+          "type:chore",
+          "area:personas"
+        ],
+        "assignees": [
+          "claude"
+        ],
+        "milestone": "v0.2.0",
+        "pm_status": "Done",
+        "priority": "P3"
+      },
+      {
+        "number": 316,
+        "title": "Explain rule-fired controls in the run story",
+        "body": "Render each rule-spawned control loop as one row: the rule, the firing fact and its value, the control identity and its outcome.",
+        "state": "open",
+        "labels": [
+          "type:feature",
+          "area:ui"
+        ],
+        "assignees": [
+          "claude"
+        ],
+        "pm_status": "In Review",
+        "priority": "P2"
+      }
+    ]
+  },
+  "c360studio/semsource": {
+    "items": [
+      {
+        "number": 51,
+        "title": "Index repository README and docs as document entities",
+        "body": "Emit one document entity per README and docs page so downstream tools can cite them.",
+        "state": "open",
+        "labels": [
+          "type:feature"
+        ],
+        "assignees": [
+          "coby"
+        ]
+      },
+      {
+        "number": 52,
+        "title": "Support git submodule paths in the source manifest",
+        "body": "A manifest entry that points inside a submodule is rejected today. Resolve it against the submodule checkout.",
+        "state": "open",
+        "labels": [
+          "type:bug"
+        ],
+        "assignees": []
+      },
+      {
+        "number": 53,
+        "title": "Fix duplicate entity ids for renamed files",
+        "body": "A rename produced two entities for one file. Key the entity on the stable path history instead.",
+        "state": "closed",
+        "labels": [
+          "type:bug"
+        ],
+        "assignees": [
+          "claude"
+        ],
+        "milestone": "v0.2.0"
+      },
+      {
+        "number": 54,
+        "title": "Add watch mode for local directories",
+        "body": "Re-ingest changed files without restarting the process.",
+        "state": "open",
+        "labels": [
+          "type:feature"
+        ],
+        "assignees": []
+      }
+    ]
+  }
+}

@@ -14,8 +14,11 @@ import { agentStore } from "./agentStore.svelte";
 import { taskRefs } from "./taskRefs.svelte";
 import { taskLabels } from "./taskLabels.svelte";
 import { runStatus } from "./runStatus.svelte";
+import { controlsStore } from "./controlsStore.svelte";
 import { runtimeStore } from "./runtimeStore.svelte";
 import { deriveMetricsEvidence, deriveRunHealth } from "$lib/utils/runHealth";
+import type { AgentLoop } from "$lib/types/agent";
+import { attachControls } from "$lib/types/control";
 import {
   type TaskInfo,
   type TaskColumn,
@@ -51,8 +54,19 @@ function createTaskStore() {
     replaceState(url, page.state);
   }
 
+  // Which controls fold into which task's card. A rule-fired control (design D3)
+  // is a top-level loop the graph has shown to be NOT a member of the run it fired
+  // on. controlsStore reads reactive state, so a poll that resolves a candidate
+  // re-runs this derivation.
+  let attachment = $derived.by(() => attachControls(agentStore.loopsList, controlsStore.snapshot));
+
   // Derive tasks from agentStore. Top-level loops (no parent_loop_id)
-  // become tasks; their descendants are grouped under them.
+  // become tasks; their descendants are grouped under them. A rule-fired
+  // control (design D3) is a top-level loop the graph has shown to be NOT a
+  // member of the run it fired on: it folds into the card of the task that owns
+  // that run instead of being a card of its own. Everything else, including a
+  // rule-fired loop that is a run member (autoresearch work loops) or whose
+  // membership is not known yet, stays a top-level card with its descendants.
   let tasks = $derived.by(() => {
     const allLoops = agentStore.loopsList;
     const metricsEvidence = deriveMetricsEvidence({
@@ -64,11 +78,10 @@ function createTaskStore() {
       now: runtimeStore.metricsNow,
     });
 
-    // Separate top-level loops from descendants. Top-level loops have an
-    // empty or absent parent_loop_id. The Go struct uses `omitempty`, so
-    // the field is omitted from JSON when empty — treat both "" and
-    // undefined/missing as top-level.
-    const topLevel = allLoops.filter((l) => !l.parent_loop_id);
+    // Top-level loops have an empty or absent parent_loop_id. The Go struct
+    // uses `omitempty`, so the field is omitted from JSON when empty — treat
+    // both "" and undefined/missing as top-level.
+    const { topLevel, controlsByTask, incompleteTaskIds } = attachment;
 
     return topLevel.map((loop) => {
       const childLoops = collectDescendantLoops(loop.loop_id, allLoops);
@@ -100,6 +113,11 @@ function createTaskStore() {
         // — that silently severs this reactivity.
         pause,
         runHealth,
+        // Controls fold in by run instance, which is a loop id: the
+        // coordinator's (the identity runStatus is keyed by above) or a
+        // nested coordinator's under it.
+        controlsByTask[loop.loop_id] ?? [],
+        incompleteTaskIds.has(loop.loop_id),
       );
     });
   });
@@ -185,6 +203,20 @@ function createTaskStore() {
     /** Toggle selection — click same card again to deselect. */
     toggleTask(id: string) {
       setSelection(readSelection() === id ? null : id);
+    },
+
+    /**
+     * True for a loop that is a card of its own for good, so it is worth a #ref: it
+     * is top-level, no control folded it into another task's card, and it is not a
+     * rule-fired candidate still awaiting classification (which may yet fold away).
+     * A resolved control the attachment refused to fold is a card, so it qualifies.
+     */
+    isRefEligible(loop: AgentLoop): boolean {
+      return (
+        !loop.parent_loop_id &&
+        !attachment.foldedLoopIds.has(loop.loop_id) &&
+        !controlsStore.mayBeControl(loop)
+      );
     },
 
     /** Get tasks for a specific column. */

@@ -6,6 +6,7 @@
 // TaskInfo, not AgentLoop directly.
 
 import type { AgentLoop, AgentLoopState } from "./agent";
+import type { TaskControl } from "./control";
 import type { RunHealth } from "$lib/utils/runHealth";
 
 /**
@@ -189,6 +190,22 @@ export interface TaskInfo {
    * plus primary/child loop state. Null while the board has not derived one.
    */
   runHealth: RunHealth | null;
+
+  /**
+   * Rule-fired control loops attached to this task (design D3): loops the graph
+   * showed to be fired on one of its runs without being members of it. They are
+   * not part of `childLoops`: a control observes or acts on the run, it is not
+   * work the run delegated, so it never moves the card's column.
+   */
+  controls: TaskControl[];
+
+  /**
+   * True when a rule-fired loop on one of this task's runs could not be
+   * classified (its membership read failed, was cut off, or ran out of
+   * retries), so `controls` may be incomplete and anything derived from it must
+   * say so. The name predates the membership rule and is kept for the callers.
+   */
+  controlsTruncated: boolean;
 }
 
 /** Column priority for "most urgent wins" aggregation over child loops. */
@@ -287,6 +304,8 @@ export function deriveTaskInfo(
   labels: TaskLabelData = { titleOverride: null, aliases: [] },
   runPause: RunPause | null = null,
   runHealth: RunHealth | null = null,
+  controls: TaskControl[] = [],
+  controlsTruncated = false,
 ): TaskInfo {
   const primaryColumn = loopStateToColumn(primaryLoop.state);
 
@@ -339,6 +358,8 @@ export function deriveTaskInfo(
     childAttentionCount: attentionChildren.length,
     runPause,
     runHealth,
+    controls,
+    controlsTruncated,
   };
 }
 

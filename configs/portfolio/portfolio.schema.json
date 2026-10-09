@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/C360Studio/semteams/configs/portfolio/portfolio.schema.json",
+  "title": "SemTeams portfolio",
+  "description": "Operator-authored program, project and repository membership. Hand-authored; schemas/ is generated and is not touched. Beyond this schema the reader enforces: program ids are unique, project ids are unique across the document, a repository is listed at most once per project, and a repository that appears under several projects carries the same project_board everywhere. Repository owner/name compare case-insensitively.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["programs"],
+  "properties": {
+    "programs": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/program" }
+    }
+  },
+  "$defs": {
+    "nonEmptyString": { "type": "string", "minLength": 1, "pattern": "\\S" },
+    "program": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "projects"],
+      "properties": {
+        "id": { "$ref": "#/$defs/nonEmptyString" },
+        "name": { "$ref": "#/$defs/nonEmptyString" },
+        "projects": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/project" }
+        }
+      }
+    },
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "repositories"],
+      "properties": {
+        "id": { "$ref": "#/$defs/nonEmptyString" },
+        "name": { "$ref": "#/$defs/nonEmptyString" },
+        "repositories": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/repository" }
+        }
+      }
+    },
+    "repository": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["owner", "name"],
+      "properties": {
+        "owner": { "$ref": "#/$defs/nonEmptyString" },
+        "name": { "$ref": "#/$defs/nonEmptyString" },
+        "project_board": { "$ref": "#/$defs/projectBoard" }
+      }
+    },
+    "projectBoard": {
+      "description": "Optional GitHub Project (v2) whose Status field defines board columns. Without it the work board uses the GitHub-field fallback: closed is Done, open with an assignee is In Progress, open without an assignee is Todo.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["owner", "number", "status_field"],
+      "properties": {
+        "owner": { "$ref": "#/$defs/nonEmptyString" },
+        "number": { "type": "integer", "minimum": 1 },
+        "status_field": { "$ref": "#/$defs/nonEmptyString" },
+        "priority_field": { "$ref": "#/$defs/nonEmptyString" }
+      }
+    }
+  }
+}
