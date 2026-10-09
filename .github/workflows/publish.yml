@@ -1,0 +1,237 @@
+name: Publish
+
+# Image-only publication (#259). A v* tag publishes ghcr.io/c360studio/semteams
+# and a GitHub release, but only after the tagged commit is proven to be on
+# main with a successful CI Status Check. workflow_dispatch is a dry run only.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Build the image without pushing and create no release
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify publication evidence
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      sha: ${{ steps.version.outputs.sha }}
+      dry_run: ${{ steps.version.outputs.dry_run }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Resolve version and mode
+        id: version
+        env:
+          DRY_RUN_INPUT: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          # Peel an annotated tag to the commit it names; every later check and
+          # the build use this one commit.
+          sha=$(git rev-parse "${GITHUB_SHA}^{commit}")
+          prerelease=false
+          case "$GITHUB_EVENT_NAME" in
+            push)
+              version=$GITHUB_REF_NAME
+              if [[ "$GITHUB_REF_TYPE" != "tag" ]] ||
+                 [[ ! "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+                echo "::error::publication requires a vMAJOR.MINOR.PATCH[-PRERELEASE] tag, got ${GITHUB_REF}"
+                exit 1
+              fi
+              dry_run=false
+              if [[ "$version" == *-* ]]; then
+                prerelease=true
+              fi
+              ;;
+            workflow_dispatch)
+              if [[ "$DRY_RUN_INPUT" != "true" ]]; then
+                echo "::error::manual publication is not a path; push a tag"
+                exit 1
+              fi
+              version="dry-run-${sha:0:7}"
+              dry_run=true
+              ;;
+            *)
+              echo "::error::unsupported event ${GITHUB_EVENT_NAME}"
+              exit 1
+              ;;
+          esac
+          {
+            echo "version=${version}"
+            echo "sha=${sha}"
+            echo "dry_run=${dry_run}"
+            echo "prerelease=${prerelease}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Require the commit to be on main
+        env:
+          SHA: ${{ steps.version.outputs.sha }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --quiet origin +refs/heads/main:refs/remotes/origin/main
+          if ! git merge-base --is-ancestor "$SHA" origin/main; then
+            echo "::error::${SHA} is not an ancestor of main; only commits already on main publish"
+            exit 1
+          fi
+
+      - name: Require a successful CI Status Check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ steps.version.outputs.sha }}
+        run: |
+          set -euo pipefail
+          # Only check-runs created by GitHub Actions count. The most recently
+          # started run decides, so a failed or still-running rerun is never
+          # outvoted by an older success.
+          runs=$(gh api --paginate \
+            "repos/${GITHUB_REPOSITORY}/commits/${SHA}/check-runs?check_name=CI%20Status%20Check&filter=all&per_page=100" \
+            --jq '.check_runs[]
+              | select(.name == "CI Status Check" and .app.slug == "github-actions")
+              | [(.started_at // ""), (.conclusion // .status)]
+              | @tsv')
+          if [[ -z "$runs" ]]; then
+            echo "::error::no CI Status Check found for ${SHA}"
+            exit 1
+          fi
+          latest=$(printf '%s\n' "$runs" | LC_ALL=C sort | tail -n 1)
+          result=${latest##*$'\t'}
+          if [[ "$result" != "success" ]]; then
+            echo "::error::latest CI Status Check for ${SHA} is ${result}, not success"
+            exit 1
+          fi
+          echo "CI Status Check succeeded for ${SHA}"
+
+  publish:
+    name: Build and publish image
+    runs-on: ubuntu-latest
+    needs: verify
+    permissions:
+      contents: write
+      packages: write
+    env:
+      IMAGE: ghcr.io/c360studio/semteams
+      PLATFORMS: linux/amd64,linux/arm64
+    steps:
+      - name: Checkout verified commit
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.verify.outputs.sha }}
+
+      # The runtime stage runs apk and adduser for each target platform, so
+      # arm64 needs emulation on the amd64 runner.
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GHCR
+        if: needs.verify.outputs.dry_run != 'true'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Image metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.IMAGE }}
+          flavor: |
+            latest=false
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=${{ needs.verify.outputs.version }},enable=${{ needs.verify.outputs.dry_run == 'true' }}
+          labels: |
+            org.opencontainers.image.title=SemTeams
+            org.opencontainers.image.description=Always-on program manager for a configurable portfolio
+            org.opencontainers.image.vendor=C360
+            org.opencontainers.image.licenses=MIT
+
+      - name: Record build date
+        id: date
+        run: echo "build_date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push image
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: docker/Dockerfile
+          platforms: ${{ env.PLATFORMS }}
+          push: ${{ needs.verify.outputs.dry_run != 'true' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ needs.verify.outputs.version }}
+            COMMIT_SHA=${{ needs.verify.outputs.sha }}
+            BUILD_DATE=${{ steps.date.outputs.build_date }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Record image digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          TAGS: ${{ steps.meta.outputs.tags }}
+          DRY_RUN: ${{ needs.verify.outputs.dry_run }}
+        run: |
+          set -euo pipefail
+          if [[ "$DRY_RUN" != "true" && -z "$DIGEST" ]]; then
+            echo "::error::the build reported no image digest; refusing to create a release"
+            exit 1
+          fi
+          {
+            echo "## Image"
+            echo
+            echo "digest: \`${DIGEST:-none}\`"
+            echo
+            echo '```text'
+            echo "$TAGS"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Create GitHub release
+        if: needs.verify.outputs.dry_run != 'true'
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ needs.verify.outputs.version }}
+          name: ${{ needs.verify.outputs.version }}
+          draft: false
+          prerelease: ${{ needs.verify.outputs.prerelease == 'true' }}
+          make_latest: ${{ needs.verify.outputs.prerelease != 'true' }}
+          generate_release_notes: true
+          body: |
+            ## Image
+
+            - image: `${{ env.IMAGE }}:${{ steps.meta.outputs.version }}`
+            - digest: `${{ steps.build.outputs.digest }}`
+
+            ```sh
+            docker pull ${{ env.IMAGE }}:${{ steps.meta.outputs.version }}
+            ```
+
+      - name: Report dry run
+        if: needs.verify.outputs.dry_run == 'true'
+        run: |
+          echo "dry run: image built for ${PLATFORMS}, nothing pushed, no release created"

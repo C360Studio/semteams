@@ -2,7 +2,7 @@
 
 - [x] 1. Propose image-only tag publication with a repository-governance delta that adds the publication requirement
   and rewrites the `Repository CI cannot activate container publication` requirement; validate strictly.
-- [ ] 2. Replace the deleted copied `release.yml` and `container.yml` with one `Publish` workflow: `v*` tag trigger,
+- [x] 2. Replace the deleted copied `release.yml` and `container.yml` with one `Publish` workflow: `v*` tag trigger,
   dispatch dry run, main-ancestry and `CI Status Check` verification before any build, `linux/amd64` and `linux/arm64`
   image build, and a release with generated notes, image reference and digest. Lint it with actionlint and prove no
   workflow listens for `workflow_run`.
