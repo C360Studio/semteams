@@ -23,6 +23,8 @@ includes:
     aliases: [d]
   openspec:
     taskfile: ./taskfiles/openspec.yml
+  publish:
+    taskfile: ./taskfiles/publish.yml
 
   # Frontend (Svelte 5 + SvelteKit) — see ui/Taskfile.yml for full surface.
   ui:

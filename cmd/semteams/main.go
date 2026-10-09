@@ -40,12 +40,16 @@ import (
 	"github.com/c360studio/semteams/internal/runtimecatalog"
 )
 
-// Build information constants
-const (
-	Version   = "0.1.0"
-	BuildTime = "dev"
-	appName   = "semstreams"
+// Build information. The Dockerfile and the Publish workflow set these via
+// -ldflags "-X main.version=… -X main.commit=… -X main.buildDate=…"; a plain
+// `go build` reports dev/unknown.
+var (
+	version   = "dev"
+	commit    = "unknown"
+	buildDate = "unknown"
 )
+
+const appName = "semteams"
 
 func main() {
 	// Add panic recovery
@@ -130,8 +134,9 @@ func run() error {
 	slog.SetDefault(logger)
 
 	slog.Info("SemStreams ready",
-		"version", Version,
-		"build_time", BuildTime)
+		"version", version,
+		"commit", commit,
+		"build_date", buildDate)
 
 	// 7. Create remaining infrastructure
 	ruleManager, err := rulepkg.NewConfigManager(logger)
@@ -541,7 +546,7 @@ func parseCLI() (*CLIConfig, bool, error) {
 	}
 
 	if cliCfg.ShowVersion {
-		fmt.Printf("%s version %s\n", appName, Version)
+		fmt.Printf("%s version %s (commit %s, built %s)\n", appName, version, commit, buildDate)
 		return nil, true, nil
 	}
 
@@ -687,7 +692,7 @@ func ensureServiceManagerConfig(cfg *config.Config) {
 			"server_info": map[string]string{
 				"title":       "SemStreams API",
 				"description": "semantic stream processing framework - protocol and semantic layers",
-				"version":     Version,
+				"version":     version,
 			},
 		}
 		defaultConfigJSON, _ := json.Marshal(defaultConfig)

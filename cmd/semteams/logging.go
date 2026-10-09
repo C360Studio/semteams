@@ -63,7 +63,7 @@ func setupLogger(level, format string, natsClient *natsclient.Client, cfg *confi
 
 	return slog.New(multiHandler).With(
 		"service", "semstreams",
-		"version", Version,
+		"version", version,
 		"pid", os.Getpid(),
 	)
 }

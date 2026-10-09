@@ -17,7 +17,7 @@ const banner = `
 
 func printBanner() {
 	fmt.Print(banner)
-	fmt.Printf("  version %s\n\n", Version)
+	fmt.Printf("  version %s\n\n", version)
 }
 
 // Spinner provides a simple animated spinner for long-running operations.

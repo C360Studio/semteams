@@ -483,6 +483,8 @@ Governance/OpenSpec jobs feed the always-reported `CI Status Check`
 aggregate. Validation tools and runtimes are pinned where their
 versions define semantics; official GitHub Actions use reviewed major
 tags. Required mock E2E and a main-branch ruleset remain future work.
+Publication is tag-only through `.github/workflows/publish.yml`; see
+`docs/release.md`.
 
 Before pushing:
 
@@ -495,6 +497,7 @@ task schema:generate
 task schema:check-changes
 task openspec:validate
 task openspec:queue-test
+task publish:verify-test
 ```
 
 ## Related Repos

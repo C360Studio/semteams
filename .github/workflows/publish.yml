@@ -1,0 +1,197 @@
+name: Publish
+
+# Image-only publication (#259). A v* tag publishes ghcr.io/c360studio/semteams
+# and a GitHub release, but only after scripts/publish-verify.sh proves the
+# tagged commit is on main with complete, successful Repository CI.
+# workflow_dispatch is a dry run only. See docs/release.md.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Build the image without pushing and create no release
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+# One publication at a time across all tags; queued runs wait.
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify publication evidence
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      checks: read
+      contents: read
+    outputs:
+      version: ${{ steps.evidence.outputs.version }}
+      sha: ${{ steps.evidence.outputs.sha }}
+      dry_run: ${{ steps.evidence.outputs.dry_run }}
+      prerelease: ${{ steps.evidence.outputs.prerelease }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Verify tag, main ancestry and CI evidence
+        id: evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DRY_RUN_INPUT: ${{ inputs.dry_run }}
+        run: scripts/publish-verify.sh
+
+  publish:
+    name: Build and publish image
+    runs-on: ubuntu-latest
+    needs: verify
+    permissions:
+      contents: write
+      packages: write
+    env:
+      IMAGE: ghcr.io/c360studio/semteams
+      PLATFORMS: linux/amd64,linux/arm64
+    steps:
+      # The job runs no git commands, so the write-scoped token is not left
+      # in .git, which the Docker build context would otherwise carry.
+      - name: Checkout verified commit
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.verify.outputs.sha }}
+          persist-credentials: false
+
+      # Refuse before pushing: re-pushing the version tags would move them off
+      # the digest an existing release already records.
+      - name: Refuse a tag that already has a release
+        if: needs.verify.outputs.dry_run == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.verify.outputs.version }}
+        run: |
+          set -euo pipefail
+          existing=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+            --jq '.[] | select(.tag_name == env.TAG) | .html_url')
+          if [[ -n "$existing" ]]; then
+            echo "::error::a release for ${TAG} already exists (${existing}); refusing to publish it again"
+            exit 1
+          fi
+
+      # The runtime stage runs apk and adduser for each target platform, so
+      # arm64 needs emulation on the amd64 runner.
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GHCR
+        if: needs.verify.outputs.dry_run == 'false'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Image metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.IMAGE }}
+          flavor: |
+            latest=false
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=${{ needs.verify.outputs.version }},enable=${{ needs.verify.outputs.dry_run == 'true' }}
+          labels: |
+            org.opencontainers.image.title=SemTeams
+            org.opencontainers.image.description=Always-on program manager for a configurable portfolio
+            org.opencontainers.image.vendor=C360
+            org.opencontainers.image.licenses=MIT
+            org.opencontainers.image.revision=${{ needs.verify.outputs.sha }}
+
+      - name: Record build date
+        id: date
+        run: echo "build_date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push image
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: docker/Dockerfile
+          platforms: ${{ env.PLATFORMS }}
+          push: ${{ needs.verify.outputs.dry_run == 'false' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ needs.verify.outputs.version }}
+            COMMIT_SHA=${{ needs.verify.outputs.sha }}
+            BUILD_DATE=${{ steps.date.outputs.build_date }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Record image digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          TAGS: ${{ steps.meta.outputs.tags }}
+          DRY_RUN: ${{ needs.verify.outputs.dry_run }}
+        run: |
+          set -euo pipefail
+          if [[ "$DRY_RUN" == "false" && -z "$DIGEST" ]]; then
+            echo "::error::the build reported no image digest; refusing to create a release"
+            exit 1
+          fi
+          {
+            echo "## Image"
+            echo
+            echo "digest: \`${DIGEST:-none}\`"
+            echo
+            echo '```text'
+            echo "$TAGS"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # The image tag drops the git tag's leading v (metadata-action's
+      # version, e.g. 0.1.0); the release is named after the git tag.
+      # make_latest=legacy never marks a prerelease latest and keeps a
+      # backport from displacing a higher version.
+      - name: Create GitHub release
+        if: needs.verify.outputs.dry_run == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.verify.outputs.version }}
+          SHA: ${{ needs.verify.outputs.sha }}
+          PRERELEASE: ${{ needs.verify.outputs.prerelease }}
+          IMAGE_TAG: ${{ steps.meta.outputs.version }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          ref="${IMAGE}:${IMAGE_TAG}"
+          fence='```'
+          body=$(printf '## Image\n\n- image: `%s`\n- digest: `%s`\n\n%ssh\ndocker pull %s\n%s\n' \
+            "$ref" "$DIGEST" "$fence" "$ref" "$fence")
+          url=$(gh api --method POST "repos/${GITHUB_REPOSITORY}/releases" \
+            -f tag_name="$TAG" \
+            -f target_commitish="$SHA" \
+            -f name="$TAG" \
+            -f body="$body" \
+            -F draft=false \
+            -F prerelease="$PRERELEASE" \
+            -F generate_release_notes=true \
+            -f make_latest=legacy \
+            --jq '.html_url')
+          echo "created release ${url}"
+
+      - name: Report dry run
+        if: needs.verify.outputs.dry_run == 'true'
+        run: |
+          echo "dry run: image built for ${PLATFORMS}, nothing pushed, no release created"
