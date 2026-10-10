@@ -57,5 +57,7 @@ All nine required local gates passed: `task lint`, `task test:race`, `task test:
 `task schema:generate`, `task schema:check-changes`, `task openspec:validate`, `task openspec:queue-test` and
 `task publish:verify-test`. Schema regeneration produced no generated changes. Independent Go review found no
 blockers; its evidence-wording correction is applied above and in the terminal assertion. These are local results,
-not post-merge or paid-provider qualification. Source commit provenance and archived-spec review follow as delivery
-checks.
+not post-merge or paid-provider qualification. Source provenance now references implementation commit `775eab76eff84262c0b50918fb8d371cbc4febe2`;
+independent final-content review confirmed the archived contract, source hash and limits with no blockers.
+The generated spec purpose was replaced with its scoped purpose. Post-archive strict validation (8/8), queue fixtures
+(26/26), focused contract tests and the real-NATS terminal-boundary fixture all passed.

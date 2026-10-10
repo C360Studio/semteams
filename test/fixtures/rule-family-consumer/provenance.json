@@ -1,5 +1,5 @@
 {
-  "semteams_source_commit": "042193463e3b27fb1996ed4e99bf2b0cd4024a06",
+  "semteams_source_commit": "775eab76eff84262c0b50918fb8d371cbc4febe2",
   "semstreams_module_version": "v1.0.0-beta.162.0.20260930150212-8b99efe9c66a",
   "semstreams_commit": "8b99efe9c66a4faa4fa509f9f62cc6bad8392128",
   "required_live": {
@@ -8,7 +8,7 @@
     "source_path": "configs/rules/research/01-coordinator-research-spawn.json",
     "source_json_pointer": "/on_enter/0",
     "source_sha256": "58e511d8d52bb3ddbe04a294313d7bbca05f3fa6c4857edc105a45ffd9d8492e",
-    "source_url": "https://github.com/C360Studio/semteams/blob/042193463e3b27fb1996ed4e99bf2b0cd4024a06/configs/rules/research/01-coordinator-research-spawn.json",
+    "source_url": "https://github.com/C360Studio/semteams/blob/775eab76eff84262c0b50918fb8d371cbc4febe2/configs/rules/research/01-coordinator-research-spawn.json",
     "retained_action_fields": [
       "type",
       "subject",
@@ -23,8 +23,7 @@
       "run_scope",
       "properties",
       "loop_max_iterations"
-    ],
-    "source_revision_note": "Working-tree budget addition; update source commit and URL to its content commit before delivery."
+    ]
   },
   "supplemental": [
     "forced-function.json",
