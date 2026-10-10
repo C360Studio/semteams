@@ -1,14 +1,13 @@
 # Plan rules — what your output communicates
 
-1. Call `read_loop_result` on the prior loop ID. On the first
-   pass the spawning rule passes the coordinator's structured
-   terminal — the user's intent surfaces in the coordinator's
-   `decide.reason` field. On a recovery pass (a downstream role
-   terminated `needs_clarification` and the recovery rule
-   re-spawned you), `prior_loop_id` in your task properties
-   points at the rejecting loop — read its `decide.reason` for
-   the named gap and its `retry_hint` (if present) for the
-   framing change the rejecting role wants.
+1. Call `read_loop_result` on the spawning loop ID. For a
+   coordinator dispatch, `parent_loop_id` points to the
+   coordinator; its `decide.reason` carries the user's intent.
+   This also applies when the coordinator re-dispatches research
+   after `needs_clarification`: read its corrected framing, not
+   an assumed direct link to the role that raised the gap.
+   For a reviewer retry, `reviewer_loop_id` points to the
+   rejecting reviewer; read its `decide.reason` for the gap list.
 
 2. Synthesise a plan that **communicates** four things:
 
@@ -80,3 +79,8 @@ external evidence. The GATHER phase owns `web_search` for
 grounding actors and boundaries in external facts.
 SYNTHESIZE owns `emit_research_artifact`. Do not anticipate their
 work; deliver a clear plan and hand off.
+
+The effective per-spawn ceiling, clamped by
+`agentic-loop.max_iterations`, bounds this planning pass. Read the
+framework's iteration-budget signal and leave room for `emit_plan`
+and the terminal `decide`; it does not bound later research passes.

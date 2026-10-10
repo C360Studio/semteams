@@ -27,6 +27,7 @@
       "type": "publish_agent",
       "subject": "agent.task.researcher-research-gather",
       "role": "researcher-research-gather",
+      "loop_max_iterations": "20",
       "model": "research",
       "tools": ["read_loop_result", "web_search", "bash", "scratchpad", "decide"],
       "tool_choice": { "mode": "required" },
@@ -49,6 +50,7 @@
   ],
   "on_exit": [],
   "metadata": {
+    "iteration_budget_note": "20 allows scoped searches, source reads, scratchpad updates, and the terminal decision for each fan-out child. Conservative engineering defaults, not successful-completion guarantees.",
     "pack": "research",
     "phase": "ADR-042 MVP-2 + ADR-046 Phase 1",
     "adr": "docs/adr/042-coordinator-instantiated-flows-via-templates.md",

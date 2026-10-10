@@ -28,6 +28,7 @@
       "run_scope": "new",
       "subject": "agent.task.researcher-research-plan",
       "role": "researcher-research-plan",
+      "loop_max_iterations": "12",
       "model": "research",
       "tools": ["read_loop_result", "emit_plan", "scratchpad", "decide"],
       "tool_choice": { "mode": "required" },
@@ -41,6 +42,7 @@
   ],
   "on_exit": [],
   "metadata": {
+    "iteration_budget_note": "12 allows reading prior context, revising or emitting the plan, and the terminal decision. Conservative engineering defaults, not successful-completion guarantees.",
     "pack": "research",
     "phase": "ADR-042 MVP-2",
     "adr": "docs/adr/042-coordinator-instantiated-flows-via-templates.md",

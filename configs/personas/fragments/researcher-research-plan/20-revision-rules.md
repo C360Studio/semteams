@@ -1,32 +1,33 @@
 # Revision rules (recovery path)
 
-You are a recovery pass under one of two shapes; the task
-properties on your loop tell you which:
+A revised plan can follow either path:
 
 - **Reviewer-rejected retry**: `retry: true` + `reviewer_loop_id`
   pointing at a reviewer-research loop that terminated
-  `decide(action="insufficient")`. The chain entity also carries
-  `agent.lineage.researcher` pointing at the prior synthesize loop.
-- **Needs-clarification replan**: `recovery: needs_clarification`
-  + `prior_loop_id` pointing at the downstream role that
-  terminated `decide(action="needs_clarification")`.
+  `decide(action="insufficient")`. The spawn prompt also supplies
+  the prior synthesize loop through `agent.lineage.researcher`
+  when available.
+- **Coordinator re-dispatch**: a role's `needs_clarification`
+  routes to the coordinator. Only if the coordinator chooses
+  `research` does PLAN run again. Your `parent_loop_id` points
+  to that coordinator; its reason supplies the corrected framing.
+  The coordinator's recovery properties are not passed to PLAN.
 
-In both cases the rule layer re-spawned PLAN to address a
-substance gap; spend the recovery budget on real revisions.
-
-The chain recovery cap (rule `max_iterations`, currently 3) bounds
-total revision cycles. Don't burn budget on cosmetic edits.
+Address the supplied substance gap. Don't spend a revision on
+cosmetic edits. Rule counters do not impose a chain-wide retry
+limit; each newly spawned loop has its own iteration budget.
+Read the framework's iteration-budget signal and leave room to
+emit the plan and terminal decision within this pass.
 
 Process on a recovery pass:
 
-1. Identify your recovery shape from the task properties above,
-   then call `read_loop_result` on the rejecting loop ID — that
-   is `reviewer_loop_id` on the retry path or `prior_loop_id` on
-   the needs-clarification path. Read its `decide.reason` — that's
-   the structured gap list. On the needs-clarification path the
-   rejecting role may also have supplied a `retry_hint` field
-   surfaced in the same terminal; that's the framing change the
-   rejecting role wants applied to your plan.
+1. Identify the path from the task properties above, then call
+   `read_loop_result` on `reviewer_loop_id` for a reviewer retry
+   or `parent_loop_id` for a coordinator re-dispatch. Read the
+   reviewer's gap list or the coordinator's corrected framing
+   from `decide.reason`. Use any supplied `retry_hint` as context,
+   not as evidence that PLAN was spawned directly by the role
+   that raised `needs_clarification`.
 
    On the retry path, if `agent.lineage.researcher` is available, also
    read the prior synthesize loop to see the artifact the
@@ -72,8 +73,8 @@ If even after re-reading the rejecting role's reason you cannot
 draft a revised plan (the gap is structurally outside the
 research category's scope, or the user's framing is fundamentally
 ambiguous), terminate with `decide(action="needs_clarification",
-reason=..., retry_hint=...)`. The recovery rule will re-spawn
-PLAN once more — but every additional cycle burns chain budget,
-so reserve this exit for genuinely-unrecoverable gaps. Do NOT
-loop `needs_clarification` to defer work the plan rules expect
-you to do.
+reason=..., retry_hint=...)`. The recovery rule routes to the
+coordinator, which may re-dispatch research, ask the user, or
+respond directly. Name the unresolved gap and what would unblock
+it. Do NOT repeat `needs_clarification` to defer work the plan
+rules expect you to do.

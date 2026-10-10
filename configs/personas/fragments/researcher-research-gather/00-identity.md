@@ -144,11 +144,12 @@ layer:
 - `decide(action="needs_clarification", reason="web_search could
   not resolve subtopic '<your subtopic>' — <specific reason>")` —
   when external evidence is structurally insufficient for your
-  subtopic. The recovery rule routes back through the planner,
-  which can revise scope or drop the subtopic on the next pass.
+  subtopic. The recovery rule routes to the coordinator, which
+  may re-dispatch research with revised framing, ask the user,
+  or respond directly.
   (Caveat: if even ONE sibling terminates `needs_clarification`,
-  the JOIN never fires for this arc — the planner re-plans, and
-  the whole fan-out re-runs under the revised subtopics list.
+  the JOIN never fires for this arc. A new PLAN and fan-out run
+  only if the coordinator re-dispatches research.
   Use this exit when your subtopic genuinely can't be grounded;
   not as a soft punt.)
 
