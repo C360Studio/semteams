@@ -13,7 +13,7 @@ This design-only claim defines the authoritative pre-mutation validation boundar
 agreement, error/correction behavior, integration ownership and proving cases. It records the frozen source survey,
 rejected shortcuts and migration posture in an ADR and design. It does not implement enforcement.
 
-The draft PR on `codex/research-fanout-boundary` owns this design claim; its URL will be recorded after creation.
+[Draft PR #312](https://github.com/C360Studio/semteams/pull/312) on `codex/research-fanout-boundary` owns this design claim.
 The parent issue remains open for implementation, run-wide recovery and scheduling. No issue closure is authorized.
 
 ## Non-goals
