@@ -41,6 +41,7 @@ OpenSpec changes own a claimed PR's target state and task truth. See
 | [**061**](061-agent-runtime-ownership-and-observable-work.md) | **Target ownership: SemEngine substrate and generic durability, SemTeams agent runtime and observable work, SemDev absorbed as a separately qualified pack.** Preserves the read-only pulse target and current live/parked fence; no extraction or activation claimed. |
 | [**062**](062-agent-contract-extraction-boundary.md) | **Accepted extraction design boundary:** retain one frozen concrete agent-contract authority; a bounded implementation may move first while preserving shared types. Records engine integration holds and provenance/qualification requirements; no runtime copying. |
 | [**063**](063-development-pack-absorption-boundary.md) | **Development-pack admission design:** source-backed SemDev transfer, repository-authoritative OpenSpec, runtime-owned evidence and qualified approvals/verification on one shared runtime. No pack activation or implementation authorized. |
+| [064](064-planner-fanout-admission.md) | **Proposed planner admission design:** pack-owned width policy at terminal decision, bounded executor ownership, and a required scoped schema seam. No enforcement or activation shipped. |
 
 ## Conventions
 
