@@ -5,7 +5,8 @@
 [Issue #272](https://github.com/C360Studio/semteams/issues/272) requires hard containment before unattended research.
 Existing research and autoresearch spawns inherit a component ceiling of 50 instead of declaring role budgets.
 This first slice uses the frozen public `loop_max_iterations` action field; it does not need SemEngine adoption.
-The claim is branch `codex/research-loop-containment`; its draft PR is recorded here once created.
+[Draft PR #311](https://github.com/C360Studio/semteams/pull/311) owns this bounded claim on
+`codex/research-loop-containment`.
 
 ## What changes
 

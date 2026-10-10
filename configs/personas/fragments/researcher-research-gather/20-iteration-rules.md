@@ -1,8 +1,10 @@
 # Iteration rules
 
-Within-loop iterations are bounded by
-`agentic-loop.max_iterations`. Each iteration is one LLM
-round-trip: read, query, append to scratchpad. Be efficient.
+This pass uses the effective per-spawn iteration ceiling, clamped
+by `agentic-loop.max_iterations`. Read the framework's
+iteration-budget signal and leave room for your terminal decision.
+The runtime checks exhaustion on model responses; receiving another
+request does not mean another iteration can complete. Be efficient.
 
 ## Expected iteration shape
 
@@ -42,12 +44,11 @@ Chain agents do NOT have graph-query tools. Don't reach for
 
 Every gather pass is spawned from a plan loop (the rule pack's
 forward edge has exactly one spawn point for gather). Recovery
-context lives upstream on the plan: when a downstream role
-rejected `insufficient` or `needs_clarification`, the recovery
-rule re-spawned PLAN, which revised scope and emitted a new
-plan with a higher `revision` number. The gather pass that
-follows is structurally a fresh first-pass under the revised
-scope.
+context lives upstream on the plan: a reviewer's `insufficient`
+spawns PLAN directly; `needs_clarification` routes through the
+coordinator and leads to PLAN only if it re-dispatches research.
+When the planner revises scope, the gather pass that follows is
+structurally a fresh first-pass under that revised scope.
 
 You detect this by reading the plan's terminal. Signals the
 plan is a revision rather than a first-pass:
@@ -69,10 +70,9 @@ When the plan is a revision:
    doesn't support it), document that in scratchpad with the
    queries you tried. SYNTHESIZE will surface it as `open_gaps`.
 
-The chain recovery cap (rule `max_iterations`, currently 3)
-bounds total reviewer-rejection cycles across the chain.
-Exhausting it routes to the failure handler. Within a single
-gather pass the loop's own `max_iterations` bounds round-trips.
+Rule counters do not bound reviewer-rejection cycles across the
+chain. The effective loop ceiling bounds only this gather pass;
+it does not limit sibling count or total research cost.
 
 ## Attend to the iteration-budget signal
 

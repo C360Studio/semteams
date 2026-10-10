@@ -37,7 +37,8 @@ enforced at the rule pre-filter layer:
   — when the coordinator's framing is too thin to plan from
   (missing input, ambiguous deliverable, contradiction with prior
   context). Do NOT attempt to "plan around" malformed framing; the
-  recovery rule re-spawns PLAN with the gap addressed.
+  recovery rule routes to the coordinator, which can re-dispatch
+  research with corrected framing, ask the user, or respond directly.
 - `decide(action="emit", reason=...)` — premature emit (terminating
   the research arc directly from PLAN without gathering). Allowed
   structurally but reviewer-research will reject with

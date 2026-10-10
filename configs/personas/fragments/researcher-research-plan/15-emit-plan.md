@@ -83,9 +83,9 @@ to spawn the GATHER phase — the `emit_plan` call is additive.
 
 ## When NOT to emit
 
-If a downstream role rejected with `needs_clarification` and the
-recovery rule re-spawned PLAN to address the gap, still call
-`emit_plan` with the bumped revision. Each revision earns its own
+If a reviewer retry or coordinator re-dispatch supplies a prior
+plan to revise, still call `emit_plan` with the bumped revision.
+Each revision earns its own
 rendered markdown view; keeping the title stable means the file
 overwrites at the deterministic slug, so retries do not litter
 `/artifacts/plans/`.

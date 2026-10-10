@@ -1,14 +1,14 @@
 ## 1. Claim and plan
 
 - [x] 1.1 Inspect milestone claims, current main CI, owner decisions and OpenSpec queue; obtain independent architecture review.
-- [ ] 1.2 Open the dedicated draft PR claim and record its identity.
+- [x] 1.2 Open draft PR #311 on the dedicated worktree and record its identity.
 
 ## 2. Implement and qualify
 
-- [ ] 2.1 Preserve a failing missing-cap regression, then add justified budgets to every live research/autoresearch spawn.
-- [ ] 2.2 Qualify actual action emission, public loop budget intake/narrowing and the iteration-exhaustion boundary.
+- [x] 2.1 Preserve a failing missing-cap regression, then add justified budgets to every live research/autoresearch spawn.
+- [x] 2.2 Qualify actual action emission, public loop budget intake/narrowing and the iteration-exhaustion boundary.
 - [ ] 2.3 Correct inaccurate recovery guidance and refresh the affected fixture provenance without weakening checks.
-- [ ] 2.4 Run applicable local gates, retain their evidence/limits and resolve independent Go-review findings.
+- [x] 2.4 Run applicable local gates, retain their evidence/limits and resolve independent Go-review findings.
 
 ## 3. Delivery
 

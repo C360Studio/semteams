@@ -39,8 +39,8 @@ research-mode-transition pack:
   phase-validator sentinels; pack uses direct role+decision matches
 - `chain.spec_mode_gate.proceed`, `chain.qa_mode_gate.proceed` —
   dev-via-spec only; not relevant for research
-- `chain.recovery.proceed` — recoverycounter sentinel; pack uses rule
-  `max_iterations` for the same bound
+- `chain.recovery.proceed` — retired recoverycounter sentinel; per-entity
+  rule counters do not replace its chain-wide bound
 - `evidence.summary_ready` — builder-only gate; not relevant for research
 
 A contract test
@@ -58,10 +58,44 @@ machinery.
 | `03a-gather-stamp-completion-on-plan.json` | researcher-research-gather decide(synthesize) | (stamp `research.gather.completed-subtopic` on PLAN loop — counter half of the JOIN) |
 | `03b-synthesize-when-all-gathers-complete.json` | PLAN loop's stamp counter `length_eq` PLAN's subtopics.length | researcher-research-synthesize (aggregates N gather siblings) |
 | `04-synthesize-to-reviewer.json` | researcher-research-synthesize decide(emit) | reviewer-research |
-| `05-reviewer-rejected-retry.json` | reviewer-research decide(insufficient) | researcher-research-plan (max_iterations=3) |
-| `06-needs-clarification-replan.json` | any pack role decide(needs_clarification) | coordinator (max_iterations=3) |
+| `05-reviewer-rejected-retry.json` | reviewer-research decide(insufficient) | researcher-research-plan (per-entity rule max_iterations=3) |
+| `06-needs-clarification-replan.json` | any pack role decide(needs_clarification) | coordinator (per-entity rule max_iterations=3) |
 | `07-reviewer-approved-to-coordinator.json` | reviewer-research decide(approved) | coordinator (wake-up for respond_direct) |
 | `08-loop-failed-pause.json` | any pack role outcome=failed | chain.paused.marker triple (operator surface) |
+
+### Loop containment and recovery limits
+
+Each `publish_agent` spawn requests a role-specific iteration ceiling:
+
+| Spawned role | Requested `loop_max_iterations` |
+|---|---:|
+| researcher-research-plan (initial and retry) | 12 |
+| researcher-research-gather | 20 |
+| researcher-research-synthesize | 24 |
+| reviewer-research | 8 |
+| coordinator (clarification and approval wake-ups) | 8 |
+
+The loop component clamps each request to its configured ceiling. The
+framework's iteration-budget signal reports the effective budget for that
+loop; personas use that signal to leave room for their terminal decision.
+These ceilings contain individual loops. They do not guarantee evidence
+quality, successful completion, bounded fan-out, or a total run budget.
+The frozen runtime enforces exhaustion when handling a model response:
+one further request can be emitted before that guard rejects the response
+with `LoopFailedEvent` reason `max_iterations`, even if it looks like
+completion. The configured values are not exact provider-call or cost ceilings.
+
+The top-level rule `max_iterations=3` in rules 05 and 06 is separate:
+its counter is scoped to a triggering entity. Every newly spawned reviewer
+or research loop is a new entity, so it does **not** cap research-wide retries.
+This is partial containment for [#272](https://github.com/C360Studio/semteams/issues/272),
+not a chain-wide recovery guarantee.
+
+Rule 05 sends reviewer `insufficient` directly to PLAN. Rule 06 sends
+`needs_clarification` to the coordinator, which chooses `research`,
+`ask_user`, or `respond_direct` subject to deployment policy. Only a
+`research` re-dispatch starts another PLAN, whose `parent_loop_id` points
+to the coordinator and whose framing comes from the coordinator's reason.
 
 ### Fan-out shape (rules 02, 03a, 03b)
 

@@ -28,6 +28,7 @@
       "type": "publish_agent",
       "subject": "agent.task.autoresearch-synthesize",
       "role": "autoresearch-synthesize",
+      "loop_max_iterations": "30",
       "model": "research",
       "tools": ["read_loop_result", "bash", "emit_autoresearch_artifact", "scratchpad", "decide"],
       "tool_choice": { "mode": "required" },
@@ -49,6 +50,7 @@
   ],
   "on_exit": [],
   "metadata": {
+    "iteration_budget_note": "30 allows reading the experiment journal and prior review when present, inspecting the best diff, emitting the rollup, and the terminal decision; journal size is not bounded here. Conservative engineering defaults, not successful-completion guarantees.",
     "pack": "autoresearch",
     "phase": "ADR-042 §Phase 2 redesign — second pack",
     "adr": "docs/adr/042-coordinator-instantiated-flows-via-templates.md",

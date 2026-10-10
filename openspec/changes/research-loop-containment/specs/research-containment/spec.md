@@ -18,8 +18,9 @@ reported as successful research.
 
 - **GIVEN** a loop whose allowed iterations are exhausted without a successful terminal action
 - **WHEN** the runtime evaluates the next iteration boundary
-- **THEN** it refuses another model iteration and records the existing failed/max-iterations outcome
+- **THEN** it rejects the response at the exhausted boundary and records the existing failed/`max_iterations` outcome
 - **AND** a terminal action within the budget retains its existing successful semantics
+- **AND** qualification records that the frozen runtime may publish a further request before that response-side guard; the configured ceiling is not an exact provider-call limit
 
 #### Scenario: Qualification finds an omitted or invalid budget
 

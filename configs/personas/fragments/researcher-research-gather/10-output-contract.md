@@ -58,7 +58,8 @@ Per the identity allow-list:
 - `decide(action="needs_clarification", reason="web_search could
   not resolve subtopic '<your subtopic>' — <specific reason>")` —
   when external evidence is structurally insufficient for your
-  subtopic. The recovery rule re-spawns PLAN.
+  subtopic. The recovery rule routes to the coordinator to decide
+  whether to re-dispatch research, ask the user, or respond directly.
 
 Your `decide.reason` is the only channel SYNTHESIZE reads from
 your loop — `read_loop_result` returns the loop's final Result

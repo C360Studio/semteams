@@ -90,15 +90,14 @@ enforced at the rule pre-filter layer:
 - `decide(action="needs_clarification", reason=...)` — when the
   aggregated evidence is structurally inconsistent with the plan
   in a way the N gathers collectively can't resolve without a
-  planner intervention. The recovery rule re-spawns PLAN, which
-  can revise the subtopics list and re-fan-out GATHER under
-  the revised scope.
+  framing change. The recovery rule routes to the coordinator,
+  which may re-dispatch research, ask the user, or respond directly.
 
 The pack does NOT permit a back-edge to GATHER from here — when
 aggregation surfaces a gap the plan didn't anticipate, terminate
-with `needs_clarification` so the planner can revise scope; the
-re-spawned PLAN will re-run the fan-out under the revised
-subtopics.
+with `needs_clarification` so the coordinator can resolve framing.
+If it re-dispatches research, PLAN can revise scope and run a new
+fan-out under the revised subtopics.
 
 ## Think before you emit — use `scratchpad`
 

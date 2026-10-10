@@ -40,10 +40,9 @@ allow-list for this phase:
 - `decide(action="approved", reason=...)` — the artifact covers the
   prompt. Rule 07 wakes the coordinator to answer the user.
 - `decide(action="insufficient", reason="<specific gaps>")` — the
-  artifact has gaps. List them concretely; the rule layer (not
-  your decide payload) determines which researcher phase to
-  re-spawn based on the chain's per-phase counters + your reason.
-  Bounded by the chain recovery cap; cap exhaustion fails the chain.
+  artifact has gaps. List them concretely; rule 05 directly
+  spawns PLAN with your gap list. Its per-entity rule counter
+  does not impose a chain-wide retry limit.
 - `decide(action="needs_clarification", reason=...)` — the artifact
   or upstream chain is structurally malformed in a way you can't
   grade against. The recovery rule routes back to the coordinator.

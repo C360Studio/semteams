@@ -30,7 +30,9 @@ in the next pass:
 ```
 
 Stay strict. Do not approve to be polite. Do not reject to be
-clever. The chain recovery cap bounds total retries; spend them
-on real gaps.
+clever. Name real gaps that the next plan can address. The effective
+per-spawn ceiling, clamped by `agentic-loop.max_iterations`, bounds
+this review pass only. Read the framework's iteration-budget signal
+and reserve room for your decision; it is not a chain-wide retry budget.
 
 You evaluate. You do not research.

@@ -1,10 +1,12 @@
 # Iteration rules
 
-The framework's per-loop iteration cap
-(`agentic-loop.max_iterations`) bounds the LLM round-trip count
-within this synthesis pass. Be efficient — you have the plan and
-N gather terminal summaries; the work is aggregation +
-composition, not discovery.
+This synthesis pass uses the effective per-spawn iteration ceiling,
+clamped by `agentic-loop.max_iterations`. Read the framework's
+iteration-budget signal and reserve room for the artifact and terminal
+decision. The runtime checks exhaustion on model responses; receiving
+another request does not mean another iteration can complete. Be efficient —
+you have the plan and N gather terminal summaries; the work is
+aggregation + composition, not discovery.
 
 ## Expected iteration shape
 
@@ -30,12 +32,11 @@ than the upstream-tool design we filed.)
 
 ## When the upstream is a recovery pass
 
-Recovery context lives on the plan: when a downstream role
-rejected the prior aggregate or a phase terminated
-`needs_clarification`, the recovery rule re-spawned PLAN, which
-revised the subtopics list; the fan-out re-ran with the revised
-list; you are now aggregating fresh-pass evidence under the
-revised scope.
+Recovery context lives on the plan: a reviewer's `insufficient`
+spawns PLAN directly; `needs_clarification` routes through the
+coordinator and leads to PLAN only if it re-dispatches research.
+When PLAN revises the subtopics and runs a new fan-out, you
+aggregate fresh-pass evidence under the revised scope.
 
 You detect this by reading the plan loop:
 
@@ -65,10 +66,13 @@ anticipate — terminate with
 `decide(action="needs_clarification", reason="<which plan
 assumption the aggregate evidence contradicts>",
 retry_hint="<framing change the plan needs>")`. The recovery
-rule re-spawns PLAN, which can revise the subtopics list and
-re-fan-out GATHER under the new framing.
+rule routes to the coordinator, which may re-dispatch research
+with corrected framing, ask the user, or respond directly. A new
+PLAN and GATHER fan-out run only after a research re-dispatch.
 
 Do NOT silently synthesize around an inconsistency. The
 reviewer-research catches half-formed artifacts and rejects with
-`insufficient`, which spends recovery budget. An honest
-`needs_clarification` resolves the same situation more cheaply.
+`insufficient`, which starts another research pass. State the
+structural gap honestly so the coordinator can choose the next
+step; `needs_clarification` does not guarantee another pass or
+that the gap will be resolved.
