@@ -336,6 +336,7 @@ describe("fixture source behavior", () => {
               assignees: ["u"],
               dependencies: [{ ref: "o/r#2", source: "task-list" }],
               pull_requests: [{ ref: "o/r#3", title: "pr", state: "merged" }],
+              linked_runs: [{ by: "work_item_ref", ref: "o/r#1" }],
             },
           ],
         },

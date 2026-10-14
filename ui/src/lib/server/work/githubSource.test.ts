@@ -187,6 +187,12 @@ describe("createGithubSource", () => {
         ],
       },
     });
+
+    const runs = await source.linkedRunBindings({ repository: REPO, number: 315 });
+    expect(runs).toEqual({
+      lookup: "complete",
+      bindings: [{ by: "work_item_ref", ref: "C360Studio/semteams#315" }],
+    });
   });
 
   it("degrades to partial with unknown delivery/review when /pulls or PR comment reads fail", async () => {

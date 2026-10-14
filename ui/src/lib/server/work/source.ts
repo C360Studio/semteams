@@ -14,12 +14,15 @@ export interface ItemRef {
 }
 
 /**
- * How a fixture item names its runs (design D5). Both forms are fixture-only;
- * live linkage is the `run.issue.ref` predicate, which no runtime writer emits.
+ * How a work item names its runs:
+ * - `run_entity_id` / `coordinator_prompt`: explicit fixture bindings (design D5)
+ * - `work_item_ref`: live/fixture work-item reference (`owner/repo#number`) resolved
+ *   through `run.issue.ref` triples and `[Work item: owner/repo#number ...]` prompt scope (#320)
  */
 export type LinkedRunBinding =
   | { by: "run_entity_id"; value: string }
-  | { by: "coordinator_prompt"; equals: string };
+  | { by: "coordinator_prompt"; equals: string }
+  | { by: "work_item_ref"; ref: string };
 
 export interface ItemsResult {
   lookup: LookupStatus;

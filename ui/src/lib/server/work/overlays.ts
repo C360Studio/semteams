@@ -42,6 +42,8 @@ const LOOP_FACTS_LIMIT = 200;
 const PROMPT_LISTING_LIMIT = 50;
 
 export const PROMPT_BINDING_UNMATCHED_REASON = "prompt binding matched no coordinator loop";
+export const WORK_ITEM_REF_UNMATCHED_REASON =
+  "no run matched run.issue.ref or work-scoped prompt";
 
 function truncation(limit: number): string {
   return `read truncated at ${limit} triples`;
@@ -302,33 +304,23 @@ interface BindingResolution {
   parts: Part[];
 }
 
-/** A coordinator found by prompt: its graph facts name the run it minted. */
-async function resolvePromptBinding(reader: Reader, equals: string): Promise<BindingResolution> {
-  const listing = await reader.triples({
-    predicate: "agent.loop.description",
-    object: equals,
-    limit: String(PROMPT_LISTING_LIMIT),
-  });
-  if (!listing.ok) {
-    return {
-      runs: [],
-      parts: [{ lookup: "failed", reason: `loop lookup by prompt failed: ${listing.error}` }],
-    };
-  }
+/**
+ * Extracts `owner/repo#number` from a work-scoped prompt header produced by
+ * `formatWorkScopeHeader` (`[Work item: owner/repo#number (Program / Project) — title]`,
+ * `[Work item: owner/repo#number — title]`, or `[Work item: owner/repo#number]`).
+ */
+export function extractScopedWorkItemRef(description: string): string | null {
+  const match =
+    /^\s*\[Work item:\s*([a-z0-9_.-]+\/[a-z0-9_.-]+#[1-9]\d*)(?=\s*(?:\(|[—–-]|\]))[^\r\n]*\]/i.exec(
+      description,
+    );
+  return match?.[1] ?? null;
+}
 
-  const loopEntities = [
-    ...new Set(
-      listing.value
-        .map((t) => t.subject)
-        .filter((s) => s.includes(LOOP_INFIX) && bareLoopId(s) !== ""),
-    ),
-  ];
-
-  const parts: Part[] = [];
-  if (listing.value.length >= PROMPT_LISTING_LIMIT) {
-    parts.push({ lookup: "partial", reason: `loop lookup by prompt: ${truncation(PROMPT_LISTING_LIMIT)}` });
-  }
-
+async function resolveLoopEntities(
+  reader: Reader,
+  loopEntities: string[],
+): Promise<{ runs: LinkedRun[]; parts: Part[] }> {
   const resolved = await Promise.all(
     loopEntities.map(async (loopEntity): Promise<{ run: LinkedRun } | { part: Part } | null> => {
       const loopId = bareLoopId(loopEntity);
@@ -366,11 +358,45 @@ async function resolvePromptBinding(reader: Reader, equals: string): Promise<Bin
     }),
   );
   const runs: LinkedRun[] = [];
+  const parts: Part[] = [];
   for (const entry of resolved) {
     if (entry === null) continue;
     if ("run" in entry) runs.push(entry.run);
     else parts.push(entry.part);
   }
+  return { runs, parts };
+}
+
+/** A coordinator found by prompt: its graph facts name the run it minted. */
+async function resolvePromptBinding(reader: Reader, equals: string): Promise<BindingResolution> {
+  const listing = await reader.triples({
+    predicate: "agent.loop.description",
+    object: equals,
+    limit: String(PROMPT_LISTING_LIMIT),
+  });
+  if (!listing.ok) {
+    return {
+      runs: [],
+      parts: [{ lookup: "failed", reason: `loop lookup by prompt failed: ${listing.error}` }],
+    };
+  }
+
+  const loopEntities = [
+    ...new Set(
+      listing.value
+        .map((t) => t.subject)
+        .filter((s) => s.includes(LOOP_INFIX) && bareLoopId(s) !== ""),
+    ),
+  ];
+
+  const parts: Part[] = [];
+  if (listing.value.length >= PROMPT_LISTING_LIMIT) {
+    parts.push({ lookup: "partial", reason: `loop lookup by prompt: ${truncation(PROMPT_LISTING_LIMIT)}` });
+  }
+
+  const fromLoops = await resolveLoopEntities(reader, loopEntities);
+  const runs = fromLoops.runs;
+  parts.push(...fromLoops.parts);
 
   // A binding that was declared but resolved to nothing is not "no linked run":
   // the frozen /graph/triples answers [] when it cannot read, so an empty
@@ -381,8 +407,113 @@ async function resolvePromptBinding(reader: Reader, equals: string): Promise<Bin
   return { runs, parts };
 }
 
+/**
+ * Resolves a work item (`owner/repo#number`) through both explicit `run.issue.ref`
+ * triples and work-scoped coordinator prompt headers (`[Work item: owner/repo#number ...]`)
+ * on `agent.loop.description` (issue #320).
+ */
+async function resolveWorkItemRefBinding(
+  reader: Reader,
+  itemRef: string,
+): Promise<BindingResolution> {
+  const trimmedRef = itemRef.trim();
+  const normalizedRef = trimmedRef.toLowerCase();
+  const [issueRefListing, promptListing] = await Promise.all([
+    reader.triples({
+      predicate: "run.issue.ref",
+      object: trimmedRef,
+      limit: String(PROMPT_LISTING_LIMIT),
+    }),
+    reader.triples({
+      predicate: "agent.loop.description",
+      limit: String(PROMPT_LISTING_LIMIT),
+    }),
+  ]);
+
+  if (!issueRefListing.ok && !promptListing.ok) {
+    return {
+      runs: [],
+      parts: [
+        {
+          lookup: "failed",
+          reason: `work-item run lookup failed: ${issueRefListing.error}; ${promptListing.error}`,
+        },
+      ],
+    };
+  }
+
+  const parts: Part[] = [];
+  const loopEntitySet = new Set<string>();
+  const directRunEntitySet = new Set<string>();
+
+  if (!issueRefListing.ok) {
+    parts.push({
+      lookup: "partial",
+      reason: `run.issue.ref lookup failed: ${issueRefListing.error}`,
+    });
+  } else {
+    if (issueRefListing.value.length >= PROMPT_LISTING_LIMIT) {
+      parts.push({
+        lookup: "partial",
+        reason: `run.issue.ref lookup: ${truncation(PROMPT_LISTING_LIMIT)}`,
+      });
+    }
+    for (const t of issueRefListing.value) {
+      if (t.subject.includes(RUN_INFIX)) {
+        directRunEntitySet.add(t.subject);
+      } else if (t.subject.includes(LOOP_INFIX) && bareLoopId(t.subject) !== "") {
+        loopEntitySet.add(t.subject);
+      }
+    }
+  }
+
+  if (!promptListing.ok) {
+    parts.push({
+      lookup: "partial",
+      reason: `work-scoped prompt lookup failed: ${promptListing.error}`,
+    });
+  } else {
+    if (promptListing.value.length >= PROMPT_LISTING_LIMIT) {
+      parts.push({
+        lookup: "partial",
+        reason: `work-scoped prompt lookup: ${truncation(PROMPT_LISTING_LIMIT)}`,
+      });
+    }
+    for (const t of promptListing.value) {
+      if (!t.subject.includes(LOOP_INFIX) || bareLoopId(t.subject) === "") continue;
+      const scopedRef = extractScopedWorkItemRef(text(t.object));
+      if (scopedRef && scopedRef.toLowerCase() === normalizedRef) {
+        loopEntitySet.add(t.subject);
+      }
+    }
+  }
+
+  const fromLoops = await resolveLoopEntities(reader, [...loopEntitySet]);
+  const runs: LinkedRun[] = [...fromLoops.runs];
+  parts.push(...fromLoops.parts);
+
+  const coveredRunIds = new Set(
+    runs.map((r) => r.run_entity_id).filter((id): id is string => id !== null),
+  );
+  const directRunIds = [...directRunEntitySet].filter((id) => !coveredRunIds.has(id));
+  if (directRunIds.length > 0) {
+    const directRuns = await Promise.all(
+      directRunIds.map((runEntityId) =>
+        resolveRun(reader, { runEntityId, coordinatorLoopId: null }),
+      ),
+    );
+    runs.push(...directRuns);
+  }
+
+  if (runs.length === 0 && parts.length === 0) {
+    parts.push({ lookup: "partial", reason: WORK_ITEM_REF_UNMATCHED_REASON });
+  }
+  return { runs, parts };
+}
+
 async function resolveBinding(reader: Reader, binding: LinkedRunBinding): Promise<BindingResolution> {
   if (binding.by === "coordinator_prompt") return resolvePromptBinding(reader, binding.equals);
+  if (binding.by === "work_item_ref") return resolveWorkItemRefBinding(reader, binding.ref);
   const run = await resolveRun(reader, { runEntityId: binding.value, coordinatorLoopId: null });
   return { runs: [run], parts: [] };
 }
@@ -406,11 +537,15 @@ export async function resolveLinkedRuns(
   const resolutions = await Promise.all(bindings.map((b) => resolveBinding(reader, b)));
 
   const seen = new Set<string>();
+  const seenUnstampedLoops = new Set<string>();
   const runs: LinkedRun[] = [];
   for (const run of resolutions.flatMap((r) => r.runs)) {
     if (run.run_entity_id !== null) {
       if (seen.has(run.run_entity_id)) continue;
       seen.add(run.run_entity_id);
+    } else if (run.coordinator_loop_id !== null) {
+      if (seenUnstampedLoops.has(run.coordinator_loop_id)) continue;
+      seenUnstampedLoops.add(run.coordinator_loop_id);
     }
     runs.push(run);
   }

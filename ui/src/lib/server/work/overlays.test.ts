@@ -2,11 +2,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { LinkedRun } from "$lib/types/work";
 import {
+  extractScopedWorkItemRef,
   NOT_YET_STAMPED_REASON,
   PROMPT_BINDING_UNMATCHED_REASON,
   READ_TIMEOUT_MS,
   resolveLinkedRuns,
   VERIFICATION_UNKNOWN_REASON,
+  WORK_ITEM_REF_UNMATCHED_REASON,
 } from "./overlays";
 import type { RunsResolution } from "./overlays";
 import { fakeBackend, requestedUrls, stubBackend, triple } from "./testkit";
@@ -494,3 +496,108 @@ describe("binding set", () => {
     expect(resolution.lookup).toBe("complete");
   });
 });
+
+describe("work_item_ref binding", () => {
+  const byItemRef: LinkedRunBinding = {
+    by: "work_item_ref",
+    ref: "C360Studio/semteams#312",
+  };
+
+  it("extracts work item references from work-scoped prompt headers", () => {
+    expect(
+      extractScopedWorkItemRef(
+        "[Work item: c360studio/semteams#312 (c360 / SemTeams) — Compare MQTT vs NATS]\nInvestigate latency",
+      ),
+    ).toBe("c360studio/semteams#312");
+    expect(
+      extractScopedWorkItemRef(
+        "[Work item: c360-studio/sem-teams#312 (c360 / SemTeams) — [UI] Fix drawer]\nInvestigate latency",
+      ),
+    ).toBe("c360-studio/sem-teams#312");
+    expect(
+      extractScopedWorkItemRef(
+        "[Work item: C360Studio/semteams#312 — Compare MQTT vs NATS]\nInvestigate latency",
+      ),
+    ).toBe("C360Studio/semteams#312");
+    expect(
+      extractScopedWorkItemRef("[Work item: c360studio/semteams#312]\nInvestigate latency"),
+    ).toBe("c360studio/semteams#312");
+    expect(extractScopedWorkItemRef("Unscoped prompt without header")).toBeNull();
+  });
+
+  it("resolves a coordinator loop whose prompt carries a matching [Work item: ...] header", async () => {
+    const scopedPrompt = `[Work item: c360studio/semteams#312 (c360 / SemTeams) — MQTT vs NATS]\n${PROMPT}`;
+    const { resolution } = await resolve([byItemRef], {
+      triples: [
+        triple(LOOP_ENTITY, "agent.loop.description", scopedPrompt),
+        triple(LOOP_ENTITY, "agent.loop.role", "coordinator"),
+        triple(LOOP_ENTITY, "agent.loop.run", LOOP_ID),
+        triple(LOOP_ENTITY, "agent.run.entity-id", RUN),
+        ...completedRun(),
+      ],
+      loops: { [LOOP_ID]: { loop_id: LOOP_ID, state: "complete" } },
+    });
+
+    expect(resolution.lookup).toBe("complete");
+    expect(resolution.runs).toEqual<LinkedRun[]>([
+      {
+        run_entity_id: RUN,
+        coordinator_loop_id: LOOP_ID,
+        lookup: "complete",
+        execution_stage: { state: "known", value: "completed" },
+        needs_you: { state: "known", value: false },
+        verification: { state: "unknown", reason: VERIFICATION_UNKNOWN_REASON },
+      },
+    ]);
+  });
+
+  it("resolves a run entity carrying an explicit run.issue.ref triple", async () => {
+    const { resolution } = await resolve([byItemRef], {
+      triples: [
+        triple(RUN, "run.issue.ref", "C360Studio/semteams#312"),
+        ...completedRun(),
+      ],
+      loops: { [LOOP_ID]: { loop_id: LOOP_ID, state: "complete" } },
+    });
+
+    expect(resolution.lookup).toBe("complete");
+    expect(resolution.runs).toHaveLength(1);
+    expect(resolution.runs[0].run_entity_id).toBe(RUN);
+    expect(resolution.runs[0].coordinator_loop_id).toBe(LOOP_ID);
+  });
+
+  it("deduplicates a run matched by both run.issue.ref and a work-scoped prompt", async () => {
+    const scopedPrompt = `[Work item: C360Studio/semteams#312 — MQTT vs NATS]\n${PROMPT}`;
+    const { resolution } = await resolve([byItemRef], {
+      triples: [
+        triple(RUN, "run.issue.ref", "C360Studio/semteams#312"),
+        triple(LOOP_ENTITY, "agent.loop.description", scopedPrompt),
+        triple(LOOP_ENTITY, "agent.loop.role", "coordinator"),
+        triple(LOOP_ENTITY, "agent.loop.run", LOOP_ID),
+        triple(LOOP_ENTITY, "agent.run.entity-id", RUN),
+        ...completedRun(),
+      ],
+      loops: { [LOOP_ID]: { loop_id: LOOP_ID, state: "complete" } },
+    });
+
+    expect(resolution.lookup).toBe("complete");
+    expect(resolution.runs).toHaveLength(1);
+    expect(resolution.runs[0].run_entity_id).toBe(RUN);
+  });
+
+  it("reports partial with WORK_ITEM_REF_UNMATCHED_REASON when neither run.issue.ref nor prompt scope matches", async () => {
+    const { resolution } = await resolve([byItemRef], {
+      triples: [
+        triple(LOOP_ENTITY, "agent.loop.description", "[Work item: C360Studio/semteams#999]\nOther item"),
+        triple(LOOP_ENTITY, "agent.loop.role", "coordinator"),
+      ],
+    });
+
+    expect(resolution).toEqual({
+      lookup: "partial",
+      reason: WORK_ITEM_REF_UNMATCHED_REASON,
+      runs: [],
+    });
+  });
+});
+
