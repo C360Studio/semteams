@@ -452,6 +452,25 @@ test.describe("Work board: fixtures + live ops control", () => {
       card(page, PROMPT_BOUND_ITEM).getByTestId("overlay-pm-status"),
     ).toHaveAttribute("data-value", "In Progress");
 
+    // Opening #312 scopes ChatBar to the work item and renders the inline run
+    // workbench (Activity and Evidence tabs) directly inside /work.
+    await expect(page.getByTestId("work-chat-context")).toContainText(
+      PROMPT_BOUND_ITEM,
+    );
+    const inlineWorkbench = page.getByTestId("work-inline-run-workbench");
+    await expect(inlineWorkbench).toHaveAttribute(
+      "data-loop-id",
+      coordinatorId,
+    );
+    await expect(
+      inlineWorkbench.getByTestId("work-inline-panel-activity"),
+    ).toBeVisible();
+    await inlineWorkbench.getByTestId("work-run-tab-evidence").click();
+    await expect(
+      inlineWorkbench.getByTestId("work-inline-panel-evidence"),
+    ).toBeVisible();
+    await inlineWorkbench.getByTestId("work-run-tab-activity").click();
+
     const drillIn = page.getByTestId("work-drill-in");
     await expect(drillIn).toHaveAttribute(
       "href",

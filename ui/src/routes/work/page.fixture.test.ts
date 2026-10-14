@@ -52,6 +52,8 @@ async function runsResponse(params: { owner: string; repo: string; number: strin
   );
 }
 
+import { workContext } from "$lib/stores/workContext.svelte";
+
 function serve(input: Parameters<typeof fetch>[0]): Promise<Response> | Response {
   const raw = String(input);
   // The runtime backend is read by the server with an absolute URL.
@@ -60,6 +62,55 @@ function serve(input: Parameters<typeof fetch>[0]): Promise<Response> | Response
   const url = new URL(raw, "http://ui.test");
   if (url.pathname === "/api/work/portfolio") return portfolioRoute.GET({} as never);
   if (url.pathname === "/api/work/items") return itemsRoute.GET({ url } as never);
+  if (url.pathname === "/graph/triples") return backend(new URL(raw, "http://backend.test"));
+  if (url.pathname === "/graphql") {
+    return new Response(
+      JSON.stringify({
+        data: {
+          trajectory: {
+            schema_version: "v1",
+            loop_id: LOOP_ID,
+            coverage: "observed",
+            terminal_observed: true,
+            observed_totals: {
+              facts: 2,
+              tokens_in: 120,
+              tokens_out: 80,
+              elapsed_ms: 450,
+              message_count: 1,
+              tool_count: 0,
+              url_count: 0,
+              model_requests: 1,
+              model_completions: 1,
+              tool_requests: 0,
+              tool_completions: 0,
+              context_compactions: 0,
+              terminal_observations: 1,
+              requested_observations: 0,
+              completed_observations: 2,
+              failed_observations: 0,
+              cancelled_observations: 0,
+            },
+            facts: [
+              {
+                kind: "model.completed",
+                status: "completed",
+                capability_preview: "coordinator",
+                model_preview: "mock-llm",
+                elapsed_ms: 400,
+              },
+              {
+                kind: "loop.terminal",
+                status: "completed",
+                elapsed_ms: 450,
+              },
+            ],
+          },
+        },
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    );
+  }
   const runs = /^\/api\/work\/items\/([^/]+)\/([^/]+)\/(\d+)\/runs$/.exec(url.pathname);
   if (runs) return runsResponse({ owner: runs[1], repo: runs[2], number: runs[3] });
   // The single-item read the page falls back to for a ?item= the lists do not carry.
@@ -69,6 +120,7 @@ function serve(input: Parameters<typeof fetch>[0]): Promise<Response> | Response
 }
 
 beforeEach(async () => {
+  workContext.clear();
   setEnv({ WORK_SOURCE: "fixture", WORK_FIXTURE_SET: "board-mvp" });
   vi.stubGlobal("fetch", vi.fn(async (input: Parameters<typeof fetch>[0]) => serve(input)));
   const { SvelteURL } = await import("svelte/reactivity");
@@ -81,6 +133,7 @@ beforeEach(async () => {
 
 afterEach(() => {
   downgradeRunsToPartial = false;
+  workContext.clear();
   setEnv({});
   vi.unstubAllGlobals();
 });
@@ -371,5 +424,44 @@ describe("/work with the board-mvp fixture", () => {
       board.unmount();
     });
   });
+
+  describe("inline run workbench and workContext scope", () => {
+    it("syncs workContext when an item opens and renders inline Activity and Evidence tabs for a bound run", async () => {
+      const user = userEvent.setup();
+      open(itemParam("c360studio/semteams#312"));
+      const board = render(WorkPage);
+
+      await screen.findByTestId("work-item-overview");
+      await waitFor(() =>
+        expect(workContext.scope).toEqual({
+          itemRef: "c360studio/semteams#312",
+          title: "Compare MQTT vs NATS for IoT edge deployments",
+          repository: "c360studio/semteams",
+          programName: "c360",
+          projectName: "SemTeams",
+        }),
+      );
+
+      await user.click(await screen.findByTestId("load-linked-runs"));
+
+      const workbench = await screen.findByTestId("work-inline-run-workbench");
+      expect(workbench).toHaveAttribute("data-loop-id", LOOP_ID);
+      await waitFor(() =>
+        expect(within(workbench).getByTestId("story-step")).toHaveTextContent("Coordinator replied"),
+      );
+
+      await user.click(within(workbench).getByTestId("work-run-tab-evidence"));
+      const evidencePanel = await within(workbench).findByTestId("run-evidence-panel");
+      await waitFor(() =>
+        expect(within(evidencePanel).getByTestId("run-evidence-triples")).toHaveTextContent("agent.run.phase"),
+      );
+      expect(within(evidencePanel).getByTestId("run-evidence-triples")).toHaveTextContent("completed");
+
+      await user.click(screen.getByTestId("work-overview-close"));
+      await waitFor(() => expect(workContext.scope).toBeNull());
+      board.unmount();
+    });
+  });
 });
+
 

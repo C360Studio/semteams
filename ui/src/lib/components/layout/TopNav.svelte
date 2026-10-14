@@ -15,6 +15,14 @@
     >
       Work
     </a>
+    <a
+      class="nav-link"
+      href={resolve("/")}
+      data-testid="nav-runs"
+      aria-current={page.route.id === "/" ? "page" : undefined}
+    >
+      Runs
+    </a>
   </nav>
   <GlobalStatus />
 </header>
@@ -41,6 +49,12 @@
 
   .app-name:hover {
     color: var(--ui-interactive-primary, #3b82f6);
+  }
+
+  nav {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
   }
 
   .nav-link {

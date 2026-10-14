@@ -5,6 +5,7 @@
   import type { BatonFilter } from "$lib/types/work";
   import { createWorkStore } from "$lib/stores/workStore.svelte";
   import type { RepositoryBoard } from "$lib/stores/workStore.svelte";
+  import { resolveWorkScope, workContext } from "$lib/stores/workContext.svelte";
   import {
     BATON_FILTERS,
     matchesBatonFilter,
@@ -51,12 +52,29 @@
   // effects' dependencies so only the URL (itemRef) drives selection.
   $effect(() => {
     untrack(() => void store.load());
-    return () => store.dispose();
+    return () => {
+      store.dispose();
+      workContext.clear();
+    };
   });
 
   $effect(() => {
     const ref = itemRef;
     untrack(() => store.select(ref));
+  });
+
+  let resolvedItemRef = $derived(selection.kind === "item" ? selection.ref : null);
+  $effect(() => {
+    const ref = resolvedItemRef;
+    if (!ref) {
+      untrack(() => workContext.clear());
+      return;
+    }
+    untrack(() => {
+      if (selection.kind === "item") {
+        workContext.setScope(resolveWorkScope(selection.item, store.programs));
+      }
+    });
   });
 
   function updateUrl(change: (params: URLSearchParams) => void): void {

@@ -1,6 +1,14 @@
 <script lang="ts">
+  import { tick } from "svelte";
   import { resolve } from "$app/paths";
-  import type { WorkItem } from "$lib/types/work";
+  import PendingApprovalSection from "$lib/components/board/PendingApprovalSection.svelte";
+  import RunEvidencePanel from "$lib/components/board/RunEvidencePanel.svelte";
+  import RunHealthPanel from "$lib/components/board/RunHealthPanel.svelte";
+  import RunWaitingSection from "$lib/components/board/RunWaitingSection.svelte";
+  import TaskStory from "$lib/components/board/TaskStory.svelte";
+  import { taskStore } from "$lib/stores/taskStore.svelte";
+  import { controlOutcome } from "$lib/types/control";
+  import type { LinkedRun, WorkItem } from "$lib/types/work";
   import { guardNone } from "$lib/utils/workView";
   import type { LinkedRunsState } from "$lib/utils/workView";
   import LookupNotice from "./LookupNotice.svelte";
@@ -24,6 +32,9 @@
   let itemRef = $derived(item.ref);
   $effect(() => {
     void itemRef;
+    selectedRunLoopId = null;
+    activeTab = "activity";
+    manualFocusId = null;
     heading?.focus();
   });
 
@@ -60,6 +71,90 @@
   // The runs lens is the existing `/?task=<coordinator loop id>` selection.
   function drillInHref(loopId: string): string {
     return `${resolve("/")}?task=${encodeURIComponent(loopId)}`;
+  }
+
+  type ResolvedLinkedRun = LinkedRun & { coordinator_loop_id: string };
+  type InlineRunTab = "activity" | "evidence";
+  const INLINE_RUN_TABS: { id: InlineRunTab; label: string }[] = [
+    { id: "activity", label: "Activity" },
+    { id: "evidence", label: "Evidence" },
+  ];
+
+  let selectedRunLoopId = $state<string | null>(null);
+  let activeTab = $state<InlineRunTab>("activity");
+  let manualFocusId = $state<string | null>(null);
+  let backBtnRef = $state<HTMLButtonElement | null>(null);
+  let workbenchContentEl = $state<HTMLElement>();
+
+  let resolvedRuns = $derived(
+    linkedRuns.status === "loaded"
+      ? linkedRuns.runs.filter(
+          (run): run is ResolvedLinkedRun => Boolean(run.coordinator_loop_id),
+        )
+      : [],
+  );
+
+  let activeRun = $derived.by(() => {
+    if (resolvedRuns.length === 0) return null;
+    if (selectedRunLoopId) {
+      const match = resolvedRuns.find((r) => r.coordinator_loop_id === selectedRunLoopId);
+      if (match) return match;
+    }
+    return resolvedRuns[0];
+  });
+
+  let liveTask = $derived(
+    activeRun
+      ? (taskStore.tasks.find((t) => t.id === activeRun.coordinator_loop_id) ?? null)
+      : null,
+  );
+
+  let focusableLoops = $derived(
+    liveTask
+      ? [...liveTask.childLoops, ...liveTask.controls.map((c) => c.loop)]
+      : [],
+  );
+
+  let focusedLoopId = $derived.by(() => {
+    if (!activeRun) return "";
+    const primaryId = activeRun.coordinator_loop_id;
+    if (!manualFocusId || manualFocusId === primaryId) return primaryId;
+    return focusableLoops.some((c) => c.loop_id === manualFocusId)
+      ? manualFocusId
+      : primaryId;
+  });
+
+  let focusedChild = $derived(
+    !activeRun || focusedLoopId === activeRun.coordinator_loop_id
+      ? null
+      : (focusableLoops.find((c) => c.loop_id === focusedLoopId) ?? null),
+  );
+
+  function selectInlineRun(loopId: string): void {
+    selectedRunLoopId = loopId;
+    manualFocusId = null;
+  }
+
+  function focusChild(loopId: string): void {
+    manualFocusId = loopId;
+  }
+
+  async function focusPrimary(): Promise<void> {
+    const returnTo = focusedLoopId;
+    manualFocusId = null;
+    await tick();
+    const row = Array.from(
+      workbenchContentEl?.querySelectorAll<HTMLElement>(
+        '[data-testid="work-inline-child-item"], [data-testid="work-inline-control-row"]',
+      ) ?? [],
+    ).find((r) => r.dataset.loopId === returnTo);
+    row?.focus();
+  }
+
+  async function focusFromStory(loopId: string): Promise<void> {
+    focusChild(loopId);
+    await tick();
+    backBtnRef?.focus();
   }
 </script>
 
@@ -254,6 +349,7 @@
 
     <button
       type="button"
+      class="load-runs-btn"
       data-testid="load-linked-runs"
       aria-busy={loading}
       aria-disabled={loading ? "true" : undefined}
@@ -343,6 +439,189 @@
           </li>
         {/each}
       </ul>
+
+      {#if activeRun}
+        <div
+          class="inline-workbench"
+          data-testid="work-inline-run-workbench"
+          data-loop-id={activeRun.coordinator_loop_id}
+        >
+          {#if resolvedRuns.length > 1}
+            <div
+              class="run-selector"
+              role="group"
+              aria-label="Inspect linked run"
+              data-testid="work-inline-run-selector"
+            >
+              {#each resolvedRuns as run (run.coordinator_loop_id)}
+                <button
+                  type="button"
+                  class="run-selector-btn"
+                  class:active={activeRun.coordinator_loop_id === run.coordinator_loop_id}
+                  data-testid="work-inline-run-option"
+                  data-loop-id={run.coordinator_loop_id}
+                  aria-pressed={activeRun.coordinator_loop_id === run.coordinator_loop_id}
+                  onclick={() => selectInlineRun(run.coordinator_loop_id)}
+                >
+                  {runLabel(run.run_entity_id)}
+                </button>
+              {/each}
+            </div>
+          {/if}
+
+          {#if liveTask?.state === "awaiting_approval" && liveTask.primaryLoop.pending_approval}
+            <PendingApprovalSection
+              loopId={liveTask.id}
+              pendingApproval={liveTask.primaryLoop.pending_approval}
+            />
+          {/if}
+
+          {#if liveTask?.runPause}
+            <RunWaitingSection runId={liveTask.id} pause={liveTask.runPause} />
+          {/if}
+
+          {#if liveTask?.runHealth}
+            <RunHealthPanel health={liveTask.runHealth} />
+          {/if}
+
+          <div
+            class="workbench-tabs"
+            role="tablist"
+            aria-label="Run views"
+            data-testid="work-inline-run-tabs"
+          >
+            {#each INLINE_RUN_TABS as tab (tab.id)}
+              <button
+                type="button"
+                class="workbench-tab"
+                class:active={activeTab === tab.id}
+                role="tab"
+                aria-selected={activeTab === tab.id}
+                aria-controls="work-inline-panel-{tab.id}"
+                data-testid="work-run-tab-{tab.id}"
+                onclick={() => (activeTab = tab.id)}
+              >
+                {tab.label}
+              </button>
+            {/each}
+          </div>
+
+          <div class="workbench-content" bind:this={workbenchContentEl}>
+            {#if activeTab === "activity"}
+              <div
+                id="work-inline-panel-activity"
+                role="tabpanel"
+                data-testid="work-inline-panel-activity"
+              >
+                {#if liveTask && liveTask.childLoops.length > 0}
+                  <section class="workbench-section" data-testid="work-inline-children-section">
+                    <h4 class="workbench-section-title">
+                      Sub-tasks ({liveTask.childLoops.length})
+                    </h4>
+                    <ul class="child-list">
+                      {#each liveTask.childLoops as child (child.loop_id)}
+                        <li>
+                          <button
+                            type="button"
+                            class="child-item"
+                            class:focused={focusedLoopId === child.loop_id}
+                            onclick={() => focusChild(child.loop_id)}
+                            data-testid="work-inline-child-item"
+                            data-loop-id={child.loop_id}
+                            aria-pressed={focusedLoopId === child.loop_id}
+                          >
+                            <span class="child-state {child.state}">
+                              {child.state.replace(/_/g, " ")}
+                            </span>
+                            <span class="child-role">{child.role}</span>
+                            <span class="child-progress">
+                              {child.iterations}/{child.max_iterations}
+                            </span>
+                          </button>
+                        </li>
+                      {/each}
+                    </ul>
+                  </section>
+                {/if}
+
+                {#if liveTask && liveTask.controls.length > 0}
+                  <section class="workbench-section" data-testid="work-inline-controls-section">
+                    <h4 class="workbench-section-title">
+                      Controls ({liveTask.controls.length})
+                    </h4>
+                    {#if liveTask.controlsTruncated}
+                      <p class="controls-note" data-testid="work-inline-controls-truncated">
+                        Some rule-fired loops on this run could not be classified, so this list may be incomplete.
+                      </p>
+                    {/if}
+                    <ul class="child-list">
+                      {#each liveTask.controls as control (control.loopId)}
+                        <li>
+                          <button
+                            type="button"
+                            class="child-item"
+                            class:focused={focusedLoopId === control.loopId}
+                            onclick={() => focusChild(control.loopId)}
+                            data-testid="work-inline-control-row"
+                            data-loop-id={control.loopId}
+                            aria-pressed={focusedLoopId === control.loopId}
+                          >
+                            <span class="child-state {control.loop.state}">
+                              {control.loop.state.replace(/_/g, " ")}
+                            </span>
+                            <span class="child-role">{control.loop.role || "control"}</span>
+                            <span class="child-progress">
+                              {controlOutcome(control.loop.state)}
+                            </span>
+                          </button>
+                        </li>
+                      {/each}
+                    </ul>
+                  </section>
+                {/if}
+
+                {#if focusedChild}
+                  <div class="focus-breadcrumb" data-testid="work-inline-focus-breadcrumb">
+                    <button
+                      type="button"
+                      class="focus-back"
+                      bind:this={backBtnRef}
+                      onclick={focusPrimary}
+                      data-testid="work-inline-focus-back"
+                    >
+                      &larr; Back to {liveTask?.title ?? runLabel(activeRun.run_entity_id)}
+                    </button>
+                    <span class="focus-current">
+                      Viewing <span class="focus-current-role">{focusedChild.role}</span>
+                    </span>
+                  </div>
+                {/if}
+
+                <section class="workbench-section">
+                  <TaskStory
+                    loopId={focusedLoopId}
+                    prompt={focusedChild ? undefined : liveTask?.primaryLoop.prompt}
+                    controls={focusedChild ? [] : (liveTask?.controls ?? [])}
+                    controlsTruncated={liveTask?.controlsTruncated ?? false}
+                    onFocusLoop={focusFromStory}
+                  />
+                </section>
+              </div>
+            {:else if activeTab === "evidence"}
+              <div
+                id="work-inline-panel-evidence"
+                role="tabpanel"
+                data-testid="work-inline-panel-evidence"
+              >
+                <RunEvidencePanel
+                  loopId={focusedLoopId}
+                  runEntityId={activeRun.run_entity_id ?? liveTask?.runHealth?.runEntityId ?? null}
+                />
+              </div>
+            {/if}
+          </div>
+        </div>
+      {/if}
     {/if}
   </section>
 </aside>
@@ -424,7 +703,8 @@
     font-size: 0.9375rem;
   }
 
-  .runs p {
+  .runs > p,
+  .runs-status p {
     margin: 0;
     font-size: 0.8125rem;
   }
@@ -482,7 +762,7 @@
   }
 
   .close,
-  .runs button {
+  .load-runs-btn {
     align-self: flex-start;
     padding: 0.25rem 0.625rem;
     border: 1px solid var(--ui-border-strong, #9ca3af);
@@ -494,15 +774,192 @@
     cursor: pointer;
   }
 
-  .runs button[aria-disabled="true"] {
+  .load-runs-btn[aria-disabled="true"] {
     cursor: progress;
     opacity: 0.7;
   }
 
+  .inline-workbench {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-top: 0.375rem;
+    padding-top: 0.625rem;
+    border-top: 1px solid var(--ui-border-subtle, #e5e7eb);
+  }
+
+  .run-selector {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+  }
+
+  .run-selector-btn {
+    padding: 0.25rem 0.5rem;
+    border: 1px solid var(--ui-border-subtle, #d1d5db);
+    border-radius: 6px;
+    background: var(--ui-surface-primary, #fff);
+    font: inherit;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.75rem;
+    color: var(--ui-text-secondary, #4b5563);
+    cursor: pointer;
+  }
+
+  .run-selector-btn.active {
+    border-color: var(--ui-interactive-primary, #3b82f6);
+    background: color-mix(
+      in srgb,
+      var(--ui-interactive-primary, #3b82f6) 10%,
+      var(--ui-surface-primary, #fff)
+    );
+    color: var(--ui-text-primary, #111827);
+    font-weight: 600;
+  }
+
+  .workbench-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--ui-border-subtle, #e5e7eb);
+  }
+
+  .workbench-tab {
+    flex: 1;
+    padding: 0.375rem 0.625rem;
+    border: none;
+    border-bottom: 2px solid transparent;
+    background: transparent;
+    font: inherit;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--ui-text-secondary, #6b7280);
+    cursor: pointer;
+    text-align: center;
+  }
+
+  .workbench-tab.active {
+    color: var(--ui-text-primary, #111827);
+    border-bottom-color: var(--ui-interactive-primary, #3b82f6);
+  }
+
+  .workbench-content {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .workbench-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+    padding: 0.375rem 0;
+  }
+
+  .workbench-section-title {
+    margin: 0;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--ui-text-secondary, #6b7280);
+  }
+
+  .controls-note {
+    margin: 0;
+    font-size: 0.75rem;
+    color: var(--ui-text-secondary, #6b7280);
+  }
+
+  .child-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .child-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    padding: 0.375rem 0.5rem;
+    border: 1px solid var(--ui-border-subtle, #e5e7eb);
+    border-radius: 6px;
+    background: var(--ui-surface-primary, #fff);
+    font: inherit;
+    font-size: 0.75rem;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .child-item.focused {
+    border-color: var(--ui-interactive-primary, #3b82f6);
+    background: color-mix(
+      in srgb,
+      var(--ui-interactive-primary, #3b82f6) 8%,
+      var(--ui-surface-primary, #fff)
+    );
+  }
+
+  .child-state {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--ui-text-secondary, #6b7280);
+  }
+
+  .child-role {
+    font-weight: 600;
+    color: var(--ui-text-primary, #111827);
+  }
+
+  .child-progress {
+    margin-left: auto;
+    font-size: 0.6875rem;
+    color: var(--ui-text-secondary, #6b7280);
+  }
+
+  .focus-breadcrumb {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.375rem 0.5rem;
+    border: 1px solid var(--ui-border-subtle, #e5e7eb);
+    border-radius: 6px;
+    background: var(--ui-surface-primary, #fff);
+    font-size: 0.75rem;
+  }
+
+  .focus-back {
+    padding: 0.125rem 0.375rem;
+    border: none;
+    background: transparent;
+    font: inherit;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--ui-interactive-primary, #2563eb);
+    cursor: pointer;
+  }
+
+  .focus-current {
+    color: var(--ui-text-secondary, #6b7280);
+  }
+
+  .focus-current-role {
+    font-weight: 600;
+    color: var(--ui-text-primary, #111827);
+  }
+
   .overview-ref:focus-visible,
   .close:focus-visible,
-  .runs button:focus-visible,
-  .drill-in:focus-visible {
+  .load-runs-btn:focus-visible,
+  .drill-in:focus-visible,
+  .run-selector-btn:focus-visible,
+  .workbench-tab:focus-visible,
+  .child-item:focus-visible,
+  .focus-back:focus-visible {
     outline: 2px solid var(--ui-focus-ring, #0f62fe);
     outline-offset: 2px;
   }
