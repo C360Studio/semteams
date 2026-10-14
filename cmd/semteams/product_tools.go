@@ -19,6 +19,7 @@ import (
 
 	"github.com/c360studio/semteams/cmd/semteams/chain"
 	"github.com/c360studio/semteams/cmd/semteams/devviaspec"
+	"github.com/c360studio/semteams/cmd/semteams/portfolio"
 	"github.com/c360studio/semteams/cmd/semteams/research"
 	"github.com/c360studio/semteams/cmd/semteams/runanchor"
 	"github.com/c360studio/semteams/cmd/semteams/sandboxmanager"
@@ -35,6 +36,7 @@ import (
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitdevviatestmeasurement"
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitdevviatestplan"
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitplan"
+	"github.com/c360studio/semteams/cmd/semteams/tools/githubread"
 	"github.com/c360studio/semteams/cmd/semteams/tools/projectspecplan"
 	"github.com/c360studio/semteams/cmd/semteams/tools/querysandboxattestation"
 	"github.com/c360studio/semteams/cmd/semteams/tools/renderopenspec"
@@ -125,6 +127,27 @@ const (
 	//     produces Terminal attestation explaining the gap;
 	//     Coordinator routes to respond_direct rather than 500.
 	envSandboxRunner = "SEMTEAMS_SANDBOX_RUNNER"
+
+	// envPortfolioPath points github_read (#273) and the UI work board (#267)
+	// at the operator-authored portfolio JSON document validated against
+	// configs/portfolio/portfolio.schema.json. Unset skips github_read
+	// registration so deployments without a portfolio do not advertise a
+	// disabled tool to the LLM.
+	envPortfolioPath = "SEMTEAMS_PORTFOLIO_PATH"
+
+	// envGitHubToken is the server-side GitHub token injected into
+	// githubread.Config at boot. Falls back to GITHUB_TOKEN when unset.
+	// Never exposed to the bash tool environment (which strips *_TOKEN).
+	envGitHubToken         = "SEMTEAMS_GITHUB_TOKEN"
+	envGitHubTokenFallback = "GITHUB_TOKEN"
+
+	// envGitHubAPIURL optionally overrides https://api.github.com for
+	// GitHub Enterprise or mock-server E2E fixtures.
+	envGitHubAPIURL = "SEMTEAMS_GITHUB_API_URL"
+
+	// envGitHubCursorPath optionally persists github_read's per-(repo, kind)
+	// cursor watermarks to a JSON file on disk across restarts.
+	envGitHubCursorPath = "SEMTEAMS_GITHUB_CURSOR_PATH"
 )
 
 // registerProductPayloads registers all SemTeams-local payload types on top
@@ -161,7 +184,7 @@ func registerProductPayloads(reg *payloadregistry.Registry) error {
 // populated it with first-party tools. R2 of ADR-031 adds
 // add_source_repo. R3.2.1 adds emit_research_artifact. ADR-038 PR C
 // Phase C2 adds emit_plan. ADR-041 Phase 4 adds the chain-scoped bash
-// wrapper.
+// wrapper. ADR-060 §5 + addendum 2026-10-14 (#273) adds github_read.
 //
 // Discipline gate (commission-not-omission): adding a new tool
 // registration here requires a framework-alignment review per
@@ -174,6 +197,9 @@ func registerProductPayloads(reg *payloadregistry.Registry) error {
 // the migration target in tools/README.md and an ADR addendum.
 func registerProductTools(reg *agentictools.ExecutorRegistry, natsClient *natsclient.Client, platform types.PlatformMeta, logger *slog.Logger) error {
 	if err := registerAddSource(reg, natsClient, logger); err != nil {
+		return err
+	}
+	if err := registerGitHubRead(reg, logger); err != nil {
 		return err
 	}
 	if err := registerEmitArtifact(reg, natsClient, platform, logger); err != nil {
@@ -788,6 +814,59 @@ func registerAddSource(reg *agentictools.ExecutorRegistry, natsClient *natsclien
 		slog.String("name", addsource.RepoToolName),
 		slog.Int("allowed_namespaces", len(addSourceCfg.AllowedNamespaces)),
 		slog.String("default_namespace", addSourceCfg.DefaultNamespace))
+	return nil
+}
+
+// registerGitHubRead wires the #273 github_read executor (ADR-060 §5 +
+// addendum 2026-10-14). Skipped when SEMTEAMS_PORTFOLIO_PATH is unset so
+// deployments without a configured portfolio do not advertise a disabled tool
+// to the LLM; fails closed at boot if SEMTEAMS_PORTFOLIO_PATH is set to an
+// unreadable or invalid portfolio document.
+func registerGitHubRead(reg *agentictools.ExecutorRegistry, logger *slog.Logger) error {
+	portfolioPath := strings.TrimSpace(os.Getenv(envPortfolioPath))
+	if portfolioPath == "" {
+		logger.Info("Product tool not registered (no portfolio path configured)",
+			slog.String("name", githubread.ToolName),
+			slog.String("env_var", envPortfolioPath))
+		return nil
+	}
+
+	p, err := portfolio.LoadFile(portfolioPath)
+	if err != nil {
+		return fmt.Errorf("load %s for %s: %w", envPortfolioPath, githubread.ToolName, err)
+	}
+
+	var cursors githubread.CursorStore
+	if cursorPath := strings.TrimSpace(os.Getenv(envGitHubCursorPath)); cursorPath != "" {
+		store, err := githubread.NewFileCursorStore(cursorPath)
+		if err != nil {
+			return fmt.Errorf("init %s for %s: %w", envGitHubCursorPath, githubread.ToolName, err)
+		}
+		cursors = store
+	}
+
+	token := strings.TrimSpace(os.Getenv(envGitHubToken))
+	if token == "" {
+		token = strings.TrimSpace(os.Getenv(envGitHubTokenFallback))
+	}
+
+	executor := githubread.NewExecutor(githubread.Config{
+		Portfolio: p,
+		Token:     token,
+		APIBase:   strings.TrimSpace(os.Getenv(envGitHubAPIURL)),
+		Cursors:   cursors,
+	}, logger)
+	if err := reg.RegisterTool(githubread.ToolName, executor); err != nil {
+		return fmt.Errorf("register %s: %w", githubread.ToolName, err)
+	}
+
+	repos, _ := p.ResolveRepositories("", "", "")
+	logger.Info("Registered product tool",
+		slog.String("name", githubread.ToolName),
+		slog.String("category", string(githubread.ToolCategory)),
+		slog.String("portfolio_path", portfolioPath),
+		slog.Int("repositories", len(repos)),
+		slog.Bool("authenticated", token != ""))
 	return nil
 }
 
