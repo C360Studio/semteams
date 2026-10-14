@@ -28,5 +28,5 @@
 ## 4. Review and archive
 
 - [x] 4.1 Run `svelte-reviewer` on the UI changes and resolve any findings.
-- [ ] 4.2 Archive `work-inline-agentic-drawer` (`openspec archive work-inline-agentic-drawer` and spec sync) as the
+- [x] 4.2 Archive `work-inline-agentic-drawer` (`openspec archive work-inline-agentic-drawer` and spec sync) as the
       landing PR's final content commit.
