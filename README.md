@@ -228,23 +228,24 @@ layering, product-shell wiring map, mandatory protocols
 ## Status
 
 Active development. Breaking changes expected. The current runtime is not yet
-the program-manager MVP: today the live product-facing packs are research and
-autoresearch. The next product slice is a read-only, evidence-backed program
+the program-manager MVP: today the live product-facing packs are `research`
+(MVP supporting capability) and `autoresearch` (retained framework
+demonstration). The next product slice is a read-only, evidence-backed program
 pulse across operator-configured projects and repositories; see the
 [`roadmap`](docs/ROADMAP.md).
 
 Current architecture is **substrate-plus-overlays**: a single bootstrap configuration wires
 substrate singletons, and task classes are added as category-keyed
 rule packs + named persona bundles rather than separate flow
-configs. The demo scope is the inner and outer loops
+configs. The wired packs are
 ([ADR-058](docs/adr/058-beta159-realignment-and-demo-lane-focus.md)):
 
-- **research** — coordinator-routed prose research arc: plan →
+- **research (MVP supporting capability)** — coordinator-routed prose research arc: plan →
   parallel gather fan-out → join → synthesize → review → artifact
   with recoverable sources.
-- **autoresearch** — Karpathy-style propose/execute iteration loop
+- **autoresearch (retained framework demonstration)** — Karpathy-style propose/execute iteration loop
   with empirical keep/revert decisions and per-tenant devcontainer
-  attestation.
+  attestation (wired on disk with contract/integration coverage and opt-in browser journeys; outside the MVP claim and required `demo-mvp` / `test:e2e` gates).
 - **Parked donor material** — the spec-authoring and software-implementation packs
   (`create-change`, `proof-readiness`, `dev-from-task`,
   `dev-via-test`) are unwired. SemDev currently implements that journey; its future absorption is separately qualified
