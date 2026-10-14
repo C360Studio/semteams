@@ -2,6 +2,7 @@
 // carry a reason, as the server emits them.
 
 import { vi } from "vitest";
+import { deriveBatonOverlays } from "$lib/server/work/baton";
 import type {
   ItemsResponse,
   LinkedRun,
@@ -12,6 +13,12 @@ import type {
 } from "$lib/types/work";
 
 export function makeItem(overrides: Partial<WorkItem> = {}): WorkItem {
+  const labels = overrides.labels ?? [];
+  const assignees = overrides.assignees ?? [];
+  const dependencies = overrides.dependencies ?? [];
+  const delivery =
+    overrides.delivery ?? ({ state: "unknown", reason: "source does not supply linked pull requests" } as const);
+  const baton = deriveBatonOverlays({ labels, assignees, dependencies, delivery });
   return {
     ref: "acme/widgets#1",
     repository: "acme/widgets",
@@ -19,11 +26,12 @@ export function makeItem(overrides: Partial<WorkItem> = {}): WorkItem {
     title: "Add a widget",
     body_excerpt: "Explain why widgets matter.",
     state: "open",
-    labels: [],
-    assignees: [],
+    labels,
+    assignees,
     column: "Todo",
-    dependencies: [],
-    delivery: { state: "unknown", reason: "source does not supply linked pull requests" },
+    dependencies,
+    delivery,
+    ...baton,
     ...overrides,
   };
 }

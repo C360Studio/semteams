@@ -68,12 +68,89 @@ export interface WorkDependency {
   source: "blocked-by" | "task-list";
 }
 
+export interface PullRequestReviewRequest {
+  sha: string;
+  reviewer_lane?: string;
+}
+
+export interface PullRequestReviewRecord {
+  sha: string;
+  verdict: "pass" | "blocking";
+  reviewer_lane?: string;
+  reviewed_by?: string;
+}
+
 export interface PullRequestRef {
   /** `owner/repo#number` */
   ref: string;
   title?: string;
   state?: "open" | "merged" | "closed";
+  draft?: boolean;
+  branch?: string;
+  head_sha?: string;
+  stop_point?: string;
+  implemented_by?: string;
+  reviewed_by?: string;
+  review_request?: PullRequestReviewRequest;
+  review_record?: PullRequestReviewRecord;
 }
+
+export type AgentVendor = "claude" | "codex" | "gemini";
+
+export interface WorkClaim {
+  kind: "agent-pr" | "human-pr" | "assignee";
+  /** Agent vendor/persona, PR author/branch, or GitHub assignee login(s). */
+  holder: string;
+  agent_vendor?: AgentVendor;
+  /** `owner/repo#number` when claimed by an open or draft PR. */
+  pull_request?: string;
+  branch?: string;
+  draft?: boolean;
+  /** Declared stop-point from the PR description when present. */
+  stop_point?: string;
+  implemented_by?: string;
+}
+
+export type WorkReviewStatus =
+  | "not_requested"
+  | "requested"
+  | "current"
+  | "stale"
+  | "changes_requested";
+
+export interface WorkReviewBaton {
+  pull_request: string;
+  status: WorkReviewStatus;
+  head_sha?: string;
+  request_sha?: string;
+  record_sha?: string;
+  reviewer_lane?: string;
+  implemented_by?: string;
+  reviewed_by?: string;
+}
+
+export type WorkGateKind =
+  | "needs-decision"
+  | "blocked"
+  | "flake-hold"
+  | "openspec-hold";
+
+export type OpenSpecCaveatClass = "HALT" | "RED" | "BLOCKED" | "WONTDO" | "OPEN-Q";
+
+export interface WorkGate {
+  kind: WorkGateKind;
+  summary: string;
+  ref?: string;
+  caveat_class?: OpenSpecCaveatClass;
+}
+
+export type BatonFilter =
+  | "all"
+  | "needs-decision"
+  | "claimed"
+  | "review"
+  | "blocked"
+  | "ready-to-land";
 
 export interface WorkItem {
   /** `owner/repo#number` */
@@ -96,6 +173,12 @@ export interface WorkItem {
   dependencies: WorkDependency[];
   /** Linked pull requests. `unknown` unless the source supplies them. */
   delivery: Overlay<PullRequestRef[]>;
+  /** Builder / claim baton derived from active PRs and issue assignees. */
+  claim: Overlay<WorkClaim>;
+  /** Cross-agent / PR review baton derived from active PR review records and HEAD SHA. */
+  review: Overlay<WorkReviewBaton>;
+  /** Decision docket, dependency blockers, flake holds, and OpenSpec caveats. */
+  gate: Overlay<WorkGate[]>;
 }
 
 // ---------------------------------------------------------------------------

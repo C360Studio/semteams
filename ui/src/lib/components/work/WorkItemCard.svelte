@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { WorkItem } from "$lib/types/work";
+  import { formatClaimBadge, formatGateBadge, formatReviewBadge } from "$lib/utils/workView";
   import type { ItemOverlays } from "$lib/utils/workView";
   import OverlayBadge from "./OverlayBadge.svelte";
 
@@ -33,6 +34,9 @@
           reason: "derived from GitHub fields; no Project status is configured",
         } as const),
   );
+  let claimBadge = $derived(formatClaimBadge(item.claim));
+  let reviewBadge = $derived(formatReviewBadge(item.review));
+  let gateBadge = $derived(formatGateBadge(item.gate));
 </script>
 
 <!--
@@ -74,6 +78,9 @@
 
   <span class="card-badges" id="{uid}-badges">
     <OverlayBadge name="pm-status" label="PM status" overlay={pmStatus} noneLabel="not set" />
+    <OverlayBadge name="claim" label="Baton" overlay={claimBadge} noneLabel="unclaimed" />
+    <OverlayBadge name="review" label="Review" overlay={reviewBadge} noneLabel="no review" />
+    <OverlayBadge name="gate" label="Gate" overlay={gateBadge} noneLabel="no hold" />
     <OverlayBadge
       name="execution-stage"
       label="Stage"

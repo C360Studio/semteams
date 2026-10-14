@@ -67,14 +67,81 @@ describe("board-mvp (design D5)", () => {
     expect(result.items.every((i) => i.pm_status === undefined && i.priority === undefined)).toBe(true);
   });
 
-  it("has exactly one item with linked PRs as delivery context", async () => {
+  it("covers delivery context and baton overlays (claim, review SHA parity, and decision/hold gates)", async () => {
     const { source, semteams, semsource } = boardMvp();
-    const items = [...(await source.listItems(semteams)).items, ...(await source.listItems(semsource)).items];
-    const known = items.filter((i) => i.delivery.state === "known");
-    expect(known).toHaveLength(1);
-    const delivery = known[0].delivery;
-    expect(delivery.state === "known" && delivery.value).toHaveLength(2);
-    expect(items.filter((i) => i.delivery.state === "unknown").length).toBe(items.length - 1);
+    const semteamsItems = (await source.listItems(semteams)).items;
+    const semsourceItems = (await source.listItems(semsource)).items;
+    const byNumber = (num: number) => semteamsItems.find((i) => i.number === num)!;
+
+    // #310: needs-decision + blocked-by #314, omitted PRs -> delivery/claim/review unknown, gate known
+    expect(byNumber(310).delivery).toMatchObject({ state: "unknown" });
+    expect(byNumber(310).claim).toMatchObject({ state: "unknown" });
+    expect(byNumber(310).review).toMatchObject({ state: "unknown" });
+    expect(byNumber(310).gate).toEqual({
+      state: "known",
+      value: [
+        { kind: "needs-decision", summary: "status:needs-decision (owner docket)" },
+        { kind: "blocked", summary: "blocked by c360studio/semteams#314", ref: "c360studio/semteams#314" },
+      ],
+    });
+
+    // #311: explicit empty PRs, assignee coby -> delivery none, claim assignee, review none, gate none
+    expect(byNumber(311).delivery).toEqual({ state: "none" });
+    expect(byNumber(311).claim).toEqual({
+      state: "known",
+      value: { kind: "assignee", holder: "coby" },
+    });
+    expect(byNumber(311).review).toEqual({ state: "none" });
+    expect(byNumber(311).gate).toEqual({ state: "none" });
+
+    // #312: claude draft PR claim with stop-point + OpenSpec BLOCKED hold
+    expect(byNumber(312).claim).toMatchObject({
+      state: "known",
+      value: {
+        kind: "agent-pr",
+        agent_vendor: "claude",
+        pull_request: "c360studio/semteams#318",
+        draft: true,
+        stop_point: "Awaiting benchmark gather synthesis",
+      },
+    });
+    expect(byNumber(312).review).toMatchObject({
+      state: "known",
+      value: { status: "not_requested", head_sha: "7f26ca7" },
+    });
+    expect(byNumber(312).gate).toMatchObject({
+      state: "known",
+      value: [{ kind: "openspec-hold", caveat_class: "BLOCKED", ref: "mqtt-nats-edge-study" }],
+    });
+
+    // #314: two linked PRs, codex claim, stale review record (head_sha a1b2c3d != record_sha 9988776)
+    const d314 = byNumber(314).delivery;
+    expect(d314.state === "known" && d314.value).toHaveLength(2);
+    expect(byNumber(314).claim).toMatchObject({
+      state: "known",
+      value: { kind: "agent-pr", agent_vendor: "codex", pull_request: "c360studio/semteams#320" },
+    });
+    expect(byNumber(314).review).toMatchObject({
+      state: "known",
+      value: { status: "stale", head_sha: "a1b2c3d", record_sha: "9988776", reviewed_by: "claude (go-reviewer)" },
+    });
+
+    // #316: current review at HEAD with zero gates (ready-to-land)
+    expect(byNumber(316).review).toMatchObject({
+      state: "known",
+      value: { status: "current", head_sha: "78fbc93", record_sha: "78fbc93", reviewed_by: "codex (svelte-reviewer)" },
+    });
+    expect(byNumber(316).gate).toEqual({ state: "none" });
+
+    // semsource#52 declares pull_requests: [] and assignees: [] -> confirmed unclaimed
+    const semsource52 = semsourceItems.find((i) => i.number === 52)!;
+    expect(semsource52.claim).toEqual({ state: "none" });
+    expect(semsource52.delivery).toEqual({ state: "none" });
+    // semsource#54 omits pull_requests -> delivery, claim, and review are unknown
+    const semsource54 = semsourceItems.find((i) => i.number === 54)!;
+    expect(semsource54.delivery.state).toBe("unknown");
+    expect(semsource54.claim.state).toBe("unknown");
+    expect(semsource54.review.state).toBe("unknown");
   });
 
   it("declares exactly the three linkage cases", async () => {

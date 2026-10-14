@@ -11,6 +11,8 @@ import type {
   WorkItem,
   WorkItemState,
 } from "$lib/types/work";
+import { deriveBatonOverlays } from "./baton";
+import type { OpenSpecChangeInput } from "./baton";
 import { columnFor, columnsFor } from "./columns";
 import { WorkConfigError } from "./config";
 import { findRepository, repositoryKey } from "./portfolio";
@@ -59,6 +61,8 @@ interface FixtureItem {
   dependencies?: WorkDependency[];
   /** Absent = the source does not supply PRs (unknown); [] = none. */
   pull_requests?: PullRequestRef[];
+  /** Linked OpenSpec change and any unticked caveat lines from `tasks.md`. */
+  openspec_change?: OpenSpecChangeInput | null;
   /** Absent behaves like [] in fixture mode. */
   linked_runs?: LinkedRunBinding[];
 }
@@ -66,6 +70,8 @@ interface FixtureItem {
 interface FixtureRepository {
   /** The project board's status options, in column order. */
   status_options?: string[];
+  /** Open `class:flake` issue refs (`owner/repo#n`) in this repository. */
+  flake_holds?: string[];
   items: FixtureItem[];
 }
 
@@ -81,11 +87,17 @@ function isStringArray(value: unknown): value is string[] {
 
 const DEPENDENCY_SOURCES: readonly string[] = ["blocked-by", "task-list"];
 const PULL_REQUEST_STATES: readonly string[] = ["open", "merged", "closed"];
+const REVIEW_VERDICTS: readonly string[] = ["pass", "blocking"];
+const OPENSPEC_CAVEAT_CLASSES: readonly string[] = ["HALT", "RED", "BLOCKED", "WONTDO", "OPEN-Q"];
 
 type IssueSink = (path: string, message: string) => void;
 
 function checkOptionalString(raw: Record<string, unknown>, path: string, key: string, issue: IssueSink) {
   if (raw[key] !== undefined && typeof raw[key] !== "string") issue(`${path}.${key}`, "must be a string");
+}
+
+function checkOptionalBoolean(raw: Record<string, unknown>, path: string, key: string, issue: IssueSink) {
+  if (raw[key] !== undefined && typeof raw[key] !== "boolean") issue(`${path}.${key}`, "must be a boolean");
 }
 
 function checkOptionalStringArray(raw: Record<string, unknown>, path: string, key: string, issue: IssueSink) {
@@ -111,6 +123,73 @@ function checkRefList(
     }
     checkEntry(entry, entryPath);
   });
+}
+
+function checkPullRequestReviewFields(entry: Record<string, unknown>, entryPath: string, issue: IssueSink) {
+  checkOptionalBoolean(entry, entryPath, "draft", issue);
+  for (const key of ["branch", "head_sha", "stop_point", "implemented_by", "reviewed_by"]) {
+    checkOptionalString(entry, entryPath, key, issue);
+  }
+  if (entry.review_request !== undefined) {
+    const reqPath = `${entryPath}.review_request`;
+    if (!isObject(entry.review_request)) {
+      issue(reqPath, "must be an object");
+    } else {
+      if (typeof entry.review_request.sha !== "string" || !entry.review_request.sha) {
+        issue(`${reqPath}.sha`, "required, must be a non-empty string");
+      }
+      checkOptionalString(entry.review_request, reqPath, "reviewer_lane", issue);
+    }
+  }
+  if (entry.review_record !== undefined) {
+    const recPath = `${entryPath}.review_record`;
+    if (!isObject(entry.review_record)) {
+      issue(recPath, "must be an object");
+    } else {
+      if (typeof entry.review_record.sha !== "string" || !entry.review_record.sha) {
+        issue(`${recPath}.sha`, "required, must be a non-empty string");
+      }
+      if (
+        typeof entry.review_record.verdict !== "string" ||
+        !REVIEW_VERDICTS.includes(entry.review_record.verdict)
+      ) {
+        issue(`${recPath}.verdict`, 'must be "pass" or "blocking"');
+      }
+      for (const key of ["reviewer_lane", "reviewed_by"]) {
+        checkOptionalString(entry.review_record, recPath, key, issue);
+      }
+    }
+  }
+}
+
+function checkOpenSpecChange(rawItem: Record<string, unknown>, itemPath: string, issue: IssueSink) {
+  const change = rawItem.openspec_change;
+  if (change === undefined || change === null) return;
+  const changePath = `${itemPath}.openspec_change`;
+  if (!isObject(change)) return issue(changePath, "must be an object or null");
+  if (typeof change.id !== "string" || !change.id) {
+    issue(`${changePath}.id`, "required, must be a non-empty string");
+  }
+  checkOptionalBoolean(change, changePath, "inspected", issue);
+  if (change.holds !== undefined) {
+    if (!Array.isArray(change.holds)) {
+      issue(`${changePath}.holds`, "must be an array");
+    } else {
+      change.holds.forEach((hold: unknown, i: number) => {
+        const holdPath = `${changePath}.holds[${i}]`;
+        if (!isObject(hold)) return issue(holdPath, "must be an object");
+        if (typeof hold.line !== "number" || !Number.isInteger(hold.line) || hold.line < 1) {
+          issue(`${holdPath}.line`, "required, must be a positive integer");
+        }
+        if (typeof hold.class !== "string" || !OPENSPEC_CAVEAT_CLASSES.includes(hold.class)) {
+          issue(`${holdPath}.class`, 'must be "HALT", "RED", "BLOCKED", "WONTDO" or "OPEN-Q"');
+        }
+        if (typeof hold.text !== "string" || !hold.text) {
+          issue(`${holdPath}.text`, "required, must be a non-empty string");
+        }
+      });
+    }
+  }
 }
 
 function parseBinding(raw: unknown): LinkedRunBinding | null {
@@ -147,6 +226,9 @@ function parseFixtureItems(raw: unknown, portfolio: Portfolio): FixtureItems {
     if (entry.status_options !== undefined && !isStringArray(entry.status_options)) {
       issue(`${path}.status_options`, "must be an array of strings");
     }
+    if (entry.flake_holds !== undefined && !isStringArray(entry.flake_holds)) {
+      issue(`${path}.flake_holds`, "must be an array of strings");
+    }
     const seen = new Set<number>();
     entry.items.forEach((rawItem: unknown, i: number) => {
       const itemPath = `${path}.items[${i}]`;
@@ -178,7 +260,9 @@ function parseFixtureItems(raw: unknown, portfolio: Portfolio): FixtureItems {
         if (entry.state !== undefined && (typeof entry.state !== "string" || !PULL_REQUEST_STATES.includes(entry.state))) {
           issue(`${entryPath}.state`, 'must be "open", "merged" or "closed"');
         }
+        checkPullRequestReviewFields(entry, entryPath, issue);
       });
+      checkOpenSpecChange(rawItem, itemPath, issue);
       if (rawItem.linked_runs !== undefined) {
         const ok =
           Array.isArray(rawItem.linked_runs) &&
@@ -208,13 +292,15 @@ function excerpt(body: string | undefined): string {
   return flat.length > EXCERPT_LENGTH ? `${flat.slice(0, EXCERPT_LENGTH).trimEnd()}…` : flat;
 }
 
-function toWorkItem(repository: Repository, raw: FixtureItem): WorkItem {
+function toWorkItem(repository: Repository, raw: FixtureItem, flakeHolds?: string[]): WorkItem {
   const board = repository.project_board;
   // PM status and priority come from the project board; with no configured
   // source they stay unset even if a fixture carries a value.
   const pmStatus = board ? raw.pm_status?.trim() || undefined : undefined;
   const priority = board?.priority_field ? raw.priority?.trim() || undefined : undefined;
   const assignees = raw.assignees ?? [];
+  const labels = raw.labels ?? [];
+  const dependencies = raw.dependencies ?? [];
 
   let delivery: WorkItem["delivery"];
   if (raw.pull_requests === undefined) {
@@ -225,6 +311,15 @@ function toWorkItem(repository: Repository, raw: FixtureItem): WorkItem {
     delivery = { state: "known", value: raw.pull_requests };
   }
 
+  const baton = deriveBatonOverlays({
+    labels,
+    assignees,
+    dependencies,
+    delivery,
+    flake_holds: flakeHolds,
+    openspec_change: raw.openspec_change,
+  });
+
   return {
     ref: `${repository.owner}/${repository.name}#${raw.number}`,
     repository: `${repository.owner}/${repository.name}`,
@@ -232,14 +327,15 @@ function toWorkItem(repository: Repository, raw: FixtureItem): WorkItem {
     title: raw.title,
     body_excerpt: excerpt(raw.body),
     state: raw.state,
-    labels: raw.labels ?? [],
+    labels,
     assignees,
     ...(raw.milestone !== undefined && { milestone: raw.milestone }),
     ...(pmStatus !== undefined && { pm_status: pmStatus }),
     ...(priority !== undefined && { priority }),
     column: columnFor({ state: raw.state, assignees, pm_status: pmStatus }, repository),
-    dependencies: raw.dependencies ?? [],
+    dependencies,
     delivery,
+    ...baton,
   };
 }
 
@@ -253,7 +349,7 @@ export function createFixtureSource(portfolio: Portfolio, rawItems: unknown): Wo
     kind: "fixture",
     async listItems(repository) {
       const fixture = forRepository(repository);
-      const items = (fixture?.items ?? []).map((raw) => toWorkItem(repository, raw));
+      const items = (fixture?.items ?? []).map((raw) => toWorkItem(repository, raw, fixture?.flake_holds));
       return {
         lookup: "complete",
         columns: columnsFor(repository, fixture?.status_options ?? [], items.map((i) => i.column)),
@@ -261,8 +357,9 @@ export function createFixtureSource(portfolio: Portfolio, rawItems: unknown): Wo
       };
     },
     async getItem({ repository, number }: ItemRef) {
-      const raw = forRepository(repository)?.items.find((i) => i.number === number);
-      return raw ? { lookup: "complete", item: toWorkItem(repository, raw) } : { lookup: "complete" };
+      const fixture = forRepository(repository);
+      const raw = fixture?.items.find((i) => i.number === number);
+      return raw ? { lookup: "complete", item: toWorkItem(repository, raw, fixture?.flake_holds) } : { lookup: "complete" };
     },
     async linkedRunBindings({ repository, number }: ItemRef) {
       const raw = forRepository(repository)?.items.find((i) => i.number === number);

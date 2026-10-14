@@ -588,4 +588,41 @@ test.describe("Work board: in-page URL state", () => {
       timeout: 5_000,
     });
   });
+
+  test("baton slice filter narrows visible cards without altering GitHub columns and shows review SHA parity", async ({
+    page,
+  }) => {
+    await page.goto("/work");
+    await waitForBoard(page);
+
+    const staleItem = `${SEMTEAMS}#314`;
+    const readyItem = `${SEMTEAMS}#316`;
+
+    await expect(card(page, staleItem).getByTestId("overlay-review")).toContainText("stale");
+    await expect(card(page, readyItem).getByTestId("overlay-review")).toContainText("current");
+
+    // Filter by Review queue (?baton=review): #314 (stale) stays in In Review, #316 (current) is filtered out.
+    await page.getByTestId("baton-filter-review").click();
+    await expect(page).toHaveURL(/[?&]baton=review(&|$)/);
+    await expect(card(page, staleItem)).toBeVisible();
+    await expect(card(page, staleItem)).toHaveAttribute("data-column", "In Review");
+    await expect(card(page, readyItem)).toHaveCount(0);
+
+    // Open #314 overview and verify both HEAD SHA and stale Review record SHA are shown.
+    await card(page, staleItem).click();
+    await expect(page.getByTestId("overview-review-shas")).toContainText("HEAD a1b2c3d");
+    await expect(page.getByTestId("overview-review-shas")).toContainText("recorded 9988776");
+
+    // Switch to Ready to land (?baton=ready-to-land): #316 renders in In Review, #314 is filtered out.
+    await page.getByTestId("baton-filter-ready-to-land").click();
+    await expect(page).toHaveURL(/[?&]baton=ready-to-land(&|$)/);
+    await expect(card(page, readyItem)).toBeVisible();
+    await expect(card(page, readyItem)).toHaveAttribute("data-column", "In Review");
+    await expect(card(page, staleItem)).toHaveCount(0);
+
+    // Switching to Table view preserves the active ?baton= filter.
+    await page.getByTestId("view-table").click();
+    await expect(page).toHaveURL(/[?&]baton=ready-to-land(&|$)/);
+    await expect(page.getByTestId("work-item-row")).toHaveCount(1);
+  });
 });

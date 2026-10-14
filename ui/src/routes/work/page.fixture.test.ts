@@ -345,4 +345,31 @@ describe("/work with the board-mvp fixture", () => {
       );
     });
   });
+
+  describe("?baton= coordination slice filtering", () => {
+    it("filters cards and table rows by baton slice without altering GitHub columns", async () => {
+      const user = userEvent.setup();
+      open(`?baton=review&item=${encodeURIComponent("c360studio/semteams#314")}`);
+      const board = render(WorkPage);
+
+      await waitFor(() => expect(screen.getAllByTestId("work-item-card")).toHaveLength(1));
+      const staleCard = cardOf("c360studio/semteams#314");
+      expect(staleCard.getByTestId("overlay-review")).toHaveTextContent("stale");
+      expect(screen.getAllByTestId("work-item-card")[0]).toHaveAttribute("data-column", "In Review");
+      expect(await screen.findByTestId("overview-review-shas")).toHaveTextContent("HEAD a1b2c3d");
+      expect(screen.getByTestId("overview-review-shas")).toHaveTextContent("recorded 9988776");
+
+      await user.click(screen.getByTestId("baton-filter-ready-to-land"));
+      await waitFor(() => expect(screen.getAllByTestId("work-item-card")).toHaveLength(1));
+      expect(screen.getAllByTestId("work-item-card")[0]).toHaveAttribute("data-item", "c360studio/semteams#316");
+      expect(screen.getAllByTestId("work-item-card")[0]).toHaveAttribute("data-column", "In Review");
+
+      await user.click(screen.getByTestId("baton-filter-needs-decision"));
+      await waitFor(() => expect(screen.getAllByTestId("work-item-card")).toHaveLength(1));
+      expect(screen.getAllByTestId("work-item-card")[0]).toHaveAttribute("data-item", "c360studio/semteams#310");
+      expect(screen.getAllByTestId("work-item-card")[0]).toHaveAttribute("data-column", "Todo");
+      board.unmount();
+    });
+  });
 });
+

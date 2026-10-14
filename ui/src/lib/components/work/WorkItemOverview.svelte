@@ -140,6 +140,111 @@
     </div>
   </dl>
 
+  <section class="coordination" aria-labelledby="coordination-heading" data-testid="overview-coordination">
+    <h3 id="coordination-heading">Coordination &amp; baton</h3>
+    <dl class="facts">
+      <div class="fact">
+        <dt>Builder baton</dt>
+        <dd data-testid="overview-claim" data-state={item.claim.state}>
+          {#if item.claim.state === "known"}
+            {@const claim = item.claim.value}
+            <span>
+              {claim.holder}
+              {#if claim.agent_vendor}
+                <span class="source">({claim.agent_vendor} {claim.draft ? "draft PR" : "PR"})</span>
+              {:else if claim.kind === "human-pr"}
+                <span class="source">({claim.draft ? "draft PR" : "PR"})</span>
+              {:else}
+                <span class="source">(assigned)</span>
+              {/if}
+            </span>
+            {#if claim.pull_request}
+              <div class="source">
+                PR: {claim.pull_request}{#if claim.branch} on <code>{claim.branch}</code>{/if}
+              </div>
+            {/if}
+            {#if claim.stop_point}
+              <div class="source" data-testid="overview-claim-stop-point">
+                Stop-point: {claim.stop_point}
+              </div>
+            {/if}
+            {#if item.claim.reason}
+              <div class="source">&mdash; {item.claim.reason}</div>
+            {/if}
+          {:else if item.claim.state === "none"}
+            unclaimed
+          {:else}
+            unknown
+            {#if item.claim.reason}
+              <span class="source">&mdash; {item.claim.reason}</span>
+            {/if}
+          {/if}
+        </dd>
+      </div>
+
+      <div class="fact">
+        <dt>Review baton</dt>
+        <dd data-testid="overview-review" data-state={item.review.state}>
+          {#if item.review.state === "known"}
+            {@const rev = item.review.value}
+            <span>
+              {rev.status.replace(/_/g, " ")}
+              <span class="source">({rev.pull_request})</span>
+            </span>
+            <div class="source" data-testid="overview-review-shas">
+              {#if rev.head_sha}HEAD <code>{rev.head_sha}</code>{/if}
+              {#if rev.request_sha}&middot; requested <code>{rev.request_sha}</code>{/if}
+              {#if rev.record_sha}&middot; recorded <code>{rev.record_sha}</code>{/if}
+            </div>
+            {#if rev.reviewer_lane || rev.reviewed_by}
+              <div class="source">
+                {#if rev.reviewer_lane}Lane: {rev.reviewer_lane}{/if}
+                {#if rev.reviewed_by}
+                  {#if rev.reviewer_lane} &middot; {/if}Reviewed by: {rev.reviewed_by}
+                {/if}
+              </div>
+            {/if}
+          {:else if item.review.state === "none"}
+            no active pull request review
+          {:else}
+            unknown
+            {#if item.review.reason}
+              <span class="source">&mdash; {item.review.reason}</span>
+            {/if}
+          {/if}
+        </dd>
+      </div>
+
+      <div class="fact">
+        <dt>Decision &amp; hold gates</dt>
+        <dd data-testid="overview-gate" data-state={item.gate.state}>
+          {#if item.gate.state === "known"}
+            <ul>
+              {#each item.gate.value as gate (`${gate.kind}-${gate.ref ?? gate.summary}`)}
+                <li>
+                  {gate.summary}
+                  {#if gate.caveat_class}
+                    <span class="source">[{gate.caveat_class}]</span>
+                  {/if}
+                </li>
+              {/each}
+            </ul>
+            {#if item.gate.reason}
+              <div class="source">&mdash; {item.gate.reason}</div>
+            {/if}
+          {:else if item.gate.state === "none"}
+            no hold gate
+          {:else}
+            unknown
+            {#if item.gate.reason}
+              <span class="source">&mdash; {item.gate.reason}</span>
+            {/if}
+          {/if}
+        </dd>
+      </div>
+    </dl>
+  </section>
+
   <section class="runs" aria-labelledby="linked-runs-heading" data-testid="work-linked-runs" data-lookup={runsLookup}>
     <h3 id="linked-runs-heading">Linked runs</h3>
 
@@ -304,6 +409,7 @@
     color: var(--ui-text-secondary, #6b7280);
   }
 
+  .coordination,
   .runs {
     display: flex;
     flex-direction: column;
@@ -312,6 +418,7 @@
     border-top: 1px solid var(--ui-border-subtle, #e5e7eb);
   }
 
+  .coordination h3,
   .runs h3 {
     margin: 0;
     font-size: 0.9375rem;
