@@ -236,3 +236,43 @@ schema. Ruling: #264 research-design addendum (2026-09-03); #274; #271.
   seams); [056](056-openspec-spec-driven-development-umbrella.md) (superseded in part);
   [058](058-beta159-realignment-and-demo-lane-focus.md) (parked packs; SemDev boundary);
   [059](059-semstreams-beta160-graph-foundation-adoption.md) (framework baseline).
+
+## Addendum 2026-10-14: Framework-alignment review for the GitHub read adapter (#273)
+
+Before landing `github_read` under `cmd/semteams/tools/githubread/`, we executed the four-step framework-alignment
+review required by [`cmd/semteams/tools/README.md`](../../cmd/semteams/tools/README.md) against frozen `semstreams`
+`v1.0.0-beta.162.0.20260930150212-8b99efe9c66a` (`8b99efe9`):
+
+1. **Upstream survey at `8b99efe9`.** `processor/agentic-tools/executors/register.go` defines the closed
+   `BuiltinGroupKeys` slice (`bash`, `web_search`, `http_request`, `read_loop_result`, `decide`, `emit_diagnosis`,
+   `emit_lesson`, `write_todos`, `scratchpad`, `graph_query`, `rules`, `personas`, `component_catalog`). The
+   `github_read` / `github_write` / `github_client` / `register_github` files that existed at `beta.113` were
+   deliberately removed in `semstreams` commit `a533306e` (`refactor(framework)!: enforce package composition
+   boundaries`), which classified GitHub adapters as product-owned by intent.
+2. **Alternatives considered and ruled out with upstream evidence:**
+   - **`bash` + `gh` CLI.** Ruled out. `processor/agentic-tools/executors/bash.go` strips `GITHUB_TOKEN` (matching both
+     the `_TOKEN` suffix in `sensitiveEnvSuffixes` and `GITHUB_TOKEN` in `sensitiveEnvPrefixes`), and attested
+     devcontainer sandboxes do not mount `~/.config/gh/hosts.yml` (proposal C3). In addition, free-form shell calls
+     cannot enforce the portfolio repository allowlist, cursor watermarks, or the typed `channel: "github"` evidence
+     record return shape.
+   - **Builtin `http_request` tool.** Ruled out. `processor/agentic-tools/executors/httprequest.go` constructs every
+     request with a `nil` body and fixed `User-Agent` / `Accept` headers with no custom header or bearer-token
+     injection parameter (proposal C6), and emits `agent.web.observation` triples rather than portfolio-scoped GitHub
+     evidence records.
+   - **Reviving `beta.113`'s `github_read` verbatim (`github_get_issue`, `github_list_issues`, `github_search_issues`,
+     `github_get_pr`, `github_get_file`).** Ruled out as-is. The `beta.113` executor accepted arbitrary `owner`/`repo`
+     arguments without an operator allowlist, did not cover releases, commits, or CI workflow status, had no cursor or
+     watermark tracking to suppress unchanged activity across repeated runs, and returned raw structs rather than
+     channel-typed evidence records (`channel: "github"`, `locator`, `origin_id`, `source_class`, `retrieved_at`,
+     `raw_body`).
+3. **Canonical pattern match.** `github_read` mirrors `add_source_repo`'s deployment-allowlist discipline
+   (`cmd/semteams/tools/README.md` step 4): the operator's portfolio file (`SEMTEAMS_PORTFOLIO_PATH`, validated against
+   `configs/portfolio/portfolio.schema.json`) is the closed set of repositories the tool may read; credentials
+   (`SEMTEAMS_GITHUB_TOKEN` / `GITHUB_TOKEN`) are injected into `githubread.Config` at registration time and never enter
+   the `bash` environment; and the tool registers under `agentic-tools` with its own category
+   (`agentictools.RegisterToolCategory("github_read", "github")`).
+4. **Migration posture.** Stays product-local per upstream commit `a533306e` (GitHub adapters are product-owned). If
+   SemEngine or SemStreams later ships a governed external-API client primitive with server-side credential injection
+   and cursor state, `github_read`'s HTTP transport and cursor store migrate to that primitive while keeping the
+   portfolio allowlist and `channel: "github"` evidence-record projection in SemTeams.
+
