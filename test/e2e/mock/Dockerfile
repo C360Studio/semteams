@@ -21,6 +21,9 @@ COPY go.mod go.sum ./
 # Download dependencies
 RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked go mod download
 
+# Content-addressed cache invalidation for the mock-openai binary (issue #305).
+ARG SOURCE_HASH=dev
+
 # Copy source code
 COPY . .
 
@@ -28,7 +31,7 @@ COPY . .
 ARG TARGETOS
 ARG TARGETARCH
 
-RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
+RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked : "${SOURCE_HASH}" && CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
     -ldflags="-w -s" \
     -o /build/mock-openai \
     ./test/e2e/mock/cmd

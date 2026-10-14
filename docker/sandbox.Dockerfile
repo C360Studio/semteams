@@ -14,11 +14,17 @@ FROM golang:${GO_VERSION}-alpine AS builder
 WORKDIR /build
 COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked go mod download
-COPY cmd/semteams/sandbox/ cmd/semteams/sandbox/
-RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked CGO_ENABLED=0 go build -ldflags="-w -s" -o /sandbox ./cmd/semteams/sandbox/
 
-# protoc-gen-go (Go protobuf plugin). Pinned to v1.34.2.
-RUN GOBIN=/out go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.34.2
+# protoc-gen-go (Go protobuf plugin). Pinned to v1.34.2 and placed before
+# SOURCE_HASH so source edits in cmd/semteams/sandbox/ do not re-run it.
+RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked GOBIN=/out go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.34.2
+
+# Content-addressed cache invalidation for the sandbox Go binary (issue #305).
+# Invalidates COPY + go build whenever product source changes while preserving
+# the heavy Ubuntu toolchain layers in the runtime stage.
+ARG SOURCE_HASH=dev
+COPY cmd/semteams/sandbox/ cmd/semteams/sandbox/
+RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked : "${SOURCE_HASH}" && CGO_ENABLED=0 go build -ldflags="-w -s" -o /sandbox ./cmd/semteams/sandbox/
 
 # ============================================================================
 # Runtime stage — Ubuntu 24.04 with the full toolchain.

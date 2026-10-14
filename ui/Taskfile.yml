@@ -1898,6 +1898,51 @@ tasks:
           # with appropriate uid/gid alignment instead.
           chmod 0777 "$target"
           (cd "$target" && pwd -P)
+      # Issue #305 — bounded BuildKit cache budget + content-addressed
+      # SOURCE_HASH invalidation for backend, sandbox, and mock-llm.
+      #
+      # Why: running `docker compose build --no-cache backend sandbox mock-llm`
+      # on every journey boot accumulated ~25 GB of orphaned BuildKit cache
+      # layers across a 20-journey chain and exhausted the 60 GB Docker VM
+      # disk on macOS (`write /var/lib/docker/buildkit/content/ingest/...:
+      # no space left on device`).
+      #
+      # How this preserves the Smoke #25 stale-binary guarantee without
+      # exhausting disk:
+      #   1. `SOURCE_HASH` hashes `git rev-parse HEAD`, `git status --porcelain`,
+      #      `git diff HEAD`, and any untracked file digests across the
+      #      product source tree (`cmd/`, `internal/`, `test/`, `configs/`,
+      #      `docker/`, `go.mod`, `go.sum`).
+      #   2. `docker/Dockerfile`, `docker/sandbox.Dockerfile`, and
+      #      `test/e2e/mock/Dockerfile` consume `ARG SOURCE_HASH` immediately
+      #      before their `COPY` + `go build` steps (after OS packages,
+      #      toolchain installs, and `go mod download`).
+      #   3. Across a multi-journey chain on an unchanged tree, `SOURCE_HASH`
+      #      stays constant and journeys 2..N hit 100% cached build layers.
+      #      When any tracked or dirty source file changes (the Smoke #25
+      #      scenario where `cmd/semteams/sandbox/server.go` was edited
+      #      between runs), `SOURCE_HASH` changes and invalidates the Go
+      #      build step while keeping heavy base/toolchain layers cached.
+      #   4. `docker builder prune -f --keep-storage=$BUILDKIT_KEEP_STORAGE`
+      #      (default 8GB) bounds the BuildKit cache before build and after
+      #      teardown.
+      #   5. Escape hatch: set `NO_CACHE=1` to force a full `--no-cache`
+      #      rebuild (`NO_CACHE=1 task ui:test:e2e:agentic:research-mvp`).
+      #      Manual recovery if Docker VM disk is already full:
+      #        docker builder prune -af && docker image prune -f
+      BUILDKIT_KEEP_STORAGE: '{{.BUILDKIT_KEEP_STORAGE | default "8GB"}}'
+      NO_CACHE: '{{.NO_CACHE | default ""}}'
+      SOURCE_HASH:
+        sh: |
+          (
+            cd "{{.TASKFILE_DIR}}/.."
+            git rev-parse HEAD 2>/dev/null || echo "no-git"
+            git status --porcelain -- cmd internal test configs docker .devcontainer go.mod go.sum 2>/dev/null
+            git diff HEAD -- cmd internal test configs docker .devcontainer go.mod go.sum 2>/dev/null
+            git ls-files --others --exclude-standard -- cmd internal test configs docker .devcontainer 2>/dev/null | while IFS= read -r f; do
+              [ -f "$f" ] && shasum -a 256 "$f"
+            done
+          ) | shasum -a 256 | awk '{print $1}'
     env:
       FIXTURE: "{{.FIXTURE}}"
       AGENTIC_CONFIG: "{{.AGENTIC_CONFIG}}"
@@ -1907,30 +1952,17 @@ tasks:
       SEMTEAMS_SANDBOX_RUNNER: "{{.SEMTEAMS_SANDBOX_RUNNER}}"
       SEMSTREAMS_PERSONA_OVERLAY_PATH: "{{.PERSONA_OVERLAY}}"
       SEMTEAMS_TENANT_ROOT: "{{.SEMTEAMS_TENANT_ROOT}}"
+      SOURCE_HASH: "{{.SOURCE_HASH}}"
     cmds:
-      - echo "Stack config → AGENTIC_CONFIG={{.AGENTIC_CONFIG}} FIXTURE={{.FIXTURE}} PROFILES={{.COMPOSE_PROFILES}} TENANT_ROOT={{.SEMTEAMS_TENANT_ROOT}}"
-      # Smoke #25 finding (2026-05-14): rebuilding only `backend` with
-      # --no-cache leaves the sandbox image carrying cached layers from
-      # a prior build — Docker's cache-by-content-hash should pick up
-      # source mutations, but in practice we hit stale binaries on
-      # adjacent slices (Fix A's sandbox/server.go change didn't deploy
-      # despite the source modification, because the cache key on the
-      # Go build layer didn't invalidate as expected). Both images
-      # carry our product code; both need the no-cache treatment to
-      # guarantee a smoke runs the committed source. Always-warm
-      # sandbox means we always rebuild it.
-      #
-      # mock-llm is in the list for the same reason: it carries the
-      # fixture-matching code (the role-keyed `responses_by_role` mode,
-      # added 2026-06-08 to mock for_each fan-out chains like research).
-      # `up -d` below does NOT pass --build, so a mock source change
-      # would otherwise run a stale binary until someone manually
-      # rebuilds — and a manual `docker compose build` from a different
-      # CWD lands in a different compose project namespace, so `up -d`
-      # silently keeps the old image. Letting stack:up own the
-      # --no-cache rebuild (same namespace as `up -d`) is the only
-      # reliable fix. See [[mock-llm-rebuild]] + [[compose-project-name-mismatch]].
-      - docker compose -f docker-compose.agentic-e2e.yml build --no-cache backend sandbox mock-llm
+      - echo "Stack config → AGENTIC_CONFIG={{.AGENTIC_CONFIG}} FIXTURE={{.FIXTURE}} PROFILES={{.COMPOSE_PROFILES}} TENANT_ROOT={{.SEMTEAMS_TENANT_ROOT}} SOURCE_HASH={{.SOURCE_HASH}}"
+      - docker builder prune -f --keep-storage={{.BUILDKIT_KEEP_STORAGE}} >/dev/null 2>&1 || true
+      - |
+        NO_CACHE_FLAG=""
+        if [ "{{.NO_CACHE}}" = "1" ] || [ "${NO_CACHE:-}" = "1" ]; then
+          echo "▶︎  NO_CACHE=1 set — forcing full --no-cache rebuild of backend, sandbox, and mock-llm"
+          NO_CACHE_FLAG="--no-cache"
+        fi
+        docker compose -f docker-compose.agentic-e2e.yml build $NO_CACHE_FLAG backend sandbox mock-llm
       - docker compose -f docker-compose.agentic-e2e.yml up -d
       - |
         PORT="{{.E2E_AGENTIC_UI_PORT}}"
@@ -1956,6 +1988,8 @@ tasks:
 
   test:e2e:agentic:cleanup:
     desc: Tear down the agentic E2E Docker stack (skipped when DEBUG=1 or KEEP_STACK_UP=1)
+    vars:
+      BUILDKIT_KEEP_STORAGE: '{{.BUILDKIT_KEEP_STORAGE | default "8GB"}}'
     cmds:
       - |
         # DEBUG=1 / KEEP_STACK_UP=1: skip teardown so the operator can
@@ -1976,6 +2010,7 @@ tasks:
           exit 0
         fi
         npm run test:e2e:cleanup
+        docker builder prune -f --keep-storage={{.BUILDKIT_KEEP_STORAGE}} >/dev/null 2>&1 || true
 
   test:e2e:sandbox:dood:smoke:
     desc: Smoke #d′ — sandbox DooD trust-boundary verification (ADR-034 §addendum #2)

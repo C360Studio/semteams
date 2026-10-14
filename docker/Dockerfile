@@ -38,6 +38,12 @@ COPY go.mod go.sum ./
 # Download dependencies (cached layer)
 RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked go mod download
 
+# Content-addressed cache invalidation for the Go build layer (issue #305).
+# Kept after go mod download so OS packages and module downloads stay cached,
+# while any tracked/dirty source change in stack:up invalidates COPY + go build
+# without requiring an unconditional `docker compose build --no-cache`.
+ARG SOURCE_HASH=dev
+
 # Copy source code
 COPY . .
 
@@ -49,7 +55,7 @@ ARG TARGETOS
 ARG TARGETARCH
 
 # Build main binary with version information
-RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
+RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked : "${SOURCE_HASH}" && CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
     -ldflags="-w -s \
       -X main.version=${VERSION} \
       -X main.commit=${COMMIT_SHA} \
