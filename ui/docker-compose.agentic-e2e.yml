@@ -57,6 +57,8 @@ services:
     build:
       context: ${BACKEND_CONTEXT:-..}
       dockerfile: test/e2e/mock/Dockerfile
+      args:
+        SOURCE_HASH: ${SOURCE_HASH:-dev}
     container_name: semteams-ui-agentic-mock-llm
     entrypoint: ["/bin/sh", "-c"]
     command:
@@ -88,6 +90,8 @@ services:
       context: ${BACKEND_CONTEXT:-..}
       dockerfile: ${BACKEND_DOCKERFILE:-docker/Dockerfile}
       target: production
+      args:
+        SOURCE_HASH: ${SOURCE_HASH:-dev}
     container_name: semteams-ui-agentic-backend
     depends_on:
       nats:
@@ -204,6 +208,8 @@ services:
     build:
       context: ${BACKEND_CONTEXT:-..}
       dockerfile: docker/sandbox.Dockerfile
+      args:
+        SOURCE_HASH: ${SOURCE_HASH:-dev}
     container_name: semteams-ui-agentic-sandbox
     # Default to DooD (Docker-out-of-Docker, ADR-034 §addendum #2) so
     # testcontainer-flavored chains (process-local-testcontainer
