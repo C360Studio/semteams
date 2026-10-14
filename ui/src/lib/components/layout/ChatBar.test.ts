@@ -567,3 +567,57 @@ describe("ChatBar — action chips", () => {
     expect(mockSelectTask).toHaveBeenCalledWith("loop_waiting");
   });
 });
+
+describe("ChatBar — work-item scope (workContext)", () => {
+  beforeEach(async () => {
+    const { workContext } = await import("$lib/stores/workContext.svelte");
+    workContext.clear();
+  });
+
+  it("renders work-chat-context chip and prefixes outbound message with the selected work item", async () => {
+    const { workContext } = await import("$lib/stores/workContext.svelte");
+    workContext.setScope({
+      itemRef: "c360studio/semteams#312",
+      title: "Compare MQTT vs NATS for IoT edge deployments",
+      repository: "c360studio/semteams",
+      programName: "c360",
+      projectName: "SemTeams",
+    });
+
+    const user = userEvent.setup();
+    render(ChatBar);
+
+    const chip = screen.getByTestId("work-chat-context");
+    expect(chip).toHaveTextContent("c360 / SemTeams");
+    expect(chip).toHaveTextContent("c360studio/semteams#312");
+    expect(chip).toHaveTextContent("Compare MQTT vs NATS for IoT edge deployments");
+    expect(screen.getByTestId("chat-input")).toHaveAttribute(
+      "placeholder",
+      "Ask or direct the team on c360studio/semteams#312…",
+    );
+
+    await user.type(screen.getByTestId("chat-input"), "/research focus on ARM idle memory");
+    await user.click(screen.getByTestId("send-button"));
+
+    expect(agentApi.sendMessage).toHaveBeenCalledWith(
+      "[Work item: c360studio/semteams#312 (c360 / SemTeams) — Compare MQTT vs NATS for IoT edge deployments]\n/research focus on ARM idle memory",
+    );
+  });
+
+  it("clears work-item scope when the chip clear button is clicked", async () => {
+    const { workContext } = await import("$lib/stores/workContext.svelte");
+    workContext.setScope({
+      itemRef: "c360studio/semteams#312",
+      title: "Compare MQTT vs NATS",
+      repository: "c360studio/semteams",
+    });
+
+    const user = userEvent.setup();
+    render(ChatBar);
+
+    expect(screen.getByTestId("work-chat-context")).toBeInTheDocument();
+    await user.click(screen.getByTestId("work-chat-context-clear"));
+    expect(screen.queryByTestId("work-chat-context")).not.toBeInTheDocument();
+  });
+});
+

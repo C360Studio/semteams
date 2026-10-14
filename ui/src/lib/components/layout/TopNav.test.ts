@@ -19,25 +19,32 @@ describe("TopNav", () => {
     expect(brand).toHaveTextContent("semteams");
   });
 
-  it("links to the work lens without displacing the brand link", () => {
+  it("links to both the work and runs lenses without displacing the brand link", () => {
     render(TopNav);
+    const nav = screen.getByRole("navigation", { name: "Primary" });
     const work = screen.getByTestId("nav-work");
+    const runs = screen.getByTestId("nav-runs");
     expect(work).toHaveAttribute("href", "/work");
     expect(work).toHaveTextContent("Work");
-    expect(screen.getByRole("navigation", { name: "Primary" })).toContainElement(work);
+    expect(runs).toHaveAttribute("href", "/");
+    expect(runs).toHaveTextContent("Runs");
+    expect(nav).toContainElement(work);
+    expect(nav).toContainElement(runs);
     expect(screen.getByTestId("brand-home")).toHaveAttribute("href", "/");
   });
 
-  it("marks the work link as the current page only on the work route", () => {
+  it("marks the active lens link as the current page", () => {
     pageMock.route.id = "/work";
     const onWork = render(TopNav);
     expect(screen.getByTestId("nav-work")).toHaveAttribute("aria-current", "page");
+    expect(screen.getByTestId("nav-runs")).not.toHaveAttribute("aria-current");
     expect(screen.getByTestId("nav-work")).toHaveAccessibleName("Work");
     onWork.unmount();
 
     pageMock.route.id = "/";
     render(TopNav);
     expect(screen.getByTestId("nav-work")).not.toHaveAttribute("aria-current");
+    expect(screen.getByTestId("nav-runs")).toHaveAttribute("aria-current", "page");
   });
 
   it("does NOT render legacy Board/Graph/Flows tabs", () => {

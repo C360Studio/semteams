@@ -1,10 +1,91 @@
-import { describe, expect, it, vi } from "vitest";
-import { render, screen, within } from "@testing-library/svelte";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { render, screen, waitFor, within } from "@testing-library/svelte";
 import userEvent from "@testing-library/user-event";
+import type { LoopTrajectory } from "$lib/types/agent";
+import type { TaskInfo } from "$lib/types/task";
+
+function makeEmptyTrajectory(loopId: string): LoopTrajectory {
+  return {
+    schema_version: "v1",
+    loop_id: loopId,
+    coverage: "observed",
+    terminal_observed: false,
+    observed_totals: {
+      facts: 0,
+      tokens_in: 0,
+      tokens_out: 0,
+      elapsed_ms: 0,
+      message_count: 0,
+      tool_count: 0,
+      url_count: 0,
+      model_requests: 0,
+      model_completions: 0,
+      tool_requests: 0,
+      tool_completions: 0,
+      context_compactions: 0,
+      terminal_observations: 0,
+      requested_observations: 0,
+      completed_observations: 0,
+      failed_observations: 0,
+      cancelled_observations: 0,
+    },
+    facts: [],
+  };
+}
+
+const mockTaskStore = vi.hoisted(() => ({
+  tasks: [] as TaskInfo[],
+}));
+
+vi.mock("$lib/stores/taskStore.svelte", () => ({
+  taskStore: mockTaskStore,
+}));
+
+vi.mock("$lib/services/agentApi", () => ({
+  agentApi: {
+    sendMessage: vi.fn().mockResolvedValue({ content: "ok" }),
+    cancelLoop: vi.fn().mockResolvedValue({ loop_id: "loop-1", signal: "pause", status: "sent" }),
+    submitApproval: vi.fn().mockResolvedValue({
+      loop_id: "loop-1",
+      decision: "approve",
+      accepted: true,
+      timestamp: "2026-04-29T11:00:00Z",
+    }),
+    getLoopTrajectory: vi.fn().mockImplementation((loopId: string) => Promise.resolve(makeEmptyTrajectory(loopId))),
+  },
+  AgentApiError: class AgentApiError extends Error {
+    statusCode: number;
+    constructor(message: string, statusCode: number) {
+      super(message);
+      this.name = "AgentApiError";
+      this.statusCode = statusCode;
+    }
+  },
+}));
+
+vi.mock("$lib/services/runStatusApi", () => ({
+  getTriples: vi.fn().mockResolvedValue([]),
+}));
+
+vi.mock("$lib/services/messageLoggerApi", () => ({
+  messageLoggerApi: {
+    fetchEntries: vi.fn().mockResolvedValue([]),
+  },
+  entryMentionsLoop: vi.fn(() => false),
+  classifyEntry: vi.fn(() => "other"),
+}));
+
 import WorkItemOverview from "./WorkItemOverview.svelte";
+import { agentApi } from "$lib/services/agentApi";
+import { getTriples } from "$lib/services/runStatusApi";
 import { makeItem, makeRun } from "../../../test-utils/work";
 import type { LinkedRunsState } from "$lib/utils/workView";
 import type { WorkItem } from "$lib/types/work";
+
+beforeEach(() => {
+  mockTaskStore.tasks = [];
+  vi.clearAllMocks();
+});
 
 function renderOverview(
   overrides: { item?: WorkItem; linkedRuns?: LinkedRunsState; onloadruns?: () => void; onclose?: () => void } = {},
@@ -491,3 +572,174 @@ describe("WorkItemOverview visible reasons and wording", () => {
     );
   });
 });
+
+describe("WorkItemOverview inline run workbench", () => {
+  it("renders inline Activity story and switches to Evidence tab when a resolved linked run is loaded", async () => {
+    const user = userEvent.setup();
+    renderOverview({
+      linkedRuns: {
+        status: "loaded",
+        lookup: "complete",
+        runs: [
+          makeRun({
+            run_entity_id: "acme.platform.chain.agent.execution.run-1",
+            coordinator_loop_id: "loop-1",
+          }),
+        ],
+      },
+    });
+
+    const workbench = screen.getByTestId("work-inline-run-workbench");
+    expect(workbench).toHaveAttribute("data-loop-id", "loop-1");
+    expect(screen.getByTestId("work-inline-panel-activity")).toBeInTheDocument();
+    expect(screen.getByTestId("task-story")).toBeInTheDocument();
+    expect(agentApi.getLoopTrajectory).toHaveBeenCalledWith("loop-1");
+
+    await user.click(screen.getByTestId("work-run-tab-evidence"));
+    expect(screen.getByTestId("work-inline-panel-evidence")).toBeInTheDocument();
+    expect(screen.getByTestId("run-evidence-panel")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(getTriples).toHaveBeenCalledWith({
+        subject: "acme.platform.chain.agent.execution.run-1",
+        limit: 250,
+      }),
+    );
+  });
+
+  it("does not render the inline workbench when no linked run resolves a coordinator loop id", () => {
+    renderOverview({
+      linkedRuns: {
+        status: "loaded",
+        lookup: "partial",
+        reason: "run entity has no facts",
+        runs: [
+          makeRun({
+            run_entity_id: "acme.platform.chain.agent.execution.dead",
+            coordinator_loop_id: null,
+          }),
+        ],
+      },
+    });
+
+    expect(screen.queryByTestId("work-inline-run-workbench")).not.toBeInTheDocument();
+  });
+
+  it("lets the operator switch between multiple resolved linked runs inline", async () => {
+    const user = userEvent.setup();
+    renderOverview({
+      linkedRuns: {
+        status: "loaded",
+        lookup: "complete",
+        runs: [
+          makeRun({ run_entity_id: "acme.platform.chain.agent.execution.run-1", coordinator_loop_id: "loop-1" }),
+          makeRun({ run_entity_id: "acme.platform.chain.agent.execution.run-2", coordinator_loop_id: "loop-2" }),
+        ],
+      },
+    });
+
+    const selector = screen.getByTestId("work-inline-run-selector");
+    const options = within(selector).getAllByTestId("work-inline-run-option");
+    expect(options).toHaveLength(2);
+    expect(options[0]).toHaveAttribute("aria-pressed", "true");
+    expect(options[1]).toHaveAttribute("aria-pressed", "false");
+
+    await user.click(options[1]);
+    expect(screen.getByTestId("work-inline-run-workbench")).toHaveAttribute("data-loop-id", "loop-2");
+    expect(agentApi.getLoopTrajectory).toHaveBeenCalledWith("loop-2");
+  });
+
+  it("surfaces live RunHealthPanel, RunWaitingSection, sub-tasks, and focus breadcrumb from taskStore", async () => {
+    const user = userEvent.setup();
+    mockTaskStore.tasks = [
+      {
+        id: "loop-1",
+        shortRef: 1,
+        aliases: [],
+        titleEdited: false,
+        title: "Coordinator research run",
+        state: "executing",
+        column: "needs_you",
+        role: "coordinator",
+        iterations: 2,
+        maxIterations: 10,
+        childLoops: [
+          {
+            loop_id: "child-1",
+            task_id: "task-child-1",
+            state: "complete",
+            role: "researcher-research-plan",
+            iterations: 1,
+            max_iterations: 5,
+            user_id: "u1",
+            channel_type: "web",
+            parent_loop_id: "loop-1",
+            outcome: "done",
+            error: "",
+          },
+        ],
+        controls: [],
+        controlsTruncated: false,
+        childNeedsAttention: false,
+        childAttentionCount: 0,
+        primaryLoop: {
+          loop_id: "loop-1",
+          task_id: "dispatch-1",
+          state: "executing",
+          role: "coordinator",
+          iterations: 2,
+          max_iterations: 10,
+          user_id: "u1",
+          channel_type: "web",
+          parent_loop_id: "",
+          outcome: "",
+          error: "",
+          prompt: "Compare MQTT vs NATS",
+        },
+        runPause: {
+          cause: "clarification",
+          askingLoopId: "loop-1",
+          question: "Target constrained ARM Cortex-M or Cortex-A?",
+        },
+        runHealth: {
+          state: "waiting",
+          label: "Waiting on you",
+          currentGate: "clarification",
+          nextAction: "Answer the clarification question",
+          evidenceFreshness: "fresh",
+          activeLoopCount: 0,
+          detail: "Run is paused awaiting user clarification.",
+          runEntityId: "acme.platform.chain.agent.execution.run-1",
+          signals: [],
+          metrics: undefined,
+        },
+      },
+    ];
+
+    renderOverview({
+      linkedRuns: {
+        status: "loaded",
+        lookup: "complete",
+        runs: [
+          makeRun({
+            run_entity_id: "acme.platform.chain.agent.execution.run-1",
+            coordinator_loop_id: "loop-1",
+          }),
+        ],
+      },
+    });
+
+    expect(screen.getByTestId("run-health-panel")).toHaveTextContent("Waiting on you");
+    expect(screen.getByText("Target constrained ARM Cortex-M or Cortex-A?")).toBeInTheDocument();
+
+    const childItem = screen.getByTestId("work-inline-child-item");
+    expect(childItem).toHaveTextContent("researcher-research-plan");
+    await user.click(childItem);
+
+    expect(screen.getByTestId("work-inline-focus-breadcrumb")).toHaveTextContent("researcher-research-plan");
+    expect(agentApi.getLoopTrajectory).toHaveBeenCalledWith("child-1");
+
+    await user.click(screen.getByTestId("work-inline-focus-back"));
+    expect(screen.queryByTestId("work-inline-focus-breadcrumb")).not.toBeInTheDocument();
+  });
+});
+

@@ -2,6 +2,7 @@
   import { agentApi } from "$lib/services/agentApi";
   import { chatHandoff } from "$lib/stores/chatHandoff.svelte";
   import { taskStore } from "$lib/stores/taskStore.svelte";
+  import { formatWorkScopeHeader, workContext } from "$lib/stores/workContext.svelte";
   import type { ApprovalDecision } from "$lib/types/agent";
 
   let input = $state("");
@@ -42,7 +43,9 @@
   let placeholder = $derived(
     taskStore.selectedTask
       ? "Reply to this task…"
-      : "What should the team work on?",
+      : workContext.scope
+        ? `Ask or direct the team on ${workContext.scope.itemRef}…`
+        : "What should the team work on?",
   );
 
   // Surface the slash-command hints only when the user is actively
@@ -96,10 +99,14 @@
   });
 
   function outboundMessage(text: string): string {
+    const scopedText =
+      !taskStore.selectedTask && workContext.scope
+        ? `${formatWorkScopeHeader(workContext.scope)}\n${text}`
+        : text;
     const artifact = chatHandoff.artifactContext;
-    if (!artifact) return text;
+    if (!artifact) return scopedText;
     return [
-      text,
+      scopedText,
       "",
       "---",
       `Artifact context: ${artifact.title}`,
@@ -213,6 +220,30 @@
           type="button"
           onclick={() => taskStore.deselectTask()}
           aria-label="Clear task selection">×</button
+        >
+      </span>
+    </div>
+  {:else if workContext.scope}
+    <div class="chat-context" data-testid="work-chat-context">
+      <span
+        class="context-chip"
+        title="{workContext.scope.itemRef} — {workContext.scope.title}"
+      >
+        {#if workContext.scope.programName && workContext.scope.projectName}
+          <span class="context-chip-scope" data-testid="work-chat-scope">
+            {workContext.scope.programName} / {workContext.scope.projectName}
+          </span>
+        {/if}
+        <span class="context-chip-ref" data-testid="work-chat-ref"
+          >{workContext.scope.itemRef}</span
+        >
+        <span class="context-chip-title">{workContext.scope.title}</span>
+        <button
+          class="context-clear"
+          type="button"
+          data-testid="work-chat-context-clear"
+          onclick={() => workContext.clear()}
+          aria-label="Clear work item scope">×</button
         >
       </span>
     </div>
@@ -397,6 +428,11 @@
     border-radius: 9999px;
     font-size: 0.75rem;
     color: var(--ui-text-primary, #111827);
+  }
+
+  .context-chip-scope {
+    color: var(--ui-text-tertiary, #6b7280);
+    font-weight: 500;
   }
 
   .context-chip-ref {
