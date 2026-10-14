@@ -92,7 +92,15 @@ async function loadContext(): Promise<Context> {
       config.portfolioPath,
     );
   }
-  return { kind: "ready", config, portfolio: checked.portfolio, source: createGithubSource() };
+  return {
+    kind: "ready",
+    config,
+    portfolio: checked.portfolio,
+    source: createGithubSource({
+      token: config.githubToken,
+      apiUrl: config.githubApiUrl,
+    }),
+  };
 }
 
 /**

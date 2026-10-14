@@ -13,6 +13,10 @@ export interface WorkConfig {
   fixtureSet: string;
   /** Portfolio document path; only read when source is "github". */
   portfolioPath?: string;
+  /** Optional GitHub personal access token / installation token for server-side GitHub reads. */
+  githubToken?: string;
+  /** GitHub REST API base URL; defaults to https://api.github.com. */
+  githubApiUrl: string;
   /** Backend `host:port` for server-side run reads. */
   backendHost: string;
 }
@@ -47,6 +51,7 @@ export class WorkConfigError extends Error {
 
 export const DEFAULT_FIXTURE_SET = "board-mvp";
 export const DEFAULT_BACKEND_HOST = "localhost:8080";
+export const DEFAULT_GITHUB_API_URL = "https://api.github.com";
 
 function nonEmpty(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
@@ -72,6 +77,8 @@ export function readWorkConfig(): WorkConfig {
     source: rawSource ?? "unconfigured",
     fixtureSet: nonEmpty(env.WORK_FIXTURE_SET) ?? DEFAULT_FIXTURE_SET,
     portfolioPath: nonEmpty(env.SEMTEAMS_PORTFOLIO_PATH),
+    githubToken: nonEmpty(env.GITHUB_TOKEN),
+    githubApiUrl: (nonEmpty(env.GITHUB_API_URL) ?? DEFAULT_GITHUB_API_URL).replace(/\/+$/, ""),
     backendHost: nonEmpty(env.BACKEND_HOST) ?? DEFAULT_BACKEND_HOST,
   };
 }

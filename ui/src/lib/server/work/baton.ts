@@ -51,8 +51,17 @@ export const NO_LINKED_PRS_REASON = "source does not supply linked pull requests
 export const NO_CLAIM_METADATA_REASON = "open pull request has no branch or claim metadata";
 export const ASSIGNED_WITH_UNKNOWN_PRS_REASON = "assigned on issue; linked pull requests unknown";
 export const NO_REVIEW_RECORDS_REASON = "source does not supply PR review records";
+export const UNINSPECTED_REVIEW_COMMENTS_REASON = "PR review comments not inspected";
 
 const AGENT_VENDORS: readonly AgentVendor[] = ["claude", "codex", "gemini"];
+
+export function shaMatchesHead(candidateSha: string, headSha: string): boolean {
+  const candidate = candidateSha.trim().toLowerCase();
+  const head = headSha.trim().toLowerCase();
+  if (!candidate || !head) return false;
+  if (candidate === head) return true;
+  return candidate.length >= 7 && head.startsWith(candidate);
+}
 
 function parseAgentVendor(branch?: string, implementedBy?: string): AgentVendor | undefined {
   if (branch) {
@@ -145,14 +154,17 @@ export function deriveReviewOverlay(input: BatonDerivationInput): Overlay<WorkRe
   if (!pr.head_sha) {
     return { state: "unknown", reason: NO_REVIEW_RECORDS_REASON };
   }
+  if (pr.review_inspected === false) {
+    return { state: "unknown", reason: UNINSPECTED_REVIEW_COMMENTS_REASON };
+  }
 
   const req = pr.review_request;
   const rec = pr.review_record;
   let status: WorkReviewStatus;
   if (rec) {
-    if (rec.sha === pr.head_sha) {
+    if (shaMatchesHead(rec.sha, pr.head_sha)) {
       status = rec.verdict === "pass" ? "current" : "changes_requested";
-    } else if (req && req.sha === pr.head_sha) {
+    } else if (req && shaMatchesHead(req.sha, pr.head_sha)) {
       status = "requested";
     } else {
       status = "stale";

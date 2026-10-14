@@ -127,6 +127,7 @@ function checkRefList(
 
 function checkPullRequestReviewFields(entry: Record<string, unknown>, entryPath: string, issue: IssueSink) {
   checkOptionalBoolean(entry, entryPath, "draft", issue);
+  checkOptionalBoolean(entry, entryPath, "review_inspected", issue);
   for (const key of ["branch", "head_sha", "stop_point", "implemented_by", "reviewed_by"]) {
     checkOptionalString(entry, entryPath, key, issue);
   }

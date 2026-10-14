@@ -7,7 +7,6 @@ import type {
   Repository,
   WorkItem,
 } from "$lib/types/work";
-import { columnsFor } from "./columns";
 
 export interface ItemRef {
   repository: Repository;
@@ -54,31 +53,5 @@ export const GITHUB_ITEMS_UNSUPPORTED = "github source arrives with #273";
 export const GITHUB_RUNS_UNSUPPORTED =
   "no run.issue.ref writer is wired on this runtime";
 
-/**
- * The live source is not implemented. It answers `unsupported` rather than an
- * empty list so the board never presents "no work" or "no linked run" for
- * something it could not look up.
- */
-export function createGithubSource(): WorkSource {
-  return {
-    kind: "github",
-    async listItems(repository) {
-      return {
-        lookup: "unsupported",
-        reason: GITHUB_ITEMS_UNSUPPORTED,
-        columns: columnsFor(repository, [], []),
-        items: [],
-      };
-    },
-    async getItem() {
-      return { lookup: "unsupported", reason: GITHUB_ITEMS_UNSUPPORTED };
-    },
-    async linkedRunBindings() {
-      return {
-        lookup: "unsupported",
-        reason: GITHUB_RUNS_UNSUPPORTED,
-        bindings: [],
-      };
-    },
-  };
-}
+export { createGithubSource } from "./githubSource";
+export type { GithubSourceOptions } from "./githubSource";

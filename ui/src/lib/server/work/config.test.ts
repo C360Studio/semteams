@@ -17,6 +17,8 @@ describe("readWorkConfig", () => {
       source: "unconfigured",
       fixtureSet: "board-mvp",
       portfolioPath: undefined,
+      githubToken: undefined,
+      githubApiUrl: "https://api.github.com",
       backendHost: "localhost:8080",
     });
   });
@@ -24,8 +26,18 @@ describe("readWorkConfig", () => {
   it("reads every variable at call time", () => {
     setEnv({ WORK_SOURCE: "fixture", WORK_FIXTURE_SET: "other", BACKEND_HOST: "backend:8080" });
     expect(readWorkConfig()).toMatchObject({ source: "fixture", fixtureSet: "other", backendHost: "backend:8080" });
-    setEnv({ WORK_SOURCE: "github", SEMTEAMS_PORTFOLIO_PATH: "/etc/portfolio.json" });
-    expect(readWorkConfig()).toMatchObject({ source: "github", portfolioPath: "/etc/portfolio.json" });
+    setEnv({
+      WORK_SOURCE: "github",
+      SEMTEAMS_PORTFOLIO_PATH: "/etc/portfolio.json",
+      GITHUB_TOKEN: "ghp_test",
+      GITHUB_API_URL: "https://gh.example.test/",
+    });
+    expect(readWorkConfig()).toMatchObject({
+      source: "github",
+      portfolioPath: "/etc/portfolio.json",
+      githubToken: "ghp_test",
+      githubApiUrl: "https://gh.example.test",
+    });
   });
 
   it("treats blank values as unset", () => {
