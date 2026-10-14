@@ -245,42 +245,133 @@ test.describe("ADR-042 MVP-5 — Research category mock-LLM journey", () => {
     ).toBe("complete");
 
     // -----------------------------------------------------------------
-    // Step 7 — typed user-response publish proof. Loop-count assertions
-    // alone would silently pass a regression where dispatch's typed
-    // user.response output is misconfigured — the chain still terminates
-    // with 6 loops, but no typed response is published. message-logger
-    // captures the canonical user.response.<channel_type>.<channel_id>
-    // publish. semstreams#1094 tracks workflow reply correlation;
-    // semstreams#1090 tracks channel-ready rendering after delivery.
+    // Step 7 — emit_research_artifact proof + origin-coordinator terminal
+    // delivery proof.
+    //   (a) The synthesize loop must receive a succeeding ToolResult from
+    //       emit_research_artifact and stamp research.artifact.path +
+    //       research.artifact.revision on its loop entity.
+    //   (b) The wake-up coordinator (rule 07) must inherit the origin
+    //       run_id, correlate to the reviewer loop via parent_loop_id and
+    //       related_loops.terminal, and publish exactly one typed
+    //       agentic.user_response.v1 result back onto the origin HTTP
+    //       channel (user.response.<channel_type>.<channel_id>) with no
+    //       intermediate loop leaking onto that channel.
     // -----------------------------------------------------------------
+    const rootCoordinator = dispatchLoops[0];
+    expect(rootCoordinator?.loop_id, "expected dispatch root coordinator loop_id").toBeTruthy();
+    const synthesisLoop = finalLoops.find((l) => l.role === "researcher-research-synthesize");
+    expect(synthesisLoop?.loop_id, "expected researcher-research-synthesize loop").toBeTruthy();
+    const reviewerLoop = finalLoops.find((l) => l.role === "reviewer-research");
+    expect(reviewerLoop?.loop_id, "expected reviewer-research loop").toBeTruthy();
     const terminalCoordinator = finalLoops.find(
-      (loop) => loop.role === "coordinator" && loop.result?.includes('"action":"respond_direct"'),
+      (loop) =>
+        loop.role === "coordinator" &&
+        !loop.task_id.startsWith("dispatch-") &&
+        loop.result?.includes('"action":"respond_direct"'),
     );
     expect(
       terminalCoordinator?.loop_id,
       "expected the terminal respond_direct coordinator loop",
     ).toBeTruthy();
-    type UserResponseEntry = {
+
+    type LoggedMessageEntry = {
       subject: string;
       message_type: string;
-      raw_data?: { payload?: { content?: string; in_reply_to?: string; type?: string } };
+      raw_data?: {
+        payload?: {
+          loop_id?: string;
+          task_id?: string;
+          role?: string;
+          run_id?: string;
+          parent_loop_id?: string;
+          channel_type?: string;
+          channel_id?: string;
+          user_id?: string;
+          type?: string;
+          content?: string;
+          in_reply_to?: string;
+          name?: string;
+          error?: string;
+          metadata?: {
+            "agent.decide.action_allowlist"?: string[];
+            "agent.related_loops"?: Record<string, string>;
+          };
+        };
+      };
     };
-    const respPayloads = await pollUntil(async () => {
-      const respResp = await request.get(
-        "/message-logger/entries?limit=500&subject=user.response.*",
-      );
+
+    const allMessages = await pollUntil(async () => {
+      const respResp = await request.get("/message-logger/entries?limit=500");
       expect(respResp.ok(), "/message-logger/entries returned non-OK").toBe(true);
-      const entries = (await respResp.json()) as UserResponseEntry[];
+      const entries = (await respResp.json()) as LoggedMessageEntry[];
       return entries.some(
-        (entry) => entry.raw_data?.payload?.in_reply_to === terminalCoordinator?.loop_id,
-      ) ? entries : null;
+        (entry) =>
+          entry.subject.startsWith("user.response.") &&
+          entry.raw_data?.payload?.in_reply_to === terminalCoordinator?.loop_id,
+      )
+        ? entries
+        : null;
     }, { timeoutMs: 10_000 });
     expect(
-      respPayloads,
-      "expected at least one typed dispatch.user.response publish. Zero entries means dispatch's typed user.response output is misconfigured.",
+      allMessages,
+      "expected at least one typed dispatch.user.response publish correlated to the terminal coordinator",
     ).toBeTruthy();
-    const delivered = respPayloads!;
-    expect(delivered.every((entry) => entry.subject.startsWith("user.response."))).toBe(true);
+    const messages = allMessages!;
+
+    // (7a) Artifact emission proof on researcher-research-synthesize.
+    const artifactResults = messages.filter(
+      (entry) =>
+        entry.subject.startsWith("tool.result.") &&
+        entry.raw_data?.payload?.name === "emit_research_artifact" &&
+        entry.raw_data?.payload?.loop_id === synthesisLoop?.loop_id,
+    );
+    expect(
+      artifactResults,
+      "the synthesize loop must receive its emit_research_artifact ToolResult",
+    ).toHaveLength(1);
+    const artifactResult = artifactResults[0].raw_data!.payload!;
+    expect(artifactResult.error ?? "", "emit_research_artifact must succeed").toBe("");
+    const artifactMeta = JSON.parse(artifactResult.content!) as {
+      loop_id: string;
+      loop_entity_id: string;
+      revision: number;
+      payload_subject: string;
+    };
+    expect(artifactMeta.revision).toBe(1);
+    expect(artifactMeta.loop_entity_id.endsWith(`.${synthesisLoop!.loop_id}`)).toBe(true);
+    const artifactPaths = await fetchTriples(request, {
+      predicate: "research.artifact.path",
+      limit: 10,
+    });
+    expect(artifactPaths).toHaveLength(1);
+    expect(artifactPaths[0].subject).toBe(artifactMeta.loop_entity_id);
+    expect(String(artifactPaths[0].object)).toMatch(/\.artifacts\/research\/.+\.md$/);
+
+    // (7b) Origin-coordinator task lineage & terminal channel delivery proof.
+    const taskEntries = messages.filter((entry) => entry.message_type === "agentic.task.v1");
+    const rootTasks = taskEntries.filter(
+      (entry) => entry.raw_data?.payload?.task_id === rootCoordinator.task_id,
+    );
+    const terminalTasks = taskEntries.filter(
+      (entry) => entry.raw_data?.payload?.task_id === terminalCoordinator!.task_id,
+    );
+    expect(rootTasks, "expected root dispatch task message").toHaveLength(1);
+    expect(terminalTasks, "expected exactly one terminal wake-up task message").toHaveLength(1);
+    const rootTask = rootTasks[0].raw_data!.payload!;
+    const terminalTask = terminalTasks[0].raw_data!.payload!;
+    expect(rootTask.loop_id).toBe(rootCoordinator.loop_id);
+    expect(rootTask.channel_type).toBe("http");
+    expect(rootTask.channel_id).toBeTruthy();
+    expect(rootTask.user_id).toBe("ui-anonymous");
+    expect(terminalTask.run_id).toBe(rootCoordinator.loop_id);
+    expect(terminalTask.parent_loop_id).toBe(reviewerLoop!.loop_id);
+    expect(terminalTask.metadata?.["agent.decide.action_allowlist"]).toEqual([
+      "respond_direct",
+      "ask_user",
+    ]);
+    expect(terminalTask.metadata?.["agent.related_loops"]?.terminal).toBe(reviewerLoop!.loop_id);
+
+    const delivered = messages.filter((entry) => entry.subject.startsWith("user.response."));
     expect(delivered.every((entry) => entry.message_type === "agentic.user_response.v1")).toBe(true);
     const results = delivered.filter((entry) => entry.raw_data?.payload?.type === "result");
     expect(
@@ -288,43 +379,74 @@ test.describe("ADR-042 MVP-5 — Research category mock-LLM journey", () => {
       "only the terminal coordinator may produce a result; submission status remains separate",
     ).toHaveLength(1);
     const terminalReply = results[0];
-    expect(terminalReply?.raw_data?.payload?.in_reply_to).toBe(terminalCoordinator?.loop_id);
+    const replyPayload = terminalReply.raw_data!.payload!;
+    expect(replyPayload).toMatchObject({
+      type: "result",
+      in_reply_to: terminalCoordinator!.loop_id,
+      channel_type: rootTask.channel_type,
+      channel_id: rootTask.channel_id,
+      user_id: rootTask.user_id,
+    });
+    expect(terminalReply.subject).toBe(
+      `user.response.${rootTask.channel_type}.${rootTask.channel_id}`,
+    );
     expect(
-      terminalReply?.raw_data?.payload?.content,
+      replyPayload.content,
       "the response correlated to the terminal coordinator must carry its user-facing result",
     ).toContain("For IoT edge deployments");
+    const routedResults = messages.filter(
+      (entry) =>
+        entry.subject === terminalReply.subject &&
+        ["result", "prompt"].includes(entry.raw_data?.payload?.type ?? ""),
+    );
+    expect(
+      routedResults,
+      "no intermediate loop or duplicate result may leak onto the original channel",
+    ).toHaveLength(1);
+    expect(routedResults[0].raw_data?.payload?.in_reply_to).toBe(terminalCoordinator!.loop_id);
 
     // -----------------------------------------------------------------
-    // Step 8 — ADR-053 Phase 4a: the run reached `completed`. Direct
-    // agent.run.phase assertion on the run entity (the design spike's
-    // merge gate §D/§H). Research is the loop-spawned-chain path: its
-    // reviewer carries agent.run.entity-id, rule 07 stamps
-    // agent.run.outcome=success, and rule 03 transitions executing→
-    // completed. `failed` here would mean the D3 zombie guard raced the
-    // dispatched→executing transition.
+    // Step 8 — ADR-053 Phase 4a: the single run entity reached `completed`
+    // and carries agent.run.origin-entity-id pointing to the root
+    // coordinator loop entity.
     // -----------------------------------------------------------------
-    const runPhases = await pollUntil(async () => {
+    const runPhaseTriples = await pollUntil(async () => {
       const phases = await fetchTriples(request, {
         predicate: "agent.run.phase",
         limit: 20,
       });
-      const objs = phases
-        .filter((t) => String(t.subject ?? "").includes("chain.agent.execution."))
-        .map((t) => String(t.object));
-      if (objs.includes("completed") || objs.includes("failed")) return objs;
+      const chainPhases = phases.filter((t) =>
+        String(t.subject ?? "").includes("chain.agent.execution."),
+      );
+      const objs = chainPhases.map((t) => String(t.object));
+      if (objs.includes("completed") || objs.includes("failed")) return chainPhases;
       return null;
     }, { timeoutMs: 30_000 });
     expect(
-      runPhases,
+      runPhaseTriples,
       "agent.run.phase never reached a terminal on the run entity (run stuck in dispatched/executing)",
     ).toBeTruthy();
-    expect(runPhases, "run must reach completed (ADR-053 Phase 4a)").toContain(
+    expect(
+      runPhaseTriples,
+      "terminal handoff reuses the single run anchor instead of minting another",
+    ).toHaveLength(1);
+    const runSubject = String(runPhaseTriples![0].subject);
+    expect(String(runPhaseTriples![0].object), "run must reach completed (ADR-053 Phase 4a)").toBe(
       "completed",
     );
-    expect(
-      runPhases,
-      "run must NOT be failed (D3 race / wrong terminal)",
-    ).not.toContain("failed");
+    const runParts = runSubject.split(".");
+    expect(runParts).toHaveLength(6);
+    expect(runParts.slice(2)).toEqual(["chain", "agent", "execution", rootCoordinator.loop_id]);
+
+    const origins = await fetchTriples(request, {
+      predicate: "agent.run.origin-entity-id",
+      limit: 20,
+    });
+    expect(origins).toHaveLength(1);
+    expect(origins[0]).toMatchObject({
+      subject: runSubject,
+      object: [...runParts.slice(0, 2), "agentic-loop", "agent", "execution", rootCoordinator.loop_id].join("."),
+    });
 
     // BORN-FIRST gate (ADR-055/056 must-exist flip, semteams#222) — TWO anchors.
     // (1) Run anchor: research/07 stamps agent.run.outcome=success on the
@@ -348,6 +470,30 @@ test.describe("ADR-042 MVP-5 — Research category mock-LLM journey", () => {
       anchorSubstr: LOOP_ANCHOR.substr,
       label: "research/03a gather.completed_subtopic (plan-loop anchor)",
     });
+
+    // -----------------------------------------------------------------
+    // Step 9 — Raw-evidence UI inspection (RunEvidencePanel). Proves the
+    // terminal user.response payload is inspectable from the root task's
+    // child loop evidence drawer in the UI.
+    // -----------------------------------------------------------------
+    await page.goto(`/?task=${rootCoordinator.loop_id}`);
+    await expect(page.getByTestId("task-detail-panel")).toBeVisible();
+    const child = page.locator(
+      `[data-testid="child-item"][data-loop-id="${terminalCoordinator!.loop_id}"]`,
+    );
+    await expect(child).toBeVisible({ timeout: 10_000 });
+    await child.click();
+    await expect(child).toHaveAttribute("aria-pressed", "true");
+    await page.getByRole("tab", { name: "Evidence", exact: true }).click();
+    const panel = page.getByTestId("run-evidence-panel");
+    await panel.locator("summary", { hasText: "Message log" }).click();
+    const row = panel.getByTestId("trace-row").filter({ hasText: terminalReply.subject });
+    await expect(row).toHaveCount(1, { timeout: 10_000 });
+    await row.getByRole("button").click();
+    const body = row.getByTestId("trace-row-expanded");
+    await expect(body).toBeVisible();
+    const rendered = JSON.parse(await body.innerText()) as { payload: unknown };
+    expect(rendered.payload).toEqual(replyPayload);
   });
 });
 

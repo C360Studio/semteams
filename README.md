@@ -43,7 +43,7 @@ covers what SemTeams adds on top.
 |---|---|---|
 | Web UI | `ui/` | Svelte 5 + SvelteKit 2 chat / graph explorer / runtime monitor |
 | Bootstrap config | `configs/flow-bootstrap.json` | Production substrate-plus-overlays wiring; mock-LLM clone at `e2e-flow-bootstrap.json` |
-| Category packs | `configs/rules/<category>/` | Live: `research/` and `autoresearch/`. Support: `coordinator/`, `agent-run/`, and `ops/`. Parked dev packs are donor material; see [ADR-058](docs/adr/058-beta159-realignment-and-demo-lane-focus.md). New task classes add a pack, not a component. |
+| Category packs | `configs/rules/<category>/` | Live: `research/` (MVP supporting capability) and `autoresearch/` (retained framework demonstration). Support: `coordinator/`, `agent-run/`, and `ops/`. Parked dev packs are donor material; see [ADR-058](docs/adr/058-beta159-realignment-and-demo-lane-focus.md). New task classes add a pack, not a component. |
 | Personas | `configs/personas/fragments/<role>/*.md` | Role-specific prompt fragments loaded by the category packs. See [`configs/README.md`](configs/README.md) for the current inventory. |
 | Product tools | `cmd/semteams/tools/` | Tool executors that don't belong upstream: source ingest, artifact/spec emission, proof analysis/projection, sandbox bootstrap, and pack-specific measurement emitters. |
 | Product shell | `cmd/semteams/main.go` | ~600 LoC binary that wires the framework primitives directly for this product shell |
@@ -87,11 +87,13 @@ task ui:test:e2e:agentic:demo-mvp
 ```
 
 That runs the black-box mock-LLM evidence pack for the demo
-contracts: coordinator routing, the reviewed research arc, fail-closed
-readiness before execution routing, and empirical autoresearch.
+contracts: coordinator routing, the reviewed research arc (single-branch and
+parallel fan-out/join), and fail-closed readiness before execution routing.
 It uses the dockerized e2e stack and requires no LLM API keys or
-host Caddy install. The frozen baseline's terminal-delivery repair is qualified in the migration evidence above;
-inspect each run's results and explicit skips before making a claim about that run.
+host Caddy install. The `autoresearch` pack remains wired as an opt-in
+framework demonstration (`task ui:test:e2e:agentic:autoresearch`), not part of
+the MVP claim or required `demo-mvp` gate. Inspect each run's results and
+explicit skips before making a claim about that run.
 
 ### Live chat UI
 
@@ -118,9 +120,10 @@ ready, the coordinator classifies it and routes it to one of the live
 category packs:
 
 - a **research** question (compare X vs Y, how does Z work) → the
-  research arc;
+  research arc (MVP supporting capability);
 - an **optimize-a-metric** ask (make this faster / smaller) → the
-  autoresearch iteration loop, in a sandbox.
+  autoresearch iteration loop, in a sandbox (retained framework
+  demonstration, not part of the program-manager MVP claim).
 
 Power users can prefix a prompt with `/research` or `/optimize`.
 Those are coordinator-routed hints, not bypasses; SemTeams still
@@ -155,7 +158,7 @@ pack does and **how the sandbox is created**.
 | No-key demo qualification | `task ui:test:e2e:agentic:demo-mvp` | Black-box Playwright + mock-LLM evidence pack. No API keys. |
 | Live chat UI | `task dev:research` | Needs `GEMINI_API_KEY` for the default model registry; `BRAVE_SEARCH_API_KEY` recommended for web search. |
 | Research arc proof | `task ui:test:e2e:agentic:research-mvp` | Mock-LLM plan/fan-out/join/synthesize/review journey. |
-| Autoresearch proof | `task ui:test:e2e:agentic:autoresearch` | Mock-LLM metric iteration; final user delivery qualified in the frozen migration. |
+| Autoresearch framework demo (opt-in) | `task ui:test:e2e:agentic:autoresearch` | Retained framework demonstration of sandboxed metric iteration (not part of `demo-mvp`); final user delivery qualified in the frozen migration. |
 | Coordinator routing proof | `task ui:test:e2e:agentic:coordinator-routing-matrix` | Includes honest responses for parked team asks. |
 
 `task --list` shows everything.
@@ -225,23 +228,24 @@ layering, product-shell wiring map, mandatory protocols
 ## Status
 
 Active development. Breaking changes expected. The current runtime is not yet
-the program-manager MVP: today the live product-facing packs are research and
-autoresearch. The next product slice is a read-only, evidence-backed program
+the program-manager MVP: today the live product-facing packs are `research`
+(MVP supporting capability) and `autoresearch` (retained framework
+demonstration). The next product slice is a read-only, evidence-backed program
 pulse across operator-configured projects and repositories; see the
 [`roadmap`](docs/ROADMAP.md).
 
 Current architecture is **substrate-plus-overlays**: a single bootstrap configuration wires
 substrate singletons, and task classes are added as category-keyed
 rule packs + named persona bundles rather than separate flow
-configs. The demo scope is the inner and outer loops
+configs. The wired packs are
 ([ADR-058](docs/adr/058-beta159-realignment-and-demo-lane-focus.md)):
 
-- **research** — coordinator-routed prose research arc: plan →
+- **research (MVP supporting capability)** — coordinator-routed prose research arc: plan →
   parallel gather fan-out → join → synthesize → review → artifact
   with recoverable sources.
-- **autoresearch** — Karpathy-style propose/execute iteration loop
+- **autoresearch (retained framework demonstration)** — Karpathy-style propose/execute iteration loop
   with empirical keep/revert decisions and per-tenant devcontainer
-  attestation.
+  attestation (wired on disk with contract/integration coverage and opt-in browser journeys; outside the MVP claim and required `demo-mvp` / `test:e2e` gates).
 - **Parked donor material** — the spec-authoring and software-implementation packs
   (`create-change`, `proof-readiness`, `dev-from-task`,
   `dev-via-test`) are unwired. SemDev currently implements that journey; its future absorption is separately qualified
