@@ -35,5 +35,5 @@
   unconfigured repository fails closed with `agentic.ToolErrorInvalidArgs`.
 - A `CursorStore` (in-memory by default, or file-backed when `SEMTEAMS_GITHUB_CURSOR_PATH` is set) tracks per-`(repo,
   kind)` watermarks and per-`origin_id` version digests (`updated_at` + content SHA-256 prefix). On subsequent runs over
-  unchanged repositories, already-observed object versions are suppressed (`records: []`, `unchanged_filtered > 0`),
+  unchanged repositories, already-observed object versions are suppressed (`records: []`, `unchanged_count > 0`),
   preventing duplicate reporting across ticks.

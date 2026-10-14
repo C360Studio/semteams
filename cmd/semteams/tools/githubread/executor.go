@@ -196,12 +196,9 @@ func (e *Executor) parseExecuteRequest(args map[string]any) (executeRequest, err
 		}
 	}
 
-	limit := 20
-	if n, ok := extractInt(args, "limit"); ok {
-		if n < 1 || n > 100 {
-			return executeRequest{}, fmt.Errorf("limit must be between 1 and 100 (got %d)", n)
-		}
-		limit = n
+	limit, err := parseLimit(args["limit"])
+	if err != nil {
+		return executeRequest{}, err
 	}
 
 	includeUnchanged, _ := args["include_unchanged"].(bool)
@@ -719,20 +716,28 @@ func parseKinds(raw any) ([]string, error) {
 	return out, nil
 }
 
-func extractInt(args map[string]any, key string) (int, bool) {
-	v, exists := args[key]
-	if !exists || v == nil {
-		return 0, false
+func parseLimit(raw any) (int, error) {
+	if raw == nil {
+		return 20, nil
 	}
-	switch n := v.(type) {
+	var n int
+	switch v := raw.(type) {
 	case float64:
-		return int(n), true
+		if float64(int(v)) != v {
+			return 0, fmt.Errorf("limit must be an integer")
+		}
+		n = int(v)
 	case int:
-		return n, true
+		n = v
 	case int64:
-		return int(n), true
+		n = int(v)
+	default:
+		return 0, fmt.Errorf("limit must be an integer")
 	}
-	return 0, false
+	if n < 1 || n > 100 {
+		return 0, fmt.Errorf("limit must be between 1 and 100 (got %d)", n)
+	}
+	return n, nil
 }
 
 func (e *Executor) argError(call agentic.ToolCall, msg string) agentic.ToolResult {

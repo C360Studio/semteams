@@ -193,6 +193,19 @@ func TestGitHubReadResultsValidateAsEvidenceRecordsContract(t *testing.T) {
 			t.Errorf("record[%d] (%s) failed ValidateToolResult: %v", i, rec.Kind, err)
 		}
 	}
+
+	rejected, err := exec.Execute(context.Background(), agentic.ToolCall{
+		ID:        "call-contract-unconfigured",
+		Name:      githubread.ToolName,
+		Arguments: map[string]any{"repository": "outside/unlisted"},
+	})
+	if err != nil {
+		t.Fatalf("Execute unconfigured repo error: %v", err)
+	}
+	if rejected.ErrorKind != agentic.ToolErrorInvalidArgs || rejected.Error == "" {
+		t.Errorf("unconfigured repository got ErrorKind=%q Error=%q, want %q and non-empty message",
+			rejected.ErrorKind, rejected.Error, agentic.ToolErrorInvalidArgs)
+	}
 }
 
 func TestGitHubReadSecondRunUnchangedRepositoriesYieldsNoNewActivityContract(t *testing.T) {

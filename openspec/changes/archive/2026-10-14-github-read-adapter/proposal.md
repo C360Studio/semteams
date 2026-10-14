@@ -5,13 +5,9 @@
 [Issue #273](https://github.com/C360Studio/semteams/issues/273) requires a read-only, product-local GitHub tool so the
 `program-report` gather phase (#267) can observe issues, pull requests, releases, commits, and CI status across an
 operator-configured portfolio (`SEMTEAMS_PORTFOLIO_PATH`) with cursors and stable identities, emitting channel-typed
-evidence records (`channel: "github"`, stable `locator`, canonical `origin_id`, `source_class: "primary"`,
-`retrieved_at`, and `raw_body`) that the emit executor (#271) can mechanically derive against.
-
-Upstream removed its `github_*` tools by design (`semstreams` commit `a533306e`), strips `GITHUB_TOKEN` from `bash`
-child environments, and restricts `http_request` to unauthenticated page fetches without request bodies or custom
-headers ([`docs/proposals/personal-assistant-deployment.md`](../../../docs/proposals/personal-assistant-deployment.md)
-C2, C3, C6; [ADR-060](../../../docs/adr/060-program-manager-direction-and-research-design.md) §5).
+evidence records (`channel: "github"`, `locator`, `origin_id`, `source_class: "primary"`, `retrieved_at`, `raw_body`)
+for mechanical derivation (#271). Upstream removed its `github_*` tools (`semstreams` `a533306e`), strips `GITHUB_TOKEN`
+from `bash`, and restricts `http_request` to unauthenticated fetches ([ADR-060](../../../docs/adr/060-program-manager-direction-and-research-design.md) §5).
 
 ## What changes
 
