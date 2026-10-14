@@ -23,10 +23,12 @@ import type { APIRequestContext, Page } from "@playwright/test";
  *     are read when an item is opened".
  *   - Read-only is structural: nothing in the board is draggable and the work
  *     API answers 405 to a write.
- *   - Three linkage cases, each against the real backend:
+ *   - Four linkage cases, each against the real backend:
  *       #311 declares `linked_runs: []`  -> lookup `complete`, "no linked run"
  *       #313 binds a run entity that does not exist -> lookup `partial`
  *            (a real failed resolution, never reported as "no linked run")
+ *       #314 binds by `work_item_ref` with no matching run -> lookup `partial`,
+ *            `linked-runs-unknown` (zero rows, never reported as "no linked run")
  *       #312 binds, by exact coordinator prompt, the run THIS spec creates
  *            -> lookup `complete`, stage `completed`, drill-in to the run
  *     and a linked run never moves a card (#312 stays in its PM column).
