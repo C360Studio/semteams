@@ -306,6 +306,312 @@ describe("createGithubSource", () => {
     });
   });
 
+  it("hydrates GitHub Projects v2 status options, pm_status, and priority when project_board is configured", async () => {
+    const boardRepo: Repository = {
+      owner: "C360Studio",
+      name: "semteams",
+      project_board: {
+        owner: "C360Studio",
+        number: 4,
+        status_field: "Status",
+        priority_field: "Priority",
+      },
+    };
+
+    const graphqlPayloads: { query?: string; variables?: Record<string, unknown> }[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+        const url = new URL(String(input));
+        if (url.pathname === "/graphql") {
+          graphqlPayloads.push(JSON.parse(String(init?.body ?? "{}")));
+          return jsonResponse({
+            data: {
+              organization: {
+                projectV2: {
+                  fields: {
+                    nodes: [
+                      {
+                        __typename: "ProjectV2SingleSelectField",
+                        name: "Status",
+                        options: [
+                          { name: "Todo" },
+                          { name: "In Progress" },
+                          { name: "In Review" },
+                          { name: "Done" },
+                        ],
+                      },
+                      {
+                        __typename: "ProjectV2SingleSelectField",
+                        name: "Priority",
+                        options: [{ name: "P0" }, { name: "P1" }, { name: "P2" }],
+                      },
+                    ],
+                  },
+                  items: {
+                    pageInfo: { hasNextPage: false },
+                    nodes: [
+                      {
+                        content: {
+                          __typename: "Issue",
+                          number: 315,
+                          repository: { nameWithOwner: "C360Studio/semteams" },
+                        },
+                        fieldValues: {
+                          nodes: [
+                            {
+                              __typename: "ProjectV2ItemFieldSingleSelectValue",
+                              name: "In Review",
+                              field: { name: "Status" },
+                            },
+                            {
+                              __typename: "ProjectV2ItemFieldSingleSelectValue",
+                              name: "P1",
+                              field: { name: "Priority" },
+                            },
+                          ],
+                        },
+                      },
+                      {
+                        content: {
+                          __typename: "Issue",
+                          number: 315,
+                          repository: { nameWithOwner: "C360Studio/semengine" },
+                        },
+                        fieldValues: {
+                          nodes: [
+                            {
+                              __typename: "ProjectV2ItemFieldSingleSelectValue",
+                              name: "Done",
+                              field: { name: "Status" },
+                            },
+                          ],
+                        },
+                      },
+                    ],
+                  },
+                },
+              },
+              user: null,
+            },
+            errors: [
+              {
+                type: "NOT_FOUND",
+                path: ["user"],
+                message: "Could not resolve to a User with the login of 'C360Studio'.",
+              },
+            ],
+          });
+        }
+        if (url.pathname === "/repos/C360Studio/semteams/issues") {
+          return jsonResponse([
+            {
+              number: 315,
+              title: "Inline agentic drawer",
+              state: "open",
+              labels: [],
+              assignees: [{ login: "coby" }],
+            },
+            {
+              number: 316,
+              title: "Unboarded issue",
+              state: "open",
+              labels: [],
+              assignees: [],
+            },
+          ]);
+        }
+        if (url.pathname === "/repos/C360Studio/semteams/issues/315") {
+          return jsonResponse({
+            number: 315,
+            title: "Inline agentic drawer",
+            state: "open",
+            labels: [],
+            assignees: [{ login: "coby" }],
+          });
+        }
+        if (url.pathname === "/repos/C360Studio/semteams/pulls") {
+          return jsonResponse([]);
+        }
+        return jsonResponse({ message: "not found" }, 404);
+      }),
+    );
+
+    const source = createGithubSource({ apiUrl: "http://github.test", token: "ghp_board" });
+    const listed = await source.listItems(boardRepo);
+    expect(graphqlPayloads).toHaveLength(1);
+    expect(graphqlPayloads[0].variables).toEqual({
+      owner: "C360Studio",
+      number: 4,
+      itemLimit: GITHUB_PAGE_LIMIT,
+    });
+    expect(listed.lookup).toBe("complete");
+    expect(listed.columns).toEqual(["Todo", "In Progress", "In Review", "Done", "No Status"]);
+
+    const item315 = listed.items.find((i) => i.number === 315)!;
+    expect(item315).toMatchObject({
+      number: 315,
+      column: "In Review",
+      pm_status: "In Review",
+      priority: "P1",
+    });
+
+    const item316 = listed.items.find((i) => i.number === 316)!;
+    expect(item316.column).toBe("No Status");
+    expect(item316).not.toHaveProperty("pm_status");
+    expect(item316).not.toHaveProperty("priority");
+
+    // Single item lookup also hydrates project_board fields.
+    const single = await source.getItem({ repository: boardRepo, number: 315 });
+    expect(single.lookup).toBe("complete");
+    expect(single.item).toMatchObject({
+      number: 315,
+      column: "In Review",
+      pm_status: "In Review",
+      priority: "P1",
+    });
+  });
+
+  it("degrades to partial and falls back to issue-state columns when the Projects v2 GraphQL read fails", async () => {
+    const boardRepo: Repository = {
+      owner: "C360Studio",
+      name: "semteams",
+      project_board: {
+        owner: "C360Studio",
+        number: 4,
+        status_field: "Status",
+        priority_field: "Priority",
+      },
+    };
+
+    stubBackend((url) => {
+      if (url.pathname === "/graphql") {
+        return jsonResponse(
+          {
+            data: { organization: null, user: null },
+            errors: [
+              {
+                type: "INSUFFICIENT_SCOPES",
+                message: "Your token has not been granted the required scopes to execute this query.",
+              },
+            ],
+          },
+          200,
+        );
+      }
+      if (url.pathname === "/repos/C360Studio/semteams/issues") {
+        return jsonResponse([
+          {
+            number: 315,
+            title: "Inline agentic drawer",
+            state: "open",
+            labels: [],
+            assignees: [{ login: "coby" }],
+          },
+        ]);
+      }
+      if (url.pathname === "/repos/C360Studio/semteams/pulls") {
+        return jsonResponse([]);
+      }
+      return jsonResponse({ message: "not found" }, 404);
+    });
+
+    const source = createGithubSource({ apiUrl: "http://github.test" });
+    const listed = await source.listItems(boardRepo);
+    expect(listed.lookup).toBe("partial");
+    expect(listed.reason).toContain("POST /graphql (ProjectV2 C360Studio#4)");
+    expect(listed.reason).toContain("required scopes");
+    expect(listed.columns).toEqual(["Todo", "In Progress", "Done"]);
+    expect(listed.items[0].column).toBe("In Progress");
+    expect(listed.items[0]).not.toHaveProperty("pm_status");
+    expect(listed.items[0]).not.toHaveProperty("priority");
+  });
+
+  it("supports user-owned ProjectV2 boards and reports partial when project items are truncated", async () => {
+    const userBoardRepo: Repository = {
+      owner: "coby",
+      name: "semteams",
+      project_board: {
+        owner: "coby",
+        number: 2,
+        status_field: "Status",
+      },
+    };
+
+    stubBackend((url) => {
+      if (url.pathname === "/graphql") {
+        return jsonResponse({
+          data: {
+            organization: null,
+            user: {
+              projectV2: {
+                fields: {
+                  nodes: [
+                    {
+                      __typename: "ProjectV2SingleSelectField",
+                      name: "Status",
+                      options: [{ name: "Todo" }, { name: "Done" }],
+                    },
+                  ],
+                },
+                items: {
+                  pageInfo: { hasNextPage: true },
+                  nodes: [
+                    {
+                      content: {
+                        __typename: "Issue",
+                        number: 10,
+                        repository: { nameWithOwner: "coby/semteams" },
+                      },
+                      fieldValues: {
+                        nodes: [
+                          {
+                            __typename: "ProjectV2ItemFieldSingleSelectValue",
+                            name: "Done",
+                            field: { name: "Status" },
+                          },
+                          {
+                            __typename: "ProjectV2ItemFieldSingleSelectValue",
+                            name: "P0",
+                            field: { name: "Priority" },
+                          },
+                        ],
+                      },
+                    },
+                  ],
+                },
+              },
+            },
+          },
+        });
+      }
+      if (url.pathname === "/repos/coby/semteams/issues") {
+        return jsonResponse([
+          { number: 10, title: "User board item", state: "open", labels: [], assignees: [] },
+        ]);
+      }
+      if (url.pathname === "/repos/coby/semteams/pulls") {
+        return jsonResponse([]);
+      }
+      return jsonResponse({ message: "not found" }, 404);
+    });
+
+    const source = createGithubSource({ apiUrl: "http://github.test" });
+    const listed = await source.listItems(userBoardRepo);
+    expect(listed.lookup).toBe("partial");
+    expect(listed.reason).toContain(
+      `POST /graphql (ProjectV2 coby#2) items truncated at ${GITHUB_PAGE_LIMIT} items`,
+    );
+    expect(listed.columns).toEqual(["Todo", "Done"]);
+    expect(listed.items[0]).toMatchObject({
+      number: 10,
+      column: "Done",
+      pm_status: "Done",
+    });
+    // priority_field is not configured on userBoardRepo.project_board, so priority stays unset.
+    expect(listed.items[0]).not.toHaveProperty("priority");
+  });
+
   it("validates configs/portfolio-c360.json against validatePortfolio", async () => {
     const raw = JSON.parse(
       await readFile(resolve(process.cwd(), "../configs/portfolio-c360.json"), "utf8"),
@@ -321,3 +627,4 @@ describe("createGithubSource", () => {
     }
   });
 });
+

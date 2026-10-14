@@ -41,6 +41,13 @@ SHALL NOT be derived from one another.
 - **AND** any failed or truncated GitHub read SHALL report `lookup: "failed"` or `"partial"` with its reason rather than
   an empty `complete` result
 
+#### Scenario: Live GitHub Projects v2 status and priority hydration with honest fallback
+
+- **GIVEN** `WORK_SOURCE=github` and a repository in `SEMTEAMS_PORTFOLIO_PATH` declaring `project_board` (`owner`, `number`, `status_field`, and optional `priority_field`)
+- **WHEN** `/api/work/items?repository=owner/name` or `/api/work/items/owner/name/number` is requested
+- **THEN** the server SHALL read the configured GitHub ProjectV2 single-select `status_field` options and item field values via a bounded read-only GraphQL query and populate ordered board columns, `pm_status`, and `priority`
+- **AND** if the Projects v2 GraphQL read fails or the configured status field cannot be resolved, the response SHALL report `lookup: "partial"` with the failure reason, leave `pm_status` and `priority` unset, and fall back to the issue-state columns (`Todo`, `In Progress`, `Done`)
+
 ### Requirement: Explicit unknown overlays over scoped reads
 
 Each graph-derived overlay (linked runs, execution stage from `agent.run.phase`, needs-you from `ask_user`, approval

@@ -274,6 +274,127 @@ describe("github source", () => {
     });
   });
 
+  it("hydrates GitHub Projects v2 columns and pm_status through /api/work/items when project_board is configured", async () => {
+    await useDocument({
+      programs: [
+        {
+          id: "c360",
+          name: "c360",
+          projects: [
+            {
+              id: "semteams",
+              name: "SemTeams",
+              repositories: [
+                {
+                  owner: "C360Studio",
+                  name: "semteams",
+                  project_board: {
+                    owner: "C360Studio",
+                    number: 4,
+                    status_field: "Status",
+                    priority_field: "Priority",
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+    stubBackend((url) => {
+      if (url.pathname === "/graphql") {
+        return new Response(
+          JSON.stringify({
+            data: {
+              organization: {
+                projectV2: {
+                  fields: {
+                    nodes: [
+                      {
+                        __typename: "ProjectV2SingleSelectField",
+                        name: "Status",
+                        options: [
+                          { name: "Todo" },
+                          { name: "In Progress" },
+                          { name: "In Review" },
+                          { name: "Done" },
+                        ],
+                      },
+                    ],
+                  },
+                  items: {
+                    pageInfo: { hasNextPage: false },
+                    nodes: [
+                      {
+                        content: {
+                          __typename: "Issue",
+                          number: 296,
+                          repository: { nameWithOwner: "C360Studio/semteams" },
+                        },
+                        fieldValues: {
+                          nodes: [
+                            {
+                              __typename: "ProjectV2ItemFieldSingleSelectValue",
+                              name: "In Review",
+                              field: { name: "Status" },
+                            },
+                            {
+                              __typename: "ProjectV2ItemFieldSingleSelectValue",
+                              name: "P0",
+                              field: { name: "Priority" },
+                            },
+                          ],
+                        },
+                      },
+                    ],
+                  },
+                },
+              },
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (url.pathname === "/repos/C360Studio/semteams/issues") {
+        return new Response(
+          JSON.stringify([
+            {
+              number: 296,
+              title: "Read-only work board",
+              state: "open",
+              labels: [],
+              assignees: [{ login: "coby" }],
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (url.pathname === "/repos/C360Studio/semteams/pulls") {
+        return new Response(JSON.stringify([]), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      return new Response(JSON.stringify({ message: "not found" }), { status: 404 });
+    });
+
+    const { status, body } = await getItems("c360studio/semteams");
+    expect(status).toBe(200);
+    expect(body).toMatchObject({
+      lookup: "complete",
+      columns: ["Todo", "In Progress", "In Review", "Done"],
+      items: [
+        {
+          ref: "C360Studio/semteams#296",
+          column: "In Review",
+          pm_status: "In Review",
+          priority: "P0",
+        },
+      ],
+    });
+  });
+
   it("still scopes to configured repositories", async () => {
     await useDocument(validDocument);
     expect((await getItems("someone/else")).status).toBe(404);
