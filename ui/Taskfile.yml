@@ -1935,11 +1935,11 @@ tasks:
       SOURCE_HASH:
         sh: |
           (
-            cd "{{.ROOT_DIR}}/.."
+            cd "{{.TASKFILE_DIR}}/.."
             git rev-parse HEAD 2>/dev/null || echo "no-git"
-            git status --porcelain -- cmd internal test configs docker go.mod go.sum 2>/dev/null
-            git diff HEAD -- cmd internal test configs docker go.mod go.sum 2>/dev/null
-            git ls-files --others --exclude-standard -- cmd internal test configs docker 2>/dev/null | while IFS= read -r f; do
+            git status --porcelain -- cmd internal test configs docker .devcontainer go.mod go.sum 2>/dev/null
+            git diff HEAD -- cmd internal test configs docker .devcontainer go.mod go.sum 2>/dev/null
+            git ls-files --others --exclude-standard -- cmd internal test configs docker .devcontainer 2>/dev/null | while IFS= read -r f; do
               [ -f "$f" ] && shasum -a 256 "$f"
             done
           ) | shasum -a 256 | awk '{print $1}'
