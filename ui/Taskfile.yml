@@ -188,15 +188,15 @@ tasks:
       - npm run test
 
   test:e2e:
-    desc: Run all E2E journey specs (each with its own fixture and fresh stack)
+    desc: Run all required E2E journey specs (each with its own fixture and fresh stack)
     summary: |
-      Runs every Playwright journey under e2e/agentic/ with the
-      research-mvp mock-LLM fixture (the surviving ADR-042 MVP cut),
-      tearing down the docker stack between runs.
+      Runs the required Playwright journeys under e2e/agentic/, tearing down the
+      docker stack between runs. The retained autoresearch framework
+      demonstration specs (test:e2e:agentic:autoresearch and
+      test:e2e:agentic:autoresearch-guardrails) remain runnable on demand.
     cmds:
       - task: test:e2e:agentic:research-mvp
-      - task: test:e2e:agentic:autoresearch
-      - task: test:e2e:agentic:autoresearch-guardrails
+      - task: test:e2e:agentic:research-fanout
       - task: test:e2e:agentic:coordinator-routing-matrix
       - task: test:e2e:agentic:coordinator-readiness-gate
       - task: test:e2e:agentic:coordinator-team-spawn
@@ -225,10 +225,15 @@ tasks:
 
         - coordinator routing chooses the correct team for prompt classes
           (parked-team asks get an honest respond_direct, ADR-058)
-        - the research arc fans out, joins, synthesizes, and delivers an
-          artifact whose sources are recoverable
+        - the research arc plans, fans out (single-branch and parallel
+          multi-branch join), synthesizes, emits a research artifact, reviews,
+          and delivers a terminal reply through the origin coordinator
         - coordinator readiness checks fail closed before execution routing
-        - autoresearch converges with empirical keep/revert decisions
+
+      The autoresearch pack remains wired as an opt-in framework demonstration
+      (task ui:test:e2e:agentic:autoresearch and
+      task ui:test:e2e:agentic:autoresearch-guardrails), not part of the MVP
+      claim or this required gate.
 
       These journeys may read graph facts, trajectories, logs, downloads, and
       HTTP status for assertions. They must not write directly into NATS, graph
@@ -241,8 +246,8 @@ tasks:
     cmds:
       - task: test:e2e:agentic:coordinator-routing-matrix
       - task: test:e2e:agentic:research-mvp
+      - task: test:e2e:agentic:research-fanout
       - task: test:e2e:agentic:coordinator-readiness-gate
-      - task: test:e2e:agentic:autoresearch
 
   test:e2e:agentic:real-time-activity-stream:
     desc: Run the real-time-activity-stream journey

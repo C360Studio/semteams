@@ -16,9 +16,11 @@ current runnable truth remains the shipped configs, journeys, and
   live capabilities.
 - **Research pack** — planning, parallel evidence gathering, synthesis,
   review, artifact emission, and coordinator wake-up.
-- **Autoresearch pack** — metric optimization with empirical keep/revert in an
-  attested per-tenant devcontainer. It remains a useful framework proof, but
-  it is not the initial program-manager story.
+- **Autoresearch pack (retained framework demonstration)** — metric optimization
+  with empirical keep/revert in an attested per-tenant devcontainer. It remains
+  wired on disk with contract/integration coverage and opt-in browser journeys
+  as a framework demonstration, but it is not part of the Program Pulse MVP
+  claim or the required `demo-mvp` / `test:e2e` browser gates.
 - **Governed repository workflow** — issues, OpenSpec changes where behavior
   changes, draft PR claims, explicit closure authority, and a readable
   Repository CI baseline.

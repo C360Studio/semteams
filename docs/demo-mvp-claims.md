@@ -1,36 +1,44 @@
 # Demo MVP Claims And Evidence
 
 This document defines the claims SemTeams can make for the inner/outer-loop demo and the evidence that is allowed to
-support them. The demo scope was reset by [ADR-058](adr/058-beta159-realignment-and-demo-lane-focus.md): the live
-surface is the coordinator front door (outer loop) plus the research and autoresearch arcs (inner loop). The
-spec-driven-development claims that previously lived here are parked with their packs and move to the Parked Claims
-section until those packs are re-authored and re-wired.
+support them. The demo scope was reset by [ADR-058](adr/058-beta159-realignment-and-demo-lane-focus.md) and aligned
+with the [Program Manager](product/program-manager.md) product direction: the MVP demo surface is the coordinator
+front door (outer loop), the research arc (inner loop), and fail-closed sandbox readiness. The `autoresearch` pack
+remains wired on disk as a retained framework demonstration, not an MVP product claim or member of the `demo-mvp` /
+required `test:e2e` gates. The spec-driven-development claims that previously lived here are parked with their packs
+and move to the Parked Claims section until those packs are re-authored and re-wired.
 
 ## Frozen migration qualification
 
 The beta.160 baseline and frozen target are compared in the
 [migration record](migrations/semstreams-8b99efe/README.md). The module is pinned to
-`v1.0.0-beta.162.0.20260930150212-8b99efe9c66a`. The aggregate demo is not fully qualified at this target:
-autoresearch completes its loops/run but does not deliver the final coordinator reply to the initiating user.
-Approval event-ordering and independent reviewer findings must also be resolved before migration sign-off.
-A loop count, terminal graph phase, or logger completion is insufficient evidence of user delivery.
+`v1.0.0-beta.162.0.20260930150212-8b99efe9c66a` ([PR #281](https://github.com/C360Studio/semteams/pull/281)).
+A loop count, terminal graph phase, or logger completion is insufficient evidence of user delivery; terminal delivery
+through the origin coordinator and raw-evidence inspection are asserted directly in the active browser journeys.
 
-## Supported and bounded claims
+## Supported and bounded MVP claims
 
-SemTeams can route prompt classes from the coordinator front door: plain chat/direct response, clarification, research,
-or autoresearch. Product-level slash commands are supported as coordinator-routed hints, not bypasses. Asks for parked
-teams (spec authoring, implementation) get an honest direct response, never a silent dead-end.
+SemTeams can route prompt classes from the coordinator front door: plain chat/direct response, clarification, or
+research (plus routing to the retained `autoresearch` framework demonstration when explicitly requested). Product-level
+slash commands are supported as coordinator-routed hints, not bypasses. Asks for parked teams (spec authoring,
+implementation) get an honest direct response, never a silent dead-end.
 
-SemTeams can run an evidence-gathering research arc end to end: plan, fan out parallel gatherer loops, join, synthesize,
-review, and publish a typed final coordinator response. Source facts are recoverable from the graph; this does not
-claim full artifact-body rendering in the UI.
-
-The autoresearch pack exercises baseline measurement, bounded proposal/execution in an attested sandbox, empirical
-keep/revert decisions, synthesis, and review. Final rollup delivery to the initiating user is blocked at the frozen
-target by missing typed ancestry after a run-triggered rule; do not claim end-to-end delivery until that gate passes.
+SemTeams can run an evidence-gathering research arc end to end: plan, fan out parallel gatherer loops with run-owned
+subtopic accounting, join, synthesize, emit a structured research artifact, review, and publish a typed final
+coordinator response correlated to the origin run and inspectable in the UI's raw-evidence message log. Source facts
+are recoverable from the graph; this does not claim full artifact-body rendering in the UI.
 
 SemTeams can prove sandbox readiness fails closed: execution-bound routing waits on, or honestly surfaces, a
 non-ready/denied sandbox attestation instead of dispatching work into an unprepared environment.
+
+## Retained Framework Demonstration (Non-MVP)
+
+The `autoresearch` pack (`configs/rules/autoresearch/`, `configs/personas/fragments/*autoresearch*`, and
+`test/contract/autoresearch_*`) remains wired in `flow-bootstrap.json` as a framework demonstration of baseline
+measurement, bounded proposal/execution in an attested sandbox, empirical keep/revert decisions, synthesis, review,
+and origin-coordinator wake-up. It is not part of the Program Pulse MVP product claim or the required `demo-mvp` /
+`test:e2e` browser aggregates; its browser journeys (`task ui:test:e2e:agentic:autoresearch` and
+`task ui:test:e2e:agentic:autoresearch-guardrails`) remain runnable on demand.
 
 ## Parked Claims (ADR-058)
 
@@ -83,14 +91,15 @@ but they do not count as pure black-box MVP evidence.
 
 The black-box demo evidence pack is:
 
-- `task ui:test:e2e:agentic:demo-mvp` — the aggregate: routing matrix, research arc, readiness gate, autoresearch arc
+- `task ui:test:e2e:agentic:demo-mvp` — the aggregate: routing matrix, research arc (single-branch and parallel fan-out), readiness gate
 - `task ui:test:e2e:agentic:coordinator-routing-matrix`
 - `task ui:test:e2e:agentic:research-mvp`
-- `task ui:test:e2e:agentic:autoresearch`
+- `task ui:test:e2e:agentic:research-fanout`
 - `task ui:test:e2e:agentic:coordinator-readiness-gate`
 
-Other journeys exercise narrower or additional behavior, but they are not members of the `demo-mvp` aggregate and are
-not evidence for claims beyond their own assertions.
+Other journeys (including the opt-in `task ui:test:e2e:agentic:autoresearch` and
+`task ui:test:e2e:agentic:autoresearch-guardrails` framework demonstrations) exercise narrower or additional behavior,
+but they are not members of the `demo-mvp` aggregate and are not evidence for MVP claims beyond their own assertions.
 
 The paid optional smoke is the real-LLM research fan-out run (see ADR-058; the create-change Gemini smoke is parked with
 its pack).
