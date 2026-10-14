@@ -1,7 +1,12 @@
 <script lang="ts">
   import type { Program, WorkItem } from "$lib/types/work";
   import type { RepositoryBoard } from "$lib/stores/workStore.svelte";
-  import { RUN_FACTS_LENS_NOTE } from "$lib/utils/workView";
+  import {
+    formatClaimBadge,
+    formatGateBadge,
+    formatReviewBadge,
+    RUN_FACTS_LENS_NOTE,
+  } from "$lib/utils/workView";
   import type { ItemOverlays } from "$lib/utils/workView";
   import OverlayBadge from "./OverlayBadge.svelte";
   import PortfolioSections from "./PortfolioSections.svelte";
@@ -84,6 +89,9 @@
               <th scope="col">Priority</th>
               {@render sortableHeader("milestone", "Milestone")}
               <th scope="col">Assignees</th>
+              <th scope="col">Baton</th>
+              <th scope="col">Review</th>
+              <th scope="col">Gate</th>
               <th scope="col">Execution stage</th>
               <th scope="col">Needs you</th>
               <th scope="col">Verification</th>
@@ -109,6 +117,27 @@
                 <td>{item.priority ?? "not set"}</td>
                 <td>{item.milestone ?? "none"}</td>
                 <td>{item.assignees.length > 0 ? item.assignees.join(", ") : "unassigned"}</td>
+                <td>
+                  <OverlayBadge
+                    name="claim"
+                    overlay={formatClaimBadge(item.claim)}
+                    noneLabel="unclaimed"
+                  />
+                </td>
+                <td>
+                  <OverlayBadge
+                    name="review"
+                    overlay={formatReviewBadge(item.review)}
+                    noneLabel="no review"
+                  />
+                </td>
+                <td>
+                  <OverlayBadge
+                    name="gate"
+                    overlay={formatGateBadge(item.gate)}
+                    noneLabel="no hold"
+                  />
+                </td>
                 <td>
                   <OverlayBadge
                     name="execution-stage"

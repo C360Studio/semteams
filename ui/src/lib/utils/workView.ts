@@ -6,7 +6,18 @@
 // `unknown`, with the reason; it is never `none`. `none` is legal only for a
 // completed lookup that found no runs.
 
-import type { LinkedRun, LookupStatus, Overlay, Program } from "$lib/types/work";
+import type {
+  BatonFilter,
+  LinkedRun,
+  LookupStatus,
+  Overlay,
+  Program,
+  WorkClaim,
+  WorkGate,
+  WorkItem,
+  WorkReviewBaton,
+  WorkReviewStatus,
+} from "$lib/types/work";
 
 export type LinkedRunsState =
   | { status: "idle" }
@@ -122,6 +133,118 @@ export function summarizeItemOverlays(state: LinkedRunsState | undefined): ItemO
 export function guardNone<T>(overlay: Overlay<T>, lookup: LookupStatus): Overlay<T> {
   if (overlay.state !== "none" || lookup === "complete") return overlay;
   return { state: "unknown", reason: overlay.reason ?? `lookup ${lookup}` };
+}
+
+// ---------------------------------------------------------------------------
+// Baton badge formatters & slice filter (design D2/D3/D4)
+// ---------------------------------------------------------------------------
+
+const REVIEW_STATUS_LABELS: Record<WorkReviewStatus, string> = {
+  not_requested: "not requested",
+  requested: "requested",
+  current: "current",
+  stale: "stale",
+  changes_requested: "changes requested",
+};
+
+const GATE_KIND_LABELS: Record<WorkGate["kind"], string> = {
+  "needs-decision": "needs decision",
+  blocked: "blocked",
+  "flake-hold": "flake hold",
+  "openspec-hold": "openspec hold",
+};
+
+export function formatClaimBadge(claim: Overlay<WorkClaim>): Overlay<string> {
+  if (claim.state !== "known") return claim;
+  const v = claim.value;
+  if (v.kind === "assignee") {
+    return {
+      state: "known",
+      value: `${v.holder} (assigned)`,
+      ...(claim.reason && { reason: claim.reason }),
+    };
+  }
+  const tag = v.draft ? "draft PR" : "PR";
+  const prNumber = v.pull_request?.split("#").at(-1);
+  return {
+    state: "known",
+    value: `${v.holder}${prNumber ? ` (#${prNumber} ${tag})` : ` (${tag})`}`,
+    ...(claim.reason && { reason: claim.reason }),
+  };
+}
+
+export function formatReviewBadge(review: Overlay<WorkReviewBaton>): Overlay<string> {
+  if (review.state !== "known") return review;
+  return {
+    state: "known",
+    value: REVIEW_STATUS_LABELS[review.value.status],
+    ...(review.reason && { reason: review.reason }),
+  };
+}
+
+export function formatGateBadge(gate: Overlay<WorkGate[]>): Overlay<string> {
+  if (gate.state !== "known") return gate;
+  const labels = gate.value
+    .map((entry) => GATE_KIND_LABELS[entry.kind])
+    .filter((label, index, all) => all.indexOf(label) === index);
+  if (labels.length === 0) return { state: "none", ...(gate.reason && { reason: gate.reason }) };
+  return {
+    state: "known",
+    value: labels.join(", "),
+    ...(gate.reason && { reason: gate.reason }),
+  };
+}
+
+export const BATON_FILTERS: readonly { id: BatonFilter; label: string }[] = [
+  { id: "all", label: "All work" },
+  { id: "needs-decision", label: "Needs decision" },
+  { id: "claimed", label: "Active baton" },
+  { id: "review", label: "Review queue" },
+  { id: "blocked", label: "Held / blocked" },
+  { id: "ready-to-land", label: "Ready to land" },
+];
+
+export function parseBatonFilter(raw: string | null): BatonFilter {
+  const found = BATON_FILTERS.find((entry) => entry.id === raw);
+  return found ? found.id : "all";
+}
+
+export function matchesBatonFilter(
+  item: WorkItem,
+  filter: BatonFilter,
+  overlays?: ItemOverlays,
+): boolean {
+  switch (filter) {
+    case "all":
+      return true;
+    case "needs-decision":
+      return (
+        (item.gate.state === "known" && item.gate.value.some((g) => g.kind === "needs-decision")) ||
+        (overlays?.needsYou.state === "known" && overlays.needsYou.value === true)
+      );
+    case "claimed":
+      return item.claim.state === "known";
+    case "review":
+      return (
+        item.review.state === "known" &&
+        (item.review.value.status === "requested" ||
+          item.review.value.status === "stale" ||
+          item.review.value.status === "changes_requested")
+      );
+    case "blocked":
+      return (
+        item.gate.state === "known" &&
+        item.gate.value.some(
+          (g) => g.kind === "blocked" || g.kind === "flake-hold" || g.kind === "openspec-hold",
+        )
+      );
+    case "ready-to-land":
+      return (
+        item.review.state === "known" &&
+        item.review.value.status === "current" &&
+        item.gate.state === "none"
+      );
+  }
 }
 
 // ---------------------------------------------------------------------------

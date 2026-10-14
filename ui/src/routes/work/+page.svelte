@@ -2,8 +2,15 @@
   import { untrack } from "svelte";
   import { page } from "$app/state";
   import { goto } from "$app/navigation";
+  import type { BatonFilter } from "$lib/types/work";
   import { createWorkStore } from "$lib/stores/workStore.svelte";
-  import { summarizeItemOverlays } from "$lib/utils/workView";
+  import type { RepositoryBoard } from "$lib/stores/workStore.svelte";
+  import {
+    BATON_FILTERS,
+    matchesBatonFilter,
+    parseBatonFilter,
+    summarizeItemOverlays,
+  } from "$lib/utils/workView";
   import WorkBoard from "$lib/components/work/WorkBoard.svelte";
   import WorkItemOverview from "$lib/components/work/WorkItemOverview.svelte";
   import WorkSourceState from "$lib/components/work/WorkSourceState.svelte";
@@ -11,8 +18,9 @@
 
   type View = "board" | "table";
 
-  // Read-only work lens (design D5). The URL is the selection: `?view=board|table`
-  // and `?item=owner/repo%23n`, so a refresh or a shared link restores the lens.
+  // Read-only work lens (design D5). The URL is the selection: `?view=board|table`,
+  // `?baton=all|needs-decision|claimed|review|blocked|ready-to-land`, and
+  // `?item=owner/repo%23n`, so a refresh or a shared link restores the lens.
   // Changes are written with goto({ replaceState: true }), a real client-side
   // navigation, so `page.url` follows and the back button keeps meaning "leave the
   // page". Shallow replaceState() is not enough: it rewrites the address bar and
@@ -20,9 +28,24 @@
   const store = createWorkStore();
 
   let view = $derived<View>(page.url.searchParams.get("view") === "table" ? "table" : "board");
+  let batonFilter = $derived<BatonFilter>(parseBatonFilter(page.url.searchParams.get("baton")));
   let itemRef = $derived(page.url.searchParams.get("item"));
   let sourceState = $derived(store.sourceState);
   let selection = $derived(store.selection);
+
+  let filteredBoards = $derived.by<Record<string, RepositoryBoard>>(() => {
+    if (batonFilter === "all") return store.boards;
+    const next: Record<string, RepositoryBoard> = {};
+    for (const [id, board] of Object.entries(store.boards)) {
+      next[id] = {
+        ...board,
+        items: board.items.filter((item) =>
+          matchesBatonFilter(item, batonFilter, summarizeItemOverlays(store.linkedRunsFor(item.ref))),
+        ),
+      };
+    }
+    return next;
+  });
 
   // load() and select() read the store's own state; keep that out of these
   // effects' dependencies so only the URL (itemRef) drives selection.
@@ -51,6 +74,13 @@
     updateUrl((params) => {
       if (next === "table") params.set("view", "table");
       else params.delete("view");
+    });
+  }
+
+  function setBatonFilter(next: BatonFilter): void {
+    updateUrl((params) => {
+      if (next === "all") params.delete("baton");
+      else params.set("baton", next);
     });
   }
 
@@ -114,6 +144,18 @@
         Table
       </button>
     </div>
+    <div class="baton-filter" role="group" aria-label="Baton filter" data-testid="work-baton-filter">
+      {#each BATON_FILTERS as filter (filter.id)}
+        <button
+          type="button"
+          data-testid="baton-filter-{filter.id}"
+          aria-pressed={batonFilter === filter.id}
+          onclick={() => setBatonFilter(filter.id)}
+        >
+          {filter.label}
+        </button>
+      {/each}
+    </div>
     <button
       type="button"
       class="refresh"
@@ -133,7 +175,7 @@
       {:else if view === "board"}
         <WorkBoard
           programs={store.programs}
-          boards={store.boards}
+          boards={filteredBoards}
           overlaysFor={(ref) => summarizeItemOverlays(store.linkedRunsFor(ref))}
           selectedRef={itemRef}
           onselect={toggleItem}
@@ -141,7 +183,7 @@
       {:else}
         <WorkTable
           programs={store.programs}
-          boards={store.boards}
+          boards={filteredBoards}
           overlaysFor={(ref) => summarizeItemOverlays(store.linkedRunsFor(ref))}
           selectedRef={itemRef}
           onselect={toggleItem}
@@ -184,8 +226,9 @@
 
   .work-header {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 1rem;
+    gap: 0.75rem 1rem;
     padding: 0.75rem 1rem;
     border-bottom: 1px solid var(--ui-border-subtle, #e5e7eb);
   }
@@ -200,11 +243,18 @@
     outline-offset: 2px;
   }
 
-  .view-toggle {
+  .view-toggle,
+  .baton-filter {
     display: inline-flex;
+    flex-wrap: wrap;
+  }
+
+  .baton-filter {
+    gap: 0.25rem;
   }
 
   .view-toggle button,
+  .baton-filter button,
   .refresh,
   .side-state button {
     padding: 0.25rem 0.75rem;
@@ -225,6 +275,7 @@
     border-radius: 0 var(--radius-md, 6px) var(--radius-md, 6px) 0;
   }
 
+  .baton-filter button,
   .refresh,
   .side-state button {
     border-radius: var(--radius-md, 6px);
@@ -234,7 +285,8 @@
     margin-left: auto;
   }
 
-  .view-toggle button[aria-pressed="true"] {
+  .view-toggle button[aria-pressed="true"],
+  .baton-filter button[aria-pressed="true"] {
     background: var(--ui-interactive-primary, #3b82f6);
     border-color: var(--ui-interactive-primary, #3b82f6);
     color: var(--ui-text-on-primary, #fff);
@@ -247,6 +299,7 @@
   }
 
   .view-toggle button:focus-visible,
+  .baton-filter button:focus-visible,
   .refresh:focus-visible,
   .side-state button:focus-visible {
     outline: 2px solid var(--ui-focus-ring, #0f62fe);

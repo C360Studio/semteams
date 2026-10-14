@@ -14,7 +14,8 @@
         "state": "open",
         "labels": [
           "type:feature",
-          "area:ui"
+          "area:ui",
+          "status:needs-decision"
         ],
         "assignees": [],
         "milestone": "v0.3.0",
@@ -41,6 +42,7 @@
         ],
         "pm_status": "Todo",
         "priority": "P3",
+        "pull_requests": [],
         "linked_runs": []
       },
       {
@@ -58,6 +60,28 @@
         "milestone": "v0.3.0",
         "pm_status": "In Progress",
         "priority": "P1",
+        "pull_requests": [
+          {
+            "ref": "c360studio/semteams#318",
+            "title": "docs(research): compare MQTT vs NATS edge latency",
+            "state": "open",
+            "draft": true,
+            "branch": "claude/gh312-mqtt-nats-research",
+            "head_sha": "7f26ca7",
+            "implemented_by": "claude",
+            "stop_point": "Awaiting benchmark gather synthesis"
+          }
+        ],
+        "openspec_change": {
+          "id": "mqtt-nats-edge-study",
+          "holds": [
+            {
+              "line": 14,
+              "class": "BLOCKED",
+              "text": "Hold: waiting on ARM edge fixture traces"
+            }
+          ]
+        },
         "linked_runs": [
           {
             "by": "coordinator_prompt",
@@ -104,7 +128,20 @@
           {
             "ref": "c360studio/semteams#320",
             "title": "feat(runs): stamp run.issue.ref at intake",
-            "state": "open"
+            "state": "open",
+            "branch": "codex/gh314-stamp-issue-ref",
+            "head_sha": "a1b2c3d",
+            "implemented_by": "codex",
+            "review_request": {
+              "sha": "9988776",
+              "reviewer_lane": "go-reviewer"
+            },
+            "review_record": {
+              "sha": "9988776",
+              "verdict": "pass",
+              "reviewer_lane": "go-reviewer",
+              "reviewed_by": "claude (go-reviewer)"
+            }
           },
           {
             "ref": "c360studio/semteams#321",
@@ -142,7 +179,27 @@
           "claude"
         ],
         "pm_status": "In Review",
-        "priority": "P2"
+        "priority": "P2",
+        "pull_requests": [
+          {
+            "ref": "c360studio/semteams#325",
+            "title": "feat(ui): explain rule-fired controls in TaskStory",
+            "state": "open",
+            "branch": "claude/gh316-explained-controls",
+            "head_sha": "78fbc93",
+            "implemented_by": "claude",
+            "review_request": {
+              "sha": "78fbc93",
+              "reviewer_lane": "svelte-reviewer"
+            },
+            "review_record": {
+              "sha": "78fbc93",
+              "verdict": "pass",
+              "reviewer_lane": "svelte-reviewer",
+              "reviewed_by": "codex (svelte-reviewer)"
+            }
+          }
+        ]
       }
     ]
   },
@@ -168,7 +225,8 @@
         "labels": [
           "type:bug"
         ],
-        "assignees": []
+        "assignees": [],
+        "pull_requests": []
       },
       {
         "number": 53,

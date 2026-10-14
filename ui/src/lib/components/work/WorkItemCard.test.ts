@@ -38,19 +38,47 @@ describe("WorkItemCard", () => {
     expect(screen.queryByTestId("card-milestone")).not.toBeInTheDocument();
   });
 
-  it("renders PM status, stage, needs-you and verification as four separate badges", () => {
+  it("renders PM status, baton, review, gate, stage, needs-you and verification as separate badges", () => {
     render(WorkItemCard, {
-      props: { item: makeItem({ pm_status: "In Review", column: "In Review" }), overlays: unloaded },
+      props: {
+        item: makeItem({
+          pm_status: "In Review",
+          column: "In Review",
+          labels: ["status:needs-decision"],
+          delivery: {
+            state: "known",
+            value: [
+              {
+                ref: "acme/widgets#12",
+                state: "open",
+                branch: "codex/gh7-widget",
+                head_sha: "a1b2c3d",
+                review_record: { sha: "9988776", verdict: "pass" },
+              },
+            ],
+          },
+        }),
+        overlays: unloaded,
+      },
     });
 
     const pm = screen.getByTestId("overlay-pm-status");
+    const claim = screen.getByTestId("overlay-claim");
+    const review = screen.getByTestId("overlay-review");
+    const gate = screen.getByTestId("overlay-gate");
     const stage = screen.getByTestId("overlay-execution-stage");
     const needsYou = screen.getByTestId("overlay-needs-you");
     const verification = screen.getByTestId("overlay-verification");
 
-    expect(new Set([pm, stage, needsYou, verification]).size).toBe(4);
+    expect(new Set([pm, claim, review, gate, stage, needsYou, verification]).size).toBe(7);
     expect(pm).toHaveAttribute("data-state", "known");
     expect(pm).toHaveTextContent("In Review");
+    expect(claim).toHaveAttribute("data-state", "known");
+    expect(claim).toHaveTextContent("codex (#12 PR)");
+    expect(review).toHaveAttribute("data-state", "known");
+    expect(review).toHaveTextContent("stale");
+    expect(gate).toHaveAttribute("data-state", "known");
+    expect(gate).toHaveTextContent("needs decision");
     // Run facts are not read for the board: unknown with the reason, never none.
     for (const badge of [stage, needsYou, verification]) {
       expect(badge).toHaveAttribute("data-state", "unknown");

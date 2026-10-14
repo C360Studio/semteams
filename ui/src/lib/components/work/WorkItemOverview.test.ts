@@ -91,6 +91,60 @@ describe("WorkItemOverview facts", () => {
     expect(delivery).toHaveTextContent("source does not supply linked pull requests");
   });
 
+  it("renders builder baton, review SHA parity, and decision/hold gates with known, none, and unknown states", () => {
+    const { unmount } = renderOverview({
+      item: makeItem({
+        labels: ["status:needs-decision"],
+        dependencies: [{ ref: "acme/widgets#3", source: "blocked-by" }],
+        delivery: {
+          state: "known",
+          value: [
+            {
+              ref: "acme/widgets#20",
+              state: "open",
+              draft: true,
+              branch: "claude/gh7-widget",
+              head_sha: "a1b2c3d",
+              implemented_by: "claude",
+              stop_point: "Awaiting owner ruling on API shape",
+              review_request: { sha: "9988776", reviewer_lane: "svelte-reviewer" },
+              review_record: {
+                sha: "9988776",
+                verdict: "pass",
+                reviewer_lane: "svelte-reviewer",
+                reviewed_by: "codex (svelte-reviewer)",
+              },
+            },
+          ],
+        },
+      }),
+    });
+
+    const claim = screen.getByTestId("overview-claim");
+    expect(claim).toHaveAttribute("data-state", "known");
+    expect(claim).toHaveTextContent("claude (claude draft PR)");
+    expect(claim).toHaveTextContent("acme/widgets#20");
+    expect(screen.getByTestId("overview-claim-stop-point")).toHaveTextContent("Awaiting owner ruling on API shape");
+
+    const review = screen.getByTestId("overview-review");
+    expect(review).toHaveAttribute("data-state", "known");
+    expect(review).toHaveTextContent("stale");
+    expect(screen.getByTestId("overview-review-shas")).toHaveTextContent("HEAD a1b2c3d");
+    expect(screen.getByTestId("overview-review-shas")).toHaveTextContent("recorded 9988776");
+    expect(review).toHaveTextContent("codex (svelte-reviewer)");
+
+    const gate = screen.getByTestId("overview-gate");
+    expect(gate).toHaveAttribute("data-state", "known");
+    expect(gate).toHaveTextContent("status:needs-decision (owner docket)");
+    expect(gate).toHaveTextContent("blocked by acme/widgets#3");
+    unmount();
+
+    renderOverview({ item: makeItem({ delivery: { state: "none" } }) });
+    expect(screen.getByTestId("overview-claim")).toHaveTextContent("unclaimed");
+    expect(screen.getByTestId("overview-review")).toHaveTextContent("no active pull request review");
+    expect(screen.getByTestId("overview-gate")).toHaveTextContent("no hold gate");
+  });
+
   it("closes from its button, which names the item it closes", async () => {
     const user = userEvent.setup();
     const { props } = renderOverview();

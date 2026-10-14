@@ -50,6 +50,9 @@ describe("WorkTable", () => {
       "Priority",
       "Milestone",
       "Assignees",
+      "Baton",
+      "Review",
+      "Gate",
       "Execution stage",
       "Needs you",
       "Verification",
@@ -59,10 +62,13 @@ describe("WorkTable", () => {
     expect(screen.getByTestId("work-table")).toBeInTheDocument();
   });
 
-  it("shows run facts as unknown with the reason until linked runs are loaded", () => {
+  it("shows protocol baton overlays and keeps run facts unknown until linked runs are loaded", () => {
     renderTable();
 
     const row = within(screen.getAllByTestId("work-item-row")[0]);
+    expect(row.getByTestId("overlay-claim")).toHaveAttribute("data-state", "unknown");
+    expect(row.getByTestId("overlay-review")).toHaveAttribute("data-state", "unknown");
+    expect(row.getByTestId("overlay-gate")).toHaveAttribute("data-state", "none");
     for (const name of ["execution-stage", "needs-you", "verification", "linked-runs"]) {
       expect(row.getByTestId(`overlay-${name}`)).toHaveAttribute("data-state", "unknown");
     }

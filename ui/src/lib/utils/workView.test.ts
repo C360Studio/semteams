@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  formatClaimBadge,
+  formatGateBadge,
+  formatReviewBadge,
   guardNone,
+  matchesBatonFilter,
+  parseBatonFilter,
   repositoryIds,
   RUNS_LOADING,
   RUNS_NOT_LOADED,
@@ -8,7 +13,7 @@ import {
   summarizeItemOverlays,
 } from "./workView";
 import type { LinkedRunsState } from "./workView";
-import { makePortfolio, makeRun } from "../../test-utils/work";
+import { makeItem, makePortfolio, makeRun } from "../../test-utils/work";
 
 const loaded = (runs: ReturnType<typeof makeRun>[], overrides: Partial<Extract<LinkedRunsState, { status: "loaded" }>> = {}) =>
   ({ status: "loaded", lookup: "complete", runs, ...overrides }) as LinkedRunsState;
@@ -141,6 +146,99 @@ describe("guardNone", () => {
   it("leaves known and unknown alone", () => {
     const known = { state: "known", value: "x" } as const;
     expect(guardNone(known, "partial")).toBe(known);
+  });
+});
+
+describe("baton formatters and slice filters", () => {
+  it("formats claim, review, and gate overlays for badges while preserving unknown/none states", () => {
+    expect(
+      formatClaimBadge({
+        state: "known",
+        value: {
+          kind: "agent-pr",
+          holder: "claude",
+          agent_vendor: "claude",
+          pull_request: "c360studio/semteams#318",
+          draft: true,
+        },
+      }),
+    ).toEqual({ state: "known", value: "claude (#318 draft PR)" });
+
+    expect(
+      formatReviewBadge({
+        state: "known",
+        value: { pull_request: "c360studio/semteams#320", status: "stale", head_sha: "a1b2c3d" },
+      }),
+    ).toEqual({ state: "known", value: "stale" });
+
+    expect(
+      formatGateBadge({
+        state: "known",
+        value: [
+          { kind: "needs-decision", summary: "status:needs-decision" },
+          { kind: "openspec-hold", summary: "OpenSpec hold" },
+        ],
+      }),
+    ).toEqual({ state: "known", value: "needs decision, openspec hold" });
+
+    expect(formatReviewBadge({ state: "unknown", reason: "no PR records" })).toEqual({
+      state: "unknown",
+      reason: "no PR records",
+    });
+  });
+
+  it("parses valid baton filters and defaults unknown values to all", () => {
+    expect(parseBatonFilter("review")).toBe("review");
+    expect(parseBatonFilter("ready-to-land")).toBe("ready-to-land");
+    expect(parseBatonFilter("unknown")).toBe("all");
+    expect(parseBatonFilter(null)).toBe("all");
+  });
+
+  it("matches items by baton slice without altering column placement", () => {
+    const needsDecisionItem = makeItem({
+      labels: ["status:needs-decision"],
+      dependencies: [{ ref: "acme/widgets#2", source: "blocked-by" }],
+      delivery: { state: "none" },
+    });
+    const staleReviewItem = makeItem({
+      delivery: {
+        state: "known",
+        value: [
+          {
+            ref: "acme/widgets#10",
+            state: "open",
+            branch: "codex/fix",
+            head_sha: "a1b2c3d",
+            review_record: { sha: "9988776", verdict: "pass" },
+          },
+        ],
+      },
+    });
+    const readyItem = makeItem({
+      delivery: {
+        state: "known",
+        value: [
+          {
+            ref: "acme/widgets#11",
+            state: "open",
+            branch: "claude/ready",
+            head_sha: "78fbc93",
+            review_record: { sha: "78fbc93", verdict: "pass" },
+          },
+        ],
+      },
+    });
+
+    expect(matchesBatonFilter(needsDecisionItem, "needs-decision")).toBe(true);
+    expect(matchesBatonFilter(needsDecisionItem, "blocked")).toBe(true);
+    expect(matchesBatonFilter(needsDecisionItem, "claimed")).toBe(false);
+
+    expect(matchesBatonFilter(staleReviewItem, "claimed")).toBe(true);
+    expect(matchesBatonFilter(staleReviewItem, "review")).toBe(true);
+    expect(matchesBatonFilter(staleReviewItem, "ready-to-land")).toBe(false);
+
+    expect(matchesBatonFilter(readyItem, "ready-to-land")).toBe(true);
+    expect(matchesBatonFilter(readyItem, "review")).toBe(false);
   });
 });
 
