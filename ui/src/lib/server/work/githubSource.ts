@@ -86,6 +86,300 @@ async function getGithubJson(
   }
 }
 
+function graphqlEndpoint(apiBase: string): string {
+  return apiBase.endsWith("/api/v3")
+    ? `${apiBase.slice(0, -"/api/v3".length)}/api/graphql`
+    : `${apiBase}/graphql`;
+}
+
+const PROJECT_BOARD_QUERY = `
+query SemTeamsProjectBoard($owner: String!, $number: Int!, $itemLimit: Int!) {
+  organization(login: $owner) {
+    projectV2(number: $number) {
+      ...ProjectFields
+    }
+  }
+  user(login: $owner) {
+    projectV2(number: $number) {
+      ...ProjectFields
+    }
+  }
+}
+fragment ProjectFields on ProjectV2 {
+  fields(first: 50) {
+    nodes {
+      __typename
+      ... on ProjectV2SingleSelectField {
+        name
+        options {
+          name
+        }
+      }
+    }
+  }
+  items(first: $itemLimit) {
+    pageInfo {
+      hasNextPage
+    }
+    nodes {
+      content {
+        __typename
+        ... on Issue {
+          number
+          repository {
+            nameWithOwner
+          }
+        }
+      }
+      fieldValues(first: 20) {
+        nodes {
+          __typename
+          ... on ProjectV2ItemFieldSingleSelectValue {
+            name
+            field {
+              ... on ProjectV2FieldCommon {
+                name
+              }
+            }
+          }
+          ... on ProjectV2ItemFieldTextValue {
+            text
+            field {
+              ... on ProjectV2FieldCommon {
+                name
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+`.trim();
+
+async function postGithubGraphql(
+  apiBase: string,
+  query: string,
+  variables: Record<string, unknown>,
+  label: string,
+  token?: string,
+): Promise<Read<unknown>> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), READ_TIMEOUT_MS);
+  try {
+    const headers: Record<string, string> = {
+      Accept: "application/vnd.github+json",
+      "Content-Type": "application/json",
+      "X-GitHub-Api-Version": "2022-11-28",
+    };
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+    const response = await fetch(graphqlEndpoint(apiBase), {
+      method: "POST",
+      signal: controller.signal,
+      headers,
+      body: JSON.stringify({ query, variables }),
+    });
+    if (!response.ok) {
+      return {
+        ok: false,
+        status: response.status,
+        error: `${label} answered ${response.status}`,
+      };
+    }
+    return { ok: true, value: await response.json() };
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      return { ok: false, error: `${label} timed out after ${READ_TIMEOUT_MS} ms` };
+    }
+    return {
+      ok: false,
+      error: `${label} failed: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+interface ProjectItemFields {
+  pm_status?: string;
+  priority?: string;
+}
+
+type ProjectBoardResolution =
+  | { configured: false }
+  | { configured: true; ok: false; error: string }
+  | {
+      configured: true;
+      ok: true;
+      statusOptions: string[];
+      itemsByIssueNumber: Map<number, ProjectItemFields>;
+      truncationReason?: string;
+    };
+
+async function readProjectBoard(
+  apiBase: string,
+  repository: Repository,
+  token?: string,
+): Promise<ProjectBoardResolution> {
+  const board = repository.project_board;
+  if (!board) return { configured: false };
+
+  const label = `POST /graphql (ProjectV2 ${board.owner}#${board.number})`;
+  const read = await postGithubGraphql(
+    apiBase,
+    PROJECT_BOARD_QUERY,
+    {
+      owner: board.owner,
+      number: board.number,
+      itemLimit: GITHUB_PAGE_LIMIT,
+    },
+    label,
+    token,
+  );
+
+  if (!read.ok) {
+    return { configured: true, ok: false, error: read.error };
+  }
+  if (!isObject(read.value)) {
+    return { configured: true, ok: false, error: `${label} returned a non-object body` };
+  }
+
+  const data = isObject(read.value.data) ? read.value.data : undefined;
+  const orgProject =
+    data && isObject(data.organization) && isObject(data.organization.projectV2)
+      ? data.organization.projectV2
+      : undefined;
+  const userProject =
+    data && isObject(data.user) && isObject(data.user.projectV2)
+      ? data.user.projectV2
+      : undefined;
+  const projectNode = orgProject ?? userProject;
+
+  if (!projectNode) {
+    const rawErrors = Array.isArray(read.value.errors)
+      ? read.value.errors.filter(isObject)
+      : [];
+    const nonNotFound = rawErrors.find(
+      (e) => e.type !== "NOT_FOUND" && typeof e.message === "string" && e.message.trim(),
+    );
+    if (nonNotFound && typeof nonNotFound.message === "string") {
+      return {
+        configured: true,
+        ok: false,
+        error: `${label}: ${nonNotFound.message.trim()}`,
+      };
+    }
+    return {
+      configured: true,
+      ok: false,
+      error: `${label}: project ${board.owner}#${board.number} not found`,
+    };
+  }
+
+  const statusFieldLower = board.status_field.trim().toLowerCase();
+  const priorityFieldLower = board.priority_field?.trim().toLowerCase();
+
+  const fieldNodes =
+    isObject(projectNode.fields) && Array.isArray(projectNode.fields.nodes)
+      ? projectNode.fields.nodes.filter(isObject)
+      : [];
+  const statusFieldNode = fieldNodes.find(
+    (f) =>
+      typeof f.name === "string" &&
+      f.name.trim().toLowerCase() === statusFieldLower &&
+      Array.isArray(f.options),
+  );
+  const statusOptions =
+    statusFieldNode && Array.isArray(statusFieldNode.options)
+      ? statusFieldNode.options
+          .filter(isObject)
+          .map((opt) => (typeof opt.name === "string" ? opt.name.trim() : ""))
+          .filter(Boolean)
+      : [];
+
+  if (statusOptions.length === 0) {
+    return {
+      configured: true,
+      ok: false,
+      error: `${label}: single-select status field "${board.status_field}" not found`,
+    };
+  }
+
+  if (!isObject(projectNode.items) || !Array.isArray(projectNode.items.nodes)) {
+    return {
+      configured: true,
+      ok: false,
+      error: `${label}: project items missing`,
+    };
+  }
+
+  const itemNodes = projectNode.items.nodes;
+  const hasNextPage =
+    isObject(projectNode.items.pageInfo) && projectNode.items.pageInfo.hasNextPage === true;
+  const truncated = hasNextPage || itemNodes.length >= GITHUB_PAGE_LIMIT;
+
+  const targetRepo = `${repository.owner}/${repository.name}`.toLowerCase();
+  const itemsByIssueNumber = new Map<number, ProjectItemFields>();
+
+  for (const rawItem of itemNodes) {
+    if (!isObject(rawItem) || !isObject(rawItem.content)) continue;
+    const content = rawItem.content;
+    if (typeof content.__typename === "string" && content.__typename !== "Issue") continue;
+    if (typeof content.number !== "number" || !Number.isInteger(content.number) || content.number < 1) {
+      continue;
+    }
+    if (
+      isObject(content.repository) &&
+      typeof content.repository.nameWithOwner === "string" &&
+      content.repository.nameWithOwner.trim() &&
+      content.repository.nameWithOwner.trim().toLowerCase() !== targetRepo
+    ) {
+      continue;
+    }
+
+    let pm_status: string | undefined;
+    let priority: string | undefined;
+
+    const fvNodes =
+      isObject(rawItem.fieldValues) && Array.isArray(rawItem.fieldValues.nodes)
+        ? rawItem.fieldValues.nodes.filter(isObject)
+        : [];
+    for (const fv of fvNodes) {
+      if (!isObject(fv.field) || typeof fv.field.name !== "string") continue;
+      const fieldNameLower = fv.field.name.trim().toLowerCase();
+      const val =
+        typeof fv.name === "string"
+          ? fv.name.trim()
+          : typeof fv.text === "string"
+            ? fv.text.trim()
+            : "";
+      if (!val) continue;
+      if (fieldNameLower === statusFieldLower) {
+        pm_status = val;
+      } else if (priorityFieldLower && fieldNameLower === priorityFieldLower) {
+        priority = val;
+      }
+    }
+
+    itemsByIssueNumber.set(content.number, {
+      ...(pm_status && { pm_status }),
+      ...(priority && { priority }),
+    });
+  }
+
+  return {
+    configured: true,
+    ok: true,
+    statusOptions,
+    itemsByIssueNumber,
+    ...(truncated && {
+      truncationReason: `${label} items truncated at ${GITHUB_PAGE_LIMIT} items`,
+    }),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Parsing helpers
 // ---------------------------------------------------------------------------
@@ -330,9 +624,11 @@ export function parseReviewComments(comments: unknown[]): {
 
 function buildWorkItem(
   repository: Repository,
+  columnRepo: Repository,
   issue: ParsedIssue,
   delivery: Overlay<PullRequestRef[]>,
   flakeHolds: string[],
+  boardFields?: ProjectItemFields,
 ): WorkItem {
   const baton = deriveBatonOverlays({
     labels: issue.labels,
@@ -341,6 +637,9 @@ function buildWorkItem(
     delivery,
     flake_holds: flakeHolds,
   });
+
+  const pm_status = columnRepo.project_board ? boardFields?.pm_status : undefined;
+  const priority = columnRepo.project_board?.priority_field ? boardFields?.priority : undefined;
 
   return {
     ref: `${repository.owner}/${repository.name}#${issue.number}`,
@@ -352,7 +651,12 @@ function buildWorkItem(
     labels: issue.labels,
     assignees: issue.assignees,
     ...(issue.milestone && { milestone: issue.milestone }),
-    column: columnFor({ state: issue.state, assignees: issue.assignees }, repository),
+    ...(pm_status && { pm_status }),
+    ...(priority && { priority }),
+    column: columnFor(
+      { state: issue.state, assignees: issue.assignees, pm_status },
+      columnRepo,
+    ),
     dependencies: issue.dependencies,
     delivery,
     ...baton,
@@ -432,17 +736,25 @@ export function createGithubSource(options: GithubSourceOptions = {}): WorkSourc
       const issuesLabel = `GET /repos/${repository.owner}/${repository.name}/issues`;
       const pullsLabel = `GET /repos/${repository.owner}/${repository.name}/pulls`;
 
-      const [issuesRead, pullsRead] = await Promise.all([
+      const [issuesRead, pullsRead, projectBoard] = await Promise.all([
         getGithubJson(apiBase, issuesPath, issuesLabel, token),
         getGithubJson(apiBase, pullsPath, pullsLabel, token),
+        readProjectBoard(apiBase, repository, token),
       ]);
+
+      const columnRepo: Repository =
+        projectBoard.configured && !projectBoard.ok
+          ? { ...repository, project_board: undefined }
+          : repository;
+      const statusOptions =
+        projectBoard.configured && projectBoard.ok ? projectBoard.statusOptions : [];
 
       if (!issuesRead.ok || !Array.isArray(issuesRead.value)) {
         const reason = issuesRead.ok ? `${issuesLabel} returned a non-array body` : issuesRead.error;
         return {
           lookup: "failed",
           reason,
-          columns: columnsFor(repository, [], []),
+          columns: columnsFor(columnRepo, statusOptions, []),
           items: [],
         };
       }
@@ -450,6 +762,13 @@ export function createGithubSource(options: GithubSourceOptions = {}): WorkSourc
       const reasons: string[] = [];
       if (issuesRead.value.length >= GITHUB_PAGE_LIMIT) {
         reasons.push(`${issuesLabel} truncated at ${GITHUB_PAGE_LIMIT} items`);
+      }
+      if (projectBoard.configured) {
+        if (!projectBoard.ok) {
+          reasons.push(projectBoard.error);
+        } else if (projectBoard.truncationReason) {
+          reasons.push(projectBoard.truncationReason);
+        }
       }
 
       const parsedIssues = issuesRead.value
@@ -504,14 +823,18 @@ export function createGithubSource(options: GithubSourceOptions = {}): WorkSourc
             delivery = { state: "none" };
           }
         }
-        return buildWorkItem(repository, issue, delivery, flakeHolds);
+        const boardFields =
+          projectBoard.configured && projectBoard.ok
+            ? projectBoard.itemsByIssueNumber.get(issue.number)
+            : undefined;
+        return buildWorkItem(repository, columnRepo, issue, delivery, flakeHolds, boardFields);
       });
 
       const lookup: LookupStatus = reasons.length === 0 ? "complete" : "partial";
       return {
         lookup,
         ...(reasons.length > 0 && { reason: [...new Set(reasons)].join("; ") }),
-        columns: columnsFor(repository, [], items.map((i) => i.column)),
+        columns: columnsFor(columnRepo, statusOptions, items.map((i) => i.column)),
         items,
       };
     },
@@ -526,10 +849,11 @@ export function createGithubSource(options: GithubSourceOptions = {}): WorkSourc
       const pullsLabel = `GET /repos/${repository.owner}/${repository.name}/pulls`;
       const flakesLabel = `GET /repos/${repository.owner}/${repository.name}/issues?labels=class:flake`;
 
-      const [issueRead, pullsRead, flakesRead] = await Promise.all([
+      const [issueRead, pullsRead, flakesRead, projectBoard] = await Promise.all([
         getGithubJson(apiBase, issuePath, issueLabel, token),
         getGithubJson(apiBase, pullsPath, pullsLabel, token),
         getGithubJson(apiBase, flakesPath, flakesLabel, token),
+        readProjectBoard(apiBase, repository, token),
       ]);
 
       if (!issueRead.ok) {
@@ -549,6 +873,14 @@ export function createGithubSource(options: GithubSourceOptions = {}): WorkSourc
       }
 
       const reasons: string[] = [];
+      if (projectBoard.configured) {
+        if (!projectBoard.ok) {
+          reasons.push(projectBoard.error);
+        } else if (projectBoard.truncationReason) {
+          reasons.push(projectBoard.truncationReason);
+        }
+      }
+
       let flakeHolds: string[] = [];
       if (!flakesRead.ok || !Array.isArray(flakesRead.value)) {
         reasons.push(flakesRead.ok ? `${flakesLabel} returned a non-array body` : flakesRead.error);
@@ -597,11 +929,20 @@ export function createGithubSource(options: GithubSourceOptions = {}): WorkSourc
         }
       }
 
+      const columnRepo: Repository =
+        projectBoard.configured && !projectBoard.ok
+          ? { ...repository, project_board: undefined }
+          : repository;
+      const boardFields =
+        projectBoard.configured && projectBoard.ok
+          ? projectBoard.itemsByIssueNumber.get(number)
+          : undefined;
+
       const lookup: LookupStatus = reasons.length === 0 ? "complete" : "partial";
       return {
         lookup,
         ...(reasons.length > 0 && { reason: [...new Set(reasons)].join("; ") }),
-        item: buildWorkItem(repository, parsedIssue, delivery, flakeHolds),
+        item: buildWorkItem(repository, columnRepo, parsedIssue, delivery, flakeHolds, boardFields),
       };
     },
 
@@ -618,3 +959,4 @@ export function createGithubSource(options: GithubSourceOptions = {}): WorkSourc
     },
   };
 }
+
