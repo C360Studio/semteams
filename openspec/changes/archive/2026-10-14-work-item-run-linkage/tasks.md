@@ -19,5 +19,5 @@
 ## 3. Review and archive
 
 - [x] 3.1 Run `svelte-reviewer` on the changes and resolve any findings.
-- [ ] 3.2 Archive `work-item-run-linkage` (`openspec archive work-item-run-linkage` and spec sync) as the landing PR's
+- [x] 3.2 Archive `work-item-run-linkage` (`openspec archive work-item-run-linkage` and spec sync) as the landing PR's
       final content commit.
