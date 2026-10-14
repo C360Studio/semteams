@@ -24,7 +24,7 @@ vi.mock("./fixtureSource", async (importOriginal) => {
 });
 
 import { getItem, getItems, getPortfolio, getRuns } from "./service";
-import { GITHUB_ITEMS_UNSUPPORTED, GITHUB_RUNS_UNSUPPORTED } from "./source";
+import { GITHUB_RUNS_UNSUPPORTED } from "./source";
 import { fakeBackend, setEnv, stubBackend } from "./testkit";
 
 let dir: string;
@@ -55,7 +55,7 @@ const validDocument = {
           id: "semteams",
           name: "SemTeams",
           repositories: [
-            { owner: "C360Studio", name: "semteams", project_board: { owner: "C360Studio", number: 3, status_field: "Status" } },
+            { owner: "C360Studio", name: "semteams" },
           ],
         },
       ],
@@ -66,11 +66,16 @@ const validDocument = {
 async function useDocument(document: unknown): Promise<string> {
   const path = join(dir, "portfolio.json");
   await writeFile(path, typeof document === "string" ? document : JSON.stringify(document));
-  setEnv({ WORK_SOURCE: "github", SEMTEAMS_PORTFOLIO_PATH: path });
+  setEnv({
+    WORK_SOURCE: "github",
+    SEMTEAMS_PORTFOLIO_PATH: path,
+    GITHUB_API_URL: "http://github.test",
+    GITHUB_TOKEN: "ghp_secret",
+  });
   return path;
 }
 
-describe("github source (not implemented until #273)", () => {
+describe("github source", () => {
   it("serves the operator's portfolio document and names github as the source", async () => {
     await useDocument(validDocument);
     const { status, body } = await getPortfolio();
@@ -78,32 +83,148 @@ describe("github source (not implemented until #273)", () => {
     expect(body).toMatchObject({ source: "github", programs: [{ id: "c360" }] });
   });
 
-  it("answers unsupported for items, never an empty complete list", async () => {
+  it("enumerates GitHub issues, PR claims, and review records through /api/work/items", async () => {
     await useDocument(validDocument);
+    stubBackend((url) => {
+      if (url.pathname === "/repos/C360Studio/semteams/issues") {
+        return new Response(
+          JSON.stringify([
+            {
+              number: 296,
+              title: "Read-only work board",
+              body: "Blocked by #290\n- [ ] #291 child",
+              state: "open",
+              labels: [{ name: "area:ui" }, { name: "status:needs-decision" }],
+              assignees: [{ login: "coby" }],
+              milestone: { title: "v0.2.0" },
+            },
+            {
+              number: 318,
+              title: "PR returned in issues endpoint should be ignored",
+              state: "open",
+              pull_request: { url: "https://api.github.com/repos/C360Studio/semteams/pulls/318" },
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (url.pathname === "/repos/C360Studio/semteams/pulls") {
+        return new Response(
+          JSON.stringify([
+            {
+              number: 318,
+              title: "ui(work): inline drawer (#296)",
+              body: "Closes #296\n\nimplemented-by: Vega\nstop-point: Ready for review",
+              state: "open",
+              draft: false,
+              head: { ref: "gemini/work-inline-drawer", sha: "0d948aaceb506471642117aa7236d3bda35cb4ed" },
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (url.pathname === "/repos/C360Studio/semteams/issues/318/comments") {
+        return new Response(
+          JSON.stringify([
+            {
+              body: "<!-- semteams-review-record -->\ncommit: 0d948aac\nverdict: pass\nreviewer-lane: svelte-reviewer\nreviewed-by: svelte-reviewer",
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return new Response(JSON.stringify({ message: "not found" }), { status: 404 });
+    });
+
     const { status, body } = await getItems("c360studio/semteams");
     expect(status).toBe(200);
     expect(body).toMatchObject({
-      lookup: "unsupported",
-      reason: GITHUB_ITEMS_UNSUPPORTED,
+      lookup: "complete",
+      repository: "C360Studio/semteams",
+      columns: ["Todo", "In Progress", "Done"],
+      items: [
+        {
+          ref: "C360Studio/semteams#296",
+          number: 296,
+          column: "In Progress",
+          claim: {
+            state: "known",
+            value: {
+              kind: "agent-pr",
+              agent_vendor: "gemini",
+              holder: "Vega",
+              pull_request: "C360Studio/semteams#318",
+              stop_point: "Ready for review",
+            },
+          },
+          review: {
+            state: "known",
+            value: {
+              pull_request: "C360Studio/semteams#318",
+              status: "current",
+              reviewer_lane: "svelte-reviewer",
+            },
+          },
+          gate: {
+            state: "known",
+            value: [
+              { kind: "needs-decision" },
+              { kind: "blocked", ref: "C360Studio/semteams#290" },
+            ],
+          },
+        },
+      ],
+    });
+  });
+
+  it("answers failed for items when GitHub returns an error, never an empty complete list", async () => {
+    await useDocument(validDocument);
+    stubBackend(() => new Response(JSON.stringify({ message: "rate limit" }), { status: 403 }));
+    const { status, body } = await getItems("c360studio/semteams");
+    expect(status).toBe(200);
+    expect(body).toMatchObject({
+      lookup: "failed",
+      reason: "GET /repos/C360Studio/semteams/issues answered 403",
       repository: "C360Studio/semteams",
       items: [],
     });
   });
 
-  it("answers unsupported for one item rather than 404", async () => {
+  it("answers failed for one item when GitHub errors, and 404 when GitHub answers 404", async () => {
     await useDocument(validDocument);
-    const { status, body } = await getItem("C360Studio", "semteams", "296");
-    expect(status).toBe(200);
-    expect(body).toEqual({ lookup: "unsupported", reason: GITHUB_ITEMS_UNSUPPORTED });
+    stubBackend(() => new Response(JSON.stringify({ message: "unavailable" }), { status: 502 }));
+    const failed = await getItem("C360Studio", "semteams", "296");
+    expect(failed.status).toBe(200);
+    expect(failed.body).toEqual({
+      lookup: "failed",
+      reason: "GET /repos/C360Studio/semteams/issues/296 answered 502",
+    });
+
+    stubBackend(() => new Response(JSON.stringify({ message: "not found" }), { status: 404 }));
+    const missing = await getItem("C360Studio", "semteams", "296");
+    expect(missing.status).toBe(404);
+    expect(missing.body).toMatchObject({ code: "ITEM_NOT_FOUND" });
   });
 
   it("answers unsupported for runs, never 'no linked run', and reads nothing from the backend", async () => {
     await useDocument(validDocument);
-    const fetchMock = stubBackend(fakeBackend({}));
+    const fetchMock = stubBackend((url) => {
+      if (url.hostname === "github.test") {
+        if (url.pathname === "/repos/C360Studio/semteams/issues/296") {
+          return new Response(
+            JSON.stringify({ number: 296, title: "Item 296", state: "open", labels: [], assignees: [] }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          );
+        }
+        return new Response(JSON.stringify([]), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      return fakeBackend({})(url);
+    });
     const { status, body } = await getRuns("C360Studio", "semteams", "296");
     expect(status).toBe(200);
     expect(body).toEqual({ lookup: "unsupported", reason: GITHUB_RUNS_UNSUPPORTED, runs: [] });
-    expect(fetchMock).not.toHaveBeenCalled();
+    const backendCalls = fetchMock.mock.calls.filter(([u]) => new URL(String(u)).hostname !== "github.test");
+    expect(backendCalls).toHaveLength(0);
   });
 
   it("still scopes to configured repositories", async () => {

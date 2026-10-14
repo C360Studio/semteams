@@ -308,6 +308,42 @@ describe("deriveReviewOverlay (design D2.2)", () => {
         record_sha: "a1b2c3d",
       },
     });
+
+    // Short 7+ char SHA in review record matches 40-char head_sha
+    expect(
+      deriveReviewOverlay(
+        baseInput({
+          delivery: {
+            state: "known",
+            value: [
+              {
+                ref: "c360studio/semteams#320",
+                state: "open",
+                head_sha: "0d948aaceb506471642117aa7236d3bda35cb4ed",
+                review_record: { sha: "0d948aac", verdict: "pass", reviewer_lane: "svelte-reviewer" },
+              },
+            ],
+          },
+        }),
+      ),
+    ).toMatchObject({
+      state: "known",
+      value: {
+        status: "current",
+        head_sha: "0d948aaceb506471642117aa7236d3bda35cb4ed",
+        record_sha: "0d948aac",
+      },
+    });
+
+    // Uninspected review comments report unknown rather than not_requested
+    expect(
+      forPr({
+        review_inspected: false,
+      }),
+    ).toEqual({
+      state: "unknown",
+      reason: "PR review comments not inspected",
+    });
   });
 });
 

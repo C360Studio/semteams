@@ -1,0 +1,617 @@
+// Live GitHub work source (OpenSpec work-live-github-source, design D1/D2; issue #319).
+//
+// Reads repository issues, pull requests, and PR review comments server-side via
+// the GitHub REST API (GET only, bounded by READ_TIMEOUT_MS) and derives
+// structured baton, review, and decision/hold gate overlays through
+// deriveBatonOverlays() without altering GitHub-owned columns.
+
+import type {
+  LookupStatus,
+  Overlay,
+  PullRequestRef,
+  PullRequestReviewRecord,
+  PullRequestReviewRequest,
+  Repository,
+  WorkDependency,
+  WorkItem,
+  WorkItemState,
+} from "$lib/types/work";
+import { deriveBatonOverlays, shaMatchesHead } from "./baton";
+import { columnFor, columnsFor } from "./columns";
+import { DEFAULT_GITHUB_API_URL } from "./config";
+import { GITHUB_RUNS_UNSUPPORTED } from "./source";
+import type { ItemRef, WorkSource } from "./source";
+
+export const READ_TIMEOUT_MS = 5000;
+export const GITHUB_PAGE_LIMIT = 100;
+export const MAX_OPEN_PR_COMMENT_FETCHES = 10;
+
+export interface GithubSourceOptions {
+  token?: string;
+  apiUrl?: string;
+}
+
+type Read<T> =
+  | { ok: true; value: T }
+  | { ok: false; status?: number; error: string };
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+const EXCERPT_LENGTH = 240;
+
+function excerpt(body: string | undefined): string {
+  const flat = (body ?? "").replace(/\s+/g, " ").trim();
+  return flat.length > EXCERPT_LENGTH ? `${flat.slice(0, EXCERPT_LENGTH).trimEnd()}…` : flat;
+}
+
+async function getGithubJson(
+  apiBase: string,
+  path: string,
+  label: string,
+  token?: string,
+): Promise<Read<unknown>> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), READ_TIMEOUT_MS);
+  try {
+    const headers: Record<string, string> = {
+      Accept: "application/vnd.github+json",
+      "X-GitHub-Api-Version": "2022-11-28",
+    };
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+    const response = await fetch(`${apiBase}${path}`, {
+      signal: controller.signal,
+      headers,
+    });
+    if (!response.ok) {
+      return {
+        ok: false,
+        status: response.status,
+        error: `${label} answered ${response.status}`,
+      };
+    }
+    return { ok: true, value: await response.json() };
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      return { ok: false, error: `${label} timed out after ${READ_TIMEOUT_MS} ms` };
+    }
+    return {
+      ok: false,
+      error: `${label} failed: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Parsing helpers
+// ---------------------------------------------------------------------------
+
+interface ParsedIssue {
+  number: number;
+  title: string;
+  body: string;
+  state: WorkItemState;
+  labels: string[];
+  assignees: string[];
+  milestone?: string;
+  dependencies: WorkDependency[];
+}
+
+interface ParsedPullRequest {
+  number: number;
+  ref: PullRequestRef;
+  claimedIssueNumbers: number[];
+}
+
+function normalizeIssueRef(rawRef: string, defaultRepo: string): string {
+  const trimmed = rawRef.trim();
+  return trimmed.startsWith("#") ? `${defaultRepo}${trimmed}` : trimmed;
+}
+
+export function extractIssueDependencies(body: string, defaultRepo: string): WorkDependency[] {
+  const seen = new Set<string>();
+  const out: WorkDependency[] = [];
+  const add = (rawRef: string, source: WorkDependency["source"]) => {
+    const ref = normalizeIssueRef(rawRef, defaultRepo);
+    const key = `${source}:${ref.toLowerCase()}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push({ ref, source });
+  };
+
+  const blockedRegex =
+    /(?:blocked[\s-]+by|depends[\s-]+on)\s*:?\s*((?:[a-z0-9_.-]+\/[a-z0-9_.-]+)?#\d+(?:\s*,\s*(?:[a-z0-9_.-]+\/[a-z0-9_.-]+)?#\d+)*)/gi;
+  for (const match of body.matchAll(blockedRegex)) {
+    const list = match[1] ?? "";
+    for (const refMatch of list.matchAll(/((?:[a-z0-9_.-]+\/[a-z0-9_.-]+)?#\d+)/gi)) {
+      if (refMatch[1]) add(refMatch[1], "blocked-by");
+    }
+  }
+
+  const taskLineRegex = /^[ \t]*[-*]\s+\[[ xX]\]\s+([^\r\n]+)/gm;
+  for (const lineMatch of body.matchAll(taskLineRegex)) {
+    const line = lineMatch[1] ?? "";
+    for (const refMatch of line.matchAll(/(?:^|[\s(])((?:[a-z0-9_.-]+\/[a-z0-9_.-]+)?#\d+)\b/gi)) {
+      if (refMatch[1]) add(refMatch[1], "task-list");
+    }
+  }
+
+  return out;
+}
+
+function parseIssue(raw: Record<string, unknown>, repository: Repository): ParsedIssue | null {
+  // GitHub's /issues endpoint includes pull requests carrying a `pull_request` key.
+  if (isObject(raw.pull_request)) return null;
+  if (typeof raw.number !== "number" || !Number.isInteger(raw.number) || raw.number < 1) {
+    return null;
+  }
+  if (typeof raw.title !== "string" || !raw.title.trim()) {
+    return null;
+  }
+  const body = typeof raw.body === "string" ? raw.body : "";
+  const state: WorkItemState = raw.state === "closed" ? "closed" : "open";
+
+  const labels: string[] = [];
+  if (Array.isArray(raw.labels)) {
+    for (const entry of raw.labels) {
+      if (typeof entry === "string" && entry.trim()) labels.push(entry.trim());
+      else if (isObject(entry) && typeof entry.name === "string" && entry.name.trim()) {
+        labels.push(entry.name.trim());
+      }
+    }
+  }
+
+  const assignees: string[] = [];
+  if (Array.isArray(raw.assignees)) {
+    for (const entry of raw.assignees) {
+      if (typeof entry === "string" && entry.trim()) assignees.push(entry.trim());
+      else if (isObject(entry) && typeof entry.login === "string" && entry.login.trim()) {
+        assignees.push(entry.login.trim());
+      }
+    }
+  } else if (isObject(raw.assignee) && typeof raw.assignee.login === "string" && raw.assignee.login.trim()) {
+    assignees.push(raw.assignee.login.trim());
+  }
+
+  const milestone =
+    isObject(raw.milestone) && typeof raw.milestone.title === "string" && raw.milestone.title.trim()
+      ? raw.milestone.title.trim()
+      : undefined;
+
+  const repoFull = `${repository.owner}/${repository.name}`;
+  return {
+    number: raw.number,
+    title: raw.title,
+    body,
+    state,
+    labels,
+    assignees,
+    ...(milestone && { milestone }),
+    dependencies: extractIssueDependencies(body, repoFull),
+  };
+}
+
+export function extractClaimedIssueNumbers(
+  title: string,
+  body: string,
+  repository: Repository,
+): number[] {
+  const targetRepo = `${repository.owner}/${repository.name}`.toLowerCase();
+  const numbers = new Set<number>();
+
+  const closingRegex =
+    /\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?|claims?)\s*:?\s*(?:([a-z0-9_.-]+\/[a-z0-9_.-]+)?#(\d+))/gi;
+  for (const match of body.matchAll(closingRegex)) {
+    const repoPrefix = match[1]?.toLowerCase();
+    const num = Number(match[2]);
+    if ((!repoPrefix || repoPrefix === targetRepo) && Number.isInteger(num) && num > 0) {
+      numbers.add(num);
+    }
+  }
+
+  for (const match of title.matchAll(/(?:^|[\s(])#(\d+)\b/g)) {
+    const num = Number(match[1]);
+    if (Number.isInteger(num) && num > 0) {
+      numbers.add(num);
+    }
+  }
+
+  return [...numbers];
+}
+
+function matchMetadataField(text: string, fieldPattern: string): string | undefined {
+  const regex = new RegExp(
+    `^\\s*(?:[-*]\\s*)?[*\`]*${fieldPattern}[*\`]*\\s*:[*\`]*\\s*[*\`]*([^\\r\\n\`*]+)[*\`]*`,
+    "im",
+  );
+  const match = text.match(regex);
+  const val = match?.[1]?.trim();
+  return val ? val : undefined;
+}
+
+function parsePullRequest(raw: Record<string, unknown>, repository: Repository): ParsedPullRequest | null {
+  if (typeof raw.number !== "number" || !Number.isInteger(raw.number) || raw.number < 1) {
+    return null;
+  }
+  const title = typeof raw.title === "string" ? raw.title : "";
+  const body = typeof raw.body === "string" ? raw.body : "";
+  const claimedIssueNumbers = extractClaimedIssueNumbers(title, body, repository);
+
+  const merged = Boolean(raw.merged_at);
+  const state: PullRequestRef["state"] = merged
+    ? "merged"
+    : raw.state === "closed"
+      ? "closed"
+      : "open";
+  const draft = typeof raw.draft === "boolean" ? raw.draft : undefined;
+  const branch =
+    isObject(raw.head) && typeof raw.head.ref === "string" && raw.head.ref.trim()
+      ? raw.head.ref.trim()
+      : undefined;
+  const headSha =
+    isObject(raw.head) && typeof raw.head.sha === "string" && raw.head.sha.trim()
+      ? raw.head.sha.trim()
+      : undefined;
+
+  const implementedBy = matchMetadataField(body, "implemented[-\\s_]*by");
+  const reviewedBy = matchMetadataField(body, "reviewed[-\\s_]*by");
+  const stopPoint = matchMetadataField(body, "stop[-\\s_]*point");
+
+  return {
+    number: raw.number,
+    claimedIssueNumbers,
+    ref: {
+      ref: `${repository.owner}/${repository.name}#${raw.number}`,
+      ...(title && { title }),
+      state,
+      ...(draft !== undefined && { draft }),
+      ...(branch && { branch }),
+      ...(headSha && { head_sha: headSha }),
+      ...(implementedBy && { implemented_by: implementedBy }),
+      ...(reviewedBy && { reviewed_by: reviewedBy }),
+      ...(stopPoint && { stop_point: stopPoint }),
+    },
+  };
+}
+
+export function parseReviewComments(comments: unknown[]): {
+  review_request?: PullRequestReviewRequest;
+  review_record?: PullRequestReviewRecord;
+} {
+  let review_request: PullRequestReviewRequest | undefined;
+  let review_record: PullRequestReviewRecord | undefined;
+
+  for (const entry of comments) {
+    if (!isObject(entry) || typeof entry.body !== "string") continue;
+    const body = entry.body;
+
+    if (body.includes("<!-- semteams-review-request -->")) {
+      const sha = matchMetadataField(body, "(?:commit|head(?:_sha)?|sha)");
+      const lane = matchMetadataField(body, "(?:reviewer[-\\s_]*lane|lane)");
+      if (sha && /^[0-9a-f]{7,40}$/i.test(sha)) {
+        review_request = {
+          sha,
+          ...(lane && { reviewer_lane: lane }),
+        };
+      }
+    }
+
+    if (body.includes("<!-- semteams-review-record -->")) {
+      const sha = matchMetadataField(body, "(?:commit|head(?:_sha)?|sha)");
+      const verdictRaw = matchMetadataField(body, "verdict")?.toLowerCase();
+      const lane = matchMetadataField(body, "(?:reviewer[-\\s_]*lane|lane)");
+      const reviewedBy = matchMetadataField(body, "reviewed[-\\s_]*by");
+      const verdict: PullRequestReviewRecord["verdict"] | undefined =
+        verdictRaw === "pass" || verdictRaw === "approved"
+          ? "pass"
+          : verdictRaw === "blocking" || verdictRaw === "changes_requested" || verdictRaw === "fail"
+            ? "blocking"
+            : undefined;
+      if (sha && /^[0-9a-f]{7,40}$/i.test(sha) && verdict) {
+        review_record = {
+          sha,
+          verdict,
+          ...(lane && { reviewer_lane: lane }),
+          ...(reviewedBy && { reviewed_by: reviewedBy }),
+        };
+      }
+    }
+  }
+
+  return {
+    ...(review_request && { review_request }),
+    ...(review_record && { review_record }),
+  };
+}
+
+function buildWorkItem(
+  repository: Repository,
+  issue: ParsedIssue,
+  delivery: Overlay<PullRequestRef[]>,
+  flakeHolds: string[],
+): WorkItem {
+  const baton = deriveBatonOverlays({
+    labels: issue.labels,
+    assignees: issue.assignees,
+    dependencies: issue.dependencies,
+    delivery,
+    flake_holds: flakeHolds,
+  });
+
+  return {
+    ref: `${repository.owner}/${repository.name}#${issue.number}`,
+    repository: `${repository.owner}/${repository.name}`,
+    number: issue.number,
+    title: issue.title,
+    body_excerpt: excerpt(issue.body),
+    state: issue.state,
+    labels: issue.labels,
+    assignees: issue.assignees,
+    ...(issue.milestone && { milestone: issue.milestone }),
+    column: columnFor({ state: issue.state, assignees: issue.assignees }, repository),
+    dependencies: issue.dependencies,
+    delivery,
+    ...baton,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Source implementation
+// ---------------------------------------------------------------------------
+
+export function createGithubSource(options: GithubSourceOptions = {}): WorkSource {
+  const apiBase = (options.apiUrl?.trim() || DEFAULT_GITHUB_API_URL).replace(/\/+$/, "");
+  const token = options.token?.trim() || undefined;
+
+  async function enrichOpenPullsWithComments(
+    repository: Repository,
+    pulls: ParsedPullRequest[],
+    targetIssueNumbers: Set<number>,
+  ): Promise<string[]> {
+    const reasons: string[] = [];
+    const relevantOpenPulls = pulls.filter(
+      (pr) =>
+        pr.ref.state === "open" &&
+        pr.claimedIssueNumbers.some((n) => targetIssueNumbers.has(n)),
+    );
+
+    const toFetch = relevantOpenPulls.slice(0, MAX_OPEN_PR_COMMENT_FETCHES);
+    const skipped = relevantOpenPulls.slice(MAX_OPEN_PR_COMMENT_FETCHES);
+    if (skipped.length > 0) {
+      reasons.push(
+        `${repository.owner}/${repository.name} open PR comment reads capped at ${MAX_OPEN_PR_COMMENT_FETCHES} (${skipped.length} uninspected)`,
+      );
+      for (const pr of skipped) {
+        pr.ref.review_inspected = false;
+      }
+    }
+
+    await Promise.all(
+      toFetch.map(async (pr) => {
+        const path = `/repos/${encodeURIComponent(repository.owner)}/${encodeURIComponent(repository.name)}/issues/${pr.number}/comments?per_page=${GITHUB_PAGE_LIMIT}`;
+        const label = `GET /repos/${repository.owner}/${repository.name}/issues/${pr.number}/comments`;
+        const read = await getGithubJson(apiBase, path, label, token);
+        if (!read.ok || !Array.isArray(read.value)) {
+          pr.ref.review_inspected = false;
+          reasons.push(read.ok ? `${label} returned a non-array body` : read.error);
+          return;
+        }
+        const parsed = parseReviewComments(read.value);
+        if (parsed.review_request) pr.ref.review_request = parsed.review_request;
+        if (parsed.review_record) pr.ref.review_record = parsed.review_record;
+        if (read.value.length >= GITHUB_PAGE_LIMIT) {
+          reasons.push(`${label} truncated at ${GITHUB_PAGE_LIMIT} comments`);
+          // A definitive review_record found in the page still holds if its SHA
+          // matches HEAD; otherwise absence or freshness is unproven.
+          pr.ref.review_inspected = Boolean(
+            parsed.review_record &&
+              pr.ref.head_sha &&
+              shaMatchesHead(parsed.review_record.sha, pr.ref.head_sha),
+          );
+        } else {
+          pr.ref.review_inspected = true;
+        }
+      }),
+    );
+
+    return reasons;
+  }
+
+  return {
+    kind: "github",
+
+    async listItems(repository: Repository) {
+      const ownerEnc = encodeURIComponent(repository.owner);
+      const nameEnc = encodeURIComponent(repository.name);
+      const issuesPath = `/repos/${ownerEnc}/${nameEnc}/issues?state=open&per_page=${GITHUB_PAGE_LIMIT}`;
+      const pullsPath = `/repos/${ownerEnc}/${nameEnc}/pulls?state=all&per_page=${GITHUB_PAGE_LIMIT}`;
+      const issuesLabel = `GET /repos/${repository.owner}/${repository.name}/issues`;
+      const pullsLabel = `GET /repos/${repository.owner}/${repository.name}/pulls`;
+
+      const [issuesRead, pullsRead] = await Promise.all([
+        getGithubJson(apiBase, issuesPath, issuesLabel, token),
+        getGithubJson(apiBase, pullsPath, pullsLabel, token),
+      ]);
+
+      if (!issuesRead.ok || !Array.isArray(issuesRead.value)) {
+        const reason = issuesRead.ok ? `${issuesLabel} returned a non-array body` : issuesRead.error;
+        return {
+          lookup: "failed",
+          reason,
+          columns: columnsFor(repository, [], []),
+          items: [],
+        };
+      }
+
+      const reasons: string[] = [];
+      if (issuesRead.value.length >= GITHUB_PAGE_LIMIT) {
+        reasons.push(`${issuesLabel} truncated at ${GITHUB_PAGE_LIMIT} items`);
+      }
+
+      const parsedIssues = issuesRead.value
+        .filter(isObject)
+        .map((raw) => parseIssue(raw, repository))
+        .filter((i): i is ParsedIssue => i !== null);
+
+      const flakeHolds = parsedIssues
+        .filter((i) => i.labels.includes("class:flake"))
+        .map((i) => `${repository.owner}/${repository.name}#${i.number}`);
+
+      let pullsOk = false;
+      let pullsTruncated = false;
+      let pullsError = "";
+      let parsedPulls: ParsedPullRequest[] = [];
+
+      if (!pullsRead.ok || !Array.isArray(pullsRead.value)) {
+        pullsError = pullsRead.ok ? `${pullsLabel} returned a non-array body` : pullsRead.error;
+        reasons.push(pullsError);
+      } else {
+        pullsOk = true;
+        pullsTruncated = pullsRead.value.length >= GITHUB_PAGE_LIMIT;
+        if (pullsTruncated) {
+          reasons.push(`${pullsLabel} truncated at ${GITHUB_PAGE_LIMIT} items`);
+        }
+        parsedPulls = pullsRead.value
+          .filter(isObject)
+          .map((raw) => parsePullRequest(raw, repository))
+          .filter((pr): pr is ParsedPullRequest => pr !== null);
+
+        const issueNumbers = new Set(parsedIssues.map((i) => i.number));
+        const commentReasons = await enrichOpenPullsWithComments(repository, parsedPulls, issueNumbers);
+        reasons.push(...commentReasons);
+      }
+
+      const items = parsedIssues.map((issue) => {
+        let delivery: Overlay<PullRequestRef[]>;
+        if (!pullsOk) {
+          delivery = { state: "unknown", reason: pullsError };
+        } else {
+          const matched = parsedPulls
+            .filter((pr) => pr.claimedIssueNumbers.includes(issue.number))
+            .map((pr) => pr.ref);
+          if (matched.length > 0) {
+            delivery = { state: "known", value: matched };
+          } else if (pullsTruncated) {
+            delivery = {
+              state: "unknown",
+              reason: `${pullsLabel} truncated at ${GITHUB_PAGE_LIMIT} items`,
+            };
+          } else {
+            delivery = { state: "none" };
+          }
+        }
+        return buildWorkItem(repository, issue, delivery, flakeHolds);
+      });
+
+      const lookup: LookupStatus = reasons.length === 0 ? "complete" : "partial";
+      return {
+        lookup,
+        ...(reasons.length > 0 && { reason: [...new Set(reasons)].join("; ") }),
+        columns: columnsFor(repository, [], items.map((i) => i.column)),
+        items,
+      };
+    },
+
+    async getItem({ repository, number }: ItemRef) {
+      const ownerEnc = encodeURIComponent(repository.owner);
+      const nameEnc = encodeURIComponent(repository.name);
+      const issuePath = `/repos/${ownerEnc}/${nameEnc}/issues/${number}`;
+      const pullsPath = `/repos/${ownerEnc}/${nameEnc}/pulls?state=all&per_page=${GITHUB_PAGE_LIMIT}`;
+      const flakesPath = `/repos/${ownerEnc}/${nameEnc}/issues?state=open&labels=class:flake&per_page=${GITHUB_PAGE_LIMIT}`;
+      const issueLabel = `GET /repos/${repository.owner}/${repository.name}/issues/${number}`;
+      const pullsLabel = `GET /repos/${repository.owner}/${repository.name}/pulls`;
+      const flakesLabel = `GET /repos/${repository.owner}/${repository.name}/issues?labels=class:flake`;
+
+      const [issueRead, pullsRead, flakesRead] = await Promise.all([
+        getGithubJson(apiBase, issuePath, issueLabel, token),
+        getGithubJson(apiBase, pullsPath, pullsLabel, token),
+        getGithubJson(apiBase, flakesPath, flakesLabel, token),
+      ]);
+
+      if (!issueRead.ok) {
+        if (issueRead.status === 404) {
+          return { lookup: "complete" };
+        }
+        return { lookup: "failed", reason: issueRead.error };
+      }
+      if (!isObject(issueRead.value)) {
+        return { lookup: "failed", reason: `${issueLabel} returned a non-object body` };
+      }
+
+      const parsedIssue = parseIssue(issueRead.value, repository);
+      if (!parsedIssue) {
+        // A pull request number hit on /issues/{number} is not a work item.
+        return { lookup: "complete" };
+      }
+
+      const reasons: string[] = [];
+      let flakeHolds: string[] = [];
+      if (!flakesRead.ok || !Array.isArray(flakesRead.value)) {
+        reasons.push(flakesRead.ok ? `${flakesLabel} returned a non-array body` : flakesRead.error);
+      } else {
+        flakeHolds = flakesRead.value
+          .filter(isObject)
+          .map((raw) => parseIssue(raw, repository))
+          .filter((i): i is ParsedIssue => i !== null)
+          .map((i) => `${repository.owner}/${repository.name}#${i.number}`);
+      }
+
+      let delivery: Overlay<PullRequestRef[]>;
+      if (!pullsRead.ok || !Array.isArray(pullsRead.value)) {
+        const err = pullsRead.ok ? `${pullsLabel} returned a non-array body` : pullsRead.error;
+        reasons.push(err);
+        delivery = { state: "unknown", reason: err };
+      } else {
+        const pullsTruncated = pullsRead.value.length >= GITHUB_PAGE_LIMIT;
+        if (pullsTruncated) {
+          reasons.push(`${pullsLabel} truncated at ${GITHUB_PAGE_LIMIT} items`);
+        }
+        const parsedPulls = pullsRead.value
+          .filter(isObject)
+          .map((raw) => parsePullRequest(raw, repository))
+          .filter((pr): pr is ParsedPullRequest => pr !== null);
+
+        const commentReasons = await enrichOpenPullsWithComments(
+          repository,
+          parsedPulls,
+          new Set([number]),
+        );
+        reasons.push(...commentReasons);
+
+        const matched = parsedPulls
+          .filter((pr) => pr.claimedIssueNumbers.includes(number))
+          .map((pr) => pr.ref);
+        if (matched.length > 0) {
+          delivery = { state: "known", value: matched };
+        } else if (pullsTruncated) {
+          delivery = {
+            state: "unknown",
+            reason: `${pullsLabel} truncated at ${GITHUB_PAGE_LIMIT} items`,
+          };
+        } else {
+          delivery = { state: "none" };
+        }
+      }
+
+      const lookup: LookupStatus = reasons.length === 0 ? "complete" : "partial";
+      return {
+        lookup,
+        ...(reasons.length > 0 && { reason: [...new Set(reasons)].join("; ") }),
+        item: buildWorkItem(repository, parsedIssue, delivery, flakeHolds),
+      };
+    },
+
+    async linkedRunBindings() {
+      return {
+        lookup: "unsupported",
+        reason: GITHUB_RUNS_UNSUPPORTED,
+        bindings: [],
+      };
+    },
+  };
+}

@@ -91,6 +91,8 @@ export interface PullRequestRef {
   stop_point?: string;
   implemented_by?: string;
   reviewed_by?: string;
+  /** False when the source enumerated the PR but did not inspect its review comments. */
+  review_inspected?: boolean;
   review_request?: PullRequestReviewRequest;
   review_record?: PullRequestReviewRecord;
 }

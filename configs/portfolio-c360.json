@@ -1,0 +1,40 @@
+{
+  "programs": [
+    {
+      "id": "c360",
+      "name": "C360 Platform",
+      "projects": [
+        {
+          "id": "semteams",
+          "name": "SemTeams",
+          "repositories": [
+            {
+              "owner": "C360Studio",
+              "name": "semteams"
+            }
+          ]
+        },
+        {
+          "id": "semengine",
+          "name": "SemEngine",
+          "repositories": [
+            {
+              "owner": "C360Studio",
+              "name": "semengine"
+            }
+          ]
+        },
+        {
+          "id": "semstreams",
+          "name": "SemStreams",
+          "repositories": [
+            {
+              "owner": "C360Studio",
+              "name": "semstreams"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
