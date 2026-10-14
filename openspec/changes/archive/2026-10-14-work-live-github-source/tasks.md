@@ -22,5 +22,5 @@
 ## 3. Review and archive
 
 - [x] 3.1 Run `svelte-reviewer` on the changes and resolve any findings.
-- [ ] 3.2 Archive `work-live-github-source` (`openspec archive work-live-github-source` and spec sync) as the landing
+- [x] 3.2 Archive `work-live-github-source` (`openspec archive work-live-github-source` and spec sync) as the landing
       PR's final content commit.

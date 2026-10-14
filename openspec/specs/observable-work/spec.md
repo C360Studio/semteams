@@ -11,11 +11,12 @@ asserts no write path and derives no status from another.
 
 SemTeams SHALL present the work items of the configured portfolio as GitHub issue-backed work items on a board and
 a table grouped by project, before and independent of any run. GitHub SHALL own work-item identity, body, assignees,
-labels and milestone. The shipped work source is fixture-backed (`WORK_SOURCE=fixture`); a `github` work source
-SHALL answer `unsupported` with a reason and SHALL NOT render an empty board as "no work" until live enumeration
-lands (#273). Columns SHALL follow the configured GitHub Projects status field; without a Project the
-columns SHALL be Todo, In Progress and Done with unknown metadata left unset. PM status, execution stage and
-verification SHALL be displayed as separate values and SHALL NOT be derived from one another.
+labels and milestone. Both fixture-backed (`WORK_SOURCE=fixture`) and live GitHub (`WORK_SOURCE=github` with
+`SEMTEAMS_PORTFOLIO_PATH`) work sources SHALL be served behind `/api/work/*`, and a failed or truncated GitHub read
+SHALL answer `failed` or `partial` with a reason and SHALL NOT render an empty board as "no work". Columns SHALL
+follow the configured GitHub Projects status field; without a Project the columns SHALL be Todo, In Progress and Done
+with unknown metadata left unset. PM status, execution stage and verification SHALL be displayed as separate values and
+SHALL NOT be derived from one another.
 
 #### Scenario: Repository without a configured Project
 
@@ -30,6 +31,15 @@ verification SHALL be displayed as separate values and SHALL NOT be derived from
 - **WHEN** its overview is opened
 - **THEN** purpose, owner, priority, milestone, dependencies and delivery context SHALL render from the issue
 - **AND** the execution stage SHALL render as no run or unknown, never as a stage
+
+#### Scenario: Live GitHub enumeration derives baton, review, and gate overlays
+
+- **GIVEN** `WORK_SOURCE=github` and a valid `SEMTEAMS_PORTFOLIO_PATH`
+- **WHEN** `/api/work/items?repository=owner/name` or `/api/work/items/owner/name/number` is requested
+- **THEN** the server SHALL read issues, linked pull requests, and PR review comments from GitHub and derive `claim`,
+  `review`, and `gate` overlays without altering GitHub-owned columns
+- **AND** any failed or truncated GitHub read SHALL report `lookup: "failed"` or `"partial"` with its reason rather than
+  an empty `complete` result
 
 ### Requirement: Explicit unknown overlays over scoped reads
 
