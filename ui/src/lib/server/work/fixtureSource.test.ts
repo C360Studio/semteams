@@ -144,7 +144,7 @@ describe("board-mvp (design D5)", () => {
     expect(semsource54.review.state).toBe("unknown");
   });
 
-  it("declares exactly the three linkage cases", async () => {
+  it("declares the four linkage cases across #311-#314", async () => {
     const { source, semteams, semsource } = boardMvp();
     const declared: Record<string, LinkedRunBinding[]> = {};
     for (const repository of [semteams, semsource]) {
@@ -158,9 +158,10 @@ describe("board-mvp (design D5)", () => {
       expect.arrayContaining([
         [{ by: "coordinator_prompt", equals: PROMPT }],
         [{ by: "run_entity_id", value: DEAD_RUN }],
+        [{ by: "work_item_ref", ref: "c360studio/semteams#314" }],
       ]),
     );
-    expect(withBindings).toHaveLength(2);
+    expect(withBindings).toHaveLength(3);
 
     // The explicit empty declaration (case B) is a key in the fixture; every
     // other undeclared item behaves the same in fixture mode.

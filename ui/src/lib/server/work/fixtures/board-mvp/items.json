@@ -148,6 +148,12 @@
             "title": "test(runs): cover issue reference stamping on restart",
             "state": "open"
           }
+        ],
+        "linked_runs": [
+          {
+            "by": "work_item_ref",
+            "ref": "c360studio/semteams#314"
+          }
         ]
       },
       {

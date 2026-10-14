@@ -23,10 +23,12 @@ import type { APIRequestContext, Page } from "@playwright/test";
  *     are read when an item is opened".
  *   - Read-only is structural: nothing in the board is draggable and the work
  *     API answers 405 to a write.
- *   - Three linkage cases, each against the real backend:
+ *   - Four linkage cases, each against the real backend:
  *       #311 declares `linked_runs: []`  -> lookup `complete`, "no linked run"
  *       #313 binds a run entity that does not exist -> lookup `partial`
  *            (a real failed resolution, never reported as "no linked run")
+ *       #314 binds by `work_item_ref` with no matching run -> lookup `partial`,
+ *            `linked-runs-unknown` (zero rows, never reported as "no linked run")
  *       #312 binds, by exact coordinator prompt, the run THIS spec creates
  *            -> lookup `complete`, stage `completed`, drill-in to the run
  *     and a linked run never moves a card (#312 stays in its PM column).
@@ -89,6 +91,7 @@ const SEMSOURCE = "c360studio/semsource";
 const NO_RUNS_ITEM = `${SEMTEAMS}#311`;
 const PROMPT_BOUND_ITEM = `${SEMTEAMS}#312`;
 const DEAD_RUN_ITEM = `${SEMTEAMS}#313`;
+const WORK_REF_ITEM = `${SEMTEAMS}#314`;
 // From fixtures/board-mvp/items.json: a run entity that cannot exist.
 const DEAD_RUN_ID =
   "c360.semteams.chain.agent.execution.00000000-0000-4000-8000-00000000dead";
@@ -411,6 +414,28 @@ test.describe("Work board: fixtures + live ops control", () => {
     ).toHaveAttribute("data-state", "unknown");
 
     // -----------------------------------------------------------------
+    // Step 5b — #314 binds by work_item_ref (c360studio/semteams#314).
+    // No run in this journey carries run.issue.ref or a work-scoped prompt
+    // for #314, so the lookup degrades to partial with zero rows and
+    // renders linked-runs-unknown (never no-linked-run).
+    // -----------------------------------------------------------------
+    await openItem(page, WORK_REF_ITEM);
+    await loadLinkedRuns(page);
+    await expect(page.getByTestId("work-linked-runs")).toHaveAttribute(
+      "data-lookup",
+      "partial",
+    );
+    await expect(page.getByTestId("no-linked-run")).toHaveCount(0);
+    await expect(page.getByTestId("linked-run-row")).toHaveCount(0);
+    await expect(page.getByTestId("linked-runs-unknown")).toBeVisible();
+    await expect(page.getByTestId("work-linked-runs-lookup")).toContainText(
+      "no run matched run.issue.ref or work-scoped prompt",
+    );
+    await expect(
+      card(page, WORK_REF_ITEM).getByTestId("overlay-execution-stage"),
+    ).toHaveAttribute("data-state", "unknown");
+
+    // -----------------------------------------------------------------
     // Step 6 — #312 is bound, by exact coordinator prompt, to the run this
     // spec created.
     // -----------------------------------------------------------------
@@ -454,21 +479,80 @@ test.describe("Work board: fixtures + live ops control", () => {
 
     // Opening #312 scopes ChatBar to the work item and renders the inline run
     // workbench (Activity and Evidence tabs) directly inside /work.
-    await expect(page.getByTestId("work-chat-context")).toContainText(
+    await expect(page.getByTestId("work-chat-context")).toBeVisible();
+    await expect(page.getByTestId("work-chat-scope")).toHaveText(
+      "c360 / SemTeams",
+    );
+    await expect(page.getByTestId("work-chat-ref")).toHaveText(
       PROMPT_BOUND_ITEM,
     );
+
     const inlineWorkbench = page.getByTestId("work-inline-run-workbench");
     await expect(inlineWorkbench).toHaveAttribute(
       "data-loop-id",
       coordinatorId,
     );
+    const inlineActivity = inlineWorkbench.getByTestId(
+      "work-inline-panel-activity",
+    );
+    await expect(inlineActivity).toBeVisible();
+
+    // The inline workbench renders the coordinator's folded ops-chain-observer
+    // control and explained control-event directly inside /work.
+    const inlineControlRows = inlineActivity.getByTestId(
+      "work-inline-control-row",
+    );
+    await expect(inlineControlRows).toHaveCount(1, { timeout: 30_000 });
+    await expect(inlineControlRows).toHaveAttribute("data-loop-id", observerId);
+
+    const inlineEvents = inlineActivity.getByTestId("control-event");
+    await expect(inlineEvents).toHaveCount(1, { timeout: 30_000 });
+    const inlineEvent = inlineEvents.first();
+    await expect(inlineEvent.getByTestId("control-rule")).toContainText(
+      "unknown",
+    );
+    await expect(inlineEvent.getByTestId("control-rule")).toContainText("#298");
+    await expect(inlineEvent.getByTestId("control-fact")).toContainText(
+      "agent.run.phase",
+      { timeout: 30_000 },
+    );
+    await expect(inlineEvent.getByTestId("control-fact")).toContainText(
+      "completed",
+    );
+    await expect(inlineEvent.getByTestId("control-identity")).toContainText(
+      "ops-chain-observer",
+    );
+    await expect(inlineEvent.getByTestId("control-identity")).toContainText(
+      observerId,
+    );
+    await expect(inlineEvent.getByTestId("control-outcome")).toContainText(
+      "applied",
+    );
+
+    // Sub-loop focus navigation inside the inline workbench.
+    const inlineChildren = inlineActivity.getByTestId("work-inline-child-item");
+    await expect(inlineChildren.first()).toBeVisible({ timeout: 30_000 });
+    await inlineChildren.first().click();
     await expect(
-      inlineWorkbench.getByTestId("work-inline-panel-activity"),
+      inlineActivity.getByTestId("work-inline-focus-breadcrumb"),
     ).toBeVisible();
+    await inlineActivity.getByTestId("work-inline-focus-back").click();
+    await expect(
+      inlineActivity.getByTestId("work-inline-focus-breadcrumb"),
+    ).toHaveCount(0);
+
+    // Switching to the Evidence tab renders raw trajectory and run graph triples.
     await inlineWorkbench.getByTestId("work-run-tab-evidence").click();
+    const inlineEvidence = inlineWorkbench.getByTestId(
+      "work-inline-panel-evidence",
+    );
+    await expect(inlineEvidence).toBeVisible();
     await expect(
-      inlineWorkbench.getByTestId("work-inline-panel-evidence"),
-    ).toBeVisible();
+      inlineEvidence.getByTestId("run-evidence-trajectory"),
+    ).toBeVisible({ timeout: 30_000 });
+    await expect(
+      inlineEvidence.getByTestId("run-evidence-triples"),
+    ).toContainText("agent.run.phase", { timeout: 30_000 });
     await inlineWorkbench.getByTestId("work-run-tab-activity").click();
 
     const drillIn = page.getByTestId("work-drill-in");
@@ -598,14 +682,38 @@ test.describe("Work board: in-page URL state", () => {
     });
   });
 
-  test("in-page card selection opens the item overview", async ({ page }) => {
+  test("in-page card selection opens the item overview and scopes ChatBar context", async ({
+    page,
+  }) => {
     await page.goto("/work");
     await waitForBoard(page);
+    await expect(page.getByTestId("work-chat-context")).toHaveCount(0);
+
     await card(page, NO_RUNS_ITEM).click();
     await expect(page).toHaveURL(/[?&]item=/);
     await expect(page.getByTestId("work-item-overview")).toBeVisible({
       timeout: 5_000,
     });
+    await expect(page.getByTestId("work-chat-context")).toBeVisible();
+    await expect(page.getByTestId("work-chat-scope")).toHaveText(
+      "c360 / SemTeams",
+    );
+    await expect(page.getByTestId("work-chat-ref")).toHaveText(NO_RUNS_ITEM);
+
+    // Clearing the ChatBar work-context chip dismisses the chip while keeping
+    // the work item overview open; selecting another card restores the chip.
+    await page.getByTestId("work-chat-context-clear").click();
+    await expect(page.getByTestId("work-chat-context")).toHaveCount(0);
+    await expect(page.getByTestId("work-item-overview")).toBeVisible();
+
+    await card(page, WORK_REF_ITEM).click();
+    await expect(page.getByTestId("work-chat-context")).toBeVisible();
+    await expect(page.getByTestId("work-chat-ref")).toHaveText(WORK_REF_ITEM);
+
+    // Closing the overview clears the ChatBar work-context chip.
+    await page.getByTestId("work-overview-close").click();
+    await expect(page.getByTestId("work-item-overview")).toHaveCount(0);
+    await expect(page.getByTestId("work-chat-context")).toHaveCount(0);
   });
 
   test("baton slice filter narrows visible cards without altering GitHub columns and shows review SHA parity", async ({
@@ -614,11 +722,33 @@ test.describe("Work board: in-page URL state", () => {
     await page.goto("/work");
     await waitForBoard(page);
 
+    const decisionItem = `${SEMTEAMS}#310`;
     const staleItem = `${SEMTEAMS}#314`;
     const readyItem = `${SEMTEAMS}#316`;
+    const unclaimedItem = `${SEMSOURCE}#52`;
 
     await expect(card(page, staleItem).getByTestId("overlay-review")).toContainText("stale");
     await expect(card(page, readyItem).getByTestId("overlay-review")).toContainText("current");
+
+    // Filter by Needs decision (?baton=needs-decision): #310 stays in Todo.
+    await page.getByTestId("baton-filter-needs-decision").click();
+    await expect(page).toHaveURL(/[?&]baton=needs-decision(&|$)/);
+    await expect(card(page, decisionItem)).toBeVisible();
+    await expect(card(page, decisionItem)).toHaveAttribute("data-column", "Todo");
+    await expect(card(page, staleItem)).toHaveCount(0);
+
+    // Filter by Blocked / hold (?baton=blocked): #310 (blocked-by #314) and #312 (OpenSpec hold) match.
+    await page.getByTestId("baton-filter-blocked").click();
+    await expect(page).toHaveURL(/[?&]baton=blocked(&|$)/);
+    await expect(card(page, decisionItem)).toBeVisible();
+    await expect(card(page, PROMPT_BOUND_ITEM)).toBeVisible();
+    await expect(card(page, readyItem)).toHaveCount(0);
+
+    // Filter by Claimed (?baton=claimed): claimed items render, confirmed-unclaimed semsource#52 is excluded.
+    await page.getByTestId("baton-filter-claimed").click();
+    await expect(page).toHaveURL(/[?&]baton=claimed(&|$)/);
+    await expect(card(page, PROMPT_BOUND_ITEM)).toBeVisible();
+    await expect(card(page, unclaimedItem)).toHaveCount(0);
 
     // Filter by Review queue (?baton=review): #314 (stale) stays in In Review, #316 (current) is filtered out.
     await page.getByTestId("baton-filter-review").click();
