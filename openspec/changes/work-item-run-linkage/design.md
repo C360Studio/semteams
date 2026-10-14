@@ -2,10 +2,11 @@
 
 ## Context
 
-When an operator selects a work item on `/work` and sends a prompt in `ChatBar`, `formatWorkScopedPrompt()` (#315)
-prepends `[Work item: owner/repo#number — title]` (or `[Work item: owner/repo#number]`) to the outbound coordinator
-message. The runtime records that message as the coordinator loop entity's `agent.loop.description` fact. In addition,
-ADR-061 §3 and the work lens design reserve the `run.issue.ref` predicate for explicit issue-to-run graph linkage.
+When an operator selects a work item on `/work` and sends a prompt in `ChatBar`, `formatWorkScopeHeader()` (#315)
+prepends `[Work item: owner/repo#number (Program / Project) — title]` (or `[Work item: owner/repo#number — title]`) to
+the outbound coordinator message. The runtime records that message as the coordinator loop entity's
+`agent.loop.description` fact. In addition, ADR-061 §3 and the work lens design reserve the `run.issue.ref` predicate
+for explicit issue-to-run graph linkage.
 
 ## Decisions
 

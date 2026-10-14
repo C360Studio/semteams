@@ -23,9 +23,9 @@ vi.mock("./fixtureSource", async (importOriginal) => {
   };
 });
 
+import { WORK_ITEM_REF_UNMATCHED_REASON } from "./overlays";
 import { getItem, getItems, getPortfolio, getRuns } from "./service";
-import { GITHUB_RUNS_UNSUPPORTED } from "./source";
-import { fakeBackend, setEnv, stubBackend } from "./testkit";
+import { fakeBackend, setEnv, stubBackend, triple } from "./testkit";
 
 let dir: string;
 // Config problems are logged server-side; capture them so they neither clutter
@@ -206,9 +206,13 @@ describe("github source", () => {
     expect(missing.body).toMatchObject({ code: "ITEM_NOT_FOUND" });
   });
 
-  it("answers unsupported for runs, never 'no linked run', and reads nothing from the backend", async () => {
+  it("resolves linked runs via work-scoped prompt or run.issue.ref, and reports partial when unmatched", async () => {
     await useDocument(validDocument);
-    const fetchMock = stubBackend((url) => {
+    const loopId = "loop_296";
+    const loopEntity = `c360.semteams.agentic-loop.agent.execution.${loopId}`;
+    const runEntity = `c360.semteams.chain.agent.execution.${loopId}`;
+
+    stubBackend((url) => {
       if (url.hostname === "github.test") {
         if (url.pathname === "/repos/C360Studio/semteams/issues/296") {
           return new Response(
@@ -218,13 +222,56 @@ describe("github source", () => {
         }
         return new Response(JSON.stringify([]), { status: 200, headers: { "Content-Type": "application/json" } });
       }
-      return fakeBackend({})(url);
+      return fakeBackend({
+        triples: [
+          triple(
+            loopEntity,
+            "agent.loop.description",
+            "[Work item: C360Studio/semteams#296 — Item 296]\nInvestigate board",
+          ),
+          triple(loopEntity, "agent.loop.role", "coordinator"),
+          triple(loopEntity, "agent.loop.run", loopId),
+          triple(loopEntity, "agent.run.entity-id", runEntity),
+          triple(runEntity, "agent.run.phase", "executing"),
+          triple(runEntity, "agent.run.handoff", loopId),
+        ],
+        loops: { [loopId]: { loop_id: loopId, state: "executing" } },
+      })(url);
     });
-    const { status, body } = await getRuns("C360Studio", "semteams", "296");
-    expect(status).toBe(200);
-    expect(body).toEqual({ lookup: "unsupported", reason: GITHUB_RUNS_UNSUPPORTED, runs: [] });
-    const backendCalls = fetchMock.mock.calls.filter(([u]) => new URL(String(u)).hostname !== "github.test");
-    expect(backendCalls).toHaveLength(0);
+    const matched = await getRuns("C360Studio", "semteams", "296");
+    expect(matched.status).toBe(200);
+    expect(matched.body).toMatchObject({
+      lookup: "complete",
+      runs: [
+        {
+          run_entity_id: runEntity,
+          coordinator_loop_id: loopId,
+          lookup: "complete",
+          execution_stage: { state: "known", value: "executing" },
+          needs_you: { state: "known", value: false },
+        },
+      ],
+    });
+
+    stubBackend((url) => {
+      if (url.hostname === "github.test") {
+        if (url.pathname === "/repos/C360Studio/semteams/issues/296") {
+          return new Response(
+            JSON.stringify({ number: 296, title: "Item 296", state: "open", labels: [], assignees: [] }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          );
+        }
+        return new Response(JSON.stringify([]), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      return fakeBackend({ triples: [] })(url);
+    });
+    const unmatched = await getRuns("C360Studio", "semteams", "296");
+    expect(unmatched.status).toBe(200);
+    expect(unmatched.body).toEqual({
+      lookup: "partial",
+      reason: WORK_ITEM_REF_UNMATCHED_REASON,
+      runs: [],
+    });
   });
 
   it("still scopes to configured repositories", async () => {

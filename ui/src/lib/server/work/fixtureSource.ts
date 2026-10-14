@@ -201,6 +201,9 @@ function parseBinding(raw: unknown): LinkedRunBinding | null {
   if (raw.by === "coordinator_prompt" && typeof raw.equals === "string" && raw.equals) {
     return { by: "coordinator_prompt", equals: raw.equals };
   }
+  if (raw.by === "work_item_ref" && typeof raw.ref === "string" && raw.ref) {
+    return { by: "work_item_ref", ref: raw.ref };
+  }
   return null;
 }
 
@@ -268,7 +271,7 @@ function parseFixtureItems(raw: unknown, portfolio: Portfolio): FixtureItems {
         const ok =
           Array.isArray(rawItem.linked_runs) &&
           rawItem.linked_runs.every((b: unknown) => parseBinding(b) !== null);
-        if (!ok) issue(`${itemPath}.linked_runs`, "every binding needs by + value/equals");
+        if (!ok) issue(`${itemPath}.linked_runs`, "every binding needs by + value/equals/ref");
       }
     });
     // Every field toWorkItem reads was checked above; an invalid fixture throws

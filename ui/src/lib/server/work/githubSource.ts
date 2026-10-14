@@ -19,7 +19,6 @@ import type {
 import { deriveBatonOverlays, shaMatchesHead } from "./baton";
 import { columnFor, columnsFor } from "./columns";
 import { DEFAULT_GITHUB_API_URL } from "./config";
-import { GITHUB_RUNS_UNSUPPORTED } from "./source";
 import type { ItemRef, WorkSource } from "./source";
 
 export const READ_TIMEOUT_MS = 5000;
@@ -606,11 +605,15 @@ export function createGithubSource(options: GithubSourceOptions = {}): WorkSourc
       };
     },
 
-    async linkedRunBindings() {
+    async linkedRunBindings({ repository, number }: ItemRef) {
       return {
-        lookup: "unsupported",
-        reason: GITHUB_RUNS_UNSUPPORTED,
-        bindings: [],
+        lookup: "complete",
+        bindings: [
+          {
+            by: "work_item_ref",
+            ref: `${repository.owner}/${repository.name}#${number}`,
+          },
+        ],
       };
     },
   };
