@@ -1,28 +1,29 @@
 import { test, expect } from "@playwright/test";
 import { attachJourneyEvidenceReport } from "./e2e_report";
 
-const RUN_INFIX = ".agent.chain.execution.";
+const RUN_INFIX = ".chain.agent.execution.";
 
 /**
  * Journey: ADR-053 Phase 4c PR-1 — an in-run loop's approval_required tool-gate
  * pauses the run executing→awaiting_approval (the run-phase reflection of the
  * loop-level approval gate, ADR-030).
  *
- *   coordinator(dispatch) → decide(dev_via_test)        run becomes `executing`
- *   first-pass Lisa       → decide(needs_clarification)  rule 02f spawns the
- *                                                        recovery coordinator
- *                                                        (inherit anchor:
- *                                                         agent.run.entity-id)
- *   recovery coordinator  → tool_call(create_rule)       create_rule ∈
- *                                                        approval_required → the
- *                                                        loop parks in
- *                                                        awaiting_approval, emits
- *                                                        agent.approval_pending.<id>;
- *                                                        the approvalpause subscriber
- *                                                        stamps
- *                                                        agent.run.approval-pending
- *                                                        on the run entity
- *   agent-run/12 (approval_pending + phase==executing) → awaiting_approval
+ *   coordinator(dispatch)     → decide(research)            run becomes `executing`
+ *   researcher-research-plan  → decide(needs_clarification) rule research/06 spawns
+ *                                                            the recovery coordinator
+ *                                                            (inherit anchor:
+ *                                                             agent.run.entity-id)
+ *   recovery coordinator      → tool_call(create_rule)      create_rule ∈
+ *                                                            approval_required → the
+ *                                                            loop parks in
+ *                                                            awaiting_approval, emits
+ *                                                            agent.approval_pending.<id>;
+ *                                                            the approvalpause subscriber
+ *                                                            stamps
+ *                                                            agent.run.approval-pending +
+ *                                                            agent.run.approval-outstanding=1
+ *                                                            on the run entity
+ *   agent-run/12 (approval-outstanding > 0 + phase==executing) → awaiting_approval
  *
  * The run is honestly PAUSED on a human approval. PR-1 has no resume — the run parks
  * in awaiting_approval (resume is PR-2). The decisive assertions:
@@ -65,12 +66,13 @@ test.describe("ADR-053 Phase 4c — in-run tool-gate pauses the run (executing�
     await expect(page.getByTestId("kanban-board")).toBeVisible();
 
     // -----------------------------------------------------------------
-    // Step 2 — send a dev-build prompt. The coordinator classifies it
-    // dev_via_test; first-pass Lisa escalates needs_clarification; rule 02f
-    // spawns the recovery coordinator, which calls the gated create_rule.
+    // Step 2 — send a research prompt. The coordinator classifies it
+    // research; researcher-research-plan escalates needs_clarification;
+    // rule research/06 spawns the recovery coordinator, which calls the
+    // gated create_rule.
     // -----------------------------------------------------------------
     await page.getByTestId("chat-input").fill(
-      "Build a Go HTTP service that decodes MAVLink v2 HEARTBEAT frames over UDP and serves the latest at GET /heartbeat as JSON.",
+      "Research MAVLink v2 HEARTBEAT frame staleness thresholds over UDP and summarize alerting defaults.",
     );
     await page.getByTestId("send-button").click();
 
@@ -85,7 +87,7 @@ test.describe("ADR-053 Phase 4c — in-run tool-gate pauses the run (executing�
         limit: 20,
       });
       const objs = phases
-        .filter((t) => String(t.subject ?? "").includes("agent.chain.execution."))
+        .filter((t) => String(t.subject ?? "").includes(RUN_INFIX))
         .map((t) => String(t.object));
       if (
         objs.includes("awaiting_approval") ||
@@ -102,7 +104,7 @@ test.describe("ADR-053 Phase 4c — in-run tool-gate pauses the run (executing�
     ).toBeTruthy();
     expect(
       runPhases,
-      "run must reach awaiting_approval (ADR-053 4c: approvalpause stamps approval_pending → agent-run/12 executing→awaiting_approval). Got: " +
+      "run must reach awaiting_approval (ADR-053 4c: approvalpause stamps approval-pending/approval-outstanding → agent-run/12 executing→awaiting_approval). Got: " +
         JSON.stringify(runPhases),
     ).toContain("awaiting_approval");
     expect(
@@ -124,7 +126,7 @@ test.describe("ADR-053 Phase 4c — in-run tool-gate pauses the run (executing�
         limit: 20,
       });
       const objs = triples
-        .filter((t) => String(t.subject ?? "").includes("agent.chain.execution."))
+        .filter((t) => String(t.subject ?? "").includes(RUN_INFIX))
         .map((t) => String(t.object));
       return objs.length > 0 ? objs : null;
     }, { timeoutMs: 15_000 });
@@ -149,7 +151,7 @@ test.describe("ADR-053 Phase 4c — in-run tool-gate pauses the run (executing�
         limit: 20,
       });
       const onRun = triples.filter((t) =>
-        String(t.subject ?? "").includes("agent.chain.execution."),
+        String(t.subject ?? "").includes(RUN_INFIX),
       );
       return onRun.length > 0 ? onRun : null;
     }, { timeoutMs: 15_000 });
@@ -157,6 +159,14 @@ test.describe("ADR-053 Phase 4c — in-run tool-gate pauses the run (executing�
       approvalMarkers,
       "expected agent.run.approval-pending on the run entity (approvalpause subscriber) — the marker that drives agent-run/12 and distinguishes a 4c tool-gate from a 4b-2 clarification pause.",
     ).toBeTruthy();
+    const pendingTuple = JSON.parse(String(approvalMarkers?.[0]?.object ?? "null")) as unknown;
+    expect(
+      Array.isArray(pendingTuple) &&
+        pendingTuple.length === 2 &&
+        typeof pendingTuple[0] === "string" &&
+        typeof pendingTuple[1] === "string",
+      `expected agent.run.approval-pending to encode a [loopId, executionId] tuple, got ${String(approvalMarkers?.[0]?.object)}`,
+    ).toBe(true);
 
     // -----------------------------------------------------------------
     // Step 6 — NEGATIVE: this is NOT a 4b-2 clarification pause. No
@@ -169,7 +179,7 @@ test.describe("ADR-053 Phase 4c — in-run tool-gate pauses the run (executing�
     });
     expect(
       clarificationMarkers.filter((t) =>
-        String(t.subject ?? "").includes("agent.chain.execution."),
+        String(t.subject ?? "").includes(RUN_INFIX),
       ).length,
       "agent.run.clarification-pending must be ABSENT — a 4c tool-gate pause must not be mistaken for (or cross-resumed with) a 4b-2 clarification pause.",
     ).toBe(0);
@@ -235,8 +245,9 @@ test.describe("ADR-053 Phase 4c — in-run tool-gate pauses the run (executing�
       "journey report must resolve provider + model id from the active config",
     ).toBe(true);
     expect(
-      report.evidence.loops.states.executing,
-      "journey report should capture the approval-paused child loop as executing with pending_approval",
+      (report.evidence.loops.states.executing ?? 0) +
+        (report.evidence.loops.states.awaiting_approval ?? 0),
+      "journey report should capture the approval-paused child loop as executing or awaiting_approval with pending_approval",
     ).toBeGreaterThanOrEqual(1);
     expect(
       report.run.phases.some((phase) => phase.object === "awaiting_approval"),

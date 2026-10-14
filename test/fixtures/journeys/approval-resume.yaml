@@ -1,21 +1,23 @@
 name: approval-resume
 description: |
   Journey: ADR-053 Phase 4c PR-2 — the tool-gate RESUME. The resume twin of
-  approval-pause. The pause half is identical (dev-via-test → first-pass Lisa
+  approval-pause. The pause half is identical (research → researcher-research-plan
   needs_clarification → recovery coordinator calls the gated create_rule → the loop
   parks in awaiting_approval → the run pauses executing→awaiting_approval). Then the
   spec POSTs the operator's APPROVAL to the real dispatch endpoint:
 
-    POST /teams-dispatch/loops/{loopId}/approval  {"decision":"approve"}
+    POST /teams-dispatch/loops/{loopId}/approval  {"decision":"approve","execution_id":"..."}
 
   which publishes agent.approval_response.<loopId>. TWO consumers react:
-    1. The agentic-loop's agent.approval_response input port (NEWLY declared on
+    1. The agentic-loop's agent.approval_response input port (declared on
        teams-loop for 4c PR-2) → handleApprovalResponseMessage → ResolveApprovalIfPending
        un-parks the loop, re-dispatches create_rule with ApprovedBy set (the
        ApprovalFilter bypasses the gate on a pre-approved call), and the loop continues.
-    2. The product-shell approvalpause subscriber → stamps agent.run.approval-resumed
-       on the run entity → agent-run/13 transitions the run awaiting_approval→executing
-       and clears BOTH approval markers.
+    2. The product-shell approvalpause subscriber → appends the matching
+       [loopId, executionId] tuple to agent.run.approval-answered and updates
+       agent.run.approval-outstanding=0 on the run entity → agent-run/13 transitions
+       the run awaiting_approval→executing while preserving append-only approval
+       receipts.
 
   After create_rule executes, the resumed recovery coordinator decide(respond_direct)
   answers directly (response #4 below). The run resumes to `executing` and STAYS there
@@ -24,10 +26,9 @@ description: |
   as the 4b-2 clarification-resume journey).
 
   DECISIVE assertion: the run that REACHED awaiting_approval LEAVES it to `executing`
-  with BOTH approval markers cleared, and a settle window confirms NO bounce back to
-  awaiting_approval (exercises rule 12's approval_resumed length_eq 0 guard + rule 13's
-  ordered marker-clear live). Approval driven via the direct dispatch API (no UI
-  affordance yet — that is the deferred UI slice); no triple seeding.
+  with approval-outstanding=0 and the matching approval-answered receipt recorded, and a
+  settle window confirms NO bounce back to awaiting_approval. Approval driven via the
+  direct dispatch API; no triple seeding.
 
   Exercises the thinly-tested upstream approval RESUME path end-to-end:
   GetPendingApprovalCallID (dispatch must have consumed agent.approval_pending),
@@ -38,16 +39,16 @@ description: |
   the agent.approval_pending + agent.approval_response ports).
 
 responses:
-  # ---------- Loop 0: front-door coordinator → dev_via_test ----------
+  # ---------- Loop 0: front-door coordinator → research ----------
   - tool_call:
       name: decide
       arguments_json: |
         {
-          "action": "dev_via_test",
-          "reason": "Add a Go HTTP service that decodes MAVLink v2 HEARTBEAT frames over UDP and serves the latest at GET /heartbeat as JSON. (4c resume journey: first-pass Lisa escalates needs_clarification, then the recovery coordinator calls a gated tool; the operator approves and the run resumes executing.)"
+          "action": "research",
+          "reason": "Research MAVLink v2 HEARTBEAT frame staleness thresholds over UDP and summarize alerting defaults. (4c resume journey: researcher-research-plan escalates needs_clarification, then the recovery coordinator calls a gated tool; the operator approves and the run resumes executing.)"
         }
 
-  # ---------- Loop A: first-pass Lisa → needs_clarification ----------
+  # ---------- Loop A: researcher-research-plan → needs_clarification ----------
   - tool_call:
       name: decide
       arguments_json: |

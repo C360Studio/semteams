@@ -7,22 +7,24 @@ import { test, expect } from "@playwright/test";
  *   (pause half — identical to approval-pause)
  *   recovery coordinator → tool_call(create_rule)  loop parks in awaiting_approval;
  *                                                   approvalpause stamps
- *                                                   agent.run.approval-pending;
+ *                                                   agent.run.approval-pending +
+ *                                                   agent.run.approval-outstanding=1;
  *                                                   agent-run/12 → run awaiting_approval
  *
  *   (resume half — this journey)
- *   POST /teams-dispatch/loops/{id}/approval {decision:"approve"}
+ *   POST /teams-dispatch/loops/{id}/approval {decision:"approve", execution_id}
  *      → dispatch publishes agent.approval_response.<id>
  *      → teams-loop (agent.approval_response input port) un-parks the loop
- *      → approvalpause stamps agent.run.approval-resumed
- *      → agent-run/13 → run awaiting_approval→executing + clears BOTH markers
+ *      → approvalpause appends [loopId, executionId] to agent.run.approval-answered
+ *        and updates agent.run.approval-outstanding=0
+ *      → agent-run/13 → run awaiting_approval→executing while preserving append-only
+ *        approval receipts
  *
  * DECISIVE assertions:
- *   - agent.run.approval-pending is CLEARED on the run entity (rule 13 ran),
+ *   - agent.run.approval-outstanding reaches 0 on the run entity,
+ *   - agent.run.approval-answered records the matching [loopId, executionId] receipt,
  *   - run is `executing`, NOT awaiting_approval (and not completed/failed),
- *   - agent.run.approval-resumed is CLEARED too (removed last),
- *   - after a settle window the run has NOT bounced back to awaiting_approval
- *     (exercises rule 12's approval_resumed length_eq 0 guard live).
+ *   - after a settle window the run has NOT bounced back to awaiting_approval.
  *
  * NOTE (per the upstream-fragility flag): this drives the thinly-tested upstream
  * approval RESUME path for real — GetPendingApprovalCallID (the dispatch must have
@@ -35,8 +37,7 @@ import { test, expect } from "@playwright/test";
  *   agent-run/12+13, the agent.approval_pending + agent.approval_response ports)
  */
 
-const RUN_INFIX = "agent.chain.execution.";
-const LOOP_INFIX = "agent.agentic-loop.execution.";
+const RUN_INFIX = ".chain.agent.execution.";
 
 test.describe("ADR-053 Phase 4c — approval resumes the run (awaiting_approval→executing)", () => {
   test.beforeAll(async ({ request }) => {
@@ -62,10 +63,10 @@ test.describe("ADR-053 Phase 4c — approval resumes the run (awaiting_approval�
     await expect(page.getByTestId("kanban-board")).toBeVisible();
 
     // -----------------------------------------------------------------
-    // Step 2 — send a dev-build prompt (drives the pause half).
+    // Step 2 — send a research prompt (drives the pause half).
     // -----------------------------------------------------------------
     await page.getByTestId("chat-input").fill(
-      "Build a Go HTTP service that decodes MAVLink v2 HEARTBEAT frames over UDP and serves the latest at GET /heartbeat as JSON.",
+      "Research MAVLink v2 HEARTBEAT frame staleness thresholds over UDP and summarize alerting defaults.",
     );
     await page.getByTestId("send-button").click();
 
@@ -90,36 +91,39 @@ test.describe("ADR-053 Phase 4c — approval resumes the run (awaiting_approval�
     ).toBeGreaterThanOrEqual(1);
 
     // -----------------------------------------------------------------
-    // Step 4 — the gated loop is the recovery coordinator (rule-spawned, so NOT in
-    // the dispatch's /teams-dispatch/loops list). Its bare loop_id — what the approval
-    // endpoint keys on — is the bare id of the approval_pending marker's OBJECT (the
-    // gated loop entity the approvalpause subscriber recorded). The dispatch still
-    // knows the pending CallID for it because it consumed agent.approval_pending
-    // (SetPendingApproval handles the unknown-loop case).
+    // Step 4 — the gated loop is the recovery coordinator. Its bare loop_id and
+    // execution_id are encoded as a JSON [loopId, executionId] tuple in the
+    // agent.run.approval-pending triple's OBJECT (recorded by approvalpause).
     // -----------------------------------------------------------------
-    // [0] is unambiguous ONLY because this journey fires exactly one gate → exactly
-    // one approval_pending marker. A multi-gate journey would need to disambiguate
-    // (/graph/triples has no ordering guarantee).
-    const gatedLoopEntity = String(pendingBefore[0].object ?? "");
-    const gatedLoopId = bareIdAfter(gatedLoopEntity, LOOP_INFIX);
+    const rawPendingTuple = String(pendingBefore[0].object ?? "null");
+    const parsedTuple = JSON.parse(rawPendingTuple) as unknown;
     expect(
-      gatedLoopId,
-      `could not extract the gated loop id from the approval_pending object ${gatedLoopEntity}`,
-    ).toBeTruthy();
+      Array.isArray(parsedTuple) &&
+        parsedTuple.length === 2 &&
+        typeof parsedTuple[0] === "string" &&
+        typeof parsedTuple[1] === "string",
+      `could not parse [loopId, executionId] tuple from approval-pending object ${rawPendingTuple}`,
+    ).toBe(true);
+    const [gatedLoopId, pendingExecutionId] = parsedTuple as [string, string];
 
     // -----------------------------------------------------------------
     // Step 5 — POST the operator's APPROVAL through the real dispatch endpoint.
     // This publishes agent.approval_response.<loopId>; the loop un-parks (re-dispatches
     // create_rule with ApprovedBy → ApprovalFilter bypass) and the approvalpause
-    // subscriber stamps the run-phase resume marker. The dispatch consumes
-    // agent.approval_pending ASYNC, so retry on 409 ("loop not awaiting approval")
-    // until it has registered the pending CallID. A persistent 409 means the dispatch
-    // never consumed agent.approval_pending (the stream-coverage wiring is broken).
+    // subscriber records the approval-answered receipt and updates approval-outstanding=0.
+    // The dispatch consumes agent.approval_pending ASYNC, so retry on 409 ("loop not
+    // awaiting approval") until it has registered the pending execution_id.
     // -----------------------------------------------------------------
     const approvalStatus = await pollUntil(async () => {
       const resp = await request.post(
         `/teams-dispatch/loops/${gatedLoopId}/approval`,
-        { data: { decision: "approve", user_id: "e2e-operator" } },
+        {
+          data: {
+            decision: "approve",
+            execution_id: pendingExecutionId,
+            user_id: "e2e-operator",
+          },
+        },
       );
       if (resp.ok()) return resp.status();
       if (resp.status() === 409) return null; // dispatch not ready yet — retry
@@ -133,18 +137,22 @@ test.describe("ADR-053 Phase 4c — approval resumes the run (awaiting_approval�
     ).toBeTruthy();
 
     // -----------------------------------------------------------------
-    // Step 6 — DECISIVE: the run RESUMES. agent-run/13 clears approval_pending as
-    // part of the awaiting_approval→executing transition, so polling until pending is
-    // GONE on the run entity is the durable proof rule 13 ran. A never-resumed run
-    // keeps pending set forever; a bounce re-sets it.
+    // Step 6 — DECISIVE: the run RESUMES. approvalpause appends the answered
+    // tuple to agent.run.approval-answered and updates agent.run.approval-outstanding
+    // to 0, driving agent-run/13's awaiting_approval→executing transition.
     // -----------------------------------------------------------------
     const resumed = await pollUntil(async () => {
-      const pending = await runEntityTriples(request, "agent.run.approval-pending");
-      return pending.length === 0 ? true : null;
+      const [outstanding, phases] = await Promise.all([
+        runEntityTriples(request, "agent.run.approval-outstanding"),
+        runEntityTriples(request, "agent.run.phase"),
+      ]);
+      const outstandingZero = outstanding.some((t) => Number(t.object) === 0);
+      const isExecuting = phases.some((t) => String(t.object) === "executing");
+      return outstandingZero && isExecuting ? true : null;
     }, { timeoutMs: 60_000 });
     expect(
       resumed,
-      "agent.run.approval-pending was never cleared after the approval — the resume (approvalpause → agent-run/13) did not fire. Run still parked. Current phases: " +
+      "run never resumed to executing with approval-outstanding=0 after approval (approvalpause → agent-run/13). Current phases: " +
         JSON.stringify((await runEntityTriples(request, "agent.run.phase")).map((t) => t.object)),
     ).toBeTruthy();
 
@@ -161,19 +169,20 @@ test.describe("ADR-053 Phase 4c — approval resumes the run (awaiting_approval�
     ).toContain("executing");
     expect(
       afterPhases,
-      "run must NOT still be awaiting_approval after pending cleared (resume incomplete). Got: " +
+      "run must NOT still be awaiting_approval after approval-outstanding reached 0 (resume incomplete). Got: " +
         JSON.stringify(afterPhases),
     ).not.toContain("awaiting_approval");
 
     // -----------------------------------------------------------------
-    // Step 8 — rule 13 also cleared approval_resumed (removed last). Required so a
-    // FUTURE tool-gate on this run can pause again (rule 12's guard).
+    // Step 8 — append-only approval receipt: agent.run.approval-answered records
+    // the matching [loopId, executionId] tuple and agent.run.approval-pending
+    // remains preserved as audit history.
     // -----------------------------------------------------------------
-    const resumedMarker = await runEntityTriples(request, "agent.run.approval-resumed");
+    const answeredMarkers = await runEntityTriples(request, "agent.run.approval-answered");
     expect(
-      resumedMarker.length,
-      "agent.run.approval-resumed must be CLEARED after resume (agent-run/13 removes it last). Still present → a second tool-gate could never pause.",
-    ).toBe(0);
+      answeredMarkers.map((t) => String(t.object)),
+      "agent.run.approval-answered must record the answered [loopId, executionId] tuple",
+    ).toContain(rawPendingTuple);
 
     // -----------------------------------------------------------------
     // Step 9 — NO bounce: settle, then confirm the run is STILL executing and has
@@ -194,18 +203,17 @@ test.describe("ADR-053 Phase 4c — approval resumes the run (awaiting_approval�
     const pendingSettled = await runEntityTriples(request, "agent.run.approval-pending");
     expect(
       pendingSettled.length,
-      "agent.run.approval-pending re-appeared after resume — pause↔resume bounce.",
-    ).toBe(0);
+      "agent.run.approval-pending count changed after resume — unexpected re-gate.",
+    ).toBe(1);
+    const outstandingSettled = await runEntityTriples(request, "agent.run.approval-outstanding");
+    expect(
+      outstandingSettled.map((t) => Number(t.object)),
+      "agent.run.approval-outstanding must remain 0 after the settle window.",
+    ).toContain(0);
   });
 });
 
-/** Extract the bare id after a fixed entity-ID infix (e.g. ".agent.agentic-loop.execution."). */
-function bareIdAfter(entityId: string, infix: string): string {
-  const idx = entityId.indexOf(infix);
-  return idx === -1 ? "" : entityId.slice(idx + infix.length);
-}
-
-/** Triples for `predicate` that live on a run entity (the chain.execution entity). */
+/** Triples for `predicate` that live on a run entity (the chain.agent.execution entity). */
 async function runEntityTriples(
   request: import("@playwright/test").APIRequestContext,
   predicate: string,

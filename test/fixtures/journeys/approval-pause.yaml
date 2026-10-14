@@ -6,24 +6,27 @@ description: |
   on mock-LLM against configs/e2e-flow-bootstrap.json. This is the run-phase
   reflection of the existing loop-level approval gate (ADR-030).
 
-  Why the dev-via-test scaffold (mirrors the ask-user-pause 4b-2 journey): we need
+  Why the research scaffold (re-pointed from parked dev-via-test per #306): we need
   an IN-RUN loop — one carrying agent.run.entity-id — to call the gated tool. A
   front-door coordinator answering plain chat mints no run, so its gated tool call
   would be a benign no-op (the same run-anchor guard as front-door ask_user). So:
 
-    1. Loop 0 front-door coordinator → decide(dev_via_test) → rule 01 run_scope=new
-       spawns first-pass Lisa + the handoff marker → run becomes `executing`.
-    2. Loop A first-pass Lisa → decide(needs_clarification) → rule 02f spawns the
-       recovery coordinator that INHERITS the run anchor (agent.run.entity-id).
+    1. Loop 0 front-door coordinator → decide(research) → rule research/01
+       (01-coordinator-research-spawn.json, run_scope=new) spawns
+       researcher-research-plan + the handoff marker → run becomes `executing`.
+    2. Loop A researcher-research-plan → decide(needs_clarification) → rule
+       research/06 (06-needs-clarification-replan.json) spawns the recovery
+       coordinator that INHERITS the run anchor (agent.run.entity-id).
     3. Loop R recovery coordinator → tool_call(create_rule). create_rule is in
        e2e-flow-bootstrap.json's agentic-tools.approval_required, so the upstream
        ApprovalFilter rejects it with the approval_required: prefix and the loop
        transitions to LoopStateAwaitingApproval, emitting
        agent.approval_pending.<loopID>.
     4. The product-shell approvalpause subscriber reads loop R's run anchor
-       (agent.run.entity-id) and stamps agent.run.approval-pending on the run entity.
-    5. agent-run/12 (approval_pending + phase==executing) transitions the run
-       executing→awaiting_approval.
+       (agent.run.entity-id) and stamps agent.run.approval-pending +
+       agent.run.approval-outstanding=1 on the run entity.
+    5. agent-run/12 (approval-outstanding > 0 + phase==executing) transitions the
+       run executing→awaiting_approval.
 
   The run is honestly PAUSED on a human approval. PR-1 has no resume yet — the run
   parks in awaiting_approval (strictly more honest than executing-forever-on-gated-
@@ -37,25 +40,24 @@ description: |
   This is an EXECUTING-phase pause, NOT a terminal — the run reaches
   awaiting_approval and does NOT complete or fail (the gated tool never executed; no
   reviewer approved). Mock serves responses in GLOBAL ORDER. No sandbox requested
-  (the chain pauses before any plan/Ralph). Paired spec:
+  (the chain pauses before any gather/synthesize). Paired spec:
   ui/e2e/agentic/approval-pause.spec.ts. Config: configs/e2e-flow-bootstrap.json
   (incl. approval_required:[create_rule], agent-run/12, and the agent.approval_pending
   output port on teams-loop).
 
 responses:
-  # ---------- Loop 0: front-door coordinator → dev_via_test ----------
+  # ---------- Loop 0: front-door coordinator → research ----------
   - tool_call:
       name: decide
       arguments_json: |
         {
-          "action": "dev_via_test",
-          "reason": "Add a Go HTTP service that decodes MAVLink v2 HEARTBEAT frames over UDP and serves the latest at GET /heartbeat as JSON. (4c pause journey: first-pass Lisa escalates needs_clarification, then the recovery coordinator calls a gated tool to exercise executing→awaiting_approval via the approval_required tool-gate.)"
+          "action": "research",
+          "reason": "Research MAVLink v2 HEARTBEAT frame staleness thresholds over UDP and summarize alerting defaults. (4c pause journey: researcher-research-plan escalates needs_clarification, then the recovery coordinator calls a gated tool to exercise executing→awaiting_approval via the approval_required tool-gate.)"
         }
 
-  # ---------- Loop A: first-pass Lisa → needs_clarification ----------
-  # rule 01 allowlist = [planned, needs_clarification]; Lisa escalates on turn 1.
-  # rule 02f (first-pass, lineage length_eq 0) spawns the INHERIT recovery
-  # coordinator (carries agent.run.entity-id).
+  # ---------- Loop A: researcher-research-plan → needs_clarification ----------
+  # research/01 allowlist = [gather, emit, needs_clarification]; planner escalates on turn 1.
+  # research/06 spawns the INHERIT recovery coordinator (carries agent.run.entity-id).
   - tool_call:
       name: decide
       arguments_json: |
