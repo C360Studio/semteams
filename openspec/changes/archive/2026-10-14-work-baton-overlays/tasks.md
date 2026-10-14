@@ -30,5 +30,5 @@
 ## 4. Review and archive
 
 - [x] 4.1 Run `svelte-reviewer` on the UI and server-route changes and resolve any findings.
-- [ ] 4.2 Archive `work-baton-overlays` (`openspec archive work-baton-overlays` and spec sync) as the landing PR's
+- [x] 4.2 Archive `work-baton-overlays` (`openspec archive work-baton-overlays` and spec sync) as the landing PR's
       final content commit.
