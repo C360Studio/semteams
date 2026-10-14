@@ -331,9 +331,8 @@ async function readProjectBoard(
       continue;
     }
     if (
-      isObject(content.repository) &&
-      typeof content.repository.nameWithOwner === "string" &&
-      content.repository.nameWithOwner.trim() &&
+      !isObject(content.repository) ||
+      typeof content.repository.nameWithOwner !== "string" ||
       content.repository.nameWithOwner.trim().toLowerCase() !== targetRepo
     ) {
       continue;

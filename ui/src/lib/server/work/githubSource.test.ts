@@ -527,6 +527,91 @@ describe("createGithubSource", () => {
     expect(listed.items[0]).not.toHaveProperty("priority");
   });
 
+  it("supports user-owned ProjectV2 boards and reports partial when project items are truncated", async () => {
+    const userBoardRepo: Repository = {
+      owner: "coby",
+      name: "semteams",
+      project_board: {
+        owner: "coby",
+        number: 2,
+        status_field: "Status",
+      },
+    };
+
+    stubBackend((url) => {
+      if (url.pathname === "/graphql") {
+        return jsonResponse({
+          data: {
+            organization: null,
+            user: {
+              projectV2: {
+                fields: {
+                  nodes: [
+                    {
+                      __typename: "ProjectV2SingleSelectField",
+                      name: "Status",
+                      options: [{ name: "Todo" }, { name: "Done" }],
+                    },
+                  ],
+                },
+                items: {
+                  pageInfo: { hasNextPage: true },
+                  nodes: [
+                    {
+                      content: {
+                        __typename: "Issue",
+                        number: 10,
+                        repository: { nameWithOwner: "coby/semteams" },
+                      },
+                      fieldValues: {
+                        nodes: [
+                          {
+                            __typename: "ProjectV2ItemFieldSingleSelectValue",
+                            name: "Done",
+                            field: { name: "Status" },
+                          },
+                          {
+                            __typename: "ProjectV2ItemFieldSingleSelectValue",
+                            name: "P0",
+                            field: { name: "Priority" },
+                          },
+                        ],
+                      },
+                    },
+                  ],
+                },
+              },
+            },
+          },
+        });
+      }
+      if (url.pathname === "/repos/coby/semteams/issues") {
+        return jsonResponse([
+          { number: 10, title: "User board item", state: "open", labels: [], assignees: [] },
+        ]);
+      }
+      if (url.pathname === "/repos/coby/semteams/pulls") {
+        return jsonResponse([]);
+      }
+      return jsonResponse({ message: "not found" }, 404);
+    });
+
+    const source = createGithubSource({ apiUrl: "http://github.test" });
+    const listed = await source.listItems(userBoardRepo);
+    expect(listed.lookup).toBe("partial");
+    expect(listed.reason).toContain(
+      `POST /graphql (ProjectV2 coby#2) items truncated at ${GITHUB_PAGE_LIMIT} items`,
+    );
+    expect(listed.columns).toEqual(["Todo", "Done"]);
+    expect(listed.items[0]).toMatchObject({
+      number: 10,
+      column: "Done",
+      pm_status: "Done",
+    });
+    // priority_field is not configured on userBoardRepo.project_board, so priority stays unset.
+    expect(listed.items[0]).not.toHaveProperty("priority");
+  });
+
   it("validates configs/portfolio-c360.json against validatePortfolio", async () => {
     const raw = JSON.parse(
       await readFile(resolve(process.cwd(), "../configs/portfolio-c360.json"), "utf8"),
