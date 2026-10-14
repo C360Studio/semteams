@@ -37,7 +37,7 @@ import { test, expect } from "@playwright/test";
  *   agent-run/12+13, the agent.approval_pending + agent.approval_response ports)
  */
 
-const RUN_INFIX = "chain.agent.execution.";
+const RUN_INFIX = ".chain.agent.execution.";
 
 test.describe("ADR-053 Phase 4c — approval resumes the run (awaiting_approval→executing)", () => {
   test.beforeAll(async ({ request }) => {
