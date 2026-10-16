@@ -78,9 +78,15 @@ type FixtureResponse struct {
 	Completion *FixtureCompletion `yaml:"completion,omitempty"`
 }
 
-// FixtureToolCall is a deterministic tool call. Name and ArgumentsJSON are
-// the only fields the mock server passes through to the OpenAI response.
+// FixtureToolCall is a deterministic tool call. Name, ArgumentsJSON, and
+// optional ID are passed through to the OpenAI response.
 type FixtureToolCall struct {
+	// ID optionally pins a deterministic OpenAI tool_call.id (e.g.
+	// "call_gather_web_1") so downstream turns in the same fixture can cite
+	// the tool call via tool_result_ref. When empty, the mock server
+	// generates a random "call_<uuid8>" ID.
+	ID string `yaml:"id,omitempty"`
+
 	// Name is the tool name (e.g. "create_rule", "query_entity").
 	Name string `yaml:"name"`
 

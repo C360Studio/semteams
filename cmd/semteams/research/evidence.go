@@ -120,6 +120,29 @@ func (r EvidenceRecord) ValidateToolResult() error {
 	return nil
 }
 
+// ValidateArtifactCitation validates an EvidenceRecord cited on an Artifact
+// claim (Actor or IntegrationPoint). In addition to Validate(), it requires a
+// non-empty verbatim Quote, a non-empty ToolResultRef, and a positive Revision
+// not exceeding maxRevision (when maxRevision >= 1).
+func (r EvidenceRecord) ValidateArtifactCitation(maxRevision int) error {
+	if err := r.Validate(); err != nil {
+		return err
+	}
+	if strings.TrimSpace(r.Quote) == "" {
+		return fmt.Errorf("evidence.quote required on artifact citations")
+	}
+	if strings.TrimSpace(r.ToolResultRef) == "" {
+		return fmt.Errorf("evidence.tool_result_ref required on artifact citations")
+	}
+	if r.Revision < 1 {
+		return fmt.Errorf("evidence.revision must be >= 1, got %d", r.Revision)
+	}
+	if maxRevision >= 1 && r.Revision > maxRevision {
+		return fmt.Errorf("evidence.revision (%d) cannot exceed artifact revision (%d)", r.Revision, maxRevision)
+	}
+	return nil
+}
+
 // NormalizeOriginID derives the canonical origin identity for a locator under
 // the given channel (#271, #273):
 //   - github: normalizes "github://<Owner>/<Repo>/<resource...>" or

@@ -11,7 +11,7 @@ Every `Actor` and `IntegrationPoint` in `research.Artifact` and the `emit_resear
 - **GIVEN** an artifact whose actors and integration points cite valid `github`, `web`, and `semsource` evidence records with canonical `origin_id`, non-empty `quote`, non-empty `tool_result_ref`, and `revision <= artifact.Revision`
 - **WHEN** `research.Artifact.Validate()` executes
 - **THEN** validation SHALL succeed
-- **AND** `research.Render` SHALL include the citation provenance in the rendered markdown
+- **AND** `emit_research_artifact` markdown rendering SHALL include the citation provenance in the rendered markdown
 
 #### Scenario: Missing evidence or non-canonical origin_id is rejected
 

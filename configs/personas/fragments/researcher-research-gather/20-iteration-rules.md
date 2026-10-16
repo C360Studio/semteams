@@ -19,18 +19,23 @@ A healthy first-pass gather typically runs:
    rule text. Slice with `head` / `sed` / `grep` / `jq` to stay
    under the 100KB bash output cap. See
    `researcher-research-gather/00-identity.md` for examples.
-4. Interleaved `scratchpad` writes to accumulate evidence.
-5. Terminal `decide(action="synthesize", reason=...)`.
+4. Interleaved `scratchpad` writes to accumulate evidence,
+   preserving each source's `tool_result_ref` (tool call ID),
+   `channel`, `locator`, canonical `origin_id`, `source_class`,
+   `retrieved_at`, and verbatim `quote`.
+5. Terminal `decide(action="synthesize", reason=...)` carrying
+   those exact `tool_result_ref` IDs, locators, and verbatim
+   quotes so SYNTHESIZE can pass the mechanical derivation gate.
 
 Total: 2–5 `web_search` calls + however many `bash` curls the
 plan demands is normal for a substantive first pass. **A gather
 loop that terminates after 0 `web_search` calls is a failure
 mode** — it means the LLM skipped grounding and SYNTHESIZE will
-fabricate from the plan alone. **Likewise, a gather that punts
-`needs_clarification` because "I'd need to read SEC filings /
-docs / earnings releases" without trying `bash` + `curl` on the
-URLs the search returned is also a failure mode** — `bash` is
-specifically there for that case. Reach for it.
+fail mechanical derivation on `emit_research_artifact`. **Likewise,
+a gather that punts `needs_clarification` because "I'd need to
+read SEC filings / docs / earnings releases" without trying
+`bash` + `curl` on the URLs the search returned is also a failure
+mode** — `bash` is specifically there for that case. Reach for it.
 
 Only terminate `needs_clarification` when `web_search` AND
 `bash` together cannot ground the actors (queries return nothing,

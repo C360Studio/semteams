@@ -86,6 +86,26 @@ func TestEmitResearchArtifactToolDefinitionShape(t *testing.T) {
 			t.Errorf("required-fields set missing %q (have %v)", must, required)
 		}
 	}
+
+	for _, arrayField := range []string{"actors", "integration_points"} {
+		fieldSchema, _ := props[arrayField].(map[string]any)
+		itemSchema, _ := fieldSchema["items"].(map[string]any)
+		itemProps, _ := itemSchema["properties"].(map[string]any)
+		if _, ok := itemProps["evidence"]; !ok {
+			t.Errorf("%s item schema missing 'evidence' property", arrayField)
+		}
+		itemReq, _ := itemSchema["required"].([]string)
+		hasEvidenceReq := false
+		for _, r := range itemReq {
+			if r == "evidence" {
+				hasEvidenceReq = true
+				break
+			}
+		}
+		if !hasEvidenceReq {
+			t.Errorf("%s item schema 'required' missing 'evidence' (have %v)", arrayField, itemReq)
+		}
+	}
 }
 
 // TestEmitResearchArtifactExecutorImplementsToolExecutor compile-time

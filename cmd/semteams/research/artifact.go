@@ -56,20 +56,24 @@ const (
 
 // Actor enumerates one external system / framework / library the
 // research target touches. The reviewer-as-enumerator gate verifies
-// every required actor appears with non-empty role text.
+// every required actor appears with non-empty role text, and #271
+// requires at least one EvidenceRecord citation per actor.
 type Actor struct {
-	Name string `json:"name"`
-	Role string `json:"role"`
+	Name     string           `json:"name"`
+	Role     string           `json:"role"`
+	Evidence []EvidenceRecord `json:"evidence"`
 }
 
 // IntegrationPoint enumerates one actor-to-actor data flow with
 // direction. The reviewer's enumerator gate verifies every required
-// pair appears with a defined direction.
+// pair appears with a defined direction, and #271 requires at least
+// one EvidenceRecord citation per integration point.
 type IntegrationPoint struct {
-	From      string `json:"from"`
-	To        string `json:"to"`
-	Data      string `json:"data"`
-	Direction string `json:"direction"` // DirectionRead or DirectionWrite
+	From      string           `json:"from"`
+	To        string           `json:"to"`
+	Data      string           `json:"data"`
+	Direction string           `json:"direction"` // DirectionRead or DirectionWrite
+	Evidence  []EvidenceRecord `json:"evidence"`
 }
 
 // Mutation records one substrate-modifying action a research run
@@ -146,15 +150,15 @@ func (a *Artifact) Schema() message.Type {
 }
 
 // Validate implements message.Payload. Validates structural
-// well-formedness AND lifecycle-position markers (the test_harness
-// either/or per smoke #8 run-9). Semantic content checks (actor
-// name correctness, gap-text concreteness, task granularity)
-// remain reviewer-side per the reviewer-as-enumerator pattern;
-// an in-flight artifact may legitimately have empty actors or
-// empty directions while the run is still iterating, but it must
-// take a position on test_harness because downstream tooling
-// (architect) cannot route a missing-stance artifact and the
-// chain has no recovery rule for that wedge.
+// well-formedness, claim-level EvidenceRecord citations (#271), AND
+// lifecycle-position markers (the test_harness either/or per smoke #8
+// run-9). Semantic content checks (actor name correctness, gap-text
+// concreteness, task granularity) remain reviewer-side per the
+// reviewer-as-enumerator pattern; an in-flight artifact may
+// legitimately have empty actors or empty directions while the run is
+// still iterating, but every emitted Actor and IntegrationPoint must
+// carry at least one valid EvidenceRecord citation and the artifact
+// must take a position on test_harness.
 func (a *Artifact) Validate() error {
 	if a.LoopID == "" {
 		return fmt.Errorf("loop_id required")
@@ -164,6 +168,22 @@ func (a *Artifact) Validate() error {
 	}
 	if a.ProducedAt.IsZero() {
 		return fmt.Errorf("produced_at required")
+	}
+	for i, actor := range a.Actors {
+		if strings.TrimSpace(actor.Name) == "" {
+			return fmt.Errorf("actors[%d].name required", i)
+		}
+		if strings.TrimSpace(actor.Role) == "" {
+			return fmt.Errorf("actors[%d].role required", i)
+		}
+		if len(actor.Evidence) == 0 {
+			return fmt.Errorf("actors[%d].evidence required (must contain at least one EvidenceRecord)", i)
+		}
+		for j, ev := range actor.Evidence {
+			if err := ev.ValidateArtifactCitation(a.Revision); err != nil {
+				return fmt.Errorf("actors[%d].evidence[%d]: %w", i, j, err)
+			}
+		}
 	}
 	for i, m := range a.SubstrateMutations {
 		if m.Tool == "" {
@@ -185,11 +205,25 @@ func (a *Artifact) Validate() error {
 		}
 	}
 	for i, ip := range a.IntegrationPoints {
+		if strings.TrimSpace(ip.From) == "" {
+			return fmt.Errorf("integration_points[%d].from required", i)
+		}
+		if strings.TrimSpace(ip.To) == "" {
+			return fmt.Errorf("integration_points[%d].to required", i)
+		}
 		switch ip.Direction {
 		case DirectionRead, DirectionWrite, "":
 			// Empty allowed during in-flight construction; reviewer enforces presence.
 		default:
 			return fmt.Errorf("integration_points[%d].direction must be one of read/write (got %q)", i, ip.Direction)
+		}
+		if len(ip.Evidence) == 0 {
+			return fmt.Errorf("integration_points[%d].evidence required (must contain at least one EvidenceRecord)", i)
+		}
+		for j, ev := range ip.Evidence {
+			if err := ev.ValidateArtifactCitation(a.Revision); err != nil {
+				return fmt.Errorf("integration_points[%d].evidence[%d]: %w", i, j, err)
+			}
 		}
 	}
 	// Test-harness either/or — enforced structurally per smoke #8 run-9

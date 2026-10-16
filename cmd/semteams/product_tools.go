@@ -883,10 +883,12 @@ func registerEmitArtifact(reg *agentictools.ExecutorRegistry, natsClient *natscl
 		return nil
 	}
 	triplePublisher := agentictools.NewNATSTriplePublisher(natsClient)
+	entityReader := chain.NewNATSEntityReader(natsClient, chain.DefaultGraphQueryEntitySubject)
 	// outputDir empty → reads SEMTEAMS_RESEARCH_ARTIFACT_DIR or falls back
 	// to the package default ("docs/research"). ADR-038 PR C Phase C1
 	// markdown render target.
 	executor := emitartifact.NewExecutor(triplePublisher, natsClient, platform, logger, "")
+	executor.SetToolResultResolver(emitartifact.NewNATSToolResultResolver(natsClient, entityReader, platform))
 	if err := reg.RegisterTool(emitartifact.ToolName, executor); err != nil {
 		return fmt.Errorf("register %s: %w", emitartifact.ToolName, err)
 	}
@@ -942,6 +944,7 @@ func registerEmitPlan(reg *agentictools.ExecutorRegistry, natsClient *natsclient
 // attestation-aware write path (#194).
 var (
 	_ chainbash.Inner                                 = (*executors.BashExecutor)(nil)
+	_ emitartifact.ToolResultResolver                 = (*emitartifact.NATSToolResultResolver)(nil)
 	_ emitautoresearchartifact.ChainAttestationReader = (*chainAttestationReader)(nil)
 	_ emitautoresearchartifact.SandboxFileWriter      = (*sandboxArtifactWriter)(nil)
 	_ renderopenspec.EntityReader                     = (*chain.NATSEntityReader)(nil)

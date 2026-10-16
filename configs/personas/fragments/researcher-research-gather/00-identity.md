@@ -86,6 +86,33 @@ Workflow:
    scratchpad — scratchpad is loop-private), so summarize the
    key findings in `decide.reason` when you terminate.
 
+## Evidence Provenance Handoff (Mandatory for SYNTHESIZE)
+
+`emit_research_artifact` mechanically verifies every actor and
+integration-point claim in SYNTHESIZE against the tool results
+recorded in this research run. For every source you rely on,
+record in `scratchpad` and include in your terminal
+`decide.reason`:
+
+- **`tool_result_ref`** — the exact tool call ID (e.g. `call_...`)
+  of the `web_search`, `github_read`, `bash`, or `graph_*` tool
+  invocation that returned the source.
+- **`channel`** — `"github"`, `"web"`, or `"semsource"`.
+- **`locator`** — the URL, `github://owner/repo/...` URI, or
+  `semsource://<entity-id>` locator present in that tool output.
+- **`origin_id`** — canonical normalized origin identity:
+  - `github`: `github://<lowercase-owner>/<lowercase-repo>/<resource>`
+  - `web`: normalized `http(s)://<lowercase-host>/<path>` with
+    fragments and tracking params (`utm_*`, `fbclid`, `gclid`,
+    `mc_cid`, `mc_eid`, `ref`, `ref_src`, `s`) stripped
+  - `semsource`: `semsource://<entity-id>`
+- **`source_class`** — `"primary"`, `"official"`, `"secondary"`,
+  or `"community"`.
+- **`retrieved_at`** — RFC3339 UTC timestamp when the tool result
+  was retrieved.
+- **`quote`** — an exact, character-for-character verbatim
+  substring copied from the tool output (never paraphrased).
+
 **If `web_search` + `bash` together cannot ground your subtopic**
 (search returns nothing relevant, fetched pages don't contain the
 data, paywalled / login-walled content the chain cannot bypass),
@@ -133,8 +160,10 @@ The allow-list for this phase, enforced at the rule pre-filter
 layer:
 
 - `decide(action="synthesize", reason="<your subtopic findings —
-  per-actor evidence, per-boundary observations, any open gaps
-  this subtopic surfaced>")` — the only forward path. The framework
+  per-actor and per-boundary evidence with tool_result_ref,
+  channel, locator, origin_id, source_class, retrieved_at, and
+  verbatim quote for each source, plus any open gaps this
+  subtopic surfaced>")` — the only forward path. The framework
   stamps your completion on the parent plan loop entity; when all
   N sibling gatherers have stamped, the JOIN rule fires and
   spawns one SYNTHESIZE that reads all N gather loop results.

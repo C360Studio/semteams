@@ -528,3 +528,40 @@ func makeRequest(t *testing.T, url string, req ChatCompletionRequest) ChatComple
 
 	return result
 }
+
+func TestOpenAIServer_FixtureToolCallDeterministicID(t *testing.T) {
+	fx, err := ParseFixture([]byte(`
+name: deterministic-id
+responses:
+  - tool_call:
+      id: call_gather_web_1
+      name: web_search
+      arguments_json: '{"query":"nats"}'
+  - tool_call:
+      name: decide
+      arguments_json: '{"action":"synthesize"}'
+`))
+	if err != nil {
+		t.Fatalf("ParseFixture: %v", err)
+	}
+	server := NewOpenAIServer().WithFixture(fx)
+	if err := server.Start(":0"); err != nil {
+		t.Fatalf("failed to start server: %v", err)
+	}
+	defer server.Stop()
+
+	req := ChatCompletionRequest{
+		Model:    "test-model",
+		Messages: []ChatMessage{{Role: "user", Content: "search"}},
+	}
+
+	resp1 := makeRequest(t, server.URL()+"/v1/chat/completions", req)
+	if got := resp1.Choices[0].Message.ToolCalls[0].ID; got != "call_gather_web_1" {
+		t.Errorf("first tool_call ID = %q, want %q", got, "call_gather_web_1")
+	}
+
+	resp2 := makeRequest(t, server.URL()+"/v1/chat/completions", req)
+	if got := resp2.Choices[0].Message.ToolCalls[0].ID; !strings.HasPrefix(got, "call_") || got == "call_gather_web_1" {
+		t.Errorf("second tool_call ID = %q, want auto-generated call_* distinct from call_gather_web_1", got)
+	}
+}

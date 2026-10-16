@@ -8,7 +8,7 @@
 
 - Extend `research.Actor` and `research.IntegrationPoint` in `cmd/semteams/research/artifact.go` with required `evidence []research.EvidenceRecord` (`channel`, `locator`, `origin_id`, `source_class`, `retrieved_at`, `quote`, `tool_result_ref`, `revision`), keeping `tasks` as `[]string` and preserving `open_gaps` for missing or unavailable evidence.
 - Validate citation structure on `research.Artifact.Validate()` via `EvidenceRecord.ValidateArtifactCitation()`, enforcing canonical `origin_id` (`NormalizeOriginID(channel, locator)`), non-empty verbatim `quote` and `tool_result_ref`, and `1 <= revision <= artifact.Revision`.
-- Render evidence provenance on actors and integration points in `cmd/semteams/research/render.go`.
+- Render evidence provenance on actors and integration points in `cmd/semteams/tools/emitartifact/executor.go` (`researchTemplateText`).
 - Implement the zero-LLM mechanical derivation verifier in `cmd/semteams/tools/emitartifact/` (`ToolResultResolver` + NATS KV/ObjectStore-backed resolver wired in `cmd/semteams/product_tools.go`):
   - verify every cited `tool_result_ref` resolves to a completed tool result whose producing loop shares the calling synthesizer loop's `agent.run.entity-id` (rejecting unknown or cross-run `tool_result_ref`s while permitting revision 2+ to retain revision-1 citations from the same run);
   - verify the cited `locator` or canonical `origin_id` appears in the referenced tool result content or dispatch arguments;

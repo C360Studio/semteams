@@ -645,7 +645,10 @@ func (s *OpenAIServer) buildFixtureResponse(reqNum int, model, sysPrompt string)
 	}
 
 	if entry.ToolCall != nil {
-		callID := "call_" + uuid.New().String()[:8]
+		callID := entry.ToolCall.ID
+		if callID == "" {
+			callID = "call_" + uuid.New().String()[:8]
+		}
 		base.Choices = []Choice{{
 			Index: 0,
 			Message: ChatMessage{

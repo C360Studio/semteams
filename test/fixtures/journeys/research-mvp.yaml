@@ -95,15 +95,22 @@ responses_by_role:
               "reason": "Plan emitted. One gather probe covers the comparison's load-bearing axes (latency + footprint on constrained ARM); SYNTHESIZE will compose the answer the wake-up coordinator delivers to the user."
             }
 
-  # ---------- researcher-research-gather (×1 from for_each) → decide synthesize ----------
+  # ---------- researcher-research-gather (×1 from for_each) → web_search → decide synthesize ----------
   - match: "You do NOT emit a research"
     responses:
+      - tool_call:
+          id: call_gather_web_1
+          name: web_search
+          arguments_json: |
+            {
+              "query": "MQTT vs NATS latency and memory footprint on constrained ARM IoT edge devices"
+            }
       - tool_call:
           name: decide
           arguments_json: |
             {
               "action": "synthesize",
-              "reason": "Subtopic: MQTT vs NATS — latency + memory footprint on constrained ARM (Raspberry Pi class) edge devices\n\nEvidence gathered: MQTT (Mosquitto) runs under 2MB resident on Raspberry Pi-class hardware; QoS 0 publishes complete in well under a millisecond. NATS server binary ~10MB, runtime ~30MB resident, but offers subject-hierarchy pub/sub PLUS request-reply in one broker; JetStream adds persistence. Forwarding to SYNTHESIZE to compose the comparison — actors (MQTT brokers, NATS servers, ARM hardware class) and integration points (broker → edge sensor)."
+              "reason": "Subtopic: MQTT vs NATS — latency + memory footprint on constrained ARM (Raspberry Pi class) edge devices\n\nEvidence gathered (tool_result_ref=call_gather_web_1): [1] https://docs.nats.io/compare ('NATS vs MQTT, Kafka, and other messaging systems for IoT and edge.'), [2] https://mqtt.org/specification ('MQTT v5.0 protocol specification for lightweight pub/sub messaging.'), [3] https://example.com/edge-messaging ('Comparison of messaging protocols for constrained IoT environments.'). Forwarding to SYNTHESIZE to compose the comparison."
             }
 
   # ---------- researcher-research-synthesize (emit_research_artifact → decide emit) ----------
@@ -116,13 +123,92 @@ responses_by_role:
               "revision": 1,
               "title": "MQTT vs NATS for IoT edge",
               "actors": [
-                {"name": "MQTT broker", "role": "TCP-based pub/sub broker with three QoS levels (0/1/2); reference implementation Mosquitto runs in <2MB resident on constrained ARM"},
-                {"name": "NATS server", "role": "Subject-hierarchy pub/sub plus request-reply; JetStream variant adds persistence; binary ~10MB on ARM, runtime memory ~30MB"},
-                {"name": "Constrained ARM device", "role": "Raspberry Pi-class hardware (1GHz CPU, 256MB-1GB RAM) hosting the edge agent"}
+                {
+                  "name": "MQTT broker",
+                  "role": "TCP-based pub/sub broker with three QoS levels (0/1/2); reference implementation Mosquitto runs in <2MB resident on constrained ARM",
+                  "evidence": [
+                    {
+                      "channel": "web",
+                      "locator": "https://mqtt.org/specification",
+                      "origin_id": "https://mqtt.org/specification",
+                      "retrieved_at": "2026-10-16T12:00:00Z",
+                      "source_class": "official",
+                      "quote": "MQTT v5.0 protocol specification for lightweight pub/sub messaging.",
+                      "tool_result_ref": "call_gather_web_1",
+                      "revision": 1
+                    }
+                  ]
+                },
+                {
+                  "name": "NATS server",
+                  "role": "Subject-hierarchy pub/sub plus request-reply; JetStream variant adds persistence; binary ~10MB on ARM, runtime memory ~30MB",
+                  "evidence": [
+                    {
+                      "channel": "web",
+                      "locator": "https://docs.nats.io/compare",
+                      "origin_id": "https://docs.nats.io/compare",
+                      "retrieved_at": "2026-10-16T12:00:00Z",
+                      "source_class": "official",
+                      "quote": "NATS vs MQTT, Kafka, and other messaging systems for IoT and edge.",
+                      "tool_result_ref": "call_gather_web_1",
+                      "revision": 1
+                    }
+                  ]
+                },
+                {
+                  "name": "Constrained ARM device",
+                  "role": "Raspberry Pi-class hardware (1GHz CPU, 256MB-1GB RAM) hosting the edge agent",
+                  "evidence": [
+                    {
+                      "channel": "web",
+                      "locator": "https://example.com/edge-messaging",
+                      "origin_id": "https://example.com/edge-messaging",
+                      "retrieved_at": "2026-10-16T12:00:00Z",
+                      "source_class": "secondary",
+                      "quote": "Comparison of messaging protocols for constrained IoT environments.",
+                      "tool_result_ref": "call_gather_web_1",
+                      "revision": 1
+                    }
+                  ]
+                }
               ],
               "integration_points": [
-                {"from": "MQTT broker", "to": "Constrained ARM device", "data": "QoS-tagged pub/sub messages over TCP", "direction": "read"},
-                {"from": "NATS server", "to": "Constrained ARM device", "data": "subject-hierarchy pub/sub + request-reply over TCP", "direction": "read"}
+                {
+                  "from": "MQTT broker",
+                  "to": "Constrained ARM device",
+                  "data": "QoS-tagged pub/sub messages over TCP",
+                  "direction": "read",
+                  "evidence": [
+                    {
+                      "channel": "web",
+                      "locator": "https://mqtt.org/specification",
+                      "origin_id": "https://mqtt.org/specification",
+                      "retrieved_at": "2026-10-16T12:00:00Z",
+                      "source_class": "official",
+                      "quote": "lightweight pub/sub messaging",
+                      "tool_result_ref": "call_gather_web_1",
+                      "revision": 1
+                    }
+                  ]
+                },
+                {
+                  "from": "NATS server",
+                  "to": "Constrained ARM device",
+                  "data": "subject-hierarchy pub/sub + request-reply over TCP",
+                  "direction": "read",
+                  "evidence": [
+                    {
+                      "channel": "web",
+                      "locator": "https://docs.nats.io/compare",
+                      "origin_id": "https://docs.nats.io/compare",
+                      "retrieved_at": "2026-10-16T12:00:00Z",
+                      "source_class": "official",
+                      "quote": "NATS vs MQTT, Kafka, and other messaging systems for IoT and edge.",
+                      "tool_result_ref": "call_gather_web_1",
+                      "revision": 1
+                    }
+                  ]
+                }
               ],
               "tasks": [
                 "Choose MQTT for sub-millisecond latency budgets on minimal-footprint hardware where pub/sub alone is sufficient",

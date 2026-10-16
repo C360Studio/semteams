@@ -66,13 +66,20 @@ func TestJourneyFixtureEmitArgs_Validate(t *testing.T) {
 // arguments unrelated to emit_*) are intentionally not deserialised
 // — keeping the type narrow means a fixture-format change unrelated
 // to emit_* args can't break this test.
+type journeyTurn struct {
+	ToolCall *struct {
+		ID            string `yaml:"id,omitempty"`
+		Name          string `yaml:"name"`
+		ArgumentsJSON string `yaml:"arguments_json"`
+	} `yaml:"tool_call,omitempty"`
+}
+
 type journeyFixture struct {
-	Responses []struct {
-		ToolCall *struct {
-			Name          string `yaml:"name"`
-			ArgumentsJSON string `yaml:"arguments_json"`
-		} `yaml:"tool_call,omitempty"`
-	} `yaml:"responses"`
+	Responses       []journeyTurn `yaml:"responses"`
+	ResponsesByRole []struct {
+		Match     string        `yaml:"match"`
+		Responses []journeyTurn `yaml:"responses"`
+	} `yaml:"responses_by_role"`
 }
 
 func validateJourneyFixture(t *testing.T, path string) {
@@ -88,15 +95,28 @@ func validateJourneyFixture(t *testing.T, path string) {
 		t.Fatalf("parse YAML %s: %v", path, err)
 	}
 
+	var allTurns []journeyTurn
+	allTurns = append(allTurns, fx.Responses...)
+	for _, bucket := range fx.ResponsesByRole {
+		allTurns = append(allTurns, bucket.Responses...)
+	}
+
+	declaredCallIDs := make(map[string]bool)
+	for _, resp := range allTurns {
+		if resp.ToolCall != nil && resp.ToolCall.ID != "" {
+			declaredCallIDs[resp.ToolCall.ID] = true
+		}
+	}
+
 	emitTurnsSeen := 0
-	for i, resp := range fx.Responses {
+	for i, resp := range allTurns {
 		if resp.ToolCall == nil {
 			continue
 		}
 		switch resp.ToolCall.Name {
 		case "emit_research_artifact":
 			emitTurnsSeen++
-			validateResearchArtifactArgs(t, path, i, resp.ToolCall.ArgumentsJSON)
+			validateResearchArtifactArgs(t, path, i, resp.ToolCall.ArgumentsJSON, declaredCallIDs)
 		case "emit_plan":
 			emitTurnsSeen++
 			validatePlanArgs(t, path, i, resp.ToolCall.ArgumentsJSON)
@@ -111,7 +131,7 @@ func validateJourneyFixture(t *testing.T, path string) {
 // cmd/semteams/tools/emitartifact/executor.go) uses at runtime. Server-
 // supplied loop_id and produced_at are injected so Validate() doesn't
 // reject for legitimate-at-runtime reasons.
-func validateResearchArtifactArgs(t *testing.T, path string, idx int, raw string) {
+func validateResearchArtifactArgs(t *testing.T, path string, idx int, raw string, declaredCallIDs map[string]bool) {
 	t.Helper()
 
 	var args map[string]any
@@ -135,6 +155,23 @@ func validateResearchArtifactArgs(t *testing.T, path string, idx int, raw string
 	}
 	if err := artifact.Validate(); err != nil {
 		t.Errorf("%s [response %d emit_research_artifact]: Validate(): %v", path, idx, err)
+		return
+	}
+	for ai, actor := range artifact.Actors {
+		for ei, ev := range actor.Evidence {
+			if !declaredCallIDs[ev.ToolResultRef] {
+				t.Errorf("%s [response %d emit_research_artifact]: actors[%d].evidence[%d] cites tool_result_ref %q which is not declared on any tool_call.id in the fixture",
+					path, idx, ai, ei, ev.ToolResultRef)
+			}
+		}
+	}
+	for ii, ip := range artifact.IntegrationPoints {
+		for ei, ev := range ip.Evidence {
+			if !declaredCallIDs[ev.ToolResultRef] {
+				t.Errorf("%s [response %d emit_research_artifact]: integration_points[%d].evidence[%d] cites tool_result_ref %q which is not declared on any tool_call.id in the fixture",
+					path, idx, ii, ei, ev.ToolResultRef)
+			}
+		}
 	}
 }
 

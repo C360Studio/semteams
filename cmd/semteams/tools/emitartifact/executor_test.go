@@ -111,15 +111,30 @@ func defaultCall(args map[string]any) agentic.ToolCall {
 	}
 }
 
+func defaultEvidenceArgs() []any {
+	return []any{
+		map[string]any{
+			"channel":         "web",
+			"locator":         "https://docs.nats.io/compare",
+			"origin_id":       "https://docs.nats.io/compare",
+			"retrieved_at":    "2026-10-16T12:00:00Z",
+			"source_class":    "official",
+			"quote":           "NATS vs MQTT, Kafka, and other messaging systems for IoT and edge.",
+			"tool_result_ref": "call_gather_web_1",
+			"revision":        1,
+		},
+	}
+}
+
 func defaultArtifactArgs() map[string]any {
 	return map[string]any{
 		"revision": 1,
 		"actors": []any{
-			map[string]any{"name": "OSH driver framework", "role": "host of the IDriver interface"},
-			map[string]any{"name": "OGC CS endpoints", "role": "exposes observation data"},
+			map[string]any{"name": "OSH driver framework", "role": "host of the IDriver interface", "evidence": defaultEvidenceArgs()},
+			map[string]any{"name": "OGC CS endpoints", "role": "exposes observation data", "evidence": defaultEvidenceArgs()},
 		},
 		"integration_points": []any{
-			map[string]any{"from": "OSH driver", "to": "OGC CS endpoints", "data": "observation messages", "direction": "write"},
+			map[string]any{"from": "OSH driver", "to": "OGC CS endpoints", "data": "observation messages", "direction": "write", "evidence": defaultEvidenceArgs()},
 		},
 		"tasks": []any{
 			"implement OSH IDriver backed by Meshtastic events",
@@ -242,7 +257,7 @@ func TestExecute_BadIntegrationPointDirection_FailsValidation(t *testing.T) {
 	exec, _, _, _ := newExecutor(t)
 	args := defaultArtifactArgs()
 	args["integration_points"] = []any{
-		map[string]any{"from": "A", "to": "B", "data": "x", "direction": "sideways"},
+		map[string]any{"from": "A", "to": "B", "data": "x", "direction": "sideways", "evidence": defaultEvidenceArgs()},
 	}
 	res, _ := exec.Execute(context.Background(), defaultCall(args))
 	if res.ErrorKind != agentic.ToolErrorInvalidArgs {

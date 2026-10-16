@@ -27,7 +27,19 @@ contract — no nesting under a wrapping object. Pass:
   stable across revisions — re-emitting with the same title
   overwrites the file at the deterministic slug.
 - `actors`, `integration_points`, `tasks` — the enumerated
-  content; transcribed from your scratchpad evidence.
+  content; transcribed from GATHER's evidence.
+  - Every `actors[i]` and `integration_points[i]` entry MUST
+    include a non-empty `evidence` array. The executor
+    mechanically verifies each `EvidenceRecord` against the
+    run's recorded tool outcomes (`tool_result_ref` must resolve
+    to a real tool call in this run, `locator`/`origin_id` must
+    match that tool call, and `quote` must be a verbatim
+    substring of the tool output).
+  - **Multi-revision provenance (`revision >= 2`):** preserve the
+    original `revision` number (e.g. `revision: 1`) and
+    `tool_result_ref` on unchanged claims carried forward from
+    an earlier pass, and stamp `revision: <current_revision>` on
+    new or updated claims backed by the latest gather pass.
 - `addressed_gaps`, `open_gaps` — gaps the reviewer named (now
   addressed) and gaps the corpus genuinely doesn't support.
 - `test_harness` — see 40-harness-catalog for the path-selection

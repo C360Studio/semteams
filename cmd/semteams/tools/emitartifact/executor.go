@@ -135,6 +135,7 @@ type PayloadPublisher interface {
 type Executor struct {
 	publisher   agentictools.TriplePublisher
 	natsPublish PayloadPublisher
+	resolver    ToolResultResolver
 	platform    types.PlatformMeta
 	logger      *slog.Logger
 	outputDir   string
@@ -165,19 +166,42 @@ func NewExecutor(publisher agentictools.TriplePublisher, natsPublish PayloadPubl
 	}
 }
 
+// SetToolResultResolver wires the mechanical derivation check resolver onto
+// the executor. When non-nil, Execute verifies every cited EvidenceRecord's
+// tool_result_ref, locator/origin_id, and verbatim quote against prior tool
+// results from the same research run before rendering or publishing.
+func (e *Executor) SetToolResultResolver(r ToolResultResolver) {
+	e.resolver = r
+}
+
 // ListTools returns the LLM-facing schema. The args mirror the Artifact
 // JSON shape directly (no wrapping object) so the LLM can think in
 // terms of the artifact's structure rather than nesting under a single
 // field. loop_id and produced_at are derived server-side — the LLM
 // neither sees nor sets them.
 func (e *Executor) ListTools() []agentic.ToolDefinition {
+	evidenceSchema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"channel":         map[string]any{"type": "string", "enum": []string{"github", "web", "semsource"}, "description": "Source channel that produced the evidence."},
+			"locator":         map[string]any{"type": "string", "description": "Human-readable URL, path, or entity reference for the source."},
+			"origin_id":       map[string]any{"type": "string", "description": "Canonical scheme-prefixed identity (github://owner/repo/... or https://host/path or semsource://<6-part-entity-id>)."},
+			"retrieved_at":    map[string]any{"type": "string", "description": "RFC3339 timestamp when the source was retrieved."},
+			"source_class":    map[string]any{"type": "string", "enum": []string{"primary", "official", "secondary", "community"}, "description": "Provenance authority class."},
+			"quote":           map[string]any{"type": "string", "description": "Verbatim substring from the tool output backing this claim."},
+			"tool_result_ref": map[string]any{"type": "string", "description": "Tool call ID or execution ID of the tool invocation in this research run that returned the cited source."},
+			"revision":        map[string]any{"type": "integer", "minimum": 1, "description": "Artifact revision in which this evidence was gathered (1 <= revision <= artifact.revision)."},
+		},
+		"required": []string{"channel", "locator", "origin_id", "retrieved_at", "source_class", "quote", "tool_result_ref", "revision"},
+	}
 	actorSchema := map[string]any{
 		"type": "object",
 		"properties": map[string]any{
-			"name": map[string]any{"type": "string", "description": "Actor name (e.g. \"OSH driver framework\")."},
-			"role": map[string]any{"type": "string", "description": "One-line role description for this actor."},
+			"name":     map[string]any{"type": "string", "description": "Actor name (e.g. \"OSH driver framework\")."},
+			"role":     map[string]any{"type": "string", "description": "One-line role description for this actor."},
+			"evidence": map[string]any{"type": "array", "items": evidenceSchema, "description": "Non-empty list of cited EvidenceRecords backing this actor claim."},
 		},
-		"required": []string{"name", "role"},
+		"required": []string{"name", "role", "evidence"},
 	}
 	integrationPointSchema := map[string]any{
 		"type": "object",
@@ -186,8 +210,9 @@ func (e *Executor) ListTools() []agentic.ToolDefinition {
 			"to":        map[string]any{"type": "string", "description": "Destination actor name."},
 			"data":      map[string]any{"type": "string", "description": "What data flows across this point."},
 			"direction": map[string]any{"type": "string", "enum": []string{"read", "write"}, "description": "Direction of the data flow."},
+			"evidence":  map[string]any{"type": "array", "items": evidenceSchema, "description": "Non-empty list of cited EvidenceRecords backing this integration point claim."},
 		},
-		"required": []string{"from", "to"},
+		"required": []string{"from", "to", "evidence"},
 	}
 	mutationSchema := map[string]any{
 		"type": "object",
@@ -210,8 +235,8 @@ func (e *Executor) ListTools() []agentic.ToolDefinition {
 			"type": "object",
 			"properties": map[string]any{
 				"revision":            map[string]any{"type": "integer", "minimum": 1, "description": "This pass's revision number, starting at 1 and monotonic."},
-				"actors":              map[string]any{"type": "array", "items": actorSchema, "description": "External systems/frameworks/libraries the work touches, each with a one-line role."},
-				"integration_points":  map[string]any{"type": "array", "items": integrationPointSchema, "description": "Actor-to-actor data flows with direction."},
+				"actors":              map[string]any{"type": "array", "items": actorSchema, "description": "External systems/frameworks/libraries the work touches, each with a one-line role and cited evidence."},
+				"integration_points":  map[string]any{"type": "array", "items": integrationPointSchema, "description": "Actor-to-actor data flows with direction and cited evidence."},
 				"tasks":               map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Decomposable-grain tasks derived from the research."},
 				"addressed_gaps":      map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Reviewer-flagged gaps this pass closed."},
 				"open_gaps":           map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Reviewer-flagged gaps still outstanding after this pass. Every artifact must declare a verification stance: include either a 'needs_test_harness: <one-line description of the integration target>' entry (real integration target without a registered harness) or a 'needs_test_harness: not applicable — <reason>' entry (pure-information / non-software work). The marker is `needs_test_harness:` lowercase exactly (case-sensitive) so downstream tooling can reliably grep it."},
@@ -225,7 +250,9 @@ func (e *Executor) ListTools() []agentic.ToolDefinition {
 }
 
 // Execute parses the args into a research.Artifact, validates it,
-// publishes the marker triples, and publishes the typed payload.
+// verifies mechanical derivation of every cited EvidenceRecord against
+// prior tool outputs in the same research run, publishes the marker
+// triples, and publishes the typed payload.
 // LLM-facing argument errors land on Result.Error with nil error so
 // the framework retry loop can surface them; transport failures
 // (publisher.AddTriple, natsPublish.Publish) land on Result.Error
@@ -264,6 +291,15 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 			CallID:    call.ID,
 			Name:      call.Name,
 			Error:     fmt.Sprintf("artifact validation failed: %v", err),
+			ErrorKind: agentic.ToolErrorInvalidArgs,
+		}, nil
+	}
+
+	if err := VerifyDerivation(ctx, e.resolver, call, artifact); err != nil {
+		return agentic.ToolResult{
+			CallID:    call.ID,
+			Name:      call.Name,
+			Error:     fmt.Sprintf("artifact derivation check failed: %v", err),
 			ErrorKind: agentic.ToolErrorInvalidArgs,
 		}, nil
 	}
@@ -517,13 +553,15 @@ const researchTemplateText = `# {{ if .Title }}{{ .Title }}{{ else }}Research Ar
 {{ end }}
 ## Actors
 {{ if .Actors }}{{ range $i, $a := .Actors }}
-- **{{ $a.Name }}** — {{ $a.Role }}{{ end }}
+- **{{ $a.Name }}** — {{ $a.Role }}{{ range $j, $ev := $a.Evidence }}
+  - [{{ $ev.Channel }}/{{ $ev.SourceClass }} · rev {{ $ev.Revision }}] ` + "`{{ $ev.OriginID }}`" + ` ({{ $ev.Locator }}) — "{{ $ev.Quote }}"{{ end }}{{ end }}
 {{ else }}
 _(none)_
 {{ end }}
 ## Integration points
 {{ if .IntegrationPoints }}{{ range $i, $ip := .IntegrationPoints }}
-- {{ $ip.From }} → {{ $ip.To }}{{ if $ip.Direction }} ({{ $ip.Direction }}){{ end }}{{ if $ip.Data }}: {{ $ip.Data }}{{ end }}{{ end }}
+- {{ $ip.From }} → {{ $ip.To }}{{ if $ip.Direction }} ({{ $ip.Direction }}){{ end }}{{ if $ip.Data }}: {{ $ip.Data }}{{ end }}{{ range $j, $ev := $ip.Evidence }}
+  - [{{ $ev.Channel }}/{{ $ev.SourceClass }} · rev {{ $ev.Revision }}] ` + "`{{ $ev.OriginID }}`" + ` ({{ $ev.Locator }}) — "{{ $ev.Quote }}"{{ end }}{{ end }}
 {{ else }}
 _(none)_
 {{ end }}

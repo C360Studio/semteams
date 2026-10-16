@@ -110,4 +110,37 @@ func TestEvidenceRecordValidate(t *testing.T) {
 	if err := missingBody.ValidateToolResult(); err == nil || !strings.Contains(err.Error(), "raw_body required") {
 		t.Errorf("missing RawBody should fail ValidateToolResult, got: %v", err)
 	}
+
+	citation := research.EvidenceRecord{
+		Channel:       research.ChannelWeb,
+		Locator:       "https://docs.nats.io/compare",
+		OriginID:      "https://docs.nats.io/compare",
+		SourceClass:   research.SourceClassOfficial,
+		RetrievedAt:   now,
+		Quote:         "NATS vs MQTT, Kafka, and other messaging systems",
+		ToolResultRef: "call_gather_1",
+		Revision:      1,
+	}
+	if err := citation.ValidateArtifactCitation(1); err != nil {
+		t.Fatalf("valid citation failed ValidateArtifactCitation: %v", err)
+	}
+
+	missingQuote := citation
+	missingQuote.Quote = ""
+	missingQuote.RawBody = "NATS vs MQTT"
+	if err := missingQuote.ValidateArtifactCitation(1); err == nil || !strings.Contains(err.Error(), "evidence.quote required") {
+		t.Errorf("missing Quote should fail ValidateArtifactCitation, got: %v", err)
+	}
+
+	missingRef := citation
+	missingRef.ToolResultRef = ""
+	if err := missingRef.ValidateArtifactCitation(1); err == nil || !strings.Contains(err.Error(), "evidence.tool_result_ref required") {
+		t.Errorf("missing ToolResultRef should fail ValidateArtifactCitation, got: %v", err)
+	}
+
+	futureRev := citation
+	futureRev.Revision = 2
+	if err := futureRev.ValidateArtifactCitation(1); err == nil || !strings.Contains(err.Error(), "cannot exceed artifact revision") {
+		t.Errorf("revision > maxRevision should fail ValidateArtifactCitation, got: %v", err)
+	}
 }
