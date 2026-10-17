@@ -27,11 +27,13 @@
      sub-question or facet is either covered by an in-scope
      item OR explicitly excluded with a one-line rationale.
    - **Epics** — decomposition at the granularity a single
-     gather pass can cover. Each epic spawns **one parallel
-     investigator** (ADR-046 fan-out); the investigators run
+     gather pass can cover (**1 to 4 epics**; enforced by the
+     `emit_plan` and `decide` tool schemas). Each epic spawns **one
+     parallel investigator** (ADR-046 fan-out); the investigators run
      concurrently and SYNTHESIZE joins their findings. Grain
      accordingly: each epic should be coverable by one focused
-     investigator with web_search + bash. Avoid coarse epics
+     investigator with web_search + bash, and the total decomposition
+     must stay within 1..4 items. Avoid coarse epics
      ("learn about X"); aim for concrete framings like
      "characterize X's interface to Y, including the message
      shapes and error semantics" or "compare A's Q3 2025
@@ -61,7 +63,7 @@
                   retries.>")
    ```
 
-   `subtopics` is the same list you passed to `emit_plan` as
+   `subtopics` is the same 1..4-item list you passed to `emit_plan` as
    `epics`, verbatim. The framework stamps it as the
    `coordinator.decision.subtopics` triple; the GATHER rule
    iterates the list via `for_each` and spawns one investigator

@@ -41,9 +41,10 @@ Pass:
 - `scope_out` — array of strings. Each excluded item carries a
   one-line rationale (per the boundary-coverage discipline in
   your plan rules).
-- `epics` — array of strings. Per-actor or per-boundary
-  decomposition; each epic grounds against something the context
-  names. At least one — a plan with no epics is a goal statement.
+- `epics` — array of strings (**1 to 4 items**, enforced by schema).
+  Per-actor or per-boundary decomposition; each epic grounds against
+  something the context names. At least one (a plan with no epics is
+  a goal statement) and at most four (fan-out containment ceiling).
 
 Do NOT pass `depends_on`. You are the first phase of the research
 arc — there is no upstream research artifact to depend on, so the
@@ -60,12 +61,12 @@ it), `slug` (server-derived from your title + date), and
 2. Call `emit_plan` with the structured fields above. This produces
    a rendered markdown view + marker triples on your loop entity +
    a typed payload for audit and forward-compat consumers.
-3. Then call `decide(action="gather", subtopics=<the same epics
+3. Then call `decide(action="gather", subtopics=<the same 1..4 epics
    array, verbatim>, reason="<your full plan content — goal,
    context, scope, epics — communicating substance for the next
    phase to consume. Optionally lead with 'plan emitted: <slug>
    rev <N>.' so the audit cite is preserved.>")`. The `subtopics`
-   arg MUST be the same list of strings you passed to `emit_plan`
+   arg MUST be the same 1..4-item list of strings you passed to `emit_plan`
    as `epics`. The framework stamps `coordinator.decision.subtopics`
    from this and the GATHER rule fans out one investigator per
    item via `for_each`. Mismatch between emit_plan epics and

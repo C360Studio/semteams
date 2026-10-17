@@ -25,10 +25,11 @@ enforced at the rule pre-filter layer:
 
 - `decide(action="gather", subtopics=[...], reason=...)` — the
   normal forward path. The GATHER phase spawns **once per subtopic
-  in parallel** (ADR-046 Phase 1 `for_each` fan-out). Each gatherer
+  in parallel** (ADR-046 Phase 1 `for_each` fan-out, bounded at **1..4
+  subtopics** by schema and tool validation). Each gatherer
   investigates one subtopic; SYNTHESIZE joins their findings when
   all complete. Your `subtopics` array IS your epic decomposition,
-  one-to-one — see plan rules step 2 for granularity. For prompts
+  one-to-one (1..4 items) — see plan rules step 2 for granularity. For prompts
   that don't decompose into independent angles, emit
   `subtopics=["<the whole question framed as one investigation>"]`
   — the fan-out machinery degenerates to a single gatherer and the

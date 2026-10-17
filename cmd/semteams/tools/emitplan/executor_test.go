@@ -142,6 +142,16 @@ func TestListTools_SchemaShape(t *testing.T) {
 			t.Errorf("required field missing: %q (have %v)", k, required)
 		}
 	}
+	epicsProp, ok := props["epics"].(map[string]any)
+	if !ok {
+		t.Fatalf("epics property missing or wrong type: %#v", props["epics"])
+	}
+	if epicsProp["minItems"] != 1 {
+		t.Errorf("epics.minItems = %v, want 1", epicsProp["minItems"])
+	}
+	if epicsProp["maxItems"] != 4 {
+		t.Errorf("epics.maxItems = %v, want 4", epicsProp["maxItems"])
+	}
 }
 
 func TestExecute_WrongToolName(t *testing.T) {
@@ -180,6 +190,34 @@ func TestExecute_NoEpics_FailsValidation(t *testing.T) {
 	}
 	if !strings.Contains(res.Error, "epics") {
 		t.Errorf("Result.Error = %q, want contains 'epics'", res.Error)
+	}
+}
+
+func TestExecute_TooManyEpics_FailsValidation(t *testing.T) {
+	for _, count := range []int{5, 15} {
+		exec, tp, pub, _ := newExecutor(t)
+		args := defaultPlanArgs()
+		epics := make([]any, count)
+		for i := range epics {
+			epics[i] = "epic item"
+		}
+		args["epics"] = epics
+		res, err := exec.Execute(context.Background(), defaultCall(args))
+		if err != nil {
+			t.Fatalf("Execute(%d epics) err = %v, want nil", count, err)
+		}
+		if res.ErrorKind != agentic.ToolErrorInvalidArgs {
+			t.Errorf("Execute(%d epics) ErrorKind = %v, want %v", count, res.ErrorKind, agentic.ToolErrorInvalidArgs)
+		}
+		if !strings.Contains(res.Error, "epics count") {
+			t.Errorf("Execute(%d epics) Error = %q, want contains 'epics count'", count, res.Error)
+		}
+		if len(tp.snapshot()) != 0 {
+			t.Errorf("Execute(%d epics) published %d triples, want 0", count, len(tp.snapshot()))
+		}
+		if _, _, calls := pub.snapshot(); calls != 0 {
+			t.Errorf("Execute(%d epics) published payload %d times, want 0", count, calls)
+		}
 	}
 }
 

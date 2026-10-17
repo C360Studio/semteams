@@ -9,10 +9,13 @@ package devviaspec
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/payloadregistry"
+
+	"github.com/c360studio/semteams/cmd/semteams/research"
 )
 
 // Payload type metadata (domain.category.version → "dev_via_spec.plan.v1").
@@ -80,8 +83,8 @@ type Plan struct {
 
 	// Epics is interface-level decomposition. Each epic grounds
 	// against an actor or integration boundary the context names.
-	// Required (≥1) — a plan with no epics is not a plan, it's a
-	// goal statement.
+	// Required (1..4) — a plan with no epics is not a plan, it's a
+	// goal statement, and fan-out is bounded at 4 subtopics (#272).
 	Epics []string `json:"epics"`
 
 	// DependsOn pins cross-arc references the plan grounds against.
@@ -103,8 +106,8 @@ func (p *Plan) Schema() message.Type {
 }
 
 // Validate implements message.Payload. Structural well-formedness
-// only — content-quality checks (epic granularity, scope coverage)
-// live in the reviewer-spec persona, not here.
+// and fan-out ceiling (1..4 epics per ADR-060 §7 / #272) — content-quality
+// checks (epic granularity, scope coverage) live in the reviewer persona.
 func (p *Plan) Validate() error {
 	if p.LoopID == "" {
 		return fmt.Errorf("loop_id required")
@@ -118,8 +121,16 @@ func (p *Plan) Validate() error {
 	if p.Context == "" {
 		return fmt.Errorf("context required")
 	}
-	if len(p.Epics) == 0 {
-		return fmt.Errorf("epics required (>= 1) — a plan with no epics is a goal statement, not a plan")
+	if len(p.Epics) < research.MinSubtopics {
+		return fmt.Errorf("epics required (>= %d) — a plan with no epics is a goal statement, not a plan", research.MinSubtopics)
+	}
+	if len(p.Epics) > research.MaxSubtopics {
+		return fmt.Errorf("epics count %d exceeds maximum fan-out ceiling of %d", len(p.Epics), research.MaxSubtopics)
+	}
+	for i, epic := range p.Epics {
+		if strings.TrimSpace(epic) == "" {
+			return fmt.Errorf("epics[%d] must be a non-empty string", i)
+		}
 	}
 	if p.ProducedAt.IsZero() {
 		return fmt.Errorf("produced_at required")

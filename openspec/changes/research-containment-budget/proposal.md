@@ -14,10 +14,10 @@
   - Define canonical research planner fan-out bounds (`MinSubtopics = 1`, `MaxSubtopics = 4`) in `cmd/semteams/research`.
   - Advertise `minItems: 1` and `maxItems: 4` on `emit_plan`'s `epics` array schema and enforce `1 <= len(Epics) <= 4` in `devviaspec.Plan.Validate()`.
   - Register a product-shell `decide` wrapper (`cmd/semteams/tools/researchdecide`) via `SkipBuiltins: ["bash", "decide"]` that advertises `minItems: 1, maxItems: 4` on the optional `subtopics` array property and enforces pre-mutation validation before delegating to the framework `agentictools.DecideExecutor`:
-    - When `call.Metadata["agent.role"] == "researcher-research-plan"` and the resolved action is `"gather"`, require `subtopics` to be a string slice with `1 <= len(subtopics) <= 4`.
-    - When `subtopics` is populated on any `decide` call, require `1 <= len(subtopics) <= 4`.
+    - When the resolved canonical action is `"gather"`, require `subtopics` to be a non-blank string slice with `1 <= len(subtopics) <= 4`.
+    - When `subtopics` is populated on any `decide` call, require `1 <= len(subtopics) <= 4` non-blank strings.
     - Reject violations with `agentic.ToolErrorInvalidArgs` and `StopLoop = false` prior to graph mutation so zero decision triples are written, zero gatherers are spawned, and the planner can self-correct within its existing loop iteration budget.
-  - Add defense-in-depth `coordinator.decision.subtopics` `length_gt: 0` and `length_lte: 4` conditions on `configs/rules/research/02-plan-to-gather.json` and update `configs/personas/fragments/researcher-research-plan/` prose to point at the schema-enforced `1..4` subtopic bound.
+  - Add a defense-in-depth `coordinator.decision.subtopics` 1..4 element JSON string-array `regex` condition on `configs/rules/research/02-plan-to-gather.json` (since `decide` stores `coordinator.decision.subtopics` as a single JSON-encoded `[]string` triple) and update `configs/personas/fragments/researcher-research-plan/` prose to point at the schema-enforced `1..4` subtopic bound.
 - **Cron cooldown, inflight guard, and Pattern-B kill-switch qualification:**
   - Add contract coverage asserting any `cron` rule in live rule packs declares a valid positive `cooldown` and `loop_max_iterations` on any `publish_agent` action.
   - Add integration tests over isolated NATS 2.14.4 proving:

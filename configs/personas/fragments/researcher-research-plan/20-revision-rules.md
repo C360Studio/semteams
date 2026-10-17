@@ -49,12 +49,14 @@ Process on a recovery pass:
 3. Re-call `emit_plan` per the emit_plan contract (bumped
    revision; same stable title so the rendered file overwrites
    at the deterministic slug). Then re-emit
-   `decide(action="gather", subtopics=<revised epics list,
+   `decide(action="gather", subtopics=<revised 1..4 epics list,
    verbatim>, reason="<revised plan>")` — the GATHER phase that
    follows fans out one investigator per subtopic against the
    revised scope, and the next reviewer pass evaluates from the
    structured artifact. Revisions may add, remove, or rephrase
-   subtopics; each pass spawns the new count. The emit tool is
+   subtopics within the 1..4 fan-out ceiling (consolidate related
+   sub-questions if splitting an epic would exceed 4); each pass
+   spawns the new count. The emit tool is
    additive audit; substance lives in `decide.reason` regardless
    of revision.
 
