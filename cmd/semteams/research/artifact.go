@@ -149,6 +149,46 @@ func (a *Artifact) Schema() message.Type {
 	return message.Type{Domain: Domain, Category: CategoryArtifact, Version: SchemaVersion}
 }
 
+// PopulateCitationDefaults fills server-derivable EvidenceRecord fields on every
+// Actor and IntegrationPoint citation before Validate() runs (#271 m1):
+//   - OriginID: derived from (Channel, Locator) via NormalizeOriginID when
+//     omitted, or canonicalized when a caller-supplied OriginID normalizes to
+//     the same canonical origin as Locator (preventing LLM query-order or
+//     tracking-param formatting drift while still rejecting mismatched origins).
+//   - RetrievedAt: defaults to ProducedAt when omitted (and VerifyDerivation
+//     overwrites it with the trajectory's ObservedAt when available).
+//   - Revision: defaults to a.Revision when 0.
+func (a *Artifact) PopulateCitationDefaults() {
+	if a == nil {
+		return
+	}
+	fill := func(ev *EvidenceRecord) {
+		if canonical, err := NormalizeOriginID(ev.Channel, ev.Locator); err == nil {
+			if strings.TrimSpace(ev.OriginID) == "" {
+				ev.OriginID = canonical
+			} else if normSupplied, err2 := NormalizeOriginID(ev.Channel, ev.OriginID); err2 == nil && normSupplied == canonical {
+				ev.OriginID = canonical
+			}
+		}
+		if ev.RetrievedAt.IsZero() && !a.ProducedAt.IsZero() {
+			ev.RetrievedAt = a.ProducedAt.UTC()
+		}
+		if ev.Revision == 0 && a.Revision >= 1 {
+			ev.Revision = a.Revision
+		}
+	}
+	for i := range a.Actors {
+		for j := range a.Actors[i].Evidence {
+			fill(&a.Actors[i].Evidence[j])
+		}
+	}
+	for i := range a.IntegrationPoints {
+		for j := range a.IntegrationPoints[i].Evidence {
+			fill(&a.IntegrationPoints[i].Evidence[j])
+		}
+	}
+}
+
 // Validate implements message.Payload. Validates structural
 // well-formedness, claim-level EvidenceRecord citations (#271), AND
 // lifecycle-position markers (the test_harness either/or per smoke #8

@@ -35,11 +35,15 @@ contract — no nesting under a wrapping object. Pass:
     to a real tool call in this run, `locator`/`origin_id` must
     match that tool call, and `quote` must be a verbatim
     substring of the tool output).
-  - **Multi-revision provenance (`revision >= 2`):** preserve the
-    original `revision` number (e.g. `revision: 1`) and
-    `tool_result_ref` on unchanged claims carried forward from
-    an earlier pass, and stamp `revision: <current_revision>` on
-    new or updated claims backed by the latest gather pass.
+  - **Multi-revision provenance (`revision >= 2`):** read
+    `prior_synthesize_loop_id` (when provided in your task
+    properties) to preserve the original `revision` number (e.g.
+    `revision: 1`) and `tool_result_ref` on unchanged claims
+    carried forward from an earlier pass, and stamp
+    `revision: <current_revision>` on new or updated claims
+    backed by the latest gather pass. The executor verifies each
+    citation's `revision` against the producing gather loop's
+    plan revision.
 - `addressed_gaps`, `open_gaps` — gaps the reviewer named (now
   addressed) and gaps the corpus genuinely doesn't support.
 - `test_harness` — see 40-harness-catalog for the path-selection
@@ -53,8 +57,9 @@ contract — no nesting under a wrapping object. Pass:
   always empty.
 
 The tool fills in `loop_id` (from the framework — you can't fake
-it) and `produced_at` (server wallclock) automatically. Don't
-pass them.
+it) and `produced_at` (server wallclock) automatically, and
+derives/stamps `origin_id`, `retrieved_at`, and `kind` on each
+`EvidenceRecord` when omitted.
 
 ## Order of operations within a pass
 

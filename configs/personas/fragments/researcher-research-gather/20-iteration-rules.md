@@ -21,8 +21,8 @@ A healthy first-pass gather typically runs:
    `researcher-research-gather/00-identity.md` for examples.
 4. Interleaved `scratchpad` writes to accumulate evidence,
    preserving each source's `tool_result_ref` (tool call ID),
-   `channel`, `locator`, canonical `origin_id`, `source_class`,
-   `retrieved_at`, and verbatim `quote`.
+   `channel`, `locator`, `source_class`, and verbatim `quote`
+   (>= 12 characters).
 5. Terminal `decide(action="synthesize", reason=...)` carrying
    those exact `tool_result_ref` IDs, locators, and verbatim
    quotes so SYNTHESIZE can pass the mechanical derivation gate.

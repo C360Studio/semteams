@@ -47,9 +47,12 @@ You detect this by reading the plan loop:
 
 When the upstream is a revision:
 
-1. Compose the aggregate afresh from the (revised) gather
-   evidence + the revised plan's subtopics. The rejected prior
-   aggregate is NOT a starting point.
+1. If `prior_synthesize_loop_id` is non-empty in your task
+   properties, call `read_loop_result` on it so you can carry
+   forward valid prior-revision citations (`tool_result_ref` and
+   original `revision`, e.g. `revision: 1`) for unchanged claims
+   while adding `revision: <current_revision>` citations for new
+   or updated claims from the latest gather pass.
 2. Transcribe the prior reviewer's gap list into
    `addressed_gaps` on your artifact, with one bullet per
    reviewer concern naming how the revised subtopics + new

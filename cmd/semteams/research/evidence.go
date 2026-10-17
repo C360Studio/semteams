@@ -28,17 +28,34 @@ const (
 	SourceClassCommunity SourceClass = "community"
 )
 
-// trackingQueryParams lists query parameters stripped when normalizing web URLs
-// to canonical origin identities (#271). Semantic query parameters (e.g. id,
-// page, version, tag) are preserved so distinct resources never collapse.
+// Canonical EvidenceRecord.Kind values for web, semsource, and github citations.
+// github_read sets Kind to the resource kind ("issue", "pull_request",
+// "release", "commit", "workflow_run"); web_search stamps EvidenceKindSnippet
+// ("snippet") so search-engine result snippets are never conflated with
+// retrieved document bodies ("body").
+const (
+	EvidenceKindSnippet = "snippet"
+	EvidenceKindBody    = "body"
+	EvidenceKindEntity  = "entity"
+)
+
+// MinQuoteLength is the minimum rune length (after whitespace normalization)
+// required for an EvidenceRecord.Quote cited on an Artifact claim. Prevents
+// trivial 1-character quotes ("a", "the", "=") that trivially match any tool
+// output (#271 M1).
+const MinQuoteLength = 12
+
+// trackingQueryParams lists query parameters stripped when normalizing URLs
+// to canonical origin identities (#271). Only unambiguous ad/analytics tracking
+// parameters are stripped (plus any "utm_*" prefix). Parameters that can select
+// distinct resources or versions — such as "ref" (GitHub git ref), "s" (search
+// query), "id", "page", "version", or "tag" — are preserved so distinct
+// resources never collapse onto the same origin_id.
 var trackingQueryParams = map[string]bool{
-	"fbclid":  true,
-	"gclid":   true,
-	"mc_cid":  true,
-	"mc_eid":  true,
-	"ref":     true,
-	"ref_src": true,
-	"s":       true,
+	"fbclid": true,
+	"gclid":  true,
+	"mc_cid": true,
+	"mc_eid": true,
 }
 
 // EvidenceRecord is the channel-typed evidence unit shared across retrieval
@@ -122,14 +139,20 @@ func (r EvidenceRecord) ValidateToolResult() error {
 
 // ValidateArtifactCitation validates an EvidenceRecord cited on an Artifact
 // claim (Actor or IntegrationPoint). In addition to Validate(), it requires a
-// non-empty verbatim Quote, a non-empty ToolResultRef, and a positive Revision
+// non-empty verbatim Quote of at least MinQuoteLength characters (after
+// whitespace normalization), a non-empty ToolResultRef, and a positive Revision
 // not exceeding maxRevision (when maxRevision >= 1).
 func (r EvidenceRecord) ValidateArtifactCitation(maxRevision int) error {
 	if err := r.Validate(); err != nil {
 		return err
 	}
-	if strings.TrimSpace(r.Quote) == "" {
+	normQuote := strings.Join(strings.Fields(r.Quote), " ")
+	if normQuote == "" {
 		return fmt.Errorf("evidence.quote required on artifact citations")
+	}
+	if len([]rune(normQuote)) < MinQuoteLength {
+		return fmt.Errorf("evidence.quote must be at least %d characters after whitespace normalization (got %d in %q)",
+			MinQuoteLength, len([]rune(normQuote)), r.Quote)
 	}
 	if strings.TrimSpace(r.ToolResultRef) == "" {
 		return fmt.Errorf("evidence.tool_result_ref required on artifact citations")
@@ -147,12 +170,13 @@ func (r EvidenceRecord) ValidateArtifactCitation(maxRevision int) error {
 // the given channel (#271, #273):
 //   - github: normalizes "github://<Owner>/<Repo>/<resource...>" or
 //     "https://github.com/<Owner>/<Repo>/<resource...>" by lowercasing the
-//     scheme and "<owner>/<repo>" while preserving the resource path so
-//     distinct issues, PRs, releases, commits, and workflow runs remain
+//     scheme and "<owner>/<repo>" while preserving the resource path and any
+//     non-tracking query parameters (such as ?ref=v1.0.0) so distinct issues,
+//     PRs, releases, commits, workflow runs, and ref-qualified paths remain
 //     distinct origins.
 //   - web: parses http/https URLs, lowercases scheme and host, removes URL
-//     fragments, strips tracking query parameters (utm_*, fbclid, gclid, etc.),
-//     and trims a redundant trailing slash on non-root paths.
+//     fragments, strips tracking query parameters (utm_*, fbclid, gclid,
+//     mc_cid, mc_eid), and trims a redundant trailing slash on non-root paths.
 //   - semsource: trims whitespace and normalizes scheme/host casing while
 //     preserving the entity or path identifier.
 func NormalizeOriginID(channel EvidenceChannel, locator string) (string, error) {
@@ -186,9 +210,17 @@ func normalizeGitHubOrigin(loc string) (string, error) {
 		return "", fmt.Errorf("github locator %q must use github://<owner>/<repo>/<resource> or https://github.com/<owner>/<repo>/<resource>", loc)
 	}
 
-	if idx := strings.IndexAny(rest, "?#"); idx >= 0 {
-		rest = rest[:idx]
+	// Strip URL fragment first.
+	if hashIdx := strings.IndexByte(rest, '#'); hashIdx >= 0 {
+		rest = rest[:hashIdx]
 	}
+
+	var rawQuery string
+	if qIdx := strings.IndexByte(rest, '?'); qIdx >= 0 {
+		rawQuery = rest[qIdx+1:]
+		rest = rest[:qIdx]
+	}
+
 	rest = strings.Trim(rest, "/")
 	parts := strings.SplitN(rest, "/", 3)
 	if len(parts) < 3 || strings.TrimSpace(parts[0]) == "" || strings.TrimSpace(parts[1]) == "" || strings.TrimSpace(parts[2]) == "" {
@@ -200,7 +232,17 @@ func normalizeGitHubOrigin(loc string) (string, error) {
 	if resource == "" {
 		return "", fmt.Errorf("github locator %q has empty resource path", loc)
 	}
-	return fmt.Sprintf("github://%s/%s/%s", owner, repo, resource), nil
+
+	canonical := fmt.Sprintf("github://%s/%s/%s", owner, repo, resource)
+	if rawQuery != "" {
+		if q, err := url.ParseQuery(rawQuery); err == nil {
+			stripTrackingQueryParams(q)
+			if encoded := q.Encode(); encoded != "" {
+				canonical += "?" + encoded
+			}
+		}
+	}
+	return canonical, nil
 }
 
 func normalizeWebOrigin(loc string) (string, error) {
@@ -223,12 +265,7 @@ func normalizeWebOrigin(loc string) (string, error) {
 
 	if u.RawQuery != "" {
 		q := u.Query()
-		for k := range q {
-			lk := strings.ToLower(k)
-			if strings.HasPrefix(lk, "utm_") || trackingQueryParams[lk] {
-				q.Del(k)
-			}
-		}
+		stripTrackingQueryParams(q)
 		u.RawQuery = q.Encode()
 	}
 
@@ -237,6 +274,15 @@ func normalizeWebOrigin(loc string) (string, error) {
 	}
 	u.RawPath = ""
 	return u.String(), nil
+}
+
+func stripTrackingQueryParams(q url.Values) {
+	for k := range q {
+		lk := strings.ToLower(k)
+		if strings.HasPrefix(lk, "utm_") || trackingQueryParams[lk] {
+			q.Del(k)
+		}
+	}
 }
 
 func normalizeSemSourceOrigin(loc string) (string, error) {

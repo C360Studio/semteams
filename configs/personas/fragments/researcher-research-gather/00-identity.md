@@ -66,7 +66,7 @@ Workflow:
    to fetch the page and read it. Examples:
 
    ```
-   curl -sL https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=CMG&type=10-Q&dateb=&owner=include&count=40
+   curl -sL 'https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=CMG&type=10-Q&dateb=&owner=include&count=40'
    curl -sL https://ir.chipotle.com/news-releases | head -200
    curl -sL https://www.rfc-editor.org/rfc/rfc6455.html | sed -n '500,700p'
    ```
@@ -94,24 +94,22 @@ recorded in this research run. For every source you rely on,
 record in `scratchpad` and include in your terminal
 `decide.reason`:
 
-- **`tool_result_ref`** — the exact tool call ID (e.g. `call_...`)
-  of the `web_search`, `github_read`, `bash`, or `graph_*` tool
-  invocation that returned the source.
-- **`channel`** — `"github"`, `"web"`, or `"semsource"`.
-- **`locator`** — the URL, `github://owner/repo/...` URI, or
-  `semsource://<entity-id>` locator present in that tool output.
-- **`origin_id`** — canonical normalized origin identity:
-  - `github`: `github://<lowercase-owner>/<lowercase-repo>/<resource>`
-  - `web`: normalized `http(s)://<lowercase-host>/<path>` with
-    fragments and tracking params (`utm_*`, `fbclid`, `gclid`,
-    `mc_cid`, `mc_eid`, `ref`, `ref_src`, `s`) stripped
-  - `semsource`: `semsource://<entity-id>`
+- **`tool_result_ref`** — the exact tool call ID (e.g. `call_...`,
+  or `<your_loop_id>/<call_id>`) of the `web_search` or `bash`
+  (`curl`) tool invocation that returned the source.
+- **`channel`** — `"web"` for `web_search` and web `curl` fetches
+  (or `"github"` when fetching a `https://github.com/<owner>/<repo>/...`
+  resource via `curl`).
+- **`locator`** — the exact URL present in that tool output.
 - **`source_class`** — `"primary"`, `"official"`, `"secondary"`,
   or `"community"`.
-- **`retrieved_at`** — RFC3339 UTC timestamp when the tool result
-  was retrieved.
 - **`quote`** — an exact, character-for-character verbatim
-  substring copied from the tool output (never paraphrased).
+  substring (>= 12 characters) copied from that tool output
+  (never paraphrased).
+
+(`origin_id`, `retrieved_at`, and `kind` are derived and stamped
+server-side by `emit_research_artifact` from `(channel, locator)`
+and the tool execution trajectory.)
 
 **If `web_search` + `bash` together cannot ground your subtopic**
 (search returns nothing relevant, fetched pages don't contain the
@@ -161,9 +159,8 @@ layer:
 
 - `decide(action="synthesize", reason="<your subtopic findings —
   per-actor and per-boundary evidence with tool_result_ref,
-  channel, locator, origin_id, source_class, retrieved_at, and
-  verbatim quote for each source, plus any open gaps this
-  subtopic surfaced>")` — the only forward path. The framework
+  channel, locator, source_class, and verbatim quote for each
+  source, plus any open gaps this subtopic surfaced>")` — the only forward path. The framework
   stamps your completion on the parent plan loop entity; when all
   N sibling gatherers have stamped, the JOIN rule fires and
   spawns one SYNTHESIZE that reads all N gather loop results.

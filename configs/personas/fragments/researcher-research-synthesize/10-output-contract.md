@@ -70,12 +70,13 @@ Notes on shape:
   organization, regulator, market, movement, or measurable
   phenomenon. Every actor MUST carry a non-empty `evidence`
   array citing at least one `EvidenceRecord` from GATHER's tool
-  outputs (`tool_result_ref`, `locator`, canonical `origin_id`,
-  `retrieved_at`, `source_class`, `revision`, and a verbatim
-  `quote` substring from that tool output). If an actor cannot
-  be backed by a verbatim quote from a real tool output in this
-  run, do NOT invent a citation — record the missing evidence in
-  `open_gaps` instead.
+  outputs (`tool_result_ref`, `channel`, `locator`, `source_class`,
+  `revision`, and a verbatim `quote` substring of at least 12
+  characters from that tool output; `origin_id`, `retrieved_at`,
+  and `kind` are derived/stamped server-side when omitted). If an
+  actor cannot be backed by a verbatim quote from a real tool
+  output in this run, do NOT invent a citation — record the
+  missing evidence in `open_gaps` instead.
 - `integration_points` enumerates every actor-to-actor
   relationship with direction — a system-to-system data flow, a
   market mechanism, a regulatory relationship, a comparison axis,

@@ -304,7 +304,7 @@ func setupToolsAndPreprocessor(
 	// see ADR-029 + tools/README.md for discipline. The dev-via-spec-arc
 	// executors (emit_dev_via_spec_artifact, builder_decide,
 	// bootstrap_workspace) retired in the ADR-042 MVP-7 follow-up sweep.
-	if err := registerProductTools(toolRegistry, natsClient, platform, logger); err != nil {
+	if err := registerProductTools(toolRegistry, natsClient, platform, extractStorageBuckets(cfg), logger); err != nil {
 		return nil, nil, fmt.Errorf("register product tools: %w", err)
 	}
 
@@ -503,6 +503,47 @@ func extractLoopsBucket(cfg *config.Config) string {
 		}
 	}
 	return ""
+}
+
+// extractStorageBuckets maps logical trajectory StorageInstance names (e.g.
+// "agent-content-store" or the objectstore component instance name) to their
+// configured JetStream ObjectStore bucket names so NATSToolResultResolver
+// follows TrajectoryFactV1.Evidence.StorageInstance without hardcoding (#271 M6).
+func extractStorageBuckets(cfg *config.Config) map[string]string {
+	if cfg == nil || len(cfg.Components) == 0 {
+		return nil
+	}
+	buckets := make(map[string]string)
+	for instName, cc := range cfg.Components {
+		if !cc.Enabled {
+			continue
+		}
+		switch cc.Name {
+		case "objectstore":
+			var ocfg struct {
+				BucketName string `json:"bucket_name"`
+			}
+			if err := json.Unmarshal(cc.Config, &ocfg); err == nil && ocfg.BucketName != "" {
+				buckets[instName] = ocfg.BucketName
+				buckets[cc.Name] = ocfg.BucketName
+				if _, exists := buckets["agent-content-store"]; !exists {
+					buckets["agent-content-store"] = ocfg.BucketName
+				}
+			}
+		case "agentic-loop":
+			var lcfg struct {
+				ContentBucketName string `json:"content_bucket_name"`
+			}
+			if err := json.Unmarshal(cc.Config, &lcfg); err == nil && lcfg.ContentBucketName != "" {
+				buckets["agent-content-store"] = lcfg.ContentBucketName
+				buckets[lcfg.ContentBucketName] = lcfg.ContentBucketName
+			}
+		}
+	}
+	if len(buckets) == 0 {
+		return nil
+	}
+	return buckets
 }
 
 // extractRestrictedDecideActions reads the deployment-level decide-action

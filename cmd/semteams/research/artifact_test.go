@@ -539,3 +539,45 @@ func TestRegisterPayloads(t *testing.T) {
 		t.Errorf("RegisterPayloads: expected duplicate-registration error on second call")
 	}
 }
+
+func TestArtifact_PopulateCitationDefaults(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 10, 14, 15, 0, 0, 0, time.UTC)
+	a := &Artifact{
+		LoopID:      "loop_abc",
+		Revision:    2,
+		ProducedAt:  now,
+		TestHarness: "meshtasticd-2.x",
+		Actors: []Actor{
+			{
+				Name: "NATS Server",
+				Role: "Message broker",
+				Evidence: []EvidenceRecord{
+					{
+						Channel:       ChannelWeb,
+						Locator:       "https://Docs.NATS.io/compare/?utm_source=test#sec",
+						SourceClass:   SourceClassOfficial,
+						Quote:         "NATS vs MQTT, Kafka, and other messaging systems",
+						ToolResultRef: "call_web_1",
+					},
+				},
+			},
+		},
+	}
+
+	a.PopulateCitationDefaults()
+	if err := a.Validate(); err != nil {
+		t.Fatalf("Validate after PopulateCitationDefaults failed: %v", err)
+	}
+	got := a.Actors[0].Evidence[0]
+	if got.OriginID != "https://docs.nats.io/compare" {
+		t.Errorf("OriginID = %q, want https://docs.nats.io/compare", got.OriginID)
+	}
+	if !got.RetrievedAt.Equal(now) {
+		t.Errorf("RetrievedAt = %v, want %v", got.RetrievedAt, now)
+	}
+	if got.Revision != 2 {
+		t.Errorf("Revision = %d, want 2", got.Revision)
+	}
+}
