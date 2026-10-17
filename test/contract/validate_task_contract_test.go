@@ -241,6 +241,20 @@ func newValidateWorktreeFixture(t *testing.T) *worktreeFixture {
 	writeFile("tracked.txt", "unstaged-modification\n")
 	writeFile("untracked.txt", "untracked-content\n")
 
+	writeValidateStubs(t, binDir)
+
+	fx := &worktreeFixture{
+		rootDir: repoDir,
+		binDir:  binDir,
+		logFile: logFile,
+	}
+	fx.snapshot = fx.captureSnapshot(t)
+	return fx
+}
+
+func writeValidateStubs(t *testing.T, binDir string) {
+	t.Helper()
+
 	writeStub := func(name, body string) {
 		t.Helper()
 		p := filepath.Join(binDir, name)
@@ -323,14 +337,6 @@ fi
 `)
 	writeStub("openspec", `echo "openspec $*" >> "$VALIDATE_TEST_LOG"`)
 	writeStub("jq", `echo "jq $*" >> "$VALIDATE_TEST_LOG"`)
-
-	fx := &worktreeFixture{
-		rootDir: repoDir,
-		binDir:  binDir,
-		logFile: logFile,
-	}
-	fx.snapshot = fx.captureSnapshot(t)
-	return fx
 }
 
 func (fx *worktreeFixture) captureSnapshot(t *testing.T) string {
