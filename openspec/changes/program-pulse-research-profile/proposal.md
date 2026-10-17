@@ -33,17 +33,18 @@ Instead, per [ADR-060 §5](../../../docs/adr/060-program-manager-direction-and-r
 
 - Affected specs: `program-pulse-github-read`
 - Affected code and configs:
-  - `cmd/semteams/product_commands.go`
+  - `cmd/semteams/product_commands.go`, `cmd/semteams/product_commands_test.go`
   - `configs/rules/research/02-plan-to-gather.json`, `configs/rules/research/README.md`
   - `configs/personas/fragments/coordinator/10-decision-contract.md`, `20-delegation-rules.md`
-  - `configs/personas/fragments/researcher-research-plan/00-identity.md`, `10-plan-rules.md`
+  - `configs/personas/fragments/researcher-research-plan/10-plan-rules.md`
   - `configs/personas/fragments/researcher-research-gather/00-identity.md`, `20-iteration-rules.md`
-  - `configs/personas/fragments/researcher-research-synthesize/00-identity.md`, `10-output-contract.md`
+  - `configs/personas/fragments/researcher-research-synthesize/10-output-contract.md`
   - `ui/src/lib/services/slashCommands.ts`, `ui/src/lib/services/slashCommands.test.ts`
   - `ui/src/lib/components/layout/ChatBar.svelte`, `ui/src/lib/components/layout/ChatBar.test.ts`
+  - `ui/e2e/agentic/action-chips-personas.spec.ts`
   - `ui/docker-compose.agentic-e2e.yml`
-  - `test/e2e/mock/openai_server.go`, `test/e2e/mock/openai_server_test.go`
+  - `test/e2e/mock/github_api.go`, `test/e2e/mock/openai_server.go`, `test/e2e/mock/openai_server_test.go`
   - `test/fixtures/journeys/program-pulse.yaml`
-  - `test/contract/journey_emit_args_contract_test.go`, `test/contract/research_rule_pack_test.go`
+  - `test/contract/journey_emit_args_contract_test.go`, `test/contract/program_pulse_contract_test.go`, `test/contract/research_rule_pack_test.go`
   - `docs/adr/060-program-manager-direction-and-research-design.md`, `docs/product/program-manager.md`, `AGENTS.md`, `CLAUDE.md`
 - Issues: Closes #267, Closes #269

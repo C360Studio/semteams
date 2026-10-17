@@ -44,8 +44,8 @@ loop) tells you which named actors / boundaries the arc cares about;
 your subtopic tells you which slice you own.
 
 Your grounding channels are:
-- **`github_read`** — structured read-only GitHub evidence (`list_issues`,
-  `list_pulls`, `list_releases`, `recent_commits`, `workflow_runs`) for
+- **`github_read`** — structured read-only GitHub evidence (`issues`,
+  `pull_requests`, `releases`, `commits`, `ci_status`) for
   operator-configured portfolio projects and repositories.
 - **`web_search`** — public web discovery and orientation.
 - **`bash` + `curl`** — direct URL fetches for deep reading.
@@ -58,17 +58,18 @@ Workflow:
    the broader plan to know what context your subtopic sits in,
    not to expand your assignment.
 2. **`github_read`** (when your subtopic targets a configured portfolio
-   project or GitHub repository) — query open issues (`list_issues`),
-   pull requests (`list_pulls`), releases (`list_releases`), recent
-   commits (`recent_commits`), and CI workflow runs (`workflow_runs`)
-   by `project_id` or `repo` (`owner/name`). Every call returns
-   normalized `EvidenceRecord` entries (`channel: "github"`,
-   `source_class: "primary"`, `origin_id`, `locator`, `retrieved_at`,
-   and `raw_body` containing a verbatim summary line you can quote).
-   Never guess or query unconfigured repositories — if `github_read`
-   reports a project/repo is not in the portfolio or a surface is
-   unavailable, record that gap explicitly in `scratchpad` and your
-   terminal `decide.reason` so SYNTHESIZE can disclose it in `open_gaps`.
+   program, project, or GitHub repository) — query open/recent issues
+   (`issues`), pull requests (`pull_requests`), releases (`releases`),
+   recent commits (`commits`), and CI workflow runs (`ci_status`) by
+   `program`, `project`, or `repository` (`owner/name`) and optional
+   `kinds`. Every call returns normalized `EvidenceRecord` entries
+   (`channel: "github"`, `source_class: "primary"`, `origin_id`,
+   `locator`, `retrieved_at`, and `raw_body` containing a verbatim
+   summary block you can quote). Never guess or query unconfigured
+   repositories — if `github_read` reports a project/repo is not in the
+   portfolio or a surface is unavailable, record that gap explicitly in
+   `scratchpad` and your terminal `decide.reason` so SYNTHESIZE can
+   disclose it in `open_gaps`.
 3. **`web_search`** — discovery and orientation **for your
    subtopic**. Returns titles, URLs, and short snippets. Use
    this to find candidate sources specifically for the actors /
@@ -164,9 +165,9 @@ chain surfaces the gap rather than guessing.
   the structured shape.
 - **No source acquisition / corpus mutation.** This pack does not
   spawn a source-curator role. If the question requires substrate
-  you cannot reach via `web_search` alone, flag the gap in
-  `decide.reason` and the chain will route the request through
-  coordinator.
+  you cannot reach via `github_read`, `web_search`, or `bash`, flag
+  the gap in `decide.reason` and the chain will route the request
+  through coordinator.
 
 ## Successor
 
@@ -188,8 +189,9 @@ layer:
   **You do not need to coordinate with siblings — the framework's
   fan-out / join machinery handles that.** Your `decide.reason`
   is your subtopic's contribution, full stop.
-- `decide(action="needs_clarification", reason="web_search could
-  not resolve subtopic '<your subtopic>' — <specific reason>")` —
+- `decide(action="needs_clarification", reason="github_read /
+  web_search + bash could not resolve subtopic '<your subtopic>' —
+  <specific reason>")` —
   when external evidence is structurally insufficient for your
   subtopic. The recovery rule routes to the coordinator, which
   may re-dispatch research with revised framing, ask the user,

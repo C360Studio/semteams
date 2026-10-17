@@ -418,6 +418,21 @@ describe("ChatBar — slash commands", () => {
     expect(agentApi.submitApproval).not.toHaveBeenCalled();
   });
 
+  it("/pulse routes through coordinator chat without a selected task", async () => {
+    mockSelectedTask.mockReturnValue(undefined);
+    const user = userEvent.setup();
+    render(ChatBar);
+
+    const input = screen.getByTestId("chat-input");
+    await user.type(input, "/pulse c360 portfolio status");
+    await user.click(screen.getByTestId("send-button"));
+
+    expect(agentApi.sendMessage).toHaveBeenCalledWith(
+      "/pulse c360 portfolio status",
+    );
+    expect(agentApi.submitApproval).not.toHaveBeenCalled();
+  });
+
   it("slash command without selected task shows error", async () => {
     mockSelectedTask.mockReturnValue(undefined);
     const user = userEvent.setup();

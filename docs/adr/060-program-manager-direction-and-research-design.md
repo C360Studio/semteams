@@ -289,7 +289,7 @@ cadence scheduler) to `horizon:post-mvp`:
    repositories, issues, pull requests, and runs). Duplicating deterministic bucket counts in an LLM rule pack is
    unnecessary for `v0.2.0`. The agentic **Program Pulse** focuses on what requires multi-agent synthesis: cross-project
    status and risk explanation, dependency analysis, and evidence-backed operator recommendations.
-2. **One evidence engine (`configs/rules/research/`).** Rather than duplicating the 8-rule `plan → gather (for_each) →
+2. **One evidence engine (`configs/rules/research/`).** Rather than duplicating the 10-rule `plan → gather (for_each) →
    synthesize → reviewer-research → coordinator` topology under `configs/rules/program-report/`, rule `02-plan-to-gather.json`
    grants `github_read` alongside `web_search` and `bash` to `researcher-research-gather`. Both `github_read`
    (`channel: "github"`, `source_class: "primary"`) and `web_search` (`channel: "web"`) feed the same mechanical

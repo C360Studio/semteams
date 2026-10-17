@@ -266,7 +266,7 @@ func validateResearchArtifactArgs(
 		Name:   emitartifact.ToolName,
 		LoopID: "fixture-loop-id",
 	}, &artifact); err != nil {
-		t.Errorf("%s [response %d emit_research_artifact]: VerifyDerivation against stub web_search output failed: %v", path, idx, err)
+		t.Errorf("%s [response %d emit_research_artifact]: VerifyDerivation against fixture tool output failed: %v", path, idx, err)
 	}
 }
 
