@@ -20,7 +20,7 @@
   // /implement-spec commands are parked with their category packs pending
   // the canonical-predicate migration (ADR-058); restore them when the
   // packs are re-wired.
-  const TEAM_MESSAGE_COMMANDS = new Set(["/research", "/optimize"]);
+  const TEAM_MESSAGE_COMMANDS = new Set(["/pulse", "/research", "/optimize"]);
   const RUN_MESSAGE_COMMANDS = new Set<string>([]);
   const TASK_SLASH_COMMANDS = Object.keys(TASK_COMMANDS);
   const ALL_SLASH_COMMANDS = [
@@ -34,6 +34,7 @@
    * direct role overrides; the coordinator still validates the prompt.
    */
   const TEAM_CHIPS = [
+    { id: "pulse", label: "Pulse", prefix: "/pulse " },
     { id: "research", label: "Research", prefix: "/research " },
     { id: "optimize", label: "Optimize", prefix: "/optimize " },
   ] as const;
@@ -63,7 +64,7 @@
     // If the user already started typing a different team prefix,
     // replace it; otherwise prepend to whatever's there.
     const stripped = input.replace(
-      /^(@\w+|\/(?:research|optimize|autoresearch))\s*/i,
+      /^(@\w+|\/(?:pulse|research|optimize|autoresearch))\s*/i,
       "",
     );
     input = prefix + stripped;

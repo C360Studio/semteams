@@ -565,3 +565,49 @@ responses:
 		t.Errorf("second tool_call ID = %q, want auto-generated call_* distinct from call_gather_web_1", got)
 	}
 }
+
+func TestOpenAIServer_GitHubEndpoints(t *testing.T) {
+	server := NewOpenAIServer()
+	if err := server.Start(":0"); err != nil {
+		t.Fatalf("failed to start server: %v", err)
+	}
+	defer server.Stop()
+
+	for _, path := range []string{
+		"/repos/C360Studio/semteams/issues?state=open",
+		"/repos/C360Studio/semteams/pulls",
+		"/repos/C360Studio/semteams/releases",
+		"/repos/C360Studio/semteams/commits",
+		"/repos/C360Studio/semteams/actions/runs",
+		"/repos/C360Studio/semengine/issues",
+		"/repos/C360Studio/semengine/releases",
+		"/repos/C360Studio/semstreams/releases",
+	} {
+		resp, err := http.Get(server.URL() + path)
+		if err != nil {
+			t.Fatalf("GET %s: %v", path, err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("GET %s: status = %d, want 200", path, resp.StatusCode)
+		}
+	}
+
+	notFoundResp, err := http.Get(server.URL() + "/repos/unknown/repo/issues")
+	if err != nil {
+		t.Fatalf("GET unknown repo: %v", err)
+	}
+	notFoundResp.Body.Close()
+	if notFoundResp.StatusCode != http.StatusNotFound {
+		t.Errorf("GET unknown repo: status = %d, want 404", notFoundResp.StatusCode)
+	}
+
+	postResp, err := http.Post(server.URL()+"/repos/C360Studio/semteams/issues", "application/json", strings.NewReader("{}"))
+	if err != nil {
+		t.Fatalf("POST issues: %v", err)
+	}
+	postResp.Body.Close()
+	if postResp.StatusCode != http.StatusMethodNotAllowed {
+		t.Errorf("POST issues: status = %d, want 405", postResp.StatusCode)
+	}
+}

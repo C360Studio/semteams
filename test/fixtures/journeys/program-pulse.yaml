@@ -1,0 +1,191 @@
+name: program-pulse
+description: "Multi-project Program Pulse (/pulse) journey over the C360 portfolio (semteams + semengine) using github_read (#267, #273). Proves coordinator routing, 2-epic project fan-out, primary GitHub evidence collection via github_read, mechanical derivation verification in emit_research_artifact, and separation of observed facts, recommendations, and open gaps."
+responses_by_role:
+  - match: Delegation rules
+    responses:
+      - tool_call:
+          name: decide
+          arguments_json: >
+            {
+              "action": "research",
+              "reason": "The operator requested a Program Pulse (/pulse) across the configured C360 portfolio projects (semteams and semengine). Routing to the research category so the planner decomposes by configured project and gatherers collect primary GitHub evidence via github_read."
+            }
+      - tool_call:
+          name: decide
+          arguments_json: >
+            {
+              "action": "respond_direct",
+              "reason": "Program Pulse — C360 Platform (semteams + semengine):\n\nObserved Facts (GitHub evidence):\n- SemTeams (C360Studio/semteams): Issue #267 (Program Pulse walking skeleton) is open for milestone v0.2.0; PR #336 (planner fan-out ceiling and containment budgets) merged at commit 6777381e with Repository CI run #9001 passing; release v0.1.3 is published.\n- SemEngine (C360Studio/semengine): Issue #24 (generic attempt, effect ledger, and replay contract) is open as the cross-repo durability dependency for ADR-061; commit a1b2c3d4 passed CI run #9002.\n\nRecommendations:\n- Complete and merge #267 on C360Studio/semteams to close epic #269 and tag v0.2.0.\n- Keep SemTeams on its existing recovery surface until C360Studio/semengine#24 lands.\n\nOpen Gaps:\n- C360Studio/semengine has no published GitHub releases (releases surface returned 0 records)."
+            }
+  - match: Emit the typed plan
+    responses:
+      - tool_call:
+          name: emit_plan
+          arguments_json: >
+            {
+              "revision": 1,
+              "title": "C360 Platform Program Pulse — semteams and semengine",
+              "goal": "Produce an evidence-backed Program Pulse across configured C360 portfolio projects semteams and semengine, covering open issues, pull requests, releases, recent commits, CI health, cross-project risks, and explicit gaps.",
+              "context": "The operator invoked /pulse for the C360 Platform portfolio. Two parallel gatherers will query github_read for the configured semteams and semengine projects.",
+              "scope_in": [
+                "Configured project semteams (C360Studio/semteams) issues, PRs, releases, commits, and CI status",
+                "Configured project semengine (C360Studio/semengine) issues, PRs, releases, commits, and CI status",
+                "Cross-project dependency between SemTeams runtime ownership (ADR-061) and SemEngine durability (#24)"
+              ],
+              "scope_out": [
+                "Unconfigured repositories outside configs/portfolio-c360.json",
+                "Write or mutation actions against GitHub issues or pull requests"
+              ],
+              "epics": [
+                "Audit configured project semteams (C360Studio/semteams) via github_read",
+                "Audit configured project semengine (C360Studio/semengine) via github_read"
+              ]
+            }
+      - tool_call:
+          name: decide
+          arguments_json: |
+            {
+              "action": "gather",
+              "subtopics": [
+                "Audit configured project semteams (C360Studio/semteams) via github_read",
+                "Audit configured project semengine (C360Studio/semengine) via github_read"
+              ],
+              "reason": "Plan emitted. Two parallel gatherers will audit configured projects semteams and semengine via github_read."
+            }
+  - match: You do NOT emit a research
+    responses:
+      - tool_call:
+          id: call_gather_gh_c360
+          name: github_read
+          arguments_json: >
+            {
+              "program": "c360",
+              "include_unchanged": true
+            }
+      - tool_call:
+          name: decide
+          arguments_json: >
+            {
+              "action": "synthesize",
+              "reason": "Collected primary GitHub evidence via github_read (tool_result_ref=call_gather_gh_c360): C360Studio/semteams issue #267 (open, v0.2.0), PR #336 (merged), release v0.1.3, commit 6777381e, CI run #9001 (success); C360Studio/semengine issue #24 (open), commit a1b2c3d4, CI run #9002 (success), and 0 published releases."
+            }
+  - match: synthesis pass
+    responses:
+      - tool_call:
+          name: emit_research_artifact
+          arguments_json: >
+            {
+              "revision": 1,
+              "title": "C360 Platform Program Pulse",
+              "actors": [
+                {
+                  "name": "SemTeams (C360Studio/semteams)",
+                  "role": "Always-on program manager product shell; milestone v0.2.0 has open issue #267 while containment PR #336 merged with green Repository CI (#9001)",
+                  "evidence": [
+                    {
+                      "channel": "github",
+                      "locator": "github://C360Studio/semteams/issues/267",
+                      "origin_id": "github://c360studio/semteams/issues/267",
+                      "retrieved_at": "2026-10-17T08:00:00Z",
+                      "source_class": "primary",
+                      "quote": "Title: program-report: deliver a read-only Program Pulse walking skeleton",
+                      "tool_result_ref": "call_gather_gh_c360",
+                      "revision": 1
+                    },
+                    {
+                      "channel": "github",
+                      "locator": "github://C360Studio/semteams/pulls/336",
+                      "origin_id": "github://c360studio/semteams/pulls/336",
+                      "retrieved_at": "2026-10-17T08:00:00Z",
+                      "source_class": "primary",
+                      "quote": "Title: feat(research): enforce 1..4 planner fan-out ceiling and containment budgets",
+                      "tool_result_ref": "call_gather_gh_c360",
+                      "revision": 1
+                    }
+                  ]
+                },
+                {
+                  "name": "SemEngine (C360Studio/semengine)",
+                  "role": "Target shared substrate for graph, transport, rules, lifecycle, and generic durability; issue #24 tracks generic attempt/effect/replay execution",
+                  "evidence": [
+                    {
+                      "channel": "github",
+                      "locator": "github://C360Studio/semengine/issues/24",
+                      "origin_id": "github://c360studio/semengine/issues/24",
+                      "retrieved_at": "2026-10-17T08:00:00Z",
+                      "source_class": "primary",
+                      "quote": "Title: durable-execution: generic attempt, effect ledger, and replay contract",
+                      "tool_result_ref": "call_gather_gh_c360",
+                      "revision": 1
+                    }
+                  ]
+                }
+              ],
+              "integration_points": [
+                {
+                  "from": "SemTeams (C360Studio/semteams)",
+                  "to": "SemEngine (C360Studio/semengine)",
+                  "data": "Generic attempt, effect ledger, and replay durability contract required before SemTeams switches off frozen SemStreams recovery (ADR-061)",
+                  "direction": "read",
+                  "evidence": [
+                    {
+                      "channel": "github",
+                      "locator": "github://C360Studio/semengine/issues/24",
+                      "origin_id": "github://c360studio/semengine/issues/24",
+                      "retrieved_at": "2026-10-17T08:00:00Z",
+                      "source_class": "primary",
+                      "quote": "Define generic attempt/effect/replay durability contract for SemTeams runtime adoption.",
+                      "tool_result_ref": "call_gather_gh_c360",
+                      "revision": 1
+                    },
+                    {
+                      "channel": "github",
+                      "locator": "github://C360Studio/semengine/commits/a1b2c3d4",
+                      "origin_id": "github://c360studio/semengine/commits/a1b2c3d4",
+                      "retrieved_at": "2026-10-17T08:00:00Z",
+                      "source_class": "primary",
+                      "quote": "docs(adr): align substrate durability boundary with SemTeams ADR-061",
+                      "tool_result_ref": "call_gather_gh_c360",
+                      "revision": 1
+                    }
+                  ]
+                }
+              ],
+              "tasks": [
+                "Recommendation: complete and merge #267 on C360Studio/semteams now that #272 (PR #336) has landed so milestone v0.2.0 can be tagged",
+                "Recommendation: preserve existing SemTeams recovery mechanics until C360Studio/semengine#24 ships the generic attempt/effect/replay substrate contract"
+              ],
+              "addressed_gaps": [
+                "Program Pulse covers both configured projects (semteams and semengine) with primary GitHub citations and explicit gap disclosure"
+              ],
+              "open_gaps": [
+                "No published GitHub releases found for configured repository C360Studio/semengine (releases surface returned 0 records)",
+                "needs_test_harness: not applicable — read-only portfolio Program Pulse synthesis"
+              ],
+              "substrate_mutations": []
+            }
+      - tool_call:
+          name: decide
+          arguments_json: >
+            {
+              "action": "emit",
+              "reason": "Program Pulse artifact rev 1 emitted for C360 Platform (semteams + semengine) with primary github_read citations, explicit recommendations, and open_gaps disclosure."
+            }
+  - match: Reviewer — RESEARCH phase
+    responses:
+      - tool_call:
+          name: decide
+          arguments_json: >
+            {
+              "action": "approved",
+              "reason": "Program Pulse artifact verified: both configured portfolio projects (SemTeams, SemEngine) carry primary github_read citations, cross-project durability dependency is documented, recommendations are clearly labeled in tasks, and the missing SemEngine release surface is disclosed in open_gaps."
+            }
+  - match: operations analyst
+    responses:
+      - tool_call:
+          name: decide
+          arguments_json: >
+            {
+              "action": "observed",
+              "reason": "Read the run entity and coordinator loop result. Program Pulse run completed cleanly with verified github_read citations; emitting no findings."
+            }

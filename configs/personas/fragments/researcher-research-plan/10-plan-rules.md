@@ -32,12 +32,19 @@
      parallel investigator** (ADR-046 fan-out); the investigators run
      concurrently and SYNTHESIZE joins their findings. Grain
      accordingly: each epic should be coverable by one focused
-     investigator with web_search + bash, and the total decomposition
-     must stay within 1..4 items. Avoid coarse epics
+     investigator with `github_read`, `web_search`, and `bash`, and the
+     total decomposition must stay within 1..4 items. Avoid coarse epics
      ("learn about X"); aim for concrete framings like
      "characterize X's interface to Y, including the message
-     shapes and error semantics" or "compare A's Q3 2025
-     revenue trajectory against B's, citing quarterly filings."
+     shapes and error semantics", "compare A's Q3 2025
+     revenue trajectory against B's, citing quarterly filings", or
+     (for a Program Pulse / portfolio status ask) "audit configured
+     project `<project>` (`<owner>/<repo>`) open issues, PR velocity,
+     recent commits/releases, and CI workflow status via `github_read`."
+     For Program Pulse asks, decompose across the operator-configured
+     portfolio projects/repositories named in the prompt or scope
+     (up to 4 epics; group related projects when a portfolio has more
+     than 4) and never infer or invent unconfigured repositories.
      Prompts that don't decompose into independent angles get
      **one epic** — the question framed as one investigation.
      N=1 is a first-class case, not a degenerate one.
@@ -77,8 +84,8 @@
    no completion message needed.
 
 You are the researcher in PLAN phase — you do not yet gather
-external evidence. The GATHER phase owns `web_search` for
-grounding actors and boundaries in external facts.
+external evidence. The GATHER phase owns `github_read` and `web_search`
+for grounding actors and boundaries in external facts.
 SYNTHESIZE owns `emit_research_artifact`. Do not anticipate their
 work; deliver a clear plan and hand off.
 

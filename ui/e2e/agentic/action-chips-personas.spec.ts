@@ -9,13 +9,13 @@ import { test, expect } from "@playwright/test";
  * and preserve any text the user has already typed when switching
  * teams.
  *
- * The live chip set is Research + Optimize. The Spec and Build chips
- * are parked with their category packs (ADR-058) and must NOT render
- * until the packs are re-authored and re-wired.
+ * The live chip set is Pulse + Research + Optimize. The Spec and Build
+ * chips are parked with their category packs (ADR-058) and must NOT
+ * render until the packs are re-authored and re-wired.
  *
  * Validates:
  *   - Chips render when no task is selected; parked chips do not.
- *   - Click → input value = "/research " (or "/optimize ").
+ *   - Click → input value = "/pulse ", "/research ", or "/optimize ".
  *   - Click a different team while text is present → the prefix
  *     swaps, the user's text survives.
  *   - Typing a slash command hides the chip row; clearing restores it.
@@ -33,7 +33,7 @@ test.describe("Action chips — team hints", () => {
     expect(health.ok(), "Backend not healthy — stack not running?").toBe(true);
   });
 
-  test("clicking Research / Optimize pre-fills input with the team hint", async ({
+  test("clicking Pulse / Research / Optimize pre-fills input with the team hint", async ({
     page,
   }) => {
     await page.goto("/");
@@ -47,6 +47,7 @@ test.describe("Action chips — team hints", () => {
     // Chip row is visible on the empty-state homepage.
     const chipRow = page.getByTestId("action-chips");
     await expect(chipRow).toBeVisible();
+    await expect(page.getByTestId("action-chip-pulse")).toBeVisible();
     await expect(page.getByTestId("action-chip-research")).toBeVisible();
     await expect(page.getByTestId("action-chip-optimize")).toBeVisible();
     // Parked with their packs (ADR-058).

@@ -186,6 +186,23 @@ describe("parseSlashCommand — aliases", () => {
 // ---------------------------------------------------------------------------
 
 describe("parseSlashCommand — team intent shortcuts", () => {
+  it("/pulse preserves the coordinator hint and routes to the research capability", () => {
+    const result = parseSlashCommand(
+      "/pulse summarize activity across semteams and semengine",
+      "flow-builder",
+    );
+    expect(result).not.toBeNull();
+    expect(result!.command.name).toBe("pulse");
+    expect(result!.result.intent).toBe("general");
+    expect(result!.result.content).toBe(
+      "/pulse summarize activity across semteams and semengine",
+    );
+    expect(result!.result.params).toMatchObject({
+      requestedTeam: "research",
+      prompt: "summarize activity across semteams and semengine",
+    });
+  });
+
   it("/research preserves the coordinator hint in message content", () => {
     const result = parseSlashCommand(
       "/research compare MQTT and NATS",
@@ -418,9 +435,9 @@ describe("parseSlashCommand — page availability", () => {
 
 describe("getCommandsForPage — flow-builder", () => {
   // flow-builder excludes data-view-only /query, but includes governed spec shortcuts.
-  it("returns all 15 commands for flow-builder", () => {
+  it("returns all 14 commands for flow-builder", () => {
     const commands = getCommandsForPage("flow-builder");
-    expect(commands).toHaveLength(13);
+    expect(commands).toHaveLength(14);
   });
 
   it("includes search on flow-builder", () => {
@@ -458,9 +475,9 @@ describe("getCommandsForPage — flow-builder", () => {
 
 describe("getCommandsForPage — data-view", () => {
   // data-view excludes /flow and /debug, but includes /query plus governed spec shortcuts.
-  it("returns 14 commands for data-view (no /flow, no /debug)", () => {
+  it("returns 13 commands for data-view (no /flow, no /debug)", () => {
     const commands = getCommandsForPage("data-view");
-    expect(commands).toHaveLength(12);
+    expect(commands).toHaveLength(13);
   });
 
   it("includes search on data-view", () => {

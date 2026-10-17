@@ -112,6 +112,11 @@ services:
       - SEMSTREAMS_NATS_URLS=nats://nats:4222
       - SEMSTREAMS_LOG_LEVEL=debug
       - AGENTIC_LLM_URL=http://mock-llm:8080/v1
+      # Program Pulse / github_read (#267, #273) — point github_read at the
+      # operator-configured C360 portfolio and the mock-llm GitHub REST API
+      # stub so Program Pulse journeys run deterministically offline.
+      - SEMTEAMS_PORTFOLIO_PATH=${SEMTEAMS_PORTFOLIO_PATH:-/app/configs/portfolio-c360.json}
+      - SEMTEAMS_GITHUB_API_URL=${SEMTEAMS_GITHUB_API_URL:-http://mock-llm:8080}
       # R2 source-acquisition tool — registers add_source_repo and
       # publishes to graph.ingest.add.research. Inert for journeys
       # that don't list the tool in agentic-tools.allowed_tools.

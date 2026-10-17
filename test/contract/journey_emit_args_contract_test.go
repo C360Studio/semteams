@@ -14,8 +14,11 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/c360studio/semteams/cmd/semteams/devviaspec"
+	"github.com/c360studio/semteams/cmd/semteams/portfolio"
 	"github.com/c360studio/semteams/cmd/semteams/research"
 	"github.com/c360studio/semteams/cmd/semteams/tools/emitartifact"
+	"github.com/c360studio/semteams/cmd/semteams/tools/githubread"
+	"github.com/c360studio/semteams/test/e2e/mock"
 )
 
 // TestJourneyFixtureEmitArgs_Validate walks every mock-llm journey
@@ -104,6 +107,27 @@ func validateJourneyFixture(t *testing.T, path string) {
 	}
 
 	stubWebSearch := executors.NewStubWebSearchExecutor()
+	var ghExec *githubread.Executor
+	ensureGitHubExec := func() *githubread.Executor {
+		if ghExec != nil {
+			return ghExec
+		}
+		pf, err := portfolio.LoadFile("../../configs/portfolio-c360.json")
+		if err != nil {
+			t.Fatalf("%s: load portfolio-c360.json: %v", path, err)
+		}
+		srv := mock.NewOpenAIServer()
+		if err := srv.Start(":0"); err != nil {
+			t.Fatalf("%s: start mock github server: %v", path, err)
+		}
+		t.Cleanup(func() { _ = srv.Stop() })
+		ghExec = githubread.NewExecutor(githubread.Config{
+			Portfolio: pf,
+			APIBase:   srv.URL(),
+		}, nil)
+		return ghExec
+	}
+
 	declaredCallIDs := make(map[string]bool)
 	resolvedCalls := make(map[string]*emitartifact.ResolvedToolResult)
 	for _, resp := range allTurns {
@@ -111,7 +135,8 @@ func validateJourneyFixture(t *testing.T, path string) {
 			continue
 		}
 		declaredCallIDs[resp.ToolCall.ID] = true
-		if resp.ToolCall.Name == "web_search" {
+		switch resp.ToolCall.Name {
+		case "web_search":
 			var callArgs map[string]any
 			if err := json.Unmarshal([]byte(resp.ToolCall.ArgumentsJSON), &callArgs); err != nil {
 				t.Fatalf("%s: unmarshal web_search arguments_json for %q: %v", path, resp.ToolCall.ID, err)
@@ -130,6 +155,30 @@ func validateJourneyFixture(t *testing.T, path string) {
 				CallID:            resp.ToolCall.ID,
 				LoopID:            "fixture-gather-loop",
 				ToolName:          "web_search",
+				Status:            string(agentic.TrajectoryStatusCompleted),
+				Content:           res.Content,
+				DispatchArguments: callArgs,
+				ObservedAt:        time.Now().UTC(),
+			}
+		case "github_read":
+			var callArgs map[string]any
+			if err := json.Unmarshal([]byte(resp.ToolCall.ArgumentsJSON), &callArgs); err != nil {
+				t.Fatalf("%s: unmarshal github_read arguments_json for %q: %v", path, resp.ToolCall.ID, err)
+			}
+			res, err := ensureGitHubExec().Execute(context.Background(), agentic.ToolCall{
+				ID:        resp.ToolCall.ID,
+				Name:      "github_read",
+				Arguments: callArgs,
+				LoopID:    "fixture-gather-loop",
+			})
+			if err != nil || res.Error != "" {
+				t.Fatalf("%s: execute mock github_read for %q: err=%v res.Error=%q", path, resp.ToolCall.ID, err, res.Error)
+			}
+			resolvedCalls[resp.ToolCall.ID] = &emitartifact.ResolvedToolResult{
+				Ref:               resp.ToolCall.ID,
+				CallID:            resp.ToolCall.ID,
+				LoopID:            "fixture-gather-loop",
+				ToolName:          "github_read",
 				Status:            string(agentic.TrajectoryStatusCompleted),
 				Content:           res.Content,
 				DispatchArguments: callArgs,
@@ -217,7 +266,7 @@ func validateResearchArtifactArgs(
 		Name:   emitartifact.ToolName,
 		LoopID: "fixture-loop-id",
 	}, &artifact); err != nil {
-		t.Errorf("%s [response %d emit_research_artifact]: VerifyDerivation against stub web_search output failed: %v", path, idx, err)
+		t.Errorf("%s [response %d emit_research_artifact]: VerifyDerivation against fixture tool output failed: %v", path, idx, err)
 	}
 }
 

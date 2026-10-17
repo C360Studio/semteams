@@ -240,6 +240,7 @@ func (s *OpenAIServer) Start(addr string) error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/chat/completions", s.handleChatCompletion)
 	mux.HandleFunc("/health", s.handleHealth)
+	mux.HandleFunc("/repos/", s.handleGitHubRepos)
 
 	s.srv = &http.Server{
 		Handler:      mux,

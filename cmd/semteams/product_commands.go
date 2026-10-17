@@ -30,6 +30,7 @@ func registerProductCommands(_ types.PlatformMeta, logger *slog.Logger) error {
 		name, team, help string
 	}{
 		// Live teams.
+		{"pulse", "pulse", "/pulse <request> - Route a portfolio or project Program Pulse ask through the coordinator"},
 		{"research", "research", "/research <question> - Route an evidence-gathering research ask through the coordinator"},
 		{"optimize", "optimize", "/optimize <target> - Route a measurable optimization ask through the coordinator"},
 		{"autoresearch", "optimize", "/autoresearch <target> - Alias of /optimize"},

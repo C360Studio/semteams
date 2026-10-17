@@ -102,6 +102,15 @@ Notes on shape:
   verifiable tool result for a planned claim, propagate it here
   verbatim rather than fabricating an `evidence` entry.
 
+### Program Pulse / Portfolio Status Mapping
+
+When the research prompt is a **Program Pulse** or portfolio/project status and risk synthesis (triggered via `/pulse` or a portfolio status question):
+
+- **`actors`** represent each configured portfolio project or repository investigated in the run, with `role` summarizing its observed health, active milestone/release posture, and key blockers, backed by `channel: "github"`, `source_class: "primary"` citations from `github_read` (verbatim `quote` substrings from `raw_body`).
+- **`integration_points`** capture cross-project dependencies, shared contract boundaries, or blocker edges observed between portfolio projects (each backed by verifiable `github_read` or `web_search` evidence).
+- **`tasks`** capture **explicitly labeled operator recommendations** and next actions (for example, `"Recommendation: resolve blocker #272 on semteams before cutting v0.2.0"`), keeping recommendations clearly separated from observed facts in `actors` and `integration_points`.
+- **`open_gaps`** explicitly disclose any incomplete, empty, or unavailable repository/surface evidence (for example, `"No published releases found for c360studio/semengine"` or `"CI workflow runs unavailable for <repo>"`). Never omit or paper over missing evidence.
+
 Termination is the `decide` call (after emit; see 30-emit-artifact
 for ordering). No completion message needed — the framework
 records the `decide` as the loop's terminal and reviewer-research

@@ -171,6 +171,7 @@ describe("ChatBar — initial render", () => {
 
     await user.type(screen.getByTestId("chat-input"), "/");
 
+    expect(screen.getByText("/pulse")).toBeInTheDocument();
     expect(screen.getByText("/research")).toBeInTheDocument();
     expect(screen.getByText("/optimize")).toBeInTheDocument();
     expect(screen.getByText("/approve")).toBeInTheDocument();
@@ -187,6 +188,7 @@ describe("ChatBar — initial render", () => {
 
     await user.type(screen.getByTestId("chat-input"), "/");
 
+    expect(screen.getByText("/pulse")).toBeInTheDocument();
     expect(screen.getByText("/research")).toBeInTheDocument();
     expect(screen.getByText("/optimize")).toBeInTheDocument();
     expect(screen.queryByText("/create-change")).not.toBeInTheDocument();
@@ -416,6 +418,21 @@ describe("ChatBar — slash commands", () => {
     expect(agentApi.submitApproval).not.toHaveBeenCalled();
   });
 
+  it("/pulse routes through coordinator chat without a selected task", async () => {
+    mockSelectedTask.mockReturnValue(undefined);
+    const user = userEvent.setup();
+    render(ChatBar);
+
+    const input = screen.getByTestId("chat-input");
+    await user.type(input, "/pulse c360 portfolio status");
+    await user.click(screen.getByTestId("send-button"));
+
+    expect(agentApi.sendMessage).toHaveBeenCalledWith(
+      "/pulse c360 portfolio status",
+    );
+    expect(agentApi.submitApproval).not.toHaveBeenCalled();
+  });
+
   it("slash command without selected task shows error", async () => {
     mockSelectedTask.mockReturnValue(undefined);
     const user = userEvent.setup();
@@ -488,6 +505,7 @@ describe("ChatBar — slash commands", () => {
 describe("ChatBar — action chips", () => {
   it("shows team chips on the empty state", () => {
     render(ChatBar);
+    expect(screen.getByTestId("action-chip-pulse")).toBeInTheDocument();
     expect(screen.getByTestId("action-chip-research")).toBeInTheDocument();
     expect(screen.getByTestId("action-chip-optimize")).toBeInTheDocument();
     // Spec and Build chips are parked with their category packs (ADR-058).
@@ -514,11 +532,14 @@ describe("ChatBar — action chips", () => {
     const user = userEvent.setup();
     render(ChatBar);
 
-    await user.click(screen.getByTestId("action-chip-research"));
+    await user.click(screen.getByTestId("action-chip-pulse"));
 
     const input = screen.getByTestId("chat-input") as HTMLInputElement;
-    expect(input.value).toBe("/research ");
+    expect(input.value).toBe("/pulse ");
     expect(document.activeElement).toBe(input);
+
+    await user.click(screen.getByTestId("action-chip-research"));
+    expect(input.value).toBe("/research ");
   });
 
   it("clicking a team chip replaces a legacy @team prefix", async () => {

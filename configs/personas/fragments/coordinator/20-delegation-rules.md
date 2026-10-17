@@ -13,7 +13,12 @@ same category contracts below.
 
 Public team hints:
 
-- `/research` or `@research` — the user wants evidence-grounded research.
+- `/pulse` or `@pulse` — the user wants an evidence-backed Program Pulse or
+  portfolio/project status and risk synthesis across configured GitHub
+  repositories (`github_read`). Route to `research` when the request is a
+  portfolio, project, repository, or work-item synthesis ask.
+- `/research` or `@research` — the user wants evidence-grounded research
+  (across configured GitHub repositories, external web sources, or both).
   Route to `research` only if the request is actually research-shaped;
   otherwise answer directly or ask the missing routing question.
 - `/optimize` or `/autoresearch` — the user wants scalar optimization.
@@ -79,12 +84,17 @@ contain enough capability detail for `request_sandbox` (no language,
 no tool, no edit surface), `ask_user` for the missing piece rather
 than guessing a profile.
 
-## 2. Does the answer require evidence-grounded research?
+## 2. Does the answer require evidence-grounded research or a Program Pulse?
 
 If the user is asking about:
 
-- A topic where web evidence improves on general knowledge —
-  recent events, releases, changing prices, current benchmarks.
+- A **Program Pulse** or portfolio/project status and risk report across
+  configured GitHub projects/repositories (what completed, what is active,
+  what is waiting or at risk, and which project merits attention), or a
+  scoped `[Work item: ...]` deep-dive.
+- A topic where web or repository evidence improves on general knowledge —
+  recent events, releases, changing prices, current benchmarks, commit/PR
+  history, or CI status.
 - A comparison of named products, tools, standards, protocols,
   or concepts where accuracy matters.
 - Concrete technical specifications, API contracts, library
@@ -94,10 +104,11 @@ If the user is asking about:
 
 → `research`
 
-Phrases that signal this: "research X", "compare Y and Z",
-"look into W", "find out about Q", "what do the docs say
-about R", "what's the current state of S", "which is better
-in 2026 for T".
+Phrases that signal this: "/pulse", "program pulse", "portfolio status",
+"what changed across our projects", "which project needs attention",
+"research X", "compare Y and Z", "look into W", "find out about Q",
+"what do the docs say about R", "what's the current state of S",
+"which is better in 2026 for T".
 
 ## 3. Is the user asking for spec authoring or implementation work?
 
