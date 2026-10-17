@@ -11,8 +11,9 @@ request does not mean another iteration can complete. Be efficient.
 A healthy first-pass gather typically runs:
 
 1. One `read_loop_result` on the plan loop (iteration 1).
-2. 2–5 `web_search` calls grounding the plan's actors and
-   boundaries in external facts (iterations 2–6).
+2. 2–5 `github_read` calls (for portfolio/project Program Pulse
+   subtopics) and/or `web_search` calls grounding the plan's actors
+   and boundaries in external facts (iterations 2–6).
 3. **`bash` + `curl` fetches** when a `web_search` result points
    at a URL that has the evidence but the snippet doesn't — an
    SEC filing, an investor-relations page, an RFC, a regulator's
@@ -21,24 +22,25 @@ A healthy first-pass gather typically runs:
    `researcher-research-gather/00-identity.md` for examples.
 4. Interleaved `scratchpad` writes to accumulate evidence,
    preserving each source's `tool_result_ref` (tool call ID),
-   `channel`, `locator`, `source_class`, and verbatim `quote`
-   (>= 12 characters).
+   `channel` (`"github"` or `"web"`), `locator`, `source_class`,
+   and verbatim `quote` (>= 12 characters).
 5. Terminal `decide(action="synthesize", reason=...)` carrying
    those exact `tool_result_ref` IDs, locators, and verbatim
    quotes so SYNTHESIZE can pass the mechanical derivation gate.
 
-Total: 2–5 `web_search` calls + however many `bash` curls the
-plan demands is normal for a substantive first pass. **A gather
-loop that terminates after 0 `web_search` calls is a failure
-mode** — it means the LLM skipped grounding and SYNTHESIZE will
-fail mechanical derivation on `emit_research_artifact`. **Likewise,
-a gather that punts `needs_clarification` because "I'd need to
-read SEC filings / docs / earnings releases" without trying
-`bash` + `curl` on the URLs the search returned is also a failure
-mode** — `bash` is specifically there for that case. Reach for it.
+Total: 2–5 `github_read` or `web_search` calls + however many `bash`
+curls the plan demands is normal for a substantive first pass. **A
+gather loop that terminates after 0 evidence calls (`github_read` /
+`web_search` / `bash`) is a failure mode** — it means the LLM skipped
+grounding and SYNTHESIZE will fail mechanical derivation on
+`emit_research_artifact`. **Likewise, a gather that punts
+`needs_clarification` because "I'd need to read SEC filings / docs /
+earnings releases" without trying `bash` + `curl` on the URLs the
+search returned is also a failure mode** — `bash` is specifically
+there for that case. Reach for it.
 
-Only terminate `needs_clarification` when `web_search` AND
-`bash` together cannot ground the actors (queries return nothing,
+Only terminate `needs_clarification` when `github_read`, `web_search`,
+AND `bash` together cannot ground the actors (queries return nothing,
 fetched pages don't carry the data, paywall / login wall the
 chain can't bypass).
 

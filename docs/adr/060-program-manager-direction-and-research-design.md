@@ -276,3 +276,27 @@ review required by [`cmd/semteams/tools/README.md`](../../cmd/semteams/tools/REA
    and cursor state, `github_read`'s HTTP transport and cursor store migrate to that primitive while keeping the
    portfolio allowlist and `channel: "github"` evidence-record projection in SemTeams.
 
+## Addendum 2026-10-17: Program Pulse delivered as an operator profile of the `research` pack (#267)
+
+Following the delivery of the `/work` portfolio work board (`#309`), the evidence provenance contract (`#271`), the
+`github_read` adapter (`#273`), and the research containment budget (`#272`), the owner ruled on 2026-10-17 to deliver
+`#267` (the read-only Program Pulse walking skeleton) directly inside the existing `research` category pack rather than
+standing up a parallel `configs/rules/program-report/` rule pack, and to defer `#268` (bespoke work classification and
+cadence scheduler) to `horizon:post-mvp`:
+
+1. **Deterministic structural state vs. semantic synthesis.** The `/work` board (`ui/src/routes/work/`) and `/api/work`
+   already provide deterministic, zero-LLM structural visibility across the configured portfolio (programs, projects,
+   repositories, issues, pull requests, and runs). Duplicating deterministic bucket counts in an LLM rule pack is
+   unnecessary for `v0.2.0`. The agentic **Program Pulse** focuses on what requires multi-agent synthesis: cross-project
+   status and risk explanation, dependency analysis, and evidence-backed operator recommendations.
+2. **One evidence engine (`configs/rules/research/`).** Rather than duplicating the 8-rule `plan → gather (for_each) →
+   synthesize → reviewer-research → coordinator` topology under `configs/rules/program-report/`, rule `02-plan-to-gather.json`
+   grants `github_read` alongside `web_search` and `bash` to `researcher-research-gather`. Both `github_read`
+   (`channel: "github"`, `source_class: "primary"`) and `web_search` (`channel: "web"`) feed the same mechanical
+   derivation check in `emit_research_artifact`.
+3. **Stable internal IDs, operator-facing `/pulse` command.** Internal category, role, and canonical 3-segment predicate
+   identifiers (`research`, `researcher-research-*`, `reviewer-research`, `research.*`) remain unchanged across rules,
+   personas, and contract tests. At the operator boundary (mirroring `/optimize` → `autoresearch`), SemTeams exposes
+   first-class **`/pulse`** (`@pulse`) and **`/research`** (`@research`) commands and UI action chips that both route to
+   `decide(action="research")`.
+

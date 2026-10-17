@@ -7,9 +7,13 @@ synthesize → reviewer-research arc, terminating on the reviewer's
 user-facing reply).
 
 This pack runs through the substrate singletons configured by
-`configs/flow-bootstrap.json`. It is one of two-to-three category
-packs that ship in the MVP-2 inventory; see ADR-042 §"MVP scope" for
-the full list.
+`configs/flow-bootstrap.json`. It is one of two product-facing category
+packs in the live runtime alongside `autoresearch` ([ADR-058](../../../docs/adr/058-beta159-realignment-and-demo-lane-focus.md)),
+and powers both open-ended external investigation (`/research`) and
+read-only portfolio/project **Program Pulse** synthesis (`/pulse`) by
+equipping `researcher-research-gather` with `github_read` alongside
+`web_search` and `bash` ([ADR-060](../../../docs/adr/060-program-manager-direction-and-research-design.md),
+[#267](https://github.com/C360Studio/semteams/issues/267)).
 
 ## Naming convention
 

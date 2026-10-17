@@ -27,6 +27,20 @@ function argsAfterFirst(args: string): string | undefined {
 
 export const COMMANDS: SlashCommand[] = [
   {
+    name: "pulse",
+    aliases: [],
+    description:
+      "Ask the coordinator to validate and route a portfolio or project Program Pulse prompt",
+    usage: "/pulse <portfolio or project question>",
+    intent: "general",
+    availableOn: ["flow-builder", "data-view"],
+    parse: (args: string) => ({
+      intent: "general",
+      content: `/pulse ${args}`.trim(),
+      params: { requestedTeam: "research", prompt: args },
+    }),
+  },
+  {
     name: "research",
     aliases: [],
     description: "Ask the coordinator to validate and route a research prompt",

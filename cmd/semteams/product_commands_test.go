@@ -23,7 +23,7 @@ func TestRegisterProductCommands_TeamHintsOnly(t *testing.T) {
 	}
 	cmds := agenticdispatch.ListRegisteredCommands()
 	want := []string{
-		"research", "optimize", "autoresearch",
+		"pulse", "research", "optimize", "autoresearch",
 		"spec", "create-change", "dev-via-test", "build", "dev", "implement-spec",
 	}
 	for _, name := range want {

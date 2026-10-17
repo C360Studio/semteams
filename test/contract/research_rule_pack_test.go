@@ -265,3 +265,40 @@ func TestResearchRulePack_WiredIntoBootstrap(t *testing.T) {
 		}
 	}
 }
+
+// TestResearchRulePack_GatherIncludesGitHubRead pins that
+// 02-plan-to-gather.json grants github_read alongside web_search and bash
+// so researcher-research-gather can collect primary GitHub portfolio evidence
+// for Program Pulse (/pulse) and repository research runs (#267).
+func TestResearchRulePack_GatherIncludesGitHubRead(t *testing.T) {
+	path := filepath.Join(researchPackDir, "02-plan-to-gather.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	var rule struct {
+		OnEnter []struct {
+			Type  string   `json:"type"`
+			Role  string   `json:"role"`
+			Tools []string `json:"tools"`
+		} `json:"on_enter"`
+	}
+	if err := json.Unmarshal(data, &rule); err != nil {
+		t.Fatalf("unmarshal %s: %v", path, err)
+	}
+	var found bool
+	for _, a := range rule.OnEnter {
+		if a.Type != "publish_agent" || a.Role != "researcher-research-gather" {
+			continue
+		}
+		for _, tool := range a.Tools {
+			if tool == "github_read" {
+				found = true
+				break
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("02-plan-to-gather.json publish_agent(researcher-research-gather) must include \"github_read\" in tools")
+	}
+}

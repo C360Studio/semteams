@@ -1,10 +1,11 @@
 # SemTeams Program Manager
 
 **Status:** Owner-approved product direction, 2026-08-26; amended 2026-09-03 per the owner ruling on
-[#264](https://github.com/C360Studio/semteams/issues/264), and 2026-10-03 for agent-runtime ownership and SemDev
-absorption ([ADR-061](../adr/061-agent-runtime-ownership-and-observable-work.md)). This document describes the target
-product and MVP. For the
-behavior available today, see the [README](../../README.md) and [demo claim boundary](../demo-mvp-claims.md).
+[#264](https://github.com/C360Studio/semteams/issues/264), 2026-10-03 for agent-runtime ownership and SemDev
+absorption ([ADR-061](../adr/061-agent-runtime-ownership-and-observable-work.md)), and 2026-10-17 for the Program Pulse
+walking skeleton ([#267](https://github.com/C360Studio/semteams/issues/267),
+[ADR-060 addendum](../adr/060-program-manager-direction-and-research-design.md)). For the behavior available today, see
+the [README](../../README.md) and [demo claim boundary](../demo-mvp-claims.md).
 
 ## Product promise
 
@@ -97,32 +98,30 @@ and the shared substrate and generic durability to SemEngine; those transfers ar
 
 | Capability | Purpose | Product posture |
 |---|---|---|
-| `program-report` | Evidence-backed program pulse and project drill-down. | First MVP pack; not yet shipped. |
-| `research` | Configurable-depth evidence gathering, synthesis, and review. | Shipped foundation; retained. |
+| `program-report` (`/pulse`) | Evidence-backed program pulse and project drill-down over configured portfolio repositories. | Shipped as an operator profile of `research` (`/pulse` + `github_read`, [#267](https://github.com/C360Studio/semteams/issues/267)) alongside deterministic structural state on `/work` ([#309](https://github.com/C360Studio/semteams/issues/309)). |
+| `research` (`/research`) | Configurable-depth evidence gathering (`github_read`, `web_search`, `bash`), synthesis, and review. | Shipped foundation; powers both `/pulse` and `/research`. |
 | `project-plan` | Propose sequencing, milestones, risks, and issue-shaped work. | Valid post-MVP capability. |
 | `design-review` | Develop or assess product and technical designs in project context. | Valid post-MVP capability. |
 | `project-action` | Draft or file approved project work and monitor disposition. | Later authority stage. |
 | `pr-review` | Independent review using issue, evidence, and program impact. | Later authority stage. |
 | Development pack (name unsettled) | Absorb SemDev's issue/OpenSpec-to-verified-PR workflow on the shared runtime. | Separately qualified future activation; outside the read-only pulse MVP. |
 
-General and deep research should be depth or budget profiles of the research capability unless experience proves they
+General research, deep research, and Program Pulse are profiles of the `research` capability unless experience proves they
 have meaningfully different terminal contracts. Packs may reuse tools, evidence contracts, and persona fragments. The
 first MVP must not depend on opaque pack-to-pack composition: each user-visible journey has an explicit entry point,
 terminal result, and authority boundary.
 
-Evidence-verified research is the program manager's core competence, and `program-report` is built as the first depth
-profile of the `research` capability, not beside it: the planner decomposes the operator's portfolio, gatherers read
-GitHub through the product-owned adapter, synthesis emits a pulse artifact whose every factual claim carries an evidence
-record, and review is a mechanical derivation check (every cited object appears in a tool result in the run's own
-trajectory) plus plan conformance. The evidence record is channel-typed so that `pr-review`, docs-drift findings, and
-open-web research later share the same reviewer and the same check. GitHub is the first domain because it is the only
-candidate domain with ground truth; the open web and SemSource are later channels of the same engine.
-That reduced review is the verifiable-domain shortcut: the GitHub API is ground truth. Research over channels without
-ground truth adds the falsification phase and origin-counted redundant width recorded in
-[ADR-060](../adr/060-program-manager-direction-and-research-design.md) decision 6.
+Evidence-verified research is the program manager's core competence, and Program Pulse (`/pulse`) is built directly as a
+profile of the `research` capability, not beside it: the planner decomposes the operator's portfolio (`1..4` epics),
+gatherers read GitHub through the product-owned `github_read` adapter (and external web sources when needed), synthesis
+emits a research artifact whose every factual claim carries an evidence record, and review enforces mechanical
+derivation (every cited object appears in a tool result in the run's own trajectory) plus plan conformance. Deterministic
+structural portfolio inspection lives on `/work`; semantic cross-project status, risk synthesis, and recommendations run
+through `/pulse`. Scheduled cadence and custom work-classification buckets ([#268](https://github.com/C360Studio/semteams/issues/268))
+are deferred to `horizon:post-mvp`.
 
-`autoresearch` remains a useful shipped framework demonstration. It is not part of the initial program-manager MVP
-story unless a concrete program-management journey requires metric optimization.
+`autoresearch` (`/optimize`) remains a shipped demonstration pack alongside `research`. It is not part of the initial
+program-manager MVP story unless a concrete program-management journey requires metric optimization.
 
 ## MVP boundary
 

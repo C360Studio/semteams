@@ -14,11 +14,12 @@ qualified development pack. Extraction, SemEngine adoption and pack activation a
 the ownership decision for implemented runtime migration.
 
 The owner-approved product direction lives in [`docs/product/program-manager.md`](docs/product/program-manager.md).
-Research, planning, and design are capabilities used in support of programs and projects; the first target MVP is a
-read-only, evidence-backed program pulse. The live runtime still exposes only the research and autoresearch
-product-facing packs, so do not describe the target MVP as shipped behavior. The long-term topology is one program
-manager coordinating durable project managers; the MVP proves that view through one program-manager journey with
-project drill-down.
+Research, planning, and design are capabilities used in support of programs and projects. Deterministic structural
+portfolio visibility lives on `/work` (`#309`), while the read-only, evidence-backed **Program Pulse** (`#267`) runs
+as an operator profile (`/pulse`) of the `research` pack using `github_read` (`#273`) under the `1..4` fan-out and loop
+containment budget (`#272`). Scheduled cadence and custom work classification (`#268`) are deferred to
+`horizon:post-mvp`. The long-term topology is one program manager coordinating durable project managers; the MVP proves
+that view through one program-manager journey with project drill-down.
 
 **Current implementation:** every processor comes from the frozen `github.com/c360studio/semstreams` dependency.
 `cmd/semteams/` independently wires the primitives per ADR-029; `internal/runtimecatalog` explicitly registers the
@@ -39,10 +40,11 @@ flow configs ([ADR-042](docs/adr/042-coordinator-instantiated-flows-via-template
 
 Live task categories ([ADR-058](docs/adr/058-beta159-realignment-and-demo-lane-focus.md)):
 
-- **`research`** — coordinator routes prose research asks via `decide(action="research")`. `configs/rules/research/`
-  drives `researcher-research-plan → researcher-research-gather (×N fan-out) → researcher-research-synthesize →
-  reviewer-research → coordinator wake-up`.
-- **`autoresearch`** — metric optimization with empirical keep/revert in an attested devcontainer sandbox
+- **`research`** (`/pulse` and `/research`) — coordinator routes both portfolio/project Program Pulse asks (`/pulse`)
+  and open-ended investigation asks (`/research`) via `decide(action="research")`. `configs/rules/research/` drives
+  `researcher-research-plan → researcher-research-gather (×1..4 fan-out with github_read + web_search + bash) →
+  researcher-research-synthesize → reviewer-research → coordinator wake-up`.
+- **`autoresearch`** (`/optimize`) — metric optimization with empirical keep/revert in an attested devcontainer sandbox
   (`configs/rules/autoresearch/`).
 
 **Parked donor material (ADR-058):** the dev-side packs (`create-change`, `proof-readiness`, `dev-from-task`,
