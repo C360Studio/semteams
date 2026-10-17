@@ -1,41 +1,36 @@
 package contract
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/c360studio/semstreams/agentic"
+	"github.com/c360studio/semstreams/processor/agentic-tools/executors"
 	"gopkg.in/yaml.v3"
 
 	"github.com/c360studio/semteams/cmd/semteams/devviaspec"
 	"github.com/c360studio/semteams/cmd/semteams/research"
+	"github.com/c360studio/semteams/cmd/semteams/tools/emitartifact"
 )
 
 // TestJourneyFixtureEmitArgs_Validate walks every mock-llm journey
 // fixture under test/fixtures/journeys and round-trips each
 // `emit_research_artifact` / `emit_plan` tool call's arguments_json
-// blob through the same parse + Validate path the production executor
-// uses.
+// blob through the same parse + Validate + VerifyDerivation path the
+// production executor uses.
 //
 // Why this exists: the fixtures encode the canonical "this is how a
 // model following the persona contract calls the tool" example. If the
 // fixture args drift away from the tool's schema (missing required
-// field, wrong nested key shape, type mismatch), the Playwright e2e
-// fails at runtime — but only after spinning up the full Docker stack.
-// This test catches drift in <1s without booting anything.
-//
-// Coverage is structural well-formedness only — it doesn't check that
-// the args are a *good* example of the persona contract (that's a
-// reviewer judgment), only that they're a *valid* example the executor
-// accepts. The emit_dev_via_spec_artifact branch retired alongside the
-// dev-via-spec arc in the ADR-042 MVP-7 follow-up sweep.
-//
-// Loop ID and produced_at are server-supplied at runtime; the test
-// injects synthetic values so Validate() doesn't reject on missing
-// loop_id (mirrors what parseArgsIntoPlan / parseArgsIntoArtifact do
-// at execution time).
+// field, wrong nested key shape, type mismatch) or from the stub
+// web_search output format, the Playwright e2e fails at runtime — but
+// only after spinning up the full Docker stack. This test catches drift
+// in <1s without booting anything.
 func TestJourneyFixtureEmitArgs_Validate(t *testing.T) {
 	t.Parallel()
 
@@ -61,18 +56,32 @@ func TestJourneyFixtureEmitArgs_Validate(t *testing.T) {
 	}
 }
 
-// journeyFixture is the minimal YAML shape needed to walk a fixture's
-// tool calls. Other fields (description, name, completion turns,
-// arguments unrelated to emit_*) are intentionally not deserialised
-// — keeping the type narrow means a fixture-format change unrelated
-// to emit_* args can't break this test.
+type journeyTurn struct {
+	ToolCall *struct {
+		ID            string `yaml:"id,omitempty"`
+		Name          string `yaml:"name"`
+		ArgumentsJSON string `yaml:"arguments_json"`
+	} `yaml:"tool_call,omitempty"`
+}
+
 type journeyFixture struct {
-	Responses []struct {
-		ToolCall *struct {
-			Name          string `yaml:"name"`
-			ArgumentsJSON string `yaml:"arguments_json"`
-		} `yaml:"tool_call,omitempty"`
-	} `yaml:"responses"`
+	Responses       []journeyTurn `yaml:"responses"`
+	ResponsesByRole []struct {
+		Match     string        `yaml:"match"`
+		Responses []journeyTurn `yaml:"responses"`
+	} `yaml:"responses_by_role"`
+}
+
+type fixtureToolResultResolver struct {
+	results map[string]*emitartifact.ResolvedToolResult
+}
+
+func (r *fixtureToolResultResolver) ResolveToolResult(_ context.Context, _ agentic.ToolCall, ref string) (*emitartifact.ResolvedToolResult, error) {
+	res, ok := r.results[ref]
+	if !ok {
+		return nil, fmt.Errorf("tool_result_ref %q not found in fixture tool calls", ref)
+	}
+	return res, nil
 }
 
 func validateJourneyFixture(t *testing.T, path string) {
@@ -88,15 +97,57 @@ func validateJourneyFixture(t *testing.T, path string) {
 		t.Fatalf("parse YAML %s: %v", path, err)
 	}
 
+	var allTurns []journeyTurn
+	allTurns = append(allTurns, fx.Responses...)
+	for _, bucket := range fx.ResponsesByRole {
+		allTurns = append(allTurns, bucket.Responses...)
+	}
+
+	stubWebSearch := executors.NewStubWebSearchExecutor()
+	declaredCallIDs := make(map[string]bool)
+	resolvedCalls := make(map[string]*emitartifact.ResolvedToolResult)
+	for _, resp := range allTurns {
+		if resp.ToolCall == nil || resp.ToolCall.ID == "" {
+			continue
+		}
+		declaredCallIDs[resp.ToolCall.ID] = true
+		if resp.ToolCall.Name == "web_search" {
+			var callArgs map[string]any
+			if err := json.Unmarshal([]byte(resp.ToolCall.ArgumentsJSON), &callArgs); err != nil {
+				t.Fatalf("%s: unmarshal web_search arguments_json for %q: %v", path, resp.ToolCall.ID, err)
+			}
+			res, err := stubWebSearch.Execute(context.Background(), agentic.ToolCall{
+				ID:        resp.ToolCall.ID,
+				Name:      "web_search",
+				Arguments: callArgs,
+				LoopID:    "fixture-gather-loop",
+			})
+			if err != nil || res.Error != "" {
+				t.Fatalf("%s: execute stub web_search for %q: err=%v res.Error=%q", path, resp.ToolCall.ID, err, res.Error)
+			}
+			resolvedCalls[resp.ToolCall.ID] = &emitartifact.ResolvedToolResult{
+				Ref:               resp.ToolCall.ID,
+				CallID:            resp.ToolCall.ID,
+				LoopID:            "fixture-gather-loop",
+				ToolName:          "web_search",
+				Status:            string(agentic.TrajectoryStatusCompleted),
+				Content:           res.Content,
+				DispatchArguments: callArgs,
+				ObservedAt:        time.Now().UTC(),
+			}
+		}
+	}
+
+	resolver := &fixtureToolResultResolver{results: resolvedCalls}
 	emitTurnsSeen := 0
-	for i, resp := range fx.Responses {
+	for i, resp := range allTurns {
 		if resp.ToolCall == nil {
 			continue
 		}
 		switch resp.ToolCall.Name {
 		case "emit_research_artifact":
 			emitTurnsSeen++
-			validateResearchArtifactArgs(t, path, i, resp.ToolCall.ArgumentsJSON)
+			validateResearchArtifactArgs(t, path, i, resp.ToolCall.ArgumentsJSON, declaredCallIDs, resolver)
 		case "emit_plan":
 			emitTurnsSeen++
 			validatePlanArgs(t, path, i, resp.ToolCall.ArgumentsJSON)
@@ -107,11 +158,17 @@ func validateJourneyFixture(t *testing.T, path string) {
 }
 
 // validateResearchArtifactArgs round-trips the LLM-supplied args
-// through the same shape parseArgsIntoArtifact (in
-// cmd/semteams/tools/emitartifact/executor.go) uses at runtime. Server-
-// supplied loop_id and produced_at are injected so Validate() doesn't
-// reject for legitimate-at-runtime reasons.
-func validateResearchArtifactArgs(t *testing.T, path string, idx int, raw string) {
+// through the same shape parseArgsIntoArtifact + PopulateCitationDefaults
+// + Validate + VerifyDerivation (in cmd/semteams/tools/emitartifact) use
+// at runtime.
+func validateResearchArtifactArgs(
+	t *testing.T,
+	path string,
+	idx int,
+	raw string,
+	declaredCallIDs map[string]bool,
+	resolver emitartifact.ToolResultResolver,
+) {
 	t.Helper()
 
 	var args map[string]any
@@ -133,8 +190,34 @@ func validateResearchArtifactArgs(t *testing.T, path string, idx int, raw string
 		t.Errorf("%s [response %d emit_research_artifact]: unmarshal into research.Artifact: %v", path, idx, err)
 		return
 	}
+	artifact.PopulateCitationDefaults()
 	if err := artifact.Validate(); err != nil {
 		t.Errorf("%s [response %d emit_research_artifact]: Validate(): %v", path, idx, err)
+		return
+	}
+	for ai, actor := range artifact.Actors {
+		for ei, ev := range actor.Evidence {
+			if !declaredCallIDs[ev.ToolResultRef] {
+				t.Errorf("%s [response %d emit_research_artifact]: actors[%d].evidence[%d] cites tool_result_ref %q which is not declared on any tool_call.id in the fixture",
+					path, idx, ai, ei, ev.ToolResultRef)
+			}
+		}
+	}
+	for ii, ip := range artifact.IntegrationPoints {
+		for ei, ev := range ip.Evidence {
+			if !declaredCallIDs[ev.ToolResultRef] {
+				t.Errorf("%s [response %d emit_research_artifact]: integration_points[%d].evidence[%d] cites tool_result_ref %q which is not declared on any tool_call.id in the fixture",
+					path, idx, ii, ei, ev.ToolResultRef)
+			}
+		}
+	}
+
+	if err := emitartifact.VerifyDerivation(context.Background(), resolver, agentic.ToolCall{
+		ID:     "fixture-emit-call",
+		Name:   emitartifact.ToolName,
+		LoopID: "fixture-loop-id",
+	}, &artifact); err != nil {
+		t.Errorf("%s [response %d emit_research_artifact]: VerifyDerivation against stub web_search output failed: %v", path, idx, err)
 	}
 }
 

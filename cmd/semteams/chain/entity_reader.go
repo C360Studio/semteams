@@ -53,6 +53,15 @@ type EntityTripleReader interface {
 	ReadEntity(ctx context.Context, entityID string) (map[string]any, error)
 }
 
+// MultiEntityTripleReader extends EntityTripleReader with ReadEntityAll, which
+// returns every object value recorded for a predicate on an entity rather than
+// collapsing repeated predicates under last-wins semantics (e.g.
+// research.gather.completed-subtopic on a research plan loop entity).
+type MultiEntityTripleReader interface {
+	EntityTripleReader
+	ReadEntityAll(ctx context.Context, entityID string) (map[string][]any, error)
+}
+
 // NATSEntityReader reads any entity's triples via the graph component's
 // graph.query.entity request/reply NATS surface. Mirrors the response
 // shape used by chainpause/decision_handler.go NATSPauseDataReader.
@@ -93,10 +102,36 @@ func NewNATSEntityReader(client *natsclient.Client, subject string) *NATSEntityR
 // ReadEntity means an empty triple map — callers decide whether an
 // absent entity is benign (a loop outside any run) or an error.
 func (r *NATSEntityReader) ReadEntity(ctx context.Context, entityID string) (map[string]any, error) {
+	respData, found, err := r.requestEntity(ctx, entityID)
+	if err != nil || !found {
+		return map[string]any{}, err
+	}
+	triples, err := DecodeExactEntityTriples(respData)
+	if err != nil {
+		return nil, fmt.Errorf("decode entity response for %q: %w", entityID, err)
+	}
+	return triples, nil
+}
+
+// ReadEntityAll implements MultiEntityTripleReader against a live graph
+// component, preserving all object values for multi-valued predicates.
+func (r *NATSEntityReader) ReadEntityAll(ctx context.Context, entityID string) (map[string][]any, error) {
+	respData, found, err := r.requestEntity(ctx, entityID)
+	if err != nil || !found {
+		return map[string][]any{}, err
+	}
+	triples, err := DecodeExactEntityAllTriples(respData)
+	if err != nil {
+		return nil, fmt.Errorf("decode entity response for %q: %w", entityID, err)
+	}
+	return triples, nil
+}
+
+func (r *NATSEntityReader) requestEntity(ctx context.Context, entityID string) ([]byte, bool, error) {
 	req := map[string]string{"id": entityID}
 	reqData, err := json.Marshal(req)
 	if err != nil {
-		return nil, fmt.Errorf("marshal entity query: %w", err)
+		return nil, false, fmt.Errorf("marshal entity query: %w", err)
 	}
 
 	queryCtx, cancel := context.WithTimeout(ctx, graphQueryTimeout)
@@ -109,16 +144,11 @@ func (r *NATSEntityReader) ReadEntity(ctx context.Context, entityID string) (map
 		// For our callers that's an empty triple map — they distinguish
 		// "absent predicate" from "graph error" by checking the map.
 		if errs.IsInvalid(err) {
-			return map[string]any{}, nil
+			return nil, false, nil
 		}
-		return nil, fmt.Errorf("graph entity query for %q: %w", entityID, err)
+		return nil, false, fmt.Errorf("graph entity query for %q: %w", entityID, err)
 	}
-
-	triples, err := DecodeExactEntityTriples(respData)
-	if err != nil {
-		return nil, fmt.Errorf("decode entity response for %q: %w", entityID, err)
-	}
-	return triples, nil
+	return respData, true, nil
 }
 
 // DecodeExactEntityTriples decodes the beta.160 exact-read envelope the
@@ -130,6 +160,24 @@ func (r *NATSEntityReader) ReadEntity(ctx context.Context, entityID string) (map
 // this decode against upstream's literal fixture. kvRevision is surfaced
 // for CAS writers; read-only callers ignore it.
 func DecodeExactEntityTriples(respData []byte) (map[string]any, error) {
+	all, err := DecodeExactEntityAllTriples(respData)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]any, len(all))
+	for pred, objs := range all {
+		if len(objs) > 0 {
+			// Last-wins semantics: if a predicate appears twice the most
+			// recent one wins, matching graph-ingest's stamping policy.
+			out[pred] = objs[len(objs)-1]
+		}
+	}
+	return out, nil
+}
+
+// DecodeExactEntityAllTriples decodes the beta.160 exact-read envelope and
+// preserves every object value per predicate in slice order.
+func DecodeExactEntityAllTriples(respData []byte) (map[string][]any, error) {
 	var resp struct {
 		Entity struct {
 			ID      string `json:"id"`
@@ -144,11 +192,9 @@ func DecodeExactEntityTriples(respData []byte) (map[string]any, error) {
 		return nil, err
 	}
 
-	out := make(map[string]any, len(resp.Entity.Triples))
+	out := make(map[string][]any, len(resp.Entity.Triples))
 	for _, t := range resp.Entity.Triples {
-		// Last-wins semantics: if a predicate appears twice the most
-		// recent one wins, matching graph-ingest's stamping policy.
-		out[t.Predicate] = t.Object
+		out[t.Predicate] = append(out[t.Predicate], t.Object)
 	}
 	return out, nil
 }

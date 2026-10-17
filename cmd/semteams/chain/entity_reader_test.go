@@ -44,3 +44,19 @@ func TestDecodeExactEntityTriples_Bare159ShapeYieldsEmpty(t *testing.T) {
 		t.Errorf("bare 159 shape decoded %d triples; the envelope contract must have changed — re-verify upstream", len(triples))
 	}
 }
+
+func TestDecodeExactEntityAllTriples_PreservesMultiValuedPredicates(t *testing.T) {
+	fixture := []byte(`{"entity":{"id":"c360.demo.agentic-loop.agent.execution.plan_1","triples":[` +
+		`{"subject":"c360.demo.agentic-loop.agent.execution.plan_1","predicate":"research.gather.completed-subtopic","object":"gather-loop-1"},` +
+		`{"subject":"c360.demo.agentic-loop.agent.execution.plan_1","predicate":"research.gather.completed-subtopic","object":"gather-loop-2"}` +
+		`]},"kvRevision":8}`)
+
+	all, err := DecodeExactEntityAllTriples(fixture)
+	if err != nil {
+		t.Fatalf("decode all triples: %v", err)
+	}
+	got := all["research.gather.completed-subtopic"]
+	if len(got) != 2 || got[0] != "gather-loop-1" || got[1] != "gather-loop-2" {
+		t.Fatalf("completed-subtopic = %#v, want [gather-loop-1 gather-loop-2]", got)
+	}
+}

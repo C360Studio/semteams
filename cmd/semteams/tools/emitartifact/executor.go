@@ -43,6 +43,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"text/template"
 	"time"
@@ -135,6 +136,7 @@ type PayloadPublisher interface {
 type Executor struct {
 	publisher   agentictools.TriplePublisher
 	natsPublish PayloadPublisher
+	resolver    ToolResultResolver
 	platform    types.PlatformMeta
 	logger      *slog.Logger
 	outputDir   string
@@ -165,19 +167,47 @@ func NewExecutor(publisher agentictools.TriplePublisher, natsPublish PayloadPubl
 	}
 }
 
+// SetToolResultResolver wires the mechanical derivation check resolver onto
+// the executor. When non-nil, Execute verifies every cited EvidenceRecord's
+// tool_result_ref, locator/origin_id, and verbatim quote against prior tool
+// results from the same research run before rendering or publishing.
+func (e *Executor) SetToolResultResolver(r ToolResultResolver) {
+	if isNilResolver(r) {
+		e.resolver = nil
+		return
+	}
+	e.resolver = r
+}
+
 // ListTools returns the LLM-facing schema. The args mirror the Artifact
 // JSON shape directly (no wrapping object) so the LLM can think in
 // terms of the artifact's structure rather than nesting under a single
 // field. loop_id and produced_at are derived server-side — the LLM
 // neither sees nor sets them.
 func (e *Executor) ListTools() []agentic.ToolDefinition {
+	evidenceSchema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"channel":         map[string]any{"type": "string", "enum": []string{"github", "web", "semsource"}, "description": "Source channel that produced the evidence."},
+			"locator":         map[string]any{"type": "string", "description": "Human-readable URL, path, or entity reference for the source."},
+			"origin_id":       map[string]any{"type": "string", "description": "Optional canonical scheme-prefixed identity (github://owner/repo/... or https://host/path or semsource://<6-part-entity-id>). Automatically derived from (channel, locator) when omitted."},
+			"retrieved_at":    map[string]any{"type": "string", "description": "Optional RFC3339 timestamp when the source was retrieved. Automatically stamped from the tool execution trajectory when omitted."},
+			"source_class":    map[string]any{"type": "string", "enum": []string{"primary", "official", "secondary", "community"}, "description": "Provenance authority class."},
+			"quote":           map[string]any{"type": "string", "minLength": research.MinQuoteLength, "description": "Verbatim substring (>= 12 chars) from the tool output backing this claim."},
+			"tool_result_ref": map[string]any{"type": "string", "description": "Tool call ID, execution ID, or '<loop_id>/<call_id>' of the retrieval tool invocation in this research run that returned the cited source."},
+			"revision":        map[string]any{"type": "integer", "minimum": 1, "description": "Artifact revision in which this evidence was gathered (1 <= revision <= artifact.revision). Defaults to the producing loop's revision or artifact.revision when omitted."},
+			"kind":            map[string]any{"type": "string", "description": "Optional evidence kind ('snippet' for web_search, 'body' for fetched pages, 'issue'/'pull_request'/'release'/'commit'/'workflow_run' for github_read, 'entity' for semsource). Stamped server-side when omitted."},
+		},
+		"required": []string{"channel", "locator", "source_class", "quote", "tool_result_ref"},
+	}
 	actorSchema := map[string]any{
 		"type": "object",
 		"properties": map[string]any{
-			"name": map[string]any{"type": "string", "description": "Actor name (e.g. \"OSH driver framework\")."},
-			"role": map[string]any{"type": "string", "description": "One-line role description for this actor."},
+			"name":     map[string]any{"type": "string", "description": "Actor name (e.g. \"OSH driver framework\")."},
+			"role":     map[string]any{"type": "string", "description": "One-line role description for this actor."},
+			"evidence": map[string]any{"type": "array", "items": evidenceSchema, "description": "Non-empty list of cited EvidenceRecords backing this actor claim."},
 		},
-		"required": []string{"name", "role"},
+		"required": []string{"name", "role", "evidence"},
 	}
 	integrationPointSchema := map[string]any{
 		"type": "object",
@@ -186,8 +216,9 @@ func (e *Executor) ListTools() []agentic.ToolDefinition {
 			"to":        map[string]any{"type": "string", "description": "Destination actor name."},
 			"data":      map[string]any{"type": "string", "description": "What data flows across this point."},
 			"direction": map[string]any{"type": "string", "enum": []string{"read", "write"}, "description": "Direction of the data flow."},
+			"evidence":  map[string]any{"type": "array", "items": evidenceSchema, "description": "Non-empty list of cited EvidenceRecords backing this integration point claim."},
 		},
-		"required": []string{"from", "to"},
+		"required": []string{"from", "to", "evidence"},
 	}
 	mutationSchema := map[string]any{
 		"type": "object",
@@ -210,8 +241,8 @@ func (e *Executor) ListTools() []agentic.ToolDefinition {
 			"type": "object",
 			"properties": map[string]any{
 				"revision":            map[string]any{"type": "integer", "minimum": 1, "description": "This pass's revision number, starting at 1 and monotonic."},
-				"actors":              map[string]any{"type": "array", "items": actorSchema, "description": "External systems/frameworks/libraries the work touches, each with a one-line role."},
-				"integration_points":  map[string]any{"type": "array", "items": integrationPointSchema, "description": "Actor-to-actor data flows with direction."},
+				"actors":              map[string]any{"type": "array", "items": actorSchema, "description": "External systems/frameworks/libraries the work touches, each with a one-line role and cited evidence."},
+				"integration_points":  map[string]any{"type": "array", "items": integrationPointSchema, "description": "Actor-to-actor data flows with direction and cited evidence."},
 				"tasks":               map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Decomposable-grain tasks derived from the research."},
 				"addressed_gaps":      map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Reviewer-flagged gaps this pass closed."},
 				"open_gaps":           map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Reviewer-flagged gaps still outstanding after this pass. Every artifact must declare a verification stance: include either a 'needs_test_harness: <one-line description of the integration target>' entry (real integration target without a registered harness) or a 'needs_test_harness: not applicable — <reason>' entry (pure-information / non-software work). The marker is `needs_test_harness:` lowercase exactly (case-sensitive) so downstream tooling can reliably grep it."},
@@ -224,12 +255,14 @@ func (e *Executor) ListTools() []agentic.ToolDefinition {
 	}}
 }
 
-// Execute parses the args into a research.Artifact, validates it,
+// Execute parses the args into a research.Artifact, populates server-derivable
+// citation defaults, validates it, verifies mechanical derivation of every
+// cited EvidenceRecord against prior tool outputs in the same research run,
 // publishes the marker triples, and publishes the typed payload.
-// LLM-facing argument errors land on Result.Error with nil error so
-// the framework retry loop can surface them; transport failures
-// (publisher.AddTriple, natsPublish.Publish) land on Result.Error
-// with ErrorKind=network.
+// LLM-facing argument/citation errors land on Result.Error with
+// ErrorKind=invalid_args so the framework retry loop can surface them;
+// transport failures land on Result.Error with ErrorKind=network; corrupt
+// trajectory state lands on Result.Error with ErrorKind=internal.
 func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.ToolResult, error) {
 	if call.Name != ToolName {
 		return agentic.ToolResult{
@@ -259,6 +292,8 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 		}, nil
 	}
 
+	artifact.PopulateCitationDefaults()
+
 	if err := artifact.Validate(); err != nil {
 		return agentic.ToolResult{
 			CallID:    call.ID,
@@ -266,6 +301,26 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 			Error:     fmt.Sprintf("artifact validation failed: %v", err),
 			ErrorKind: agentic.ToolErrorInvalidArgs,
 		}, nil
+	}
+
+	if err := VerifyDerivation(ctx, e.resolver, call, artifact); err != nil {
+		return agentic.ToolResult{
+			CallID:    call.ID,
+			Name:      call.Name,
+			Error:     fmt.Sprintf("artifact derivation check failed: %v", err),
+			ErrorKind: ErrorKindOf(err),
+		}, nil
+	}
+
+	if !isNilResolver(e.resolver) {
+		if err := artifact.Validate(); err != nil {
+			return agentic.ToolResult{
+				CallID:    call.ID,
+				Name:      call.Name,
+				Error:     fmt.Sprintf("artifact validation failed: %v", err),
+				ErrorKind: agentic.ToolErrorInvalidArgs,
+			}, nil
+		}
 	}
 
 	loopEntityID := agentic.LoopExecutionEntityID(e.platform.Org, e.platform.Platform, call.LoopID)
@@ -460,6 +515,34 @@ func buildTriples(loopEntityID string, a *research.Artifact, now time.Time) []me
 	return triples
 }
 
+// formatQuote normalizes whitespace (collapsing embedded newlines/tabs) and
+// wraps the quote in Go/JSON double quotes so quotes containing `"`, newlines,
+// or markdown syntax never corrupt rendered markdown bullets (#271 m5).
+func formatQuote(q string) string {
+	norm := strings.Join(strings.Fields(q), " ")
+	return strconv.Quote(norm)
+}
+
+// formatEvidenceMeta renders the structured citation header including channel,
+// source_class, kind (when present), revision, tool_result_ref, and
+// retrieved_at so revision-2+ synthesize loops reading the prior revision's
+// markdown view have every field required to carry forward revision-1
+// citations (#271 M4).
+func formatEvidenceMeta(ev research.EvidenceRecord) string {
+	parts := []string{fmt.Sprintf("%s/%s", ev.Channel, ev.SourceClass)}
+	if ev.Kind != "" {
+		parts = append(parts, ev.Kind)
+	}
+	parts = append(parts, fmt.Sprintf("rev %d", ev.Revision))
+	if ev.ToolResultRef != "" {
+		parts = append(parts, "ref="+ev.ToolResultRef)
+	}
+	if !ev.RetrievedAt.IsZero() {
+		parts = append(parts, "retrieved="+ev.RetrievedAt.UTC().Format(time.RFC3339))
+	}
+	return "[" + strings.Join(parts, " · ") + "]"
+}
+
 // renderMarkdown writes the artifact as a markdown file to e.outputDir.
 // The file is named <Slug>.md (Slug must be set by the caller before this
 // runs — Execute derives it via deriveSlug). The directory is created if
@@ -481,7 +564,9 @@ func (e *Executor) renderMarkdown(a *research.Artifact) (string, error) {
 	}
 
 	tmpl, err := template.New("research-artifact").Funcs(template.FuncMap{
-		"add": func(i, n int) int { return i + n },
+		"add":                func(i, n int) int { return i + n },
+		"formatQuote":        formatQuote,
+		"formatEvidenceMeta": formatEvidenceMeta,
 	}).Parse(researchTemplateText)
 	if err != nil {
 		return "", fmt.Errorf("parse research markdown template: %w", err)
@@ -517,13 +602,15 @@ const researchTemplateText = `# {{ if .Title }}{{ .Title }}{{ else }}Research Ar
 {{ end }}
 ## Actors
 {{ if .Actors }}{{ range $i, $a := .Actors }}
-- **{{ $a.Name }}** — {{ $a.Role }}{{ end }}
+- **{{ $a.Name }}** — {{ $a.Role }}{{ range $j, $ev := $a.Evidence }}
+  - {{ formatEvidenceMeta $ev }} ` + "`{{ $ev.OriginID }}`" + ` ({{ $ev.Locator }}) — {{ formatQuote $ev.Quote }}{{ end }}{{ end }}
 {{ else }}
 _(none)_
 {{ end }}
 ## Integration points
 {{ if .IntegrationPoints }}{{ range $i, $ip := .IntegrationPoints }}
-- {{ $ip.From }} → {{ $ip.To }}{{ if $ip.Direction }} ({{ $ip.Direction }}){{ end }}{{ if $ip.Data }}: {{ $ip.Data }}{{ end }}{{ end }}
+- {{ $ip.From }} → {{ $ip.To }}{{ if $ip.Direction }} ({{ $ip.Direction }}){{ end }}{{ if $ip.Data }}: {{ $ip.Data }}{{ end }}{{ range $j, $ev := $ip.Evidence }}
+  - {{ formatEvidenceMeta $ev }} ` + "`{{ $ev.OriginID }}`" + ` ({{ $ev.Locator }}) — {{ formatQuote $ev.Quote }}{{ end }}{{ end }}
 {{ else }}
 _(none)_
 {{ end }}

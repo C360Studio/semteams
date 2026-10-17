@@ -195,14 +195,14 @@ func registerProductPayloads(reg *payloadregistry.Registry) error {
 // port don't fork; if it's planned but not shipped (e.g. upstream's
 // write_artifact suite per ADR-028 §What's not built here), document
 // the migration target in tools/README.md and an ADR addendum.
-func registerProductTools(reg *agentictools.ExecutorRegistry, natsClient *natsclient.Client, platform types.PlatformMeta, logger *slog.Logger) error {
+func registerProductTools(reg *agentictools.ExecutorRegistry, natsClient *natsclient.Client, platform types.PlatformMeta, storageBuckets map[string]string, logger *slog.Logger) error {
 	if err := registerAddSource(reg, natsClient, logger); err != nil {
 		return err
 	}
 	if err := registerGitHubRead(reg, logger); err != nil {
 		return err
 	}
-	if err := registerEmitArtifact(reg, natsClient, platform, logger); err != nil {
+	if err := registerEmitArtifact(reg, natsClient, platform, storageBuckets, logger); err != nil {
 		return err
 	}
 	if err := registerEmitPlan(reg, natsClient, platform, logger); err != nil {
@@ -877,16 +877,23 @@ func registerGitHubRead(reg *agentictools.ExecutorRegistry, logger *slog.Logger)
 // Reuses the framework's NATSTriplePublisher so the marker triples flow
 // through the same graph.mutation.triple.add path the decide and
 // emit_diagnosis tools use.
-func registerEmitArtifact(reg *agentictools.ExecutorRegistry, natsClient *natsclient.Client, platform types.PlatformMeta, logger *slog.Logger) error {
+func registerEmitArtifact(reg *agentictools.ExecutorRegistry, natsClient *natsclient.Client, platform types.PlatformMeta, storageBuckets map[string]string, logger *slog.Logger) error {
 	if natsClient == nil {
 		logger.Warn("nats client unavailable; emit_research_artifact registration skipped")
 		return nil
 	}
 	triplePublisher := agentictools.NewNATSTriplePublisher(natsClient)
+	entityReader := chain.NewNATSEntityReader(natsClient, chain.DefaultGraphQueryEntitySubject)
 	// outputDir empty → reads SEMTEAMS_RESEARCH_ARTIFACT_DIR or falls back
 	// to the package default ("docs/research"). ADR-038 PR C Phase C1
 	// markdown render target.
 	executor := emitartifact.NewExecutor(triplePublisher, natsClient, platform, logger, "")
+	executor.SetToolResultResolver(emitartifact.NewNATSToolResultResolver(
+		natsClient,
+		entityReader,
+		platform,
+		emitartifact.WithStorageBuckets(storageBuckets),
+	))
 	if err := reg.RegisterTool(emitartifact.ToolName, executor); err != nil {
 		return fmt.Errorf("register %s: %w", emitartifact.ToolName, err)
 	}
@@ -942,6 +949,7 @@ func registerEmitPlan(reg *agentictools.ExecutorRegistry, natsClient *natsclient
 // attestation-aware write path (#194).
 var (
 	_ chainbash.Inner                                 = (*executors.BashExecutor)(nil)
+	_ emitartifact.ToolResultResolver                 = (*emitartifact.NATSToolResultResolver)(nil)
 	_ emitautoresearchartifact.ChainAttestationReader = (*chainAttestationReader)(nil)
 	_ emitautoresearchartifact.SandboxFileWriter      = (*sandboxArtifactWriter)(nil)
 	_ renderopenspec.EntityReader                     = (*chain.NATSEntityReader)(nil)

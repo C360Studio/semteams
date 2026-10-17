@@ -9,19 +9,35 @@ import (
 	"github.com/c360studio/semstreams/payloadregistry"
 )
 
+func sampleCitation(now time.Time) EvidenceRecord {
+	return EvidenceRecord{
+		Channel:       ChannelGitHub,
+		Locator:       "github://sensorhub-tools/osh-core/issues/1",
+		OriginID:      "github://sensorhub-tools/osh-core/issues/1",
+		SourceClass:   SourceClassPrimary,
+		RetrievedAt:   now,
+		Quote:         "IDriver observations over LoRa mesh transport",
+		ToolResultRef: "call_gather_1",
+		Revision:      1,
+	}
+}
+
 func TestArtifact_RoundTrip(t *testing.T) {
 	t.Parallel()
+
+	now := time.Date(2026, 4, 30, 12, 0, 0, 0, time.UTC)
+	ev := sampleCitation(now)
 
 	orig := &Artifact{
 		LoopID:   "loop_abc",
 		Revision: 2,
 		Actors: []Actor{
-			{Name: "OSH driver framework", Role: "Implements IDriver"},
-			{Name: "Meshtastic radio", Role: "LoRa mesh transport"},
+			{Name: "OSH driver framework", Role: "Implements IDriver", Evidence: []EvidenceRecord{ev}},
+			{Name: "Meshtastic radio", Role: "LoRa mesh transport", Evidence: []EvidenceRecord{ev}},
 		},
 		IntegrationPoints: []IntegrationPoint{
-			{From: "OSH driver framework", To: "OGC CS endpoints", Data: "observations", Direction: DirectionWrite},
-			{From: "Meshtastic radio", To: "OSH driver framework", Data: "MeshPacket payloads", Direction: DirectionRead},
+			{From: "OSH driver framework", To: "OGC CS endpoints", Data: "observations", Direction: DirectionWrite, Evidence: []EvidenceRecord{ev}},
+			{From: "Meshtastic radio", To: "OSH driver framework", Data: "MeshPacket payloads", Direction: DirectionRead, Evidence: []EvidenceRecord{ev}},
 		},
 		Tasks: []string{
 			"Implement OSH IDriver backed by Meshtastic radio events",
@@ -38,7 +54,7 @@ func TestArtifact_RoundTrip(t *testing.T) {
 				ApprovedBy: "alice",
 				Status:     MutationStatusExecuted,
 				Result:     "created=true",
-				Timestamp:  time.Date(2026, 4, 30, 12, 0, 0, 0, time.UTC),
+				Timestamp:  now,
 			},
 		},
 		ProducedAt: time.Date(2026, 4, 30, 12, 5, 0, 0, time.UTC),
@@ -62,6 +78,9 @@ func TestArtifact_RoundTrip(t *testing.T) {
 	}
 	if len(got.Actors) != len(orig.Actors) {
 		t.Fatalf("actors len: got %d, want %d", len(got.Actors), len(orig.Actors))
+	}
+	if len(got.Actors[0].Evidence) != 1 || got.Actors[0].Evidence[0].OriginID != ev.OriginID {
+		t.Errorf("actor[0].evidence round-trip mismatch: %+v", got.Actors[0].Evidence)
 	}
 	if len(got.SubstrateMutations) != 1 {
 		t.Fatalf("substrate_mutations len: got %d, want 1", len(got.SubstrateMutations))
@@ -134,6 +153,7 @@ func TestArtifact_Validate(t *testing.T) {
 	t.Parallel()
 
 	now := time.Now().UTC()
+	ev := sampleCitation(now)
 
 	cases := []struct {
 		name    string
@@ -176,6 +196,137 @@ func TestArtifact_Validate(t *testing.T) {
 				},
 			},
 			wantErr: false,
+		},
+		{
+			name: "happy path — multi-channel evidence (github, web, semsource)",
+			a: Artifact{
+				LoopID:      "loop_abc",
+				Revision:    2,
+				ProducedAt:  now,
+				TestHarness: "meshtasticd-2.x",
+				Actors: []Actor{
+					{
+						Name: "OSH driver",
+						Role: "Driver host",
+						Evidence: []EvidenceRecord{
+							ev,
+							{
+								Channel:       ChannelWeb,
+								Locator:       "https://docs.example.com/osh?utm_source=x",
+								OriginID:      "https://docs.example.com/osh",
+								SourceClass:   SourceClassOfficial,
+								RetrievedAt:   now,
+								Quote:         "OSH driver host specification",
+								ToolResultRef: "call_web_1",
+								Revision:      2,
+							},
+						},
+					},
+				},
+				IntegrationPoints: []IntegrationPoint{
+					{
+						From:      "OSH driver",
+						To:        "OGC CS",
+						Data:      "observations",
+						Direction: DirectionWrite,
+						Evidence: []EvidenceRecord{
+							{
+								Channel:       ChannelSemSource,
+								Locator:       "semsource://c360/semteams/entity/osh.driver",
+								OriginID:      "semsource://c360/semteams/entity/osh.driver",
+								SourceClass:   SourceClassPrimary,
+								RetrievedAt:   now,
+								Quote:         "writes observations to OGC CS",
+								ToolResultRef: "call_semsource_1",
+								Revision:      1,
+							},
+						},
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "actor missing evidence is rejected",
+			a: Artifact{
+				LoopID:      "loop_abc",
+				Revision:    1,
+				ProducedAt:  now,
+				TestHarness: "meshtasticd-2.x",
+				Actors: []Actor{
+					{Name: "OSH driver", Role: "Driver host"},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "integration point missing evidence is rejected",
+			a: Artifact{
+				LoopID:      "loop_abc",
+				Revision:    1,
+				ProducedAt:  now,
+				TestHarness: "meshtasticd-2.x",
+				IntegrationPoints: []IntegrationPoint{
+					{From: "a", To: "b", Direction: DirectionRead},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "evidence with non-canonical origin_id is rejected",
+			a: Artifact{
+				LoopID:      "loop_abc",
+				Revision:    1,
+				ProducedAt:  now,
+				TestHarness: "meshtasticd-2.x",
+				Actors: []Actor{
+					{
+						Name: "OSH driver",
+						Role: "Driver host",
+						Evidence: []EvidenceRecord{
+							{
+								Channel:       ChannelGitHub,
+								Locator:       "github://SensorHub-Tools/osh-core/issues/1",
+								OriginID:      "github://SensorHub-Tools/osh-core/issues/1",
+								SourceClass:   SourceClassPrimary,
+								RetrievedAt:   now,
+								Quote:         "IDriver",
+								ToolResultRef: "call_1",
+								Revision:      1,
+							},
+						},
+					},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "evidence revision exceeding artifact revision is rejected",
+			a: Artifact{
+				LoopID:      "loop_abc",
+				Revision:    1,
+				ProducedAt:  now,
+				TestHarness: "meshtasticd-2.x",
+				Actors: []Actor{
+					{
+						Name: "OSH driver",
+						Role: "Driver host",
+						Evidence: []EvidenceRecord{
+							{
+								Channel:       ChannelGitHub,
+								Locator:       "github://sensorhub-tools/osh-core/issues/1",
+								OriginID:      "github://sensorhub-tools/osh-core/issues/1",
+								SourceClass:   SourceClassPrimary,
+								RetrievedAt:   now,
+								Quote:         "IDriver",
+								ToolResultRef: "call_1",
+								Revision:      2,
+							},
+						},
+					},
+				},
+			},
+			wantErr: true,
 		},
 		{
 			// Smoke #8 run-9 negative case: researcher emits artifact
@@ -250,7 +401,7 @@ func TestArtifact_Validate(t *testing.T) {
 				Revision:   1,
 				ProducedAt: now,
 				IntegrationPoints: []IntegrationPoint{
-					{From: "a", To: "b", Direction: "sideways"},
+					{From: "a", To: "b", Direction: "sideways", Evidence: []EvidenceRecord{ev}},
 				},
 			},
 			wantErr: true,
@@ -263,7 +414,7 @@ func TestArtifact_Validate(t *testing.T) {
 				ProducedAt:  now,
 				TestHarness: "meshtasticd-2.x",
 				IntegrationPoints: []IntegrationPoint{
-					{From: "a", To: "b", Direction: ""},
+					{From: "a", To: "b", Direction: "", Evidence: []EvidenceRecord{ev}},
 				},
 			},
 			wantErr: false,
@@ -386,5 +537,47 @@ func TestRegisterPayloads(t *testing.T) {
 	// boot-time misconfiguration.
 	if err := RegisterPayloads(reg); err == nil {
 		t.Errorf("RegisterPayloads: expected duplicate-registration error on second call")
+	}
+}
+
+func TestArtifact_PopulateCitationDefaults(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 10, 14, 15, 0, 0, 0, time.UTC)
+	a := &Artifact{
+		LoopID:      "loop_abc",
+		Revision:    2,
+		ProducedAt:  now,
+		TestHarness: "meshtasticd-2.x",
+		Actors: []Actor{
+			{
+				Name: "NATS Server",
+				Role: "Message broker",
+				Evidence: []EvidenceRecord{
+					{
+						Channel:       ChannelWeb,
+						Locator:       "https://Docs.NATS.io/compare/?utm_source=test#sec",
+						SourceClass:   SourceClassOfficial,
+						Quote:         "NATS vs MQTT, Kafka, and other messaging systems",
+						ToolResultRef: "call_web_1",
+					},
+				},
+			},
+		},
+	}
+
+	a.PopulateCitationDefaults()
+	if err := a.Validate(); err != nil {
+		t.Fatalf("Validate after PopulateCitationDefaults failed: %v", err)
+	}
+	got := a.Actors[0].Evidence[0]
+	if got.OriginID != "https://docs.nats.io/compare" {
+		t.Errorf("OriginID = %q, want https://docs.nats.io/compare", got.OriginID)
+	}
+	if !got.RetrievedAt.Equal(now) {
+		t.Errorf("RetrievedAt = %v, want %v", got.RetrievedAt, now)
+	}
+	if got.Revision != 2 {
+		t.Errorf("Revision = %d, want 2", got.Revision)
 	}
 }
