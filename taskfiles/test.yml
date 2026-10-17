@@ -13,6 +13,8 @@ tasks:
 
   browser-runner:
     desc: Verify browser qualification tracks product-owned source changes
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
     cmds:
       - python3 -m unittest discover -s scripts -p test_qualify_migration_browser.py
 

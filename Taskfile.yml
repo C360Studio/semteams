@@ -70,3 +70,8 @@ tasks:
       - task: ui:check
       - task: ui:test
       - task: ui:build
+
+  validate:
+    desc: Run read-only local validation mirroring Repository CI (Go, UI, Governance)
+    cmds:
+      - scripts/validate.sh

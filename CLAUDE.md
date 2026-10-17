@@ -140,6 +140,7 @@ task test:race          # Go tests with -race
 task test:integration   # Integration tests (testcontainers; sequential w/ -p 1 on macOS)
 task check              # Go lint + test
 task check:all          # Go + UI lint + type-check + test + build
+task validate           # Read-only local CI parity gate (Go, UI, Governance)
 task schema:generate    # Regenerate schemas/ + specs/openapi.v3.yaml
 go test ./test/contract/... -run TestConfigDispatch -v
 
@@ -236,9 +237,7 @@ early on loops, and quote log lines.
 runs via `.github/workflows/publish.yml` (`docs/release.md`). Before pushing:
 
 ```bash
-task lint && task test:race && task test:integration && go build ./...
-task schema:generate && task schema:check-changes
-task openspec:validate && task openspec:queue-test && task publish:verify-test
+task validate
 ```
 
 ## Related Repos
