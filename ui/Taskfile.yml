@@ -45,9 +45,10 @@ tasks:
 
   generate-types:check:
     desc: Check for uncommitted type changes (CI)
+    env:
+      OPENAPI_SPEC_PATH: "{{.OPENAPI_SPEC_PATH}}"
     cmds:
-      - task: generate-types
-      - git diff --exit-code src/lib/types/api.generated.ts || (echo "⚠️  Generated types changed! Run 'task generate-types' and commit."; exit 1)
+      - npm run generate-types:check
 
   # === Development ===
 
