@@ -79,7 +79,7 @@ The loop component clamps each request to its configured ceiling. The
 framework's iteration-budget signal reports the effective budget for that
 loop; personas use that signal to leave room for their terminal decision.
 These ceilings contain individual loops. They do not guarantee evidence
-quality, successful completion, bounded fan-out, or a total run budget.
+quality, successful completion, or a total run budget.
 The frozen runtime enforces exhaustion when handling a model response:
 one further request can be emitted before that guard rejects the response
 with `LoopFailedEvent` reason `max_iterations`, even if it looks like
@@ -89,7 +89,8 @@ The top-level rule `max_iterations=3` in rules 05 and 06 is separate:
 its counter is scoped to a triggering entity. Every newly spawned reviewer
 or research loop is a new entity, so it does **not** cap research-wide retries.
 This is partial containment for [#272](https://github.com/C360Studio/semteams/issues/272),
-not a chain-wide recovery guarantee.
+not a chain-wide recovery guarantee (upstream tracking: `semstreams#383`,
+`semstreams#1005`, `semengine#24`).
 
 Rule 05 sends reviewer `insufficient` directly to PLAN. Rule 06 sends
 `needs_clarification` to the coordinator, which chooses `research`,
@@ -99,7 +100,12 @@ to the coordinator and whose framing comes from the coordinator's reason.
 
 ### Fan-out shape (rules 02, 03a, 03b)
 
-The planner emits `decide(action="gather", subtopics=[…])`. The `subtopics` list is the planner's epic decomposition, one-to-one. Rule 02's `for_each` over `coordinator.decision.subtopics` spawns one researcher-research-gather per item in parallel, each carrying `$subtopic` as its scope.
+The planner emits `decide(action="gather", subtopics=[…])`. The `subtopics` list is the planner's epic decomposition, one-to-one, bounded at **1..4 items** ([ADR-060 §7](../../../docs/adr/060-program-manager-direction-and-research-design.md) / [#272](https://github.com/C360Studio/semteams/issues/272)):
+
+- Both `emit_plan` (`epics`) and `decide` (`subtopics`) advertise `minItems: 1, maxItems: 4` in their tool schemas.
+- `devviaspec.Plan.Validate()` rejects `emit_plan` payloads with `< 1` or `> 4` epics.
+- `cmd/semteams/tools/researchdecide` wraps `decide` via `SkipBuiltins: ["bash", "decide"]` and rejects `subtopics` outside `1..4` (or missing `subtopics` on `action="gather"`) with `ToolErrorInvalidArgs` and `StopLoop: false` **before** any triples are published, keeping the planner loop alive to self-correct within its `loop_max_iterations` budget (`12`).
+- Rule 02 gates on `coordinator.decision.subtopics` matching a 1..4 element JSON string-array regex as defense-in-depth (since `decide` stores `coordinator.decision.subtopics` as a single JSON-encoded `[]string` triple) before its `for_each` over `coordinator.decision.subtopics` spawns one `researcher-research-gather` per item in parallel, each carrying `$subtopic` as its scope.
 
 Each gatherer's `decide(action="synthesize")` triggers rule 03a, which uses the beta.83 `subject` override to stamp `research.gather.completed-subtopic` on the PLAN loop entity (Object = the gather's own loop id, so the predicate-set deduplicates naturally).
 

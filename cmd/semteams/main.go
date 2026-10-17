@@ -275,13 +275,17 @@ func setupToolsAndPreprocessor(
 	// 9c. First-party tool executors. Pattern-B tools (create_rule, etc.)
 	// each need their matching manager; nil manager → registerX skips.
 	//
-	// SkipBuiltins[bash]: ADR-041 Phase 4. The product shell registers
-	// its own chain-scoped wrapper under the canonical "bash" name in
-	// registerProductTools (registerChainBash). The wrapper rewrites
-	// Metadata["task_id"] to chain_id so every role in a chain shares one
-	// sandbox worktree. SkipBuiltins=[bash] omits the framework bash so
-	// the slot is free for the wrapper.
+	// SkipBuiltins[bash, decide]:
+	//   - bash (ADR-041 Phase 4): the product shell registers its own
+	//     chain-scoped wrapper under the canonical "bash" name in
+	//     registerProductTools (registerChainBash).
+	//   - decide (ADR-060 §7 / #272): the product shell registers
+	//     researchdecide.Executor under the canonical "decide" name in
+	//     registerProductTools (registerResearchDecide) so decide.subtopics
+	//     advertises minItems=1/maxItems=4 and enforces the 1..4 fan-out
+	//     ceiling pre-mutation before delegating to DecideExecutor.
 
+	restrictedDecideActions := extractRestrictedDecideActions(cfg, logger)
 	toolRegistry := agentictools.NewExecutorRegistry()
 	if err := executors.RegisterBuiltins(ctx, toolRegistry, executors.ToolDependencies{
 		NATSClient:              natsClient,
@@ -292,19 +296,20 @@ func setupToolsAndPreprocessor(
 		PersonaManager:          personaMgr,
 		ComponentRegistry:       componentRegistry,
 		LoopsBucket:             extractLoopsBucket(cfg),
-		RestrictedDecideActions: extractRestrictedDecideActions(cfg, logger),
-		SkipBuiltins:            []string{"bash"},
+		RestrictedDecideActions: restrictedDecideActions,
+		SkipBuiltins:            []string{"bash", "decide"},
 	}); err != nil {
 		return nil, nil, fmt.Errorf("register builtin tools: %w", err)
 	}
 
 	// 9d. Product-shell-local tool executors (add_source_repo,
-	// emit_research_artifact, emit_plan, chain-scoped bash wrapper).
+	// emit_research_artifact, emit_plan, researchdecide wrapper,
+	// chain-scoped bash wrapper).
 	// Each tool's registration comment lives in registerProductTools;
 	// see ADR-029 + tools/README.md for discipline. The dev-via-spec-arc
 	// executors (emit_dev_via_spec_artifact, builder_decide,
 	// bootstrap_workspace) retired in the ADR-042 MVP-7 follow-up sweep.
-	if err := registerProductTools(toolRegistry, natsClient, platform, extractStorageBuckets(cfg), logger); err != nil {
+	if err := registerProductTools(toolRegistry, natsClient, platform, extractStorageBuckets(cfg), restrictedDecideActions, logger); err != nil {
 		return nil, nil, fmt.Errorf("register product tools: %w", err)
 	}
 

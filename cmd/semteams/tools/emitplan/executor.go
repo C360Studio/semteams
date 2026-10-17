@@ -37,6 +37,7 @@ import (
 	"github.com/c360studio/semstreams/types"
 
 	"github.com/c360studio/semteams/cmd/semteams/devviaspec"
+	"github.com/c360studio/semteams/cmd/semteams/research"
 	"github.com/c360studio/semteams/cmd/semteams/slug"
 )
 
@@ -144,7 +145,7 @@ func (e *Executor) ListTools() []agentic.ToolDefinition {
 				"context":    map[string]any{"type": "string", "description": "Why the work matters, naming at least one actor from the upstream research artifact and identifying the integration boundary the work sits at. Single string."},
 				"scope_in":   map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Work items that are explicitly in-scope. Each item is one decomposable description. Persona owns granularity."},
 				"scope_out":  map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Work items explicitly excluded, each with a one-line rationale. Per the research-artifact integration_point coverage discipline."},
-				"epics":      map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Interface-level decomposition. Each epic grounds against an actor or integration boundary the context names. Required (>= 1) — a plan with no epics is a goal statement, not a plan."},
+				"epics":      map[string]any{"type": "array", "minItems": research.MinSubtopics, "maxItems": research.MaxSubtopics, "items": map[string]any{"type": "string"}, "description": "Interface-level decomposition (1..4 items). Each epic grounds against an actor or integration boundary the context names and maps 1:1 to a parallel gather subtopic. Required (1..4) — a plan with no epics is a goal statement, not a plan."},
 				"depends_on": dependsOnSchema,
 			},
 			"required": []string{"revision", "goal", "context", "epics"},

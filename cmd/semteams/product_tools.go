@@ -41,6 +41,7 @@ import (
 	"github.com/c360studio/semteams/cmd/semteams/tools/querysandboxattestation"
 	"github.com/c360studio/semteams/cmd/semteams/tools/renderopenspec"
 	"github.com/c360studio/semteams/cmd/semteams/tools/requestsandbox"
+	"github.com/c360studio/semteams/cmd/semteams/tools/researchdecide"
 )
 
 // Environment variables that configure product-shell-local tools.
@@ -195,7 +196,7 @@ func registerProductPayloads(reg *payloadregistry.Registry) error {
 // port don't fork; if it's planned but not shipped (e.g. upstream's
 // write_artifact suite per ADR-028 §What's not built here), document
 // the migration target in tools/README.md and an ADR addendum.
-func registerProductTools(reg *agentictools.ExecutorRegistry, natsClient *natsclient.Client, platform types.PlatformMeta, storageBuckets map[string]string, logger *slog.Logger) error {
+func registerProductTools(reg *agentictools.ExecutorRegistry, natsClient *natsclient.Client, platform types.PlatformMeta, storageBuckets map[string]string, restrictedDecideActions []string, logger *slog.Logger) error {
 	if err := registerAddSource(reg, natsClient, logger); err != nil {
 		return err
 	}
@@ -206,6 +207,9 @@ func registerProductTools(reg *agentictools.ExecutorRegistry, natsClient *natscl
 		return err
 	}
 	if err := registerEmitPlan(reg, natsClient, platform, logger); err != nil {
+		return err
+	}
+	if err := registerResearchDecide(reg, natsClient, platform, restrictedDecideActions, logger); err != nil {
 		return err
 	}
 	if err := registerSandboxManagerTools(reg, natsClient, platform, logger); err != nil {
@@ -940,15 +944,41 @@ func registerEmitPlan(reg *agentictools.ExecutorRegistry, natsClient *natsclient
 	return nil
 }
 
+// registerResearchDecide wires the #272 decide wrapper (ADR-060 §7) under the
+// canonical "decide" name after upstream's RegisterBuiltins skips the framework
+// decide executor via SkipBuiltins=["bash", "decide"]. Mirrors upstream's
+// registerDecide posture: skipped when natsClient is nil because decide stamps
+// triples via graph.mutation.triple.append.
+func registerResearchDecide(reg *agentictools.ExecutorRegistry, natsClient *natsclient.Client, platform types.PlatformMeta, restrictedDecideActions []string, logger *slog.Logger) error {
+	if natsClient == nil {
+		logger.Warn("nats client unavailable; decide registration skipped")
+		return nil
+	}
+	publisher := agentictools.NewNATSTriplePublisher(natsClient)
+	inner := agentictools.NewDecideExecutor(publisher, platform, restrictedDecideActions)
+	inner.SetLogger(logger)
+	wrapper := researchdecide.NewExecutor(inner, restrictedDecideActions, logger)
+	if err := reg.RegisterTool(researchdecide.ToolName, wrapper); err != nil {
+		return fmt.Errorf("register %s: %w", researchdecide.ToolName, err)
+	}
+	logger.Info("Registered product tool (research fan-out decide wrapper)",
+		slog.String("name", researchdecide.ToolName),
+		slog.String("org", platform.Org),
+		slog.String("platform", platform.Platform),
+		slog.Int("restricted_decide_actions", len(restrictedDecideActions)))
+	return nil
+}
+
 // Compile-time guards that the product-shell adapters satisfy the
 // (structurally-identical) interfaces declared by the consumer
 // packages. If a consumer interface ever widens (new method added)
 // and the adapter is not extended to match, this fails to build —
 // surfacing the drift here rather than at the SetX call site.
-// Covers: chainbash.Inner and the emit_autoresearch_artifact
-// attestation-aware write path (#194).
+// Covers: chainbash.Inner, researchdecide.Inner, and the
+// emit_autoresearch_artifact attestation-aware write path (#194).
 var (
 	_ chainbash.Inner                                 = (*executors.BashExecutor)(nil)
+	_ researchdecide.Inner                            = (*agentictools.DecideExecutor)(nil)
 	_ emitartifact.ToolResultResolver                 = (*emitartifact.NATSToolResultResolver)(nil)
 	_ emitautoresearchartifact.ChainAttestationReader = (*chainAttestationReader)(nil)
 	_ emitautoresearchartifact.SandboxFileWriter      = (*sandboxArtifactWriter)(nil)

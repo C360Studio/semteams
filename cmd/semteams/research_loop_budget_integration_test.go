@@ -6,6 +6,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -13,6 +15,7 @@ import (
 	"github.com/c360studio/semstreams/config"
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/natsclient"
+	rulepkg "github.com/c360studio/semstreams/processor/rule"
 	"github.com/c360studio/semstreams/service"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/stretchr/testify/require"
@@ -153,4 +156,285 @@ func TestResearchLoopBudgetTerminalBoundary(t *testing.T) {
 			}
 		})
 	}
+}
+
+type blockingCronActionExecutor struct {
+	startedOnce sync.Once
+	started     chan struct{}
+	release     chan struct{}
+	calls       atomic.Int64
+}
+
+func (e *blockingCronActionExecutor) Execute(_ context.Context, _ rulepkg.Action, _ *rulepkg.ExecutionContext) error {
+	e.calls.Add(1)
+	e.startedOnce.Do(func() { close(e.started) })
+	<-e.release
+	return nil
+}
+
+// TestScheduledCronInflightAndCooldownContainment verifies the two cron
+// containment guards required by ADR-060 §7 / #272:
+//  1. CronScheduler's per-rule inflight CAS guard skips overlapping ticks
+//     while an earlier fire is still executing (no stacked runs).
+//  2. A cron rule's Cooldown suppresses subsequent ticks within the cooldown
+//     window and persists last_fired_at in the RULE_SCHEDULES KV bucket.
+func TestScheduledCronInflightAndCooldownContainment(t *testing.T) {
+	t.Run("inflight_skips_overlapping_ticks", func(t *testing.T) {
+		exec := &blockingCronActionExecutor{
+			started: make(chan struct{}),
+			release: make(chan struct{}),
+		}
+		scheduler, err := rulepkg.NewCronScheduler(rulepkg.CronSchedulerConfig{
+			Executor: exec,
+			Logger:   quietLogger(),
+		})
+		require.NoError(t, err)
+
+		cronRule, err := rulepkg.NewCronRule(rulepkg.Definition{
+			ID:       "scheduled_pulse_inflight_test",
+			Type:     rulepkg.CronRuleType,
+			Name:     "Scheduled Pulse Inflight Guard Test",
+			Enabled:  true,
+			Schedule: "@every 1s",
+			Cooldown: "1ms",
+			Actions: []rulepkg.Action{{
+				Type:              rulepkg.ActionTypePublishAgent,
+				Subject:           "agent.task.coordinator",
+				Role:              "coordinator",
+				LoopMaxIterations: "8",
+				Model:             "fast",
+				Prompt:            "Scheduled pulse check.",
+			}},
+		})
+		require.NoError(t, err)
+		require.NoError(t, scheduler.Register(cronRule))
+
+		startCtx, cancelStart := context.WithCancel(context.Background())
+		defer cancelStart()
+		require.NoError(t, scheduler.Start(startCtx))
+		defer func() {
+			stopCtx, cancelStop := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancelStop()
+			require.NoError(t, scheduler.Stop(stopCtx))
+		}()
+
+		select {
+		case <-exec.started:
+		case <-time.After(3 * time.Second):
+			t.Fatal("cron rule did not fire first tick within 3s")
+		}
+
+		// Hold the first fire open across the next @every 1s tick and verify
+		// overlapping ticks are skipped by the inflight CAS guard.
+		time.Sleep(1300 * time.Millisecond)
+		require.Equal(t, int64(1), exec.calls.Load(), "overlapping cron tick must be skipped while first fire is in flight")
+		close(exec.release)
+	})
+
+	t.Run("cooldown_suppresses_subsequent_ticks_and_persists_last_fired", func(t *testing.T) {
+		testNATS := natsclient.NewTestClient(t, natsclient.WithJetStream(), natsclient.WithKV(), natsclient.WithNATSVersion("2.14.4-alpine"))
+		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+		defer cancel()
+		logger := quietLogger()
+
+		cfg := loadLoopBoundaryConfig(t, "../../configs/flow-bootstrap.json", testNATS.URL)
+		require.NoError(t, config.NewStreamsManager(testNATS.Client, logger).EnsureStreams(ctx, cfg))
+
+		proc := startedRuleProcessor(t, testNATS.Client)
+		js, err := testNATS.Client.JetStream()
+		require.NoError(t, err)
+		stream, err := js.Stream(ctx, "AGENT")
+		require.NoError(t, err)
+		consumer, err := stream.CreateOrUpdateConsumer(ctx, jetstream.ConsumerConfig{
+			Durable:        "cron-cooldown-tasks",
+			FilterSubjects: []string{"agent.task.coordinator"},
+			AckPolicy:      jetstream.AckExplicitPolicy,
+		})
+		require.NoError(t, err)
+
+		payloads, err := buildPayloadRegistry()
+		require.NoError(t, err)
+		decoder := message.NewDecoder(payloads)
+
+		ruleID := "scheduled_pulse_cooldown_test"
+		cronDef := rulepkg.Definition{
+			ID:       ruleID,
+			Type:     rulepkg.CronRuleType,
+			Name:     "Scheduled Pulse Cooldown Test",
+			Enabled:  true,
+			Schedule: "@every 1s",
+			Cooldown: "1h",
+			Actions: []rulepkg.Action{{
+				Type:              rulepkg.ActionTypePublishAgent,
+				Subject:           "agent.task.coordinator",
+				Role:              "coordinator",
+				LoopMaxIterations: "8",
+				Model:             "fast",
+				Prompt:            "Scheduled pulse check.",
+			}},
+		}
+		rawDef, err := json.Marshal(cronDef)
+		require.NoError(t, err)
+		var ruleMap map[string]any
+		require.NoError(t, json.Unmarshal(rawDef, &ruleMap))
+		require.NoError(t, proc.ApplyConfigUpdate(map[string]any{
+			"rules": map[string]any{ruleID: ruleMap},
+		}))
+
+		fetchCtx, fetchCancel := context.WithTimeout(ctx, 3*time.Second)
+		defer fetchCancel()
+		msg, err := consumer.Next(jetstream.FetchContext(fetchCtx))
+		require.NoError(t, err, "first cron fire must publish a coordinator TaskMessage")
+		envelope, err := decoder.Decode(msg.Data())
+		require.NoError(t, err)
+		require.NoError(t, msg.DoubleAck(ctx))
+
+		task, ok := envelope.Payload().(*agentic.TaskMessage)
+		require.True(t, ok)
+		require.NotNil(t, task.MaxIterations)
+		require.Equal(t, 8, *task.MaxIterations)
+
+		// Verify RULE_SCHEDULES KV persisted the last_fired_at record.
+		schedBucket, err := js.KeyValue(ctx, rulepkg.ScheduleBucketName)
+		require.NoError(t, err)
+		entry, err := schedBucket.Get(ctx, ruleID)
+		require.NoError(t, err)
+		require.NotEmpty(t, entry.Value())
+
+		// Observe across the next @every 1s tick: the 1h cooldown must suppress it.
+		quietCtx, quietCancel := context.WithTimeout(ctx, 1400*time.Millisecond)
+		defer quietCancel()
+		extraMsg, err := consumer.Next(jetstream.FetchContext(quietCtx))
+		require.Error(t, err, "1h cooldown must suppress subsequent ticks")
+		require.Nil(t, extraMsg)
+	})
+}
+
+// TestScheduledCronPatternBKillSwitch verifies that disabling a scheduled
+// cron rule via Pattern-B rule.ConfigManager.SaveRule (Enabled: false)
+// hot-reloads into the running rule.Processor without process restart,
+// deregisters future cron ticks while allowing in-flight work triggered by an
+// earlier tick to complete undisturbed.
+func TestScheduledCronPatternBKillSwitch(t *testing.T) {
+	testNATS := natsclient.NewTestClient(t, natsclient.WithJetStream(), natsclient.WithKV(), natsclient.WithNATSVersion("2.14.4-alpine"))
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	logger := quietLogger()
+
+	ruleManager, err := rulepkg.NewConfigManager(logger)
+	require.NoError(t, err)
+	cfg := loadLoopBoundaryConfig(t, "../../configs/flow-bootstrap.json", testNATS.URL)
+	require.NoError(t, config.NewStreamsManager(testNATS.Client, logger).EnsureStreams(ctx, cfg))
+	_, _, configManager, err := setupRemainingInfrastructure(
+		ctx, cfg, testNATS.Client, logger, ruleManager,
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = configManager.Stop(5 * time.Second) })
+
+	proc := &observedRuleProcessor{
+		Processor: startedRuleProcessor(t, testNATS.Client),
+		applied:   make(chan map[string]any, 8),
+	}
+	ruleConfig := newRuleConfigService(ruleManager, []rulepkg.HotReloadTarget{proc}, logger)
+	require.NoError(t, ruleConfig.Start(ctx))
+	t.Cleanup(func() {
+		stopCtx, stopCancel := context.WithTimeout(context.Background(), ruleProcessorStopBudget)
+		defer stopCancel()
+		require.NoError(t, ruleConfig.Stop(stopCtx))
+	})
+
+	// Consume initial seeded reconcile.
+	_ = nextApplied(t, proc.applied)
+
+	js, err := testNATS.Client.JetStream()
+	require.NoError(t, err)
+	stream, err := js.Stream(ctx, "AGENT")
+	require.NoError(t, err)
+	consumer, err := stream.CreateOrUpdateConsumer(ctx, jetstream.ConsumerConfig{
+		Durable:        "cron-killswitch-tasks",
+		FilterSubjects: []string{"agent.task.coordinator"},
+		AckPolicy:      jetstream.AckExplicitPolicy,
+	})
+	require.NoError(t, err)
+
+	payloads, err := buildPayloadRegistry()
+	require.NoError(t, err)
+	decoder := message.NewDecoder(payloads)
+
+	const ruleID = "scheduled_pulse_killswitch_test"
+	cronDef := func(enabled bool) rulepkg.Definition {
+		return rulepkg.Definition{
+			ID:       ruleID,
+			Type:     rulepkg.CronRuleType,
+			Name:     "Scheduled Pulse Kill Switch Test",
+			Enabled:  enabled,
+			Schedule: "@every 1s",
+			Cooldown: "1ms",
+			Actions: []rulepkg.Action{{
+				Type:              rulepkg.ActionTypePublishAgent,
+				Subject:           "agent.task.coordinator",
+				Role:              "coordinator",
+				LoopMaxIterations: "8",
+				Model:             "fast",
+				Prompt:            "Scheduled pulse check.",
+			}},
+		}
+	}
+
+	require.NoError(t, ruleManager.SaveRule(ctx, ruleID, cronDef(true)))
+	for {
+		rules := nextApplied(t, proc.applied)
+		if _, ok := rules[ruleID]; ok {
+			break
+		}
+	}
+
+	// Wait for the first scheduled fire.
+	fetchCtx, fetchCancel := context.WithTimeout(ctx, 3*time.Second)
+	defer fetchCancel()
+	msg, err := consumer.Next(jetstream.FetchContext(fetchCtx))
+	require.NoError(t, err, "enabled cron rule must fire and publish TaskMessage")
+	envelope, err := decoder.Decode(msg.Data())
+	require.NoError(t, err)
+	require.NoError(t, msg.DoubleAck(ctx))
+	firstTask, ok := envelope.Payload().(*agentic.TaskMessage)
+	require.True(t, ok)
+
+	// Simulate an in-flight downstream execution triggered by the first fire
+	// that stays active across the Pattern-B disable operation.
+	releaseInflight := make(chan struct{})
+	inflightCompleted := make(chan string, 1)
+	go func(taskID string) {
+		<-releaseInflight
+		inflightCompleted <- taskID
+	}(firstTask.TaskID)
+
+	// Disable the cron rule at runtime via Pattern-B rule.ConfigManager (no restart).
+	require.NoError(t, ruleManager.SaveRule(ctx, ruleID, cronDef(false)))
+	for {
+		rules := nextApplied(t, proc.applied)
+		if raw, ok := rules[ruleID].(map[string]any); ok {
+			if enabled, _ := raw["enabled"].(bool); !enabled {
+				break
+			}
+		}
+	}
+
+	// Drain at most one message if a tick raced before ApplyConfigUpdate completed.
+	drainCtx, drainCancel := context.WithTimeout(ctx, 50*time.Millisecond)
+	if racedMsg, raceErr := consumer.Next(jetstream.FetchContext(drainCtx)); raceErr == nil {
+		_ = racedMsg.DoubleAck(ctx)
+	}
+	drainCancel()
+
+	// Complete the in-flight execution from the first fire after the rule is disabled.
+	close(releaseInflight)
+	require.Equal(t, firstTask.TaskID, <-inflightCompleted, "in-flight execution from first fire must complete undisturbed after kill switch")
+
+	// Observe across a full post-disable @every 1s window: zero new fires may occur.
+	postDisableCtx, postDisableCancel := context.WithTimeout(ctx, 1400*time.Millisecond)
+	defer postDisableCancel()
+	extraMsg, err := consumer.Next(jetstream.FetchContext(postDisableCtx))
+	require.Error(t, err, "disabled cron rule must not fire after Pattern-B hot-reload")
+	require.Nil(t, extraMsg)
 }
