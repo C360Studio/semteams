@@ -625,8 +625,28 @@ func TestValidateTaskAndDocsContract(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read Taskfile.yml: %v", err)
 	}
-	if !strings.Contains(string(taskfileBytes), "validate:") || !strings.Contains(string(taskfileBytes), "scripts/validate.sh") {
+	taskfileText := string(taskfileBytes)
+	if !strings.Contains(taskfileText, "validate:") || !strings.Contains(taskfileText, "scripts/validate.sh") {
 		t.Fatal("Taskfile.yml must define top-level 'validate' task invoking scripts/validate.sh")
+	}
+	for _, wantTask := range []string{
+		"doctor:", "scripts/doctor.sh",
+		"fmt:", "fmt:check:", "tidy:check:",
+		"cleanup-roots:check:", "scripts/cleanup-roots-check.sh",
+		"merge:check:", "scripts/merge-check.sh",
+		"spec:check:", "spec:queue:",
+		"verify:", "scripts/verify.sh",
+	} {
+		if !strings.Contains(taskfileText, wantTask) {
+			t.Errorf("Taskfile.yml missing required SemEngine parity entry %q", wantTask)
+		}
+	}
+	verifyScriptBytes, err := os.ReadFile(filepath.Join(repoRoot, "scripts", "verify.sh"))
+	if err != nil {
+		t.Fatalf("read scripts/verify.sh: %v", err)
+	}
+	if !strings.Contains(string(verifyScriptBytes), "validate.sh") {
+		t.Fatal("scripts/verify.sh must delegate to scripts/validate.sh")
 	}
 
 	pkgBytes, err := os.ReadFile(filepath.Join(repoRoot, "ui", "package.json"))

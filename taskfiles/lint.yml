@@ -2,14 +2,21 @@ version: '3'
 
 tasks:
   default:
-    desc: Run Go vet and formatting checks; report revive warnings
+    desc: Run Go vet, worktree-safe gofmt check, go.mod tidy check, revive, cleanup-roots check, and fixed-port test guard
     cmds:
-      - go vet ./...
+      - scripts/gopkgs.sh go vet ./...
       - |
-        unformatted=$(gofmt -l cmd internal test)
+        files=$(git ls-files --cached --others --exclude-standard -- '*.go' ':!docs/sponsor-packages/**')
+        echo "gofmt: $(printf '%s\n' "$files" | grep -c . || true) Go file(s)"
+        unformatted=""
+        [ -z "$files" ] || unformatted=$(gofmt -l $files)
         if [ -n "$unformatted" ]; then
           echo "The following Go files need formatting:"
           echo "$unformatted"
           exit 1
         fi
-      - revive -config revive.toml -formatter friendly ./...
+      - go mod tidy -diff
+      - scripts/gopkgs.sh revive -config revive.toml -formatter friendly ./...
+      - scripts/cleanup-roots-check.sh
+      - scripts/lint-test-ports.sh
+      - scripts/lint-test-ports_fixture_test.sh

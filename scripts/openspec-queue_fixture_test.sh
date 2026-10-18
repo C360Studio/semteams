@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # openspec-queue_fixture_test.sh — verifies scripts/openspec-queue.sh
-# reports the caveat shapes it claims to and suppresses historical/noisy
-# shapes. Run from repo root.
+# reports the caveat shapes it claims to, supports multi-line task-block
+# Hold: scanning and --check stray-hold rejection, and suppresses
+# historical/noisy shapes. Run from repo root.
 
 set -uo pipefail
 
@@ -189,6 +190,10 @@ check "explicit RED gate" report "RED" \
 check "HOLD wording" report "BLOCKED" \
 '- [ ] 8.3 On HOLD pending the owner ruling.'
 
+check "Hold: on an indented continuation line in an open task" report "BLOCKED" \
+'- [ ] 3.1 Write the reader.
+      Hold: until PR #48 merges.'
+
 check "STILL OPEN wording" report "OPEN-Q" \
 '- [ ] 8.3 **STILL OPEN** — decide whether it rides the sister replay.'
 
@@ -210,6 +215,22 @@ echo "=== structural case: a clean change must SAY so, not be silent ==="
 check "clean change emits an explicit no-marker line" report "no halt/hold/deliberate marker" \
 '- [ ] 2.1 Run one comparative benchmark and record it as ADR evidence.
 - [x] 2.2 Enumerate the consumers.'
+
+echo
+echo "=== --check cases: stray Hold: outside task blocks MUST fail ==="
+
+check_status_output "--check rejects Hold: in paragraph outside task block" 1 "Hold: outside every task" \
+'## 1. Work
+
+- [ ] 1.1 Write the reader.
+
+Hold: task 1.1 waits for #12.' valid --check
+
+check_status_output "--check accepts Hold: nested inside an open task block" 0 "holds: ok (1 tasks.md read)" \
+'## 1. Work
+
+- [ ] 1.1 Write the reader.
+      Hold: waits for #12.' valid --check
 
 echo
 echo "=== exit cases: reporter failures and strict mode MUST be trustworthy ==="
