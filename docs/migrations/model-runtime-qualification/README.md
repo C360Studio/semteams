@@ -8,16 +8,30 @@ Issue [#288](https://github.com/C360Studio/semteams/issues/288), draft
 
 ## Result and boundary
 
-Both configured-model cases pass under the race detector: production makes three total HTTP attempts for 503, 503,
-200, then emits the canonical upstream `AgentResponse` with matching `RequestID`/response subject, expected content
-and `RetryCount: 2`; the mock makes one attempt and emits the correlated canonical typed error. The
-[focused run](focused-race.txt) and [full integration run](integration-race.txt) retain the actual outputs.
+Both configured-model cases pass under the race detector: the `flow-bootstrap.json` ("production") retry config makes
+three total HTTP attempts for 503, 503, 200, then emits the canonical upstream `AgentResponse` with matching
+`RequestID`/response subject, expected content and `RetryCount: 2`; the `e2e-flow-bootstrap.json` ("mock") retry config
+makes one attempt and emits the correlated canonical typed error. The [focused run](focused-race.txt) and
+[full integration run](integration-race.txt) retain the actual outputs.
 
 The test uses product `setupRegistriesAndManager`, `buildPayloadRegistry` and the public component manager. It derives
-model configuration from each shipped bootstrap, asserts the request input is required and non-external, and changes
-only that input's `External` marker in the test copy. Reversing the marker reproduces the original component JSON.
-Subjects, requiredness, stream, retry settings and output fields remain intact. Response consumption and running
-state precede publication; component stop and HTTP shutdown join before final provider-call assertions.
+`agentic-model` component configuration from each shipped bootstrap, asserts the request input is required and
+non-external, and changes only that input's `External` marker in the test copy. Reversing the marker reproduces the
+original component JSON. Subjects, requiredness, stream, retry settings and output fields on the `agentic-model`
+component remain intact. Response consumption and running state precede publication; component stop and HTTP shutdown
+join before final provider-call assertions.
+
+Two scope limits apply to the `"production"` subtest (`loadModelBoundaryConfig`, lines 202–207):
+
+1. **Provider replacement:** `loadModelBoundaryConfig` replaces the bootstrap `model_registry` with a single local
+   OpenAI non-streaming HTTP endpoint (`Provider: "openai"`, `Stream: false`). Shipped `flow-bootstrap.json` routes
+   Gemini through the wire backend plus streaming Anthropic. Because all three backends share `Client.runRetryLoop`,
+   this fixture proves the shipped retry budget in `runRetryLoop`, not how the Gemini wire path or streaming Anthropic
+   adapter classifies a 503 response.
+2. **Production retry count equals component default:** `flow-bootstrap.json` declares `retry.max_attempts = 3`, which
+   matches `agentic-model`'s zero-value fallback (`MaxAttempts == 0 → 3`). Deleting the `retry` block from
+   `flow-bootstrap.json` alone would still produce 3 attempts; the `e2e-flow-bootstrap.json` subtest (`max_attempts = 1`)
+   is the case that proves the component's `retry` configuration is read rather than defaulted.
 
 The fixture uses isolated real NATS with image tag `nats:2.14.4-alpine` and a local non-streaming HTTP endpoint. This
 qualifies an isolated composed model with explicit external fixture input, not a full product boot or unchanged
