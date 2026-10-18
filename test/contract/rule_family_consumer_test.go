@@ -106,6 +106,10 @@ func ruleFamilyDecoded(action rule.Action) ruleFamilyExpected {
 	return ruleFamilyActual(action.Subject, action.Role, action.Model, action.ToolChoice, action.ResponseFormat)
 }
 
+// TestRuleFamilyDecode is a dependency description of the frozen upstream
+// rule.Definition JSON tags and round-trip behavior; it does not exercise
+// SemTeams product code and would pass with all SemTeams code deleted.
+// TestRuleFamilyEmission below is the real product-catalog boundary test.
 func TestRuleFamilyDecode(t *testing.T) {
 	for name, want := range ruleFamilyGoldens(t) {
 		t.Run(name, func(t *testing.T) {
@@ -260,7 +264,7 @@ func TestRuleFamilyLiveSourceProjection(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got := fmt.Sprintf("%x", sha256.Sum256(data)); got != p.SHA256 {
-		t.Fatalf("live source changed: got SHA256 %s, pinned %s; review fixture provenance", got, p.SHA256)
+		t.Fatalf("live source %s changed: got SHA256 %s, pinned %s; update required_live.source_sha256 (and required-live.json + retained_action_fields/omitted_action_fields if /on_enter/0 changed) in test/fixtures/rule-family-consumer/provenance.json (see docs/migrations/rule-family-consumer/README.md)", p.SourcePath, got, p.SHA256)
 	}
 	var source, fixture struct {
 		OnEnter []map[string]any `json:"on_enter"`

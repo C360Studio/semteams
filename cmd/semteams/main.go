@@ -1,6 +1,5 @@
-// Package main implements the entry point for the SemStreams application.
-// SemStreams is a semantic stream processing framework that combines
-// protocol-level data processing with semantic knowledge graph capabilities.
+// Package main implements the entry point for the SemTeams application.
+// SemTeams is an always-on program manager for a configurable portfolio.
 package main
 
 import (
@@ -115,7 +114,7 @@ func run() error {
 		return nil
 	}
 
-	// 4. Connect to NATS (required - semstreams cannot operate without NATS)
+	// 4. Connect to NATS (required - semteams cannot operate without NATS)
 	ctx, cancelRuntime := context.WithCancel(context.Background())
 	defer cancelRuntime()
 	natsClient, err := connectToNATSWithSpinner(ctx, cfg)
@@ -133,7 +132,7 @@ func run() error {
 	logger := setupLogger(cliCfg.LogLevel, cliCfg.LogFormat, natsClient, cfg)
 	slog.SetDefault(logger)
 
-	slog.Info("SemStreams ready",
+	slog.Info("SemTeams ready",
 		"version", version,
 		"commit", commit,
 		"build_date", buildDate)
@@ -605,7 +604,7 @@ func parseCLI() (*CLIConfig, bool, error) {
 }
 
 // connectToNATSWithSpinner connects to NATS with a spinner for user feedback.
-// NATS is a hard requirement - semstreams cannot operate without it.
+// NATS is a hard requirement - semteams cannot operate without it.
 func connectToNATSWithSpinner(ctx context.Context, cfg *config.Config) (*natsclient.Client, error) {
 	spinner := NewSpinner("Connecting to NATS...")
 	spinner.Start()
@@ -736,8 +735,8 @@ func ensureServiceManagerConfig(cfg *config.Config) {
 			"http_port":  8080,
 			"swagger_ui": true,
 			"server_info": map[string]string{
-				"title":       "SemStreams API",
-				"description": "semantic stream processing framework - protocol and semantic layers",
+				"title":       "SemTeams API",
+				"description": "Always-on program manager for a configurable portfolio",
 				"version":     version,
 			},
 		}
@@ -929,7 +928,7 @@ func runUntilShutdown(ctx context.Context, manager serviceLifecycle, stopped <-c
 		return fmt.Errorf("graceful shutdown failed: %w", err)
 	}
 
-	slog.Info("SemStreams shutdown complete")
+	slog.Info("SemTeams shutdown complete")
 	return nil
 }
 

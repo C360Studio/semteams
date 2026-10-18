@@ -49,8 +49,21 @@ constrains decision to `proceed` or `hold`. Evidence is an array of objects with
 `accepted:boolean`, also rejecting additional properties. These nested values are part of the oracle.
 
 The live projection retains `type`, `subject`, `role`, `model`, `prompt`, `tools`, `tool_choice` and `action_allowlist`;
-it omits exactly `run_scope` and `properties`. The fixture envelope is test-only. The supplemental cases do not invent
-a current SemTeams production dependency. Tool registry/name resolution and E3 run behavior are outside this proof.
+it omits exactly `run_scope`, `properties` and `loop_max_iterations`. The fixture envelope is test-only. The supplemental
+cases do not invent a current SemTeams production dependency. Tool registry/name resolution and E3 run behavior are
+outside this proof.
+
+**Updating the pinned live-source SHA-256 (`TestRuleFamilyLiveSourceProjection`):** Because
+`test/contract/rule_family_consumer_test.go` has no build tag, `TestRuleFamilyLiveSourceProjection` runs in `task test`
+and `task test:race` and fails closed whenever `configs/rules/research/01-coordinator-research-spawn.json` changes. When
+editing `configs/rules/research/01-coordinator-research-spawn.json`:
+
+1. Compute the new SHA-256 (`shasum -a 256 configs/rules/research/01-coordinator-research-spawn.json`) and update
+   `required_live.source_sha256` in `test/fixtures/rule-family-consumer/provenance.json`.
+2. If any field under `/on_enter/0` was added, removed, or modified, update `retained_action_fields` /
+   `omitted_action_fields` in `provenance.json` and sync `test/fixtures/rule-family-consumer/required-live.json` (and
+   `expected.json` if `subject`, `role`, `model`, `tool_choice`, or `response_format` changed).
+3. Run `go test -race ./test/contract -run '^TestRuleFamily' -count=1 -v` to confirm the projection and emission checks pass.
 
 The relevant source path is [rule.Definition](https://github.com/C360Studio/semstreams/blob/8b99efe9c66a4faa4fa509f9f62cc6bad8392128/processor/rule/rule_factory.go#L16) / `[]Action`, with cold JSON
 decoding in [rule loading](https://github.com/C360Studio/semstreams/blob/8b99efe9c66a4faa4fa509f9f62cc6bad8392128/processor/rule/rule_loader.go#L72) and hot definition mapping in
@@ -130,11 +143,14 @@ go test ./test/contract -run '^TestRuleFamily' -count=1 -v
 go test -race ./test/contract -run '^TestRuleFamily' -count=1 -v
 ```
 
-- `TestRuleFamilyDecode`: three direct decode cases and three Definition JSON round trips.
-- `TestRuleFamilyEmission`: three real public-executor captured emissions, decoded as canonical task payloads.
+- `TestRuleFamilyDecode`: three direct decode cases and three Definition JSON round trips (dependency description of the
+  frozen `rule.Definition` JSON contract; does not gate SemTeams product code).
+- `TestRuleFamilyEmission`: three real public-executor captured emissions, decoded through the product payload catalog as
+  canonical task payloads (the product-boundary test).
 - `TestRuleFamilyOracleRejectsDrift`: six valid-input changes rejected at both decode and emission boundaries—choice
   omission, required-mode drift, function-name drift, format omission, strict-flag drift and nested `accepted.type` drift.
-- `TestRuleFamilyLiveSourceProjection`: pinned source hash and exact retained/omitted field projection.
+- `TestRuleFamilyLiveSourceProjection`: pinned source hash (`configs/rules/research/01-coordinator-research-spawn.json`)
+  and exact retained/omitted field projection against `test/fixtures/rule-family-consumer/provenance.json`.
 
 Local validation passed: `task lint` (six warnings in unchanged files, zero errors), `task test:race`, `task test:integration`,
 `go build ./...`, `task schema:generate` and `task schema:check-changes` (generated outputs unchanged), strict OpenSpec

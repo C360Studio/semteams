@@ -18,13 +18,12 @@ import (
 
 func main() {
 	// Parse command-line flags
-	registryPkg := flag.String("registry", "./componentregistry", "Deprecated compatibility flag; ignored (uses SemTeams runtime catalog)")
 	outDir := flag.String("out", "./schemas", "Output directory for schemas")
 	openapiOut := flag.String("openapi", "./specs/openapi.v3.yaml", "Output path for OpenAPI spec")
 	flag.Parse()
 
 	log.Printf("OpenAPI Generator")
-	log.Printf("  Registry: SemTeams runtime catalog (-registry=%q is ignored)", *registryPkg)
+	log.Printf("  Registry: SemTeams runtime catalog")
 	log.Printf("  Output dir: %s", *outDir)
 	log.Printf("  OpenAPI spec: %s", *openapiOut)
 
