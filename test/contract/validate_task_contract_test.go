@@ -638,15 +638,21 @@ func TestValidateTaskAndDocsContract(t *testing.T) {
 		t.Fatal("ui/package.json generate-types:check must not overwrite tracked src/lib/types/api.generated.ts via npm run generate-types")
 	}
 
-	for _, doc := range []string{"CLAUDE.md", "AGENTS.md"} {
-		docBytes, err := os.ReadFile(filepath.Join(repoRoot, doc))
-		if err != nil {
-			t.Fatalf("read %s: %v", doc, err)
-		}
-		docText := strings.ReplaceAll(string(docBytes), "\r\n", "\n")
-		wantBlock := "Before pushing:\n\n```bash\ntask validate\n```"
-		if !strings.Contains(docText, wantBlock) {
-			t.Errorf("%s must collapse 'Before pushing:' to a single 'task validate' block", doc)
-		}
+	agentsBytes, err := os.ReadFile(filepath.Join(repoRoot, "AGENTS.md"))
+	if err != nil {
+		t.Fatalf("read AGENTS.md: %v", err)
+	}
+	agentsText := strings.ReplaceAll(string(agentsBytes), "\r\n", "\n")
+	wantBlock := "Before pushing:\n\n```bash\ntask validate\n```"
+	if !strings.Contains(agentsText, wantBlock) {
+		t.Errorf("AGENTS.md must collapse 'Before pushing:' to a single 'task validate' block")
+	}
+
+	claudeBytes, err := os.ReadFile(filepath.Join(repoRoot, "CLAUDE.md"))
+	if err != nil {
+		t.Fatalf("read CLAUDE.md: %v", err)
+	}
+	if !strings.Contains(string(claudeBytes), "@AGENTS.md") {
+		t.Errorf("CLAUDE.md must import @AGENTS.md")
 	}
 }

@@ -1,250 +1,202 @@
 # AGENTS.md
 
-This file provides guidance to Codex (codex.ai) and Antigravity (Gemini) when working with code in this repository. Content is intentionally kept in sync with `CLAUDE.md` (`cp CLAUDE.md AGENTS.md` with the agent-specific opener) and kept under 24,000 bytes so rule loaders with a 24 KB per-file cap never truncate it. Role contracts, model/effort routing, and shared skills live in [`.agents/README.md`](.agents/README.md); the full shared work protocol lives in [`.agents/protocol.md`](.agents/protocol.md).
+Guidance for coding agents. Codex and Antigravity (Gemini) load this file as `AGENTS.md`; `CLAUDE.md` imports it, so
+there is one copy (kept strictly under 24,000 bytes so rule loaders with a 24 KB per-file cap never truncate it). Role
+contracts, model/effort routing, and shared skills live in [`.agents/README.md`](.agents/README.md); the full shared
+work protocol lives in [`.agents/protocol.md`](.agents/protocol.md); the enforcement audit matrix lives in
+[`.agents/rules-index.md`](.agents/rules-index.md).
 
-# SemTeams Project Context
+## What this is for
 
-SemTeams is an **always-on program manager for a configurable portfolio**. The current runtime composes agentic,
-graph, rule and I/O components from the frozen [SemStreams](https://github.com/c360studio/semstreams) dependency.
-SemTeams owns the product wiring, category packs, shared persona corpus, product tools, Svelte UI and documentation.
+SemTeams is an **always-on program manager for a configurable portfolio** ([`docs/product/program-manager.md`](docs/product/program-manager.md)).
+The current runtime composes agentic, graph, rule and I/O components from the frozen
+[SemStreams](https://github.com/c360studio/semstreams) dependency (`v1.0.0-beta.162.0.20260930150212-8b99efe9c66a`,
+`8b99efe9c66a4faa4fa509f9f62cc6bad8392128`). SemTeams owns product wiring (`cmd/semteams/`), category packs
+(`configs/`), shared personas, product tools, Svelte 5 / SvelteKit 2 UI (`ui/`), and documentation.
 
-[ADR-061](docs/adr/061-agent-runtime-ownership-and-observable-work.md) records the approved next boundary: SemEngine
-owns the shared substrate and generic durability; SemTeams owns the agent runtime and absorbs SemDev as a separately
-qualified development pack. Extraction, SemEngine adoption and pack activation are future changes. Do not mistake
-the ownership decision for implemented runtime migration.
+[ADR-061](docs/adr/061-agent-runtime-ownership-and-observable-work.md) records the approved ownership boundary:
+SemEngine owns the shared substrate (graph, transport, mutation, rule engine, lifecycle/projection, generic durability
+including [SemEngine #24](https://github.com/C360Studio/semengine/issues/24)); SemTeams owns the agent runtime (loop,
+dispatch, model/tool orchestration, context, approval/governance, trajectories, agent rule extensions) and absorbs
+SemDev as a separately qualified development pack. Extraction, SemEngine adoption, and dev-pack activation are future
+changes; preserve existing recovery and never create a competing journal or workflow engine.
 
-The owner-approved product direction lives in [`docs/product/program-manager.md`](docs/product/program-manager.md).
-Research, planning, and design are capabilities used in support of programs and projects. Deterministic structural
-portfolio visibility lives on `/work` (`#309`), while the read-only, evidence-backed **Program Pulse** (`#267`) runs
-as an operator profile (`/pulse`) of the `research` pack using `github_read` (`#273`) under the `1..4` fan-out and loop
-containment budget (`#272`). Scheduled cadence and custom work classification (`#268`) are deferred to
-`horizon:post-mvp`. The long-term topology is one program manager coordinating durable project managers; the MVP proves
-that view through one program-manager journey with project drill-down.
+Deterministic structural portfolio visibility lives on `/work` (`#309`), while the read-only, evidence-backed **Program
+Pulse** (`#267`) runs as an operator profile (`/pulse`) of the `research` pack using `github_read` (`#273`) under the
+`1..4` fan-out and loop containment budget (`#272`). Scheduled cadence and custom work classification (`#268`) are
+deferred to `horizon:post-mvp`.
 
-**Current implementation:** every processor comes from the frozen `github.com/c360studio/semstreams` dependency.
-`cmd/semteams/` independently wires the primitives per ADR-029; `internal/runtimecatalog` explicitly registers the
-complete frozen component/payload surface for runtime and generators. Registration does not activate a pack.
+## Architecture, Config Layering, and Product-Shell Wiring
 
-**Target ownership:** agent loop, dispatch, model/tool orchestration, context, agent-specific approval/governance,
-trajectories and agent rule extensions belong in the SemTeams runtime. Generic graph, transport, mutation, rule,
-lifecycle/projection and durable-execution mechanics belong in SemEngine. Its generic attempt/effect/replay work
-([SemEngine #24](https://github.com/C360Studio/semengine/issues/24)) is planned, not a shipped dependency guarantee.
-Preserve existing recovery while the integration contract is resolved; do not create a competing journal or engine.
+The product shell runs **one** flow config — `configs/flow-bootstrap.json` (`gemini-flash` default; `e2e-flow-bootstrap.json`
+is its `mock-llm` clone with disabled compaction) — wiring substrate singletons (`graph-ingest`, `graph-query`,
+`rule-processor`, `agentic-loop`, `agentic-dispatch`, `agentic-tools`, `agentic-model`). Task classes are added as
+**category-keyed rule packs** (`configs/rules/<category>/`) + persona bundles (`configs/personas/fragments/`) +
+coordinator `decide(action=<category>)` ([ADR-042](docs/adr/042-coordinator-instantiated-flows-via-templates.md)).
 
-## Substrate-plus-overlays architecture (ADR-042; demo scope reset by ADR-058)
+- **Live categories ([ADR-058](docs/adr/058-beta159-realignment-and-demo-lane-focus.md)):** `research` (`/pulse` and
+  `/research`: `researcher-research-plan → researcher-research-gather ×1..4 → researcher-research-synthesize →
+  reviewer-research → coordinator`) and `autoresearch` (`/optimize`).
+- **Parked packs (ADR-058):** `create-change`, `proof-readiness`, `dev-from-task`, `dev-via-test` are on disk but
+  UNWIRED (`parked_packs` build tag; `test/contract/predicate_contract_test.go` CI fence). Coordinator taxonomy is
+  `research | autoresearch | respond_direct | ask_user`. Shared coordinator personas stay domain-neutral.
+- **Ops Agent Phase 1 ([ADR-027](docs/adr/027-ops-agent-self-sufficient-operations.md), wired):**
+  `configs/rules/ops/01-run-terminal-observe.json` fires once per run on `agent.run.phase in [completed, failed,
+  cancelled]` (`role: ops-chain-observer`), terminates via `decide(action="observed")`, and emits `emit_diagnosis`
+  (`{org}.{platform}.diagnosis.ops.finding.{uuid}`). Cadence is set by trigger scope, never `fire_every_n_events` or
+  `cooldown`.
+- **Product-Shell Wiring ([ADR-029](docs/adr/029-product-shell-wiring.md)):** `cmd/semteams/main.go` orders
+  `runtimecatalog.RegisterComponents` (Pattern C, shared with `cmd/openapi-generator`) → `persona.NewManager` +
+  `LoadFromDirectory` (Pattern B) → `rule.NewConfigManager` + `config.WithKeyFamily` (Pattern B, before config startup)
+  → `registerRuleConfigService` (starts after components in `StartAll`, stops before them; initial rule reconciliation
+  inside readiness barrier) → `agentic.LoopExecutionContract()` / `LessonContract()` (Pattern C) →
+  `payloadregistry.New` + `runtimecatalog.RegisterPayloads` (Pattern A) → `agentictools.NewExecutorRegistry` +
+  `executors.RegisterBuiltins` (Pattern A+B) → `chainpause.Subscriber` and `approvalpause.Subscriber` (reading
+  effective platform ID after config starts; `StopAll` uses a fresh bounded shutdown context).
+- **IDs & Toggles:** Canonical IDs are `org.platform.system.domain.type.instance` (loops: `agentic-loop.agent.execution`;
+  runs: `chain.agent.execution`); loop tokens are canonical UUIDs; typed `agentic.user_response.v1` uses
+  `user.response.*`. Instance names `teams-dispatch` and `teams-loop` point `"name"` at `agentic-dispatch` and
+  `agentic-loop`. Personalization toggles default `false`; `restricted_decide_actions` is `[]` (interactive) or
+  `["ask_user"]` (autonomous with `-persona-overlay configs/personas/fragments-autonomous`).
 
-The product shell runs **one** flow config — `configs/flow-bootstrap.json` — wiring substrate singletons
-(`graph-ingest`, `graph-query`, `rule-processor`, `agentic-loop`, `agentic-dispatch`, `agentic-tools`, `agentic-model`).
-Task classes are added as **category-keyed rule packs** + named persona bundles loaded by the substrate, not separate
-flow configs ([ADR-042](docs/adr/042-coordinator-instantiated-flows-via-templates.md) §Phase 2 redesign).
-
-Live task categories ([ADR-058](docs/adr/058-beta159-realignment-and-demo-lane-focus.md)):
-
-- **`research`** (`/pulse` and `/research`) — coordinator routes both portfolio/project Program Pulse asks (`/pulse`)
-  and open-ended investigation asks (`/research`) via `decide(action="research")`. `configs/rules/research/` drives
-  `researcher-research-plan → researcher-research-gather (×1..4 fan-out with github_read + web_search + bash) →
-  researcher-research-synthesize → reviewer-research → coordinator wake-up`.
-- **`autoresearch`** (`/optimize`) — metric optimization with empirical keep/revert in an attested devcontainer sandbox
-  (`configs/rules/autoresearch/`).
-
-**Parked donor material (ADR-058):** the dev-side packs (`create-change`, `proof-readiness`, `dev-from-task`,
-`dev-via-test`) are on disk but UNWIRED — they predate the upstream canonical predicate contract (3-segment
-lower-kebab, fail-closed at persistence, NO alias mode). Their contract tests carry a `parked_packs` build tag; their
-journeys are `describe.skip`; the coordinator taxonomy is `research | autoresearch | respond_direct | ask_user`.
-ADR-061 authorizes future SemDev absorption as a separately qualified pack preserving
-`issue → OpenSpec → implementation → verification → PR`, harness-owned outcomes and clean-room verification. Do not
-rewire parked packs as a shortcut (`test/contract/predicate_contract_test.go` enforces the CI fence).
-
-Adding a new prompt class (e.g. `program-report` or `project-plan`) is a **new category pack**: rule files under
-`configs/rules/<category>/`, persona bundles under `configs/personas/fragments/<role>-<category>-<phase?>/`, and a
-coordinator-persona `decide(action=<category>)` token. Adding a category does not justify a new runtime component.
-**Shared persona corpus (`configs/personas/fragments/coordinator/`) stays domain-neutral**; domain flavor lives in
-category packs.
-
-## Shared work protocol (Claude, Codex, and Gemini)
-
-State that all agents must see lives in the repository's tools, never in private memory or a separate status file.
-The full protocol is [`.agents/protocol.md`](.agents/protocol.md); role contracts and model/effort routing live in
-[`.agents/README.md`](.agents/README.md).
-
-SemTeams routes design and implementation through its project roles: `architect` owns API and integration contracts;
-`go-developer` implements backend work and `go-reviewer` reviews it; `svelte-developer` implements UI work and
-`svelte-reviewer` reviews it; cross-stack changes use both reviewer lanes; and `technical-writer` owns durable docs and
-conservative OpenSpec task truth.
-
-| Question | Home | Rule |
-|---|---|---|
-| What is wanted / decided | GitHub issue + labels (`type:`, `area:`, `class:`, `status:`, `horizon:`) | `status:needs-decision` is the owner's docket (ruling comment removes label). `status:blocked` names its blocker. |
-| What gates the next tag | GitHub milestone named for the intended version | Membership is the gate: in or out. `horizon:pre-v1` means before v1.0.0, not before the next tag. |
-| An epic | Tracking issue labeled `type:epic` with a `#n` task list | GitHub renders progress; no separate epic document. |
-| Who has claimed what | **Draft PR** opened at work start with `Closes #n`; branch prefix names the agent (`claude/...`, `codex/...`, `gemini/...`) | No draft PR, no claim. Design claims commit the OpenSpec proposal first. Record the current stop-point in the PR body. |
-| Target state & task truth | OpenSpec change inside that PR; `task openspec:queue` reads `Hold:` lines | Archive (`openspec archive <id>` + spec sync) as the final content commit. Never assert post-merge facts ("CI green"). |
-| Why | ADR or owner ruling comment on the issue | ADRs record durable decisions, not status or checklists. |
-
-Rituals:
-
-- **Start:** query open issues, draft PR claims, `task openspec:queue`, recent `main` runs, and `status:needs-decision`
-  issues before choosing work.
-- **Clarify:** before claiming work, mutating state, or spawning role subagents, read any named issue, PR, or file
-  first, then confirm four boundaries: **Deliverable**, **Scope/non-goals**, **Definition of Done/verification**, and
-  **Stop boundary**. When ambiguous, propose a 3–4 bullet Definition of Done and ask 1–3 targeted questions; once
-  confirmed, run autonomously to that stop boundary.
-- **Take work:** unclaimed issue → dedicated worktree on an agent-prefixed branch (`claude/<topic>`, `codex/<topic>`,
-  `gemini/<topic>`; CLI uses `../semteams-wt/<branch>`, Enjoy desktop uses `move_to_worktree` under
-  `.worktrees/<branch>`) → push → draft PR with `Closes #n` → implementation. Primary checkout is discovery-only.
-  Verify worktree path and branch before every edit, commit, push, or PR mutation. Update branches by merging
-  `origin/main`, never by rebase or force-push.
-- **Land:** undraft → appropriate reviewer lane (`go-reviewer`, `svelte-reviewer`, or both) + cross-agent review round
-  when requested (`Review request` / `Review record` PR comments per [`.agents/protocol.md`](.agents/protocol.md)) →
-  all local and hosted gates green (`Repository CI` / `CI Status Check`) with no open unfixed `class:flake` → squash
-  merge. Include `implemented-by: <agent> (<persona/model>)` (and `reviewed-by:` when reviewed) in the PR body
-  (`claude`, `codex` / `Sol`, or `gemini`).
-- **Close:** no issue closes without the owner's explicit `CONFIRM-CLOSE` or the squash merge of an approved PR that
-  declared `Closes #n`.
-
-## Tech Stack & Repository Layout
-
-- **Go 1.26.3** — `cmd/semteams/` (~600 LoC across `main.go`, `flags.go`, `banner.go`, `logging.go`). Independently
-  wires framework primitives per [ADR-029](docs/adr/029-product-shell-wiring.md) — no imports from `cmd/semstreams/`.
-- **Frozen SemStreams** — `github.com/c360studio/semstreams` pinned to
-  `v1.0.0-beta.162.0.20260930150212-8b99efe9c66a` (`8b99efe9c66a4faa4fa509f9f62cc6bad8392128`). Every bump is a
-  first-class change ([migration evidence](docs/migrations/semstreams-8b99efe/README.md)). Use fresh isolated NATS
-  2.14.4 and graph state; retained-state conversion is not supported.
-- **Frontend (`ui/`)** — Svelte 5 + SvelteKit 2 + TypeScript.
-
-| Path | Purpose |
-|------|---------|
-| `cmd/semteams/` | Product-shell binary wiring Pattern-A/B/C primitives per ADR-029 |
-| `cmd/openapi-generator/` | Generate OpenAPI spec from component registry |
-| `configs/` | Bootstrap composition, category rule packs, personas |
-| `docs/` | Product, ADR, and migration documentation |
-| `schemas/`, `specs/` | Generated via `task schema:generate` — do not hand-edit |
-| `test/contract/`, `test/e2e/mock/`, `test/fixtures/journeys/` | Contract tests, mock LLM/AGNTCY server, Playwright YAML fixtures |
-| `ui/` | Svelte 5 + SvelteKit 2 frontend (work board, runs board, graph explorer, composition inventory) |
-
-## Runtime ownership boundary
-
-- Current component implementations, gateways, NATS clients and graph engine remain in frozen SemStreams.
-- Future agent-runtime extraction belongs here under ADR-061 in reviewed slices preserving behavior, tests, and
-  provenance.
-- Generic graph, transport, lifecycle/projection and durability belong in SemEngine; do not duplicate them locally.
-- Development-pack activation and the SemEngine switch require separate qualification. The read-only Program Pulse
-  remains the first product MVP.
-
-## Common Tasks
+## Commands
 
 ```bash
-task build              # Build bin/semteams
-task test               # Run Go tests (fast)
-task test:race          # Go tests with -race
-task test:integration   # Integration tests (testcontainers; sequential w/ -p 1 on macOS)
-task check              # Go lint + test
-task check:all          # Go + UI lint + type-check + test + build
-task validate           # Read-only local CI parity gate (Go, UI, Governance)
-task schema:generate    # Regenerate schemas/ + specs/openapi.v3.yaml
-go test ./test/contract/... -run TestConfigDispatch -v
-
-# UI
-task ui:dev             # Start Vite dev server
-task ui:test            # Vitest unit/component tests
-task ui:test:e2e        # Playwright E2E tests (auto-manages Docker stack)
-task ui:lint            # ESLint
-task ui:check           # svelte-check (TypeScript)
-task ui:build           # Production build
+task build                # Build bin/semteams
+task lint                 # Go fmt, vet, and pinned revive
+task test                 # Run Go tests (fast)
+task test:race            # Go unit/contract tests with -race
+task test:integration     # Integration tests (testcontainers; sequential w/ -p 1 on macOS)
+task schema:generate      # Regenerate schemas/ + specs/openapi.v3.yaml
+task openspec:validate    # Strict OpenSpec validation
+task openspec:queue       # In-flight OpenSpec changes and their Hold: lines
+task openspec:queue-test  # Fixture test for OpenSpec queue reporter
+task publish:verify-test  # Fixture test for release publication gate
+task ui:lint              # ESLint
+task ui:check             # svelte-check (TypeScript)
+task ui:test              # Vitest unit/component tests
+task ui:build             # Production UI build
+task ui:test:e2e          # Playwright E2E tests (auto-manages Docker stack)
+task check                # Go lint + test
+task check:all            # Go + UI lint + type-check + test + build
+task validate             # Read-only local CI parity gate (Go, UI, Governance)
 ```
 
-## Config Layering & Ops Agent
-
-| Config | Purpose | Model |
-|--------|---------|-------|
-| `flow-bootstrap.json` | Production substrate (research + autoresearch + coordinator + agent-run + ops packs). | `gemini-flash` default |
-| `e2e-flow-bootstrap.json` | Mock-LLM clone with the same packs and disabled compaction. | `mock-llm` |
-
-### Ops Agent Phase 1 (ADR-027, accepted) — WIRED
-
-Read-only diagnostic agent in the same backend process: `configs/rules/ops/01-run-terminal-observe.json` fires once per
-run on `agent.run.phase in [completed, failed, cancelled]` with `role: ops-chain-observer`
-(`configs/personas/fragments/ops-chain-observer/`).
-
-- **Cadence is set by trigger scope, not a throttle.** Never use `fire_every_n_events` (does not gate `publish_agent`
-  on expression rules — semstreams#1007) or `cooldown` (per rule instance; suppression fires `on_exit`).
-- Terminates via `decide(action="observed")`. Emits findings via `emit_diagnosis` (`finding`, `recommendation`,
-  `confidence` 0.0–1.0, `evidence` ≥1 entity ID), minting `{org}.{platform}.diagnosis.ops.finding.{uuid}`. Phase 2
-  (proposing changes) is not deployed; approval requires exact pending execution identity (default 12h timeout).
-
-### Product-Shell Wiring (ADR-029)
-
-`cmd/semteams/main.go` owns composition-root lifecycle ordering:
-
-| Surface | Pattern | Call site |
-|---|---|---|
-| `runtimecatalog.RegisterComponents` | C | `setupRegistriesAndManager`; shared with schema/OpenAPI generators |
-| `persona.NewManager` + `LoadFromDirectory` | B | `loadPersonaFragments` |
-| `rule.NewConfigManager` + `config.WithKeyFamily` | B | `run` → `setupRemainingInfrastructure` → shared tool dependencies |
-| rule-config lifecycle adapter | B | `registerRuleConfigService`; starts after components in `StartAll`, stops before them |
-| public loop/lesson projection contracts | C | `agentic.LoopExecutionContract()` / `agentic.LessonContract()` |
-| `payloadregistry.New` + `runtimecatalog.RegisterPayloads` | A | before tool registry; plumbed via `Dependencies.PayloadRegistry` |
-| `agentictools.NewExecutorRegistry` + `executors.RegisterBuiltins` | A + B | after persona load; plumbed via `Dependencies.ToolRegistry` |
-
-Product-local `chainpause.Subscriber` and `approvalpause.Subscriber` reflect failed-loop and approval events onto run
-state via graph mutation, starting after tool registration. Rule key family registers before config startup; initial
-rule reconciliation runs inside the readiness barrier; `StopAll` uses a fresh bounded shutdown context; local writers
-read the effective platform ID after config starts.
-
-Canonical IDs are `org.platform.system.domain.type.instance` (loops: `agentic-loop.agent.execution`; runs:
-`chain.agent.execution`). Never reconstruct the platform segment from configured base alone. Loop tokens crossing
-control boundaries are canonical UUIDs. Composition inspection uses `/components/flowgraph` and `/components/validate`.
-Typed `agentic.user_response.v1` belongs on `user.response.*`.
-
-### Component Instance vs Factory & Personalization Toggles
-
-Configs use instance names `teams-dispatch` and `teams-loop` (`/teams-dispatch/*`, `/teams-loop/*`) pointing `"name"`
-at upstream factories (`agentic-dispatch`, `agentic-loop`).
-
-Personalization toggles (default `false`):
-- `agentic-dispatch.enable_intent_classification` & `enable_onboarding` — off in `flow-bootstrap.json`.
-- `agentic-memory.enable_profile_context` — off in `flow-bootstrap.json`.
-- `agentic-tools.approval_required` & `enable_categories` — tool approval gates and category filtering.
-- `agentic-tools.restricted_decide_actions` — run-level clarification policy (ADR-053 Phase 4b). `[]` = interactive;
-  `["ask_user"]` = autonomous (threaded via `extractRestrictedDecideActions` → `RegisterBuiltins`). Autonomous
-  deployments also set `-persona-overlay` / `SEMSTREAMS_PERSONA_OVERLAY_PATH` to
-  `configs/personas/fragments-autonomous` (`coordinator/12-autonomous-clarification-policy.md`).
-- `agentic-governance.enable_tool_governance` — pre-execution governance filtering.
-
-## Mandatory Protocols
-
-### Reviewer-Pass Protocol
-Every multi-phase or nontrivial change runs `go-reviewer` (backend), `svelte-reviewer` (`ui/`), or both (cross-stack) at
-each critical boundary (see [`.agents/contracts/`](.agents/contracts/)): verify locally → invoke reviewer with explicit
-scope → fix criticals/nits or document explicit disagreement → re-verify.
-
-### Product-Shell-Tool Discipline
-Before adding a tool in `cmd/semteams/tools/`, rule action shape, local payload type, KV bucket, or stream, complete a
-**framework-alignment review** (`cmd/semteams/tools/README.md`):
-1. Survey frozen SemStreams and SemEngine's admitted contracts/roadmap; classify as substrate, agent runtime, or pack.
-2. Reuse existing primitives; do not fork unreviewed.
-3. Preserve agent-specific behavior during extraction; never build a competing journal, effect ledger, or workflow engine.
-4. Missing generic mechanisms require upstream contract discussion; domain-local additions require an ADR first.
-
-### E2E Active Monitoring Protocol
-UI Playwright journeys run in background and must be monitored every 20–30s via test output, backend logs
-(`docker compose -f ui/docker-compose.agentic-e2e.yml logs --since=30s`), and message logger
-(`curl -s http://localhost:3100/message-logger/entries?limit=10 | jq '.[].subject'`). Dump evidence to `/tmp/`, abort
-early on loops, and quote log lines.
-
-### CI Baseline
-`.github/workflows/ci.yml` runs Go, UI, and Governance/OpenSpec jobs feeding `CI Status Check`. Tag-only publication
-runs via `.github/workflows/publish.yml` (`docs/release.md`). Before pushing:
+Before pushing:
 
 ```bash
 task validate
 ```
 
-## Related Repos
+Gate selection per diff and evidence rules: [`.agents/skills/semteams-preflight/SKILL.md`](.agents/skills/semteams-preflight/SKILL.md).
 
-- [semstreams](https://github.com/c360studio/semstreams) — frozen runtime and extraction baseline (`8b99efe9`).
-- [semengine](https://github.com/c360studio/semengine) — target shared substrate (graph, transport, rules, lifecycle, durability).
-- [semdev](https://github.com/c360studio/semdev) — maker-side issue-to-reviewed-PR workflow (absorbed under ADR-061).
-- [semmem](https://github.com/c360studio/semmem) — cross-product knowledge curator and SOP release publisher.
-- [semsource](https://github.com/c360studio/semsource) — code, documentation, and change evidence service.
-- [semdragons](https://github.com/c360studio/semdragons) — sibling product on semstreams (`semspec` retired).
+## Rules and what enforces them
+
+Domain-grouped working reference. [`.agents/rules-index.md`](.agents/rules-index.md) carries the full audit matrix
+(what enforces each rule and what stays review only). Short names in "Where": `arch`, `go-dev`, `go-rev`, `svelte-dev`,
+`svelte-rev`, `writer` → `.agents/contracts/<role>.md`; `protocol` → `.agents/protocol.md`. In "Gate": `review` means
+review only; `verify` means enforced by `task validate` (`verify+review` when structural checks cover the core rule and
+edge cases remain review only). A new repo-wide or agent-conduct rule updates both this file and
+`.agents/rules-index.md`.
+
+### 1. Go, composition root, and runtime ownership
+
+| Gate | Rule | Where |
+| --- | --- | --- |
+| `verify+review` | `cmd/semteams/` independently wires Pattern-A/B/C primitives per ADR-029; no imports from `cmd/semstreams/` | `go-dev`, `go-rev`; ADR-029 |
+| `verify+review` | Rule key family registers before config startup; rule-config service starts after components in `StartAll` and stops before them; initial rule reconciliation runs inside the readiness barrier; `StopAll` uses a fresh bounded shutdown context | `go-dev`, `go-rev`; ADR-029; `cmd/semteams/main.go` |
+| `review` | Canonical IDs are 6 parts (`org.platform.system.domain.type.instance`); never reconstruct the platform segment from configured base alone — read effective platform ID after config starts | `go-dev`, `go-rev`; ADR-029 |
+| `verify+review` | `internal/runtimecatalog` explicitly registers the frozen component and payload surface; importing a package registers nothing, and `task schema:generate` keeps `schemas/` and `specs/openapi.v3.yaml` drift-free | `go-dev`, `go-rev`; `task validate` |
+| `review` | Before adding a tool in `cmd/semteams/tools/`, rule action shape, local payload type, KV bucket, or stream, complete a framework-alignment review (`cmd/semteams/tools/README.md`) and classify as substrate (SemEngine), agent runtime (SemTeams), or pack | `arch`, `go-dev`, `go-rev`; ADR-061 |
+| `review` | Never build a competing generic execution journal, effect ledger, or workflow engine while SemEngine #24 durability contracts are pending | `arch`, `go-dev`, `go-rev`; ADR-061 |
+| `review` | Production structs never retain `context.Context`; failure paths fail closed and any skip, drop, or degrade is declared and tested | `go-dev`, `go-rev` |
+| `verify` | Pinned `revive` (`revive.toml`), `gofmt`, and `go vet` pass with zero errors | `task lint` (`task validate`) |
+
+### 2. Packs, rules, predicates, and personas
+
+| Gate | Rule | Where |
+| --- | --- | --- |
+| `verify+review` | All predicates in live configs and rules follow the 3-segment lower-kebab canonical contract (`domain.category.property`); fail closed with no alias mode | `go-dev`, `go-rev`; `TestPredicateContract` |
+| `verify+review` | Parked dev-side packs (`create-change`, `proof-readiness`, `dev-from-task`, `dev-via-test`) remain unwired in `configs/flow-bootstrap.json` and `configs/e2e-flow-bootstrap.json` until qualified under ADR-061 | `arch`, `go-dev`, `go-rev`; ADR-058; `TestPredicateContract` |
+| `verify+review` | New prompt classes are added as category rule packs (`configs/rules/<category>/`) + persona bundles (`configs/personas/fragments/<role>-<category>-<phase?>/`) + coordinator `decide(action=<category>)`, not new runtime components; shared coordinator personas stay domain-neutral | `arch`, `go-dev`, `go-rev`; ADR-042 |
+| `verify+review` | Every `publish_agent` rule action sets an explicit `loop_max_iterations` ceiling and respects the `research` `1..4` fan-out / loop containment budget (#272) | `go-dev`, `go-rev`; ADR-060; `TestResearchContainment` |
+| `verify+review` | Rule cadence is set by trigger scope, never expression-rule `fire_every_n_events` (semstreams#1007) or `cooldown` | `go-dev`, `go-rev`; ADR-027 |
+| `verify+review` | `configs/e2e-flow-bootstrap.json` stays a structural clone of `configs/flow-bootstrap.json` with `mock-llm` and disabled compaction | `go-dev`, `go-rev`; `TestConfigDispatch` |
+
+### 3. Svelte UI and observable work
+
+| Gate | Rule | Where |
+| --- | --- | --- |
+| `verify+review` | Browser reads of portfolio and work state go through scoped SvelteKit server routes (`/api/work/*`), never direct browser NATS connections or admin credentials | `svelte-dev`, `svelte-rev`; `observable-work` spec |
+| `verify+review` | Graph-derived overlays carry explicit `known | none | unknown` states; never collapse a failed, partial, or unsupported lookup into `none` or simulate unshipped pulse/attention state | `svelte-dev`, `svelte-rev`; ADR-061 §3; `observable-work` spec |
+| `verify+review` | Svelte 5 runes (`$state`, `$derived`, `$effect`, `$props`) avoid subscription/SSE reconnect loops and preserve keyboard focus order, `aria-busy`/`aria-disabled`, and WCAG 2.5.3 compliance | `svelte-dev`, `svelte-rev`; `task ui:check`, `task ui:test` |
+| `verify` | Frontend `npm run lint`, `npm run check`, `npm run test:unit`, `npm run generate-types:check`, and `npm run build` pass without overwriting tracked generated types | `task validate`; `TestValidateTaskContract` |
+
+### 4. Testing, E2E, and verification
+
+| Gate | Rule | Where |
+| --- | --- | --- |
+| `verify+review` | `task validate` runs the read-only local parity gate (Go, UI, Governance) without mutating tracked, staged, unstaged, or untracked worktree files | `go-dev`, `svelte-dev`, `go-rev`, `svelte-rev`; `TestValidateTaskContract` |
+| `verify+review` | Tests use an independent oracle and are shown able to fail; structural guards carry paired sensitivity tests | `go-dev`, `svelte-dev`, `go-rev`, `svelte-rev`; `TestAgentSetupParitySensitivity` |
+| `review` | Integration tests run sequentially (`-p 1`) under `task test:integration`; serialize heavy Docker/testcontainers runs across concurrent sessions on a shared host | `go-dev`, `go-rev`; `semteams-preflight` skill |
+| `review` | Playwright E2E journeys (`task ui:test:e2e`) run in background and are monitored every 20–30s via test output, backend Docker logs, and `/message-logger/entries`, aborting early on loops with quoted log evidence | `svelte-dev`, `svelte-rev` |
+| `review` | Never run a git command that can discard working-tree state (`checkout --`, `restore`, `stash`, `clean`, `reset --hard`); temporary in-tree fault checks use `cp` backup + verified `shasum -a 256` restore | `go-dev`, `svelte-dev`, `go-rev`, `svelte-rev`, `writer` |
+| `review` | Added or edited statements on how frozen SemStreams, SemEngine, NATS, or SvelteKit behaves cite `file:line` at the pinned commit or a named test/probe, or state it is not promised | `arch`, `go-dev`, `svelte-dev`, `go-rev`, `svelte-rev`, `writer` |
+
+### 5. Workflow, review, and merge gates
+
+| Gate | Rule | Where |
+| --- | --- | --- |
+| `spec:check+review` | OpenSpec changes and specs are well formed (`task openspec:validate`) and truthful against code | `writer`, `go-rev`, `svelte-rev`; `task validate` |
+| `spec:check+review` | Every OpenSpec task can be ticked in or before the archive commit; holds are written as `Hold:` inside the unticked task they stop (`task openspec:queue-test`) | `protocol`; `writer`, `go-rev`, `svelte-rev` |
+| `verify+review` | Steps end when `task validate` passes locally on a clean tree; reviewer `APPROVE` cites commit SHA + local verification run, never CI (#171) | `go-dev`, `svelte-dev`, `go-rev`, `svelte-rev`; `protocol` |
+| `CI required` | A merge needs `Repository CI` (`CI Status Check`) green on a head up to date with `main` | `protocol`; `repository-governance` spec |
+| `review` | No merge while a known flake (`class:flake` issue) is open in a required job unless the PR closes every open one with before/after reproduction evidence | `protocol` |
+| `review` | Code/UI PRs require review by the appropriate SemTeams reviewer lane (`go-reviewer`, `svelte-reviewer`, or both) and cross-agent review (`implemented-by:` and `reviewed-by:` naming model family `claude`, `codex`, or `gemini`); docs-only PRs take any agent's reviewer | `protocol`; `go-rev`, `svelte-rev` |
+| `review` | Any defect found in repo code not fixed in the active change is filed as a GitHub issue (`status:blocked` while its code is only on a PR branch), never left in comments | `protocol`; `go-rev`, `svelte-rev` |
+| `review` | A finding needing an unchosen condition (library timing/ordering, OS state, mid-op fault, test-only call sequence) is `BLOCKING`/`HIGH` only with a named routine real-world trigger; else `MEDIUM` at most (#185) | `go-rev`, `svelte-rev`, `go-dev`, `svelte-dev`; `protocol` |
+| `verify+review` | A new repo-wide or agent-conduct rule names what enforces it and adds its row to both `AGENTS.md` and `.agents/rules-index.md` | `go-rev`, `svelte-rev`; `TestAgentSetupParity` |
+| `review` | Before claiming work, mutating state, or spawning role subagents on an underspecified prompt, check named issues/PRs/files first, then confirm Deliverable, Scope/non-goals, Definition of Done/verification, and Stop boundary | `protocol`; `.agents/README.md` |
+| `review` | Role-agent briefs carry the owner's intent and the artifact itself, not a paraphrase; resume for continuity, start fresh for mechanics; designs cap at 3 review rounds before escalating to the owner | `.agents/README.md`; `arch` |
+| `verify+review` | `architect`, `go-developer`, `go-reviewer`, `svelte-developer`, and `svelte-reviewer` run on the frontier model tier (`opus` / `gpt-6-astra` or `gpt-6-sol` / Gemini `inherit` or `pro`); `technical-writer` runs on `sonnet` / `gpt-6-sol` / Gemini `inherit` (or `flash` when requested); effort defaults match `.agents/README.md` | `.agents/README.md`; `TestAgentSetupParity` |
+| `verify+review` | `CLAUDE.md` only imports `@AGENTS.md`, `AGENTS.md` stays strictly `< 24,000` bytes and matches `.agents/rules-index.md` in numbered domains and row counts, and all role/skill adapters match their canonical contracts | `.agents/README.md`; `TestAgentSetupParity`, `TestAgentSetupParitySensitivity` |
+| `review` | Pushed claim branches live in dedicated worktrees (`../semteams-wt/<branch>` or `.worktrees/<branch>`) and update by merging `origin/main`, never by rebase or force-push | `protocol` |
+| `review` | Evidence cited in a PR or task can be opened on another machine; git-ignored paths are named as local only, and task choices not in the design go in `openspec/changes/<id>/notes/<task>.md` | `semteams-handoff`, `semteams-preflight` skills; `protocol` |
+| `review` | Docs are written for a working developer: shipped vs. target behavior kept distinct (`docs/demo-mvp-claims.md`), coined terms defined at first use, no marketing register | `writer`, `go-rev`, `svelte-rev` |
+
+## Shared work protocol (Claude, Codex, and Gemini)
+
+State that all agents must see lives in the repository's tools, never in private memory or a separate status file.
+The canonical protocol is [`.agents/protocol.md`](.agents/protocol.md); role contracts and model/effort routing live in
+[`.agents/README.md`](.agents/README.md). Four gates never become a pointer:
+
+- **Clarify:** before claiming work, mutating state, or spawning role subagents, read any named issue, PR, or file so
+  you never ask what the repository already answers, then verify four boundaries are clear: **Deliverable** (answer,
+  issue, OpenSpec design, docs-only PR, or code/UI PR), **Scope/non-goals**, **Definition of Done/verification**, and
+  **Stop boundary**. When a prompt leaves any of the four ambiguous, stop first, propose a concise 3–4 bullet
+  recommended Definition of Done, and ask at most 1–3 targeted questions; once confirmed, run autonomously to that
+  stop boundary without pausing on routine steps.
+- **Claim:** a draft PR opened before the work, in its own worktree on an agent-prefixed branch (`claude/<topic>`,
+  `codex/<topic>`, `gemini/<topic>`; CLI uses `../semteams-wt/<branch>`, Enjoy desktop uses `move_to_worktree` under
+  `.worktrees/<branch>`) with `Closes #n` (or `Addresses #n` for an epic). No draft PR, no claim. Primary checkout is
+  discovery-only. Verify worktree path and branch before every edit, commit, push, or PR mutation.
+- **Merge:** appropriate SemTeams reviewer lane (`go-reviewer`, `svelte-reviewer`, or both) + cross-agent review on
+  code/UI PRs (`Review request` / `Review record` comments; `implemented-by:` and `reviewed-by:` in the PR body naming
+  model family `claude`, `codex`, or `gemini`) → archive/spec sync (`openspec archive <id>`) as the final content
+  commit → `task validate` and `Repository CI` (`CI Status Check`) green on a head up to date with `main` with no open
+  unfixed `class:flake` → squash merge.
+- **Close:** no issue closes without the owner's explicit `CONFIRM-CLOSE` or the squash merge of an approved PR that
+  declared `Closes #n`.
+
+## Roles and Related Repos
+
+Role agents are the default path for nontrivial work ([`.agents/contracts/`](.agents/contracts/)): `architect`
+(read-only inventories + contract/OpenSpec/ADR drafts), `go-developer` (backend/runtime/packs/contract tests),
+`go-reviewer` (independent read-only backend/pack audit), `svelte-developer` (`ui/` Svelte 5 / SvelteKit 2 + tests),
+`svelte-reviewer` (independent read-only UI/accessibility/contract audit), and `technical-writer` (durable docs +
+conservative OpenSpec task truth).
+
+Related repos (read-only from here): [semstreams](https://github.com/c360studio/semstreams) (`8b99efe9`),
+[semengine](https://github.com/c360studio/semengine), [semdev](https://github.com/c360studio/semdev),
+[semmem](https://github.com/c360studio/semmem), [semsource](https://github.com/c360studio/semsource),
+[semdragons](https://github.com/c360studio/semdragons).

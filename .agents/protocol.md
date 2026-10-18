@@ -1,11 +1,18 @@
 # Shared Work Protocol (Claude, Codex, and Gemini)
 
+Canonical. `CLAUDE.md` imports `AGENTS.md`, which points to this file and carries the four gates (clarify, claim,
+merge, close) inline; edit the protocol here only. Read it before taking, landing, or closing work; the
+[semteams-pickup](skills/semteams-pickup/SKILL.md), [semteams-handoff](skills/semteams-handoff/SKILL.md), and
+[semteams-preflight](skills/semteams-preflight/SKILL.md) skills read it. Adapted from SemEngine's `.agents/protocol.md`
+alongside SemVocab and SemSparql.
+
 State that all agents must see lives in the repository's tools, never in an agent's private memory or a separate
 program-status document. Each question has one authoritative home, and each home is discoverable with `gh`, `task`, or
-`openspec`.
+`openspec`. There is no `/tickets` directory or program baton file (legacy `/tickets` YAML records were reconciled into
+issues and removed under #255).
 
 SemTeams routes design and implementation through its project roles: `architect` owns API and integration contracts;
-`go-developer` implements backend work and `go-reviewer` reviews it; `svelte-developer` implements UI work and
+`go-developer` implements backend/pack work and `go-reviewer` reviews it; `svelte-developer` implements UI work and
 `svelte-reviewer` reviews it; cross-stack changes use both reviewer lanes; and `technical-writer` owns durable docs and
 conservative OpenSpec task truth. Role contracts and per-platform model routing live in [`.agents/README.md`](README.md).
 
@@ -17,18 +24,28 @@ conservative OpenSpec task truth. Role contracts and per-platform model routing 
 | What gates the next tag | GitHub milestone named for the intended version | Membership is the gate: in or out; an unruled item is out. `horizon:pre-v1` means before v1.0.0, not before the next tag. |
 | An epic | A tracking issue labeled `type:epic` whose body carries a task list of `#n` children | GitHub renders the progress; there is no separate epic document. |
 | Who has claimed what | A **draft PR** opened at the start of the work, with `Closes #n` (or `Addresses #n` for an epic) in its body; the branch prefix names the agent (`claude/...`, `codex/...`, `gemini/...`) | No draft PR, no claim. Design work claims the same way: its OpenSpec proposal is the first content commit. Put the current stop-point in the PR description. |
-| Target state and task truth | The OpenSpec change inside that PR; `task openspec:queue` reads its holds | Archive (`openspec archive <id>` plus spec sync) as the landing PR's final content commit, reviewed with the implementation. No task may assert a post-merge fact such as "CI green" or "merge-ready". A hold is written inside the unticked task it stops as `Hold: <reason>`. |
-| Why | An ADR, or the owner's ruling comment on the issue | ADRs record durable architectural decisions, not work status or implementation checklists. |
+| Target state, task truth, holds | The OpenSpec change inside that PR; `task openspec:queue` (run in the claim's worktree) reads its holds | Archive (`openspec archive <id>` plus spec sync) as the landing PR's final content commit, reviewed with the implementation. Every task can be ticked in or before the archive commit. No task may assert a post-merge fact ("CI green", "merge-ready") or wait on a step after archive. A hold is written inside the unticked task it stops as `Hold: <reason>`. |
+| Upstream dependencies | An issue on the owning repository (`semstreams`, `semengine`, `semmem`, `semsource`), linked from the SemTeams issue or task it blocks, with that task carrying the `Hold:` | Sister repositories are read-only from here; never fork unreviewed upstream mechanics locally. |
+| Why | An ADR (`docs/adr/`), or the owner's ruling comment on the issue | ADRs record durable architectural decisions, not work status or implementation checklists. |
 
 OpenSpec changes are contract deltas, not backlogs. Sequencing, discovery, holds, and future work belong in GitHub
-issues. There is no separate program baton document or ticket directory; the legacy `/tickets` YAML records were
-reconciled into issues and removed under #255 (history remains in git).
+issues.
+
+## Bounded port and extraction scope
+
+When extracting agent-runtime packages from the frozen SemStreams pin (`8b99efe9c66a4faa4fa509f9f62cc6bad8392128`) or
+adopting SemEngine contracts under ADR-061, a change implements the admitted surface and its accepted contract. A
+finding adds required work only when the correction satisfies a binding requirement (the issue's acceptance criteria, a
+spec requirement), a verification gate, an explicit owner ruling, an accepted design commitment, or the dependency
+change needed to build. Name that obligation and the concrete failure or missing evidence. A maintenance preference
+alone (inherited duplication, naming, indirection) is optional: it cannot veto approval or become `BLOCKING`/`HIGH`,
+and scheduling it needs an explicit owner decision. This never excuses a broken contract, a newly introduced defect, a
+rewired parked pack, or an unproved composition-root invariant.
 
 ## Work lifecycle
 
-- **Start:** query the milestone's open issues (`gh issue list --state open`), draft PR claims (`gh pr list`),
-  `task openspec:queue`, recent `main` runs (`gh run list --branch main --limit 3`), and `status:needs-decision`
-  issues before choosing work.
+- **Start:** `gh issue list --state open` · `gh pr list` (drafts are claims; skip them) · `task openspec:queue` ·
+  `gh run list --branch main --limit 3` · `gh issue list --label status:needs-decision`.
 - **Clarify:** before claiming work, mutating state, or spawning role subagents, read any named issue, PR, or file so
   you never ask a question the repository already answers, then verify four boundaries are clear:
   1. **Deliverable** (answer/audit, issue, OpenSpec design, docs-only PR, or code/UI PR),
@@ -40,37 +57,74 @@ reconciled into issues and removed under #255 (history remains in git).
   to that stop boundary without pausing on routine steps.
 - **Take work:** an unclaimed issue → a dedicated worktree on an agent-prefixed branch (`claude/<topic>`,
   `codex/<topic>`, `gemini/<topic>`; the prefix names who claimed it) → push → draft PR with `Closes #n` (or
-  `Addresses #n` for an epic) → then implementation. While concurrent agents have claimed work, each claimed PR has
-  exactly one dedicated worktree and the primary checkout is discovery-only. Verify the worktree path and branch before
-  every edit, commit, push, or PR mutation; never share a worktree between claimed PRs.
+  `Addresses #n` for an epic) → then implementation. One claimed PR owns one worktree. When multiple agents share a
+  host, the primary checkout is discovery-only and no agent commits from it. Verify the worktree path and branch before
+  every edit, commit, push, or PR mutation; a mismatch stops the operation. The prefix says who claimed the work, never
+  whether that agent's worktree is idle.
 - **Worktree hygiene:** for standalone CLI sessions, the claim's worktree lives at a durable sibling path
   (`git worktree add ../semteams-wt/<branch> -b <branch> origin/main`), never under `/private/tmp`. For Enjoy desktop
   sessions, `move_to_worktree` creates and reuses the branch's worktree under `.worktrees/<branch>` inside the
-  repository root; run all commands and file edits inside the path `move_to_worktree` returns. Pushed claim branches
-  update by merging `origin/main`, never by rebase or force-push.
-- **File:** any defect found in repository code that is not fixed in the active change is filed as a GitHub issue
-  (linked without a closing keyword while on a PR branch), never left in comments or a local backlog.
-- **Reviewer-pass & cross-agent review:**
-  - Every multi-phase or nontrivial change runs the appropriate SemTeams reviewer lane (`go-reviewer` for Go/backend,
-    `svelte-reviewer` for `ui/`, or both for cross-stack changes) at each critical boundary, plus the cross-agent
-    review round when requested or on code/UI changes across agents.
-  - When handing off across agents on a pull request, the implementer posts a PR comment headed `Review request`
-    naming the review lane, the commit SHA to read, the diff range, the local verification commands and results on that
-    commit, and the issue or ruling answered.
-  - The reviewing session answers with a PR comment headed `Review record` containing the reviewer's report on that
-    named commit, what was run, and what could not be run. The reviewer remains read-only on the branch.
-  - A review record covers the commit SHA it names; later content commits require re-review.
-  - State `implemented-by: <agent> (<persona/model>)` in the PR body (`claude`, `codex` / `Sol`, or `gemini`), and
-    `reviewed-by: <agent> (<persona/model>)` when a cross-agent or role review record approves the head.
-- **Land:** undraft → appropriate SemTeams reviewer lane (`go-reviewer`, `svelte-reviewer`, or both), plus the
-  cross-agent round when requested → all applicable local and hosted gates green (`Repository CI` / `CI Status Check`),
-  with no known unfixed flake (`class:flake`) in a required job → squash merge closes the issue. A fresh green over a
-  known flake is rerun-to-green: fix it, or file it and obtain an explicit owner waiver in a PR comment.
-- **Close:** no issue closes without the owner's explicit `CONFIRM-CLOSE` or the squash merge of an approved PR that
-  declared `Closes #n`.
+  repository root (ignored in `.gitignore` alongside `.enjoy-logs/`); run all commands and file edits inside the path
+  `move_to_worktree` returns. Pushed claim branches update by merging `origin/main`, never by rebase or force-push: a
+  review record names the commit SHA it read. Heavy local gates (`task test:integration`, `task ui:test:e2e`,
+  `task validate`) run one agent at a time on a shared host.
+- **File:** a defect in code in this repository that the active change does not fix is always filed as a GitHub issue,
+  whether the code was carried, extracted, or written here. Check for an existing issue first (`gh issue list --search`).
+  When the defect's code exists only on a pull request's branch, the issue is labelled `status:blocked` with that pull
+  request named as its blocker, and the pull request body links it without a closing keyword
+  (`Follow-up after this pull request merges: #n`). A defect in a sister repository is reported to its owner, not fixed
+  here.
 
-## CI baseline
+  Route every other finding before opening an issue. A residual (a cost of a decision this change made deliberately)
+  belongs in a doc comment at the line or in the change's `design.md`. An unmeasured cost becomes a *Declared cost*
+  section in the design. Only an architectural finding (it crosses files, would need its evidence re-collected, or
+  changes what someone should not do next) becomes an issue. Developer notes on choices a task made that its design does
+  not spell out go in `openspec/changes/<id>/notes/<task>.md`, linked from a one-line PR comment; they archive with the
+  change.
+- **Land:** implementation review (`go-reviewer` for Go/packs, `svelte-reviewer` for `ui/`, or both for cross-stack,
+  and another agent's reviewer on code/UI pull requests: "Cross-agent review" below) → fixes and re-review → archive
+  (`openspec archive <id>` + spec sync) as the final content commit → narrow reviewer check of the archive/spec sync
+  (any agent's reviewer) → undraft → `task validate` and `Repository CI` (`CI Status Check`) green on a head up to date
+  with `main` and with **no known flake open** → squash merge. A correction after archive re-enters reconciliation and
+  final review. State `implemented-by:` in the PR body naming the implementing agent with `claude`, `codex`, or
+  `gemini` beside the model or persona (`implemented-by: gemini (Gemini 4 Argon go-developer)`), and `reviewed-by:`
+  once the reviewing agent's newest record approves.
+- **Cross-agent review:** on a code/UI pull request the implementation review, and the re-review of a fix that changes
+  code or UI, are done by an agent that wrote none of the commits under review, as the pull request's `implemented-by:`
+  line records. The agent named is the **model family** that did the work (`claude`, `codex`, `gemini`), not the
+  service or IDE it ran in: a Claude model running in Antigravity is `claude`, and a review by a different model family
+  counts as cross-agent even when both ran in the same tool (owner ruling of 2026-10-15). A **documents-only** pull
+  request changes only Markdown files or files under `openspec/`, and none under `.claude/agents/`, `.codex/agents/`,
+  or `.agents/contracts/`; it keeps any agent's reviewer. Any other changed file (`.go`, `.svelte`, `.ts`, `go.mod`,
+  `package.json`, a rule/persona JSON or prompt file, a script, `Taskfile.yml`, a CI workflow, `.claude/agents/*`,
+  `.codex/agents/*`, `.agents/contracts/*`) makes it a code/UI pull request.
+  - The implementer asks with a PR comment headed `Review request`: the review lane (`go-reviewer`, `svelte-reviewer`,
+    or both), the commit SHA to read, the diff range, the implementer's local verification result (`task validate`) on
+    that commit (clean tree), and the issue or ruling the change answers. It does not say what the reviewer should
+    conclude.
+  - The reviewing session answers with a PR comment headed `Review record`: its reviewer's report in the reviewer
+    contract's format (`BLOCKING`, `HIGH`, `MEDIUM`, `NIT`, ending in `APPROVE` or `CHANGES REQUESTED`). It names the
+    commit read, what was run, and what could not be run. Without its own `task validate` / lane run, the implementer's
+    result is recorded as reported, never as passed. The record does not rest on CI: the CI run before merge is the
+    check.
+  - A record covers the commit SHA it names. A later commit that changes code/UI goes back to the reviewing agent; a
+    later documents-only commit and the archive check take any agent's reviewer. A merge of `origin/main` that touches
+    no file the pull request changes carries the record over.
+  - The reviewer does not write on the branch. If the agents disagree on a finding, it goes to the owner on the issue,
+    labelled `status:needs-decision`.
+- **Known flakes:** a known flake is an open issue labelled `class:flake`: a test or check that passes and fails on the
+  same tree. A network fetch that did not answer is not one; record it on the pull request and re-run. A red you cannot
+  explain by your diff is filed before the next push. A fresh green over an open `class:flake` in a required job is
+  rerun-to-green, not a fix: fix the flake in a PR that closes the `class:flake` issue and shows the reproduction
+  (command and failure rate before and after). A flake that comes back reopens its issue.
+- **Close:** no issue closes without the owner's explicit `CONFIRM-CLOSE` on the issue itself or the squash merge of an
+  approved PR that declared `Closes #n`. A PR that only `Addresses` an epic closes nothing. Approval of adjacent work
+  never widens into a close.
 
-`.github/workflows/ci.yml` runs the Go, UI, and Governance/OpenSpec jobs for every pull request to `main`; all three
-feed the stable `CI Status Check` aggregate. Required mock E2E and a main-branch ruleset remain future work.
-Publication is tag-only through `.github/workflows/publish.yml`; see [`docs/release.md`](../docs/release.md).
+## Verification and CI baseline
+
+`.github/workflows/ci.yml` runs the Go, UI, and Governance/OpenSpec jobs for every pull request and push to `main`; all
+three feed the stable `CI Status Check` aggregate. Locally, `task validate` (`scripts/validate.sh`) mirrors all three
+lanes in read-only mode without mutating tracked or untracked worktree files. Gate selection per diff and evidence
+recording live in [semteams-preflight](skills/semteams-preflight/SKILL.md). Publication is tag-only through
+`.github/workflows/publish.yml`; see [`docs/release.md`](../docs/release.md).
