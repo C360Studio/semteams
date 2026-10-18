@@ -54,6 +54,7 @@ import (
 	"github.com/c360studio/semstreams/types"
 
 	"github.com/c360studio/semteams/cmd/semteams/research"
+	"github.com/c360studio/semteams/cmd/semteams/runanchor"
 	"github.com/c360studio/semteams/cmd/semteams/slug"
 )
 
@@ -127,6 +128,13 @@ type PayloadPublisher interface {
 	Publish(ctx context.Context, subject string, data []byte) error
 }
 
+// CursorCommitter promotes staged per-run incremental cursors (such as
+// github_read's RunCursorStore) once emit_research_artifact has verified,
+// rendered, and published the research artifact (#268).
+type CursorCommitter interface {
+	CommitRun(runOrLoopID string, committedAt time.Time) error
+}
+
 // Executor implements agentic.ToolExecutor for emit_research_artifact.
 // It writes a deterministic set of marker triples on the calling loop's
 // entity (so rule conditions can match revision / mutation-count without
@@ -134,12 +142,13 @@ type PayloadPublisher interface {
 // outputDir/<slug>.md (ADR-038 PR C Phase C1), and publishes the typed
 // payload on a stable subject for audit / forward-compat consumers.
 type Executor struct {
-	publisher   agentictools.TriplePublisher
-	natsPublish PayloadPublisher
-	resolver    ToolResultResolver
-	platform    types.PlatformMeta
-	logger      *slog.Logger
-	outputDir   string
+	publisher       agentictools.TriplePublisher
+	natsPublish     PayloadPublisher
+	resolver        ToolResultResolver
+	cursorCommitter CursorCommitter
+	platform        types.PlatformMeta
+	logger          *slog.Logger
+	outputDir       string
 }
 
 // NewExecutor constructs an Executor. outputDir is the directory
@@ -177,6 +186,14 @@ func (e *Executor) SetToolResultResolver(r ToolResultResolver) {
 		return
 	}
 	e.resolver = r
+}
+
+// SetCursorCommitter wires an optional CursorCommitter onto the executor so
+// staged per-run incremental cursors (e.g. github_read) commit only after
+// derivation verification, markdown rendering, and triple/payload publication
+// succeed (#268).
+func (e *Executor) SetCursorCommitter(c CursorCommitter) {
+	e.cursorCommitter = c
 }
 
 // ListTools returns the LLM-facing schema. The args mirror the Artifact
@@ -303,7 +320,8 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 		}, nil
 	}
 
-	if err := VerifyDerivation(ctx, e.resolver, call, artifact); err != nil {
+	producerLoops, err := verifyDerivationWithLoops(ctx, e.resolver, call, artifact)
+	if err != nil {
 		return agentic.ToolResult{
 			CallID:    call.ID,
 			Name:      call.Name,
@@ -390,6 +408,15 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 		}, nil
 	}
 
+	if err := e.commitRunCursors(call, producerLoops, now); err != nil {
+		return agentic.ToolResult{
+			CallID:    call.ID,
+			Name:      call.Name,
+			Error:     fmt.Sprintf("commit run cursors: %v", err),
+			ErrorKind: agentic.ToolErrorInternal,
+		}, nil
+	}
+
 	mutationCount := artifact.LatestRevisionMutationCount()
 	resultMap := map[string]any{
 		"loop_id":                      artifact.LoopID,
@@ -437,6 +464,46 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 			"last_revision_mutation_count": mutationCount,
 		},
 	}, nil
+}
+
+func (e *Executor) commitRunCursors(call agentic.ToolCall, producerLoops []string, committedAt time.Time) error {
+	if e.cursorCommitter == nil {
+		return nil
+	}
+	var keys []string
+	seen := make(map[string]bool)
+	addKey := func(k string) {
+		k = strings.TrimSpace(k)
+		if k != "" && !seen[k] {
+			seen[k] = true
+			keys = append(keys, k)
+		}
+	}
+
+	runID, runEntityID := runanchor.Anchor(call, e.platform.Org, e.platform.Platform)
+	addKey(runID)
+	if runEntityID != "" {
+		if idx := strings.LastIndexByte(runEntityID, '.'); idx >= 0 && idx < len(runEntityID)-1 {
+			addKey(runEntityID[idx+1:])
+		}
+		addKey(runEntityID)
+	}
+	if call.Metadata != nil {
+		if pulseRunID, ok := call.Metadata["pulse_run_id"].(string); ok {
+			addKey(pulseRunID)
+		}
+	}
+	addKey(call.LoopID)
+	for _, loopID := range producerLoops {
+		addKey(loopID)
+	}
+
+	for _, k := range keys {
+		if err := e.cursorCommitter.CommitRun(k, committedAt); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // parseArgsIntoArtifact builds a research.Artifact from the LLM-supplied

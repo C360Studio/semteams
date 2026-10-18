@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -361,31 +362,29 @@ func TestScheduledCronPatternBKillSwitch(t *testing.T) {
 	require.NoError(t, err)
 	decoder := message.NewDecoder(payloads)
 
-	const ruleID = "scheduled_pulse_killswitch_test"
+	rawShipped, err := os.ReadFile("../../configs/rules/research/10-scheduled-program-pulse.json")
+	require.NoError(t, err)
+	var shippedDef rulepkg.Definition
+	require.NoError(t, json.Unmarshal(rawShipped, &shippedDef))
+	require.Equal(t, "scheduled_program_pulse", shippedDef.ID)
+	require.False(t, shippedDef.Enabled, "shipped 10-scheduled-program-pulse.json must be disabled by default")
+
+	const ruleID = "scheduled_program_pulse"
 	cronDef := func(enabled bool) rulepkg.Definition {
-		return rulepkg.Definition{
-			ID:       ruleID,
-			Type:     rulepkg.CronRuleType,
-			Name:     "Scheduled Pulse Kill Switch Test",
-			Enabled:  enabled,
-			Schedule: "@every 1s",
-			Cooldown: "1ms",
-			Actions: []rulepkg.Action{{
-				Type:              rulepkg.ActionTypePublishAgent,
-				Subject:           "agent.task.coordinator",
-				Role:              "coordinator",
-				LoopMaxIterations: "8",
-				Model:             "fast",
-				Prompt:            "Scheduled pulse check.",
-			}},
-		}
+		d := shippedDef
+		d.Enabled = enabled
+		d.Schedule = "@every 1s"
+		d.Cooldown = "1ms"
+		return d
 	}
 
 	require.NoError(t, ruleManager.SaveRule(ctx, ruleID, cronDef(true)))
 	for {
 		rules := nextApplied(t, proc.applied)
-		if _, ok := rules[ruleID]; ok {
-			break
+		if raw, ok := rules[ruleID].(map[string]any); ok {
+			if enabled, _ := raw["enabled"].(bool); enabled {
+				break
+			}
 		}
 	}
 
@@ -399,6 +398,9 @@ func TestScheduledCronPatternBKillSwitch(t *testing.T) {
 	require.NoError(t, msg.DoubleAck(ctx))
 	firstTask, ok := envelope.Payload().(*agentic.TaskMessage)
 	require.True(t, ok)
+	require.NotNil(t, firstTask.MaxIterations)
+	require.Equal(t, 8, *firstTask.MaxIterations)
+	require.Contains(t, firstTask.Prompt, "@pulse")
 
 	// Simulate an in-flight downstream execution triggered by the first fire
 	// that stays active across the Pattern-B disable operation.

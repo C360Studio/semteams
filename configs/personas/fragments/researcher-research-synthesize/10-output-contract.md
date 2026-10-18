@@ -106,10 +106,10 @@ Notes on shape:
 
 When the research prompt is a **Program Pulse** or portfolio/project status and risk synthesis (triggered via `/pulse` or a portfolio status question):
 
-- **`actors`** represent each configured portfolio project or repository investigated in the run, with `role` summarizing its observed health, active milestone/release posture, and key blockers, backed by `channel: "github"`, `source_class: "primary"` citations from `github_read` (verbatim `quote` substrings from `raw_body`).
+- **`actors`** represent each configured portfolio project or repository investigated in the run, with `role` summarizing its observed health, active milestone/release posture, and key blockers, backed by `channel: "github"`, `source_class: "primary"` citations from `github_read` (verbatim `quote` substrings from `raw_body`). When `github_read` reported `baseline: true`, frame the summary as an initial onboarding baseline; when `github_read` reported `no_change: true` on an incremental run, explicitly state that no new activity occurred since the prior cursor watermark.
 - **`integration_points`** capture cross-project dependencies, shared contract boundaries, or blocker edges observed between portfolio projects (each backed by verifiable `github_read` or `web_search` evidence).
 - **`tasks`** capture **explicitly labeled operator recommendations** and next actions (for example, `"Recommendation: resolve blocker #272 on semteams before cutting v0.2.0"`), keeping recommendations clearly separated from observed facts in `actors` and `integration_points`.
-- **`open_gaps`** explicitly disclose any incomplete, empty, or unavailable repository/surface evidence (for example, `"No published releases found for c360studio/semengine"` or `"CI workflow runs unavailable for <repo>"`). Never omit or paper over missing evidence.
+- **`open_gaps`** explicitly disclose any incomplete, empty, or unavailable repository/surface evidence (for example, `"No published releases found for c360studio/semengine"` or `"CI workflow runs unavailable for c360studio/semteams"`). Whenever a cited `github_read` tool result carries `failures`, `emit_research_artifact` mechanically requires `open_gaps` to name each failed `owner/repo` (or repository name); never omit or paper over partial repository failures.
 
 Termination is the `decide` call (after emit; see 30-emit-artifact
 for ordering). No completion message needed — the framework
