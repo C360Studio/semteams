@@ -22,9 +22,9 @@ SemDev as a separately qualified development pack. Extraction, SemEngine adoptio
 changes; preserve existing recovery and never create a competing journal or workflow engine.
 
 Deterministic structural portfolio visibility lives on `/work` (`#309`), while the read-only, evidence-backed **Program
-Pulse** (`#267`) runs as an operator profile (`/pulse`) of the `research` pack using `github_read` (`#273`) under the
-`1..4` fan-out and loop containment budget (`#272`). Scheduled cadence and custom work classification (`#268`) are
-deferred to `horizon:post-mvp`.
+Pulse** (`#267`, `#268`) runs as an operator profile (`/pulse` and opt-in cron `10-scheduled-program-pulse.json`) of
+the `research` pack using replay-safe incremental `github_read` cursors (`#273`, `#268`) under the `1..4` fan-out and
+loop containment budget (`#272`). Custom work-classification buckets remain deferred to `horizon:post-mvp`.
 
 ## Architecture, Config Layering, and Product-Shell Wiring
 

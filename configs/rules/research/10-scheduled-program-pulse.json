@@ -1,0 +1,34 @@
+{
+  "id": "scheduled_program_pulse",
+  "type": "cron",
+  "name": "Scheduled Program Pulse → coordinator (@pulse)",
+  "description": "ADR-060 §7 (#272) + #268 scheduled Program Pulse rule. Fires on a cron schedule with an atomic inflight CAS guard and a 20h cooldown (persisted in RULE_SCHEDULES KV) to prevent overlapping or restart-storm runs. Ships with enabled: false by default in flow-bootstrap.json and e2e-flow-bootstrap.json so unconfigured or E2E environments do not fire background pulses unexpectedly; operators enable, disable, or adjust the schedule at runtime via Pattern-B RULE_CONFIG KV (rule.ConfigManager.SaveRule) without restarting the process. When enabled, dispatches an @pulse task to the coordinator, which classifies it as decide(action=research) and routes through the existing research pack (01-coordinator-research-spawn mints the research run → 02-plan-to-gather → 03a/03b → 04 → 07).",
+  "enabled": false,
+  "schedule": "0 9 * * *",
+  "cooldown": "20h",
+  "actions": [
+    {
+      "type": "publish_agent",
+      "subject": "agent.task.coordinator",
+      "role": "coordinator",
+      "loop_max_iterations": "8",
+      "model": "coordinator",
+      "tools": ["decide"],
+      "tool_choice": { "mode": "required" },
+      "action_allowlist": ["research", "respond_direct"],
+      "properties": {
+        "category": "research",
+        "trigger": "scheduled_program_pulse",
+        "last_fired_at": "$schedule.last_fired_at"
+      },
+      "prompt": "@pulse Run the scheduled incremental Program Pulse across the configured portfolio (last scheduled fire: $schedule.last_fired_at). Route this request with decide(action=\"research\", reason=\"Scheduled incremental Program Pulse across configured portfolio projects since $schedule.last_fired_at\") so researcher-research-plan decomposes the portfolio into 1..4 project subtopics, researcher-research-gather reads incremental GitHub activity via github_read (distinguishing initial baseline onboarding, incremental deltas, no-change checks, and partial repository failures), and researcher-research-synthesize emits an evidence-backed Program Pulse artifact disclosing any unavailable repository surfaces in open_gaps."
+    }
+  ],
+  "metadata": {
+    "iteration_budget_note": "8 allows the coordinator to classify the scheduled @pulse trigger and emit decide(action=\"research\"). Conservative engineering default, not a successful-completion guarantee.",
+    "pack": "research",
+    "phase": "ADR-060 §7 + #268",
+    "adr": "docs/adr/060-program-manager-direction-and-research-design.md",
+    "default_enabled_posture": "Disabled on disk (enabled: false) by default; enabled and kill-switched live via Pattern-B RULE_CONFIG KV without process restart."
+  }
+}

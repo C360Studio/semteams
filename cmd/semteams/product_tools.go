@@ -199,10 +199,11 @@ func registerProductTools(reg *agentictools.ExecutorRegistry, natsClient *natscl
 	if err := registerAddSource(reg, natsClient, logger); err != nil {
 		return err
 	}
-	if err := registerGitHubRead(reg, logger); err != nil {
+	ghCursors, err := registerGitHubRead(reg, logger)
+	if err != nil {
 		return err
 	}
-	if err := registerEmitArtifact(reg, natsClient, platform, storageBuckets, logger); err != nil {
+	if err := registerEmitArtifact(reg, natsClient, platform, storageBuckets, ghCursors, logger); err != nil {
 		return err
 	}
 	if err := registerEmitPlan(reg, natsClient, platform, logger); err != nil {
@@ -825,25 +826,25 @@ func registerAddSource(reg *agentictools.ExecutorRegistry, natsClient *natsclien
 // deployments without a configured portfolio do not advertise a disabled tool
 // to the LLM; fails closed at boot if SEMTEAMS_PORTFOLIO_PATH is set to an
 // unreadable or invalid portfolio document.
-func registerGitHubRead(reg *agentictools.ExecutorRegistry, logger *slog.Logger) error {
+func registerGitHubRead(reg *agentictools.ExecutorRegistry, logger *slog.Logger) (githubread.CursorStore, error) {
 	portfolioPath := strings.TrimSpace(os.Getenv(envPortfolioPath))
 	if portfolioPath == "" {
 		logger.Info("Product tool not registered (no portfolio path configured)",
 			slog.String("name", githubread.ToolName),
 			slog.String("env_var", envPortfolioPath))
-		return nil
+		return nil, nil
 	}
 
 	p, err := portfolio.LoadFile(portfolioPath)
 	if err != nil {
-		return fmt.Errorf("load %s for %s: %w", envPortfolioPath, githubread.ToolName, err)
+		return nil, fmt.Errorf("load %s for %s: %w", envPortfolioPath, githubread.ToolName, err)
 	}
 
 	var cursors githubread.CursorStore
 	if cursorPath := strings.TrimSpace(os.Getenv(envGitHubCursorPath)); cursorPath != "" {
 		store, err := githubread.NewFileCursorStore(cursorPath)
 		if err != nil {
-			return fmt.Errorf("init %s for %s: %w", envGitHubCursorPath, githubread.ToolName, err)
+			return nil, fmt.Errorf("init %s for %s: %w", envGitHubCursorPath, githubread.ToolName, err)
 		}
 		cursors = store
 	}
@@ -860,7 +861,7 @@ func registerGitHubRead(reg *agentictools.ExecutorRegistry, logger *slog.Logger)
 		Cursors:   cursors,
 	}, logger)
 	if err := reg.RegisterTool(githubread.ToolName, executor); err != nil {
-		return fmt.Errorf("register %s: %w", githubread.ToolName, err)
+		return nil, fmt.Errorf("register %s: %w", githubread.ToolName, err)
 	}
 
 	repos, _ := p.ResolveRepositories("", "", "")
@@ -870,7 +871,7 @@ func registerGitHubRead(reg *agentictools.ExecutorRegistry, logger *slog.Logger)
 		slog.String("portfolio_path", portfolioPath),
 		slog.Int("repositories", len(repos)),
 		slog.Bool("authenticated", token != ""))
-	return nil
+	return executor.Cursors(), nil
 }
 
 // registerEmitArtifact wires the R3.2.1 emit_research_artifact executor.
@@ -880,7 +881,7 @@ func registerGitHubRead(reg *agentictools.ExecutorRegistry, logger *slog.Logger)
 // Reuses the framework's NATSTriplePublisher so the marker triples flow
 // through the same graph.mutation.triple.add path the decide and
 // emit_diagnosis tools use.
-func registerEmitArtifact(reg *agentictools.ExecutorRegistry, natsClient *natsclient.Client, platform types.PlatformMeta, storageBuckets map[string]string, logger *slog.Logger) error {
+func registerEmitArtifact(reg *agentictools.ExecutorRegistry, natsClient *natsclient.Client, platform types.PlatformMeta, storageBuckets map[string]string, ghCursors githubread.CursorStore, logger *slog.Logger) error {
 	if natsClient == nil {
 		logger.Warn("nats client unavailable; emit_research_artifact registration skipped")
 		return nil
@@ -897,6 +898,9 @@ func registerEmitArtifact(reg *agentictools.ExecutorRegistry, natsClient *natscl
 		platform,
 		emitartifact.WithStorageBuckets(storageBuckets),
 	))
+	if committer, ok := ghCursors.(emitartifact.CursorCommitter); ok {
+		executor.SetCursorCommitter(committer)
+	}
 	if err := reg.RegisterTool(emitartifact.ToolName, executor); err != nil {
 		return fmt.Errorf("register %s: %w", emitartifact.ToolName, err)
 	}
@@ -979,6 +983,8 @@ var (
 	_ chainbash.Inner                                 = (*executors.BashExecutor)(nil)
 	_ researchdecide.Inner                            = (*agentictools.DecideExecutor)(nil)
 	_ emitartifact.ToolResultResolver                 = (*emitartifact.NATSToolResultResolver)(nil)
+	_ emitartifact.CursorCommitter                    = (*githubread.MemoryCursorStore)(nil)
+	_ emitartifact.CursorCommitter                    = (*githubread.FileCursorStore)(nil)
 	_ emitautoresearchartifact.ChainAttestationReader = (*chainAttestationReader)(nil)
 	_ emitautoresearchartifact.SandboxFileWriter      = (*sandboxArtifactWriter)(nil)
 	_ renderopenspec.EntityReader                     = (*chain.NATSEntityReader)(nil)

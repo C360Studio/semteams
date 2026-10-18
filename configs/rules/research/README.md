@@ -66,6 +66,7 @@ machinery.
 | `06-needs-clarification-replan.json` | any pack role decide(needs_clarification) | coordinator (per-entity rule max_iterations=3) |
 | `07-reviewer-approved-to-coordinator.json` | reviewer-research decide(approved) | coordinator (wake-up for respond_direct) |
 | `08-loop-failed-pause.json` | any pack role outcome=failed | chain.paused.marker triple (operator surface) |
+| `10-scheduled-program-pulse.json` | cron (`0 9 * * *`, `cooldown: 20h`, shipped `enabled: false`; live-toggled via Pattern-B `RULE_CONFIG` KV) | coordinator (`@pulse` prompt) |
 
 ### Loop containment and recovery limits
 
@@ -77,7 +78,7 @@ Each `publish_agent` spawn requests a role-specific iteration ceiling:
 | researcher-research-gather | 20 |
 | researcher-research-synthesize | 24 |
 | reviewer-research | 8 |
-| coordinator (clarification and approval wake-ups) | 8 |
+| coordinator (clarification, approval wake-ups, and scheduled pulse) | 8 |
 
 The loop component clamps each request to its configured ceiling. The
 framework's iteration-budget signal reports the effective budget for that

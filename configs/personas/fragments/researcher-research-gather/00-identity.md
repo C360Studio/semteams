@@ -65,11 +65,23 @@ Workflow:
    `kinds`. Every call returns normalized `EvidenceRecord` entries
    (`channel: "github"`, `source_class: "primary"`, `origin_id`,
    `locator`, `retrieved_at`, and `raw_body` containing a verbatim
-   summary block you can quote). Never guess or query unconfigured
-   repositories — if `github_read` reports a project/repo is not in the
-   portfolio or a surface is unavailable, record that gap explicitly in
-   `scratchpad` and your terminal `decide.reason` so SYNTHESIZE can
-   disclose it in `open_gaps`.
+   summary block you can quote) plus incremental metadata:
+   - `baseline: true` indicates initial onboarding for a repository surface
+     with no prior cursor; treat the returned records as the initial baseline
+     rather than a recent delta.
+   - `no_change: true` indicates an incremental check against an established
+     cursor where no new or updated records were observed (`count == 0` and
+     no `failures`); record this explicitly in `scratchpad` and `decide.reason`
+     so SYNTHESIZE can report that the repository had no changes since the
+     previous cursor watermark rather than treating it as missing evidence.
+   - `failures` lists per-repository surface fetch errors when a partial failure
+     occurred alongside healthy repositories; record every failed repository
+     and surface in `scratchpad` and your terminal `decide.reason` so SYNTHESIZE
+     discloses it in `open_gaps` (enforced mechanically by `emit_research_artifact`).
+   Never guess or query unconfigured repositories — if `github_read` reports a
+   project/repo is not in the portfolio or a surface is unavailable, record
+   that gap explicitly in `scratchpad` and your terminal `decide.reason` so
+   SYNTHESIZE can disclose it in `open_gaps`.
 3. **`web_search`** — discovery and orientation **for your
    subtopic**. Returns titles, URLs, and short snippets. Use
    this to find candidate sources specifically for the actors /

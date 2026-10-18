@@ -168,12 +168,16 @@ func extractRuleTools(ruleData []byte) ([]string, error) {
 			Type  string   `json:"type"`
 			Tools []string `json:"tools"`
 		} `json:"on_enter"`
+		Actions []struct {
+			Type  string   `json:"type"`
+			Tools []string `json:"tools"`
+		} `json:"actions"`
 	}
 	if err := json.Unmarshal(ruleData, &rule); err != nil {
 		return nil, err
 	}
 	seen := make(map[string]struct{})
-	for _, action := range rule.OnEnter {
+	for _, action := range append(rule.OnEnter, rule.Actions...) {
 		if action.Type != "publish_agent" {
 			continue
 		}
