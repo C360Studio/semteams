@@ -125,7 +125,7 @@ func TestAgentSetupParitySensitivity(t *testing.T) {
 			return s + strings.Repeat("x", maxAgentsMDBytes)
 		}), []string{"AGENTS.md", "24000"}},
 		{"AGENTS.md and rules-index.md row count mismatch", edit("AGENTS.md", func(s string) string {
-			return strings.Replace(s, "| `verify` | Pinned `revive` (`revive.toml`), `gofmt`, and `go vet` pass with zero errors | `task lint` (`task validate`) |\n", "", 1)
+			return strings.Replace(s, "| `verify` | Pinned `revive` (`revive.toml`), worktree-safe `gofmt`, `go mod tidy -diff`, and `go vet` pass with zero errors | `task lint` (`task validate`) |\n", "", 1)
 		}), []string{"AGENTS.md", ".agents/rules-index.md", "1. Go, composition root, and runtime ownership"}},
 		{"role adapter contains checkbox", edit(".claude/agents/go-developer.md", func(s string) string {
 			return s + "- [ ] copied checklist item\n"

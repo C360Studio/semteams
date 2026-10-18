@@ -4,12 +4,22 @@ tasks:
   default:
     desc: Run all unit tests
     cmds:
-      - go test -count=1 ./...
+      - scripts/gopkgs.sh go test -count=1 ./...
+
+  unit:
+    desc: Run unit tests once with the race detector at one CPU
+    cmds:
+      - scripts/gopkgs.sh go test -race -count=1 -cpu 1 ./...
 
   race:
     desc: Run tests with race detector
     cmds:
-      - go test -race -count=1 ./...
+      - scripts/gopkgs.sh go test -race -count=1 ./...
+
+  repeat:
+    desc: Run unit tests five times at one CPU without the race detector, shuffled; -- <pkgs> to focus
+    cmds:
+      - 'scripts/gopkgs.sh go test -count=5 -cpu 1 -shuffle=on {{.CLI_ARGS | default "./..."}}'
 
   browser-runner:
     desc: Verify browser qualification tracks product-owned source changes

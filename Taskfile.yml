@@ -38,6 +38,62 @@ tasks:
     cmds:
       - task --list
 
+  doctor:
+    desc: Report tool versions and Docker reachability against their pins; starts no workloads
+    cmds:
+      - scripts/doctor.sh
+
+  # Both read git's file list (tracked plus unignored untracked), so a primary checkout never
+  # walks .worktrees/; gofmt with no file argument would read stdin, hence the empty guard.
+  fmt:
+    desc: Format Go sources (changes files)
+    cmds:
+      - |
+        files=$(git ls-files --cached --others --exclude-standard -- '*.go' ':!docs/sponsor-packages/**')
+        echo "gofmt: $(printf '%s\n' "$files" | grep -c . || true) Go file(s)"
+        [ -z "$files" ] || gofmt -w $files
+
+  fmt:check:
+    desc: Fail if any Go source needs formatting (no writes)
+    cmds:
+      - |
+        files=$(git ls-files --cached --others --exclude-standard -- '*.go' ':!docs/sponsor-packages/**')
+        echo "gofmt: $(printf '%s\n' "$files" | grep -c . || true) Go file(s)"
+        drift=""
+        [ -z "$files" ] || drift=$(gofmt -l $files)
+        if [ -n "$drift" ]; then echo "gofmt drift:"; echo "$drift"; exit 1; fi
+
+  tidy:check:
+    desc: Fail if go.mod or go.sum is not tidy
+    cmds:
+      - go mod tidy -diff
+
+  vet:
+    desc: Run go vet over all packages
+    cmds:
+      - scripts/gopkgs.sh go vet ./...
+
+  cleanup-roots:check:
+    desc: Fail if a test stops, closes, or terminates under an unbounded context.Background/TODO
+    cmds:
+      - scripts/cleanup-roots-check.sh
+
+  merge:check:
+    desc: Fail while a class:flake issue is open that PR <n> does not close, main's rules lack the up-to-date setting, or PR <n> is a code PR, not a draft, without implemented-by and reviewed-by lines naming the agents; -- <n>. Reads GitHub, so not in validate/verify
+    cmds:
+      - scripts/merge-check.sh {{.CLI_ARGS}}
+
+  spec:check:
+    desc: Validate all OpenSpec changes and specs strictly, and fail on a hold written outside every task
+    cmds:
+      - openspec validate --all --strict
+      - scripts/openspec-queue.sh --check
+
+  spec:queue:
+    desc: Show each in-flight OpenSpec change with its holds and blocking conditions
+    cmds:
+      - scripts/openspec-queue.sh
+
   # Observability shortcuts
   observe:up:
     desc: Start Prometheus + Grafana for local monitoring
@@ -75,3 +131,8 @@ tasks:
     desc: Run read-only local validation mirroring Repository CI (Go, UI, Governance)
     cmds:
       - scripts/validate.sh
+
+  verify:
+    desc: Alias for validate — run read-only local validation mirroring Repository CI (Go, UI, Governance)
+    cmds:
+      - scripts/verify.sh

@@ -8,25 +8,41 @@
 # "decide whether this change should still exist".
 #
 # This script reads caveats from the source every run, so a program baton
-# does not have to carry them and cannot drift from them.
+# or handoff note does not have to carry them and cannot drift from them.
+#
+# A task is read whole: its checkbox line and every line wrapped or nested
+# under it, up to the next task or the next line indented no deeper than
+# the task. Labels come from the checkbox line alone. A `Hold:` (matched
+# with its case) anywhere in an open task's block gets one BLOCKED line,
+# numbered where the hold is written, with the task number and the text
+# from `Hold:` on; the checkbox line is not shown as BLOCKED a second time.
 #
 # Exit status is advisory-by-default and deliberately so: this is a
 # reporting aid for humans and session startup, not a merge gate. Use
 # --strict to exit non-zero when any caveat is found (for CI or a
-# pre-archive hook).
+# pre-archive hook). Exit 2 means the queue could not be read.
+#
+# --check prints no queue; `task spec:check` / `task openspec:validate` runs it.
+# A `Hold:` below a tasks.md's first "## " heading that lies in no task's block,
+# ticked tasks included, is one the queue cannot show: each is printed as
+# <path>:<line>: and the exit is 1. With none it prints "holds: ok (<n> tasks.md read)"
+# and exits 0. An unreadable change list or tasks.md exits 2, as for the queue.
 #
 # Run from repo root:
 #   scripts/openspec-queue.sh [--strict] [--stale-days N]
+#   scripts/openspec-queue.sh --check
 
 set -uo pipefail
 
 STRICT=0
+CHECK=0
 STALE_DAYS=7
 MAX_STALE_DAYS=36500
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --strict) STRICT=1; shift ;;
+    --check) CHECK=1; shift ;;
     --stale-days)
       if [ $# -lt 2 ] \
         || ! printf '%s\n' "$2" | grep -qE '^[1-9][0-9]*$' \
@@ -38,18 +54,20 @@ while [ $# -gt 0 ]; do
       STALE_DAYS=$2
       shift 2
       ;;
-    -h|--help) sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,33p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
 
+# Prefer repo-pinned CLI in node_modules/.bin if present, falling back to PATH.
+[ -d "$PWD/node_modules/.bin" ] && PATH="$PWD/node_modules/.bin:$PATH"
 if ! command -v openspec >/dev/null 2>&1; then
-  echo "openspec CLI not found on PATH" >&2
+  echo "queue unavailable: openspec CLI not found on PATH" >&2
   exit 2
 fi
 
 CHANGES_DIR="openspec/changes"
-[ -d "$CHANGES_DIR" ] || { echo "no $CHANGES_DIR (run from repo root)" >&2; exit 2; }
+[ -d "$CHANGES_DIR" ] || { echo "queue unavailable: no $CHANGES_DIR (run from repo root)" >&2; exit 2; }
 
 # Caveat classes, most severe first. A line matching an earlier pattern is
 # reported under that class and not re-reported under a later one.
@@ -61,10 +79,58 @@ label_for() {
   local t=$1
   printf '%s' "$t" | grep -qiE '\bhalt(s|ed|ing)?\b'                    && { echo "HALT";    return; }
   printf '%s' "$t" | grep -qiE '\bred\b|\bfailed\b|\bfailing\b'         && { echo "RED";     return; }
-  printf '%s' "$t" | grep -qiE '\bhold\b|\bblocked\b|\bblocking\b'    && { echo "BLOCKED"; return; }
+  printf '%s' "$t" | grep -qiE '\bhold\b|\bblocked\b|\bblocking\b'      && { echo "BLOCKED"; return; }
   printf '%s' "$t" | grep -qiE '\bdeliberate|\bnot done\b|\bwont ?do\b' && { echo "WONTDO";  return; }
-  printf '%s' "$t" | grep -qiE 'still open'                            && { echo "OPEN-Q";  return; }
+  printf '%s' "$t" | grep -qiE 'still open'                             && { echo "OPEN-Q";  return; }
   echo ""
+}
+
+# scan_tasks FILE prints one tab-separated row per line of interest, tasks
+# in line order:
+#   open  <line> <checkbox line>  an open task ("- [ ]" or "- [~]") with no hold
+#   held  <line> <checkbox line>  an open task with a hold; its hold row follows
+#   hold  <line> <task number> <the block's text from its first Hold: on>
+#   stray <line>                  a Hold: below the first "## " heading, in no block
+scan_tasks() {
+  python3 - "$1" <<'PY'
+import re, sys
+
+TASK = re.compile(r"\s*- \[(.)\]")
+tasks, strays = [], []
+task, below = None, False
+with open(sys.argv[1], encoding="utf-8") as f:
+    for n, line in enumerate(f, 1):
+        line = line.rstrip("\n")
+        depth = len(line) - len(line.lstrip())
+        m = TASK.match(line)
+        if m:
+            words = line[m.end():].split()
+            task = {"line": n, "open": m.group(1) in " ~", "first": line, "depth": depth,
+                    "number": words[0] if words else "", "hold": 0, "text": []}
+            tasks.append(task)
+        elif task and line.strip() and depth <= task["depth"]:
+            task = None
+        if task is None:
+            if below and "Hold:" in line:
+                strays.append(n)
+        elif task["hold"]:
+            task["text"].append(line)
+        elif "Hold:" in line:
+            task["hold"] = n
+            task["text"].append(line[line.index("Hold:"):])
+        if line.startswith("## "):
+            below = True
+for t in tasks:
+    if not t["open"]:
+        continue
+    if t["hold"]:
+        print("held\t%d\t%s" % (t["line"], t["first"]))
+        print("hold\t%d\t%s %s" % (t["hold"], t["number"], " ".join(t["text"])))
+    else:
+        print("open\t%d\t%s" % (t["line"], t["first"]))
+for n in strays:
+    print("stray\t%d" % n)
+PY
 }
 
 now_epoch=$(date -u +%s)
@@ -72,11 +138,14 @@ found_any=0
 change_count=0
 input_error=0
 
-printf '\n%s\n' "openspec queue — why each in-flight change is still open"
-printf '%s\n\n' "-------------------------------------------------------"
+if [ "$CHECK" -eq 0 ]; then
+  printf '\n%s\n' "openspec queue — why each in-flight change is still open"
+  printf '%s\n\n' "-------------------------------------------------------"
+fi
 
-if ! json=$(openspec list --json); then
-  echo "openspec list --json failed" >&2
+if json=$(openspec list --json 2>&1); then status=0; else status=$?; fi
+if [ "$status" -ne 0 ]; then
+  printf 'queue unavailable: openspec list --json exited %s\n%s\n' "$status" "$json" >&2
   exit 2
 fi
 
@@ -86,7 +155,7 @@ if ! rows=$(printf '%s' "$json" | python3 -c '
 import json,re,sys
 
 def invalid(message):
-    print(f"invalid openspec JSON: {message}", file=sys.stderr)
+    print(f"queue unavailable: invalid openspec JSON: {message}", file=sys.stderr)
     sys.exit(2)
 
 try:
@@ -124,8 +193,28 @@ for index, c in enumerate(d["changes"]):
         str(c.get("lastModified","")),
     ]))
 '); then
-  echo "could not parse openspec list output" >&2
   exit 2
+fi
+
+if [ "$CHECK" -eq 1 ]; then
+  read_count=0
+  misplaced=0
+  while IFS=$'\t' read -r name _; do
+    [ -n "$name" ] || continue
+    tasks_file="$CHANGES_DIR/$name/tasks.md"
+    [ -f "$tasks_file" ] || continue
+    scan=$(scan_tasks "$tasks_file") || { echo "queue unavailable: cannot read $tasks_file" >&2; exit 2; }
+    read_count=$((read_count + 1))
+    while IFS=$'\t' read -r kind lineno _; do
+      [ "$kind" = stray ] || continue
+      printf '%s:%s: Hold: outside every task; task spec:queue cannot show it. Put it in the task it stops.\n' \
+        "$tasks_file" "$lineno"
+      misplaced=1
+    done <<< "$scan"
+  done <<< "$rows"
+  [ "$misplaced" -eq 0 ] || exit 1
+  printf 'holds: ok (%d tasks.md read)\n' "$read_count"
+  exit 0
 fi
 
 if [ -z "$rows" ]; then
@@ -162,28 +251,37 @@ except Exception:
     continue
   fi
 
-  # [~] is always a caveat: a deliberate decision must be propagated into
-  # the spec delta before the change can be archived.
-  caveats=0
-  while IFS= read -r line; do
-    lineno="${line%%:*}"
-    task_text="${line#*:}"
+  scan=$(scan_tasks "$tasks_file") || { echo "queue unavailable: cannot read $tasks_file" >&2; exit 2; }
 
+  # Unchecked "- [ ]" and partial "- [~]" tasks only. [~] is ALWAYS a
+  # caveat regardless of wording — it means a deliberate decision was
+  # recorded, and that decision has to be propagated into the spec delta
+  # before this change can be archived.
+  caveats=0
+  while IFS=$'\t' read -r kind lineno text; do
     marker=""
-    case "$task_text" in
-      *'- [~]'*) marker="WONTDO" ;;
+    case "$kind" in
+      open|held)
+        case "$text" in
+          *'- [~]'*) marker="WONTDO" ;;
+        esac
+        [ -z "$marker" ] && marker="$(label_for "$text")"
+        # The task's hold row says BLOCKED; its checkbox line does not say it again.
+        [ "$kind" = held ] && [ "$marker" = BLOCKED ] && marker=""
+        ;;
+      hold) marker="BLOCKED" ;;
     esac
-    [ -z "$marker" ] && marker="$(label_for "$task_text")"
     [ -z "$marker" ] && continue
 
-    clean=$(printf '%s' "$task_text" \
+    # Trim leading list syntax and squeeze whitespace for a compact line.
+    clean=$(printf '%s' "$text" \
       | sed -e 's/^[[:space:]]*- \[[^]]*\][[:space:]]*//' \
             -e 's/\*\*//g' \
             -e 's/[[:space:]][[:space:]]*/ /g')
     printf '      %-8s L%-5s %.104s\n' "$marker" "$lineno" "$clean"
     caveats=$((caveats + 1))
     found_any=1
-  done < <(grep -nE '^[[:space:]]*- \[( |~)\]' "$tasks_file" 2>/dev/null)
+  done <<< "$scan"
 
   if [ "$caveats" -eq 0 ]; then
     printf '      %-8s no halt/hold/deliberate marker in the open tasks\n' "ok"
