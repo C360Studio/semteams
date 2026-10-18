@@ -62,7 +62,7 @@ func setupLogger(level, format string, natsClient *natsclient.Client, cfg *confi
 	multiHandler := logging.NewMultiHandler(stdoutHandler, natsHandler)
 
 	return slog.New(multiHandler).With(
-		"service", "semstreams",
+		"service", appName,
 		"version", version,
 		"pid", os.Getpid(),
 	)

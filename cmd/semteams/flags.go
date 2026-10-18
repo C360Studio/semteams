@@ -126,7 +126,7 @@ func validateFlags(cfg *CLIConfig) error {
 }
 
 func printDetailedHelp() {
-	_, _ = fmt.Fprintf(os.Stderr, `%s - Semantic Stream Processing
+	_, _ = fmt.Fprintf(os.Stderr, `%s - Always-on program manager for a configurable portfolio
 
 Usage: %s [options]
 
