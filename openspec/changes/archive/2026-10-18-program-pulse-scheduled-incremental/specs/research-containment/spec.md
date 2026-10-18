@@ -24,4 +24,4 @@ Scheduled cron rules — including the wired `configs/rules/research/10-schedule
 - **GIVEN** `configs/rules/research/10-scheduled-program-pulse.json` wired in `configs/flow-bootstrap.json` and `configs/e2e-flow-bootstrap.json`
 - **WHEN** the rule definition is loaded at boot or enabled at runtime via `rule.ConfigManager.SaveRule`
 - **THEN** its default on-disk state SHALL be `enabled: false` with `type: "cron"`, positive `cooldown` (`20h`), and `loop_max_iterations: "8"` on its `publish_agent` coordinator action
-- **AND** when enabled, its `publish_agent` action SHALL dispatch an `@pulse` prompt to `agent.task.coordinator` (`run_scope: "new"`) with `action_allowlist: ["research", "respond_direct"]`
+- **AND** when enabled, its `publish_agent` action SHALL dispatch an `@pulse` prompt to `agent.task.coordinator` with `action_allowlist: ["research", "respond_direct"]` so `01-coordinator-research-spawn.json` mints the research run (`run_scope: "new"`) upon `decide(action="research")`

@@ -20,20 +20,20 @@ Under ADR-060 (`#267`, `#272`, `#273`), Program Pulse runs as an operator profil
 - `LastPersistedAt time.Time` (`json:"last_persisted_at,omitempty"`)
 
 `githubread.CursorStore` (`MemoryCursorStore` and `FileCursorStore`) adds run-scoped staging methods:
-- `GetForRun(runID, repoKey, kind string) CursorEntry`: returns the committed `CursorEntry` snapshot captured before any staging in `runID` (so a retry or second `github_read` call within the same `runID` reads against the exact same pre-run baseline cursor and returns identical delta records).
-- `Stage(runID, repoKey, kind string, next CursorEntry, hasNewRecords bool) error`:
-  - When `runID == ""` (standalone calls without a run anchor), commits immediately (`BaselineEstablished = true`, `LastCheckedAt = next.LastCheckedAt`, and if `hasNewRecords || prev.LastPersistedAt.IsZero()` updates `Watermark`, `Seen`, and `LastPersistedAt`).
-  - When `runID != ""`, records the committed `LastCheckedAt` immediately (since the check occurred) and stages `next` under `runID` without mutating the committed `Watermark`, `Seen`, `BaselineEstablished`, or `LastPersistedAt`.
-- `CommitRun(runID string, committedAt time.Time) error`: promotes all staged `(repoKey, kind)` entries for `runID` into the committed store. For each staged entry:
+- `GetForRun(runID, repoKey, kind string) (CursorEntry, bool)`: returns the committed `CursorEntry` snapshot captured before any staging in `runID` (so a retry or second `github_read` call within the same `runID` reads against the exact same pre-run baseline cursor and returns identical delta records).
+- `StageForRun(runID, loopID, repoKey, kind string, next CursorEntry, hasNewRecords bool) error`:
+  - When `runID == ""` (standalone calls without a run or loop anchor), commits immediately (`BaselineEstablished = true`, `LastCheckedAt = next.LastCheckedAt`, and if `hasNewRecords || prev.LastPersistedAt.IsZero()` updates `Watermark`, `Seen`, and `LastPersistedAt`).
+  - When `runID != ""`, records the committed `LastCheckedAt` immediately (since the check occurred) and stages `next` under `runID` (mapping `loopID -> runID`) without mutating the committed `Watermark`, `Seen`, `BaselineEstablished`, or `LastPersistedAt`.
+- `CommitRun(runOrLoopID string, committedAt time.Time) error`: promotes all staged `(repoKey, kind)` entries for `runOrLoopID` into the committed store. For each staged entry:
   - Sets `BaselineEstablished = true`.
   - If the staged entry observed new/updated records (or established the initial baseline), promotes `Seen`, `Watermark`, and sets `LastPersistedAt = committedAt.UTC()`.
   - If the staged entry was a no-change check (`!hasNewRecords` on an already-baselined entry), preserves the prior committed `Watermark` and `LastPersistedAt` while keeping `LastCheckedAt`.
-  - Clears the staged buffer for `runID` (idempotent if `CommitRun` is called again for the same `runID`).
+  - Clears the staged buffer for `runOrLoopID` (idempotent if `CommitRun` is called again for the same key).
 
 How `runID` is resolved:
-- `githubread.Executor.Execute` resolves the run key via `runanchor.Anchor(call, "", "")` (extracting `agent.run_id` / `agent.run_entity_id` from `call.Metadata`, or falling back to `call.Metadata["pulse_run_id"]`).
+- `githubread.Executor.Execute` resolves the run key via `runanchor.Anchor(call, "", "")` (extracting `agent.run_id` / `agent.run_entity_id` from `call.Metadata`, falling back to `call.Metadata["pulse_run_id"]` or `call.LoopID`).
 - In `cmd/semteams/product_tools.go`, `registerProductTools` constructs the shared `githubread.CursorStore` and wires it into both `githubread.Executor` and `emitartifact.Executor` (`SetCursorCommitter`).
-- When `emitartifact.Executor.Execute` succeeds (after `VerifyDerivation`, markdown rendering, triple append, and NATS payload publish), it invokes `CommitRun` for the resolved caller run ID (and any loop IDs resolved during derivation).
+- When `emitartifact.Executor.Execute` succeeds (after `VerifyDerivation`, markdown rendering, triple append, and NATS payload publish), it invokes `CommitRun` for the resolved caller run ID and any producer loop IDs resolved during derivation.
 
 ### 2. Partial-Repository Failure Disclosure
 
@@ -54,4 +54,4 @@ We add `configs/rules/research/10-scheduled-program-pulse.json`:
 - `enabled`: `false` (default disabled in `configs/flow-bootstrap.json` and `configs/e2e-flow-bootstrap.json`; operators enable or adjust schedule at runtime via Pattern-B `RULE_CONFIG` KV without process restart)
 - `schedule`: `"0 9 * * *"`
 - `cooldown`: `"20h"`
-- `actions`: single `publish_agent` action with `run_scope: "new"`, `subject: "agent.task.coordinator"`, `role: "coordinator"`, `loop_max_iterations: "8"`, `model: "coordinator"`, `tools: ["decide"]`, `tool_choice: {"mode": "required"}`, `action_allowlist: ["research", "respond_direct"]`, and an `@pulse` prompt referencing `$schedule.last_fired_at` so the coordinator routes directly into the existing `research` pack (`01-coordinator-research-spawn.json`).
+- `actions`: single `publish_agent` action with `subject: "agent.task.coordinator"`, `role: "coordinator"`, `loop_max_iterations: "8"`, `model: "coordinator"`, `tools: ["decide"]`, `tool_choice: {"mode": "required"}`, `action_allowlist: ["research", "respond_direct"]`, and an `@pulse` prompt referencing `$schedule.last_fired_at` so the coordinator routes directly into the existing `research` pack (`01-coordinator-research-spawn.json`, which mints the `research` run via `run_scope: "new"`).

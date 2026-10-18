@@ -33,7 +33,7 @@ cursors.
 - **THEN** the tool SHALL reject the call with `ToolErrorInvalidArgs`
 - **AND** it SHALL NOT issue any GitHub API request for that repository
 
-#### Scenario: Second run over unchanged repositories yields no new activity and preserves persisted watermark
+#### Scenario: Second run over unchanged repositories yields no new activity
 
 - **GIVEN** `github_read` has already observed and committed a repository's baseline issues, pull requests, releases,
   commits, and CI status
