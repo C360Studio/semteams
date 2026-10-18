@@ -166,14 +166,13 @@ func registerProductPayloads(reg *payloadregistry.Registry) error {
 	if err := devviaspec.RegisterPayloads(reg); err != nil {
 		return fmt.Errorf("dev-via-spec payloads: %w", err)
 	}
-	// Headless-semsource compatibility: semsource publishes
-	// semsource.entity.v1 / .status.v1 / .manifest.v1 / .predicates.v1
-	// payloads on the shared NATS bus. graph-ingest unmarshals them via
-	// the registry — without this registration, every entity message is
-	// dropped with "unregistered payload type: semsource.entity.v1".
-	// Mirrors semspec's headless-host pattern (semspec/semsource/
-	// payload.go) — host app owns the registration when running
-	// semsource headless.
+	// Parked semsource payload compatibility (#282/#285): registers
+	// semsource.{entity,status,manifest,predicates}.v1 so the product
+	// payload catalog preserves its registered schema and BaseMessage
+	// decoding surface. Under ADR-060 SemSource is a standalone external
+	// service (SemSource ADR-0006 removed headless mode), and
+	// configs/flow-bootstrap.json does not subscribe graph-ingest to
+	// shared-NATS graph.ingest.{entity,status,manifest,predicates} streams.
 	if err := semsource.RegisterPayloads(reg); err != nil {
 		return fmt.Errorf("semsource payloads: %w", err)
 	}

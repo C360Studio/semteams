@@ -1,22 +1,20 @@
-// Package semsource registers semsource payload types so that semteams can
-// deserialize messages published by a headless semsource instance on the
-// shared NATS bus. Since semsource runs headless (using semteams's graph
-// components), semteams owns the payload registration.
+// Package semsource registers parked semsource wire payload types
+// (semsource.{entity,status,manifest,predicates}.v1) so the product payload
+// catalog preserves its registered schema and BaseMessage decoding surface
+// without taking a Go-module dependency on semsource.
 //
-// Wire shape mirrored from the canonical semspec/semsource registration —
-// semspec set the architectural precedent that the host app owns the
-// registration when semsource runs headless. This package replicates the
-// same wire types so we match the canonical wire shape without taking a
-// Go-module dep on semsource itself or on semspec.
-//
-// Imported by cmd/semteams/product_tools.go's registerProductPayloads so
-// the registry is populated before graph-ingest starts consuming the
-// graph.ingest.entity stream.
+// Under ADR-060, SemSource is a standalone external service with its own NATS
+// and graph (SemSource ADR-0006 removed headless mode), and
+// configs/flow-bootstrap.json does not subscribe graph-ingest to shared-NATS
+// graph.ingest.{entity,status,manifest,predicates} streams. Retaining these
+// registrations preserves runtime-composition catalog parity (#282/#285) and
+// does not claim active headless-host operation or SemSource dogfood readiness.
 package semsource
 
 import (
 	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/c360studio/semstreams/graph"
@@ -28,12 +26,14 @@ import (
 var (
 	_ graph.Graphable = (*EntityPayload)(nil)
 	_ message.Payload = (*EntityPayload)(nil)
+	_ message.Payload = (*StatusPayload)(nil)
+	_ message.Payload = (*ManifestPayload)(nil)
+	_ message.Payload = (*PredicateSchemaPayload)(nil)
 )
 
-// RegisterPayloads registers every semsource payload type with the supplied
-// registry. Called from cmd/semteams/product_tools.go's
-// registerProductPayloads so semteams can deserialize messages published by
-// a headless semsource instance on the shared NATS bus.
+// RegisterPayloads registers the four semsource wire payload types with the
+// supplied registry. Called from cmd/semteams/product_tools.go's
+// registerProductPayloads to preserve product payload catalog compatibility.
 func RegisterPayloads(reg *payloadregistry.Registry) error {
 	return errors.Join(
 		reg.Register(&payloadregistry.Registration{
@@ -139,4 +139,27 @@ func (p *StatusPayload) Schema() message.Type {
 }
 
 // Validate checks the payload for correctness.
-func (p *StatusPayload) Validate() error { return nil }
+func (p *StatusPayload) Validate() error {
+	if strings.TrimSpace(p.Status) == "" {
+		return errors.New("semsource status payload: status is required")
+	}
+	if p.Sources < 0 {
+		return errors.New("semsource status payload: sources must be non-negative")
+	}
+	if p.Entities < 0 {
+		return errors.New("semsource status payload: entities must be non-negative")
+	}
+	return nil
+}
+
+// MarshalJSON satisfies json.Marshaler.
+func (p *StatusPayload) MarshalJSON() ([]byte, error) {
+	type Alias StatusPayload
+	return json.Marshal((*Alias)(p))
+}
+
+// UnmarshalJSON satisfies json.Unmarshaler.
+func (p *StatusPayload) UnmarshalJSON(data []byte) error {
+	type Alias StatusPayload
+	return json.Unmarshal(data, (*Alias)(p))
+}
