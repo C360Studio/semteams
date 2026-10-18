@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -82,29 +83,25 @@ func TestConfiguredLoopFirstRequestBoundary(t *testing.T) {
 				require.Equal(t, component.StateStarted, status.State, "%s: %v", name, status.LastError)
 			}
 
-			// Start has joined component setup. The durable capture is installed
-			// before publication, so no sleeps or transient core subscriptions
-			// stand in for request readiness.
+			// Start has joined component setup. Each subtest installs its own
+			// DeliverNewPolicy consumer before publication, so no sleeps or
+			// transient core subscriptions stand in for request readiness and
+			// a failed subtest cannot leave queued requests for later subtests.
 			js, err := testNATS.Client.JetStream()
 			require.NoError(t, err)
 			stream, err := js.Stream(ctx, "AGENT")
-			require.NoError(t, err)
-			requests, err := stream.CreateOrUpdateConsumer(ctx, jetstream.ConsumerConfig{
-				Durable: "loop-boundary-requests", FilterSubject: "agent.request.>", AckPolicy: jetstream.AckExplicitPolicy,
-			})
 			require.NoError(t, err)
 			decoder := message.NewDecoder(payloads)
 			reader := graph.NewExactEntityReader(testNATS.Client, 5*time.Second)
 			var expected map[string]loopBoundaryExpected
 			loopBoundaryReadJSON(t, filepath.Join(loopBoundaryFixtures, "expected.json"), &expected)
 			require.Len(t, expected, 3)
-			seenRequests := make(map[string]bool)
 			seenLoops := make(map[string]bool)
 			seenEntities := make(map[string]bool)
 
 			// Fixed order leaves the omission case last in the SAME live loop
 			// component, after both knobs have appeared on other fresh roots.
-			for _, name := range []string{"required-live.json", "forced-function.json", "response-format.json", "omitted-knobs"} {
+			for idx, name := range []string{"required-live.json", "forced-function.json", "response-format.json", "omitted-knobs"} {
 				t.Run(name, func(t *testing.T) {
 					task, subject, want := loopBoundaryTask(t, name, expected)
 					require.Empty(t, task.LoopID, "root identity must be minted by the loop")
@@ -115,8 +112,16 @@ func TestConfiguredLoopFirstRequestBoundary(t *testing.T) {
 					require.NoError(t, err)
 					opCtx, opCancel := context.WithTimeout(ctx, 15*time.Second)
 					defer opCancel()
+					requests, err := stream.CreateOrUpdateConsumer(opCtx, jetstream.ConsumerConfig{
+						Durable:       fmt.Sprintf("loop-boundary-requests-%d", idx),
+						FilterSubject: "agent.request.>",
+						DeliverPolicy: jetstream.DeliverNewPolicy,
+						AckPolicy:     jetstream.AckExplicitPolicy,
+					})
+					require.NoError(t, err)
 					require.NoError(t, testNATS.Client.PublishToStream(opCtx, subject, wire))
 
+					seenRequests := make(map[string]bool)
 					var request *agentic.AgentRequest
 					for {
 						received, err := requests.Next(jetstream.FetchContext(opCtx))

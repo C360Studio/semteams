@@ -1,8 +1,10 @@
 # Loop first-request qualification
 
 [Issue #294](https://github.com/C360Studio/semteams/issues/294) and
-[PR #295](https://github.com/C360Studio/semteams/pull/295) qualify the boundary after #293's captured TaskMessage emission
-and before #289's model handling of an authored AgentRequest. This is a test-only qualification, not extraction or a new API.
+[PR #295](https://github.com/C360Studio/semteams/pull/295) qualify the `agentic-loop` first-request intake boundary using
+canonical `TaskMessage` inputs reconstructed from #293's rule-action fixtures (rather than consuming #293's raw
+executor-emitted bytes directly), before #289's model handling of an authored `AgentRequest`. This is a test-only
+qualification, not extraction or a new API.
 
 ## Sources and composition
 
@@ -34,7 +36,8 @@ there are no handwritten graph responders or direct state writes standing in for
 explicitly empty; action metadata/run anchors are not copied. `LoopID`, `RunID` and `ParentLoopID` are empty, so each case
 starts a fresh root. This does not execute the rule action or resolve tool names.
 
-Before task publication, the test installs a durable `AGENT` consumer filtered to `agent.request.>`. Each task is published
+Before each subtest's task publication, the subtest installs its own durable `AGENT` consumer (`DeliverNewPolicy`)
+filtered to `agent.request.>` so a failed subtest cannot leave queued requests for later subtests. Each task is published
 to its original fixture subject. Captured bytes decode through the product payload catalog as `*agentic.AgentRequest`
 and pass canonical validation. Checks cover the subject `agent.request.<LoopID>`, literal first-request identity
 `<LoopID>:req:1:0`, distinct loop identity, role/model, prompt inclusion, empty tools and independently expected knob values. At-least-once replay of
