@@ -71,7 +71,7 @@ and it is load-bearing documentation.
 
 | Framework surface | Pattern | Call site in `cmd/semteams/main.go` | Status |
 |---|---|---|---|
-| `componentregistry.Register` | C | `setupRegistriesAndManager` | ✅ live |
+| `runtimecatalog.RegisterComponents` | C | `setupRegistriesAndManager` | ✅ live |
 | `persona.NewManager` + `persona.LoadFromDirectory` | B | `loadPersonaFragments` after services configured | ✅ live (c226c50) |
 | `rule.NewConfigManager` (+ `InitializeKVStore`) | B | `buildRuleManager`, passed to `executors.RegisterAll` | ✅ live |
 | `flowstore.NewManager` | B | `buildFlowManager`, passed to `executors.RegisterAll` | ✅ live |
@@ -103,7 +103,7 @@ Every adopted wiring must be demonstrable at boot:
   `initPromptRegistry`.
 - `executors.RegisterAll`: a Pattern B tool (`read_loop_result`) called
   from a fixture resolves to its executor and returns a non-error result.
-- `componentregistry.Register`: `"Component factories registered"` log
+- `runtimecatalog.RegisterComponents`: `"Component factories registered"` log
   line with `count=N` matching the configs the binary supports.
 
 ## Consequences

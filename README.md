@@ -11,7 +11,7 @@ MVP boundary are defined in
 [`docs/product/program-manager.md`](docs/product/program-manager.md).
 
 The current repository is the early product shell — UI, configs, personas,
-rules, and a small set of product-shell tools — proving the multi-agent runtime
+rules, `internal/runtimecatalog`, and a small set of product-shell tools — proving the multi-agent runtime
 on top of SemStreams. It has **no custom Go
 components**: every processor (graph, rule, agentic-dispatch,
 agentic-loop, agentic-model, agentic-tools, …) is imported from the
@@ -46,6 +46,7 @@ covers what SemTeams adds on top.
 | Category packs | `configs/rules/<category>/` | Live: `research/` (MVP supporting capability) and `autoresearch/` (retained framework demonstration). Support: `coordinator/`, `agent-run/`, and `ops/`. Parked dev packs are donor material; see [ADR-058](docs/adr/058-beta159-realignment-and-demo-lane-focus.md). New task classes add a pack, not a component. |
 | Personas | `configs/personas/fragments/<role>/*.md` | Role-specific prompt fragments loaded by the category packs. See [`configs/README.md`](configs/README.md) for the current inventory. |
 | Product tools | `cmd/semteams/tools/` | Tool executors that don't belong upstream: source ingest, artifact/spec emission, proof analysis/projection, sandbox bootstrap, and pack-specific measurement emitters. |
+| Runtime catalog | `internal/runtimecatalog/` | Explicit frozen component and payload registration surface shared by `cmd/semteams` and `cmd/openapi-generator`. |
 | Product shell | `cmd/semteams/main.go` | ~600 LoC binary that wires the framework primitives directly for this product shell |
 
 Current `agentic-*` processors, the rule engine, graph and NATS wiring remain in SemStreams.

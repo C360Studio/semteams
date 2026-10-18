@@ -118,6 +118,7 @@ Rituals:
 | `cmd/openapi-generator/` | Generate OpenAPI spec from component registry |
 | `configs/` | Bootstrap composition, category rule packs, personas |
 | `docs/` | Product, ADR, and migration documentation |
+| `internal/runtimecatalog/` | Explicit frozen component and payload registration surface shared by runtime and generators |
 | `schemas/`, `specs/` | Generated via `task schema:generate` — do not hand-edit |
 | `test/contract/`, `test/e2e/mock/`, `test/fixtures/journeys/` | Contract tests, mock LLM/AGNTCY server, Playwright YAML fixtures |
 | `ui/` | Svelte 5 + SvelteKit 2 frontend (work board, runs board, graph explorer, composition inventory) |

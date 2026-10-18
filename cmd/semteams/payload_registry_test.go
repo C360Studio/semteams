@@ -7,11 +7,50 @@ import (
 	"time"
 
 	"github.com/c360studio/semstreams/agentic"
+	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/config"
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semteams/cmd/semteams/devviaspec"
 	"github.com/c360studio/semteams/cmd/semteams/research"
 	"github.com/c360studio/semteams/cmd/semteams/semsource"
+	"github.com/c360studio/semteams/internal/runtimecatalog"
 )
+
+func TestSetupRegistriesAndManagerRegistersProductCatalog(t *testing.T) {
+	cfg := &config.Config{}
+	componentRegistry, manager, err := setupRegistriesAndManager(cfg)
+	if err != nil {
+		t.Fatalf("setupRegistriesAndManager: %v", err)
+	}
+	if componentRegistry == nil {
+		t.Fatal("componentRegistry is nil")
+	}
+	if manager == nil {
+		t.Fatal("service manager is nil")
+	}
+
+	got := componentRegistry.ListFactories()
+	if len(got) != 27 {
+		t.Fatalf("registered factory count = %d, want 27", len(got))
+	}
+
+	wantRegistry := component.NewRegistry()
+	if err := runtimecatalog.RegisterComponents(wantRegistry); err != nil {
+		t.Fatalf("RegisterComponents: %v", err)
+	}
+	for name := range wantRegistry.ListFactories() {
+		if _, ok := got[name]; !ok {
+			t.Errorf("setupRegistriesAndManager missing factory %q", name)
+		}
+	}
+
+	if !cfg.Services["service-manager"].Enabled {
+		t.Error("default service-manager config not enabled")
+	}
+	if !cfg.Services["metrics"].Enabled {
+		t.Error("default metrics config not enabled")
+	}
+}
 
 func TestProductionPayloadRegistryDecodesTypedUserResponse(t *testing.T) {
 	reg, err := buildPayloadRegistry()

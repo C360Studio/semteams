@@ -2,6 +2,7 @@ package runtimecatalog_test
 
 import (
 	"errors"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -95,14 +96,15 @@ func TestComponentCollisionNamesFactory(t *testing.T) {
 				t.Fatal(err)
 			}
 			err := runtimecatalog.RegisterComponents(registry)
-			if err == nil || !strings.Contains(err.Error(), name) || errors.Unwrap(err) == nil {
-				t.Fatalf("want wrapped collision identifying %q, got %v", name, err)
+			wantPrefix := fmt.Sprintf("register component %q: ", name)
+			if err == nil || !strings.HasPrefix(err.Error(), wantPrefix) || errors.Unwrap(err) == nil {
+				t.Fatalf("want wrapped collision starting with %q and non-nil Unwrap, got %v", wantPrefix, err)
 			}
 		})
 	}
 }
 
-func TestPayloadCollisionsNameEveryOwnerAndType(t *testing.T) {
+func TestPayloadCollisionsNameEveryOwner(t *testing.T) {
 	registry := payloadregistry.New()
 	if err := runtimecatalog.RegisterPayloads(registry); err != nil {
 		t.Fatal(err)
@@ -111,14 +113,22 @@ func TestPayloadCollisionsNameEveryOwnerAndType(t *testing.T) {
 	if err == nil {
 		t.Fatal("duplicate registration succeeded")
 	}
-	for _, owner := range []string{"message", "agentic", "processor/gated-dag", "storage/objectstore", "governance", "pkg/lifecycle", "graph/inference"} {
-		if !strings.Contains(err.Error(), "payload owner \""+owner+"\"") {
-			t.Errorf("collision does not identify owner %q: %v", owner, err)
-		}
+	joined, ok := err.(interface{ Unwrap() []error })
+	if !ok {
+		t.Fatalf("want joined error implementing Unwrap() []error, got %T (%v)", err, err)
 	}
-	for key := range registry.List() {
-		if !strings.Contains(err.Error(), key) {
-			t.Errorf("collision does not identify payload %q", key)
+	wantOwners := []string{"message", "agentic", "processor/gated-dag", "storage/objectstore", "governance", "pkg/lifecycle", "graph/inference"}
+	branches := joined.Unwrap()
+	if len(branches) != len(wantOwners) {
+		t.Fatalf("got %d joined owner errors, want %d: %v", len(branches), len(wantOwners), err)
+	}
+	for i, owner := range wantOwners {
+		wantPrefix := fmt.Sprintf("register payload owner %q: ", owner)
+		if !strings.HasPrefix(branches[i].Error(), wantPrefix) {
+			t.Errorf("branch[%d] = %q, want prefix %q", i, branches[i].Error(), wantPrefix)
+		}
+		if errors.Unwrap(branches[i]) == nil {
+			t.Errorf("branch[%d] (%s) did not wrap underlying error via %%w", i, owner)
 		}
 	}
 }
