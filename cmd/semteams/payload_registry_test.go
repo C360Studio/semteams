@@ -88,15 +88,11 @@ func TestProductionPayloadRegistryDecodesProductPayloads(t *testing.T) {
 		t.Fatal(err)
 	}
 	at := time.Date(2026, 10, 3, 12, 0, 0, 0, time.UTC)
-	// StatusPayload is a retained legacy registration but does not implement
-	// message.Payload. Keep its factory available without claiming decode proof.
-	if payload := reg.Create("semsource", "status", "v1"); reflect.TypeOf(payload) != reflect.TypeOf(&semsource.StatusPayload{}) {
-		t.Fatalf("status factory produced %T, want *semsource.StatusPayload", payload)
-	}
 	payloads := []message.Payload{
 		&research.Artifact{LoopID: "research-1", Revision: 1, TestHarness: "catalog-test", ProducedAt: at},
 		&devviaspec.Plan{LoopID: "research-1", Revision: 1, Goal: "catalog parity", Context: "frozen baseline", Epics: []string{"registration"}, ProducedAt: at},
 		&semsource.EntityPayload{ID: "c360.semteams.source.repo.file.catalog", UpdatedAt: at},
+		&semsource.StatusPayload{Status: "ready", Sources: 2, Entities: 42, Uptime: "5m0s"},
 		&semsource.ManifestPayload{Namespace: "semteams", Sources: []semsource.ManifestSource{{Type: "git", Path: "/workspace", Branch: "main"}}, Timestamp: at},
 		&semsource.PredicateSchemaPayload{Sources: []semsource.SourcePredicateSchema{{SourceType: "git", Predicates: []semsource.PredicateDescriptor{{Name: "source.file.path", DataType: "string", Role: "location"}}}}, Timestamp: at},
 	}
