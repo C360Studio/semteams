@@ -33,6 +33,7 @@ tasks:
       - scripts/openspec-queue_fixture_test.sh
 
   validate:
-    desc: Validate all OpenSpec changes and specs strictly
+    desc: Validate all OpenSpec changes and specs strictly, and fail on a hold written outside every task
     cmds:
       - openspec validate --all --strict
+      - scripts/openspec-queue.sh --check
