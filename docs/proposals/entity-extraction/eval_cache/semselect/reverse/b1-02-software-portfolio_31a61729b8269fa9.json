@@ -1,0 +1,76 @@
+{
+  "request": {
+    "state": "The current runtime composes agentic, graph, rule and I/O components from the frozen SemStreams dependency.",
+    "questions": {
+      "type": {
+        "type": "choice",
+        "instructions": "What kind of entity is \"SemStreams\"? Judge using the supplied text and standard technical meaning of the named entity in context. Choose unsure if the text does not allow a confident answer.",
+        "criteria": {
+          "unsure": "The supplied text does not allow a confident answer",
+          "not_an_entity": "The actor name is not a nameable entity",
+          "concept": "A technical concept, algorithm, technique, or pattern that is not a specific product or standard",
+          "event": "A conference, release, incident, meeting, or dated occurrence",
+          "specification": "A standard, protocol, RFC, ADR, or formal specification",
+          "repository": "A source-code repository, e.g. owner/name on GitHub",
+          "software": "A software product, library, framework, service, CLI tool, or AI model",
+          "organization": "A company, foundation, agency, institution, or group of people",
+          "person": "A named human individual"
+        }
+      },
+      "link": {
+        "type": "choice",
+        "instructions": "Which catalog entity does \"SemStreams\" refer to in this text? Choose new if it is a real entity not in the catalog list, or unsure if the text does not settle it.",
+        "criteria": {
+          "unsure": "The text does not provide enough evidence to link or reject",
+          "new": "A valid entity mentioned in the text that is not one of the listed catalog entities",
+          "entity:software:semstreams": "SemStreams (software): Frozen Go stream processing and agentic runtime library consumed by SemTeams"
+        }
+      },
+      "support": {
+        "type": "noul",
+        "instructions": "Does the supplied text, on its own, support the claim that \"SemStreams\" is \"frozen runtime dependency supplying agentic and graph components\"?"
+      }
+    }
+  },
+  "status": 200,
+  "latency_ms": 834,
+  "response": {
+    "model": "semselect-kev-4b",
+    "answers": {
+      "type": {
+        "type": "choice",
+        "choice": "software",
+        "probabilities": {
+          "unsure": 0.11990534550891205,
+          "not_an_entity": 0.05860176130522414,
+          "concept": 0.031341548202461315,
+          "event": 0.0025942017459374966,
+          "specification": 0.01183331125700417,
+          "repository": 0.061402309525511296,
+          "software": 0.7057173626728629,
+          "organization": 0.007500355339890674,
+          "person": 0.0011038044421959954
+        },
+        "confidence": 0.6689320330069709
+      },
+      "link": {
+        "type": "choice",
+        "choice": "entity:software:semstreams",
+        "probabilities": {
+          "unsure": 0.22759340446116555,
+          "new": 0.19634579275703978,
+          "entity:software:semstreams": 0.5760608027817947
+        },
+        "confidence": 0.3640912041726921
+      },
+      "support": {
+        "type": "noul",
+        "noul": 0.942108637996212
+      }
+    },
+    "usage": {
+      "input_tokens": 395,
+      "output_tokens": 0
+    }
+  }
+}

@@ -1,0 +1,77 @@
+{
+  "request": {
+    "state": "The MQTT v5.0 specification defines three QoS delivery levels for lightweight pub/sub messaging.",
+    "questions": {
+      "type": {
+        "type": "choice",
+        "instructions": "What kind of entity is \"MQTT v5.0 Protocol\"? Judge using the supplied text and standard technical meaning of the named entity in context. Choose unsure if the text does not allow a confident answer.",
+        "criteria": {
+          "person": "A named human individual",
+          "organization": "A company, foundation, agency, institution, or group of people",
+          "software": "A software product, library, framework, service, CLI tool, or AI model",
+          "repository": "A source-code repository, e.g. owner/name on GitHub",
+          "specification": "A standard, protocol, RFC, ADR, or formal specification",
+          "event": "A conference, release, incident, meeting, or dated occurrence",
+          "concept": "A technical concept, algorithm, technique, or pattern that is not a specific product or standard",
+          "not_an_entity": "The actor name is not a nameable entity",
+          "unsure": "The supplied text does not allow a confident answer"
+        }
+      },
+      "link": {
+        "type": "choice",
+        "instructions": "Which catalog entity does \"MQTT v5.0 Protocol\" refer to in this text? Choose new if it is a real entity not in the catalog list, or unsure if the text does not settle it.",
+        "criteria": {
+          "entity:spec:mqtt": "MQTT Specification (specification): OASIS standard pub/sub messaging protocol for constrained IoT devices",
+          "new": "A valid entity mentioned in the text that is not one of the listed catalog entities",
+          "unsure": "The text does not provide enough evidence to link or reject"
+        }
+      },
+      "support": {
+        "type": "noul",
+        "instructions": "Does the supplied text, on its own, support the claim that \"MQTT v5.0 Protocol\" is \"OASIS pub/sub protocol specification with three QoS delivery levels\"?"
+      }
+    },
+    "model": "mercury-decide"
+  },
+  "status": 200,
+  "latency_ms": 559,
+  "response": {
+    "model": "mercury-decide",
+    "answers": {
+      "type": {
+        "type": "choice",
+        "choice": "specification",
+        "probabilities": {
+          "person": 9.591577677368009e-05,
+          "organization": 0.00010868681407579863,
+          "software": 0.0006254494311271282,
+          "repository": 7.017348135018166e-05,
+          "specification": 0.9979620157086669,
+          "event": 1.8886936283016875e-05,
+          "concept": 7.469928206024414e-05,
+          "not_an_entity": 1.2980788816525714e-05,
+          "unsure": 0.001031191780846591
+        },
+        "confidence": 0.9977072676722504
+      },
+      "link": {
+        "type": "choice",
+        "choice": "entity:spec:mqtt",
+        "probabilities": {
+          "entity:spec:mqtt": 0.9882473323535572,
+          "new": 0.00587633382322132,
+          "unsure": 0.00587633382322132
+        },
+        "confidence": 0.9823709985303358
+      },
+      "support": {
+        "type": "noul",
+        "noul": 0.060086648070103596
+      }
+    },
+    "usage": {
+      "input_tokens": 573,
+      "output_tokens": 3
+    }
+  }
+}

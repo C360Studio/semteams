@@ -1,0 +1,71 @@
+{
+  "results": [
+    {
+      "status": 200,
+      "ms": 846,
+      "case": "c1-software",
+      "type": "software",
+      "type_conf": 0.6857778151842465,
+      "type_ok": true,
+      "p_support": 0.9335981893914197,
+      "support_ok": true,
+      "centrality": 1.622602193565813
+    },
+    {
+      "status": 200,
+      "ms": 840,
+      "case": "c2-person",
+      "type": "person",
+      "type_conf": 0.919099752691129,
+      "type_ok": true,
+      "p_support": 0.969732146430578,
+      "support_ok": true,
+      "centrality": 1.880245484031575
+    },
+    {
+      "status": 200,
+      "ms": 812,
+      "case": "c3-org",
+      "type": "organization",
+      "type_conf": 0.8293696855658608,
+      "type_ok": true,
+      "p_support": 0.9638607204679112,
+      "support_ok": true,
+      "centrality": 1.6184122640796088
+    },
+    {
+      "status": 200,
+      "ms": 648,
+      "case": "c4-unsupported",
+      "type": "software",
+      "type_conf": 0.7566445959904824,
+      "type_ok": true,
+      "p_support": 0.7882654884630652,
+      "support_ok": false,
+      "centrality": 0.9504506094972213
+    },
+    {
+      "status": 200,
+      "ms": 839,
+      "case": "c5-unicode",
+      "type": "software",
+      "type_conf": 0.7396213794315251,
+      "type_ok": true,
+      "p_support": 0.9750603142384594,
+      "support_ok": true,
+      "centrality": 1.897732567048413
+    },
+    {
+      "status": 200,
+      "ms": 653,
+      "case": "c6-ambiguous",
+      "type": "software",
+      "type_conf": 0.6047479860887423,
+      "type_ok": true,
+      "p_support": 0.9601637323151492,
+      "support_ok": true,
+      "centrality": 1.8144927691281212
+    }
+  ],
+  "spans": []
+}

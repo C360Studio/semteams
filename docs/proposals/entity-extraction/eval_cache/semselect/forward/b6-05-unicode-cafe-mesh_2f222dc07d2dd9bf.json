@@ -1,0 +1,76 @@
+{
+  "request": {
+    "state": "Zürich Instruments 🚀 deploys Café-Mesh for local robot telemetry buffering on edge controllers.",
+    "questions": {
+      "type": {
+        "type": "choice",
+        "instructions": "What kind of entity is \"Cafe-Mesh\"? Judge using the supplied text and standard technical meaning of the named entity in context. Choose unsure if the text does not allow a confident answer.",
+        "criteria": {
+          "person": "A named human individual",
+          "organization": "A company, foundation, agency, institution, or group of people",
+          "software": "A software product, library, framework, service, CLI tool, or AI model",
+          "repository": "A source-code repository, e.g. owner/name on GitHub",
+          "specification": "A standard, protocol, RFC, ADR, or formal specification",
+          "event": "A conference, release, incident, meeting, or dated occurrence",
+          "concept": "A technical concept, algorithm, technique, or pattern that is not a specific product or standard",
+          "not_an_entity": "The actor name is not a nameable entity",
+          "unsure": "The supplied text does not allow a confident answer"
+        }
+      },
+      "link": {
+        "type": "choice",
+        "instructions": "Which catalog entity does \"Cafe-Mesh\" refer to in this text? Choose new if it is a real entity not in the catalog list, or unsure if the text does not settle it.",
+        "criteria": {
+          "entity:software:cafe-mesh": "Café-Mesh (software): Local robot telemetry buffering mesh used by Zürich Instruments",
+          "new": "A valid entity mentioned in the text that is not one of the listed catalog entities",
+          "unsure": "The text does not provide enough evidence to link or reject"
+        }
+      },
+      "support": {
+        "type": "noul",
+        "instructions": "Does the supplied text, on its own, support the claim that \"Cafe-Mesh\" is \"local robot telemetry buffering mesh used by Zürich Instruments\"?"
+      }
+    }
+  },
+  "status": 200,
+  "latency_ms": 821,
+  "response": {
+    "model": "semselect-kev-4b",
+    "answers": {
+      "type": {
+        "type": "choice",
+        "choice": "software",
+        "probabilities": {
+          "person": 0.000878862048191366,
+          "organization": 0.005053888985538535,
+          "software": 0.7512307671492283,
+          "repository": 0.021889682305110666,
+          "specification": 0.038493038216765925,
+          "event": 0.009085085962206897,
+          "concept": 0.057923875315134814,
+          "not_an_entity": 0.053074598449091216,
+          "unsure": 0.062370201568732304
+        },
+        "confidence": 0.720134613042882
+      },
+      "link": {
+        "type": "choice",
+        "choice": "entity:software:cafe-mesh",
+        "probabilities": {
+          "entity:software:cafe-mesh": 0.7235099677719328,
+          "new": 0.18061601291930832,
+          "unsure": 0.09587401930875902
+        },
+        "confidence": 0.5852649516578992
+      },
+      "support": {
+        "type": "noul",
+        "noul": 0.9383727739435797
+      }
+    },
+    "usage": {
+      "input_tokens": 396,
+      "output_tokens": 0
+    }
+  }
+}

@@ -1,0 +1,77 @@
+{
+  "request": {
+    "state": "SemStreams stores agent loop state in NATS JetStream key-value buckets.",
+    "questions": {
+      "type": {
+        "type": "choice",
+        "instructions": "What kind of entity is \"NATS JetStream\"? Judge using the supplied text and standard technical meaning of the named entity in context. Choose unsure if the text does not allow a confident answer.",
+        "criteria": {
+          "unsure": "The supplied text does not allow a confident answer",
+          "not_an_entity": "The actor name is not a nameable entity",
+          "concept": "A technical concept, algorithm, technique, or pattern that is not a specific product or standard",
+          "event": "A conference, release, incident, meeting, or dated occurrence",
+          "specification": "A standard, protocol, RFC, ADR, or formal specification",
+          "repository": "A source-code repository, e.g. owner/name on GitHub",
+          "software": "A software product, library, framework, service, CLI tool, or AI model",
+          "organization": "A company, foundation, agency, institution, or group of people",
+          "person": "A named human individual"
+        }
+      },
+      "link": {
+        "type": "choice",
+        "instructions": "Which catalog entity does \"NATS JetStream\" refer to in this text? Choose new if it is a real entity not in the catalog list, or unsure if the text does not settle it.",
+        "criteria": {
+          "unsure": "The text does not provide enough evidence to link or reject",
+          "new": "A valid entity mentioned in the text that is not one of the listed catalog entities",
+          "entity:software:nats-jetstream": "NATS JetStream (software): NATS persistence engine providing streams and key-value buckets"
+        }
+      },
+      "support": {
+        "type": "noul",
+        "instructions": "Does the supplied text, on its own, support the claim that \"NATS JetStream\" is \"persistence layer for agent loop state\"?"
+      }
+    },
+    "model": "mercury-decide"
+  },
+  "status": 200,
+  "latency_ms": 302,
+  "response": {
+    "model": "mercury-decide",
+    "answers": {
+      "type": {
+        "type": "choice",
+        "choice": "software",
+        "probabilities": {
+          "unsure": 0.009690397848338837,
+          "not_an_entity": 0.00033158733817469863,
+          "concept": 0.0005466948368589877,
+          "event": 9.50013629651532e-05,
+          "specification": 0.0007472432452626832,
+          "repository": 7.398713587011207e-05,
+          "software": 0.9884476479646533,
+          "organization": 4.487546632954731e-05,
+          "person": 2.2564801546668106e-05
+        },
+        "confidence": 0.987003603960235
+      },
+      "link": {
+        "type": "choice",
+        "choice": "entity:software:nats-jetstream",
+        "probabilities": {
+          "unsure": 0.005198990200499904,
+          "new": 0.0040489776393298855,
+          "entity:software:nats-jetstream": 0.9907520321601703
+        },
+        "confidence": 0.9861280482402552
+      },
+      "support": {
+        "type": "noul",
+        "noul": 0.9324533065140289
+      }
+    },
+    "usage": {
+      "input_tokens": 535,
+      "output_tokens": 3
+    }
+  }
+}

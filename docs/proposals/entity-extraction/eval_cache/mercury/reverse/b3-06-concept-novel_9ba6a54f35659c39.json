@@ -1,0 +1,75 @@
+{
+  "request": {
+    "state": "Writers use Compare-And-Swap Optimistic Concurrency on KV revision numbers to detect conflicting updates without locks.",
+    "questions": {
+      "type": {
+        "type": "choice",
+        "instructions": "What kind of entity is \"Compare-And-Swap Optimistic Concurrency\"? Judge using the supplied text and standard technical meaning of the named entity in context. Choose unsure if the text does not allow a confident answer.",
+        "criteria": {
+          "unsure": "The supplied text does not allow a confident answer",
+          "not_an_entity": "The actor name is not a nameable entity",
+          "concept": "A technical concept, algorithm, technique, or pattern that is not a specific product or standard",
+          "event": "A conference, release, incident, meeting, or dated occurrence",
+          "specification": "A standard, protocol, RFC, ADR, or formal specification",
+          "repository": "A source-code repository, e.g. owner/name on GitHub",
+          "software": "A software product, library, framework, service, CLI tool, or AI model",
+          "organization": "A company, foundation, agency, institution, or group of people",
+          "person": "A named human individual"
+        }
+      },
+      "link": {
+        "type": "choice",
+        "instructions": "Which catalog entity does \"Compare-And-Swap Optimistic Concurrency\" refer to in this text? Choose new if it is a real entity not in the catalog list, or unsure if the text does not settle it.",
+        "criteria": {
+          "unsure": "The text does not provide enough evidence to link or reject",
+          "new": "A valid entity mentioned in the text that is not one of the listed catalog entities"
+        }
+      },
+      "support": {
+        "type": "noul",
+        "instructions": "Does the supplied text, on its own, support the claim that \"Compare-And-Swap Optimistic Concurrency\" is \"concurrency control technique using revision numbers instead of distributed locks\"?"
+      }
+    },
+    "model": "mercury-decide"
+  },
+  "status": 200,
+  "latency_ms": 354,
+  "response": {
+    "model": "mercury-decide",
+    "answers": {
+      "type": {
+        "type": "choice",
+        "choice": "concept",
+        "probabilities": {
+          "unsure": 0.005895720915276531,
+          "not_an_entity": 0.0021689145156147146,
+          "concept": 0.9915078597502808,
+          "event": 3.731823563357625e-05,
+          "specification": 0.00016724872876329916,
+          "repository": 1.3728611670384234e-05,
+          "software": 0.00017803534502958796,
+          "organization": 1.6559866679371358e-05,
+          "person": 1.4614031051759076e-05
+        },
+        "confidence": 0.990446342219066
+      },
+      "link": {
+        "type": "choice",
+        "choice": "new",
+        "probabilities": {
+          "unsure": 0.16451645880021026,
+          "new": 0.8354835411997897
+        },
+        "confidence": 0.6709670823995795
+      },
+      "support": {
+        "type": "noul",
+        "noul": 0.9046505344582186
+      }
+    },
+    "usage": {
+      "input_tokens": 549,
+      "output_tokens": 3
+    }
+  }
+}

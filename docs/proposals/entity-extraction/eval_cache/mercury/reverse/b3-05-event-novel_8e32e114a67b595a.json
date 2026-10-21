@@ -1,0 +1,75 @@
+{
+  "request": {
+    "state": "Maintainers presented the SemEngine durability benchmark at the KubeCon North America 2026 conference in Salt Lake City.",
+    "questions": {
+      "type": {
+        "type": "choice",
+        "instructions": "What kind of entity is \"KubeCon North America 2026\"? Judge using the supplied text and standard technical meaning of the named entity in context. Choose unsure if the text does not allow a confident answer.",
+        "criteria": {
+          "unsure": "The supplied text does not allow a confident answer",
+          "not_an_entity": "The actor name is not a nameable entity",
+          "concept": "A technical concept, algorithm, technique, or pattern that is not a specific product or standard",
+          "event": "A conference, release, incident, meeting, or dated occurrence",
+          "specification": "A standard, protocol, RFC, ADR, or formal specification",
+          "repository": "A source-code repository, e.g. owner/name on GitHub",
+          "software": "A software product, library, framework, service, CLI tool, or AI model",
+          "organization": "A company, foundation, agency, institution, or group of people",
+          "person": "A named human individual"
+        }
+      },
+      "link": {
+        "type": "choice",
+        "instructions": "Which catalog entity does \"KubeCon North America 2026\" refer to in this text? Choose new if it is a real entity not in the catalog list, or unsure if the text does not settle it.",
+        "criteria": {
+          "unsure": "The text does not provide enough evidence to link or reject",
+          "new": "A valid entity mentioned in the text that is not one of the listed catalog entities"
+        }
+      },
+      "support": {
+        "type": "noul",
+        "instructions": "Does the supplied text, on its own, support the claim that \"KubeCon North America 2026\" is \"conference where the SemEngine durability benchmark was presented\"?"
+      }
+    },
+    "model": "mercury-decide"
+  },
+  "status": 200,
+  "latency_ms": 280,
+  "response": {
+    "model": "mercury-decide",
+    "answers": {
+      "type": {
+        "type": "choice",
+        "choice": "event",
+        "probabilities": {
+          "unsure": 0.0003799365363178923,
+          "not_an_entity": 4.8303510012434196e-05,
+          "concept": 2.5855005771736874e-05,
+          "event": 0.999493782526245,
+          "specification": 1.2213039947494387e-05,
+          "repository": 4.492926310888736e-06,
+          "software": 2.013589874134437e-05,
+          "organization": 5.769031578486226e-06,
+          "person": 9.511525074790978e-06
+        },
+        "confidence": 0.9994305053420257
+      },
+      "link": {
+        "type": "choice",
+        "choice": "new",
+        "probabilities": {
+          "unsure": 0.18242551936144574,
+          "new": 0.8175744806385543
+        },
+        "confidence": 0.6351489612771086
+      },
+      "support": {
+        "type": "noul",
+        "noul": 0.994779874195208
+      }
+    },
+    "usage": {
+      "input_tokens": 550,
+      "output_tokens": 3
+    }
+  }
+}

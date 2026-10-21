@@ -1,0 +1,74 @@
+{
+  "request": {
+    "state": "Browser reads of portfolio and work state go through scoped SvelteKit server routes (/api/work/*).",
+    "questions": {
+      "type": {
+        "type": "choice",
+        "instructions": "What kind of entity is \"Apollo GraphQL Router\"? Judge using the supplied text and standard technical meaning of the named entity in context. Choose unsure if the text does not allow a confident answer.",
+        "criteria": {
+          "unsure": "The supplied text does not allow a confident answer",
+          "not_an_entity": "The actor name is not a nameable entity",
+          "concept": "A technical concept, algorithm, technique, or pattern that is not a specific product or standard",
+          "event": "A conference, release, incident, meeting, or dated occurrence",
+          "specification": "A standard, protocol, RFC, ADR, or formal specification",
+          "repository": "A source-code repository, e.g. owner/name on GitHub",
+          "software": "A software product, library, framework, service, CLI tool, or AI model",
+          "organization": "A company, foundation, agency, institution, or group of people",
+          "person": "A named human individual"
+        }
+      },
+      "link": {
+        "type": "choice",
+        "instructions": "Which catalog entity does \"Apollo GraphQL Router\" refer to in this text? Choose new if it is a real entity not in the catalog list, or unsure if the text does not settle it.",
+        "criteria": {
+          "unsure": "The text does not provide enough evidence to link or reject",
+          "new": "A valid entity mentioned in the text that is not one of the listed catalog entities"
+        }
+      },
+      "support": {
+        "type": "noul",
+        "instructions": "Does the supplied text, on its own, support the claim that \"Apollo GraphQL Router\" is \"browser-facing API gateway for the SemTeams work board\"?"
+      }
+    }
+  },
+  "status": 200,
+  "latency_ms": 816,
+  "response": {
+    "model": "semselect-kev-4b",
+    "answers": {
+      "type": {
+        "type": "choice",
+        "choice": "software",
+        "probabilities": {
+          "unsure": 0.22195054598607925,
+          "not_an_entity": 0.1541135193927446,
+          "concept": 0.20852879220032822,
+          "event": 0.012360821768427234,
+          "specification": 0.06759421107503696,
+          "repository": 0.031245988181064957,
+          "software": 0.2731540756830607,
+          "organization": 0.022784306959061175,
+          "person": 0.008267738754196742
+        },
+        "confidence": 0.18229833514344332
+      },
+      "link": {
+        "type": "choice",
+        "choice": "unsure",
+        "probabilities": {
+          "unsure": 0.5308046091173636,
+          "new": 0.4691953908826365
+        },
+        "confidence": 0.0616092182347272
+      },
+      "support": {
+        "type": "noul",
+        "noul": 0.041045849313347725
+      }
+    },
+    "usage": {
+      "input_tokens": 365,
+      "output_tokens": 0
+    }
+  }
+}

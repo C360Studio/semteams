@@ -1,0 +1,77 @@
+{
+  "request": {
+    "state": "Zürich Instruments 🚀 released Gödel-SDK v2.1 for café robotics teams.",
+    "questions": {
+      "type": {
+        "type": "choice",
+        "instructions": "What kind of entity is \"Zürich Instruments\"? Judge using the supplied text and standard technical meaning of the named entity in context. Choose unsure if the text does not allow a confident answer.",
+        "criteria": {
+          "person": "A named human individual",
+          "organization": "A company, foundation, agency, institution, or group of people",
+          "software": "A software product, library, framework, service, CLI tool, or AI model",
+          "repository": "A source-code repository, e.g. owner/name on GitHub",
+          "specification": "A standard, protocol, RFC, ADR, or formal specification",
+          "event": "A conference, release, incident, meeting, or dated occurrence",
+          "concept": "A technical concept, algorithm, technique, or pattern that is not a specific product or standard",
+          "not_an_entity": "The actor name is not a nameable entity",
+          "unsure": "The supplied text does not allow a confident answer"
+        }
+      },
+      "link": {
+        "type": "choice",
+        "instructions": "Which catalog entity does \"Zürich Instruments\" refer to in this text? Choose new if it is a real entity not in the catalog list, or unsure if the text does not settle it.",
+        "criteria": {
+          "entity:org:zurich-instruments": "Zürich Instruments (organization): Swiss scientific instrumentation and robotics hardware company",
+          "new": "A valid entity mentioned in the text that is not one of the listed catalog entities",
+          "unsure": "The text does not provide enough evidence to link or reject"
+        }
+      },
+      "support": {
+        "type": "noul",
+        "instructions": "Does the supplied text, on its own, support the claim that \"Zürich Instruments\" is \"Swiss instrumentation company that released Gödel-SDK v2.1\"?"
+      }
+    },
+    "model": "mercury-decide"
+  },
+  "status": 200,
+  "latency_ms": 370,
+  "response": {
+    "model": "mercury-decide",
+    "answers": {
+      "type": {
+        "type": "choice",
+        "choice": "organization",
+        "probabilities": {
+          "person": 0.0002301767046214951,
+          "organization": 0.9983377725946737,
+          "software": 0.00011574011559697756,
+          "repository": 4.257840904693424e-05,
+          "specification": 2.5825110528751385e-05,
+          "event": 3.9998713652505505e-05,
+          "concept": 1.4714704426060264e-05,
+          "not_an_entity": 2.426044617931088e-05,
+          "unsure": 0.0011689332012742584
+        },
+        "confidence": 0.998129994169008
+      },
+      "link": {
+        "type": "choice",
+        "choice": "entity:org:zurich-instruments",
+        "probabilities": {
+          "entity:org:zurich-instruments": 0.9940775844471123,
+          "new": 0.0013189227658092734,
+          "unsure": 0.00460349278707849
+        },
+        "confidence": 0.9911163766706682
+      },
+      "support": {
+        "type": "noul",
+        "noul": 0.03732688386369013
+      }
+    },
+    "usage": {
+      "input_tokens": 555,
+      "output_tokens": 3
+    }
+  }
+}

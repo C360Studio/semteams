@@ -1,0 +1,77 @@
+{
+  "request": {
+    "state": "NATS was created by Derek Collison, who later founded Synadia to steward the project.",
+    "questions": {
+      "type": {
+        "type": "choice",
+        "instructions": "What kind of entity is \"Synadia\"? Judge using the supplied text and standard technical meaning of the named entity in context. Choose unsure if the text does not allow a confident answer.",
+        "criteria": {
+          "unsure": "The supplied text does not allow a confident answer",
+          "not_an_entity": "The actor name is not a nameable entity",
+          "concept": "A technical concept, algorithm, technique, or pattern that is not a specific product or standard",
+          "event": "A conference, release, incident, meeting, or dated occurrence",
+          "specification": "A standard, protocol, RFC, ADR, or formal specification",
+          "repository": "A source-code repository, e.g. owner/name on GitHub",
+          "software": "A software product, library, framework, service, CLI tool, or AI model",
+          "organization": "A company, foundation, agency, institution, or group of people",
+          "person": "A named human individual"
+        }
+      },
+      "link": {
+        "type": "choice",
+        "instructions": "Which catalog entity does \"Synadia\" refer to in this text? Choose new if it is a real entity not in the catalog list, or unsure if the text does not settle it.",
+        "criteria": {
+          "unsure": "The text does not provide enough evidence to link or reject",
+          "new": "A valid entity mentioned in the text that is not one of the listed catalog entities",
+          "entity:org:synadia": "Synadia (organization): Company founded by Derek Collison that stewards the NATS ecosystem"
+        }
+      },
+      "support": {
+        "type": "noul",
+        "instructions": "Does the supplied text, on its own, support the claim that \"Synadia\" is \"company that stewards the NATS project\"?"
+      }
+    },
+    "model": "mercury-decide"
+  },
+  "status": 200,
+  "latency_ms": 434,
+  "response": {
+    "model": "mercury-decide",
+    "answers": {
+      "type": {
+        "type": "choice",
+        "choice": "organization",
+        "probabilities": {
+          "unsure": 0.0024717088382992473,
+          "not_an_entity": 4.2528099738915555e-05,
+          "concept": 2.5794596390969125e-05,
+          "event": 3.995145243137165e-05,
+          "specification": 1.665424314963144e-05,
+          "repository": 1.3806852512300924e-05,
+          "software": 0.00011560336071918802,
+          "organization": 0.9971583491960391,
+          "person": 0.00011560336071918802
+        },
+        "confidence": 0.996803142845544
+      },
+      "link": {
+        "type": "choice",
+        "choice": "entity:org:synadia",
+        "probabilities": {
+          "unsure": 0.0009068553726384915,
+          "new": 0.0046053915883763515,
+          "entity:org:synadia": 0.9944877530389851
+        },
+        "confidence": 0.9917316295584776
+      },
+      "support": {
+        "type": "noul",
+        "noul": 0.9820137917486748
+      }
+    },
+    "usage": {
+      "input_tokens": 558,
+      "output_tokens": 3
+    }
+  }
+}

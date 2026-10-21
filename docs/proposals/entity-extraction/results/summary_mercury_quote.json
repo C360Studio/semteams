@@ -1,0 +1,232 @@
+{
+  "results": [
+    {
+      "status": 200,
+      "ms": 1225,
+      "case": "c1-software",
+      "type": "software",
+      "type_conf": 0.8194,
+      "type_ok": true,
+      "p_support": 0.9621,
+      "support_ok": true,
+      "centrality": 1.6984,
+      "input_tokens": 402
+    },
+    {
+      "status": 200,
+      "ms": 774,
+      "case": "c2-person",
+      "type": "person",
+      "type_conf": 0.9767,
+      "type_ok": true,
+      "p_support": 0.9987,
+      "support_ok": true,
+      "centrality": 1.6596,
+      "input_tokens": 408
+    },
+    {
+      "status": 200,
+      "ms": 453,
+      "case": "c3-org",
+      "type": "organization",
+      "type_conf": 0.9343,
+      "type_ok": true,
+      "p_support": 0.9948,
+      "support_ok": true,
+      "centrality": 1.0816,
+      "input_tokens": 416
+    },
+    {
+      "status": 200,
+      "ms": 346,
+      "case": "c4-unsupported",
+      "type": "not_an_entity",
+      "type_conf": 0.5999,
+      "type_ok": false,
+      "p_support": 0.0036,
+      "support_ok": true,
+      "centrality": 0.0138,
+      "input_tokens": 399
+    },
+    {
+      "status": 200,
+      "ms": 416,
+      "case": "c5-unicode",
+      "type": "software",
+      "type_conf": 0.7916,
+      "type_ok": true,
+      "p_support": 0.9668,
+      "support_ok": true,
+      "centrality": 1.8728,
+      "input_tokens": 419
+    },
+    {
+      "status": 200,
+      "ms": 383,
+      "case": "c6-ambiguous",
+      "type": "software",
+      "type_conf": 0.5547,
+      "type_ok": true,
+      "p_support": 0.9923,
+      "support_ok": true,
+      "centrality": 1.7404,
+      "input_tokens": 399
+    }
+  ],
+  "spans": [
+    {
+      "case": "c1-software",
+      "field": "software",
+      "text": "SemStreams",
+      "start": 0,
+      "end": 10,
+      "conf": 0.8727,
+      "codepoint_ok": true,
+      "utf16_ok": true,
+      "byte_ok": true
+    },
+    {
+      "case": "c1-software",
+      "field": "software",
+      "text": "NATS JetStream",
+      "start": 38,
+      "end": 52,
+      "conf": 0.8575,
+      "codepoint_ok": true,
+      "utf16_ok": true,
+      "byte_ok": true
+    },
+    {
+      "case": "c2-person",
+      "field": "person",
+      "text": "Derek Collison",
+      "start": 20,
+      "end": 34,
+      "conf": 0.9982,
+      "codepoint_ok": true,
+      "utf16_ok": true,
+      "byte_ok": true
+    },
+    {
+      "case": "c2-person",
+      "field": "organization",
+      "text": "Synadia",
+      "start": 54,
+      "end": 61,
+      "conf": 0.9987,
+      "codepoint_ok": true,
+      "utf16_ok": true,
+      "byte_ok": true
+    },
+    {
+      "case": "c2-person",
+      "field": "software",
+      "text": "NATS",
+      "start": 0,
+      "end": 4,
+      "conf": 0.9638,
+      "codepoint_ok": true,
+      "utf16_ok": true,
+      "byte_ok": true
+    },
+    {
+      "case": "c3-org",
+      "field": "person",
+      "text": "Derek Collison",
+      "start": 20,
+      "end": 34,
+      "conf": 0.9985,
+      "codepoint_ok": true,
+      "utf16_ok": true,
+      "byte_ok": true
+    },
+    {
+      "case": "c3-org",
+      "field": "organization",
+      "text": "Synadia",
+      "start": 54,
+      "end": 61,
+      "conf": 0.9986,
+      "codepoint_ok": true,
+      "utf16_ok": true,
+      "byte_ok": true
+    },
+    {
+      "case": "c3-org",
+      "field": "software",
+      "text": "NATS",
+      "start": 0,
+      "end": 4,
+      "conf": 0.9586,
+      "codepoint_ok": true,
+      "utf16_ok": true,
+      "byte_ok": true
+    },
+    {
+      "case": "c4-unsupported",
+      "field": "software",
+      "text": "SemEngine",
+      "start": 0,
+      "end": 9,
+      "conf": 0.9569,
+      "codepoint_ok": true,
+      "utf16_ok": true,
+      "byte_ok": true
+    },
+    {
+      "case": "c4-unsupported",
+      "field": "software",
+      "text": "NATS JetStream",
+      "start": 18,
+      "end": 32,
+      "conf": 0.9586,
+      "codepoint_ok": true,
+      "utf16_ok": true,
+      "byte_ok": true
+    },
+    {
+      "case": "c5-unicode",
+      "field": "organization",
+      "text": "Zürich Instruments",
+      "start": 0,
+      "end": 18,
+      "conf": 0.9974,
+      "codepoint_ok": true,
+      "utf16_ok": true,
+      "byte_ok": false
+    },
+    {
+      "case": "c5-unicode",
+      "field": "software",
+      "text": "Gödel-SDK",
+      "start": 30,
+      "end": 39,
+      "conf": 0.7455,
+      "codepoint_ok": true,
+      "utf16_ok": false,
+      "byte_ok": false
+    },
+    {
+      "case": "c6-ambiguous",
+      "field": "software",
+      "text": "Inception",
+      "start": 0,
+      "end": 9,
+      "conf": 0.485,
+      "codepoint_ok": true,
+      "utf16_ok": true,
+      "byte_ok": true
+    },
+    {
+      "case": "c6-ambiguous",
+      "field": "software",
+      "text": "Mercury Decide model",
+      "start": 12,
+      "end": 32,
+      "conf": 0.5452,
+      "codepoint_ok": true,
+      "utf16_ok": true,
+      "byte_ok": true
+    }
+  ]
+}

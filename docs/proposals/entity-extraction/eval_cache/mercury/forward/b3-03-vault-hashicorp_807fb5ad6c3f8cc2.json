@@ -1,0 +1,79 @@
+{
+  "request": {
+    "state": "HashiCorp Vault leases dynamic PostgreSQL credentials and rotates transit encryption keys every hour.",
+    "questions": {
+      "type": {
+        "type": "choice",
+        "instructions": "What kind of entity is \"Vault\"? Judge using the supplied text and standard technical meaning of the named entity in context. Choose unsure if the text does not allow a confident answer.",
+        "criteria": {
+          "person": "A named human individual",
+          "organization": "A company, foundation, agency, institution, or group of people",
+          "software": "A software product, library, framework, service, CLI tool, or AI model",
+          "repository": "A source-code repository, e.g. owner/name on GitHub",
+          "specification": "A standard, protocol, RFC, ADR, or formal specification",
+          "event": "A conference, release, incident, meeting, or dated occurrence",
+          "concept": "A technical concept, algorithm, technique, or pattern that is not a specific product or standard",
+          "not_an_entity": "The actor name is not a nameable entity",
+          "unsure": "The supplied text does not allow a confident answer"
+        }
+      },
+      "link": {
+        "type": "choice",
+        "instructions": "Which catalog entity does \"Vault\" refer to in this text? Choose new if it is a real entity not in the catalog list, or unsure if the text does not settle it.",
+        "criteria": {
+          "entity:software:ansible-vault": "Vault (software): Red Hat Ansible feature for encrypting playbooks and variable files",
+          "entity:software:hashicorp-vault": "Vault (software): HashiCorp secrets management and encryption transit service",
+          "new": "A valid entity mentioned in the text that is not one of the listed catalog entities",
+          "unsure": "The text does not provide enough evidence to link or reject"
+        }
+      },
+      "support": {
+        "type": "noul",
+        "instructions": "Does the supplied text, on its own, support the claim that \"Vault\" is \"secrets manager issuing short-lived dynamic database credentials\"?"
+      }
+    },
+    "model": "mercury-decide"
+  },
+  "status": 200,
+  "latency_ms": 327,
+  "response": {
+    "model": "mercury-decide",
+    "answers": {
+      "type": {
+        "type": "choice",
+        "choice": "software",
+        "probabilities": {
+          "person": 0.0001233228482539807,
+          "organization": 0.0001312764886243305,
+          "software": 0.999295531050945,
+          "repository": 1.4728813822079156e-05,
+          "specification": 1.6689932597998286e-05,
+          "event": 6.139883077340648e-06,
+          "concept": 3.533258758722679e-05,
+          "not_an_entity": 2.013190156050283e-05,
+          "unsure": 0.0003568464935314281
+        },
+        "confidence": 0.9992074724323134
+      },
+      "link": {
+        "type": "choice",
+        "choice": "entity:software:hashicorp-vault",
+        "probabilities": {
+          "entity:software:ansible-vault": 0.000139791257223188,
+          "entity:software:hashicorp-vault": 0.9996401619701216,
+          "new": 5.142632958791976e-05,
+          "unsure": 0.00016862044306719854
+        },
+        "confidence": 0.9995202159601623
+      },
+      "support": {
+        "type": "noul",
+        "noul": 0.939913354875362
+      }
+    },
+    "usage": {
+      "input_tokens": 579,
+      "output_tokens": 3
+    }
+  }
+}

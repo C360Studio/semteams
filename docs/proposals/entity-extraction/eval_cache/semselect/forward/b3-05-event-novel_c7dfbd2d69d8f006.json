@@ -1,0 +1,74 @@
+{
+  "request": {
+    "state": "Maintainers presented the SemEngine durability benchmark at the KubeCon North America 2026 conference in Salt Lake City.",
+    "questions": {
+      "type": {
+        "type": "choice",
+        "instructions": "What kind of entity is \"KubeCon North America 2026\"? Judge using the supplied text and standard technical meaning of the named entity in context. Choose unsure if the text does not allow a confident answer.",
+        "criteria": {
+          "person": "A named human individual",
+          "organization": "A company, foundation, agency, institution, or group of people",
+          "software": "A software product, library, framework, service, CLI tool, or AI model",
+          "repository": "A source-code repository, e.g. owner/name on GitHub",
+          "specification": "A standard, protocol, RFC, ADR, or formal specification",
+          "event": "A conference, release, incident, meeting, or dated occurrence",
+          "concept": "A technical concept, algorithm, technique, or pattern that is not a specific product or standard",
+          "not_an_entity": "The actor name is not a nameable entity",
+          "unsure": "The supplied text does not allow a confident answer"
+        }
+      },
+      "link": {
+        "type": "choice",
+        "instructions": "Which catalog entity does \"KubeCon North America 2026\" refer to in this text? Choose new if it is a real entity not in the catalog list, or unsure if the text does not settle it.",
+        "criteria": {
+          "new": "A valid entity mentioned in the text that is not one of the listed catalog entities",
+          "unsure": "The text does not provide enough evidence to link or reject"
+        }
+      },
+      "support": {
+        "type": "noul",
+        "instructions": "Does the supplied text, on its own, support the claim that \"KubeCon North America 2026\" is \"conference where the SemEngine durability benchmark was presented\"?"
+      }
+    }
+  },
+  "status": 200,
+  "latency_ms": 889,
+  "response": {
+    "model": "semselect-kev-4b",
+    "answers": {
+      "type": {
+        "type": "choice",
+        "choice": "event",
+        "probabilities": {
+          "person": 0.0002808566086100602,
+          "organization": 0.006987437922415195,
+          "software": 0.003826891123864257,
+          "repository": 0.0015595768707307458,
+          "specification": 0.0042984970066419805,
+          "event": 0.9460650503910107,
+          "concept": 0.00825274024193795,
+          "not_an_entity": 0.014408090430110937,
+          "unsure": 0.014320859404678211
+        },
+        "confidence": 0.9393231816898872
+      },
+      "link": {
+        "type": "choice",
+        "choice": "new",
+        "probabilities": {
+          "new": 0.6155482383808504,
+          "unsure": 0.3844517616191496
+        },
+        "confidence": 0.23109647676170075
+      },
+      "support": {
+        "type": "noul",
+        "noul": 0.9834004837552255
+      }
+    },
+    "usage": {
+      "input_tokens": 403,
+      "output_tokens": 0
+    }
+  }
+}

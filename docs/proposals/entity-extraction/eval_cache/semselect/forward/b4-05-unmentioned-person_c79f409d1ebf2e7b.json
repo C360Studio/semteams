@@ -1,0 +1,74 @@
+{
+  "request": {
+    "state": "Every publish_agent rule action sets an explicit loop_max_iterations ceiling under the research containment budget.",
+    "questions": {
+      "type": {
+        "type": "choice",
+        "instructions": "What kind of entity is \"Mitchell Hashimoto\"? Judge using the supplied text and standard technical meaning of the named entity in context. Choose unsure if the text does not allow a confident answer.",
+        "criteria": {
+          "person": "A named human individual",
+          "organization": "A company, foundation, agency, institution, or group of people",
+          "software": "A software product, library, framework, service, CLI tool, or AI model",
+          "repository": "A source-code repository, e.g. owner/name on GitHub",
+          "specification": "A standard, protocol, RFC, ADR, or formal specification",
+          "event": "A conference, release, incident, meeting, or dated occurrence",
+          "concept": "A technical concept, algorithm, technique, or pattern that is not a specific product or standard",
+          "not_an_entity": "The actor name is not a nameable entity",
+          "unsure": "The supplied text does not allow a confident answer"
+        }
+      },
+      "link": {
+        "type": "choice",
+        "instructions": "Which catalog entity does \"Mitchell Hashimoto\" refer to in this text? Choose new if it is a real entity not in the catalog list, or unsure if the text does not settle it.",
+        "criteria": {
+          "new": "A valid entity mentioned in the text that is not one of the listed catalog entities",
+          "unsure": "The text does not provide enough evidence to link or reject"
+        }
+      },
+      "support": {
+        "type": "noul",
+        "instructions": "Does the supplied text, on its own, support the claim that \"Mitchell Hashimoto\" is \"author of the SemTeams research containment rules\"?"
+      }
+    }
+  },
+  "status": 200,
+  "latency_ms": 810,
+  "response": {
+    "model": "semselect-kev-4b",
+    "answers": {
+      "type": {
+        "type": "choice",
+        "choice": "unsure",
+        "probabilities": {
+          "person": 0.044394722965906845,
+          "organization": 0.02586296211808978,
+          "software": 0.09212472236623864,
+          "repository": 0.03245954461734236,
+          "specification": 0.08454865890009089,
+          "event": 0.016960265745906398,
+          "concept": 0.19158333037401293,
+          "not_an_entity": 0.22416892221198795,
+          "unsure": 0.28789687070042425
+        },
+        "confidence": 0.1988839795379773
+      },
+      "link": {
+        "type": "choice",
+        "choice": "unsure",
+        "probabilities": {
+          "new": 0.24345048880802836,
+          "unsure": 0.7565495111919716
+        },
+        "confidence": 0.5130990223839431
+      },
+      "support": {
+        "type": "noul",
+        "noul": 0.035471640976062695
+      }
+    },
+    "usage": {
+      "input_tokens": 360,
+      "output_tokens": 0
+    }
+  }
+}

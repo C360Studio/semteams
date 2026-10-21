@@ -1,0 +1,79 @@
+{
+  "request": {
+    "state": "Reference implementation Eclipse Mosquitto runs in under 2MB resident memory on constrained ARM edge nodes.",
+    "questions": {
+      "type": {
+        "type": "choice",
+        "instructions": "What kind of entity is \"Mosquitto MQTT Broker\"? Judge using the supplied text and standard technical meaning of the named entity in context. Choose unsure if the text does not allow a confident answer.",
+        "criteria": {
+          "person": "A named human individual",
+          "organization": "A company, foundation, agency, institution, or group of people",
+          "software": "A software product, library, framework, service, CLI tool, or AI model",
+          "repository": "A source-code repository, e.g. owner/name on GitHub",
+          "specification": "A standard, protocol, RFC, ADR, or formal specification",
+          "event": "A conference, release, incident, meeting, or dated occurrence",
+          "concept": "A technical concept, algorithm, technique, or pattern that is not a specific product or standard",
+          "not_an_entity": "The actor name is not a nameable entity",
+          "unsure": "The supplied text does not allow a confident answer"
+        }
+      },
+      "link": {
+        "type": "choice",
+        "instructions": "Which catalog entity does \"Mosquitto MQTT Broker\" refer to in this text? Choose new if it is a real entity not in the catalog list, or unsure if the text does not settle it.",
+        "criteria": {
+          "entity:software:eclipse-mosquitto": "Eclipse Mosquitto (software): Open-source lightweight MQTT broker written in C for constrained edge devices",
+          "entity:spec:mqtt": "MQTT Specification (specification): OASIS standard pub/sub messaging protocol for constrained IoT devices",
+          "new": "A valid entity mentioned in the text that is not one of the listed catalog entities",
+          "unsure": "The text does not provide enough evidence to link or reject"
+        }
+      },
+      "support": {
+        "type": "noul",
+        "instructions": "Does the supplied text, on its own, support the claim that \"Mosquitto MQTT Broker\" is \"lightweight C MQTT broker running in under 2MB RAM on ARM edge nodes\"?"
+      }
+    },
+    "model": "mercury-decide"
+  },
+  "status": 200,
+  "latency_ms": 325,
+  "response": {
+    "model": "mercury-decide",
+    "answers": {
+      "type": {
+        "type": "choice",
+        "choice": "software",
+        "probabilities": {
+          "person": 0.0012098576778470018,
+          "organization": 0.00032562877647448975,
+          "software": 0.97068550677363,
+          "repository": 0.00022380116693673877,
+          "specification": 0.001287886794147362,
+          "event": 8.233184822620413e-05,
+          "concept": 0.00022380116693673877,
+          "not_an_entity": 9.329420645565593e-05,
+          "unsure": 0.025867891589345944
+        },
+        "confidence": 0.9670211951203337
+      },
+      "link": {
+        "type": "choice",
+        "choice": "entity:software:eclipse-mosquitto",
+        "probabilities": {
+          "entity:software:eclipse-mosquitto": 0.9956746111388933,
+          "entity:spec:mqtt": 0.0001482166938760743,
+          "new": 0.0005862086754235186,
+          "unsure": 0.003590963491807178
+        },
+        "confidence": 0.9942328148518578
+      },
+      "support": {
+        "type": "noul",
+        "noul": 0.11920291732853862
+      }
+    },
+    "usage": {
+      "input_tokens": 605,
+      "output_tokens": 3
+    }
+  }
+}
